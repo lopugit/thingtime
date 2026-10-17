@@ -5243,3 +5243,26 @@ helper. Forwarded-origin headers are stripped in that helper; do not clone these
 objects with Node's `new Request(existingRequest)`, which can fail its private
 Undici-state check. The native export fixture's `--headless` mode exercises
 account checks and retained byte ranges through the actual bundled proxy.
+
+
+### Native Trash recovery development
+
+Apple native recovery uses the same local package as download publication:
+
+```sh
+swift test --package-path apple/FileSync
+apple/FileSync/scripts/test-trash-process.sh
+apple/FileSync/scripts/test-publication-process.sh
+swift test --package-path macos/ThingtimeNode --filter 'MacFolderSyncTests|ThingtimeAPIClientTests|WireCodecTests|FolderStreamXPCTests'
+```
+
+The process scripts create and remove only their own temporary fixtures. No
+credentials or extra environment variables are required. For the real loopback
+Mac/API checks use the private fixture setup above; it now verifies native Trash
+restart/restore and revoked-device refusal, with isolated picker/consent and
+credential-store adapters. Native storage is endpoint-specific on Mac
+(`FolderSyncTrash-v1-<endpoint identifier>`) and app-private on iOS
+(`MobileSyncTrash-v1`). It is excluded from OS backup and has no automatic purge;
+this recovery state is not yet included in whole-account snapshots. Cross-volume
+moves refuse. Foreground automatic deletion and recovery browsing remain pending;
+see [the acceptance ledger](docs/mobile-file-sync.md).

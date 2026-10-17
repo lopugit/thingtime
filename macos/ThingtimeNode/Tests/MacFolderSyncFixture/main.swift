@@ -62,8 +62,9 @@ final class StreamWriter: @unchecked Sendable {
         var identityChecks = 0
         let service = try MacFolderSync(origin: config.base, store: store,
             staging: MobileSyncStaging(directory: config.directory.appendingPathComponent("staging")),
+            trash: MobileSyncTrash(directory: config.directory.appendingPathComponent("trash")),
             verify: { owner, device in identityChecks += 1; try await api.verifyFileSyncIdentity(ownerID: owner, deviceID: device) },
-            choose: { selected }, approve: { _ in true }, conditions: { .init(network: "wifi", charging: true) })
+            choose: { selected }, approve: { _ in true }, approveTrash: { _ in true }, conditions: { .init(network: "wifi", charging: true) })
         while let input = try NodeFolderStreamInput.header(.standardInput) {
             let response: JSONValue
             do {

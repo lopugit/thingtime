@@ -51,7 +51,7 @@ Trash operations for explicitly pinned destinations. It also creates ordinary cl
 preallocated parent IDs and exact canonical Timeline creation receipts. Its prepared metadata is
 retained with the existing journal run. The mobile connection controls start explicit foreground upload/backup, approved
 downloads and two-way runs, as described below. Native delete propagation remains
-disabled until recoverable native trash is implemented.
+disabled until native recovery, fresh remote absence checks and parent revision handling are connected.
 
 The current scan bound is 10,000 combined paths, and directories must appear
 alongside descendants. Large-root partitioning is still needed. Folder removal
@@ -1913,3 +1913,44 @@ this producer until migration. Ninety-four backup/Mongo regression tests pass;
 targeted lint passes and full TypeScript retains the same 91 baseline diagnostics.
 There is no new public route, installed-app surface or native binary change.
 See [coverage and setup](portable-backups.md#account-inventory-producer).
+
+## Recoverable Apple native Trash foundation — 2026-10-17
+
+`MobileSyncTrash.swift` shares the existing Apple descriptor access and durable
+operation-journal helpers with publication. Mac/iOS advertise `fileTrashVersion`
+1.0.0. `trash`, `trash-lookup`, `trash-inspect` and `trash-restore` bind the original
+operation to account, origin, device, connection, native grant/bookmark and root
+inode. Deletion requires a separate native consent dialog and exact saved
+`allowTrash: true` approval; download permission alone is insufficient. The
+shared client rejects missing/downgraded approval flags. Restore remains possible
+with ordinary download approval after deletion propagation has been disabled.
+
+Files and initially empty directories move by exclusive same-volume rename into
+private native storage. No unlink, cross-volume copy fallback or automatic purge
+exists. Durable intent precedes the move; process recovery confirms the original
+null-entry receipt without removing a later recreated/restored file. A racing
+replacement remains retained and pending. If another writer populates an empty
+folder during the move, explicit restoration moves that retained directory intact
+without traversing its children; this is not a recursive content snapshot.
+Restore is restricted to the same grant and an absent destination, validates the
+reviewed retained entry, and cannot move the adapter's own journal/lock/data.
+
+Verified: 41 shared Apple tests, 42 focused Mac adapter/identity/XPC tests,
+27 iOS simulator staging/trash/bridge tests, 139 shared client tests and 17
+Electron folder/stream tests. Four fresh-process Trash scenarios plus three
+existing publication recovery scenarios pass. The real loopback Mac/API fixture
+also covers native consent, receipt recovery after restart, exclusive alternate
+restore, full-byte hashes and revoked device refusal; its picker/consent and
+credential store are synthetic and isolated from the installed app. Full Mac
+suite execution aborts in an unrelated DesktopChatRuntime test because its test
+host lacks NSBluetoothAlwaysUsageDescription. TypeScript remains at the prior
+91 diagnostics (ratchet baseline 89), with none added by this change.
+
+This is native recovery support, not enabled automatic deletion propagation or
+Timeline history. The foreground runner still refuses local delete propagation:
+fresh remote-path absence checks, child-removal parent revisions, Android parity,
+retained-item browsing/restore UI and signed installed permission acceptance
+remain required. Native journals are private local recovery state, excluded from
+OS backup and not yet included by the whole-account snapshot producer. No claim
+of device-loss recovery, continuous background sync or complete account backup
+follows from these checks.

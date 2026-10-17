@@ -177,7 +177,7 @@ async function send(payload: any) {
 	});
 }
 const signal = new AbortController().signal;
-const caps: FolderCapabilities = { platform: 'macos', fileAccessVersion: '1.2.0', fileStagingVersion: '1.1.0', filePublicationVersion: '1.1.0' };
+const caps: FolderCapabilities = { platform: 'macos', fileAccessVersion: '1.2.0', fileStagingVersion: '1.1.0', filePublicationVersion: '1.1.0', fileTrashVersion: '1.0.0' };
 let deviceId: string | undefined, remoteRoot: string | undefined, configurationId: string | undefined;
 const deviceName = 'Mac sync acceptance ' + randomUUID();
 const factory = new IDBFactory();
@@ -436,7 +436,35 @@ try {
 			assert.equal(response.status, 200);
 			assert.equal(hash(new Uint8Array(await response.arrayBuffer())), hash(node.path === 'local.bin' ? localBytes : remoteBytes));
 		}
+    // Direct native recovery acceptance: deliberately independent of the sync
+    // deletion planner, which remains gated until fresh remote absence is wired.
+    const recoverBytes = new Uint8Array(131_079).fill(63);
+    await writeFile(path.join(directory, 'selected/recover-only.bin'), recoverBytes);
+    const recoverEntry = (await request(fixture.userId, { action: 'scan', rootId: nativeRoot }, signal)).entries!.find(e => e.path === 'recover-only.bin')!;
+    const recoverOperation = { id: randomUUID(), confirmed: false, mutation: { kind: 'trash' as const, side: 'local' as const, path: recoverEntry.path, expected: recoverEntry } };
+    const recoverRequest = { scope, rootId: nativeRoot, operation: recoverOperation };
+    const deletionConfig = { ...saved, configuration: { ...saved.configuration, propagateDeletes: true } };
+    let deletionTarget = await approveMobileSyncTarget(deletionConfig, scope, signal, request, caps);
+    const recoveryReceipt = await deletionTarget.trash!(recoverOperation, scope);
+    assert.equal(recoveryReceipt.entry, null);
+    await assert.rejects(readFile(path.join(directory, 'selected/recover-only.bin')), { code: 'ENOENT' });
+    await stopNative(); await startNative();
+    deletionTarget = await approveMobileSyncTarget(deletionConfig, scope, signal, request, caps);
+    assert.deepEqual(await deletionTarget.lookup(recoverOperation, scope), { status: 'complete', receipt: recoveryReceipt });
+    const retained = (await request(fixture.userId, { action: 'trash-inspect', rootId: nativeRoot, trash: recoverRequest }, signal)).retainedEntry!;
+    assert.equal(retained.id, recoverEntry.id);
+    const approval = { scope, configurationRevision: saved.updatedAt,
+        configurationHash: createHash('sha256').update(JSON.stringify(deletionConfig.configuration)).digest('hex'), allowTrash: true };
+    await writeFile(path.join(directory, 'selected/recover-only.bin'), new Uint8Array([73]));
+    await assert.rejects(request(fixture.userId, { action: 'trash-restore', rootId: nativeRoot, trash: recoverRequest,
+        restore: { path: recoverEntry.path, expected: retained }, approval }, signal));
+    const restored = await request(fixture.userId, { action: 'trash-restore', rootId: nativeRoot, trash: recoverRequest,
+        restore: { path: 'recovered-only.bin', expected: retained }, approval }, signal);
+    assert.equal(restored.restoredEntry!.id, retained.id);
+    assert.equal(hash(await readFile(path.join(directory, 'selected/recovered-only.bin'))), hash(recoverBytes));
+    assert.deepEqual(await readFile(path.join(directory, 'selected/recover-only.bin')), Buffer.from([73]));
 	await api('/api/v1/devices/disconnect', { deviceId });
+    await assert.rejects(request(fixture.userId, { action: 'trash-inspect', rootId: nativeRoot, trash: recoverRequest }, signal), /401/);
 	await assert.rejects(request(fixture.userId, { action: 'scan', rootId: nativeRoot }, signal), /401/);
 	assert.equal(hash(await readFile(path.join(directory, 'selected/remote.bin'))), hash(editedRemote));
 	if (forcePreflightCooldown) assert.ok(preflightWaitMs > 30_000);
@@ -445,6 +473,9 @@ try {
 			ok: true,
 			checks: [
 				'signed-pairing',
+                'native-trash-restart-recovery',
+                'exclusive-native-trash-restore',
+                'native-trash-revoked-identity',
 				'live-native-identity',
 				'real-Mac-upload-download',
 				'lost-cloud-reply',

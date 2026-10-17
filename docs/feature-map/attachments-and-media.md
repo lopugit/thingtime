@@ -19,6 +19,17 @@ Unsupported providers/volumes refuse. Process-kill, provider and authenticated
 installed-app acceptance remain tracked in the full sync ledger.
 
 
+`apple/FileSync/MobileSyncTrash.swift` (under `Sources/AppleFileSync`) provides
+recoverable same-volume Apple moves and explicit exclusive restore. It reuses
+`NativeFileJournal` and `NativeFileDestination`; these are operation recovery,
+not Timeline history. Mac/iOS bridge actions negotiate `fileTrashVersion` 1.0.0
+and separately bind deletion consent (`allowTrash`). Run the Apple package tests,
+`apple/FileSync/scripts/test-trash-process.sh`, the focused Mac adapter suite,
+iOS `MobileSyncTrashTests`/`MobileSyncStagingTests`, and the real Mac/API fixture.
+Automatic local deletion and retained-item browsing remain gated; see the
+[recovery checkpoint](../mobile-file-sync.md#recoverable-apple-native-trash-foundation--2026-10-17).
+
+
 Persistent file sync work lives in `app/fileSync/`: `reconcile.ts` plans bounded
 three-way inventory reconciliation, `execute.ts` persists stable operations and
 resolves uncertain receipts, and `journal.client.ts` stores the browser queue.

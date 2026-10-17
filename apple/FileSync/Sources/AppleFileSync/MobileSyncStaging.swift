@@ -112,50 +112,13 @@ public final class MobileSyncStaging: @unchecked Sendable {
                                            request.scope.rootId, request.scope.deviceId, request.rootId, request.operation.id]))
     }
     private func locked<T>(_ work: (Int32) throws -> T) throws -> T {
-        try Task.checkCancellation()
-        var storageAttributes: [FileAttributeKey: Any] = [.posixPermissions: 0o700]
-        #if os(iOS)
-        storageAttributes[.protectionKey] = FileProtectionType.completeUntilFirstUserAuthentication
-        #endif
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true, attributes: storageAttributes)
-        var storageDirectory = directory, attributes = URLResourceValues()
-        attributes.isExcludedFromBackup = true
-        try storageDirectory.setResourceValues(attributes)
-        let fd = open(directory.path, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
-        guard fd >= 0 else { throw Failure.storage }; defer { close(fd) }
-        let lock = openat(fd, "lock", O_RDWR | O_CREAT | O_NOFOLLOW | O_CLOEXEC | O_NONBLOCK, 0o600)
-        guard lock >= 0 else { throw Failure.storage }; defer { close(lock) }
-        let lockInfo = try MobileFolderReader.info(lock)
-        guard lockInfo.st_mode & S_IFMT == S_IFREG, lockInfo.st_nlink == 1 else { throw Failure.storage }
-        // Do not leave a cancelled worker blocked behind another transfer.
-        while flock(lock, LOCK_EX | LOCK_NB) != 0 {
-            guard errno == EWOULDBLOCK else { throw Failure.storage }
-            try Task.checkCancellation(); Thread.sleep(forTimeInterval: 0.01)
-        }
-        defer { flock(lock, LOCK_UN) }
-        try Task.checkCancellation(); return try work(fd)
+        try NativeFileJournal.locked(directory: directory, work: work)
     }
     private func record(_ fd: Int32) throws -> Record? {
-        let file = openat(fd, "record.json", O_RDONLY | O_NOFOLLOW | O_CLOEXEC | O_NONBLOCK)
-        if file < 0 { if errno == ENOENT { return nil }; throw Failure.storage }
-        defer { close(file) }
-        let info = try MobileFolderReader.info(file)
-        guard info.st_mode & S_IFMT == S_IFREG, info.st_nlink == 1, info.st_size > 0, info.st_size <= 65_536 else { throw Failure.storage }
-        let handle = FileHandle(fileDescriptor: file, closeOnDealloc: false)
-        let data = try handle.read(upToCount: 65_537) ?? Data()
-        guard data.count == info.st_size else { throw Failure.storage }
-        return try JSONDecoder().decode(Record.self, from: data)
+        try NativeFileJournal.read(fd, as: Record.self)
     }
     private func save(_ record: Record, _ fd: Int32) throws {
-        let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
-        let data = try encoder.encode(record)
-        guard data.count <= 65_536 else { throw Failure.limit }
-        let name = "checkpoint-" + UUID().uuidString
-        let file = openat(fd, name, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0o600)
-        guard file >= 0 else { throw Failure.storage }
-        defer { close(file); unlinkat(fd, name, 0) }
-        try FileHandle(fileDescriptor: file, closeOnDealloc: false).write(contentsOf: data)
-        guard fsync(file) == 0, renameat(fd, name, fd, "record.json") == 0, fsync(fd) == 0 else { throw Failure.storage }
+        try NativeFileJournal.save(record, fd)
     }
     private func withRecord<T>(_ request: Request, owner: FileSyncOwnerScope, create: Bool,
                                work: (Int32, inout Record) throws -> T) throws -> T {
@@ -269,28 +232,10 @@ public final class MobileSyncStaging: @unchecked Sendable {
         }
     }
     private func verifyContent(_ file: Int32, source: Entry) throws {
-        let before = try MobileFolderReader.info(file)
-        if source.kind == "file" {
-            guard before.st_mode & S_IFMT == S_IFREG, before.st_nlink == 1, before.st_size == source.size else { throw Failure.changed }
-            if let expected = source.fingerprint {
-                guard try MobileFolderReader.fingerprint(file, size: source.size) == expected else { throw Failure.changed }
-            } else {
-                var hash = SHA256(), offset: Int64 = 0
-                var bytes = [UInt8](repeating: 0, count: MobileFolderReader.maximumReadBytes)
-                while offset < source.size {
-                    try Task.checkCancellation()
-                    let n = pread(file, &bytes, Int(min(Int64(bytes.count), source.size - offset)), off_t(offset))
-                    guard n > 0 else { throw Failure.changed }
-                    hash.update(data: Data(bytes.prefix(n))); offset += Int64(n)
-                }
-                guard hash.finalize().map({ String(format: "%02x", $0) }).joined() == source.sha256 else { throw Failure.changed }
-            }
-        } else { guard before.st_mode & S_IFMT == S_IFDIR, try MobileFolderReader.names(file).isEmpty else { throw Failure.changed } }
-        guard try MobileFolderReader.stamp(MobileFolderReader.info(file)) == MobileFolderReader.stamp(before) else { throw Failure.changed }
+        try NativeFileDestination.verifyContent(file, source: source)
     }
     private func entry(_ info: stat, source: Entry) -> Entry {
-        Entry(path: source.path, id: "\(info.st_dev):\(info.st_ino)", version: MobileFolderReader.stamp(info), kind: source.kind,
-              size: source.size, sha256: source.sha256, fingerprint: source.fingerprint)
+        NativeFileDestination.entry(info, source: source)
     }
     public func finish(_ request: Request, owner: FileSyncOwnerScope) throws -> Progress {
         try withRecord(request, owner: owner, create: false) { fd, row in
@@ -312,48 +257,10 @@ public final class MobileSyncStaging: @unchecked Sendable {
     /// no absolute URLs. A provider/volume without the required rename support
     /// fails closed. Private staging is never copied directly over a destination.
     private func destination<T>(_ request: Request, bookmark: Data, work: (Int32, Int32) throws -> T) throws -> T {
-        let parts = try MobileFolderReader.components(request.operation.mutation.path)
-        var stale = false
-        let url = try FolderBookmark.resolve(bookmark, stale: &stale)
-        guard url.isFileURL, !stale else { throw Failure.unavailable }
-        let access = url.startAccessingSecurityScopedResource(); defer { if access { url.stopAccessingSecurityScopedResource() } }
-        let root = open(url.path, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
-        guard root >= 0 else { throw Failure.unavailable }; defer { close(root) }
-        let rootIdentity = try Self.identity(MobileFolderReader.info(root))
-        let target = parts.reduce(url) { $0.appendingPathComponent($1) }
-        var result: Result<T, Error>?, error: NSError?
-        NSFileCoordinator().coordinate(writingItemAt: target, options: .forReplacing, error: &error) { coordinated in
-            result = Result {
-                try Task.checkCancellation()
-                guard coordinated.standardizedFileURL == target.standardizedFileURL else { throw Failure.changed }
-                let current = open(url.path, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
-                guard current >= 0 else { throw Failure.unavailable }; defer { close(current) }
-                guard try Self.identity(MobileFolderReader.info(current)) == rootIdentity else { throw Failure.changed }
-                var parent = dup(root); guard parent >= 0 else { throw Failure.storage }; defer { close(parent) }
-                for (index, name) in parts.enumerated() {
-                    // Refuse alternate case/Unicode spellings even on a case-sensitive volume.
-                    let alias = name.precomposedStringWithCanonicalMapping.lowercased()
-                    guard try MobileFolderReader.names(parent).allSatisfy({ $0 == name || $0.precomposedStringWithCanonicalMapping.lowercased() != alias }) else { throw Failure.changed }
-                    if index < parts.count - 1 {
-                        let next = openat(parent, name, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
-                        guard next >= 0 else { throw Failure.unavailable }; close(parent); parent = next
-                    }
-                }
-                return try work(root, parent)
-            }
-        }
-        if let error { throw error }; guard let result else { throw Failure.unavailable }; return try result.get()
+        try NativeFileDestination.coordinated(bookmark: bookmark, path: request.operation.mutation.path, work: work)
     }
     private func openDestination(_ root: Int32, path: String) throws -> Int32? {
-        let parts = try MobileFolderReader.components(path)
-        var parent = dup(root); guard parent >= 0 else { throw Failure.storage }; defer { close(parent) }
-        for name in parts.dropLast() {
-            let next = openat(parent, name, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
-            guard next >= 0 else { throw Failure.unavailable }; close(parent); parent = next
-        }
-        let file = openat(parent, parts.last!, O_RDONLY | O_NOFOLLOW | O_CLOEXEC | O_NONBLOCK)
-        if file < 0 { if errno == ENOENT { return nil }; throw Failure.unavailable }
-        return file
+        try NativeFileDestination.openDestination(root, path: path)
     }
     private func checkExpected(_ root: Int32, request: Request) throws {
         let expected = request.operation.mutation.expectedTarget

@@ -9,9 +9,11 @@ final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
     static let accessVersion = "1.1.1"
     static let stagingVersion = "1.2.0"
     static let publicationVersion = "1.0.0"
-    static let script = WKUserScript(source: "window.thingtimeNativeBridge.fileAccessVersion = '\(accessVersion)'; window.thingtimeNativeBridge.fileStagingVersion = '\(stagingVersion)'; window.thingtimeNativeBridge.filePublicationVersion = '\(publicationVersion)';", injectionTime: .atDocumentStart, forMainFrameOnly: true)
+    static let trashVersion = "1.0.0"
+    static let script = WKUserScript(source: "window.thingtimeNativeBridge.fileAccessVersion = '\(accessVersion)'; window.thingtimeNativeBridge.fileStagingVersion = '\(stagingVersion)'; window.thingtimeNativeBridge.filePublicationVersion = '\(publicationVersion)'; window.thingtimeNativeBridge.fileTrashVersion = '\(trashVersion)';", injectionTime: .atDocumentStart, forMainFrameOnly: true)
     private let store: MobileFolderStore
     private let staging: MobileSyncStaging
+    private let trash: MobileSyncTrash
     private let networkMonitor = NWPathMonitor()
     private var networkKind = "unknown"
     private var task: Task<Void, Never>?
@@ -24,8 +26,8 @@ final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
     private var picker: UIDocumentPickerViewController?
     private var selection: CheckedContinuation<URL?, Error>?
     private var observer: NSObjectProtocol?
-    init(store: MobileFolderStore? = nil, staging: MobileSyncStaging = MobileSyncStaging()) {
-        self.store = store ?? MobileFolderStore(); self.staging = staging
+    init(store: MobileFolderStore? = nil, staging: MobileSyncStaging = MobileSyncStaging(), trash: MobileSyncTrash = MobileSyncTrash()) {
+        self.store = store ?? MobileFolderStore(); self.staging = staging; self.trash = trash
         super.init()
         UIDevice.current.isBatteryMonitoringEnabled = true
         networkMonitor.pathUpdateHandler = { [weak self] path in
@@ -62,15 +64,17 @@ final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
             selection = continuation; picker = controller; presenter.present(controller, animated: true)
         }
     }
-    private func approve(grant: MobileFolderStore.Grant, webView: WKWebView) async throws -> Bool {
+    private func approve(grant: MobileFolderStore.Grant, allowTrash: Bool, webView: WKWebView) async throws -> Bool {
         guard var presenter = webView.window?.rootViewController else { throw MobileFolderStore.Failure.unavailable }
         while let next = presenter.presentedViewController { presenter = next }
         guard !(presenter is UIDocumentPickerViewController), !(presenter is UIAlertController) else { throw MobileFolderStore.Failure.unavailable }
         return try await withCheckedThrowingContinuation { continuation in
-            let dialog = UIAlertController(title: "Allow downloads to \(grant.name)?",
-                message: "This sync connection on \(grant.scope.origin.absoluteString) can add and replace files in this folder while the app is open. Replaced copies are retained privately on this device. Removing or choosing the folder again clears this permission.", preferredStyle: .alert)
+            var message = "This sync connection on \(grant.scope.origin.absoluteString) can add and replace files in this folder while the app is open. Replaced copies are retained privately on this device. Removing or choosing the folder again clears this permission."
+            if allowTrash { message += " Files deleted in other connected locations can also be moved into Thingtime's private recovery storage. Restoring a retained file never overwrites an existing file." }
+            let dialog = UIAlertController(title: allowTrash ? "Allow downloads and recoverable deletions in \(grant.name)?" : "Allow downloads to \(grant.name)?",
+                message: message, preferredStyle: .alert)
             approvalContinuation = continuation; approvalDialog = dialog
-            for (title, approved) in [("Cancel", false), ("Allow downloads", true)] {
+            for (title, approved) in [("Cancel", false), (allowTrash ? "Allow sync and trash" : "Allow downloads", true)] {
                 dialog.addAction(UIAlertAction(title: title, style: approved ? .default : .cancel) { [weak self, weak dialog] _ in
                     guard let self, let dialog, self.approvalDialog === dialog else { return }
                     self.approvalContinuation?.resume(returning: approved); self.approvalContinuation = nil; self.approvalDialog = nil
@@ -97,7 +101,7 @@ final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
                 reply: @escaping (String, [String: Any]) -> Void) {
         guard let payload = body["payload"] as? [String: Any], let id = payload["requestId"] as? String, UUID(uuidString: id) != nil,
               let owner = payload["ownerId"] as? String, let action = payload["action"] as? String,
-              ["list", "choose", "remove", "scan", "read", "conditions", "suspend", "stage-begin", "stage-append", "stage-download", "stage-finish", "write-approve", "publish", "publication-lookup"].contains(action),
+              ["list", "choose", "remove", "scan", "read", "conditions", "suspend", "stage-begin", "stage-append", "stage-download", "stage-finish", "write-approve", "publish", "publication-lookup", "trash", "trash-lookup", "trash-inspect", "trash-restore"].contains(action),
               let scope = try? MobileDevicePairing.Scope(ownerId: owner, url: root) else { return }
         if action == "suspend" { if requestId == id { suspend() }; return }
         let base: [String: Any] = ["requestId": id, "ownerId": owner, "origin": scope.origin.absoluteString]
@@ -133,11 +137,38 @@ final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
                             let approval = try self.decode(payload["approval"], as: MobileFolderStore.WriteApproval.self)
                             try approval.validate(owner: scope)
                             if try !self.store.isWriteApproved(scope, id: rootId, approval: approval) {
-                                guard try await self.approve(grant: grant, webView: webView) else { throw MobileFolderStore.Failure.approvalCancelled }
+                                guard try await self.approve(grant: grant, allowTrash: approval.allowTrash == true, webView: webView) else { throw MobileFolderStore.Failure.approvalCancelled }
                                 try check(); try await verifyOwner(scope, check); try check()
                                 try self.store.approveWrite(scope, grant: grant, approval: approval)
                             }
                             result = ["rootId": rootId, "writeApproval": try JSONSerialization.jsonObject(with: JSONEncoder().encode(approval))]
+                        } else if ["trash", "trash-lookup", "trash-inspect", "trash-restore"].contains(action) {
+                            let request = try self.decode(payload["trash"], as: MobileSyncTrash.Request.self)
+                            try request.validate(owner: scope)
+                            guard request.rootId == rootId else { throw MobileFolderStore.Failure.invalid }
+                            if action == "trash" || action == "trash-restore" {
+                                let approval = try self.decode(payload["approval"], as: MobileFolderStore.WriteApproval.self)
+                                guard approval.scope == request.scope, action != "trash" || approval.allowTrash == true,
+                                      try self.store.isWriteApproved(scope, id: rootId, approval: approval) else { throw MobileFolderStore.Failure.unavailable }
+                            }
+                            let trash = self.trash
+                            if action == "trash-inspect" {
+                                let worker = Task.detached { try trash.inspect(request, owner: scope, bookmark: grant.bookmark) }
+                                let retained = try await withTaskCancellationHandler(operation: { try await worker.value }, onCancel: { worker.cancel() })
+                                result = ["rootId": rootId, "retainedEntry": try retained.map { try JSONSerialization.jsonObject(with: JSONEncoder().encode($0)) } ?? NSNull()]
+                            } else if action == "trash-restore" {
+                                let restore = try self.decode(payload["restore"], as: MobileSyncTrash.Restore.self)
+                                let worker = Task.detached { try trash.restore(request, owner: scope, bookmark: grant.bookmark, restore: restore) }
+                                let restored = try await withTaskCancellationHandler(operation: { try await worker.value }, onCancel: { worker.cancel() })
+                                result = ["rootId": rootId, "restoredEntry": try JSONSerialization.jsonObject(with: JSONEncoder().encode(restored))]
+                            } else {
+                                let worker = Task.detached {
+                                    if action == "trash" { return MobileSyncTrash.Lookup(status: "complete", receipt: try trash.trash(request, owner: scope, bookmark: grant.bookmark)) }
+                                    return try trash.lookup(request, owner: scope, bookmark: grant.bookmark)
+                                }
+                                let lookup = try await withTaskCancellationHandler(operation: { try await worker.value }, onCancel: { worker.cancel() })
+                                result = ["rootId": rootId, "trash": try JSONSerialization.jsonObject(with: JSONEncoder().encode(lookup))]
+                            }
                         } else if action == "publish" || action == "publication-lookup" {
                             let request = try self.decode(payload["transfer"], as: MobileSyncStaging.Request.self)
                             try request.validate(owner: scope)

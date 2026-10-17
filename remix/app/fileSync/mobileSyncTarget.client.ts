@@ -3,7 +3,13 @@ import type { SavedFileSyncConfiguration } from './configuredPlan';
 import { parseFileSyncConfiguration } from './configuration';
 import type { LocalSyncTarget } from './localSyncTarget';
 import { sameSyncScope, validateSyncScope, type SyncScope } from './reconcile';
-import { requestMobileFolders, supportsMobileFolderPublication, type FolderCapabilities, type MobileWriteApproval } from './mobileFolders.client';
+import {
+	requestMobileFolders,
+	supportsMobileFolderPublication,
+	supportsMobileTrash,
+	type FolderCapabilities,
+	type MobileWriteApproval
+} from './mobileFolders.client';
 import { stageMobileCopy } from './mobileStaging.client';
 
 /** Native consent is separate from the editable configuration. Its binding is
@@ -27,9 +33,15 @@ export async function approveMobileSyncTarget(
 		)
 	)
 		throw Error('Downloads are unavailable for this device folder. On Android, choose a Thingtime offline folder.');
+	if (configuration.propagateDeletes && !supportsMobileTrash(bridge)) throw Error('Recoverable native trash is unavailable on this device.');
 	const bytes = new TextEncoder().encode(JSON.stringify(configuration));
 	const hash = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)), (n) => n.toString(16).padStart(2, '0')).join('');
-	const approval: MobileWriteApproval = { scope: { ...scope }, configurationRevision: saved.updatedAt, configurationHash: hash };
+	const approval: MobileWriteApproval = {
+		scope: { ...scope },
+		configurationRevision: saved.updatedAt,
+		configurationHash: hash,
+		...(configuration.propagateDeletes ? { allowTrash: true } : {})
+	};
 	signal.throwIfAborted();
 	const approved = await request(scope.ownerId, { action: 'write-approve', rootId, approval }, signal);
 	if (!approved.writeApproval || JSON.stringify(approved.writeApproval) !== JSON.stringify(approval))
@@ -40,7 +52,22 @@ export async function approveMobileSyncTarget(
 		return { scope: { ...scope }, rootId, operation: { ...structuredClone(operation), confirmed: false } };
 	};
 	return {
+		...(configuration.propagateDeletes
+			? {
+					trash: async (operation: Parameters<LocalSyncTarget['lookup']>[0], current: SyncScope) => {
+						const result = await request(scope.ownerId, { action: 'trash', rootId, trash: transfer(operation, current), approval }, signal);
+						if (result.trash?.status !== 'complete') throw Error('Native trash is not confirmed.');
+						return result.trash.receipt;
+					}
+			  }
+			: {}),
 		lookup: async (operation, current) => {
+			if (operation.mutation.kind === 'trash' && operation.mutation.side === 'local') {
+				if (!supportsMobileTrash(bridge)) throw Error('Recoverable native trash is unavailable on this device.');
+				const result = await request(scope.ownerId, { action: 'trash-lookup', rootId, trash: transfer(operation, current) }, signal);
+				if (!result.trash) throw Error('Native trash lookup is unavailable.');
+				return result.trash;
+			}
 			const result = await request(scope.ownerId, { action: 'publication-lookup', rootId, transfer: transfer(operation, current) }, signal);
 			if (!result.publication) throw Error('Native publication lookup is unavailable.');
 			return result.publication;

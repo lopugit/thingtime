@@ -504,8 +504,11 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
                 store: MobileFolderStore(),
                 staging: MobileSyncStaging(directory: endpointScope.commandJournalFileURL().deletingLastPathComponent()
                     .appendingPathComponent("FolderSync-v1-" + endpointScope.identifier, isDirectory: true)),
+                trash: MobileSyncTrash(directory: endpointScope.commandJournalFileURL().deletingLastPathComponent()
+                    .appendingPathComponent("FolderSyncTrash-v1-" + endpointScope.identifier, isDirectory: true)),
                 verify: { owner, device in try await apiClient.verifyFileSyncIdentity(ownerID: owner, deviceID: device) },
                 choose: { try await folderDialogs.choose() }, approve: { try await folderDialogs.approve($0) },
+                approveTrash: { try await folderDialogs.approve($0, allowTrash: true) },
                 cancelDialog: { folderDialogs.cancel() }, conditions: { folderConditions.snapshot() })
             let controller = ThingtimeNodeController(
                 journal: journal,

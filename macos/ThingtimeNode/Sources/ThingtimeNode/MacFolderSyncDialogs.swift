@@ -24,12 +24,16 @@ final class MacFolderSyncDialogs {
             panel.begin { response in continuation.resume(returning: response == .OK ? panel.url : nil) }
         }
     }
-    func approve(_ grant: MobileFolderStore.Grant) async throws -> Bool {
+    func approve(_ grant: MobileFolderStore.Grant, allowTrash: Bool = false) async throws -> Bool {
         guard picker == nil, alert == nil else { return false }
         let dialog = NSAlert(); alert = dialog
         dialog.messageText = "Allow downloads to \(grant.name)?"
         dialog.informativeText = "This connection on \(grant.scope.origin.absoluteString) can add and replace files in the selected folder. Replaced copies are retained privately. Removing or choosing the folder again clears this approval."
-        dialog.addButton(withTitle: "Cancel"); dialog.addButton(withTitle: "Allow downloads")
+        if allowTrash {
+            dialog.messageText = "Allow downloads and recoverable deletions in \(grant.name)?"
+            dialog.informativeText += " Files deleted in other connected locations can also be moved into Thingtime's private recovery storage. Restoring a retained file never overwrites an existing file."
+        }
+        dialog.addButton(withTitle: "Cancel"); dialog.addButton(withTitle: allowTrash ? "Allow sync and trash" : "Allow downloads")
         let timeout = Timer(timeInterval: 120, repeats: false) { [weak dialog] _ in
             guard let dialog, NSApp.modalWindow === dialog.window else { return }
             NSApp.abortModal(); dialog.window.orderOut(nil)

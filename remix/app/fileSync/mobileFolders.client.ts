@@ -10,7 +10,7 @@ import type { FingerprintSource } from './contentFingerprint';
 
 export type MobileFolder = { id: string; name: string; publicationVersion?: string };
 export type MobileStageRequest = { scope: SyncScope; rootId: string; operation: SyncOperation };
-export type MobileWriteApproval = { scope: SyncScope; configurationRevision: string; configurationHash: string };
+export type MobileWriteApproval = { scope: SyncScope; configurationRevision: string; configurationHash: string; allowTrash?: boolean };
 export type FolderRequest =
 	| { action: 'list' | 'choose' | 'conditions' }
 	| { action: 'remove' | 'scan'; rootId: string }
@@ -21,10 +21,22 @@ export type FolderRequest =
 	| { action: 'stage-append'; rootId: string; transfer: MobileStageRequest; offset: number; data: string }
 	| { action: 'write-approve'; rootId: string; approval: MobileWriteApproval }
 	| { action: 'publication-lookup'; rootId: string; transfer: MobileStageRequest }
-	| { action: 'publish'; rootId: string; transfer: MobileStageRequest; stage: LocalStagedCopy; approval: MobileWriteApproval };
+	| { action: 'publish'; rootId: string; transfer: MobileStageRequest; stage: LocalStagedCopy; approval: MobileWriteApproval }
+	| { action: 'trash-lookup' | 'trash-inspect'; rootId: string; trash: MobileStageRequest }
+	| { action: 'trash'; rootId: string; trash: MobileStageRequest; approval: MobileWriteApproval }
+	| {
+			action: 'trash-restore';
+			rootId: string;
+			trash: MobileStageRequest;
+			restore: { path: string; expected: SyncEntry };
+			approval: MobileWriteApproval;
+	  };
 export type FolderResult = {
 	writeApproval?: MobileWriteApproval;
 	publication?: SyncReceiptLookup;
+	trash?: SyncReceiptLookup;
+	retainedEntry?: SyncEntry | null;
+	restoredEntry?: SyncEntry;
 	staging?: { received: number; stage?: LocalStagedCopy };
 	roots: MobileFolder[];
 	conditions?: SyncConditions;
@@ -32,7 +44,10 @@ export type FolderResult = {
 	chunk?: { version: string; size: number; offset: number; data: string };
 	range?: { version: string; size: number; offset: number; bytes: Uint8Array<ArrayBuffer> };
 };
-export type FolderCapabilities = Pick<ThingtimeNativeBridge, 'platform' | 'fileAccessVersion' | 'fileStagingVersion' | 'filePublicationVersion'>;
+export type FolderCapabilities = Pick<
+	ThingtimeNativeBridge,
+	'platform' | 'fileAccessVersion' | 'fileStagingVersion' | 'filePublicationVersion' | 'fileTrashVersion'
+>;
 export const supportsFolderAccess = (bridge: FolderCapabilities | undefined) =>
 	Boolean(bridge && ['ios', 'android', 'macos'].includes(bridge.platform) && /^1\.\d+\.\d+$/.test(bridge.fileAccessVersion ?? ''));
 export const supportsMobileFolders = (bridge: ThingtimeNativeBridge | undefined = getNativeBridge()) =>
@@ -78,10 +93,44 @@ export function parseMobileFolderResult(
 			!approved ||
 			!sameSyncScope(approved.scope, request.approval.scope) ||
 			approved.configurationRevision !== request.approval.configurationRevision ||
-			approved.configurationHash !== request.approval.configurationHash
+			approved.configurationHash !== request.approval.configurationHash ||
+			approved.allowTrash !== request.approval.allowTrash
 		)
 			throw Error('Native folder write approval changed.');
 		result.writeApproval = structuredClone(request.approval);
+	} else if (
+		request.action === 'trash' ||
+		request.action === 'trash-lookup' ||
+		request.action === 'trash-inspect' ||
+		request.action === 'trash-restore'
+	) {
+		const m = request.trash.operation.mutation;
+		if (payload.rootId !== request.rootId || m.kind !== 'trash' || m.side !== 'local') throw Error('Native trash scope changed.');
+		if (request.action === 'trash-inspect') {
+			const entry = payload.retainedEntry;
+			if (entry !== null && (!validSyncEntry(entry) || entry.path !== m.path)) throw Error('Invalid retained native item.');
+			result.retainedEntry = entry === null ? null : structuredClone(entry);
+		} else if (request.action === 'trash-restore') {
+			const entry = payload.restoredEntry;
+			if (
+				!validSyncEntry(entry) ||
+				entry.path !== request.restore.path ||
+				entry.id !== request.restore.expected.id ||
+				!sameSyncContent(entry, request.restore.expected)
+			)
+				throw Error('Native restore is not confirmed.');
+			result.restoredEntry = structuredClone(entry);
+		} else {
+			const lookup = payload.trash,
+				receipt = lookup?.receipt;
+			if (!['missing', 'pending', 'complete'].includes(lookup?.status) || (request.action === 'trash' && lookup.status !== 'complete'))
+				throw Error('Native trash is not confirmed.');
+			if (lookup.status === 'complete') {
+				if (receipt?.operationId !== request.trash.operation.id || !sameSyncScope(receipt?.scope, request.trash.scope) || receipt.entry !== null)
+					throw Error('Invalid native trash receipt.');
+				result.trash = { status: 'complete', receipt: structuredClone(receipt) };
+			} else result.trash = { status: lookup.status };
+		}
 	} else if (request.action === 'publication-lookup' || request.action === 'publish') {
 		const publication = payload.publication,
 			receipt = publication?.receipt,
@@ -210,6 +259,8 @@ export const supportsNativeCloudStaging = (bridge: FolderCapabilities | undefine
 	bridge?.platform === 'ios' && supportsMobileStaging(bridge) && Number(bridge.fileStagingVersion!.split('.')[1]) >= 2;
 export const supportsMobilePublication = (bridge: FolderCapabilities | undefined = getNativeBridge()) =>
 	supportsMobileStaging(bridge) && /^1\.\d+\.\d+$/.test(bridge?.filePublicationVersion ?? '');
+export const supportsMobileTrash = (bridge: FolderCapabilities | undefined = getNativeBridge()) =>
+	supportsMobilePublication(bridge) && /^1\.\d+\.\d+$/.test(bridge?.fileTrashVersion ?? '');
 /** Publication 1.1 adds explicit per-folder capability. Earlier iOS 1.0
  * adapters support their selected roots; Android never falls back to that rule. */
 export function supportsMobileFolderPublication(folder: MobileFolder | undefined, bridge: FolderCapabilities | undefined = getNativeBridge()) {
@@ -260,6 +311,13 @@ export function requestMobileFolders(ownerId: string, request: FolderRequest, si
 		return Promise.reject(Error('Update the mobile app to receive staged files.'));
 	if (['write-approve', 'publication-lookup', 'publish'].includes(request.action) && !supportsMobilePublication(bridge))
 		return Promise.reject(Error('Update the mobile app to download into selected folders.'));
+	if (
+		(request.action === 'trash' ||
+			request.action.startsWith('trash-') ||
+			(request.action === 'write-approve' && request.approval.allowTrash === true)) &&
+		!supportsMobileTrash(bridge)
+	)
+		return Promise.reject(Error('Update the app to use recoverable native trash.'));
 	const input = structuredClone(request),
 		expected = { requestId: crypto.randomUUID(), ownerId, origin: window.location.origin };
 	return new Promise((resolve, reject) => {
@@ -328,9 +386,22 @@ export function requestMobileFolders(ownerId: string, request: FolderRequest, si
 				stop();
 				reject(Error('Folder access timed out. Your saved selections are preserved.'));
 			},
-			['choose', 'scan', 'read-range', 'stage-begin', 'stage-range', 'stage-download', 'stage-finish', 'write-approve', 'publish', 'publication-lookup'].includes(
-				input.action
-			)
+			[
+				'choose',
+				'scan',
+				'read-range',
+				'stage-begin',
+				'stage-range',
+				'stage-download',
+				'stage-finish',
+				'write-approve',
+				'publish',
+				'publication-lookup',
+				'trash',
+				'trash-lookup',
+				'trash-inspect',
+				'trash-restore'
+			].includes(input.action)
 				? 300_000
 				: 30_000
 		);

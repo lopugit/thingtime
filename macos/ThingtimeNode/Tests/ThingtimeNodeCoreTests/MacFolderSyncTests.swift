@@ -233,4 +233,72 @@ final class MacFolderSyncTests: XCTestCase {
         await rejects { try await service.handle(self.request("list"), receive: { _ in Data() }) }
     }
 
+    func testTrashRequiresSeparateConsentAndRestoreSurvivesDisablingDeletions() async throws {
+        var saved: [String: Data] = [:], allowTrash = false, trashPrompts = 0, writePrompts = 0, live = true
+        let selected = folder.appendingPathComponent("selected"), target = selected.appendingPathComponent("keep.bin")
+        let bytes = Data("recover this exact version".utf8)
+        try bytes.write(to: target)
+        let service = try MacFolderSync(origin: origin,
+            store: MobileFolderStore(load: { saved[$0.key] }, save: { saved[$0.key] = $1 }),
+            staging: MobileSyncStaging(directory: folder.appendingPathComponent("staging")),
+            trash: MobileSyncTrash(directory: folder.appendingPathComponent("trash")),
+            verify: { owner, device in
+                guard live, owner == "owner", device == "device" else { throw MobileFolderStore.Failure.unavailable }
+            }, choose: { selected }, approve: { _ in writePrompts += 1; return true },
+            approveTrash: { _ in trashPrompts += 1; return allowTrash })
+        let context = try await service.handle(request("context")).decode([String: JSONValue].self)
+        XCTAssertEqual(try XCTUnwrap(context["capabilities"]).decode([String: String].self)["fileTrashVersion"], "1.0.0")
+        let id = try await root(service)
+        let scan = try await service.handle(request("scan", ["rootId": .string(id)])).decode([String: JSONValue].self)
+        let entry = try XCTUnwrap(scan["entries"]).decode([MobileFolderReader.Entry].self)[0]
+        let scope = MobileSyncStaging.Scope(origin: origin.absoluteString, ownerId: "owner", dataPlane: "home", rootId: "connection", deviceId: "device")
+        let operation = MobileSyncTrash.Request(scope: scope, rootId: id,
+            operation: .init(id: UUID().uuidString.lowercased(), mutation: .init(kind: "trash", side: "local", path: entry.path, expected: entry), confirmed: false))
+        let ordinary = MobileFolderStore.WriteApproval(scope: scope, configurationRevision: "1", configurationHash: String(repeating: "a", count: 64))
+        let deletion = MobileFolderStore.WriteApproval(scope: scope, configurationRevision: "1", configurationHash: ordinary.configurationHash, allowTrash: true)
+        var fields: [String: JSONValue] = ["rootId": .string(id), "trash": try .from(operation), "approval": try .from(ordinary)]
+        _ = try await service.handle(request("write-approve", fields))
+        await rejects { try await service.handle(self.request("trash", fields)) }
+        XCTAssertEqual(writePrompts, 1); XCTAssertEqual(trashPrompts, 0)
+        fields["approval"] = try .from(deletion)
+        await rejects { try await service.handle(self.request("trash", fields)) }
+        await rejects { try await service.handle(self.request("write-approve", fields)) }
+        XCTAssertEqual(try Data(contentsOf: target), bytes)
+        allowTrash = true
+        _ = try await service.handle(request("write-approve", fields))
+        XCTAssertEqual(trashPrompts, 2)
+        var changed = fields
+        changed["approval"] = try .from(MobileFolderStore.WriteApproval(scope: scope, configurationRevision: "2", configurationHash: ordinary.configurationHash, allowTrash: true))
+        await rejects { try await service.handle(self.request("trash", changed)) }
+        let result = try await service.handle(request("trash", fields)).decode([String: JSONValue].self)
+        let receipt = try XCTUnwrap(result["trash"]).decode(MobileSyncTrash.Lookup.self)
+        XCTAssertEqual(receipt.status, "complete"); XCTAssertNil(receipt.receipt?.entry)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: target.path))
+        let repeated = try await service.handle(request("trash-lookup", fields)).decode([String: JSONValue].self)
+        XCTAssertEqual(repeated["trash"], result["trash"])
+        live = false
+        await rejects { try await service.handle(self.request("trash-inspect", fields)) }
+        live = true
+        let inspected = try await service.handle(request("trash-inspect", fields)).decode([String: JSONValue].self)
+        let retained = try XCTUnwrap(inspected["retainedEntry"]).decode(MobileFolderReader.Entry.self)
+        XCTAssertEqual(retained.id, entry.id)
+        // Revoke deletion consent by accepting the ordinary configuration again.
+        fields["approval"] = try .from(ordinary)
+        _ = try await service.handle(request("write-approve", fields))
+        fields["restore"] = try .from(MobileSyncTrash.Restore(path: entry.path, expected: retained))
+        _ = try await service.handle(request("trash-restore", fields))
+        XCTAssertEqual(try Data(contentsOf: target), bytes)
+        await rejects { try await service.handle(self.request("trash", fields)) }
+        _ = try await service.handle(request("remove", ["rootId": .string(id)]))
+        await rejects { try await service.handle(self.request("trash-inspect", fields)) }
+        XCTAssertEqual(try Data(contentsOf: target), bytes)
+    }
+
+    func testOldNativeAdapterCannotApproveTrash() async throws {
+        let service = try service(), id = try await root(service)
+        let scope = MobileSyncStaging.Scope(origin: origin.absoluteString, ownerId: "owner", dataPlane: "home", rootId: "connection", deviceId: "device")
+        let approval = MobileFolderStore.WriteApproval(scope: scope, configurationRevision: "1", configurationHash: String(repeating: "a", count: 64), allowTrash: true)
+        await rejects { try await service.handle(self.request("write-approve", ["rootId": .string(id), "approval": try .from(approval)])) }
+    }
+
 }

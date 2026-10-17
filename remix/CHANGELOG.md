@@ -68,6 +68,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-17 — **Codex (AI)**: Add Apple native recoverable Trash primitives,
+  separate deletion consent, immutable receipt recovery and exclusive restore.
+  Verify process interruptions and real Mac/API restart/revocation, plus iOS
+  simulator bridges. Automatic local deletion, Android support and recovery UI
+  remain pending. Details: [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+
 - 2026-10-17 — **Codex (AI)**: Add an internal paged account inventory using one
   MongoDB snapshot and canonical Timeline metadata. Refuse unsupported managed
   families, expired snapshots and incomplete plans. Verify concurrent mutations

@@ -150,3 +150,17 @@ test('staging accepts binary ranges only from the current main-frame account', a
     const before = f.calls.length; f.account('other');
     await assert.rejects(f.host.request(f.event, input)); assert.equal(f.calls.length, before);
 });
+
+test('native trash and restoration use the same live main-frame account boundary', async () => {
+    for (const action of ['trash', 'trash-lookup', 'trash-inspect', 'trash-restore']) {
+        const f = fixture(), trash = { operation: { id: randomUUID() } }, input = f.input({ action, rootId: randomUUID(), trash });
+        f.account('foreign');
+        await assert.rejects(f.host.request(f.event, input));
+        assert.equal(f.calls.length, 0);
+        f.account('owner');
+        await f.host.request(f.event, input);
+        assert.deepEqual(f.calls[0], input);
+        f.run(async (_method, request) => { f.account('foreign'); return { ...request, retainedEntry: { private: true } }; });
+        await assert.rejects(f.host.request(f.event, f.input({ action, rootId: input.rootId, trash })));
+    }
+});

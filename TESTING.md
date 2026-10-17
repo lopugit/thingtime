@@ -10922,3 +10922,28 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
   authenticated job admission/quota, large metadata, retained-byte pinning and
   independent cloud copying, Timeline backup lifecycle, native UI and measured
   100 GB–100 TB export remain required before claiming whole-account backup.
+
+
+### Recoverable Apple native Trash — 2026-10-17
+
+- [x] Require separate native deletion consent, exact configuration/scope/grant
+  binding and an explicit allowTrash reply; download-only permission, cancelled
+  deletion consent, old hosts, changed settings and revoked accounts refuse.
+- [x] Retain exact file/empty-file/empty-directory bytes by exclusive same-volume
+  rename. Refuse changed sources, nonempty planned folders, symlink ancestors,
+  exposed private journals and attempts to move the adapter's own lock/data.
+- [x] Regression: a replacement or newly populated folder racing the native move
+  stays pending and recoverable. Explicit folder restore preserves children and
+  symlinks without following them. Restore never overwrites a recreated path.
+- [x] Kill disposable children after trash/restore rename and before receipt;
+  a fresh process recovers the same operation. Retried deletion must never remove
+  restored or recreated files. Existing download publication recovery still passes.
+- [x] Real Mac adapter/API fixture: restart, original receipt, alternate restore,
+  exact hashes and device revocation; isolated synthetic picker/consent only.
+- [x] Mac focused adapter/identity/XPC 42; Apple 41; iOS simulator 27; shared
+  file-sync 139; Electron folder/stream 17. Full native suite hits an unrelated
+  Bluetooth usage-description test-host crash. Web tsc remains 91 diagnostics.
+- [ ] Enable automatic native deletion only after fresh remote absence and parent
+  revision handling, Android parity, recovery browsing and installed consent QA.
+  Verify external volumes/providers and preserve local recovery in whole-account
+  backup before promising device-loss recovery.

@@ -6,11 +6,14 @@ import Security
 @MainActor
 public final class MobileFolderStore {
     public struct WriteApproval: Codable, Equatable, Sendable {
-        public init(scope: MobileSyncStaging.Scope, configurationRevision: String, configurationHash: String) { self.scope = scope; self.configurationRevision = configurationRevision; self.configurationHash = configurationHash }
+        public init(scope: MobileSyncStaging.Scope, configurationRevision: String, configurationHash: String, allowTrash: Bool? = nil) { self.scope = scope; self.configurationRevision = configurationRevision; self.configurationHash = configurationHash; self.allowTrash = allowTrash }
 
         public let scope: MobileSyncStaging.Scope
         public let configurationRevision: String
         public let configurationHash: String
+        // Omitted on older grants. Ordinary download permission never implies
+        // permission to propagate deletions into native recovery storage.
+        public let allowTrash: Bool?
         public func validate(owner: FileSyncOwnerScope) throws {
             guard scope.origin == owner.origin.absoluteString, scope.ownerId == owner.ownerId, scope.dataPlane == "home",
                   !scope.rootId.isEmpty, scope.rootId.utf16.count <= 4096, !scope.deviceId.isEmpty, scope.deviceId.utf16.count <= 4096,

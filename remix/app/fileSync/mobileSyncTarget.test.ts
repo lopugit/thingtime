@@ -131,3 +131,70 @@ test('fresh folder capability is required before native consent or staging', asy
 		assert.deepEqual(calls, [{ action: 'list' }]);
 	}
 });
+
+test('native trash negotiates distinct consent, recovers immutable receipts and rejects consent downgrade', async () => {
+	const configured = { ...saved, configuration: { ...saved.configuration, propagateDeletes: true } };
+	const capable = { ...bridge, fileTrashVersion: '1.0.0' };
+	const trash: SyncOperation = {
+		...operation,
+		mutation: {
+			kind: 'trash',
+			side: 'local',
+			path: 'file',
+			expected: { path: 'file', id: 'inode', version: '1', kind: 'file', size: 3, sha256: 'a'.repeat(64) }
+		}
+	};
+	const calls: FolderRequest[] = [];
+	const request = async (_owner: string, input: FolderRequest): Promise<FolderResult> => {
+		calls.push(input);
+		if (input.action === 'write-approve') return parse(input, { writeApproval: input.approval });
+		if (input.action === 'trash-lookup') return parse(input, { trash: { status: 'missing' } });
+		if (input.action === 'trash') return parse(input, { trash: { status: 'complete', receipt: { scope, operationId: trash.id, entry: null } } });
+		return parse(input, {});
+	};
+	await assert.rejects(approveMobileSyncTarget(configured, scope, new AbortController().signal, request, bridge), /trash is unavailable/);
+	assert.deepEqual(calls, [{ action: 'list' }]);
+	calls.length = 0;
+	const target = await approveMobileSyncTarget(configured, scope, new AbortController().signal, request, capable);
+	assert.equal(calls[1].action, 'write-approve');
+	if (calls[1].action !== 'write-approve') throw Error('missing consent');
+	const consent = calls[1];
+	assert.equal(consent.approval.allowTrash, true);
+	for (const allowTrash of [undefined, false, 'true']) assert.throws(() => parse(consent, { writeApproval: { ...consent.approval, allowTrash } }));
+	assert.equal((await target.lookup({ ...trash, confirmed: true }, scope)).status, 'missing');
+	const lookup = calls.at(-1);
+	assert.equal(lookup?.action, 'trash-lookup');
+	if (lookup?.action === 'trash-lookup') assert.equal(lookup.trash.operation.confirmed, false);
+	assert.equal((await target.trash!(trash, scope)).entry, null);
+	const ordinary = await approveMobileSyncTarget(saved, scope, new AbortController().signal, request, capable);
+	assert.equal(ordinary.trash, undefined);
+});
+
+test('native trash replies require null receipts and restore the reviewed inode without changing content', () => {
+	const entry = { path: 'file', id: 'inode', version: '1', kind: 'file' as const, size: 3, sha256: 'a'.repeat(64) };
+	const trash = {
+		scope,
+		rootId,
+		operation: { ...operation, mutation: { kind: 'trash' as const, side: 'local' as const, path: entry.path, expected: entry } }
+	};
+	const request: FolderRequest = { action: 'trash-lookup', rootId, trash };
+	for (const receipt of [
+		undefined,
+		{ scope, operationId: operation.id },
+		{ scope, operationId: 'other', entry: null },
+		{ scope: { ...scope, ownerId: 'foreign' }, operationId: operation.id, entry: null },
+		{ scope, operationId: operation.id, entry }
+	])
+		assert.throws(() => parse(request, { trash: { status: 'complete', receipt } }));
+	assert.equal(parse({ ...request, action: 'trash-inspect' }, { retainedEntry: entry }).retainedEntry?.id, entry.id);
+	const restore: FolderRequest = {
+		...request,
+		action: 'trash-restore',
+		restore: { path: 'recovered', expected: entry },
+		approval: { scope, configurationRevision: '1', configurationHash: 'a'.repeat(64) }
+	};
+	const restored = { ...entry, path: 'recovered', version: '2' };
+	assert.deepEqual(parse(restore, { restoredEntry: restored }).restoredEntry, restored);
+	for (const patch of [{ path: 'other' }, { id: 'other' }, { sha256: 'b'.repeat(64) }, { size: 4 }])
+		assert.throws(() => parse(restore, { restoredEntry: { ...restored, ...patch } }));
+});

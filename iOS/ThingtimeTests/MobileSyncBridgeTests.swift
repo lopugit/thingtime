@@ -73,4 +73,74 @@ extension MobileSyncStagingTests {
         bridge.suspend()
     }
 
+    func testBridgeTrashSeparatesConsentAndPreservesARecreatedDestination() async throws {
+        let bytes = Data("retained iOS bytes".utf8), (cache, owner, initial) = try fixture(Data([1]))
+        let selected = cache.appendingPathComponent("selected")
+        try FileManager.default.createDirectory(at: selected, withIntermediateDirectories: true)
+        let target = selected.appendingPathComponent("retained.bin")
+        try bytes.write(to: target)
+        var data: Data?
+        let store = MobileFolderStore(load: { _ in data }, save: { _, next in data = next })
+        let grant = try store.add(owner, selected: selected)
+        let entry = try XCTUnwrap(MobileFolderReader.scan(bookmark: grant.bookmark).first)
+        let request = MobileSyncTrash.Request(scope: initial.scope, rootId: grant.id,
+            operation: .init(id: UUID().uuidString.lowercased(), mutation: .init(kind: "trash", side: "local", path: entry.path, expected: entry), confirmed: false))
+        let bridge = MobileFolderBridge(store: store, staging: MobileSyncStaging(directory: cache.appendingPathComponent("staging")),
+            trash: MobileSyncTrash(directory: cache.appendingPathComponent("trash")))
+        let webView = WKWebView()
+        webView.configuration.userContentController.addUserScript(WKUserScript(source: "window.thingtimeNativeBridge = {};", injectionTime: .atDocumentStart, forMainFrameOnly: true))
+        webView.configuration.userContentController.addUserScript(MobileFolderBridge.script)
+        webView.loadHTMLString("<html><body>Native trash fixture</body></html>", baseURL: owner.origin)
+        for _ in 0..<100 {
+            if let version = try? await webView.evaluateJavaScript("window.thingtimeNativeBridge?.fileTrashVersion"), version as? String == "1.0.0" { break }
+            try await Task.sleep(nanoseconds: 20_000_000)
+        }
+        let version = try await webView.evaluateJavaScript("window.thingtimeNativeBridge.fileTrashVersion")
+        XCTAssertEqual(version as? String, "1.0.0")
+        let encoded = try JSONSerialization.jsonObject(with: JSONEncoder().encode(request))
+        let ordinary = MobileFolderStore.WriteApproval(scope: initial.scope, configurationRevision: "v1", configurationHash: String(repeating: "a", count: 64))
+        let deletion = MobileFolderStore.WriteApproval(scope: initial.scope, configurationRevision: "v1", configurationHash: ordinary.configurationHash, allowTrash: true)
+        var approval = ordinary, live = true
+        func call(_ action: String, restore: MobileSyncTrash.Restore? = nil) async throws -> [String: Any] {
+            let complete = expectation(description: action)
+            var response: [String: Any]?
+            var payload: [String: Any] = ["requestId": UUID().uuidString, "ownerId": owner.ownerId, "rootId": grant.id,
+                "action": action, "trash": encoded, "approval": try JSONSerialization.jsonObject(with: JSONEncoder().encode(approval))]
+            if let restore { payload["restore"] = try JSONSerialization.jsonObject(with: JSONEncoder().encode(restore)) }
+            bridge.handle(["payload": payload], webView: webView, root: owner.origin, currentRoot: { owner.origin },
+                verifyOwner: { supplied, check in
+                    XCTAssertEqual(supplied, owner); try check()
+                    if !live { throw MobileFolderStore.Failure.unavailable }
+                }, reply: { _, payload in response = payload; complete.fulfill() })
+            await fulfillment(of: [complete], timeout: 5)
+            return try XCTUnwrap(response)
+        }
+        try store.approveWrite(owner, grant: grant, approval: ordinary)
+        let denied = try await call("trash"); XCTAssertNotNil(denied["error"])
+        XCTAssertEqual(try Data(contentsOf: target), bytes)
+        approval = deletion
+        let unapproved = try await call("trash"); XCTAssertNotNil(unapproved["error"])
+        // Synthetic consent is restricted to this disposable native test grant.
+        try store.approveWrite(owner, grant: grant, approval: deletion)
+        let deleted = try await call("trash"); XCTAssertNil(deleted["error"])
+        let receipt = try XCTUnwrap((deleted["trash"] as? [String: Any])?["receipt"] as? [String: Any])
+        XCTAssertTrue(receipt["entry"] is NSNull)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: target.path))
+        live = false
+        let revoked = try await call("trash-inspect"); XCTAssertNotNil(revoked["error"])
+        live = true
+        let inspected = try await call("trash-inspect")
+        let retained = try JSONDecoder().decode(MobileFolderReader.Entry.self,
+            from: JSONSerialization.data(withJSONObject: try XCTUnwrap(inspected["retainedEntry"])))
+        try Data("new local version".utf8).write(to: target)
+        let occupied = try await call("trash-restore", restore: .init(path: entry.path, expected: retained))
+        XCTAssertNotNil(occupied["error"])
+        approval = ordinary; try store.approveWrite(owner, grant: grant, approval: ordinary)
+        let restored = try await call("trash-restore", restore: .init(path: "recovered.bin", expected: retained))
+        XCTAssertNil(restored["error"])
+        XCTAssertEqual(try Data(contentsOf: selected.appendingPathComponent("recovered.bin")), bytes)
+        XCTAssertEqual(try Data(contentsOf: target), Data("new local version".utf8))
+        bridge.suspend()
+    }
+
 }
