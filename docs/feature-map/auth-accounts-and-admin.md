@@ -105,3 +105,11 @@ model catalogue sync and TESTING daily provider model availability.
 native Responses requirements (including GPT-6 Astra); `lopu/chat.ts` consumes
 that transport policy. `chat.streaming.test.mts` exercises Astra default/High/Max
 reasoning and tool-result replay through the real SDK against an HTTP fixture.
+
+## iOS release automation
+
+`api/utils/releases/iosRelease.ts` uses the existing admin integration secret,
+claim and audit stores. `iosReleaseCore.ts` validates the fixed release policy and
+Apple bundle. GitHub OIDC grants only `integrations/ios-release` access after
+immutable repository/owner, main workflow, event and source checks; it grants no
+admin session or general vault access. See [setup and acceptance](../ios-automatic-testflight.md).

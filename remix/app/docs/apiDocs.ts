@@ -642,6 +642,16 @@ const deviceEndpointDocs: ApiEndpointDoc[] = [
 
 export const apiEndpointDocs: ApiEndpointDoc[] = [
   endpoint({
+    id: 'integration-ios-release', group: 'integrations', title: 'Deliver iOS release credentials',
+    endpoint: '/api/v1/integrations/ios-release', featureVersion: '1.0.0',
+    summary: 'Purpose-scoped TestFlight credential delivery using a short-lived GitHub identity.',
+    detail: 'Production only. Verifies GitHub OIDC signature, audience, immutable repository and owner IDs, main ref, exact TestFlight workflow, source SHA, allowed event and single-use token. A vault policy enables delivery; explicit migration imports an absent Apple bundle without overwriting it. No browser session or general CI credential grants access.',
+    auth: { mode: 'bearer', description: 'GitHub Actions OIDC token with audience thingtime:ios-testflight; not a Thingtime session token.' },
+    methods: ['POST'], steps: ['Configure the iOS release policy in Admin System Secure Vault.', 'Negotiate api.integration-ios-release 1.0.0.', 'Request a fresh GitHub OIDC token and submit fetch or an explicitly enabled migration.', 'Mask returned credentials and retain them only for this job.'],
+    requestExamples: [{ name: 'Release job', description: 'One request per short-lived identity.', method: 'POST', body: { operation: 'fetch' } }],
+    responseExamples: [{ status: 403, description: 'Wrong identity.', body: { ok: false, error: 'This workflow is not authorized for iOS releases.' } }]
+  }),
+  endpoint({
     id: 'passwords', contractVersion: '1.0.0', featureVersion: '1.0.0', group: 'auth', title: 'Private password manager', endpoint: '/api/v1/passwords',
     summary: 'Manage encrypted credentials using the current full account session.',
     detail: 'GET pages metadata with an opaque cursor. POST export returns up to 50 decrypted entries per page for an explicit backup. POST catalog pages native AutoFill names, exact HTTPS domains and public passkey identifiers without secret values. POST read unlocks one owned entry through the live session; save uses a stable id, writeId and revision; delete leaves a value-free tombstone. All POST requests require expectedOwnerId. Values never enter generic Thing APIs or history. Server-assisted recovery preserves entries after password reset.',

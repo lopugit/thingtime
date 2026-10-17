@@ -132,3 +132,15 @@ test('desktop vault proxy requires the bundled origin and pinned HTTPS endpoint'
   } finally { mock.mock.restore(); if (prior === undefined) delete process.env.THINGTIME_DESKTOP; else process.env.THINGTIME_DESKTOP = prior; }
  });
 });
+
+
+test('iOS release identities and migration bodies never follow an origin fallback', async () => {
+  await withFallbackEnv('https://thingtime.com', async () => {
+    const request = new Request('http://127.0.0.1:17340/api/v1/integrations/ios-release', { method: 'POST', headers: { Authorization: 'Bearer synthetic-identity', 'Content-Type': 'application/json' }, body: '{"operation":"migrate","credentials":"synthetic"}' });
+    const response = await (handleApi as any)({ req: request, context: { params: { path: 'v1/integrations/ios-release' } } });
+    assert.equal(response.status, 503);
+    assert.match(response.headers.get('Cache-Control'), /no-store/);
+    assert.equal(request.bodyUsed, false);
+    assert.ok(!(await response.text()).includes('synthetic'));
+  });
+});
