@@ -5370,3 +5370,17 @@ installed acceptance so hot reload cannot replace a pending bridge listener.
 The shared synthetic layout fixture also exercises replaced-version controls.
 Removing a grant, uninstalling the app and device loss are not recovery paths;
 independent snapshots and large-volume export remain separate acceptance work.
+
+
+#### Android photo backup setup
+
+On Android 11+, **Choose folder → Photo library (backup)** requests photo/video
+and original-media metadata access, then opens Files to select the library or a
+storage volume. Android 14+ selected-photo access is supported and labelled.
+Create a private cloud folder and a file-sync connection; photo sources use backup
+mode and retain cloud copies after source deletion. Start transfers explicitly
+while the app is open. No extra credentials or server environment variables are
+required beyond the existing file-sync/Timeline setup. Native photo libraries
+remain bounded to 10,000 entries per selected tree; background workers, large-library
+paging and iOS/Mac Photos adapters remain unfinished. See the
+[Android setup and disposable acceptance workflow](android/README.md#photo-library-backup-android-11).

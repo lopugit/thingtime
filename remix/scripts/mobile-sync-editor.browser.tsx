@@ -1,3 +1,4 @@
+import type { MobileFolder } from '../app/fileSync/mobileFolders.client';
 import { fingerprintSource } from '../app/fileSync/contentFingerprint';
 import { fileRetentionEventId } from '../app/fileSync/fileVersions';
 // Render the production editor and useApi under StrictMode. Only the Things API
@@ -10,6 +11,7 @@ import { SyncConflictReview } from '../app/components/Devices/SyncConflictReview
 import { DesktopFolderAccess } from '../app/components/Devices/DesktopFolderAccess';
 import { MobileFolderAccess } from '../app/components/Devices/MobileFolderAccess';
 import { nativeBridgeMessageEvent } from '../app/utils/nativeBridge';
+const photoQA = new URLSearchParams(location.search).has('photos');
 const desktop = new URLSearchParams(location.search).get('platform') === 'desktop';
 const captureQA = new URLSearchParams(location.search).has('capture');
 const conflictQA = captureQA || new URLSearchParams(location.search).has('conflicts');
@@ -25,9 +27,9 @@ let capturePuts = 0,
 	captureRedraw = () => {};
 const captureReady = new Set<string>();
 const canonicalOrigin = 'https://desktop-sync.invalid';
-const ownerId = 'sync-ui-fixture',
+const ownerId = photoQA ? 'sync-ui-photo-fixture' : 'sync-ui-fixture',
 	deviceId = 'sync-ui-device',
-	databaseKey = 'tt:fixture:sync-editor-database' + (captureQA ? ':capture' : conflictQA ? ':conflicts' : '');
+	databaseKey = 'tt:fixture:sync-editor-database' + (photoQA ? ':photos' : captureQA ? ':capture' : conflictQA ? ':conflicts' : '');
 let rows: any[] = JSON.parse(localStorage.getItem(databaseKey) || 'null') ?? [
 	{ id: 'cloud-documents', thingtime: ['folder'], author: { id: ownerId }, acl: ['tt:user'], crystal: { name: 'Cloud documents' } }
 ];
@@ -90,7 +92,14 @@ const captureChunk = (request: any) => ({
 		data: btoa(String.fromCharCode(...captureBytes.slice(request.offset, request.offset + request.length)))
 	}
 });
-let roots = [{ id: '11111111-1111-4111-8111-111111111111', name: 'Project documents' }],
+const initialRoots: MobileFolder[] = [
+	{
+		id: '11111111-1111-4111-8111-111111111111',
+		name: photoQA ? 'Photo library' : 'Project documents',
+		...(photoQA ? { sourceKind: 'photos' as const, photoAccess: 'limited' as const } : {})
+	}
+];
+let roots = structuredClone(initialRoots),
 	loseReply = false,
 	unavailable = false;
 const persist = () => localStorage.setItem(databaseKey, JSON.stringify(rows));
@@ -267,7 +276,7 @@ window.thingtimeNativeBridge = {
 				);
 			else {
 				if (request.action === 'remove') roots = roots.filter((r) => r.id !== request.rootId);
-				if (request.action === 'choose') roots = [{ id: '11111111-1111-4111-8111-111111111111', name: 'Project documents' }];
+				if (request.action === 'choose') roots = structuredClone(initialRoots);
 				window.dispatchEvent(
 					new CustomEvent(nativeBridgeMessageEvent, {
 						detail: {
@@ -304,7 +313,7 @@ if (desktop) {
 				return await new Promise((resolve) => pending.set(request.requestId, resolve));
 			}
 			if (request.action === 'remove') roots = roots.filter((root) => root.id !== request.rootId);
-			if (request.action === 'choose') roots = [{ id: '11111111-1111-4111-8111-111111111111', name: 'Project documents' }];
+			if (request.action === 'choose') roots = structuredClone(initialRoots);
 			const manifest = request.action === 'context' ? await (await originalFetch('/.well-known/thingtime-capabilities.json')).json() : undefined;
 			return {
 				...request,

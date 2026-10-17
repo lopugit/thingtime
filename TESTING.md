@@ -11062,3 +11062,23 @@ Canonical runner: 67 instrumentation tests passed in 174.246 seconds, with build
 JVM tests and Android lint. Shared suite: 148 passed. Raw TypeScript: 91 existing
 diagnostics outside changed files. These results do not establish 100 TB data
 transfer, whole-account snapshots or production deployment.
+
+
+### Android photo library backup
+
+- On a disposable Android 11+ emulator, cancel the native photo explanation and
+  confirm no folder is selected. Complete the permission flow and Files selection;
+  selection alone must not upload anything.
+- Confirm the connection identifies originals and full/limited access, defaults to
+  paused backup, disables other directions and deletion propagation, and remains
+  readable without overflow at mobile and desktop widths.
+- Run `THINGTIME_PHOTO_BACKUP_TEST=1 android/scripts/test-mobile-devices.sh
+  /path/to/private-fixture.json`; compare the downloaded original SHA-256, add a
+  second owned test image, delete the first locally, and verify both cloud copies
+  remain. Re-run without extra publications.
+- Run the installed `PhotoLibraryTest` checks: duplicate display names retain
+  distinct paths, pending/trashed/deleted assets are not readable, denied access
+  and cancellation fail rather than return an empty scan, and provider writes
+  fail. Never treat a permissions flag as a persisted grant.
+- Real limited-selection changes, video/EXIF format coverage, physical devices,
+  large libraries and background completion remain additional release checks.

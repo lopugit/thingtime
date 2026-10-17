@@ -18,7 +18,13 @@ import { getNativeBridge, nativeBridgeMessageEvent, type ThingtimeNativeBridge }
 import { planFileSync, validSyncEntry, type SyncEntry } from './reconcile';
 import type { FingerprintSource } from './contentFingerprint';
 
-export type MobileFolder = { id: string; name: string; publicationVersion?: string };
+export type MobileFolder = {
+	id: string;
+	name: string;
+	publicationVersion?: string;
+	sourceKind?: 'photos';
+	photoAccess?: 'full' | 'limited' | 'unavailable';
+};
 export type MobileStageRequest = { scope: SyncScope; rootId: string; operation: SyncOperation };
 export type MobileTrashRequest = MobileStageRequest & LocalTrashContext;
 export type MobileWriteApproval = { scope: SyncScope; configurationRevision: string; configurationHash: string; allowTrash?: boolean };
@@ -95,6 +101,10 @@ export function parseMobileFolderResult(
 				typeof r.name !== 'string' ||
 				!r.name ||
 				r.name.length > 1024 ||
+				(r.sourceKind !== undefined && r.sourceKind !== 'photos') ||
+				(r.sourceKind === 'photos'
+					? !['full', 'limited', 'unavailable'].includes(r.photoAccess) || r.publicationVersion !== undefined
+					: r.photoAccess !== undefined) ||
 				(r.publicationVersion !== undefined &&
 					(typeof r.publicationVersion !== 'string' || !/^\d+\.\d+\.\d+$/.test(r.publicationVersion) || r.publicationVersion.length > 32))
 		)
@@ -104,7 +114,8 @@ export function parseMobileFolderResult(
 		roots: payload.roots.map((r: any) => ({
 			id: r.id,
 			name: r.name,
-			...(r.publicationVersion !== undefined ? { publicationVersion: r.publicationVersion } : {})
+			...(r.publicationVersion !== undefined ? { publicationVersion: r.publicationVersion } : {}),
+			...(r.sourceKind === 'photos' ? { sourceKind: r.sourceKind, photoAccess: r.photoAccess } : {})
 		}))
 	};
 	if (request.action.startsWith('version-')) {

@@ -353,6 +353,7 @@ public class DeviceLiveTest {
             .put("data",java.util.Base64.getEncoder().encodeToString(new byte[FolderReader.MAX_READ])));
         assertEquals("Folder access is unavailable. Choose it again.",denied.getString("error"));
         assertFalse(denied.toString().contains("content://"));
+        if("true".equals(InstrumentationRegistry.getArguments().getString("photoBackup"))) {PhotoBackupAcceptance.run(web,context,scope);return;}
         if("true".equals(InstrumentationRegistry.getArguments().getString("offlineSelection"))) {verifyOfflineFolder(web,context,scope);return;}
         if(!"true".equals(InstrumentationRegistry.getArguments().getString("folderSelection"))) return;
         progress("FOLDER_QA_READY: Choose folder and select Documents/ThingtimeSyncQA in the system picker.");

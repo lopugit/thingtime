@@ -68,6 +68,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-18 — **Codex (AI)**: Add Android original-photo backup through native
+  photo permission and folder selection, with editable backup-only connections
+  and cloud copies retained after device deletion. Verify 71 installed Android
+  tests, original-byte download hashes and responsive access messaging. Large
+  libraries, background transfer and Apple Photos remain open. See the
+  [PR #1002 ledger](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
 - 2026-10-18 — **Codex (AI)**: Android offline folders can browse versions kept
   during replacement and restore an independent copy with native confirmation,
   preserving exact retry intent through reload. Schema migration, 67 installed

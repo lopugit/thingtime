@@ -1876,3 +1876,34 @@ canonical Timeline event for native restore or create an independent backup.
 Apple retained-version browsing, recovery after replacing a grant, native history
 in device-loss snapshots, background workers and whole-account large-volume
 backup/export remain open. Existing cloud history still uses canonical Timeline.
+
+
+## Android foreground photo backup — 2026-10-18
+
+Android 11+ can select a read-only photo library through native permission and
+Files dialogs. Original photos/videos enter the existing file-sync pipeline and
+canonical cloud file history. Editable connection Things carry optional source
+intent; fresh native access remains authoritative. Photo connections require
+backup mode with deletion propagation disabled, so deleting a device original
+keeps its saved cloud copy. Full, selected-only and unavailable access are shown
+explicitly. No upload starts from granting access alone.
+
+The canonical runner rebuilt and installed both APKs, passed JVM tests and lint,
+and passed 71 instrumentation tests in 158.118 seconds. The live API 35 emulator
+scenario checked real permission/tree selection, the backup-only editor, an
+independent original PNG SHA-256 after download, discovery of another photo,
+retention after deleting the first device original and repeat convergence without
+another publication. Four native cases cover read-only enforcement, distinct
+identities, generation changes, pending/trashed/missing media, cancellation and
+permission loss. The focused shared suite passed 53 tests. Raw TypeScript retains
+91 diagnostics outside changed files. Live synthetic editor checks at 390px and
+1280px showed selected-only messaging and no horizontal overflow. The first live
+harness incorrectly waited for an Upload again label; the corrected runner uses
+the actual Upload now control.
+
+Actual limited-selection changes, video/EXIF format coverage and physical devices
+still need acceptance. Scans remain bounded to 10,000 entries and run while the
+app is open; large-library paging, background workers and Apple Photos adapters
+remain open. This does not complete independent whole-account snapshots, native
+history inclusion in device-loss backups, 100 GB–100 TB export acceptance or
+physical-drive delivery. Setup and permission details are in android/README.md.

@@ -1,3 +1,4 @@
+import { assertPhotoSourcePolicy, photoAccessDescription } from '~/fileSync/photoSourcePolicy';
 import { NativeFileRecovery } from './NativeFileRecovery';
 import { TIMELINE_CHANGED_EVENT } from '~/timeline/clientEvents';
 import React, { useEffect, useId, useRef, useState, useSyncExternalStore } from 'react';
@@ -278,6 +279,8 @@ function Connections({
 					syncScope,
 					async () => {
 						assertActive();
+						assertPhotoSourcePolicy(saved.configuration, (await requestFolders(scope.ownerId, { action: 'list' }, active.signal)).roots);
+						assertActive();
 						const localTarget = ['download', 'two-way'].includes(saved.configuration.mode)
 							? await approveMobileSyncTarget(saved, syncScope, active.signal, requestFolders, capabilities)
 							: undefined;
@@ -295,6 +298,7 @@ function Connections({
 								},
 								authorizeDevice: async () => {
 									await authorizeDevice(scope.deviceId, active.signal);
+									assertPhotoSourcePolicy(saved.configuration, (await requestFolders(scope.ownerId, { action: 'list' }, active.signal)).roots);
 									assertActive();
 								},
 								conditions: async () => (await requestFolders(scope.ownerId, { action: 'conditions' }, active.signal)).conditions!,
@@ -376,7 +380,8 @@ function Connections({
 					name: roots[0]?.name || 'Folder connection',
 					deviceId: scope.deviceId,
 					localRootId: roots[0]?.id || 'unselected',
-					remoteFolderId: 'unselected'
+					remoteFolderId: 'unselected',
+					sourceKind: roots[0]?.sourceKind
 				}),
 				localRootId: roots[0]?.id ?? '',
 				remoteFolderId: ''
@@ -494,6 +499,13 @@ function Connections({
 				const running = busy && activeTransfer === saved.id;
 				const downloading = saved.configuration.mode === 'download';
 				const twoWay = saved.configuration.mode === 'two-way';
+				const nativeRoot = roots.find((root) => root.id === saved.configuration.localRootId);
+				let sourceAllowed = true;
+				try {
+					assertPhotoSourcePolicy(saved.configuration, roots);
+				} catch {
+					sourceAllowed = false;
+				}
 				const supported =
 					['upload', 'backup'].includes(saved.configuration.mode) ||
 					((downloading || twoWay) &&
@@ -503,6 +515,7 @@ function Connections({
 						) &&
 						(!saved.configuration.propagateDeletes || supportsMobileTrashRecovery(capabilities)));
 				const allowed =
+					sourceAllowed &&
 					supportsMobileSyncConditions(capabilities) &&
 					scope.dataPlane === 'home' &&
 					supported &&
@@ -514,8 +527,15 @@ function Connections({
 							<Text fontSize="13px" fontWeight={600}>
 								{saved.configuration.name}
 							</Text>
+							{nativeRoot?.sourceKind === 'photos' && (
+								<Text fontSize="12px" color="var(--tt-muted, #71717a)">
+									{photoAccessDescription(nativeRoot)}
+								</Text>
+							)}
 							<Text fontSize="12px">
-								{saved.configuration.paused
+								{!sourceAllowed
+									? 'Source access or backup policy needs review'
+									: saved.configuration.paused
 									? 'Paused'
 									: !supported
 									? downloading || twoWay
@@ -697,6 +717,8 @@ export function SyncConfigurationForm({
 }) {
 	const prefix = useId(),
 		c = draft.configuration;
+	const selectedRoot = roots.find((root) => root.id === c.localRootId);
+	const photos = selectedRoot?.sourceKind === 'photos' || c.sourceKind === 'photos';
 	const change = (patch: Partial<FileSyncConfiguration>) => onChange({ ...draft, configuration: { ...c, ...patch } });
 	const field = (name: string, label: string, child: React.ReactNode) => (
 		<FormControl isDisabled={disabled}>
@@ -716,7 +738,18 @@ export function SyncConfigurationForm({
 			{field(
 				'local',
 				'Device folder',
-				<Select id={`${prefix}-local`} value={c.localRootId} onChange={(e) => change({ localRootId: e.target.value })}>
+				<Select
+					id={`${prefix}-local`}
+					value={c.localRootId}
+					onChange={(e) => {
+						const root = roots.find((root) => root.id === e.target.value);
+						change({
+							localRootId: e.target.value,
+							sourceKind: root?.sourceKind,
+							...(root?.sourceKind === 'photos' ? { mode: 'backup', propagateDeletes: false } : {})
+						});
+					}}
+				>
 					<option value="">Choose a device folder</option>
 					{c.localRootId && !roots.some((r) => r.id === c.localRootId) && <option value={c.localRootId}>Folder access missing</option>}
 					{roots.map((r) => (
@@ -725,6 +758,11 @@ export function SyncConfigurationForm({
 						</option>
 					))}
 				</Select>
+			)}
+			{selectedRoot?.sourceKind === 'photos' && (
+				<Text fontSize="12px" color="var(--tt-muted, #71717a)">
+					{photoAccessDescription(selectedRoot)}. Backup runs while this app is open.
+				</Text>
 			)}
 			{field(
 				'remote',
@@ -747,6 +785,7 @@ export function SyncConfigurationForm({
 				'Direction',
 				<Select
 					id={`${prefix}-mode`}
+					isDisabled={disabled || photos}
 					value={c.mode}
 					onChange={(e) =>
 						change({ mode: e.target.value as FileSyncConfiguration['mode'], ...(e.target.value === 'backup' ? { propagateDeletes: false } : {}) })

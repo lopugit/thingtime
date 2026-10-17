@@ -89,7 +89,7 @@ this test environment. The runtime remains fail-closed on secure-storage errors.
 | Folder sync across Mac, iOS, Android and cloud | Create/edit/rename/move/delete real byte fixtures in each direction; independent hash verification and convergence | Reconciler/executor, verified fingerprints and atomic stable-file replacement; cloud upload adapter and complete private cloud inventory verified; iOS and Android folder grants/scans/reads implemented; foreground upload/backup controls and recoverable progress implemented; bounded cloud downloads and executor staging/receipt adapter verified; iOS native staging, approval and same-volume publication implemented and tested; Android private staging, native write approval, durable offline-folder publication, explicit native creation and read-only Android Files access verified; Android foreground offline-root cloud downloads, mixed two-way creates/independent replacements and actual Files acceptance verified; shared Apple publication core and process-exit recovery verified on macOS; Mac local adapter/identity/disconnect implemented; Electron host/shared controls, synthetic browser foreground acceptance and real Mac adapter/cloud mixed-transfer acceptance implemented; iOS mixed-direction simulator acceptance verified; iOS external Files edits, Mac installed transfers, workers and full cross-device transfer acceptance pending |
 | Persistent offline and background sync | Kill/relaunch, reboot, network loss, sleep/wake, quota errors, paused jobs; durable retries with original IDs | Browser journal, Desktop full-process journal/draft restart recovery and real cloud upload recovery verified; iOS publication and Android staging process-exit recovery verified; native schedulers and reboot acceptance pending |
 | Large resumable transfers | Chunk interruption/resume, hash mismatch, cancellation, stale upload/finalization race; streaming memory bounds | Real executor multipart interruption and exact-identity retry verified; Mac upload/download ranges and Android binary download ranges verified; mobile upload ranges, iOS streaming and sustained throughput remain pending |
-| Photos backup | Explicit selection/permission, incremental discovery, original photo/video bytes and metadata, duplicates, limited library changes, background completion | Pending |
+| Photos backup | Explicit selection/permission, incremental discovery, original photo/video bytes and metadata, duplicates, limited library changes, background completion | Android 11+ read-only MediaStore source and shared backup-only connection implemented; native originals/duplicate/permission tests pass. Installed API 35 cloud acceptance passed; real limited-selection changes, video formats and physical devices remain open. iOS/Mac Photos, large-library paging, real limited-selection changes, broader video/EXIF fixtures and background completion remain pending |
 | Sync settings | Folder selection, direction, pause/resume, Wi-Fi/cellular and charging policy, exclusions, retention, selective/offline availability | Editable file-sync Things persist device/root/destination, direction, pause, network/power and exclusions; shared configured planner verified. Mobile folder and connection editors exist with durable local drafts and guarded API saves; foreground upload/backup checks live native network/power signals; iOS scoped Keychain and Android native/OS write approvals implemented; Mac native approvals/shared controls implemented with installed acceptance pending; retention/selective settings and background workers remain pending |
 | Conflict and deletion recovery | Concurrent edits and delete/edit preserve both versions; conflict resolution UI, retained versions/trash restore | API preserves versions and supports Trash/restore; iOS preserves displaced versions and uncertain conflicts in the transfer journal; file conflict review now offers guarded version choices; Android file-conflict review and native recovery acceptance verified; shared native recovery browsing and reviewed restore implemented on Mac/iOS/Android offline folders; broader installed conflict review, folder conflicts, recovery after grant replacement and retention policy remain pending |
 | Sharing and device-to-device behavior | Existing ACL/account boundaries, revocation during transfers, offline peers and selected destinations | Existing ACL paths retained; sync adapters and peer behavior pending |
@@ -2109,3 +2109,34 @@ canonical Timeline event for native restore or create an independent backup.
 Apple retained-version browsing, recovery after replacing a grant, native history
 in device-loss snapshots, background workers and whole-account large-volume
 backup/export remain open. Existing cloud history still uses canonical Timeline.
+
+
+### Android foreground photo backup — 2026-10-18
+
+Android 11+ can select a read-only photo library through native permission and
+Files dialogs. Original photos/videos enter the existing file-sync pipeline and
+canonical cloud file history. Editable connection Things carry optional source
+intent; fresh native access remains authoritative. Photo connections require
+backup mode with deletion propagation disabled, so deleting a device original
+keeps its saved cloud copy. Full, selected-only and unavailable access are shown
+explicitly. No upload starts from granting access alone.
+
+The canonical runner rebuilt and installed both APKs, passed JVM tests and lint,
+and passed 71 instrumentation tests in 158.118 seconds. The live API 35 emulator
+scenario checked real permission/tree selection, the backup-only editor, an
+independent original PNG SHA-256 after download, discovery of another photo,
+retention after deleting the first device original and repeat convergence without
+another publication. Four native cases cover read-only enforcement, distinct
+identities, generation changes, pending/trashed/missing media, cancellation and
+permission loss. The focused shared suite passed 53 tests. Raw TypeScript retains
+91 diagnostics outside changed files. Live synthetic editor checks at 390px and
+1280px showed selected-only messaging and no horizontal overflow. The first live
+harness incorrectly waited for an Upload again label; the corrected runner uses
+the actual Upload now control.
+
+Actual limited-selection changes, video/EXIF format coverage and physical devices
+still need acceptance. Scans remain bounded to 10,000 entries and run while the
+app is open; large-library paging, background workers and Apple Photos adapters
+remain open. This does not complete independent whole-account snapshots, native
+history inclusion in device-loss backups, 100 GB–100 TB export acceptance or
+physical-drive delivery. Setup and permission details are in android/README.md.

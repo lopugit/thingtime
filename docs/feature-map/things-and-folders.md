@@ -418,3 +418,15 @@ and `mobileFolders.client.ts` verifies native replies. `ManagedVersionTest`,
 `NativeVersionAcceptance` and `native-recovery.browser.tsx` cover storage,
 installed cancel/reload/copy restore and responsive controls. This is local
 recovery; cloud versions continue through the canonical Timeline path above.
+
+
+Android original-media backup uses `PhotoLibrary` (MediaStore) and the read-only
+`PhotoDocumentsProvider` (system folder selection). `FolderBridge` requests
+permissions only after native selection and rechecks access before disclosure.
+`ManagedFolderAccess` projects source kind and current permission extent.
+`fileSync/photoSourcePolicy.ts` enforces backup-only intent against fresh native
+roots; `MobileSyncConnections` exposes the same editable connection Thing and
+foreground pipeline. `PhotoLibraryTest`, `PhotoBackupAcceptance` and
+`photoSourcePolicy.test.ts` cover original bytes, native permission boundaries,
+read-only access and retained cloud copies. See `android/README.md` for setup and
+`docs/mobile-file-sync.md` for bounded foreground coverage.

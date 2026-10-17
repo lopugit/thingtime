@@ -12,12 +12,13 @@ import org.json.JSONObject;
  * Generic SAF providers never enter this publication path. Callers authenticate
  * the account before entry; grants and consent are checked again at commit. */
 final class ManagedFolderAccess {
+    private Context contextForPhotos;
     private final File directory;
     private final String authority;
     private final FolderStore grants;
     private final PairingEngine.Check active;
     ManagedFolderAccess(Context context,FolderStore grants,PairingEngine.Check active) {
-        this(new File(context.getNoBackupFilesDir(),"ManagedFiles-v1"),OfflineDocumentsProvider.authority(context),grants,active);
+        this(new File(context.getNoBackupFilesDir(),"ManagedFiles-v1"),OfflineDocumentsProvider.authority(context),grants,active);this.contextForPhotos=context;
     }
     ManagedFolderAccess(File directory,String authority,FolderStore grants,PairingEngine.Check active) {
         this.directory=directory;this.authority=authority;this.grants=grants;this.active=active;
@@ -115,6 +116,7 @@ final class ManagedFolderAccess {
         JSONArray roots=grants.list(scope);
         for(int i=0;i<roots.length();i++) {
             JSONObject row=roots.getJSONObject(i);FolderStore.Grant grant=grants.snapshot(scope,row.getString("id"));
+            if(contextForPhotos!=null && PhotoLibrary.owns(contextForPhotos,grant.uri)) {row.put("sourceKind","photos").put("photoAccess",PhotoLibrary.access(contextForPhotos));continue;}
             if(!owns(grant.uri))continue;
             try(ManagedFileStore store=store(()->{})) {root(scope,grant,store);row.put("publicationVersion","1.0.0");}
             catch(FolderReader.Failure | SecurityException unavailable) { /* Keep the saved selection; it needs renewed access. */ }

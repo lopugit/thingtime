@@ -133,5 +133,6 @@ public final class MainActivity extends Activity {
     @Override protected void onPause() { active=false; cancel(); if(folders!=null) folders.pause(); if(exports!=null)exports.pause(); if(web!=null) web.onPause(); super.onPause(); }
     @Override protected void onDestroy() { cancel(); if(folders!=null) folders.close(); if(exports!=null)exports.suspend(); if(web!=null) web.destroy(); super.onDestroy(); }
     @Override protected void onActivityResult(int request,int result,Intent data) { super.onActivityResult(request,result,data); if(folders!=null) folders.activityResult(request,result,data); if(exports!=null)exports.activityResult(request,result,data); }
+    @Override public void onRequestPermissionsResult(int request,String[] permissions,int[] results) { super.onRequestPermissionsResult(request,permissions,results);if(folders!=null)folders.permissionResult(request); }
     @Override public void onBackPressed() { if(web!=null && web.canGoBack()) web.goBack(); else super.onBackPressed(); }
 }

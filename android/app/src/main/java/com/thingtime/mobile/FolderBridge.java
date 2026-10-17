@@ -16,7 +16,7 @@ import java.util.concurrent.atomic.AtomicLong;
 /** Foreground folder adapter. Picker pause is expected; resumed results must
  * authenticate again before retaining a grant or returning private data. */
 final class FolderBridge {
-    static final int PICK_FOLDER=7183;
+    static final int PICK_FOLDER=7183,PHOTO_PERMISSIONS=7184;
     private static final ExecutorService worker=Executors.newSingleThreadExecutor();
     interface Active { boolean get(); }
     private final Activity activity; private final String origin; private final Active active;
@@ -35,11 +35,11 @@ final class FolderBridge {
         @Override public synchronized void onLost(android.net.Network network) { if(network.equals(observedNetwork)){observedNetwork=null;networkKind="offline";} }
     };
     private android.app.AlertDialog approvalDialog;
-    private Request pending; private boolean selecting; private Intent selectedResult; private boolean resultArrived;
+    private Request pending; private boolean permissionResult; private boolean selecting; private Intent selectedResult; private boolean resultArrived;
     private CancellationSignal cancellation=new CancellationSignal();
     private static final class Request {
         volatile FolderRangeSource range; volatile FolderRangeSink sink;
-        FolderStore.Grant approvalGrant,restoreGrant; JSONObject reviewedRestore; boolean restoreConsent; WriteApproval approval; boolean chooseExisting,offlineConsent; String offlineName;
+        FolderStore.Grant approvalGrant,restoreGrant; JSONObject reviewedRestore; boolean restoreConsent; WriteApproval approval; boolean choosePhotos,photoPermissionsRequested,chooseExisting,offlineConsent; String offlineName;
         final String id,action;final DeviceScope scope;final JSONObject payload,base;final JavaScriptReplyProxy reply;final long generation;final long deadline;
         Request(JSONObject payload,DeviceScope scope,JavaScriptReplyProxy reply,long generation) throws Exception {
             this.payload=payload;this.scope=scope;this.reply=reply;this.generation=generation;id=payload.getString("requestId");action=payload.getString("action");deadline=android.os.SystemClock.elapsedRealtime()+((action.equals("choose") || action.startsWith("trash") || action.startsWith("version-") || action.equals("write-approve") || action.equals("scan") || action.equals("read-range") || action.equals("stage-begin") || action.equals("stage-range") || action.equals("stage-finish") || action.equals("publish") || action.equals("publication-lookup"))?300000:30000);
@@ -55,7 +55,7 @@ final class FolderBridge {
     void suspend() {
         proofs.clear();
         if(approvalDialog!=null) { approvalDialog.dismiss();approvalDialog=null; }
-        Request old=pending;pending=null;selecting=false;selectedResult=null;resultArrived=false;generation.incrementAndGet();cancellation.cancel();cancellation=new CancellationSignal();
+        Request old=pending;pending=null;selecting=false;selectedResult=null;resultArrived=false;permissionResult=false;generation.incrementAndGet();cancellation.cancel();cancellation=new CancellationSignal();
         if(old!=null) { if(old.range!=null)old.range.close();if(old.sink!=null)old.sink.close();reply(old,new JSONObject(),"Folder access paused. Try again when the app is active."); }
     }
     void pause() { if(!selecting) suspend(); }
@@ -63,10 +63,14 @@ final class FolderBridge {
         if(code!=PICK_FOLDER || !selecting || pending==null) return;
         selectedResult=result==Activity.RESULT_OK?data:null;resultArrived=true;resume();
     }
+    void permissionResult(int code) {
+        if(code!=PHOTO_PERMISSIONS || !selecting || pending==null || !pending.choosePhotos)return;
+        permissionResult=true;resultArrived=true;resume();
+    }
     void resume() {
         if(!active.get() || !selecting || !resultArrived || pending==null) return;
         Request request=pending;Intent result=selectedResult;selectedResult=null;resultArrived=false;selecting=false;
-        execute(request,result,true);
+        boolean wasPermission=permissionResult;permissionResult=false;execute(request,result,!wasPermission);
     }
     void handleFrame(byte[] bytes) {
         Request request=pending;
@@ -102,8 +106,14 @@ final class FolderBridge {
                 PairingEngine auth=new PairingEngine(new KeystoreDeviceStore(activity),new DeviceHttpTransport(url->CookieManager.getInstance().getCookie(url),check),check);
                 auth.identity(request.scope);check.run();
                 if(request.action.equals("choose") && !pickerFinished) {
-                    if(!request.chooseExisting && request.offlineName==null) {choose(request,check);return;}
+                    if(!request.choosePhotos && !request.chooseExisting && request.offlineName==null) {choose(request,check);return;}
                     Uri initial=null;
+                    if(request.choosePhotos) {
+                        if(!PhotoLibrary.supported())throw new FolderReader.Failure("Photo backup requires Android 11 or later.");
+                        if(!request.photoPermissionsRequested) {requestPhotoPermissions(request,check);return;}
+                        if("unavailable".equals(PhotoLibrary.access(activity)))throw new FolderReader.Failure("Allow photo/video access and original media location metadata to back up original files. You can choose selected media only.");
+                        initial=android.provider.DocumentsContract.buildDocumentUri(PhotoLibrary.authority(activity),PhotoLibrary.ROOT);
+                    }
                     if(request.offlineName!=null) {
                         try(ManagedFileStore catalog=new ManagedFileStore(activity,check)) {
                             String root=catalog.createRoot(request.scope,request.offlineName);
@@ -144,6 +154,9 @@ final class FolderBridge {
                 } else if(!request.action.equals("list")) {
                     String rootId=request.payload.getString("rootId");if(!UUID.fromString(rootId).toString().equalsIgnoreCase(rootId)) throw new FolderReader.Failure("Invalid folder selection.");
                     if(request.action.equals("remove")) { store.remove(request.scope,rootId);proofs.clear(); }
+                    else if(PhotoLibrary.owns(activity,store.snapshot(request.scope,rootId).uri) && !java.util.Arrays.asList("scan","read","read-range").contains(request.action)) {
+                        throw new FolderReader.Failure("Photo libraries are read-only backup sources.");
+                    }
                     else if(request.action.equals("write-approve")) {
                         WriteApproval approval=new WriteApproval(request.payload.getJSONObject("approval"),request.scope);
                         FolderStore.Grant grant=store.snapshot(request.scope,rootId);
@@ -271,7 +284,7 @@ final class FolderBridge {
                     }
                     else {
                         FolderStore.Grant grant=store.snapshot(request.scope,rootId);store.requireRead(request.scope,grant);boolean managed=offline.owns(grant.uri);
-                        FolderReader reader=managed?null:new FolderReader(new SafFolderProvider(activity.getContentResolver(),grant.uri,signal),check,proofs,request.scope.origin+"\0"+request.scope.owner+"\0"+rootId);
+                        FolderReader reader=managed?null:new FolderReader(PhotoLibrary.owns(activity,grant.uri)?new PhotoLibrary(activity,android.provider.DocumentsContract.getTreeDocumentId(grant.uri),check,signal):new SafFolderProvider(activity.getContentResolver(),grant.uri,signal),check,proofs,request.scope.origin+"\0"+request.scope.owner+"\0"+rootId);
                         result.put("rootId",rootId);
                         if(request.action.equals("scan")) result.put("complete",true).put("entries",managed?offline.scan(request.scope,grant):reader.scan());
                         else {
@@ -285,6 +298,7 @@ final class FolderBridge {
                                 auth.identity(request.scope);check.run();
                                 PairingEngine.Check frameCheck=()->{
                                     check.run();store.requireRead(request.scope,grant);
+                                    if(PhotoLibrary.owns(activity,grant.uri))new PhotoLibrary(activity,android.provider.DocumentsContract.getTreeDocumentId(grant.uri),check,signal).stat(android.provider.DocumentsContract.getTreeDocumentId(grant.uri));
                                     if(!authentication.equals(SessionCookie.auth(CookieManager.getInstance().getCookie(request.scope.origin+"/api/v1/auth/me"))))
                                         throw new java.util.concurrent.CancellationException();
                                 };
@@ -309,12 +323,27 @@ final class FolderBridge {
             try {
                 check.run();android.app.AlertDialog dialog=new android.app.AlertDialog.Builder(activity)
                     .setTitle("Choose folder")
-                    .setItems(new String[]{"Existing folder","New offline folder"},(d,which)-> {
+                    .setItems(PhotoLibrary.supported()?new String[]{"Existing folder","New offline folder","Photo library (backup)"}:new String[]{"Existing folder","New offline folder"},(d,which)-> {
                         approvalDialog=null;
-                        if(which==0){request.chooseExisting=true;execute(request,null,false);}else nameOfflineFolder(request,check);
+                        if(which==0){request.chooseExisting=true;execute(request,null,false);}else if(which==2){request.choosePhotos=true;explainPhotos(request,check);}else nameOfflineFolder(request,check);
                     }).setNegativeButton("Cancel",(d,w)->finish(request,new JSONObject(),"Folder selection cancelled.")).create();
                 dialog.setOnCancelListener(d->finish(request,new JSONObject(),"Folder selection cancelled."));approvalDialog=dialog;dialog.show();
             }catch(Exception error){finish(request,new JSONObject(),"Folder access paused. Try again when the app is active.");}
+        });
+    }
+    private void explainPhotos(Request request,PairingEngine.Check check) {
+        try {
+            check.run();android.app.AlertDialog dialog=new android.app.AlertDialog.Builder(activity).setTitle("Back up photo originals")
+                .setMessage("Choose which photos and videos Thingtime can read. Original files include their embedded location metadata. Next, choose the photo library or a storage volume in Files, then a cloud destination in Thingtime. Nothing uploads until you start a backup. Removing access or deleting device photos keeps saved cloud copies.")
+                .setNegativeButton("Cancel",(d,w)->finish(request,new JSONObject(),"Photo selection cancelled."))
+                .setPositiveButton("Choose photo access",(d,w)->{approvalDialog=null;execute(request,null,false);}).create();
+            dialog.setOnCancelListener(d->finish(request,new JSONObject(),"Photo selection cancelled."));approvalDialog=dialog;dialog.show();
+        }catch(Exception error){finish(request,new JSONObject(),"Photo access is unavailable.");}
+    }
+    private void requestPhotoPermissions(Request request,PairingEngine.Check check) {
+        activity.runOnUiThread(()-> {
+            try {check.run();request.photoPermissionsRequested=true;selecting=true;activity.requestPermissions(PhotoLibrary.permissions(),PHOTO_PERMISSIONS);}
+            catch(Exception error){finish(request,new JSONObject(),"Photo permissions are unavailable.");}
         });
     }
     private void nameOfflineFolder(Request request,PairingEngine.Check check) {

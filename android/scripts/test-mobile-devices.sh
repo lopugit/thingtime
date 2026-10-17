@@ -14,6 +14,9 @@ conflict_review="${THINGTIME_CONFLICT_SYNC_TEST:-0}"
 [[ "$sync_deletion" == 0 || "$conflict_review" == 0 ]] || { echo 'Run deletion and concurrent edit review acceptance separately.' >&2; exit 1; }
 file_history="${THINGTIME_FILE_HISTORY_TEST:-0}"
 file_export="${THINGTIME_FILE_EXPORT_TEST:-0}"
+photo_backup="${THINGTIME_PHOTO_BACKUP_TEST:-0}"
+[[ "$photo_backup" == 0 || "$photo_backup" == 1 ]] || { echo 'THINGTIME_PHOTO_BACKUP_TEST must be 0 or 1.' >&2; exit 1; }
+[[ "$photo_backup" == 0 || ( -n "$fixture" && "$offline_test" == 0 && "$picker_test" == 0 ) ]] || { echo 'Photo backup acceptance requires a fixture and its own picker flow.' >&2; exit 1; }
 native_versions="${THINGTIME_NATIVE_VERSIONS_TEST:-0}"
 [[ "$native_versions" == 0 || "$native_versions" == 1 ]] || { echo 'THINGTIME_NATIVE_VERSIONS_TEST must be 0 or 1.' >&2; exit 1; }
 [[ "$native_versions" == 0 || ( "$offline_test" == 1 && -z "$download_state" ) ]] || { echo 'Native versions acceptance requires THINGTIME_OFFLINE_FILES_TEST=1 without a cloud download fixture.' >&2; exit 1; }
@@ -85,6 +88,7 @@ PYDATA
 fi
 result="$(mktemp)"
 test_args=()
+if [[ "$photo_backup" == 1 ]]; then test_args+=(-e photoBackup true); fi
 if [[ "$sync_deletion" == 1 ]]; then test_args+=(-e syncDeletion true); fi
 if [[ "$native_trash" == 1 ]]; then test_args+=(-e nativeTrash true); fi
 if [[ "$native_versions" == 1 ]]; then test_args+=(-e nativeVersions true); fi

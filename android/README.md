@@ -527,3 +527,33 @@ installed API 35 suite passed 67 tests, including cancellation, WebView reload,
 exact operation replay and full restored hash. This storage is local and excluded
 from OS backup; independent snapshot inclusion and physical-device acceptance
 remain open. See [the acceptance ledger](../docs/mobile-file-sync.md).
+
+
+### Photo library backup (Android 11+)
+
+Choose **Photo library (backup)** in the native folder menu, approve access to
+photos/videos and original embedded location metadata, then select the library
+or a storage volume in Files. Android 14+ can grant selected media only; the
+connection shows limited access explicitly. This read-only source uses the same
+editable file-sync Thing and foreground cloud/Timeline pipeline as folders.
+Photo connections require backup mode and keep cloud copies after device deletion.
+There are no new server secrets or private dashboard settings.
+
+The adapter requests original bytes without media transcoding, excludes pending
+and trashed media, and fences inventories with MediaStore volume version and
+generation. Permission loss fails the scan; it cannot become a successful empty
+inventory. Original names are prefixed with MediaStore IDs to distinguish duplicate
+names. The existing 10,000-entry selected-tree bound remains; background completion,
+large-library paging and other platforms' photo-library adapters remain open.
+
+Use `THINGTIME_PHOTO_BACKUP_TEST=1 ANDROID_SERIAL=<test-device-id>
+android/scripts/test-mobile-devices.sh /path/to/private-fixture.json` with the
+SDK/JDK setup above on a disposable emulator. Follow the native photo permission
+and Files selection prompts. The opt-in test creates its own image and excludes
+all other existing media from uploads. It verifies the cloud download hash,
+additional media discovery, retained cloud copies after local deletion and a
+repeat run. The ordinary installed suite also checks the read-only provider,
+duplicate names, permission/cancellation fencing, and pending/trashed media.
+
+Android contracts: [partial access](https://developer.android.com/about/versions/14/changes/partial-photo-video-access)
+and [original formats and media generations](https://developer.android.com/reference/android/provider/MediaStore).
