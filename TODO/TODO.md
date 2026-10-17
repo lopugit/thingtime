@@ -27,6 +27,14 @@
   (`docs/design/thingtime-history-timeline/`); spec and phases:
   `claude-todo/56-unified-thing-history-and-timeline-browser.md`.
 
+- **Make connected-account and credential lifecycles understandable and safe.**
+  Distinguish provider consent, Thingtime storage, device cache, transient relay,
+  imported secrets, revocation, unlink, deletion, and external-action outcomes.
+  Start with an evidence inventory and synthetic rehearsal; no new scopes or
+  production migration are approved. [Evidence](../NOTES/credential-and-connected-account-stewardship-baseline.md),
+  [phases](../PLAN/credential-and-connected-account-stewardship-roadmap.md),
+  [TODO 57](claude-todo/57-credential-and-connected-account-stewardship.md).
+
 1. **~~Make true `hydrateRoot(document, ...)` merge-ready.~~ RESOLVED — obsolete
    (closed 2026-07-21).**
 
