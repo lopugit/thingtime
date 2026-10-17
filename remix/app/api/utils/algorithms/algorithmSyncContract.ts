@@ -12,7 +12,7 @@ const fail = (): never => {
 	throw new Error('Invalid algorithm synchronization command.');
 };
 export type AlgorithmWrite = { id: string; writeId: string; expectedVersion: string | null } & (
-	| { action: 'save'; content: AlgorithmTransferContent; description: string; parentId?: string | null }
+	| { action: 'save'; content: AlgorithmTransferContent; description: string; parentId?: string | null; folderId?: string | null }
 	| { action: 'delete'; expectedVersion: string }
 );
 export type AlgorithmWriteAcknowledgment = {
@@ -43,10 +43,13 @@ export function parseAlgorithmWrite(input: unknown): AlgorithmWrite {
 	}
 	if (
 		value.action !== 'save' ||
-		Object.keys(value).some((key) => !['id', 'writeId', 'expectedVersion', 'action', 'content', 'description', 'parentId'].includes(key)) ||
+		Object.keys(value).some(
+			(key) => !['id', 'writeId', 'expectedVersion', 'action', 'content', 'description', 'parentId', 'folderId'].includes(key)
+		) ||
 		typeof value.description !== 'string' ||
 		value.description.length > 300 ||
 		value.description !== value.description.trim() ||
+		('folderId' in value && value.folderId !== null && (!identity(value.folderId) || value.folderId === value.id)) ||
 		('parentId' in value &&
 			(value.expectedVersion !== null || (value.parentId !== null && (!identity(value.parentId) || value.parentId === value.id))))
 	)
@@ -56,7 +59,8 @@ export function parseAlgorithmWrite(input: unknown): AlgorithmWrite {
 		action: 'save',
 		content: parseAlgorithmTransfer(value.content),
 		description: value.description,
-		...('parentId' in value ? { parentId: value.parentId as string | null } : {})
+		...('parentId' in value ? { parentId: value.parentId as string | null } : {}),
+		...('folderId' in value ? { folderId: value.folderId as string | null } : {})
 	};
 }
 export function parseAlgorithmWriteAcknowledgment(input: unknown): AlgorithmWriteAcknowledgment {

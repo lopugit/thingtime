@@ -6,7 +6,7 @@ import { accountSyncDeadline, type SyncState } from './accountSync';
 import { copyBoundedJson } from '../utils/boundedJson';
 import { MAX_SAVED_ALGORITHMS } from '../api/utils/algorithms/algorithmContent';
 import { parseAlgorithmTransfer, type AlgorithmTransferContent } from '../api/utils/algorithms/algorithmTransferCore';
-import { algorithmTransferContent, isTransferAlgorithm } from '../utils/thingTransfer/algorithm';
+import { algorithmTransferContent, isTransferAlgorithm, validateTransferAlgorithm } from '../utils/thingTransfer/algorithm';
 import {
 	parseAlgorithmWrite,
 	parseAlgorithmWriteAcknowledgment,
@@ -40,6 +40,8 @@ export type AccountAlgorithmState = {
 	baseVersion: string | null;
 	state: SyncState;
 	deleted: boolean;
+	remoteFolderId?: string | null;
+	placementIntent?: boolean;
 	pending?: { command: AlgorithmWrite; revision: number };
 	claim?: { token: string; expiresAt: number };
 	retryAt: number;
@@ -152,6 +154,8 @@ export class AccountAlgorithmSync {
 			revision: (old?.revision ?? 0) + 1,
 			base: old?.base ?? null,
 			baseVersion: old?.baseVersion ?? null,
+			remoteFolderId: old?.remoteFolderId !== undefined ? old.remoteFolderId : old?.base?.folderId ?? null,
+			placementIntent: old?.placementIntent || (row?.folderId ?? null) !== (previous?.folderId ?? null),
 			state: old && ['conflict', 'error'].includes(old.state) ? old.state : 'pending',
 			deleted: !row,
 			pending: old?.pending,
@@ -161,6 +165,107 @@ export class AccountAlgorithmSync {
 			error: old?.error
 		} satisfies State);
 		await this.bump(tx);
+	}
+	/** Canonical import already validated the bundle and remapped every ID.
+	 * This hook adds account intent in that same device transaction. */
+	async importIn(tx: WorkspaceTransaction, row: LocalThing) {
+		this.lease.assertCurrent();
+		validateTransferAlgorithm(row);
+		if ((await tx.get(collection, row.id)) || (await tx.get('thing-sync', row.id)))
+			return fail('An imported algorithm must have an independent identity.');
+		await this.mutated(tx, row, null);
+		const state = (await tx.get<State>(collection, row.id))!;
+		await tx.put(collection, row.id, { ...state, placementIntent: true });
+	}
+	async viewIn(tx: WorkspaceTransaction, id: string) {
+		this.lease.assertCurrent();
+		const row = await tx.get<LocalThing>('things', id),
+			state = await tx.get<State>(collection, id);
+		if (!row || !isTransferAlgorithm(row) || !state || state.deleted) return null;
+		return {
+			...row,
+			visibility: 'private',
+			acl: ['tt:user'],
+			author: { id: this.scope.ownerId },
+			syncState: state.state,
+			localOnly: false,
+			localWorkspace: true
+		};
+	}
+	async isDeletedIn(tx: WorkspaceTransaction, id: string) {
+		return !!(await tx.get<State>(collection, id))?.deleted;
+	}
+	async moveIn(tx: WorkspaceTransaction, row: LocalThing, previous: LocalThing) {
+		this.lease.assertCurrent();
+		validateTransferAlgorithm({ ...row, crystal: algorithmTransferContent(row.crystal) });
+		const stable = (value: unknown) =>
+			JSON.stringify(copyBoundedJson(value, { maxBytes: 2 * 1024 * 1024, maxDepth: 12, maxNodes: 65000, sortKeys: true }));
+		if (row.id !== previous.id || stable(row.crystal) !== stable(previous.crystal))
+			return fail('Algorithm placement cannot replace its protected content.');
+		await this.mutated(tx, row, previous);
+		const state = (await tx.get<State>(collection, row.id))!;
+		await tx.put(collection, row.id, { ...state, placementIntent: true });
+	}
+	removeIn(tx: WorkspaceTransaction, id: string) {
+		return this.algorithms.removeIn(tx, id);
+	}
+	async prepareFolderDelete(tx: WorkspaceTransaction, id: string, destination: string | null) {
+		for (const { value: state } of await tx.list<State>(collection)) {
+			const remoteFolder = state.remoteFolderId !== undefined ? state.remoteFolderId : state.base?.folderId;
+			const pendingFolder = state.pending?.command.action === 'save' ? state.pending.command.folderId : undefined;
+			if (remoteFolder !== id && pendingFolder !== id) continue;
+			const local = await tx.get<LocalThing>('things', state.id);
+			if (local?.folderId === id) {
+				const moved = {
+					...local,
+					folderId: destination,
+					revision: local.revision + 1,
+					updatedAt: new Date(Math.max(this.now(), Date.parse(local.updatedAt) + 1)).toISOString()
+				};
+				await tx.put('things', local.id, moved);
+				await this.moveIn(tx, moved, local);
+			}
+			if (['conflict', 'error'].includes(state.state))
+				return fail('Review the algorithm conflict before retrying this folder deletion.', 'ALGORITHM_SYNC_BLOCKED');
+			return false;
+		}
+		return true;
+	}
+	async exportSnapshot() {
+		return this.tx('readonly', async (tx) => {
+			const states = (await tx.list<State>(collection)).map((row) => row.value),
+				things: LocalThing[] = [];
+			for (const state of states) {
+				if (state.deleted) continue;
+				const row = await tx.get<LocalThing>('things', state.id);
+				if (!row || !isTransferAlgorithm(row)) return fail('Retained algorithm content is incomplete.', 'LOCAL_ALGORITHM_INCOMPLETE');
+				things.push({
+					id: row.id,
+					thingtime: ['feed-algorithm'],
+					crystal: algorithmTransferContent(row.crystal),
+					...(row.folderId ? { folderId: row.folderId } : {}),
+					createdAt: row.createdAt,
+					updatedAt: row.updatedAt,
+					revision: row.revision
+				});
+			}
+			return {
+				things,
+				records: states.map((state) => ({
+					id: state.id,
+					state: state.state,
+					remote: state.baseVersion !== null,
+					deleted: state.deleted,
+					complete: true
+				}))
+			};
+		});
+	}
+	async assertExportReadable(ids: Iterable<string>) {
+		return this.tx('readonly', async (tx) => {
+			for (const id of ids)
+				if (!(await this.viewIn(tx, id))) return fail('This algorithm is no longer available for export.', 'EXPORT_ACCESS_REFUSED');
+		});
 	}
 	async list() {
 		return this.tx('readonly', async (tx) => {
@@ -213,6 +318,7 @@ export class AccountAlgorithmSync {
 			revision: (old?.revision ?? 0) + 1,
 			base: remote ? profileMetadata(remote) : null,
 			baseVersion: remote.version,
+			remoteFolderId: remote.folderId,
 			state: 'synced',
 			deleted: false,
 			retryAt: 0,
@@ -288,6 +394,10 @@ export class AccountAlgorithmSync {
 								}
 								if (blockedDeletions.has(row.id)) continue;
 							}
+							if (!row.deleted && row.placementIntent && thing?.folderId) {
+								const folder = await tx.get<{ base?: { id?: string }; deleted?: unknown }>('thing-sync', thing.folderId);
+								if (folder && (!folder.base || folder.base.id !== thing.folderId || folder.deleted)) continue;
+							}
 							const parent = thing?.crystal.parentId;
 							if (!row.baseVersion && parent) {
 								const state = await tx.get<State>(collection, String(parent));
@@ -310,6 +420,7 @@ export class AccountAlgorithmSync {
 													action: 'save',
 													content: algorithmTransferContent(thing!.crystal),
 													description: thing!.crystal.description ?? '',
+													...(row.placementIntent ? { folderId: thing!.folderId || null } : {}),
 													...(row.baseVersion === null ? { parentId: parent ?? null } : {})
 											  }
 									)
@@ -357,6 +468,15 @@ export class AccountAlgorithmSync {
 							...row,
 							baseVersion: ack.resultVersion,
 							base: command.action === 'delete' ? null : row.base,
+							remoteFolderId:
+								command.action === 'delete'
+									? null
+									: command.folderId !== undefined
+									? command.folderId
+									: row.remoteFolderId !== undefined
+									? row.remoteFolderId
+									: row.base?.folderId ?? null,
+							placementIntent: row.revision === claimed.pending!.revision ? undefined : row.placementIntent,
 							pending: undefined,
 							claim: undefined,
 							state: row.revision === claimed.pending!.revision ? 'synced' : 'pending',
@@ -475,6 +595,7 @@ export class AccountAlgorithmSync {
 							parentId: null,
 							description: local.crystal.description ?? ''
 						},
+						...(local.folderId ? { folderId: local.folderId } : {}),
 						createdAt: now,
 						updatedAt: now,
 						revision: 1
@@ -497,6 +618,7 @@ export class AccountAlgorithmSync {
 							revision: state.revision + 1,
 							base: null,
 							baseVersion: null,
+							remoteFolderId: null,
 							state: 'synced',
 							deleted: true,
 							pending: undefined,
@@ -515,6 +637,8 @@ export class AccountAlgorithmSync {
 						revision: state.revision + 1,
 						base: null,
 						baseVersion: null,
+						remoteFolderId: null,
+						placementIntent: false,
 						state: 'synced',
 						deleted: true,
 						pending: undefined,
@@ -527,6 +651,8 @@ export class AccountAlgorithmSync {
 						...state,
 						base: remote ? profileMetadata(remote) : null,
 						baseVersion: remote!.version,
+						remoteFolderId: remote!.folderId,
+						placementIntent: !!local && (local.folderId ?? null) !== remote!.folderId,
 						pending: undefined,
 						claim: undefined,
 						revision: state.revision + 1,

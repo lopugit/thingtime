@@ -34,7 +34,10 @@ export function accountAlgorithmTransport(
 		const combined = AbortSignal.any([signal, controller.signal, AbortSignal.timeout(20000)]);
 		try {
 			if (window.location.origin !== scope.origin) throw new WorkspaceError('WORKSPACE_CHANGED', 'Account origin changed.', 409);
-			await requireThingtimeCapability('api.algorithms-sync', ['selection', 'select'].includes(operation) ? '1.1.0' : '1.0.0');
+			await requireThingtimeCapability(
+				'api.algorithms-sync',
+				operation === 'write' && command && 'folderId' in command ? '1.2.0' : ['selection', 'select'].includes(operation) ? '1.1.0' : '1.0.0'
+			);
 			await requireThingtimeCapability('api.mongodb-endpoint', '1.1.0');
 			lease.assertCurrent();
 			remote.assertCurrent();

@@ -110,6 +110,7 @@ export async function synchronizeAlgorithmWrite(
 	};
 	const boundary: AlgorithmMutationBoundary = {
 		createId: command.id,
+		...(command.action === 'save' && command.folderId !== undefined ? { folderId: command.folderId } : {}),
 		...(command.action === 'save' ? { content: command.content, ...(command.parentId === undefined ? {} : { parentId: command.parentId }) } : {}),
 		beforeWrite: async (before, old, session) => {
 			await admit();

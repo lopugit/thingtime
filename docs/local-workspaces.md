@@ -4053,3 +4053,40 @@ conflict UI still need integration, followed by clean offline/reconnect/multitab
 browser acceptance. Private feed observations must stay scoped to their selected
 source plane while algorithm content stays at home. Full coverage, latest-main
 reconciliation, current-head CI and deployed acceptance remain merge gates.
+
+## Account algorithm library transfer — 2026-10-18
+
+The normal local Thing importer/exporter and library organization hooks can now
+use the dedicated account algorithm adapter. Import remaps IDs and folder
+references atomically; export keeps the canonical portable profile and omits
+ownership, sharing, lineage and queue metadata. Profiles remain private and
+inactive. Generic content updates still cannot replace protected profiles.
+
+Local import, move and delete finish without waiting for a folder upload or an
+algorithm write. Only the background sender waits for a new folder receipt.
+Uncertain writes replay the exact command before a later placement; folder
+removal waits for the child's acknowledged move. Conflict copies retain their
+device folder, and accepting device content records the reviewed remote folder
+before queuing the chosen placement. Prepared exports are revoked on deletion
+or identity changes.
+
+`api.algorithms-sync` 1.2.0 adds optional `folderId` to saves: omission preserves
+placement and explicit null moves to the root. The canonical writer locks the
+owned home folder chain in the same transaction as content, version and receipt.
+Foreign/missing folders cannot partially commit content or a receipt. Older
+hosts refuse placement writes through capability negotiation.
+
+Native account facade/editor/feed activation and conflict UI remain pending;
+these adapter checks do not establish native offline browser acceptance.
+Private feed observations still require selected-source-plane isolation before
+activation. Full coverage, latest-main reconciliation, current-head CI and
+deployed acceptance remain outstanding merge gates.
+
+Local validation for this checkpoint: 588 workspace tests passed (67 opt-in
+skips), plus four offline-shell checks; 88 feed tests passed (one opt-in skip).
+The disposable loopback API fixture passed 83 checks, including ownership,
+placement, canonical transfer, conditional selection and receipt retries.
+The initial API attempt reached an unready dev runner before startup completed;
+the healthy-server rerun passed. Focused lint passed. TypeScript retained all
+91 normalized baseline diagnostics with no additions. No new native browser,
+CI or deployed verification is claimed for this checkpoint.

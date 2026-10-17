@@ -732,7 +732,7 @@ test('home theme receipt context requires its additive sync contract on both man
 test('conditional algorithm synchronization and atomic deletion are advertised by both manifests', () => {
   const route = createApiCapabilitiesManifest().features;
   const manifest = thingtimeCapabilityManifest('https://thingtime.test');
-  for (const [feature, version] of [['api.algorithms-sync', '1.1.0'], ['api.algorithms-delete', '1.0.1']]) {
+  for (const [feature, version] of [['api.algorithms-sync', '1.2.0'], ['api.algorithms-delete', '1.0.1']]) {
     assert.equal(route[feature], version);
     assert.equal(manifest.features[feature].version, version);
     assert.equal(capabilitySatisfies(version, version), true);

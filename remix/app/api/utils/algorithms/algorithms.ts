@@ -1,3 +1,5 @@
+import { lockFolderDestination } from '../things/folderPlacement';
+import { prepareManagedPlacement } from '../things/managedPlacementCore';
 import { MAX_SAVED_ALGORITHMS, normalizeAlgorithmName, sanitizeAlgorithmEmoji as sanitizeEmoji, sanitizeAlgorithmEvents as sanitizeEvents } from './algorithmContent';
 import { isDefaultAlgorithm } from '~/components/Feed/defaultAlgorithms';
 import { randomUUID } from 'node:crypto';
@@ -307,6 +309,7 @@ export type CreateAlgorithmInput = {
  * request bodies are never spread into these transaction callbacks. */
 export type AlgorithmMutationBoundary = {
   createId?: string;
+  folderId?: string | null;
   parentId?: string | null;
   content?: AlgorithmTransferContent;
   beforeWrite?(before: any | null, legacy: any | null, session: any): Promise<void>;
@@ -423,6 +426,7 @@ export const createAlgorithm = async (ownerId: string, input: CreateAlgorithmInp
 	try {
 		await withHomeMongoTransaction(async (session) => {
       await boundary.beforeWrite?.(null, null, session);
+      if (boundary.folderId !== undefined) Object.assign(thing, prepareManagedPlacement(thing, ownerId, await lockFolderDestination(things, ownerId, boundary.folderId, session), now));
       const count = await things.countDocuments({ thingtime: 'feed-algorithm', ownerId } as any, { session }) +
         await algorithms.countDocuments({ ownerId }, { session });
       if (count >= MAX_ALGORITHMS_PER_USER) throw new StorageMutationError(409, 'storage_conflict', 'Algorithm limit reached');
@@ -437,6 +441,7 @@ export const createAlgorithm = async (ownerId: string, input: CreateAlgorithmInp
 	}
   // Import must return the minted ID without a fallible username lookup after
   // commit; its caller needs that ID to compensate a later mixed-import failure.
+  doc.updatedAt = thing.updatedAt;
   return { ok: true, algorithm: imported ? projectAlgorithm(doc, new Map()) : await toPublicAlgorithm(doc) };
 };
 
@@ -492,6 +497,7 @@ export const updateAlgorithm = async (
 					throw new StorageMutationError(409, 'storage_conflict', 'Algorithm changed while it was being updated — try again');
 				}
 				await boundary.beforeWrite?.(before, null, session);
+				const placement: Partial<ReturnType<typeof prepareManagedPlacement>> = boundary.folderId === undefined ? {} : prepareManagedPlacement(before as any, ownerId, await lockFolderDestination(things, ownerId, boundary.folderId, session), set.updatedAt!);
 				const crystal = { ...(before.crystal || {}) };
         if (content) Object.assign(crystal, content, { lastTrainedAt: content.lastTrainedAt ? new Date(content.lastTrainedAt) : null });
 				if (set.name !== undefined) crystal.name = set.name;
@@ -513,6 +519,7 @@ export const updateAlgorithm = async (
 					} as any,
 					{
 						$set: {
+							...placement,
 							crystal,
 							extended,
 							tags,
@@ -520,7 +527,7 @@ export const updateAlgorithm = async (
 							storageClass: 'content',
 							sizeBytes,
 							storageAccountingVersion: USER_STORAGE_ACCOUNTING_VERSION,
-							updatedAt: set.updatedAt
+							updatedAt: placement.updatedAt ?? set.updatedAt
 						}
 					},
 					{ session }
@@ -530,6 +537,7 @@ export const updateAlgorithm = async (
 				}
 				updatedDoc = algorithmThingToDoc({
 					...before,
+					...placement,
 					crystal,
 					extended,
 					tags,
@@ -537,7 +545,7 @@ export const updateAlgorithm = async (
 					storageClass: 'content',
 					sizeBytes,
 					storageAccountingVersion: USER_STORAGE_ACCOUNTING_VERSION,
-					updatedAt: set.updatedAt
+					updatedAt: placement.updatedAt ?? set.updatedAt
 				});
         await boundary.afterWrite?.(await things.findOne({ _id: before._id, ownerId } as any, { session }), session);
 			});
@@ -551,6 +559,7 @@ export const updateAlgorithm = async (
 					throw new StorageMutationError(409, 'storage_conflict', 'Algorithm changed while it was being updated — try again');
 				}
 				await boundary.beforeWrite?.(null, before, session);
+				if (boundary.folderId !== undefined) throw new StorageMutationError(409, 'storage_conflict', 'Legacy algorithms must be migrated before library placement can change');
 				const write = await algorithms.updateOne({ _id: before._id, ownerId, updatedAt: before.updatedAt } as any, { $set: set }, { session });
 				if (write.matchedCount === 0) {
 					throw new StorageMutationError(409, 'storage_conflict', 'Algorithm changed while it was being updated — try again');

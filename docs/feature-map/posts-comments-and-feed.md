@@ -223,3 +223,15 @@ its receipt commits in the same home transaction. The matching local-workspace
 selection queue records local choices atomically, preserves uncertain retries,
 and protects referenced profiles during catalogue refresh. Account native
 facade/feed/transfer and review integration remains outstanding.
+
+### Account algorithm library transfer
+
+`AccountAlgorithmSync` supplies protected import, move, delete, projection and
+portable export hooks to `LocalThings`, `AccountThingSync` and
+`exportAccountThings`. The normal importer owns validation and ID remapping.
+`algorithms/sync` 1.2.0 accepts explicit folder placement through the existing
+canonical writer and home-folder transaction locks. Account content and
+placement retries remain separate from active-selection synchronization.
+`accountAlgorithmLibrary.test.ts` covers offline round trips, folder prerequisites,
+uncertain writes, conflict copies and export revocation. Native facade/editor/feed
+activation remains pending.

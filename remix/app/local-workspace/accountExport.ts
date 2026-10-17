@@ -1,3 +1,5 @@
+import type { AccountAlgorithmSync } from './accountAlgorithms';
+import { isTransferAlgorithm } from '../utils/thingTransfer/algorithm';
 import { localAttachmentFileId } from './attachments';
 import { ACCOUNT_EXPORT_SNAPSHOTS, accountReadRefusals } from './accountReadRevocation';
 import type { AccountThemeSync } from './accountThemes';
@@ -68,6 +70,7 @@ export async function exportAccountThings(
 		sync: AccountThingSync;
 		files?: AccountFileSync;
 		themes?: AccountThemeSync;
+		algorithms?: AccountAlgorithmSync;
 		db: WorkspaceDatabase;
 		lease: WorkspaceLease;
 		canRefresh: () => boolean;
@@ -79,6 +82,8 @@ export async function exportAccountThings(
 		{ sync, db, lease } = deps;
 	if (deps.themes && workspaceScopeKey(deps.themes.scope) !== workspaceScopeKey(sync.scope))
 		throw new WorkspaceError('WORKSPACE_CHANGED', 'Theme and content exports belong to different account workspaces.', 409);
+	if (deps.algorithms && workspaceScopeKey(deps.algorithms.scope) !== workspaceScopeKey(sync.scope))
+		throw new WorkspaceError('WORKSPACE_CHANGED', 'Algorithm and content exports belong to different home workspaces.', 409);
 	const check = () => {
 		lease.assertCurrent();
 		signal?.throwIfAborted();
@@ -96,6 +101,7 @@ export async function exportAccountThings(
 	const watched = new Set(args.ids);
 	let selected = new Set<string>();
 	let selectedThemes = new Set<string>();
+	let selectedAlgorithms = new Set<string>();
 	const watch = (manifest: Pick<ThingTransfer, 'things'>) => {
 		for (const row of manifest.things) {
 			watched.add(row.id);
@@ -164,13 +170,21 @@ export async function exportAccountThings(
 		}
 	}
 	const attempted = new Set<string>();
-	const collect = async (state: State, themeSnapshot: Awaited<ReturnType<AccountThemeSync['exportSnapshot']>> | undefined) => {
-		const themeRows = new Map(themeSnapshot?.things.map((row) => [row.id, row]) || []),
-			themeRecords = new Map(themeSnapshot?.records.map((row) => [row.id, row]) || []);
-		if (state.records.some((row) => themeRecords.has(row.id)))
-			throw new WorkspaceError('EXPORT_IDENTITY_CONFLICT', 'A theme identity conflicts with generic account content.', 409);
+	const collect = async (
+		state: State,
+		themeSnapshot: Awaited<ReturnType<AccountThemeSync['exportSnapshot']>> | undefined,
+		algorithmSnapshot: Awaited<ReturnType<AccountAlgorithmSync['exportSnapshot']>> | undefined
+	) => {
+		const themeIds = new Set(themeSnapshot?.things.map((row) => row.id)),
+			algorithmIds = new Set(algorithmSnapshot?.things.map((row) => row.id));
+		if ([...themeIds].some((id) => algorithmIds.has(id)))
+			throw new WorkspaceError('EXPORT_IDENTITY_CONFLICT', 'Protected library identities collide.', 409);
+		const managedRows = new Map([...(themeSnapshot?.things || []), ...(algorithmSnapshot?.things || [])].map((row) => [row.id, row])),
+			managedRecords = new Map([...(themeSnapshot?.records || []), ...(algorithmSnapshot?.records || [])].map((row) => [row.id, row]));
+		if (state.records.some((row) => managedRecords.has(row.id)))
+			throw new WorkspaceError('EXPORT_IDENTITY_CONFLICT', 'A protected identity conflicts with generic account content.', 409);
 		const cacheable = (row: LocalThing | ThingTransfer['things'][number]) =>
-			accountThingCanCache(row) || (isTransferTheme(row) && themeRows.has(row.id));
+			accountThingCanCache(row) || ((isTransferTheme(row) || isTransferAlgorithm(row)) && managedRows.has(row.id));
 		const fileLibrary = await deps.files?.library(true);
 		check();
 		const files = new Map(fileLibrary?.things.map((row) => [row.id, row]) || []);
@@ -180,7 +194,7 @@ export async function exportAccountThings(
 			return aliases.get(id) || id;
 		});
 		const records = new Map<string, State['records'][number] & { complete?: boolean }>(
-			[...state.records, ...(themeSnapshot?.records || [])].map((row) => [row.id, row])
+			[...state.records, ...(themeSnapshot?.records || []), ...(algorithmSnapshot?.records || [])].map((row) => [row.id, row])
 		);
 		const captured = new Map(baseline?.manifest.things.map((row) => [row.id, row]) || []);
 		const docs = new Map<string, LocalThing>(
@@ -188,7 +202,7 @@ export async function exportAccountThings(
 				.filter(([, row]) => cacheable(row))
 				.map(([id, row]) => [id, { ...row, createdAt: baseline!.savedAt, updatedAt: baseline!.savedAt, revision: 1 }])
 		);
-		for (const row of [...state.things.filter((row) => !themeRows.has(row.id)), ...themeRows.values()]) {
+		for (const row of [...state.things.filter((row) => !managedRows.has(row.id)), ...managedRows.values()]) {
 			const record = records.get(row.id);
 			if (!record || record.deleted || !cacheable(row)) continue;
 			// Fresh server plans outrank an unchanged old device copy. Pending edits and
@@ -213,9 +227,13 @@ export async function exportAccountThings(
 			{ ...args, signal },
 			(row) => {
 				if (files.has(row.id)) return;
-				if (themeRows.has(row.id)) {
-					if (!themeRecords.get(row.id)?.complete)
-						throw new WorkspaceError('THEME_PLACEMENT_UNKNOWN', 'Refresh this theme online to retain its folder placement before exporting it.', 409);
+				if (managedRows.has(row.id)) {
+					if (!managedRecords.get(row.id)?.complete)
+						throw new WorkspaceError(
+							'THEME_PLACEMENT_UNKNOWN',
+							'Refresh this protected item online to retain its folder placement before exporting it.',
+							409
+						);
 					return;
 				}
 				const record = records.get(row.id);
@@ -250,29 +268,31 @@ export async function exportAccountThings(
 			sync.scope.dataPlane !== 'home' &&
 			bundle.manifest.things.some(
 				(row) =>
-					themeRows.has(row.id) &&
+					managedRows.has(row.id) &&
 					row.folderId &&
 					bundle.manifest.things.some((parent) => parent.id === row.folderId && parent.thingtime.includes('folder'))
 			)
 		)
 			throw new WorkspaceError(
 				'EXPORT_DATA_PLANE_CONFLICT',
-				'A home theme folder cannot be joined to a folder in another database. Export these roots separately.',
+				'A home protected-item folder cannot be joined to a folder in another database. Export these roots separately.',
 				409
 			);
 		watch(bundle.manifest);
 		selected = new Set(bundle.manifest.things.map((row) => row.id));
-		selectedThemes = new Set([...selected].filter((id) => themeRows.has(id)));
+		selectedThemes = new Set([...selected].filter((id) => themeIds.has(id)));
+		selectedAlgorithms = new Set([...selected].filter((id) => algorithmIds.has(id)));
 		check();
 		return bundle;
 	};
 	for (;;) {
 		check();
 		const state = await sync.exportSnapshot(),
-			themeSnapshot = await deps.themes?.exportSnapshot();
+			themeSnapshot = await deps.themes?.exportSnapshot(),
+			algorithmSnapshot = await deps.algorithms?.exportSnapshot();
 		check();
 		try {
-			const bundle = await collect(state, themeSnapshot);
+			const bundle = await collect(state, themeSnapshot, algorithmSnapshot);
 			// Retain the entire known closure before a later sync acknowledges new IDs.
 			// Missing children/files never reach this point or become a success snapshot.
 			baseline = {
@@ -284,7 +304,8 @@ export async function exportAccountThings(
 			};
 			const retainedOnDevice = await retain(baseline);
 			check();
-			const exportedThemes = [...selectedThemes];
+			const exportedThemes = [...selectedThemes],
+				exportedAlgorithms = [...selectedAlgorithms];
 			const assertCurrent = async (requestSignal?: AbortSignal) => {
 				check();
 				requestSignal?.throwIfAborted();
@@ -293,6 +314,7 @@ export async function exportAccountThings(
 				for (const id of bundle.files.keys()) await deps.files!.assertFileReadable(id.slice(0, -':bytes'.length), requestSignal);
 				await tx('readonly', assertReadable);
 				await deps.themes?.assertExportReadable(exportedThemes);
+				await deps.algorithms?.assertExportReadable(exportedAlgorithms);
 				check();
 				requestSignal?.throwIfAborted();
 			};
@@ -334,7 +356,10 @@ export async function exportAccountThings(
 				plan.files?.length ||
 				plan.links?.length ||
 				!plan.things?.every(
-					(row: any) => accountThingCanCache(row) || (isTransferTheme(row) && themeSnapshot?.things.some((theme) => theme.id === row.id))
+					(row: any) =>
+						accountThingCanCache(row) ||
+						(isTransferTheme(row) && themeSnapshot?.things.some((theme) => theme.id === row.id)) ||
+						(isTransferAlgorithm(row) && algorithmSnapshot?.things.some((algorithm) => algorithm.id === row.id))
 				)
 			) {
 				// Keep dedicated online exports working, but never replace pending local
@@ -350,7 +375,12 @@ export async function exportAccountThings(
 				const affectedFiles = library?.things.some(
 					(row) => pendingFiles.has(row.id) && (selected.has(row.id) || (args.includeChildren && row.folderId && selected.has(row.folderId)))
 				);
-				if (state.records.some((row) => row.state !== 'synced') || themeSnapshot?.records.some((row) => row.state !== 'synced') || affectedFiles)
+				if (
+					state.records.some((row) => row.state !== 'synced') ||
+					themeSnapshot?.records.some((row) => row.state !== 'synced') ||
+					algorithmSnapshot?.records.some((row) => row.state !== 'synced') ||
+					affectedFiles
+				)
 					throw new WorkspaceError(
 						'DEDICATED_EXPORT_REQUIRED',
 						'This download needs its file or managed-content adapter. Sync your device edits before downloading it online.',

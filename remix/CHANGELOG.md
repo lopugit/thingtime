@@ -68,6 +68,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-18 — **Codex (AI)**: Added protected account algorithm import/export
+  and library placement adapters, immutable folder retries and owned-home-folder
+  validation (`api.algorithms-sync` 1.2.0). Native account editor/feed activation
+  remains pending. Details: [PR #1000 note](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md#account-algorithm-library-transfer--2026-10-18).
+
 - 2026-10-18 — **Codex (AI)**: Added independent conditional account algorithm selection and exact home receipts, with atomic device intent and pending-profile retention. Verified 67 isolated real API checks; native account editor/feed activation remains pending. Details: [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
 
 - 2026-10-18 — **Codex (AI)**: Prepared account algorithm device storage and

@@ -79,3 +79,17 @@ test('algorithm receipt binds owner, home storage and exact content without reta
 	])
 		assert.throws(() => parseAlgorithmWriteAcknowledgment(bad));
 });
+
+test('algorithm placement is optional, explicit and part of the immutable command', () => {
+	const omitted = parseAlgorithmWrite(save),
+		filed = parseAlgorithmWrite({ ...save, folderId: 'home-folder' }),
+		unfiled = parseAlgorithmWrite({ ...save, folderId: null });
+	assert.ok(!('folderId' in omitted));
+	assert.deepEqual(filed, { ...save, folderId: 'home-folder' });
+	assert.deepEqual(unfiled, { ...save, folderId: null });
+	assert.notEqual(algorithmWriteDigest('owner', filed), algorithmWriteDigest('owner', omitted));
+	assert.notEqual(algorithmWriteDigest('owner', filed), algorithmWriteDigest('owner', unfiled));
+	for (const folderId of [undefined, save.id, 'timeline-managed', '../../outside', 'x'.repeat(201), {}])
+		assert.throws(() => parseAlgorithmWrite({ ...save, folderId }));
+	assert.throws(() => parseAlgorithmWrite({ id: save.id, writeId: save.writeId, action: 'delete', expectedVersion: version, folderId: null }));
+});

@@ -73,7 +73,8 @@ export class LocalThings {
 		private builtins: readonly TransferThing[] = [], private now = () => new Date().toISOString(), private uuid = () => crypto.randomUUID(), private onWrite?: LocalThingMutation,
 		private onFileWrite?: LocalFileMutation, private acceptsExternalTarget?: (tx: WorkspaceTransaction, id: string) => Promise<boolean>,
 		private captureAccountChanges?: ThingTransactionCapture, private onRecover?: LocalThingRecovery,
-		private themeMutations?: { import(tx: WorkspaceTransaction, row: LocalThing): Promise<void>; move(tx: WorkspaceTransaction, row: LocalThing, previous: LocalThing): Promise<void>; rename(tx: WorkspaceTransaction, row: LocalThing, previous: LocalThing): Promise<void> }) {}
+		private themeMutations?: { import(tx: WorkspaceTransaction, row: LocalThing): Promise<void>; move(tx: WorkspaceTransaction, row: LocalThing, previous: LocalThing): Promise<void>; rename(tx: WorkspaceTransaction, row: LocalThing, previous: LocalThing): Promise<void> },
+		private algorithmMutations?: { import(tx: WorkspaceTransaction, row: LocalThing): Promise<void>; move(tx: WorkspaceTransaction, row: LocalThing, previous: LocalThing): Promise<void> }) {}
 	private transaction<T>(mode: IDBTransactionMode, run: (tx: WorkspaceTransaction) => Promise<T>, captures?: Map<string, LocalMutationCapture>, signal?: AbortSignal) {
 		const lease: WorkspaceLease = signal ? { assertCurrent: () => { this.lease.assertCurrent(); signal.throwIfAborted(); }, onInvalidate: cb => { const off = this.lease.onInvalidate(cb); signal.addEventListener('abort', cb, { once: true }); return () => { off(); signal.removeEventListener('abort', cb); }; } } : this.lease;
 		return this.db.transaction(this.scope, mode, lease, async tx => {
@@ -404,6 +405,9 @@ export class LocalThings {
 				} else if (isTransferTheme(row) && this.scope.kind === 'account') {
 					if (!this.themeMutations) fail('LOCAL_OPERATION_UNAVAILABLE', 'Account themes require their dedicated sync adapter');
 					await this.themeMutations!.move(tx, row, previous);
+				} else if (isTransferAlgorithm(row) && this.scope.kind === 'account') {
+					if (!this.algorithmMutations) fail('LOCAL_OPERATION_UNAVAILABLE', 'Account algorithms require their dedicated sync adapter');
+					await this.algorithmMutations!.move(tx, row, previous);
 				} else await this.onWrite?.(tx, row, previous, { folderId });
 				rows.push(row);
 			}
@@ -436,7 +440,7 @@ export class LocalThings {
 		const crystals = rewriteTransferMedia(manifest.things, fileMap);
 		const stamp = this.now();
 		const importedAlgorithms = manifest.things.filter(isTransferAlgorithm);
-		if (importedAlgorithms.length && this.scope.kind !== 'anonymous') fail('LOCAL_OPERATION_UNAVAILABLE', 'Account algorithms require their dedicated sync adapter');
+		if (importedAlgorithms.length && this.scope.kind !== 'anonymous' && !this.algorithmMutations) fail('LOCAL_OPERATION_UNAVAILABLE', 'Account algorithms require their dedicated sync adapter');
 		for (const algorithm of importedAlgorithms) { validateTransferAlgorithm(algorithm); if (manifest.files.some(file => file.targetId === algorithm.id) || manifest.things.some(row => row.targetId === algorithm.id || row.folderId === algorithm.id)) fail('INVALID_ALGORITHM', 'Algorithm transfers cannot contain child Things'); }
 		const importedThemes = manifest.things.filter(isTransferTheme);
 		if (importedThemes.length && this.scope.kind !== 'anonymous' && !this.themeMutations) fail('LOCAL_OPERATION_UNAVAILABLE', 'Account themes require their dedicated sync adapter');
@@ -490,6 +494,7 @@ export class LocalThings {
 				await tx.put('things', row.id, row);
 				if (isLocalAttachment(row)) await this.onFileWrite?.(tx, row);
 				else if (isTransferTheme(row) && this.scope.kind === 'account') await this.themeMutations!.import(tx, row);
+				else if (isTransferAlgorithm(row) && this.scope.kind === 'account') await this.algorithmMutations!.import(tx, row);
 				else await this.onWrite?.(tx, row, null, row);
 			}
 			for (const file of manifest.files) { signal?.throwIfAborted(); await tx.putBytes(fileMap.get(file.id)!, bytes.get(file.id)!); }

@@ -186,18 +186,20 @@ export class LocalAlgorithms {
 		});
 	}
 	async remove(id: string) {
-		return this.transaction('readwrite', async (tx) => {
-			const previous = await this.read(tx, id);
-			if ((await tx.list<LocalThing>('things')).some((row) => row.value.folderId === id || row.value.targetId === id))
-				throw new WorkspaceError('HAS_CHILDREN', 'Remove related local Things before deleting this algorithm');
-			await tx.delete('things', id);
-			if ((await tx.get('settings', 'active-algorithm')) === id) {
-				await tx.delete('settings', 'active-algorithm');
-				await this.options.onActive?.(tx, null);
-			}
-			await this.options.onWrite?.(tx, null, previous);
-			return { ok: true };
-		});
+		return this.transaction('readwrite', (tx) => this.removeIn(tx, id));
+	}
+	async removeIn(tx: WorkspaceTransaction, id: string) {
+		this.lease.assertCurrent();
+		const previous = await this.read(tx, id);
+		if ((await tx.list<LocalThing>('things')).some((row) => row.value.folderId === id || row.value.targetId === id))
+			throw new WorkspaceError('HAS_CHILDREN', 'Remove related local Things before deleting this algorithm');
+		await tx.delete('things', id);
+		if ((await tx.get('settings', 'active-algorithm')) === id) {
+			await tx.delete('settings', 'active-algorithm');
+			await this.options.onActive?.(tx, null);
+		}
+		await this.options.onWrite?.(tx, null, previous);
+		return { ok: true };
 	}
 	private async features(tx: WorkspaceTransaction, ids: string[]) {
 		const result = new Map<string, PostFeatures>();

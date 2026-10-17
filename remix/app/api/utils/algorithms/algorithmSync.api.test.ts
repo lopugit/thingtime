@@ -19,6 +19,7 @@ test(
 			other = await request.newContext({ baseURL: origin });
 		const headers = { Origin: origin, 'X-Thingtime-Expected-Data-Plane': 'home' },
 			ids = new Set<string>(),
+			folders: { context: any; id: string }[] = [],
 			checks: string[] = [];
 		let ownerId = '',
 			complete = false;
@@ -48,7 +49,7 @@ test(
 			const routes = await read(await guest.get('/api/v1/capabilities'), 'live route capability discovery');
 			assert.equal(capabilities.origin, origin);
 			for (const [feature, required] of [
-				['api.algorithms-sync', '1.1.0'],
+				['api.algorithms-sync', '1.2.0'],
 				['api.algorithms-delete', '1.0.1']
 			]) {
 				assert.ok(capabilitySatisfies(capabilities.features[feature]?.version, required));
@@ -256,6 +257,39 @@ test(
 			assert.equal(deleteRace[1].status(), 200);
 			assert.notEqual((await selection()).algorithmId, importedId);
 			checks.push('concurrent selection and profile deletion cannot leave a dangling active pointer');
+			const createFolder = async (context: any, name: string) => {
+				const result = await read(
+					await context.post('/api/v1/things', { headers, data: { thingtime: ['folder'], crystal: { name }, visibility: 'private' } }),
+					'create isolated library folder'
+				);
+				folders.push({ context, id: result.thing.id });
+				return result.thing.id as string;
+			};
+			const ownedFolder = await createFolder(owner, 'Owned algorithm folder'),
+				foreignFolder = await createFolder(other, 'Other account folder');
+			const placed = { ...create, id: randomUUID(), writeId: randomUUID(), folderId: ownedFolder };
+			ids.add(placed.id);
+			const placedAck = (await read(await write(placed), 'profile creation commits owned folder placement')).acknowledgment;
+			assert.equal((await snapshot()).find((row: any) => row.id === placed.id).folderId, ownedFolder);
+			await read(await write({ ...placed, folderId: null }), 'receipt rejects changed placement', 409);
+			const unchanged = { ...create, id: placed.id, writeId: randomUUID(), expectedVersion: placedAck.resultVersion };
+			const kept = (await read(await write(unchanged), 'omitted placement preserves folder')).acknowledgment;
+			assert.equal((await snapshot()).find((row: any) => row.id === placed.id).folderId, ownedFolder);
+			for (const folderId of [foreignFolder, 'missing-' + randomUUID()]) {
+				await read(
+					await write({ ...unchanged, writeId: randomUUID(), expectedVersion: kept.resultVersion, folderId }),
+					'unavailable folder placement refused atomically',
+					409
+				);
+				const unchangedRow = (await snapshot()).find((row: any) => row.id === placed.id);
+				assert.equal(unchangedRow.version, kept.resultVersion);
+				assert.equal(unchangedRow.folderId, ownedFolder);
+			}
+			await read(
+				await write({ ...unchanged, writeId: randomUUID(), expectedVersion: kept.resultVersion, folderId: null }),
+				'explicit null moves profile to root'
+			);
+			assert.equal((await snapshot()).find((row: any) => row.id === placed.id).folderId, null);
 			complete = true;
 		} finally {
 			try {
@@ -267,6 +301,8 @@ test(
 						await read(await owner.post('/api/v1/algorithms/delete', { headers, data: { id: row.id } }), 'cleanup fixture profile');
 					}
 				}
+				for (const folder of folders)
+					await read(await folder.context.delete('/api/v1/things', { headers, data: { id: folder.id } }), 'cleanup fixture folder');
 				await mkdir(artifacts!, { recursive: true });
 				await writeFile(artifacts + '/verification.json', JSON.stringify({ complete, checks }, null, 2));
 			} finally {

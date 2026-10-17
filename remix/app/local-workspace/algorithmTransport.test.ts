@@ -80,6 +80,13 @@ test('algorithm transport requires current authority and compatible origin, boun
 		const select = { algorithmId: 'hot', expectedVersion: selection.version, writeId: 'choose-hot' };
 		await assert.rejects(bind().selection(signal()), /incompatible/);
 		capability = '1.1.0';
+		const beforePlacement = calls.length;
+		await assert.rejects(bind().write({ ...command, folderId: null } as any, signal()), /incompatible/);
+		assert.equal(calls.length, beforePlacement, 'older hosts never receive an unsupported placement write');
+		capability = '1.2.0';
+		response = Response.json({ ok: true, ownerId: 'owner', dataPlane: plane, storagePlane: 'home', acknowledgment: ack });
+		assert.deepEqual(await bind().write({ ...command, folderId: null } as any, signal()), ack);
+		assert.equal(JSON.parse(String(calls.at(-1)!.init.body)).command.folderId, null);
 		response = Response.json({ ok: true, ownerId: 'owner', dataPlane: plane, storagePlane: 'home', selection });
 		assert.deepEqual(await bind().selection(signal()), selection);
 		response = Response.json({

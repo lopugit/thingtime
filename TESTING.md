@@ -11898,3 +11898,23 @@ never point it at an existing account or deployment.
   Retain pending device choice/content when a remote catalogue loses its profile.
 - Native account editor/feed/transfer and conflict UI activation is still pending;
   the queue/API checks are not full offline browser acceptance.
+
+### Account algorithm library transfer and placement
+
+- Import a canonical folder/profile bundle offline through the normal importer;
+  export it and reimport into another isolated account. Require fresh IDs,
+  exact weights/training statistics, private ownership and inactive selection.
+- Move an imported profile before its folder uploads. Local completion must
+  succeed; only synchronization waits for the folder receipt. Move to the root
+  and verify synchronization can proceed without that unrelated upload.
+- Lose a profile write response, remove its folder and retry. Require the exact
+  old command followed by the newer placement before remote folder deletion.
+- Resolve a content conflict after another device moves the profile. The chosen
+  device placement and independent-copy placement must survive later edits.
+- Reject foreign/missing home folders atomically; omitted folderId preserves
+  placement, null clears it, and altered receipt replay fails. Hosts older than
+  algorithms-sync 1.2 must receive no placement writes.
+- Delete a profile or change account after preparing an export; the old plan
+  must refuse download. Refuse mismatched home/account adapters.
+- Native account facade/editor/feed integration is still an outstanding gate;
+  adapter tests alone do not count as full native browser acceptance.
