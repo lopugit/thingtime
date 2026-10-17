@@ -12,12 +12,12 @@ import java.nio.file.Files;
 
 /** Opt-in, local-only test. Fixture is supplied to the debug app's private storage; never packaged. */
 public class DeviceLiveTest {
-    private static String evaluate(android.webkit.WebView web,String js) throws Exception {
+    static String evaluate(android.webkit.WebView web,String js) throws Exception {
         java.util.concurrent.ArrayBlockingQueue<String> result=new java.util.concurrent.ArrayBlockingQueue<>(1);
         InstrumentationRegistry.getInstrumentation().runOnMainSync(()->web.evaluateJavascript(js,result::offer));
         String value=result.poll(10,java.util.concurrent.TimeUnit.SECONDS); assertNotNull("WebView evaluation timed out",value); return value;
     }
-    private static void awaitTrue(android.webkit.WebView web,String js) throws Exception {
+    static void awaitTrue(android.webkit.WebView web,String js) throws Exception {
         awaitTrue(web,js,60000);
     }
     private static void awaitTrue(android.webkit.WebView web,String js,long timeout) throws Exception {
@@ -394,7 +394,7 @@ public class DeviceLiveTest {
         }
         System.out.println("DIRECTORY_DESCRIPTOR_RESULT: "+result);
     }
-    private static JSONObject webApi(android.webkit.WebView web,String path,String method,JSONObject body) throws Exception {
+    static JSONObject webApi(android.webkit.WebView web,String path,String method,JSONObject body) throws Exception {
         evaluate(web,"window.__syncQA=null;(async()=>{try{const r=await fetch("+JSONObject.quote(path)+",{method:"+JSONObject.quote(method)+",headers:{'Content-Type':'application/json'},"+(body==null?"":"body:"+JSONObject.quote(body.toString())+",")+"redirect:'error'});const value=await r.json();window.__syncQA=r.ok?{ok:true,value}:{ok:false,status:r.status};}catch(e){window.__syncQA={ok:false,error:String(e)}}})()");
         awaitTrue(web,"window.__syncQA!==null");
         JSONObject result=new JSONObject(new JSONTokener(evaluate(web,"JSON.stringify(window.__syncQA)")).nextValue().toString());
@@ -450,6 +450,7 @@ public class DeviceLiveTest {
             awaitTrue(target[0],"window.thingtimeNativeBridge?.platform === 'android' && window.thingtimeNativeBridge?.devicePairingVersion === '1.0.0'");
             awaitTrue(target[0],"document.body.innerText.includes('This device is paired to your account')");
             verifySelectedFolder(target[0],context,scope);
+            if("true".equals(InstrumentationRegistry.getArguments().getString("fileHistory"))) FileHistoryAcceptance.run(target[0],context,scope);
             long revision=storage.load(scope).getLong("revision");
             awaitTrue(target[0],"Array.from(document.querySelectorAll('button')).some(b=>b.textContent.trim()==='Check connection' && !b.disabled)");
             assertEquals("true",evaluate(target[0],"(()=>{const b=Array.from(document.querySelectorAll('button')).find(b=>b.textContent.trim()==='Check connection'); b.click(); return true;})()"));

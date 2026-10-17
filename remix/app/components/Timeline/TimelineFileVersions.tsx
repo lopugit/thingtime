@@ -81,6 +81,10 @@ export function TimelineFileVersion({
 	const live = React.useRef(enabled);
 	live.current = enabled;
 	React.useEffect(() => {
+		// Effect cleanup also runs during StrictMode's mount replay. Reinstall
+		// the current permission state along with the identity subscription.
+		live.current = enabled;
+		if (!enabled) setBusy(false);
 		const unsubscribe = rootIdentity.subscribe(() => {
 			active.current?.abort();
 			live.current = false;
@@ -91,12 +95,6 @@ export function TimelineFileVersion({
 			active.current?.abort();
 			live.current = false;
 		};
-	}, []);
-	React.useEffect(() => {
-		if (!enabled) {
-			active.current?.abort();
-			setBusy(false);
-		}
 	}, [enabled]);
 	const run = async (work: (check: () => void, signal: AbortSignal) => Promise<void>) => {
 		if (!live.current || active.current || initial.error) return;

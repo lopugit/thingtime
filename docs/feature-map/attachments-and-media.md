@@ -269,3 +269,9 @@ retry metadata; bytes/history remain in accounted attachments and Timeline.
 `fileVersions.test.ts`, `storageScope.test.ts`, `scripts/file-history.browser.html`
 and `scripts/file-versions.integration.mts` cover this path. Installed native
 History/download acceptance and native retained-version browsing remain open.
+
+`android/app/src/androidTest/java/com/thingtime/mobile/FileHistoryAcceptance.java` is the opt-in installed History check
+(`THINGTIME_FILE_HISTORY_TEST=1` on `android/scripts/test-mobile-devices.sh`). It
+uses real private file uploads, History filters, guarded restore and exact byte
+readback. It does not claim a native exported file. `timeline/browserModel.ts`
+uses `timelineFileVersion` for canonical file card names and Files filtering.

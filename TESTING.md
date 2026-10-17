@@ -10650,3 +10650,18 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
   permission failures and canonical Timeline snapshots (`file-versions.integration.mts`).
 - [ ] Installed iOS, Android and Mac History/download/restore acceptance; local
   device retained-version browsing and content-ID search across folders.
+
+### Installed file History and effect replay — 2026-10-17
+
+- [x] File revision cards show their recorded filename and remain discoverable
+  under the Files filter and filename search; malformed/unsupported/foreign
+  snapshots cannot invent file cards (`browserModel.test.ts`).
+- [x] Run `scripts/file-history.browser.html` under React StrictMode: Review
+  opens after effect replay; Cancel sends no write; lost reply plus reopen and
+  retry uses one operation; account change during a delayed read removes
+  download access and cannot reveal a late review.
+- [x] Run Android `THINGTIME_FILE_HISTORY_TEST=1` with a disposable local
+  account: real History filter, two retained versions, cancel without writes,
+  restore and both complete byte hashes. Verify the saved review screenshot.
+- [ ] Native History export into Android Files, installed iOS and Mac restore,
+  local retained-version browsing and cross-folder content-ID retrieval.

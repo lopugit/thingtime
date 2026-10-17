@@ -1196,3 +1196,33 @@ targeted lint passes. Full TypeScript matches the same 91 baseline diagnostics.
 The conflict review now links each cloud file to its home History, with measured
 390px layout and cancellation preserving both folders. Installed native restore
 and downloads are still unverified.
+
+## Installed file History follow-up — 2026-10-17
+
+The real app uses React StrictMode; its effect replay exposed a dormant restore
+control because cleanup marked the card inactive without setup restoring it.
+The card now reinstalls its current enabled state and identity subscription
+together. Abort and account fences remain in place. The browser fixture now
+uses StrictMode too, with verified Cancel, lost-reply/reopen/exact-retry and
+delayed-read/account-change checks.
+
+Shared History cards also recognize validated canonical file snapshots, retain
+the historical filename and participate in Files and filename filters. A
+regression failed with the generic “Thing” title before the fix. The 239 Timeline
+tests and 19 focused history/scope tests pass; targeted lint passes. The full
+TypeScript output matches the same 91 baseline diagnostics.
+
+Android's opt-in `THINGTIME_FILE_HISTORY_TEST=1` seeds two private file versions
+and exercises the real History screen through the existing installed-app
+runner. It distinguishes full authorized byte reads from native export; the
+WebView has no download handler yet. The stronger native export and universal
+content-ID retrieval promises remain unfinished work.
+
+Installed API 35 Android acceptance passed against the real local API: two
+retained versions appeared in Files/filename History filters, Review and Cancel
+left the revision unchanged, Restore committed the earlier attachment, and both
+complete byte hashes still matched. The debug runner finished `OK (50 tests)`
+(48 executed, two opt-in process-restart checks skipped), with build, JVM tests
+and lint passing. Both APKs were reinstalled and the app relaunched. One earlier
+login attempt returned a transient 503; the successful run followed without a
+server restart or weaker authorization. Native export remains unimplemented.

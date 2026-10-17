@@ -447,3 +447,16 @@ the app, choosing the requested version and Apply choices and sync. The runner
 checks full native/cloud hashes and repeated convergence before continuing the
 saved-settings consent and Android Files checks. Keep all fixture state private;
 use the existing cleanup action afterward.
+
+### Installed file History acceptance
+
+With the same disposable local account fixture, run
+`THINGTIME_FILE_HISTORY_TEST=1 android/scripts/test-mobile-devices.sh /private/path/fixture.json`.
+The runner requires Java 17 (`JAVA_HOME`) and the Android SDK (`ANDROID_HOME`),
+builds and installs both debug APKs, and uses the real shared History page. It
+creates two private file versions, filters by filename and Files, cancels a
+restore without changing its revision, restores the earlier bytes, and hashes
+both retained attachments. The synthetic file is left in private Trash with
+its accounted versions. `files/file-history-qa.png` in the debug app contains
+the restore-review screenshot. This verifies authorized byte reads; saving a
+History download into Android Files is a separate native export acceptance.

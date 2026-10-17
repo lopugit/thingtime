@@ -74,6 +74,27 @@ test('filters use recorded kinds, exact source and receipt state; search include
 	assert.equal(filterHistoryCards(cards, { ...filters, source: 'api' }).length, 0);
 });
 
+test('retained file revisions keep their historical name and appear in file searches and filters', () => {
+	const file = {
+		id: 'file-1', revision: 'revision-1', name: 'Holiday photo.jpg', folderId: null, trashed: false,
+		content: { attachmentId: 'attachment-1', version: 'a'.repeat(64), size: 123,
+			fingerprint: { algorithm: 'sha256-parts-v1', partSizeBytes: 8388608, partCount: 1, sha256: 'b'.repeat(64) } }
+	};
+	const original = row(file.revision, 1, { thingId: file.id, before: null, after: { adapter: 'file-content', version: 1, value: file } });
+	const card = historyCard(original);
+	assert.equal(card.title, file.name);
+	assert.equal(card.kind, 'file');
+	assert.equal(filterHistoryCards([card], readHistoryFilters(new URLSearchParams('kind=file&q=holiday'))).length, 1);
+	assert.deepEqual(card.fields, [{ name: 'size', value: '123' }, { name: 'trashed', value: 'false' }]);
+	for (const snapshot of [null, { adapter: 'file-content', version: 2, value: file }, { adapter: 'file-content', version: 1, value: { ...file, content: null } }]) {
+		const invalid = historyCard(row(file.revision, 1, { thingId: file.id, before: null, after: snapshot }));
+		assert.equal(invalid.title, 'Thing'); assert.equal(invalid.kind, '');
+	}
+	assert.equal(historyCard({ ...original, event: { ...original.event, thingId: 'foreign-file' } }).kind, '');
+	const removed = historyCard(row('removed', 2, { thingId: file.id, operation: 'delete', before: original.event.after, after: null }));
+	assert.equal(removed.title, file.name); assert.equal(removed.kind, 'file');
+});
+
 test('horizontal positions stay bounded and separated with backwards clocks and widely separated events', () => {
 	const cards = [
 		historyCard(row('pending', null, { occurredAt: '2001-01-01T00:00:00.000Z' })),

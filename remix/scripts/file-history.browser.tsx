@@ -148,4 +148,4 @@ function Fixture() {
 const router = createMemoryRouter([
 	{ id: 'root', path: '/', loader: () => ({ user: { id: scope.ownerId, accountKind: 'user' }, dataPlane: 'home' }), element: <Fixture /> }
 ]);
-createRoot(document.getElementById('root')!).render(<RouterProvider router={router} />);
+createRoot(document.getElementById('root')!).render(<React.StrictMode><RouterProvider router={router} /></React.StrictMode>);
