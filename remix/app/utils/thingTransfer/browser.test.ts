@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { bundleFromPlan, readTransferClipboard, transferClipboardText, writeTransferClipboard } from './browser';
+import { bundleFromPlan, downloadTransfer, readTransferClipboard, transferClipboardText, writeTransferClipboard } from './browser';
 import type { TransferPlan } from './plan';
 import { encodeTransferArchive, decodeTransferArchive } from './archive';
 
@@ -121,4 +121,27 @@ test('cancelled and undeclared clipboard bundles are never serialized', async ()
   await assert.rejects(transferClipboardText(bundle, controller.signal), { name: 'AbortError' });
   bundle.files.set('hidden', new Uint8Array([1]));
   await assert.rejects(transferClipboardText(bundle), /undeclared/);
+});
+
+
+test('in-process export availability is checked before and after preparing portable content',async()=>{
+ const original=plan();let reads=0,allowed=true;
+ original.assertCurrent=async()=>{reads++;if(!allowed)throw Error('Export refused');};
+ const bundle=await bundleFromPlan(original);assert.equal(reads,2);assert.equal('assertCurrent' in bundle.manifest,false);
+ allowed=false;await assert.rejects(bundleFromPlan(original),/Export refused/);
+ allowed=true;original.files=[{id:'file',targetId:'note',name:'file.txt',mime:'text/plain',bytes:2}];
+ original.readLocalFile=async()=>{allowed=false;return new Uint8Array([1,2]);};
+ await assert.rejects(bundleFromPlan(original),/Export refused/);
+});
+
+
+test('portable encoding and download cannot outlive an in-process availability fence',async()=>{
+ let allowed=true;
+ const original=plan();original.assertCurrent=async()=>{if(!allowed)throw Error('Export refused');};
+ const bundle=await bundleFromPlan(original);allowed=false;
+ await assert.rejects(encodeTransferArchive(bundle),/Export refused/);
+ await assert.rejects(transferClipboardText(bundle),/Export refused/);
+ await assert.rejects(downloadTransfer(bundle,'json'),/Export refused/);
+ let checks=0;bundle.assertCurrent=async()=>{if(++checks===2)throw Error('Refused during ZIP encoding');};
+ await assert.rejects(encodeTransferArchive(bundle),/Refused during ZIP encoding/);
 });

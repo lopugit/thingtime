@@ -3,7 +3,9 @@ import { parseTransfer, serializeTransfer, TRANSFER_LIMITS, TransferFormatError,
 
 export const TRANSFER_MANIFEST_PATH = 'thingtime.json';
 export const MAX_ARCHIVE_BYTES = TRANSFER_LIMITS.manifestBytes + TRANSFER_LIMITS.fileBytes + 1024 * 1024;
-export type TransferBundle = { manifest: ThingTransfer; files: Map<string, Uint8Array> };
+export type TransferBundle = { manifest: ThingTransfer; files: Map<string, Uint8Array>;
+  /** Optional in-process availability fence, excluded from every serialized format. */
+  assertCurrent?: (signal?: AbortSignal) => Promise<void> };
 
 export const transferChecksum = async (bytes: Uint8Array): Promise<string> => {
   const digest = await crypto.subtle.digest('SHA-256', Uint8Array.from(bytes));
@@ -25,13 +27,14 @@ export const verifyTransferFiles = async (bundle: TransferBundle, signal?: Abort
 };
 
 export const encodeTransferArchive = async (bundle: TransferBundle, signal?: AbortSignal): Promise<Uint8Array> => {
+  if (typeof bundle.assertCurrent === 'function') await bundle.assertCurrent(signal);
   const manifest = new TextEncoder().encode(serializeTransfer(bundle.manifest));
   await verifyTransferFiles(bundle, signal);
   const entries: Record<string, Uint8Array> = { [TRANSFER_MANIFEST_PATH]: manifest };
   for (const file of bundle.manifest.files) entries[file.path] = bundle.files.get(file.id)!;
   // Files are commonly already-compressed media. Store them without another
   // compression pass; the resulting ZIP is readable by ordinary ZIP tools.
-  return new Promise((resolve, reject) => {
+  const archive = await new Promise<Uint8Array>((resolve, reject) => {
     abort(signal);
     let cancel: (() => void) | undefined;
     const stopped = () => { cancel?.(); reject(signal?.reason || new DOMException('Aborted', 'AbortError')); };
@@ -43,6 +46,8 @@ export const encodeTransferArchive = async (bundle: TransferBundle, signal?: Abo
       else resolve(bytes);
     });
   });
+  if (typeof bundle.assertCurrent === 'function') await bundle.assertCurrent(signal);
+  return archive;
 };
 
 /** Two passes allow a re-zipped archive to put its manifest anywhere.

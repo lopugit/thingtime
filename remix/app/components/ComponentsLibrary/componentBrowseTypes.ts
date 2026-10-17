@@ -46,6 +46,7 @@ export type BrowseComponentEntry = {
 export type BrowseComponentsResponse = {
   ok: boolean;
   error?: string;
+  localCacheError?: string;
   components: BrowseComponentEntry[];
   nextCursor: string | null;
   total: number | null;

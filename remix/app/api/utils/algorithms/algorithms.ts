@@ -1,3 +1,4 @@
+import { MAX_SAVED_ALGORITHMS, normalizeAlgorithmName, sanitizeAlgorithmEmoji as sanitizeEmoji, sanitizeAlgorithmEvents as sanitizeEvents } from './algorithmContent';
 import { isDefaultAlgorithm } from '~/components/Feed/defaultAlgorithms';
 import { randomUUID } from 'node:crypto';
 import { ObjectId } from 'mongodb';
@@ -79,9 +80,7 @@ export type SharedAlgorithmPreview = {
   ownerUsername: string | null;
 };
 
-const MAX_ALGORITHMS_PER_USER = 50;
-const MAX_NAME_CHARS = 60;
-const MAX_EVENTS_PER_BATCH = 100;
+const MAX_ALGORITHMS_PER_USER = MAX_SAVED_ALGORITHMS;
 const DEFAULT_EMOJI = '🧠';
 
 type Fail = { ok: false; status: number; error: string };
@@ -186,28 +185,6 @@ export const toPublicAlgorithm = async (doc: FeedAlgorithmDoc): Promise<PublicAl
   const interests = topInterests(doc.weights || emptyWeights());
 	const usernames = await resolveAuthorUsernames(interests.filter((entry) => entry.kind === 'author').map((entry) => entry.key));
   return projectAlgorithm(doc, usernames);
-};
-
-// Client-supplied event batches: keep only well-formed entries so a [null]
-// payload can never throw past the { ok, error } envelope.
-const sanitizeEvents = (value: unknown): EngagementEvent[] => {
-  if (!Array.isArray(value)) return [];
-  return value
-    .filter(
-      (entry): entry is EngagementEvent =>
-        !!entry &&
-        typeof entry === 'object' &&
-        typeof (entry as { thingId?: unknown }).thingId === 'string' &&
-        typeof (entry as { signal?: unknown }).signal === 'string'
-    )
-    .slice(0, MAX_EVENTS_PER_BATCH);
-};
-
-const sanitizeEmoji = (value: unknown): string => {
-  if (typeof value !== 'string') return DEFAULT_EMOJI;
-  const trimmed = value.trim();
-  // an emoji (or short grapheme cluster), not arbitrary text
-  return trimmed && [...trimmed].length <= 3 ? trimmed : DEFAULT_EMOJI;
 };
 
 // Ownership-scoped lookup, dual-era with the era kept so writes can target the
@@ -333,7 +310,7 @@ export const createAlgorithm = async (ownerId: string, input: CreateAlgorithmInp
   // Validate again at the writer boundary, even for an in-process caller.
   const imported = transferSeed === undefined ? undefined : parseAlgorithmTransfer(transferSeed);
   if (imported && (input.branchFrom != null || input.events !== undefined)) return fail(400, 'An imported profile cannot also branch or train');
-  const name = typeof input.name === 'string' ? input.name.trim().slice(0, MAX_NAME_CHARS) : '';
+  const name = normalizeAlgorithmName(input.name);
   if (!name) return fail(400, 'Algorithm name is required');
 
   const things = await getThingsCollection();
@@ -458,7 +435,7 @@ export const updateAlgorithm = async (
 
   const set: Record<string, any> = { updatedAt: new Date() };
   if (input.name !== undefined) {
-    const name = typeof input.name === 'string' ? input.name.trim().slice(0, MAX_NAME_CHARS) : '';
+    const name = normalizeAlgorithmName(input.name);
     if (!name) return fail(400, 'Algorithm name is required');
     set.name = name;
   }

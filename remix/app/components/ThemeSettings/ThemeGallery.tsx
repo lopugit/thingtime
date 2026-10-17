@@ -145,8 +145,8 @@ export const ThemeGallery = () => {
 							No public themes yet — yours could be the first 🌈
 						</Text>
 						<Text marginTop="4px" fontSize="sm" color="var(--tt-muted, #9a9aa6)">
-							Save a theme in the <Link to="/themes" style={{ textDecoration: 'underline' }}>Theme Studio</Link> and tick
-							&ldquo;shareable&rdquo; to publish it here.
+							Create and save your own look in the <Link to="/themes" style={{ textDecoration: 'underline' }}>Theme Studio</Link>.
+							{' '}Sign in to publish a shareable account theme here.
 						</Text>
 					</Box>
 				) : (

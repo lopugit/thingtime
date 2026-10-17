@@ -186,6 +186,7 @@ const author = (extra: Partial<FeedAuthor>): FeedAuthor => ({
 test('authorLinkTarget: native authors keep their profile route', () => {
   assert.deepEqual(authorLinkTarget(author({})), { external: false, href: '/profile/nik' });
   assert.equal(authorLinkTarget(null), null);
+  assert.equal(authorLinkTarget(author({ localOnly: true })), null, 'local workspace identities are not account profile links');
   assert.equal(authorLinkTarget(author({ username: '' })), null);
 });
 

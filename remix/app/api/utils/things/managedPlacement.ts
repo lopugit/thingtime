@@ -47,7 +47,7 @@ export const moveManagedContent = async (
     const now = deps.now();
     prepareManagedPlacement(source, ownerId, null, now);
     if (expected && expected.getTime() !== source.updatedAt.getTime()) {
-      throw new Error('Content changed before the move; refresh and try again');
+      throw Object.assign(new Error('Content changed before the move; refresh and try again'), { status: 409 });
     }
     const folder = await lockFolderDestination(things, ownerId, folderId, session);
     const patch = prepareManagedPlacement(source, ownerId, folder, now);
@@ -55,7 +55,7 @@ export const moveManagedContent = async (
       { shareId: id, ownerId, thingtime: source.thingtime, updatedAt: source.updatedAt } as any,
       { $set: patch }, { session }
     );
-    if (moved.matchedCount !== 1) throw new Error('Content changed before the move');
+    if (moved.matchedCount !== 1) throw Object.assign(new Error('Content changed before the move'), { status: 409 });
     await deps.record(things, source, { ...source, ...patch }, capture, session);
     return { id, folderId: patch.folderId };
   });

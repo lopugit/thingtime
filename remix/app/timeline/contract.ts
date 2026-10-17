@@ -33,7 +33,12 @@ export type TimelineEvent = {
 	dependencies: TimelineDependency[];
 };
 
-/** Server-issued order; client timestamps are descriptive, never conflict rules.
+/** Client-authored versions retain draft provenance even after authority admission. */
+export const isClientDraftVersion = (event: TimelineEvent) => event.mode === 'draft' && event.source === 'client' && event.actorId === event.ownerId && event.clientId !== null;
+
+/** Authority-issued order; client timestamps are descriptive, never conflict rules.
+ * Browser-only workspaces issue receipts in their isolated local data plane.
+ * Those receipts never authorize account writes or enter account sync.
  * The server serializes acceptance per account/data-plane, so a pull cursor
  * cannot skip an earlier transaction which happened to commit late. */
 export type TimelineReceipt = { formatVersion: 1; eventId: string; ownerId: string; position: number; acceptedAt: string };

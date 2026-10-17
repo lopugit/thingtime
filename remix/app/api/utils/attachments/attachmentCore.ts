@@ -1,7 +1,7 @@
 export const ATTACHMENT_THINGTIME = 'attachment' as const;
 export const ATTACHMENT_ENVELOPE_VERSION = 1 as const;
 
-export const ATTACHMENT_STATES = ['pending', 'finalizing', 'ready', 'deleting'] as const;
+export const ATTACHMENT_STATES = ['pending', 'finalizing', 'ready', 'deleting', 'cancelled'] as const;
 export type AttachmentState = (typeof ATTACHMENT_STATES)[number];
 
 // A purpose is stamped before any upload URL is issued and never changes.
@@ -84,6 +84,7 @@ export type AttachmentPrivateObjectFields = {
 	attachmentFinalizationLeaseId?: string;
 	attachmentPartsIssuedAt?: Date;
 	attachmentObjectlessDelete?: true;
+	attachmentCancellationRequested?: true;
 	attachmentMpuEmptyVerifiedAt?: Date;
 	uploadId?: string;
 	attachmentExpiresAt?: Date;
@@ -106,6 +107,8 @@ export type AttachmentStorageCandidate = {
 	attachmentFinalizationLeaseId?: unknown;
 	attachmentPartsIssuedAt?: unknown;
 	attachmentObjectlessDelete?: unknown;
+	attachmentCancellationRequested?: unknown;
+	targetId?: unknown;
 	attachmentMpuEmptyVerifiedAt?: unknown;
 	uploadId?: unknown;
 	attachmentExpiresAt?: unknown;
@@ -711,6 +714,15 @@ export const attachmentObjectSizeBytesForAccounting = (doc: AttachmentStorageCan
 	// synthetic key, the zero object size, the url-bearing crystal, and the
 	// absence of every S3 upload field all imply each other. Any partial
 	// combination is a forged or corrupt claim and fails closed.
+	if (doc.attachmentCancellationRequested !== undefined &&
+		(doc.attachmentCancellationRequested !== true || !['deleting', 'cancelled'].includes(String(doc.attachmentState)))) return null;
+	if (doc.attachmentState === 'cancelled') {
+		// The durable receipt has no object, target, expiry or upload authority.
+		if (doc.attachmentCancellationRequested !== true || doc.objectSizeBytes !== 0 ||
+			doc.uploadId !== undefined || doc.objectVersionId !== undefined || doc.targetId !== undefined ||
+			doc.attachmentExpiresAt !== undefined || doc.attachmentPurpose !== undefined || doc.attachmentLinked !== undefined ||
+			doc.attachmentRequestFingerprint !== undefined || doc.attachmentMpuEmptyVerifiedAt !== undefined) return null;
+	}
 	if (doc.attachmentLinked !== undefined && doc.attachmentLinked !== true) return null;
 	const looksLinked =
 		doc.attachmentLinked === true ||
@@ -749,3 +761,6 @@ export const attachmentObjectSizeBytesForAccounting = (doc: AttachmentStorageCan
 	if (!crystal || crystal.size !== Number(doc.objectSizeBytes)) return null;
 	return Number(doc.objectSizeBytes);
 };
+
+/** Durable owner-private originals; editor-bound upload purposes stay separate. */
+export const isStandaloneAttachmentPurpose = (value: unknown): value is 'file' | 'recording' => value === 'file' || value === 'recording';

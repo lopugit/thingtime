@@ -10,7 +10,7 @@ import { normalizeVersionName, versionControlState } from './timelineVersionCont
 
 /** The control strip under one Versions-tab row: 📌 name form (Save, Clear
  * when a name exists) and Export. It is a sibling of the row's select button,
- * never nested in it. Names are online only and the server is authoritative:
+ * never nested in it. The selected Timeline authority owns each name:
  * every write sends the revision this editor last saw and a 409 offers Refresh.
  * `drafts` outlives this editor (the mobile sheet unmounts the whole panel on
  * Escape), so a typed name is still there when the row is reopened. */
@@ -23,10 +23,16 @@ export function TimelineVersionNameEditor({ row, current, drafts, draftKey }: { 
 	const live = override ? override.name : current ?? null;
 	const [value, setValue] = React.useState(() => drafts.get(draftKey) ?? live?.name ?? '');
 	const [saving, setSaving] = React.useState(false); const [exporting, setExporting] = React.useState(false);
-	const [notice, setNotice] = React.useState(''); const [error, setError] = React.useState<{ message: string; stale: boolean } | null>(null);
+	const [notice, setNotice] = React.useState('');
+	const [queued, setQueued] = React.useState<{count:number;failure:string|null}>({count:0,failure:null});
+	React.useEffect(()=>{let alive=true;const refresh=()=>{void connection?.nameQueue?.queued().then(rows=>{const own=rows.filter(item=>item.command.eventId===event.id);if(alive)setQueued({count:own.length,failure:own.find(item=>item.failure)?.failure?.message??null});}).catch(()=>{});};refresh();window.addEventListener(TIMELINE_CHANGED_EVENT,refresh);return()=>{alive=false;window.removeEventListener(TIMELINE_CHANGED_EVENT,refresh);};},[connection,event.id]); const [error, setError] = React.useState<{ message: string; stale: boolean } | null>(null);
 	const input = React.useRef<HTMLInputElement>(null);
+	const exportController = React.useRef<AbortController | null>(null);
 	const alive = React.useRef(true); const working = React.useRef(false);
-	React.useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
+	// Keep an uncertain write identity until its exact result is known. A retry
+	// must not append another naming effect after a committed-but-lost reply.
+	const request = React.useRef<TimelineVersionNameCommand | null>(null);
+	React.useEffect(() => { alive.current = true; return () => { alive.current = false; exportController.current?.abort(); }; }, []);
 	// Focus returns after the operation ends: while saving the input is disabled and cannot take focus.
 	const wantFocus = React.useRef(false);
 	React.useEffect(() => { if (!saving && !exporting && wantFocus.current) { wantFocus.current = false; input.current?.focus(); } }, [saving, exporting]);
@@ -38,26 +44,33 @@ export function TimelineVersionNameEditor({ row, current, drafts, draftKey }: { 
 		seen.current = stamp;
 		if (!drafts.has(draftKey)) setValue(live?.name ?? '');
 	}, [live?.revision, live?.updatedAt, live?.name, drafts, draftKey]);
-	const state = versionControlState(row, !!connection?.verified);
+	const state = versionControlState(row, !!connection?.verified || !!connection?.nameQueue, !!connection && api.v1.timeline.canExportLocally?.(connection.scope), !!connection?.nameQueue);
 	const name = normalizeVersionName(value);
 	const unchanged = name === (live?.name ?? '');
 	const change = (next: string) => { setValue(next); if (next === (live?.name ?? '')) drafts.delete(draftKey); else drafts.set(draftKey, next); };
 	const settle = (fresh: TimelineVersionName | null, message: string) => {
-		drafts.delete(draftKey);
+		request.current = null; drafts.delete(draftKey);
 		if (alive.current) { setOverride({ name: fresh }); setValue(fresh?.name ?? ''); setNotice(message); }
 		window.dispatchEvent(new Event(TIMELINE_CHANGED_EVENT));
 	};
 	const send = async (next: string | null) => {
 		if (!connection || working.current) return;
-		const command: TimelineVersionNameCommand = { command: 'name-version', operationId: crypto.randomUUID(), eventId: event.id, thingId: event.thingId, name: next, expectedRevision: live?.revision ?? 0 };
+		const command: TimelineVersionNameCommand = request.current?.name === next ? request.current : { command: 'name-version', operationId: crypto.randomUUID(), eventId: event.id, thingId: event.thingId, name: next, expectedRevision: live?.revision ?? 0 };
+		request.current = command;
 		working.current = true; wantFocus.current = true; setSaving(true); setError(null); setNotice('');
 		try {
+			if (connection.nameQueue) {
+				await connection.nameQueue.enqueue(command,event);
+				const fresh=(await connection.nameQueue.view([event.id])).get(event.id)??null;
+				settle(fresh,'Version name saved on this device. Account sync runs separately.');return;
+			}
 			const result = parseTimelineVersionNameResult(await api.v1.timeline.nameVersion(connection.scope, command), connection.scope.ownerId, command);
 			// The receipt is a real effect event: cache it with the version it names so every open history view repaints together.
 			if (result.entry) await connection.store.accept([result.entry]);
 			connection.names.accept(result.name ? [result.name] : [], { events: [event.id] });
 			settle(result.name, next === null ? 'Removed the version name.' : live ? `Renamed this version “${result.name?.name ?? next}”.` : `Named this version “${result.name?.name ?? next}”.`);
 		} catch (failure: any) {
+			if ([400, 401, 403, 404, 409, 413, 422].includes(failure?.status)) request.current = null;
 			if (alive.current) setError({ message: failure?.error || failure?.message || 'Could not save this version name.', stale: failure?.status === 409 });
 		} finally { working.current = false; if (alive.current) setSaving(false); }
 	};
@@ -66,20 +79,33 @@ export function TimelineVersionNameEditor({ row, current, drafts, draftKey }: { 
 		working.current = true; wantFocus.current = true; setSaving(true); setError(null); setNotice('');
 		try {
 			// The entry read carries the current name record (or none); the connection cache is updated by the read itself.
-			await connection.sync.entry(event.id);
-			const fresh = connection.names.forEvents([event.id]).get(event.id) ?? null;
+			if (connection.verified) await connection.sync.entry(event.id);
+			const fresh = (connection.nameQueue ? await connection.nameQueue.view([event.id]) : connection.names.forEvents([event.id])).get(event.id) ?? null;
 			settle(fresh, fresh ? `This version is now named “${fresh.name}”.` : 'This version has no name now.');
 		} catch (failure: any) { if (alive.current) setError({ message: failure?.error || failure?.message || 'Could not refresh this version.', stale: false }); }
 		finally { working.current = false; if (alive.current) setSaving(false); }
 	};
+	const reviewQueued = async (keep:boolean) => {
+		if (!connection?.nameQueue || working.current) return;
+		working.current=true;setSaving(true);setError(null);
+		try {
+			if(keep){if(!connection.verified)throw new Error('Reconnect to review the current account name.');await connection.sync.entry(event.id);await connection.nameQueue.retry(event.id,crypto.randomUUID());}
+			else await connection.nameQueue.dismiss(event.id);
+			settle((await connection.nameQueue.view([event.id])).get(event.id)??null,keep?'Local version names are queued again.':'Discarded the refused local version names.');
+		}catch(failure:any){if(alive.current)setError({message:failure?.message||'Could not review this name.',stale:false});}
+		finally{working.current=false;if(alive.current)setSaving(false);}
+	};
 	const exportVersion = async () => {
 		if (!connection || working.current) return;
 		working.current = true; setExporting(true); setError(null); setNotice('');
+		const attempt = new AbortController(); exportController.current = attempt;
 		try {
-			const filename = downloadTimelineVersionExport(await api.v1.timeline.exportVersion(connection.scope, event.id), event);
-			if (alive.current) setNotice(`Exported ${live?.name ?? event.label} · ${filename}`);
+			const result = await api.v1.timeline.exportVersion(connection.scope, event.id, { signal: attempt.signal, adapter: (event.after ?? event.before)?.adapter });
+			if (!alive.current || attempt.signal.aborted) return;
+			const filename = downloadTimelineVersionExport(result, event);
+			if (alive.current) setNotice(`Exported ${live?.name ?? event.label} · ${filename}${((result as any)?.export?.context ?? result?.context)?.source === 'device' ? ' · Notes and names include retained context only.' : ''}`);
 		} catch (failure: any) { if (alive.current) setError({ message: failure?.error || failure?.message || 'Could not export this version.', stale: false }); }
-		finally { working.current = false; if (alive.current) setExporting(false); }
+		finally { if (exportController.current === attempt) exportController.current = null; working.current = false; if (alive.current) setExporting(false); }
 	};
 	return <Flex as="form" className="history-version-controls" gap={2} align="center" wrap="wrap" px={1} pb={2} minW={0}
 		onClick={(click) => click.stopPropagation()}
@@ -89,6 +115,8 @@ export function TimelineVersionNameEditor({ row, current, drafts, draftKey }: { 
 		{live ? <Button type="button" size="xs" variant="ghost" isDisabled={!state.name || saving || exporting} onClick={() => void send(null)}>Clear</Button> : null}
 		<Button type="button" size="xs" variant="outline" isLoading={exporting} isDisabled={!state.export || saving} title={state.export ? undefined : state.title} onClick={() => void exportVersion()}>Export</Button>
 		{!state.name ? <Text fontSize="xs" color="var(--tt-muted)" flexBasis="100%">{state.title}</Text> : null}
+		{queued.count ? <Text role="status" fontSize="xs" flexBasis="100%" minW={0} overflowWrap="anywhere">{queued.failure ? `Version name needs review: ${queued.failure}` : 'Version name saved on this device · waiting to sync'}</Text> : null}
+		{queued.failure ? <Flex gap={2} wrap="wrap"><Button type="button" size="xs" isDisabled={saving || !connection?.verified} onClick={()=>void reviewQueued(true)}>Keep local names</Button><Button type="button" size="xs" isDisabled={saving} onClick={()=>void reviewQueued(false)}>Discard local names</Button></Flex> : null}
 		{notice ? <Text role="status" fontSize="xs" color="var(--tt-muted)" flexBasis="100%" overflowWrap="anywhere">{notice}</Text> : null}
 		{error ? <Flex role="alert" flexBasis="100%" gap={2} align="center" wrap="wrap" minW={0}>
 			<Text fontSize="xs" overflowWrap="anywhere" minW={0}>{error.message}</Text>

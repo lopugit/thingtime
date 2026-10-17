@@ -3,7 +3,7 @@ import { TIMELINE_SNAPSHOT_PARTS_ADAPTER } from '../../timeline/snapshotParts';
 import { Box, Button, Flex, Heading, Select, Text } from '@chakra-ui/react';
 import { useApi } from '../../hooks/useApi';
 import { useTimelineSession } from '../../timeline/TimelineProvider';
-import { parseTimelineEntry, type TimelineEvent } from '../../timeline/contract';
+import { parseTimelineEntry, parseTimelineEvent, type TimelineEvent } from '../../timeline/contract';
 import type { VersionChoices } from '../../timeline/versions';
 import { parsePublishedVersionPreview, type PublishedVersionPreview, type VersionRequest } from '../../timeline/publishedVersion';
 import { componentValues, definitionSnapshot } from '../../timeline/componentDefinitions';
@@ -19,7 +19,8 @@ const UNDO_LABELS = { incoming: 'Before this change', useIncoming: 'Use the earl
  * command; component choices are reviewed after page-content conflicts. */
 export function TimelineVersionActions({ event, onApplied }: { event: TimelineEvent; onApplied: () => void }) {
 	const { connection } = useTimelineSession();
-	const api = useApi();
+	const api = React.useRef(useApi()).current;
+	const localChanges = !!connection && api.v1.timeline.canChangeLocally?.(connection.scope);
 	const [preview, setPreview] = React.useState<PublishedVersionPreview | null>(null);
 	const [choices, setChoices] = React.useState<VersionChoices>({});
 	const [componentChoices, setComponentChoices] = React.useState<VersionChoices>({});
@@ -51,7 +52,7 @@ export function TimelineVersionActions({ event, onApplied }: { event: TimelineEv
 		setError('');
 		request.current = null;
 		try {
-			await connection.sync.pushPending();
+			if (!localChanges) await connection.sync.pushPending();
 			const query: VersionRequest = {
 				command: 'preview-version',
 				mode,
@@ -98,16 +99,19 @@ export function TimelineVersionActions({ event, onApplied }: { event: TimelineEv
 		try {
 			const result = await api.v1.timeline.version(connection.scope, request.current);
 			if (result?.ok === false || !result?.entry) throw new Error(result?.error || 'Could not apply this version.');
-			const entry = parseTimelineEntry(result.entry);
+			const device = localChanges && (result as any).savedLocally === true;
+			const entry = device && result.entry.receipt === null ? {event:parseTimelineEvent(result.entry.event),receipt:null} : parseTimelineEntry(result.entry);
 			if (
 				entry.event.ownerId !== connection.scope.ownerId ||
 				entry.event.thingId !== event.thingId ||
 				entry.event.id !== `version-${request.current.operationId}` ||
-				entry.event.source !== 'api' ||
-				entry.event.mode !== 'revision'
+				entry.event.source !== (device ? 'client' : 'api') ||
+				entry.event.mode !== (device ? 'draft' : 'revision') ||
+				(device && (entry.event.actorId !== connection.scope.ownerId || !entry.event.clientId))
 			)
 				throw new Error('This save receipt belongs to another operation.');
-			await connection.store.accept([entry]);
+			if(entry.receipt) await connection.store.accept([{event:entry.event,receipt:entry.receipt}]);
+			else await connection.store.enqueue(entry.event);
 			if (alive.current) {
 				setSaved(preview.mode);
 				setPreview(null);
@@ -262,7 +266,7 @@ export function TimelineVersionActions({ event, onApplied }: { event: TimelineEv
 					<Button size="sm" variant="outline" isLoading={loading === 'restore'} isDisabled={busy && loading !== 'restore'} onClick={() => void compare('restore', {}, {}, 'recorded')}>
 						{event.operation === 'delete' ? 'Recover this Thing…' : 'Restore this version…'}
 					</Button>
-					{event.operation === 'update' && event.mode === 'revision' && event.before && event.after ? (
+					{event.operation === 'update' && (event.mode === 'revision' || (localChanges && event.mode === 'draft' && event.source === 'client')) && event.before && event.after ? (
 						// Undo defaults to current shared components: the recorded default would fork every referenced component into private copies on apply.
 						<Button size="sm" variant="outline" isLoading={loading === 'undo'} isDisabled={busy && loading !== 'undo'} onClick={() => void compare('undo', {}, {}, 'current')}>
 							Undo this change…

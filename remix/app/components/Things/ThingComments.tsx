@@ -1,7 +1,7 @@
 import React from 'react';
 import { Box, Button, Text } from '@chakra-ui/react';
 import { useApi } from '~/hooks/useApi';
-import { useCurrentUser } from '~/hooks/useCurrentUser';
+import { useWorkspaceScope } from '~/hooks/useWorkspaceScope';
 import { PostCard } from '~/components/Feed/PostCard';
 import { mergeCommentPage, type PublicPost, type PostChange } from '~/components/Feed/feedTypes';
 import { createDiscussionCommentPager, mergeDiscussionComments } from '~/components/Feed/discussionCommentPages';
@@ -20,8 +20,8 @@ type DiscussionProps = {
 
 // The corresponding discussion shares the original Thing id and its live ACL.
 export function ThingComments({ thingId, linkKey = '', initialPost, description, onCommentAdded, collectionControls = false }: DiscussionProps) {
-  const user = useCurrentUser();
-  return <Discussion key={`${user?.id || 'anonymous'}:${thingId}:${linkKey}`} thingId={thingId} linkKey={linkKey} initialPost={initialPost} description={description} onCommentAdded={onCommentAdded} collectionControls={collectionControls} />;
+  const workspace = useWorkspaceScope();
+  return <Discussion key={`${workspace}:${thingId}:${linkKey}`} thingId={thingId} linkKey={linkKey} initialPost={initialPost} description={description} onCommentAdded={onCommentAdded} collectionControls={collectionControls} />;
 }
 
 function Discussion({ thingId, linkKey = '', initialPost, description, onCommentAdded, collectionControls }: DiscussionProps) {
@@ -29,13 +29,14 @@ function Discussion({ thingId, linkKey = '', initialPost, description, onComment
   const apiRef = React.useRef(api); apiRef.current = api;
   const [post, setPost] = React.useState<PublicPost | null>(() => initialPost ? { ...initialPost, comments: initialPost.comments.filter(comment => comment.repliesLoaded === false) } : null);
   const [error, setError] = React.useState('');
+  const [coverage, setCoverage] = React.useState('');
   const [loading, setLoading] = React.useState(true);
   const [hasMore, setHasMore] = React.useState(false);
   const [revision, setRevision] = React.useState(0);
   const active = React.useRef<{ pager: ReturnType<typeof createDiscussionCommentPager>; controller: AbortController } | null>(null);
   const reportFailure = React.useCallback((failure: any) => {
-    if ([401, 403, 404].includes(Number(failure?.status))) {
-      setPost(null);
+    if ([401, 403, 404, 410].includes(Number(failure?.status))) {
+      setPost(null); setCoverage('');
       active.current?.pager.dispose();
       setHasMore(false);
     }
@@ -61,6 +62,7 @@ function Discussion({ thingId, linkKey = '', initialPost, description, onComment
       const fresh = response?.discussion || response?.post;
       if (!response?.ok || !fresh) throw Object.assign(new Error(response?.error || 'Could not load comments.'), { status: response?.status });
       const comments = page?.comments || [];
+      setCoverage(response.incomplete || page?.incomplete ? 'Showing discussions saved on this device. More comments may be available online.' : response.localCacheError || page?.localCacheError || '');
       setPost(previous => {
         const keep = (previous?.comments || []).filter(comment => new Date(comment.createdAt).getTime() >= started).map(comment => comment.id);
         const merged = mergeCommentPage(comments, previous?.comments || [], keep, started);
@@ -79,6 +81,8 @@ function Discussion({ thingId, linkKey = '', initialPost, description, onComment
     try {
       const page = await request.pager.load(fetchPage);
       if (request.controller.signal.aborted || !page) return;
+      if (page.incomplete) setCoverage('Showing discussions saved on this device. More comments may be available online.');
+      else if (page.localCacheError) setCoverage(page.localCacheError);
       setPost(previous => previous && mergeReactionOverlay(started, { ...previous, comments: mergeDiscussionComments(previous.comments, page.comments) }));
     } catch (failure) {
       if (!request.controller.signal.aborted) reportFailure(failure);
@@ -91,6 +95,7 @@ function Discussion({ thingId, linkKey = '', initialPost, description, onComment
     {collectionControls && <style>{collectionStyles}</style>}
     {description && <Text color="var(--tt-muted)" fontSize="sm" mb={2}>{description}</Text>}
     {post && <SharedMediaProvider linkKey={linkKey}><PostCard key={revision} post={post} onChanged={onChanged} onCommentAdded={onCommentAdded} defaultCommentsOpen discussionOnly commentCollection={{ controls: !!collectionControls, hasMore, loadMore, loading, error, resetKey: String(revision) }} /></SharedMediaProvider>}
+    {coverage && <Text role="status" color="var(--tt-muted)" fontSize="sm">{coverage}</Text>}
     {error && <Text role="alert" color="red.500" fontSize="sm">{error}</Text>}
     <Button size="sm" variant="ghost" mt={2} isDisabled={loading} onClick={() => setRevision(value => value + 1)}>Refresh comments</Button>
   </Box>;

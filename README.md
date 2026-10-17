@@ -4,7 +4,20 @@ https://thingtime.com
 
 ### Password manager setup
 
-The private `/passwords` library uses the [Thingtime password manager contract](docs/password-manager.md).
+Anonymous `/passwords` uses an encrypted device vault with a separate passphrase;
+it needs no server secret or database. Use HTTPS or loopback for WebCrypto, and
+load the production offline shell once before testing offline reload. Entries
+stay on that device and never sync on login. Account workspaces also use an encrypted device copy with a separate passphrase;
+edits complete locally and sync only after matching account/origin/plane confirmation.
+The broader local-first rollout remains in progress. See [device vault behavior and verification](docs/password-manager.md#anonymous-device-vault).
+
+Anonymous Settings → Security → Secure Vault also works offline. It has its own
+provider-vault passphrase and stores environment names, key values and provider
+connections encrypted on the device. It needs no server vault key; saving a
+connection never calls that provider. Account provider-vault synchronization is
+still being implemented. See [local provider vault setup and tests](docs/local-workspaces.md#anonymous-provider-vault).
+
+The account-private `/passwords` library uses the [Thingtime password manager contract](docs/password-manager.md).
 Use a Mongo replica set for canonical storage transactions and configure the
 usual Thingtime JWT signing keys. Set `THINGTIME_USER_VAULT_KEY=<32 random bytes
 encoded as base64url>` in ignored local env files and your deployment secret
@@ -14,6 +27,17 @@ securely with your database. Replacing or losing it makes existing recovery
 wrappers unreadable; do not generate a new key on each deploy. The server-assisted
 recovery model is documented above. No provider developer accounts are required
 for storing passwords or importing TOTP setup codes.
+
+For account offline QA, keep a stable vault key in the disposable local server's
+ignored environment, restart that checkout through `npm run web-pms`, and build
+and serve the production client offline shell. Run the enabled
+`accountPasswords.browser.test.ts` with `TT_ACCOUNT_PASSWORDS_URL=http://127.0.0.1:<port>`,
+`TT_ACCOUNT_PASSWORDS_ARTIFACTS=<ignored-output-directory>`,
+`TT_SHARED_PLAYWRIGHT_PATH=<playwright-module>` and
+`TT_SHARED_CHROME_PATH=<chromium-executable>`. From `remix/`, use
+`node --import tsx --test app/local-workspace/accountPasswords.browser.test.ts`.
+The fixture creates disposable accounts and plaintext synthetic CSV evidence;
+keep those outputs untracked. No production account or deployment is required.
 
 Native system AutoFill and passkey creation are being delivered separately in
 [PR #996](https://github.com/lopugit/thingtime/pull/996). They require signed Apple
@@ -4544,6 +4568,321 @@ PNGs and JSON as inline resources without an account or HTTP access from the
 agent host. No private environment variables are needed. See the
 [fork-safe setup, actual tool connection, bounds and disposable importer QA](docs/no-login-draft-preview.md).
 
+### Local workspace development (in progress)
+
+The account discussion browser check runs from `remix/` with
+`node --import tsx --test app/local-workspace/accountDiscussions.browser.test.ts`.
+Set `TT_LOCAL_DISCUSSIONS_URL` to your loopback production-client preview,
+`TT_SHARED_PLAYWRIGHT_PATH` to an installed Playwright module, and optionally
+`TT_SHARED_CHROME_PATH` to its Chromium executable and
+`TT_LOCAL_DISCUSSIONS_ARTIFACTS` to an output directory. Build the client first.
+Use an isolated local API/database: this creates and cleans up private fixture
+Things using a newly registered disposable account and the normal rate limits.
+It requires no production account, admin token or alternate auth configuration.
+See the [read-side limits](docs/local-workspaces.md#account-discussion-reads-and-refusal-cleanup--2026-10-17).
+
+The ordinary Builder now has a browser workspace adapter under
+`remix/app/local-workspace/`. See [coverage and limits](docs/local-workspaces.md)
+before treating the rollout as complete. IndexedDB requires a stable origin and
+available site storage. Clearing site data removes unsynced device content.
+Anonymous work never enters an account queue. Account sync uses the existing
+same-origin API and session; there is no new secret or alternate authentication
+setup. Unsupported dedicated features retain their current adapters.
+
+For offline shell checks, run `npm --prefix remix run build:client`; this generates
+an integrity-checked static asset manifest. Use the repository PM2 lifecycle for
+development, and an isolated local database/account fixture for mutation tests.
+Do not point a fixture preview at production API fallback URLs. Saved account pages now reopen and remain editable after a fully offline cold
+start; the server must verify the account before sync resumes. The remaining
+feature matrix is not yet complete.
+
+
+The offline Web Platform renderer uses the same compiled runtime as the standalone
+sandbox. `build:client` runs `build:platform` first, then includes that static code
+in a sandboxed document and authorizes its exact hash in production CSP. Use the
+normal build command; if running main Vite directly in a clean checkout, first run
+`npm --prefix remix run build:platform`. The managed dev stack already builds and
+watches the platform runtime; the app reloads its virtual document when that output
+changes. No additional environment values or secrets are needed. Embed and inert
+draft bundles retain the standalone runtime URL and their existing policies. Keep
+`patch:vercel-output` and `verify:vercel-output` in deployment builds so runtime
+bytes and CSP remain paired. See [the offline execution checks](docs/local-workspaces.md#offline-web-platform-execution--2026-10-16).
+
+### Disposable Timeline restore and related-history regressions
+
+The `remix/scripts/timeline-versions.integration.mts`,
+`timeline-published-components.integration.mts` and
+`timeline-related.integration.mts` scripts require a loopback
+`TIMELINE_TEST_BASE` and verify the server's database status before registering
+new fixture accounts. Their default replica is `timeline-rs` at
+`127.0.0.1:20337`. For a different explicitly disposable local replica, set
+`TIMELINE_TEST_MONGO_HOST=127.0.0.1:<disposable-mongo-port>` and
+`TIMELINE_TEST_REPLICA_SET=<disposable-replica-name>` as well. Never point the app
+at an existing account database for these checks. All three scripts clean up their own
+created Things, including restored component copies, in `finally`; synthetic
+accounts and immutable audit remain in the disposable database. Run each from
+`remix` with `node --import tsx scripts/<script-name>.integration.mts`.
+
+
+### Durable account file adapter regression
+
+From `remix`, run `node --import tsx --test
+app/local-workspace/accountFiles.browser.test.ts` with
+`TT_LOCAL_FILE_SYNC_URL=http://127.0.0.1:<vite-port>`,
+`TT_LOCAL_FILE_SYNC_ADMIN_FIXTURE=/path/to/ignored-fixture-admin.json`, and optional
+`TT_LOCAL_FILE_SYNC_ARTIFACTS=/path/to/local-evidence`. Set
+`TT_SHARED_PLAYWRIGHT_PATH` and `TT_SHARED_CHROME_PATH` to installed Playwright and
+its matching Chromium executable. Use the PM2-managed Vite dev origin: this
+adapter-focused test loads actual source modules and does not assert offline
+cold reload. It captures the exact workspace module URLs requested by the app;
+Vite HMR timestamps must be retained to avoid creating a second unbound runtime.
+The fixture also checks offline metadata/folder edits, reviewed conflicts, and
+lost annotation receipts. The account file picker is not switched to this adapter yet.
+
+Use only an explicitly disposable local Mongo replica. Register a disposable
+administrator through the normal API, add its username to ignored
+`remix/.env` as `ADMIN_USERNAMES=<fixture-admin>`, then store its username/password
+in the ignored JSON fixture (restrict it to mode 0600). Enable the existing
+filesystem object-store stand-in with
+`THINGTIME_LOCAL_ATTACHMENT_STORAGE_DIR=<ignored-directory>`. If setting
+`THINGTIME_LOCAL_ATTACHMENT_STORAGE_ORIGIN`, use the **same browser origin** the
+browser opens (including a production-client preview port); a different Nitro port is a different origin and is correctly
+blocked by the normal CSP. The default root-relative signed URLs also work.
+Restart this checkout using `npm run web-pms` after environment changes.
+
+The test creates its own ordinary account, proves private upload refusal, then
+uses the disposable admin's normal API to approve only that new account. It
+cleans up its completed file and sessions; fixture accounts remain only in the
+disposable database. Never substitute an existing account or production database,
+weaken CSP, alter rate limits, or commit credentials/evidence storage.
+
+
+The ordinary account Files picker/native-preview acceptance uses the same
+loopback setup: run `node --import tsx --test
+app/local-workspace/accountFileUi.browser.test.ts` from `remix/`, with
+`TT_LOCAL_FILE_SYNC_URL`, `TT_SHARED_PLAYWRIGHT_PATH`, `TT_SHARED_CHROME_PATH`
+and optional `TT_LOCAL_FILE_SYNC_ARTIFACTS` as above. It creates only a disposable
+local account and needs no administrator approval because its saves finish
+offline. The separate lifecycle fixture tests protected upload approval and sync.
+
+
+### Offline account ZIP import regression
+
+`accountFileImport.browser.test.ts` runs the normal Import and Download dialogs,
+native preview and verified private sync against a production client. From
+`remix`, run `node --import tsx --test app/local-workspace/accountFileImport.browser.test.ts`.
+Set `TT_LOCAL_FILE_IMPORT_URL=http://127.0.0.1:<production-preview-port>`,
+`TT_LOCAL_FILE_SYNC_ADMIN_FIXTURE=/path/to/ignored-fixture-admin.json`, optional
+`TT_LOCAL_FILE_IMPORT_ARTIFACTS=/path/to/local-evidence`, and the shared
+Playwright/Chrome paths described above. Use the disposable replica/admin setup
+above and normal rate-limited registration. Fixture accounts remain disposable;
+created files/Things and browser contexts are cleaned up.
+
+When the dev and production-client preview use different ports, leave
+`THINGTIME_LOCAL_ATTACHMENT_STORAGE_ORIGIN` unset so the stand-in emits
+root-relative signed URLs. An absolute URL for the other port is correctly
+blocked by CSP. Restart only this checkout's managed stack after changing the
+environment. Do not weaken CSP, signing, upload approval or rate limits.
+
+
+### Offline recording import regression
+
+The same local ZIP path accepts standalone recordings (canonical transfer
+`recordingFileId`, with no `filePurpose: "file"`). The recording retains its
+purpose through local storage, export and verified private upload. Original
+account recording retention requires `api.attachment-content` 1.14.0; durable
+deletion requires `api.attachment-delete` 1.5.0. Account approval and all normal
+server authorization remain required for sync; anonymous work never syncs.
+
+Run `node --import tsx --test app/local-workspace/accountRecordingImport.browser.test.ts`
+from `remix` using the disposable local setup above. Set
+`TT_LOCAL_RECORDING_IMPORT_URL=http://127.0.0.1:<production-preview-port>`,
+`TT_LOCAL_FILE_SYNC_ADMIN_FIXTURE=/path/to/ignored-fixture-admin.json`, optional
+`TT_LOCAL_RECORDING_IMPORT_ARTIFACTS=/path/to/local-evidence`, and the shared
+Playwright/Chrome paths. It generates a WAV without using a microphone, checks
+native offline playback, exact-byte export, clean-context private retention,
+unsynced edit/delete and lost-response retry, plus anonymous offline playback.
+This fixture does not prove microphone capture or bound post/draft media.
+
+
+The opt-in native account post authoring check uses the same disposable loopback
+stack and clean Playwright/Chrome configuration as discussion QA. Run from
+`remix/` with `TT_LOCAL_AUTHORING_URL=http://127.0.0.1:<client-port>`, optional
+`TT_LOCAL_AUTHORING_ARTIFACTS=<local-output-directory>`, and the shared
+`TT_SHARED_PLAYWRIGHT_PATH` / `TT_SHARED_CHROME_PATH` values, then execute
+`node --import tsx --test app/local-workspace/accountAuthoring.browser.test.ts`.
+It creates a disposable account and private post, verifies cold offline creation
+and subsequent account sync, and deletes the post during cleanup. Never point
+these fixtures at production or an existing account. Account draft sync and bound
+post media remain outside this checkpoint's acceptance.
+
+
+Account post media can be saved on the device before upload approval or a network
+connection. A submitted local post queues private file uploads and uses the normal
+account binding API after session verification. Unsubmitted selections remain
+local. To run the isolated native regression against a production client preview,
+set `TT_LOCAL_BOUND_MEDIA_URL=http://127.0.0.1:<preview-port>`,
+`TT_LOCAL_BOUND_MEDIA_ARTIFACTS=<output-directory>` and the same disposable admin
+fixture, Playwright and Chrome variables used by the local file-sync tests, then
+run `node --import tsx --test app/local-workspace/accountBoundMedia.browser.test.ts`
+from `remix/`. The test accepts loopback origins only and grants upload scope only
+to its newly registered test user. It also removes post/comment images offline,
+reloads, and deliberately loses a real deletion response to verify identical
+retry, private receipt retention and refusal of a delayed upload replay.
+Follow the local attachment-storage setup above;
+never point this fixture at production or provide an existing user account.
+See [remaining local-workspace acceptance](docs/local-workspaces.md).
+
+
+### Existing private post/comment media on a fresh device
+
+Run `node --import tsx --test app/local-workspace/accountBoundRetention.browser.test.ts`
+from `remix/` using the same disposable loopback setup and `TT_LOCAL_BOUND_MEDIA_URL`,
+`TT_LOCAL_BOUND_MEDIA_ARTIFACTS`, `TT_LOCAL_FILE_SYNC_ADMIN_FIXTURE`,
+`TT_SHARED_PLAYWRIGHT_PATH` and `TT_SHARED_CHROME_PATH` placeholders described above.
+The fixture creates its own private post/comment files with the normal API, then
+opens them in a second clean context, edits/removes offline and checks reconnect.
+Only its newly registered user receives upload scope. It deletes its created
+content and closes its contexts; never supply an existing user or production URL.
+Owned bound retention needs content 1.15.0, existing-ID deletion needs delete 1.7.0;
+older servers fail explicitly while device edits remain saved.
+
+
+### Offline post template and deletion regression
+
+Using the isolated local stack and disposable upload-admin fixture above, run
+`node --import tsx --test app/drafts/offlinePostTemplate.browser.test.ts` from
+`remix/`. Set `TT_LOCAL_POST_TEMPLATE_URL=http://127.0.0.1:<client-port>`,
+`TT_LOCAL_POST_TEMPLATE_ARTIFACTS=/path/to/ignored-evidence`, the shared
+`TT_SHARED_PLAYWRIGHT_PATH`/optional `TT_SHARED_CHROME_PATH`, and
+`TT_LOCAL_FILE_SYNC_ADMIN_FIXTURE=/path/to/ignored-fixture-admin.json` for the
+account case. Without that fixture only the anonymous case runs. Never use
+production accounts or commit credentials. Both cases verify cold offline copying,
+independent media after source deletion, and responsive native previews; account
+verification includes private sync and deletion after reconnect. See
+[coverage and boundaries](docs/local-workspaces.md#offline-post-templates-and-bound-parent-deletion--2026-10-17).
+
+
+### Native offline History menu regression
+
+From `remix/`, enable `app/local-workspace/details.browser.test.ts` with
+`TT_LOCAL_DETAILS_URL=http://127.0.0.1:<client-port>` and optional
+`TT_LOCAL_DETAILS_ARTIFACTS=/path/to/ignored-evidence` for anonymous History.
+Enable `app/local-workspace/historyMenu.browser.test.ts` with
+`TT_LOCAL_HISTORY_MENU_URL=http://127.0.0.1:<client-port>` and optional
+`TT_LOCAL_HISTORY_MENU_ARTIFACTS=/path/to/ignored-evidence` for cached account
+History. Both use the shared Playwright/Chrome setup above and the production
+client's complete offline shell. The latter creates two disposable local accounts;
+it needs no admin fixture or production credentials. Normal signup rate limits
+remain in force. See [coverage](docs/local-workspaces.md#native-anonymousoffline-history-menu--2026-10-17)
+for the boundary between cached account reads and unfinished account history sync.
+
+
+Offline account parent deletion requires the selected origin to advertise
+`api.things` 1.34.0. The existing same-origin DELETE and attachment cleanup retain
+durable private upload receipts; no additional environment variables or secrets
+are required. Older origins leave work on-device for retry. The loopback template
+fixture now also tests a newer remote edit, native conflict recovery and retained
+media after offline reload. See [the deletion checkpoint](docs/local-workspaces.md#parent-deletion-conflicts-preserve-media--2026-10-17).
+
+
+### Account device History regression
+
+No new secret or service is required. Use a disposable loopback replica and the
+production-client offline shell described above. Enable
+`app/local-workspace/accountTimeline.browser.test.ts` with
+`TT_LOCAL_ACCOUNT_HISTORY_URL=http://127.0.0.1:<client-port>` and optionally
+`TT_LOCAL_ACCOUNT_HISTORY_ARTIFACTS=/path/to/ignored-evidence`, plus the shared
+Playwright/Chrome paths above. It creates one private test account, edits through
+the native menu offline, reloads at desktop/phone sizes, reconnects through normal
+Timeline sync, checks exact canonical events/receipts and guest refusals, and
+removes its test Thing. Normal signup rate limits apply; no admin fixture is used.
+Run `test:local-workspace` and `test:timeline` for protocol/quota regressions.
+See [coverage](docs/local-workspaces.md#account-device-history-capture-and-sync--2026-10-17)
+for remaining account History controls.
+
+
+The account History fixture also exercises the normal Export button after cold
+offline reload. Its artifact directory receives actual downloaded History JSON
+and screenshots at 1440/390/320px. No additional environment variables, services
+or credentials are needed. These are version archives, not portable Thing import
+bundles; device exports explicitly mark note/name context as partial. See
+[offline History export](docs/local-workspaces.md#offline-account-history-export--2026-10-17).
+
+
+### Account offline History restore regression
+
+Use the same disposable loopback replica and production-client shell as the
+History capture/export checks. Enable `accountTimelineRestore.browser.test.ts`
+with `TT_LOCAL_ACCOUNT_RESTORE_URL=http://127.0.0.1:<client-port>` and optional
+`TT_LOCAL_ACCOUNT_RESTORE_ARTIFACTS=/path/to/ignored-evidence`, plus the shared
+Playwright/Chrome paths above. No new secret or service is required. The fixture
+creates a private account and Thing, restores/undoes offline through native
+controls, verifies exact receipts after reconnect and removes its test Thing.
+Normal signup limits apply. See [coverage and remaining recovery work](docs/local-workspaces.md#offline-account-history-restore-and-undo--2026-10-17).
+
+
+### Account offline deleted-Thing recovery regression
+
+Use the same disposable loopback replica and production-client shell above.
+Enable `accountTimelineRecovery.browser.test.ts` with
+`TT_LOCAL_ACCOUNT_RECOVERY_URL=http://127.0.0.1:<client-port>`, optional
+`TT_LOCAL_ACCOUNT_RECOVERY_ARTIFACTS=/path/to/ignored-evidence`, and the shared
+Playwright/Chrome paths. No additional service or secret is required. The fixture
+creates its own private account and Thing, deletes through the UI, recovers from
+History offline, verifies private recreation after reconnect, and removes its
+test Thing. Normal signup limits apply. See [coverage and remaining work](docs/local-workspaces.md#offline-recovery-of-ordinary-account-things--2026-10-17).
+
+
+### Account offline History names and notes regression
+
+Run `node --import tsx --test app/local-workspace/accountTimelineNames.browser.test.ts`
+from `remix/`, with `TT_LOCAL_ACCOUNT_NAMES_URL=http://127.0.0.1:<client-port>`,
+optional `TT_LOCAL_ACCOUNT_NAMES_ARTIFACTS=/path/to/ignored-evidence`, and the
+shared Playwright/Chromium variables described above. Use the built production
+client/offline shell and disposable loopback replica API. The fixture registers
+its own account through the normal API, creates a private Thing, queues names
+and notes offline, reconnects normally, and deletes that test Thing in cleanup.
+Normal signup limits apply. It never uses an existing account or service token.
+See [History naming coverage](docs/local-workspaces.md#offline-account-history-names-and-notes--2026-10-17).
+
+
+### Pending History note removal regression
+
+The same native names/notes fixture now removes a note before its first account
+acknowledgement, cold-reloads at desktop and phone widths, reconnects and retries
+the original add request. Run the real transaction fixture separately:
+
+```sh
+TIMELINE_TEST_BASE=http://127.0.0.1:<disposable-api-port> \
+TIMELINE_TEST_MONGO_HOST=127.0.0.1:<disposable-mongo-port> \
+TIMELINE_TEST_REPLICA_SET=<disposable-replica-name> \
+npm --prefix remix run test:timeline:notes
+```
+
+The database guard defaults to `127.0.0.1:20337` / `timeline-rs`; explicit values
+must identify the disposable loopback fixture. The script validates the actual
+server database status before creating its own accounts. Do not point it at an
+existing account database. Normal permissions, signup limits and storage quotas
+apply. No tokens or account credentials are needed. `api.timeline` 1.19.0 is
+required for remote note writes with durable removal identities.
+
+
+### Device draft naming and local History exports
+
+The existing `accountTimeline.browser.test.ts` fixture now names a device
+version while offline, cold-reloads at 1440/390/320px, exports its canonical
+content, and verifies the unchanged draft plus accepted name after reconnect.
+Use `TT_LOCAL_ACCOUNT_HISTORY_URL`, `TT_LOCAL_ACCOUNT_HISTORY_ARTIFACTS` and the
+shared Playwright/Chromium variables from the account History setup above.
+`timeline.browser.test.ts` uses `TT_LOCAL_TIMELINE_URL` and
+`TT_LOCAL_TIMELINE_ARTIFACTS` to test clean anonymous offline Builder draft
+names and downloads at the same widths, with no account Timeline requests or
+mutations. Both need the built production client/offline shell; account checks
+use only the guarded disposable loopback API and their own fresh fixture.
+Remote draft naming requires `api.timeline` 1.20.0. Anonymous work needs no
+account, credentials or remote capability discovery. See
+[coverage and limits](docs/local-workspaces.md#device-draft-names-and-anonymous-version-export--2026-10-17).
 
 ### Automatic AI model catalogue sync
 

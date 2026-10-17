@@ -1,7 +1,9 @@
+import { accountImportSupported } from '~/local-workspace/accountImport';
 import React, { useEffect, useRef, useState } from 'react';
 import { TRANSFER_DIALOG_Z } from './transferLayers';
 import { Box, Button, Flex, Input, Modal, ModalBody, ModalCloseButton, ModalContent, ModalFooter, ModalHeader, ModalOverlay, Select, Text, Textarea } from '@chakra-ui/react';
 import { useAttachmentUploads } from '~/components/Attachments/useAttachmentUploads';
+import { useWorkspaceUser } from '~/hooks/useWorkspaceUser';
 import { useApi } from '~/hooks/useApi';
 import { readTransferFiles, MAX_TRANSFER_BATCH } from '~/utils/thingTransfer/readFile';
 import { readTransferClipboard, MAX_CLIPBOARD_BYTES } from '~/utils/thingTransfer/browser';
@@ -45,7 +47,9 @@ const ThingImportStep = ({ ownerId, folderId, initialBundle, onClose, batch, com
   onFinished: (destination: string | null) => void;
 }) => {
   const api = useApi();
+  const anonymous = !!useWorkspaceUser()?.localOnly;
   const [bundle, setBundle] = useState<TransferBundle | null>(initialBundle || null);
+  const localImport = anonymous || (!!bundle && accountImportSupported(bundle.manifest));
   const [destination, setDestination] = useState<string | null>(folderId);
   const [error, setError] = useState('');
   const [reading, setReading] = useState(false);
@@ -121,7 +125,7 @@ const ThingImportStep = ({ ownerId, folderId, initialBundle, onClose, batch, com
     });
   };
   const beginUploads = () => {
-    if (!bundle || uploadDispatch.current) return;
+    if (localImport || !bundle || uploadDispatch.current) return;
     try {
       for (const thing of bundle.manifest.things.filter(isTransferRecording)) recordingTransferFile(thing, bundle.manifest);
       for (const thing of bundle.manifest.things.filter(isTransferEmoji)) emojiTransferFile(thing, bundle.manifest);
@@ -137,8 +141,8 @@ const ThingImportStep = ({ ownerId, folderId, initialBundle, onClose, batch, com
     });
     uploads.addFiles(files);
   };
-  const filesReady = !!bundle && uploads.uploads.length === bundle.manifest.files.length &&
-    uploads.uploads.every((upload) => upload.status === 'ready' && upload.attachment);
+  const filesReady = !!bundle && (localImport || (uploads.uploads.length === bundle.manifest.files.length &&
+    uploads.uploads.every((upload) => upload.status === 'ready' && upload.attachment)));
   const hasThemes = !!bundle?.manifest.things.some(thing => thing.thingtime.includes('theme') || thing.thingtime.includes('feed-algorithm'));
   const hasRecordings = !!bundle?.manifest.things.some(isTransferRecording);
   const submit = async () => {
@@ -151,7 +155,7 @@ const ThingImportStep = ({ ownerId, folderId, initialBundle, onClose, batch, com
       // onward, do not let dialog unmount delete those potentially durable
       // copies. Server compensation and normal draft expiry own cleanup.
       uploads.markCommitted(Object.values(files));
-      const result = await api.v1.things.import({ manifest: bundle.manifest, files, folderId: destination }, { signal: controller.signal });
+      const result = await api.v1.things.import({ manifest: bundle.manifest, ...(localImport ? { localFiles: bundle.files } : { files }), folderId: destination }, { signal: controller.signal });
       if (controller.signal.aborted) return;
       if (result?.ok !== true) throw new Error(result?.error || 'Import did not confirm success');
       onFinished(destination);
@@ -167,7 +171,7 @@ const ThingImportStep = ({ ownerId, folderId, initialBundle, onClose, batch, com
     // StrictMode replays mount effects: never dispatch a write from the
     // discarded mount and then abort it with an ambiguous server outcome.
     const timer = setTimeout(() => {
-      if (bundle.manifest.files.length && !uploadStarted) beginUploads();
+      if (!localImport && bundle.manifest.files.length && !uploadStarted) beginUploads();
       else if (filesReady) void submit();
     }, 0);
     return () => clearTimeout(timer);
@@ -220,9 +224,10 @@ const ThingImportStep = ({ ownerId, folderId, initialBundle, onClose, batch, com
                 {folderId && <option value={folderId}>Current folder</option>}
               </Select>
             </Box>
-            {hasRecordings && <Text fontSize="sm">Recordings stay private and retain included folders. Other recordings use the import destination.</Text>}
+            {localImport && bundle.manifest.files.length > 0 && <Text fontSize="sm">{anonymous ? 'Files stay on this device. Import saves their bytes with the Things; no upload is needed.' : 'Files save on this device now. Account uploads continue separately when your connection and login are verified.'}</Text>}
+            {hasRecordings && <Text fontSize="sm">Files and recordings stay private and retain included folders. Other recordings use the import destination.</Text>}
             <Text fontSize="sm">Apps may contain actions. Importing does not run them. Only use content from sources you trust.</Text>
-            {bundle.manifest.files.length > 0 && !uploadStarted && <Button onClick={beginUploads}>Upload {bundle.manifest.files.length} files</Button>}
+            {!localImport && bundle.manifest.files.length > 0 && !uploadStarted && <Button onClick={beginUploads}>Upload {bundle.manifest.files.length} files</Button>}
             {uploads.uploads.length > 0 && <Box maxHeight="180px" overflowY="auto" aria-label="Import file uploads">
               {uploads.uploads.map((upload) => <Flex key={upload.localId} align="center" gap={2} py={1}>
                 <Text flex={1} minWidth={0} overflowWrap="anywhere" fontSize="sm">{upload.file.name}: {upload.error || `${upload.status} ${Math.round(upload.progress)}%`}</Text>

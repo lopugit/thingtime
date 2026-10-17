@@ -1,3 +1,5 @@
+import { useWorkspaceUser } from '~/hooks/useWorkspaceUser';
+import { WORKSPACE_LIMITS } from '~/local-workspace/storage';
 import { attachmentCountLimit } from '~/schemas/attachmentLimits';
 import { withAttachmentRateLimitRetry } from './attachmentRateLimitRetry';
 import { HeicImageError, isHeicImage, prepareHeicImage } from './heicImage';
@@ -151,7 +153,9 @@ export const useAttachmentUploads = (
 	onCleanupDeferred?: () => void,
 	options: AttachmentUploadOptions = {}
 ) => {
+	const workspace = useWorkspaceUser();
 	const uploadPurpose = options.purpose ?? 'post';
+	const saveOnDevice = workspace?.id === ownerId && (workspace?.localOnly === true || ['post','comment'].includes(uploadPurpose));
 	const prepareLocalImage = options.prepareLocalImage;
 	// Archive imports promise byte-for-byte fidelity; ordinary media selections are normalized.
 	const convertHeic = options.selectionScope !== 'transfer';
@@ -161,8 +165,8 @@ export const useAttachmentUploads = (
 		? Math.max(1, Math.min(options.selectionScope === 'transfer' ? TRANSFER_LIMITS.files : attachmentCountLimit(uploadPurpose), Number(options.maxFiles)))
 		: attachmentCountLimit(uploadPurpose);
 	const imageOnly = options.imageOnly === true;
-	const maxBytesPerFile =
-		Number.isSafeInteger(options.maxBytesPerFile) && Number(options.maxBytesPerFile) > 0 ? Number(options.maxBytesPerFile) : null;
+	const configuredMaxBytes = Number.isSafeInteger(options.maxBytesPerFile) && Number(options.maxBytesPerFile) > 0 ? Number(options.maxBytesPerFile) : null;
+	const maxBytesPerFile = saveOnDevice ? Math.min(configuredMaxBytes || Infinity, WORKSPACE_LIMITS.binaryBytes) : configuredMaxBytes;
 	const allowedContentTypes = React.useMemo(
 		() => (options.allowedContentTypes?.length ? new Set(options.allowedContentTypes.map((value) => value.toLowerCase())) : null),
 		[options.allowedContentTypes]
@@ -252,6 +256,7 @@ export const useAttachmentUploads = (
 		async ({ localId, file, attempt, completeOnly, resumeExisting }: QueueEntry) => {
 			if (!isCurrent(localId, attempt)) return;
 			const controller = new AbortController();
+			const selectedApi = apiRef.current;
 			activeRequestsRef.current.set(localId, controller);
 			const existing = uploadsRef.current.find((upload) => upload.localId === localId);
 			const purpose = existing?.purpose ?? uploadPurpose;
@@ -291,6 +296,17 @@ export const useAttachmentUploads = (
 					const previous = uploadsRef.current.find((upload) => upload.localId === localId)?.previewUrl;
 					if (previous) URL.revokeObjectURL(previous);
 					patchUpload(localId, attempt, { file, previewUrl, status: 'ready', progress: 100 });
+					return;
+				}
+				if (saveOnDevice) {
+					if (!['post', 'comment', 'file'].includes(purpose)) throw new Error('This attachment target requires its account service.');
+					if (file.size > WORKSPACE_LIMITS.binaryBytes) throw new Error('A local file cannot exceed 16 MiB.');
+					const bytes = new Uint8Array(await file.arrayBuffer()); controller.signal.throwIfAborted();
+					const result = await selectedApi.saveLocalFile({ requestId: localId, name: file.name, contentType: file.type || 'application/octet-stream', bytes, purpose: purpose as 'post' | 'comment' | 'file' }, { signal: controller.signal });
+					const attachment = normalizePublicAttachment(result?.attachment);
+					if (!attachment) throw new Error('Invalid local attachment metadata');
+					if (!isCurrent(localId, attempt)) { void selectedApi.remove({ id: attachment.id }).catch(() => {}); return; }
+					patchUpload(localId, attempt, { status: 'ready', attachment, progress: 100, uploadId: null, error: null, failedAt: null });
 					return;
 				}
 				if (!canResume) {
@@ -376,7 +392,7 @@ export const useAttachmentUploads = (
 				const phase = uploadId ? 'upload' : 'prepare';
 				patchUpload(localId, attempt, {
 					status: 'error',
-					error: error instanceof HeicImageError ? error.message : attachmentUploadError(error, phase, {
+					error: error instanceof HeicImageError || (saveOnDevice && error instanceof Error) ? error.message : attachmentUploadError(error, phase, {
 						...uploadErrorContextRef.current,
 						fileSizeBytes: file.size
 					}),
@@ -386,7 +402,7 @@ export const useAttachmentUploads = (
 				if (activeRequestsRef.current.get(localId) === controller) activeRequestsRef.current.delete(localId);
 			}
 		},
-		[completeUpload, convertHeic, isCurrent, maxBytesPerFile, patchUpload, prepareLocalImage, uploadPurpose]
+		[completeUpload, convertHeic, isCurrent, saveOnDevice, maxBytesPerFile, patchUpload, prepareLocalImage, uploadPurpose]
 	);
 
 	pumpRef.current = () => {
@@ -418,7 +434,7 @@ export const useAttachmentUploads = (
 			if (eligible.length < files.length) {
 				onSelectionError?.(
 					maxBytesPerFile
-						? `Choose a supported image no larger than ${Math.round(maxBytesPerFile / 1024)} KiB.`
+						? `Choose a supported ${imageOnly ? 'image' : 'file'} no larger than ${Math.round(maxBytesPerFile / 1024)} KiB.`
 						: 'Choose a JPEG, PNG, GIF, WebP, AVIF, HEIC, or HEIF image.'
 				);
 			}

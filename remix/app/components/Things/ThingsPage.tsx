@@ -1,3 +1,5 @@
+import { useWorkspaceScope } from '~/hooks/useWorkspaceScope';
+import { LOCAL_WORKSPACE_CHANGED } from '~/local-workspace/runtime.client';
 import { openThingHistory, TimelineLibrary } from '~/components/Timeline/TimelineHost';
 import { isManagedLibraryThing } from './thingsCore';
 import { FilesystemThingsPage } from './FilesystemThingsBrowser';
@@ -31,7 +33,7 @@ import type { ThingContextMenuAction } from '~/components/Thingtime/ContextMenu/
 import { useThingContextMenu } from '~/components/Thingtime/ContextMenu/useThingContextMenu';
 import { readLocalCache, writeLocalCache } from '~/hooks/localCache';
 import { useApi } from '~/hooks/useApi';
-import { useCurrentUser } from '~/hooks/useCurrentUser';
+import { useWorkspaceUser } from '~/hooks/useWorkspaceUser';
 import { RAINBOW_TEXT } from '~/theme/rainbow';
 
 import { FolderTree } from './FolderTree';
@@ -140,11 +142,12 @@ export const ThingsPage = () => {
 
 const ThingsPageContents = () => {
   const [params] = useSearchParams();
-  return params.has("files") ? <FilesystemThingsPage /> : <ThingsLibraryPage />;
+  const scope = useWorkspaceScope();
+  return params.has("files") ? <FilesystemThingsPage /> : <ThingsLibraryPage key={scope} />;
 };
 
 const ThingsLibraryPage = () => {
-  const user = useCurrentUser();
+  const user = useWorkspaceUser();
   const [importOpen, setImportOpen] = useState(false);
   const [importBundle, setImportBundle] = useState<TransferBundle | null>(null);
   const [importDestination, setImportDestination] = useState<string | null>(null);
@@ -180,7 +183,7 @@ const ThingsLibraryPage = () => {
 
   const archive = useAttachmentArchive();
 
-	const devicesEnabled = Boolean(user && user.accountKind === 'user' && !user.temporary);
+	const devicesEnabled = Boolean(user && !user.localOnly && user.accountKind === 'user' && !user.temporary);
 	const deviceStore = useDeviceStore({
 		userId: user?.id,
 		selectedDeviceId: deviceParam,
@@ -271,6 +274,11 @@ const ThingsLibraryPage = () => {
 
   const [searchResults, setSearchResults] = useState<ThingsThing[] | null>(null);
   const [searching, setSearching] = useState(false);
+  const [searchCursor, setSearchCursor] = useState<string | null>(null);
+  const [searchError, setSearchError] = useState<string | null>(null);
+  const [searchIncomplete, setSearchIncomplete] = useState(false);
+  const searchRequest = useRef(0);
+  const searchAbort = useRef<AbortController | null>(null);
   // bumped after mutations (duplicate) so an active search re-fetches and the
   // fresh copies appear in the results the user is actually looking at
   const [searchSeq, setSearchSeq] = useState(0);
@@ -397,6 +405,22 @@ const ThingsLibraryPage = () => {
     if (currentKey !== 'root') ensureLoaded(null);
   }, [user?.id, folderId]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Sync conflict choices and other tabs mutate the same local workspace.
+  // Refresh visible folders as well as search, retaining their current paint.
+  useEffect(() => {
+    if (!user?.id) return;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const refresh = () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        void fetchFolder(folderId);
+        if (folderId) void fetchFolder(null);
+      }, 0);
+    };
+    window.addEventListener(LOCAL_WORKSPACE_CHANGED, refresh);
+    return () => { clearTimeout(timer); window.removeEventListener(LOCAL_WORKSPACE_CHANGED, refresh); };
+  }, [user?.id, folderId, fetchFolder]);
+
   // deep-linked folder (?folder=) whose ancestry we haven't met yet — resolve
   // folder names upward so breadcrumbs/columns stay honest, cycle-safe
   useEffect(() => {
@@ -453,37 +477,59 @@ const ThingsLibraryPage = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [previewParam]);
 
-  // deep search across every folder (server-side, own things)
-  useEffect(() => {
+  // Search the current workspace first; a confirmed account can refresh its
+  // owned remote results without replacing the local view with a blank screen.
+  const fetchSearch = useCallback(async (cursor?: string) => {
     const query = q.trim();
-    if (!user || !query) {
-      setSearchResults(null);
+    if (!user?.id || !query) return;
+    const seq = ++searchRequest.current;
+    searchAbort.current?.abort();
+    const controller = new AbortController(); searchAbort.current = controller;
+    setSearching(true); setSearchError(null);
+    let refreshed = false, refreshFailed = false;
+    const accept = (resp: any) => {
+      if (seq !== searchRequest.current || controller.signal.aborted) return;
+      if (resp?.ok === false) throw new Error(resp.error || 'Could not search your Things.');
+      setSearchResults(previous => cursor ? dedupeById([...(previous || []), ...(resp.things || [])]) : resp.things || []);
+      setSearchCursor(resp.nextCursor || null); setSearchIncomplete(!!resp.incomplete);
+      setSearching(!!resp.refreshing);
+    };
+    const failed = (error: any) => {
+      if (seq !== searchRequest.current || controller.signal.aborted) return;
+      setSearchError(error?.message || error?.error || 'Could not search your Things. Please retry.');
       setSearching(false);
+    };
+    try {
+      // A signed-in account without a resolved data plane gets the plain remote
+      // facade, which has no owner to pin — keep sending the account scope so
+      // the library never widens into other authors' public Things. Local-only
+      // and offline workspaces are already single-owner and refuse the filter.
+      const result = await apiRef.current.v1.things.search({ q: query, workspace: true,
+        author: user.localOnly || user.offline ? undefined : user.username,
+        thingtime: kindFilter === 'all' ? undefined : kindFilter, limit: PAGE_SIZE, cursor },
+        { signal: controller.signal, onRefresh: (resp: any) => { refreshed = true; accept(resp); }, onError: (error: unknown) => { refreshFailed = true; failed(error); } });
+      if (!refreshed) accept(refreshFailed ? { ...result, refreshing: false } : result);
+    } catch (error) { failed(error); }
+  }, [q, kindFilter, user?.id, user?.username, user?.offline, user?.localOnly]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!q.trim() || !user?.id) {
+      setSearchResults(null); setSearchCursor(null); setSearchError(null); setSearchIncomplete(false); setSearching(false);
       return;
     }
-    let cancelled = false;
-    setSearching(true);
-    const timer = setTimeout(async () => {
-      try {
-        const resp = await apiRef.current.v1.things.search({
-          q: query,
-          author: user.username,
-          thingtime: kindFilter === 'all' ? undefined : kindFilter,
-          limit: PAGE_SIZE
-        });
-        if (cancelled) return;
-        setSearchResults(resp?.things || []);
-      } catch {
-        if (!cancelled) setSearchResults([]);
-      } finally {
-        if (!cancelled) setSearching(false);
-      }
-    }, 350);
+    const requests = searchRequest, abort = searchAbort;
+    const timer = setTimeout(() => void fetchSearch(), 350);
+    return () => { clearTimeout(timer); requests.current++; abort.current?.abort(); };
+  }, [fetchSearch, searchSeq, q, user?.id]);
+  useEffect(() => {
+    const refresh = () => setSearchSeq(seq => seq + 1);
+    window.addEventListener(LOCAL_WORKSPACE_CHANGED, refresh);
+    window.addEventListener('online', refresh); window.addEventListener('offline', refresh);
     return () => {
-      cancelled = true;
-      clearTimeout(timer);
+      window.removeEventListener(LOCAL_WORKSPACE_CHANGED, refresh);
+      window.removeEventListener('online', refresh); window.removeEventListener('offline', refresh);
     };
-  }, [q, kindFilter, searchSeq, user?.id, user?.username]);
+  }, []);
 
   // persist the optimistic seed (writeLocalCache swallows quota errors)
   useEffect(() => {
@@ -1015,8 +1061,12 @@ const ThingsLibraryPage = () => {
         setFolderMeta((prev) => ({ ...prev, [thing.id]: { ...(prev[thing.id] || { folderId: thing.folderId }), name } }));
       }
       try {
-        const { requireThingtimeCapability } = await import('~/api/utils/capabilities/requireCapability.client');
-        await requireThingtimeCapability('api.things', '1.27.0');
+        // Local validation and the workspace lease authorize device-only writes.
+        // A cold offline editor has no remote capability manifest to negotiate.
+        if (!user?.localOnly) {
+          const { requireThingtimeCapability } = await import('~/api/utils/capabilities/requireCapability.client');
+          await requireThingtimeCapability('api.things', '1.27.0');
+        }
         const response = isManagedLibraryThing(thing)
           ? await apiRef.current.v1.things.renameLibrary({ id: thing.id, displayTitle: name, expectedUpdatedAt: thing.updatedAt })
           : thing.thingtime.includes('attachment')
@@ -1032,7 +1082,7 @@ const ThingsLibraryPage = () => {
         return false;
       }
     },
-    [refreshAfterMutation, sourceKeysOf]
+    [refreshAfterMutation, sourceKeysOf, user?.localOnly]
   );
 
   const createFolder = useCallback(
@@ -1789,11 +1839,15 @@ const ThingsLibraryPage = () => {
           </Flex>
         )}
         {searchMode && (
+          <Box>
           <Text color="var(--tt-muted, #9a9aa6)" fontSize="13px">
 						{searching
 							? 'Searching all your folders…'
 							: `${searchResultCount} result${searchResultCount === 1 ? '' : 's'} across your things and computers`}
           </Text>
+          {searchIncomplete && <Text fontSize="sm">Showing Things saved on this device. Your account may contain more results.</Text>}
+          {searchError && <Box role="alert"><Text color="var(--tt-danger, #e5484d)" fontSize="sm">{searchError}</Text><Button size="sm" onClick={() => void fetchSearch()}>Retry search</Button></Box>}
+          </Box>
         )}
 
         <Flex alignItems="flex-start" gap={4}>
@@ -1921,7 +1975,7 @@ const ThingsLibraryPage = () => {
               />
             )}
 
-						{canPaintContent && !displayItems.length && !visibleDevices.length && !searching && !deviceSurfaceLoading && (
+						{canPaintContent && !displayItems.length && !visibleDevices.length && !searching && !searchError && !deviceSurfaceLoading && (
               <Flex
                 alignItems="center"
                 border="1px dashed var(--tt-border, #ececef)"
@@ -1936,6 +1990,9 @@ const ThingsLibraryPage = () => {
               </Flex>
             )}
 
+            {searchMode && searchCursor && <Flex justifyContent="center" paddingY={4}>
+              <Button isDisabled={searching} onClick={() => void fetchSearch(searchCursor)} size="sm" variant="outline">Load more search results</Button>
+            </Flex>}
             {!searchMode && cursors[currentKey] && view !== 'columns' && (
               <Flex justifyContent="center" paddingY={4}>
                 <Button onClick={() => fetchFolder(folderId, cursors[currentKey])} size="sm" variant="outline">

@@ -1,5 +1,401 @@
 # TESTING.md — per-area manual test checklists
 
+## Local workspaces and account sync (in-progress rollout)
+
+- [x] Retained account discussions: create a private Thing and comment through
+      the real local API/native composer, visit the comment permalink, then cold
+      reload both surfaces fully offline. Retain exact comment-only kinds and
+      authors, show partial coverage, refresh without remote writes, and check
+      1440/390/320px bounds. Delete the remote target, observe its refusal, then
+      verify both offline views omit the old comment. Run
+      `accountDiscussions.browser.test.ts`, the recording lifecycle browser
+      fixture (including already-retained offline file comments), and existing
+      `accountPosts.browser.test.ts`. Unit coverage must fence late reads across
+      both projection caches at byte/record quota, preserve authored data and
+      isolate account/data-plane/cursor scopes. New account comments/replies,
+      complete page membership and parent-thread offline recovery remain open.
+
+- [x] Anonymous imported file metadata: in a clean no-account browser, import a
+      standalone recording ZIP offline through Things. Open its native detail,
+      edit title, description and display filename, and cold reload. Download
+      the folder through the normal export dialog; canonical annotations and
+      exact original bytes must survive with no UI capability field in the JSON.
+      Reconnect and verify zero remote writes. Check 1440/390/320px and retain
+      account upload/retention/deletion coverage in
+      `accountRecordingImport.browser.test.ts`. Imported `local-` IDs and upload
+      `local-file-` IDs must both work; ID prefixes alone must never grant edits.
+      Foreign workspace, shared-link and bound/draft UI eligibility stay refused.
+
+- [x] Existing account-file retention: open an owned standalone original through
+      the normal media route. Inject truncated bytes: show a retention warning
+      and preserve the valid online view. Retry; edit details offline and download
+      identical bytes. Production build: cold reload before and after editing,
+      reconnect and verify the original account file, with zero upload requests.
+      Check native rendering at 1440/390/320px and one Files-list alias. Drop a
+      successful deletion reply and verify identical durable receipt retry.
+      `accountFileRetention.browser.test.ts` uses explicit loopback/admin
+      fixtures; `TT_LOCAL_FILE_RETENTION_COLD=1` selects production-shell mode.
+      Unit coverage must refuse foreign/shared/linked/bound/blocked content,
+      changed descriptors, quota overflow, expired leases and late transactions;
+      retain conflicting edits and keep the original alias on upload completion.
+      Full-quota deletion and three-file concurrency admission must pass.
+      Unvisited files, parent-folder discovery and managed/bound media remain open.
+
+- [x] Existing saved-file deletion receipts: in a disposable account, upload a
+      standalone file through the real storage lifecycle, then delete it with
+      `retainReceipt:true`, canonical `id` and a freshly read `expectedUpdatedAt`,
+      without its original upload request ID. Replaying after discarding the
+      response must return `deleted:true` and refuse the late original start.
+      Missing IDs return 404 without reserving a row. Guest, foreign owner/admin,
+      cross-origin, Watch durable operations, stale versions, bound/linked/import
+      drafts and unfinished uploads remain refused. Race an annotation with
+      deletion: exactly one wins. A lost cleanup claim or unconfirmed legacy
+      removal must not return a durable acknowledgement. Run attachment and
+      capability suites, `accountExistingFile.browser.test.ts` and the existing
+      `accountFiles.browser.test.ts` with their explicit loopback/admin fixtures.
+      Verify built attachment-delete 1.4.0 in both discovery manifests and docs.
+      Opened standalone originals are covered by the retention check above;
+      wider media retention remains outstanding.
+
+- [ ] Normal account files: use the Files picker offline, create a folder, move
+      the file with Cut/Paste, download identical bytes and open its native media
+      route at 1440/390/320px. Local completion must not await account listing or
+      upload. Reconnect through the normal approval/upload lifecycle; own server
+      aliases must appear once under their stable local ID. Shared media contexts
+      and keyed URLs must never resolve viewer device bytes. Cancellation may
+      retain recovery bytes, but ordinary reads and previews must refuse them.
+      Check scope retirement, scope-only tab invalidation, late reads, deletion
+      and restoration. Run `accountFileUi.browser.test.ts`,
+      `accountFiles.browser.test.ts`, workspace, Things and attachment suites.
+      Existing account files not retained on this device, managed imports and
+      broader list membership remain separate acceptance gates.
+
+- [ ] Completed file deletion: delete an uploaded standalone file while offline
+      and at the full 64 MiB device quota. It disappears from Things immediately;
+      recovery bytes remain private until an exact durable acknowledgement.
+      Change account details, reject a stale native review, restore the device
+      file at full quota, and delete it again without losing the worker wake.
+      Race the reviewed deletion with annotation: exactly one succeeds. Drop a
+      successful deletion reply; retries must reuse the frozen version/request,
+      eventually release bytes, and reject a late original upload start. Legacy
+      cleanup must retain the receipt. Test missing-file reads, malformed replies,
+      bound/unfinished refusal, metadata pause, storage reopen and native review
+      at 1440/390/320px. A delayed moderation verdict must not modify deleting or
+      cancelled files. Run workspace, attachment, moderation and capability
+      suites and the enabled file browser fixture. Built delete 1.3.0 must be
+      discoverable; anonymous and Watch request-id mutations remain refused.
+      Existing remote file retention and broader media integration are still outstanding.
+
+- [ ] Durable upload cancellation: cancel a never-started local file offline
+      with no remote calls. Lose a real start reply, cancel from the native sync
+      panel offline, and verify bytes remain until a durable cancellation reply.
+      Lose that reply too; reconnect/retry must remove device bytes without
+      re-uploading. Replaying the original request, including after legacy
+      abort/delete, must fail. Cancel-before-start and concurrent start/cancel
+      must leave one private quota-accounted zero-object receipt with no expiry.
+      Finalized, finalizing and bound uploads require reviewed deletion; legacy
+      or malformed acknowledgements must retain bytes. Check competing tabs,
+      owner/origin/plane isolation, original save replay refusal, cancellation at the
+      full 64 MiB device quota (both never-started and attempted uploads), and
+      multipart settlement. Verify native controls at 1440/390/320px, abort 1.2.0
+      in both built manifests, anonymous 401 and Watch refusal for the new mode.
+      Run workspace, attachment, storage, schema, Things and capability suites,
+      plus the enabled account file browser fixture. This is cancellation of
+      queued files, not acceptance of the unfinished ordinary account file UI.
+
+- [ ] Conditional file deletion: malformed versions fail 400, stale versions
+      fail 409 without touching bytes, and a real annotation/delete race using
+      one timestamp has exactly one winner. Repeat deletion after a lost reply;
+      content must remain 404. Existing deleting rows must resume cleanup with
+      the original timestamp, preserving multipart deferral and quota billing.
+      A skipped claim with a live row must not return completed success. Run
+      attachment/capability suites and the enabled account file browser fixture;
+      verify built manifests and docs advertise delete 1.3.0 and anonymous calls
+      remain 401. Missing rows are not proof of durable upload cancellation;
+      durable request-id mode below provides that fence.
+
+- [ ] Account file details: save annotations and a folder selection offline,
+      reopen storage, reconnect, and wait for the file and folder dependencies.
+      Drop a successful annotation reply; recovery must retain newer local edits
+      and never upload the bytes again. Concurrent same-field changes require
+      comparison; unrelated account changes merge. Check stale review refusal,
+      Keep device/account choices, competing tabs, cancellation, quota rollback,
+      and original save retries after filing. Review at 1440/390/320px. Run
+      `accountFileMetadata.test.ts` and the real `accountFiles.browser.test.ts`.
+      The browser fixture must import the app's exact Vite module URLs after HMR,
+      never a second bare-import workspace singleton. Normal account picker,
+      listing/media still have separate completion gates.
+
+- [ ] Conditional file metadata: run attachment, Things, capability and local
+      workspace suites, then enable `accountFiles.browser.test.ts`. Concurrent
+      annotations using one version must have one winner and one 409; stale
+      annotation/move must preserve current metadata, placement and bytes.
+      Malformed versions and conditional multi-item/non-move requests fail 400.
+      Verify both built-server manifests advertise annotation 1.2.0/bulk 1.6.0,
+      docs routes return JSON, and anonymous mutations remain 401. Clean completed
+      fixture uploads with `/attachments/delete`, assert success and content 404;
+      generic Thing DELETE cannot prove cleanup of protected attachments. Close
+      test browsers even when cleanup fails. These checks do not claim native
+      account picker or durable metadata reconciliation acceptance.
+
+
+- [ ] Durable account file adapter: `accountFiles.test.ts` and
+      `accountTransport.test.ts` cover atomic metadata/bytes/intent quota rollback,
+      original request identity, checksum-locked parts, permission refusals,
+      malformed plans, tab claims, cancellation, credentialless signed PUTs and
+      completion-only retry after a lost response. Enable
+      `accountFiles.browser.test.ts` against the disposable Vite/replica fixture
+      documented in README. Save bytes with the browser fully offline; verify
+      zero mutations, normal approval refusal, private upload after fixture-admin
+      approval, one byte PUT after a dropped completion reply, exact owner bytes,
+      guest 404, and the open retry panel at 1440/390/320px. Relative signed URLs
+      resolve at the current origin; do not loosen CSP for a different local
+      storage port. This checks the internal adapter, not the pending account
+      file picker/media/post-binding implementation.
+
+
+- [ ] Search → This device: normal-import more than 20 local Things, disconnect,
+      search and page them, add numeric/nested/tag/date field filters, and reload.
+      Invalid paths/operators/types must show errors while keeping prior results.
+      No local query sends an API search or mutation. Switch to Online search and
+      back: caches, pages and cursors stay separated. Check 1440/390/320px bounds.
+      In a disposable account compare field results with the real API, cold-reload
+      device search and confirm a separate anonymous context sees no private rows.
+      Also run `structuredSearch.test.ts`, `publicSearch.test.ts`, API facade tests
+      and opt-in `structuredSearch.browser.test.ts`. Prototype names must never
+      become datatype aliases; unsupported shortcuts/ranking fail explicitly.
+
+- [ ] In a disposable local account, move multiple ordinary Things into a folder
+      offline, cold-navigate/reload that folder, then reconnect. The server must
+      remain unchanged until the account is verified; sync must carry actor,
+      data-plane and timestamp preconditions. Check new-folder ordering, move to
+      root, ambiguous retries followed by another move, conflict review, and
+      whole-batch rollback for cycles/missing sync bases. An unavailable remote
+      archive probe must reject a promise and never unmount the local folder.
+      Fresh and cached listings must respect pending local placement. Run
+      `accountSync.test.ts`, `accountApi.test.ts` and opt-in
+      `accountMove.browser.test.ts`; verify 1440/390/320px and fixture cleanup.
+
+- [ ] Settings → Things → Device storage works without login and after a cold
+      offline reload. Import a local Thing in another tab and refresh the meter;
+      it includes local History/internal records without requesting an account.
+      A missing, malformed or count-mismatched ledger must show unavailable and
+      preserve last-known usage/content. Retry after repair must converge. Test
+      zero-byte files, quota rollback and every scope; account/origin/data-plane
+      changes retire pending reads immediately. Reading protection must never
+      call `persist()`. Explicit requests must report granted/denied/unsupported,
+      failed/timeout and stale-workspace outcomes accurately. A late `persisted()`
+      response after timeout must not start a protection request. Check desktop,
+      390/320px and normal Things/History links. Run `storageStatus.test.ts` and
+      the opt-in `storage.browser.test.ts` against a production client build.
+
+- [ ] After saving local content, find Timeline in Things and library search,
+      open it, cold-reload offline, return to Things and rename a local item.
+      Reload again and verify the name without a capability-manifest request.
+      Check 1440/390/320px, managed folder menu restrictions, paged membership,
+      retained history after current-content deletion and no account partition
+      leakage. Ordinary rename/move/delete/export, target/folder placement and
+      import into Timeline must fail without changing content. Run the local
+      Timeline unit and native browser regressions.
+
+- [ ] Restore a page with recorded components offline, open its `restored-` copy
+      from Things, verify the native preview, add a comment/nested reply, rename,
+      and cold-reload at desktop/390/320px. No account Timeline/mutation HTTP or
+      public fetch for the restored identity may occur. Local browser Actions
+      must read/update/delete the copy without altering the shared original.
+      A deleted copy must stay local-not-found; a public same-format ID must still
+      use credential-free reads. An ID present only in an account partition must
+      grant no anonymous mutation/Action access. Switch workspace while routing
+      and reject the stale read before transport. Run `restoredRouting.test.ts`
+      and both offline History/detail browser regressions.
+
+- [ ] Anonymous History export: offline, name a saved version, add a note, change
+      the current Thing and export the earlier version. Inspect the actual JSON:
+      original content/event/receipt, selected name and notes, no account HTTP.
+      Cold-reload and export a deletion's before-image. Missing compact ancestry
+      and oversized archives must fail clearly with retained history unchanged;
+      closing the editor or changing workspace must not trigger a late download.
+      History archives preserve dependency references, not inline transfer data.
+      For portable historical content, restore recorded components and use normal
+      Thing export/import; verify remapped IDs and unchanged shared components.
+      Run `timelineExport.test.ts`, the offline History browser download and the
+      guarded `timeline-versions.integration.mts` account regression.
+
+- [ ] Anonymous History: offline, undo one saved edit while preserving later
+      independent fields, merge a variation into current content, and restore an
+      earlier page with recorded components. Verify native previews and Builder
+      cold reload at desktop/390/320px with no mutation/account Timeline HTTP.
+      Recorded copies must not change shared components or sibling pages. Recover
+      a deleted ordinary Thing with its original identity; a deleted folder falls
+      back to Things. Replays must return the original receipt; stale heads and
+      component edits between review/commit must fail. Inject an aborted or failed
+      receipt write and verify content, copies, history and quota roll back.
+      Retained drafts must still pass normal schema validation on apply. Run
+      `timelineVersions.test.ts`, the offline History browser test and both
+      guarded version/component API integrations against a disposable replica.
+
+- [ ] Anonymous branch merges: offline, select a version and use the variation
+      row's Review and combine control. Resolve all content/component conflicts,
+      preview recorded definitions, save, and cold-reload in Builder. Verify
+      desktop/390/320px and zero account/mutation HTTP requests. The current Thing
+      must remain unchanged. Invalid choices and retired/foreign scopes fail;
+      stale-head pushes retain the proposal; oversized captures fail before
+      payload decoding. Run `timelineBranchMerge.test.ts`, the offline History
+      browser test and guarded `timeline-branches.integration.mts` account parity.
+
+- [ ] Anonymous variations: while offline, select a saved version, create a
+      variation, edit its fields, open it in Builder, save and cold-reload.
+      Recorded components must render with Actions/live data paused, and the
+      current Thing must remain unchanged. Check 1440/390/320px, including the
+      phone inspector and unobstructed preview. Observe zero mutation/account
+      Timeline requests. Concurrent stale/divergent pushes must fail safely;
+      uncertain retries replay exactly and quota failures roll back effects,
+      heads and ordering. Foreign/retired scopes must never fall through to HTTP.
+      Run `timelineBranches.test.ts`, the offline History browser test and the
+      disposable real-account `timeline-branches.integration.mts` regression.
+
+- [ ] Anonymous version names: use Versions offline to name, rename, reload,
+      clear and reload again. Verify the pinned badge and immutable effects,
+      no HTTP mutations, and desktop/390/320px controls. Concurrent tabs must
+      reject stale revisions; retries after later changes return their original
+      receipt without overwriting the newer name. Failed name storage must roll
+      back its effect and ordering. Run `timelineVersionNames.test.ts` and the
+      offline History browser test. Server integration must validate against the
+      exact operation ID sent and clean up its own created Things on failure.
+
+- [ ] Anonymous History notes: open Message on a saved change while offline;
+      save plain text, cold-reload and remove it. Confirm device-only copy and
+      zero account/mutation HTTP calls. Eight concurrent notes must be the cap;
+      a ninth retains its text with Retry/Dismiss without breaking History.
+      A delayed add after removal cannot resurrect text. Failed deletion-marker
+      storage must roll back deletion and quota together. Batch page limits
+      must count multibyte notes and exclude notes from unselected events.
+      Run `timelineNotes.test.ts` and the normal offline History browser test.
+
+- [ ] Anonymous History: normal-import a page and component, rename offline,
+      open its recorded native preview, then cold-reload offline. Content and
+      canonical history must commit together; no account Timeline/mutation
+      requests may occur. Verify saved-on-device labels and 1440/390/320px.
+      Run `local-workspace/timeline.browser.test.ts` against the loopback
+      production preview with `TT_LOCAL_TIMELINE_URL` and shared browser paths.
+      Unit coverage must retain old component captures after edits/deletion,
+      roll back content when history fails, page large records, reject damaged
+      links/indexes and fence old identities across concurrent connections.
+
+- [ ] Anonymous page sources: normal-import an editable schema/Data/Action/
+      Component/page bundle. Both source-bound Components and native Collections
+      must load without sign-in, refresh after a local control, and survive a
+      cold offline reload. Inert previews make no run. Malformed pages show an
+      error. Verify 1440/390/320px and zero account mutation requests.
+- [ ] Source caches and local forms must retire across anonymous/account/origin/
+      data-plane boundaries, even when the page and block IDs match. Never adopt
+      legacy viewer-only cache entries or cache shared-root run results. Run the
+      opt-in `sourceWorkspace.browser.test.ts` lifecycle regression against Vite
+      with `TT_SHARED_TEST_URL`, `TT_SHARED_PLAYWRIGHT_PATH`, and optional
+      `TT_SHARED_CHROME_PATH`; use a fresh browser and disposable local data.
+
+- [ ] Anonymous Actions: create in the native editor, cold-reload offline, run,
+      edit in Fields/Source, save and reload. Invalid JSON cannot save; execution
+      failures show their actual error. Local definition drafts do not require an
+      account Timeline. Export/import through Transfer remaps IDs and omits run
+      records; deleting an Action removes its protected details. Check 1440,
+      390 and 320px, current-workspace cache separation and no account mutation.
+- [ ] Action host refactors must preserve missing-input search predicates:
+      `where: { field: "$input.optional" }` still filters null/missing values;
+      resolving an omitted input must never erase the filter. Run the live
+      server Action suite and local nested/scope/history/identity tests.
+
+Use a disposable account and an isolated local Mongo instance; do not run mutation
+checks against existing personal data. Full feature coverage is tracked in
+[docs/local-workspaces.md](docs/local-workspaces.md).
+
+- [ ] Anonymous create/edit/export must make no account write. Login/logout and
+      account/database switches never adopt or expose another workspace's data.
+- [ ] Block Things + webpage resolve endpoints: create a private Builder page,
+      edit and save text, then reload. The native renderer retains the page and
+      the sync panel says it is saved on the device. Reconnect and verify exactly
+      one private Thing with the latest text through the real API.
+- [ ] Save again after a sync acknowledgement without reloading: the server's
+      timestamp must not cause a false local editor conflict.
+- [ ] Edit the server copy concurrently. Reconnect: preserve local edits, stop
+      replay and show comparison. Keep either reviewed version; type or change
+      the server after review and verify the stale choice is refused.
+- [ ] Unsupported attachment/control fields must use their complete adapter or
+      fail clearly; never report a successful partial local write.
+- [ ] A definitive validation failure can be corrected and retried. A lost
+      response replays its original immutable body and does not duplicate data.
+- [ ] Check expanded sync details at 1440×1000, 390×844 and 320px: nav clearance,
+      long IDs, scrollable comparisons and all choice buttons remain usable.
+- [ ] Cold-reload a previously loaded account page with all networking disabled;
+      edit/save/reload again. Restore networking with root verification blocked:
+      no account mutation may occur. Unblock root verification, reconnect, and
+      verify the same private Thing receives the queued edit. A dirty editor
+      must retain its content across this transition.
+- [ ] Open Builder offline without a cached server list page. Show locally saved
+      pages/components, distinct device pagination and an incomplete-library
+      notice. Never mistake the known local subset for the full account library.
+- [ ] Older overlapping root reads (including failed ones) cannot change the
+      newest accepted workspace pointer. Logout removes offline access to the
+      previous account pointer; anonymous content is not adopted on login.
+- [ ] A definitive root/session refusal retires old editors and sync leases;
+      re-confirming the same account never revives their pending callbacks.
+- [ ] Block or stall IndexedDB opening: report a bounded storage error, retry
+      after recovery, and close late connections without committing abandoned work.
+- [ ] Logged out on `/themes`, save/edit/reload a named theme, then cold-reload
+      offline. Download JSON through Transfer, import a new copy, apply and delete
+      it. Verify no account mutation, unchanged active selection after import,
+      private local labels, and usable controls at 1440, 390 and 320px. Public
+      profiles/gallery remain readable without borrowing account credentials.
+- [ ] Logged out, create/select an algorithm, cold-reload Settings → Things
+      offline, rename/branch it, download/import/re-export JSON and delete it.
+      Preserve weights/statistics with fresh IDs and unchanged active selection;
+      show private-interest warnings and usable 1440/390/320px controls.
+- [ ] Train from a disposable public-feed response fixture without publishing a
+      post. No anonymous track request or page-hide beacon may reach the server.
+      Switch accounts with queued/in-flight events: clear the old session, never
+      seed or train the new owner's profile, and ignore stale completion toasts.
+      Built-in sorts never train. Storage failures must be visible.
+- [ ] Logged out and offline, import a canonical ZIP with actual file bytes;
+      no Upload step or network request is needed. Cold-reload, export through
+      the normal dialog, import that download and delete the original. The copy
+      must export identical bytes with fresh IDs. Verify 390/320px controls.
+- [ ] Missing/corrupt/oversized local bytes fail before metadata is committed;
+      quota rollback/refund and identity changes never expose another scope.
+      Component media/dependencies rebind to the copied bytes. A folder holding
+      standalone files requires explicit recursive deletion; target-bound files
+      cascade with their target. Clear all disposable test data afterward.
+- [ ] A missing local Thing with a remaining account sync entry becomes a
+      visible error; it cannot stall unrelated pending writes. Deletion with a
+      missing usage row must not throw or create negative quota totals.
+- [ ] Logged out and offline in Browse files, add PNG/text/empty files through
+      the normal picker. Download exact bytes, copy and cut/paste between folders,
+      cold-reload a native media page and verify the decoded image at 1440/390/320px.
+      No paired-device discovery, account request or HTTP byte fallback may run.
+- [ ] Local media URLs revoke after deletion, unmount and identity retirement;
+      late reads cannot recreate them. Corrupt/missing bytes and preview capacity
+      failures show errors, not blank-success previews. HTML/SVG downloads remain
+      opaque and empty pending src/href values are omitted.
+- [ ] Re-render the native Thing page without changing workspace identity:
+      API callback identities stay stable and no repeated-fetch/update-depth loop
+      occurs. Retired callbacks cannot target the next account's API cell.
+- [ ] Logged out with networking disabled, use the normal composer to select
+      an image, autosave a draft, save/edit a post and cold-reload it. Reopened
+      edit/template media tiles must decode local object URLs, never request a
+      server attachment URL. Posting must succeed without a saved draft.
+- [ ] Create a local comment and nested reply, cold-reload and expand replies:
+      persisted children must reappear through native post/list projections.
+      Local author labels cannot link to an unrelated account profile.
+- [ ] Save a local post as a template, instantiate an independent working copy,
+      save it, delete the original and cold-reload the copy's actual image.
+      The reusable template remains. Cleanup/tombstones preserve committed files;
+      corrupt bytes, quota failures and wrong-purpose files roll back atomically.
+      Export/import image posts and image comments with fresh IDs: verified
+      attached-file context must reach the canonical validator, and comment
+      files retain comment purpose so later edits succeed. Check desktop/390/320px
+      and clear only disposable test fixtures.
+- [ ] All local feature families, queue deletion/import/move semantics and
+      multi-tab UI refresh require separate acceptance before rollout merge.
+
 ## History timeline design concept (`docs/design/thingtime-history-timeline/`, `/docs/design`)
 
 Fictional-data design concept for unified Thing history (TODO 56). Nothing is
@@ -1474,6 +1870,22 @@ is fixed, and cite the checklist you ran in the PR description.
       during a session, and confirm the header, the gear popover, messages
       and the voice deck never clip, overlap, or cause horizontal page
       scrolling.
+- [ ] In a clean anonymous browser, load the production offline shell, disconnect,
+      then open **Settings → Security → Secure Vault**. Create the independent
+      device passphrase, environment, key value and provider. Verify native
+      forms at 1440/390/320px; reload locks and the same passphrase restores
+      entries. Wrong passphrases, quota refusal and damaged saved rows preserve
+      ciphertext. There must be no account Vault/reveal requests or writes.
+- [ ] Anonymous selected-value reveal clears on blur, hiding, page exit, manual
+      Hide, vault lock and after 30 seconds. Move an entry out of an environment
+      before deleting it; a nonempty deletion must fail without changing either.
+      Race child creation against group deletion and verify one coherent result.
+      Inspect device storage after deletion too: notification history must not
+      contain vault names, values or passphrases outside the encrypted records.
+- [ ] Supply a malformed/non-string or over-32-KiB replacement provider token:
+      reject it before touching the saved account record. An omitted/empty token
+      remains the explicit retain-existing operation. Confirm both capability
+      manifests advertise `api.lopu-vault` 1.2.1 and keep account host restrictions.
 - [ ] Add a disposable provider in **Settings → Secure Vault**, grouped under a
       test environment. Refresh and verify only metadata returns to the
       browser—never plaintext, masked text, IV, tag, or ciphertext. Updating
@@ -2481,6 +2893,32 @@ email whose link points at the attacker.
       `npm --prefix remix run test:api-capabilities` pass.
 
 ## Account drafts and reusable post templates
+
+- Rich workspace isolation regression (2026-10-17): seed a matching scoped rich
+  draft, another database's draft and an older unscoped pending submission. Only
+  the matching draft resumes; the latter two never enter the working picker or
+  execute. Explicit template selection makes a new scoped copy, preserving source
+  and independent file bytes. Concurrent retries cannot reuse its ID for another
+  context; templates with pending submissions fail without creating a copy.
+  Cold-reload rich account/anonymous drafts offline; verify first-render recovery
+  and subsequent typing even when WebCrypto digest stalls, and confirm anonymous
+  posting emits no account draft requests or remote mutations. A fresh browser for
+  the same account preserves its matching immutable pending operation without
+  replay. Run `richWorkspace.browser.test.ts`, accountDraftSync and remotePlainComment
+  with their loopback opt-ins; inspect 1440/390/320px screenshots and overflow bounds.
+  Older rich/media migration and actual native data-plane transitions remain open.
+
+- [ ] Save and reopen native account drafts after a cold offline reload. Inspect
+      the picker at 1440, 390 and 320px. Reconnect with only the draft endpoint
+      failing or held unresolved: posting must commit locally and sync privately
+      before that draft request finishes or times out; later draft retry
+      must retire the completed draft while preserving templates. For rich replies,
+      wait for the composer to close after commit, not merely for the submit
+      button's label to disappear while its spinner is showing.
+- [ ] Discard a remote-only summary after another device changes its revision:
+      retain the actual loaded body and refuse deletion against the stale summary.
+      Conflict choices must recheck both device and account revisions; typing
+      during review must never be overwritten by an old review action.
 
 - [ ] Block, reject and stall only `/api/v1/drafts`, leaving the post API online.
       Submit a post, edit, rich comment, plain comment and nested reply: each
@@ -6118,11 +6556,28 @@ default` unsets it, and runtime usage reports the effective cap. A custom
 
 ## Notification history (`/notifications`, `remix/app/components/Notifications/`, `api/utils/notifications/listQuery.ts`)
 
-- [ ] `/notifications` (auth) lists every notification the viewer has received
-      newest first (no automatic count-based deletion), with the
-      unfiltered first page painting instantly from `tt-notif-history-<id>`
-      and reconciling in the background; a cold start shows one spinner only.
-      Signed out, the page renders the quiet "Log in" state and never 401s.
+- [ ] `/notifications` keeps authenticated account history as its default;
+      "On this device" (`?source=device`) lists locally saved Lopu messages.
+      Anonymous/offline workspaces default to device history and the nav bell
+      opens it without login. Cached first pages are keyed by workspace and
+      source, repaint instantly, and never cross identity changes.
+- [ ] In a clean anonymous browser, import a Thing offline, open the nav's
+      notification-history link and cold reload: the import message remains
+      searchable at 1440/390/320px, without any mutation request. Login must
+      never upload or adopt that anonymous message.
+- [ ] In a disposable account, trigger a local move offline. Its notification
+      commits locally without a recording POST, survives reload, then syncs
+      exactly once after verified reconnect. Device and account history both
+      expose it. Lost acknowledgements reuse the same event UUID; concurrent
+      tabs cannot own the same live claim. Refused/exhausted sync stays visible
+      as a local message with a failed count, without blocking the action.
+- [ ] Local notification input uses the canonical validator/redactor before
+      persistence; foreign recipients, forged audit fields, changed event bodies,
+      unsafe URLs and oversized UTF-8 bodies fail without partial records.
+      Redaction-expanded text is bounded again before queuing and still passes
+      the canonical server validator on retry.
+      Storage failure emits a nonrecursive failure event; a retired workspace
+      cannot commit or accept a remote acknowledgement.
 - [ ] Category chips All / Social 🤝 / Engagement 💬 / Feed 📰 / System ⚙️, the
       Type dropdown (grouped by category), "Unread only", the search box
       (debounced ~300ms, literal match over preview / actor name / username /
@@ -6997,24 +7452,38 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       library 🔖", and the state survives a reload (`viewerSaved` rides the
       same batched projection as `viewerReactions` — one query per page, no
       N+1). Tapping again unfills instantly and toasts the removal; a failed
-      toggle reverts the icon and toasts the error. Logged OUT, no bookmark
-      button renders anywhere and `PublicPost` carries no `viewerSaved` field.
+      toggle reverts the icon and toasts the error. Logged OUT, remote posts have no bookmark
+      button or account `viewerSaved` field. Device-local posts retain the local
+      bookmark control without granting remote authority.
 - [ ] `/saved` lists the viewer's saved posts newest-SAVED-first (save time,
       not post time) as real PostCards — reactions, comments, polls, and the
       bookmark itself work in place; unsaving a card removes it from the list
       optimistically (a failed unsave restores it in place). Pagination loads
       ~30 per page via `nextCursor`. Optimistic first paint from the
-      per-viewer `tt-saved-<viewerId>` localStorage cache (no skeleton flash
+      workspace-scoped `tt-saved-<scope>` localStorage cache (no skeleton flash
       on revisit; skeleton only on a true cold start), and logout sweeps the
       `tt-saved-` prefix so another account on the same browser never sees a
       cached library.
 - [ ] Libraries are independent per user: two accounts saving different posts
       each see only their own on `/saved`, and `GET /api/v1/things/saved`
-      401s logged out (`/saved` shows the quiet log-in state instead). A
+      401s logged out (`/saved` uses only the device workspace instead). A
       saved post that is later DELETED (or its audience narrowed away from
       the viewer) silently disappears from `/saved` — fail closed, no error
-      rows. The drawer's Feed section shows "Saved 🔖" (auth-only) linking to
+      rows. The drawer's Feed section shows "Saved 🔖" (including logged-out local workspaces) linking to
       `/saved`.
+
+- [ ] Anonymous/offline native poll: create through the normal composer, react,
+      save, change/remove the vote, reload and visit Saved from the drawer.
+      All state survives without an account or mutation request; unsave disappears
+      after reload. Deleting the post removes its saved reference and activity.
+      Check 1440, 390 and 320px widths; no horizontal overflow. Remote-post
+      interactions remain authenticated. Account/data-plane changes must not show
+      the previous workspace's cached Saved entries or apply late responses.
+- [ ] Device interaction adapter: enforce normal emoji/poll/up-down validation,
+      reaction limits, scoped target lookup, serialized cross-tab toggles and
+      quota rollback. Generic writes/imports cannot mint activity slots; content
+      exports omit activity, and target deletion cleans it up. Run
+      `npm --prefix remix run test:local-workspace`.
 
 ## Public posts Atom feed (`remix/app/api/utils/things/rss.ts`, `GET /api/v1/things/rss`)
 
@@ -7433,11 +7902,63 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       toggle publishes (acl tt:all) and /p/<id> renders it; anonymous viewers
       see public pages read-only while included controls can run in the
       root-authorized read-only action mode (no saved-data mutations).
-- [ ] Site edit mode: ✏️ pill (signed-in only, hidden on /builder, /p/*,
-      /authorize) enters in-place editing of the current route; the live app
-      screen renders as the locked 🔒 native block; Save my version forks a
-      viewer-owned twin; leaving edit mode shows the personalised blocks in
-      view mode; reset-to-default deletes the fork and restores the seed.
+- [ ] Builder → Customize a site page works anonymously and offline; the native
+      sections render once, and Save my version creates a private workspace
+      copy. Global blocks and route-specific blocks remain isolated by workspace.
+      Unsaved name/text edits recover after reload; Discard retires recovery; reset-to-default removes the
+      version and retires unfinished recovery. Recheck after a second reload.
+- [ ] Global/site blocks: edit in one offline tab and verify another updates;
+      account/origin/data-plane changes cannot retain another workspace's cache.
+      Failed refresh keeps loaded blocks with Retry. Import a component/source
+      bundle through Things and verify native source output after offline reload.
+      Check 1440/390/320px widths with no horizontal overflow. Account page saves
+      and confirmed sync must finish while `/api/v1/drafts` POSTs never settle.
+      `siteBlocks.browser.test.ts` exercises the disposable production client.
+- [ ] Account offline export: download a newly imported ordinary bundle through
+  the normal Download dialog while fully offline, before sync; verify canonical
+  content and all dependencies, then import the downloaded file through the normal
+  importer with fresh IDs. Repeat download after sync and cold offline reload.
+  Check the 320px dialog and zero offline mutation requests.
+- [ ] A first-page account folder cache must fail offline download until the
+  canonical exporter has supplied complete coverage. Preserve pending edits,
+  moves and deletes in the cached export; refuse missing dependencies. A shared
+  export-only component with a higher version and the same key must not replace
+  an owned component alias. Two authorized roots with conflicting saved dependency
+  contexts must fail instead of silently rewriting one another. Identity
+  changes/cancellation must not retain partial
+  snapshots. A full device must still permit downloading its local content even
+  when export-cache retention exceeds quota. Keep media/managed exports explicit.
+- [ ] Account offline import: use the normal Things dialog to import a folder,
+      page/component and schema/data bundle with no networking. Native preview,
+      edit and cold reload work locally; no mutation is sent. Reconnect only
+      after verified account identity, then read back independent private IDs,
+      definition keys, schema names/provenance and folder placement. Source
+      site routes/global keys must not become account site customization.
+      Canonically export via the normal server API and round-trip through its
+      importer in a disposable fixture; allow legitimate ID remapping. Exercise
+      1440/390/320px (`accountImport.browser.test.ts`). File/managed-kind offline
+      imports remain gated by their dedicated adapter; never drop their content.
+- [ ] Account import transactions: rejected rows, invalid destinations, aborted
+      signals and quota failures leave neither content nor queue fragments.
+      Mutating caller JSON after dispatch cannot change the imported copy.
+      Reopen after an ambiguous create and retry its exact request. Remap legal
+      Action cycles without executing them; reject structural/provenance cycles.
+- [ ] Account offline delete/reset: cache an owned folder, its child, a Data Thing
+      and a global page in a disposable account. Go fully offline, delete the
+      folder/Data Thing and reset the global page; reload. The child survives in
+      the parent folder, deleted content stays absent, and no mutation is sent.
+      Reconnect with a verified session; check canonical server state. Change a
+      queued Thing remotely and exercise both conflict choices at 1440/390/320px.
+      Keeping the account version must restore the visible list immediately.
+      Cover a false `navigator.onLine` hint with unverified account identity.
+      `accountDelete.browser.test.ts` performs this through normal UI and APIs.
+- [ ] Account deletion queue: lose a DELETE response, reopen the workspace and
+      verify the identical conditional retry; stale reads must never resurrect
+      it. Delete during an uncertain create/update; refused creates must not be
+      recreated. Identity changes, 403s and competing tab claims cannot clear
+      another operation. Linked child conflicts hold parent deletion; keeping
+      that child must prevent a parent cascade until explicitly deleted. Check
+      rollback, folder draining, quota bounds and before-image release after ack.
 - [ ] Global blocks (webpage-site-global doc) render on every page and do NOT
       refetch or remount on client navigation.
 - [ ] Admin seed POST /api/v1/admin/webpages/seed converges (re-run →
@@ -9906,6 +10427,11 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
   verification. Setup and commands: [draft workflow](docs/no-login-draft-preview.md).
 
 
+- Builder offline reconnection: reopen a saved account library fully offline,
+  then restore connectivity. Keep its saved rows visible while confirming the
+  account; restart pagination from the first page and clear the device-only
+  notice after account results arrive. Do not flash a spinner over cached rows.
+
 ## Password manager and native AutoFill
 
 - [ ] On desktop and 390px, add two entries for one website, edit/reorder custom
@@ -9941,6 +10467,895 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
 
 - Password vault routes reject request-scoped internal Action actors for every operation, even if the internal request carries an Authorization header. A full browser session is required directly; internal account authority cannot substitute for it.
 
+
+### Anonymous bundled suite and browser-request boundaries (2026-10-16)
+
+- [ ] Install each bundled suite twice and concurrently in a clean anonymous
+  workspace. Require one set of IDs, no partial writes on validation/quota error,
+  canonical normalized no-op reinstall, preserved sample edits, and preserved
+  authored definitions when installing only missing parts.
+- [ ] Run saved browser Actions through local Things create/read/update/delete
+  and local data-Action requests. Require zero fetches, normal validators and
+  budgets, identity/cancellation fences, and explicit errors for remote IDs,
+  ownership/public ACLs, protected-kind writes/deletes and unsupported services.
+- [ ] In a clean production-build browser, wait for verified offline cache
+  readiness, disconnect, install Web Standards from the gallery, edit Content,
+  save/open the Component and cold-reload. Verify exact text and zero mutation
+  requests. Export/import normally with fresh IDs and complete dependencies.
+- [ ] Check 1440×1000, 390×844 and 320px native views for overflow. Run the native
+  Web Platform renderer before and after a cold offline reload; require the real
+  DOM result, offline worker result and native form event cancellation. Stop must
+  clear frame/output; a throwing program must report its error without a fake result.
+- [ ] Serve the production app CSP (no unsafe-inline/eval) and verify its exact
+  compiled runtime hash. Reconnect before security probes so connectivity cannot
+  mask violations: the opaque frame must reject parent/cookie/storage access,
+  arbitrary inline scripts and same-origin fetch. Keep sandbox permissions and
+  canonical child CSP. Verify external embed/inert draft bundles still use the
+  standalone URL. Check local Component discussions with the regression below.
+- [ ] Rebuild the platform runtime during managed development and verify the
+  virtual document reloads. A missing build must give the build:platform recovery
+  instruction; production verification must reject a runtime/CSP hash mismatch.
+
+
+### Local generic Thing discussions and owner rename (2026-10-16)
+
+- [ ] In a clean anonymous production-build browser, import a Component, go
+  offline, create a comment and nested reply, rename from the owner menu, then
+  cold-reload. Require preserved content and zero remote mutation requests.
+- [ ] Search and clear comments; check 1440×1000, 390×844 and 320×844 layouts
+  without horizontal overflow. Run `app/local-workspace/details.browser.test.ts`
+  with the documented local preview/Playwright environment variables.
+- [ ] Page more than twenty local comments without duplicates or recursively
+  embedded replies. Deleting the target cascades its comments. Aborted reads
+  and retired workspace facades must reject instead of exposing old content.
+- [ ] Anonymous public discussions forward the projection, share key and cursor
+  through credential-omitting reads. They cannot acquire an account session or
+  write comments to a remote Thing. Local owner rename must not require a remote
+  capability request; History and recording handoff still require real auth.
+
+
+### Local-first library search and selection (2026-10-16)
+
+- [ ] In a clean anonymous production-build browser, import at least 61 nested
+  Things, go offline and search across folders. Load both pages without missing
+  or duplicate rows, filter kinds, rename a result and cold-reload. Require zero
+  mutation/search requests. Invalid text/cursors report an error, not empty success.
+- [ ] Select a visible grid/list checkbox by mouse and keyboard without opening
+  the Thing. Check 1440×1000, 390×844 and 320×844 for overflow and usable selection
+  controls. Target the visible label rather than Chakra's hidden input.
+- [ ] In an isolated disposable account, search private owned Things, inject a
+  failed remote refresh and verify cached rows plus Retry. Cold-reload offline
+  and verify the explicit partial-results notice. Delete synthetic content through
+  the normal API and log out. Never use existing user data for this fixture.
+- [ ] Page remote and pending local matches independently; edits racing a remote
+  response must not restore old matches. Query, origin/account/data-plane changes
+  and aborts retire prior responses. Unicode cursors survive paging, while changed
+  scope/filter and missing anchors require a fresh search. Advanced/public search
+  keeps its separate contract. Run the opt-in `search.browser.test.ts` as documented
+  in `docs/local-workspaces.md`.
+
+
+### Anonymous Page + related History (2026-10-16)
+
+- [ ] Import a page and component through the normal UI in a clean browser;
+  disconnect, open History, select Page + related and verify both event streams.
+  Wait for the URL transition, cold-reload, and check 1440/390/320px without
+  overflow. Switching back to This Thing must hide the component history.
+- [ ] Restore a recorded version with a new component copy, edit that copy and
+  revisit related History. Its events replace the previous component membership
+  after cold reload. Require zero account Timeline requests or HTTP mutations.
+- [ ] Resolve stored defaults, saved args and multiple instance args through the
+  canonical composition/reference rules. Check component version aliases,
+  Action/data/schema references, cycles, 128-Thing/512-context/512-edge limits,
+  page byte bounds and missing/deleted/non-page roots.
+- [ ] Add/remove related Things while paging in both directions. Changed
+  membership must reset stale cursors so older newly related events are not
+  missed. A change between membership hashing and reading must report a retry;
+  cancellation/account switches must retire the operation.
+- [ ] Keep account partitions and public catalog caches out of anonymous related
+  discovery; it must neither fetch remote references nor execute Actions.
+  Run `timelineRelated.test.ts`, `test:timeline` and the guarded disposable
+  `timeline-related.integration.mts` with fixture cleanup.
+
+- [ ] Run the History regression with both network modes when investigating
+  startup: default `TT_LOCAL_TIMELINE_NETWORK_MODE=offline-emulation` uses
+  Chromium's offline flag. Optional `blocked-requests` may miss controlled
+  requests, so both modes must explicitly prove the root API is unreachable.
+  Record module-load failures separately and do not count automatic retries as
+  uninterrupted startup. The request-blocking mode leaves `navigator.onLine`
+  true. Real-device offline startup remains a separate acceptance check.
+
+- [ ] Make CacheStorage enumeration/open/match fail in the offline-shell reader.
+  Immutable build assets must fall back to the real network. Failed navigation
+  must preserve its original network error, and partial installs must never be
+  served as verified content. Run `node --test remix/scripts/offline-shell.test.mjs`;
+  account API/media authorization and cache exclusions must remain unchanged.
+
+
+## Local schema workflow and independent draft saving (2026-10-16)
+
+- [x] In a clean anonymous context, load the production app, verify the static
+  offline shell, go offline and prove the root API cannot be reached. Author a
+  schema, reload its incomplete draft, save it and create a Thing from its form.
+  Reload an incomplete form and a completed form; preserve unfinished text and
+  never reopen the completed draft or duplicate its Thing.
+- [x] Copy a saved local schema, retain its fields/provenance, then save it to the
+  library. The library contains only saved definitions; text filters run before
+  pagination. Inspect the builder and detail at 1440/390/320px without overflow.
+- [x] Stall account draft writes in a disposable local fixture. Both schema and
+  data creation complete; their normal authenticated sync validates the copied
+  schema dependency first. Do not turn a draft failure into a content failure.
+- [x] Corrupt a synthetic device schema recovery tree. Show a clear paused-draft
+  message, preserve its original bytes, and permit content creation. Test scoped
+  contexts and callbacks across account/origin/data-plane changes.
+- [x] Run `test:drafts`, `test:schemas`, `test:local-workspace` and opt-in
+  `app/local-workspace/schemas.browser.test.ts` using the local-workspaces runbook.
+- [ ] Complete account catalogue discovery, account draft/interaction sync and
+  multi-tab UI acceptance before the full local-first rollout merges.
+
+## Local component catalogue and version drafts (2026-10-16)
+
+- [x] In a clean anonymous browser, load `/components`, finish installing the
+  production offline shell, disable networking and verify a root-data fetch
+  fails. Browse bundled definitions without creating owned Things; Mine stays
+  empty until a version is explicitly saved.
+- [x] Edit native detail arguments and the version name, reload, and confirm
+  both render panes use the recovered values. Save an independent component;
+  reload it and confirm the original bundled definition remains unchanged.
+- [x] Save that copy to Library; edit arguments/name in its catalogue card,
+  reload the draft, then save another version. Open each card and verify its
+  exact ID and saved arguments, even when both have the same component key.
+- [x] Measure catalogue, detail editor and card editor at 1440/390/320 CSS
+  pixels. No horizontal overflow. Anonymous writes never reach the network.
+- [x] In a disposable account, stall every draft mutation and verify component
+  creation still completes, syncs its canonical saved arguments and survives
+  offline reload. Existing trust, URL-source confirmation and renderer
+  sanitization tests must remain green.
+- [x] Interrupt an online component refresh in the disposable account: keep
+  the previously rendered preview, show Retry and recover when the endpoint
+  returns. A failed request must not become a not-found screen.
+- [ ] Finish account catalogue discovery, cross-tab refresh, source-control
+  editor recovery and bundled-only library bookmarks (covered by later checkpoints) before the full rollout
+  merges. Bundled previews remain unowned; the UI requires saving a version
+  before local reactions/library membership.
+
+Run `app/local-workspace/components.browser.test.ts` with
+`TT_LOCAL_COMPONENTS_URL` pointing to the isolated production-client origin,
+`TT_SHARED_PLAYWRIGHT_PATH`, `TT_SHARED_CHROME_PATH`, and optionally
+`TT_LOCAL_COMPONENTS_ARTIFACTS`. See the local workspace runbook.
+
+
+### Builder definition/source-control recovery (2026-10-16)
+
+- In a clean anonymous workspace and a disposable signed-in workspace, prepare
+  the production offline shell, disable networking and import a native Component.
+  Its Builder menu must allow editing and private duplication. An omitted optional
+  bearer key must not force account reads onto the network; real bearer keys must
+  keep their existing guarded remote path.
+- Type an unfinished numeric field (`1e-`) and new property name; reload/reopen
+  and verify exact recovery with Save disabled. Move/remove array rows and verify
+  raw numeric drafts follow the correct row. Switch to Source, leave invalid JSON,
+  reload and recover exact text/mode; correct it and save immediately.
+- Hold draft POSTs indefinitely. Definition saving must finish, update native
+  rendering, and sync account content without waiting for draft or Timeline queues.
+  Reload after completion: the finished draft must not reappear.
+- Retain an older device draft after a newer saved definition. Save must refuse
+  the stale version; explicitly discard recovery and confirm the newer content.
+  Corrupt the recovery envelope: show a paused recovery error, preserve its bytes,
+  and still allow a normal validated definition save.
+- Leave unfinished Component source Action/interval/input fields and reload.
+  Recover exact input without binding, adding a source URL or executing an Action.
+  A private duplicate must not inherit the original component's control draft.
+- Inspect 1440/390/320px dialog bounds and screenshots; no horizontal overflow.
+  Verify zero offline mutation requests and no browser errors. Regression command:
+  enable `TT_LOCAL_DEFINITION_URL`, `TT_LOCAL_DEFINITION_ARTIFACTS` and shared
+  Playwright/Chrome paths for `app/local-workspace/definition.browser.test.ts`.
+
+
+### Account catalogue retention and tab refresh (2026-10-16)
+
+- In a disposable account, create more than one page of Components and a Schema
+  through real server APIs, then browse Online catalogue / Mine. Requests must
+  carry the expected account and data plane. Visit every page to be tested.
+- Go fully offline and switch to This device / Mine: all visited owned entries
+  remain pageable after cold reload. Render and rename an owned Component;
+  another open device catalogue and detail preview must refresh without reload.
+- Open the discovered Schema offline and create Data through its native form.
+  Create another Schema in a second tab; the first Schema catalogue must update.
+- Server catalogue results must not overwrite pending local edits or resurrect
+  local deletions. Shared/system entries must never enter owned editable storage.
+  Malformed or oversized owned batches roll back completely and show a device
+  retention warning while the valid online response stays available. Repeating
+  identical catalogue reads must not cause invalidation loops.
+- Inspect desktop/390px/320px screenshots and overflow. Confirm zero offline
+  mutation requests and browser errors. Enable `TT_LOCAL_CATALOG_URL`,
+  `TT_LOCAL_CATALOG_ARTIFACTS` and the shared Playwright/Chrome paths to run
+  `app/local-workspace/catalog.browser.test.ts` against a disposable local stack.
+
+
+### Anonymous bundled Component Library (2026-10-16)
+
+- [x] In a clean logged-out browser, prepare the production offline shell and
+  disable networking. Bookmark a bundled Component and add a reaction; Library
+  must retain both after cold reload, while Mine excludes the bundled definition.
+- [x] Remove and re-add the bookmark from another tab. An open Library must update
+  without reload; removing and reloading must not resurrect the bookmark.
+- [x] Preserve original Thingtime attribution and definition timestamps. Library
+  sorts and paginates by save time, including owned and bundled definitions.
+- [x] Reject unknown bundled targets, wrong resolver IDs/kinds, votes on bundled
+  definitions and account-scope writes. The stored rows are only relational
+  save/reaction children: generic Things reads/exports gain no owned target.
+  Concurrent toggles serialize and persisted reactions survive reopening storage.
+- [x] Verify 1440/390/320px PNGs and no horizontal overflow, zero remote mutations
+  and zero browser errors. Enable `TT_LOCAL_COMPONENTS_URL`,
+  `TT_LOCAL_COMPONENTS_ARTIFACTS` and shared Playwright/Chrome paths for
+  `app/local-workspace/components.browser.test.ts`; all three scenarios pass.
+- [x] Add conditional account synchronization for cached owned targets (see below);
+  never replay the current remote toggle after a lost response as though it were
+  an idempotent desired-state command.
+
+
+### Conditional account bookmarks and reactions (2026-10-16)
+
+- [x] In a disposable replica-backed account, retain an owned Component through
+  Online catalogue / Mine. Disable networking, save/react from This device,
+  cold reload Library, and remove/re-add its bookmark from another tab. Local
+  completion must emit no remote mutations, and reactions must survive reload.
+- [x] Reconnect and drop the response after the server commits a conditional
+  write. Reconcile membership without toggling twice; a frozen retry carries
+  the same expected revision and cannot overwrite a competing account edit.
+- [x] Race two commands against one revision: one succeeds and one returns 409.
+  Legacy toggle, generic create, generic reaction edit and generic deletion
+  invalidate older commands atomically. Ordinary exports omit internal revisions.
+- [x] Change the account while an offline device unsaves. Open native conflict
+  review, compare device/account choices, keep the device choice, and preserve
+  the other account reaction. Review must reject later local/remote changes.
+- [x] Refuse anonymous/foreign-account private reads, cross-origin writes and
+  wrong actor/data-plane writes. Malformed/duplicate/oversized input fails
+  clearly (400/413); no stale membership or unauthorized write succeeds.
+- [x] Check offline and review layouts at 1440/390/320px, zero overflow, navigation
+  clearance, wrapped controls and zero page errors. Run
+  `app/local-workspace/accountInteractions.browser.test.ts` with
+  `TT_LOCAL_INTERACTIONS_URL`, `TT_LOCAL_INTERACTIONS_ARTIFACTS` and shared
+  Playwright/Chrome paths against the disposable local stack. The test allows
+  the 60-second claim expiry after a reload interrupts a queued request.
+- [x] Unit checks cover account isolation, unknown baseline reconciliation,
+  cross-tab claims, immutable retries, newer intent, permanent refusal, identity
+  retirement and discard fencing. Keep ordinary content and draft sync separate.
+- [x] Extend noncached/foreign target membership through the read-only post
+  snapshot checkpoint below.
+- [ ] Complete the broader account social-cache matrix; these local checkpoints
+  are not full account interaction coverage or production verification.
+
+
+### Read-only account post recovery and local membership (2026-10-16)
+
+- [x] Share a private post between two disposable local accounts through a
+  username grant. Retain it through the normal native permalink, disable all
+  networking, cold reload, and Save/react without sending a mutation request.
+- [x] Open and reload Saved offline; remove/re-add the bookmark in another tab.
+  Both tabs retain original authors, counts and current device membership.
+  Device cursors are workspace-bound and must not masquerade as server cursors.
+- [x] Reconnect through verified account identity and confirm both desired
+  membership changes through the normal interaction API. Logout, cold reload
+  anonymously offline and verify the private post is absent; log in normally.
+- [x] Revoke the original read grant and perform a normal read. Refused content
+  must disappear from permalink/Saved recovery and remain absent after offline
+  reload. Unit tests also fence delayed reads and prune nested share/comment/
+  linked references while permitting a later genuinely authorized read.
+- [x] Keep credentials/server envelope fields out of retained projections;
+  never create owned Things or content sync records from another author's post.
+  Account, origin and data-plane scope and existing quota remain enforced.
+- [x] Check Saved at 1440/390/320px with no horizontal overflow or page errors.
+  Run `app/local-workspace/accountPosts.browser.test.ts` with
+  `TT_LOCAL_ACCOUNT_POSTS_URL`, `TT_LOCAL_ACCOUNT_POSTS_ARTIFACTS` and shared
+  Playwright/Chrome paths. Use normal rate-limited fixture registration.
+- [ ] Finish full feed paging, unvisited/context/media cache recovery, account
+  post/comment writes and wider cross-device social acceptance before merge.
+
+
+### Offline account file transfer export (2026-10-17)
+
+- [x] Create an account folder and PNG with the normal Files UI while offline;
+  cold reload, then use normal Things Download ZIP. Decode with the canonical
+  archive reader and compare exact original bytes and portable metadata.
+- [x] Import that actual ZIP through the normal anonymous dialog in a separate
+  clean browser context. Verify fresh IDs, folder placement, cold offline native
+  preview and identical original-byte download, with zero remote mutations.
+- [x] Export an existing retained account file after offline metadata edits and
+  reload. JSON excluding required bytes must fail clearly; ZIP retains edits.
+  Reconnect through verified identity without creating a duplicate upload.
+- [x] Re-export component media after ordinary sync acknowledgement; portable
+  byte references must resolve again. Excluding bytes preserves original account
+  references. Deleted/cancelled files never return from old export snapshots.
+- [x] Refuse corrupt/missing bytes, other workspace scope, retired identity and
+  cancelled reads without returning partial content. Unrelated uploads must not
+  block a valid online fallback; affected pending files must not be omitted.
+- [x] Check Download dialog and imported native preview at 1440/390/320 pixels,
+  wrapping controls, no horizontal overflow and no browser errors. Enable
+  `TT_LOCAL_FILE_EXPORT_URL` (production client on a disposable local stack),
+  `TT_LOCAL_FILE_EXPORT_ARTIFACTS` and shared Playwright/Chrome paths for
+  `accountFileExport.browser.test.ts`. Also run the retention browser fixture
+  with `TT_LOCAL_FILE_RETENTION_COLD=1` and its existing private admin fixture.
+- [ ] Finish account file import and complete remote-folder/managed media
+  transfer coverage before claiming the full offline suite or merging.
+
+
+### Offline account file transfer import (2026-10-17)
+
+- [x] Import a canonical folder/Component/page/standalone-file ZIP through the
+  normal account dialog with networking disabled. No Upload step or mutation
+  request; cold reload and decode the native preview. Export again through the
+  normal Download dialog; validate exact bytes and standalone file target IDs.
+- [x] Reconnect with verified identity. Independent content must drain while
+  file-dependent content waits for upload, then use the real private account
+  attachment ID. Verify title/folder metadata, exact downloaded bytes and guest
+  404. Never replace storage policy or approval with a local identity.
+- [x] Cover ambiguous receipt retry plus a newer edit, cancellation dependency
+  errors, missing/invalid bytes, missing destination, abort and actual full-quota
+  atomic rollback. Check split templates, saved/instance arguments, HTML/CSS
+  remapping and repeated independent imports. Ordinary/protected import routing
+  must preserve dedicated behavior until its local adapter is implemented.
+- [x] Inspect native dialog/preview at 1440/390/320px; no overflow or page errors.
+  Enable `TT_LOCAL_FILE_IMPORT_URL`, `TT_LOCAL_FILE_SYNC_ADMIN_FIXTURE`, optional
+  `TT_LOCAL_FILE_IMPORT_ARTIFACTS` and shared Playwright/Chrome paths for
+  `accountFileImport.browser.test.ts`. Use the production client, a disposable
+  loopback stack and root-relative local storage URLs across preview ports.
+  A CSP-blocked upload is a real failure; do not loosen CSP to pass the fixture.
+- [ ] Complete recordings, bound/linked/managed account import and remaining
+  full-suite acceptance before merge. Standalone file coverage is not that gate.
+
+
+### Standalone recordings and independent offline deletion (2026-10-17)
+
+- [x] Run the production-client `accountRecordingImport.browser.test.ts` using
+  the README disposable local setup. Import a canonical WAV ZIP offline; native
+  playback must advance after cold reload, without an empty-source codec error
+  or a second legacy-cache download button. Edit, reload and export identical
+  bytes with recording purpose intact at 1440/390/320 CSS pixels.
+- [x] Reconnect with verified identity; upload exactly once with recording
+  purpose. A new clean account browser retains and plays the existing recording
+  offline. Guest and other-account retention reads remain denied.
+- [x] Rename offline and delete immediately without syncing the rename first.
+  Observe local removal, a durable account deletion and identical retry after
+  the first successful response is lost. No re-upload or annotation prerequisite.
+  Unrelated account metadata changes must still require explicit review. Retain
+  already annotated media and verify the descriptor preserves title, description
+  and display filename. The native library bulk menu must use the same queue,
+  including one-item, repeated and mixed file/content selections.
+- [x] Import/play/reload the same recording anonymously while offline, then
+  reconnect: no account creation, upload or other remote mutation.
+- [ ] Finish native microphone capture, audio cache account-switch/revocation
+  coverage, bound/linked/managed media and the full local-first matrix before
+  merge. A generated WAV is playback evidence, not microphone evidence.
+
+- [x] Account nested reply reads with unused `sharedRoot: undefined` stay on the
+  scoped local discussion adapter after a cold offline reload; defined shared
+  access continues through the remote authorization path.
+
+
+### Account offline post and reply authorship (2026-10-17)
+
+- [x] In a disposable account browser, cold-reload offline, create a private
+  rich-text post through the native composer, and reload its permalink. Confirm
+  exact text, structured rich text, explicit pending sync and no network mutation.
+- [x] Create a comment and a reply beneath the pending comment offline. Reload,
+  reconnect/verify the same account, and observe exactly one canonical server
+  comment/reply with the correct parents. Draft saving is not a prerequisite.
+- [x] Retain stable submission identity after successful sync; reject changed
+  content with the same request identity. Queue linked local dependencies first.
+  Reject unsupported bound-media/authority payloads without partial acceptance.
+- [x] Refuse a retained discussion remotely and remove synced owned/display
+  cache copies; fence old reads while preserving pending authored text. Preserve
+  account/origin/data-plane isolation and normal remote comment authorization.
+- [x] Inspect desktop and 320px post rendering and measure 1440/390/320px overflow.
+  Known offline authors must not render as Anonymous or `@undefined`.
+- [ ] Complete bound media, full native edit/privacy/delete/conflict flows,
+  linked-Thing surfaces and account draft sync before the full merge gate closes.
+
+
+### Account post media saved on device
+
+- [ ] With a fresh disposable account, cold-reload offline; select media in the
+  normal composer without upload approval, submit a private post, reload its
+  permalink, and verify actual image pixels at 1440, 390 and 320px. No offline
+  mutation request may be made. Failed draft saving must not block submission.
+- [ ] Reconnect the matching verified account with approved upload scope; verify
+  one upload per file, canonical post binding/order, exact downloaded original
+  bytes, and anonymous denial of both the private post and its media.
+- [ ] A stale-version or invalid-content PATCH carrying a different file order
+  changes neither content nor binding; a valid conditional edit commits both.
+- [ ] Selecting then removing a file before submission must stay entirely local.
+  Missing/wrong-purpose files, refused uploads, lost replies and concurrent local
+  reordering preserve bytes and immutable request identity. Export the local post
+  and validate its file closure. Tests: `accountBoundMedia.test.ts` and the opt-in
+  `accountBoundMedia.browser.test.ts` with README's loopback fixture settings.
+- [ ] Finish binding reconciliation, parent deletion, retained remote
+  bound files, import, and complete native comment/media/identity acceptance before
+  considering the full local-first merge gate satisfied.
+
+- Create a rich comment with a selected image while offline; wait for the
+  composer to close after local completion, then cold reload. The comment and
+  decoded image must survive, upload after the pending parent, and retain the
+  parent's private audience. Seeing text still inside the editor is not proof
+  of a saved comment.
+- Refuse a synced parent read and verify direct media readers also reject its
+  own and descendant file IDs while recoverable device bytes remain intact.
+- A client must refuse attachment PATCH writes before transport when the origin
+  advertises `api.things-update` older than 1.11.0.
+
+
+### Offline removal of authored account post/comment files
+
+- [x] Remove an image from each native post/comment editor offline; reload and
+  verify text survives, removed images stay absent and no mutation request runs.
+  Inspect the 320px view, with the content scrolled into view before capture.
+- [x] Reconnect, lose a successful deletion response, and require an identical
+  retry before the sync indicator clears. Verify original bytes return 404 and
+  the original upload request cannot recreate them (`upload_cancelled`). Wait for
+  actual deletion requests; an initially absent status indicator is not completion.
+- [x] Repeat local removal after its file row is gone. The native facade must use
+  the retained intent and return success without a network or draft request.
+- [x] Remove before upload starts, after uncertain start, and while an immutable
+  parent write is pending. Cancel locally or settle the original request in order;
+  never release bytes or create a new upload identity to hide uncertainty.
+- [x] Wrong target/purpose, linked/import/profile files, stale versions and a
+  racing cleanup claim must not delete bytes. Account metadata conflicts require
+  review; stale reviews fail, and keeping the file restores exact bytes at quota.
+- [ ] Complete remote bound-file retention/import, parent deletion and broader
+  account/device reconciliation before treating the full merge gate as passed.
+
+
+### Fresh-device retention of existing account post/comment media
+
+- [x] Create private post/comment files with the normal account API, then use a
+  separate clean browser context to open them. Check decoded original bytes,
+  offline cold reload and native editing/removal at desktop, 390px and 320px.
+- [x] Reconnect after editing both parents. Require persisted text and exact file
+  membership on the original records, no duplicate uploads, durable existing-ID
+  deletion receipts, and anonymous refusal of private records/bytes.
+- [x] Comment edit PATCH must omit its inherited audience snapshot; keep server
+  audience enforcement and never silently drop a different requested audience.
+- [x] Interrupted bytes, quota failure, wrong binding or a read refusal during
+  admission must leave no partial editable parent/files. Concurrent local edits
+  survive; unchanged retention must not cause revision/refresh loops.
+- [ ] Complete normal bound-media import/export, parent context/deletion and
+  cross-device reconciliation before closing the full local-first merge gate.
+
+
+### Offline conversation parent/root navigation
+
+- [x] In a clean anonymous browser, import a Component, create a comment and
+  nested reply offline, cold reload, then follow the reply's parent and root
+  links back to the native discussion. Check desktop, 390px and 320px bounds.
+- [x] In a disposable account, open a comment on a generic Thing and on a private
+  media post. Cold offline reload must retain the real parent link; following it
+  must render the retained parent and its device edits without network writes.
+- [x] Preserve foreign authors and explicit authorized roots when intermediate
+  ancestors are unvisited. A newer direct discussion read cannot erase root
+  context; neither snapshot format creates ownership or account sync intent.
+- [x] Missing/cyclic ancestors, other account/data-plane scopes, known root
+  refusals and pending parent deletion cannot expose stale conversation links.
+  Keep unsynced authored content recoverable after refusal.
+
+- [x] A depth-eight retained account reply with unvisited intermediate ancestors
+  keeps its real parent/root links after cold offline reload. Local traversal at
+  70 levels reaches the root without adding a depth rail.
+
+
+### Offline account bound-file imports
+
+- [x] Unit coverage: import a post with reversed portable attachment order and a
+  reply with its own file; all original bytes and both queues commit atomically.
+  Independent content syncs before upload receipts, then the post and reply bind
+  the confirmed account IDs in order with private/inherited audiences.
+- [x] Unit coverage: export/re-import through anonymous and account adapters with
+  fresh IDs, exact bytes and no portable ownership/authorization fields. Missing
+  targets, corrupt bytes, too many comment files and mixed managed kinds leave
+  no content, bytes or queue intent.
+- [x] Enabled loopback browser fixture: normal offline Import/Download dialogs,
+  cold Component/reply rendering at 1440/390/320px, approved private reconnect,
+  exact originals and anonymous refusal. Run `accountFileImport.browser.test.ts`
+  with the existing README fixture setup; do not count its default skip.
+
+
+### Retained account export refusal fences
+
+- [x] Refuse a retained root or export-only dependency: discard every affected
+  export closure, preserve pending authored edits, and reject prepared JSON/ZIP
+  plans. A delayed export cannot recreate the refused snapshot; a fresh
+  authorized read/export can establish a new one.
+- [x] Cancel/delete a file after preparing its bundle, or refuse its canonical
+  account ID: byte readers, clipboard and final ZIP encoding all reject it.
+  Keep availability checks in process; never serialize callbacks into transfers.
+- [x] Cached ordinary Thing refresh treats 403/404/410 as definitive refusals;
+  session expiry and transient failures preserve ordinary offline content.
+- [x] Enabled `accountExportRefusal.browser.test.ts`: normal Download succeeds,
+  another tab observes the dependency's real 404, and the reopened offline
+  Download dialog produces a visible error and no second file. Verify
+  1440/390/320px bounds and zero offline mutations in a disposable local account.
+
+
+### Native offline export of retained account posts
+
+- [x] A fresh device opens an existing private post/reply with originals, then
+  disconnects. Download through the post menu without an earlier remote export;
+  validate ordered canonical bytes and complete reply/parent content.
+- [x] Normal anonymous Import creates independent editable IDs; cold native
+  rendering and a second Download preserve every original byte without account
+  requests. Pending account text edits and intentional file removals are exported
+  before synchronization; private reconnect creates no replacement uploads.
+- [x] Incomplete legacy caches, missing file records and unknown parents do not
+  become successful partial offline exports. Keep-device conflict review preserves
+  the known local binding, independent of a different remote attachment list.
+- [x] Open the shared post menu with Enter, select Download by touch, and check
+  menu hit targets and export dialog bounds at 1440/390/320px.
+- [ ] Repeat shared-link and cross-account changes during an in-flight export;
+  verify dialog cancellation and that no prior account/key survives the switch.
+
+
+### Retained file access lifetimes
+
+- [x] Refuse a canonical retained file before its first export. Both canonical
+  and local aliases reject fresh exports and media reads; unsynced metadata and
+  recovery bytes remain stored. A stale descriptor cannot undo the refusal.
+- [x] Canonical descriptor 403/404/410 fences retained bytes; 401, network and byte
+  failures preserve normal offline use. Fresh validated descriptors reauthorize
+  identical bytes without uploads and preserve pending edits.
+- [x] Dedicated and keyed export plans reject a refusal arriving during/after
+  preparation, scope retirement and cancellation. Do not persist keyed plans or
+  serialize their in-process checks.
+- [x] Cold production-client fixture: edit/export an existing file offline,
+  reconcile, delete only the disposable server fixture, observe the real 404,
+  withdraw its active preview, and refuse a new native offline Download. Check
+  1440/390/320px layout, no resulting file, no offline mutation or duplicate upload.
+
+
+### Account local draft queue foundation (activation pending)
+
+- [x] Service tests: local save/list/load work without transport, unsent writes
+  coalesce, and acknowledgements never change the editor's local revision.
+- [x] Simulate a lost save response, reconstruct the service, edit or discard,
+  and replay exactly the old write before newer intent. A deleted local draft
+  cannot reappear. Two workers cannot concurrently claim the same write.
+- [x] Conflicts retain both versions; reviewed replacement checks both revisions.
+  Retired identities, malformed replies and quota failures cannot partly commit.
+  Respect a server Retry-After delay without changing the frozen write.
+- [x] Template and working copies own independent originals/upload identities.
+  Existing private draft retention is atomic and hidden from the ordinary library.
+  Refusal after preparation prevents copying; local release does not erase the
+  original parent refusal boundary. Recovery bytes remain stored.
+- [ ] Activate only after verified account/home-data-plane transport, native
+  client/worker/status integration, bounded cached discovery and template-save
+  capability negotiation. Prove cold offline native editing, independent post
+  completion, reconnect and media donation/removal/cleanup races with disposable
+  accounts. Current queue tests alone do not satisfy this acceptance gate.
+
+
+### Generic Thing drafts and cold editor recovery (2026-10-17)
+
+- [x] In a clean anonymous browser, go offline after installing the application
+  shell. In `/editor/Notes`, use the native type menu to create a string and edit
+  it. Load its device draft, reload, edit again and reload immediately after the
+  new draft save completes. The latest text must appear without another picker
+  selection; the older whole-tree snapshot must not replace it.
+- [x] Open the generic draft picker at 1440x1000, 390x844 and 320x844. Its controls
+  remain within the viewport. Record actual screenshots and zero remote writes.
+- [x] In that disposable context only, corrupt the scoped recovery serialization.
+  Reload and verify a visible paused-saving error, unchanged recovery bytes and
+  a still-editable Thing. Never substitute blank data for a decoding failure.
+- [x] Service regression: retire a captured lease during a pending save/load.
+  No old completion may persist, restore or retry into the next workspace.
+  Same-workspace closure drains the final edit and updates only its original key.
+- [x] Regression: a native private post reaches the real disposable account while
+  draft POST remains held; releasing the failure later allows cleanup to converge.
+- [ ] Complete native account/origin/data-plane transitions, explicit legacy-key
+  recovery and the broader draft/media/conflict matrix before merging PR #1000.
+
+
+### Legacy native editor device storage (2026-10-17)
+
+- [x] Scope tree snapshots by account, origin and selected database. Invalidate
+  a lease between byte and metadata writes: both roll back. At full quota, a
+  refused replacement keeps the earlier snapshot and usage; retry after freeing
+  fixture bytes succeeds. Malformed/damaged snapshots remain recoverable.
+- [x] In a clean anonymous context, seed only the earlier device tree, then edit
+  through the native editor and cold reload offline. Preserve tagged Dates,
+  nested cycles and original legacy bytes, with zero remote writes.
+- [x] In a disposable account context, old owner-only data must not auto-load.
+  Review it, change the original during review, and reject copying until it is
+  reviewed again. Reject an existing destination name. Copy under a fresh name
+  offline; current content/settings and source bytes remain intact after reload.
+  A 600 KiB source must finish even though ancillary drafts have a smaller cap.
+- [x] Recovery controls fit 1440/390/320px viewports and pass hit testing across
+  the copy button. Leave clearance for the floating assistant on narrow phones;
+  a bounding box alone does not establish a reachable control.
+- [ ] Complete native account/origin/data-plane transitions during tree reads,
+  recovery and broadcasts, whole-tree account sync, and root-reference semantics.
+  These service/native recovery checks do not close the broader acceptance matrix.
+
+
+### Plain comment/reply recovery and multiline input (2026-10-17)
+
+- [x] Earlier text must not auto-fill a new selected workspace. Review/copy the
+  exact device source; if it changes during review, refuse copying until reviewed
+  again. Append to existing text, preserve all old bytes/IDs and never delete old
+  keys after submitting. Refuse invalid, oversized, wrong-editor and media-bearing
+  snapshots, including their pending variants, without replacing current text.
+- [x] Use Shift+Enter and recover text with line breaks. Cold reload offline and
+  retain those breaks in the actual native control. IME Enter must not send;
+  ordinary Enter must. Verify recovery and composer bounds/hit tests at
+  1440x1000, 390x844 and 320x844.
+- [x] In disposable IndexedDB only, make draft record writes throw. Wait for the
+  visible retry state, then submit a comment; local completion/input clearing
+  must finish. Reload, retain the completed comment and original legacy source,
+  and use normal Reconnect to verify exactly one matching account comment.
+- [x] Repeat anonymous comments, nested replies, rename, search and thread
+  navigation with no remote writes. Await actual input clearing after submit;
+  optimistic text alone must not be mistaken for completed submission.
+- [ ] Complete native live account/origin/data-plane changes during comment
+  review/submission, remote-only older drafts and rich/media recovery before
+  declaring the wider draft acceptance matrix complete.
+
+
+### Cross-tab draft identity races (2026-10-17)
+
+- [ ] With two disposable accounts in one browser, hold a real legacy tree and
+  plain-comment read during review, then during copy. Switch accounts through
+  Settings in another tab, release the reads, and verify old modals/content never
+  enter the new workspace. Return to the original account and verify its current
+  text and original recovery sources remain intact.
+- [ ] Hold a successful private-comment response after the real server commit.
+  Require local completion before release, switch accounts, and verify the new
+  account cannot read the parent or display the comment. Return, wait for the
+  exact original `thing-sync` record to acknowledge with no pending operation,
+  then verify one server comment and an empty composer.
+- [ ] Run the enabled `drafts/workspaceSwitch.browser.test.ts` against a disposable
+  loopback API and production client. Close recovery dialogs before clicking Send
+  so modal focus restoration is not mistaken for submission completion.
+- [ ] Continue the separate origin/data-plane, rich/media and remote-only legacy
+  draft matrix; these cross-tab account checks do not establish those boundaries.
+
+
+### Account-only older plain-draft recovery (2026-10-17)
+
+- [ ] Seed a private old raw-context comment draft and template in a disposable
+  account without device copies. Opening the comment must not auto-adopt either.
+  Find earlier account drafts, review one, and verify no writes, media fetches or
+  retained source IDs/queue state. Summary pages stay bounded and validate context.
+- [ ] Change the source after review. Copy must refuse, retain current text and
+  require review again. Copy an unchanged source/template and verify current text
+  is preserved, only text is appended, and original IDs/mode/revisions stay intact.
+- [ ] Reload the independent copy offline. Earlier account review must explain
+  reconnect and make no account request; anonymous discussions must never query
+  `/api/v1/drafts` or sync account data.
+- [ ] At 1440/390/320px, verify long source names wrap, the dialog fits and Copy
+  stays reachable above floating controls. Run `remotePlainComment.browser.test.ts`
+  with the loopback setup in `docs/local-workspaces.md`.
+- [ ] Hold fresh account review and copy responses across a native cross-tab
+  account switch. Neither the old preview nor copied text may enter the new
+  account; returning preserves current edits and the original source revision.
+  Run the expanded `workspaceSwitch.browser.test.ts`.
+- [ ] Keep rich/media/pending-submission reconciliation and origin/data-plane
+  transitions as separate acceptance gates; refusing those payloads here is not
+  complete recovery support for their original editors.
+
+
+### Offline post templates and parent media cleanup (2026-10-17)
+
+- [x] In clean anonymous and disposable account browsers, install the offline
+  shell, disconnect, create a post with an image, cold reload, and use Post options
+  → Save as template. Create an independent working copy through the normal picker;
+  its context must match this workspace and its file ID must differ from the source.
+- [x] Delete the source offline. Its local files disappear; template and copied
+  post bytes remain exact after reload at 1440/390/320px, without horizontal overflow.
+- [x] For the disposable account only, reconnect with normal upload approval.
+  Post/template originals sync independently, remain private, and deny guest reads.
+  Delete the synced post offline, reconnect, and verify parent/file removal while
+  the reusable template retains exact bytes. No offline mutation requests occur.
+- [x] Anonymous template/post creation never requests account drafts. Duplicate
+  template clicks coalesce; uncertain retries reuse their copy identity; stale
+  workspace/unmounted callbacks cannot start another request or show a late result.
+- [x] Service regressions: unsent nested comment/file deletion makes no upload;
+  a protected child rolls back the cascade; uncertain parent writes settle before
+  file cleanup and remote parent deletion; lost deletion replies reuse identity.
+- [ ] Complete broader retained/shared-parent deletion, full-quota cascade,
+  restored-file conflict UI, and native account/origin/data-plane race acceptance
+  before closing the full local-first matrix. This checkpoint is not that closure.
+
+Run `test:local-workspace`, `test:drafts`, `test:feed` and separately enable
+`app/drafts/offlinePostTemplate.browser.test.ts` as documented in README.
+
+
+### Native anonymous/offline History menu (2026-10-17)
+
+- [x] In a clean anonymous context, import and rename an editable Component while
+  offline. Cold reload its normal detail page, open Thing actions → History, and
+  inspect the original recorded data. History must be offered; Send to Lopu must
+  remain absent. No remote mutations or account-draft requests occur.
+- [x] In disposable account A, create a private Thing and read its canonical History
+  online. Disconnect and cold reload the detail page. Open the normal History menu
+  and read the cached version data at 1440/390/320px, including scrolling to and
+  opening the version on a phone. Cached content stays visible when refresh fails.
+- [x] With History open, use Settings in another tab to switch to disposable B.
+  The modal closes, the old recorded value disappears and B receives a private
+  Thing 404. Return to A: History stays closed until explicitly reopened.
+- [ ] Complete account-local mutation capture and remote reconciliation, plus
+  native origin/data-plane switches. Cached account History reads are not proof of
+  either. Keep the full local-first merge gate open.
+
+Enable `details.browser.test.ts` and `historyMenu.browser.test.ts` with the loopback
+variables in README; also run `test:local-workspace`, `test:things`, `test:timeline`
+and `test:nav`.
+
+
+### Offline parent deletion and bound media conflict regression
+
+- In a disposable approved account, save a private post with an image, allow sync,
+  disconnect, and delete through Post options. Independently edit the remote post
+  before reconnect. Confirm sync reports a conflict and both newer text and image
+  remain available remotely. No attachment DELETE may precede parent acceptance.
+- Use Review sync → Compare versions → Keep account version, cold-reload offline,
+  and verify the restored text/image. A changed file binding must retain recovery
+  bytes for review. Repeat an uncertain parent write/delete with its original ID.
+- Without a remote edit, delete offline and reconnect: parent and image disappear,
+  a separate template image survives, and `retainReceipt:true` reconciles the
+  existing attachment ID without its upload request ID. Refuse malformed options,
+  foreign Origin and an origin lacking `api.things` 1.34.0 before mutation.
+- Enable `offlinePostTemplate.browser.test.ts` with the documented loopback fixture
+  variables. It runs three native cases, including the conflict/recovery case;
+  default skipped cases are not acceptance evidence. Mid-cascade server writes,
+  deeper child conflicts and broader retained/shared-file races remain separate
+  full-rollout checks.
+
+
+### Account device History capture and reconciliation (2026-10-17)
+
+- [x] In a disposable account, load a private Data Thing online, disconnect and
+  rename twice through the normal menu. Cold reload and inspect both recorded
+  versions in native History at 1440/390/320px; no remote write occurs offline.
+- [x] Reconnect through normal identity discovery. Exactly two private client/draft
+  events receive canonical server receipts, the latest content syncs independently,
+  and a guest receives 404 for the Thing and 401 for Timeline.
+- [x] Verify full-quota receipt acceptance, atomic content/queue/history rollback,
+  immutable captured components, lost-reply retries, cross-tab ancestry and
+  account/origin/plane isolation with `accountTimeline.test.ts`. Cache pruning
+  must preserve device-authored versions; remote reads must not invent them.
+- [x] With private History open, switch accounts using another native Settings tab.
+  The modal closes and old data is denied; returning does not reopen it.
+- [ ] Complete feature-specific protected History, all account-offline controls,
+  native origin/data-plane transitions and current-head CI/deployed acceptance.
+
+Use the README loopback variables for `accountTimeline.browser.test.ts` and
+`historyMenu.browser.test.ts`; default opt-in skips are not browser acceptance.
+
+
+### Offline account History downloads (2026-10-17)
+
+- [x] Cold reload offline, select a cached accepted revision, and use the normal
+  Export button. Validate the downloaded archive, exact historical content and
+  original receipt without any Timeline request.
+- [x] Export an unacknowledged intermediate edit at desktop/390/320px. Keep
+  client/draft provenance and a null receipt; notes/names must identify partial
+  device context. Reconnect and verify genuine receipts independently of export.
+- [x] Refuse wrong account/origin/plane, missing ancestry/parts, invalid context,
+  oversized archives and aborted requests. A prepared download must become
+  unavailable when its workspace retires or its caller cancels.
+- [ ] Verify offline restore/undo/branches/notes/naming and complete retained
+  note/name context; these are not established by an export-only test.
+
+Run `accountTimelineExport.test.ts`, `accountApi.test.ts`, shared Timeline tests
+and the README-enabled `accountTimeline.browser.test.ts`. Default browser skips
+are not native acceptance evidence.
+
+
+### Offline account History restore and undo (2026-10-17)
+
+- [x] From a retained ordinary account Thing, restore an earlier device version
+  through the normal History comparison after a cold offline reload. Content,
+  sync intent and a canonical client/draft event must commit together.
+- [x] Undo a device edit without a prior upload. Keep later independent properties;
+  require explicit choices for overlap. Inspect desktop/390/320px review and reload
+  the restored content before reconnecting. No offline write request is allowed.
+- [x] Reconnect through verified identity discovery; exact events receive real
+  receipts independently of content sync. Guest Thing/History access stays denied.
+- [x] Restore a cached server basis and recorded component copies in focused
+  fixtures. Refuse stale heads/components and wrong scopes; injected History
+  failure must roll back content and sync intent. Concurrent retries commit once.
+- [x] Retry a committed restore after another edit or deletion; return its saved
+  result without changing current content. Retired/aborted calls must fail.
+- [ ] Complete deleted-account reconciliation/recovery, editor-specific pending
+  draft sources, full native component/branch merges, notes/names and broader
+  account/origin/data-plane transitions before declaring the full suite complete.
+
+Run `accountTimelineVersions.test.ts`, `accountApi.test.ts`, existing shared
+version/Timeline suites and README-enabled `accountTimelineRestore.browser.test.ts`.
+
+
+### Offline account deleted-Thing recovery (2026-10-17)
+
+- [x] Delete a disposable private account Thing through Things and confirm its
+  removal through the real API. Cold reload History offline, choose Recover
+  this Thing, inspect 1440/390/320px review, recover privately and cold reload
+  the editable result. Reconnect through verified identity and confirm the same
+  ID is recreated via normal authenticated create; guests still receive 404.
+- [x] Hold create/update/delete responses across recovery. Late acknowledgements
+  must preserve current content and pending sync. Lose a DELETE response, reopen
+  storage, replay the identical request, then create the recovered content.
+  New linked content must wait until its recovered parent’s frozen delete resolves.
+- [x] Refuse stale heads, colliding identities and conditional-write conflicts;
+  require review without losing local edits. Preserve private audience, folder
+  fallback, recorded component copies and atomic rollback on History failure.
+- [ ] Complete attachment-bound/protected recovery and mid-cascade child/file
+  races, plus the broader account-offline acceptance matrix.
+
+Run `accountDelete.test.ts`, `accountTimelineVersions.test.ts`, shared Timeline
+suites and README-enabled `accountTimelineRecovery.browser.test.ts`.
+
+
+### Offline account History names and notes (2026-10-17)
+
+- [x] Name, rename, clear and name a retained saved version offline; cold reload
+  at 1440/390/320px and check the pending label and usable editable input.
+  Save a note without waiting for remote sync. No offline write requests occur.
+- [x] Reconnect via normal discovery. Verify actual API names/notes, canonical
+  receipts, command order and expected revisions; cold reload offline again.
+  Guests still cannot read the private Thing or its History. Remove an accepted
+  note offline, confirm the remote note remains until reconnect, then confirm
+  its independently queued removal completes.
+- [x] Reopen the queue after a lost reply: retry the exact frozen command,
+  then rebase successors only from its actual acknowledgement. Conflicting
+  tabs, definitive refusal/review, wrong scope, bounds and transaction failure
+  preserve pending work. Unrelated names can sync after a definitive refusal.
+- [x] Upgrade a v6 database without dropping pending notes. Export acknowledged
+  cached names after reload; omit pending projections and retain clear tombstones.
+- [ ] Complete the broader History/local-feature acceptance matrix. Pending-note
+  removal and device draft naming have separate checklists below.
+
+Run `test:timeline`, `test:local-workspace`, and README-enabled
+`accountTimelineNames.browser.test.ts`. An offline browser flag is checked at
+transport boundaries as well as the UI; a previously verified connection must
+not continue starting writes while disconnected.
+
+
+### Pending History note removal (2026-10-17)
+
+- [x] Queue add then remove, reopen storage and drain in acknowledgement order.
+  Lost replies replay the exact add; refused adds block only their removal.
+  Dismiss refuses uncertain work and removes never-sent dependent removal only
+  after a definitive add refusal. Retry targets the failed operation.
+- [x] Old page/exact-version replies and duplicate add acknowledgements cannot
+  restore removed cache entries. Reopen a v7 database: preserve names/notes and
+  persist the bounded v8 read revision fence.
+- [x] Server removal erases text, keeps a metered private identity, and refuses
+  delayed add/explanation retries. Local legacy boolean markers upgrade to the
+  same record. Corrupt markers/accounting and failed quota writes preserve data.
+- [x] Run the native fixture at 1440/390/320px, including pending removal before
+  first sync, cold reload, zero offline requests and private guest refusals.
+- [x] Run real replica add/remove races and delayed retries through
+  `test:timeline:notes` using README's guarded disposable database settings.
+
+
+### Device draft naming and anonymous export (2026-10-17)
+
+- [x] Name/rename/clear an anonymous authored draft, reopen storage and verify
+  canonical metadata, unchanged provenance and no account records. Refuse
+  foreign/malformed targets, effects and versions without after content.
+- [x] Queue a name before its account version upload; lose the upload reply,
+  reopen the queue and verify exact upload replay before the name is sent.
+  Real name receipts must not change the original draft event or its identity.
+- [x] Use normal local export for an anonymous client draft; preserve editable
+  content, accepted local name and local authority receipt. Account partial
+  exports must not label pending name projections as accepted metadata.
+- [x] In clean browsers, verify anonymous native Builder drafts and offline
+  account edits at 1440/390/320px, cold reload names and download actual JSON.
+  Anonymous checks must make no account mutations or Timeline requests; account
+  naming must finish locally and synchronize only through verified reconnect.
+
+- [x] Anonymous `canChangeLocally` and `canExportLocally` return synchronous
+  booleans for the current local scope and false for foreign/retired scopes.
+  The remote-method blocking adapter must not turn capability predicates into
+  rejected promises or generate unhandled errors during normal History render.
 
 ## Daily provider model availability (2026-10-17)
 
@@ -10007,6 +11422,115 @@ separate from deterministic discovery/lease tests.
       draft preservation, nested deep links and narrow layout. It performs no
       API writes and does not prove authenticated server mutation behavior.
 
+
+## Offline workspace with collapsed Settings cards (2026-10-17)
+
+- [x] Clean anonymous production client: import offline, open Settings → Things,
+  require Device storage initially collapsed; expand/collapse with Enter/Space
+  and pointer. Reopen and cold reload without losing authored Things/History.
+- [x] A background native editor-tree save may change total usage. Require
+  unchanged authored records and a meter matching current exact record bytes;
+  do not use an earlier total as a false data-loss signal.
+- [x] Another tab's imported Thing updates usage. A missing ledger retains the
+  last-known value with an explicit error; restoring it recovers the meter.
+  Account writes and browser errors remain absent. Inspect 1440/390/320px.
+- [x] Run the shared Settings card fixture at those widths for field retention,
+  nested deep links and no horizontal overflow; rerun anonymous/account native
+  History and canonical export after upstream API/settings integration.
+
+Bug classes: cold-reload usage assertions must account for legitimate preference
+writes, and a cancellation status can precede the subscribed History projection;
+wait for row removal before asserting absence. These checks do not imply all
+Settings categories, authenticated admin mutations or the full local matrix are
+complete. Evidence is linked in the PR #1000 integration note.
+
+
+### Anonymous encrypted device passwords (2026-10-17)
+
+- [x] In a clean anonymous production-client context, open Settings → Security →
+  Device passwords, install the offline shell and disconnect. Create a separate
+  passphrase, save through the normal field editor, lock, reject a wrong phrase,
+  unlock and cold reload. Verify masked values at 1440/390/320px with no horizontal
+  overflow. Global floating controls may overlay edge controls; scroll to access.
+- [x] Inspect serialized workspace records, decoded native-tree bytes and local
+  storage using synthetic credentials: neither phrase, title nor field value
+  may persist unencrypted. No account records, anonymous sync commands, Timeline
+  copies, password API requests, mutation requests or browser errors appear.
+- [x] Unlock two tabs separately. Save in one and attempt a stale edit in the
+  other: the conflict retains unsaved input, and reopening reads the saved value.
+  Export through the normal acknowledgement/download, delete and re-import via
+  the normal CSV preview. Preserve the exact synthetic password.
+- [x] Automated crypto/storage checks: browser/server envelope and password-key
+  interoperability; wrong key, origin, account and plane; malformed formats and
+  tampering; exact retry/conflict; quota rollback; cancellation/lock during
+  encryption and transactions; missing-key damage; idle timeout and paging.
+- [ ] Account offline vault UI/sync/conflict recovery, provider/environment
+  credentials and signed native AutoFill remain outside this checkpoint.
+
+Regression: removing a login gate must not store plaintext credentials in the
+ordinary local Thing tree or grant anonymous access to a live account vault.
+Local evidence: `tmp/local-passwords-native-accepted/verification.json` and its
+screenshots; 39 password + 432 workspace/offline-shell tests pass. The 47 opt-in
+skips are excluded. This is not CI or deployed acceptance.
+
+
+### Account encrypted device passwords and independent sync (2026-10-17)
+
+- [x] On a disposable local account, seed a normal API credential, set up a
+  separate device passphrase and retain it through the normal password UI.
+  Disconnect, edit/save, cold reload/unlock and export CSV at 1440/390/320px.
+  Exact synthetic secret values remain masked; no horizontal overflow, browser
+  errors or offline UI mutation requests occur. Serialized storage, native-tree
+  bytes and localStorage contain no plaintext phrase, title or secret.
+- [x] While that UI is offline, make a competing authorized fixture edit. On
+  reconnect, refuse the stale revision. The normal reviewed-copy control keeps
+  both account and device versions as independent canonical server entries.
+  A second disposable account gets a separate vault and a 404 for the first entry.
+- [x] Automated regressions: local writes finish without the network; lost
+  responses retain exact encrypted retries through reopen and later edits; two
+  tabs claim one entry in order; lock/retire aborts late adoption; incomplete
+  refreshes retain entries; reviewed resolutions reject newer local changes;
+  quota failure rolls replacement/copy back together; background work never
+  renews the idle unlock window; actor/plane mismatch retires direct requests.
+  Automatic conflict-title reads, list refreshes and export paging must also
+  preserve the five-minute deadline; pointer/keyboard activity still renews it
+  in both anonymous and account vaults.
+  Shared device-key lifecycle changes must open the fixed synthetic legacy
+  password fixture unchanged. Provider key copies must fail across domains,
+  owners, origins, data planes and the anonymous namespace; retirement must
+  lock immediately and damaged key storage must preserve encrypted records.
+- [x] Re-run anonymous native setup/lock/reload, two-tab edits and normal CSV
+  transfer: no password requests or account commands are introduced.
+- [ ] Broader real-device/native AutoFill, provider/environment credentials and
+  all native account/origin/data-plane transitions remain outstanding.
+
+Regression: finishing an account credential edit must not wait for account
+connectivity or draft saving; retrying an ambiguous upload must not silently
+advance its revision or overwrite a competing device's value. Evidence:
+`tmp/account-passwords-native-accepted/`, `tmp/account-passwords-anonymous-regression/`
+and the focused sync/transport test logs. These are local results, not CI or deployed acceptance.
+
+### Account provider metadata / selected offline retention — 2026-10-17
+
+- [x] Unit checks: metadata and values stay encrypted; remote-only entries cannot
+  be revealed as invented empty tokens; generic edits/BSON type changes produce
+  distinct server versions; incomplete, malformed and oversized snapshots fail.
+- [x] Unit races: older metadata and selected-value replies cannot replace local
+  edits; pending children retain their environment metadata; local/remote totals
+  respect the device entry bound; locking and anonymous scope stop adoption.
+- [x] Real loopback API with a disposable account: metadata contains no values or
+  ciphertext, generic editing changes its comparison version, and fresh selected
+  verification returns the exact corresponding value/version. Wrong password,
+  wrong account, expected actor/plane mismatch and cross-origin are refused.
+- [ ] Account Settings retention/reconnect and ordered conditional write sync,
+  including lost replies after generic deletion, remain unfinished.
+
+Regression: a Vault's embedded `crystal.updatedAt` is not an authoritative sync
+version because ordinary Thing edits can leave it unchanged. A selected old
+credential must never attach to a newer device/account metadata version. Run the
+opt-in `providerMetadata.api.test.ts` through the documented loopback setup in
+[local workspaces](docs/local-workspaces.md#account-vault-metadata-and-selected-retention-implementation-in-progress).
+
 ## Automatic iOS TestFlight and vault delivery
 
 - [ ] Run `test:ios-release`, both capability suites and `server/utils/apiFallback.test.ts`.
@@ -10050,3 +11574,105 @@ separate from deterministic discovery/lease tests.
   to collapsed; collapsing and reopening preserves unsaved edits.
 - Check the connection selector and explanatory text at desktop and narrow mobile
   sizes; credentials are masked and the buttons remain reachable.
+
+## Vault environment mutation integrity (2026-10-17)
+
+- [x] In a disposable loopback account, create an environment and secret. Generic
+  Things deletion and conversion of the nonempty environment must return 409;
+  metadata and versions must remain unchanged after refusal.
+- [x] Generic creation with a missing environment rolls back completely. Missing
+  and self group assignments are refused; valid renames, ungrouping and empty
+  environment deletion still work. Late creation cannot reference a deleted group.
+- [x] Race generic group deletion against dedicated entry creation through the real
+  API; every acknowledged child retains its owned environment and metadata remains
+  complete. Current four trials exercised creation winning; do not claim both race
+  orders were observed. Verify fixture cleanup through the API.
+- [ ] Extend native account-provider synchronization acceptance to History/import
+  restoration, cross-plane transitions and retained receipt retries before rollout.
+
+Use `providerIntegrity.api.test.ts` with the loopback setup in
+[local workspaces](docs/local-workspaces.md#vault-environment-integrity-before-account-synchronization).
+
+
+## Conditional account Vault writes (2026-10-17)
+
+- [x] In a disposable loopback account, retry an identical create concurrently:
+  one content revision and one immutable completion effect, with equal receipts.
+- [x] Compete two updates against one version: exactly one succeeds. A normal
+  generic edit invalidates the old version; a missing expected update never creates.
+- [x] Delete the target through normal Things, then retry the original create:
+  return the retained receipt and keep the target absent. Verify delete retries too.
+- [x] Reject wrong owner/origin/plane, caller authority fields and oversized input.
+  Refused environment membership rolls back content and receipt; nonempty groups
+  remain intact. Provider metadata-only edits preserve the existing ciphertext.
+- [x] Queue tests cover lost response plus cold unlock, newer local edits, competing
+  tabs and expired claims, wrong receipts, locking, cancellation and corrupt state.
+  Anonymous storage must never invoke the sender or create account commands.
+- [ ] Finish normal account Settings, reviewed conflict resolution, selected fresh
+  value retention, native offline/reconnect and cross-plane browser acceptance.
+
+Use `providerWrites.api.test.ts` with the documented isolated fixture setup.
+Unit transports are not proof of server or deployed behavior.
+
+
+## Account provider device workspace (2026-10-17)
+
+- [ ] In a disposable account, open Security → Secure Vault, set a separate device
+  passphrase, and confirm account metadata arrives without credential values.
+  Verify one selected value with the current password/passkey and explicitly
+  keep it offline. A wrong owner/plane, changed session/role or changed metadata
+  version must refuse retention without replacing device edits.
+- [ ] Go offline, save an environment and credential, then cold reload at
+  1440/390/320px. Unlock the same account partition with `user:null`; retained
+  values and local edits remain usable, with no account mutation requests.
+- [ ] Make a conflicting fixture account change, reconnect, and review every
+  affected entry. Independent copies remap environment references; account
+  originals remain unchanged. Account-version selection discards only the
+  reviewed commands. Newer edits, competing tabs, uncertain requests and quota
+  failures must leave the entire encrypted working set intact.
+- [ ] Repeat anonymous Settings acceptance: no account commands, protected
+  requests or uploads. Check reveal masking, lock, cold reload and narrow
+  controls. Separately exercise account/origin/plane switches during pending
+  sync, fresh verification and retention; this is broader than one happy path.
+
+Regression: resolving a refused environment alone can orphan queued children.
+Review includes historical moves, uses an authenticated local snapshot token,
+commits all reviewed records/commands atomically and never rewrites a frozen
+request. `providerReview.test.ts`, `providerReview.api.test.ts` and
+`accountProviders.browser.test.ts` cover this boundary; fixture commands and
+verification limits are in `docs/local-workspaces.md`.
+
+
+## Conditional device theme synchronization
+
+- [ ] Use a disposable full account through `/api/v1/themes/sync`. Confirm exact
+  retries return the same receipt, changed payloads cannot reuse a write ID,
+  stale versions refuse changes, and old create receipts cannot resurrect a
+  deleted theme. Generic title edits must also invalidate a device preimage.
+- [ ] Verify anonymous, temporary, service, internal Action, wrong-origin,
+  changed-account and changed-plane requests cannot read or write the catalogue.
+  A confirmed custom content-plane selection still stores themes at home.
+- [ ] With one saved-theme slot left, race two ordinary create requests: exactly
+  one succeeds. Delete a selected theme and confirm its active pointer is cleared
+  before acknowledging completion. Clean all fixture entries through normal APIs.
+  Run `test:theme-sync` and opt in to the two guarded loopback API fixtures.
+- [ ] In native account Settings, switch accounts while a provider proof response
+  or selected-value encryption is held. Deliver the old completion after switching:
+  no old value may display or persist; returning to the original account still
+  requires fresh proof. `providerIdentity.browser.test.ts` covers these three
+  cross-tab races; origin/plane transitions remain separate acceptance work.
+
+### Account theme device save and independent selection
+
+- [ ] Offline account Theme Studio: save privately, apply, edit, delete and cold-reload; each local operation finishes without a remote request. Check 1440/390/320px and no horizontal overflow.
+- [ ] Reconnect: theme content and selection synchronize independently; pending themes are not advertised as public links.
+- [ ] Concurrent theme changes require fresh exact review; copying an active theme selects the independent private copy locally and queues its new selection.
+- [ ] Replay a lost create acknowledgment before a later edit; its version must equal the actual persisted BSON postimage (including stored field order).
+- [ ] Replay a lost selection acknowledgment after another normal selection/deletion; it must not restore the old pointer. Change account/origin/plane during reads and reviews; no stale data or choice crosses the boundary.
+- [ ] Run accountThemes.browser.test.ts, accountThemes.api.test.ts and themeSelection.api.test.ts against disposable loopback fixtures; retain screenshots and cleanup evidence.
+
+### Theme local completion and anonymous History (2026-10-17)
+
+- [ ] In a clean anonymous browser, cache the native app, go offline, change the accent and Save. Wait for Save to return, reload immediately and verify the new tokens. Open History, select the creation, open Versions and download the actual theme-content JSON; no mutation request may be made. Repeat at 1440/390/320px with the DevKit launcher visible; the mobile sheet must keep Export reachable.
+- [ ] Edit/import/delete a local theme; History preserves exact earlier partial tokens using the shared approved theme snapshot. An export cannot substitute a different theme payload or owner; generic protected writers remain refused. Simulated History quota failure rolls back the local content write.
+- [ ] With a disposable account, edit offline, reload immediately, then make a conflicting normal private API edit. Review both values, keep the device version as a private copy and verify both originals plus the remapped active choice after reload. Run the opt-in anonymousThemeHistory.browser.test.ts and accountThemeConflict.browser.test.ts fixtures.

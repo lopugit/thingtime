@@ -1,8 +1,9 @@
 import React from 'react';
 import { Box, Button, Flex, Input, Text } from '@chakra-ui/react';
-import { useSearchParams } from 'react-router';
+import { useNavigate, useSearchParams } from 'react-router';
 
 import { useApi } from '~/hooks/useApi';
+import { useWorkspaceUser } from '~/hooks/useWorkspaceUser';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { FeedShortcutsContext, useFeedShortcuts } from '~/hooks/useFeedShortcuts';
 import { readLocalCache, writeLocalCache } from '~/hooks/localCache';
@@ -42,8 +43,10 @@ const readCachedScope = (loggedIn: boolean): FeedScope => feedScopeOf(readLocalC
 const PAGE_SIZE = 20;
 
 export const FeedPage = () => {
+  const navigate = useNavigate();
   const api = useApi();
   const user = useCurrentUser();
+  const workspaceUser = useWorkspaceUser();
   const lopu = useLopu();
 
   const [searchParams, setSearchParams] = useSearchParams();
@@ -68,6 +71,16 @@ export const FeedPage = () => {
   const [nextCursor, setNextCursor] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [ranked, setRanked] = React.useState(false);
+  const [localTrainingError, setLocalTrainingError] = React.useState<string | null>(null);
+  React.useEffect(() => {
+    if (!workspaceUser?.localOnly || isDefaultAlgorithm(searchParams.get('sort'))) return;
+    let cancelled = false;
+    api.v1.algorithms.list().then((result: any) => { if (!cancelled) setAlgorithmId(result.activeAlgorithmId); }).catch(() => {});
+    return () => { cancelled = true; };
+    // The captured API is scoped to this workspace; cancel on identity changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workspaceUser?.id, workspaceUser?.localOnly]);
+
 
   // login/logout swaps the viewer — re-seed the algorithm from their profile
   // and the scope from the cache (a logout drops back to all: a guest has no
@@ -287,7 +300,7 @@ export const FeedPage = () => {
           const pagePosts: PublicPost[] = mergeReactionOverlays(startedAt, searchResponsePosts(resp));
           setPosts((prev) => appendPostsDeduped(reset ? [] : prev, pagePosts));
           setNextCursor(resp.nextCursor ?? null);
-          setRanked(!!resp.ranked);
+          setRanked(!!resp.ranked); setLocalTrainingError(resp.localTrainingError || null);
           return;
         }
 
@@ -316,7 +329,7 @@ export const FeedPage = () => {
           return appendPostsDeduped(reset ? [] : prev, page);
         });
         setNextCursor(resp.nextCursor ?? null);
-        setRanked(!!resp.ranked);
+        setRanked(!!resp.ranked); setLocalTrainingError(resp.localTrainingError || null);
       } catch (err: any) {
         if (seq !== requestSeqRef.current) return;
         // a failed RESET must not leave the previous query's posts posing as
@@ -392,8 +405,9 @@ export const FeedPage = () => {
   // your own fresh post beats strict filter fidelity, and the next Apply or
   // page reload reconciles the list
   const handlePosted = React.useCallback((post: PublicPost) => {
+    if (post.id.startsWith('local-')) { navigate(`/post/${encodeURIComponent(post.id)}`); return; }
     setPosts((prev) => [post, ...prev]);
-  }, []);
+  }, [navigate]);
 
   // hook the engagement observer onto every rendered card wrapper
   const listRef = React.useRef<HTMLDivElement | null>(null);
@@ -619,7 +633,7 @@ export const FeedPage = () => {
           />
         )}
 
-        {user && (
+        {workspaceUser && (
           <Box ref={composerBoxRef}>
             <PostComposer onPosted={handlePosted} />
           </Box>
@@ -629,6 +643,8 @@ export const FeedPage = () => {
             when there are none, so the list below never shifts */}
         {user && <MemoriesCard />}
 
+        {localTrainingError && <Text fontSize="sm" role="alert">Local training storage: {localTrainingError}</Text>}
+        {algorithmId?.startsWith('local-') && <Text fontSize="sm" role="status">This device ranks each available public page using your local interests. Your profile stays on this device.</Text>}
         <Box ref={listRef}>
           <FeedShortcutsContext.Provider value={shortcuts.registry}>
             <PostList

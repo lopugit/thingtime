@@ -25,6 +25,7 @@ import { useLopu } from '~/components/Lopu/useLopu';
 import { LopuSettingsRows } from '~/components/Lopu/LopuHost';
 import { DRAWER_TOP_LEVEL_DEFAULT_LIMIT, useDrawer } from '~/components/Nav/Drawer/useDrawer';
 import { ColorControl, ThingsBadgePaddingControl } from '~/components/ThemeSettings/controls';
+import { useWorkspaceUser } from '~/hooks/useWorkspaceUser';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import type { CurrentUser } from '~/hooks/useCurrentUser';
 import { readLocalCache, writeLocalCache } from '~/hooks/localCache';
@@ -276,6 +277,7 @@ export const SettingsContent = ({
 }) => {
 	const contentRef = React.useRef<HTMLDivElement>(null);
 	const user = useCurrentUser();
+	const workspaceUser = useWorkspaceUser();
 	const api = useApi();
 	const lopu = useLopu();
 	const routerNavigate = useNavigate();
@@ -644,13 +646,13 @@ export const SettingsContent = ({
 						<ThingsSettings />
 						{/* subspaces — vote pills + default sort (per-browser preferences) */}
 						<SubspacePreferencesSection />
-						{/* 3 · feed algorithms (auth only) */}
-						{user && (
+						{/* Feed algorithms use workspace content identity. */}
+						{workspaceUser && (
 							<SettingsSection
 								eyebrow="Feed algorithms"
 								description="Algorithms learn from what you linger on in the feed — the active one trains as you scroll. Keep a few for different moods, branch the ones you like, and switch anytime."
 							>
-								<AlgorithmManager key={user.id} />
+								<AlgorithmManager key={workspaceUser.id} />
 							</SettingsSection>
 						)}
 						<DesktopSettings />
@@ -790,6 +792,10 @@ export const SettingsContent = ({
 				)}
 				{tab === 'security' && (
 					<Flex direction="column" gap={4} minW={0}>
+            {workspaceUser?.localOnly && <SettingsSection eyebrow="Device passwords" description="Encrypted passwords and authenticator entries on this device, available offline.">
+              <Button as="a" href="/passwords">Open device password manager</Button>
+              <Text fontSize="sm">Unlock with a separate device passphrase. Anonymous entries are never uploaded.</Text>
+            </SettingsSection>}
 						{/* security (auth only) — email 2FA + the reset flow's home */}
 						{user && !user.temporary && (
 							<SettingsSection
@@ -833,13 +839,13 @@ export const SettingsContent = ({
 						{/* Every account gets the same write-only encrypted key/value store as
 		    the admin integration console, scoped to that account's private Things.
 		    Anchored: the drawer's Lopu → Secure Vault row deep-links #secure-vault. */}
-						{user && !user.temporary && (
+						{(
 							<Box id="secure-vault" width="100%" scrollMarginTop="calc(var(--tt-nav-clearance, 54px) + 16px)">
 								<SettingsSection
 									eyebrow="Secure Vault 🔐"
-									description="Encrypted passwords, keys, environments, and the AI provider connections Lopu can use for this account."
+									description="Encrypted keys, environments and AI provider connections, with a private device vault available without an account."
 								>
-									<SecureVault key={user.id} />
+									<SecureVault />
 								</SettingsSection>
 							</Box>
 						)}

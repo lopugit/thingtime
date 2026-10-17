@@ -1,6 +1,7 @@
-import { useAccountDraft } from '~/drafts/useAccountDraft';
-import { useCurrentUser } from '~/hooks/useCurrentUser';
-import { DraftSaveStatus } from '~/drafts/DraftPicker';
+import { createWithDraft } from '~/drafts/createWithDraft';
+import { useWorkspaceUser } from '~/hooks/useWorkspaceUser';
+import { useWorkspaceDraft } from '~/drafts/useWorkspaceDraft';
+import { DraftSaveStatus, DraftPicker } from '~/drafts/DraftPicker';
 import { restoreSchemaFormDraft, schemaFormValue } from '~/drafts/schemaFormDraft';
 import { GENERIC_NATIVE_SCHEMA_KINDS, schemaThingCreateInput } from '~/schemas/schemaCopies';
 import React from 'react';
@@ -337,13 +338,15 @@ export const SchemaThingFormBody = ({ source, onCreated, resetOnCreate = false }
   const lopu = useLopu();
   const [value, setValue] = React.useState<Record<string, unknown>>({});
   const [publishing, setPublishing] = React.useState(false);
+  const creating = React.useRef(false);
   const [touched, setTouched] = React.useState(false);
-  const user = useCurrentUser();
-  const draft = useAccountDraft({ actor: user?.id, surface: 'schema', context: `schema-form:${source.id}`,
+  const user = useWorkspaceUser();
+  const draft = useWorkspaceDraft({  surface: 'schema', context: `schema-form:${source.id}`,
+    validateSnapshot: snapshot => restoreSchemaFormDraft(snapshot, source.fields),
     onRestore: saved => setValue(restoreSchemaFormDraft(saved.snapshot, source.fields)) });
   const captureDraft = draft.capture;
- React.useEffect(() => { if (!publishing) captureDraft({ name: `${source.name} draft`.slice(0, 160), surface: 'schema', context: `schema-form:${source.id}`,
-    snapshot: JSON.stringify({ version: 2, value }), attachmentIds: [] }, Object.keys(value).length > 0); }, [value, source.id, source.name, publishing, captureDraft]);
+ React.useEffect(() => { if (!publishing) captureDraft({ name: `${source.name} draft`.slice(0, 160), surface: 'schema', context: draft.context,
+    snapshot: JSON.stringify({ version: 2, value }), attachmentIds: [] }, Object.keys(value).length > 0); }, [value, source.id, source.name, publishing, draft.context, captureDraft]);
 
   const handleChange = React.useCallback((path: string[], next: unknown) => {
     setTouched(true);
@@ -354,15 +357,16 @@ export const SchemaThingFormBody = ({ source, onCreated, resetOnCreate = false }
   const validation = React.useMemo(() => validateValueAgainstFields(source.fields, normalizedValue), [source.fields, normalizedValue]);
 
   const publish = async () => {
+    if (creating.current) return;
     setTouched(true);
     if (!validation.ok) {
       lopu({ title: `${validation.issues[0].path}: ${validation.issues[0].message}`, status: 'error', duration: 8000 });
       return;
     }
+    creating.current = true;
     setPublishing(true);
     try {
-      await draft.flush();
-      const resp: any = await api.v1.things.create(schemaThingCreateInput(source, normalizedValue));
+      const resp: any = await createWithDraft(draft, () => api.v1.things.create(schemaThingCreateInput(source, normalizedValue)));
       if (!resp?.ok) throw resp;
       // only link to /search when SearchPage can actually resolve the schema
       // — non-searchable builtin kinds (share/save/user/…) would dead-end on
@@ -371,17 +375,17 @@ export const SchemaThingFormBody = ({ source, onCreated, resetOnCreate = false }
         title: `Thing created with the ${source.name} schema ✨`,
         status: 'success',
         duration: 8000,
-        ...(searchableSchemaSource(source) ? { link: { label: 'Find it on /search', href: schemaSearchPath(source) } } : {})
+        ...(searchableSchemaSource(source) ? { link: { label: 'Find it on /search', href: `${schemaSearchPath(source)}&source=device` } } : {})
       });
-      await draft.clear().catch(() => {});
       if (resetOnCreate) {
         setValue({});
         setTouched(false);
       }
       onCreated?.(resp.thing && typeof resp.thing === 'object' ? resp.thing : null);
     } catch (err: any) {
-      lopu({ title: err?.error || 'Creating hiccuped — try again 🌈', status: 'error' });
+      lopu({ title: err?.error || err?.message || 'Could not create the Thing. Try again.', status: 'error' });
     } finally {
+      creating.current = false;
       setPublishing(false);
     }
   };
@@ -389,7 +393,10 @@ export const SchemaThingFormBody = ({ source, onCreated, resetOnCreate = false }
   if (source.origin === 'builtin' && !GENERIC_NATIVE_SCHEMA_KINDS.has(source.id)) return <Text fontSize="sm">Copy and extend this schema to create your own Things. Thingtime manages system records through their dedicated features.</Text>;
   return (
     <Flex direction="column" gap={3}>
-      <DraftSaveStatus status={draft.status} error={draft.error} retry={draft.retry} />
+      <DraftSaveStatus paused={!!draft.recoveryError} status={draft.status} error={draft.error} retry={draft.retry} />
+      {draft.legacy && <Button size="xs" onClick={() => { void draft.copyIntoEditor(draft.legacy!).catch(error => lopu({ title: error.message, status: 'error' })); }}>Recover earlier device draft</Button>}
+      {user && !user.localOnly && !user.offline && <DraftPicker actor={user.id} surface="schema" context={`schema-form:${source.id}`} label="Recover earlier account drafts" onLoad={draft.copyIntoEditor} />}
+
       {source.description && (
         <Text color="var(--tt-muted, #9a9aa6)" fontSize="13px">
           {source.description}

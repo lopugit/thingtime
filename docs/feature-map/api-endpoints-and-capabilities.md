@@ -1,5 +1,22 @@
 # API endpoints and capabilities
 
+Conditional file sync prerequisites reuse `attachmentStore.annotateOwnedAttachment`
+and `managedPlacement.moveManagedContent`. Annotation 1.2.0 accepts optional
+`expectedUpdatedAt` and returns the committed timestamp; bulk 1.6.0 accepts it
+only for single-item moves and reports stale per-item status 409. Both manifests
+must carry these versions. `accountTransport.client.ts` negotiates them;
+`accountFiles.browser.test.ts` covers real concurrent edits, moves, private bytes
+and canonical attachment cleanup. The durable local metadata queue now consumes these contracts; deletion
+reconciliation and ordinary account file UI wiring remain pending; see [local workspaces](../local-workspaces.md#conditional-account-file-metadata--2026-10-16).
+
+`api.things-interactions` 1.0.0 adds the first-party private GET/POST
+`/api/v1/things/interactions` capability: bounded membership snapshots and
+conditional desired-state writes for independent account interaction sync.
+The canonical Things helpers own revision invalidation and authorization;
+`local-workspace/accountTransport.client.ts` negotiates this capability and the
+existing data-plane fence. Route file, import map and docs registry are updated
+together. See [Things and folders](things-and-folders.md) for tests and limits.
+
 Timeline 1.18.0 adds named versions, undo and version export on the existing
 route: the POST command `name-version` (`api/utils/timeline/versionNames.ts`,
 shared `timeline/versionNames.ts`, protected kind `timeline-version-name`),
@@ -57,7 +74,7 @@ requests preserve their header and selection through the same fallback as root
 data; the upstream enforces the precondition. `app/api/utils/mongodb/dataPlane.ts` owns the identity and guard;
 `app/utils/dataPlane.ts` owns the shared public validation/header/link helpers.
 
-Saved theme history uses `api.themes` / `api.themes-delete` 1.1.0 and
+Saved theme history uses `api.themes` / `api.themes-delete` 1.1.1 and
 `api.timeline` 1.5.0. The dedicated home writer records approved token versions
 and retained deletion in its content transaction; no new endpoint or collection
 is introduced. See [the Timeline contract](../unified-timeline.md).
@@ -388,6 +405,14 @@ Native integrations live in `apple/Passwords`, `apple/PasswordProvider`,
 `iOS/Thingtime/Web/PasswordBridge.swift` and `electron/lib/password-provider.cjs`.
 
 
+Standalone recording retention extends attachment content to 1.14.0 (the owned
+retention descriptor includes immutable `purpose`). Deletion 1.5.0 extends both
+durable receipt modes to recordings with exact-purpose claim fences. Routes keep
+full-user, same-origin, private/no-store and owner-only restrictions. Both
+manifests derive from `apiDocs.ts`; coverage includes `attachmentsRoutes.test.ts`,
+attachment service tests, both capability suites and the local recording browser
+fixture. No new route or public publishing endpoint is added.
+
 ## Incoming mail
 
 See [incoming-mail.md](incoming-mail.md) for Email settings, IMAP/POP3, private cloud storage, the paired local connector, offline reading and proxy inbox views.
@@ -400,3 +425,22 @@ The native release script negotiates the origin manifest before requesting a
 single-use GitHub OIDC credential delivery or explicitly enabled create-only
 migration. No origin fallback is allowed. Run `test:ios-release`, capability and
 API fallback tests; see [the release runbook](../ios-automatic-testflight.md).
+
+
+`api.themes-sync` 1.0.0 is the private full-session prerequisite for conditional
+account theme synchronization. `api/utils/themes/themeSync.ts` extends the
+canonical writer with in-transaction hooks and protected Timeline receipts;
+`things/storedSnapshot.ts` supplies the shared complete BSON comparison used by
+both themes and Vault. The route, import map, rate rule and docs registration are
+kept together. `test:theme-sync`, the opt-in `themeSync.api.test.ts` and
+`themeQuota.api.test.ts` cover admission, immutable retries, cross-writer conflicts,
+transactional quota and active-pointer cleanup. Client account theme sync remains
+pending in the [local workspace matrix](../local-workspaces.md).
+
+`api.themes` and `api.themes-delete` 1.1.1 preserve the request shape while fixing concurrent quota admission and transactional active-pointer cleanup.
+
+Account theme selection uses `themes/sync` operations `selection`/`select` under
+`api.themes-sync` 1.1.0. `themes/themeSelection.ts` reuses the secure account CAS
+writer and transactional Timeline receipts. `themeSelectionContract.ts` is shared
+with the device queue. Run selection contract/API and themes/sync route tests;
+verify normal-writer conflicts, replay after deletion and all identity boundaries.

@@ -5,7 +5,8 @@ import { useNavigate } from 'react-router';
 
 import { useApi } from '~/hooks/useApi';
 import { useLopu } from '~/components/Lopu/useLopu';
-import { useCurrentUser } from '~/hooks/useCurrentUser';
+import { useWorkspaceUser } from '~/hooks/useWorkspaceUser';
+import { useWorkspaceScope } from '~/hooks/useWorkspaceScope';
 import { gatherFormFields, useWebpageRuntime } from '~/components/Builder/webpageRuntime';
 
 // The click half of the ttAction binding (componentTemplate.ts resolves the
@@ -113,10 +114,11 @@ export const useTtActionClicks = (options?: { onUnowned?: TtActionUnownedHandler
 	const runtime = useWebpageRuntime();
 	const runtimeRef = React.useRef(runtime);
 	runtimeRef.current = runtime;
-	const user = useCurrentUser();
-	const signedIn = !!user?.id;
-	const identityRef = React.useRef(user?.id);
-	identityRef.current = user?.id;
+	const user = useWorkspaceUser();
+	const workspaceScope = useWorkspaceScope();
+	const hasWorkspace = workspaceScope !== 'pending' && !!user?.id;
+	const identityRef = React.useRef(workspaceScope);
+	identityRef.current = workspaceScope;
 	const navigate = useNavigate();
 
 	return React.useCallback(
@@ -153,7 +155,7 @@ export const useTtActionClicks = (options?: { onUnowned?: TtActionUnownedHandler
 				runtimeRef.current.refresh();
 				return;
 			}
-			if (!signedIn && (!runtimeRef.current.sharedRun || action === INSTALL_ACTION)) {
+			if (!hasWorkspace && (!runtimeRef.current.sharedRun || action === INSTALL_ACTION)) {
 				lopuRef.current({ title: 'Sign in to use this 🗝️', description: 'Controls run as you, on your own things.', status: 'info', duration: 6000 });
 				navigate('/login');
 				return;
@@ -221,8 +223,8 @@ export const useTtActionClicks = (options?: { onUnowned?: TtActionUnownedHandler
 						onUnowned: async (key, fields) => {
 							if (!mountedRef.current || identity !== identityRef.current) return false;
 							if (key === CATALOG_RECORD_ACTION) {
-								const { installSuiteOnServer } = await import('../Builder/installSuite');
-								await installSuiteOnServer('catalog-records', { onlyMissing: true });
+								const { installSuiteForWorkspace } = await import('../Builder/installSuite');
+								await installSuiteForWorkspace('catalog-records', { onlyMissing: true });
 								return true;
 							}
 							return onUnowned?.(key, fields) ?? false;
@@ -270,6 +272,6 @@ export const useTtActionClicks = (options?: { onUnowned?: TtActionUnownedHandler
 				}
 			})();
 		},
-		[navigate, signedIn]
+		[navigate, hasWorkspace]
 	);
 };

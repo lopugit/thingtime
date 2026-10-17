@@ -1,3 +1,4 @@
+import type { TimelineNameQueue } from './nameQueue';
 import { timelineScopeKey, type TimelineScope } from './contract.ts';
 import type { TimelineLocalStore } from './localStore.ts';
 import type { TimelineBranchStore } from './branchStore.ts';
@@ -5,8 +6,8 @@ import type { TimelineNoteStore } from './noteStore.ts';
 import type { TimelineNameStore } from './nameStore.ts';
 import type { TimelineSync } from './sync.ts';
 
-/** `names` is the in-memory 📌 version-name cache (no queue, no IndexedDB). */
-export type TimelineConnection = { scope: TimelineScope; folderId: string; store: TimelineLocalStore; branches: TimelineBranchStore; notes: TimelineNoteStore; names: TimelineNameStore; sync: TimelineSync };
+/** Accepted names share the existing cache; account name commands also persist in their scoped queue. */
+export type TimelineConnection = { scope: TimelineScope; folderId: string; store: TimelineLocalStore; branches: TimelineBranchStore; notes: TimelineNoteStore; names: TimelineNameStore; nameQueue?: TimelineNameQueue; sync: TimelineSync };
 
 /** A signed-out render has neither a viewer nor a connection. Check both
  * before comparing identities: undefined === undefined is not an account. */

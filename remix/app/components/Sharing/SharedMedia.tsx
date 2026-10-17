@@ -1,4 +1,5 @@
 import React from 'react';
+import { useLocalMediaUrl } from '~/local-workspace/media.client';
 import { requireThingtimeCapability } from '~/api/utils/capabilities/requireCapability.client';
 import { sharedAttachmentUrl, sharedThingPath } from './sharedMediaCore';
 
@@ -12,7 +13,12 @@ export const useSharedThingPath = () => {
   const context = React.useContext(SharedLinkContext);
   return (url: string) => sharedThingPath(url, context.linkKey, context.sharedRoot);
 };
-export const useSharedMediaUrl = () => React.useContext(SharedMediaContext);
+export const useSharedMediaUrl = () => {
+  const { linkKey, sharedRoot } = React.useContext(SharedLinkContext);
+  // Shared content cannot borrow the viewer's device bytes, even for a
+  // syntactically valid local ID. Its media keeps the normal server gate.
+  return useLocalMediaUrl(React.useContext(SharedMediaContext), !linkKey && !sharedRoot);
+};
 export const SharedMediaProvider = ({ linkKey, sharedRoot, children, inheritContext = true }: { linkKey?: string; sharedRoot?: string; children: React.ReactNode; inheritContext?: boolean }) => {
 	const parent = React.useContext(SharedLinkContext);
 	linkKey = linkKey || (inheritContext ? parent.linkKey : undefined);

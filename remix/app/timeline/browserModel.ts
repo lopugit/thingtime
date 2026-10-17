@@ -1,3 +1,4 @@
+import { THEME_CONTENT_ADAPTER, themeContentValue } from './themeContent.ts';
 import { readActionOutcome } from './actionOutcome.ts';
 import type { TimelineEvent, TimelineSnapshot } from './contract.ts';
 import type { LocalTimelineRow } from './localStore.ts';
@@ -71,9 +72,12 @@ const object = (value: unknown): Record<string, any> | null =>
 	value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, any>) : null;
 const text = (value: unknown, max = 160) => (typeof value === 'string' ? value.slice(0, max) : '');
 /** Presentation only: historical labels never consult today's Thing. */
-export function historyContent(snapshot: TimelineSnapshot | null) {
+export function historyContent(snapshot: TimelineSnapshot | null): {crystal: Record<string, any> | null; kinds: string[]} | null {
 	const value = object(snapshot?.value);
 	if (!value || snapshot?.adapter === TIMELINE_SNAPSHOT_PARTS_ADAPTER) return null;
+	if (snapshot?.adapter === THEME_CONTENT_ADAPTER) {
+  try { return {crystal:themeContentValue(snapshot).crystal,kinds:['theme']}; } catch { return null; }
+ }
 	if (snapshot?.adapter === 'thing-content' || snapshot?.adapter === 'webpage-draft')
 		return {
 			crystal: object(value.crystal),

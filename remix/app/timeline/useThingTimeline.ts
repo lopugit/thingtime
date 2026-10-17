@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useCurrentUser } from '../hooks/useCurrentUser';
+import { useWorkspaceUser } from '../hooks/useWorkspaceUser';
 import type { LocalTimelineRow } from './localStore';
 import { timelineScopeKey } from './contract';
 import { useTimelineSession, timelineAccessFailure } from './TimelineProvider';
@@ -21,7 +21,7 @@ const emptyView = (identity: string): View => ({ identity, rows: [], notes: new 
 
 /** Only open history views pull pages. The account queue runs independently. */
 export function useThingTimeline(thingId: string | null, enabled = true, related = false) {
-	const user = useCurrentUser(); const session = useTimelineSession();
+	const user = useWorkspaceUser(); const session = useTimelineSession();
 	const sessionRef = useRef(session); sessionRef.current = session;
 	const connection = session.connection;
 	const scope = connection ? timelineScopeKey(connection.scope) : 'unavailable';
@@ -45,7 +45,7 @@ export function useThingTimeline(thingId: string | null, enabled = true, related
 			const rows = membership ? await store.forThings(membership.thingIds) : await store.forThing(thingId);
 			const [stored, queued] = await Promise.all([noteStore.forEvents(rows.map(row => row.event.id)), noteStore.queued()]);
 			const notes = historyNoteViews(connection.scope.ownerId, rows, stored, queued);
-			const names = nameStore.forEvents(rows.map(row => row.event.id));
+			const names = connection.nameQueue ? await connection.nameQueue.view(rows.map(row=>row.event.id)) : nameStore.forEvents(rows.map(row => row.event.id));
 			if (alive) setView(previous => ({ ...(previous.identity === identity ? previous : emptyView(identity)), identity, rows, notes, names, ready: true, folderId, nextBefore: before, related: membership }));
 		};
 		const refresh = async (force = false) => {
@@ -88,5 +88,5 @@ export function useThingTimeline(thingId: string | null, enabled = true, related
 		return () => { alive = false; clearInterval(timer); refreshRef.current = async () => {}; olderRef.current = async () => {}; window.removeEventListener('focus', changed); window.removeEventListener('online', changed); window.removeEventListener(TIMELINE_CHANGED_EVENT, changed); document.removeEventListener('visibilitychange', changed); };
 	}, [identity, enabled, thingId, connection, related]);
 	const current = view.identity === identity ? view : emptyView(identity);
-	return { ...current, identity: related ? `${identity}:${current.related?.revision ?? 'unknown'}` : identity, error: current.error || session.error, signedIn: !!user?.id, refresh: useCallback(() => refreshRef.current(), []), older: useCallback(() => olderRef.current(), []) };
+	return { ...current, identity: related ? `${identity}:${current.related?.revision ?? 'unknown'}` : identity, error: current.error || session.error, signedIn: !!user?.id, localOnly: !!user?.localOnly, refresh: useCallback(() => refreshRef.current(), []), older: useCallback(() => olderRef.current(), []) };
 }

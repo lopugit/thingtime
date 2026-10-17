@@ -1,3 +1,4 @@
+import { useWorkspaceUser } from '~/hooks/useWorkspaceUser';
 import { PostLinkedThings } from './PostLinkedThings';
 import { CollectionList } from '~/components/Collections/CollectionList';
 import { createDiscussionCommentPager, mergeDiscussionComments, discussionCommentSearchText } from './discussionCommentPages';
@@ -35,6 +36,7 @@ import { ArrowLeft, Bookmark, Eye, Flag, Heart, Maximize2, MessageCircle, Plus, 
 
 import { useApi } from '~/hooks/useApi';
 import { useCommentDraft } from '~/hooks/useCommentDraft';
+import { PlainCommentDraftTools } from '~/drafts/PlainCommentDraftTools';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { useOutsideTapClose } from '~/hooks/useOutsideTapClose';
 import { FeedShortcutsContext } from '~/hooks/useFeedShortcuts';
@@ -750,6 +752,7 @@ const viewerAsAuthor = (user: any): FeedAuthor | null =>
         id: user.id,
         username: user.username,
         displayName: user.displayName ?? null,
+        ...(user.localOnly ? { localOnly: true as const } : {}),
         avatarUrl: user.avatarUrl ?? null
       }
     : null;
@@ -852,7 +855,9 @@ const CommentRow = (props: {
 
   const api = useApi();
   const sharedAccess = useSharedAccess();
-  const user = useCurrentUser();
+  const accountUser = useCurrentUser(), workspace = useWorkspaceUser();
+  const user = workspace?.localOnly === true && comment.author?.localOnly === true && comment.author.id === workspace.id ? workspace : accountUser || (workspace?.offline && !sharedAccess.key && !sharedAccess.sharedRoot ? workspace : null);
+  const interactionUser = user || (workspace?.offline ? workspace : null);
   const lopu = useLopu();
   const { recent, pushRecent } = useRecentReactions();
   const inFlightReactionTokensRef = React.useRef(new Set<string>());
@@ -902,7 +907,8 @@ const CommentRow = (props: {
   const [richReplyOpen, setRichReplyOpen] = React.useState(false);
   const [repliesLoading, setRepliesLoading] = React.useState(false);
   // reply text persists as a per-user draft — leave and pick it up later
-	const { value: replyText, setValue: setReplyText, clear: clearReplyDraft, hydrated: draftHydrated, flush: flushReplyDraft, begin: beginReply, end: endReply } = useCommentDraft(user?.id, comment.id, replyInputOpen);
+ const replyDraft = useCommentDraft(user?.id, comment.id, replyInputOpen);
+	const { value: replyText, setValue: setReplyText, clear: clearReplyDraft, hydrated: draftHydrated, flush: flushReplyDraft, begin: beginReply, end: endReply } = replyDraft;
   const pending = isPendingComment(comment);
 
   // ＋ in the quick row opens the full custom picker (same as posts)
@@ -936,7 +942,7 @@ const CommentRow = (props: {
   // optimistic: repaint immediately, reconcile with the server's counts,
   // revert on failure — same principle as post reactions
   const handleReact = async (rawToken: string) => {
-    if (!user) {
+    if (!interactionUser) {
       lopu({ title: 'Log in to react 🗝️', status: 'info', duration: 6000 });
       return;
     }
@@ -1028,10 +1034,11 @@ const CommentRow = (props: {
     try {
       const page = await request.pager.load(cursor => api.v1.things.list({ target: comment.id, thingtime: 'comment', commentProjection: true, cursor, limit: 20, ...sharedAccess }, { signal: request.controller.signal }));
       if (request.controller.signal.aborted || !page) return;
+      if (page.localCacheError) setReplyLoadError(page.localCacheError);
       setReplies(previous => mergeReactionOverlays(started, mergeDiscussionComments(previous || [], page.comments)));
     } catch (failure: any) {
       if (request.controller.signal.aborted) return;
-      if ([401, 403, 404].includes(Number(failure?.status))) { setReplies([]); request.pager.dispose(); }
+      if ([401, 403, 404, 410].includes(Number(failure?.status))) { setReplies([]); request.pager.dispose(); }
       setReplyLoadError(failure instanceof Error ? failure.message : 'Could not load replies.');
     } finally {
       if (!request.controller.signal.aborted) {
@@ -1243,7 +1250,7 @@ const CommentRow = (props: {
   const reactControl = (
     <Box ref={reactAnchorRef} position="relative" display="flex" flexShrink={0}>
       <ReactionControl
-        enabled={!!user && !pending}
+        enabled={!!interactionUser && !pending}
         onQuickTap={() => handleReact('❤️')}
         content={(close) => (
           <QuickReactionRow
@@ -1409,9 +1416,11 @@ const CommentRow = (props: {
               (user ? (
                 <Flex flexDirection="column" rowGap={2}>
                   <Flex columnGap={2}>
-                    <Input
+                    <Textarea
                       size="xs"
-                      borderRadius="999px"
+                      borderRadius="20px"
+                      minH="32px" maxH="180px" minW={0} resize="vertical"
+                      rows={Math.min(6, Math.max(1, replyText.split('\n').length))}
                       borderColor="var(--tt-border, #ececef)"
                       color="var(--tt-ink-soft, #4f4f58)"
                       _placeholder={{ color: MUTED }}
@@ -1421,7 +1430,7 @@ const CommentRow = (props: {
                       value={replyText}
                       onChange={(event) => setReplyText(event.target.value)}
                       onKeyDown={(event) => {
-                        if (event.key === 'Enter' && !event.shiftKey) {
+                        if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
                           event.preventDefault();
                           submitReply();
                         }
@@ -1447,6 +1456,7 @@ const CommentRow = (props: {
                       onClick={submitReply}
                     />
                   </Flex>
+                  <PlainCommentDraftTools draft={replyDraft} />
                   {richReplyOpen && (
 										<PostComposer parentId={comment.id} onPosted={handleRichReplied as any} onClose={() => setRichReplyOpen(false)} />
                   )}
@@ -1489,7 +1499,10 @@ function PostCardImpl(props: PostCardProps) {
         : null;
 
   const api = useApi();
-  const user = useCurrentUser();
+  const accountUser = useCurrentUser(), workspace = useWorkspaceUser();
+  const localOnly = workspace?.localOnly === true && post.author?.localOnly === true && post.author.id === workspace.id;
+  const user = localOnly ? workspace : accountUser || (workspace?.offline && !sharedAccess.key && !sharedAccess.sharedRoot ? workspace : null);
+  const interactionUser = user || (workspace?.offline ? workspace : null);
   const lopu = useLopu();
 
   const [commentsOpen, setCommentsOpen] = React.useState(!!defaultCommentsOpen);
@@ -1501,7 +1514,8 @@ function PostCardImpl(props: PostCardProps) {
   const navDirRef = React.useRef<'push' | 'pop'>('push');
   const focusedComment = focusStack.length ? focusStack[focusStack.length - 1] : null;
   // the comment text persists as a per-user draft — leave and pick it up later
-  const { value: commentText, setValue: setCommentText, clear: clearCommentDraft, flush: flushCommentDraft, begin: beginComment, end: endComment } = useCommentDraft(user?.id, post.id, commentsOpen);
+  const commentDraft = useCommentDraft(user?.id, post.id, commentsOpen);
+  const { value: commentText, setValue: setCommentText, clear: clearCommentDraft, flush: flushCommentDraft, begin: beginComment, end: endComment } = commentDraft;
   const [richCommentOpen, setRichCommentOpen] = React.useState(false);
   // one EMPTY reply input at a time across this card's comment tree
   const [openReplyId, setOpenReplyId] = React.useState<string | null>(null);
@@ -1828,7 +1842,7 @@ function PostCardImpl(props: PostCardProps) {
   // we repaint the card immediately, then reconcile with the server's counts
   // and revert on failure — no spinner, no wait (optimistic-rendering rule).
   const handleReact = async (rawToken: string) => {
-    if (!user) {
+    if (!interactionUser) {
       lopu({ title: 'Log in to react 🗝️', status: 'info', duration: 6000 });
       return;
     }
@@ -2155,7 +2169,7 @@ function PostCardImpl(props: PostCardProps) {
   // toggles rather than setting, so response order could invert the state).
   const inFlightSaveRef = React.useRef(false);
   const handleToggleSave = async () => {
-    if (!user) return; // the button is hidden logged-out; belt-and-braces
+    if (!interactionUser) return; // the button is hidden logged-out; belt-and-braces
     if (inFlightSaveRef.current) return;
     inFlightSaveRef.current = true;
 
@@ -2238,12 +2252,12 @@ function PostCardImpl(props: PostCardProps) {
           <AuthorAvatar author={post.author} />
           <Box minWidth={0} flex="1">
             <Flex alignItems="baseline" columnGap={1.5} flexWrap="wrap" whiteSpace="normal">
-              {post.author?.username ? (
+              {post.author ? (
                 // named, and linked only where a link is honest — a third-party
                 // author the provider gave no url for stays plain text rather
                 // than borrowing a native /profile route (authorLinkTarget)
                 (() => {
-                  const link = authorLinkTarget(post.author);
+                  const link = post.author.username ? authorLinkTarget(post.author) : null;
                   const name = (
                     <Text as="span" fontSize="sm" fontWeight={700} color={INK} _hover={link ? { textDecoration: 'underline' } : undefined}>
                       {authorName(post.author)}
@@ -2265,7 +2279,7 @@ function PostCardImpl(props: PostCardProps) {
               )}
               <AuthorFlairChip flair={post.authorFlair} />
               <Text as="span" fontSize="xs" color={MUTED}>
-                {post.author ? `${getUserIdentityDetail(post.author)} · ` : ''}
+                {post.author?.username ? `${getUserIdentityDetail(post.author)} · ` : ''}
               </Text>
 							<TimestampLink id={post.id} createdAt={post.createdAt} to={mediaThing ? permalinkPath : undefined} />
               <Tooltip label={`${circle.label} — ${circle.hint}`} fontSize="xs" borderRadius="8px" hasArrow>
@@ -2498,7 +2512,7 @@ function PostCardImpl(props: PostCardProps) {
           />
           {showVotes && <UpdownControl votes={post.votes} hideUnknownScore={!!commentCollection} onVote={handleUpdown} enabled={!!user} accent={post.subspace?.accent} />}
 
-          {user ? (
+          {interactionUser ? (
             <Box ref={reactAnchorRef} position="relative" display="flex">
               {/* tap, touch-and-hold, or hover: quick reactions + a ＋ that
               opens the full picker */}
@@ -2536,7 +2550,7 @@ function PostCardImpl(props: PostCardProps) {
           )}
 
           {/* repost: instant repost OR quote (caption + circle) */}
-			{!mediaThing && !discussionOnly && (user ? (
+			{!mediaThing && !discussionOnly && !localOnly && (user ? (
             <Box position="relative" display="flex">
               <Menu placement="top" autoSelect={false}>
 									<MenuButton as={ActionIcon} icon={<Repeat2 size={18} strokeWidth={2.2} />} count={post.shareCount} label="Repost" />
@@ -2617,11 +2631,11 @@ function PostCardImpl(props: PostCardProps) {
 			))}
 
           {/* outward share: native sheet / copy link */}
-          <ActionIcon icon={<Share size={18} strokeWidth={2.2} />} label="Share" onClick={handleShareLink} />
+          {!localOnly && <ActionIcon icon={<Share size={18} strokeWidth={2.2} />} label="Share" onClick={handleShareLink} />}
 
           {/* bookmark: save to the viewer's private library (/saved) —
           filled/accent when saved, hidden logged-out (nothing to save into) */}
-          {user && (
+          {interactionUser && (
             <ActionIcon
               icon={<Bookmark size={18} strokeWidth={2.2} fill={post.viewerSaved ? 'currentColor' : 'none'} />}
               label={post.viewerSaved ? 'Remove from Saved' : 'Save to library'}
@@ -2777,9 +2791,11 @@ function PostCardImpl(props: PostCardProps) {
             {user ? (
               <Flex flexDirection="column" rowGap={2}>
                 <Flex columnGap={2}>
-                  <Input
+                  <Textarea
                     size="sm"
-                    borderRadius="999px"
+                    borderRadius="20px"
+                      minH="32px" maxH="180px" minW={0} resize="vertical"
+                      rows={Math.min(6, Math.max(1, commentText.split('\n').length))}
                     borderColor="var(--tt-border, #ececef)"
                     color="var(--tt-ink-soft, #4f4f58)"
                     _placeholder={{ color: MUTED }}
@@ -2789,7 +2805,7 @@ function PostCardImpl(props: PostCardProps) {
                     value={commentText}
                     onChange={(event) => setCommentText(event.target.value)}
                     onKeyDown={(event) => {
-                      if (event.key === 'Enter' && !event.shiftKey) {
+                      if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
                         event.preventDefault();
                         submitComment();
                       }
@@ -2815,6 +2831,7 @@ function PostCardImpl(props: PostCardProps) {
                     onClick={submitComment}
                   />
                 </Flex>
+                <PlainCommentDraftTools draft={commentDraft} />
                 {richCommentOpen && (
                   <PostComposer parentId={post.id} onPosted={handleRichCommented as any} onClose={() => setRichCommentOpen(false)} />
                 )}

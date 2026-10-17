@@ -88,6 +88,29 @@ Native provider implementation and signed release are tracked separately in
 [PR #996](https://github.com/lopugit/thingtime/pull/996); this release exposes the
 private catalog and negotiates an optional supported native bridge.
 
+Local account workers are bound to the confirmed root identity generation,
+origin, owner ID and data plane (`app/local-workspace/runtime.client.ts`).
+Expected-actor mismatch now also returns `code: ACTOR_CHANGED`; the existing
+409 refusal remains. A mismatched queue stops before another request and root
+identity refreshes. Temporary/anonymous users do not start account workers, and
+logging in does not adopt anonymous content. See the incomplete
+[local workspace acceptance matrix](../local-workspaces.md).
+
+Offline account roots contain only a local workspace pointer and `user: null`
+(`local-workspace/rootFallback.ts`), never a cached authenticated profile. Local
+and remote leases are separate. `createRootDataLoader` installs workspace binding
+only after its latest-request fence; a stale success/failure cannot change a
+newer pointer. `useWorkspaceUser` is content identity only. Legacy anonymous tree
+hydration does not silently claim data for an account. Test `test:root-data`,
+`test:local-workspace` and `test:autosave` for these boundaries.
+
+
+The opt-in `drafts/workspaceSwitch.browser.test.ts` uses the actual account switcher
+and identity BroadcastChannel across three clean browser tabs. Held device reads
+and a delayed successful private-comment response cannot enter the next account;
+the original account retains edits, recovery sources and exactly one acknowledged
+comment. This is local account-switch acceptance, not coverage of every origin,
+data-plane or editor transition. Setup: [local workspaces](../local-workspaces.md#native-cross-tab-draft-isolation--2026-10-17).
 
 ## AI provider model availability
 
@@ -106,6 +129,60 @@ native Responses requirements (including GPT-6 Astra); `lopu/chat.ts` consumes
 that transport policy. `chat.streaming.test.mts` exercises Astra default/High/Max
 reasoning and tool-result replay through the real SDK against an HTTP fixture.
 
+### Anonymous device passwords
+
+`components/Passwords/DevicePasswordManager.tsx` gates the existing password UI
+with an independent local passphrase. `local-workspace/passwordVault.ts` owns
+scoped encrypted storage, transactional revisions, leases and idle locking;
+`passwords/vaultCrypto.ts` implements WebCrypto with the shared
+`passwords/vaultEnvelopeContract.ts` used by server `vaultEnvelope.ts`.
+No anonymous network/session adapter or native AutoFill grant is available.
+`local-workspace/deviceVaultSession.ts` owns shared key lifetime, independent
+password/provider key domains and legacy password-envelope compatibility.
+`deviceVaultSession.test.ts` uses the fixed synthetic legacy fixture and checks
+domain/scope separation, retirement and missing-key preservation.
+
+Account device UI/sync now uses `components/Passwords/AccountPasswordWorkspace.tsx`,
+`local-workspace/passwordVault.ts` and the direct fenced
+`local-workspace/passwordTransport.client.ts`. Local encrypted writes finish before
+network sync, and conflict choices preserve independent copies.
+`passwordSync.test.ts`, `passwordTransport.test.ts` and the opt-in
+`accountPasswords.browser.test.ts` cover the new boundary. Settings provider
+credentials and signed native offline integration are still outstanding.
+`passwords/vaultCrypto.test.ts` verifies server interoperability;
+`local-workspace/passwordVault.test.ts` and the opt-in browser fixture cover
+storage isolation, cancellation, conflicts and real offline editor/transfer use.
+
+
+### Local provider and environment vault
+
+Anonymous Settings → Security → Secure Vault reuses `SecureVault.tsx` through
+`DeviceProviderVault.tsx` and the shared `DeviceVaultGate`. `userVaultModel.ts`
+is the browser-safe canonical metadata/value validator; `userVaultCore.ts`
+retains server-only outbound-host restrictions. `local-workspace/providerVault.ts`
+encrypts metadata and values with the independent provider key domain and
+commits revisions/tombstones with quota and lease checks. Anonymous operations
+never create account commands. The account variant now uses the same encrypted device forms with independent
+sync and reviewed conflicts through `AccountProviderWorkspace.tsx`. Account
+values arrive only through explicit fresh selected-value retention.
+
+`providerVault.test.ts` covers atomic group membership, replay, quota, lock and
+corruption. `providerVault.browser.test.ts` is the opt-in actual offline Settings
+fixture. `userVaultModel.test.ts` and `userVaultEnvironment.test.ts` cover shared
+validation and rejection of malformed replacement tokens (`api.lopu-vault`
+1.2.1). See [local provider setup and verification](../local-workspaces.md#anonymous-provider-vault).
+
+Account provider groundwork adds `userVaultMetadata.ts` and `userVaultVersion.ts`
+for complete bounded, value-free snapshots of actual stored Things. The existing
+Vault POST delegates `sync-metadata` to `routes/api/v1/lopu/vault/metadata.ts`
+(`api.lopu-vault` 1.3.0); selected personal reveals optionally return the same
+record's version after fresh proof (`api.vault-reveal` 1.2.0). The device adapter
+retains explicit remote-only metadata and exact-version selected values through
+`providerTransport.client.ts`. `providerMetadata.api.test.ts` is an opt-in
+loopback API fixture; `test:lopu`, `test:sensitive-reveal`, `test:api-capabilities`
+and `test:local-workspace` include the corresponding unit contracts. Account Settings and conditional synchronization are described in the latest
+provider workspace checkpoint below.
+
 ## Incoming mail
 
 See [incoming-mail.md](incoming-mail.md) for Email settings, IMAP/POP3, private cloud storage, the paired local connector, offline reading and proxy inbox views.
@@ -117,3 +194,33 @@ claim and audit stores. `iosReleaseCore.ts` validates the fixed release policy a
 Apple bundle. GitHub OIDC grants only `integrations/ios-release` access after
 immutable repository/owner, main workflow, event and source checks; it grants no
 admin session or general vault access. See [setup and acceptance](../ios-automatic-testflight.md).
+
+`userVaultIntegrity.ts` runs from the shared ordinary Thing mutation recorder,
+inside its content transaction, so generic and dedicated account Vault writes
+share environment validation and the owner Timeline-folder concurrency fence.
+`userVaultIntegrity.test.ts` covers the invariant; the opt-in
+`local-workspace/providerIntegrity.api.test.ts` reproduces the former generic
+delete bypass and verifies real API rollback and concurrent membership changes.
+Versions: `api.things` 1.34.1, `api.lopu-vault` 1.3.1. No account sync sender is
+enabled by this correction.
+
+
+`userVaultWrites.ts` now uses canonical create/update/delete utilities and protected
+Timeline effects for exact-write acknowledgments (`api.lopu-vault` 1.4.0).
+`routes/api/v1/lopu/vault/write.ts` admits only current full sessions with the
+expected owner, exact same origin and selected plane. `providerVault.ts` freezes
+an encrypted request before transmission; `providerTransport.client.ts` negotiates
+the write contract and independently fences each request. `providerSync.test.ts`,
+`userVaultWriteReceipt.test.ts`, the route tests and the opt-in
+`providerWrites.api.test.ts` cover these boundaries. Account Settings now binds the retained account scope even when offline root
+identity has `user:null`. `AccountProviderWorkspace.tsx` owns independent pull/
+push workers and exact-snapshot review; `VaultReveal.tsx` offers explicit retention
+after scoped fresh proof (`api.vault-reveal` 1.3.0).
+See [the write checkpoint](../local-workspaces.md#conditional-account-provider-writes--2026-10-17).
+
+Provider conflict review and account Settings acceptance: `providerReview.test.ts`
+checks atomic dependent copies/discards, quota, stale reviews, cross-tab winners
+and unknown outcomes. `providerReview.api.test.ts` and
+`accountProviders.browser.test.ts` are opt-in loopback fixtures with normal API
+registration and entry cleanup. They do not grant broader native, multi-account
+race, CI or deployed acceptance.
