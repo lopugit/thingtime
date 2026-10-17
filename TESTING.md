@@ -10984,3 +10984,31 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
 - [ ] Installed native recovery consent and selected-folder lifecycle; Android
   parity, external/provider volumes, recovery after removing/rechoosing a grant,
   and inclusion of native recovery storage in device-loss backups remain open.
+
+### Android transactional Trash and recovery — 2026-10-17
+
+- [x] Delete rollback leaves the exact visible entry and no recovery receipt;
+  lost replies replay the same completed operation. Original bytes remain intact.
+- [x] Nested child/sibling receipts advance only the pinned direct parent;
+  external edits, foreign scopes and nonempty directories stop removal.
+- [x] Restore requires exact reviewed retained metadata and an absent destination;
+  case aliases, missing parents and corrupt bytes refuse. Lost replies cannot
+  overwrite later edits or choose a different destination.
+- [x] Schema 2 migration retains files and publication receipts. Recovery pages
+  return at most 20, include previous owned pairing/configuration IDs, and exclude
+  other accounts and native grants.
+- [x] Copy consent never permits deletion. Explicit deletion consent survives
+  encrypted reload, while reselection and revocation invalidate approval. A
+  permission change inside a delete/restore transaction rolls back all effects.
+- [x] Kill a real Android process before and after both SQLite commits; reopen
+  in a new process, verify rollback/exact replay and all restored bytes.
+- [x] Installed authenticated WebView: native delete consent cancel/allow, shared
+  recovery list/review, separate restore cancel/allow, exact retry without another
+  prompt, restored bytes, no horizontal overflow and Android Files inspection.
+- [ ] Physical-device/background/provider acceptance, native recovery in backups,
+  independent snapshot copies and whole-account large-volume export remain open.
+
+- [ ] Investigate Android emulator paint artifacts after expanding/scrolling the
+  recovery card. Measured Things section bounds do not overlap, but captured
+  pixels show stale search/toolbar layers. Keep physical-device visual acceptance
+  open; do not infer a CSS sizing fix from the screenshot alone.

@@ -471,7 +471,7 @@ function Connections({
 			</Text>
 			{scope.dataPlane === 'home' && supportsMobileTrashRecovery(capabilities) && (
 				<NativeFileRecovery
-					roots={roots}
+					roots={roots.filter(root => supportsMobileFolderPublication(root, capabilities))}
 					busy={busy}
 					perform={(work) =>
 						run(async (assertActive) => {

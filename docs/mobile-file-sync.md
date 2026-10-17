@@ -2020,3 +2020,30 @@ Real Mac/API acceptance verifies planner child/parent removal and exact restored
 bytes across lost replies/restart with 280 native calls and 562 fresh identity
 checks. Fixture picker/consent remains synthetic. Desktop/phone browser layout
 checks passed; raw TypeScript remains at 91 baseline diagnostics, none introduced.
+
+### Android transactional recovery — 2026-10-17
+
+Thingtime-owned Android offline folders now implement native Trash 1.2 and use
+the existing shared deletion planner and recovery controls. Generic SAF folders
+are excluded from both publication and the recovery picker. Distinct deletion
+consent is bound to the owner/origin, native grant generation, sync connection,
+paired device, configuration revision and hash. Every mutation checks permission
+again at commit; reviewed restore resumes through fresh identity authentication.
+
+Schema 3 extends the canonical offline catalog. Immutable blobs stay in place;
+entry removal, the direct parent's new revision, retained blob reference and
+receipt commit atomically with FULL synchronous SQLite. Nested removal uses the
+same bounded previous-sibling/last-child receipt links as Apple. Unrelated edits,
+nonempty directories and mismatched scope refuse. Restores require exact reviewed
+retained metadata and an absent case-normalized destination. Destination and
+receipt commit together; an interrupted uncommitted restore requires confirmation
+again, while a committed exact retry returns its receipt without rewriting later
+edits. Pages use an indexed owner-root/grant/key query, at most 20 items plus one
+lookahead. Prior connection/pairing IDs remain discoverable under the same grant.
+
+Rechoosing the same saved Android grant revokes old consent; a new review can
+restore its retained data. Removing the grant does not transfer receipts to a new
+grant. Native records remain local recovery material, not canonical Timeline or
+independent device-loss backup. Automatic purge, arbitrary external providers,
+background execution, restored-tree automation and full large-volume backup/export
+acceptance remain open. No production promotion is implied by this checkpoint.

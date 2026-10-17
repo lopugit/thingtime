@@ -41,7 +41,7 @@ final class SyncStaging {
     private static FolderReader.Failure invalid() { return new FolderReader.Failure("Invalid download operation."); }
     private static FolderReader.Failure changed() { return new FolderReader.Failure("Saved download bytes or operation changed. Keep both versions and retry with a new operation."); }
     private static FolderReader.Failure storage() { return new FolderReader.Failure("Download storage is unavailable. Free space and retry to resume saved work."); }
-    private static String text(JSONObject object,String key,int maximum) throws Exception {
+    static String text(JSONObject object,String key,int maximum) throws Exception {
         Object value=object.get(key);
         if(!(value instanceof String) || ((String)value).isEmpty() || ((String)value).length()>maximum) throw invalid();
         String result=(String)value;
@@ -60,7 +60,7 @@ final class SyncStaging {
         if(!Double.isFinite(number) || number<0 || number>maximum || number!=Math.rint(number)) throw invalid();
         return (long)number;
     }
-    private static String uuid(JSONObject object,String key) throws Exception {
+    static String uuid(JSONObject object,String key) throws Exception {
         String id=text(object,key,36);
         if(!UUID.fromString(id).toString().equalsIgnoreCase(id)) throw invalid();
         return id;

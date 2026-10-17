@@ -55,6 +55,39 @@ final class ManagedFolderAccess {
     JSONObject lookup(DeviceScope scope,FolderStore.Grant grant,JSONObject transfer) throws Exception {
         try(ManagedFileStore store=store(()->{})){return store.lookup(scope,root(scope,grant,store),grant.id,transfer);}
     }
+    JSONObject trash(DeviceScope scope,FolderStore.Grant grant,JSONObject input,WriteApproval approval) throws Exception {
+        JSONObject request=SyncTrash.request(input,scope,grant.id);
+        if(!Boolean.TRUE.equals(approval.allowTrash) || !SyncTrash.same(request.getJSONObject("scope"),approval.json().getJSONObject("scope")))
+            throw new FolderReader.Failure("Approve recoverable deletions for this connection first.");
+        requireApproval(scope,grant,approval);
+        try(ManagedFileStore store=store(()->requireApproval(scope,grant,approval))){return store.trash(scope,root(scope,grant,store),grant.id,request);}
+    }
+    JSONObject trashLookup(DeviceScope scope,FolderStore.Grant grant,JSONObject input) throws Exception {
+        try(ManagedFileStore store=store(()->{})){return store.trashLookup(scope,root(scope,grant,store),grant.id,input);}
+    }
+    JSONObject trashExpected(DeviceScope scope,FolderStore.Grant grant,JSONObject input) throws Exception {
+        try(ManagedFileStore store=store(()->{})){return store.trashExpected(scope,root(scope,grant,store),grant.id,input);}
+    }
+    JSONObject trashInspect(DeviceScope scope,FolderStore.Grant grant,JSONObject input) throws Exception {
+        try(ManagedFileStore store=store(()->{})){return store.trashInspect(scope,root(scope,grant,store),grant.id,input);}
+    }
+    JSONObject trashList(DeviceScope scope,FolderStore.Grant grant,String cursor) throws Exception {
+        try(ManagedFileStore store=store(()->{})){return store.trashList(scope,root(scope,grant,store),grant.id,cursor);}
+    }
+    void reviewRestore(DeviceScope scope,FolderStore.Grant grant,JSONObject input,JSONObject restore) throws Exception {
+        try(ManagedFileStore store=store(()->{})){store.reviewTrashRestore(scope,root(scope,grant,store),grant.id,input,restore);}
+    }
+    JSONObject restore(DeviceScope scope,FolderStore.Grant grant,JSONObject input,JSONObject restore,boolean approved) throws Exception {
+        try(ManagedFileStore store=store(()->{active.run();grants.requireRead(scope,grant);})){
+            return store.restoreTrash(scope,root(scope,grant,store),grant.id,input,restore,approved);
+        }
+    }
+    JSONObject restoreApproved(DeviceScope scope,FolderStore.Grant grant,JSONObject input,JSONObject restore,WriteApproval approval) throws Exception {
+        JSONObject request=SyncTrash.request(input,scope,grant.id);
+        if(!SyncTrash.same(request.getJSONObject("scope"),approval.json().getJSONObject("scope")))throw new FolderReader.Failure("Restore approval scope changed.");
+        requireApproval(scope,grant,approval);
+        try(ManagedFileStore store=store(()->requireApproval(scope,grant,approval))){return store.restoreTrash(scope,root(scope,grant,store),grant.id,request,restore,true);}
+    }
     JSONArray scan(DeviceScope scope,FolderStore.Grant grant) throws Exception {
         try(ManagedFileStore store=store(()->{})){return store.scan(scope,root(scope,grant,store));}
     }

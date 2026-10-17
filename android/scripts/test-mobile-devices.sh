@@ -10,6 +10,9 @@ two_way="${THINGTIME_TWO_WAY_SYNC_TEST:-0}"
 conflict_review="${THINGTIME_CONFLICT_SYNC_TEST:-0}"
 file_history="${THINGTIME_FILE_HISTORY_TEST:-0}"
 file_export="${THINGTIME_FILE_EXPORT_TEST:-0}"
+native_trash="${THINGTIME_NATIVE_TRASH_TEST:-0}"
+[[ "$native_trash" == 0 || "$native_trash" == 1 ]] || { echo 'THINGTIME_NATIVE_TRASH_TEST must be 0 or 1.' >&2; exit 1; }
+[[ "$native_trash" == 0 || ( "$offline_test" == 1 && -z "$download_state" ) ]] || { echo 'Native recovery acceptance requires THINGTIME_OFFLINE_FILES_TEST=1 without a cloud download fixture.' >&2; exit 1; }
 [[ "$file_export" == 0 || "$file_export" == 1 ]] || { echo 'THINGTIME_FILE_EXPORT_TEST must be 0 or 1.' >&2; exit 1; }
 [[ "$file_export" == 0 || "$file_history" == 1 ]] || { echo 'File export acceptance requires THINGTIME_FILE_HISTORY_TEST=1.' >&2; exit 1; }
 [[ "$file_history" == 0 || "$file_history" == 1 ]] || { echo 'THINGTIME_FILE_HISTORY_TEST must be 0 or 1.' >&2; exit 1; }
@@ -75,6 +78,7 @@ PYDATA
 fi
 result="$(mktemp)"
 test_args=()
+if [[ "$native_trash" == 1 ]]; then test_args+=(-e nativeTrash true); fi
 if [[ "$file_export" == 1 ]]; then test_args+=(-e fileExport true); fi
 if [[ "$file_history" == 1 ]]; then test_args+=(-e fileHistory true); fi
 if [[ "$offline_test" == 1 ]]; then

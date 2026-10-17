@@ -5267,7 +5267,8 @@ this recovery state is not yet included in whole-account snapshots. Cross-volume
 moves refuse. Mac/iOS native Trash 1.2 enables explicitly approved foreground
 deletion and recovery browsing under the same surviving picker grant. Removing
 or rechoosing that grant currently loses UI recovery access; retain it until
-files have been restored. Android Trash and recovery across regrants remain open;
+files have been restored. Android offline folders use transactional recovery as
+described below; arbitrary new-grant recovery remains open;
 see [the acceptance ledger](docs/mobile-file-sync.md).
 
 
@@ -5286,3 +5287,35 @@ feedback. This fixture does not grant filesystem access or exercise native
 consent. Native recovery itself requires no new secrets, dashboards or services.
 The Mac/API fixture now exercises planner-driven child/parent deletion, lost
 native replies, restart, paged recovery listing and reviewed restore.
+
+### Android offline-folder recovery development
+
+Android native Trash 1.2 uses the existing app-private `ManagedFiles-v1`
+SQLite catalog and immutable blobs. Catalog schema 3 adds indexed retained-item
+receipts; migration preserves prior roots, document IDs and publication receipts.
+Deletion, parent-folder revision and recovery receipt commit together. Restoration
+inserts an absent destination and its receipt in one transaction. A crash before
+commit leaves the original state; after commit an exact retry returns the saved
+receipt. No deleted bytes are automatically purged. These local records are not
+Timeline versions or an independent backup, and remain excluded from OS backup.
+
+Use JDK 17, the Android SDK and a connected disposable emulator/device:
+
+```sh
+ANDROID_SERIAL=emulator-5554 THINGTIME_WEB_URL=http://127.0.0.1:14900 \
+  android/scripts/test-mobile-trash-process.sh
+THINGTIME_OFFLINE_FILES_TEST=1 THINGTIME_NATIVE_TRASH_TEST=1 \
+  android/scripts/test-mobile-devices.sh /path/to/private-local-fixture.json
+```
+
+Use the existing mode-0600 loopback account fixture setup above. The second
+command creates/selects its synthetic offline folder through Android Files,
+exercises real native cancel/allow dialogs and the shared recovery screen, then
+asks for rendered Files inspection. Test screenshots are saved in the debug
+app's private `files/native-trash-*.png` paths. Generic external SAF providers
+remain read-only. Deletion needs separate per-configuration `allowTrash` consent;
+restoration needs fresh native confirmation and never overwrites an occupied
+path. Rechoosing the same saved Android grant invalidates old consent but permits
+newly reviewed recovery; removing it and selecting a new grant does not transfer
+recovery authority. Physical devices, background deletion, independent backup
+copies, large-volume export and shipping physical media remain separate work.

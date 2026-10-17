@@ -79,4 +79,36 @@ public class ManagedFolderAccessTest {
         assertThrows(Exception.class,()->racing.publish(owner,grant,request,stage,approval,fixture.fixture.store()));
         try(ManagedFileStore store=fixture.store()){assertEquals(0,store.scan(owner,fixture.root).length());assertEquals("missing",store.lookup(owner,fixture.root,grant.id,request).getString("status"));}
     }
+    @Test public void trashRequiresDistinctPersistedConsentAndRestoreRechecksTheSelectedGrant() throws Exception {
+        JSONObject original=fixture.publish(fixture.request("file",new byte[]{1},false),new byte[]{1}).getJSONObject("entry");
+        JSONObject request=ManagedTrashTest.request(fixture,original);WriteApproval copy=approval(request,"1");
+        WriteApproval denied=new WriteApproval(copy.json().put("allowTrash",false),owner),allowed=new WriteApproval(copy.json().put("allowTrash",true),owner);
+        assertFalse(copy.matches(denied));assertFalse(copy.matches(allowed));assertFalse(denied.matches(allowed));assertFalse(copy.json().has("allowTrash"));
+        assertThrows(Exception.class,()->new WriteApproval(copy.json().put("allowTrash",JSONObject.NULL),owner));
+        access.approve(owner,grant,copy);assertThrows(Exception.class,()->access.trash(owner,grant,request,copy));assertThrows(Exception.class,()->access.trash(owner,grant,request,allowed));
+        access.approve(owner,grant,allowed);assertFalse(access.approved(owner,grant,copy));
+        FolderStore reloaded=new FolderStore(data,permissions);assertTrue(new ManagedFolderAccess(fixture.managed,AUTHORITY,reloaded,()->{}).approved(owner,grant,allowed));
+        access.trash(owner,grant,request,allowed);
+        JSONObject target=new JSONObject().put("path","file").put("expected",access.trashInspect(owner,grant,request).getJSONObject("retainedEntry"));
+        assertNull(access.restore(owner,grant,request,target,false));access.reviewRestore(owner,grant,request,target);
+        permissions.read.clear();assertThrows(Exception.class,()->access.restore(owner,grant,request,target,true));
+        registry.add(owner,uri,Intent.FLAG_GRANT_READ_URI_PERMISSION,"Reselected");
+        assertThrows(Exception.class,()->access.restore(owner,grant,request,target,true));
+        FolderStore.Grant current=registry.snapshot(owner,grant.id);assertFalse(access.approved(owner,current,allowed));
+        assertEquals(1,access.trashList(owner,current,null).getJSONArray("items").length());
+        access.reviewRestore(owner,current,request,target);JSONObject restored=access.restore(owner,current,request,target,true);
+        assertEquals(original.getString("id"),restored.getString("id"));assertEquals(0,access.trashList(owner,current,null).getJSONArray("items").length());
+    }
+    @Test public void revocationInsideDeleteOrRestoreTransactionRollsBackDirectoryAndReceipt() throws Exception {
+        JSONObject original=fixture.publish(fixture.request("file",new byte[]{1},false),new byte[]{1}).getJSONObject("entry"),request=ManagedTrashTest.request(fixture,original);
+        WriteApproval allowed=new WriteApproval(approval(request,"1").json().put("allowTrash",true),owner);access.approve(owner,grant,allowed);
+        java.util.concurrent.atomic.AtomicInteger calls=new java.util.concurrent.atomic.AtomicInteger();
+        ManagedFolderAccess racing=new ManagedFolderAccess(fixture.managed,AUTHORITY,registry,()->{if(calls.incrementAndGet()==4)permissions.read.clear();});
+        assertThrows(Exception.class,()->racing.trash(owner,grant,request,allowed));permissions.read.add(uri);
+        assertEquals(1,access.scan(owner,grant).length());assertEquals("missing",access.trashLookup(owner,grant,request).getString("status"));
+        access.trash(owner,grant,request,allowed);JSONObject target=new JSONObject().put("path","file").put("expected",original);
+        calls.set(0);assertThrows(Exception.class,()->racing.restoreApproved(owner,grant,request,target,allowed));permissions.read.add(uri);
+        assertEquals(0,access.scan(owner,grant).length());assertTrue(access.trashInspect(owner,grant,request).isNull("restoreIntent"));
+    }
+
 }

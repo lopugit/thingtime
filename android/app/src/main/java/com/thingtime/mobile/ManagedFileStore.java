@@ -41,10 +41,10 @@ final class ManagedFileStore implements AutoCloseable {
         db=SQLiteDatabase.openOrCreateDatabase(catalog,null);
         try {
             db.disableWriteAheadLogging();db.execSQL("PRAGMA synchronous=FULL");db.execSQL("PRAGMA foreign_keys=ON");
-            if(db.getVersion()!=2) {
+            if(db.getVersion()!=3) {
                 db.beginTransaction();
                 try {
-                    int version=db.getVersion();if(version<0 || version>2)throw unavailable();
+                    int version=db.getVersion();if(version<0 || version>3)throw unavailable();
                     db.execSQL("CREATE TABLE IF NOT EXISTS roots (id TEXT PRIMARY KEY, owner TEXT NOT NULL, origin TEXT NOT NULL, name TEXT NOT NULL)");
                     db.execSQL("CREATE TABLE IF NOT EXISTS entries (root TEXT NOT NULL REFERENCES roots(id), path TEXT NOT NULL, folded TEXT NOT NULL, entry TEXT NOT NULL, blob TEXT, PRIMARY KEY(root,path), UNIQUE(root,folded))");
                     db.execSQL("CREATE TABLE IF NOT EXISTS receipts (key TEXT PRIMARY KEY, root TEXT NOT NULL REFERENCES roots(id), request TEXT NOT NULL, receipt TEXT NOT NULL)");
@@ -64,7 +64,9 @@ final class ManagedFileStore implements AutoCloseable {
                         db.execSQL("CREATE UNIQUE INDEX entries_document ON entries(root,document)");
                         db.execSQL("CREATE INDEX entries_parent ON entries(root,parent,path)");
                     }
-                    db.setVersion(2);db.setTransactionSuccessful();
+                    db.execSQL("CREATE TABLE IF NOT EXISTS trash_receipts (key TEXT PRIMARY KEY, root TEXT NOT NULL REFERENCES roots(id), grantId TEXT NOT NULL, request TEXT NOT NULL, retainedEntry TEXT NOT NULL, blob TEXT, receipt TEXT NOT NULL, parentAfter TEXT, restoration TEXT)");
+                    db.execSQL("CREATE INDEX IF NOT EXISTS trash_recovery_page ON trash_receipts(root,grantId,key) WHERE restoration IS NULL");
+                    db.setVersion(3);db.setTransactionSuccessful();
                 } finally { db.endTransaction(); }
                 syncDirectory(directory);
             }
@@ -204,6 +206,140 @@ final class ManagedFileStore implements AutoCloseable {
             ContentValues receipt=new ContentValues();receipt.put("key",key);receipt.put("root",root);receipt.put("request",SyncStaging.canonical(request));receipt.put("receipt",SyncStaging.canonical(result));
             db.insertOrThrow("receipts",null,receipt);check.run();beforeCommit.run();check.run();db.setTransactionSuccessful();
         } finally {db.endTransaction();}
+        afterCommit.run();return result;
+    }
+    private static final class TrashRow {
+        final JSONObject request,entry,receipt,parentAfter,restoration;final String blob;
+        TrashRow(Cursor row) throws Exception {
+            request=new JSONObject(row.getString(0));entry=SyncStaging.entry(new JSONObject(row.getString(1)));
+            blob=row.isNull(2)?null:row.getString(2);receipt=new JSONObject(row.getString(3));
+            parentAfter=row.isNull(4)?null:SyncStaging.entry(new JSONObject(row.getString(4)));
+            restoration=row.isNull(5)?null:new JSONObject(row.getString(5));
+            if(!SyncTrash.same(receipt,SyncTrash.receipt(request)))throw changed();
+        }
+    }
+    private TrashRow trashRow(String root,String grant,JSONObject request) throws Exception {
+        try(Cursor row=db.rawQuery("SELECT request,retainedEntry,blob,receipt,parentAfter,restoration FROM trash_receipts WHERE key=? AND root=? AND grantId=?",
+            new String[]{SyncStaging.key(request),root,grant})) {
+            if(!row.moveToFirst())return null;TrashRow value=new TrashRow(row);
+            if(!SyncTrash.same(value.request,request))throw changed();return value;
+        }
+    }
+    private TrashRow requireTrash(String root,String grant,JSONObject request) throws Exception {
+        TrashRow row=trashRow(root,grant,request);if(row==null)throw changed();return row;
+    }
+    private JSONObject resolvedTrash(String root,String grant,JSONObject request,JSONObject expected,String previous) throws Exception {
+        if(previous==null)return expected;
+        JSONObject lookup=new JSONObject(request.toString());lookup.getJSONObject("operation").put("id",previous);
+        // Resolve by key, then validate the predecessor's own immutable payload.
+        try(Cursor row=db.rawQuery("SELECT request,retainedEntry,blob,receipt,parentAfter,restoration FROM trash_receipts WHERE key=? AND root=? AND grantId=?",
+            new String[]{SyncStaging.key(lookup),root,grant})) {
+            if(!row.moveToFirst())throw changed();TrashRow prior=new TrashRow(row);
+            JSONObject parent=prior.request.optJSONObject("parent");
+            if(parent==null || !SyncTrash.same(prior.request.getJSONObject("scope"),request.getJSONObject("scope")) ||
+                !previous.equals(prior.request.getJSONObject("operation").getString("id")) || !grant.equals(prior.request.getString("rootId")) ||
+                !SyncTrash.same(parent.getJSONObject("expected"),expected) || prior.restoration!=null || prior.parentAfter==null ||
+                !expected.getString("id").equals(prior.parentAfter.getString("id")) || !expected.getString("path").equals(prior.parentAfter.getString("path")) ||
+                !"folder".equals(prior.parentAfter.getString("kind")))throw changed();
+            return prior.parentAfter;
+        }
+    }
+    private static String optional(JSONObject value,String key) throws Exception{return value.isNull(key)?null:value.getString(key);}
+    JSONObject trashExpected(DeviceScope owner,String root,String grant,JSONObject input) throws Exception {
+        root(owner,root);JSONObject request=SyncTrash.request(input,owner,grant);
+        return resolvedTrash(root,grant,request,SyncTrash.mutation(request).getJSONObject("expected"),optional(request,"childrenOperationId"));
+    }
+    JSONObject trashLookup(DeviceScope owner,String root,String grant,JSONObject input) throws Exception {
+        root(owner,root);JSONObject request=SyncTrash.request(input,owner,grant);TrashRow row=trashRow(root,grant,request);
+        return row==null?new JSONObject().put("status","missing"):new JSONObject().put("status","complete").put("receipt",row.receipt);
+    }
+    private void verifyRetained(TrashRow row) throws Exception {
+        if("folder".equals(row.entry.getString("kind"))) {if(row.blob!=null)throw changed();return;}
+        if(row.blob==null)throw changed();FileDescriptor fd=open(new File(blobs,uuid(row.blob)),OsConstants.O_RDONLY);
+        try{verify(fd,row.entry,null,0,0);}finally{Os.close(fd);}
+    }
+    private JSONObject bumpDirectParent(String root,String path) throws Exception {
+        String parent=SyncTrash.parent(path);if(parent.isEmpty())return null;Entry previous=entry(root,parent);
+        if(previous==null || !"folder".equals(previous.json.getString("kind")))throw changed();
+        JSONObject after=new JSONObject(previous.json.toString()).put("version",UUID.randomUUID().toString());ContentValues update=new ContentValues();update.put("entry",SyncStaging.canonical(after));
+        if(db.update("entries",update,"root=? AND path=?",new String[]{root,parent})!=1)throw changed();return after;
+    }
+    /** Removal, retained blob reference, parent transition and receipt share one
+     * FULL-synchronous SQLite transaction. Immutable blob bytes are never unlinked. */
+    JSONObject trash(DeviceScope owner,String root,String grant,JSONObject input) throws Exception {
+        root(owner,root);JSONObject request=SyncTrash.request(input,owner,grant),result;db.beginTransaction();
+        try {
+            root(owner,root);TrashRow existing=trashRow(root,grant,request);if(existing!=null)return existing.receipt;
+            JSONObject m=SyncTrash.mutation(request),expected=resolvedTrash(root,grant,request,m.getJSONObject("expected"),optional(request,"childrenOperationId"));
+            String path=m.getString("path");Entry current=entry(root,path);if(current==null || !SyncTrash.same(current.json,expected))throw changed();
+            if(!request.isNull("parent")) {
+                JSONObject proof=request.getJSONObject("parent"),parentExpected=resolvedTrash(root,grant,request,proof.getJSONObject("expected"),optional(proof,"previousOperationId"));
+                Entry parent=entry(root,SyncTrash.parent(path));if(parent==null || !SyncTrash.same(parent.json,parentExpected))throw changed();
+            }
+            if("folder".equals(expected.getString("kind"))) {
+                if(current.blob!=null || count("SELECT COUNT(*) FROM entries WHERE root=? AND parent=?",new String[]{root,path})!=0)throw changed();
+            } else {
+                if(current.blob==null)throw changed();FileDescriptor fd=open(new File(blobs,uuid(current.blob)),OsConstants.O_RDONLY);
+                try{verify(fd,expected,null,0,0);}finally{Os.close(fd);}
+            }
+            if(db.delete("entries","root=? AND path=?",new String[]{root,path})!=1)throw changed();
+            JSONObject after=bumpDirectParent(root,path);result=SyncTrash.receipt(request);
+            ContentValues row=new ContentValues();row.put("key",SyncStaging.key(request));row.put("root",root);row.put("grantId",grant);
+            row.put("request",SyncStaging.canonical(request));row.put("retainedEntry",SyncStaging.canonical(current.json));row.put("blob",current.blob);
+            row.put("receipt",SyncStaging.canonical(result));if(after!=null)row.put("parentAfter",SyncStaging.canonical(after));
+            db.insertOrThrow("trash_receipts",null,row);check.run();beforeCommit.run();check.run();db.setTransactionSuccessful();
+        } finally{db.endTransaction();}
+        afterCommit.run();return result;
+    }
+    JSONObject trashInspect(DeviceScope owner,String root,String grant,JSONObject input) throws Exception {
+        root(owner,root);JSONObject request=SyncTrash.request(input,owner,grant);TrashRow row=requireTrash(root,grant,request);
+        if(row.restoration==null)verifyRetained(row);
+        return new JSONObject().put("retainedEntry",row.restoration==null?row.entry:JSONObject.NULL)
+            .put("restoreIntent",row.restoration==null?JSONObject.NULL:row.restoration);
+    }
+    JSONObject trashList(DeviceScope owner,String root,String grant,String cursor) throws Exception {
+        root(owner,root);uuid(grant);if(cursor!=null && !cursor.matches("[a-f0-9]{64}"))throw changed();
+        JSONArray items=new JSONArray();String next=null,last=null;
+        try(Cursor rows=db.rawQuery("SELECT key,request,retainedEntry FROM trash_receipts WHERE root=? AND grantId=? AND restoration IS NULL AND key>? ORDER BY key LIMIT 21",
+            new String[]{root,grant,cursor==null?"":cursor})) {
+            while(rows.moveToNext()) {
+                check.run();if(items.length()==20){next=last;break;}last=rows.getString(0);
+                JSONObject request=SyncTrash.request(new JSONObject(rows.getString(1)),owner,grant),entry=SyncStaging.entry(new JSONObject(rows.getString(2)));
+                if(!last.equals(SyncStaging.key(request)))throw changed();
+                items.put(new JSONObject().put("request",request).put("kind",entry.getString("kind")).put("size",entry.getLong("size")).put("state","retained"));
+            }
+        }
+        return new JSONObject().put("items",items).put("nextCursor",next==null?JSONObject.NULL:next);
+    }
+    private void restorable(String root,TrashRow row,JSONObject restore) throws Exception {
+        if(!SyncTrash.same(row.entry,restore.getJSONObject("expected")))throw changed();verifyRetained(row);String path=restore.getString("path");
+        if(count("SELECT COUNT(*) FROM entries WHERE root=? AND folded=?",new String[]{root,folded(path)})!=0 ||
+            count("SELECT COUNT(*) FROM entries WHERE root=?",new String[]{root})>=FolderReader.MAX_ENTRIES)throw changed();
+        String parent=SyncTrash.parent(path);if(!parent.isEmpty()) {
+            Entry directory=entry(root,parent);if(directory==null || !"folder".equals(directory.json.getString("kind")))throw changed();
+        }
+    }
+    void reviewTrashRestore(DeviceScope owner,String root,String grant,JSONObject input,JSONObject restoreInput) throws Exception {
+        root(owner,root);JSONObject request=SyncTrash.request(input,owner,grant),restore=SyncTrash.restore(request,restoreInput);
+        db.beginTransaction();try{TrashRow row=requireTrash(root,grant,request);if(row.restoration!=null)throw changed();restorable(root,row,restore);db.setTransactionSuccessful();}finally{db.endTransaction();}
+    }
+    /** Return an existing exact receipt without another approval. New restoration
+     * requires consent; destination insertion and its immutable receipt commit together. */
+    JSONObject restoreTrash(DeviceScope owner,String root,String grant,JSONObject input,JSONObject restoreInput,boolean approved) throws Exception {
+        root(owner,root);JSONObject request=SyncTrash.request(input,owner,grant),restore=SyncTrash.restore(request,restoreInput),result;db.beginTransaction();
+        try {
+            root(owner,root);TrashRow row=requireTrash(root,grant,request);
+            if(row.restoration!=null) {
+                if(!SyncTrash.same(row.restoration.getJSONObject("request"),restore))throw changed();return row.restoration.getJSONObject("receipt");
+            }
+            if(!approved)return null;restorable(root,row,restore);
+            String path=restore.getString("path");result=new JSONObject(row.entry.toString()).put("path",path).put("version",UUID.randomUUID().toString());
+            ContentValues values=documentColumns(result);values.put("root",root);values.put("path",path);values.put("folded",folded(path));values.put("entry",SyncStaging.canonical(result));values.put("blob",row.blob);
+            db.insertOrThrow("entries",null,values);bumpDirectParent(root,path);
+            ContentValues update=new ContentValues();update.put("restoration",SyncStaging.canonical(new JSONObject().put("request",restore).put("receipt",result)));
+            if(db.update("trash_receipts",update,"key=? AND root=? AND grantId=?",new String[]{SyncStaging.key(request),root,grant})!=1)throw changed();
+            check.run();beforeCommit.run();check.run();db.setTransactionSuccessful();
+        }finally{db.endTransaction();}
         afterCommit.run();return result;
     }
     JSONArray scan(DeviceScope owner,String root) throws Exception {

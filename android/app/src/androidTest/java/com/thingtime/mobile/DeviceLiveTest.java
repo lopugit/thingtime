@@ -25,10 +25,18 @@ public class DeviceLiveTest {
         while(System.currentTimeMillis()<end) { if("true".equals(evaluate(web,js))) return; Thread.sleep(250); }
         fail("Installed WebView did not satisfy: "+js);
     }
-    private static JSONObject folderRequest(android.webkit.WebView web,DeviceScope scope,JSONObject request) throws Exception {
+    static void verifyPageLayout(android.webkit.WebView web) throws Exception {
+        String measure="(()=>{const h=Array.from(document.querySelectorAll('h1')).find(e=>e.textContent==='Things');if(!h)return null;const column=h.parentElement.parentElement;return Array.from(column.children).map(e=>{const r=e.getBoundingClientRect();return {label:e.textContent.slice(0,55),top:r.top,bottom:r.bottom,height:r.height,shrink:getComputedStyle(e).flexShrink}}).filter(r=>r.height>0)})()";
+        JSONArray rows=new JSONArray(new JSONTokener(evaluate(web,"JSON.stringify("+measure+")")).nextValue().toString());
+        assertTrue("Things page content must be rendered",rows.length()>3);
+        for(int i=1;i<rows.length();i++)assertTrue("Things page sections overlap: "+rows,rows.getJSONObject(i-1).getDouble("bottom")<=rows.getJSONObject(i).getDouble("top")+1);
+        assertEquals("true",evaluate(web,"document.documentElement.scrollWidth<=window.innerWidth+1"));
+        System.out.println("THINGS_LAYOUT_QA_PASS: "+rows);
+    }
+    static JSONObject folderRequest(android.webkit.WebView web,DeviceScope scope,JSONObject request) throws Exception {
         JSONObject result=folderReply(web,scope,request);assertFalse(result.optString("error"),result.has("error"));return result;
     }
-    private static JSONObject folderReply(android.webkit.WebView web,DeviceScope scope,JSONObject request) throws Exception {
+    static JSONObject folderReply(android.webkit.WebView web,DeviceScope scope,JSONObject request) throws Exception {
         String id=java.util.UUID.randomUUID().toString();request.put("requestId",id).put("ownerId",scope.owner).put("origin",scope.origin);
         evaluate(web,"window.__folderTestReply=null;window.__folderTestListener=e=>{if(e.detail?.type==='mobile-files-result'&&e.detail?.payload?.requestId==="+JSONObject.quote(id)+"){window.__folderTestReply=e.detail.payload;window.removeEventListener('thingtime:native-message',window.__folderTestListener)}};window.addEventListener('thingtime:native-message',window.__folderTestListener);window.thingtimeNativeBridge.postMessage("+new JSONObject().put("type","mobile-files").put("payload",request)+");");
         awaitTrue(web,"window.__folderTestReply !== null",request.optString("action").equals("write-approve")?300000:60000);
@@ -71,6 +79,10 @@ public class DeviceLiveTest {
             evaluate(web,"Array.from(document.querySelectorAll('button')).find(b=>b.textContent.trim()==='Check folder')?.click()");
             awaitTrue(web,"document.body.innerText.includes('1 file checked')");
             }
+            if("true".equals(InstrumentationRegistry.getArguments().getString("nativeTrash"))) {
+                assertFalse("Recovery acceptance uses the original synthetic fixture",download);
+                NativeTrashAcceptance.run(web,context,scope,grantId,fixture);
+            }
             android.content.Intent browse=new android.content.Intent(android.content.Intent.ACTION_OPEN_DOCUMENT).setType("*/*")
                 .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK).putExtra(android.provider.DocumentsContract.EXTRA_INITIAL_URI,OfflineDocumentsProvider.rootUri(context,root));
             context.startActivity(browse);
@@ -87,7 +99,7 @@ public class DeviceLiveTest {
             try(android.database.sqlite.SQLiteDatabase db=android.database.sqlite.SQLiteDatabase.openDatabase(new File(fixture.managed,"catalog.sqlite").getPath(),null,0)) {
                 db.beginTransaction();try {
                     try(android.database.Cursor rows=db.rawQuery("SELECT blob FROM entries WHERE root=? AND blob IS NOT NULL",new String[]{root})) {while(rows.moveToNext())blobs.add(rows.getString(0));}
-                    for(String table:new String[]{"receipts","retained","entries"})db.delete(table,"root=?",new String[]{root});
+                    for(String table:new String[]{"trash_receipts","receipts","retained","entries"})db.delete(table,"root=?",new String[]{root});
                     db.delete("roots","id=?",new String[]{root});db.setTransactionSuccessful();
                 }finally{db.endTransaction();}
             }
@@ -468,6 +480,7 @@ public class DeviceLiveTest {
             awaitTrue(target[0],"window.thingtimeNativeBridge?.platform === 'android' && window.thingtimeNativeBridge?.devicePairingVersion === '1.0.0'");
             awaitTrue(target[0],"document.body.innerText.includes('This device is paired to your account')");
             verifySelectedFolder(target[0],context,scope);
+            verifyPageLayout(target[0]);
             if("true".equals(InstrumentationRegistry.getArguments().getString("fileHistory"))) FileHistoryAcceptance.run(target[0],context,scope);
             long revision=storage.load(scope).getLong("revision");
             awaitTrue(target[0],"Array.from(document.querySelectorAll('button')).some(b=>b.textContent.trim()==='Check connection' && !b.disabled)");

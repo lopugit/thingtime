@@ -1721,3 +1721,48 @@ native and IndexedDB restart with original IDs, recovery enumeration, reviewed
 restore with lost reply/restart, exact bytes, occupied-target preservation and
 revocation all passed (280 native calls, 562 fresh identity checks). Picker,
 consent and credentials are isolated fixture adapters, not installed-app evidence.
+
+## Android transactional recovery — 2026-10-17
+
+Extend the existing offline folder catalog to schema 3 with indexed recoverable
+Trash receipts. Android native Trash 1.2 connects the shared foreground deletion
+planner and recovery UI to owned offline folders. Generic SAF roots remain
+read-only and are omitted from the recovery picker. Deletion requires separate
+configuration-bound native consent; reviewed restoration asks for its own native
+confirmation. Both permission and grant generation are checked again at commit.
+
+Immutable bytes remain in place. Visible entry removal, direct-parent revision,
+retained blob reference and receipt commit together. Restored destination and
+receipt also commit together; retries after a lost response cannot overwrite
+subsequent edits. Exact child/sibling receipt links support nested empty-folder
+removal while refusing outside edits. Recovery lists 20 records per page across
+previous pairing/configuration IDs under the same owned grant. Reselecting that
+same saved Android grant invalidates old approval but allows fresh reviewed
+recovery. Removing it does not transfer authority to a new grant.
+
+Canonical Timeline history stays unchanged. Native recovery is not an independent
+backup and remains excluded from OS backup. Background workers, arbitrary SAF
+writes, restored-tree automation, physical-device acceptance, independent account
+snapshot copies, 100 GB/100 TB export throughput and physical-media delivery remain
+open. The preview still needs to be checked against the eventual pushed commit.
+
+Installed emulator screenshots showed stale search/toolbar layers after the
+recovery panel expanded or scrolled. Direct DOM bounds showed non-overlapping
+sections; a speculative flex-shrink change was removed. The native acceptance
+harness now checks page section bounds as well as horizontal overflow. Emulator
+paint artifacts and physical-device visual acceptance remain open. A fresh
+installed check with the original styling passes (28.591 seconds): the setup
+card ends at 570.31 CSS px, the heading begins at 586.31 px and search begins
+at 653.31 px, identical to the speculative style change.
+
+Storage validation: 39 JVM tests, a passing 61-test instrumentation suite (opt-in
+live/process tests run separately), seven new storage recovery cases and two new
+grant/consent cases. Four actual process-death scenarios pass: before/after delete
+and restore commits. Shared sync 146 plus one transport mock and targeted lint
+pass. TypeScript remains at 91 diagnostics versus the recorded 89 baseline; none
+are in changed components. A first installed UI attempt timed out in manual folder
+selection before recovery, and a retry hit an emulator startup ANR before JUnit
+started. After rebooting without clearing data, installed authenticated acceptance
+passed native delete cancel/allow, shared recovery review, restore cancel/allow,
+exact replay, original bytes, Android Files visibility and non-destructive grant
+removal (one test, 452.983 seconds). No real user files were used.
