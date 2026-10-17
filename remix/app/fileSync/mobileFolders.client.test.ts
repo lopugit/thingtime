@@ -171,3 +171,47 @@ test('Mac 1.2 reads a full bounded range once and validates binary stream framin
 	controller.abort(); await assert.rejects(source.read(0, 3));
 	await assert.rejects(source.read(0, 32 * 1024 * 1024 + 1));
 });
+
+test('Android streams correlated binary pulls, rejects early completion and stops malformed or aborted ranges', async () => {
+ const previous = Object.getOwnPropertyDescriptor(globalThis, 'window');
+ const target = new EventTarget() as any;
+ target.location = { origin: expected.origin };
+ const bytes = new Uint8Array(65539).fill(19);
+ let mode = 'ok', suspended = 0, frames = 0, at = 0, current: any, token: string;
+ const emit = (type: string, payload: any) => target.dispatchEvent(new CustomEvent(nativeBridgeMessageEvent, { detail: { type, payload } }));
+ const pull = () => {
+  token = crypto.randomUUID();
+  emit('mobile-files-range-pull', { ...current, token, offset: mode === 'malformed' ? at + 1 : at, length: Math.min(65536, bytes.length - at) });
+ };
+ const complete = () => emit('mobile-files-result', { ...current, roots: [root], staging: { received: bytes.length } });
+ target.thingtimeNativeBridge = {
+  platform: 'android', isNativeWebView: true, fileAccessVersion: '1.3.0', fileStagingVersion: '1.1.0',
+  postMessage(message: any) {
+   if (message.payload.action === 'suspend') { suspended++; return; }
+   current = message.payload; at = 0;
+   assert.equal(current.length, bytes.length); assert.equal(current.bytes, undefined); assert.equal(current.data, undefined);
+   queueMicrotask(() => { if (mode === 'early') complete(); else if (mode !== 'hold') pull(); });
+  },
+  postFileFrame(frame: ArrayBuffer) {
+   assert.ok(frame instanceof ArrayBuffer); assert.equal(new TextDecoder().decode(frame.slice(0, 36)), token);
+   const body = new Uint8Array(frame, 36);assert.deepEqual(body, bytes.slice(at, at + body.length));
+   assert.ok(body.length <= 65536);at += body.length;frames++;
+   queueMicrotask(() => { if (at === bytes.length) complete(); else pull(); });
+  }
+ };
+ Object.defineProperty(globalThis, 'window', { configurable: true, value: target });
+ const scope = { ownerId: 'owner', origin: expected.origin, dataPlane: 'home', rootId: 'config', deviceId: 'device' };
+ const input = { action: 'stage-range' as const, rootId, offset: 0, bytes, transfer: { scope, rootId, operation: {
+  id: crypto.randomUUID(), confirmed: false, mutation: { kind: 'copy' as const, from: 'remote' as const, path: 'file', expectedTarget: null, source: { ...entry, size: bytes.length } }
+ } } };
+ try {
+  assert.equal((await requestMobileFolders('owner', input, new AbortController().signal)).staging!.received, bytes.length);assert.equal(frames, 2);
+  for (const failure of ['early', 'malformed']) { mode = failure;await assert.rejects(requestMobileFolders('owner', input, new AbortController().signal)); }
+  assert.equal(suspended, 2);
+  mode = 'hold';const abort = new AbortController(), pending = requestMobileFolders('owner', input, abort.signal);abort.abort();
+  await assert.rejects(pending, { name: 'AbortError' });assert.equal(suspended, 3);
+  target.thingtimeNativeBridge.fileStagingVersion = '1.0.0';
+  await assert.rejects(requestMobileFolders('owner', input, new AbortController().signal), /Update the Android/);
+  assert.equal(suspended, 3);
+ } finally { if (previous) Object.defineProperty(globalThis, 'window', previous); else Reflect.deleteProperty(globalThis, 'window'); }
+});

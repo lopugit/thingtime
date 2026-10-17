@@ -133,11 +133,25 @@ pairing/folder emulator suite uses generated providers and does not prove that p
 
 ### Private download staging and process recovery
 
-Android advertises `fileStagingVersion` 1.0.0 separately from publication. The
+Android advertises `fileStagingVersion` 1.1.0 when WebView supports binary
+ArrayBuffer messages, otherwise 1.0.0, separately from publication. The
 foreground bridge accepts the shared `stage-begin`, `stage-append` and
 `stage-finish` requests only after authenticating the current owner and resolving
 that owner's selected readable folder. Each call rechecks authentication before
 responding. Native provider URIs and paths never cross the bridge.
+
+Staging 1.1 also accepts `stage-range`: the shared downloader sends at most
+2 MiB per range (native protocol maximum 32 MiB). Native code requests one
+64 KiB frame at a time using a fresh nonce bound to the pending request,
+owner and origin. Frames are raw ArrayBuffers with a 36-byte nonce header;
+bytes never enter the JSON metadata. The foreground/origin gate and cancellation
+checks apply throughout. A whole range has a five-minute deadline; a stalled
+frame fails after 15 seconds, and cancellation wakes a waiting reader within
+100 ms. Identity and the selected read grant are checked at
+both range boundaries. One fsync/checkpoint follows the complete range, so an
+interrupted partial range is discarded on resume; matching replay compares
+every retained byte. Older WebViews and iOS retain the 64 KiB chunk path.
+See [WebView binary messages](https://developer.android.com/reference/androidx/webkit/WebMessageCompat).
 
 Bytes stay in app-private no-backup storage. An immutable operation binds owner,
 origin, device, connection and native grant. Chunks are at most 64 KiB; fsynced

@@ -138,9 +138,9 @@ test('native staging rejects false proofs, unnegotiated capabilities, invalid of
 	assert.equal(called, false);
 });
 
-test('Mac staging 1.1 resumes after an accepted binary range without replaying its bytes', async () => {
+for (const platform of ['macos', 'android'] as const) test(`${platform} staging 1.1 resumes after an accepted binary range without replaying its bytes`, async () => {
     const f = await fixture(), signal = new AbortController().signal;
-    const bridge = { platform: 'macos' as const, fileAccessVersion: '1.2.0', fileStagingVersion: '1.1.0' };
+    const bridge = { platform, fileAccessVersion: '1.2.0', fileStagingVersion: '1.1.0' };
     await assert.rejects(stageMobileCopy(scope, rootId, f.operation, f.source, signal, f.request, bridge), /lost acknowledged/);
     assert.equal(f.received(), 2 * 1024 * 1024); assert.equal(f.count(), 1);
     f.ranges.length = 0;

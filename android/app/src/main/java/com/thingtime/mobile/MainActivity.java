@@ -41,8 +41,9 @@ public final class MainActivity extends Activity {
           };
           window.thingtimeDeviceTransport.onmessage = event => { try { receive(JSON.parse(event.data)); } catch {} };
           window.thingtimeNativeBridge = {
-            version:'1.4.0', platform:'android', isNativeWebView:true, devicePairingVersion:'1.0.0', fileAccessVersion:'1.3.0', fileStagingVersion:'1.0.0', filePublicationVersion:'1.1.0',
+            version:'1.4.0', platform:'android', isNativeWebView:true, devicePairingVersion:'1.0.0', fileAccessVersion:'1.3.0', fileStagingVersion:'__STAGING_VERSION__', filePublicationVersion:'1.1.0',
             postMessage:message => window.thingtimeDeviceTransport.postMessage(JSON.stringify(message)),
+            __BINARY_METHOD__
             onMessage:listener => { listeners.add(listener); return () => listeners.delete(listener); },
             offMessage:listener => listeners.delete(listener)
           };
@@ -57,6 +58,7 @@ public final class MainActivity extends Activity {
         if(!WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER) || !WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
             unavailable("Update Android System WebView to connect this device."); return;
         }
+        final boolean binary=WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_ARRAY_BUFFER);
         folders=new FolderBridge(this,origin,()->active && origin.equals(currentOrigin));
         web=new WebView(this); android.widget.FrameLayout frame=new android.widget.FrameLayout(this); frame.addView(web,new android.widget.FrameLayout.LayoutParams(-1,-1)); setContentView(frame);
         if(Build.VERSION.SDK_INT>=30) {
@@ -80,11 +82,14 @@ public final class MainActivity extends Activity {
             }
         });
         if(WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) WebViewCompat.addWebMessageListener(web,"thingtimeDeviceTransport",Collections.singleton(origin),(view,message,source,isMainFrame,reply)-> {
-            if(!isMainFrame || !origin.equals(canonical(source.toString())) || !origin.equals(canonical(view.getUrl())) || !active || message.getType()!=WebMessageCompat.TYPE_STRING) return;
+            if(!isMainFrame || !origin.equals(canonical(source.toString())) || !origin.equals(canonical(view.getUrl())) || !active) return;
+            if(binary && message.getType()==WebMessageCompat.TYPE_ARRAY_BUFFER) { folders.handleFrame(message.getArrayBuffer());return; }
+            if(message.getType()!=WebMessageCompat.TYPE_STRING)return;
             String data=message.getData(); if(data==null || data.length()>131072) return;
             try { JSONObject body=new JSONObject(data); if(!"mobile-files".equals(body.optString("type")) && data.length()>4096) return; handle(body,reply); } catch(Exception invalid) { /* Malformed messages have no effects. */ }
         });
-        if(WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) WebViewCompat.addDocumentStartJavaScript(web,SCRIPT,Collections.singleton(origin));
+        if(WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) WebViewCompat.addDocumentStartJavaScript(web,SCRIPT.replace("__STAGING_VERSION__",binary?"1.1.0":"1.0.0")
+            .replace("__BINARY_METHOD__",binary?"postFileFrame:frame => window.thingtimeDeviceTransport.postMessage(frame),":""),Collections.singleton(origin));
         web.loadUrl(origin);
     }
     private String canonical(String url) { try { return DeviceScope.origin(url,BuildConfig.DEBUG); } catch(Exception e) { return ""; } }

@@ -367,3 +367,8 @@ desktop runtime maps canonical API requests onto the bundled cookie proxy and
 preserves anonymous signed uploads. Native network/power conditions use the shared
 contract. Installed acceptance, restart persistence and native streaming remain
 pending; see the current release boundary in the mobile sync ledger.
+
+Android staging 1.1 uses `FolderRangeSource` and `mobileRangeFrames.ts` for
+nonce-bound, native-pulled binary WebView frames. `SyncStaging.appendRange`
+retains the lock and checkpoints once per bounded range; older WebViews fall
+back to staging 1.0. See the dated [sync ledger](../mobile-file-sync.md).

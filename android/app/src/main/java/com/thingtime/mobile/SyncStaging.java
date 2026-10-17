@@ -249,21 +249,36 @@ final class SyncStaging {
             finally { Os.close(fd); }
         });
     }
+    interface FrameReader { byte[] read(long offset,int length) throws Exception; }
     JSONObject append(JSONObject input,DeviceScope owner,String grantId,long offset,byte[] bytes) throws Exception {
-        if(offset<0 || bytes==null || bytes.length==0 || bytes.length>FolderReader.MAX_READ)throw invalid();
+        if(bytes==null || bytes.length==0 || bytes.length>FolderReader.MAX_READ)throw invalid();
+        return appendRange(input,owner,grantId,offset,bytes.length,(at,length)->Arrays.copyOfRange(bytes,(int)at,(int)at+length));
+    }
+    /** Keep the lock through all frames; acknowledge only after bytes and offset are durable. */
+    JSONObject appendRange(JSONObject input,DeviceScope owner,String grantId,long offset,long length,FrameReader reader) throws Exception {
+        if(offset<0 || length<1 || length>32*1024*1024 || reader==null)throw invalid();
         return withRecord(input,owner,grantId,false,(folder,row,request)-> {
             long received=row.getLong("received");JSONObject source=source(request);
-            if(!source.getString("kind").equals("file") || offset>received || offset>source.getLong("size")-bytes.length)throw invalid();
+            if(!source.getString("kind").equals("file") || offset>received || offset>source.getLong("size")-length)throw invalid();
             FileDescriptor fd=payload(folder,row,request,false);
             try {
-                if(offset<received || !row.isNull("stage")) {
-                    if(offset+bytes.length>received)throw changed();
-                    byte[] saved=new byte[bytes.length];int at=0;
-                    while(at<saved.length) { check.run();int n=Os.pread(fd,saved,at,saved.length-at,offset+at);if(n<=0)throw changed();at+=n; }
-                    if(!Arrays.equals(saved,bytes))throw changed();return progress(row);
+                boolean replay=offset<received || !row.isNull("stage");
+                if(replay && offset+length>received)throw changed();
+                for(long at=0;at<length;) {
+                    check.run();int wanted=(int)Math.min(FolderReader.MAX_READ,length-at);
+                    byte[] bytes=reader.read(at,wanted);check.run();
+                    if(bytes==null || bytes.length!=wanted)throw invalid();
+                    if(replay) {
+                        byte[] saved=new byte[wanted];int read=0;
+                        while(read<wanted) { check.run();int n=Os.pread(fd,saved,read,wanted-read,offset+at+read);if(n<=0)throw changed();read+=n; }
+                        if(!Arrays.equals(saved,bytes))throw changed();
+                    } else {
+                        int written=0;while(written<wanted) { check.run();int n=Os.pwrite(fd,bytes,written,wanted-written,offset+at+written);if(n<=0)throw storage();written+=n; }
+                    }
+                    at+=wanted;
                 }
-                int at=0;while(at<bytes.length) { check.run();int n=Os.pwrite(fd,bytes,at,bytes.length-at,offset+at);if(n<=0)throw storage();at+=n; }
-                Os.fsync(fd);afterBytesFlushed.run();check.run();row.put("received",received+bytes.length);save(folder,row);return progress(row);
+                check.run();if(replay)return progress(row);
+                Os.fsync(fd);afterBytesFlushed.run();check.run();row.put("received",received+length);save(folder,row);return progress(row);
             } finally { Os.close(fd); }
         });
     }

@@ -10583,12 +10583,13 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
   account change before returning it. Native dispatch is a fixture here.
 - [ ] Verify the signed installed Mac app with real picker, Keychain and TCC.
 - [ ] Benchmark sustained upload/download and large roots; download staging and
-  mobile reads still use individual chunk requests.
+  mobile reads still use individual chunk requests. Android download range
+  acceptance is recorded below.
 
 ## Mac download staging stream (2026-10-17)
 
 - [x] Negotiate Mac staging 1.1 and send 2 MiB cloud ranges as binary Electron
-  IPC; retain 64 KiB appends for older Mac and current mobile bridges.
+  IPC; retain 64 KiB appends for older Mac, iOS and Android staging 1.0.
 - [x] Check bounded helper headers, sequential 64 KiB XPC pulls, truncated and
   oversized sources, malformed offsets and account/main-frame boundaries.
 - [x] Recover an interrupted range and a payload-flushed/checkpoint-lost range
@@ -10600,3 +10601,17 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
   replacements, original IDs, retained versions and revocation without replay.
 - [ ] Verify signed installed XPC/Keychain/TCC, physical mobile streaming,
   abrupt machine power loss, low storage and sustained large-root performance.
+
+### Android binary download range regression — 2026-10-17
+
+- [x] On the installed API 35 app, run the existing two-way acceptance with a
+  fresh cloud fixture. Verify staging 1.1, nonzero raw binary frames bounded to
+  64 KiB plus their 36-byte nonce, zero legacy append messages, exact cloud-byte
+  counts, final hashes, repeated convergence and native settings reapproval.
+- [x] Unit transport checks reject malformed/out-of-order frame requests and
+  premature completion; cancellation suspends the exact native request. Native
+  frame tests ignore stale/duplicate/unsolicited frames and wake on cancellation.
+- [x] Real private Android staging: a multi-frame range checkpoints once;
+  replay compares every frame; interrupted reads, short frames and loss after
+  fsync leave only the old durable offset, and resume truncates extra tails.
+- [ ] Verify binary-capable physical devices and an older WebView chunk fallback.

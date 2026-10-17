@@ -63,6 +63,34 @@ public class SyncStagingTest {
         assertEquals(SyncStaging.canonical(stage),SyncStaging.canonical(store().finish(request,owner,grant).getJSONObject("stage")));
         assertArrayEquals(bytes,Files.readAllBytes(payload(request).toPath()));
     }
+    @Test public void streamedRangeCheckpointsOnceAndComparesEveryReplayedFrame() throws Exception {
+        byte[] bytes=new byte[2*1024*1024+17];for(int i=0;i<bytes.length;i++)bytes[i]=(byte)i;
+        JSONObject request=request(bytes,false);store().begin(request,owner,grant);
+        java.util.concurrent.atomic.AtomicInteger flushes=new java.util.concurrent.atomic.AtomicInteger(),frames=new java.util.concurrent.atomic.AtomicInteger();
+        SyncStaging stage=new SyncStaging(directory,()->{},flushes::incrementAndGet);
+        SyncStaging.FrameReader reader=(at,length)->{frames.incrementAndGet();assertTrue(length<=65536);return Arrays.copyOfRange(bytes,(int)at,(int)at+length);};
+        assertEquals(bytes.length,stage.appendRange(request,owner,grant,0,bytes.length,reader).getLong("received"));
+        assertEquals(1,flushes.get());assertEquals(33,frames.get());
+        assertEquals(bytes.length,stage.appendRange(request,owner,grant,0,bytes.length,reader).getLong("received"));assertEquals(1,flushes.get());
+        assertThrows(Exception.class,()->stage.appendRange(request,owner,grant,0,bytes.length,(at,length)-> {
+            byte[] frame=reader.read(at,length);if(at>0)frame[0]^=1;return frame;
+        }));
+        assertEquals(sha(bytes),stage.finish(request,owner,grant).getJSONObject("stage").getJSONObject("entry").getString("sha256"));
+    }
+    @Test public void interruptedStreamOrShortFrameCannotAdvanceDurableOffset() throws Exception {
+        byte[] bytes=new byte[65539];JSONObject request=request(bytes,false);store().begin(request,owner,grant);
+        for(boolean shortFrame:new boolean[]{false,true}) {
+            assertThrows(Exception.class,()->store().appendRange(request,owner,grant,0,bytes.length,(at,length)-> {
+                if(at>0) {if(shortFrame)return new byte[length-1];throw new java.io.IOException("Lost frame");}
+                return new byte[length];
+            }));
+            assertEquals(65536,payload(request).length());assertEquals(0,store().begin(request,owner,grant).getLong("received"));assertEquals(0,payload(request).length());
+        }
+        SyncStaging interrupted=new SyncStaging(directory,()->{},()->{throw new java.io.IOException("Lost checkpoint");});
+        assertThrows(Exception.class,()->interrupted.appendRange(request,owner,grant,0,bytes.length,(at,length)->new byte[length]));
+        assertEquals(bytes.length,payload(request).length());assertEquals(0,store().begin(request,owner,grant).getLong("received"));assertEquals(0,payload(request).length());
+        store().appendRange(request,owner,grant,0,bytes.length,(at,length)->new byte[length]);assertNotNull(store().finish(request,owner,grant).getJSONObject("stage"));
+    }
     @Test public void multipartMatchesCanonicalRawPartDigestsIncludingTheShortTail() throws Exception {
         byte[] bytes=new byte[8*1024*1024+17];Arrays.fill(bytes,(byte)13);JSONObject request=request(bytes,true);
         // Known cross-platform vector: SHA-256 of concatenated binary part digests.

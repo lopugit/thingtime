@@ -101,6 +101,12 @@ public class DeviceLiveTest {
         assertFalse(cloud.optBoolean("cleaned"));String connection=null;JSONObject uploaded=null;
         boolean twoWay="true".equals(InstrumentationRegistry.getArguments().getString("twoWaySync"));
         String button=twoWay?"Sync now":"Download now";
+        boolean binary=androidx.webkit.WebViewFeature.isFeatureSupported(androidx.webkit.WebViewFeature.WEB_MESSAGE_ARRAY_BUFFER);
+        if(binary) {
+            assertEquals("\"1.1.0\"",evaluate(web,"window.thingtimeNativeBridge.fileStagingVersion"));
+            evaluate(web,"window.__rangeQA={ranges:0,frames:0,bytes:0,appends:0,lastAction:null};window.__rangeQAPost=window.thingtimeNativeBridge.postMessage;window.__rangeQAFrame=window.thingtimeNativeBridge.postFileFrame;window.thingtimeNativeBridge.postMessage=m=>{if(m.type==='mobile-files'){window.__rangeQA.lastAction=m.payload.action;if(m.payload.action==='stage-range')window.__rangeQA.ranges++;if(m.payload.action==='stage-append')window.__rangeQA.appends++}return window.__rangeQAPost(m)};window.thingtimeNativeBridge.postFileFrame=f=>{if(!(f instanceof ArrayBuffer)||f.byteLength<37||f.byteLength>65572)throw Error('Invalid binary frame');window.__rangeQA.frames++;window.__rangeQA.bytes+=f.byteLength-36;return window.__rangeQAFrame(f)};");
+        }
+
         byte[] localBytes=new byte[257];java.util.Arrays.fill(localBytes,(byte)41);
         if(twoWay)fixture.publish(fixture.request("from-device.bin",localBytes,true),localBytes);
         try {
@@ -123,6 +129,11 @@ public class DeviceLiveTest {
                 expected.put(expectedFile("from-device.bin",localBytes));
             }
             JSONArray before=verifyCloudBytes(context,scope,root,expected);
+            if(binary) {
+                long downloaded=0;for(int i=0;i<cloud.getJSONArray("files").length();i++)downloaded+=cloud.getJSONArray("files").getJSONObject(i).getLong("size");
+                assertEquals("true",evaluate(web,"window.__rangeQA.appends===0 && window.__rangeQA.ranges>0 && window.__rangeQA.frames>window.__rangeQA.ranges && window.__rangeQA.bytes==="+downloaded));
+                System.out.println("ANDROID_BINARY_RANGE_PASS: "+evaluate(web,"JSON.stringify(window.__rangeQA)"));
+            }
             evaluate(web,"Array.from(document.querySelectorAll('button')).find(b=>b.textContent.trim()==='"+button+"'&&!b.disabled).click()");
             awaitTrue(web,"Array.from(document.querySelectorAll('button')).some(b=>b.textContent.trim()==='Stop transfer')");
             awaitDownload(web);
@@ -155,6 +166,8 @@ public class DeviceLiveTest {
             }
             System.out.println("OFFLINE_DOWNLOAD_PASS: actual Download now, native Cancel/Allow, cloud nested bytes, independent hashes and unchanged repeated transfer.");
         }finally {
+            if(binary)System.out.println("ANDROID_BINARY_RANGE_DIAGNOSTICS: "+evaluate(web,"JSON.stringify(window.__rangeQA)"));
+            if(binary)evaluate(web,"window.thingtimeNativeBridge.postMessage=window.__rangeQAPost;window.thingtimeNativeBridge.postFileFrame=window.__rangeQAFrame;delete window.__rangeQAPost;delete window.__rangeQAFrame;");
             if(twoWay) {
                 // Only the explicitly named synthetic local fixture belongs to this test.
                 JSONArray nodes=webApi(web,"/api/v1/files?rootId="+cloud.getString("rootId"),"GET",null).getJSONObject("inventory").getJSONArray("nodes");
@@ -239,7 +252,7 @@ public class DeviceLiveTest {
         JSONObject conditions=folderRequest(web,scope,new JSONObject().put("action","conditions")).getJSONObject("conditions");
         assertTrue(java.util.Arrays.asList("wifi","cellular","ethernet","offline","unknown").contains(conditions.getString("network")));
         assertTrue(conditions.isNull("charging") || conditions.get("charging") instanceof Boolean);
-        awaitTrue(web,"window.thingtimeNativeBridge?.fileStagingVersion==='1.0.0' && window.thingtimeNativeBridge.filePublicationVersion==='1.1.0'");
+        awaitTrue(web,"window.thingtimeNativeBridge?.fileStagingVersion==='"+(androidx.webkit.WebViewFeature.isFeatureSupported(androidx.webkit.WebViewFeature.WEB_MESSAGE_ARRAY_BUFFER)?"1.1.0":"1.0.0")+"' && window.thingtimeNativeBridge.filePublicationVersion==='1.1.0'");
         // A full 64 KiB base64 envelope must reach the real handler, then fail
         // on its missing native grant. This is not successful picker acceptance.
         JSONObject denied=folderReply(web,scope,new JSONObject().put("action","stage-append")
@@ -311,7 +324,7 @@ public class DeviceLiveTest {
         store.add(scope,uri,android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION,"ThingtimeSyncQA");
         assertFalse(store.isWriteApproved(scope,id,approval));
         assertFalse(context.getContentResolver().getPersistedUriPermissions().stream().anyMatch(p->p.getUri().equals(uri)&&p.isWritePermission()));
-        assertEquals("true",evaluate(web,"window.thingtimeNativeBridge.fileStagingVersion==='1.0.0' && window.thingtimeNativeBridge.filePublicationVersion==='1.1.0'"));
+        assertEquals("true",evaluate(web,"window.thingtimeNativeBridge.fileStagingVersion==='"+(androidx.webkit.WebViewFeature.isFeatureSupported(androidx.webkit.WebViewFeature.WEB_MESSAGE_ARRAY_BUFFER)?"1.1.0":"1.0.0")+"' && window.thingtimeNativeBridge.filePublicationVersion==='1.1.0'"));
         System.out.println("WRITE_APPROVAL_QA_PASS: native cancellation, real OS write grant, encrypted reload, exact retry, configuration change, reselection invalidation; generic provider publication remains disabled.");
     }
     private static void inspectSelectedDirectoryDescriptor(Context context,android.net.Uri tree) throws Exception {

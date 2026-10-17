@@ -33,14 +33,14 @@ export async function stageMobileCopy(
 		if (!result.staging) throw Error('Missing native staging progress.');
 		return result.staging;
 	};
-	const streaming = bridge?.platform === 'macos' && supportsMobileStaging(bridge) && Number(bridge.fileStagingVersion!.split('.')[1]) >= 1;
+	const streaming = (bridge?.platform === 'macos' || bridge?.platform === 'android') && supportsMobileStaging(bridge) && Number(bridge.fileStagingVersion!.split('.')[1]) >= 1;
 	await check();
 	let progress = await send({ action: 'stage-begin', rootId, transfer });
 	if (!Number.isSafeInteger(progress.received) || progress.received < 0 || progress.received > m.source.size) throw Error('Invalid staged offset.');
 	while (!progress.stage && progress.received < m.source.size) {
 		const start = progress.received;
-		// Buffer cloud ranges once. Mac staging 1.1 pulls bounded XPC frames
-		// within one request; older hosts retain small bridge messages.
+		// Buffer cloud ranges once. Mac and Android staging 1.1 pull bounded
+		// binary frames within one request; older hosts retain small messages.
 		const bytes = await source!.read(start, Math.min(2 * 1024 * 1024, m.source.size - start), signal);
 		signal.throwIfAborted();
 		if (bytes.length !== Math.min(2 * 1024 * 1024, m.source.size - start)) throw Error('Incomplete cloud stage bytes.');

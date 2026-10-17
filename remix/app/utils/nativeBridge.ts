@@ -18,6 +18,7 @@ export type ThingtimeNativeBridge = {
   platform: 'ios' | 'macos' | 'android';
   isNativeWebView: true;
   postMessage: (message: ThingtimeBridgeMessage) => void;
+  postFileFrame?: (frame: ArrayBuffer) => void;
   receiveMessageFromNative?: (message: ThingtimeBridgeMessage) => void;
   onMessage?: (listener: (message: ThingtimeBridgeMessage) => void) => () => void;
   offMessage?: (listener: (message: ThingtimeBridgeMessage) => void) => void;

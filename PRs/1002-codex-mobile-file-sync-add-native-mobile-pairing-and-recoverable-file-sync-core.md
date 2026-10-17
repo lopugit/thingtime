@@ -1067,3 +1067,49 @@ and real Files inspection. No consent or grant reply was fabricated. A first
 attempt exposed a test-only array serialization mistake before the reapproval
 step; node-wise canonical comparison fixed it, and the full sequence was rerun.
 Fixtures use normal cleanup and retain accounted cloud versions in private Trash.
+
+## Android binary download ranges — 2026-10-17
+
+Android staging 1.1 negotiates WebView ArrayBuffer support, using the existing
+origin/main-frame restricted bridge. A native range pulls at most 64 KiB per
+nonce-bound frame; the shared downloader supplies 2 MiB ranges. Account identity
+and native read grants are checked before/after a range, foreground/cancellation
+checks run throughout, and the staging lock spans frames plus the single durable
+checkpoint. Retained replay compares all bytes; an interrupted tail is truncated
+back to the acknowledged offset on resume. Final hashing and native publication
+approval remain separate. No shared storage/schema or permission is broadened.
+Old Android WebViews retain staging 1.0, and iOS retains its existing chunk path.
+
+The installed API 35 app downloaded 8,388,642 payload bytes using six ranges
+and 130 bounded binary frames, with zero legacy append messages and independently
+verified final hashes. JVM frame tests and real Android staging tests cover
+stale/duplicate frames, incorrect lengths, cancellation, timeout, multi-frame
+replay and interruption before durable acknowledgement.
+
+The complete installed two-way sequence passed independent 257-to-513-byte local
+uploads and an 8 MiB-plus cloud replacement, repeated convergence, changed-settings
+consent cancellation/retry and real Android Files inspection. Across both cloud
+versions it used 11 ranges, 259 frames and 16,777,281 payload bytes with no legacy
+appends. Cloud identities/revisions, local identities and full hashes passed the
+existing assertions. Native consent and grant replies were not fabricated.
+The runner reported `OK (50 tests)` (48 executed, two opt-in process-restart cases
+skipped), including 16 real-filesystem staging checks; all 29 JVM checks, debug
+build and Android lint passed. Shared sync tests passed 110 checks; 13 focused
+transport/staging checks were rerun after the deadline change. Targeted ESLint
+passed. Full TypeScript retains the same 91 baseline diagnostics with no new ones.
+
+This establishes bounded foreground download transport on the API 35 emulator,
+not a throughput benchmark. Physical devices, older WebView runtime fallback,
+Android upload ranges, iOS streaming, installed binary interruption/restart,
+background workers and the remaining sync product scope stay open. Fixtures use
+normal cleanup, retaining accounted cloud versions in private Trash.
+
+Installed validation exposed that the former 30-second per-chunk request deadline
+was too short for a multi-frame range: a diagnostic run transferred 124 binary
+frames (8,060,945 payload bytes), checkpointed earlier ranges, then stopped a
+later range while still receiving frames. Range requests now use the existing
+five-minute long-transfer deadline on both sides; an individual stalled frame
+still fails after 15 seconds, and foreground cancellation remains immediate
+between frames (at most 100 ms while waiting). No timeout or identity check is
+removed. The first run also caught an outdated test capability assertion,
+which now follows actual WebView binary support.

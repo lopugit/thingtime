@@ -1,3 +1,4 @@
+import { mobileRangeFrame } from './mobileRangeFrames';
 import { validateLocalStage, type LocalStagedCopy } from './localSyncTarget';
 import type { SyncOperation, SyncReceiptLookup } from './execute';
 import { sameSyncScope, sameSyncContent, type SyncScope } from './reconcile';
@@ -189,7 +190,13 @@ export function supportsMobileFolderPublication(folder: MobileFolder | undefined
 export function requestMobileFolders(ownerId: string, request: FolderRequest, signal: AbortSignal): Promise<FolderResult> {
 	const bridge = getNativeBridge();
 	if (!supportsMobileFolders(bridge)) return Promise.reject(Error('Folder access requires an updated mobile app.'));
-	if (request.action === 'read-range' || request.action === 'stage-range') return Promise.reject(Error('Native range streaming requires the desktop host.'));
+	if (request.action === 'read-range') return Promise.reject(Error('Native read range streaming requires the desktop host.'));
+	if (request.action === 'stage-range' && (bridge?.platform !== 'android' || !supportsMobileStaging(bridge) ||
+		Number(bridge.fileStagingVersion!.split('.')[1]) < 1 || typeof bridge.postFileFrame !== 'function'))
+		return Promise.reject(Error('Update the Android app to stream downloads.'));
+	if (request.action === 'stage-range' && (!(request.bytes instanceof Uint8Array) || request.bytes.byteLength < 1 ||
+		request.bytes.byteLength > 32 * 1024 * 1024 || !Number.isSafeInteger(request.offset) || request.offset < 0))
+		return Promise.reject(Error('Invalid native download range.'));
 	if (request.action === 'conditions' && !supportsMobileSyncConditions(bridge))
 		return Promise.reject(Error('Update the mobile app to run folder transfers.'));
 	if (request.action.startsWith('stage-') && !supportsMobileStaging(bridge))
@@ -199,6 +206,7 @@ export function requestMobileFolders(ownerId: string, request: FolderRequest, si
 	const input = structuredClone(request),
 		expected = { requestId: crypto.randomUUID(), ownerId, origin: window.location.origin };
 	return new Promise((resolve, reject) => {
+		let nextOffset = 0;
 		const cleanup = () => {
 			clearTimeout(timer);
 			window.removeEventListener(nativeBridgeMessageEvent, listener);
@@ -218,13 +226,23 @@ export function requestMobileFolders(ownerId: string, request: FolderRequest, si
 		};
 		const listener = (event: Event) => {
 			try {
+				if (input.action === 'stage-range') {
+					const pulled = mobileRangeFrame((event as CustomEvent).detail, expected, input.bytes, nextOffset);
+					if (pulled) {
+						nextOffset = pulled.nextOffset;
+						bridge!.postFileFrame!(pulled.frame);
+						return;
+					}
+				}
 				const result = parseMobileFolderResult((event as CustomEvent).detail, expected, input);
 				if (result) {
+					if (input.action === 'stage-range' && nextOffset !== input.bytes.byteLength) throw Error('Native download range is incomplete.');
 					cleanup();
 					resolve(result);
 				}
 			} catch (error) {
 				cleanup();
+				stop();
 				reject(error);
 			}
 		};
@@ -234,7 +252,7 @@ export function requestMobileFolders(ownerId: string, request: FolderRequest, si
 				stop();
 				reject(Error('Folder access timed out. Your saved selections are preserved.'));
 			},
-			['choose', 'scan', 'stage-begin', 'stage-finish', 'write-approve', 'publish', 'publication-lookup'].includes(input.action) ? 300_000 : 30_000
+			['choose', 'scan', 'stage-begin', 'stage-range', 'stage-finish', 'write-approve', 'publish', 'publication-lookup'].includes(input.action) ? 300_000 : 30_000
 		);
 		window.addEventListener(nativeBridgeMessageEvent, listener);
 		signal.addEventListener('abort', abort, { once: true });
@@ -243,9 +261,13 @@ export function requestMobileFolders(ownerId: string, request: FolderRequest, si
 			return;
 		}
 		try {
-			bridge!.postMessage({ type: 'mobile-files', payload: { ...expected, ...input } });
+			const payload = input.action === 'stage-range'
+				? { ...expected, action: input.action, rootId: input.rootId, transfer: input.transfer, offset: input.offset, length: input.bytes.byteLength }
+				: { ...expected, ...input };
+			bridge!.postMessage({ type: 'mobile-files', payload });
 		} catch (error) {
 			cleanup();
+			stop();
 			reject(error);
 		}
 	});

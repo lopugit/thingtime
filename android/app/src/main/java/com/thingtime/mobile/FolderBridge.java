@@ -38,10 +38,11 @@ final class FolderBridge {
     private Request pending; private boolean selecting; private Intent selectedResult; private boolean resultArrived;
     private CancellationSignal cancellation=new CancellationSignal();
     private static final class Request {
+        volatile FolderRangeSource range;
         FolderStore.Grant approvalGrant; WriteApproval approval; boolean chooseExisting,offlineConsent; String offlineName;
         final String id,action;final DeviceScope scope;final JSONObject payload,base;final JavaScriptReplyProxy reply;final long generation;final long deadline;
         Request(JSONObject payload,DeviceScope scope,JavaScriptReplyProxy reply,long generation) throws Exception {
-            this.payload=payload;this.scope=scope;this.reply=reply;this.generation=generation;id=payload.getString("requestId");action=payload.getString("action");deadline=android.os.SystemClock.elapsedRealtime()+((action.equals("choose") || action.equals("write-approve") || action.equals("scan") || action.equals("stage-begin") || action.equals("stage-finish") || action.equals("publish") || action.equals("publication-lookup"))?300000:30000);
+            this.payload=payload;this.scope=scope;this.reply=reply;this.generation=generation;id=payload.getString("requestId");action=payload.getString("action");deadline=android.os.SystemClock.elapsedRealtime()+((action.equals("choose") || action.equals("write-approve") || action.equals("scan") || action.equals("stage-begin") || action.equals("stage-range") || action.equals("stage-finish") || action.equals("publish") || action.equals("publication-lookup"))?300000:30000);
             base=new JSONObject().put("requestId",id).put("ownerId",scope.owner).put("origin",scope.origin);
         }
     }
@@ -55,7 +56,7 @@ final class FolderBridge {
         proofs.clear();
         if(approvalDialog!=null) { approvalDialog.dismiss();approvalDialog=null; }
         Request old=pending;pending=null;selecting=false;selectedResult=null;resultArrived=false;generation.incrementAndGet();cancellation.cancel();cancellation=new CancellationSignal();
-        if(old!=null) reply(old,new JSONObject(),"Folder access paused. Try again when the app is active.");
+        if(old!=null) { if(old.range!=null)old.range.close();reply(old,new JSONObject(),"Folder access paused. Try again when the app is active."); }
     }
     void pause() { if(!selecting) suspend(); }
     void activityResult(int code,int result,Intent data) {
@@ -67,12 +68,17 @@ final class FolderBridge {
         Request request=pending;Intent result=selectedResult;selectedResult=null;resultArrived=false;selecting=false;
         execute(request,result,true);
     }
+    void handleFrame(byte[] bytes) {
+        Request request=pending;
+        if(request!=null && request.range!=null && active.get())request.range.accept(bytes);
+    }
     void handle(JSONObject body,JavaScriptReplyProxy reply) throws Exception {
         JSONObject payload=body.getJSONObject("payload");String id=payload.getString("requestId"),action=payload.getString("action");
         if(!UUID.fromString(id).toString().equalsIgnoreCase(id)) return;
         DeviceScope scope=new DeviceScope(payload.getString("ownerId"),origin,BuildConfig.DEBUG);
         if(action.equals("suspend")) { if(pending!=null && pending.id.equals(id)) suspend();return; }
-        if(!java.util.Arrays.asList("list","choose","remove","scan","read","conditions","stage-begin","stage-append","stage-finish","write-approve","publication-lookup","publish").contains(action)) return;
+        if(!java.util.Arrays.asList("list","choose","remove","scan","read","conditions","stage-begin","stage-append","stage-range","stage-finish","write-approve","publication-lookup","publish").contains(action)) return;
+        if(action.equals("stage-range") && !WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_ARRAY_BUFFER))return;
         if(pending!=null) { reply(new Request(payload,scope,reply,generation.get()),new JSONObject(),"Another folder request is running.");return; }
         Request request=new Request(payload,scope,reply,generation.incrementAndGet());pending=request;execute(request,null,false);
     }
@@ -171,7 +177,7 @@ final class FolderBridge {
                         if(request.action.equals("publish"))OfflineDocumentsProvider.changed(activity,android.provider.DocumentsContract.getTreeDocumentId(grant.uri));
                     }
                     else if(request.action.startsWith("stage-")) {
-                        // Resolve this account's native grant on every chunk. A
+                        // Resolve this account's native grant on every range. A
                         // remembered root ID or existing journal is not authority.
                         FolderStore.Grant selectedGrant=store.snapshot(request.scope,rootId);store.requireRead(request.scope,selectedGrant);
                         FolderReader.Doc root=new SafFolderProvider(activity.getContentResolver(),selectedGrant.uri,signal).root();
@@ -179,7 +185,21 @@ final class FolderBridge {
                         SyncStaging staging=new SyncStaging(activity,check);JSONObject transfer=request.payload.getJSONObject("transfer"),progress;
                         if(request.action.equals("stage-begin"))progress=staging.begin(transfer,request.scope,rootId);
                         else if(request.action.equals("stage-finish"))progress=staging.finish(transfer,request.scope,rootId);
-                        else {
+                        else if(request.action.equals("stage-range")) {
+                            try(FolderRangeSource range=new FolderRangeSource(check,(token,offset,length)->activity.runOnUiThread(()-> {
+                                try {
+                                    check.run();if(pending!=request)throw new java.util.concurrent.CancellationException();
+                                    JSONObject pull=new JSONObject(request.base.toString()).put("token",token).put("offset",offset).put("length",length);
+                                    request.reply.postMessage(new JSONObject().put("type","mobile-files-range-pull").put("payload",pull).toString());
+                                } catch(Exception error) { if(request.range!=null)request.range.close(); }
+                            }))) {
+                                request.range=range;check.run();
+                                progress=staging.appendRange(transfer,request.scope,rootId,
+                                    SyncStaging.integer(request.payload,"offset",9007199254740991L),
+                                    SyncStaging.integer(request.payload,"length",32*1024*1024),range::read);
+                            } finally { request.range=null; }
+                            store.requireRead(request.scope,selectedGrant);check.run();
+                        } else {
                             Object encoded=request.payload.get("data");
                             if(!(encoded instanceof String) || ((String)encoded).length()>87384)throw new FolderReader.Failure("Invalid download chunk.");
                             byte[] bytes=java.util.Base64.getDecoder().decode((String)encoded);
@@ -273,6 +293,7 @@ final class FolderBridge {
         });
     }
     private void finish(Request request,JSONObject result,String error) {
+        if(request.range!=null)request.range.close();
         activity.runOnUiThread(()-> {
             if(generation.get()!=request.generation || pending!=request || !active.get()) return;
             if(approvalDialog!=null) { approvalDialog.dismiss();approvalDialog=null; }
