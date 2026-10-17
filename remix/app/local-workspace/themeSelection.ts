@@ -10,14 +10,14 @@ import { accountSyncDeadline, type SyncState } from './accountSync';
 import { WorkspaceError, type WorkspaceDatabase, type WorkspaceLease, type WorkspaceScope, type WorkspaceTransaction } from './storage';
 export type ThemeSelectionTransport = {
 	selection(signal: AbortSignal): Promise<ThemeSelection>;
-	select(command: ThemeSelectionWrite, signal: AbortSignal): Promise<ThemeSelectionAcknowledgment>;
+	select(command: ThemeSelectionWrite, signal: AbortSignal, receiptPlane?: string): Promise<ThemeSelectionAcknowledgment>;
 };
 type State = {
 	revision: number;
 	desired: string | null;
 	base: ThemeSelection | null;
 	state: SyncState;
-	pending?: { command: ThemeSelectionWrite; revision: number };
+	pending?: { command: ThemeSelectionWrite; revision: number; receiptPlane?: string };
 	claim?: { token: string; expiresAt: number };
 	retryAt: number;
 	attempts: number;
@@ -134,7 +134,8 @@ export class AccountThemeSelection {
 					return null;
 				const pending = row.pending ?? {
 					command: parseThemeSelectionWrite({ themeId: row.desired, expectedVersion: row.base.version, writeId: this.uuid() }),
-					revision: row.revision
+					revision: row.revision,
+					receiptPlane: 'home'
 				};
 				const next = { ...row, pending, state: 'syncing' as const, claim: { token: this.uuid(), expiresAt: this.now() + 60_000 } };
 				await tx.put('settings', key, next);
@@ -152,7 +153,7 @@ export class AccountThemeSelection {
 			const command = claimed.pending.command;
 			let result: ThemeSelection;
 			try {
-				const acknowledgment = parseThemeSelectionAcknowledgment(await accountSyncDeadline((s) => transport.select(command, s), controller.signal));
+				const acknowledgment = parseThemeSelectionAcknowledgment(await accountSyncDeadline((s) => transport.select(command, s, claimed.pending.receiptPlane ?? this.scope.dataPlane), controller.signal));
 				if (
 					acknowledgment.themeId !== command.themeId ||
 					acknowledgment.writeId !== command.writeId ||

@@ -1,3 +1,4 @@
+import { parseThemeHomeContext, type ThemeHomeContext } from './themeHomeContext';
 import { createHash } from 'node:crypto';
 import { getHomeThingsCollection, withHomeMongoTransaction } from '../mongodb/collections';
 import { readUserThemeSelection, setUserActiveTheme, ActiveThemeConflictError } from '../auth/users';
@@ -21,16 +22,19 @@ export async function synchronizeThemeSelection(
 	ownerId: string,
 	plane: string,
 	raw: unknown,
-	admit: () => Promise<void>
+	admit: () => Promise<void>,
+	homeContext?: ThemeHomeContext
 ): Promise<ThemeSelectionAcknowledgment> {
 	let command: ThemeSelectionWrite;
+	let context: ThemeHomeContext | undefined;
 	try {
 		command = parseThemeSelectionWrite(raw);
+		context = homeContext === undefined ? undefined : parseThemeHomeContext(homeContext);
 	} catch {
 		throw new ThemeSyncError(400, 'Invalid theme selection command.');
 	}
 	const things = await getHomeThingsCollection(),
-		requestDigest = digest(ownerId, plane, command);
+		requestDigest = digest(ownerId, context?.receiptPlane ?? plane, command);
 	return withHomeMongoTransaction(async (session) => {
 		await admit();
 		const entries = await readTimelineEntries(things, ownerId, [eventId(command.writeId)], session);

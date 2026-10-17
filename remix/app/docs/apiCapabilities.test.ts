@@ -32,9 +32,9 @@ test('dedicated theme writers advertise durable history on both capability manif
 
 test('conditional theme synchronization is registered on both manifests', () => {
  const feature = 'api.themes-sync';
- assert.equal(createApiCapabilitiesManifest().features[feature], '1.4.0');
+ assert.equal(createApiCapabilitiesManifest().features[feature], '1.5.0');
  const manifest = thingtimeCapabilityManifest('https://thingtime.test');
- assert.equal(manifest.features[feature].version, '1.4.0');
+ assert.equal(manifest.features[feature].version, '1.5.0');
  assert.ok(manifest.operations.some(operation => operation.feature === feature && operation.path === '/api/v1/themes/sync' && operation.methods.includes('POST')));
  assert.equal(typeof routeModules['v1/themes/sync'], 'function');
 });
@@ -713,7 +713,17 @@ test('draft naming requires the explicit Timeline 1.20 contract', () => {
 
 test('theme title metadata requires compatible synchronization and transfer contracts',()=>{
  for(const [feature,minimum,old] of [['api.themes-sync','1.4.0','1.3.0'],['api.things-import','1.12.0','1.11.0'],['api.things-export','1.16.0','1.15.0']]){
-  assert.equal(createApiCapabilitiesManifest().features[feature],minimum);assert.equal(thingtimeCapabilityManifest('https://titles.test').features[feature].version,minimum);
+  assert.equal(capabilitySatisfies(createApiCapabilitiesManifest().features[feature],minimum),true);assert.equal(capabilitySatisfies(thingtimeCapabilityManifest('https://titles.test').features[feature].version,minimum),true);
   assert.equal(capabilitySatisfies(old,minimum),false);assert.equal(capabilitySatisfies('2.0.0',minimum),false);
  }
+});
+
+
+test('home theme receipt context requires its additive sync contract on both manifests',()=>{
+ const feature='api.themes-sync';
+ assert.equal(createApiCapabilitiesManifest().features[feature],'1.5.0');
+ assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features[feature].version,'1.5.0');
+ assert.equal(capabilitySatisfies('1.4.0','1.5.0'),false);
+ assert.equal(capabilitySatisfies('1.5.1','1.5.0'),true);
+ assert.equal(capabilitySatisfies('2.0.0','1.5.0'),false);
 });

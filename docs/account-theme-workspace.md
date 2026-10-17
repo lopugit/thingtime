@@ -27,8 +27,8 @@ device content makes a fresh private copy rather than resurrecting its old ID.
 Unknown outcomes cannot be discarded through the conflict-review path. Related
 device Things prevent silently deleting their retained parent.
 
-`themeTransport.client.ts` negotiates `api.themes-sync` **1.2.0** for catalogues,
-**1.0.1** for content writes, **1.1.0** for selection, and
+`themeTransport.client.ts` negotiates `api.themes-sync` **1.4.0** for complete catalogues,
+**1.5.0** for new device content/selection writes carrying home receipt context, and
 `api.mongodb-endpoint` 1.1.0, then uses bounded, same-origin, non-redirecting
 requests with the expected owner and selected data plane. Both confirmation and
 response identity are rechecked. Offline or anonymous content identity is never
@@ -301,3 +301,36 @@ These are local results; current-head CI and deployed acceptance are unverified.
 
 Wider protected-kind renaming, account theme History, home-partition integration,
 shared gallery retention and the full matrix remain open.
+
+
+## Stable home receipts — 2026-10-18
+
+New device theme and active-selection commands freeze `receiptPlane: home`
+with their immutable request. `/api/v1/themes/sync` 1.5.0 accepts an explicit
+`context: { storagePlane: "home", receiptPlane }` for `write` and `select`.
+The current selected-plane header, full account, origin and repeated admission
+checks still apply. Context selects no database and carries no authorization.
+The canonical home writer still validates folder ownership, theme access,
+versions, quota and protected Timeline receipts.
+
+An older pending command without this field retains its original selected-plane
+receipt identity. Migration code must store that original plane before moving
+the record; changing it to home would change the digest and turn an uncertain
+retry into a conflicting request. A retry keeps both the command and context
+unchanged even when later device edits have completed. Legacy requests without
+context preserve their previous placement/title restrictions. Explicit home
+context permits owned home metadata changes while another content plane is
+selected, and never permits a custom-plane or foreign folder as home placement.
+
+The isolated `themeImport.api.test.ts` fixture checks real receipts across a
+selected-plane switch, old command replay, altered context/content refusal,
+home-folder ownership, selection replay without reapplying an old choice, and
+normal private transfer import/export. It uses disposable loopback accounts and
+cleans fixture entries through normal APIs. Run it with
+`TT_THEME_IMPORT_API_URL`, `TT_THEME_IMPORT_API_ARTIFACTS`, and
+`TT_SHARED_PLAYWRIGHT_PATH`; it refuses a non-isolated database.
+
+This is receipt compatibility for the home-cache integration. The device theme
+cache still uses the selected-plane partition. Lossless consolidation of old
+partitions, mixed imports, cross-tab home invalidation and account theme History
+remain unfinished. No cache migration is enabled by this increment.

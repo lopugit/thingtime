@@ -1,3 +1,4 @@
+import { parseThemeHomeContext, type ThemeHomeContext } from '~/api/utils/themes/themeHomeContext';
 import { json, readJsonBody, requireJsonContentType } from '~/api/http';
 import { getAuthToken } from '~/api/utils/auth/authCookie';
 import { resolveTokenUser } from '~/api/utils/auth/getCurrentUser';
@@ -58,13 +59,16 @@ export function createThemeSyncResponse(overrides: Partial<typeof defaults> = {}
 				!body.expectedOwnerId ||
 				Object.keys(body).some(
 					(key) =>
-						!(['write', 'select'].includes(body.operation) ? ['operation', 'expectedOwnerId', 'command'] : ['operation', 'expectedOwnerId']).includes(
+						!(['write', 'select'].includes(body.operation) ? ['operation', 'expectedOwnerId', 'command', 'context'] : ['operation', 'expectedOwnerId']).includes(
 							key
 						)
 				) ||
 				(['write', 'select'].includes(body.operation) && !body.command)
 			)
 				return deny(400, 'Invalid theme synchronization request.');
+			let context: ThemeHomeContext | undefined;
+			try { context = body.context === undefined ? undefined : parseThemeHomeContext(body.context); }
+			catch { return deny(400, 'Invalid home theme context.'); }
 			const ownerId = body.expectedOwnerId;
 			const admit = async () => {
 				const account = token ? await deps.resolveTokenUser(token) : null;
@@ -84,8 +88,8 @@ export function createThemeSyncResponse(overrides: Partial<typeof defaults> = {}
 					: body.operation === 'selection'
 					? { selection: await deps.readUserThemeSelection(ownerId) }
 					: body.operation === 'select'
-					? { acknowledgment: await deps.synchronizeThemeSelection(ownerId, expectedPlane, body.command, admit) }
-					: { acknowledgment: await deps.synchronizeThemeWrite(ownerId, expectedPlane, body.command, admit) };
+					? { acknowledgment: await deps.synchronizeThemeSelection(ownerId, expectedPlane, body.command, admit, context) }
+					: { acknowledgment: await deps.synchronizeThemeWrite(ownerId, expectedPlane, body.command, admit, context) };
 			await admit();
 			return json({ ok: true, ownerId, dataPlane: expectedPlane, storagePlane: 'home', ...result }, { headers });
 		} catch (error) {

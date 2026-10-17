@@ -154,3 +154,42 @@ test('selection reads and writes retain admission and disclosure boundaries', as
   }
  }
 });
+
+
+test('explicit home destination preserves receipt context without replacing current session admission', async () => {
+ const selected = 'custom-' + 'a'.repeat(64), original = 'custom-' + 'b'.repeat(64);
+ for (const operation of ['write','select']) {
+  let calls=0;
+  const context={storagePlane:'home',receiptPlane:original};
+  const handler=async(owner:string,plane:string,raw:unknown,admit:()=>Promise<void>,received:unknown)=>{
+   assert.equal(owner,'owner'); assert.equal(plane,selected); assert.deepEqual(raw,command); assert.deepEqual(received,context);
+   await admit(); calls++; return receipt as any;
+  };
+  const f=fixture({mongoDataPlane:()=>selected,synchronizeThemeWrite:handler,synchronizeThemeSelection:handler});
+  const payload={...body,operation,context};
+  const response=await f.run({request:request(payload,{'X-Thingtime-Expected-Data-Plane':selected})});
+  assert.equal(response.status,200); const result=await response.json();
+  assert.equal(result.dataPlane,selected); assert.equal(result.storagePlane,'home'); assert.equal(calls,1);
+  for(const [overrides,headers,status] of [
+   [{getAuthToken:async()=>null},{},401],
+   [{resolveTokenUser:async()=>({...account,user:{...account.user,id:'other'}})},{},409],
+   [{mongoDataPlane:()=>original},{},409],
+   [{},{Origin:'https://foreign.example'},403],
+   [{enforceRateLimit:async()=>({allowed:false,limit:60,remaining:0,resetAt:new Date().toISOString()})},{},429]
+  ] as const) {
+   const denied=fixture({mongoDataPlane:()=>selected,synchronizeThemeWrite:async()=>assert.fail('Denied write'),synchronizeThemeSelection:async()=>assert.fail('Denied selection'),...overrides});
+   assert.equal((await denied.run({request:request(payload,{'X-Thingtime-Expected-Data-Plane':selected,...headers})})).status,status);
+  }
+ }
+});
+test('home context rejects alternate destinations, extra authority and read operations before storage',async()=>{
+ for(const operation of ['write','select','snapshot','selection']) {
+  for(const context of [null,{storagePlane:'other',receiptPlane:'home'},{storagePlane:'home',receiptPlane:'custom-bad'},
+   {storagePlane:'home',receiptPlane:'home',ownerId:'other'}, ...(operation==='snapshot'||operation==='selection'?[{storagePlane:'home',receiptPlane:'home'}]:[])]) {
+   const f=fixture({synchronizeThemeSelection:async()=>assert.fail('Unexpected write'),readUserThemeSelection:async()=>assert.fail('Unexpected read')});
+   const payload={operation,expectedOwnerId:'owner',context,...(['write','select'].includes(operation)?{command}:{})};
+   assert.equal((await f.run({request:request(payload)})).status,400);
+   assert.equal(f.writes()+f.reads(),0);
+  }
+ }
+});

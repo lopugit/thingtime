@@ -3350,3 +3350,44 @@ completed; the title source/docs refresh is recorded separately below.
 Account theme History, home-partition integration, other protected-kind titles,
 algorithm sync, wider identity/cache boundaries, latest-main reconciliation and
 the full acceptance matrix remain open. No merge or deployment is claimed.
+
+
+## Home receipt compatibility — 2026-10-18
+
+Theme and active-selection retry identity now survives a selected-plane change.
+New frozen device commands use home receipt context; old frozen commands retain
+their original plane. The additive themes-sync 1.5.0 contract declares the home
+destination separately from the mandatory current selected-plane/session fence.
+Canonical home ownership, folder validation, quota, History receipts, auth,
+same-origin admission and rate limits remain in force. Context is not database
+selection or remote authority. Legacy callers retain their previous semantics.
+
+Local edits still finish independently while an older command awaits a receipt.
+The isolated real API fixture passes 58 checks, including owned home metadata
+from a custom selection, exact retries from another selected plane, legacy
+receipt preservation, altered context/body refusal, private transfer round-trip,
+and selection replay without reapplying an obsolete choice. Cleanup uses normal
+APIs. Evidence: `tmp/home-theme-context-live-api/verification.json`.
+
+Applied-source validation: 532 workspace tests plus four shell checks pass;
+62 opt-in skips remain distinct. The 104 capability checks and 72 focused
+route/parser/manifest checks pass. Both native account and anonymous browser
+fixtures run explicitly at 1440/390/320px: offline rename, move, folder drain,
+theme deletion, cold reload and reconnect pass with zero offline account writes
+and no page errors. Evidence: `tmp/home-theme-context-live-browser/`. Client
+build passes (248 verified assets); focused lint has no errors or warnings.
+Raw TypeScript retains the same 91 baseline errors / 47 normalized signatures.
+
+The prior title semantic graph refresh exited unsuccessfully because its
+completeness guard detected a shrink in account-theme documentation. It preserved
+the existing graph; no partial override was used. The subsequent graph query
+completed. Structural refresh evidence is recorded in
+`tmp/home-theme-context-graph.log`; semantic freshness remains unproven.
+
+This increment does not enable cache migration. The atomic same-account
+home/selected transaction candidate remains isolated in ignored scratch space
+with four dedicated tests passing. Home-cache consolidation must preserve all
+pending conflicts and original receipt contexts, then integrate mixed imports,
+selection, cross-tab invalidation and protected account History. Other local-only
+feature families, latest-main reconciliation and full acceptance remain open.
+No merge, production deployment or existing-account mutation was performed.

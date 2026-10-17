@@ -68,6 +68,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-18 — **Codex (AI)**: Preserve immutable home theme/selection receipt
+  identity across selected-plane changes. The additive themes-sync 1.5.0 context
+  retains current session/origin/plane checks and canonical home ownership.
+  Legacy retries keep their original context while later edits finish locally.
+  Real isolated API replay/refusal checks pass; home-cache migration remains open.
+  Details: [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
 - 2026-10-18 — **Codex (AI)**: Theme library display titles now rename offline
   for anonymous and retained account workspaces, sync independently, and survive
   canonical import/export. Removed the duplicate network preflight from the

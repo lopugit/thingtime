@@ -11726,3 +11726,22 @@ verification limits are in `docs/local-workspaces.md`.
 - [ ] Cold offline account Rename must reach the local adapter without requiring
       a live capability manifest in the UI. A later remote request must still
       negotiate its own capability and matching account/origin/plane lease.
+
+
+### Home theme receipt context (2026-10-18)
+
+- [x] Using disposable loopback accounts, save owned home folder/title metadata
+      while a custom content plane is selected. Retry from home with the exact
+      context and receive the same receipt. Missing/foreign home folders, changed
+      commands and changed receipt context must fail without changing content.
+- [x] Replay a legacy custom-plane theme/selection command from home by retaining
+      its original receipt plane. New device commands freeze home receipt identity;
+      later offline edits preserve the frozen request. Old selection receipts
+      never reapply a choice after a later clear. Run `themeImport.api.test.ts`,
+      `themeReceiptContext.test.ts`, `themeTransport.test.ts` and route tests.
+- [x] Anonymous/offline authority, another account/origin/selected plane and an
+      older capability cannot send the new context contract. Read operations and
+      context fields that claim another storage destination are refused.
+- [ ] Consolidate existing selected-plane theme caches without losing conflicting
+      or uncertain pending edits; prove shared home selection, cross-tab refresh,
+      mixed import/export and protected account History before enabling migration.

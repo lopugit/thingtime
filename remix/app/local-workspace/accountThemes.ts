@@ -30,7 +30,7 @@ export type AccountThemeSnapshot = {
 };
 export type AccountThemeTransport = {
 	snapshot(signal: AbortSignal): Promise<AccountThemeSnapshot[]>;
-	write(command: ThemeWrite, signal: AbortSignal): Promise<ThemeWriteAcknowledgment>;
+	write(command: ThemeWrite, signal: AbortSignal, receiptPlane?: string): Promise<ThemeWriteAcknowledgment>;
 };
 type State = {
 	id: string;
@@ -45,7 +45,7 @@ type State = {
 	titleIntent?: boolean;
 	placementIntent?: boolean;
 	remoteFolderId?: string | null;
-	pending?: { command: ThemeWrite; revision: number };
+	pending?: { command: ThemeWrite; revision: number; receiptPlane?: string };
 	claim?: { token: string; expiresAt: number };
 	retryAt: number;
 	attempts: number;
@@ -480,7 +480,7 @@ export class AccountThemeSync {
 										...(row.titleIntent ? { title: thing?.crystal.title ?? null } : {})
 								  }
 						);
-						pending = { command, revision: row.revision };
+						pending = { command, revision: row.revision, receiptPlane: 'home' };
 					}
 					const next = { ...row, pending, state: 'syncing' as const, claim: { token: this.uuid(), expiresAt: this.now() + 60_000 } };
 					await tx.put(collection, row.id, next);
@@ -496,7 +496,7 @@ export class AccountThemeSync {
 			if (signal.aborted) abort();
 			try {
 				const command = claimed.pending!.command,
-					acknowledgment = parseThemeWriteAcknowledgment(await accountSyncDeadline((s) => transport.write(command, s), controller.signal));
+					acknowledgment = parseThemeWriteAcknowledgment(await accountSyncDeadline((s) => transport.write(command, s, claimed.pending!.receiptPlane ?? this.scope.dataPlane), controller.signal));
 				if (
 					acknowledgment.id !== command.id ||
 					acknowledgment.writeId !== command.writeId ||

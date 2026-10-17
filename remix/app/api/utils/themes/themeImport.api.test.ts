@@ -56,7 +56,7 @@ test(
 			assert.equal(health.replicaSet, 'draftPreview');
 			assert.equal(health.custom, false);
 			const capabilities = await read(await owner.get('/api/v1/capabilities'), 'placement contract active');
-			assert.equal(capabilities.features['api.themes-sync'], '1.4.0');
+			assert.equal(capabilities.features['api.themes-sync'], '1.5.0');
 			for (const context of [owner, other]) {
 				const username = 'themeimport-' + randomUUID().slice(0, 8);
 				const result = await read(
@@ -186,6 +186,35 @@ test(
 			assert.equal(withoutTitle.name, copied.name);
 			assert.deepEqual(withoutTitle.theme, copied.theme);
 			await read(await guest.get('/api/v1/themes/shared', { params: { id: create.id } }), 'imported theme stays private', 404);
+
+            const sendContext = (operation: string, value: unknown, receiptPlane: string, extra = {}) => owner.post('/api/v1/themes/sync', {
+                headers: {...headers,...extra}, data: {operation,expectedOwnerId:ownerId,command:value,context:{storagePlane:'home',receiptPlane}}
+            });
+            const homeChange=command({id:create.id,expectedVersion:theme.version,folderId:folders[0],title:'Home title from custom selection',name:theme.name,theme:theme.theme});
+            const homeReceipt=(await read(await sendContext('write',homeChange,'home',selected),'explicit home metadata from selected custom plane')).acknowledgment;
+            assert.deepEqual((await read(await sendContext('write',homeChange,'home'),'home receipt replays after selected plane changes')).acknowledgment,homeReceipt);
+            await read(await sendContext('write',homeChange,root.dataPlane),'altered receipt identity refused',409);
+            const homeState=(await snapshot()).find((row:any)=>row.id===create.id);
+            assert.equal(homeState.folderId,folders[0]);assert.equal(homeState.title,homeChange.title);
+            for(const folderId of [foreignFolders[0],randomUUID()]) {
+                await read(await sendContext('write',command({id:create.id,expectedVersion:homeState.version,folderId}),'home',selected),'explicit home destination still requires owned home folder',409);
+            }
+            assert.deepEqual((await snapshot()).find((row:any)=>row.id===create.id),homeState);
+            const legacyReceipt=(await read(await write(rootCreate,selected),'legacy custom receipt unchanged')).acknowledgment;
+            assert.deepEqual((await read(await sendContext('write',rootCreate,root.dataPlane),'legacy receipt replays through explicit original context')).acknowledgment,legacyReceipt);
+            await read(await sendContext('write',rootCreate,'home'),'legacy receipt cannot be rebound to home',409);
+            await read(await sendContext('write',{...rootCreate,name:'Changed legacy retry'},root.dataPlane),'legacy receipt cannot change payload',409);
+            const getSelection=async()=> (await read(await owner.post('/api/v1/themes/sync',{headers,data:{operation:'selection',expectedOwnerId:ownerId}}),'read home selection')).selection;
+            const initialSelection=await getSelection();
+            const choose={themeId:create.id,expectedVersion:initialSelection.version,writeId:randomUUID()};
+            const chosen=(await read(await sendContext('select',choose,'home',selected),'select home theme from custom plane')).acknowledgment;
+            assert.deepEqual((await read(await sendContext('select',choose,'home'),'selection receipt replays across selected planes')).acknowledgment,chosen);
+            const clear={themeId:null,expectedVersion:chosen.result.version,writeId:randomUUID()};
+            const legacySelection=(await read(await owner.post('/api/v1/themes/sync',{headers:{...headers,...selected},data:{operation:'select',expectedOwnerId:ownerId,command:clear}}),'legacy selected-plane selection')).acknowledgment;
+            assert.deepEqual((await read(await sendContext('select',clear,root.dataPlane),'legacy selection retains original receipt context')).acknowledgment,legacySelection);
+            await read(await sendContext('select',clear,'home'),'selection receipt cannot be rebound',409);
+            assert.deepEqual((await read(await sendContext('select',choose,'home'),'old context receipt does not reapply selection')).acknowledgment,chosen);
+            assert.deepEqual(await getSelection(),legacySelection.result);
 			completed = true;
 		} finally {
 			try {

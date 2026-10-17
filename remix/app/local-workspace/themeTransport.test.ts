@@ -133,3 +133,39 @@ test('theme transport rejects missing capability, offline authority, partial cat
 		bindLocalWorkspace(true, rootIdentity.read().generation);
 	}
 });
+
+
+test('home receipts negotiate their contract while requests retain the current selected-plane fence',async()=>{
+ const origin='https://theme-home-transport.example', selected='custom-'+'a'.repeat(64), original='custom-'+'b'.repeat(64);
+ const scope={kind:'account',ownerId:'owner',origin,dataPlane:selected} as const;
+ const previous={window:globalThis.window,fetch:globalThis.fetch};
+ const calls:RequestInit[]=[];
+ let capability='1.4.0';
+ const command=parseThemeWrite({action:'save',id:'123e4567-e89b-42d3-a456-426614174000',writeId:'receipt-context',expectedVersion:null,name:'Peach',theme:{},visibility:'private'});
+ const acknowledgment={id:command.id,writeId:command.writeId,action:'save',expectedVersion:null,resultVersion:'theme-state-v1:'+'a'.repeat(64)};
+ Object.assign(globalThis,{window:{location:{origin},dispatchEvent:()=>true},fetch:async(url:string,init:RequestInit)=>{
+  if(url.includes('capabilities')) return Response.json({schemaVersion:1,origin,features:{'api.themes-sync':{version:capability},'api.mongodb-endpoint':{version:'1.1.0'}}});
+  calls.push(init);return Response.json({ok:true,ownerId:'owner',dataPlane:selected,storagePlane:'home',acknowledgment});
+ }});
+ const bind=(confirmed=true)=>{
+  rootIdentity.confirm(rootIdentity.read().generation);bindLocalWorkspace(false,rootIdentity.read().generation,scope,confirmed);
+  return accountThemeTransport(scope,accountWorkspaceLease(scope));
+ };
+ try {
+  await assert.rejects(bind().write(command,signal(),'home'),/incompatible/);assert.equal(calls.length,0);
+  capability='1.5.0';
+  for(const receiptPlane of ['home',original]) {
+   assert.deepEqual(await bind().write(command,signal(),receiptPlane),acknowledgment);
+   const sent=calls.at(-1)!;
+   assert.equal((sent.headers as any)['X-Thingtime-Expected-Data-Plane'],selected);
+   assert.equal((sent.headers as any)['X-Thingtime-Expected-Actor'],'owner');
+   assert.deepEqual(JSON.parse(String(sent.body)),{operation:'write',expectedOwnerId:'owner',command,context:{storagePlane:'home',receiptPlane}});
+  }
+  const count=calls.length;
+  await assert.rejects(bind().write(command,signal(),'https://elsewhere.example'),/Invalid home theme context/);
+  await assert.rejects(bind(false).write(command,signal(),'home'),/offline/);
+  rootIdentity.confirm(rootIdentity.read().generation);bindLocalWorkspace(true,rootIdentity.read().generation);
+  await assert.rejects(accountThemeTransport(scope,{assertCurrent(){},onInvalidate:()=>()=>{}}).write(command,signal(),'home'));
+  assert.equal(calls.length,count,'invalid context, offline or anonymous identity never sends');
+ } finally {Object.assign(globalThis,previous);rootIdentity.confirm(rootIdentity.read().generation);bindLocalWorkspace(true,rootIdentity.read().generation);}
+});

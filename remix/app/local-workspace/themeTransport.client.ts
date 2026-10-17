@@ -1,3 +1,4 @@
+import { parseThemeHomeContext } from '../api/utils/themes/themeHomeContext';
 import {
 	parseThemeSelection,
 	parseThemeSelectionWrite,
@@ -24,8 +25,10 @@ export function accountThemeTransport(
 	const request = async (
 		operation: 'snapshot' | 'write' | 'selection' | 'select',
 		command: ThemeWrite | ThemeSelectionWrite | undefined,
-		signal: AbortSignal
+		signal: AbortSignal,
+		receiptPlane?: string
 	) => {
+		const context = receiptPlane === undefined ? undefined : parseThemeHomeContext({storagePlane:'home',receiptPlane});
 		lease.assertCurrent();
 		const remote = accountRemoteWorkspaceLease(scope);
 		remote.assertCurrent();
@@ -36,7 +39,7 @@ export function accountThemeTransport(
 			if (window.location.origin !== scope.origin) throw new WorkspaceError('WORKSPACE_CHANGED', 'Account origin changed.', 409);
 			await requireThingtimeCapability(
 				'api.themes-sync',
-				operation === 'snapshot' ? '1.4.0' : operation === 'selection' || operation === 'select' ? '1.1.0' : command && 'title' in command ? '1.4.0' : command && 'folderId' in command ? '1.3.0' : '1.0.1'
+				context ? '1.5.0' : operation === 'snapshot' ? '1.4.0' : operation === 'selection' || operation === 'select' ? '1.1.0' : command && 'title' in command ? '1.4.0' : command && 'folderId' in command ? '1.3.0' : '1.0.1'
 			);
 			await requireThingtimeCapability('api.mongodb-endpoint', '1.1.0');
 			lease.assertCurrent();
@@ -52,6 +55,7 @@ export function accountThemeTransport(
 				body: JSON.stringify({
 					operation,
 					expectedOwnerId: scope.ownerId,
+					...(context ? {context} : {}),
 					...(command ? { command: operation === 'select' ? parseThemeSelectionWrite(command) : parseThemeWrite(command) } : {})
 				})
 			});
@@ -88,7 +92,7 @@ export function accountThemeTransport(
 	};
 	return {
 		selection: async (signal) => parseThemeSelection((await request('selection', undefined, signal)).selection),
-		select: async (command, signal) => parseThemeSelectionAcknowledgment((await request('select', command, signal)).acknowledgment),
+		select: async (command, signal, receiptPlane) => parseThemeSelectionAcknowledgment((await request('select', command, signal, receiptPlane)).acknowledgment),
 		snapshot: async (signal) => {
 			const result = await request('snapshot', undefined, signal);
 			if (result.complete !== true)
@@ -97,6 +101,6 @@ export function accountThemeTransport(
 			if(rows.some(row=>row.title === undefined)) throw new WorkspaceError('INVALID_THEME_SNAPSHOT','Account theme title metadata is incomplete.',502);
 			return rows;
 		},
-		write: async (command, signal) => parseThemeWriteAcknowledgment((await request('write', command, signal)).acknowledgment)
+		write: async (command, signal, receiptPlane) => parseThemeWriteAcknowledgment((await request('write', command, signal, receiptPlane)).acknowledgment)
 	};
 }

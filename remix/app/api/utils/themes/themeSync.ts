@@ -1,3 +1,4 @@
+import { parseThemeHomeContext, type ThemeHomeContext } from './themeHomeContext';
 import { getHomeThingsCollection, getThemesCollection, withHomeMongoTransaction } from '~/api/utils/mongodb/collections';
 import { saveTheme, deleteTheme, toPublicTheme, type ThemeMutationBoundary } from '~/api/utils/themes/themes';
 import { readTimelineEntries, appendTimelineEvent } from '~/api/utils/timeline/repository';
@@ -63,20 +64,23 @@ export async function synchronizeThemeWrite(
 	ownerId: string,
 	selectedPlane: string,
 	raw: unknown,
-	admit: () => Promise<void>
+	admit: () => Promise<void>,
+	homeContext?: ThemeHomeContext
 ): Promise<ThemeWriteAcknowledgment> {
 	let command;
+	let context: ThemeHomeContext | undefined;
 	try {
 		command = parseThemeWrite(raw);
+		context = homeContext === undefined ? undefined : parseThemeHomeContext(homeContext);
 	} catch {
 		throw new ThemeSyncError(400, 'Invalid theme synchronization command.');
 	}
-	if (command.action === 'save' && command.title !== undefined && command.expectedVersion !== null && selectedPlane !== 'home') throw new ThemeSyncError(409, 'Theme display titles belong to the home library.');
-	if (command.action === 'save' && command.folderId !== undefined && selectedPlane !== 'home' && (command.expectedVersion !== null || command.folderId !== null))
+	if (!context && command.action === 'save' && command.title !== undefined && command.expectedVersion !== null && selectedPlane !== 'home') throw new ThemeSyncError(409, 'Theme display titles belong to the home library.');
+	if (!context && command.action === 'save' && command.folderId !== undefined && selectedPlane !== 'home' && (command.expectedVersion !== null || command.folderId !== null))
 		throw new ThemeSyncError(409, 'Theme folder placement belongs to the home library. Device changes have been kept.');
 	const things = await getHomeThingsCollection(),
 		legacy = await getThemesCollection();
-	const digest = themeWriteDigest(ownerId, selectedPlane, command),
+	const digest = themeWriteDigest(ownerId, context?.receiptPlane ?? selectedPlane, command),
 		capture = newThingMutationCapture(ownerId, 'api');
 	capture.operationId = command.writeId;
 	const replay = async (session?: any) => {
