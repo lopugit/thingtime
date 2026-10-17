@@ -10082,6 +10082,11 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
 
 ## Mobile sync connection editor
 
+- [x] In an installed iOS WebKit app, start a real foreground transfer after
+  native approval. Inventory and byte requests must retain the Window receiver
+  for `fetch`; copying the function into a transport must not cause an illegal
+  invocation. The editor browser fixture rejects an unrelated fetch receiver.
+
 - [ ] Open `scripts/mobile-sync-editor.browser.html` in the local dev browser.
   Exercise the real editor/useApi with synthetic native and Things responses.
   Save all settings, reload before saving, and verify complete draft restoration,
@@ -10431,8 +10436,12 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
 - [x] Installed Android: use the optional two-way runbook, cancel/allow native
   consent, verify both transfer directions and independent replacements, repeat
   without changing file identities/revisions, inspect Files and remove access.
-- [ ] Verify the same mixed-direction flow in installed iOS, including local
-  Files edits, settings reapproval, concurrent same-file edits and restart.
+- [x] Installed iOS simulator: cancel/retry native consent, run mixed uploads
+  and downloads, independently replace each side, compare full byte hashes,
+  and repeat without changing cloud revisions or local inodes/mtimes. Local
+  source edits use disposable container files, not an external Files editor.
+- [ ] Verify iOS external Files edits, two-way settings reapproval, concurrent
+  same-file edits and interrupted two-way restart recovery.
 - [ ] Add Mac receivers, recoverable native trash, explicit conflict resolution,
   native background workers, Photos, peer sync and large-folder acceptance.
 

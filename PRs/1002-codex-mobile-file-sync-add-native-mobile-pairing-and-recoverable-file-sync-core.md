@@ -1010,3 +1010,33 @@ These totals include setup/recovery and are not a throughput benchmark. The
 fixture uses synthetic picker/consent/conditions and private credential storage;
 signed installed XPC/Keychain/TCC, mobile streaming, persistent workers, Photos,
 peers and the rest of the requested product remain open.
+
+
+## Installed iOS two-way acceptance and WebKit fetch binding — 2026-10-17
+
+A real iPhone 17 Pro / iOS 26.5 simulator run exposed a mobile regression after
+Mac host routing was added: the mobile fallback copied `fetch` into the transport
+object, so WebKit rejected inventory reads with “Can only call Window.fetch on
+instances of Window.” `MobileSyncConnections` now calls through `window.fetch`;
+the desktop host's scoped fetch remains unchanged. The editor browser fixture
+uses a receiver-sensitive function so an unrelated transport receiver fails.
+
+Build 33 was rebuilt with the explicit loopback origin and installed. CUA used
+the actual Things connection editor, native folder picker and Cancel/Allow
+writes dialogs with a disposable account. Cancellation preserved the local
+source and published no downloads. The two-way run then uploaded 257 bytes and
+downloaded a 17-byte text file plus an 8 MiB + 17-byte nested binary. Independent
+edits replaced the upload with 513 bytes and the cloud binary with 8 MiB + 31
+bytes. Full local and authenticated cloud-download SHA-256 hashes matched each
+expected version. Cloud file IDs stayed stable, the changed revisions advanced,
+and the unchanged text file kept its inode/mtime. A completed repeat retained
+all cloud revisions and local inodes/mtimes. Local edits were disposable
+container-file writes, not an external Files editor acceptance.
+
+The opt-in installed XCTest passed after external byte verification (one test,
+zero failures). All 107 shared sync tests and targeted ESLint passed; full
+TypeScript output is byte-identical to the existing 91 diagnostics. No native
+permission or pairing response was injected. This verifies foreground two-way
+transfers on the simulator's local provider; external Files editing, interrupted
+two-way restart recovery, settings reapproval, physical devices, mobile streaming,
+background workers, Photos, peers and the remaining product scope stay open.

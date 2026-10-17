@@ -68,6 +68,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-17 — **Codex (AI)**: Fixed iOS foreground sync failing with WebKit's
+  `Window.fetch` receiver error after native approval. The mobile transport now
+  calls through Window, and the editor fixture enforces that constraint.
+  Installed simulator acceptance verified mixed uploads/downloads with full
+  byte hashes. [PR #1002 details](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
 - 2026-10-17 — **Codex (AI)**: Mac staging 1.1 streams downloaded ranges through
   binary Electron/helper input and bounded XPC pulls, retaining flushed range
   checkpoints and explicit publication approval. Real upload/download acceptance

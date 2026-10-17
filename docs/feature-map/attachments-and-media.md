@@ -239,3 +239,11 @@ recovery semantics. `append` uses the same primitive for older/mobile bridges.
 Tests extend `mobileStaging.test.ts`, `folder-stream.test.cjs`, native staging and
 XPC tests; `mac-file-sync.integration.mts --large-upload --large-download` verifies
 real transfers and a native restart after a lost accepted staging reply.
+
+## iOS transport receiver
+
+`MobileSyncConnections` wraps the mobile `window.fetch` call before passing it
+to inventory and cloud transports. WebKit rejects invoking a copied native fetch
+with a transport object as its receiver. `mobile-sync-editor.browser.tsx` now
+models that receiver constraint; installed iOS two-way acceptance exercises the
+real WebKit call through canonical inventory, upload and download APIs.

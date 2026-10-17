@@ -65,7 +65,8 @@ function Connections({
 	const requestFolders = host?.request ?? requestMobileFolders;
 	const capabilities = host ? host.capabilities : getNativeBridge();
 	const runtimeOrigin = host?.origin ?? (() => window.location.origin);
-	const runtimeFetch = host?.fetch ?? fetch;
+	// WebKit requires Window.fetch's receiver even when transports call it as a method.
+	const runtimeFetch: typeof fetch = host?.fetch ?? ((input, init) => window.fetch(input, init));
 	const requireCapability = host?.requireCapability ?? requireThingtimeCapability;
 	const authorizeDevice = async (deviceId: string, signal: AbortSignal) => {
 		if (host) return host.authorizeDevice(scope.ownerId, deviceId, signal);

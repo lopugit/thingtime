@@ -27,7 +27,9 @@ const persist = () => localStorage.setItem(databaseKey, JSON.stringify(rows));
 const originalFetch = window.fetch.bind(window);
 const fixtureJson = (data: any, init?: ResponseInit) =>
 	Response.json(data, { ...init, headers: { ...init?.headers, ...(desktop ? { 'x-thingtime-api-fallback': canonicalOrigin } : {}) } });
-window.fetch = async (input, init) => {
+window.fetch = async function (this: unknown, input, init) {
+	// Match WebKit: a copied fetch must not receive a transport object as `this`.
+	if (this !== undefined && this !== window) throw new TypeError('Can only call Window.fetch on instances of Window');
 	const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url, location.origin);
 	init?.signal?.throwIfAborted();
 	if (
