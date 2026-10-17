@@ -1,5 +1,6 @@
 import React from 'react';
-import { mailRequest, localMailRequest } from './client';
+import { nativeMailRequest } from './native';
+import { mailRequest, localMailRequest, relayMailRequest } from './client';
 import { emptyLocalMail, readMailLocal, writeMailLocal, type LocalMail } from './localStore';
 import {
 	mergeMailRows,
@@ -281,6 +282,15 @@ export function useMail(ownerId: string) {
 		const batch: MailBatch =
 			target === 'cloud'
 				? await mailRequest(ownerId, { operation: 'sync', id: account.id, protocol, ...request }, {}, controller.current.signal)
+				: account.sync.transport === 'native'
+				? await nativeMailRequest(localSyncAccount(account, local.credentials[account.id] || {}), { protocol, ...request }, controller.current.signal)
+				: account.sync.transport === 'relay'
+				? await relayMailRequest(
+						ownerId,
+						localSyncAccount(account, local.credentials[account.id] || {}),
+						{ protocol, ...request },
+						controller.current.signal
+				  )
 				: await localMailRequest(
 						localSyncAccount(account, local.credentials[account.id] || {}),
 						local.connectorToken,

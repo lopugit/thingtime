@@ -8,7 +8,8 @@ import { ownerVaultConfigured } from '~/api/utils/auth/vaultCipher';
 import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
 import { StorageMutationError } from '~/api/utils/storage/storageCore';
 import { listMail, saveMailAccount, saveMailInbox, deleteMailRecord, syncMailAccount } from '~/api/utils/mail/store';
-import { MailError } from '~/mail/model';
+import { MailError, validateMailAccount } from '~/mail/model';
+import { fetchMailBatch } from '~/api/utils/mail/provider';
 const headers = { 'Cache-Control': 'private, no-store', Vary: 'Cookie, Authorization', 'Referrer-Policy': 'no-referrer' };
 const defaults = {
 	getCurrentUser,
@@ -19,9 +20,10 @@ const defaults = {
 	saveMailAccount,
 	saveMailInbox,
 	deleteMailRecord,
-	syncMailAccount
+	syncMailAccount,
+	fetchMailBatch
 };
-export function createMailHandler(overrides: Partial<typeof defaults> = {}) {
+export function createMailHandler(overrides: Partial<typeof defaults> = {}, relayOnly = false) {
 	const deps = { ...defaults, ...overrides };
 	return async ({ request }: { request: Request }) =>
 		withVaultRequest(request, async () => {
@@ -29,8 +31,8 @@ export function createMailHandler(overrides: Partial<typeof defaults> = {}) {
 			const user = token ? await deps.getCurrentUser(request) : null;
 			if (!user || user.temporary || user.accountKind === 'service')
 				return json({ ok: false, error: 'Sign in to your Thingtime account.' }, { status: 401, headers });
-			if (!['GET', 'POST'].includes(request.method))
-				return json({ ok: false, error: 'Method not allowed.' }, { status: 405, headers: { ...headers, Allow: 'GET, POST' } });
+			if (!(relayOnly ? ['POST'] : ['GET', 'POST']).includes(request.method))
+				return json({ ok: false, error: 'Method not allowed.' }, { status: 405, headers: { ...headers, Allow: relayOnly ? 'POST' : 'GET, POST' } });
 			const limit = await deps.enforceRateLimit(request, request.method === 'GET' ? 'mail.read' : 'mail.write', `user:${user.id}`, {
 				failClosed: true
 			});
@@ -62,6 +64,21 @@ export function createMailHandler(overrides: Partial<typeof defaults> = {}) {
 				if (requireJsonContentType(request)) throw new MailError(415, 'Use application/json.');
 				const body = await readJsonBody(request, 64 * 1024);
 				if (body?.expectedOwnerId !== user.id) throw new MailError(409, 'Your active account changed. Reopen Mail.');
+				if (relayOnly) {
+					if (body.operation !== 'relay') throw new MailError(400, 'Use the relay operation.');
+					const account = validateMailAccount(body.account);
+					if (!account.sync.local || account.sync.transport !== 'relay')
+						throw new MailError(403, 'Choose Thingtime API relay in this account’s device sync settings.');
+					const budget = await deps.enforceRateLimit(request, 'mail.sync', `user:${user.id}`, { failClosed: true });
+					if (!budget.allowed) throw new MailError(429, 'Please wait before syncing again.');
+					const batch = await deps.fetchMailBatch(
+						account,
+						{ protocol: body.protocol, path: body.path, cursor: body.cursor, discover: body.discover === true },
+						request.signal
+					);
+					if ((await deps.getCurrentUser(request))?.id !== user.id) throw new MailError(401, 'Your session ended.');
+					return json({ ok: true, ownerId: user.id, version: 1, ...batch }, { headers });
+				}
 				if (!deps.ownerVaultConfigured()) throw new MailError(503, 'Cloud mail encryption is not configured on this deployment.');
 				let result: object;
 				switch (body.operation) {

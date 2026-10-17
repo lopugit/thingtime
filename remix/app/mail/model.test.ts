@@ -80,3 +80,12 @@ test('a changed remote destination cannot reuse a device password', () => {
 	remote.servers.imap!.host = 'new.example.com';
 	assert.throws(() => localSyncAccount(remote, saved.servers), /Re-enter/);
 });
+
+test('transport choices round trip without silently migrating legacy connector accounts', () => {
+	assert.equal(validateMailAccount(account()).sync.transport, undefined);
+	for (const transport of ['connector', 'native', 'relay']) {
+		const input = { ...account(), sync: { cloud: false, local: true, transport } };
+		assert.equal(publicMailAccount(validateMailAccount(input)).sync.transport, transport);
+	}
+	assert.throws(() => validateMailAccount({ ...account(), sync: { cloud: false, local: true, transport: 'auto' } }));
+});

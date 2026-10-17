@@ -1,4 +1,5 @@
 import React from 'react';
+import { hasNativeMailSync } from '~/mail/native';
 import { Button, Flex, FormControl, FormLabel, Input, Text } from '@chakra-ui/react';
 import { Link } from 'react-router';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
@@ -28,7 +29,7 @@ function EmailSettingsScope({ ownerId }: { ownerId: string }) {
 		<Flex direction="column" gap={4} minW={0}>
 			<SettingsSection
 				eyebrow="Email accounts"
-				description="Connect as many accounts as you need. Choose cloud sync, local sync, both, or pause syncing while keeping your saved mail."
+				description="Connect as many accounts as you need. Choose cloud storage, a device copy, both, or pause syncing while keeping your saved mail. API relay works in browsers and native apps without an extra installation."
 			>
 				<Flex gap={2} wrap="wrap">
 					<RainbowButton onClick={() => setDraft(newMailAccount())} isDisabled={!mail.ready || mail.busy}>
@@ -53,7 +54,13 @@ function EmailSettingsScope({ ownerId }: { ownerId: string }) {
 						<Text fontSize="xs" color="var(--tt-muted)">
 							{Object.keys(account.servers).join(' + ').toUpperCase()} · {account.sync.cloud ? 'Cloud' : ''}
 							{account.sync.cloud && account.sync.local ? ' + ' : ''}
-							{account.sync.local ? 'Local' : ''}
+							{account.sync.local
+								? account.sync.transport === 'relay'
+									? 'Device via API relay'
+									: account.sync.transport === 'native'
+									? 'Direct device sync'
+									: 'Device via connector'
+								: ''}
 							{!account.sync.cloud && !account.sync.local ? 'Sync paused' : ''}
 						</Text>
 						<Flex gap={2} wrap="wrap">
@@ -92,12 +99,15 @@ function EmailSettingsScope({ ownerId }: { ownerId: string }) {
 			</SettingsSection>
 			{draft && <MailAccountEditor key={draft.id} account={draft} busy={mail.busy} onSave={mail.saveAccount} onCancel={() => setDraft(null)} />}
 			<SettingsSection
-				eyebrow="Local connector"
+				eyebrow="Optional local connector"
 				description="Pair this browser with the connector running on your computer. It connects directly to your email servers and keeps credentials out of Thingtime’s cloud."
 			>
 				<Text fontSize="sm">
-					Start the connector with your Thingtime origin and a random pairing token, then enter that token here. Setup instructions are in the project
-					README’s Incoming mail section.
+					{hasNativeMailSync()
+						? 'This app includes direct mail sync: choose Directly from this app in the account settings. '
+						: 'Choose Thingtime API relay to sync without installing anything. '}
+					For the separate connector option, start the connector with your Thingtime origin and a random pairing token, then enter that token here.
+					Setup instructions are in the project README’s Incoming mail section.
 				</Text>
 				<FormControl>
 					<FormLabel>Pairing token</FormLabel>

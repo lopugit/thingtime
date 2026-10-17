@@ -10,6 +10,7 @@ struct DestinationPickerDrawer: View {
     let onRefreshDeployments: () async -> Void
     let onClose: () -> Void
     let onWidgetSettings: () -> Void
+    let onMail: () -> Void
 
     @State private var expandedDeploymentSectionIDs: Set<String>
 
@@ -22,7 +23,8 @@ struct DestinationPickerDrawer: View {
         onSelect: @escaping (ThingtimeWebDestination.Destination) -> Void,
         onRefreshDeployments: @escaping () async -> Void,
         onClose: @escaping () -> Void,
-        onWidgetSettings: @escaping () -> Void = {}
+        onWidgetSettings: @escaping () -> Void = {},
+        onMail: @escaping () -> Void = {}
     ) {
         self.deploymentSections = deploymentSections
         self.staticDestinations = staticDestinations
@@ -33,6 +35,7 @@ struct DestinationPickerDrawer: View {
         self.onRefreshDeployments = onRefreshDeployments
         self.onClose = onClose
         self.onWidgetSettings = onWidgetSettings
+        self.onMail = onMail
 
         let selectedSectionID = deploymentSections.first(where: { section in
             section.deployments.contains(where: { $0.id == selectedDestinationID })
@@ -49,6 +52,17 @@ struct DestinationPickerDrawer: View {
                 onRefresh: refreshDeployments,
                 onClose: onClose
             )
+
+            Button(action: onMail) {
+                Label("Mail", systemImage: "envelope")
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(12)
+            }
+            .buttonStyle(.plain)
+            .background(.quaternary, in: RoundedRectangle(cornerRadius: 12))
+            .padding(.horizontal, 16)
+            .padding(.bottom, 12)
+            .accessibilityIdentifier("native-open-mail")
 
             Button(action: onWidgetSettings) {
                 Label("Widget settings", systemImage: "square.grid.2x2")
