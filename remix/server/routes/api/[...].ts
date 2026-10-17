@@ -387,9 +387,9 @@ export default defineHandler(async (event) => {
     // forward passwords/assertions to a fallback origin or reveal its keys.
     if (event.req.headers.has('X-Thingtime-Expected-Actor')) {
       if (desktopSyncProxyAllowed(event.req)) {
-        const headers = new Headers(event.req.headers);
-        headers.delete('x-forwarded-host'); headers.delete('x-forwarded-proto');
-        return proxyApiRequestToFallback(new Request(event.req, { headers }));
+        // Nitro/srvx requests are Request-compatible, but cannot be copied with
+        // Node's Request constructor (its private Undici state is a different brand).
+        return proxyApiRequestToFallback(event.req, { omitForwardedOrigin: true });
       }
       return jsonResponse({ ok: false, error: 'Browser Actions require a configured account environment at this origin' }, { status: 503, headers: { 'Cache-Control': 'private, no-store' } });
     }
@@ -406,9 +406,7 @@ export default defineHandler(async (event) => {
         return jsonResponse({ ok: false, error: 'Configure password encryption on this deployment.' }, { status: 503, headers: { 'Cache-Control': 'private, no-store' } });
       if (event.req.headers.get('Sec-Fetch-Site') === 'cross-site' || (method !== 'GET' && event.req.headers.get('Origin') !== resolvePublicOrigin(event.req).origin))
         return jsonResponse({ ok: false, error: 'Use the same Thingtime origin.' }, { status: 403, headers: { 'Cache-Control': 'private, no-store' } });
-      const headers = new Headers(event.req.headers);
-      headers.delete('x-forwarded-host'); headers.delete('x-forwarded-proto');
-      return proxyApiRequestToFallback(new Request(event.req, { headers }));
+      return proxyApiRequestToFallback(event.req, { omitForwardedOrigin: true });
     }
     // Root data uses this same fallback. Forward its public database
     // precondition and selection unchanged for the upstream to enforce.

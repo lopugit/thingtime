@@ -123,7 +123,7 @@ export function desktopSyncProxyAllowed(request: Request): boolean {
   return methods[local.pathname]?.includes(request.method) === true;
 }
 
-export const proxyApiRequestToFallback = async (request: Request) => {
+export const proxyApiRequestToFallback = async (request: Request, options: { omitForwardedOrigin?: boolean } = {}) => {
   const requestUrl = new URL(request.url);
   const fallbackUrl = new URL(requestUrl.pathname + requestUrl.search, getApiFallbackOrigin());
   const expectedOrigin = request.headers.get(EXPECTED_API_ORIGIN_HEADER);
@@ -131,6 +131,10 @@ export const proxyApiRequestToFallback = async (request: Request) => {
     return Response.json({ ok: false, code: 'API_ORIGIN_CHANGED', error: 'The selected sync server changed.' },
       { status: 409, headers: { 'Cache-Control': 'private, no-store' } });
   const headers = cloneProxyRequestHeaders(request, fallbackUrl);
+  if (options.omitForwardedOrigin) {
+    headers.delete('x-forwarded-host');
+    headers.delete('x-forwarded-proto');
+  }
   const init: RequestInit & { duplex?: 'half' } = {
     method: request.method,
     headers,

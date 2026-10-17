@@ -10884,3 +10884,10 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
 - [x] Regression: Electron's Nitro middleware preset must serve startup JS/CSS
   bytes from the package, not the HTML catch-all. Check responses across the
   restart fixture and visually open the rebuilt isolated app.
+
+- [x] Regression: an account-bound Desktop API request must work through the
+  real bundled Nitro/srvx middleware. Do not clone its framework Request using
+  Node's private-state copy constructor. Verify GET and POST body preservation,
+  forwarded-origin removal, and unchanged actor/home/origin checks. Run the
+  native export fixture with `--headless` after `build:web` to cover real
+  cookie-session account checks and exact-version ranges through this proxy.

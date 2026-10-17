@@ -1570,3 +1570,18 @@ The rebuilt dev app exposed a separate blank-renderer bug: Nitro's middleware
 preset did not serve packaged public assets. Static serving is now enabled only
 for that preset. The restart fixture compares startup JavaScript/CSS responses
 to packaged bytes; the rebuilt isolated app visually renders the normal home UI.
+
+Installed validation exposed and reproduced a second runtime issue: cloning
+Nitro/srvx requests with Node's `Request` constructor failed the private Undici
+state check on the account-bound proxy path. Sync and Desktop password proxying
+now strip forwarded-origin headers in the forwarding helper without cloning
+the framework request. Nine proxy regression tests pass, including GET/POST
+wrappers, byte preservation and unchanged account/origin admission checks.
+The native export fixture now traverses the actual bundled Nitro proxy; its
+headless run saved and verified 17,825,809 bytes over nine ranges and 23 account
+checks (destination selection is synthetic in this mode). A separate disposable
+account diagnostic completed normal login and the host account check through
+the bundled proxy against the real local API. Full TypeScript diagnostics remain
+at the same 91 baseline entries. The actual Save panel was verified separately
+with the unchanged production export host. Authenticated signed History
+export/restore remains an explicit acceptance item.

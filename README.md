@@ -5217,3 +5217,9 @@ variable or private service is required. After staging with
 `corepack pnpm@10.12.1 --dir electron verify:renderer-restart` to verify the
 packaged startup scripts/styles and persistence across app processes. The web
 cloud presets keep their existing static hosting defaults.
+
+The Desktop proxy passes Nitro/srvx request objects directly to its forwarding
+helper. Forwarded-origin headers are stripped in that helper; do not clone these
+objects with Node's `new Request(existingRequest)`, which can fail its private
+Undici-state check. The native export fixture's `--headless` mode exercises
+account checks and retained byte ranges through the actual bundled proxy.

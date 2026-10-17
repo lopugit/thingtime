@@ -183,3 +183,36 @@ test('a destination switch after admission is rejected before proxy body consump
   } finally { mock.mock.restore(); }
  });
 });
+
+
+test('desktop proxy accepts framework request wrappers without cloning foreign private state', async t => {
+ await withFallbackEnv('https://sync.test', async () => {
+  const prior = process.env.THINGTIME_DESKTOP; process.env.THINGTIME_DESKTOP = '1';
+  let calls = 0;
+  const mocked = t.mock.method(globalThis, 'fetch', async (_url: URL, init: RequestInit) => {
+   calls++; const headers = new Headers(init.headers);
+   assert.equal(headers.has('x-forwarded-host'), false); assert.equal(headers.has('x-forwarded-proto'), false);
+   assert.equal(headers.get('X-Thingtime-Expected-Actor'), 'owner');
+   if (init.method === 'POST') assert.equal(Buffer.from(init.body as ArrayBuffer).toString(), '{"value":"preserved"}');
+   return Response.json({ ok: true });
+  });
+  try {
+   for (const method of ['GET', 'POST']) {
+    const original = new Request('http://127.0.0.1:17340/api/v1/files', { method, headers: {
+     Origin: 'http://127.0.0.1:17340', 'X-Thingtime-Expected-Actor': 'owner', 'X-Thingtime-Expected-Data-Plane': 'home',
+     'X-Thingtime-Expected-Api-Origin': 'https://sync.test', 'x-forwarded-host': 'untrusted.test', 'x-forwarded-proto': 'https'
+    }, ...(method === 'POST' ? { body: '{"value":"preserved"}' } : {}) });
+    // A framework wrapper exposes standard request fields/methods without the
+    // private slots that Node's Request copy constructor expects on this object.
+    const wrapped = Object.create(Request.prototype);
+    for (const key of ['url', 'method', 'headers', 'body', 'bodyUsed', 'signal'] as const)
+     Object.defineProperty(wrapped, key, { get: () => original[key] });
+    wrapped.arrayBuffer = original.arrayBuffer.bind(original);
+    assert.throws(() => new Request(wrapped));
+    const response = await (handleApi as any)({ req: wrapped, context: { params: { path: 'v1/files' } } });
+    assert.equal(response.status, 200); assert.equal(original.bodyUsed, method === 'POST');
+   }
+   assert.equal(calls, 2);
+  } finally { mocked.mock.restore(); if (prior === undefined) delete process.env.THINGTIME_DESKTOP; else process.env.THINGTIME_DESKTOP = prior; }
+ });
+});

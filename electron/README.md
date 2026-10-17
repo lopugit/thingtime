@@ -406,11 +406,13 @@ parent identity but does not promise protection against an adversarial local
 process continuously renaming the destination's ancestors.
 
 Run `node --test electron/test/file-export.test.cjs` from the repository root.
-For the real native panel, run `corepack pnpm@10.12.1 --dir electron exec electron
+After staging a web bundle with `build:web`, for the real native panel run `corepack pnpm@10.12.1 --dir electron exec electron
 test/fixtures/file-export-host.cjs`, click Save this version, then accept the
 suggested temporary destination. It checks 17 MiB against generated source bytes,
 using the production preload/host and real Electron cookie-session requests.
-Close the test window to remove its disposable profile/output. This fixture
+Add `--headless` to exercise the packaged Nitro proxy with a fixture destination
+instead of a native panel. Close the test window to remove its disposable
+profile/output. This fixture
 does not establish authenticated installed-app Timeline acceptance.
 
 The `node_middleware` build explicitly enables Nitro static assets. Run

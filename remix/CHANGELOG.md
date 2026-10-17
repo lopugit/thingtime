@@ -70,7 +70,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 - 2026-10-17 — **Codex (AI)**: Add Mac History Save As with bounded, verified
   retained-version downloads and native destination selection. Fix Electron's
-  middleware build serving HTML for startup assets; extend restart acceptance
+  middleware build serving HTML for startup assets and account-bound proxy
+  requests failing Node’s Request copy constructor; extend restart acceptance
   to verify packaged JS/CSS. Native fixture coverage and remaining installed
   acceptance are recorded in [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
 
