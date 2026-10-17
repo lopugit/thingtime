@@ -45,7 +45,7 @@ export function anonymousApi<T extends Record<string, any>>(remote: T): T {
 		push: (scope: any, event: any, options?: { signal?: AbortSignal }) => { history.assertScope(scope); return history.push(event, options?.signal); },
 		canChangeLocally: ownsTimeline,
 		canExportLocally: ownsTimeline,
-		exportVersion: (scope: any, eventId: string, options?: { signal?: AbortSignal }) => { history.assertScope(scope); return history.exportVersion(eventId, options?.signal); },
+		exportVersion: (scope: any, eventId: string, options?: { signal?: AbortSignal; adapter?: string }) => { history.assertScope(scope); return history.exportVersion(eventId, options?.signal); },
 		version: (scope: any, request: any, options?: { signal?: AbortSignal }) => { history.assertScope(scope); return new LocalTimelineVersions(anonymousWorkspaceDatabase(), lease, service()).request(request, options?.signal).then(result => request.command === 'apply-version' ? changed(result) : result); },
 		branchMerge: (scope: any, request: any, options?: { signal?: AbortSignal }) => { history.assertScope(scope); return history.branchMerge(request, options?.signal); },
 		branch: (scope: any, command: any, options?: { signal?: AbortSignal }) => { history.assertScope(scope); return history.branch(command, options?.signal).then(changed); },

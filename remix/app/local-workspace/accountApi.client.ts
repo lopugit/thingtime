@@ -546,7 +546,7 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
    canExportLocally: (requested: {apiOrigin?: string; ownerId: string; dataPlane: string}) => {
     try { facadeLease.assertCurrent(); return localHistoryScope(requested); } catch { return false; }
    },
-   exportVersion: async (requested: {apiOrigin?: string; ownerId: string; dataPlane: string}, eventId: string, options?: {signal?: AbortSignal}) => {
+   exportVersion: async (requested: {apiOrigin?: string; ownerId: string; dataPlane: string}, eventId: string, options?: {signal?: AbortSignal; adapter?: string}) => {
     facadeLease.assertCurrent();
     if (!localHistoryScope(requested)) return online.timeline.exportVersion(requested, eventId, options);
     const result = await withExportDeadline(async signal => {
@@ -554,7 +554,7 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
      catch (error) {
       facadeLease.assertCurrent(); signal.throwIfAborted();
       if (!(error instanceof WorkspaceError) || error.code !== 'HISTORY_NOT_RETAINED' || navigator.onLine === false || !canSyncAccountWorkspace(scope)) throw error;
-      return online.timeline.exportVersion(requested, eventId, {signal});
+      return online.timeline.exportVersion(requested, eventId, {...options,signal});
      }
     }, options?.signal);
     return {ok:true,export:result.export ?? result,assertAvailable:()=>{facadeLease.assertCurrent();options?.signal?.throwIfAborted();result.assertAvailable?.();}};

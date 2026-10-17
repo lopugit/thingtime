@@ -3833,3 +3833,26 @@ admission. Native offline save/apply/cold reload and reconnect passed locally
 at 1440/390/320px. Account transfer, protected theme History, broader gallery
 retention, conflict/identity browser acceptance and final deployment gates remain
 open. See [account theme workspace](account-theme-workspace.md).
+
+## Theme persistence and anonymous History — 2026-10-17
+
+Native Theme Studio Save/Apply waits for the existing editor persistence flush,
+so normal local completion survives an immediate offline reload. Content and
+selection continue through independent account sync queues. Anonymous theme
+create/edit/import/delete uses the existing relational Timeline and approved
+`theme-content` snapshots. History names/filtering and version download use that
+projection; export never grants generic protected-content restore authority.
+Account-authored theme History and account theme transfers remain unfinished.
+
+`api.timeline` 1.21.0 adds approved theme-content version export. The native
+export control negotiates that version only for theme content; ordinary exports
+retain the 1.18.0 requirement. Both use the same archive reader and validator.
+
+Opt-in browser tests require a loopback app and the existing shared Playwright
+and Chrome paths. Set `TT_ANONYMOUS_THEME_HISTORY_URL` and
+`TT_ANONYMOUS_THEME_HISTORY_ARTIFACTS` for `anonymousThemeHistory.browser.test.ts`.
+Set `TT_ACCOUNT_THEME_CONFLICT_URL` and `TT_ACCOUNT_THEME_CONFLICT_ARTIFACTS` for
+`accountThemeConflict.browser.test.ts`; it checks the isolated local Mongo
+fixture, creates a disposable account and cleans only that account's themes
+through normal APIs. Neither test publishes content. The anonymous test returns
+a downloaded History JSON and 1440/390/320 screenshots with no mutation requests.

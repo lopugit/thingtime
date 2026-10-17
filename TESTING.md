@@ -11670,3 +11670,9 @@ verification limits are in `docs/local-workspaces.md`.
 - [ ] Replay a lost create acknowledgment before a later edit; its version must equal the actual persisted BSON postimage (including stored field order).
 - [ ] Replay a lost selection acknowledgment after another normal selection/deletion; it must not restore the old pointer. Change account/origin/plane during reads and reviews; no stale data or choice crosses the boundary.
 - [ ] Run accountThemes.browser.test.ts, accountThemes.api.test.ts and themeSelection.api.test.ts against disposable loopback fixtures; retain screenshots and cleanup evidence.
+
+### Theme local completion and anonymous History (2026-10-17)
+
+- [ ] In a clean anonymous browser, cache the native app, go offline, change the accent and Save. Wait for Save to return, reload immediately and verify the new tokens. Open History, select the creation, open Versions and download the actual theme-content JSON; no mutation request may be made. Repeat at 1440/390/320px with the DevKit launcher visible; the mobile sheet must keep Export reachable.
+- [ ] Edit/import/delete a local theme; History preserves exact earlier partial tokens using the shared approved theme snapshot. An export cannot substitute a different theme payload or owner; generic protected writers remain refused. Simulated History quota failure rolls back the local content write.
+- [ ] With a disposable account, edit offline, reload immediately, then make a conflicting normal private API edit. Review both values, keep the device version as a private copy and verify both originals plus the remapped active choice after reload. Run the opt-in anonymousThemeHistory.browser.test.ts and accountThemeConflict.browser.test.ts fixtures.

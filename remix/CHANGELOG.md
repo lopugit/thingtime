@@ -68,6 +68,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-17 — **Codex (AI)**: Theme saves flush native device persistence before completion; anonymous themes retain and export canonical History. Phone History exports stay reachable above floating controls. Local browser evidence and remaining scope are in [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
 - 2026-10-17: Account Theme Studio saves and selection now finish on-device with
   independent remote sync, exact conflict review and private copies. Local native
   offline/reconnect checks passed at desktop/390/320px; wider rollout remains

@@ -214,3 +214,9 @@ provides retries and exact conflict comparisons. ThemeStudio keys its state by
 workspace identity; ThemeHost uses retained content before network refresh.
 See [account theme coverage](../account-theme-workspace.md) for native browser
 fixtures, unresolved transfer/History integration and verification boundaries.
+
+Theme Studio Save/Apply flushes the existing native editor persistence before
+reporting local completion; account queues still run independently. The mobile
+History detail sheet retains bottom clearance so floating developer controls
+cannot cover its last export action. Native regressions:
+`anonymousThemeHistory.browser.test.ts`, `accountThemeConflict.browser.test.ts`.

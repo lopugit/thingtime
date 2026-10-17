@@ -706,3 +706,11 @@ cannot recache removed notes. The shared `TimelineNoteRemoval` record replaces
 the removed protected note payload on the account and upgrades existing local
 `timeline-meta` removal markers. `api.timeline` 1.19.0 advertises durable removal;
 `test:timeline:notes` checks real transaction races and delayed replay refusal.
+
+Anonymous saved themes use the shared approved `theme-content` snapshot in
+`local-workspace/themes.ts` and `timeline.ts`. `timeline/exportVersion.ts` keeps
+that protected projection in History downloads for local and account authority
+(`api.timeline` 1.21.0), without widening generic mutation/restore permissions.
+Regressions: `local-workspace/themeHistory.test.ts` and the opt-in
+`anonymousThemeHistory.browser.test.ts`. Account-authored theme History remains
+a separate home-scope integration task.

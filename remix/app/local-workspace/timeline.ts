@@ -1,3 +1,5 @@
+import { themeContentSnapshot } from '../timeline/themeContent';
+import { isTransferTheme } from '../utils/thingTransfer/theme';
 import { createRelatedTimelineScope, validRelatedTimelineRequest } from '../timeline/relatedHistory';
 import { localRelatedThingIds } from './timelineRelated';
 import { createVersionExportReader } from '../timeline/exportVersion';
@@ -131,8 +133,11 @@ export async function recordLocalThingChanges(tx: WorkspaceTransaction, changes:
  let things: LocalThing[] | null = null;
  for (const [id, { before, after }] of changes) {
   const target = after || before;
-  if (!target || isProtectedThingtime(target.thingtime) || ['reaction', 'save', 'vote', 'updown', 'action-run'].some(kind => target.thingtime.includes(kind)) || id.startsWith('timeline-')) continue;
-  const previous = thingContentSnapshot(before && { ...before, ...(!writer ? {acl: []} : {}) }), next = thingContentSnapshot(after && { ...after, ...(!writer ? {acl: []} : {}) });
+  if (!target || (isProtectedThingtime(target.thingtime) && (writer || !isTransferTheme(target))) || ['reaction', 'save', 'vote', 'updown', 'action-run'].some(kind => target.thingtime.includes(kind)) || id.startsWith('timeline-')) continue;
+  const snapshot = (row: LocalThing | null) => row && isTransferTheme(row)
+   ? themeContentSnapshot({crystal:row.crystal,tags:row.tags ?? [],visibility:'private',folderId:row.folderId ?? null})
+   : thingContentSnapshot(row && {...row,...(!writer ? {acl:[]} : {})});
+  const previous = snapshot(before), next = snapshot(after);
   if (JSON.stringify(previous) === JSON.stringify(next) && !captures.has(id)) continue;
   const parent = await tx.get<string>(META, `head:${id}`);
   const prior = parent ? await history.read(parent) : null;

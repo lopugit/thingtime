@@ -1,3 +1,5 @@
+import { captureThingChanges } from './thingChanges';
+import { recordLocalThingChanges } from './timeline';
 import { normalizeSavedTheme, MAX_SAVED_THEMES } from '../theme/savedTheme';
 import { snapshotTransferValue } from '../utils/thingTransfer/value';
 import { isTransferTheme } from '../utils/thingTransfer/theme';
@@ -29,7 +31,17 @@ export class LocalThemes {
 		this.scope = options.scope ?? { kind: 'anonymous' };
 	}
 	private transaction<T>(mode: IDBTransactionMode, run: (tx: WorkspaceTransaction) => Promise<T>) {
-		return this.db.transaction(this.scope, mode, this.lease, run);
+		return this.db.transaction(this.scope, mode, this.lease, (tx) => {
+			if (mode !== 'readwrite' || this.scope.kind !== 'anonymous') return run(tx);
+			return captureThingChanges(tx, run, (transaction, changes) =>
+				recordLocalThingChanges(
+					transaction,
+					changes,
+					() => new Date(this.options.now?.() ?? Date.now()).toISOString(),
+					this.options.uuid ?? (() => crypto.randomUUID())
+				)
+			);
+		});
 	}
 	private async read(tx: WorkspaceTransaction, id: string) {
 		const row = await tx.get<LocalThing>('things', id);

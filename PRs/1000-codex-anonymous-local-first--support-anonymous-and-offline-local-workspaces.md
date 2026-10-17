@@ -3196,3 +3196,28 @@ Remaining: protected theme History/account transfer and expanded browser
 conflict/identity acceptance; latest-main reconciliation and current-head CI /
 deployed verification. The earlier semantic graph run completed but failed its
 historical source-hash check; do not use it as current semantic evidence.
+
+### 2026-10-17 — Theme completion and anonymous History
+
+Reproduced and fixed native Save returning before the current look had flushed
+to device persistence. Anonymous theme writes now retain canonical protected
+History and export earlier snapshots, including deletion before-images. Both
+API manifests advertise the shared 1.21.0 export capability. Historical labels
+and filtering recognize themes; the phone detail sheet keeps Export above the
+default DevKit launcher.
+
+Local validation: 509 local-workspace tests plus 4 offline-shell tests passed
+(57 opt-in tests skipped in that broad run); 258 Timeline tests passed. Later
+focused history/presentation/control checks passed 17/17 and capability checks
+102/102. Clean-browser anonymous offline save/reload and actual History download
+passed with zero mutation requests and zero page errors, at 1440/390/320px. The
+account fixture passed immediate offline reload, concurrent conflict review and
+private copy/selection remapping. TypeScript retains the same 91 baseline
+diagnostics; lint and client build passed. These are local results, not CI or
+deployed verification.
+
+Semantic graph refresh for the prior f97e663d5 source was refused by its shrink
+guard after incomplete semantic extraction; no partial graph was accepted.
+The full feature matrix, account theme imports/exports and authored History,
+latest-main reconciliation and current-head CI/deployment remain outstanding.
+The branch remains unmerged.

@@ -252,7 +252,8 @@ const ThemeStudioWorkspace = () => {
 		setGeneral,
 		setWindows,
 		resetOverrides,
-		applyThemeDoc
+		applyThemeDoc,
+        flushTheme
 	} = useTtTheme();
 	const themeRef = React.useRef(theme); themeRef.current = theme;
 
@@ -323,7 +324,10 @@ const ThemeStudioWorkspace = () => {
   try {
    await api.v1.themes.setActive({ themeId: null });
    if (!isCurrent(generation)) return;
-   setPreset(name); setActiveThemeId(null);
+   setPreset(name);
+   await flushTheme();
+   if (!isCurrent(generation)) return;
+   setActiveThemeId(null);
   } catch (error: any) { if (isCurrent(generation)) lopu({title: 'Could not save this theme choice', description: error?.message || error?.error, status: 'error'}); }
  };
  const applySaved = async (saved: any) => {
@@ -331,7 +335,10 @@ const ThemeStudioWorkspace = () => {
   try {
    await api.v1.themes.setActive({themeId: saved.id});
    if (!isCurrent(generation)) return;
-   applyThemeDoc(saved.theme, {shareId: saved.id}); setActiveThemeId(saved.id);
+   applyThemeDoc(saved.theme, {shareId: saved.id});
+   await flushTheme();
+   if (!isCurrent(generation)) return;
+   setActiveThemeId(saved.id);
    setSavePublic(saved.visibility === 'public');
    lopu({title: `Theme "${saved.name}" applied 🎨`, description: 'Applied on this device.', status: 'success', duration: 5000});
   } catch (error: any) { if (isCurrent(generation)) lopu({title: 'Could not save this theme choice', description: error?.message || error?.error, status: 'error'}); }
@@ -365,6 +372,7 @@ const ThemeStudioWorkspace = () => {
 		const name = saveName.trim() || appliedThemeName || `${theme.name} remix`;
 		if (!user) return;
 		setSaving(true);
+        let savedLocally = false;
 		try {
 			// Re-saving the currently applied saved theme (same or blank name)
 			// updates it in place instead of minting a duplicate document.
@@ -377,18 +385,21 @@ const ThemeStudioWorkspace = () => {
 				visibility: !localOnly && savePublic ? 'public' : 'private',
 				expectedUpdatedAt: updatingApplied ? appliedOwned.updatedAt : undefined
 			});
-			if (!isCurrent(generation)) return;
- lopu({ title: `Theme "${name}" saved 🎨`, description: localOnly ? 'Saved on this device.' : 'Saved on this device. Account sync runs separately.', status: 'success' });
-			setSaveName(current => current === savingName ? '' : current);
-			refreshMyThemes();
-			if (res?.theme?.id && themeRef.current === savingTheme) {
-				applyThemeDoc(res.theme.theme, { shareId: res.theme.id });
-				void api.v1.themes.setActive({ themeId: res.theme.id }).catch((error: any) => {
- if (isCurrent(generation)) lopu({ title: 'Theme saved; selection could not be saved', description: error?.message || error?.error, status: 'error' });
- });
-			}
+			savedLocally = true;
+            if (!isCurrent(generation)) return;
+            if (res?.theme?.id && themeRef.current === savingTheme) {
+                applyThemeDoc(res.theme.theme, {shareId: res.theme.id});
+                await flushTheme();
+                if (!isCurrent(generation)) return;
+                void api.v1.themes.setActive({themeId:res.theme.id}).catch((error: any) => {
+                    if (isCurrent(generation)) lopu({title:'Theme saved; selection could not be saved',description:error?.message || error?.error,status:'error'});
+                });
+            }
+            lopu({title:`Theme "${name}" saved 🎨`,description:localOnly?'Saved on this device.':'Saved on this device. Account sync runs separately.',status:'success'});
+            setSaveName(current => current === savingName ? '' : current);
+            void refreshMyThemes();
 		} catch (error: any) {
-			if (isCurrent(generation)) lopu({ title: 'Could not save theme 🌧️', description: error?.error, status: 'error' });
+			if (isCurrent(generation)) lopu({ title: savedLocally ? 'Theme saved; current look could not be saved' : 'Could not save theme 🌧️', description: error?.message || error?.error, status: 'error' });
 		} finally {
 			if (isCurrent(generation)) setSaving(false);
 		}

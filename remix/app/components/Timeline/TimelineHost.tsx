@@ -452,7 +452,8 @@ function HistoryDetails({ children, onClose, activity }: { children: React.React
 				>
 					<ModalHeader>{activity ? 'Activity details' : 'Version details'}</ModalHeader>
 					<ModalCloseButton />
-					<ModalBody px={2} pb={4}>
+					{/* Leave the final controls reachable above floating launchers and the phone safe area. */}
+					<ModalBody px={2} pb="calc(var(--thingtime-safe-area-bottom, env(safe-area-inset-bottom, 0px)) + 80px)">
 						{children}
 					</ModalBody>
 				</ModalContent>

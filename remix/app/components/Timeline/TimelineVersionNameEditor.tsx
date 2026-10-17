@@ -100,7 +100,7 @@ export function TimelineVersionNameEditor({ row, current, drafts, draftKey }: { 
 		working.current = true; setExporting(true); setError(null); setNotice('');
 		const attempt = new AbortController(); exportController.current = attempt;
 		try {
-			const result = await api.v1.timeline.exportVersion(connection.scope, event.id, { signal: attempt.signal });
+			const result = await api.v1.timeline.exportVersion(connection.scope, event.id, { signal: attempt.signal, adapter: (event.after ?? event.before)?.adapter });
 			if (!alive.current || attempt.signal.aborted) return;
 			const filename = downloadTimelineVersionExport(result, event);
 			if (alive.current) setNotice(`Exported ${live?.name ?? event.label} · ${filename}${((result as any)?.export?.context ?? result?.context)?.source === 'device' ? ' · Notes and names include retained context only.' : ''}`);
