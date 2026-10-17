@@ -40,7 +40,7 @@ public final class MobileSyncStaging: @unchecked Sendable {
             }
             if operation.mutation.source.kind == "folder", operation.mutation.expectedTarget != nil { throw Failure.invalid }
         }
-        private static func validateEntry(_ e: Entry) throws {
+        static func validateEntry(_ e: Entry) throws {
             _ = try MobileFolderReader.components(e.path)
             guard !e.id.isEmpty, e.id.utf16.count <= 512, !e.version.isEmpty, e.version.utf16.count <= 512,
                   e.size >= 0, e.size <= 9_007_199_254_740_991 else { throw Failure.invalid }

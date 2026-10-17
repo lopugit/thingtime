@@ -4819,6 +4819,29 @@ real account, file-provider, process-kill and physical-device acceptance remain
 separate. See the [full sync ledger](docs/mobile-file-sync.md).
 
 
+
+### Installed iOS file-history export acceptance
+
+The same disposable account fixture and local attachment storage setup support
+History exports. No additional secrets, saved folder grants or server routes are
+required. Run from the repository root:
+
+```sh
+THINGTIME_FILE_EXPORT_TEST=1 DEST='platform=iOS Simulator,id=<simulator-uuid>' iOS/scripts/test-mobile-sync-installed.sh /private/account.json
+```
+
+This selects `FileExportInstalledTests`, creates two private byte versions through
+the ordinary upload/files APIs, and opens the real History page. Follow the
+printed folder name: open the updated-file row, cancel the first **Save this
+version**, then save the earlier and later versions into that empty folder using
+Files. Next review/cancel restore, then review/restore the earlier version.
+The runner checks native replies, exact destination bytes, collision naming,
+unchanged cancellation revisions and both retained cloud byte versions. It does
+not accept an external completion marker. The cloud fixture is moved to private
+Trash; the exported files are retained for inspection. Keep credentials out of
+logs and repository files. Physical/provider, low-storage and interrupted-save
+acceptance remain separate from this simulator check.
+
 ### Installed iOS download and process-exit acceptance
 
 Use a disposable loopback account with normal private-upload approval and the

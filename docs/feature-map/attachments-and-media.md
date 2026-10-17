@@ -288,3 +288,18 @@ WebView download listener or arbitrary-URL fetch is installed. Tests:
 canonical `tt_auth` cookie; unrelated cookie refreshes do not invalidate it.
 Missing, duplicate or changed credentials remain refused. `SessionCookieTest`
 and `fileExport.client.test.ts` cover the session and native-error regressions.
+
+
+## iOS History exports
+
+`iOS/Thingtime/Files/FileExportBridge.swift` negotiates the shared
+`fileExportVersion` 1.0.0 contract. `apple/FileSync/.../FileVersionExport.swift`
+validates immutable attachment metadata, reads bounded ranges into private cache,
+verifies fingerprints and publishes an exclusive copy into a one-use Files folder
+selection. WebView main-frame/origin checks, exact-auth-cookie pinning and fresh
+owner checks surround the picker/save. No persistent grant or new API is added.
+Tests: `FileVersionExportTests`, `FileExportBridgeTests`, and opt-in
+`FileExportInstalledTests` via `THINGTIME_FILE_EXPORT_TEST=1` on the existing iOS
+installed acceptance script. See README for the disposable fixture and manual
+steps. Installed simulator export and restore pass; physical providers, Mac
+exports and cross-folder content-ID retrieval remain in the sync ledger.

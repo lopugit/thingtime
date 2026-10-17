@@ -1520,3 +1520,42 @@ Unit coverage distinguishes cookie reordering/preferences from changed auth.
 Native error guidance now reaches the shared History error display. Earlier
 readiness failures during web rebuilds and the failed zero-byte exports were
 not accepted as success; the successful run used a stable managed server.
+
+## iOS historical file exports — 2026-10-17
+
+The iOS shell now negotiates `fileExportVersion` 1.0.0 for the shared History
+**Save this version** control. `FileExportBridge` accepts only main-frame,
+current-origin requests, pins the exact authentication cookie, negotiates
+`api.auth-me` and `api.attachment-content` 1.14.0, and rechecks the live owner
+before and after the Files destination picker and after the save. Unrelated
+cookie changes do not cancel work; account/session, navigation, background,
+explicit cancel and deadline boundaries cancel pending work.
+
+`FileVersionExport` in the shared Apple package validates the existing sync
+fingerprint contract, reads bounded 2 MiB exact-version ranges into request-owned
+private cache, and verifies bytes before exposing the destination picker. The
+picker grants access to one chosen folder for this save, with no bookmark or
+persistent sync grant. A coordinated 64 KiB copy is flushed and verified before
+exclusive publication; existing names and symlinks receive a collision suffix
+instead of replacement. The saved file is read back before success. Failure
+after publication preserves the file and tells the user to check Files before
+retrying. Normal completion/cancellation removes private staging; process-crash
+cache reclamation and resumable background export remain separate work.
+
+Validation: 30 AppleFileSync tests and 29 selected iOS bridge/device/destination
+regressions pass. A rebuilt, installed iOS 26.5 simulator app passes real API and
+manual/CUA History acceptance: cancel without writes; save both versions into
+the same selected folder; preserve the first filename and create `(1)` for the
+second; cancel restore without changing the current revision; restore the
+earlier version and independently read back both retained cloud versions.
+Independent destination reads confirm 128 bytes of value 11 and 257 bytes of
+value 22. Initial fixture setup used uppercase Swift UUIDs, which the existing
+file-commit contract correctly rejected; the fixture now generates canonical
+lowercase IDs. The successful test uses normal APIs throughout and moves its
+synthetic cloud file to private Trash; local exports remain available for inspection.
+
+This proves the installed simulator's local Files provider, not physical iCloud
+or third-party provider behavior. Installed account-switch/revocation while
+saving, low-storage/process-kill scenarios, Mac native History export/restore,
+native retained-version browsing, cross-folder content-ID lookup and durable
+ignored-conflict retention remain open with the broader sync ledger.

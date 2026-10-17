@@ -19,6 +19,7 @@ struct WebView: UIViewRepresentable {
         configuration.userContentController.addUserScript(Self.bridgeUserScript)
         configuration.userContentController.addUserScript(MobileDeviceBridge.script)
         configuration.userContentController.addUserScript(MobileFolderBridge.script)
+        configuration.userContentController.addUserScript(FileExportBridge.script)
         configuration.userContentController.add(context.coordinator, name: Self.nativeMessageHandlerName)
 
         let webView = ThingtimeWKWebView(frame: .zero, configuration: configuration)
@@ -55,6 +56,7 @@ struct WebView: UIViewRepresentable {
         if rootChanged { WidgetStore.clear(); context.coordinator.resetChatActivity() }
         context.coordinator.mobileDevice.suspend()
         context.coordinator.mobileFolders.suspend()
+        context.coordinator.fileExports.suspend()
         context.coordinator.cancelVoice()
         if rootChanged { context.coordinator.suspendRecordingUploads() }
         context.coordinator.loadedRootURL = url
@@ -68,6 +70,7 @@ struct WebView: UIViewRepresentable {
         var loadedRootURL: URL?
         let mobileDevice = MobileDeviceBridge()
         let mobileFolders = MobileFolderBridge()
+        let fileExports = FileExportBridge()
         private let lopuVoice = LopuVoiceSessionController()
         private let lopuChats = LopuChatActivityController()
 
@@ -97,6 +100,7 @@ struct WebView: UIViewRepresentable {
         func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
             mobileDevice.suspend()
             mobileFolders.suspend()
+            fileExports.suspend()
         }
 
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
@@ -112,6 +116,7 @@ struct WebView: UIViewRepresentable {
                 "notificationsVersion": "1.0.0",
                 "devicePairingVersion": "1.0.0",
                 "fileAccessVersion": MobileFolderBridge.accessVersion,
+                "fileExportVersion": FileExportBridge.version,
                 "fileStagingVersion": MobileFolderBridge.stagingVersion, "filePublicationVersion": MobileFolderBridge.publicationVersion,
                 "watchNotifications": true
             ])
@@ -135,6 +140,14 @@ struct WebView: UIViewRepresentable {
                 return
             }
             switch type {
+            case "file-export":
+                guard message.frameInfo.isMainFrame, let webView, let root = loadedRootURL,
+                      let current = webView.url, LopuVoiceContract.sameOrigin(current, root),
+                      let frame = message.frameInfo.request.url, LopuVoiceContract.sameOrigin(frame, root) else { return }
+                fileExports.handle(body, webView: webView, root: root,
+                    currentRoot: { [weak self] in self?.loadedRootURL },
+                    cookies: { [weak self] values, url in self?.cookies(values, matching: url) ?? [] },
+                    reply: { [weak self] type, payload in self?.sendToWeb(type: type, payload: payload) })
             case "mobile-files":
                 guard message.frameInfo.isMainFrame, let webView, let root = loadedRootURL,
                       let current = webView.url, LopuVoiceContract.sameOrigin(current, root),
