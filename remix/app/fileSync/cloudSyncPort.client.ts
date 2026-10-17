@@ -22,6 +22,9 @@ export function createCloudSyncPort(
 		openSource(expected: SyncEntry): Promise<FingerprintSource>;
 		signal?: AbortSignal;
 		localTarget?: LocalSyncTarget;
+		/** Original durable configuration root for runs predating per-write roots.
+		 * The caller must validate the saved configuration before supplying it. */
+		cloudRootId?: string;
 		progress?: (path: string, bytes: number, total: number) => void;
 	},
 	runtime: CloudTransportRuntime = {
@@ -45,8 +48,10 @@ export function createCloudSyncPort(
 	const readDownload = async (write: ReturnType<typeof get>) => {
 		const m = write.operation.mutation;
 		if (m.kind !== 'copy' || m.from !== 'remote') throw Error('Expected a download.');
-		if (!write.cloudRootId) throw Error('This saved download has no pinned cloud root; reconcile it before publishing.');
-		return readCloudPathEntry(runtime, run.scope, write.cloudRootId, m.path, input.signal);
+		const rootId = write.cloudRootId ?? input.cloudRootId;
+		if (!rootId) throw Error('This saved download has no pinned cloud root; reconcile it before publishing.');
+		if (write.cloudRootId && input.cloudRootId && write.cloudRootId !== input.cloudRootId) throw Error('Saved cloud roots disagree.');
+		return readCloudPathEntry(runtime, run.scope, rootId, m.path, input.signal);
 	};
 	const transport = (write: ReturnType<typeof get>) =>
 		isDownload(write)

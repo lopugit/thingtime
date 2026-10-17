@@ -261,6 +261,7 @@ export async function runForegroundCloudSync(
 	const port = createCloudSyncPort(
 		run,
 		{
+			cloudRootId: run.configuration.remoteFolderId,
 			currentScope: input.currentScope,
 			persist: async (value) => {
 				check();

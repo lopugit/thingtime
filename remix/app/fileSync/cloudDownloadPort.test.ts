@@ -126,7 +126,7 @@ async function fixture() {
 			journal.close();
 			journal = await openSyncJournal(factory);
 		},
-		port: () =>
+		port: (cloudRootId?: string) =>
 			createCloudSyncPort(
 				run,
 				{
@@ -136,7 +136,8 @@ async function fixture() {
 					openSource: async () => {
 						throw Error('Downloads do not open an upload source');
 					},
-					localTarget: target
+					localTarget: target,
+					cloudRootId
 				},
 				runtime
 			),
@@ -204,6 +205,7 @@ test('renaming a cloud ancestor during staging prevents publication even when th
 });
 test('legacy runs retain receipt recovery but cannot publish without their original cloud root', async () => {
  const f = await fixture();
+ await assert.rejects(f.port('other-root').read('remote', 'nested'), /roots disagree/);
  for (const write of f.run.cloudWrites) delete write.cloudRootId;
  await assert.rejects(executeSyncRun(f.run, f.port()), /no pinned cloud root/);
  assert.equal(f.counts().publishes, 0); f.journal().close();

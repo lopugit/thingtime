@@ -1970,8 +1970,9 @@ New download runs retain the selected cloud root in the durable queue and
 check the full path before staging and again before native publication. Moving
 or renaming an ancestor while bytes are staged now stops publication even when
 the old file id still reads successfully. Existing native receipts remain
-recoverable; old uncompleted runs without a pinned root refuse publication and
-need reconciliation. An unavailable root, permission failure, malformed path,
+recoverable; older configured runs use the original root already saved in their
+immutable configuration. Unconfigured runs without any pinned root refuse
+publication and need reconciliation. An unavailable root, permission failure, malformed path,
 case/Unicode alias or failed request never means a deleted file.
 
 This closes one prerequisite for deletion propagation. The foreground deletion

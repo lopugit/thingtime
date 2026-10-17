@@ -230,8 +230,16 @@ test('foreground downloads recover native receipts and checkpoint failure withou
 	journal.close();
 });
 
-test('two-way foreground recovers mixed upload/download receipts across reload without duplicating either side', async () => {
+test('legacy two-way foreground runs recover mixed receipts using their original configuration root', async () => {
 	const f = await fixture();
+	// Model a durable pre-1.4 queue: the configuration pins the root, while
+	// individual writes have no root field. Do not migrate immutable payloads.
+	const persist = f.journal().persist;
+	f.journal().persist = async run => {
+		const legacy = structuredClone(run) as any;
+		for (const write of legacy.cloudWrites) delete write.cloudRootId;
+		await persist(legacy);
+	};
 	const twoWay = { ...saved, configuration: { ...saved.configuration, mode: 'two-way' as const } };
 	f.rows.set('remote-folder', { id: 'remote-folder', folderId: 'cloud-root', name: 'Downloads', revision: 'r1' });
 	const local: any[] = [], receipts = new Map<string, any>();
@@ -256,6 +264,7 @@ test('two-way foreground recovers mixed upload/download receipts across reload w
 	await assert.rejects(runForegroundCloudSync(twoWay, scope, input(), new AbortController().signal), /lost accepted creation/);
 	const original = await f.journal().read(scope);
 	assert.deepEqual(original!.operations.map(op => op.mutation.kind === 'copy' && op.mutation.from), ['local', 'remote']);
+	assert.ok((original as any).cloudWrites.every((write: any) => write.cloudRootId === undefined));
 	await f.reload();
 	await assert.rejects(runForegroundCloudSync(twoWay, scope, input(), new AbortController().signal), /lost native reply/);
 	await f.reload();

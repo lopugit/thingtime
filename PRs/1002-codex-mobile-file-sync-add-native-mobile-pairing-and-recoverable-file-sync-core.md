@@ -1676,7 +1676,8 @@ cache, history format or credentials.
 New durable download runs pin their cloud root and recheck the full source path
 before staging and before publication. This fixes a moved-ancestor race where
 the previous file-id read could still succeed. Old receipts remain recoverable;
-old uncompleted runs without a cloud root fail safely pending reconciliation.
+old configured runs use their original durable configuration root without
+rewriting operations. Unconfigured runs with no root fail safely.
 The path observation is not an atomic cross-device lock, and wide-folder
 performance still needs further work.
 
