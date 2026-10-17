@@ -21,7 +21,8 @@ import {
   resolveAiPreferredAnthropicChoice,
   resolveAiPreferredOpenAiChoice,
   toAnthropicEffort,
-  toOpenAiReasoningEffort
+  toOpenAiReasoningEffort,
+  requiresOpenAiResponsesForTools
 } from '../settings/prConflictResolverModelWaterfallCore';
 import type {
   LopuChatContext,
@@ -78,7 +79,7 @@ import { friendlyVaultProviderError, resolveVaultTurnModel, vaultProviderTranspo
 //
 // Providers (set either or both env keys):
 //   - Claude OAuth credentials → Claude with native tools
-//   - OPENAI_API_KEY → Responses for native GPT-5.6 Sol tools, otherwise
+//   - OPENAI_API_KEY → Responses for registry-marked native tools, otherwise
 //     ChatGPT-compatible chat.completions; LOPU_OPENAI_TOOLS
 //     = native (function calling) | text (fenced ```tt-tool blocks parsed
 //     out of the streamed text, for endpoints without function calling such
@@ -536,7 +537,7 @@ async function* completionAsChunks(completion: unknown, normalize: (content: str
   };
 }
 
-// GPT-5.6 Sol rejects native tools plus reasoning on Chat Completions. Keep
+// Some OpenAI models require Responses for native tools with reasoning. Keep
 // this explicit: compatible custom/text endpoints and other model contracts
 // retain their existing transport. Never repair it by dropping chosen effort.
 async function* openAiResponsesProvider(options: OpenAiProviderOptions): LopuProviderStream {
@@ -683,7 +684,7 @@ async function* openAiResponsesProvider(options: OpenAiProviderOptions): LopuPro
 }
 
 async function* openAiProvider(options: OpenAiProviderOptions): LopuProviderStream {
-  if (options.toolMode === 'native' && options.choice.model === 'gpt-5.6-sol') {
+  if (options.toolMode === 'native' && requiresOpenAiResponsesForTools(options.choice.model)) {
     return yield* openAiResponsesProvider(options);
   }
   const { client, choice, signal, toolMode } = options;
