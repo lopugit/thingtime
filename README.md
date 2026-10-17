@@ -1207,8 +1207,18 @@ checked out without dependencies. Flags: `--no-deps`, `--no-env`,
 
 The desktop shell lives in `electron/` and packages the same `remix/` web app
 with Electron. It builds the Vite client and Nitro server with
-`NITRO_PRESET=node_server`, stages the output in `electron/dist/web`, then
-launches the bundled Nitro server on `127.0.0.1` inside the Electron app.
+`NITRO_PRESET=node_middleware`, stages the output in `electron/dist/web`, then
+binds the bundled Nitro middleware on `127.0.0.1` inside the Electron app.
+Desktop keeps the same port per user-data profile in `renderer-origin.json`, so
+IndexedDB sync runs and local editor drafts survive relaunch. The address record
+is private, atomically published and flushed before the renderer starts. If its
+port is occupied, close the application using that port and reopen Desktop;
+Desktop preserves the address and refuses to load the other server. A malformed
+record stops startup for recovery. Keep it with the Chromium profile in backups;
+do not delete it to work around a collision. No environment variable, external
+service or secret is required. Earlier random-port profiles are left untouched;
+this does not migrate storage from their old origins. See
+[Desktop restart verification](electron/README.md#renderer-restart-verification).
 
 Build the unpacked desktop app from the repository root with:
 

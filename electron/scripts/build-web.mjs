@@ -109,7 +109,7 @@ runRemixScript('build:client');
 runRemixScript('sync:nitro-template');
 runRemixScript('build:server', {
   env: {
-    NITRO_PRESET: 'node_server'
+    NITRO_PRESET: 'node_middleware'
   }
 });
 
@@ -133,7 +133,7 @@ await writeFile(
       desktopRelease: desktopReleaseMetadata.version ? desktopReleaseMetadata : null,
       gitBranch: readGitValue(['rev-parse', '--abbrev-ref', 'HEAD']),
       gitCommit: readGitValue(['rev-parse', 'HEAD']),
-      nitroPreset: 'node_server'
+      nitroPreset: 'node_middleware'
     },
     null,
     2

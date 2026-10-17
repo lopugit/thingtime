@@ -10495,8 +10495,19 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
   no horizontal overflow. Existing mobile folder controls still work.
 - [ ] Signed installed Mac: real picker/consent, account switch while dialogs are
   open, Keychain/TCC, upload/download/two-way bytes and interrupted receipts.
-- [ ] Before release, preserve the shared browser journal/drafts across complete
-  desktop restarts despite the current ephemeral loopback origin. Prove the same
-  operation IDs/baseline survive; do not infer this from same-page reload tests.
+- [x] Isolated full-process restart: run `verify:renderer-restart` after Electron
+  `build:web` and `verify:web`. Four separate processes preserve shared journal
+  IDs, confirmed progress, the completion baseline and pending editor drafts.
+  Synthetic receipt recovery must not replay mutations; other scopes stay empty.
+  An occupied saved port must refuse startup without contacting its server;
+  release it and verify exact recovery. No installed/native acceptance is implied.
+- [x] Stable-origin regression: malformed, oversized, symlink and non-file address
+  records remain untouched and fail startup. Competing first starts cannot
+  overwrite the record; failed bundle loading releases the owned socket; fresh
+  profiles have distinct addresses. Loading middleware serves only uncached 503s
+  until it is ready. Existing HTTP cache clearing preserves application storage.
+- [ ] Signed installed Desktop: verify the same journal/draft persistence with
+  real native/cloud transfers and app upgrades; preserve the profile/address
+  record together. Older random-port origins are not automatically migrated.
 - [ ] Measure native streaming throughput and identity-rate-limit behavior on
   large files/roots; per-64-KiB bridge correctness tests do not establish scale.

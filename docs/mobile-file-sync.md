@@ -82,8 +82,8 @@ this test environment. The runtime remains fail-closed on secure-storage errors.
 | --- | --- | --- |
 | Add this iPhone/iPad or Android device in Things | Native discovery, authenticated pairing, refresh/relaunch readback, correct account/origin, revoke and reconnect on actual app | iOS and Android clients implemented; real local API pairing and secure storage verified on both simulators; installed Things pairing verified on both simulators; physical devices pending |
 | Safe native credentials and recovery | Keychain/Keystore storage; restart during prepare/complete; exact recovery without duplicate devices | iOS Keychain and Android Keystore-encrypted pending claims preserve exact completion replay; native recovery tests pass |
-| Folder sync across Mac, iOS, Android and cloud | Create/edit/rename/move/delete real byte fixtures in each direction; independent hash verification and convergence | Reconciler/executor, verified fingerprints and atomic stable-file replacement; cloud upload adapter and complete private cloud inventory verified; iOS and Android folder grants/scans/reads implemented; foreground upload/backup controls and recoverable progress implemented; bounded cloud downloads and executor staging/receipt adapter verified; iOS native staging, approval and same-volume publication implemented and tested; Android private staging, native write approval, durable offline-folder publication, explicit native creation and read-only Android Files access verified; Android foreground offline-root cloud downloads, mixed two-way creates/independent replacements and actual Files acceptance verified; shared Apple publication core and process-exit recovery verified on macOS; Mac local adapter/identity/disconnect implemented; Electron host/shared controls and synthetic browser foreground acceptance implemented; iOS mixed-direction acceptance, Mac installed transfers/restart persistence, workers and full cross-device transfer acceptance pending |
-| Persistent offline and background sync | Kill/relaunch, reboot, network loss, sleep/wake, quota errors, paused jobs; durable retries with original IDs | Browser journal and real cloud upload recovery verified; iOS publication and Android staging process-exit recovery verified; native schedulers and reboot acceptance pending |
+| Folder sync across Mac, iOS, Android and cloud | Create/edit/rename/move/delete real byte fixtures in each direction; independent hash verification and convergence | Reconciler/executor, verified fingerprints and atomic stable-file replacement; cloud upload adapter and complete private cloud inventory verified; iOS and Android folder grants/scans/reads implemented; foreground upload/backup controls and recoverable progress implemented; bounded cloud downloads and executor staging/receipt adapter verified; iOS native staging, approval and same-volume publication implemented and tested; Android private staging, native write approval, durable offline-folder publication, explicit native creation and read-only Android Files access verified; Android foreground offline-root cloud downloads, mixed two-way creates/independent replacements and actual Files acceptance verified; shared Apple publication core and process-exit recovery verified on macOS; Mac local adapter/identity/disconnect implemented; Electron host/shared controls and synthetic browser foreground acceptance implemented; iOS mixed-direction acceptance, Mac installed transfers, workers and full cross-device transfer acceptance pending |
+| Persistent offline and background sync | Kill/relaunch, reboot, network loss, sleep/wake, quota errors, paused jobs; durable retries with original IDs | Browser journal, Desktop full-process journal/draft restart recovery and real cloud upload recovery verified; iOS publication and Android staging process-exit recovery verified; native schedulers and reboot acceptance pending |
 | Large resumable transfers | Chunk interruption/resume, hash mismatch, cancellation, stale upload/finalization race; streaming memory bounds | Real executor multipart interruption and exact-identity retry verified; native streaming transport pending |
 | Photos backup | Explicit selection/permission, incremental discovery, original photo/video bytes and metadata, duplicates, limited library changes, background completion | Pending |
 | Sync settings | Folder selection, direction, pause/resume, Wi-Fi/cellular and charging policy, exclusions, retention, selective/offline availability | Editable file-sync Things persist device/root/destination, direction, pause, network/power and exclusions; shared configured planner verified. Mobile folder and connection editors exist with durable local drafts and guarded API saves; foreground upload/backup checks live native network/power signals; iOS scoped Keychain and Android native/OS write approvals implemented; Mac native approvals/shared controls implemented with installed acceptance pending; retention/selective settings and background workers remain pending |
@@ -1086,13 +1086,38 @@ baseline; targeted lint has zero errors and five existing ThingsPage hook warnin
 Full web/Vercel build and packaged-output verification passed. These are separate layers,
 not an installed signed Mac transfer acceptance.
 
-Release acceptance remains open: installed AppKit/Keychain/TCC and real cloud
+At the host-controls checkpoint, release acceptance remained open: installed AppKit/Keychain/TCC and real cloud
 mixed-direction transfer, current-account revocation during native operations,
 large-file throughput/rate-limit work, and durable desktop restart storage. The
-bundled app currently chooses a new loopback port on launch, so its IndexedDB and
+bundled app at that checkpoint chose a new loopback port on launch, so its IndexedDB and
 local drafts cannot yet be claimed to recover across full app restarts even
 though record keys contain the canonical server origin. Keep this integration
 unreleased until that persistence boundary and the real-native acceptance lane
 are resolved. Background workers, Photos, peers, rename/delete convergence,
 conflict/restore UI, retention/selective availability and physical-device tests
 remain required by the original goal.
+
+
+## Desktop stable origin and restart recovery — 2026-10-17
+
+The restart-storage gap above is now addressed in source. Electron binds its own
+loopback socket and loads Nitro's `node_middleware` build. It durably publishes
+one private `renderer-origin.json` per profile, then reuses that address. Startup
+refuses occupied ports and malformed/non-file records without opening a window,
+contacting the other server, rotating the origin or clearing stored user data.
+The existing HTTP-cache clear remains; shared IndexedDB journal and draft formats
+are unchanged, with canonical server/account/device/root scope isolation.
+
+Verification uses the actual staged Nitro bundle and production shared modules
+in four separate Electron processes with one disposable profile. It preserves a
+partially confirmed run and pending configuration draft, recovers an uncertain
+operation by its original receipt without reapplying it, and reads back the full
+completion baseline on a later launch. An intervening port collision refuses
+startup without a request to the other server; release of the port permits exact
+recovery. Receipts are synthetic and no native transfer occurs. Unit coverage
+also checks corrupt/oversized/symlink/non-file records, competing first starts,
+bundle failure cleanup and independent profiles. The installed profile is untouched.
+
+This does not migrate older random-port origin storage or establish power-loss,
+signed installed transfer, streaming/rate-limit or background-worker acceptance.
+All other remaining work in the ledger above is still required.

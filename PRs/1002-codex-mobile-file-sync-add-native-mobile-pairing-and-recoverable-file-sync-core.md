@@ -856,8 +856,33 @@ passed. The final Graphify refresh establishes structural coverage only.
 
 Do not release this as completed Mac synchronization yet. Real signed installed
 picker/consent/Keychain/TCC and cloud transfer acceptance, native streaming/rate
-limits and durable desktop restart storage remain open. Desktop currently uses
+limits and durable desktop restart storage remain open. Desktop at this checkpoint used
 an ephemeral loopback origin; a same-page reload does not prove its IndexedDB or
 local drafts survive a complete app restart. Background workers, Photos, peers,
 rename/delete convergence, conflict/restore UI, retention/selective availability
 and physical-device coverage remain part of the active original goal.
+
+
+## Desktop restart persistence — 2026-10-17
+
+Closing Desktop previously changed its local origin and stranded its IndexedDB
+sync journal and editor drafts. Desktop now owns a stable loopback socket per
+profile, loads Nitro's `node_middleware` output, and atomically publishes a flushed,
+private address record before opening the renderer. It refuses occupied ports
+and invalid records; it never probes the other process or silently changes the
+address. Only HTTP cache is cleared. The canonical shared journal, draft and
+Timeline contracts remain unchanged.
+
+Four separate isolated Electron launches against the actual staged Nitro bundle
+verify pending run/draft persistence, original operation IDs, confirmed-operation
+skipping, synthetic lost-reply receipt recovery, full completion baseline,
+account/origin isolation and collision refusal/recovery. The fixture uses the
+production shared modules and no native dispatch. Electron unit coverage includes
+record corruption, symlink/non-file refusal, exclusive first publication, bundle
+failure cleanup and readiness; all 127 Electron tests pass. Full Desktop web/AI build and resource verification
+pass. No installed profile, native node or LaunchAgent is touched.
+
+Older random-port data remains untouched and is not migrated. Signed installed
+Mac transfer acceptance, native streaming/rate limits, power-loss/reboot and all
+other remaining full-feature goals are still open. This checkpoint closes the
+isolated restart-storage gap, not the complete sync delivery gate.
