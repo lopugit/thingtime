@@ -11883,3 +11883,18 @@ Native fixture: set `TT_LOCAL_SCHEMA_URL`, `TT_LOCAL_SCHEMA_ARTIFACTS`,
 `node --import tsx --test app/local-workspace/schemaDetail.browser.test.ts` from
 `remix/`. It requires the isolated loopback replica for its disposable account;
 never point it at an existing account or deployment.
+
+
+### Account algorithm selection independence
+
+- Apply a saved or built-in algorithm and clear to Latest while offline. Local
+  completion must not wait for a profile upload or account selection write.
+- Lose a selection response, choose another profile and retry. Replay the exact
+  frozen command; keep the newer device choice pending. A replay must not change
+  a newer account choice or reactivate a deleted profile.
+- Race two tabs, ordinary active selection and profile deletion. Require exact
+  versions and one receipt; never leave a deleted profile active.
+- Refuse another account's saved profile and stale account/origin/plane authority.
+  Retain pending device choice/content when a remote catalogue loses its profile.
+- Native account editor/feed/transfer and conflict UI activation is still pending;
+  the queue/API checks are not full offline browser acceptance.

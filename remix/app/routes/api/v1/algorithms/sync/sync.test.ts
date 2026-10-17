@@ -126,3 +126,32 @@ test('algorithm sync repeats session admission before mutation and response disc
 	assert.equal(f.reads(), 1);
 	assert.ok(!(await response.text()).includes('algorithms'));
 });
+
+test('selection operations use the same admission and hide pointers after account revocation', async () => {
+	const selection = { algorithmId: 'hot', version: 'algorithm-selection-v1:' + 'a'.repeat(64) };
+	const command = { algorithmId: 'hot', expectedVersion: selection.version, writeId: 'choose-hot' };
+	let writes = 0;
+	const f = fixture({
+		readUserAlgorithmSelection: async () => selection,
+		synchronizeAlgorithmSelection: async (owner: string, raw: unknown, admit: () => Promise<void>) => {
+			assert.equal(owner, 'owner');
+			assert.deepEqual(raw, command);
+			await admit();
+			writes++;
+			return { ...command, result: selection };
+		}
+	});
+	assert.deepEqual((await (await f.run({ request: request({ operation: 'selection', expectedOwnerId: 'owner' }) })).json()).selection, selection);
+	assert.deepEqual((await (await f.run({ request: request({ operation: 'select', expectedOwnerId: 'owner', command }) })).json()).acknowledgment, {
+		...command,
+		result: selection
+	});
+	assert.equal(writes, 1);
+	assert.equal((await f.run({ request: request({ operation: 'selection', expectedOwnerId: 'owner', command }) })).status, 400);
+	assert.equal((await f.run({ request: request({ operation: 'select', expectedOwnerId: 'owner' }) })).status, 400);
+	let reads = 0;
+	const expired = fixture({ resolveTokenUser: async () => (++reads > 1 ? null : account), readUserAlgorithmSelection: async () => selection });
+	const denied = await expired.run({ request: request({ operation: 'selection', expectedOwnerId: 'owner' }) });
+	assert.equal(denied.status, 401);
+	assert.ok(!(await denied.text()).includes('algorithmId'));
+});

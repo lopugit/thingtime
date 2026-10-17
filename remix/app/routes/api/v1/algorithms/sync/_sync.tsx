@@ -1,3 +1,4 @@
+import { readUserAlgorithmSelection, synchronizeAlgorithmSelection } from '~/api/utils/algorithms/algorithmSelection';
 import { json, readJsonBody, requireJsonContentType } from '~/api/http';
 import { getAuthToken } from '~/api/utils/auth/authCookie';
 import { resolveTokenUser } from '~/api/utils/auth/getCurrentUser';
@@ -17,7 +18,16 @@ const privateResponse = (response: Response) => {
 	for (const [key, value] of Object.entries(headers)) response.headers.set(key, value);
 	return response;
 };
-const defaults = { getAuthToken, resolveTokenUser, mongoDataPlane, enforceRateLimit, algorithmSyncSnapshot, synchronizeAlgorithmWrite };
+const defaults = {
+	getAuthToken,
+	resolveTokenUser,
+	mongoDataPlane,
+	enforceRateLimit,
+	algorithmSyncSnapshot,
+	synchronizeAlgorithmWrite,
+	readUserAlgorithmSelection,
+	synchronizeAlgorithmSelection
+};
 class Changed extends Error {
 	constructor(readonly status: number, readonly code?: string) {
 		super('Algorithm account confirmation changed.');
@@ -42,13 +52,16 @@ export function createAlgorithmSyncResponse(overrides: Partial<typeof defaults> 
 				!body ||
 				typeof body !== 'object' ||
 				Array.isArray(body) ||
-				!['snapshot', 'write'].includes(body.operation) ||
+				!['snapshot', 'write', 'selection', 'select'].includes(body.operation) ||
 				typeof body.expectedOwnerId !== 'string' ||
 				!body.expectedOwnerId ||
 				Object.keys(body).some(
-					(key) => !(body.operation === 'write' ? ['operation', 'expectedOwnerId', 'command'] : ['operation', 'expectedOwnerId']).includes(key)
+					(key) =>
+						!(['write', 'select'].includes(body.operation) ? ['operation', 'expectedOwnerId', 'command'] : ['operation', 'expectedOwnerId']).includes(
+							key
+						)
 				) ||
-				(body.operation === 'write' && !body.command)
+				(['write', 'select'].includes(body.operation) && !body.command)
 			)
 				return deny(400, 'Invalid algorithm synchronization request.');
 			const ownerId = body.expectedOwnerId;
@@ -67,6 +80,10 @@ export function createAlgorithmSyncResponse(overrides: Partial<typeof defaults> 
 			const result =
 				body.operation === 'snapshot'
 					? { complete: true, algorithms: await deps.algorithmSyncSnapshot(ownerId) }
+					: body.operation === 'selection'
+					? { selection: await deps.readUserAlgorithmSelection(ownerId) }
+					: body.operation === 'select'
+					? { acknowledgment: await deps.synchronizeAlgorithmSelection(ownerId, body.command, admit) }
 					: { acknowledgment: await deps.synchronizeAlgorithmWrite(ownerId, expectedPlane, body.command, admit) };
 			await admit();
 			return json({ ok: true, ownerId, dataPlane: expectedPlane, storagePlane: 'home', ...result }, { headers });

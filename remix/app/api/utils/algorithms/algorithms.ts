@@ -1,7 +1,7 @@
 import { MAX_SAVED_ALGORITHMS, normalizeAlgorithmName, sanitizeAlgorithmEmoji as sanitizeEmoji, sanitizeAlgorithmEvents as sanitizeEvents } from './algorithmContent';
 import { isDefaultAlgorithm } from '~/components/Feed/defaultAlgorithms';
 import { randomUUID } from 'node:crypto';
-import { ObjectId } from 'mongodb';
+import { ObjectId, type ClientSession } from 'mongodb';
 
 // feed-algorithm is a PROTECTED system kind: algorithm things stay on the home
 // deployment DB even while a data-plane endpoint override is active.
@@ -193,19 +193,19 @@ export const toPublicAlgorithm = async (doc: FeedAlgorithmDoc): Promise<PublicAl
 // the unique shareId index first, legacy feedAlgorithms shareId index second).
 type OwnedAlgorithm = { doc: FeedAlgorithmDoc; era: 'things' | 'legacy' };
 
-const findOwnedAlgorithmWithEra = async (ownerId: string, shareId: unknown): Promise<OwnedAlgorithm | null> => {
+const findOwnedAlgorithmWithEra = async (ownerId: string, shareId: unknown, session?: ClientSession): Promise<OwnedAlgorithm | null> => {
   if (typeof shareId !== 'string' || !shareId.trim()) return null;
   const id = shareId.trim();
   const things = await getThingsCollection();
-  const thing = await things.findOne({ shareId: id, ownerId, thingtime: 'feed-algorithm' } as any);
+  const thing = await things.findOne({ shareId: id, ownerId, thingtime: 'feed-algorithm' } as any, { session });
   if (thing) return { doc: algorithmThingToDoc(thing), era: 'things' };
   const algorithms = await getFeedAlgorithmsCollection();
-  const legacy = (await algorithms.findOne({ shareId: id, ownerId } as any)) as any as FeedAlgorithmDoc | null;
+  const legacy = (await algorithms.findOne({ shareId: id, ownerId } as any, { session })) as any as FeedAlgorithmDoc | null;
   return legacy ? { doc: legacy, era: 'legacy' } : null;
 };
 
-const findOwnedAlgorithm = async (ownerId: string, shareId: unknown): Promise<FeedAlgorithmDoc | null> =>
-  (await findOwnedAlgorithmWithEra(ownerId, shareId))?.doc ?? null;
+const findOwnedAlgorithm = async (ownerId: string, shareId: unknown, session?: ClientSession): Promise<FeedAlgorithmDoc | null> =>
+  (await findOwnedAlgorithmWithEra(ownerId, shareId, session))?.doc ?? null;
 
 // Any-owner lookup honoured ONLY for algorithms whose owner flipped shared:true
 // — the branch-invitation gate. shareId is an unguessable UUID, so possession
@@ -612,18 +612,18 @@ export const deleteAlgorithm = async (ownerId: string, shareId: unknown, boundar
   return { ok: true };
 };
 
-export const setActiveAlgorithm = async (ownerId: string, algorithmId: unknown): Promise<Fail | { ok: true; activeAlgorithmId: string | null }> => {
+export const setActiveAlgorithm = async (ownerId: string, algorithmId: unknown, options: { session?: ClientSession; expectedVersion?: string } = {}): Promise<Fail | { ok: true; activeAlgorithmId: string | null }> => {
   if (algorithmId === null || algorithmId === undefined || algorithmId === '') {
-    await setUserActiveFeedAlgorithm(ownerId, null);
+    await setUserActiveFeedAlgorithm(ownerId, null, options);
     return { ok: true, activeAlgorithmId: null };
   }
   if (isDefaultAlgorithm(algorithmId)) {
-    await setUserActiveFeedAlgorithm(ownerId, algorithmId);
+    await setUserActiveFeedAlgorithm(ownerId, algorithmId, options);
     return { ok: true, activeAlgorithmId: algorithmId };
   }
-  const doc = await findOwnedAlgorithm(ownerId, algorithmId);
+  const doc = await findOwnedAlgorithm(ownerId, algorithmId, options.session);
   if (!doc) return fail(404, 'Algorithm not found');
-  await setUserActiveFeedAlgorithm(ownerId, doc.shareId);
+  await setUserActiveFeedAlgorithm(ownerId, doc.shareId, options);
   return { ok: true, activeAlgorithmId: doc.shareId };
 };
 

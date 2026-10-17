@@ -3,6 +3,7 @@ import { randomUUID as lopuSettingsRevision } from 'node:crypto';
 import { LopuPromptConflictError, validateLopuInstructions, type LopuInstructionSettings } from '../lopu/promptSettingsCore';
 import { createHash } from 'node:crypto';
 import { Binary, ObjectId, BSON, type ClientSession } from 'mongodb';
+import type { AlgorithmSelection } from '../algorithms/algorithmSelectionContract';
 import type { ThemeSelection } from '../themes/themeSelectionContract';
 
 import {
@@ -1296,18 +1297,48 @@ export const clearUserActiveTheme = async (userId: string, themeShareId: string,
 	).updateOne({ _id: new ObjectId(userId), 'meta.activeThemeId': themeShareId }, { $set: { 'meta.activeThemeId': null, updatedAt: new Date() } }, { ...(session ? { session } : {}) });
 };
 
-// Set (or clear, with null) the user's active feed algorithm shareId in meta.
-export const setUserActiveFeedAlgorithm = async (userId: string, algorithmShareId: string | null) => {
-	const result = await mutateUserThingSecure(userId, (s) => {
-		s.meta!.activeFeedAlgorithmId = algorithmShareId;
-	});
-	if (result === 'mutated') return;
-	if (result === 'contended') throw new SecureWriteContendedError(userId);
-	if (!ObjectId.isValid(userId)) return;
-	await (
-		await getUsersCollection()
-	).updateOne({ _id: new ObjectId(userId) }, { $set: { 'meta.activeFeedAlgorithmId': algorithmShareId, updatedAt: new Date() } });
+export class ActiveFeedAlgorithmConflictError extends Error {
+ constructor() { super('The account algorithm selection changed. Keep your device choice for review.'); }
+}
+const algorithmSelectionId = (value: unknown): string | null => {
+ if (value === null || value === undefined) return null;
+ if (typeof value !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(value)) throw new Error('Saved algorithm selection is invalid.');
+ return value;
 };
+const algorithmSelectionVersion = (ownerId: string, stored: any) => {
+ if (BSON.calculateObjectSize(stored) > 1024 * 1024) throw new Error('Algorithm selection state exceeds the read limit.');
+ return 'algorithm-selection-v1:' + createHash('sha256').update(ownerId).update('\0').update(BSON.serialize(stored)).digest('hex');
+};
+/** Private projection. The opaque comparison includes the actual secure CAS
+ * preimage, but never discloses any secure fields or infers session authority. */
+export const readUserAlgorithmSelection = async (userId: string, session?: ClientSession): Promise<AlgorithmSelection> => {
+ const things=await getThingsCollection();
+ const thing=await things.findOne({shareId:String(userId),thingtime:'user'} as any,{projection:{secure:1,secureVersion:1},...(session?{session}:{})});
+ if(thing)return {algorithmId:algorithmSelectionId(strictVaultPayload((thing as any).secure).meta?.activeFeedAlgorithmId),version:algorithmSelectionVersion(userId,thing)};
+ if(!ObjectId.isValid(userId))throw new ActiveFeedAlgorithmConflictError();
+ const legacy=await (await getUsersCollection()).findOne({_id:new ObjectId(userId)},{...(session?{session}:{})});
+ if(!legacy)throw new ActiveFeedAlgorithmConflictError();
+ return {algorithmId:algorithmSelectionId(legacy.meta?.activeFeedAlgorithmId),version:algorithmSelectionVersion(userId,legacy)};
+};
+
+// Normal and conditional selection changes share the same secure CAS writer.
+export const setUserActiveFeedAlgorithm = async (userId: string, algorithmShareId: string | null, options: {session?: ClientSession;expectedVersion?: string} = {}) => {
+ const result = await mutateUserThingSecure(userId, (s, stored) => {
+  if(options.expectedVersion !== undefined && algorithmSelectionVersion(userId,stored)!==options.expectedVersion)throw new ActiveFeedAlgorithmConflictError();
+  s.meta!.activeFeedAlgorithmId = algorithmShareId;
+ }, options.expectedVersion !== undefined, options.session);
+ if(result==='mutated')return;
+ if(result==='contended')throw new SecureWriteContendedError(userId);
+ if(!ObjectId.isValid(userId)){if(options.expectedVersion!==undefined)throw new ActiveFeedAlgorithmConflictError();return;}
+ const users=await getUsersCollection(),session=options.session;
+ if(options.expectedVersion!==undefined){
+  const before=await users.findOne({_id:new ObjectId(userId)},{...(session?{session}:{})});
+  if(!before||algorithmSelectionVersion(userId,before)!==options.expectedVersion)throw new ActiveFeedAlgorithmConflictError();
+  const result=await users.updateOne({_id:before._id,$expr:{$eq:['$$ROOT',{$literal:before}]}} as any,{$set:{'meta.activeFeedAlgorithmId':algorithmShareId,updatedAt:new Date()}},{...(session?{session}:{})});
+  if(result.matchedCount!==1)throw new ActiveFeedAlgorithmConflictError();
+ }else await users.updateOne({_id:new ObjectId(userId)},{$set:{'meta.activeFeedAlgorithmId':algorithmShareId,updatedAt:new Date()}},{...(session?{session}:{})});
+};
+
 
 // Clear the active feed-algorithm pointer only if it still points at the given
 // algorithm — the twin of clearUserActiveTheme, so algorithm delete stops

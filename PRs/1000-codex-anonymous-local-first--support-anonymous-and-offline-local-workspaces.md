@@ -3674,3 +3674,34 @@ final acknowledgment hardening. Focused lint is clean; TypeScript reports the
 same 91 normalized baseline diagnostics and no new signatures. The queue and
 transport are tested independently; no native UI, deployed feature acceptance
 or complete account algorithm flow is claimed by these results.
+
+## Independent account algorithm selection — 2026-10-18
+
+Account selection now has a bounded conditional protocol on `algorithms/sync`
+(`api.algorithms-sync` 1.1.0). It extends the normal secure account writer and
+owned-profile validation; selection plus its exact retry receipt commit in one
+home transaction. Current owner, origin and selected-plane checks still apply.
+Built-in choices and null clearing need no profile upload. Replay returns the
+original receipt without replacing a later choice or reviving a deleted profile.
+
+The home device queue records selection atomically with local apply, deletion
+and conflict-copy remapping. It preserves newer choices during uncertain writes,
+claims work across tabs, and requires fresh review for conflicting remote choices.
+Pending selection references protect retained profiles from catalogue deletion.
+The transport negotiates 1.1.0 before sending selection operations. Anonymous
+selections never enter the account queue.
+
+Local verification: 87 feed tests passed (one opt-in skip); 582 workspace tests
+passed (67 opt-in skips), plus four offline-shell checks. After the final
+retention guard, 84 focused queue/selection/transport/capability tests passed.
+The real loopback API fixture passed 67 checks using newly registered disposable
+accounts, including normal import/export, exact retries, private ownership,
+concurrent choices and concurrent profile deletion. TypeScript retained the
+same 91 baseline diagnostics; no new signatures. Focused lint passed.
+
+This completes the selection prerequisite, not native account activation. The
+account facade, editor/feed, normal transfer/library hooks, sharing controls and
+conflict UI still need integration, followed by clean offline/reconnect/multitab
+browser acceptance. Private feed observations must stay scoped to their selected
+source plane while algorithm content stays at home. Full coverage, latest-main
+reconciliation, current-head CI and deployed acceptance remain merge gates.

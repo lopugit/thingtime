@@ -1,3 +1,10 @@
+import {
+	parseAlgorithmSelection,
+	parseAlgorithmSelectionWrite,
+	parseAlgorithmSelectionAcknowledgment,
+	type AlgorithmSelectionWrite
+} from '../api/utils/algorithms/algorithmSelectionContract';
+import type { AlgorithmSelectionTransport } from './algorithmSelection';
 import { parseAlgorithmWrite, parseAlgorithmWriteAcknowledgment, type AlgorithmWrite } from '../api/utils/algorithms/algorithmSyncContract';
 import { requireThingtimeCapability } from '../api/utils/capabilities/requireCapability.client';
 import { EXPECTED_ACTOR_HEADER } from '../api/utils/auth/expectedActor';
@@ -9,8 +16,15 @@ import { WorkspaceError, type WorkspaceScope, type WorkspaceLease } from './stor
 import { parseAccountAlgorithmSnapshot, type AccountAlgorithmTransport } from './accountAlgorithms';
 /** Remote authority belongs to the current selected account/origin/plane even
  * though the algorithm content and immutable receipts live in home storage. */
-export function accountAlgorithmTransport(scope: Extract<WorkspaceScope, { kind: 'account' }>, lease: WorkspaceLease): AccountAlgorithmTransport {
-	const request = async (operation: 'snapshot' | 'write', command: AlgorithmWrite | undefined, signal: AbortSignal) => {
+export function accountAlgorithmTransport(
+	scope: Extract<WorkspaceScope, { kind: 'account' }>,
+	lease: WorkspaceLease
+): AccountAlgorithmTransport & AlgorithmSelectionTransport {
+	const request = async (
+		operation: 'snapshot' | 'write' | 'selection' | 'select',
+		command: AlgorithmWrite | AlgorithmSelectionWrite | undefined,
+		signal: AbortSignal
+	) => {
 		lease.assertCurrent();
 		const remote = accountRemoteWorkspaceLease(scope);
 		remote.assertCurrent();
@@ -20,7 +34,7 @@ export function accountAlgorithmTransport(scope: Extract<WorkspaceScope, { kind:
 		const combined = AbortSignal.any([signal, controller.signal, AbortSignal.timeout(20000)]);
 		try {
 			if (window.location.origin !== scope.origin) throw new WorkspaceError('WORKSPACE_CHANGED', 'Account origin changed.', 409);
-			await requireThingtimeCapability('api.algorithms-sync', '1.0.0');
+			await requireThingtimeCapability('api.algorithms-sync', ['selection', 'select'].includes(operation) ? '1.1.0' : '1.0.0');
 			await requireThingtimeCapability('api.mongodb-endpoint', '1.1.0');
 			lease.assertCurrent();
 			remote.assertCurrent();
@@ -66,6 +80,14 @@ export function accountAlgorithmTransport(scope: Extract<WorkspaceScope, { kind:
 		}
 	};
 	return {
+		selection: async (signal) => parseAlgorithmSelection((await request('selection', undefined, signal)).selection),
+		select: async (raw, signal) => {
+			const command = parseAlgorithmSelectionWrite(raw);
+			const ack = parseAlgorithmSelectionAcknowledgment((await request('select', command, signal)).acknowledgment);
+			if (ack.algorithmId !== command.algorithmId || ack.writeId !== command.writeId || ack.expectedVersion !== command.expectedVersion)
+				throw new WorkspaceError('INVALID_SELECTION_ACK', 'Account algorithm selection acknowledgment changed.', 502);
+			return ack;
+		},
 		snapshot: async (signal) => {
 			const result = await request('snapshot', undefined, signal);
 			if (result.complete !== true)

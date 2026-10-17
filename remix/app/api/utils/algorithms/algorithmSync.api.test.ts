@@ -48,7 +48,7 @@ test(
 			const routes = await read(await guest.get('/api/v1/capabilities'), 'live route capability discovery');
 			assert.equal(capabilities.origin, origin);
 			for (const [feature, required] of [
-				['api.algorithms-sync', '1.0.0'],
+				['api.algorithms-sync', '1.1.0'],
 				['api.algorithms-delete', '1.0.1']
 			]) {
 				assert.ok(capabilitySatisfies(capabilities.features[feature]?.version, required));
@@ -67,7 +67,7 @@ test(
 				).user.id;
 			};
 			ownerId = await register(owner);
-			await register(other);
+			const otherId = await register(other);
 			const payload = { operation: 'snapshot', expectedOwnerId: ownerId };
 			await read(await guest.post('/api/v1/algorithms/sync', { headers, data: payload }), 'anonymous refused', 401);
 			await read(await other.post('/api/v1/algorithms/sync', { headers, data: payload }), 'different account refused', 409);
@@ -172,6 +172,60 @@ test(
 			await mkdir(artifacts!, { recursive: true });
 			await writeFile(artifacts + '/export.json', JSON.stringify(exported, null, 2));
 			await writeFile(artifacts + '/profile.thingtime.json', serializeTransfer(manifest));
+			const selection = async () =>
+				(await read(await sync({ operation: 'selection', expectedOwnerId: ownerId }), 'private selection snapshot')).selection;
+			const select = (command: unknown, extra = {}) => sync({ operation: 'select', expectedOwnerId: ownerId, command }, extra);
+			const initialChoice = await selection();
+			assert.equal(initialChoice.algorithmId, null);
+			await read(
+				await select({ algorithmId: randomUUID(), expectedVersion: initialChoice.version, writeId: randomUUID() }),
+				'unavailable profile cannot be selected',
+				404
+			);
+			const choice = { algorithmId: create.id, expectedVersion: initialChoice.version, writeId: randomUUID() };
+			const chosen = (await read(await select(choice), 'conditional active profile selection')).acknowledgment;
+			assert.equal(chosen.result.algorithmId, create.id);
+			assert.equal((await selection()).algorithmId, create.id);
+			assert.deepEqual((await read(await select(choice, selected), 'selection home receipt survives selected-plane change')).acknowledgment, chosen);
+			await read(await select({ ...choice, algorithmId: branch.id }), 'changed selection receipt identity refused', 409);
+			const otherChoice = (
+				await read(
+					await other.post('/api/v1/algorithms/sync', { headers, data: { operation: 'selection', expectedOwnerId: otherId } }),
+					'other isolated selection'
+				)
+			).selection;
+			await read(
+				await other.post('/api/v1/algorithms/sync', {
+					headers,
+					data: {
+						operation: 'select',
+						expectedOwnerId: otherId,
+						command: { algorithmId: create.id, expectedVersion: otherChoice.version, writeId: randomUUID() }
+					}
+				}),
+				'private profile cannot be selected by another account',
+				404
+			);
+			await read(
+				await owner.post('/api/v1/algorithms/active', { headers, data: { algorithmId: 'hot' } }),
+				'normal writer supersedes conditional selection'
+			);
+			assert.deepEqual((await read(await select(choice), 'old selection response replay')).acknowledgment, chosen);
+			assert.equal((await selection()).algorithmId, 'hot');
+			await read(
+				await select({ ...choice, writeId: randomUUID(), expectedVersion: chosen.result.version }),
+				'stale selection cannot overwrite newer choice',
+				409
+			);
+			const beforeRace = await selection();
+			const selections = await Promise.all(
+				['new', null].map((algorithmId) => select({ algorithmId, expectedVersion: beforeRace.version, writeId: randomUUID() }))
+			);
+			assert.deepEqual(selections.map((r) => r.status()).sort(), [200, 409]);
+			checks.push('concurrent selections commit only one');
+			const beforeClear = await selection();
+			await read(await select({ algorithmId: null, expectedVersion: beforeClear.version, writeId: randomUUID() }), 'conditional latest clearing');
+			assert.equal((await selection()).algorithmId, null);
 			await read(await owner.post('/api/v1/algorithms/active', { headers, data: { algorithmId: create.id } }), 'normal active selection');
 			const deletion = { action: 'delete', id: create.id, writeId: randomUUID(), expectedVersion: settled.version };
 			const removed = (await read(await write(deletion), 'atomic profile and active-pointer deletion')).acknowledgment;
@@ -186,11 +240,22 @@ test(
 				(await read(await owner.get('/api/v1/auth/me'), 'deletion replay preserves newer selection')).user.activeFeedAlgorithmId,
 				branch.id
 			);
+			assert.deepEqual((await read(await select(choice), 'old selection receipt never reactivates a deleted profile')).acknowledgment, chosen);
+			assert.equal((await selection()).algorithmId, branch.id);
 			assert.deepEqual((await read(await write(create), 'old creation receipt never resurrects deleted profile')).acknowledgment, first);
 			assert.equal(
 				(await snapshot()).some((item: any) => item.id === create.id),
 				false
 			);
+			const beforeDeleteRace = await selection();
+			const deleteRace = await Promise.all([
+				select({ algorithmId: importedId, expectedVersion: beforeDeleteRace.version, writeId: randomUUID() }),
+				write({ action: 'delete', id: importedId, expectedVersion: restored.version, writeId: randomUUID() })
+			]);
+			assert.ok([200, 404, 409].includes(deleteRace[0].status()));
+			assert.equal(deleteRace[1].status(), 200);
+			assert.notEqual((await selection()).algorithmId, importedId);
+			checks.push('concurrent selection and profile deletion cannot leave a dangling active pointer');
 			complete = true;
 		} finally {
 			try {

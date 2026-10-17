@@ -1,3 +1,4 @@
+import { AccountAlgorithmSelection, ACCOUNT_ALGORITHM_SELECTION, type AccountAlgorithmSelectionState } from './algorithmSelection';
 import { LocalAlgorithms } from './algorithms';
 import type { LocalThing } from './things';
 import { WorkspaceError, type WorkspaceDatabase, type WorkspaceScope, type WorkspaceLease, type WorkspaceTransaction } from './storage';
@@ -95,6 +96,7 @@ export function parseAccountAlgorithmSnapshot(input: unknown): AccountAlgorithmS
  * It has no network authority: the transport must verify a fresh remote lease. */
 export class AccountAlgorithmSync {
 	readonly algorithms: LocalAlgorithms;
+	readonly selection: AccountAlgorithmSelection;
 	constructor(
 		private db: WorkspaceDatabase,
 		readonly scope: Scope,
@@ -104,7 +106,14 @@ export class AccountAlgorithmSync {
 	) {
 		if (scope.kind !== 'account') return fail('Anonymous algorithms never synchronize.', 'ACCOUNT_REQUIRED', 403);
 		if (scope.dataPlane !== 'home') return fail('Account algorithms belong to the home workspace.', 'ALGORITHM_HOME_REQUIRED');
-		this.algorithms = new LocalAlgorithms(db, lease, { scope, now, uuid, onWrite: (tx, row, previous) => this.mutated(tx, row, previous) });
+		this.selection = new AccountAlgorithmSelection(db, scope, lease, now, uuid);
+		this.algorithms = new LocalAlgorithms(db, lease, {
+			scope,
+			now,
+			uuid,
+			onActive: (tx, id) => this.selection.setIn(tx, id),
+			onWrite: (tx, row, previous) => this.mutated(tx, row, previous)
+		});
 	}
 	private tx<T>(mode: IDBTransactionMode, run: (tx: WorkspaceTransaction) => Promise<T>, signal?: AbortSignal) {
 		const lease: WorkspaceLease = signal
@@ -227,20 +236,21 @@ export class AccountAlgorithmSync {
 						if (!old || old.baseVersion !== row.version || old.base?.version !== row.version) await this.install(tx, row, old);
 					}
 				}
+				const choice = await tx.get<AccountAlgorithmSelectionState>('settings', ACCOUNT_ALGORITHM_SELECTION);
 				for (const [id, state] of states)
 					if (!present.has(id) && state.state === 'synced' && !state.deleted) {
-						if (dependents.has(id)) {
+						if (dependents.has(id) || (choice?.state !== 'synced' && choice?.desired === id) || choice?.pending?.command.algorithmId === id) {
 							await tx.put(collection, id, {
 								...state,
 								state: 'conflict',
 								revision: state.revision + 1,
-								error: 'Account algorithm was removed. Preserve its related device Things before discarding it.'
+								error: 'Account algorithm was removed. Review the device choice or related Things before discarding it.'
 							});
 							continue;
 						}
 						await tx.delete('things', id);
 						await tx.delete(collection, id);
-						if ((await tx.get('settings', 'active-algorithm')) === id) await tx.delete('settings', 'active-algorithm');
+						// Reconcile the account pointer through the independent selection reader.
 					}
 				if ((await tx.list<LocalThing>('things')).filter((row) => isTransferAlgorithm(row.value)).length > MAX_SAVED_ALGORITHMS)
 					return fail('Retaining this catalogue exceeds the device algorithm limit.', 'LOCAL_QUOTA', 413);
@@ -471,7 +481,10 @@ export class AccountAlgorithmSync {
 					};
 					await tx.put('things', copyId, copy);
 					await this.mutated(tx, copy, null);
-					if ((await tx.get('settings', 'active-algorithm')) === review.id) await tx.put('settings', 'active-algorithm', copyId);
+					if ((await tx.get('settings', 'active-algorithm')) === review.id) {
+						await tx.put('settings', 'active-algorithm', copyId);
+						await this.selection.setIn(tx, copyId);
+					}
 				}
 				if (keep === 'remote' || independent) {
 					if (remote) await this.install(tx, remote, state);
@@ -491,7 +504,10 @@ export class AccountAlgorithmSync {
 							retryAt: 0,
 							error: undefined
 						});
-						if ((await tx.get('settings', 'active-algorithm')) === review.id) await tx.delete('settings', 'active-algorithm');
+						if ((await tx.get('settings', 'active-algorithm')) === review.id) {
+							await tx.delete('settings', 'active-algorithm');
+							await this.selection.setIn(tx, null);
+						}
 					}
 				} else if (!remote && !local) {
 					await tx.put(collection, review.id, {

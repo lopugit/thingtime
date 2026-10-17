@@ -76,6 +76,29 @@ test('algorithm transport requires current authority and compatible origin, boun
 		assert.deepEqual(JSON.parse(String(calls.at(-1)!.init.body)), { operation: 'write', expectedOwnerId: 'owner', command });
 		response = Response.json({ ok: true, ownerId: 'owner', dataPlane: plane, storagePlane: 'home', acknowledgment: { ...ack, writeId: 'wrong' } });
 		await assert.rejects(bind().write(command, signal()), /does not match/);
+		const selection = { algorithmId: 'hot', version: 'algorithm-selection-v1:' + 'c'.repeat(64) };
+		const select = { algorithmId: 'hot', expectedVersion: selection.version, writeId: 'choose-hot' };
+		await assert.rejects(bind().selection(signal()), /incompatible/);
+		capability = '1.1.0';
+		response = Response.json({ ok: true, ownerId: 'owner', dataPlane: plane, storagePlane: 'home', selection });
+		assert.deepEqual(await bind().selection(signal()), selection);
+		response = Response.json({
+			ok: true,
+			ownerId: 'owner',
+			dataPlane: plane,
+			storagePlane: 'home',
+			acknowledgment: { ...select, result: selection }
+		});
+		assert.deepEqual(await bind().select(select, signal()), { ...select, result: selection });
+		assert.equal(JSON.parse(String(calls.at(-1)!.init.body)).operation, 'select');
+		response = Response.json({
+			ok: true,
+			ownerId: 'owner',
+			dataPlane: plane,
+			storagePlane: 'home',
+			acknowledgment: { ...select, writeId: 'wrong', result: selection }
+		});
+		await assert.rejects(bind().select(select, signal()), /acknowledgment changed/);
 		response = Response.json({ ok: true, ownerId: 'owner', dataPlane: plane, storagePlane: 'home', complete: false, algorithms: [] });
 		await assert.rejects(bind().snapshot(signal()), /incomplete/);
 		response = Response.json({ ok: true, ownerId: 'owner', dataPlane: plane, complete: true, algorithms: [] });

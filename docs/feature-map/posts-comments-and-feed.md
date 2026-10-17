@@ -213,3 +213,13 @@ infrastructure as other account queues. Native facade/feed/editor activation,
 selection sync and transfer/library hooks remain pending. Run
 `test:local-workspace`; dedicated cases cover two tabs, deletion during creation,
 training after lost responses, stale review, large profiles and branch ordering.
+
+### Independent account algorithm selection
+
+`algorithmSelectionContract.ts` and `algorithmSelection.ts` under
+`api/utils/algorithms` add bounded conditional pointer synchronization to
+`algorithms/sync` 1.1.0. The normal secure account writer owns selection CAS;
+its receipt commits in the same home transaction. The matching local-workspace
+selection queue records local choices atomically, preserves uncertain retries,
+and protects referenced profiles during catalogue refresh. Account native
+facade/feed/transfer and review integration remains outstanding.
