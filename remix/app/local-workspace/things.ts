@@ -1,4 +1,5 @@
 import { LOCAL_TIMELINE_FOLDER, localTimelineFolder, recordLocalThingChanges, type LocalMutationCapture } from './timeline';
+import { captureThingChanges, type ThingTransactionCapture } from './thingChanges';
 import { isLocalInteraction } from './interactions';
 import { attachmentCountLimit } from '../schemas/attachmentLimits';
 import type { StoredDraft } from './drafts';
@@ -68,22 +69,14 @@ const validated = (input: ThingWrite, postAttachments?: { hasAny: boolean; hasVi
 export class LocalThings {
 	constructor(private db: WorkspaceDatabase, readonly scope: WorkspaceScope, private lease: WorkspaceLease,
 		private builtins: readonly TransferThing[] = [], private now = () => new Date().toISOString(), private uuid = () => crypto.randomUUID(), private onWrite?: LocalThingMutation,
-		private onFileWrite?: LocalFileMutation, private acceptsExternalTarget?: (tx: WorkspaceTransaction, id: string) => Promise<boolean>) {}
+		private onFileWrite?: LocalFileMutation, private acceptsExternalTarget?: (tx: WorkspaceTransaction, id: string) => Promise<boolean>,
+		private captureAccountChanges?: ThingTransactionCapture) {}
 	private transaction<T>(mode: IDBTransactionMode, run: (tx: WorkspaceTransaction) => Promise<T>, captures?: Map<string, LocalMutationCapture>, signal?: AbortSignal) {
 		const lease: WorkspaceLease = signal ? { assertCurrent: () => { this.lease.assertCurrent(); signal.throwIfAborted(); }, onInvalidate: cb => { const off = this.lease.onInvalidate(cb); signal.addEventListener('abort', cb, { once: true }); return () => { off(); signal.removeEventListener('abort', cb); }; } } : this.lease;
 		return this.db.transaction(this.scope, mode, lease, async tx => {
-			if (mode !== 'readwrite' || this.scope.kind !== 'anonymous') return run(tx);
-			const before = new Map<string, Promise<LocalThing | undefined>>();
-			const capture = (collection: string, id: string) => { if (collection === 'things' && !before.has(id)) before.set(id, tx.get<LocalThing>(collection, id)); };
-			const tracked: WorkspaceTransaction = { ...tx,
-				put: async (collection, id, value) => { capture(collection, id); await before.get(id); await tx.put(collection, id, value); },
-				delete: async (collection, id) => { capture(collection, id); await before.get(id); await tx.delete(collection, id); }
-			};
-			const result = await run(tracked);
-			const changes = new Map<string, { before: LocalThing | null; after: LocalThing | null }>();
-			for (const [id, previous] of before) changes.set(id, { before: await previous || null, after: await tx.get<LocalThing>('things', id) || null });
-			await recordLocalThingChanges(tx, changes, this.now, this.uuid, captures);
-			return result;
+			if (mode !== 'readwrite') return run(tx);
+			if (this.scope.kind !== 'anonymous') return this.captureAccountChanges ? this.captureAccountChanges(tx, run) : run(tx);
+			return captureThingChanges(tx, run, (tx, changes) => recordLocalThingChanges(tx, changes, this.now, this.uuid, captures));
 		});
 	}
 	private async placement(tx: WorkspaceTransaction, row: TransferThing) {

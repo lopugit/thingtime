@@ -120,39 +120,45 @@ export async function appendLocalTimeline(tx: WorkspaceTransaction, input: Timel
  * Protected families need their dedicated snapshot adapters; never copy vault,
  * attachment bookkeeping or Action outcomes through the generic projection. */
 export type LocalMutationCapture = Pick<TimelineEvent, 'id' | 'operationId' | 'source' | 'clientId' | 'label' | 'operation' | 'parentIds'>;
+export type ThingHistoryWriter = {
+ ownerId: string; clientId: string; branchId: string; mode: 'draft' | 'revision';
+ read(id: string): Promise<{ event: TimelineEvent } | null>;
+ append(event: TimelineEvent): Promise<unknown>;
+};
 
-export async function recordLocalThingChanges(tx: WorkspaceTransaction, changes: Map<string, { before: LocalThing | null; after: LocalThing | null }>, now: () => string, uuid: () => string, captures = new Map<string, LocalMutationCapture>()) {
+export async function recordLocalThingChanges(tx: WorkspaceTransaction, changes: Map<string, { before: LocalThing | null; after: LocalThing | null }>, now: () => string, uuid: () => string, captures = new Map<string, LocalMutationCapture>(), writer?: ThingHistoryWriter) {
+ const history: ThingHistoryWriter = writer || { ownerId: LOCAL_TIMELINE_OWNER, clientId: 'local-workspace', branchId: 'main', mode: 'revision', read: id => localTimelineEntry(tx, id), append: event => appendLocalTimeline(tx, event) };
  let things: LocalThing[] | null = null;
  for (const [id, { before, after }] of changes) {
   const target = after || before;
   if (!target || isProtectedThingtime(target.thingtime) || ['reaction', 'save', 'vote', 'updown', 'action-run'].some(kind => target.thingtime.includes(kind)) || id.startsWith('timeline-')) continue;
-  const previous = thingContentSnapshot(before && { ...before, acl: [] }), next = thingContentSnapshot(after && { ...after, acl: [] });
+  const previous = thingContentSnapshot(before && { ...before, ...(!writer ? {acl: []} : {}) }), next = thingContentSnapshot(after && { ...after, ...(!writer ? {acl: []} : {}) });
   if (JSON.stringify(previous) === JSON.stringify(next) && !captures.has(id)) continue;
   const parent = await tx.get<string>(META, `head:${id}`);
-  const prior = parent ? await localTimelineEntry(tx, parent) : null;
+  const prior = parent ? await history.read(parent) : null;
   if (parent && (!prior || prior.event.thingId !== id)) fail('The previous local version is unavailable.');
-  let event = parseTimelineEvent({ formatVersion: 1, id: `local-event-${uuid()}`, ownerId: LOCAL_TIMELINE_OWNER, actorId: LOCAL_TIMELINE_OWNER,
-   thingId: id, branchId: 'main', parentIds: parent ? [parent] : [], operationId: uuid(), source: 'client', clientId: 'local-workspace',
-   occurredAt: now(), mode: 'revision', operation: !before ? 'create' : !after ? 'delete' : 'update',
-   label: !before ? 'Created Thing' : !after ? 'Deleted Thing' : 'Edited Thing', before: previous, after: next, dependencies: [], ...captures.get(id) });
+  let event = parseTimelineEvent({ formatVersion: 1, id: `${writer ? 'device' : 'local'}-event-${uuid()}`, ownerId: history.ownerId, actorId: history.ownerId,
+   thingId: id, branchId: history.branchId, parentIds: parent ? [parent] : [], operationId: uuid(), source: 'client', clientId: history.clientId,
+   occurredAt: now(), mode: history.mode, operation: !before ? 'create' : !after ? 'delete' : 'update',
+   label: (!before ? 'Created Thing' : !after ? 'Deleted Thing' : 'Edited Thing') + (writer ? ' on this device' : ''), before: previous, after: next, dependencies: [], ...captures.get(id) });
   if (!after && before?.thingtime.includes('webpage') && prior) event = parseTimelineEvent({ ...event, dependencies: prior.event.dependencies });
   if (after?.thingtime.includes('webpage')) {
    const bindings: ComponentBindings = Object.create(null);
    const refs = webpageComponentRefs(after.crystal.blocks);
    if (refs.length) things ??= (await tx.list<LocalThing>('things')).map(row => row.value);
-   const resolved = resolveWorkspacePage(things || [after], { kind: 'id', id }, LOCAL_TIMELINE_OWNER);
+   const resolved = resolveWorkspacePage(things || [after], { kind: 'id', id }, history.ownerId);
    for (const ref of refs) { const selected = resolved.components.find(row => row.id === resolved.refs[ref]); bindings[ref] = selected ? { id: selected.id, crystal: selected.crystal } : null; }
    const previousCaptures: TimelineEvent[] = [];
    for (const ref of prior?.event.dependencies || []) if (ref.thingId.startsWith('timeline-component-')) {
-    const capture = await localTimelineEntry(tx, ref.eventId);
+    const capture = await history.read(ref.eventId);
     if (!capture || capture.event.thingId !== ref.thingId) fail('Recorded components are incomplete.');
     previousCaptures.push(capture!.event);
    }
    const captures = captureComponentBindings(event, bindings, previousCaptures, () => `local-event-${uuid()}`);
-   for (const capture of captures.events) await appendLocalTimeline(tx, capture);
+   for (const capture of captures.events) await history.append(capture);
    event = parseTimelineEvent({ ...event, dependencies: captures.dependencies });
   }
-  await appendLocalTimeline(tx, event); await tx.put(META, `head:${id}`, event.id);
+  await history.append(event); await tx.put(META, `head:${id}`, event.id);
  }
 }
 

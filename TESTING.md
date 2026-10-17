@@ -11175,3 +11175,24 @@ and `test:nav`.
   default skipped cases are not acceptance evidence. Mid-cascade server writes,
   deeper child conflicts and broader retained/shared-file races remain separate
   full-rollout checks.
+
+
+### Account device History capture and reconciliation (2026-10-17)
+
+- [x] In a disposable account, load a private Data Thing online, disconnect and
+  rename twice through the normal menu. Cold reload and inspect both recorded
+  versions in native History at 1440/390/320px; no remote write occurs offline.
+- [x] Reconnect through normal identity discovery. Exactly two private client/draft
+  events receive canonical server receipts, the latest content syncs independently,
+  and a guest receives 404 for the Thing and 401 for Timeline.
+- [x] Verify full-quota receipt acceptance, atomic content/queue/history rollback,
+  immutable captured components, lost-reply retries, cross-tab ancestry and
+  account/origin/plane isolation with `accountTimeline.test.ts`. Cache pruning
+  must preserve device-authored versions; remote reads must not invent them.
+- [x] With private History open, switch accounts using another native Settings tab.
+  The modal closes and old data is denied; returning does not reopen it.
+- [ ] Complete feature-specific protected History, all account-offline controls,
+  native origin/data-plane transitions and current-head CI/deployed acceptance.
+
+Use the README loopback variables for `accountTimeline.browser.test.ts` and
+`historyMenu.browser.test.ts`; default opt-in skips are not browser acceptance.

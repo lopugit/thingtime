@@ -61,8 +61,8 @@ live file metadata check with byte reads. Regressions: `accountReadRefusal.test.
 Local-capable details use `local-workspace/posts.ts` for the separate generic
 Thing discussion projection and `api.client.ts` for paged local comments.
 `ThingComments.tsx` keys its state by the full workspace identity.
-`PersistedThingMenu.tsx` uses workspace ownership for rename while retaining real
-account authentication for History and recording handoff. The API adapter owns
+`PersistedThingMenu.tsx` uses workspace ownership for rename and local-capable
+History while retaining real account authentication for recording handoff. The API adapter owns
 capability negotiation; local rename makes no remote manifest request. See
 [the local workspace matrix](../local-workspaces.md) for remaining coverage.
 
@@ -643,3 +643,13 @@ on workspace-generation changes; account-only handoff remains authenticated.
 `historyMenu.browser.test.ts` verifies cached account versions, native account
 switching and desktop/390/320px interaction. Account-local history capture/sync
 remains open in the [coverage matrix](../local-workspaces.md#native-anonymousoffline-history-menu--2026-10-17).
+
+
+Account device History uses `local-workspace/thingChanges.ts` to capture before
+and after values atomically, and `accountTimeline.ts` to retain the canonical
+normalized events/links in the existing account partition. `scopedTimelineStore`
+merges these authoritative versions into the established History cache/sync/UI.
+Server receipts remain authoritative; uploaded device versions use client/draft
+provenance. Tests: `accountTimeline.test.ts`, opt-in
+`accountTimeline.browser.test.ts`, and `historyMenu.browser.test.ts`. See
+[coverage and remaining controls](../local-workspaces.md#account-device-history-capture-and-sync--2026-10-17).

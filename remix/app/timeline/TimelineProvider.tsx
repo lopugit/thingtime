@@ -4,8 +4,7 @@ import { useWorkspaceUser } from '../hooks/useWorkspaceUser';
 import { useWorkspaceScope } from '../hooks/useWorkspaceScope';
 import { localTimelineScope, LOCAL_TIMELINE_FOLDER, LOCAL_TIMELINE_PLANE } from '../local-workspace/timeline';
 import { anonymousWorkspaceLease } from '../local-workspace/runtime.client';
-import { localTimelineBackend } from './localBackend.client';
-import { TimelineLocalStore } from './localStore';
+import { localTimelineBackend, scopedTimelineStore } from './localBackend.client';
 import { TimelineBranchStore } from './branchStore';
 import { TimelineNoteStore } from './noteStore';
 import { TimelineNameStore } from './nameStore';
@@ -134,7 +133,7 @@ export function TimelineProvider({ children }: { children: React.ReactNode }) {
 	const api = useApi(); const apiRef = React.useRef(api); apiRef.current = api;
 	const [pool] = React.useState(() => new TimelineConnectionPool((scope, folderId) => {
 		const connectionApi = apiRef.current;
-		const store = new TimelineLocalStore(scope, localTimelineBackend());
+		const store = scopedTimelineStore(scope);
 		const branches = new TimelineBranchStore(scope, localTimelineBackend());
 		const notes = new TimelineNoteStore(scope, localTimelineBackend());
 		const names = new TimelineNameStore(scope);

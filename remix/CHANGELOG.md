@@ -68,6 +68,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-17 — **Codex (AI)**: Retain each ordinary account edit and its canonical
+  device History atomically, including local deletion and reviewed replacement.
+  Reuse Timeline sync for private client drafts and preserve authoritative device
+  versions through cache clearing. 640 focused checks and two native offline/
+  reconnect/account-switch cases pass locally; broader acceptance remains open.
+  [PR #1000 checkpoint](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md#account-device-history-capture-and-sync--2026-10-17).
+
+
 - 2026-10-17 — **Codex (AI)**: Offline parent deletion now holds bound-media
   cleanup until the canonical parent version check accepts deletion. Reviewed
   account restoration preserves local image bytes; same-origin opt-in cascade

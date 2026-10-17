@@ -1,3 +1,4 @@
+import { captureAccountThingChanges } from './accountTimeline';
 import { isLocalAttachment } from './attachments';
 import { normalizePublicAttachment } from '../components/Attachments/attachmentUiCore';
 import { postThingReferences } from '../components/Feed/postThingReferences';
@@ -87,7 +88,7 @@ export class AccountThingSync {
 					if (row?.post && (!refusal || row.at > refusal.at)) return true;
 				}
 				return false;
-			});
+			}, (tx, run) => captureAccountThingChanges(tx, scope, run, () => new Date(this.now()).toISOString(), this.uuid));
 	}
 	private tx<T>(mode: IDBTransactionMode, run: (tx: WorkspaceTransaction) => Promise<T>) { return this.db.transaction(this.scope, mode, this.lease, run); }
 	private checked(input: AccountThing): AccountThing {
@@ -171,7 +172,7 @@ export class AccountThingSync {
 		if (expectedUpdatedAt !== undefined && (typeof expectedUpdatedAt !== 'string' || !Number.isFinite(Date.parse(expectedUpdatedAt)))) throw new WorkspaceError('INVALID_VERSION', 'expectedUpdatedAt must be an ISO timestamp.');
 		if (!Array.isArray(ids) || !ids.length || ids.length > 200 || ids.some(id => typeof id !== 'string' || !id.trim()) || new Set(ids).size !== ids.length)
 			throw new WorkspaceError('INVALID_IDS', 'Choose between 1 and 200 distinct Things.');
-		return this.tx('readwrite', async tx => {
+		return this.tx('readwrite', tx => captureAccountThingChanges(tx, this.scope, async tx => {
 			const all = (await tx.list<LocalThing>('things')).map(row => row.value), selected = new Set(ids);
 			const byId = new Map(all.map(row => [row.id, row]));
 			for (const id of ids) {
@@ -217,7 +218,7 @@ export class AccountThingSync {
 				}
 			}
 			return { ok: true, deleted: [...selected] };
-		});
+		}, () => new Date(this.now()).toISOString(), this.uuid));
 	}
 	async view(id: string) {
 		return this.tx('readonly', async tx => {
@@ -264,7 +265,7 @@ export class AccountThingSync {
 		if (!['local', 'remote'].includes(choice.keep)) throw new WorkspaceError('INVALID_CONFLICT_CHOICE', 'Choose which version to keep');
 		const remote = this.checked(await accountSyncDeadline(child => transport.get(choice.id, child), signal));
 		if (remote.id !== choice.id || remote.updatedAt !== choice.remoteUpdatedAt) throw new WorkspaceError('SYNC_CONFLICT_CHANGED', 'The account version changed. Review it again.', 409);
-		return this.tx('readwrite', async tx => {
+		return this.tx('readwrite', tx => captureAccountThingChanges(tx, this.scope, async tx => {
 			const state = await tx.get<SyncRecord>(COLLECTION, choice.id), local = await tx.get<LocalThing>(state?.deleted ? DELETED_CONTENT : 'things', choice.id);
 			if (state?.state !== 'conflict' || !local || local.revision !== choice.localRevision)
 				throw new WorkspaceError('SYNC_CONFLICT_CHANGED', 'Your local version changed. Review it again.', 409);
@@ -277,7 +278,7 @@ export class AccountThingSync {
 				...(choice.keep === 'local' && state.deleted ? { deleted: state.deleted } : {}),
 				...(choice.keep === 'local' && state.postAttachmentIds ? { postAttachmentIds: state.postAttachmentIds } : {}),
 				audience: choice.keep === 'local' ? state.audience : { acl: remote.acl, visibility: remote.visibility }, attempts: 0, retryAt: 0 } satisfies SyncRecord);
-		});
+		}, () => new Date(this.now()).toISOString(), this.uuid));
 	}
 	/** One claimed operation at a time, even across browser tabs. A crashed
 	 * tab's lease expires; the next tab replays the identical frozen request. */

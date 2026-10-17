@@ -4760,3 +4760,19 @@ durable private upload receipts; no additional environment variables or secrets
 are required. Older origins leave work on-device for retry. The loopback template
 fixture now also tests a newer remote edit, native conflict recovery and retained
 media after offline reload. See [the deletion checkpoint](docs/local-workspaces.md#parent-deletion-conflicts-preserve-media--2026-10-17).
+
+
+### Account device History regression
+
+No new secret or service is required. Use a disposable loopback replica and the
+production-client offline shell described above. Enable
+`app/local-workspace/accountTimeline.browser.test.ts` with
+`TT_LOCAL_ACCOUNT_HISTORY_URL=http://127.0.0.1:<client-port>` and optionally
+`TT_LOCAL_ACCOUNT_HISTORY_ARTIFACTS=/path/to/ignored-evidence`, plus the shared
+Playwright/Chrome paths above. It creates one private test account, edits through
+the native menu offline, reloads at desktop/phone sizes, reconnects through normal
+Timeline sync, checks exact canonical events/receipts and guest refusals, and
+removes its test Thing. Normal signup rate limits apply; no admin fixture is used.
+Run `test:local-workspace` and `test:timeline` for protocol/quota regressions.
+See [coverage](docs/local-workspaces.md#account-device-history-capture-and-sync--2026-10-17)
+for remaining account History controls.

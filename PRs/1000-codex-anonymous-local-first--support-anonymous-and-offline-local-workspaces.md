@@ -2465,3 +2465,45 @@ the reproduced client ordering failure, not the full rollout. A remote mutation
 *during* server cascade, deeper child conflicts, retained/shared binding changes,
 quota and native identity races remain acceptance work. Current-head CI and
 deployed acceptance are unverified. No main merge or manual deployment occurred.
+
+
+## Account device History capture and sync — 2026-10-17
+
+Ordinary account edits through `AccountThingSync.things`, local deletion, and
+reviewed replacement with the account version now retain immutable device
+versions in the same workspace transaction as their content and sync intent.
+Intermediate edits survive content-queue coalescing. The recorder reuses canonical
+`TimelineEventRecord`/`TimelineLink`, content snapshots and component captures;
+there is no new database or alternate event format. Account/origin/data-plane
+partitions and active workspace leases remain mandatory.
+
+Device versions are client-authored private **draft** events. They do not claim
+that the server executed a mutation. Existing Timeline discovery and sync upload
+them only after matching identity confirmation; server revisions remain separate.
+Remote cache reads and sync acknowledgements do not manufacture local edits.
+Real receipts reach authoritative device records before the ordinary cache;
+cache clearing cannot delete these versions. Receipt bookkeeping space is reserved
+at admission, and existing workspace byte/record limits apply atomically.
+Anonymous events never enter this account queue.
+
+Local verification: 402 workspace/offline checks and 238 Timeline checks pass
+(640 total; 43 opt-in browser cases excluded from that count). Two explicitly
+run production-client browser cases pass: native offline account renames retain
+both intermediate versions across cold reload, then sync exact canonical events
+and receipts; an account switch closes private History and denies the other
+account. Viewports 1440×1000, 390×844 and 320×844 fit; offline mutations and browser
+errors are zero. Guest Thing/Timeline reads return 404/401. The built offline
+shell contains 247 verified assets (21,725,025 bytes). TypeScript retains 91
+baseline diagnostics, none in changed files; focused lint has no errors (two
+existing constructor warnings).
+
+Unit regressions also cover immutable component dependencies, parent-first retry
+after a lost reply, transaction rollback, acknowledgement at full workspace quota,
+concurrent tabs, retired leases, scope isolation, cache pruning and reviewed
+conflict replacement. Evidence is local only: `tmp/account-history-native-verified/`
+and `tmp/account-history-switch-verified/` contain screenshots/results.
+
+Remaining: protected feature-specific History adapters, full account-offline
+restore/export/branch/note controls, cross-origin/data-plane native transitions
+and the broader local-first matrix. This checkpoint does not establish current
+CI/deployed acceptance and does not close the merge gate.
