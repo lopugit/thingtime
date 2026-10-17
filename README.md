@@ -4590,3 +4590,99 @@ provider price of zero. Admins should consider this before enabling auto-allow.
 A complete provider snapshot atomically marks absent models unavailable, retaining
 their records and admin choices. The public catalogue and shared model selectors
 only offer enabled, available models. Admin retains all compatible rows for audit.
+
+### Incoming mail (IMAP, POP3 and offline inboxes)
+
+Open `/settings/email` to connect email accounts, then `/mail` (`/email` is an
+alias). Each account can independently enable **Cloud** and **Local** sync.
+IMAP discovers selectable folders; POP3 exposes its single inbox. **All inboxes**
+combines inbox folders. A proxy inbox is a saved selection of folders from any
+connected accounts: it changes only the view and never copies, moves or deletes
+provider messages. Both protocols can be enabled, so the same provider message
+may appear once per protocol/folder; independent source identities are preserved.
+
+Cloud sync uses the existing account vault bootstrap key
+(`THINGTIME_USER_VAULT_KEY`, or the already configured admin vault key), the home
+Mongo data plane, and the normal transactional storage allowance. Configure the
+vault using the existing Secure Vault setup; no mail-specific encryption key is
+needed. Missing encryption fails closed. Credentials and message content are
+account-bound encrypted protected Things; generic search/sharing cannot expose
+them. Use an app password where your provider requires one. Providers that have
+disabled password authentication require a future OAuth adapter; do not enter a
+normal account password when the provider requires OAuth. These are incoming
+mail readers; the existing transactional email outbox remains separate.
+
+Ordinary browser pages cannot open raw TCP/TLS connections to POP3 or IMAP.
+**Local** means the browser stores and renders mail offline and talks to a paired
+loopback connector for network sync. The connector runs the same read-only
+protocol adapter as the cloud; local-only credentials never go to Thingtime's
+cloud. To run it from a clone with Node 24 and the Remix dependencies installed:
+
+```sh
+export THINGTIME_MAIL_ORIGIN=https://your-thingtime-origin.example
+# Generate a random token privately and paste the same token into Email settings.
+# Never commit or share the resulting token.
+export THINGTIME_MAIL_TOKEN="$(openssl rand -hex 32)"
+npm --prefix remix run mail:connector
+```
+
+`THINGTIME_MAIL_ORIGIN` must be the exact browser origin without a trailing slash
+(for this development worktree, `http://127.0.0.1:13760`). The connector binds
+only `127.0.0.1:17879`, checks Host, Origin and a bearer pairing token, accepts no
+cookies, and allows at most two concurrent syncs. Close its terminal process to
+stop it. Your browser may require local-network permission. Pair each browser
+separately; do not expose the connector through a public proxy or Funnel.
+
+TLS ports are IMAP 993 / POP3 995; mandatory STARTTLS uses 143 / 110. Certificate
+verification is always enabled. The adapters reject private/reserved addresses
+and pin the validated DNS address to prevent rebinding. Plaintext, custom ports,
+internal mail servers and OAuth login are not currently supported. No mail
+server deletion/mark-read/move commands are issued.
+
+Sync is explicit through **Sync inbox** / **Sync folders**, with **Load older
+mail** for bounded ten-message provider pages. It is not a background cron or
+push service. A device caches up to 2,000 messages, with up to 12,000 text
+characters per message, and marks truncated/oversized messages. HTML is rendered
+as text; remote images and scripts are never loaded. Attachments remain at the
+provider and are counted, not downloaded by this version. Cloud-only proxy
+inboxes sync across your devices; views including device-only accounts stay on
+that device. Browser records are individually AES-GCM encrypted with a
+non-exportable device key; stale-tab writes are refused. This protects stored
+bytes from accidental disclosure, not an attacker running scripts in the same
+origin or an unlocked operating-system account.
+
+Validation commands:
+
+```sh
+npm --prefix remix run test:mail
+npm --prefix remix run test:mail:transport
+npm --prefix remix run test:mail:connector
+# Opt-in HTTP checks refuse any DB except 127.0.0.1:20437 / mail-qa-rs.
+MAIL_TEST_BASE=http://127.0.0.1:13760 npm --prefix remix run test:mail:integration
+# Requires the same disposable DB/vault/JWT settings in remix/.env.local.
+MAIL_TEST_BASE=http://127.0.0.1:13760 npm --prefix remix run test:mail:storage
+```
+
+The transport test uses temporary self-signed fixture certificates trusted only
+by its child Node process and synthetic TLS servers. It does not weaken the
+production connector's certificate or destination checks. HTTP tests create
+fixture users through the real API, never by inserting Mongo records. The local
+web app uses the normal PM2 worktree lifecycle (`npm run web-pms`). No public
+Tailscale/Funnel endpoint is configured for the disposable mail QA database.
+
+The storage integration uses the production HTTP route and real authenticated
+replica transactions with a synthetic provider boundary to force a sync/delete
+race. The connector integration can run with `--serve` for synthetic browser QA;
+never use its published fixture token for real mail. The production connector
+requires your own random token. Browser offline checks cover cached reading and
+search in an already loaded app; offline cold-launch of the whole app is separate.
+
+### Automatic iOS TestFlight publishing
+
+Native changes merged to `main` can publish tested, signed TestFlight builds with
+matching phone/Watch/widget versions. The existing GitHub credentials remain the
+initial source; an explicit one-time migration can move them into the encrypted
+admin Secure Vault, after which short-lived GitHub OIDC identities fetch only the
+Apple release bundle. See [setup, fork configuration, migration and release
+verification](docs/ios-automatic-testflight.md). No additional Vercel environment
+variables or permanent GitHub-to-vault password are required.

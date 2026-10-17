@@ -115,6 +115,11 @@ const EXPECTED_PROJECTED_FIELDS: Record<string, string[]> = {
   "password-reset": ["token", "userId", "email", "expiresAt", "consumedAt", "schemaVersion", "createdAt"],
   "auth-otp": ["challenge", "userId", "purpose", "codeHash", "attempts", "expiresAt", "consumedAt", "schemaVersion", "createdAt"],
   "email-message": ["provider", "stream", "templateKey", "status", "from", "replyTo", "to", "subject", "html", "text", "sensitive", "metadata", "tags", "providerMessageId", "suppressedRecipients", "schemaVersion", "createdAt", "updatedAt"],
+  // Mail payloads live in the encrypted envelope, never the public crystal.
+  "mail-account": [],
+  "mail-folder": [],
+  "mail-message": [],
+  "mail-inbox": [],
   "rate-limit": ["key", "expiresAt", "requests", "count", "schemaVersion"],
   "deployment-peer": ["origin", "signingPublicKey", "firstSeenAt", "lastSeenAt", "expiresAt", "syncCursor", "schemaVersion"],
   "admin-integration-secret": ["id", "label", "cipherText", "iv", "tag", "createdAt", "updatedAt", "schemaVersion"],

@@ -117,6 +117,11 @@ expanded transfer dialog without changing the ordinary library defaults.
 Popup menus use the shared transfer layer constants; keyboard copy/cut/paste
 only intercepts events inside the browser and leaves editable inputs alone.
 
+
+## Incoming mail
+
+See [incoming-mail.md](incoming-mail.md) for Email settings, IMAP/POP3, private cloud storage, the paired local connector, offline reading and proxy inbox views.
+
 ## Settings sections
 
 `SettingsSection.tsx` is the shared, initially collapsed disclosure card for

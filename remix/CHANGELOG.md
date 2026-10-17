@@ -68,6 +68,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-17 — **Codex (AI)**: Prepare incoming mail PR #1009 for the authorized main promotion, preserving the current Settings sections and rerunning the mail/settings checks after integration.
+
+- 2026-10-17 — **Codex (AI)**: Add private incoming-mail accounts, read-only IMAP/POP3 adapters, `/mail` and `/email`, combined and proxy inboxes, independent cloud/local sync, encrypted offline records and a paired loopback connector. Include its exact origin in the shared CSP. Setup is in README; [PR #1009 notes](../PRs/1009-codex-mail-provider-incoming-mail-accounts-proxy-inboxes-cloud-local-sync.md) record verification and remaining acceptance.
+
 - 2026-10-17: Split admin System settings into AI Providers, Lopu, Platform,
   and Access & limits. Shared settings cards start collapsed, show descriptions
   and status summaries, preserve drafts, and open for legacy deep links. Labels
@@ -75,6 +79,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   [PR #1008](../PRs/1008-codex-settings-cards-split-system-settings-into-focused-tabs-and-collapsible-cards.md). — **Codex (AI)**
 
 - 2026-10-17 — **Codex (AI)**: Fix Astra replies rejected by Chat Completions tool/reasoning compatibility. The shared model registry now routes GPT-6 Astra native tools through Responses, publishes its supported reasoning levels and pricing, and preserves provider-default or selected reasoning across tool hops. Both API manifests advertise reply 1.19.3 and catalogue 1.5.1.
+
+- 2026-10-17: Add automatic native-main TestFlight publishing, version allocation, pre-upload widget/signature checks and exact-build processing verification. Add production-only GitHub OIDC delivery and create-only Apple credential migration through the shared admin vault; see [PR #1006 validation and rollout](../PRs/1006-codex-ios-testflight-vault--automatic-ios-testflight-publishing.md).
 
 - 2026-10-17 — **Codex (AI)**: Support a separate Anthropic Models API credential for catalogue discovery when Claude OAuth cannot list models. Keep replies on Claude Code OAuth and show redacted HTTP failure reasons in admin sync reports.
 
