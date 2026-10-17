@@ -81,7 +81,8 @@ test('recording processing, attachment cleanup, moderation sweep, peer sync, and
 		{
 			path: '/api/v1/notifications/email/weekly-summary',
 			schedule: '37 21 * * 0'
-		}
+		},
+		{ path: '/api/v1/ai/models/sync', schedule: '23 3 * * *' }
 	]);
 });
 
@@ -258,4 +259,12 @@ test('Claude discovery finds a runtime reference in an emitted chunk and rejects
 	assert.equal((await packageClaudeOAuthArtifacts(f.options)).length, 2);
 	await f.json(join(f.step, '.vc-config.json'), { runtime: 'nodejs22.x', handler: '../../../../../__server.func/index.js' });
 	await assert.rejects(claudeRuntimeFunctions(f.options.functionsRoot));
+});
+
+test('mail connector is the only HTTP loopback destination in the application CSP', async () => {
+  const { prodCsp, devCsp } = await import('./csp.mjs');
+  for (const policy of [prodCsp, devCsp]) {
+    assert.deepEqual(cspSources(policy, 'connect-src').filter((source) => source.startsWith('http:')), ['http://127.0.0.1:17879']);
+    assert(!cspSources(policy, 'script-src').includes('http://127.0.0.1:17879'));
+  }
 });

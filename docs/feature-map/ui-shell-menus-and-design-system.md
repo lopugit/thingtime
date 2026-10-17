@@ -81,6 +81,13 @@ browser acceptance also checks reload and repeated search through the renderer.
 
 ## Tests
 
+- `scripts/lopu-popovers.browser.html` mounts the real floating host, full page,
+  or embedded chat with synthetic HTTP/preferences. It checks popup hit testing,
+  model/list selection and scrolling, setting persistence, repeat taps, Escape
+  and outside dismissal. Lopu popovers set `rootProps.zIndex` on Chakra’s
+  positioner, using `DRAWER_POPUP_Z`; child content alone cannot escape a lower
+  stacking context.
+
 - `scripts/lopu-dictation.browser.html` exercises the real Lopu voice surface
   with synthetic speech/HTTP: live composer revisions, stop/resume, edits,
   mode switches, stale callbacks, recognition failure and rejected-send recovery.
@@ -109,3 +116,19 @@ browser acceptance also checks reload and repeated search through the renderer.
 expanded transfer dialog without changing the ordinary library defaults.
 Popup menus use the shared transfer layer constants; keyboard copy/cut/paste
 only intercepts events inside the browser and leaves editable inputs alone.
+
+
+## Incoming mail
+
+See [incoming-mail.md](incoming-mail.md) for Email settings, IMAP/POP3, private cloud storage, the paired local connector, offline reading and proxy inbox views.
+
+## Settings sections
+
+`SettingsSection.tsx` is the shared, initially collapsed disclosure card for
+personal settings (page and popup) and admin configuration. It keeps children
+mounted, exposes a title/description/summary, and opens enclosing cards for
+fragment links. `SettingRow` gives labels a readable wrapping basis before
+controls move to the next line. Admin categories live in `adminRoutesCore.ts`:
+AI Providers, Lopu, Platform, and Access & limits replace System; legacy System
+links resolve to AI Providers or to Lopu for Lopu anchors. Browser regression:
+`/scripts/settings-sections.browser.html`; route coverage: `test:admin-integrations`.

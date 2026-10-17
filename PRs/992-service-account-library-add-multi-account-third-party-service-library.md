@@ -106,10 +106,33 @@ remained readable on a second reveal after migration.
   commits scanned). The GitGuardian check remains failed pending its own
   false-positive disposition; no scanner rule or finding was suppressed.
 
+### October 18 released-vault integration checkpoint
+
+- Integrated production `main` at `0618f323e`, including the complete 1PUX
+  importer and encrypted attachments. OAuth and password entries continue to
+  share the canonical account-key envelope; the merge preserves the current
+  password payload options, incoming-mail routes and OAuth request context.
+- A fresh real Google identity authorization returned through the configured
+  localhost callback, persisted across reload, and passed **Check connection**
+  against Google's profile endpoint. A second, distinct account reached its
+  device passkey challenge; that positive callback is still unverified.
+- Connection tests: 140 pass; password tests: 47 pass; capability tests: 96
+  pass. Live HTTP checks: 21 account-library and 18 recovery checks pass.
+  The production build and Vercel output verification pass. Full TypeScript
+  checking still reports 91 existing diagnostics, with none in the connection
+  or password feature files; this is not a clean repository-wide typecheck.
+- Selected the complete `main` graph snapshot while resolving the merge,
+  then refreshed the structural graph for the integrated source. Semantic
+  documentation extraction is not claimed refreshed.
+- Meta app-secret retrieval remains behind password verification; the supplied
+  saved credential was rejected. No credential was reset and no app secret was
+  committed. The hosted OpenAI client remains dependent on partner approval;
+  the open-source local enrollment flow is a separate integration.
+
 ### Remaining provider and delivery gates
 
 - Finish the remaining real-provider acceptance and final review.
-- Google web client created on October 14 with production and localhost callbacks; secret stored only in ignored local configuration. A real Google OAuth callback, expired-token refresh and account.profile API request passed. Second-account passkey verification and Facebook client-secret setup are pending.
+- Google web client created on October 14 with production and localhost callbacks; secret stored only in ignored local configuration. A real Google OAuth callback, expired-token refresh and account.profile API request passed, with fresh callback/profile acceptance repeated on October 18. Second-account passkey verification and Facebook client-secret setup are pending.
 - Finish two-distinct-Google-account and Facebook positive authorization testing. Mocked OAuth tests alone do not establish these.
 - The OpenAI partner inquiry page confirms receipt. Hosted ChatGPT still requires an approved partner client. Local subscription-token enrollment is not implemented. Direct browser Claude enrollment is unavailable; the current adapter accepts a Claude Code setup token.
 - Review preview behavior and required CI. Production promotion requires separate approval for the exact PR.

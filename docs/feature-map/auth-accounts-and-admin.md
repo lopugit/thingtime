@@ -113,7 +113,7 @@ migrate only under canonical revision guards; corrupt key records fail closed.
 
 ## Password manager
 
-See [password-manager.md](../password-manager.md). `api.passwords` 1.0.0 is a
+See [password-manager.md](../password-manager.md). `api.passwords` 1.1.0 is a
 private, session-bound home-plane API over protected `password-manager-entry`
 Things. `api/utils/passwords/passwords.ts` owns accounted mutations, revision
 fences and secret-free native catalog projections; `auth/vaultEnvelope.ts` and
@@ -124,3 +124,39 @@ so decrypted fields never enter shared client history/cache. The reusable
 Native provider implementation and signed release are tracked separately in
 [PR #996](https://github.com/lopugit/thingtime/pull/996); this release exposes the
 private catalog and negotiates an optional supported native bridge.
+
+
+## AI provider model availability
+
+`api/utils/ai/modelDiscovery.ts` reads complete credential-scoped provider lists;
+`modelSync.ts` publishes them atomically into protected home-plane `ai-model`
+Things with a durable settings lease/cooldown. `models.ts` projects availability
+and preserves admin choices. Daily authenticated cron and admin manual sync use
+this same service; shared inference model-not-found errors trigger a bounded
+refresh without replay. `LopuModelsEditor.tsx` owns per-provider allow-all and
+future auto-admission controls. Public model selectors consume the live catalogue;
+unknown model capabilities and pricing are conservative. See README automatic AI
+model catalogue sync and TESTING daily provider model availability.
+
+`settings/prConflictResolverModelWaterfallCore.ts` owns known reasoning tiers and
+native Responses requirements (including GPT-6 Astra); `lopu/chat.ts` consumes
+that transport policy. `chat.streaming.test.mts` exercises Astra default/High/Max
+reasoning and tool-result replay through the real SDK against an HTTP fixture.
+
+## Incoming mail
+
+See [incoming-mail.md](incoming-mail.md) for Email settings, IMAP/POP3, private cloud storage, the paired local connector, offline reading and proxy inbox views.
+
+## iOS release automation
+
+`api/utils/releases/iosRelease.ts` uses the existing admin integration secret,
+claim and audit stores. `iosReleaseCore.ts` validates the fixed release policy and
+Apple bundle. GitHub OIDC grants only `integrations/ios-release` access after
+immutable repository/owner, main workflow, event and source checks; it grants no
+admin session or general vault access. See [setup and acceptance](../ios-automatic-testflight.md).
+
+Password migration coverage and encrypted file lifecycle: `passwords/onePassword.ts`,
+`transfer.ts`, `fileCrypto.ts`, `files.client.ts`, `backup.client.ts`, and
+`api/utils/passwords/files.ts`. Every original 1PUX member is retained as an
+encrypted attachment to a source archive entry; item editors preserve structured
+values, source context and password history. See [the password contract](../password-manager.md).

@@ -1,3 +1,4 @@
+import { refreshUnavailableAiModel } from '../ai/modelSync';
 import { normalizeReadReferences, rememberReadReference, restoreReadContext, type LopuReadReference } from './readContext';
 import { looksLikeUnexecutedToolCall } from './toolTextParser';
 import { checkpointResultContext } from './checkpointResults';
@@ -20,7 +21,8 @@ import {
   resolveAiPreferredAnthropicChoice,
   resolveAiPreferredOpenAiChoice,
   toAnthropicEffort,
-  toOpenAiReasoningEffort
+  toOpenAiReasoningEffort,
+  requiresOpenAiResponsesForTools
 } from '../settings/prConflictResolverModelWaterfallCore';
 import type {
   LopuChatContext,
@@ -77,7 +79,7 @@ import { friendlyVaultProviderError, resolveVaultTurnModel, vaultProviderTranspo
 //
 // Providers (set either or both env keys):
 //   - Claude OAuth credentials → Claude with native tools
-//   - OPENAI_API_KEY → Responses for native GPT-5.6 Sol tools, otherwise
+//   - OPENAI_API_KEY → Responses for registry-marked native tools, otherwise
 //     ChatGPT-compatible chat.completions; LOPU_OPENAI_TOOLS
 //     = native (function calling) | text (fenced ```tt-tool blocks parsed
 //     out of the streamed text, for endpoints without function calling such
@@ -535,7 +537,7 @@ async function* completionAsChunks(completion: unknown, normalize: (content: str
   };
 }
 
-// GPT-5.6 Sol rejects native tools plus reasoning on Chat Completions. Keep
+// Some OpenAI models require Responses for native tools with reasoning. Keep
 // this explicit: compatible custom/text endpoints and other model contracts
 // retain their existing transport. Never repair it by dropping chosen effort.
 async function* openAiResponsesProvider(options: OpenAiProviderOptions): LopuProviderStream {
@@ -682,7 +684,7 @@ async function* openAiResponsesProvider(options: OpenAiProviderOptions): LopuPro
 }
 
 async function* openAiProvider(options: OpenAiProviderOptions): LopuProviderStream {
-  if (options.toolMode === 'native' && options.choice.model === 'gpt-5.6-sol') {
+  if (options.toolMode === 'native' && requiresOpenAiResponsesForTools(options.choice.model)) {
     return yield* openAiResponsesProvider(options);
   }
   const { client, choice, signal, toolMode } = options;
@@ -1320,6 +1322,7 @@ export async function* streamLopuChatTurn(input: LopuChatTurnInput): AsyncGenera
         state.stopReason = 'aborted';
         return outcome(attempt.provider, attempt.choice, state);
       }
+      await refreshUnavailableAiModel(attempt.provider === 'claude' ? 'anthropic' : 'openai', error);
       lastError = error;
       console.error(`[lopu] ${attempt.provider} failed before replying:`, (error as any)?.message || error);
       continue;
@@ -1339,6 +1342,7 @@ export async function* streamLopuChatTurn(input: LopuChatTurnInput): AsyncGenera
     } catch (error) {
       if (isAbortError(error)) state.stopReason = 'aborted';
       else {
+        await refreshUnavailableAiModel(attempt.provider === 'claude' ? 'anthropic' : 'openai', error);
         await recordErrorLog(error, { source: 'lopu-chat-stream', provider: attempt.provider });
         state.stopReason = 'error';
         state.error = String((error as any)?.message || error).slice(0, 300);

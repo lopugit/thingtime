@@ -1,3 +1,4 @@
+import { refreshUnavailableAiModel } from '../ai/modelSync';
 import { getLopuPromptSettings } from '../settings/lopuPromptSettings';
 import { composeLopuSurfacePrompt } from './promptSettingsCore';
 import { createClaudeOAuthClient, claudeOAuthConfigured } from '../ai/claudeOAuth';
@@ -194,6 +195,7 @@ async function* streamClaude(system: string, user: string, choice: AiWorkflowMod
       // silently skipped in favor of the next provider.
       if (yielded || attempt === attempts.length - 1) return;
     } catch (err) {
+      await refreshUnavailableAiModel('anthropic', err);
       // Never retry after emitting text (it would duplicate the musing), and
       // never swallow the final attempt's failure — the provider loop needs it.
       if (yielded || !decorated || attempt === attempts.length - 1) throw err;
@@ -250,6 +252,7 @@ async function* streamOpenAI(
       // falls through to the bare retry before the provider is given up on.
       if (yielded || attempt === attempts.length - 1) return;
     } catch (err) {
+      await refreshUnavailableAiModel('openai', err);
       if (yielded || attempt === attempts.length - 1) throw err;
     }
   }

@@ -243,7 +243,8 @@ export const LopuModelPicker = ({ models, vaultProviders, vault, value, defaults
 							<ChevronDown size={12} strokeWidth={2.2} aria-hidden style={{ flexShrink: 0, opacity: 0.7 }} />
 						</Box>
 					</PopoverTrigger>
-					<Portal appendToParentPortal={false}><PopoverContent zIndex={DRAWER_POPUP_Z}
+					{/* Chakra positions a wrapper; raising only the content leaves it beneath Lopu. */}
+					<Portal appendToParentPortal={false}><PopoverContent rootProps={{ zIndex: DRAWER_POPUP_Z }} zIndex={DRAWER_POPUP_Z}
 						width="320px"
 						maxW="calc(100vw - 24px)"
 						sx={lopuPopoverSx}
@@ -251,7 +252,7 @@ export const LopuModelPicker = ({ models, vaultProviders, vault, value, defaults
 						_focusVisible={{ outline: 'none', boxShadow: LOPU_UI.shadowPopover }}
 						aria-label="Choose what Lopu thinks with"
 					>
-						<PopoverBody p={0}>
+						<PopoverBody p={0} maxH="calc(100dvh - 24px)" overflowY="auto" overscrollBehavior="contain">
 							<Flex align="center" px={3} pt={2.5} pb={1}>
 								<Text as="span" sx={lopuEyebrowSx}>
 									Model

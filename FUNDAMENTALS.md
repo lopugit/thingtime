@@ -528,3 +528,5 @@ a matching, verified, live session. Background server access and password-reset
 recovery are intentionally supported; do not describe this as zero knowledge.
 Password reset rewraps the stable key alongside the password hash in the same
 secure CAS. Legacy migrations cannot overwrite newer edits or reconnects.
+
+Incoming mail uses protected `mail-account`, `mail-folder`, `mail-message`, `mail-inbox` and `mail-operation` Things in the existing `things` collection. Message, folder and operation receipt rows are relational children of the account (`parentId`). Operation receipts fence duplicate provider mutations without storing message bodies or grants. Credentials/content use account-vault encryption; home-plane writes use the shared transactional storage ledger. See [incoming mail](docs/feature-map/incoming-mail.md).

@@ -11,6 +11,7 @@ import { claudeOAuthConfigured } from './claudeOAuthCore';
 import type { LopuVaultProviderPublic } from '../lopu/vaultProviders';
 import {
   AI_WORKFLOW_BASE_MODELS,
+  getAiWorkflowBaseModel,
   parseAiWorkflowModelOptionId,
   type AiModelEffort,
   type AiModelSpeed,
@@ -63,9 +64,11 @@ export const aiModelFamilyOf = (provider: AiModelProviderId, modelId: string): A
 };
 
 // Context windows (tokens) where the provider catalog states them. Anthropic
-// values are the published table as of 2026-06; OpenAI windows are left
-// unknown rather than guessed — the field is optional on the Thing.
+// values are published limits; unverified windows stay unknown rather than
+// guessed — the field is optional on the Thing. Astra verified 2026-10-17.
 export const AI_MODEL_CONTEXT_WINDOWS: Readonly<Record<string, number>> = {
+  'gpt-6-astra': 1_050_000,
+  'claude-fable-5-1': 1_000_000,
   'claude-fable-5': 1_000_000,
   'claude-opus-5': 1_000_000,
   'claude-opus-4-8': 1_000_000,
@@ -116,7 +119,13 @@ export const AI_MODEL_CATALOG_IDS: readonly string[] = AI_MODEL_CATALOG.map((ent
 const catalogById = new Map<string, AiModelCatalogEntry>(AI_MODEL_CATALOG.map((entry) => [entry.modelId, entry]));
 
 export const getAiModelCatalogEntry = (modelId: unknown): AiModelCatalogEntry | null =>
-  typeof modelId === 'string' ? (catalogById.get(modelId.trim()) ?? null) : null;
+  typeof modelId === 'string' ? (catalogById.get(modelId.trim()) ?? discoveredAiModelEntry(modelId.trim())) : null;
+
+export const discoveredAiModelEntry = (id: string): AiModelCatalogEntry | null => {
+  const base = getAiWorkflowBaseModel(id);
+  if (!base || !isAiModelProviderId(base.provider)) return null;
+  return { modelId: id, label: base.label, provider: base.provider, efforts: [...base.efforts], speeds: [...base.speeds], family: aiModelFamilyOf(base.provider, id), sortOrder: 10000, contextWindow: null };
+};
 
 export const isAiModelCatalogId = (modelId: unknown): modelId is string => getAiModelCatalogEntry(modelId) !== null;
 
@@ -184,6 +193,8 @@ export type AiModelPublic = {
   // the provider key's probe verdict: true verified, false rejected by the
   // provider, null unknown (unconfigured, or the check could not conclude)
   verified: boolean | null;
+  providerAvailable?: boolean | null; // latest complete provider catalogue
+  lastSyncedAt?: string | null;
   isDefault: boolean; // the resolved Lopu default model
 };
 
@@ -395,7 +406,9 @@ export const resolveLopuModelChoice = (
     } else if (!candidate.available) {
       if (!lenient) {
         return choiceFail(
-          candidate.verified === false
+          candidate.providerAvailable === false
+            ? `${candidate.label} is no longer available from its provider. Choose a current model.`
+            : candidate.verified === false
             ? `${candidate.label} is unavailable — the provider rejected the server's ${AI_PROVIDER_ENV_HINTS[candidate.provider]} (key invalid)`
             : `${candidate.label} needs ${AI_PROVIDER_ENV_HINTS[candidate.provider]} configured on the server`
         );

@@ -422,10 +422,11 @@ export function useApi() {
       }, [asyncFetcher])
     },
     admin: {
+      aiModels: useCallback(async () => getJson('/api/v1/admin/ai/models'), []),
       // { id, enabled } toggles one catalog model; { seed: true } re-runs the catalog upsert;
       // { probe: true } re-checks the provider keys (fresh providers.<p>.verified + the re-projected list)
       setAiModel: useCallback(
-        async (args: { id?: string; enabled?: boolean; seed?: boolean; probe?: boolean }) =>
+        async (args: { id?: string; enabled?: boolean; seed?: boolean; probe?: boolean; sync?: boolean; provider?: string; allowAll?: boolean; autoAllowNewModels?: boolean }) =>
           asyncFetcher.submit(args, { action: '/api/v1/admin/ai/models', errorContext: 'update the Lopu model catalog' }),
         [asyncFetcher]
       ),
