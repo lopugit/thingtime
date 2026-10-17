@@ -3547,3 +3547,44 @@ deadline and integrity checks were not relaxed. The final source build passed
 with 249 assets / 21,947,711 bytes. This remains local verification; current-head
 CI and deployed feature acceptance are not complete. Structural Graphify includes
 the changed code; semantic document freshness is not claimed.
+
+## Account Actions execute locally — 2026-10-18
+
+Retained owned account Actions now use the existing canonical data/browser
+interpreters when their bounded dependency closure has local adapters. Local
+CRUD uses the account queue, canonical Timeline capture and operation leases;
+deletes use `AccountThingSync.remove`, not bare local deletion. Remote-only
+programs retain the guarded authenticated path before any local effects. An
+error after execution begins never causes remote replay. Device run history is
+bounded, labelled separately, excluded from sync/export and cascaded with the
+Action without weakening protected-kind writes.
+
+Native acceptance passed in a fresh disposable account against the isolated
+`127.0.0.1:22463` replica: normal transfer import, cold offline reload, UI run,
+device history reload at 1440/390/320px, canonical two-Thing result export, then
+reconnection through owner/plane-fenced content writes. Exactly one result
+appeared remotely and no `/api/v1/actions/run` request occurred. Screenshots,
+export and request metadata: `tmp/account-actions-verified/`; transcript:
+`tmp/account-actions-verified.log`. Mobile screenshot visually inspected.
+
+Validation: 564 local-workspace tests passed with 67 opt-in skips, plus four
+offline-shell checks; the new native test was separately enabled and passed.
+Canonical Action suite: 156 passed, one opt-in skip. Focused lint clean. The
+client build passed (248 verified assets, 21,951,812 bytes). Initial typecheck
+had the same 91 normalized baseline diagnostics and no new signatures.
+
+Runtime evidence: existing PM2 inventory timed out and its API returned 502.
+The repository-permitted test-owned foreground stack used 22480/22481/22482,
+with a built-client preview on 22490. The preview explicitly targeted that
+loopback API via `THINGTIME_API_FALLBACK_ORIGIN`; the fixture refused registration
+before this was configured because the default preview proxy was not the
+disposable replica. No existing account or production data was modified. An
+initial native test captured the URL before navigation finished; using the
+actual exported ID repaired that assertion. The final run passed against the
+final functional source.
+
+This is a coverage increment, not completion of the full goal. Dynamic whole
+request bodies and nested HTTP Action references, further local endpoint
+adapters, cross-plane home editor/media/draft navigation, custom-plane live
+acceptance, latest-main reconciliation and final CI/deployed acceptance remain.
+No merge or manual deployment.

@@ -66,6 +66,7 @@ type RunResponse = {
 
 type RunRecord = {
 	id: string;
+	localOnly?: boolean;
 	status: string;
 	startedAt: string | null;
 	durationMs: number | null;
@@ -600,12 +601,13 @@ const WorkspaceActionDetailPage = ({ scope }: { scope: string }) => {
 								Recent execution details
 							</Text>
 							{!user?.localOnly ? <Button size="sm" variant="outline" mb={2} onClick={() => openThingHistory(action.id)}>Open History</Button> : null}
-							<Text fontSize="xs" color={MUTED} mb={3}>{user?.localOnly ? 'The latest 50 execution details are saved on this device. They stay private to this local workspace.' : 'History keeps saved changes and recorded server outcomes. The details below are a rolling debug window of up to 50 server runs.'}</Text>
+							<Text fontSize="xs" color={MUTED} mb={3}>{user?.localOnly ? 'The latest 50 execution details are saved on this device. They stay private to this local workspace.' : 'History keeps saved changes and recorded server outcomes. Recent execution details below are labelled by where the Action ran.'}</Text>
 							{runs.length ? (
 								<Stack spacing={2}>
 									{runs.map((record) => (
 										<Flex align="center" gap={2} key={record.id} wrap="wrap">
 											<ActionChip size="sm" tone={record.status === 'ok' ? 'ok' : 'danger'}>{record.status}</ActionChip>
+											<Text color={MUTED} fontSize="xs">{record.localOnly ? 'This device' : 'Server'}</Text>
 											<Text color={MUTED} fontSize="xs">
 												{record.startedAt ? new Date(record.startedAt).toLocaleString() : '—'}
 											</Text>
@@ -622,7 +624,7 @@ const WorkspaceActionDetailPage = ({ scope }: { scope: string }) => {
 								</Stack>
 							) : (
 								<Text color={MUTED} fontSize="sm">
-									{user?.localOnly ? 'No local runs yet.' : crystal.runtime === 'browser' ? 'Browser runs show their trace above for this session. They do not create server run records.' : 'No server runs yet.'}
+									No execution details available yet.
 								</Text>
 							)}
 						</Box>

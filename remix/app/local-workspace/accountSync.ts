@@ -189,6 +189,20 @@ export class AccountThingSync {
 				...(row.postAttachmentIds ? { postAttachmentIds: row.postAttachmentIds } : {}) }))
 		}));
 	}
+	/** An Action adds cancellation/deadline checks without dropping the account
+	 * queue, Timeline capture, file hooks or the original identity fence. */
+	withLease(operation: WorkspaceLease): AccountThingSync {
+		const parent = this.lease;
+		const lease: WorkspaceLease = {
+			assertCurrent() { parent.assertCurrent(); operation.assertCurrent(); },
+			onInvalidate(callback) {
+				const offParent = parent.onInvalidate(callback), offOperation = operation.onInvalidate(callback);
+				return () => { offParent(); offOperation(); };
+			}
+		};
+		lease.assertCurrent();
+		return new AccountThingSync(this.db, this.scope, lease, this.now, this.uuid, this.files, this.themes);
+	}
 	async isDeleted(id: string) { return this.tx('readonly', async tx => !!(await tx.get<SyncRecord>(COLLECTION, id))?.deleted || !!await this.themes?.isDeletedIn(tx,id)); }
 	/** Match canonical deletion: drain folder children to their surviving parent;
 	 * cascade target-linked content. Content removal and intent commit together. */
@@ -216,6 +230,8 @@ export class AccountThingSync {
 						throw new WorkspaceError('UNSUPPORTED_LOCAL_DELETE', 'This file requires its owning editor.', 409);
 				} else if (isTransferTheme(row) && this.themes) {
 					if (!await this.themes.viewIn(tx,row.id)) throw new WorkspaceError('UNSUPPORTED_LOCAL_DELETE','Open this theme in its home library before deleting it.',409);
+				} else if (row.thingtime.includes('action-run') && row.id.startsWith('local-action-run-') && row.targetId && byId.get(row.targetId)?.thingtime.includes('action') && selected.has(row.targetId)) {
+					// Device execution evidence has no remote queue or server receipt.
 				} else if (!await tx.get<SyncRecord>(COLLECTION, row.id) || isProtectedThingtime(row.thingtime))
 					throw new WorkspaceError('UNSUPPORTED_LOCAL_DELETE', 'This item requires its dedicated deletion adapter.', 409);
 			}
@@ -225,6 +241,7 @@ export class AccountThingSync {
 			for (const row of all) {
 				if (selected.has(row.id)) {
 					if (isLocalAttachment(row) || (isTransferTheme(row) && this.themes)) continue;
+					if (row.thingtime.includes('action-run') && row.id.startsWith('local-action-run-') && row.targetId && selected.has(row.targetId)) { await tx.delete('things', row.id); continue; }
 					const state = await tx.get<SyncRecord>(COLLECTION, row.id);
 					if (!state || isProtectedThingtime(row.thingtime)) throw new WorkspaceError('UNSUPPORTED_LOCAL_DELETE', 'This item requires its dedicated deletion adapter.', 409);
 					await tx.delete('things', row.id);

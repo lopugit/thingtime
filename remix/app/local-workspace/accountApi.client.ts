@@ -1,3 +1,4 @@
+import { LocalActions } from './actions';
 import { AccountThemeSync } from './accountThemes';
 import { isTransferTheme } from '../utils/thingTransfer/theme';
 import { accountThemeTransport } from './themeTransport.client';
@@ -27,7 +28,7 @@ import { browseLocalDefinitions } from './definitionCatalog';
 import { searchLocalThings } from './structuredSearch';
 import { readWorkspaceSearchCursor, workspaceSearchCursor } from './searchCursor';
 import { searchLocalLibrary } from './librarySearch';
-import { validateThingtimeCrystal } from '../schemas/registry';
+import { MAX_ACTION_RUN_HISTORY, validateThingtimeCrystal } from '../schemas/registry';
 import { snapshotTransferValue } from '../utils/thingTransfer/value';
 import { parseTransfer, serializeTransfer, validateTransfer } from '../utils/thingTransfer/format';
 import { resolveWorkspacePage, type LocalWebpageTarget } from './webpageResolution';
@@ -536,6 +537,23 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 	const localHistoryScope = (requested: {apiOrigin?: string; ownerId: string; dataPlane: string}) =>
   requested.ownerId === scope.ownerId && requested.dataPlane === scope.dataPlane && (requested.apiOrigin === undefined || requested.apiOrigin === scope.origin);
  return { ...online, auth: remote.auth, login: remote.login,
+  actions: { ...online.actions,
+   run: async (args: {action?: unknown; inputs?: unknown; source?: string} = {}) => {
+    const service = worker(), actions = new LocalActions(service.db, scope, service.lease, service.sync);
+    if (typeof args.action !== 'string' || !await actions.canRunLocally(args.action)) return online.actions.run(args);
+    try { return await actions.run({...args,action:args.action}); }
+    finally { changed(); } // Partial local effects also have independent queued sync.
+   },
+   runs: async (args: {action?:string;limit?:number} = {}) => {
+    const service = worker(), local = await new LocalActions(service.db,scope,service.lease,service.sync).runs(args);
+    if (navigator.onLine === false || !canSyncAccountWorkspace(scope)) return {...local,incomplete:true};
+    try {
+     const remote = await online.actions.runs(args); facadeLease.assertCurrent();
+     const runs = [...local.runs,...(remote.runs || [])].sort((a,b)=>b.createdAt.localeCompare(a.createdAt)||a.id.localeCompare(b.id));
+     return {...remote,runs:runs.slice(0,Math.max(1,Math.min(Number(args.limit)||20,MAX_ACTION_RUN_HISTORY)))};
+    } catch { facadeLease.assertCurrent(); return {...local,incomplete:true}; }
+   }
+  },
   themes: {...online.themes,
    list: async()=>{const service=worker();void service.refreshThemes().catch(()=>{});void service.refreshThemeSelection().catch(()=>{});return {...await service.themes.list(),syncError:service.themeErrors.catalog};},
    save: async(input:Parameters<AccountThemeSync['save']>[0])=>{const result=await worker().themes.save(input);changed();return result;},

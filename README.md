@@ -5109,3 +5109,17 @@ library display-title renaming. Its account reconnect checks require
 API. The `themeImport.api.test.ts` fixture checks conditional title metadata and a
 normal importer round-trip. Use the disposable loopback configuration above; no
 existing account or public content is needed.
+
+### Disposable offline Action verification
+
+The opt-in `remix/app/local-workspace/accountActions.browser.test.ts` uses a fresh
+account on an isolated replica at `127.0.0.1:22463`, verifies its API status before
+registration, then imports/runs/exports offline and reconnects to sync content.
+Set `TT_LOCAL_ACTIONS_URL` to the built-client preview,
+`TT_LOCAL_ACTIONS_ARTIFACTS` to a local output directory, and the existing
+`TT_SHARED_PLAYWRIGHT_PATH` / `TT_SHARED_CHROME_PATH` harness paths. Never point
+this fixture at a real account database. When a test-owned Vite preview has no
+local API environment, explicitly set
+`THINGTIME_API_FALLBACK_ORIGIN=http://127.0.0.1:<isolated-api-port>` so its normal
+proxy targets the disposable API. Use the repository dev lifecycle instructions
+for server ownership and cleanup. No production credentials are required.

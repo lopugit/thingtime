@@ -16,11 +16,26 @@ const editableKinds = (kinds: unknown) => {
 		refuse('This local request supports editable definitions, Data and folders; other kinds need their dedicated adapter');
 };
 // ID shape is not authority: every operation below resolves its target through
-// LocalThings in the leased anonymous partition, with no HTTP fallback.
+// LocalThings in the leased workspace partition, with no HTTP fallback.
 const id = (value: unknown): string =>
 	typeof value === 'string' && value.length > 0 && value.length <= 200
 		? value
 		: refuse('This request requires an ID from the local workspace');
+
+/** This is also the account placement check, before any local effect. */
+const onlyFields = (value: unknown, allowed: string[]) => value === undefined ||
+	(!!value && typeof value === 'object' && !Array.isArray(value) && Object.keys(value).every(key => allowed.includes(key)));
+export const localActionRequestSupported = (step: Record<string, unknown>) => {
+	if (step.path === '/api/v1/actions/run' && step.method === 'POST' && step.feature === 'api.actions-run' && capabilitySatisfies('1.10.0', String(step.minimumVersion)))
+		return onlyFields(step.query, []) && onlyFields(step.body, ['action', 'inputs', 'source']);
+	if (step.path !== '/api/v1/things' || step.feature !== 'api.things' || !capabilitySatisfies('1.33.0', String(step.minimumVersion))) return false;
+	if (step.method === 'GET') return step.body === undefined && onlyFields(step.query, ['id', 'thingtime', 'folder', 'target', 'cursor', 'limit']);
+	if (step.method === 'DELETE') return onlyFields(step.query, ['id']) && onlyFields(step.body, ['id']);
+	if (step.method !== 'POST' && step.method !== 'PATCH') return false;
+	if (!onlyFields(step.query, []) || !onlyFields(step.body, ['thingtime', 'crystal', 'extended', 'tags', 'folderId', 'targetId', 'acl', ...(step.method === 'PATCH' ? ['id', 'expectedUpdatedAt'] : [])])) return false;
+	const body = step.body as Record<string, unknown> | undefined;
+	return body?.acl === undefined || JSON.stringify(body.acl) === '["tt:user"]';
+};
 
 /** Closed endpoint adapter for the existing browser interpreter. These saved
  * http.request steps describe operations; this host never performs HTTP. */
@@ -28,14 +43,16 @@ export function localActionRequests(
 	db: WorkspaceDatabase,
 	scope: WorkspaceScope,
 	lease: WorkspaceLease,
-	runData: (body: { action: string; inputs?: unknown }, lease: WorkspaceLease) => Promise<unknown>
+	runData: (body: { action: string; inputs?: unknown }, lease: WorkspaceLease) => Promise<unknown>,
+	store?: (lease: WorkspaceLease) => Pick<LocalThings, 'get' | 'list' | 'snapshot' | 'create' | 'update'> & { remove(ids: string[]): Promise<unknown> }
 ): BrowserActionHost['request'] {
 	return async (step, actor, signal) => {
 		const active: WorkspaceLease = {
 			assertCurrent() {
 				lease.assertCurrent();
 				signal.throwIfAborted();
-				if (scope.kind !== 'anonymous' || actor !== 'local-workspace') refuse('Workspace changed');
+				if (actor !== (scope.kind === 'account' ? scope.ownerId : 'local-workspace')) refuse('Workspace changed');
+				if (scope.kind === 'account' && !store) refuse('Account Actions require their dedicated sync adapter');
 			},
 			onInvalidate(callback) {
 				const unsubscribe = lease.onInvalidate(callback);
@@ -47,7 +64,7 @@ export function localActionRequests(
 			}
 		};
 		active.assertCurrent();
-		const things = new LocalThings(db, scope, active);
+		const things = store ? store(active) : new LocalThings(db, scope, active);
 		const query = object(step.query || {});
 		let result: unknown;
 		if (

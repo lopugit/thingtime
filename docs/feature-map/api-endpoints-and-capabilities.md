@@ -458,3 +458,15 @@ inside its accounted home transaction. Normal token writes omit the property;
 imported placement negotiates 1.3.0. Retained catalogue reads still require 1.2.0.
 Both manifests derive from apiDocs.ts. Run theme contract/receipt/transport and
 capability suites plus guarded themeImport.api.test.ts for the new write boundary.
+
+## Locally executable account Actions
+
+`local-workspace/accountApi.client.ts` selects the existing `LocalActions`
+interpreter for retained owned programs with a supported local dependency
+closure. `AccountThingSync.withLease` carries content queue and Timeline hooks
+into both data and browser requests, including deletion. Remote-only Actions
+retain the original authenticated/capability-negotiated adapter. Device run
+details are distinct from server receipts and never enter content sync.
+`accountActions.test.ts`, `accountApi.test.ts` and the opt-in
+`accountActions.browser.test.ts` cover this boundary; see
+[local workspaces](../local-workspaces.md#account-local-action-execution--2026-10-18).

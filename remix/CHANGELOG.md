@@ -68,6 +68,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-18 — **Codex (AI)**: Retained owned account Actions can execute
+  offline through the native interpreters and queue their ordinary content
+  changes for independent sync. Preserve operation leases, distinguish device
+  run history from server receipts, and remove it with its owning Action.
+  See [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
 - 2026-10-18 — **Codex (AI)**: Native schema-backed Thing details now resolve
   locally for anonymous/offline workspaces, with scoped preview caches and
   recoverable dependency errors. Shared-schema authorization is preserved.

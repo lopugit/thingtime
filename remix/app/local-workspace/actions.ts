@@ -24,16 +24,16 @@ import {
 } from '../schemas/registry';
 import { MAX_EXPRESSION_NODES_PER_RUN } from '../schemas/actionExpressions';
 import type { PreparedBrowserAction } from '../schemas/browserActions';
-import { localActionRequests } from './actionRequests';
+import { localActionRequests, localActionRequestSupported } from './actionRequests';
 import { snapshotTransferValue } from '../utils/thingTransfer/value';
 import { LocalThings, localThingProjection, type LocalThing } from './things';
-import { WorkspaceError, type WorkspaceDatabase, type WorkspaceLease, type WorkspaceScope } from './storage';
+import type { AccountThingSync } from './accountSync';
+import { WorkspaceError, workspaceScopeKey, type WorkspaceDatabase, type WorkspaceLease, type WorkspaceScope } from './storage';
 
 const fail = (message: string, status = 400): never => {
 	throw new WorkspaceError('LOCAL_ACTION_ERROR', message, status);
 };
 const activeRuns = new WeakMap<WorkspaceDatabase, number>();
-const actorId = 'local-workspace'; // Display/reference identity, never account authority.
 const newest = (a: LocalThing, b: LocalThing) => b.createdAt.localeCompare(a.createdAt) || a.id.localeCompare(b.id);
 const scalar = (value: unknown, label: string) =>
 	value == null || ['string', 'number', 'boolean'].includes(typeof value) ? value ?? null : fail(`${label} resolved to a non-scalar filter value`);
@@ -49,20 +49,33 @@ const read = (value: unknown, path: string): unknown =>
 		);
 
 /** Same saved programs and interpreters as account Actions, with a closed local
- * host. No fetch, credentials, remote IDs, or implicit public-data fallback. */
+ * host. No fetch, credentials or implicit public-data fallback. Account IDs
+ * select device content; they do not grant remote authority. */
 export class LocalActions {
 	private things: LocalThings;
-	constructor(private db: WorkspaceDatabase, private scope: WorkspaceScope, private lease: WorkspaceLease) {
-		this.things = new LocalThings(db, scope, lease);
+	private actorId: string;
+	constructor(private db: WorkspaceDatabase, private scope: WorkspaceScope, private lease: WorkspaceLease, private account?: AccountThingSync) {
+		this.actorId = scope.kind === 'account' ? scope.ownerId : 'local-workspace';
+		this.things = account ? account.withLease(lease).things : new LocalThings(db, scope, lease);
+	}
+	private store(lease: WorkspaceLease) {
+		if (!this.account) return new LocalThings(this.db, this.scope, lease);
+		const account = this.account.withLease(lease);
+		return {
+			get: account.things.get.bind(account.things), snapshot: account.things.snapshot.bind(account.things),
+			list: account.things.list.bind(account.things), create: account.things.create.bind(account.things),
+			update: account.things.update.bind(account.things), remove: account.remove.bind(account)
+		};
 	}
 	private assert() {
 		this.lease.assertCurrent();
-		if (this.scope.kind !== 'anonymous') fail('Account Actions require their dedicated sync adapter', 403);
+		if (this.scope.kind === 'account' && (!this.account || workspaceScopeKey(this.account.scope) !== workspaceScopeKey(this.scope))) fail('Account Actions require their matching sync adapter', 403);
+		if (this.scope.kind === 'anonymous' && this.account) fail('Anonymous Actions never use an account adapter', 403);
 	}
-	private async resolve(reference: string): Promise<ActionProgram> {
+	private async resolve(reference: string, snapshot?: LocalThing[]): Promise<ActionProgram> {
 		this.assert();
 		if (typeof reference !== 'string' || !reference.trim() || reference.length > 240) fail('Which action? Pass its id or actionKey');
-		const rows = (await this.things.snapshot()).filter((row) => row.thingtime.includes('action'));
+		const rows = (snapshot ?? await this.things.snapshot()).filter((row) => row.thingtime.includes('action'));
 		const row =
 			rows.find((row) => row.id === reference) ||
 			rows
@@ -74,13 +87,40 @@ export class LocalActions {
 		const crystal = checked.crystal;
 		return {
 			id: row.id,
-			ownerId: actorId,
+			ownerId: this.actorId,
 			name: String(crystal.name || 'Action'),
 			crystal,
 			steps: crystal.steps as ActionStep[],
 			capabilities: crystal.capabilities as ActionCapabilityEntry[],
 			inputs: (crystal.inputs || []) as Record<string, unknown>[]
 		};
+	}
+	/** Decide placement before executing any effect. A remote-only dependency
+	 * never causes a completed/partially completed local run to replay remotely. */
+	async canRunLocally(reference: string): Promise<boolean> {
+		this.assert();
+		const seen = new Set<string>(), snapshot = await this.things.snapshot();
+		const visit = async (reference: string): Promise<boolean> => {
+			let program: ActionProgram;
+			try { program = await this.resolve(reference, snapshot); }
+			catch (error) { if (error instanceof WorkspaceError && error.status === 404) return false; throw error; }
+			if (seen.has(program.id)) return true; // Runtime still enforces recursion/depth limits.
+			if (seen.size >= 100) return false;
+			seen.add(program.id);
+			for (const step of program.steps) {
+				if (step.op === 'lookup' || (step.op === 'things.search' && ['public', 'system'].includes(String(step.scope)))) return false;
+				if (step.op === 'http.request') {
+					if (!localActionRequestSupported(step)) return false;
+					if (step.path === '/api/v1/actions/run') {
+						const action = (step.body as any)?.action;
+						if (typeof action !== 'string' || action.startsWith('$') || !await visit(action)) return false;
+					}
+				}
+				if ((step.op === 'actions.invoke' || step.op === 'each') && !await visit(String(step.action))) return false;
+			}
+			return true;
+		};
+		return visit(reference);
 	}
 	private async schema(reference: string) {
 		const rows = (await this.things.snapshot()).filter((row) => row.thingtime.includes('schema')).sort(newest);
@@ -119,10 +159,10 @@ export class LocalActions {
 		});
 		const offset = Number(step.offset) || 0,
 			limit = Math.min(Number(step.limit) || 20, MAX_ACTION_SEARCH_LIMIT);
-		return rows.slice(offset, offset + limit).map((row) => ({ shareId: row.id, crystal: row.crystal, createdAt: row.createdAt, ownerId: actorId }));
+		return rows.slice(offset, offset + limit).map((row) => ({ shareId: row.id, crystal: row.crystal, createdAt: row.createdAt, ownerId: this.actorId }));
 	}
 	private host(lease: WorkspaceLease): ActionRuntimeHost {
-		const things = new LocalThings(this.db, this.scope, lease);
+		const things = this.store(lease);
 		return {
 			resolveActionProgram: async (reference) => {
 				const program = await this.resolve(reference);
@@ -130,7 +170,7 @@ export class LocalActions {
 				return program;
 			},
 			resolveSchemaRef: (reference) => this.schema(reference),
-			getThing: async (id) => ({ ok: true, thing: localThingProjection(await things.get(id), actorId) }),
+			getThing: async (id) => ({ ok: true, thing: localThingProjection(await things.get(id), this.actorId) }),
 			createThing: async (input) => {
 				const row = await things.create({ thingtime: input.thingtime, crystal: input.crystal });
 				return { ok: true, doc: { shareId: row.id, crystal: row.crystal } };
@@ -165,7 +205,7 @@ export class LocalActions {
 			status: 'prepared',
 			execution: 'browser',
 			actionId: program.id,
-			viewer: { id: actorId, username: 'local' },
+			viewer: { id: this.actorId, ...(this.scope.kind === 'anonymous' ? { username: 'local' } : {}) },
 			program: program.crystal,
 			inputs: this.inputs(program, raw)
 		};
@@ -221,26 +261,26 @@ export class LocalActions {
 			outcome = await finishBrowserAction(await this.prepare(program.id, inputs), {
 				assertIdentity: (id) => {
 					this.assert();
-					if (id !== actorId) fail('Workspace changed', 409);
+					if (id !== this.actorId) fail('Workspace changed', 409);
 				},
 				prepare: async (reference, values, id, signal) => {
 					this.assert();
 					signal.throwIfAborted();
-					if (id !== actorId) fail('Workspace changed', 409);
+					if (id !== this.actorId) fail('Workspace changed', 409);
 					return this.prepare(reference, values);
 				},
 				request: localActionRequests(this.db, this.scope, this.lease, async (body, lease) => {
-					const child = new LocalActions(this.db, this.scope, lease);
+					const child = new LocalActions(this.db, this.scope, lease, this.account);
 					const target = await child.resolve(body.action);
 					if (target.crystal.runtime === 'browser') fail('Use actions.invoke for browser composition so its shared budgets are retained');
 					return child.run(body);
-				})
+				}, lease => this.store(lease))
 			});
 		} else {
 			let result: unknown = null,
 				error: string | undefined;
 			try {
-				result = await executeProgram({ id: actorId, username: 'local' }, program, inputs, budget, '', this.host(runLease));
+				result = await executeProgram({ id: this.actorId, ...(this.scope.kind === 'anonymous' ? { username: 'local' } : {}) }, program, inputs, budget, '', this.host(runLease));
 				runLease.assertCurrent();
 				if (jsonBytes(result) > limits.maxResultBytes) fail(`Result exceeds the ${limits.maxResultBytes}-byte cap`);
 			} catch (cause) {
@@ -301,6 +341,7 @@ export class LocalActions {
 			ok: true,
 			runs: rows.map((row) => ({
 				id: row.id,
+				localOnly: true,
 				actionId: row.targetId || null,
 				createdAt: row.createdAt,
 				status: typeof row.crystal.status === 'string' ? row.crystal.status : 'error',

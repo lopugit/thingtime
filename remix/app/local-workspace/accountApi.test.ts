@@ -88,6 +88,14 @@ test('account local facade and native page resolution work offline without uploa
   await assert.rejects(api.things.search({ workspace: true, q: 'cold offline', cursor: 'server-cursor' }), /Reload/);
   await assert.rejects(api.things.get({ id: 'not-cached' }), /offline/);
   await assert.rejects(api.things.create({ thingtime: ['data'], crystal: {}, attachmentIds: ['attachment'] }), /offline/);
+  const schema = await api.things.create({thingtime:['schema'],crystal:{name:'offline-note',fields:[{name:'name',type:'string'}]}});
+  const action = await api.things.create({thingtime:['action'],crystal:{name:'Offline account execution',version:1,capabilities:[{capability:'things.create'}],steps:[{op:'things.create',schema:schema.id,values:{name:'Created by offline account Action'}},{op:'return',value:'$step.1.id'}]}});
+  const outcome = await api.actions.run({action:action.id});
+  assert.equal(outcome.status,'ok',outcome.error);
+  assert.equal((await api.things.get({id:outcome.result})).thing.crystal.name,'Created by offline account Action');
+  assert.equal((await api.actions.runs({action:action.id})).runs[0].id,outcome.runId);
+  assert.equal((await historyWorker.sync.status()).find(row=>row.id===outcome.result)?.state,'pending');
+  assert.equal(remoteCalls,1,'account Action uses local interpreter, not remote run');
   await assert.rejects(async () => api.actions.run({}), /offline/);
   let refusal: Promise<unknown> | undefined;
   assert.doesNotThrow(() => { refusal = api.actions.run({}); });

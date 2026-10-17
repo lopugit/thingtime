@@ -7616,6 +7616,17 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
 
 ## Actions (/actions, `remix/app/api/utils/actions/`, `/api/v1/actions/run`, `/api/v1/actions/runs`)
 
+- [ ] Offline account Actions: normally import a schema and owned data/browser
+      Action, cold reload offline, run, edit/read its result, and export the
+      complete schema dependency. Device run details survive reload at desktop,
+      390px and 320px. Reconnect: ordinary queued content reaches the same owner
+      and selected plane once, without an `/actions/run` request or forged server
+      receipt. A later local failure preserves completed effects. Remote-only
+      dependencies are classified before effects; wrong account, cancelled and
+      retired leases cannot commit. Deleting the Action removes device debug
+      history without a protected-kind error. Run `accountActions.test.ts`,
+      `accountApi.test.ts` and the guarded `accountActions.browser.test.ts`.
+
 - [ ] Server Action Timeline: run read-only, successful mutating and partially
       failing programs. Admission/outcome effects share trusted operation IDs
       with committed changes, retain no raw inputs/results/errors/traces, and
