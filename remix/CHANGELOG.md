@@ -68,6 +68,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-16 — **Codex (AI)**: Raise Lopu model/settings popup positioners above the floating window and mobile scrim; bound long popup bodies to the viewport so their controls remain scrollable.
+
 - 2026-10-16 — **Codex (AI)**: Keep fresh Lopu chats ready to send while unrelated background tasks run; scope busy checks and Stop to the selected conversation.
 
 - 2026-10-16 — **Codex (AI)**: Post creation, editing, rich comments and plain
