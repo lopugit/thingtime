@@ -10536,3 +10536,20 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
   streaming and large-folder throughput remain required. The measured 129 native
   calls / 259 verification attempts for this small complete acceptance sequence
   are evidence of remaining overhead, not a performance pass.
+
+
+### Sync authorization and HTTP deadlines (2026-10-17)
+
+- [x] Model a native cooldown longer than 30 seconds during foreground mutation
+  authorization. The regression must fail on the old early timer and pass with
+  authorization completed before the request deadline begins.
+- [x] Every upload mutation (start, part signing, PUT, completion, file commit)
+  reauthorizes before its fresh network deadline; GET lookups do not. Cancellation,
+  changed scope and refused approval must prevent the PUT and file commit.
+- [x] Run Mac acceptance with `--cooldown-before-upload`: the real preflight took
+  61,971 ms, including a 50-second server-directed cooldown, then sent the upload
+  with an unexpired signal. Mixed transfers, replacements, lost replies, native
+  restart, original IDs and revocation still passed with four PUTs/two publications.
+  The forced device-budget pressure is not a throughput benchmark.
+- [x] Run all shared sync tests (104 plus one module-mock transport check), targeted
+  lint and TypeScript. The latter remains the identical existing 91 diagnostics.

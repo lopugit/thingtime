@@ -18,6 +18,9 @@ export type CloudTransportRuntime = {
 	currentScope(): SyncScope;
 	origin(): string;
 	fetch: typeof fetch;
+	/** Live native/configuration approval can wait for consent or cooldown. Run
+	 * it before starting the network deadline, then recheck cancellation/scope. */
+	authorizeMutation?(signal?: AbortSignal): Promise<void>;
 	requireCapability(feature: string, minimumVersion: string): Promise<void>;
 };
 const hash = async (bytes: Uint8Array<ArrayBuffer>) => new Uint8Array(await crypto.subtle.digest('SHA-256', bytes));
@@ -34,8 +37,12 @@ export function cloudRequests(runtime: CloudTransportRuntime, scope: SyncScope, 
 	};
 	const json = async (path: string, body?: unknown, missing = false): Promise<any> => {
 		check();
+		const url = new URL(path, scope.origin),
+			bodyText = body === undefined ? undefined : JSON.stringify(body);
+		if (body !== undefined) await runtime.authorizeMutation?.(signal);
+		check();
 		const requestSignal = signal ? AbortSignal.any([signal, AbortSignal.timeout(30_000)]) : AbortSignal.timeout(30_000);
-		const response = await runtime.fetch(new URL(path, scope.origin), {
+		const response = await runtime.fetch(url, {
 			method: body === undefined ? 'GET' : 'POST',
 			credentials: 'same-origin',
 			cache: 'no-store',
@@ -47,7 +54,7 @@ export function cloudRequests(runtime: CloudTransportRuntime, scope: SyncScope, 
 				[EXPECTED_DATA_PLANE_HEADER]: scope.dataPlane,
 				...(body === undefined ? {} : { 'Content-Type': 'application/json' })
 			},
-			...(body === undefined ? {} : { body: JSON.stringify(body) })
+			...(bodyText === undefined ? {} : { body: bodyText })
 		});
 		check();
 		if (missing && response.status === 404) {
@@ -201,6 +208,8 @@ export function createCloudFileTransport(runtime: CloudTransportRuntime, saved: 
 					const target = new URL(part.url, scope.origin);
 					if (target.username || target.password || (target.protocol !== 'https:' && target.origin !== scope.origin))
 						throw Error('Invalid cloud upload destination.');
+					await sourceCheck();
+					await runtime.authorizeMutation?.(signal);
 					await sourceCheck();
 					const response = await runtime.fetch(target, {
 						method: 'PUT',

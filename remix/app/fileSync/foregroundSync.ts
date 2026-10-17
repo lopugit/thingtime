@@ -100,9 +100,13 @@ export async function runForegroundCloudSync(
 	const runtime: CloudTransportRuntime = {
 		...input.runtime,
 		currentScope: input.currentScope,
-		fetch: async (url, init) => {
+		authorizeMutation: async () => {
 			check();
-			if (init?.method && !['GET', 'HEAD'].includes(init.method)) await authorize();
+			await input.runtime.authorizeMutation?.(signal);
+			await authorize();
+			check();
+		},
+		fetch: async (url, init) => {
 			check();
 			const result = await input.runtime.fetch(url, init);
 			check();

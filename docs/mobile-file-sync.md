@@ -1157,3 +1157,25 @@ demonstrated recovery failure, not the throughput gap.
 Signed installed Electron/XPC/AppKit/Keychain/TCC acceptance, native streaming,
 background workers, Photos, peers and the other full-delivery requirements remain
 open. The counts above explicitly prevent treating small-file acceptance as scale.
+
+
+## Authorization waits and network deadlines — 2026-10-17
+
+A clock-controlled regression proved that foreground native authorization was
+inside the API request's 30-second timeout. A valid longer cooldown could therefore
+expire an unsent mutation. Shared transports now await `authorizeMutation` before
+starting the HTTP timer, then recheck scope/cancellation and upload source identity.
+JSON bodies are captured before the wait; each POST/PUT still authorizes, and
+caller cancellation spans the whole operation. JSON and signed-part deadlines
+remain 30 and 120 seconds respectively. Shared journal/receipt contracts are unchanged.
+
+All 105 shared checks pass; targeted lint passes and TypeScript output matches
+the existing 91 diagnostics byte-for-byte. The real Mac/API acceptance's opt-in
+`--cooldown-before-upload` mode deliberately consumed its disposable device budget:
+preflight lasted 61,971 ms including one 50-second cooldown, then the request had
+a fresh signal and completed. Mixed creates/replacements, lost cloud/native replies,
+native process restart, original-ID/no-replay recovery, byte hashes, retained
+versions, convergence and revocation passed (four PUTs, two publications). Its
+238 native calls / 477 verifier invocations include deliberate rate pressure;
+this is not a performance measurement. Signed installed acceptance, streaming,
+background workers and the other full-goal work remain open.

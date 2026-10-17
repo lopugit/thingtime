@@ -204,3 +204,14 @@ and fixture prerequisites in README's Mac sync acceptance section.
 (1–60 seconds) for a 429, then rechecks cancellation and the exact local credential
 before repeating the live request. Identity remains uncached; auth errors,
 invalid/long delays and repeated 429s fail. Streaming/throughput remains open.
+
+
+`CloudTransportRuntime.authorizeMutation` supplies the foreground configuration,
+device and policy recheck before each POST/PUT. `cloudRequests` and the signed
+part writer await it before creating their HTTP deadline, then recheck scope,
+cancellation and (for parts) source identity. Request bodies are captured before
+the wait. Read requests still bypass mutation authorization. This prevents a
+native consent/cooldown wait from expiring an unsent request; caller cancellation
+and 30-second JSON / 120-second upload deadlines remain enforced. Regression
+coverage lives in `foregroundSync.test.ts`, `cloudTransport.test.ts` and the
+`--cooldown-before-upload` Mac integration option.

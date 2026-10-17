@@ -913,3 +913,23 @@ and ordinary config/folder Things, and retains accounted byte versions in privat
 Trash and protected device history. It needs no new secrets/admin environment
 changes and never touches the installed app or service. Detailed commands and
 coverage are in README, TESTING and the full sync ledger.
+
+
+## Native authorization before network deadlines — 2026-10-17
+
+Reproduced an unsent-request timeout: the JSON deadline began before foreground
+native authorization, so the valid native cooldown could exceed its 30 seconds.
+The shared runtime now exposes mutation authorization separately; JSON and signed
+PUT writers await it before starting HTTP time, then recheck scope/cancellation
+and source identity. Bodies remain captured before waiting, reads bypass mutation
+authorization, and existing 30/120-second network limits remain unchanged.
+
+The regression fails before the fix and passes after it. All 105 shared checks
+pass; targeted lint passes and TypeScript is byte-identical to the existing 91
+errors. Real Mac/API acceptance forced a cooldown immediately before upload:
+61,971 ms of preflight including a 50-second server wait, followed by a successful
+request with a fresh signal. Full mixed transfer/replacement/recovery/revocation
+acceptance still passed with four PUTs and two native publications. The extra
+fixture read traffic deliberately exhausts only its disposable device budget;
+it is not a sustained-throughput claim. Installed acceptance, streaming and the
+full-feature remainder stay open.

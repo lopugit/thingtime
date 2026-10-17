@@ -24,6 +24,7 @@ import { capabilitySatisfies } from '../app/api/utils/capabilities/capabilityCon
 import type { CloudTransportRuntime } from '../app/fileSync/cloudTransport';
 
 const [fixturePath] = process.argv.slice(2);
+const forcePreflightCooldown = process.argv.includes('--cooldown-before-upload');
 assert.ok(fixturePath);
 assert.equal((await stat(fixturePath)).mode & 0o077, 0);
 const fixture = JSON.parse(await readFile(fixturePath, 'utf8')),
@@ -246,10 +247,32 @@ try {
 	configurationId = row.id;
 	const saved = readOwnedFileSyncConfiguration(row, fixture.userId);
 	const scope = { origin: base.origin, ownerId: fixture.userId, dataPlane: 'home', deviceId: deviceId!, rootId: row.id };
+	let primeCooldown = false,
+		primedAt = 0,
+		preflightWaitMs = 0;
 	const runtime: CloudTransportRuntime = {
 		currentScope: () => scope,
 		origin: () => base.origin,
-		fetch: sessionFetch,
+		authorizeMutation: async () => {
+			if (!primeCooldown) return;
+			primeCooldown = false;
+			primedAt = Date.now();
+			// Consume only this disposable device's identity budget. The foreground
+			// preflight must then honor the real cooldown before starting HTTP time.
+			for (let attempts = 0; verifyCalls < 239 && attempts < 120; attempts++) {
+				await request(fixture.userId, { action: 'conditions' }, signal);
+			}
+			assert.ok(verifyCalls >= 239);
+		},
+		fetch: async (url, init) => {
+			if (primedAt && !preflightWaitMs && init?.method === 'POST') {
+				assert.ok(cooldownCount >= 1);
+				init.signal?.throwIfAborted();
+				preflightWaitMs = Date.now() - primedAt;
+				assert.ok(preflightWaitMs > 30_000, 'Real preflight must outlast the JSON network deadline');
+			}
+			return sessionFetch(url, init);
+		},
 		requireCapability: async (feature, minimum) => {
 			assert.ok(capabilitySatisfies(manifest.features[feature]?.version, minimum), feature);
 		}
@@ -297,6 +320,7 @@ try {
 		remoteBytes = new Uint8Array(65_539).fill(29);
 	await writeFile(path.join(directory, 'selected/local.bin'), localBytes);
 	await seed('remote.bin', remoteBytes);
+	primeCooldown = forcePreflightCooldown;
 	const run = async () => {
 		const localTarget = await approveMobileSyncTarget(saved, scope, signal, request, caps);
 		return runForegroundCloudSync(
@@ -385,6 +409,7 @@ try {
 	await api('/api/v1/devices/disconnect', { deviceId });
 	await assert.rejects(request(fixture.userId, { action: 'scan', rootId: nativeRoot }, signal), /401/);
 	assert.equal(hash(await readFile(path.join(directory, 'selected/remote.bin'))), hash(editedRemote));
+	if (forcePreflightCooldown) assert.ok(preflightWaitMs > 30_000);
 	console.log(
 		JSON.stringify({
 			ok: true,
@@ -407,6 +432,7 @@ try {
 			verifyCalls,
 			cooldownCount,
 			cooldownSeconds,
+			preflightWaitMs,
 			counts,
 			picker: 'fixture',
 			keychain: 'not-used'

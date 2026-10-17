@@ -289,3 +289,29 @@ test('two-way conflicting initial bytes stop the whole run before native or clou
 	}, new AbortController().signal), /sync conflict/);
 	assert.equal(await f.journal().read(scope), null); assert.equal(f.creates(), 0); f.journal().close();
 });
+
+test('native authorization cooldown does not spend the upcoming HTTP request deadline', async (t) => {
+	const f = await fixture(),
+		input = f.input();
+	t.after(() => f.journal().close());
+	const deadlines: AbortController[] = [];
+	t.mock.method(AbortSignal, 'timeout', (milliseconds: number) => {
+		assert.equal(milliseconds, 30_000);
+		const controller = new AbortController();
+		deadlines.push(controller);
+		return controller.signal;
+	});
+	input.authorizeDevice = async () => {
+		// Model the verified 47-second native cooldown without wall-clock sleep.
+		// Every HTTP deadline which already started must now have expired.
+		for (const controller of deadlines) controller.abort(new DOMException('HTTP deadline expired', 'TimeoutError'));
+	};
+	const fetch = input.runtime.fetch;
+	input.runtime.fetch = async (url, init) => {
+		init.signal.throwIfAborted();
+		return fetch(url, init);
+	};
+	const result = await runForegroundCloudSync(saved, scope, input, new AbortController().signal);
+	assert.equal(f.creates(), 1);
+	assert.ok(result.operations.every((operation) => operation.confirmed));
+});

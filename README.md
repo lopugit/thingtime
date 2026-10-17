@@ -5016,6 +5016,8 @@ Build the test-only native adapter, then run the shared sync acceptance from
 swift build --package-path macos/ThingtimeNode --product MacFolderSyncFixture
 cd remix
 corepack pnpm exec tsx scripts/mac-file-sync.integration.mts /path/to/private-fixture.json
+# Also force a real native cooldown immediately before an upload HTTP request:
+corepack pnpm exec tsx scripts/mac-file-sync.integration.mts /path/to/private-fixture.json --cooldown-before-upload
 ```
 
 The mode-0600 fixture contains `base` (an `http://127.0.0.1:<web-port>` origin),
@@ -5042,3 +5044,11 @@ protected device history, signs the fixture session out, and removes its private
 temporary directory. It can take over a minute: native identity honors one
 server-directed 1–60-second cooldown on 429, while preserving live checks and
 cancellation. This recovery is not a sustained-throughput or installed-app claim.
+
+The optional `--cooldown-before-upload` check consumes only its disposable paired
+device's identity budget, then verifies that native authorization can outlast the
+30-second JSON deadline without expiring the unsent request. Authorization and
+source checks finish before the HTTP timer starts; caller cancellation still
+covers the whole operation. Network deadlines remain 30 seconds for API JSON and
+120 seconds for signed upload parts. This option intentionally increases read
+traffic and is an acceptance check, not a throughput measurement.

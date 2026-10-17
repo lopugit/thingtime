@@ -112,3 +112,41 @@ test('full native verification prevents publication after range reads and also c
  await createCloudFileTransport(f.runtime,run.cloudWrites[0]).apply({...source(),verify:async()=>{checks++;}});
  assert.equal(f.counts().commits,1);assert.equal(f.counts().puts,1);assert.equal(checks,3);
 });
+
+test('every upload mutation authorizes before its fresh network deadline', async t => {
+ const f=await fixture(), run=f.make(), deadlines: AbortController[]=[];
+ let approvals=0, mutations=0;
+ t.mock.method(AbortSignal,'timeout',(milliseconds:number)=>{
+  assert.ok([30_000,120_000].includes(milliseconds));
+  const controller=new AbortController();deadlines.push(controller);return controller.signal;
+ });
+ f.runtime.authorizeMutation=async()=>{
+  approvals++;
+  for(const deadline of deadlines) deadline.abort(new DOMException('elapsed during authorization','TimeoutError'));
+ };
+ const fetch=f.runtime.fetch;
+ f.runtime.fetch=async(url,init)=>{
+  init?.signal?.throwIfAborted();
+  if(init?.method==='POST'||init?.method==='PUT') {mutations++;assert.equal(approvals,mutations);}
+  return fetch(url,init);
+ };
+ const transport=createCloudFileTransport(f.runtime,run.cloudWrites[0]);
+ await transport.lookup();assert.equal(approvals,0);
+ await transport.apply(source());
+ assert.equal(mutations,5);assert.equal(approvals,5);
+ assert.deepEqual(f.counts(),{puts:1,starts:1,commits:1,opens:0});
+});
+
+test('cancellation, scope changes and refused approval stop before sending upload bytes', async()=>{
+ for(const failure of ['cancel','scope','refuse']) {
+  const f=await fixture(),run=f.make(),controller=new AbortController();let approvals=0;
+  f.runtime.authorizeMutation=async()=>{
+   if(++approvals!==3)return;
+   if(failure==='cancel')controller.abort(new Error('cancelled approval'));
+   else if(failure==='scope')f.context({...scope,ownerId:'other'});
+   else throw Error('approval refused');
+  };
+  await assert.rejects(createCloudFileTransport(f.runtime,run.cloudWrites[0],controller.signal).apply(source()),/cancelled approval|context changed|approval refused/);
+  assert.equal(f.counts().puts,0);assert.equal(f.counts().commits,0);
+ }
+});
