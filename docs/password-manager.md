@@ -37,11 +37,51 @@ normal explicit exports contain plaintext and still require acknowledgement.
 
 Anonymous entries never create account sync commands or become account content
 on login. They are excluded from ordinary Things, Timeline, transfer exports and
-request diagnostics. Anonymous native AutoFill is not enabled. The account
-adapter has encrypted command primitives for subsequent work, but the account
-UI still uses its live-session API: account offline unlock/sync/conflict recovery,
-Settings provider/environment credentials and the native bridge remain separate
-unfinished acceptance items.
+request diagnostics. Anonymous native AutoFill is not enabled. Account workspaces now use the encrypted device adapter described below.
+Settings provider/environment credentials and signed native offline integration
+remain separate unfinished acceptance items.
+
+## Account device access and sync
+
+In an account workspace, the normal password editor uses a separately encrypted
+device copy with its own passphrase. This phrase is not sent to the server and is
+not the account password. After initial setup/unlock, existing entries are read
+through the normal session-bound API and encrypted before retention. A retained
+account workspace can unlock, edit, delete and export while offline with
+`user: null`; its local pointer grants no network authority.
+
+Local mutations commit their encrypted entry and encrypted account intent in one
+workspace transaction. Pulls and uploads run independently of editor completion.
+Each upload freezes the normal write ID, content and expected server revision
+before sending; retries reuse that exact command. Per-entry claims prevent tabs
+from racing later revisions past an unresolved write. Invalid receipts and lost
+responses retain the encrypted retry. Definitive refusals block that entry for
+review while unrelated entries continue syncing. Background work does not extend
+the five-minute unlock timer; locking aborts outstanding operations and leaves
+unacknowledged commands encrypted for the next unlock.
+
+Every request requires matching confirmed account, browser/API origin and selected
+data-plane leases and sends the existing expected-actor/data-plane headers. The
+password API itself still stores account credentials on the home plane. It has
+no generic request-history path, automatic fallback or saved bearer credential.
+Requests have a 20-second timeout and bounded response parsing. Identity or
+confirmation changes abort requests before response adoption. These device copies
+remain separate from anonymous entries and other account/origin/plane partitions.
+
+Refused entries offer explicit choices: keep the device version as a new entry,
+or discard its pending changes and use the account version. Both read the current
+account value and compare the local revision again before committing. Creating a
+copy and replacing the original projection are atomic, including quota failures.
+An uncertain write cannot be discarded through this conflict UI. Other unsaved
+editor fields are preserved; reopen the entry to load the resolved saved version.
+
+Refresh pages contain at most 50 entries, with a maximum of 200 pages. Partial
+refreshes retain existing entries; only a complete traversal can retire missing
+account entries, and concurrent local edits/pending commands are protected.
+Remote or storage failures remain visible while previously saved entries stay
+available. The existing account native-provider controls remain available only
+with a confirmed account; signed-device/offline provider behavior is not verified
+by these web fixtures.
 
 ## Account storage and access
 
@@ -135,3 +175,20 @@ runner. The fixture uses synthetic credentials and a clean browser context;
 its downloaded CSV is plaintext test data and must remain untracked. It checks
 1440/390/320px layout, independent tab unlock, stale edits, normal transfer,
 zero account records/commands and zero password API or mutation requests.
+
+Account verification uses `app/local-workspace/passwordSync.test.ts` and
+`passwordTransport.test.ts` for ordering, ambiguous receipts, claims, scope
+fences, reviewed conflicts, cancellation, idle locking and atomic quota rollback.
+Automatic title/list/export reads preserve the idle deadline; explicit user
+activity renews it for anonymous and account vaults.
+The adapter shares key lifetime through `deviceVaultSession.ts`: its password
+namespace and authenticated encryption context remain compatible with saved
+device records. A fixed synthetic legacy fixture verifies that compatibility.
+Provider credentials have a separate key namespace; their authoring/sync surface
+is still pending and is not enabled by this extraction.
+Enable `accountPasswords.browser.test.ts` with `TT_ACCOUNT_PASSWORDS_URL` set to a
+disposable loopback production-client server and `TT_ACCOUNT_PASSWORDS_ARTIFACTS`
+set to an ignored output directory. Supply the same Playwright/Chromium paths as
+the anonymous fixture. It creates disposable accounts, edits and exports offline,
+reopens at 1440/390/320px, exercises real server conflicts/copies and proves a second
+account cannot read the first vault. Never point this fixture at existing accounts.

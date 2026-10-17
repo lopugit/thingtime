@@ -11442,3 +11442,40 @@ ordinary local Thing tree or grant anonymous access to a live account vault.
 Local evidence: `tmp/local-passwords-native-accepted/verification.json` and its
 screenshots; 39 password + 432 workspace/offline-shell tests pass. The 47 opt-in
 skips are excluded. This is not CI or deployed acceptance.
+
+
+### Account encrypted device passwords and independent sync (2026-10-17)
+
+- [x] On a disposable local account, seed a normal API credential, set up a
+  separate device passphrase and retain it through the normal password UI.
+  Disconnect, edit/save, cold reload/unlock and export CSV at 1440/390/320px.
+  Exact synthetic secret values remain masked; no horizontal overflow, browser
+  errors or offline UI mutation requests occur. Serialized storage, native-tree
+  bytes and localStorage contain no plaintext phrase, title or secret.
+- [x] While that UI is offline, make a competing authorized fixture edit. On
+  reconnect, refuse the stale revision. The normal reviewed-copy control keeps
+  both account and device versions as independent canonical server entries.
+  A second disposable account gets a separate vault and a 404 for the first entry.
+- [x] Automated regressions: local writes finish without the network; lost
+  responses retain exact encrypted retries through reopen and later edits; two
+  tabs claim one entry in order; lock/retire aborts late adoption; incomplete
+  refreshes retain entries; reviewed resolutions reject newer local changes;
+  quota failure rolls replacement/copy back together; background work never
+  renews the idle unlock window; actor/plane mismatch retires direct requests.
+  Automatic conflict-title reads, list refreshes and export paging must also
+  preserve the five-minute deadline; pointer/keyboard activity still renews it
+  in both anonymous and account vaults.
+  Shared device-key lifecycle changes must open the fixed synthetic legacy
+  password fixture unchanged. Provider key copies must fail across domains,
+  owners, origins, data planes and the anonymous namespace; retirement must
+  lock immediately and damaged key storage must preserve encrypted records.
+- [x] Re-run anonymous native setup/lock/reload, two-tab edits and normal CSV
+  transfer: no password requests or account commands are introduced.
+- [ ] Broader real-device/native AutoFill, provider/environment credentials and
+  all native account/origin/data-plane transitions remain outstanding.
+
+Regression: finishing an account credential edit must not wait for account
+connectivity or draft saving; retrying an ambiguous upload must not silently
+advance its revision or overwrite a competing device's value. Evidence:
+`tmp/account-passwords-native-accepted/`, `tmp/account-passwords-anonymous-regression/`
+and the focused sync/transport test logs. These are local results, not CI or deployed acceptance.

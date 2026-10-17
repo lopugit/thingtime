@@ -1,9 +1,10 @@
 import React from 'react';
 import { Box, Button, Checkbox, Flex, Heading, Input, Modal, ModalBody, ModalCloseButton, ModalContent, ModalFooter, ModalHeader, ModalOverlay, Select, Text } from '@chakra-ui/react';
 import { Link, useLocation } from 'react-router';
+import { AccountPasswordWorkspace } from './AccountPasswordWorkspace';
 import { DevicePasswordManager } from './DevicePasswordManager';
 import type { LocalPasswordVault } from '~/local-workspace/passwordVault';
-import { isAnonymousWorkspace, workspaceIdentityKey, subscribeWorkspaceIdentity, announceLocalWorkspaceChange, LOCAL_WORKSPACE_CHANGED } from '~/local-workspace/runtime.client';
+import { isAnonymousWorkspace, currentAccountWorkspace, canSyncAccountWorkspace, subscribeWorkspaceBinding, workspaceIdentityKey, subscribeWorkspaceIdentity, announceLocalWorkspaceChange, LOCAL_WORKSPACE_CHANGED } from '~/local-workspace/runtime.client';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { Thingtime } from '~/components/Thingtime/Thingtime';
@@ -20,7 +21,8 @@ const card = { border: '1px solid var(--tt-border, #e6e6eb)', borderRadius: '12p
 export function PasswordManager() {
   const user = useCurrentUser(), location = useLocation();
   const identity = React.useSyncExternalStore(subscribeWorkspaceIdentity, workspaceIdentityKey, () => '');
-  return <Box width="100%" pt="calc(var(--thingtime-safe-area-top, 0px) + var(--tt-nav-clearance, 54px))">{isAnonymousWorkspace() ? <DevicePasswordManager key={`${identity}:${location.key}`}>{vault => <PasswordManagerScope ownerId="local-workspace" localVault={vault} />}</DevicePasswordManager> : user && !user.temporary ? <PasswordManagerScope key={`${user.id}:${location.key}`} ownerId={user.id} /> : <Box p={6}><Heading size="md">Passwords</Heading><Text mt={3}>Sign in to unlock your password manager.</Text><Button as={Link} to="/login" mt={3}>Sign in</Button></Box>}</Box>;
+  const accountScope = React.useMemo(() => identity ? currentAccountWorkspace() : null, [identity]);
+  return <Box width="100%" pt="calc(var(--thingtime-safe-area-top, 0px) + var(--tt-nav-clearance, 54px))">{isAnonymousWorkspace() ? <DevicePasswordManager key={`${identity}:${location.key}`}>{vault => <PasswordManagerScope ownerId="local-workspace" localVault={vault} />}</DevicePasswordManager> : accountScope ? <DevicePasswordManager key={`${identity}:${location.key}`} scope={accountScope}>{vault => <AccountPasswordWorkspace vault={vault} scope={accountScope}><PasswordManagerScope ownerId={accountScope.ownerId} localVault={vault} /></AccountPasswordWorkspace>}</DevicePasswordManager> : user && !user.temporary ? <PasswordManagerScope key={`${user.id}:${location.key}`} ownerId={user.id} /> : <Box p={6}><Heading size="md">Passwords</Heading><Text mt={3}>Sign in to unlock your password manager.</Text><Button as={Link} to="/login" mt={3}>Sign in</Button></Box>}</Box>;
 }
 export function PasswordManagerScope({ ownerId, localVault }: { ownerId: string; localVault?: LocalPasswordVault }) {
   const lopu = useLopu();
@@ -32,7 +34,7 @@ export function PasswordManagerScope({ ownerId, localVault }: { ownerId: string;
   const [format, setFormat] = React.useState<PasswordFormat>('1pux'), [acknowledged, setAcknowledged] = React.useState(false), [progress, setProgress] = React.useState('');
   const [deleteConfirm, setDeleteConfirm] = React.useState(false);
   const [nativeAvailable, setNativeAvailable] = React.useState(false), [nativeMessage, setNativeMessage] = React.useState('');
-  React.useEffect(() => { const check = () => setNativeAvailable(!localVault && hasNativePasswordProvider()); check(); window.addEventListener('thingtime:native-bridge-ready', check); return () => window.removeEventListener('thingtime:native-bridge-ready', check); }, [localVault]);
+  React.useEffect(() => { const check = () => setNativeAvailable((!localVault || (localVault.scope.kind === 'account' && canSyncAccountWorkspace(localVault.scope))) && hasNativePasswordProvider()); check(); const off = subscribeWorkspaceBinding(check); window.addEventListener('thingtime:native-bridge-ready', check); return () => { off(); window.removeEventListener('thingtime:native-bridge-ready', check); }; }, [localVault]);
   const refreshSequence = React.useRef(0);
   const generation = React.useRef(0), active = React.useRef(true), controllers = React.useRef(new Set<AbortController>());
   const retry = React.useRef<{ payload: string; writeId: string } | null>(null), importPending = React.useRef<{ id: string; writeId: string; entry: PasswordEntry }[]>([]);
@@ -103,7 +105,7 @@ export function PasswordManagerScope({ ownerId, localVault }: { ownerId: string;
   });
   const visible = records.filter(record => record.title.toLowerCase().includes(search.toLowerCase())).sort((a, b) => sort === 'updated' ? b.updatedAt.localeCompare(a.updatedAt) : a.title.localeCompare(b.title));
   return <Box width="100%" maxWidth="1100px" mx="auto" px={{ base: 3, md: 6 }} py={6}>
-    <Flex gap={3} alignItems="center" justifyContent="space-between" flexWrap="wrap"><Box><Heading size="lg">Passwords</Heading><Text mt={1} color="var(--tt-muted)">{localVault ? 'Encrypted on this device · never uploaded' : 'Unlocked with your Thingtime session'}</Text></Box><Flex gap={2} flexWrap="wrap"><Button onClick={() => { clear(); setDraft({ id: crypto.randomUUID(), revision: 0, entry: emptyPasswordEntry() }); }} isDisabled={busy || configured === false}>Add password</Button><Button variant="outline" onClick={() => { clear(); setTransfer('import'); }}>Import</Button><Button variant="outline" onClick={() => { clear(); setTransfer('export'); }}>Export</Button><Button variant="ghost" onClick={clear}>Hide values</Button>{localVault && <Button variant="outline" onClick={() => localVault.lock()}>Lock vault</Button>}</Flex></Flex>
+    <Flex gap={3} alignItems="center" justifyContent="space-between" flexWrap="wrap"><Box><Heading size="lg">Passwords</Heading><Text mt={1} color="var(--tt-muted)">{localVault ? localVault.scope.kind === 'anonymous' ? 'Encrypted on this device · never uploaded' : 'Encrypted on this device · account sync runs separately' : 'Unlocked with your Thingtime session'}</Text></Box><Flex gap={2} flexWrap="wrap"><Button onClick={() => { clear(); setDraft({ id: crypto.randomUUID(), revision: 0, entry: emptyPasswordEntry() }); }} isDisabled={busy || configured === false}>Add password</Button><Button variant="outline" onClick={() => { clear(); setTransfer('import'); }}>Import</Button><Button variant="outline" onClick={() => { clear(); setTransfer('export'); }}>Export</Button><Button variant="ghost" onClick={clear}>Hide values</Button>{localVault && <Button variant="outline" onClick={() => localVault.lock()}>Lock vault</Button>}</Flex></Flex>
     {configured === false && <Text mt={4}>Password encryption needs deployment configuration before you can save entries.</Text>}
     {nativeAvailable && <Box mt={4}><Text fontSize="sm">Use the native Thingtime app to fill passwords, verification codes, and create or use passkeys in other apps and websites.</Text><Flex gap={2} mt={2} flexWrap="wrap"><Button size="sm" onClick={() => run(async () => { const result = await nativePasswordProvider('connect', ownerId); setNativeMessage(result.message); })}>Connect Password AutoFill</Button><Button size="sm" variant="ghost" onClick={() => run(async () => { const result = await nativePasswordProvider('disconnect', ownerId); setNativeMessage(result.message); })}>Disconnect AutoFill</Button></Flex>{nativeMessage && <Text role="status" mt={2} fontSize="sm">{nativeMessage}</Text>}</Box>}
     {error && <Text role="alert" color="red.600" mt={4}>{error}</Text>}

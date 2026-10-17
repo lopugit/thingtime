@@ -137,7 +137,18 @@ scoped encrypted storage, transactional revisions, leases and idle locking;
 `passwords/vaultCrypto.ts` implements WebCrypto with the shared
 `passwords/vaultEnvelopeContract.ts` used by server `vaultEnvelope.ts`.
 No anonymous network/session adapter or native AutoFill grant is available.
-Account offline UI/sync and Settings provider credentials are still outstanding.
+`local-workspace/deviceVaultSession.ts` owns shared key lifetime, independent
+password/provider key domains and legacy password-envelope compatibility.
+`deviceVaultSession.test.ts` uses the fixed synthetic legacy fixture and checks
+domain/scope separation, retirement and missing-key preservation.
+
+Account device UI/sync now uses `components/Passwords/AccountPasswordWorkspace.tsx`,
+`local-workspace/passwordVault.ts` and the direct fenced
+`local-workspace/passwordTransport.client.ts`. Local encrypted writes finish before
+network sync, and conflict choices preserve independent copies.
+`passwordSync.test.ts`, `passwordTransport.test.ts` and the opt-in
+`accountPasswords.browser.test.ts` cover the new boundary. Settings provider
+credentials and signed native offline integration are still outstanding.
 `passwords/vaultCrypto.test.ts` verifies server interoperability;
 `local-workspace/passwordVault.test.ts` and the opt-in browser fixture cover
 storage isolation, cancellation, conflicts and real offline editor/transfer use.

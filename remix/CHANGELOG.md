@@ -68,6 +68,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-17 — **Codex (AI)**: Account passwords now save to encrypted device
+  storage before independent, identity-bound sync, using a shared device-key
+  lifecycle with backward-compatible envelopes. Offline unlock/export,
+  immutable retries and reviewed conflict copies pass local browser checks;
+  anonymous credentials remain isolated. [PR #1000 details](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md#account-encrypted-device-passwords-and-independent-sync--2026-10-17).
+
+
 - 2026-10-17 — **Codex (AI)**: Anonymous encrypted device passwords reuse the
   canonical vault envelopes and normal editor/transfer UI, with independent
   passphrase unlock, idle locking and transactional conflict/cancellation guards.

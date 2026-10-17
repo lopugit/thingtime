@@ -7,8 +7,9 @@ https://thingtime.com
 Anonymous `/passwords` uses an encrypted device vault with a separate passphrase;
 it needs no server secret or database. Use HTTPS or loopback for WebCrypto, and
 load the production offline shell once before testing offline reload. Entries
-stay on that device and never sync on login. Account offline vault sync remains
-in progress. See [device vault behavior and verification](docs/password-manager.md#anonymous-device-vault).
+stay on that device and never sync on login. Account workspaces also use an encrypted device copy with a separate passphrase;
+edits complete locally and sync only after matching account/origin/plane confirmation.
+The broader local-first rollout remains in progress. See [device vault behavior and verification](docs/password-manager.md#anonymous-device-vault).
 
 The account-private `/passwords` library uses the [Thingtime password manager contract](docs/password-manager.md).
 Use a Mongo replica set for canonical storage transactions and configure the
@@ -20,6 +21,17 @@ securely with your database. Replacing or losing it makes existing recovery
 wrappers unreadable; do not generate a new key on each deploy. The server-assisted
 recovery model is documented above. No provider developer accounts are required
 for storing passwords or importing TOTP setup codes.
+
+For account offline QA, keep a stable vault key in the disposable local server's
+ignored environment, restart that checkout through `npm run web-pms`, and build
+and serve the production client offline shell. Run the enabled
+`accountPasswords.browser.test.ts` with `TT_ACCOUNT_PASSWORDS_URL=http://127.0.0.1:<port>`,
+`TT_ACCOUNT_PASSWORDS_ARTIFACTS=<ignored-output-directory>`,
+`TT_SHARED_PLAYWRIGHT_PATH=<playwright-module>` and
+`TT_SHARED_CHROME_PATH=<chromium-executable>`. From `remix/`, use
+`node --import tsx --test app/local-workspace/accountPasswords.browser.test.ts`.
+The fixture creates disposable accounts and plaintext synthetic CSV evidence;
+keep those outputs untracked. No production account or deployment is required.
 
 Native system AutoFill and passkey creation are being delivered separately in
 [PR #996](https://github.com/lopugit/thingtime/pull/996). They require signed Apple

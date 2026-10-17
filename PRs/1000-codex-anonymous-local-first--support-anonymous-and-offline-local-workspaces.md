@@ -2832,3 +2832,50 @@ Account vault caching/unlock/sync/conflict recovery, Settings provider/environme
 credentials, native credential integration and the rest of the local-feature
 matrix remain open. Current-head CI and deployed verification remain unproven.
 This checkpoint is not the full goal's completion or permission to merge.
+
+
+## Account encrypted device passwords and independent sync — 2026-10-17
+
+Account password editing now uses the existing encrypted device adapter and
+normal editor/transfer UI. A separate local passphrase permits cold offline
+unlock; local saves/deletes commit encrypted queue intent atomically. Independent
+pull/upload loops use verified account/origin/data-plane leases and the existing
+private password endpoint. Frozen retries, per-entry claims, validated receipts
+and explicit conflict-copy/account choices preserve newer edits. Background sync
+does not renew idle unlock, and cancellation/lock cannot adopt a late response.
+Review reproduced a separate timer renewal through automatic title/list reads.
+Those reads now preserve the deadline; anonymous/account regressions also prove
+that explicit user activity still renews unlock.
+The account API, server encryption format and authorization remain unchanged.
+
+The password adapter now delegates key lifetime to `deviceVaultSession.ts`.
+A fixed synthetic pre-extraction encrypted fixture proves compatibility; seven
+focused tests cover domain/identity separation, idle expiry, retirement, late
+storage adoption and missing-key damage. The shared session prepares independent
+provider credentials without reusing password entry schemas. Provider authoring
+and sync are not yet wired into the UI.
+
+Local validation: 491 automated checks pass (39 password suite; 452 workspace/
+offline-shell), excluding 48 opt-in skips. The actual account browser fixture
+passes in 36.61s: offline edit and acknowledged CSV export, cold unlock at
+1440/390/320px, competing real server edit, reviewed independent copy and second-
+account isolation. The anonymous regression passes in 32.05s with zero password
+API/mutation requests. Both inspect serialized/native-tree storage for synthetic
+plaintext leaks. No existing account data was changed; all accounts are disposable
+fixtures on the task's loopback replica. The fixture-only server encryption key
+is ignored and was installed through the managed PM2 lifecycle.
+
+Build: 247 verified offline assets (21,795,907 bytes). Focused lint has no errors
+and two existing PasswordManager ref-cleanup warnings. TypeScript remains at its
+91 baseline diagnostics. Evidence: `tmp/shared-vault-account-native/`,
+`tmp/shared-vault-anonymous-native/`, `tmp/shared-vault-*.log`,
+`tmp/account-passwords-idle-*.log`,
+`tmp/account-passwords-*-final.log`
+and `tmp/account-passwords-password-suite.log`. The initial transport test hung
+because its mock cloned an oversized Response and retained an unread tee branch;
+using the single response fixed the harness. It is not counted as a passing run.
+
+Provider/environment credential storage, broader native identity/plane transitions,
+signed offline provider integration and the remaining full local-feature matrix
+are still open. This is local acceptance only; current-head CI/deployed verification
+and full-goal completion remain unproven. No main merge or deployment occurred.

@@ -1,16 +1,23 @@
 import { validatePasswordEntry, validPasswordId, type PasswordEntry, type PasswordMetadata } from '../passwords/model';
 import { parseTotp } from '../passwords/totp';
-import { createDeviceVaultKey, wrapDeviceVaultKey, unwrapDeviceVaultKey, sealDeviceVaultValue, openDeviceVaultValue, deviceVaultWriteDigest, type DeviceVaultKey } from '../passwords/vaultCrypto';
-import type { PasswordKeyEnvelope, VaultEnvelope } from '../passwords/vaultEnvelopeContract';
-import { WorkspaceError, workspaceScopeKey, type WorkspaceDatabase, type WorkspaceLease, type WorkspaceScope } from './storage';
+import { sealDeviceVaultValue, openDeviceVaultValue, deviceVaultWriteDigest } from '../passwords/vaultCrypto';
+import type { VaultEnvelope } from '../passwords/vaultEnvelopeContract';
+import { WorkspaceError, type WorkspaceDatabase, type WorkspaceLease, type WorkspaceScope } from './storage';
 
-const KEYS = 'password-vault-keys', RECORDS = 'password-vault-records', COMMANDS = 'password-vault-commands';
-const IDLE_MS = 5 * 60_000;
-type KeyHeader = { version: 1; passwordKey: PasswordKeyEnvelope };
+import { DeviceVaultSession, deviceVaultCollections } from './deviceVaultSession';
+
+const { records: RECORDS, commands: COMMANDS } = deviceVaultCollections('passwords');
 export type DevicePasswordRecord = { id: string; revision: number; remoteRevision: number; createdAt: string; updatedAt: string;
   encryptedValue?: VaultEnvelope; deleted?: true; writeId?: string; writeDigest?: string };
 export type DevicePasswordCommand = { id: string; recordId: string; localRevision: number; operation: 'save' | 'delete';
-  encryptedValue: VaultEnvelope; state: 'pending' | 'frozen' | 'refused'; expectedRevision?: number };
+  encryptedValue: VaultEnvelope; state: 'pending' | 'frozen' | 'refused'; expectedRevision?: number;
+  claim?: { token: string; until: number }; attempts?: number; retryAt?: number; status?: number };
+export type PasswordVaultRemoteEntry = PasswordMetadata & { entry: PasswordEntry };
+export type PasswordVaultTransport = {
+  write(command: { operation: 'save' | 'delete'; id: string; writeId: string; revision: number; entry?: PasswordEntry }, signal: AbortSignal): Promise<{ record?: PasswordMetadata }>;
+  read(id: string, signal: AbortSignal): Promise<PasswordVaultRemoteEntry | null>;
+  page(cursor: string | undefined, signal: AbortSignal): Promise<{ entries: PasswordVaultRemoteEntry[]; nextCursor: string | null }>;
+};
 type Save = { id: string; writeId: string; revision: number; entry: unknown };
 const refuse = (code: string, message: string, status = 409): never => { throw new WorkspaceError(code, message, status); };
 const ordered = (a: DevicePasswordRecord, b: DevicePasswordRecord) => b.createdAt.localeCompare(a.createdAt) || a.id.localeCompare(b.id);
@@ -19,69 +26,9 @@ const validRevision = (value: unknown): value is number => Number.isSafeInteger(
 /** Caller-supplied content stays in the current device namespace. Unlocking is
  * independent of account login; this class has no network or session access.
  * All content and command payloads use the existing vault envelopes. */
-export class LocalPasswordVault {
- private key: DeviceVaultKey | null = null;
- private generation = 0;
- private disposed = false;
- private unlocking = false;
- private timer?: ReturnType<typeof setTimeout>;
- private listeners = new Set<() => void>();
- private retired: () => void;
- private readonly context: Promise<string>;
- constructor(private db: WorkspaceDatabase, readonly scope: WorkspaceScope, private lease: WorkspaceLease, browserOrigin: string) {
-  if (new URL(browserOrigin).origin !== browserOrigin) throw new Error('Invalid device vault origin');
-  const identity = JSON.stringify(['thingtime-device-vault', browserOrigin, workspaceScopeKey(scope)]);
-  this.context = crypto.subtle.digest('SHA-256', new TextEncoder().encode(identity)).then(hash =>
-   'device-vault:' + [...new Uint8Array(hash)].map(byte => byte.toString(16).padStart(2, '0')).join(''));
-  this.retired = lease.onInvalidate(() => this.lock());
- }
- private check() { this.lease.assertCurrent(); if (this.disposed) refuse('VAULT_CLOSED', 'Reopen the password manager.'); }
- readonly subscribe = (listener: () => void) => { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; };
- readonly isUnlocked = () => { try { this.check(); return this.key !== null; } catch { return false; } };
- lock() { clearTimeout(this.timer); this.key?.bytes.fill(0); this.key = null; this.generation++; this.listeners.forEach(listener => listener()); }
- dispose() { this.disposed = true; this.lock(); this.retired(); this.listeners.clear(); }
- touch() { if (this.isUnlocked()) this.arm(); }
- private arm() { clearTimeout(this.timer); this.timer = setTimeout(() => this.lock(), IDLE_MS); (this.timer as any).unref?.(); }
- private guarded(assertCurrent: () => void, signal?: AbortSignal): WorkspaceLease {
-  return { assertCurrent, onInvalidate: callback => {
-   const changed = () => { try { assertCurrent(); } catch { callback(); } };
-   this.listeners.add(changed); signal?.addEventListener('abort', changed, { once: true });
-   const unsubscribe = this.lease.onInvalidate(changed);
-   return () => { this.listeners.delete(changed); signal?.removeEventListener('abort', changed); unsubscribe(); };
-  } };
- }
- private operation(signal?: AbortSignal) {
-  this.check(); const key = this.key, generation = this.generation;
-  if (!key) return refuse('VAULT_LOCKED', 'Unlock this device vault to continue.', 423);
-  this.arm();
-  const assertCurrent = () => { this.check(); if (signal?.aborted) throw new DOMException('Cancelled', 'AbortError'); if (this.generation !== generation || this.key !== key) refuse('VAULT_LOCKED', 'This device vault was locked. Unlock it again.', 423); };
-  assertCurrent(); return { key, lease: this.guarded(assertCurrent, signal) };
- }
- async configured() { this.check(); return !!await this.db.transaction(this.scope, 'readonly', this.lease, tx => tx.get(KEYS, 'key')); }
- async unlock(password: string, create = false) {
-  this.check(); if (this.unlocking) return refuse('VAULT_BUSY', 'A vault unlock is already in progress.');
-  this.unlocking = true; this.lock(); const generation = this.generation;
-  const check = () => { this.check(); if (this.generation !== generation) refuse('VAULT_LOCKED', 'Vault unlock was cancelled.', 423); };
-  let key: DeviceVaultKey | undefined;
-  try {
-   const owner = await this.context; check();
-   const header = await this.db.transaction(this.scope, 'readonly', this.lease, tx => tx.get<KeyHeader>(KEYS, 'key')); check();
-   if (header) {
-    if (header.version !== 1) refuse('VAULT_FORMAT', 'This device vault format is not supported.', 422);
-    key = await unwrapDeviceVaultKey(owner, password, header.passwordKey, check);
-   } else {
-    if (!create) refuse('VAULT_MISSING', 'Set up this device vault first.', 404);
-    if (typeof password !== 'string' || password.length < 12) refuse('VAULT_PASSPHRASE', 'Use a device vault passphrase of at least 12 characters.', 400);
-    key = createDeviceVaultKey(); const passwordKey = await wrapDeviceVaultKey(owner, key, password, check); check();
-    await this.db.transaction(this.scope, 'readwrite', this.guarded(check), async tx => {
-     if (await tx.get(KEYS, 'key')) refuse('VAULT_EXISTS', 'Another tab set up this vault. Unlock it with its passphrase.');
-     // An absent key beside encrypted records is damage, never an empty vault.
-     if ((await tx.list(RECORDS)).length || (await tx.list(COMMANDS)).length) refuse('VAULT_DAMAGED', 'The saved device vault key is missing. Existing encrypted entries have been kept.', 422);
-     await tx.put(KEYS, 'key', { version: 1, passwordKey } satisfies KeyHeader);
-    });
-   }
-   check(); this.key = key; key = undefined; this.arm(); this.listeners.forEach(listener => listener());
-  } finally { key?.bytes.fill(0); this.unlocking = false; }
+export class LocalPasswordVault extends DeviceVaultSession {
+ constructor(db: WorkspaceDatabase, scope: WorkspaceScope, lease: WorkspaceLease, browserOrigin: string) {
+  super(db, scope, lease, browserOrigin, 'passwords');
  }
  private async value(record: DevicePasswordRecord, op: ReturnType<LocalPasswordVault['operation']>) {
   if (record.deleted || !record.encryptedValue) return refuse('PASSWORD_MISSING', 'Password entry not found.', 404);
@@ -93,12 +40,14 @@ export class LocalPasswordVault {
  }
  async read(id: string, signal?: AbortSignal) {
   if (!validPasswordId(id)) refuse('PASSWORD_ID', 'Invalid password entry.', 400);
-  const op = this.operation(signal), record = await this.db.transaction(this.scope, 'readonly', op.lease, tx => tx.get<DevicePasswordRecord>(RECORDS, id));
+  // Reads also serve automatic list/conflict refreshes. Only user activity
+  // (touch) and explicit mutations renew the idle deadline.
+  const op = this.operation(signal, false), record = await this.db.transaction(this.scope, 'readonly', op.lease, tx => tx.get<DevicePasswordRecord>(RECORDS, id));
   if (!record) return refuse('PASSWORD_MISSING', 'Password entry not found.', 404);
   const entry = await this.value(record, op); return { ...this.metadata(record, entry), entry };
  }
  async page(cursor?: string, includeValues = false, signal?: AbortSignal) {
-  const op = this.operation(signal); let after: { id: string; createdAt: string } | null = null;
+  const op = this.operation(signal, false); let after: { id: string; createdAt: string } | null = null;
   if (cursor) {
    try { if (cursor.length > 200) throw Error(); after = JSON.parse(cursor); if (!after || !validPasswordId(after.id) || new Date(after.createdAt).toISOString() !== after.createdAt) throw Error(); }
    catch { return refuse('PASSWORD_CURSOR', 'Invalid password cursor.', 400); }
@@ -149,6 +98,167 @@ export class LocalPasswordVault {
    if (commandValue) await tx.put(COMMANDS, `${id}:${writeId}`, { id: writeId, recordId: id, localRevision: next.revision, operation: 'delete', encryptedValue: commandValue, state: 'pending' } satisfies DevicePasswordCommand);
   });
   op.lease.assertCurrent();
+ }
+ private accountOperation(signal?: AbortSignal) {
+  if (this.scope.kind !== 'account') return refuse('ACCOUNT_REQUIRED', 'Anonymous password vaults never synchronize.', 403);
+  return this.operation(signal, false);
+ }
+ /** Value-free queue state. Do not surface or persist server exception text. */
+ async syncStatus() {
+  this.check();
+  if (this.scope.kind !== 'account') return [];
+  return this.db.transaction(this.scope, 'readonly', this.lease, async tx => {
+   const records = new Map((await tx.list<DevicePasswordRecord>(RECORDS)).map(row => [row.id, row.value]));
+   return (await tx.list<DevicePasswordCommand>(COMMANDS)).map(({ value }) => ({
+    id: value.id, recordId: value.recordId, revision: records.get(value.recordId)?.revision ?? value.localRevision,
+    canCopy: !!records.get(value.recordId)?.encryptedValue, state: value.state, status: value.status, retryAt: value.retryAt ?? 0
+   }));
+  });
+ }
+ /** Freeze before sending, claim across tabs, then advance only from a validated
+  * receipt. Later local edits remain independent and cannot change the retry. */
+ async synchronize(transport: PasswordVaultTransport, signal?: AbortSignal, now = () => Date.now()) {
+  const op = this.accountOperation(signal), controller = new AbortController();
+  const off = op.lease.onInvalidate(() => controller.abort());
+  const combined = AbortSignal.any([controller.signal, ...(signal ? [signal] : [])]);
+  let completed = 0; const attempted = new Set<string>();
+  try {
+   for (let count = 0; count < 20; count++) {
+    op.lease.assertCurrent(); combined.throwIfAborted();
+    const claim = await this.db.transaction(this.scope, 'readwrite', op.lease, async tx => {
+     const rows = (await tx.list<DevicePasswordCommand>(COMMANDS)).sort((a, b) => a.value.localRevision - b.value.localRevision || a.id.localeCompare(b.id));
+     const seen = new Set<string>();
+     for (const row of rows) {
+      const item = row.value;
+      if (seen.has(item.recordId)) continue; seen.add(item.recordId);
+      if (attempted.has(item.recordId) || item.state === 'refused' || (item.retryAt ?? 0) > now() || (item.claim?.until ?? 0) > now()) continue;
+      const record = await tx.get<DevicePasswordRecord>(RECORDS, item.recordId);
+      if (!record) return refuse('VAULT_DAMAGED', 'A queued password entry is missing. Its encrypted command has been kept.', 422);
+      const next: DevicePasswordCommand = { ...item, state: 'frozen', expectedRevision: item.expectedRevision ?? record.remoteRevision,
+       claim: { token: crypto.randomUUID(), until: now() + 60_000 }, attempts: (item.attempts ?? 0) + 1 };
+      await tx.put(COMMANDS, row.id, next); return { key: row.id, command: next };
+     }
+     return null;
+    });
+    if (!claim) break;
+    const item = claim.command; let dispatched = false;
+    try {
+     const plain = await openDeviceVaultValue(await this.context, op.key, `command:${item.recordId}:${item.id}`, item.encryptedValue);
+     const payload = JSON.parse(plain), entry = item.operation === 'save' ? validatePasswordEntry(payload.entry) : undefined;
+     op.lease.assertCurrent(); combined.throwIfAborted();
+     dispatched = true;
+     const receipt = await transport.write({ operation: item.operation, id: item.recordId, writeId: item.id, revision: item.expectedRevision!, ...(entry ? { entry } : {}) }, combined);
+     op.lease.assertCurrent(); combined.throwIfAborted();
+     if (item.operation === 'save' && (receipt.record?.id !== item.recordId || receipt.record.revision !== item.expectedRevision! + 1))
+      refuse('VAULT_RECEIPT', 'The account returned an invalid save receipt. The encrypted retry has been kept.', 502);
+     const accepted = await this.db.transaction(this.scope, 'readwrite', op.lease, async tx => {
+      const current = await tx.get<DevicePasswordCommand>(COMMANDS, claim.key);
+      if (current?.claim?.token !== item.claim!.token) return;
+      const record = await tx.get<DevicePasswordRecord>(RECORDS, item.recordId);
+      if (!record || record.remoteRevision !== item.expectedRevision) return refuse('VAULT_DAMAGED', 'The queued password base changed unexpectedly.', 422);
+      await tx.put(RECORDS, record.id, { ...record, remoteRevision: item.expectedRevision! + 1 });
+      await tx.delete(COMMANDS, claim.key); return true;
+     });
+     if (accepted) completed++;
+    } catch (error) {
+     op.lease.assertCurrent(); combined.throwIfAborted(); attempted.add(item.recordId);
+     const status = dispatched ? Number((error as any)?.status) || 0 : 422;
+     // A response may have been lost after commit. Retain the exact encrypted
+     // command, expected revision and write id through every uncertain attempt.
+     const refused = status >= 400 && status < 500 && ![408, 429].includes(status);
+     await this.db.transaction(this.scope, 'readwrite', op.lease, async tx => {
+      const current = await tx.get<DevicePasswordCommand>(COMMANDS, claim.key);
+      if (current?.claim?.token !== item.claim!.token) return;
+      const retry = Math.max(1000, Math.min(86_400_000, Number((error as any)?.retryAfterMs) || 1000 * 2 ** Math.min(item.attempts ?? 1, 6)));
+      await tx.put(COMMANDS, claim.key, { ...current, claim: undefined, state: refused ? 'refused' : 'frozen', status, retryAt: refused ? 0 : now() + retry });
+     });
+    }
+   }
+   return { completed };
+  } finally { off(); }
+ }
+ /** Explicit review can keep the account value or preserve the device value
+  * as a new independent entry. It never force-overwrites the conflicting entry. */
+ async resolveRefused(recordId: string, revision: number, choice: 'account' | 'copy', transport: PasswordVaultTransport, signal?: AbortSignal) {
+  if (!validPasswordId(recordId) || !validRevision(revision) || !['account', 'copy'].includes(choice)) refuse('PASSWORD_INPUT', 'Choose a valid conflict resolution.', 400);
+  const op = this.accountOperation(signal), controller = new AbortController(), off = op.lease.onInvalidate(() => controller.abort());
+  const combined = AbortSignal.any([controller.signal, ...(signal ? [signal] : [])]);
+  try {
+   const before = await this.db.transaction(this.scope, 'readonly', op.lease, async tx => {
+    const record = await tx.get<DevicePasswordRecord>(RECORDS, recordId);
+    const commands = (await tx.list<DevicePasswordCommand>(COMMANDS)).filter(row => row.value.recordId === recordId).sort((a,b) => a.value.localRevision - b.value.localRevision);
+    if (!record || record.revision !== revision || commands[0]?.value.state !== 'refused') return refuse('PASSWORD_CONFLICT', 'This conflict changed. Review it again.');
+    return { record, first: commands[0].value.id };
+   });
+   const local = choice === 'copy' ? await this.value(before.record, op) : null;
+   const remote = await transport.read(recordId, combined); op.lease.assertCurrent(); combined.throwIfAborted();
+   if (remote && (remote.id !== recordId || !validRevision(remote.revision) || remote.revision < 1 || new Date(remote.updatedAt).toISOString() !== remote.updatedAt))
+    return refuse('VAULT_RESPONSE', 'The account returned an invalid password entry.', 502);
+   const owner = await this.context, remoteValue = remote ? await sealDeviceVaultValue(owner, op.key, recordId, JSON.stringify(validatePasswordEntry(remote.entry))) : undefined;
+   const id = crypto.randomUUID(), writeId = crypto.randomUUID(), stamp = new Date().toISOString();
+   const copy = local ? { value: await sealDeviceVaultValue(owner, op.key, id, JSON.stringify(local)),
+    command: await sealDeviceVaultValue(owner, op.key, `command:${id}:${writeId}`, JSON.stringify({ entry: local })), digest: await deviceVaultWriteDigest(op.key, id, JSON.stringify(local)) } : null;
+   await this.db.transaction(this.scope, 'readwrite', op.lease, async tx => {
+    const record = await tx.get<DevicePasswordRecord>(RECORDS, recordId), commands = (await tx.list<DevicePasswordCommand>(COMMANDS)).filter(row => row.value.recordId === recordId).sort((a,b) => a.value.localRevision - b.value.localRevision);
+    if (record?.revision !== revision || commands[0]?.value.id !== before.first || commands[0]?.value.state !== 'refused') return refuse('PASSWORD_CONFLICT', 'This conflict changed. Review it again.');
+    for (const command of commands) await tx.delete(COMMANDS, command.id);
+    await tx.put(RECORDS, recordId, { id: recordId, revision: revision + 1, remoteRevision: remote?.revision ?? record.remoteRevision,
+     createdAt: record.createdAt, updatedAt: remote?.updatedAt ?? stamp, ...(remoteValue ? { encryptedValue: remoteValue } : { deleted: true as const }) } satisfies DevicePasswordRecord);
+    if (copy) {
+     await tx.put(RECORDS, id, { id, revision: 1, remoteRevision: 0, createdAt: stamp, updatedAt: stamp, encryptedValue: copy.value, writeId, writeDigest: copy.digest } satisfies DevicePasswordRecord);
+     await tx.put(COMMANDS, `${id}:${writeId}`, { id: writeId, recordId: id, localRevision: 1, operation: 'save', encryptedValue: copy.command, state: 'pending' } satisfies DevicePasswordCommand);
+    }
+   });
+   return { copiedId: copy ? id : null };
+  } finally { off(); }
+ }
+ /** Pull decrypted pages only while the verified transport and local unlock
+  * remain valid. Every retained entry is encrypted before the transaction. */
+ async reconcile(transport: PasswordVaultTransport, signal?: AbortSignal) {
+  const op = this.accountOperation(signal), controller = new AbortController(), off = op.lease.onInvalidate(() => controller.abort());
+  const combined = AbortSignal.any([controller.signal, ...(signal ? [signal] : [])]);
+  const baseline = await this.db.transaction(this.scope, 'readonly', op.lease, tx => tx.list<DevicePasswordRecord>(RECORDS));
+  const seen = new Set<string>(), cursors = new Set<string>(); let cursor: string | undefined;
+  try {
+   for (let pages = 0; ; pages++) {
+    if (pages >= 200) return refuse('VAULT_LIMIT', 'The account vault exceeds this device workspace limit.', 413);
+    op.lease.assertCurrent(); combined.throwIfAborted();
+    const page = await transport.page(cursor, combined); op.lease.assertCurrent(); combined.throwIfAborted();
+    if (!Array.isArray(page.entries) || page.entries.length > 50 || (page.nextCursor !== null && (typeof page.nextCursor !== 'string' || !page.nextCursor || page.nextCursor.length > 200 || cursors.has(page.nextCursor))))
+     return refuse('VAULT_RESPONSE', 'The account returned an invalid password page.', 502);
+    const retained = [];
+    for (const remote of page.entries) {
+     if (!validPasswordId(remote.id) || !validRevision(remote.revision) || remote.revision < 1 || seen.has(remote.id) || new Date(remote.updatedAt).toISOString() !== remote.updatedAt)
+      return refuse('VAULT_RESPONSE', 'The account returned an invalid password entry.', 502);
+     seen.add(remote.id); const entry = validatePasswordEntry(remote.entry);
+     const encryptedValue = await sealDeviceVaultValue(await this.context, op.key, remote.id, JSON.stringify(entry));
+     retained.push({ remote, encryptedValue });
+    }
+    await this.db.transaction(this.scope, 'readwrite', op.lease, async tx => {
+     const pending = new Set((await tx.list<DevicePasswordCommand>(COMMANDS)).map(row => row.value.recordId));
+     for (const { remote, encryptedValue } of retained) {
+      const old = await tx.get<DevicePasswordRecord>(RECORDS, remote.id);
+      if (pending.has(remote.id) || (old && (old.deleted || old.remoteRevision >= remote.revision))) continue;
+      await tx.put(RECORDS, remote.id, { id: remote.id, revision: (old?.revision ?? 0) + 1, remoteRevision: remote.revision,
+       createdAt: old?.createdAt ?? remote.updatedAt, updatedAt: remote.updatedAt, encryptedValue } satisfies DevicePasswordRecord);
+     }
+    });
+    if (page.nextCursor === null) break;
+    cursors.add(page.nextCursor); cursor = page.nextCursor;
+   }
+   // Only a complete traversal can remove vanished account entries. Concurrent
+   // local writes or newer pulls are protected by the captured revision pair.
+   await this.db.transaction(this.scope, 'readwrite', op.lease, async tx => {
+    const pending = new Set((await tx.list<DevicePasswordCommand>(COMMANDS)).map(row => row.value.recordId));
+    for (const { value: before } of baseline) {
+     if (seen.has(before.id) || pending.has(before.id) || before.deleted || !before.remoteRevision) continue;
+     const current = await tx.get<DevicePasswordRecord>(RECORDS, before.id);
+     if (current && current.revision === before.revision && current.remoteRevision === before.remoteRevision)
+      await tx.put(RECORDS, before.id, { id: before.id, revision: before.revision + 1, remoteRevision: before.remoteRevision, createdAt: before.createdAt, updatedAt: new Date().toISOString(), deleted: true } satisfies DevicePasswordRecord);
+    }
+   });
+   return { retained: seen.size };
+  } finally { off(); }
  }
  async request(body?: Record<string, unknown>, cursor?: string, signal?: AbortSignal) {
   const ownerId = this.scope.kind === 'anonymous' ? 'local-workspace' : this.scope.ownerId;
