@@ -71,7 +71,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 - 2026-10-17: Split admin System settings into AI Providers, Lopu, Platform,
   and Access & limits. Shared settings cards start collapsed, show descriptions
   and status summaries, preserve drafts, and open for legacy deep links. Labels
-  and controls wrap without squeezing helper text into a narrow column. — **Codex (AI)**
+  and controls wrap without squeezing helper text into a narrow column. Details:
+  [PR #1008](../PRs/1008-codex-settings-cards-split-system-settings-into-focused-tabs-and-collapsible-cards.md). — **Codex (AI)**
 
 - 2026-10-17 — **Codex (AI)**: Support a separate Anthropic Models API credential for catalogue discovery when Claude OAuth cannot list models. Keep replies on Claude Code OAuth and show redacted HTTP failure reasons in admin sync reports.
 
