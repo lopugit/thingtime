@@ -4590,3 +4590,13 @@ provider price of zero. Admins should consider this before enabling auto-allow.
 A complete provider snapshot atomically marks absent models unavailable, retaining
 their records and admin choices. The public catalogue and shared model selectors
 only offer enabled, available models. Admin retains all compatible rows for audit.
+
+### Automatic iOS TestFlight publishing
+
+Native changes merged to `main` can publish tested, signed TestFlight builds with
+matching phone/Watch/widget versions. The existing GitHub credentials remain the
+initial source; an explicit one-time migration can move them into the encrypted
+admin Secure Vault, after which short-lived GitHub OIDC identities fetch only the
+Apple release bundle. See [setup, fork configuration, migration and release
+verification](docs/ios-automatic-testflight.md). No additional Vercel environment
+variables or permanent GitHub-to-vault password are required.
