@@ -1,3 +1,4 @@
+import { getElectronBridge, type ThingtimeDesktopBridge } from '../utils/electronBridge';
 import { getNativeBridge, nativeBridgeMessageEvent, type ThingtimeNativeBridge } from '../utils/nativeBridge';
 import type { TimelineScope } from '../timeline/contract';
 import { parseCloudFile, type CloudFile } from './cloudFile';
@@ -10,15 +11,18 @@ class FileExportError extends Error {
 	}
 }
 
-export const supportsFileExport = (bridge: ThingtimeNativeBridge | undefined = getNativeBridge()) =>
-	!!bridge?.isNativeWebView && /^1\.\d+\.\d+$/.test(bridge.fileExportVersion ?? '');
+const supportsDesktopExport = (bridge: ThingtimeDesktopBridge | undefined) =>
+	bridge?.platform === 'darwin' && /^1\.\d+\.\d+$/.test(bridge.fileExportVersion ?? '') && typeof bridge.fileExportRequest === 'function';
+export const supportsFileExport = (bridge: ThingtimeNativeBridge | undefined = getNativeBridge(), desktop = getElectronBridge()) =>
+	(!!bridge?.isNativeWebView && /^1\.\d+\.\d+$/.test(bridge.fileExportVersion ?? '')) || supportsDesktopExport(desktop);
 
 /** Explicit Save As of one immutable version; no sync connection or folder grant. */
 export function exportFileVersion(scope: TimelineScope, input: CloudFile, signal: AbortSignal): Promise<boolean> {
 	const bridge = getNativeBridge(),
+		desktop = getElectronBridge(),
 		file = parseCloudFile(structuredClone(input));
 	signal.throwIfAborted();
-	if (!supportsFileExport(bridge) || scope.dataPlane !== 'home' || scope.apiOrigin !== window.location.origin)
+	if (!supportsFileExport(bridge, desktop) || scope.dataPlane !== 'home' || scope.apiOrigin !== window.location.origin)
 		return Promise.reject(Error('Saving files is unavailable in this app version.'));
 	const requestId = crypto.randomUUID();
 	const identity = { requestId, ownerId: scope.ownerId, origin: scope.apiOrigin };
@@ -36,9 +40,18 @@ export function exportFileVersion(scope: TimelineScope, input: CloudFile, signal
 			if (error) reject(error);
 			else resolve(saved);
 		};
+		const send = (payload: Record<string, unknown>) => {
+			if (supportsDesktopExport(desktop)) {
+				void desktop!.fileExportRequest!(payload).then(result => {
+					if (payload.action === 'save') receive({ detail: { type: 'file-export-result', payload: result } } as CustomEvent);
+				}).catch(() => {
+					if (payload.action === 'save') finish(false, new FileExportError('Saving could not be verified. Check the selected folder before trying again.'));
+				});
+			} else bridge!.postMessage({ type: 'file-export', payload });
+		};
 		const cancel = () => {
 			try {
-				bridge!.postMessage({ type: 'file-export', payload: { ...identity, action: 'cancel' } });
+				send({ ...identity, action: 'cancel' });
 			} catch {
 				/* Host may have closed. */
 			}
@@ -70,7 +83,7 @@ export function exportFileVersion(scope: TimelineScope, input: CloudFile, signal
 		window.addEventListener(nativeBridgeMessageEvent, receive);
 		signal.addEventListener('abort', abort, { once: true });
 		try {
-			bridge!.postMessage({ type: 'file-export', payload: { ...identity, action: 'save', name: file.name, content: file.content } });
+			send({ ...identity, action: 'save', name: file.name, content: file.content });
 		} catch (error) {
 			finish(false, error);
 		}

@@ -124,3 +124,44 @@ test('History displays bounded native save failure guidance', async () => {
 		f.close();
 	}
 });
+
+test('Mac export negotiates its own preload version and binds the exact retained version', async () => {
+	const f = fixture();
+	try {
+		Reflect.deleteProperty(window, 'thingtimeNativeBridge');
+		const requests: Record<string, unknown>[] = [];
+		window.thingtimeDesktop = {
+			platform: 'darwin', fileExportVersion: '1.0.0',
+			fileExportRequest: async request => {
+				requests.push(request);
+				return { ...request, attachmentId: file.content.attachmentId, version: file.content.version, size: file.content.size, saved: true };
+			}
+		};
+		assert.equal(supportsFileExport(), true);
+		assert.equal(await exportFileVersion(scope, file, new AbortController().signal), true);
+		assert.equal(requests[0].origin, scope.apiOrigin);
+		assert.deepEqual(requests[0].content, file.content);
+		assert.equal(f.messages.length, 0);
+		window.thingtimeDesktop.fileExportVersion = '2.0.0';
+		assert.equal(supportsFileExport(), false);
+	} finally { f.close(); }
+});
+test('Mac cancellation retains its request binding and sanitizes IPC errors', async () => {
+	const f = fixture();
+	try {
+		Reflect.deleteProperty(window, 'thingtimeNativeBridge');
+		const requests: Record<string, unknown>[] = [];
+		let release: (value: unknown) => void = () => {};
+		window.thingtimeDesktop = { platform: 'darwin', fileExportVersion: '1.0.0', fileExportRequest: request => {
+			requests.push(request);
+			return request.action === 'cancel' ? Promise.resolve({}) : new Promise(resolve => { release = resolve; });
+		} };
+		const abort = new AbortController(), pending = exportFileVersion(scope, file, abort.signal);
+		abort.abort(); await assert.rejects(pending);
+		assert.equal(requests[1].action, 'cancel'); assert.equal(requests[1].requestId, requests[0].requestId);
+		release({ ...requests[0], attachmentId: file.content.attachmentId, version: file.content.version, size: file.content.size, saved: true });
+		window.thingtimeDesktop.fileExportRequest = async () => { throw Error('/private/native/path'); };
+		await assert.rejects(exportFileVersion(scope, file, new AbortController().signal), (error: Error) =>
+			!error.message.includes('/private') && apiErrorMessage(error, 'fallback').includes('Check the selected folder'));
+	} finally { f.close(); }
+});

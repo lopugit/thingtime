@@ -42,7 +42,7 @@ try {
         assert.equal(result.origin, seeded.origin); assert.equal(result.runId, seeded.runId);
         assert.deepEqual(result.operationIds, seeded.operationIds); assert.equal(result.draftId, seeded.draftId);
     }
-    console.log(JSON.stringify({ ok: true, launches: 4, checks: ['bundled-Nitro-middleware', 'stable-origin', 'IndexedDB-pending-run', 'confirmed-operation-skip',
+    console.log(JSON.stringify({ ok: true, launches: 4, checks: ['bundled-Nitro-middleware', 'bundled-startup-JavaScript-and-CSS', 'stable-origin', 'IndexedDB-pending-run', 'confirmed-operation-skip',
         'lost-reply-receipt-recovery', 'completion-checkpoint', 'pending-editor-draft', 'scope-isolation', 'occupied-port-refusal-and-recovery'], nativeDispatch: 'none', receipts: 'synthetic' }));
 } finally {
     if (occupied) await new Promise(resolve => occupied.close(resolve));

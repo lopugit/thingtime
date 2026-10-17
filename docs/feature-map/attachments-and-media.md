@@ -361,3 +361,9 @@ private local recovery directory, with durable range checkpoints and exclusive
 file publication. `backup:vault plan-tree/restore-tree/resume-tree` and
 `test:backups` cover real process-exit recovery, output preservation and local
 process exclusion. See [restore boundaries](../portable-backups.md#reviewed-tree-restore).
+
+Mac historical Save As uses `electron/lib/file-export.cjs` and the negotiated
+preload `fileExportVersion` bridge consumed by `fileSync/fileExport.client.ts`.
+It shares retained attachment identity and canonical multipart fingerprints,
+uses session-bound ranges, native destination selection and exclusive verified
+publication. See the Mac acceptance section in `docs/mobile-file-sync.md`.

@@ -40,7 +40,17 @@ app.whenReady().then(async () => {
     }
     assert.notEqual(stage, 'collision');
     const shell = await fetch(renderer.origin);
-    assert.equal(shell.status, 200); assert.match(await shell.text(), /id="root"/);
+    assert.equal(shell.status, 200); const html = await shell.text(); assert.match(html, /id="root"/);
+    // A valid HTML shell alone does not prove the bundled app can start. The
+    // middleware preset must serve the actual scripts, not catch-all HTML.
+    const assets = [...html.matchAll(/(?:src|href)="(\/[^"]+\.(?:js|css)(?:\?[^"]*)?)"/g)].map(match => match[1]);
+    assert.ok(assets.includes('/tt-boot.js')); assert.ok(assets.some(asset => asset.startsWith('/assets/')));
+    for (const asset of assets) {
+        const response = await fetch(renderer.origin + asset); assert.equal(response.status, 200);
+        assert.doesNotMatch(response.headers.get('content-type') || '', /text\/html/);
+        const expected = fs.readFileSync(path.resolve(__dirname, '../../dist/web/.output/public', asset.split('?')[0].slice(1)));
+        assert.deepEqual(Buffer.from(await response.arrayBuffer()), expected);
+    }
     window = new BrowserWindow({ show: false, webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false } });
     window.webContents.session.webRequest.onBeforeRequest((details, callback) => callback({ cancel: !details.url.startsWith(renderer.origin + '/') }));
     await window.loadURL(renderer.origin + '/restart-fixture');

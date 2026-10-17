@@ -10865,3 +10865,22 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
   the 17,825,809-byte output and repeat CLI resume without rewriting it.
 - [ ] Native restore review/consent, account-wide/generic Thing restoration,
   cross-device/shared-filesystem destinations and large-data throughput remain.
+
+### Mac History Save As and bundled static assets — 2026-10-17
+
+- [x] Export 17 MiB through the production preload/host, real Electron session
+  cookies and native Save panel; verify all saved bytes, canonical multipart
+  fingerprint, nine bounded ranges and removal of the request's partial file.
+- [x] Reject foreign frames/origins, invalid content descriptors, changed accounts
+  during the picker/ranges, proxy mismatch, short/oversized/corrupt bodies, wrong
+  version/framing, cancellation and concurrent requests. Existing files, symlinks
+  and files created during transfer must remain untouched. A failure after
+  publication preserves the saved bytes and reports uncertainty.
+- [x] Shared History client negotiates the Mac capability, retains cancellation
+  binding, checks exact version receipts and sanitizes host errors.
+- [ ] Authenticated signed installed-app History save/cancel/restore against a
+  real retained file, account switching during its native picker, external-volume
+  permissions, low disk space and app termination during transfer.
+- [x] Regression: Electron's Nitro middleware preset must serve startup JS/CSS
+  bytes from the package, not the HTML catch-all. Check responses across the
+  restart fixture and visually open the rebuilt isolated app.

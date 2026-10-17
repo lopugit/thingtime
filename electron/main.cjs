@@ -42,6 +42,7 @@ const {
 } = require('./lib/thingtime-node-bridge.cjs');
 
 const { DesktopFolderSync } = require('./lib/folder-sync.cjs');
+const { DesktopFileExport } = require('./lib/file-export.cjs');
 const { DesktopSpeechRecognition, requireSpeechSender } = require('./lib/speech-recognition.cjs');
 const desktopSpeech = new DesktopSpeechRecognition({ executable: app.isPackaged
 	? path.join(process.resourcesPath, '..', 'Helpers', 'Thingtime Node.app', 'Contents', 'MacOS', 'ThingtimeSpeech')
@@ -76,7 +77,12 @@ const desktopFolderSync = new DesktopFolderSync({
         apiOrigin: desktopSettings?.snapshot().selectedEndpoint.url }),
     requestNative: (method, parameters, options) => thingtimeNode.request(method, parameters, undefined, options)
 });
-app.on('before-quit', () => desktopFolderSync.invalidate());
+const desktopFileExport = new DesktopFileExport({
+    context: () => ({ enabled: process.platform === 'darwin', window: mainWindow, appOrigin,
+        apiOrigin: desktopSettings?.snapshot().selectedEndpoint.url }),
+    choose: (window, options) => dialog.showSaveDialog(window, options)
+});
+app.on('before-quit', () => { desktopFolderSync.invalidate(); desktopFileExport.invalidate(); });
 
 
 function getSessionHash() {
@@ -220,7 +226,7 @@ function normalizeDesktopUrl(rawUrl) {
 }
 
 function setApiFallbackEndpoint(rawUrl) {
-	desktopFolderSync.invalidate();
+	desktopFolderSync.invalidate(); desktopFileExport.invalidate();
 	const endpointUrl = normalizeDesktopUrl(rawUrl);
 	process.env.THINGTIME_API_FALLBACK_ORIGIN = new URL(endpointUrl).origin;
 	return endpointUrl;
@@ -1576,16 +1582,16 @@ function createWindow() {
   });
 
   mainWindow.webContents.on('did-start-navigation', (_event, _url, isInPlace, isMainFrame) => {
-    if (isMainFrame && !isInPlace) { desktopSpeech.stop(); desktopFolderSync.invalidate(); }
+    if (isMainFrame && !isInPlace) { desktopSpeech.stop(); desktopFolderSync.invalidate(); desktopFileExport.invalidate(); }
   });
-  mainWindow.webContents.on('render-process-gone', () => { desktopSpeech.stop(); desktopFolderSync.invalidate(); });
+  mainWindow.webContents.on('render-process-gone', () => { desktopSpeech.stop(); desktopFolderSync.invalidate(); desktopFileExport.invalidate(); });
   const folderCookies = mainWindow.webContents.session.cookies;
   const folderAccountChanged = (_event, cookie) => {
-    if (cookie.name === 'tt_auth' || cookie.name === 'tt_accounts') desktopFolderSync.invalidate();
+    if (cookie.name === 'tt_auth' || cookie.name === 'tt_accounts') { desktopFolderSync.invalidate(); desktopFileExport.invalidate(); }
   };
   folderCookies.on('changed', folderAccountChanged);
   mainWindow.on('closed', () => {
-    desktopSpeech.stop(); desktopFolderSync.invalidate(); folderCookies.removeListener('changed', folderAccountChanged);
+    desktopSpeech.stop(); desktopFolderSync.invalidate(); desktopFileExport.invalidate(); folderCookies.removeListener('changed', folderAccountChanged);
   });
 
   mainWindow.once('ready-to-show', () => {
@@ -1617,6 +1623,7 @@ function createWindow() {
 	});
 }
 
+ipcMain.handle('thingtime-desktop:file-export', (event, request) => desktopFileExport.request(event, request));
 ipcMain.handle('thingtime-desktop:folder-sync', (event, request) => desktopFolderSync.request(event, request));
 
 ipcMain.handle('thingtime-desktop:speech-start', (event, request) => {

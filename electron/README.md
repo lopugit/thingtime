@@ -386,3 +386,34 @@ a completion baseline and collision refusal followed by recovery. Native dispatc
 is absent and receipts are synthetic; this is not signed installed Mac transfer
 acceptance, a power-loss test or background-worker coverage. Installed app state
 and its managed Node are never used or modified.
+
+### Historical file export on Mac
+
+History uses `fileExportVersion` 1.0.0 and the narrow `fileExportRequest` preload
+method. The host opens a native Save panel, reads exact retained attachment
+versions in 2 MiB ranges using the selected account's cookie session, verifies
+the canonical multipart fingerprint from disk, and publishes exclusively.
+Existing files and symlinks are refused, even if the Save panel offers Replace.
+Choose a new filename instead. Paths, credentials and bytes stay in the host.
+Account cookies, navigation, renderer loss, endpoint changes and app exit cancel
+the active operation. There is no persistent folder grant or overwrite consent.
+
+This foreground export requires attachment-content 1.14.0 or compatible 1.x
+and a destination filesystem supporting exclusive hardlinks and directory fsync.
+It is not a resumable backup export; an interrupted process can leave a hidden
+`.thingtime-export-*` partial file in the chosen folder. The operation guards
+parent identity but does not promise protection against an adversarial local
+process continuously renaming the destination's ancestors.
+
+Run `node --test electron/test/file-export.test.cjs` from the repository root.
+For the real native panel, run `corepack pnpm@10.12.1 --dir electron exec electron
+test/fixtures/file-export-host.cjs`, click Save this version, then accept the
+suggested temporary destination. It checks 17 MiB against generated source bytes,
+using the production preload/host and real Electron cookie-session requests.
+Close the test window to remove its disposable profile/output. This fixture
+does not establish authenticated installed-app Timeline acceptance.
+
+The `node_middleware` build explicitly enables Nitro static assets. Run
+`verify:renderer-restart` against the staged bundle: it now compares every
+startup script/style response to the packaged file, so a valid HTML shell alone
+cannot hide a missing asset server and blank renderer.

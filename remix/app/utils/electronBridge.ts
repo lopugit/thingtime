@@ -257,6 +257,8 @@ export type DesktopSpeechEvent = {
 };
 
 export type ThingtimeDesktopBridge = {
+	fileExportVersion?: string;
+	fileExportRequest?: (request: Record<string, unknown>) => Promise<unknown>;
 	folderSyncRequest?: (request: Record<string, unknown>) => Promise<unknown>;
 	speechRecognitionVersion?: string;
 	startSpeechRecognition?: (request: { sessionId: string; lang: string; continuous?: boolean }) => Promise<{ ok: true }>;

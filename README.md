@@ -5207,3 +5207,13 @@ A destination interrupted before its initial identity record was saved needs a
 new directory; no existing directory is silently adopted. Keep recovery state
 until the operation succeeds. Native/account restore UI, generic Thing restore,
 permissions/timestamps restoration and encrypted media remain separate work.
+
+### Desktop middleware assets
+
+The Electron build uses Nitro's `node_middleware` preset and explicitly enables
+its static-file serving in `remix/nitro.config.ts`. No additional environment
+variable or private service is required. After staging with
+`corepack pnpm@10.12.1 --dir electron build:web`, run
+`corepack pnpm@10.12.1 --dir electron verify:renderer-restart` to verify the
+packaged startup scripts/styles and persistence across app processes. The web
+cloud presets keep their existing static hosting defaults.
