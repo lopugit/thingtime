@@ -302,7 +302,7 @@ cover this boundary; existing account drafts and import permissions are unchange
 
 ## Password manager
 
-See [password-manager.md](../password-manager.md). `api.passwords` 1.0.0 is a
+See [password-manager.md](../password-manager.md). `api.passwords` 1.1.0 is a
 private, session-bound home-plane API over protected `password-manager-entry`
 Things. `api/utils/passwords/passwords.ts` owns accounted mutations, revision
 fences and secret-free native catalog projections; `auth/vaultEnvelope.ts` and
@@ -312,3 +312,9 @@ so decrypted fields never enter shared client history/cache. The reusable
 `Thingtime` fields mod renders the entry without global Thing persistence.
 Native integrations live in `apple/Passwords`, `apple/PasswordProvider`,
 `iOS/Thingtime/Web/PasswordBridge.swift` and `electron/lib/password-provider.cjs`.
+
+Password migration coverage and encrypted file lifecycle: `passwords/onePassword.ts`,
+`transfer.ts`, `fileCrypto.ts`, `files.client.ts`, `backup.client.ts`, and
+`api/utils/passwords/files.ts`. Every original 1PUX member is retained as an
+encrypted attachment to a source archive entry; item editors preserve structured
+values, source context and password history. See [the password contract](../password-manager.md).

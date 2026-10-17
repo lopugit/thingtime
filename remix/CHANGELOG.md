@@ -68,6 +68,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+### 2026-10-17 — Password migration and encrypted attachments
+- Remove arbitrary password import/editor caps; stream 1PUX/CSV and preserve every source archive member, rich field types, metadata and history.
+- Add session-gated encrypted multipart attachments and file-inclusive backups. Fork-safe storage setup and local QA use the existing private attachment adapter.
+
+
 - 2026-10-17: Add explicit browser mail relay without cloud persistence, bundled desktop direct mail sync, and an iOS Mail shortcut. Preserve transport choice and credential origin boundaries; document native build and relay setup. [PR #1013 details](../PRs/1013-codex-mail-native-relay-native-desktop-mail-sync-and-browser-api-relay.md).
 
 - 2026-10-17 — **Codex (AI)**: Prepare incoming mail PR #1009 for the authorized main promotion, preserving the current Settings sections and rerunning the mail/settings checks after integration.

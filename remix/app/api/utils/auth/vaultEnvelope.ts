@@ -30,18 +30,18 @@ const decode = (value: string, max: number, exact?: number) => {
   if (bytes.length > max || (exact !== undefined && bytes.length !== exact) || bytes.toString('base64url') !== value) throw failure();
   return bytes;
 };
-const seal = (key: Buffer, aad: string[], value: Buffer): Sealed => {
-  if (value.length > MAX_VALUE_BYTES) throw failure();
+const seal = (key: Buffer, aad: string[], value: Buffer, maxBytes = MAX_VALUE_BYTES): Sealed => {
+  if (value.length > maxBytes) throw failure();
   const iv = randomBytes(12);
   const cipher = createCipheriv('aes-256-gcm', keyBytes(key), iv);
   cipher.setAAD(Buffer.from(JSON.stringify(aad)));
   const encrypted = Buffer.concat([cipher.update(value), cipher.final()]);
   return { cipherText: encrypted.toString('base64url'), iv: iv.toString('base64url'), tag: cipher.getAuthTag().toString('base64url') };
 };
-const open = (key: Buffer, aad: string[], value: Sealed) => {
+const open = (key: Buffer, aad: string[], value: Sealed, maxBytes = MAX_VALUE_BYTES) => {
   let partial: Buffer | undefined;
   try {
-    const iv = decode(value.iv, 12, 12), tag = decode(value.tag, 16, 16), cipherText = decode(value.cipherText, MAX_VALUE_BYTES);
+    const iv = decode(value.iv, 12, 12), tag = decode(value.tag, 16, 16), cipherText = decode(value.cipherText, maxBytes);
     const decipher = createDecipheriv('aes-256-gcm', keyBytes(key), iv, { authTagLength: 16 });
     decipher.setAAD(Buffer.from(JSON.stringify(aad)));
     decipher.setAuthTag(tag);
@@ -56,15 +56,15 @@ const valueContext = (ownerId: string, keyId: string, recordId: string, purpose:
   if (typeof recordId !== 'string' || !recordId || recordId.length > 200 || !['oauth', 'secret'].includes(purpose)) throw failure();
   return ['thingtime-vault-value:v2', ownerId, keyId, recordId, purpose];
 };
-export const sealVaultValue = (ownerId: string, key: VaultDataKey, recordId: string, purpose: 'oauth' | 'secret', value: string): VaultEnvelope => {
-  if (typeof value !== 'string' || Buffer.byteLength(value) > MAX_VALUE_BYTES) throw failure();
+export const sealVaultValue = (ownerId: string, key: VaultDataKey, recordId: string, purpose: 'oauth' | 'secret', value: string, maxBytes = MAX_VALUE_BYTES): VaultEnvelope => {
+  if (typeof value !== 'string' || Buffer.byteLength(value) > maxBytes) throw failure();
   const plain = Buffer.from(value);
-  try { return { version: 2, keyId: key.id, ...seal(key.bytes, valueContext(ownerId, key.id, recordId, purpose), plain) }; }
+  try { return { version: 2, keyId: key.id, ...seal(key.bytes, valueContext(ownerId, key.id, recordId, purpose), plain, maxBytes) }; }
   finally { plain.fill(0); }
 };
-export const openVaultValue = (ownerId: string, key: VaultDataKey, recordId: string, purpose: 'oauth' | 'secret', value: VaultEnvelope): string => {
+export const openVaultValue = (ownerId: string, key: VaultDataKey, recordId: string, purpose: 'oauth' | 'secret', value: VaultEnvelope, maxBytes = MAX_VALUE_BYTES): string => {
   if (value?.version !== 2 || value.keyId !== key.id) throw failure();
-  const plain = open(key.bytes, valueContext(ownerId, key.id, recordId, purpose), value);
+  const plain = open(key.bytes, valueContext(ownerId, key.id, recordId, purpose), value, maxBytes);
   try { return plain.toString('utf8'); } finally { plain.fill(0); }
 };
 

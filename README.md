@@ -15,6 +15,16 @@ wrappers unreadable; do not generate a new key on each deploy. The server-assist
 recovery model is documented above. No provider developer accounts are required
 for storing passwords or importing TOTP setup codes.
 
+Password attachments also require the existing private, versioned S3 setup
+(`THINGTIME_PRIVATE_S3_BUCKET=<bucket>`, `THINGTIME_PRIVATE_S3_REGION=<region>`,
+`THINGTIME_PRIVATE_S3_ROLE_ARN=<role ARN>`), signed multipart PUT/GET CORS for your
+deployment origin, and the account's private-upload permission. Names and bytes
+are encrypted before object upload; keep the same recovery key when upgrading.
+For isolated local QA, set `THINGTIME_LOCAL_ATTACHMENT_STORAGE_DIR=<local path>`
+and `THINGTIME_LOCAL_ATTACHMENT_STORAGE_ORIGIN=http://localhost:<web port>`.
+This local adapter refuses deployed/Vercel environments. No new provider secrets
+are needed beyond the existing vault and private object storage configuration.
+
 Native system AutoFill and passkey creation are being delivered separately in
 [PR #996](https://github.com/lopugit/thingtime/pull/996). They require signed Apple
 credential-provider bundles, provisioning and device verification. This web
