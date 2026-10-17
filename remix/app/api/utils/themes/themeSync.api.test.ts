@@ -85,7 +85,9 @@ test(
 			const first = (await read(receipts[0], 'concurrent exact create receipt')).acknowledgment,
 				second = (await read(receipts[1], 'concurrent exact create replay')).acknowledgment;
 			assert.deepEqual(first, second);
-			assert.equal((await snapshot()).length, 1);
+			const createdSnapshot = await snapshot();
+			assert.equal(createdSnapshot.length, 1);
+			assert.equal(createdSnapshot[0].version, first.resultVersion, 'create receipt hashes the actual stored BSON preimage');
 			assert.deepEqual((await read(await write(create), 'lost-response create replay')).acknowledgment, first);
 			await read(await write({ ...create, name: 'Changed immutable payload' }), 'write ID cannot change payload', 409);
 			const normal = await read(

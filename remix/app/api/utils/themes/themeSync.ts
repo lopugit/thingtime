@@ -116,12 +116,18 @@ export async function synchronizeThemeWrite(
 			}
 		},
 		afterWrite: async (after, session) => {
+			// MongoDB stores _id first. Hash the actual persisted BSON order,
+			// not the in-memory insert object, so the next snapshot agrees.
+			const stored = after
+				? await (Array.isArray(after.thingtime) ? things : legacy).findOne({ _id: after._id, shareId: command.id, ownerId } as any, { session })
+				: null;
+			if (after && !stored) return conflict();
 			const acknowledgment: ThemeWriteAcknowledgment = {
 				id: command.id,
 				writeId: command.writeId,
 				action: command.action,
 				expectedVersion: command.expectedVersion,
-				resultVersion: after ? themeVersion(after) : null
+				resultVersion: stored ? themeVersion(stored) : null
 			};
 			await appendTimelineEvent(things, createThemeWriteReceipt(ownerId, acknowledgment, digest, capture.now.toISOString()), session, {
 				plane: 'home'

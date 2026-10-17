@@ -6362,7 +6362,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		notes: ['No response or log contains the cron secret. Free omni text screening makes draining the off-era backlog costless.']
 	}),
   endpoint({
-    id: 'themes-sync', featureVersion: '1.0.0', contractVersion: '1.0.0',
+    id: 'themes-sync', featureVersion: '1.0.1', contractVersion: '1.0.1',
     group: 'themes', title: 'Device theme synchronization', endpoint: '/api/v1/themes/sync',
     summary: 'Reads versioned private theme snapshots and acknowledges conditional device saves.',
     detail: 'A current full account session, exact Origin, expectedOwnerId and X-Thingtime-Expected-Data-Plane are required on every POST. Themes remain in their canonical home data plane even when a different content database is selected. Snapshot reads return a complete bounded catalogue with opaque stored-document versions. Writes use the normal theme validator, storage accounting and protected Timeline transaction. A writeId names one immutable command; retry it exactly after an uncertain result. A stale expectedVersion or reused writeId with different content is refused. Deletion and active-theme cleanup commit together. Anonymous workspaces never call this endpoint.',
