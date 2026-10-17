@@ -52,9 +52,45 @@ private final class XPCService: NSObject, ThingtimeNodeXPCProtocol {
         }
     }
 
+    func stream(_ data: Data, sink: ThingtimeNodeByteSink, withReply reply: @escaping (Data) -> Void) {
+        guard let request = try? NodeWireCodec.decodeRequest(data), request.method == "folder-sync.request",
+              case .object(let fields) = request.parameters, fields["action"] == .string("read-range") else {
+            reply(Self.encoded(.failure(id: "", code: "invalid_request", message: "Invalid folder stream.")))
+            return
+        }
+        Task {
+            let response = await controller.handleLocalFolderSync(request, stream: { bytes in
+                let acknowledgement = StreamAcknowledgement()
+                sink.receive(bytes) { acknowledgement.finish($0) }
+                try acknowledgement.wait()
+            })
+            reply(Self.encoded(response))
+        }
+    }
+
     private static func encoded(_ response: NodeResponse) -> Data {
         (try? NodeWireCodec.encodeResponse(response))
             ?? Data(#"{"error":{"code":"encoding_error","message":"The node response could not be encoded."},"id":"","ok":false}"#.utf8)
+    }
+}
+
+/// A stalled/disconnected consumer must not hold a coordinated file indefinitely.
+private final class StreamAcknowledgement: @unchecked Sendable {
+    private let lock = NSLock(), semaphore = DispatchSemaphore(value: 0)
+    private var accepted = false
+    private var completed = false
+    func finish(_ value: Bool) {
+        lock.lock(); defer { lock.unlock() }
+        guard !completed else { return }; completed = true; accepted = value; semaphore.signal()
+    }
+    func wait() throws {
+        let deadline = Date().addingTimeInterval(15)
+        while semaphore.wait(timeout: .now() + 0.1) != .success {
+            try Task.checkCancellation()
+            guard Date() < deadline else { throw CancellationError() }
+        }
+        lock.lock(); let value = accepted; lock.unlock()
+        guard value else { throw CancellationError() }; try Task.checkCancellation()
     }
 }
 
@@ -189,7 +225,7 @@ private final class XPCListenerDelegate: NSObject, NSXPCListenerDelegate {
             ThingtimeNodeLog.lifecycle.error("Rejected an XPC connection that did not meet the peer requirement")
             return false
         }
-        connection.exportedInterface = NSXPCInterface(with: ThingtimeNodeXPCProtocol.self)
+        connection.exportedInterface = ThingtimeNodeXPC.interface()
         connection.exportedObject = service
         connection.resume()
         return true

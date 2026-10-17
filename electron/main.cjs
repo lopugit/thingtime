@@ -74,7 +74,7 @@ const thingtimeNode = new ThingtimeNodeIntegration({ app, electronDir: __dirname
 const desktopFolderSync = new DesktopFolderSync({
     context: () => ({ enabled: process.platform === 'darwin' && !parallelDevMode, window: mainWindow, appOrigin,
         apiOrigin: desktopSettings?.snapshot().selectedEndpoint.url }),
-    requestNative: (method, parameters) => thingtimeNode.request(method, parameters)
+    requestNative: (method, parameters, options) => thingtimeNode.request(method, parameters, undefined, options)
 });
 app.on('before-quit', () => desktopFolderSync.invalidate());
 

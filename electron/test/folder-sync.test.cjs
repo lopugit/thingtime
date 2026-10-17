@@ -99,3 +99,16 @@ test('server capability negotiation is anonymous, bounded, origin-bound and proj
     for (mode of ['foreign', 'large', 'redirect']) await assert.rejects(readCapabilities(context, new AbortController().signal));
     mode = 'bad-version'; assert.deepEqual((await readCapabilities(context, new AbortController().signal)).features, {});
 });
+
+test('streamed bytes require final browser-account verification and exact range binding', async () => {
+    const f = fixture(), bytes = new Uint8Array(2 * 1024 * 1024),
+        input = f.input({ action: 'read-range', rootId: 'root', path: 'file', version: 'v1', offset: 0, length: bytes.length });
+    const result = request => ({ ...request, roots: [], chunk: { bytes, offset: 0, version: 'v1', length: bytes.length, size: bytes.length } });
+    f.run(async (_method, request) => result(request));
+    assert.equal((await f.host.request(f.event, input)).chunk.bytes.length, bytes.length);
+    f.run(async (_method, request) => { f.account('other'); return result(request); });
+    await assert.rejects(f.host.request(f.event, input));
+    f.account('owner');
+    f.run(async (_method, request) => ({ ...result(request), path: 'other' }));
+    await assert.rejects(f.host.request(f.event, input));
+});

@@ -1,7 +1,7 @@
 'use strict';
 
 const { normalizeEndpointUrl } = require('./desktop-settings.cjs');
-const ACTIONS = new Set(['context', 'list', 'choose', 'conditions', 'remove', 'scan', 'read', 'stage-begin', 'stage-append', 'stage-finish', 'write-approve', 'publication-lookup', 'publish', 'suspend']);
+const ACTIONS = new Set(['context', 'list', 'choose', 'conditions', 'remove', 'scan', 'read', 'read-range', 'stage-begin', 'stage-append', 'stage-finish', 'write-approve', 'publication-lookup', 'publish', 'suspend']);
 const UUID = /^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/iu;
 const identifier = value => typeof value === 'string' && value.length > 0 && Buffer.byteLength(value) <= 512 && !/[\p{Cc}\p{Cf}]/u.test(value);
 const unavailable = () => new Error('Folder access changed. Reopen this device with the current account.');
@@ -114,7 +114,7 @@ class DesktopFolderSync {
         try {
             await verify();
             state.dispatched = true;
-            const value = await this.requestNative('folder-sync.request', { ...state.input, origin: context.apiOrigin });
+            const value = await this.requestNative('folder-sync.request', { ...state.input, origin: context.apiOrigin }, { signal: state.abort.signal });
             if (!value || typeof value !== 'object') throw unavailable();
             if (state.input.action === 'context') {
                 this.assertCurrent(state);
@@ -122,7 +122,16 @@ class DesktopFolderSync {
             }
             await verify();
             if (!value || typeof value !== 'object' || value.requestId !== input.requestId || value.ownerId !== input.ownerId ||
-                value.deviceId !== input.deviceId || value.origin !== context.apiOrigin || Buffer.byteLength(JSON.stringify(value)) > 900_000) throw unavailable();
+                value.deviceId !== input.deviceId || value.origin !== context.apiOrigin) throw unavailable();
+            if (input.action === 'read-range') {
+                const c = value.chunk;
+                if (!Number.isSafeInteger(input.length) || input.length <= 0 || input.length > 32 * 1024 * 1024 ||
+                    !(c?.bytes instanceof Uint8Array) || c.bytes.byteLength !== input.length || c.length !== input.length ||
+                    c.offset !== input.offset || c.version !== input.version || value.rootId !== input.rootId || value.path !== input.path) throw unavailable();
+                // Binary bytes cross Electron IPC; never stringify tens of MiB.
+                const metadata = { ...value, chunk: { ...c, bytes: undefined } };
+                if (Buffer.byteLength(JSON.stringify(metadata)) > 900_000) throw unavailable();
+            } else if (Buffer.byteLength(JSON.stringify(value)) > 900_000) throw unavailable();
             return value;
         } finally { clearTimeout(timer); if (this.active === state) this.active = null; }
     }

@@ -99,4 +99,38 @@ final class MobileFolderTests: XCTestCase {
         let task = Task { try Task.checkCancellation(); return try MobileFolderReader.scan(bookmark: grant.bookmark) }; task.cancel()
         do { _ = try await task.value; XCTFail("Cancelled scan returned success") } catch is CancellationError { }
     }
+    func testStreamRejectsReplacedPathsChangedInodesCancellationAndConsumerRefusal() async throws {
+        let (root, scope, store) = try fixture(), file = root.appendingPathComponent("stream.bin")
+        let bytes = Data(repeating: 43, count: 131_073)
+        try bytes.write(to: file)
+        let grant = try store.add(scope, selected: root)
+        func entry() throws -> MobileFolderReader.Entry { try XCTUnwrap(MobileFolderReader.scan(bookmark: grant.bookmark).first) }
+        let original = try entry()
+        var received = Data()
+        XCTAssertEqual(try MobileFolderReader.stream(bookmark: grant.bookmark, path: original.path, version: original.version, offset: 7, length: 100_000) { received.append($0) }, Int64(bytes.count))
+        XCTAssertEqual(received, bytes.subdata(in: 7..<100_007))
+        for length in [0, -1, MobileFolderReader.maximumStreamBytes + 1] {
+            XCTAssertThrowsError(try MobileFolderReader.stream(bookmark: grant.bookmark, path: original.path, version: original.version, offset: 0, length: length) { _ in XCTFail() })
+        }
+        XCTAssertThrowsError(try MobileFolderReader.stream(bookmark: grant.bookmark, path: original.path, version: original.version, offset: 0, length: bytes.count) { _ in throw CancellationError() })
+        var frames = 0
+        XCTAssertThrowsError(try MobileFolderReader.stream(bookmark: grant.bookmark, path: original.path, version: original.version, offset: 0, length: bytes.count) { _ in
+            frames += 1
+            if frames == 1 { try Data(repeating: 2, count: bytes.count).write(to: file) }
+        })
+        XCTAssertEqual(frames, 1)
+        let current = try entry()
+        frames = 0
+        XCTAssertThrowsError(try MobileFolderReader.stream(bookmark: grant.bookmark, path: current.path, version: current.version, offset: 0, length: bytes.count) { _ in
+            frames += 1
+            if frames == 3 { try Data(repeating: 3, count: bytes.count).write(to: file, options: .atomic) }
+        })
+        let latest = try entry()
+        let cancelled = Task.detached {
+            withUnsafeCurrentTask { $0?.cancel() }
+            return try MobileFolderReader.stream(bookmark: grant.bookmark, path: latest.path, version: latest.version, offset: 0, length: bytes.count) { _ in XCTFail("Cancelled stream emitted bytes") }
+        }
+        do { _ = try await cancelled.value; XCTFail() } catch { }
+    }
+
 }

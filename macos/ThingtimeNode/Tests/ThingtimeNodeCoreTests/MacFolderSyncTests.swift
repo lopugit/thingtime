@@ -41,7 +41,7 @@ final class MacFolderSyncTests: XCTestCase {
         let context = try await service.handle(request("context")).decode([String: JSONValue].self)
         XCTAssertEqual(context["deviceId"], .string("device"))
         let capabilities = try XCTUnwrap(context["capabilities"]).decode([String: String].self)
-        XCTAssertEqual(capabilities, ["fileAccessVersion": "1.1.0", "fileStagingVersion": "1.0.0", "filePublicationVersion": "1.1.0"])
+        XCTAssertEqual(capabilities, ["fileAccessVersion": "1.2.0", "fileStagingVersion": "1.0.0", "filePublicationVersion": "1.1.0"])
         let result = try await service.handle(request("conditions")).decode([String: JSONValue].self)
         XCTAssertEqual(result["conditions"], .object(["network": .string("unknown"), "charging": .null]))
     }
@@ -159,4 +159,50 @@ final class MacFolderSyncTests: XCTestCase {
         XCTAssertEqual(ThingtimeNodeXPCRequestPolicy.access(for: "folder-sync.publish"), .forbidden)
         XCTAssertEqual(ThingtimeNodeXPCRequestPolicy.bridgeResponseTimeoutSeconds(for: "folder-sync.request"), 300)
     }
+    func testStreamUsesTwoLiveIdentityChecksAndNeverSucceedsAfterRevocation() async throws {
+        let bytes = Data(repeating: 29, count: 8 * 1024 * 1024 + 17)
+        try bytes.write(to: folder.appendingPathComponent("selected/large.bin"))
+        var checks = 0, revoked = false, failAt = Int.max
+        let service = try service(verify: { _, _ in checks += 1; if revoked || checks == failAt { throw MobileFolderStore.Failure.unavailable } })
+        let id = try await root(service)
+        let rows = try await service.handle(request("scan", ["rootId": .string(id)])).decode([String: JSONValue].self)
+        let entry = try XCTUnwrap(rows["entries"]).decode([MobileFolderReader.Entry].self)[0]
+        let input = request("read-range", ["rootId": .string(id), "path": .string(entry.path), "version": .string(entry.version), "offset": .number(0), "length": .number(Double(bytes.count))])
+        final class Collector: @unchecked Sendable { var bytes = Data(); var chunks = 0 }
+        let collector = Collector(); checks = 0
+        let result = try await service.handle(input, stream: { data in
+            XCTAssertLessThanOrEqual(data.count, 65_536); collector.bytes.append(data); collector.chunks += 1
+        })
+        XCTAssertEqual(collector.bytes, bytes); XCTAssertEqual(collector.chunks, 129); XCTAssertEqual(checks, 2)
+        let chunk = try XCTUnwrap(result.decode([String: JSONValue].self)["chunk"]).decode([String: JSONValue].self)
+        XCTAssertNil(chunk["data"]); XCTAssertEqual(chunk["length"], .number(Double(bytes.count)))
+        await rejects { try await service.handle(input) } // Never put a whole range in a normal XPC reply.
+        await rejects { try await service.handle(self.request("list"), stream: { _ in }) }
+        // The completion verifier refuses after all provisional frames arrived.
+        checks = 0; failAt = 2; collector.bytes.removeAll()
+        await rejects { try await service.handle(input, stream: { collector.bytes.append($0) }) }
+        XCTAssertEqual(collector.bytes, bytes); XCTAssertEqual(checks, 2)
+        revoked = true
+        await rejects { try await service.handle(input, stream: { _ in XCTFail("Revoked source disclosed bytes") }) }
+
+    }
+
+    func testCancellationDuringStreamStopsBeforeSecondFrameAndReleasesRequest() async throws {
+        let bytes = Data(repeating: 7, count: 131_073)
+        try bytes.write(to: folder.appendingPathComponent("selected/cancel.bin"))
+        let service = try service(), id = try await root(service)
+        let rows = try await service.handle(request("scan", ["rootId": .string(id)])).decode([String: JSONValue].self)
+        let entry = try XCTUnwrap(rows["entries"]).decode([MobileFolderReader.Entry].self)[0]
+        let started = expectation(description: "first provisional frame"), release = DispatchSemaphore(value: 0)
+        let input = request("read-range", ["rootId": .string(id), "path": .string(entry.path), "version": .string(entry.version), "offset": .number(0), "length": .number(Double(bytes.count))])
+        let pending = Task { try await service.handle(input, stream: { _ in
+            started.fulfill(); _ = release.wait(timeout: .now() + 5)
+        }) }
+        await fulfillment(of: [started], timeout: 5)
+        await rejects { try await service.handle(self.request("list")) }
+        pending.cancel(); release.signal()
+        await rejects { try await pending.value }
+        _ = try await service.handle(request("list"))
+    }
+
 }

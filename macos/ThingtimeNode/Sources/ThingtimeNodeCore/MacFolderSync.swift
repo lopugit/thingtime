@@ -5,7 +5,7 @@ import Foundation
 /// commands. The desktop host must also verify its active browser account.
 @MainActor
 public final class MacFolderSync {
-    public static let version = "1.1.0"
+    public static let version = "1.2.0"
     public struct Conditions: Codable, Sendable {
         public let network: String
         public let charging: Bool?
@@ -44,7 +44,7 @@ public final class MacFolderSync {
 
     public func suspend() { active?.task.cancel(); cancelDialog() }
 
-    public func handle(_ payload: JSONValue) async throws -> JSONValue {
+    public func handle(_ payload: JSONValue, stream: (@Sendable (Data) throws -> Void)? = nil) async throws -> JSONValue {
         let encoded = try JSONEncoder().encode(payload)
         guard encoded.count <= 131_072 else { throw MobileFolderStore.Failure.limit }
         let r = try JSONDecoder().decode(Request.self, from: encoded)
@@ -56,8 +56,9 @@ public final class MacFolderSync {
             return .object([:])
         }
         guard active == nil else { throw ThingtimeNodeError.invalidRequest("Another folder request is running.") }
-        guard ["context", "conditions", "list", "choose", "remove", "scan", "read", "stage-begin", "stage-append", "stage-finish", "write-approve", "publication-lookup", "publish"].contains(r.action) else { throw MobileFolderStore.Failure.invalid }
-        let task = Task { try await self.execute(r, owner: owner) }
+        guard ["context", "conditions", "list", "choose", "remove", "scan", "read", "read-range", "stage-begin", "stage-append", "stage-finish", "write-approve", "publication-lookup", "publish"].contains(r.action) else { throw MobileFolderStore.Failure.invalid }
+        guard (r.action == "read-range") == (stream != nil) else { throw MobileFolderStore.Failure.invalid }
+        let task = Task { try await self.execute(r, owner: owner, stream: stream) }
         active = (r.requestId, r.ownerId, r.deviceId, task)
         let timeout = Task {
             try await Task.sleep(for: .seconds(270))
@@ -81,11 +82,11 @@ public final class MacFolderSync {
     }
     private func value<T: Encodable>(_ input: T) throws -> JSONValue { try JSONValue.from(input) }
 
-    private func execute(_ r: Request, owner: FileSyncOwnerScope) async throws -> JSONValue {
+    private func execute(_ r: Request, owner: FileSyncOwnerScope, stream: (@Sendable (Data) throws -> Void)?) async throws -> JSONValue {
         try await authorized(r)
         var result: [String: JSONValue] = ["requestId": .string(r.requestId), "ownerId": .string(r.ownerId), "deviceId": .string(r.deviceId), "origin": .string(r.origin)]
         if r.action == "context" {
-            result["capabilities"] = .object(["fileAccessVersion": .string("1.1.0"), "fileStagingVersion": .string("1.0.0"), "filePublicationVersion": .string("1.1.0")])
+            result["capabilities"] = .object(["fileAccessVersion": .string(Self.version), "fileStagingVersion": .string("1.0.0"), "filePublicationVersion": .string("1.1.0")])
         } else if r.action == "conditions" {
             result["conditions"] = try value(conditions())
         } else if r.action == "choose" {
@@ -112,6 +113,16 @@ public final class MacFolderSync {
                 } else if r.action == "scan" {
                     result["entries"] = try value(await worker { try MobileFolderReader.scan(bookmark: grant.bookmark) })
                     result["complete"] = .bool(true)
+                } else if r.action == "read-range" {
+                    guard let path = r.path, let version = r.version, let offset = r.offset, let length = r.length,
+                          let stream else { throw MobileFolderStore.Failure.invalid }
+                    let size = try await worker {
+                        try MobileFolderReader.stream(bookmark: grant.bookmark, path: path, version: version,
+                            offset: offset, length: length, receive: stream)
+                    }
+                    result["path"] = .string(path)
+                    result["chunk"] = .object(["version": .string(version), "size": .number(Double(size)),
+                        "offset": .number(Double(offset)), "length": .number(Double(length))])
                 } else if r.action == "read" {
                     guard let path = r.path, let version = r.version, let offset = r.offset, let length = r.length else { throw MobileFolderStore.Failure.invalid }
                     result["path"] = .string(path)

@@ -7,6 +7,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { createInterface } from 'node:readline';
+import { createRequire } from 'node:module';
 import { generateKeyPairSync, randomBytes, randomUUID, sign, createHash } from 'node:crypto';
 import { IDBFactory } from 'fake-indexeddb';
 import { openSyncJournal } from '../app/fileSync/journal.client';
@@ -23,6 +24,8 @@ import { fingerprintSource } from '../app/fileSync/contentFingerprint';
 import { capabilitySatisfies } from '../app/api/utils/capabilities/capabilityContract';
 import type { CloudTransportRuntime } from '../app/fileSync/cloudTransport';
 
+const { FolderStream } = createRequire(import.meta.url)('../../electron/lib/folder-stream.cjs');
+
 const [fixturePath] = process.argv.slice(2);
 const forcePreflightCooldown = process.argv.includes('--cooldown-before-upload');
 assert.ok(fixturePath);
@@ -34,12 +37,12 @@ assert.equal(base.hostname, '127.0.0.1');
 assert.equal(base.origin, fixture.base);
 const directory = await mkdtemp(path.join(tmpdir(), 'thingtime-mac-sync-live-'));
 const cookies = new Map<string, string>();
-let native: ChildProcessWithoutNullStreams | undefined, pending: { resolve(value: any): void; reject(error: unknown): void } | undefined;
+let native: ChildProcessWithoutNullStreams | undefined, pending: { resolve(value: any): void; reject(error: unknown): void; stream?: any; requestId?: string } | undefined;
 let nativeExit: Promise<void> | undefined,
 	nativeCalls = 0,
 	verifyCalls = 0,
 	lastVerifyCalls = 0;
-const counts = { puts: 0, publishes: 0, reads: 0 };
+const counts = { puts: 0, publishes: 0, reads: 0, streams: 0, streamedBytes: 0 };
 let cooldownCount = 0,
 	cooldownSeconds = 0,
 	priorCooldownCount = 0,
@@ -99,6 +102,9 @@ async function startNative() {
 		try {
 			assert.ok(line.length <= 1_000_000);
 			const value = JSON.parse(line);
+            if (value.type === 'chunk') {
+                assert.ok(pending?.stream); pending.stream.write(Buffer.from(line + '\n')); return;
+            }
 			verifyCalls += value.identityChecks - lastVerifyCalls;
 			lastVerifyCalls = value.identityChecks;
 			cooldownCount += value.cooldowns.count - priorCooldownCount;
@@ -106,8 +112,11 @@ async function startNative() {
 			priorCooldownCount = value.cooldowns.count;
 			priorCooldownSeconds = value.cooldowns.seconds;
 			const next = pending;
-			pending = undefined;
-			value.ok ? next?.resolve(value.result) : next?.reject(Error('Native fixture: ' + value.error));
+			if (value.ok && next?.stream) {
+                next.stream.write(Buffer.from(JSON.stringify({ type: 'result', response: { id: next.requestId, ok: true, result: value.result } }) + '\n'));
+                next.resolve(next.stream.finish().result);
+            } else value.ok ? next?.resolve(value.result) : next?.reject(Error('Native fixture: ' + value.error));
+            pending = undefined;
 		} catch (error) {
 			pending?.reject(error);
 			pending = undefined;
@@ -137,7 +146,7 @@ async function stopNative() {
 		nativeExit = undefined;
 	}
 }
-async function send(payload: unknown) {
+async function send(payload: any) {
 	assert.ok(native && !pending);
 	nativeCalls++;
 	return new Promise<any>((resolve, reject) => {
@@ -147,6 +156,8 @@ async function send(payload: unknown) {
 			reject(Error('Native fixture request timeout'));
 		}, 280000);
 		pending = {
+            requestId: payload.requestId,
+            ...(payload.action === 'read-range' ? { stream: new FolderStream({ id: payload.requestId, method: 'folder-sync.request', parameters: payload }) } : {}),
 			resolve: (value) => {
 				clearTimeout(timer);
 				resolve(value);
@@ -160,7 +171,7 @@ async function send(payload: unknown) {
 	});
 }
 const signal = new AbortController().signal;
-const caps: FolderCapabilities = { platform: 'macos', fileAccessVersion: '1.1.0', fileStagingVersion: '1.0.0', filePublicationVersion: '1.1.0' };
+const caps: FolderCapabilities = { platform: 'macos', fileAccessVersion: '1.2.0', fileStagingVersion: '1.0.0', filePublicationVersion: '1.1.0' };
 let deviceId: string | undefined, remoteRoot: string | undefined, configurationId: string | undefined;
 const deviceName = 'Mac sync acceptance ' + randomUUID();
 const factory = new IDBFactory();
@@ -221,6 +232,7 @@ try {
 		abort.throwIfAborted();
 		const expected = { requestId: randomUUID(), ownerId, origin: base.origin };
 		if (input.action === 'read') counts.reads++;
+        if (input.action === 'read-range') { counts.streams++; counts.streamedBytes += input.length; }
 		if (input.action === 'publish') counts.publishes++;
 		const payload = await send({ ...expected, deviceId, ...input });
 		assert.equal(payload.deviceId, deviceId);
@@ -316,7 +328,7 @@ try {
 		);
 		assert.ok(retained?.operations.every((operation) => operation.confirmed));
 	};
-	const localBytes = new Uint8Array(65_537).fill(17),
+	const localBytes = new Uint8Array(process.argv.includes('--large-upload') ? 8 * 1024 * 1024 + 17 : 65_537).fill(17),
 		remoteBytes = new Uint8Array(65_539).fill(29);
 	await writeFile(path.join(directory, 'selected/local.bin'), localBytes);
 	await seed('remote.bin', remoteBytes);
@@ -383,6 +395,7 @@ try {
 			revision: node.kind === 'file' ? node.file.revision : node.revision
 		}));
 	};
+	assert.ok(counts.streams > 0 && counts.streamedBytes >= localBytes.length);
 	const first = await verifyBytes({ 'local.bin': localBytes, 'remote.bin': remoteBytes });
 	await run();
 	assert.deepEqual(await verifyBytes({ 'local.bin': localBytes, 'remote.bin': remoteBytes }), first);

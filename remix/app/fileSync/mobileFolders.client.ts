@@ -12,7 +12,7 @@ export type MobileWriteApproval = { scope: SyncScope; configurationRevision: str
 export type FolderRequest =
 	| { action: 'list' | 'choose' | 'conditions' }
 	| { action: 'remove' | 'scan'; rootId: string }
-	| { action: 'read'; rootId: string; path: string; version: string; offset: number; length: number; verifiedChunks?: true }
+	| { action: 'read' | 'read-range'; rootId: string; path: string; version: string; offset: number; length: number; verifiedChunks?: true }
 	| { action: 'stage-begin' | 'stage-finish'; rootId: string; transfer: MobileStageRequest }
 	| { action: 'stage-append'; rootId: string; transfer: MobileStageRequest; offset: number; data: string }
 	| { action: 'write-approve'; rootId: string; approval: MobileWriteApproval }
@@ -26,6 +26,7 @@ export type FolderResult = {
 	conditions?: SyncConditions;
 	entries?: SyncEntry[];
 	chunk?: { version: string; size: number; offset: number; data: string };
+	range?: { version: string; size: number; offset: number; bytes: Uint8Array<ArrayBuffer> };
 };
 export type FolderCapabilities = Pick<ThingtimeNativeBridge, 'platform' | 'fileAccessVersion' | 'fileStagingVersion' | 'filePublicationVersion'>;
 export const supportsFolderAccess = (bridge: FolderCapabilities | undefined) =>
@@ -141,6 +142,15 @@ export function parseMobileFolderResult(
 			{ mode: 'backup', propagateDeletes: false }
 		);
 		result.entries = structuredClone(payload.entries);
+	} else if (request.action === 'read-range') {
+		const c = payload.chunk;
+		if (payload.rootId !== request.rootId || payload.path !== request.path || c?.version !== request.version ||
+			c.offset !== request.offset || !Number.isSafeInteger(c.size) || c.size < request.offset ||
+			!Number.isSafeInteger(request.length) || request.length <= 0 || request.length > 32 * 1024 * 1024 ||
+			c.size - request.offset < request.length || c.length !== request.length ||
+			!(c.bytes instanceof Uint8Array) || c.bytes.byteLength !== request.length)
+			throw Error('Native file stream changed or returned incomplete bytes.');
+		result.range = { version: c.version, size: c.size, offset: c.offset, bytes: new Uint8Array(c.bytes) };
 	} else if (request.action === 'read') {
 		const c = payload.chunk;
 		if (
@@ -176,6 +186,7 @@ export function supportsMobileFolderPublication(folder: MobileFolder | undefined
 export function requestMobileFolders(ownerId: string, request: FolderRequest, signal: AbortSignal): Promise<FolderResult> {
 	const bridge = getNativeBridge();
 	if (!supportsMobileFolders(bridge)) return Promise.reject(Error('Folder access requires an updated mobile app.'));
+	if (request.action === 'read-range') return Promise.reject(Error('Native range streaming requires the desktop host.'));
 	if (request.action === 'conditions' && !supportsMobileSyncConditions(bridge))
 		return Promise.reject(Error('Update the mobile app to run folder transfers.'));
 	if (request.action.startsWith('stage-') && !supportsMobileStaging(bridge))
@@ -237,8 +248,8 @@ export function requestMobileFolders(ownerId: string, request: FolderRequest, si
 	});
 }
 /** Bounded native reads can feed the shared fingerprint/upload source contract.
- * Production native workers can stream directly without round-tripping bytes
- * through JavaScript. Every chunk remains tied to the scanned source version. */
+ * Mac access 1.2 streams one bounded range across XPC, then returns binary bytes
+ * through Electron; older/mobile bridges retain their bounded chunk path. Every chunk remains tied to the scanned source version. */
 export function mobileFolderSource(
 	ownerId: string,
 	rootId: string,
@@ -249,6 +260,7 @@ export function mobileFolderSource(
 ): FingerprintSource {
 	const entry = structuredClone(scanned);
 	if (!validSyncEntry(entry) || entry.kind !== 'file') throw Error('Select a scanned file.');
+	const streaming = bridge?.platform === 'macos' && supportsFolderAccess(bridge) && Number(bridge!.fileAccessVersion!.split('.')[1]) >= 2;
 	const chunkProofs = bridge?.platform === 'android' && supportsFolderAccess(bridge) && Number(bridge!.fileAccessVersion!.split('.')[1]) >= 2;
 	const verify = async (full = false) => {
 		signal.throwIfAborted();
@@ -282,6 +294,13 @@ export function mobileFolderSource(
 				offset + length > entry.size
 			)
 				throw Error('Invalid native read range.');
+			readSignal.throwIfAborted();
+			if (streaming && length > 0) {
+				const response = await request(ownerId, { action: 'read-range', rootId, path: entry.path, version: entry.version, offset, length }, readSignal);
+				readSignal.throwIfAborted();
+				if (response.range?.size !== entry.size || response.range.bytes.byteLength !== length) throw Error('Native source changed.');
+				return response.range.bytes;
+			}
 			const bytes = new Uint8Array(length);
 			for (let at = 0; at < length; at += 65536) {
 				readSignal.throwIfAborted();

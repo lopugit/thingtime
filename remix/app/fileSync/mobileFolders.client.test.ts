@@ -151,3 +151,23 @@ test('folder publication is scoped, version negotiated and projected without nat
 	assert.equal(supportsMobileFolderPublication(root, { ...android, platform: 'ios', filePublicationVersion: '1.0.0' }), true);
 	assert.equal(supportsMobileFolderPublication(root, { ...android, filePublicationVersion: '1.0.0' }), false);
 });
+
+test('Mac 1.2 reads a full bounded range once and validates binary stream framing', async () => {
+	const size = 8 * 1024 * 1024 + 17, bytes = new Uint8Array(size).fill(23), controller = new AbortController();
+	const scanned = { ...entry, size }, calls: string[] = [];
+	const request = async (_owner: string, input: any) => {
+		calls.push(input.action);
+		if (input.action === 'read') return { roots: [root], chunk: { version: '1', size, offset: 0, data: 'Fw==' } };
+		return parseMobileFolderResult(response({ rootId, path: entry.path, chunk: { version: '1', size, offset: input.offset, length: input.length, bytes: bytes.slice(input.offset, input.offset + input.length) } }), expected, input)!;
+	};
+	const source = mobileFolderSource('owner', rootId, scanned, controller.signal, request, { platform: 'macos', fileAccessVersion: '1.2.0' });
+	await source.check();
+	assert.deepEqual(await source.read(0, size), bytes);
+	assert.deepEqual(calls, ['read', 'read-range']);
+	const input = { action: 'read-range' as const, rootId, path: entry.path, version: '1', offset: 0, length: 3 };
+	for (const patch of [{ bytes: [1, 2, 3] }, { bytes: new Uint8Array(2) }, { offset: 1 }, { version: '2' }, { size: 2 }, { length: 4 }]) {
+		assert.throws(() => parseMobileFolderResult(response({ rootId, path: entry.path, chunk: { version: '1', size: 3, offset: 0, length: 3, bytes: new Uint8Array(3), ...patch } }), expected, input));
+	}
+	controller.abort(); await assert.rejects(source.read(0, 3));
+	await assert.rejects(source.read(0, 32 * 1024 * 1024 + 1));
+});

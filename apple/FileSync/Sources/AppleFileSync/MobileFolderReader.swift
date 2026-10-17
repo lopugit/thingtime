@@ -145,6 +145,33 @@ public struct MobileFolderReader {
             guard try stamp(info(root)) == initial else { throw Failure.changed }; return entries
         }
     }
+    /// One pinned, coordinated range; the sink applies backpressure. Bytes remain
+    /// provisional until this call and the host's final identity checks succeed.
+    /// No path, descriptor or bookmark is exposed to the consumer.
+    public static let maximumStreamBytes = 32 * 1024 * 1024
+    public static func stream(bookmark: Data, path: String, version: String, offset: Int64, length: Int,
+                              receive: (Data) throws -> Void) throws -> Int64 {
+        guard offset >= 0, length > 0, length <= maximumStreamBytes else { throw Failure.invalid }
+        return try access(bookmark) { root in
+            let fd = try openPath(root, path: path); defer { close(fd) }
+            let before = try info(fd)
+            guard before.st_mode & S_IFMT == S_IFREG, stamp(before) == version,
+                  offset <= before.st_size, Int64(length) <= before.st_size - offset else { throw Failure.changed }
+            var buffer = [UInt8](repeating: 0, count: maximumReadBytes), sent = 0
+            while sent < length {
+                try Task.checkCancellation()
+                guard try stamp(info(fd)) == version else { throw Failure.changed }
+                let wanted = min(buffer.count, length - sent)
+                let n = pread(fd, &buffer, wanted, off_t(offset) + off_t(sent))
+                guard n > 0 else { throw Failure.changed }
+                try receive(Data(buffer.prefix(n))); sent += n
+            }
+            try Task.checkCancellation()
+            let current = try openPath(root, path: path); defer { close(current) }
+            guard try stamp(info(fd)) == version, try stamp(info(current)) == version else { throw Failure.changed }
+            return before.st_size
+        }
+    }
     public static func read(bookmark: Data, path: String, version: String, offset: Int64, length: Int) throws -> Chunk {
         guard offset >= 0, length > 0, length <= maximumReadBytes else { throw Failure.invalid }
         return try access(bookmark) { root in

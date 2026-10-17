@@ -5016,6 +5016,8 @@ Build the test-only native adapter, then run the shared sync acceptance from
 swift build --package-path macos/ThingtimeNode --product MacFolderSyncFixture
 cd remix
 corepack pnpm exec tsx scripts/mac-file-sync.integration.mts /path/to/private-fixture.json
+# Exercise an upload crossing the canonical 8 MiB multipart boundary:
+corepack pnpm exec tsx scripts/mac-file-sync.integration.mts /path/to/private-fixture.json --large-upload
 # Also force a real native cooldown immediately before an upload HTTP request:
 corepack pnpm exec tsx scripts/mac-file-sync.integration.mts /path/to/private-fixture.json --cooldown-before-upload
 ```
@@ -5052,3 +5054,16 @@ source checks finish before the HTTP timer starts; caller cancellation still
 covers the whole operation. Network deadlines remain 30 seconds for API JSON and
 120 seconds for signed upload parts. This option intentionally increases read
 traffic and is an acceptance check, not a throughput measurement.
+
+Mac file access 1.2 uses a bounded native range stream (up to 32 MiB) for the
+existing shared upload source. Descriptor-relative reads retain one coordinated,
+version-checked descriptor and emit at most 64 KiB per acknowledged XPC frame.
+The signed bridge streams framed output with pipe backpressure; Electron checks
+framing/range bounds and returns a binary buffer only after final native and
+browser-account verification. Cancellation, changed source/path, incomplete
+output or late authorization refusal discards the range. The 1 MiB ordinary XPC
+message cap is unchanged. Older Mac and current mobile bridges retain chunked
+reads; downloads still use chunked staging. No direct native network upload or
+new device credential scope is added. The `--large-upload` option tests the real
+native/cloud path with an 8 MiB-plus file; installed signing/TCC acceptance and
+sustained throughput remain separate checks.

@@ -933,3 +933,42 @@ acceptance still passed with four PUTs and two native publications. The extra
 fixture read traffic deliberately exhausts only its disposable device budget;
 it is not a sustained-throughput claim. Installed acceptance, streaming and the
 full-feature remainder stay open.
+
+## Mac bounded range streaming — 2026-10-17
+
+Mac file access 1.2 connects the shared upload source to `read-range`. One
+coordinated native file descriptor supplies up to 32 MiB through acknowledged
+64 KiB XPC frames. Source stamps are checked between frames and the current path
+is checked again at completion. The native verifier runs before/after the range,
+not for each frame; no identity cache, rate-limit increase or network authority
+is introduced. The existing request timeout/cancellation and exact owner,
+origin, device, root, path and version binding remain. A stalled consumer has a
+15-second acknowledgement limit; its disconnected helper cannot keep reading.
+
+The signed bridge writes framed stdout with backpressure. Electron's bounded
+parser rejects missing/reordered/duplicate/oversized frames and invalid final
+metadata, and holds provisional bytes until the final native and browser account
+checks succeed. Renderer IPC carries binary bytes rather than a giant base64
+JSON message. Ordinary XPC request/reply limits stay at 1 MiB. The generic and
+remotely leased node dispatchers still cannot read folders. Older Mac/mobile
+bridges keep the existing chunked path; the journal and canonical file/Timeline
+contracts are unchanged.
+
+Validation: 106 shared tests, 132 Electron tests, 23 AppleFileSync tests and 11
+Mac/XPC tests pass. A real anonymous XPC connection transferred 129 frames and
+stopped on a refused acknowledgement. Native tests verify two live checks for an
+8 MiB-plus range, late revocation, changed/replaced files, consumer refusal and
+midstream cancellation. Isolated real Electron verifies binary range IPC and
+refusal after account change; native dispatch there is synthetic. Native release
+and production web/Vercel builds pass; targeted lint passes. TypeScript output
+is byte-identical to the existing 91 diagnostics.
+
+Real native/API acceptance with `--large-upload` passed upload/download,
+independent replacement, lost replies, process restart, original-ID recovery,
+full byte hashes, retained versions and revocation. It used 141 native calls,
+283 verifier invocations, three streamed ranges totaling 8,388,882 bytes, five
+PUTs and two publications, with one 46-second cooldown. These totals include
+seeding, scans and other checks; they are not a sustained-throughput benchmark.
+The fixture uses synthetic picker/consent/conditions and private credential
+storage, not installed XPC/Keychain/TCC. Download staging, mobile streaming,
+background execution, Photos, peers and the remaining delivery ledger stay open.

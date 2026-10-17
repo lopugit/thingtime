@@ -215,3 +215,19 @@ native consent/cooldown wait from expiring an unsent request; caller cancellatio
 and 30-second JSON / 120-second upload deadlines remain enforced. Regression
 coverage lives in `foregroundSync.test.ts`, `cloudTransport.test.ts` and the
 `--cooldown-before-upload` Mac integration option.
+
+## Mac range stream
+
+Mac file access 1.2 uses `mobileFolderSource` → `read-range` →
+`electron/lib/folder-sync.cjs` → `thingtime-node-bridge.cjs` / `folder-stream.cjs`
+→ the signed XPC byte sink → `MacFolderSync` → `MobileFolderReader.stream`.
+One coordinated range (32 MiB maximum) carries acknowledged 64 KiB frames,
+with source checks between frames, live identity before/after and browser-account
+verification before returning binary bytes. A 15-second missing-ack limit,
+cancellation and exact range/binding validation reject unfinished transfers.
+Ordinary XPC frames remain capped; no new HTTP endpoint or device permission.
+Tests: `folder-stream.test.cjs`, `folder-sync.test.cjs`, isolated Electron
+`test/fixtures/folder-sync-host.cjs`, `FolderStreamXPCTests`, `MacFolderSyncTests`,
+`MobileFolderTests`, and `mobileFolders.client.test.ts`. Real API acceptance is
+`mac-file-sync.integration.mts --large-upload`. Installed Mac acceptance,
+download/mobile streaming and sustained large-folder throughput remain open.

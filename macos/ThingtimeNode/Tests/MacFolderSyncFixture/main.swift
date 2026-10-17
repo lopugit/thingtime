@@ -20,6 +20,13 @@ actor Cooldowns {
     }
     func snapshot() -> JSONValue { .object(["count": .number(Double(count)), "seconds": .number(Double(seconds))]) }
 }
+final class StreamWriter: @unchecked Sendable {
+    private var offset = 0
+    func receive(_ data: Data) throws {
+        var bytes = try JSONSerialization.data(withJSONObject: ["type": "chunk", "offset": offset, "data": data.base64EncodedString()])
+        bytes.append(10); try FileHandle.standardOutput.write(contentsOf: bytes); offset += data.count
+    }
+}
 @main struct Fixture {
     @MainActor static func main() async throws {
         guard CommandLine.arguments.count == 2 else { throw MobileFolderStore.Failure.invalid }
@@ -61,7 +68,11 @@ actor Cooldowns {
             do {
                 guard line.utf8.count <= 131_072 else { throw MobileFolderStore.Failure.limit }
                 let request = try JSONDecoder().decode(JSONValue.self, from: Data(line.utf8))
-                response = .object(["ok": .bool(true), "result": try await service.handle(request), "identityChecks": .number(Double(identityChecks)), "cooldowns": await cooldowns.snapshot()])
+                let stream: (@Sendable (Data) throws -> Void)?
+                if case .object(let fields) = request, fields["action"] == .string("read-range") {
+                    let writer = StreamWriter(); stream = { try writer.receive($0) }
+                } else { stream = nil }
+                response = .object(["ok": .bool(true), "result": try await service.handle(request, stream: stream), "identityChecks": .number(Double(identityChecks)), "cooldowns": await cooldowns.snapshot()])
             } catch {
                 response = .object(["ok": .bool(false), "error": .string(String(describing: error)), "identityChecks": .number(Double(identityChecks)), "cooldowns": await cooldowns.snapshot()])
             }

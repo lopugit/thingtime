@@ -2,9 +2,22 @@ import Foundation
 
 @objc public protocol ThingtimeNodeXPCProtocol {
     func request(_ data: Data, withReply reply: @escaping (Data) -> Void)
+    func stream(_ data: Data, sink: ThingtimeNodeByteSink, withReply reply: @escaping (Data) -> Void)
+}
+
+@objc public protocol ThingtimeNodeByteSink {
+    /// At most one 64 KiB frame may be outstanding. A false/missing ack stops
+    /// the read; the normal final response alone establishes success.
+    func receive(_ data: Data, withReply reply: @escaping (Bool) -> Void)
 }
 
 public enum ThingtimeNodeXPC {
+    public static func interface() -> NSXPCInterface {
+        let interface = NSXPCInterface(with: ThingtimeNodeXPCProtocol.self)
+        interface.setInterface(NSXPCInterface(with: ThingtimeNodeByteSink.self),
+            for: #selector(ThingtimeNodeXPCProtocol.stream(_:sink:withReply:)), argumentIndex: 1, ofReply: false)
+        return interface
+    }
     public static let machServiceName = "com.thingtime.desktop.node.xpc"
     public static let maximumMessageBytes = 1_048_576
 }

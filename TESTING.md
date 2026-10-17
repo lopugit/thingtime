@@ -10553,3 +10553,20 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
   The forced device-budget pressure is not a throughput benchmark.
 - [x] Run all shared sync tests (104 plus one module-mock transport check), targeted
   lint and TypeScript. The latter remains the identical existing 91 diagnostics.
+
+## Mac file range stream (2026-10-17)
+
+- [x] Transfer a range crossing 8 MiB through the real native adapter and shared
+  cloud writer; verify full hashes, replacement, lost-reply recovery and original
+  operation IDs with `mac-file-sync.integration.mts --large-upload`.
+- [x] Check one live native verification before and after the range, 64 KiB
+  backpressured frames, and unchanged ordinary XPC bounds. Exercise the actual
+  nested sink/ack protocol through an anonymous XPC connection.
+- [x] Reject source modification, path replacement, cancellation during delivery,
+  sink refusal, malformed/missing/reordered/duplicate/oversized frames and wrong
+  final scope/range. Never treat provisional bytes as successful completion.
+- [x] Verify an 8 MiB-plus binary range through isolated Electron IPC and reject
+  account change before returning it. Native dispatch is a fixture here.
+- [ ] Verify the signed installed Mac app with real picker, Keychain and TCC.
+- [ ] Benchmark sustained upload/download and large roots; download staging and
+  mobile reads still use individual chunk requests.
