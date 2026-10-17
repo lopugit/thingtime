@@ -39,10 +39,15 @@ async function fixture() {
 	const expected = { requestId: 'request', ownerId: scope.ownerId, origin: scope.origin };
 	const request = async (_owner: string, input: FolderRequest): Promise<FolderResult> => {
 		assert.ok(input.action.startsWith('stage-'));
-		if (input.action === 'stage-append' || input.action === 'stage-range') {
+		if (input.action === 'stage-append' || input.action === 'stage-range' || input.action === 'stage-download') {
 			assert.equal(input.offset, received);
-			const data = input.action === 'stage-range' ? input.bytes : Uint8Array.from(atob(input.data), (c) => c.charCodeAt(0));
-			assert.ok(data.length <= (input.action === 'stage-range' ? 2 * 1024 * 1024 : 65_536));
+			const data =
+				input.action === 'stage-download'
+					? bytes.slice(input.offset, input.offset + input.length)
+					: input.action === 'stage-range'
+					? input.bytes
+					: Uint8Array.from(atob(input.data), (c) => c.charCodeAt(0));
+			assert.ok(data.length <= (input.action !== 'stage-append' ? 2 * 1024 * 1024 : 65_536));
 			destination.set(data, received);
 			received += data.length;
 			writes++;
@@ -138,19 +143,96 @@ test('native staging rejects false proofs, unnegotiated capabilities, invalid of
 	assert.equal(called, false);
 });
 
-for (const platform of ['macos', 'android'] as const) test(`${platform} staging 1.1 resumes after an accepted binary range without replaying its bytes`, async () => {
-    const f = await fixture(), signal = new AbortController().signal;
-    const bridge = { platform, fileAccessVersion: '1.2.0', fileStagingVersion: '1.1.0' };
-    await assert.rejects(stageMobileCopy(scope, rootId, f.operation, f.source, signal, f.request, bridge), /lost acknowledged/);
-    assert.equal(f.received(), 2 * 1024 * 1024); assert.equal(f.count(), 1);
-    f.ranges.length = 0;
-    const stage = await stageMobileCopy(scope, rootId, f.operation, f.source, signal, f.request, bridge);
-    assert.deepEqual(f.ranges, [[2 * 1024 * 1024, 3]]); assert.equal(f.count(), 2);
-    assert.equal(stage.operationId, f.operation.id);
-    assert.deepEqual(await stageMobileCopy(scope, rootId, f.operation, f.source, signal, f.request, bridge), stage);
-    assert.equal(f.count(), 2);
-    const input: FolderRequest = { action: 'stage-range', rootId, transfer: { scope, rootId, operation: f.operation }, offset: 0, bytes: f.bytes };
-    for (const received of [0, f.bytes.length - 1, f.bytes.length + 1]) {
-        assert.throws(() => parseMobileFolderResult({ type: 'mobile-files-result', payload: { ...f.expected, rootId, roots: [], staging: { received } } }, f.expected, input));
-    }
+for (const platform of ['macos', 'android'] as const)
+	test(`${platform} staging 1.1 resumes after an accepted binary range without replaying its bytes`, async () => {
+		const f = await fixture(),
+			signal = new AbortController().signal;
+		const bridge = { platform, fileAccessVersion: '1.2.0', fileStagingVersion: '1.1.0' };
+		await assert.rejects(stageMobileCopy(scope, rootId, f.operation, f.source, signal, f.request, bridge), /lost acknowledged/);
+		assert.equal(f.received(), 2 * 1024 * 1024);
+		assert.equal(f.count(), 1);
+		f.ranges.length = 0;
+		const stage = await stageMobileCopy(scope, rootId, f.operation, f.source, signal, f.request, bridge);
+		assert.deepEqual(f.ranges, [[2 * 1024 * 1024, 3]]);
+		assert.equal(f.count(), 2);
+		assert.equal(stage.operationId, f.operation.id);
+		assert.deepEqual(await stageMobileCopy(scope, rootId, f.operation, f.source, signal, f.request, bridge), stage);
+		assert.equal(f.count(), 2);
+		const input: FolderRequest = { action: 'stage-range', rootId, transfer: { scope, rootId, operation: f.operation }, offset: 0, bytes: f.bytes };
+		for (const received of [0, f.bytes.length - 1, f.bytes.length + 1]) {
+			assert.throws(() =>
+				parseMobileFolderResult(
+					{ type: 'mobile-files-result', payload: { ...f.expected, rootId, roots: [], staging: { received } } },
+					f.expected,
+					input
+				)
+			);
+		}
+	});
+
+test('iOS native cloud staging resumes accepted binary ranges without sending bytes through the WebView', async () => {
+	const f = await fixture(),
+		signal = new AbortController().signal;
+	const bridge = { platform: 'ios' as const, fileAccessVersion: '1.1.1', fileStagingVersion: '1.2.0' };
+	const source = {
+		...f.source,
+		nativeCloud: {
+			scope,
+			file: {
+				id: 'cloud-file',
+				revision: 'r1',
+				name: 'file',
+				folderId: null,
+				trashed: false,
+				content: { attachmentId: 'attachment', version: 'a'.repeat(64), size: f.bytes.length, fingerprint: f.operation.mutation.source.fingerprint }
+			}
+		},
+		read: async (): Promise<Uint8Array<ArrayBuffer>> => {
+			throw Error('Native cloud transfer must not read bytes in JavaScript');
+		}
+	};
+	await assert.rejects(stageMobileCopy(scope, rootId, f.operation, source, signal, f.request, bridge), /lost acknowledged/);
+	assert.equal(f.received(), 2 * 1024 * 1024);
+	const stage = await stageMobileCopy(scope, rootId, f.operation, source, signal, f.request, bridge);
+	assert.equal(stage.operationId, f.operation.id);
+	assert.equal(f.count(), 2);
+	assert.deepEqual(f.ranges, []);
+	assert.deepEqual(await stageMobileCopy(scope, rootId, f.operation, source, signal, f.request, bridge), stage);
+	assert.equal(f.count(), 2);
+	for (const changed of [
+		{ ...source.nativeCloud, scope: { ...scope, ownerId: 'other' } },
+		{ ...source.nativeCloud, scope: { ...scope, origin: 'https://other.test' } },
+		{ ...source.nativeCloud, file: { ...source.nativeCloud.file, revision: 'changed' } },
+		{ ...source.nativeCloud, file: { ...source.nativeCloud.file, trashed: true } }
+	])
+		await assert.rejects(
+			stageMobileCopy(
+				scope,
+				rootId,
+				f.operation,
+				{ ...source, nativeCloud: changed },
+				signal,
+				async () => {
+					throw Error('must not send changed source');
+				},
+				bridge
+			),
+			/source changed|trashed/
+		);
+	const input: FolderRequest = {
+		action: 'stage-download',
+		rootId,
+		transfer: { scope, rootId, operation: f.operation },
+		offset: 0,
+		length: 2 * 1024 * 1024,
+		cloudFile: source.nativeCloud.file
+	};
+	for (const received of [0, 1, input.length - 1, input.length + 1])
+		assert.throws(() =>
+			parseMobileFolderResult(
+				{ type: 'mobile-files-result', payload: { ...f.expected, rootId, roots: [], staging: { received } } },
+				f.expected,
+				input
+			)
+		);
 });

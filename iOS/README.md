@@ -278,3 +278,33 @@ contracts are preserved. The test target includes the shared folder/publication
 cases plus iOS-only WebKit bridge cases. See the [package runbook](../apple/FileSync/README.md)
 for Mac filesystem tests and the existing `scripts/test-mobile-publication-process.sh`
 for iOS fresh-process recovery. This extraction does not enable Mac host sync.
+
+### Native cloud download ranges
+
+iOS staging capability `1.2.0` downloads pinned cloud ranges through the native
+`NativeFileSession` on iOS 17+. The shared planner, durable journal, folder consent,
+staging fingerprint verification and publication receipts remain canonical. A
+`stage-download` request carries an exact file descriptor and at most a 2 MiB
+range, never a URL, credential or file bytes. The native host negotiates the
+selected origin, checks the current file before/after reading, pins its WebView
+session and refuses redirects, wrong ETags/ranges, oversized/truncated responses,
+changed accounts, removed grants and inactive/navigation-changed hosts.
+
+Explicit History exports share this transport. Cookie notifications plus a
+250 ms identity check cancel active transport/picker waits when native cookie
+changes do not produce a WebKit observer notification. Older hosts and sources
+without a cloud descriptor retain their existing staged byte path. Uploads still
+use the existing iOS bridge; background transfer workers remain separate work.
+
+For installed acceptance, run `MobileSyncInstalledTests` with the existing
+loopback account fixture and `THINGTIME_NATIVE_CLOUD_STAGING_TEST=1` in addition
+to `THINGTIME_SYNC_INSTALLED_ACCEPTANCE=1`. Use the visible folder picker and
+sync controls, independently compare the resulting files with the cloud fixture,
+then complete the acceptance marker. The test requires native range requests,
+over 8 MiB transferred and zero legacy appends. Keep all fixture credentials and
+`.xctestrun` environment files private and untracked.
+
+Use a dedicated simulator for interactive acceptance when other tasks are
+installing the same bundle ID. A reinstall terminates the test host and can
+remove its test bundle; it is not evidence of a transfer failure. Finish or stop
+this test's runner before rebuilding, and never interrupt another task's runner.

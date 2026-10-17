@@ -68,6 +68,18 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-17 — **Codex (AI)**: Verified iOS History save/cancel and restore with
+  independently checked retained bytes after sharing native range transport.
+  Installed acceptance now observes real replies across WebView reloads; isolated
+  simulator/PM2 recovery and remaining snapshot scope are recorded in
+  [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-17 — **Codex (AI)**: iOS cloud downloads now transfer bounded binary
+  ranges directly into native staging, sharing authenticated transport with
+  History export and cancelling active work after session changes. Installed
+  simulator download/replacement/repeat checks passed with zero base64 appends.
+  Details and remaining scope: [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
 - 2026-10-17: Android native access 1.4 streams verified upload ranges through acknowledged binary WebView frames, preserving older-host compatibility and scoped source checks. Details: [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
 
 - 2026-10-17 — **Codex (AI)**: Add iOS History exports through Files with verified ranges, temporary destination access, exclusive collision naming and saved-byte readback. Installed simulator checks also verify restore cancellation and retained versions. See [PR #1002 iOS acceptance](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md#ios-historical-file-exports--2026-10-17).

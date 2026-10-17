@@ -1,6 +1,15 @@
-import { requestMobileFolders, supportsMobileStaging, type FolderRequest, type FolderResult, type MobileStageRequest, type FolderCapabilities } from './mobileFolders.client';
+import { cloudFileSyncEntry, parseCloudFile } from './cloudFile';
+import {
+	requestMobileFolders,
+	supportsMobileStaging,
+	supportsNativeCloudStaging,
+	type FolderRequest,
+	type FolderResult,
+	type MobileStageRequest,
+	type FolderCapabilities
+} from './mobileFolders.client';
 import { validateSyncRun, type SyncOperation } from './execute';
-import type { SyncScope } from './reconcile';
+import { sameSyncScope, sameSyncStamp, type SyncScope } from './reconcile';
 import type { FingerprintSource } from './contentFingerprint';
 import { validateLocalStage, type LocalStagedCopy } from './localSyncTarget';
 
@@ -33,12 +42,28 @@ export async function stageMobileCopy(
 		if (!result.staging) throw Error('Missing native staging progress.');
 		return result.staging;
 	};
-	const streaming = (bridge?.platform === 'macos' || bridge?.platform === 'android') && supportsMobileStaging(bridge) && Number(bridge.fileStagingVersion!.split('.')[1]) >= 1;
+	const streaming =
+		(bridge?.platform === 'macos' || bridge?.platform === 'android') &&
+		supportsMobileStaging(bridge) &&
+		Number(bridge.fileStagingVersion!.split('.')[1]) >= 1;
+	const nativeCloud = supportsNativeCloudStaging(bridge) && source?.nativeCloud ? structuredClone(source.nativeCloud) : undefined;
+	if (nativeCloud) {
+		nativeCloud.file = parseCloudFile(nativeCloud.file);
+		if (!sameSyncScope(nativeCloud.scope, scope) || !sameSyncStamp(cloudFileSyncEntry(nativeCloud.file, m.path), m.source))
+			throw Error('Native cloud source changed.');
+	}
 	await check();
 	let progress = await send({ action: 'stage-begin', rootId, transfer });
 	if (!Number.isSafeInteger(progress.received) || progress.received < 0 || progress.received > m.source.size) throw Error('Invalid staged offset.');
 	while (!progress.stage && progress.received < m.source.size) {
 		const start = progress.received;
+		if (nativeCloud) {
+			const length = Math.min(2 * 1024 * 1024, m.source.size - start);
+			progress = await send({ action: 'stage-download', rootId, transfer, offset: start, length, cloudFile: nativeCloud.file });
+			if (progress.received !== start + length || progress.stage) throw Error('Native staging progress changed during transfer.');
+			await check();
+			continue;
+		}
 		// Buffer cloud ranges once. Mac and Android staging 1.1 pull bounded
 		// binary frames within one request; older hosts retain small messages.
 		const bytes = await source!.read(start, Math.min(2 * 1024 * 1024, m.source.size - start), signal);
@@ -47,13 +72,14 @@ export async function stageMobileCopy(
 		if (streaming) {
 			progress = await send({ action: 'stage-range', rootId, transfer, offset: start, bytes });
 			if (progress.received !== start + bytes.length || progress.stage) throw Error('Native staging progress changed during transfer.');
-		} else for (let offset = 0; offset < bytes.length; offset += 65_536) {
-			const part = bytes.subarray(offset, Math.min(bytes.length, offset + 65_536));
-			let binary = '';
-			for (const byte of part) binary += String.fromCharCode(byte);
-			progress = await send({ action: 'stage-append', rootId, transfer, offset: start + offset, data: btoa(binary) });
-			if (progress.received !== start + offset + part.length || progress.stage) throw Error('Native staging progress changed during transfer.');
-		}
+		} else
+			for (let offset = 0; offset < bytes.length; offset += 65_536) {
+				const part = bytes.subarray(offset, Math.min(bytes.length, offset + 65_536));
+				let binary = '';
+				for (const byte of part) binary += String.fromCharCode(byte);
+				progress = await send({ action: 'stage-append', rootId, transfer, offset: start + offset, data: btoa(binary) });
+				if (progress.received !== start + offset + part.length || progress.stage) throw Error('Native staging progress changed during transfer.');
+			}
 		await check();
 	}
 	await check();

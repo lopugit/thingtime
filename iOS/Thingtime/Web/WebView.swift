@@ -154,6 +154,7 @@ struct WebView: UIViewRepresentable {
                       let frame = message.frameInfo.request.url, LopuVoiceContract.sameOrigin(frame, root) else { return }
                 mobileFolders.handle(body, webView: webView, root: root,
                     currentRoot: { [weak self] in self?.loadedRootURL },
+                    cookies: { [weak self] values, url in self?.cookies(values, matching: url) ?? [] },
                     verifyOwner: { [weak self, weak webView] scope, check in
                         guard let self, let webView else { throw CancellationError() }
                         try await self.mobileDevice.verifyOwner(scope, webView: webView,

@@ -10728,3 +10728,31 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
   Both installed APK hashes match the built outputs and the app is relaunched.
 - [ ] Physical devices, API 26, background uploads, large provider-performance
   runs, and iOS binary ranges remain separate acceptance.
+
+
+### iOS native cloud range staging (2026-10-17)
+
+- On iOS 17+, negotiate staging 1.2, select a disposable folder through Files,
+  approve downloads, and sync a nested 8 MiB + 17-byte file. Independently compare
+  complete local/cloud hashes; assert native `stage-download` ranges are at most
+  2 MiB and no base64 `stage-append` messages carry those bytes.
+- Lose a range acknowledgement, resume its original operation, and verify the
+  persisted offset prevents replay. Older staging 1.0 hosts still use the existing
+  path; a mismatched owner/origin/file revision fails before staging starts.
+- Refuse wrong attachment/version/range/length and changed or trashed cloud files.
+  Change the session through the native cookie store during work; verify active
+  transport is cancelled even without an observer notification. Unrelated cookie
+  changes must not interrupt transfers. Keep grant, foreground and navigation
+  checks active and require the normal final fingerprint before publication.
+- Run `NativeFileSessionTests`, `MobileFolderTests`, `MobileSyncStagingTests`,
+  `FileExportBridgeTests` in a signed simulator test host (Keychain requires it),
+  plus `test:file-sync` and explicit installed native-cloud acceptance. Recheck
+  History export consent/cancellation when changing the shared network transport.
+
+- Run interactive iOS transfer/History acceptance on a dedicated simulator when
+  another task uses the same bundle ID; distinguish an installation-terminated
+  test host from a product crash and preserve the interrupted fixture for cleanup.
+- Observe installed History export replies through a native test observer installed
+  at document start; a WebView/dev reload must not erase the acceptance counter.
+  Explicitly cancel in Files, save both byte versions without overwriting, cancel
+  restore, then restore and independently read both retained cloud attachments.

@@ -21,11 +21,11 @@ extension MobileSyncStagingTests {
         webView.configuration.userContentController.addUserScript(MobileFolderBridge.script)
         webView.loadHTMLString("<html><body>Native staging fixture</body></html>", baseURL: owner.origin)
         for _ in 0..<100 {
-            if let version = try? await webView.evaluateJavaScript("window.thingtimeNativeBridge?.fileStagingVersion"), version as? String == "1.0.0" { break }
+            if let version = try? await webView.evaluateJavaScript("window.thingtimeNativeBridge?.fileStagingVersion"), version as? String == "1.2.0" { break }
             try await Task.sleep(nanoseconds: 20_000_000)
         }
         let version = try await webView.evaluateJavaScript("window.thingtimeNativeBridge.fileStagingVersion")
-        XCTAssertEqual(version as? String, "1.0.0")
+        XCTAssertEqual(version as? String, "1.2.0")
         let encoded = try JSONSerialization.jsonObject(with: JSONEncoder().encode(transfer))
         var authorizations = 0
         func call(_ action: String) async throws -> [String: Any] {

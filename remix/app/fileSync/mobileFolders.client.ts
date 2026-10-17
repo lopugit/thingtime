@@ -1,3 +1,4 @@
+import type { CloudFile } from './cloudFile';
 import { mobileRangeFrame, receiveMobileReadFrame } from './mobileRangeFrames';
 import { validateLocalStage, type LocalStagedCopy } from './localSyncTarget';
 import type { SyncOperation, SyncReceiptLookup } from './execute';
@@ -15,6 +16,7 @@ export type FolderRequest =
 	| { action: 'remove' | 'scan'; rootId: string }
 	| { action: 'read' | 'read-range'; rootId: string; path: string; version: string; offset: number; length: number; verifiedChunks?: true }
 	| { action: 'stage-begin' | 'stage-finish'; rootId: string; transfer: MobileStageRequest }
+	| { action: 'stage-download'; rootId: string; transfer: MobileStageRequest; offset: number; length: number; cloudFile: CloudFile }
 	| { action: 'stage-range'; rootId: string; transfer: MobileStageRequest; offset: number; bytes: Uint8Array<ArrayBuffer> }
 	| { action: 'stage-append'; rootId: string; transfer: MobileStageRequest; offset: number; data: string }
 	| { action: 'write-approve'; rootId: string; approval: MobileWriteApproval }
@@ -107,6 +109,7 @@ export function parseMobileFolderResult(
 		request.action === 'stage-begin' ||
 		request.action === 'stage-append' ||
 		request.action === 'stage-range' ||
+		request.action === 'stage-download' ||
 		request.action === 'stage-finish'
 	) {
 		const state = payload.staging,
@@ -119,6 +122,13 @@ export function parseMobileFolderResult(
 			state.received < 0 ||
 			state.received > m.source.size ||
 			(request.action === 'stage-append' && state.received < request.offset + atob(request.data).length) ||
+			(request.action === 'stage-download' &&
+				(!Number.isSafeInteger(request.offset) ||
+					request.offset < 0 ||
+					!Number.isSafeInteger(request.length) ||
+					request.length <= 0 ||
+					request.length > 2 * 1024 * 1024 ||
+					state.received !== request.offset + request.length)) ||
 			(request.action === 'stage-range' &&
 				(!(request.bytes instanceof Uint8Array) ||
 					request.bytes.length <= 0 ||
@@ -196,6 +206,8 @@ export const supportsMobileSyncConditions = (bridge: FolderCapabilities | undefi
 	supportsFolderAccess(bridge) && Number(bridge!.fileAccessVersion!.split('.')[1]) >= 1;
 export const supportsMobileStaging = (bridge: FolderCapabilities | undefined = getNativeBridge()) =>
 	supportsFolderAccess(bridge) && /^1\.\d+\.\d+$/.test(bridge?.fileStagingVersion ?? '');
+export const supportsNativeCloudStaging = (bridge: FolderCapabilities | undefined) =>
+	bridge?.platform === 'ios' && supportsMobileStaging(bridge) && Number(bridge.fileStagingVersion!.split('.')[1]) >= 2;
 export const supportsMobilePublication = (bridge: FolderCapabilities | undefined = getNativeBridge()) =>
 	supportsMobileStaging(bridge) && /^1\.\d+\.\d+$/.test(bridge?.filePublicationVersion ?? '');
 /** Publication 1.1 adds explicit per-folder capability. Earlier iOS 1.0
@@ -208,6 +220,8 @@ export function supportsMobileFolderPublication(folder: MobileFolder | undefined
 export function requestMobileFolders(ownerId: string, request: FolderRequest, signal: AbortSignal): Promise<FolderResult> {
 	const bridge = getNativeBridge();
 	if (!supportsMobileFolders(bridge)) return Promise.reject(Error('Folder access requires an updated mobile app.'));
+	if (request.action === 'stage-download' && !supportsNativeCloudStaging(bridge))
+		return Promise.reject(Error('Update the iOS app to download cloud ranges natively.'));
 	if (
 		request.action === 'read-range' &&
 		(bridge?.platform !== 'android' || Number(bridge.fileAccessVersion!.split('.')[1]) < 4 || typeof bridge.postFileFrame !== 'function')
@@ -314,7 +328,7 @@ export function requestMobileFolders(ownerId: string, request: FolderRequest, si
 				stop();
 				reject(Error('Folder access timed out. Your saved selections are preserved.'));
 			},
-			['choose', 'scan', 'read-range', 'stage-begin', 'stage-range', 'stage-finish', 'write-approve', 'publish', 'publication-lookup'].includes(
+			['choose', 'scan', 'read-range', 'stage-begin', 'stage-range', 'stage-download', 'stage-finish', 'write-approve', 'publish', 'publication-lookup'].includes(
 				input.action
 			)
 				? 300_000

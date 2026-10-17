@@ -9,12 +9,12 @@ final class FileExportBridgeTests: XCTestCase {
             HTTPCookie(properties: [.name: name, .value: value, .domain: "localhost", .path: "/"])!
         }
         let auth = cookie("tt_auth", "disposable.test.credential")
-        XCTAssertEqual(try FileExportBridge.authenticationCookie([cookie("theme", "dark"), auth]), "tt_auth=disposable.test.credential")
-        XCTAssertEqual(try FileExportBridge.authenticationCookie([auth, cookie("theme", "light")]), "tt_auth=disposable.test.credential")
-        XCTAssertThrowsError(try FileExportBridge.authenticationCookie([]))
-        XCTAssertThrowsError(try FileExportBridge.authenticationCookie([auth, auth]))
-        XCTAssertThrowsError(try FileExportBridge.authenticationCookie([cookie("tt_auth", "")] ))
-        XCTAssertThrowsError(try FileExportBridge.authenticationCookie([cookie("tt_auth", "value;other=credential")] ))
+        XCTAssertEqual(try NativeFileSession.authenticationCookie([cookie("theme", "dark"), auth]), "tt_auth=disposable.test.credential")
+        XCTAssertEqual(try NativeFileSession.authenticationCookie([auth, cookie("theme", "light")]), "tt_auth=disposable.test.credential")
+        XCTAssertThrowsError(try NativeFileSession.authenticationCookie([]))
+        XCTAssertThrowsError(try NativeFileSession.authenticationCookie([auth, auth]))
+        XCTAssertThrowsError(try NativeFileSession.authenticationCookie([cookie("tt_auth", "")] ))
+        XCTAssertThrowsError(try NativeFileSession.authenticationCookie([cookie("tt_auth", "value;other=credential")] ))
     }
     func testExportFeatureIsExplicitAndMainFrameOnly() {
         XCTAssertEqual(FileExportBridge.version, "1.0.0")

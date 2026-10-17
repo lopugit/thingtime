@@ -391,3 +391,11 @@ retry metadata; bytes/history remain in accounted attachments and Timeline.
 `fileVersions.test.ts`, `storageScope.test.ts`, `scripts/file-history.browser.html`
 and `scripts/file-versions.integration.mts` cover this path. Installed native
 History/download acceptance and native retained-version browsing remain open.
+
+
+`NativeFileSession.swift` shares pinned-cookie, same-origin binary reads between
+native History exports and iOS sync. Staging 1.2 accepts only pinned cloud file
+metadata through `NativeCloudFile.swift`; `mobileStaging.client.ts` keeps the shared
+journal/verification flow while the host fetches byte ranges directly. See the
+[iOS native cloud range runbook](../../iOS/README.md#native-cloud-download-ranges)
+and the corresponding `TESTING.md` checklist.

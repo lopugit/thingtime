@@ -4,6 +4,23 @@ import UIKit
 import CryptoKit
 @testable import Thingtime
 
+@MainActor
+private final class HistoryExportReplies: NSObject, WKScriptMessageHandler {
+    var values: [[String: Any]] = []
+    func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+        guard message.frameInfo.isMainFrame, let value = message.body as? [String: Any] else { return }
+        values.append(value)
+    }
+    func wait(for count: Int) async throws {
+        for _ in 0..<1200 {
+            if values.count >= count { return }
+            try await Task.sleep(nanoseconds: 250_000_000)
+        }
+        throw NSError(domain: "FileExportAcceptance", code: 3,
+            userInfo: [NSLocalizedDescriptionKey: "Timed out waiting for native export replies: received \(values.count), expected \(count)"])
+    }
+}
+
 /// Real API fixtures and installed History, with CUA/manual interaction for every
 /// History action and Files picker. No fabricated native callbacks or completion file.
 @MainActor
@@ -50,6 +67,14 @@ final class FileExportInstalledTests: XCTestCase {
             try await Task.sleep(nanoseconds: 100_000_000)
         }
         let web = try XCTUnwrap(found)
+        // Observe real replies at document start. Dev-server reloads must not
+        // silently erase a page-global counter while Files writes still succeed.
+        let exports = HistoryExportReplies(), replyHandler = "thingtimeHistoryAcceptanceReplies"
+        web.configuration.userContentController.add(exports, name: replyHandler)
+        web.configuration.userContentController.addUserScript(WKUserScript(source:
+            "window.addEventListener('thingtime:native-message',e=>{if(e.detail?.type==='file-export-result')window.webkit.messageHandlers.thingtimeHistoryAcceptanceReplies.postMessage(e.detail.payload)})",
+            injectionTime: .atDocumentStart, forMainFrameOnly: true))
+        defer { web.configuration.userContentController.removeScriptMessageHandler(forName: replyHandler) }
         let existing = try await web.callAsyncJavaScript("return await (await fetch('/api/v1/auth/me')).json()", arguments: [:], in: nil, contentWorld: .page) as? [String: Any]
         if let current = (existing?["user"] as? [String: Any])?["id"] as? String, current != owner { throw XCTSkip("Preserve the simulator's other signed-in account") }
         let cookies = configuration.httpCookieStorage?.cookies(for: origin) ?? []; XCTAssertFalse(cookies.isEmpty)
@@ -85,19 +110,16 @@ final class FileExportInstalledTests: XCTestCase {
         do {
             web.load(URLRequest(url: URL(string: "/history?storage=home&kind=file&q=iOS&thing=\(id)", relativeTo: origin)!.absoluteURL))
             try await awaitTrue(web, "document.querySelectorAll('.history-event').length === 2", seconds: 60)
-            _ = try await web.evaluateJavaScript("window.__exportReplies=[];window.addEventListener('thingtime:native-message',e=>{if(e.detail?.type==='file-export-result')window.__exportReplies.push(e.detail.payload)})")
             print("IOS_EXPORT_READY: Open the update History row. Cancel the first save, then save both versions into \(selected.lastPathComponent). File: \(name)")
-            try await awaitTrue(web, "window.__exportReplies?.length >= 1")
-            let cancelledValue = try await web.evaluateJavaScript("window.__exportReplies[0]")
-            let cancelled = try XCTUnwrap(cancelledValue as? [String: Any])
+            try await exports.wait(for: 1)
+            let cancelled = exports.values[0]
             XCTAssertEqual(cancelled["saved"] as? Bool, false); XCTAssertNil(cancelled["error"])
             XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: selected.path), [])
             let unchanged = try await api("/api/v1/files?id=\(id)")
             XCTAssertEqual((unchanged["file"] as? [String: Any])?["revision"] as? String, replacementRevision)
             print("IOS_EXPORT_CANCEL_PASS: Save the earlier and later versions into the prepared folder.")
-            try await awaitTrue(web, "window.__exportReplies?.length >= 3")
-            let repliesValue = try await web.evaluateJavaScript("window.__exportReplies.slice(1,3)")
-            let replies = try XCTUnwrap(repliesValue as? [[String: Any]])
+            try await exports.wait(for: 3)
+            let replies = Array(exports.values[1..<3])
             XCTAssertTrue(replies.allSatisfy { $0["saved"] as? Bool == true && $0["error"] == nil })
             XCTAssertEqual(try Data(contentsOf: selected.appendingPathComponent(name)), before)
             let collision = (name as NSString).deletingPathExtension + " (1).bin"

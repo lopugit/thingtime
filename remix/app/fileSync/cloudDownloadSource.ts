@@ -33,6 +33,7 @@ export function createCloudDownloadSource(
 		checkContext();
 	};
 	return {
+		nativeCloud: structuredClone({ scope, file }),
 		size: file.content.size,
 		check,
 		verify: check,

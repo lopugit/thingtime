@@ -1604,3 +1604,106 @@ build/lint and targeted ESLint passing. TypeScript remains at exactly the same
 91 normalized baseline diagnostics. The screenshot captures the installed control
 showing completion; this run is functional emulator acceptance, not a sustained
 throughput benchmark or a physical-provider test.
+
+
+## iOS native cloud download ranges — 2026-10-17
+
+iOS staging capability `1.2.0` receives cloud file ranges directly with
+`URLSession` on the supported iOS 17+ deployment target. JavaScript sends the
+pinned file descriptor and range; file bytes stay native. The shared planner,
+journal, source validation, final fingerprint, consent and atomic publication
+remain the same. Each native request bounds its body to 2 MiB and stages in
+64 KiB slices. The bridge uses the existing five-minute operation deadline
+while each HTTP request retains its 30-second timeout and cancellation.
+
+`NativeFileSession` is shared by sync and explicit History exports. It pins the
+exact selected-origin WebView session, sends expected-owner/home headers,
+disables cookie/credential/cache persistence, refuses redirects and checks the
+current cloud file before and after each range. Account, origin, foreground and
+folder-grant changes cancel work. Native WebKit cookie changes did not reliably
+notify observers in the simulator; a 250 ms identity check now also cancels
+network/picker waits, with immediate identity checks at every read boundary.
+
+Installed iOS 26.5 simulator acceptance exercised the real folder picker, native
+write consent and shared Download now control. An initial 8,388,625-byte file
+matched the fixture SHA-256; the replacement 8,388,639-byte file and the unchanged
+17-byte sibling matched independent downloads through the real cloud API. A
+repeat sync preserved both file inodes, modification times and full hashes. The
+installed test passed with 11 native ranges, 16,777,281 bytes and zero legacy
+base64 appends. This is foreground functional acceptance, not a physical-device
+or sustained-throughput benchmark.
+
+The shared suite passes 128 checks; Apple package checks pass 30 and focused iOS
+transport/export/folder/staging checks pass 30. Targeted ESLint passes. Full
+TypeScript still has the identical 91 normalized baseline diagnostics. Older
+hosts and non-cloud sources retain the existing byte transport. iOS uploads,
+background workers, Photos backup, native retained-version browsing and durable
+ignored-conflict snapshots/content-ID lookup remain unfinished.
+
+
+## Whole-backup snapshots and Timeline recovery — requested 2026-10-17
+
+The active goal now also includes Time Machine-style file history/restore in
+Thingtime's Timeline and a complete independent backup of the selected data at
+a saved point in time. A snapshot must support restoring one item, a folder or
+the whole dataset, including 100 GB and 100 TB scale, with a future path to
+physical USB/hard-drive delivery. This is required scope, not delivered behavior.
+
+Default scope pending user preference: all owned Thingtime content and stored
+files, plus only device folders explicitly selected for backup. Do not silently
+scan device storage, export service credentials or copy other owners' content
+merely because the account can view it. Show coverage and omissions before
+starting, and make shared references, external links and offline devices explicit.
+
+Current foundations are the canonical local/remote Timeline event/link/snapshot
+contracts, `fileVersions.ts`, the conditional file writer and retained attachment
+versions. The shared Timeline History control already reviews/restores a file
+version and exports its exact bytes. However, per-Thing snapshots and attachment
+retention are not a whole-account backup. The existing attachment ZIP is limited
+to 500 files / 2 GiB, and a single Timeline version export has a 4 MiB ceiling.
+Neither path may be relabelled as a 100 TB restore or enlarged without a new
+streaming/resume design and evidence.
+
+Required implementation and acceptance:
+
+- Keep snapshot lifecycle events in the existing private Timeline folder and
+  reuse canonical local/remote record formats. Use relational manifest entries
+  and bounded pages/parts, never an accumulating array on the snapshot Thing.
+  Link each item to its exact Timeline revision, content ID, original placement,
+  metadata and byte fingerprint. Preserve portable metadata and safe path mapping.
+- Establish a server-authoritative point-in-time boundary and a complete
+  inventory for that boundary. A long live scan is not an atomic snapshot.
+  Historical reconstruction requires a verified baseline and writer coverage;
+  sources lacking it must be captured explicitly and report their actual capture
+  interval. Offline/unreadable/changing device sources stay incomplete, never
+  silently omitted from a successful total backup.
+- Seal only after every manifest entry and byte range is durably retained and
+  verified. Backup content must survive source edits/deletion, sync disconnect,
+  live-storage cleanup and original-object loss. Use an independently managed
+  backup destination/copy with explicit retention and recovery, not just pointers
+  to current attachments. Deduplication is allowed only with durable references
+  and lifecycle fencing; snapshot deletion must not remove another backup's data.
+- Support on-demand snapshots and user-configured schedules/retention, quota
+  admission, progress, pause, interruption and idempotent recovery. Keep partial
+  captures distinguishable from sealed snapshots and retain the original job
+  identity after uncertain acknowledgements. No fixed schedule is selected yet.
+- Restore through reviewed, non-destructive plans and conditional native/API
+  writers, recording the new changes in Timeline. Offer a separate destination
+  and preserve newer files/conflicts; a restore never erases later history.
+  Test complete recovery after deleting/replacing the original live dataset.
+- Provide resumable large exports with bounded memory, paged manifests and
+  independently verified chunks/volumes. Do not make one browser blob, one huge
+  in-memory ZIP or one serverless request. Persist range/checksum progress across
+  crashes, expired credentials/URLs, network loss, disk-full and device restarts.
+  Prove counters and manifests at 100 TB scale separately from actual transfer
+  throughput; small fixtures cannot substantiate a 100 TB transfer claim.
+- The portable sealed export format should also drive future physical-media
+  preparation: integrity report, encrypted media, recipient/key handoff and
+  verified completion. Shipping, payments and fulfillment are future services;
+  do not expose an order action before they actually exist.
+
+Next implementation boundary: canonical sealed snapshot/manifest and durable
+job contract plus owner-scoped API, followed by independently retained bytes,
+Timeline UI and resumable native export. Validate source-loss recovery before
+calling this a backup. Existing file history and the iOS transfer checkpoint do
+not complete any whole-backup acceptance item above.

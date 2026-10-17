@@ -5,11 +5,11 @@ import UniformTypeIdentifiers
 
 /// Explicit one-file saves, using ephemeral picker access rather than a sync grant.
 @MainActor
-final class FileExportBridge: NSObject, UIDocumentPickerDelegate, WKHTTPCookieStoreObserver {
+final class FileExportBridge: NSObject, UIDocumentPickerDelegate {
     static let version = "1.0.0"
     static let script = WKUserScript(source: "window.thingtimeNativeBridge.fileExportVersion = '\(version)';",
                                      injectionTime: .atDocumentStart, forMainFrameOnly: true)
-    private let session: URLSession
+    private var transport: NativeFileSession?
     private var task: Task<Void, Never>?
     private var deadline: Task<Void, Never>?
     private var generation = UUID()
@@ -19,22 +19,14 @@ final class FileExportBridge: NSObject, UIDocumentPickerDelegate, WKHTTPCookieSt
     private var picker: UIDocumentPickerViewController?
     private var selection: CheckedContinuation<URL?, Error>?
     private var observer: NSObjectProtocol?
-    private var cookieStore: WKHTTPCookieStore?
-    private var cookieURL: URL?
-    private var pinnedCookie: String?
-    private var filterCookies: (([HTTPCookie], URL) -> [HTTPCookie])?
 
     override init() {
-        let configuration = URLSessionConfiguration.ephemeral
-        configuration.httpCookieStorage = nil; configuration.urlCredentialStorage = nil
-        configuration.httpShouldSetCookies = false; configuration.urlCache = nil
-        session = URLSession(configuration: configuration, delegate: MobileDeviceRedirectPolicy(), delegateQueue: nil)
         super.init()
         observer = NotificationCenter.default.addObserver(forName: UIApplication.willResignActiveNotification, object: nil, queue: .main) { [weak self] _ in
             Task { @MainActor in self?.suspend() }
         }
     }
-    deinit { if let observer { NotificationCenter.default.removeObserver(observer) }; task?.cancel(); deadline?.cancel(); session.invalidateAndCancel() }
+    deinit { if let observer { NotificationCenter.default.removeObserver(observer) }; task?.cancel(); deadline?.cancel() }
     func suspend() {
         let reply = cancellationReply
         generation = UUID(); task?.cancel(); task = nil; clear()
@@ -42,27 +34,9 @@ final class FileExportBridge: NSObject, UIDocumentPickerDelegate, WKHTTPCookieSt
     }
     private func clear() {
         deadline?.cancel(); deadline = nil; requestId = nil; scope = nil; cancellationReply = nil
-        cookieStore?.remove(self); cookieStore = nil; cookieURL = nil; pinnedCookie = nil; filterCookies = nil
+        transport?.close(); transport = nil
         selection?.resume(throwing: CancellationError()); selection = nil
         picker?.dismiss(animated: false); picker = nil
-    }
-    // Only authentication changes invalidate work; unrelated cookies may refresh.
-    static func authenticationCookie(_ cookies: [HTTPCookie]) throws -> String {
-        let matches = cookies.filter { $0.name == "tt_auth" }
-        guard matches.count == 1, let value = matches.first?.value, !value.isEmpty, value.utf8.count <= 16_384,
-              value.unicodeScalars.allSatisfy({ (0x21...0x7e).contains($0.value) && !";,\\\"".unicodeScalars.contains($0) }) else {
-            throw MobileDevicePairing.Failure.identity
-        }
-        return "tt_auth=" + value
-    }
-    func cookiesDidChange(in cookieStore: WKHTTPCookieStore) {
-        let operation = generation
-        Task { [weak self] in
-            guard let self, let url = self.cookieURL, let filter = self.filterCookies, let pinned = self.pinnedCookie else { return }
-            let all = await cookieStore.allCookies()
-            guard self.generation == operation else { return }
-            if (try? Self.authenticationCookie(filter(all, url))) != pinned { self.suspend() }
-        }
     }
     func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) { if picker === controller { finish(nil) } }
     func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
@@ -96,8 +70,6 @@ final class FileExportBridge: NSObject, UIDocumentPickerDelegate, WKHTTPCookieSt
         guard task == nil else { respond(false, "Another file is being saved. Finish or cancel it first."); return }
         let operation = UUID(); generation = operation; requestId = id; self.scope = scope
         cancellationReply = { respond(false, "Saving was interrupted. Check Files before trying again.") }
-        cookieStore = webView.configuration.websiteDataStore.httpCookieStore; cookieStore?.add(self)
-        cookieURL = scope.origin.appendingPathComponent("api/v1/auth/me"); filterCookies = cookies
         let check = { [weak self, weak webView] in
             try Task.checkCancellation()
             guard self?.generation == operation, currentRoot() == root, let current = webView?.url,
@@ -112,33 +84,32 @@ final class FileExportBridge: NSObject, UIDocumentPickerDelegate, WKHTTPCookieSt
             defer { if self.generation == operation { self.task = nil; self.clear() } }
             do {
                 try check()
-                let all = await webView.configuration.websiteDataStore.httpCookieStore.allCookies(); try check()
-                self.pinnedCookie = try Self.authenticationCookie(cookies(all, self.cookieURL!))
-                let manifest = try await self.json(LopuVoiceContract.manifestPath, scope: scope, check: check)
-                guard LopuVoiceContract.accepts(manifest, baseURL: scope.origin, feature: "api.auth-me", minimum: [1,0,0]),
-                      LopuVoiceContract.accepts(manifest, baseURL: scope.origin, feature: "api.attachment-content", minimum: [1,14,0]) else { throw MobileDevicePairing.Failure.incompatible }
-                try await self.verifyOwner(scope, check: check)
-                let fingerprint = try await self.read("/api/v1/attachments/content?id=\(request.content.attachmentId)&fingerprint=1", scope: scope,
-                    limit: 512 * 1024, check: check) { response in
+                let transport = NativeFileSession(scope: scope, cookieStore: webView.configuration.websiteDataStore.httpCookieStore,
+                    cookies: cookies, check: check, invalidated: { [weak self] in if self?.generation == operation { self?.suspend() } })
+                self.transport = transport
+                try await transport.open()
+                try await transport.require([("api.auth-me", [1,0,0]), ("api.attachment-content", [1,14,0])])
+                let fingerprint = try await transport.read("/api/v1/attachments/content?id=\(request.content.attachmentId)&fingerprint=1",
+                    limit: 512 * 1024) { response in
                         guard response.statusCode == 200 else { throw MobileFolderStore.Failure.unavailable }
                     }
                 try request.matchFingerprint(fingerprint)
                 let directory = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0].appendingPathComponent("FileVersionExports-v1", isDirectory: true)
                 let worker = Task.detached {
                     try await FileVersionExport.Prepared.download(request, privateDirectory: directory) { offset, length in
-                        try await self.read(request.rangePath(offset: offset, length: length), scope: scope, limit: length, check: check) {
+                        try await transport.read(request.rangePath(offset: offset, length: length), limit: length) {
                             try request.validateRange($0, offset: offset, length: length)
                         }
                     }
                 }
                 let prepared = try await withTaskCancellationHandler(operation: { try await worker.value }, onCancel: { worker.cancel() })
-                try check(); try await self.verifyOwner(scope, check: check)
+                try check(); try await transport.verifyOwner()
                 guard let selected = try await self.choose(webView: webView) else { try check(); respond(false); return }
                 // Picker selection is not authorization to disclose bytes from an old account.
-                try check(); try await self.verifyOwner(scope, check: check); try check()
+                try check(); try await transport.verifyOwner(); try check()
                 let writer = Task.detached { try prepared.save(into: selected) }
                 _ = try await withTaskCancellationHandler(operation: { try await writer.value }, onCancel: { writer.cancel() })
-                try check(); try await self.verifyOwner(scope, check: check); try check()
+                try check(); try await transport.verifyOwner(); try check()
                 respond(true)
             } catch {
                 if self.generation == operation {
@@ -146,46 +117,5 @@ final class FileExportBridge: NSObject, UIDocumentPickerDelegate, WKHTTPCookieSt
                 }
             }
         }
-    }
-    private func verifyOwner(_ scope: FileSyncOwnerScope, check: @escaping () throws -> Void) async throws {
-        let identity = try await json("/api/v1/auth/me", scope: scope, check: check)
-        guard let user = identity["user"] as? [String: Any], user["id"] as? String == scope.ownerId,
-              user["accountKind"] as? String == "user", user["temporary"] as? Bool != true else { throw MobileDevicePairing.Failure.identity }
-    }
-    private func json(_ path: String, scope: FileSyncOwnerScope, check: @escaping () throws -> Void) async throws -> [String: Any] {
-        let data = try await read(path, scope: scope, limit: 512 * 1024, check: check) {
-            guard $0.statusCode == 200 else { throw MobileFolderStore.Failure.unavailable }
-        }
-        guard let value = try JSONSerialization.jsonObject(with: data) as? [String: Any] else { throw MobileFolderStore.Failure.invalid }; return value
-    }
-    private func read(_ path: String, scope: FileSyncOwnerScope, limit: Int, check: @escaping () throws -> Void,
-                      validate: @escaping @Sendable (HTTPURLResponse) throws -> Void) async throws -> Data {
-        try check()
-        guard let store = cookieStore, let filter = filterCookies, let pinned = pinnedCookie,
-              let url = URL(string: path, relativeTo: scope.origin)?.absoluteURL, LopuVoiceContract.sameOrigin(url, scope.origin) else { throw CancellationError() }
-        let all = await store.allCookies(); try check()
-        guard try Self.authenticationCookie(filter(all, url)) == pinned else { throw MobileDevicePairing.Failure.identity }
-        var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 30)
-        request.setValue(pinned, forHTTPHeaderField: "Cookie"); request.setValue(scope.origin.absoluteString, forHTTPHeaderField: "Origin")
-        request.setValue(scope.ownerId, forHTTPHeaderField: "X-Thingtime-Expected-Actor")
-        request.setValue("home", forHTTPHeaderField: "X-Thingtime-Expected-Data-Plane")
-        request.setValue("identity", forHTTPHeaderField: "Accept-Encoding")
-        let immutableRequest = request
-        let reader = Task.detached { [session] in
-            let (bytes, response) = try await session.bytes(for: immutableRequest)
-            guard let http = response as? HTTPURLResponse, http.url == url else { throw MobileFolderStore.Failure.invalid }
-            try validate(http)
-            var data = Data(); data.reserveCapacity(min(limit, FileVersionExport.rangeBytes))
-            for try await byte in bytes {
-                try Task.checkCancellation()
-                guard data.count < limit else { throw MobileFolderStore.Failure.limit }; data.append(byte)
-            }
-            return data
-        }
-        let data = try await withTaskCancellationHandler(operation: { try await reader.value }, onCancel: { reader.cancel() })
-        try check()
-        let latest = await store.allCookies(); try check()
-        guard try Self.authenticationCookie(filter(latest, url)) == pinned else { throw MobileDevicePairing.Failure.identity }
-        return data
     }
 }

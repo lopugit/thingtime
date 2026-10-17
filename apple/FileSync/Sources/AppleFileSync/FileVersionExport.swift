@@ -12,6 +12,7 @@ public enum FileVersionExport {
         public let fingerprint: MobileFolderReader.Fingerprint
     }
     public struct Request: Codable, Sendable {
+        public init(name: String, content: Content) { self.name = name; self.content = content }
         public let name: String
         public let content: Content
         public func validate() throws {

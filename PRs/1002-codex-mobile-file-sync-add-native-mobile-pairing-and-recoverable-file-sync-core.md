@@ -1356,3 +1356,67 @@ build/lint and targeted ESLint passing. TypeScript remains at exactly the same
 91 normalized baseline diagnostics. The screenshot captures the installed control
 showing completion; this run is functional emulator acceptance, not a sustained
 throughput benchmark or a physical-provider test.
+
+
+### iOS native cloud download transport — 2026-10-17
+
+iOS `fileStagingVersion` 1.2.0 now downloads pinned cloud ranges natively through
+the same request-owned transport as History export. This removes base64 byte
+messages from cloud downloads on the iOS 17+ deployment target while preserving
+the shared planner/journal, exact source checks, fingerprint, native consent and
+publication receipt. Responses are bounded to 2 MiB; native staging uses 64 KiB
+slices. Each request reauthorizes the owner and pinned file at the selected
+origin and checks the exact folder grant. The ordinary native request deadline
+is five minutes, with a separate 30-second timeout for each HTTP request.
+
+WebKit did not reliably emit observer notifications for native auth-cookie
+changes in the transport test. An active 250 ms identity check supplements the
+observer and immediate request-boundary checks, cancelling network/picker waits
+without treating unrelated cookie changes as account changes. The new tests
+cover binary bytes, bounds, expected-actor/home headers, wrong origin, cookie
+changes and exact cloud descriptor matching. The shared staging test covers
+lost acknowledgements with offset resume and no JavaScript byte reads.
+
+Installed iOS 26.5 simulator acceptance passed the actual folder/consent controls,
+initial download, replacement and no-change repeat. Independent cloud/native
+SHA-256 checks matched 8,388,639 replacement bytes plus a 17-byte sibling; the
+repeat retained both inodes and modification times. The test observed 11 native
+ranges, 16,777,281 bytes and zero legacy appends. The initial full native file
+also matched the original 8,388,625-byte fixture hash. Shared checks pass 128,
+Apple package checks 30 and focused native checks 30. Targeted lint passes;
+TypeScript remains at the same 91 normalized baseline diagnostics.
+
+This does not complete iOS uploads, background transfer, Photos backup, physical
+device performance or retained conflict lookup. See the current scope matrix in
+`docs/mobile-file-sync.md`; the overall cross-platform sync goal remains open.
+
+
+The user expanded the goal on 2026-10-17 to include whole-backup snapshots,
+Timeline version recovery, resumable 100 GB–100 TB exports and a future physical
+media delivery path. The explicit requirements and current archive-size limits
+are recorded in `docs/mobile-file-sync.md` under “Whole-backup snapshots and
+Timeline recovery”. This remains implementation work; existing retained file
+versions must not be described as an independently recoverable total backup.
+
+### iOS History regression verification — 2026-10-17
+
+The shared native transport passed installed History acceptance on the dedicated
+`Thingtime file sync acceptance` iOS 26.5 simulator: explicit picker cancellation
+left no local files or cloud revision change; both 128-byte and 257-byte versions
+saved with collision-safe names and matched independent byte assertions; restore
+cancellation preserved the current revision; restoring the earlier bytes created
+a new revision and both original cloud attachments remained readable. The real
+API fixture was moved to private Trash afterwards. `FileExportInstalledTests`
+now observes genuine native replies at document start through a native test
+handler, so a development-page reload cannot erase its acceptance counter.
+
+Earlier runs were interrupted by another simulator installation, local API
+outages, and lost page-local observation; they are not passing evidence. The
+successful run ended with `IOS_HISTORY_PASS` and zero test failures. A stalled
+shared PM2 daemon required a task-local daemon: run the same `npm run web-pms`
+with `PM2_HOME=/tmp/thingtime-mobile-file-sync-pm2`, and use that identical variable
+with `npm run web-pms-stop` when retiring this test stack. Ports remain the
+worktree's 14900/14901/14902 trio; no unrelated daemon was stopped.
+
+The new whole-backup scope above remains unimplemented. Per-file History and
+small acceptance fixtures do not establish a complete snapshot or 100 TB export.

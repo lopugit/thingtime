@@ -1,3 +1,5 @@
+import type { CloudFile } from './cloudFile';
+import type { SyncScope } from './reconcile';
 /** Canonical multipart fingerprint. This is SHA-256 of concatenated part
  * SHA-256 digests, not the whole-file SHA-256. Part boundaries are part of the
  * identity and match the attachment service's verified multipart protocol. */
@@ -28,6 +30,8 @@ export const equalContentFingerprints = (a: ContentFingerprint, b: ContentFinger
 	a.algorithm === b.algorithm && a.partSizeBytes === b.partSizeBytes && a.partCount === b.partCount && a.sha256 === b.sha256;
 
 export type FingerprintSource = {
+	/** Pinned descriptor for native byte transport, reauthorized by the host. */
+	nativeCloud?: { scope: SyncScope; file: CloudFile };
 	size: number;
 	/** Read exactly this range from one pinned source version. A native adapter
 	 * must refuse changed files instead of returning bytes from another version. */

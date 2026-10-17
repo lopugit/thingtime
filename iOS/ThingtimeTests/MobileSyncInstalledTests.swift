@@ -63,12 +63,36 @@ final class MobileSyncInstalledTests: XCTestCase {
         if FileManager.default.fileExists(atPath: completion.path) { try FileManager.default.removeItem(at: completion) }
         try JSONSerialization.data(withJSONObject: ["ownerId": owner, "origin": base, "selected": selected.path])
             .write(to: control.appendingPathComponent("ready.json"), options: .atomic)
+        let nativeCloud = env["THINGTIME_NATIVE_CLOUD_STAGING_TEST"] == "1"
+        if nativeCloud {
+            web.configuration.userContentController.addUserScript(WKUserScript(source: """
+                (() => {
+                window.__nativeCloudStats = {ranges:0, bytes:0, legacy:0};
+                const original = window.thingtimeNativeBridge.postMessage;
+                window.thingtimeNativeBridge.postMessage = function(message) {
+                    if (message.type === 'mobile-files') {
+                        if (message.payload?.action === 'stage-download') { window.__nativeCloudStats.ranges++; window.__nativeCloudStats.bytes += message.payload.length; }
+                        if (message.payload?.action === 'stage-append') window.__nativeCloudStats.legacy++;
+                    }
+                    return original.call(this, message);
+                };
+                })();
+                """, injectionTime: .atDocumentStart, forMainFrameOnly: true))
+        }
         web.load(URLRequest(url: origin.appendingPathComponent("things")))
         print("Installed sync acceptance ready; use the visible Things, Files picker and native consent controls.")
         for _ in 0..<1200 {
             if FileManager.default.fileExists(atPath: completion.path) {
                 let done = try JSONSerialization.jsonObject(with: Data(contentsOf: completion)) as? [String: Any]
                 XCTAssertEqual(done?["verified"] as? Bool, true)
+                if nativeCloud {
+                    let value = try await web.evaluateJavaScript("window.__nativeCloudStats")
+                    let stats = try XCTUnwrap(value as? [String: Int])
+                    XCTAssertGreaterThanOrEqual(stats["ranges"] ?? 0, 5)
+                    XCTAssertGreaterThan(stats["bytes"] ?? 0, 8 * 1024 * 1024)
+                    XCTAssertEqual(stats["legacy"], 0)
+                    print("IOS_NATIVE_CLOUD_PASS: ranges=\(stats["ranges"] ?? 0) bytes=\(stats["bytes"] ?? 0) legacy=\(stats["legacy"] ?? -1)")
+                }
                 return
             }
             try await Task.sleep(nanoseconds: 500_000_000)
