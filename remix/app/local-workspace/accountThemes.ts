@@ -1,3 +1,4 @@
+import { validOptionalLibraryTitle } from '../utils/libraryTitle';
 import { AccountThemeSelection } from './themeSelection';
 import { LocalThemes, type LocalThemeInput } from './themes';
 import type { LocalThing } from './things';
@@ -19,6 +20,7 @@ type Scope = Extract<WorkspaceScope, { kind: 'account' }>;
 export type AccountThemeSnapshot = {
 	id: string;
 	name: string;
+	title?: string | null;
 	theme: Record<string, unknown>;
 	visibility: 'private' | 'public';
 	folderId: string | null;
@@ -39,6 +41,8 @@ type State = {
 	state: SyncState;
 	deleted: boolean;
 	placementKnown?: boolean;
+	titleKnown?: boolean;
+	titleIntent?: boolean;
 	placementIntent?: boolean;
 	remoteFolderId?: string | null;
 	pending?: { command: ThemeWrite; revision: number };
@@ -74,6 +78,7 @@ export function parseAccountThemeSnapshot(input: unknown): AccountThemeSnapshot[
 			!validThemeVersion(row.version) ||
 			!normalized.ok ||
 			!['private', 'public'].includes(row.visibility) ||
+			('title' in row && !validOptionalLibraryTitle(row.title)) ||
 			(row.folderId !== null && (typeof row.folderId !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(row.folderId))) ||
 			typeof row.createdAt !== 'string' ||
 			!Number.isFinite(Date.parse(row.createdAt)) ||
@@ -86,6 +91,7 @@ export function parseAccountThemeSnapshot(input: unknown): AccountThemeSnapshot[
 			id: row.id,
 			version: row.version,
 			name: normalized.name,
+			...('title' in row ? { title: row.title } : {}),
 			theme: normalized.theme as unknown as Record<string, unknown>,
 			visibility: row.visibility,
 			folderId: row.folderId,
@@ -165,6 +171,8 @@ export class AccountThemeSync {
 			visibility: (input?.visibility as State['visibility']) ?? old?.visibility ?? 'private',
 			state: old?.state === 'conflict' || old?.state === 'error' ? old.state : 'pending',
 			deleted: !row,
+			titleKnown: old?.titleKnown ?? (!old?.base || old.base.title !== undefined),
+			titleIntent: old?.titleIntent || (!previous && row?.crystal.title !== undefined),
 			placementKnown: old?.placementKnown ?? (!old?.base || old.base.folderId !== undefined),
 			placementIntent: old?.placementIntent ?? (!previous && row?.folderId ? true : undefined),
 			pending: old?.pending,
@@ -250,6 +258,18 @@ export class AccountThemeSync {
 		const state = (await tx.get<State>(collection, row.id))!;
 		await tx.put(collection, row.id, { ...state, placementKnown: true, placementIntent: true });
 	}
+	async renameIn(tx: WorkspaceTransaction, row: LocalThing, previous: LocalThing) {
+		this.lease.assertCurrent();
+		if (this.scope.dataPlane !== 'home') return fail('Rename themes in the home library.', 'THEME_PLACEMENT_SCOPE');
+		validateTransferTheme(row);
+		const { title: _new, ...next } = row.crystal,
+			{ title: _old, ...before } = previous.crystal;
+		if (row.id !== previous.id || stable(next) !== stable(before) || row.folderId !== previous.folderId)
+			return fail('Theme title changes cannot replace protected content.');
+		await this.mutated(tx, row, previous);
+		const state = (await tx.get<State>(collection, row.id))!;
+		await tx.put(collection, row.id, { ...state, titleKnown: true, titleIntent: true });
+	}
 	removeIn(tx: WorkspaceTransaction, id: string) {
 		return this.themes.removeIn(tx, id);
 	}
@@ -301,7 +321,7 @@ export class AccountThemeSync {
 				things.push({
 					id: row.id,
 					thingtime: ['theme'],
-					crystal: { name: row.crystal.name, theme: row.crystal.theme },
+					crystal: { name: row.crystal.name, theme: row.crystal.theme, ...(row.crystal.title !== undefined ? { title: row.crystal.title } : {}) },
 					...(row.folderId ? { folderId: row.folderId } : {}),
 					createdAt: row.createdAt,
 					updatedAt: row.updatedAt,
@@ -315,7 +335,9 @@ export class AccountThemeSync {
 					state: state.state,
 					remote: state.baseVersion !== null,
 					deleted: state.deleted,
-					complete: state.placementKnown === true || (!!state.base && state.base.folderId !== undefined)
+					complete:
+						(state.placementKnown === true || (!!state.base && state.base.folderId !== undefined)) &&
+						(state.titleKnown === true || (!!state.base && state.base.title !== undefined))
 				}))
 			};
 		});
@@ -345,7 +367,7 @@ export class AccountThemeSync {
 			...row,
 			id: remote.id,
 			thingtime: ['theme'],
-			crystal: { ...row?.crystal, name: remote.name, theme: remote.theme as any },
+			crystal: { ...row?.crystal, name: remote.name, theme: remote.theme as any, ...(remote.title !== undefined ? { title: remote.title } : {}) },
 			folderId: remote.folderId,
 			createdAt: row?.createdAt ?? remote.createdAt,
 			updatedAt: new Date(Math.max(Date.parse(remote.updatedAt), row ? Date.parse(row.updatedAt) + 1 : 0)).toISOString(),
@@ -357,6 +379,7 @@ export class AccountThemeSync {
 			revision: (old?.revision ?? 0) + 1,
 			base: remote,
 			placementKnown: true,
+			titleKnown: remote.title !== undefined,
 			baseVersion: remote.version,
 			remoteFolderId: remote.folderId,
 			visibility: remote.visibility,
@@ -380,13 +403,19 @@ export class AccountThemeSync {
 					const old = states.get(row.id);
 					if (old?.deleted) continue;
 					if (!old || old.state === 'synced') {
-						if (!old || old.baseVersion !== row.version || !old.placementKnown) await this.install(tx, row, old);
-					} else if (old.baseVersion === row.version && !old.placementKnown) {
+						if (!old || old.baseVersion !== row.version || !old.placementKnown || (!old.titleKnown && row.title !== undefined))
+							await this.install(tx, row, old);
+					} else if (old.baseVersion === row.version && (!old.placementKnown || (!old.titleKnown && row.title !== undefined))) {
 						// Upgrade retained metadata without replacing a pending device edit.
 						const local = await tx.get<LocalThing>('things', row.id);
 						if (local && isTransferTheme(local)) {
-							await tx.put('things', row.id, { ...local, folderId: row.folderId, revision: local.revision + 1 });
-							await tx.put(collection, row.id, { ...old, base: row, placementKnown: true });
+							await tx.put('things', row.id, {
+								...local,
+								...(!old.placementKnown && !old.placementIntent ? { folderId: row.folderId } : {}),
+								crystal: { ...local.crystal, ...(!old.titleKnown && !old.titleIntent && row.title !== undefined ? { title: row.title } : {}) },
+								revision: local.revision + 1
+							});
+							await tx.put(collection, row.id, { ...old, base: row, placementKnown: true, titleKnown: old.titleKnown || row.title !== undefined });
 						}
 					}
 				}
@@ -447,7 +476,8 @@ export class AccountThemeSync {
 										name: thing?.crystal.name,
 										theme: thing?.crystal.theme,
 										visibility: row.visibility,
-										...(row.placementIntent ? { folderId: thing?.folderId || null } : {})
+										...(row.placementIntent ? { folderId: thing?.folderId || null } : {}),
+										...(row.titleIntent ? { title: thing?.crystal.title ?? null } : {})
 								  }
 						);
 						pending = { command, revision: row.revision };
@@ -505,6 +535,7 @@ export class AccountThemeSync {
 								? row.remoteFolderId
 								: row.base?.folderId,
 						placementIntent: row.revision === claimed.pending!.revision ? undefined : row.placementIntent,
+						titleIntent: row.revision === claimed.pending!.revision ? undefined : row.titleIntent,
 						pending: undefined,
 						claim: undefined,
 						state: row.revision === claimed.pending!.revision ? 'synced' : 'pending',

@@ -746,3 +746,17 @@ workspace identity for remote computer discovery. useDeviceStore pauses remote
 refresh/poll effects offline while retaining cached snapshots and resumes on
 connectivity changes. The theme organization browser regression checks no
 offline device reads or automatic refresh-error overlay.
+
+
+Theme display-title editing uses `LocalThings.renameLibrary` and the dedicated
+`AccountThemeSync.renameIn` hook. Generic protected writes remain refused. Shared
+`utils/libraryTitle.ts` validation and the existing canonical theme writer retain
+metadata across conditional sync and portable transfer. `readManagedContentMetadata`
+adds an owned/home title projection; folder-only readers preserve their original
+contract. The native library organization fixture also exercises offline renames.
+See `themeTitle.test.ts`, theme transfer/capability tests and the theme workspace
+guide for verification status and remaining integration gates.
+
+The library Rename callback delegates capability negotiation to the selected
+adapter, so cached account themes and ordinary Things can finish locally after
+cold offline reload. The normal remote rename adapter retains its manifest check.

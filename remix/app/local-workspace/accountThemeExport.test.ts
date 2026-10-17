@@ -14,6 +14,7 @@ const lease = { assertCurrent() {}, onInvalidate: () => () => {} };
 const remote = (folderId: string | null = null) => ({
 	id: randomUUID(),
 	name: 'Peach',
+	title:null,
 	theme: { colors: { accent: '#bb8866' } },
 	visibility: 'private',
 	folderId,
@@ -56,7 +57,7 @@ test('new device themes export before sync and mixed folder transfers retain edi
 		const mixed = manifest((await exportAccountThings({ ids: [folder.id] }, f.deps)).plan);
 		const exported = mixed.things.find((row) => row.id === theme.id)!;
 		assert.equal(exported.folderId, folder.id);
-		assert.deepEqual(exported.crystal, { name: 'Edited peach', theme: edited.theme.theme });
+		assert.deepEqual(exported.crystal, { name: 'Edited peach', theme: edited.theme.theme, title:null });
 		assert.equal((exported.crystal.theme as any).colors.accent, '#226688');
 		assert.equal('ownerId' in exported, false);
 		assert.equal('acl' in exported, false);

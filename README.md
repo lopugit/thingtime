@@ -5101,3 +5101,11 @@ TT_ACCOUNT_THEME_ORGANIZATION_URL=http://127.0.0.1:<qa-port> \
 TT_ACCOUNT_THEME_ORGANIZATION_ARTIFACTS=/path/to/private-test-artifacts \
 node --import tsx --test app/local-workspace/accountThemeOrganization.browser.test.ts
 ```
+
+
+The same theme organization browser fixture now exercises anonymous and account
+library display-title renaming. Its account reconnect checks require
+`api.themes-sync` 1.4.0 and transfer import/export 1.12.0 / 1.16.0 on the isolated
+API. The `themeImport.api.test.ts` fixture checks conditional title metadata and a
+normal importer round-trip. Use the disposable loopback configuration above; no
+existing account or public content is needed.

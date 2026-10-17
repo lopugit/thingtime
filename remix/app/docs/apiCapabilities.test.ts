@@ -32,9 +32,9 @@ test('dedicated theme writers advertise durable history on both capability manif
 
 test('conditional theme synchronization is registered on both manifests', () => {
  const feature = 'api.themes-sync';
- assert.equal(createApiCapabilitiesManifest().features[feature], '1.3.0');
+ assert.equal(createApiCapabilitiesManifest().features[feature], '1.4.0');
  const manifest = thingtimeCapabilityManifest('https://thingtime.test');
- assert.equal(manifest.features[feature].version, '1.3.0');
+ assert.equal(manifest.features[feature].version, '1.4.0');
  assert.ok(manifest.operations.some(operation => operation.feature === feature && operation.path === '/api/v1/themes/sync' && operation.methods.includes('POST')));
  assert.equal(typeof routeModules['v1/themes/sync'], 'function');
 });
@@ -54,15 +54,15 @@ test('JSON Action inputs and draft-saving suites negotiate both origin manifests
 });
 
 test('external avatar export requires the bounded-download contract on both manifests', () => {
-  assert.equal(createApiCapabilitiesManifest().features['api.things-export'], '1.15.0');
-  assert.equal(thingtimeCapabilityManifest('https://archive.test').features['api.things-export'].version, '1.15.0');
+  assert.equal(createApiCapabilitiesManifest().features['api.things-export'], '1.16.0');
+  assert.equal(thingtimeCapabilityManifest('https://archive.test').features['api.things-export'].version, '1.16.0');
   for (const version of [undefined, '1.13.0', '1.13.9', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.14.0'), false);
   for (const version of ['1.14.0', '1.14.1', '1.15.0']) assert.equal(capabilitySatisfies(version, '1.14.0'), true);
 });
 
 test('emoji transfer, library and move capabilities reject pre-support origins', () => {
   const manifest = thingtimeCapabilityManifest('https://thingtime.test');
-  for (const [feature, version] of [['api.things-export', '1.15.0'], ['api.things-import', '1.11.0'], ['api.things', '1.34.1'], ['api.things-bulk', '1.6.0']]) {
+  for (const [feature, version] of [['api.things-export', '1.16.0'], ['api.things-import', '1.12.0'], ['api.things', '1.34.1'], ['api.things-bulk', '1.6.0']]) {
     assert.equal(manifest.features[feature].version, version);
     assert.equal(capabilitySatisfies(version, version), true);
     assert.equal(capabilitySatisfies('1.0.0', version), false);
@@ -80,25 +80,25 @@ test('archive root moves negotiate the additive bulk contract on both manifests'
 
 test('archive library and folder export reject origins without complete archive traversal', () => {
   const manifest = thingtimeCapabilityManifest('https://thingtime.test');
-  for (const [feature, required, previous] of [['api.things', '1.34.1', '1.13.1'], ['api.things-export', '1.15.0', '1.9.0']]) {
+  for (const [feature, required, previous] of [['api.things', '1.34.1', '1.13.1'], ['api.things-export', '1.16.0', '1.9.0']]) {
     assert.equal(manifest.features[feature].version, required);
     for (const version of [undefined, previous, '2.0.0']) assert.equal(capabilitySatisfies(version, required), false);
     assert.equal(capabilitySatisfies(required, required), true);
   }
   assert.equal(createApiCapabilitiesManifest().features['api.things'], '1.34.1');
-  assert.equal(createApiCapabilitiesManifest().features['api.things-export'], '1.15.0');
+  assert.equal(createApiCapabilitiesManifest().features['api.things-export'], '1.16.0');
 });
 
 test('archive re-export is advertised by both manifests and rejects incomplete older implementations', () => {
-  assert.equal(createApiCapabilitiesManifest().features['api.things-export'], '1.15.0');
-  assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.things-export'].version, '1.15.0');
+  assert.equal(createApiCapabilitiesManifest().features['api.things-export'], '1.16.0');
+  assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.things-export'].version, '1.16.0');
   for (const version of [undefined, '1.8.0', '1.8.1', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.9.0'), false);
   for (const version of ['1.9.0', '1.9.1', '1.10.0']) assert.equal(capabilitySatisfies(version, '1.9.0'), true);
 });
 
 test('live-chat shared emoji export requires the additive contract on both manifests', () => {
-  assert.equal(createApiCapabilitiesManifest().features['api.things-export'], '1.15.0');
-  assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.things-export'].version, '1.15.0');
+  assert.equal(createApiCapabilitiesManifest().features['api.things-export'], '1.16.0');
+  assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.things-export'].version, '1.16.0');
   for (const version of [undefined, '1.10.0', '1.11.0', '1.11.1', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.12.0'), false);
   for (const version of ['1.12.0', '1.12.1', '1.14.0']) assert.equal(capabilitySatisfies(version, '1.12.0'), true);
 });
@@ -708,4 +708,12 @@ test('both manifests advertise conditional independent draft and template synchr
 test('draft naming requires the explicit Timeline 1.20 contract', () => {
  assert.equal(capabilitySatisfies('1.19.0','1.20.0'),false);
  assert.equal(capabilitySatisfies(createApiCapabilitiesManifest().features['api.timeline'],'1.20.0'),true);
+});
+
+
+test('theme title metadata requires compatible synchronization and transfer contracts',()=>{
+ for(const [feature,minimum,old] of [['api.themes-sync','1.4.0','1.3.0'],['api.things-import','1.12.0','1.11.0'],['api.things-export','1.16.0','1.15.0']]){
+  assert.equal(createApiCapabilitiesManifest().features[feature],minimum);assert.equal(thingtimeCapabilityManifest('https://titles.test').features[feature].version,minimum);
+  assert.equal(capabilitySatisfies(old,minimum),false);assert.equal(capabilitySatisfies('2.0.0',minimum),false);
+ }
 });

@@ -68,6 +68,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-18 — **Codex (AI)**: Theme library display titles now rename offline
+  for anonymous and retained account workspaces, sync independently, and survive
+  canonical import/export. Removed the duplicate network preflight from the
+  Rename UI while retaining remote adapter negotiation. Native desktop/mobile
+  and isolated API round-trip checks pass locally; full rollout remains open.
+  [PR #1000 details](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
 - 2026-10-17 — **Codex (AI)**: Theme library moves/deletes now finish offline
   through the dedicated theme adapter, with independent receipt-ordered folder
   sync. Anonymous folder deletion preserves children; active selection clears on

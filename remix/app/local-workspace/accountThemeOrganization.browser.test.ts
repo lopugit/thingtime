@@ -35,7 +35,7 @@ test(
 			if (!['GET', 'HEAD', 'OPTIONS'].includes(request.method()))
 				writes.push({ path: new URL(request.url()).pathname, offline, method: request.method() });
 		});
-		const title = 'Organization peach ' + randomUUID().slice(0, 6),
+		let title = 'Organization peach ' + randomUUID().slice(0, 6),
 			folderName = 'Theme folder ' + randomUUID().slice(0, 6),
 			dataName = 'Ordinary companion ' + randomUUID().slice(0, 6);
 		const read = async (id: string) => {
@@ -61,6 +61,7 @@ test(
 			await dialog.waitFor({ state: 'hidden' });
 			await page.getByRole('link', { name, exact: true }).waitFor({ state: 'hidden' });
 		};
+		const sourceTitle = title;
 		const goOffline = async () => {
 			offline = true;
 			await context.setOffline(true);
@@ -129,6 +130,14 @@ test(
 				return false;
 			});
 			await goOffline();
+			await page.getByRole('link', { name: title, exact: true }).click({ button: 'right' });
+			await page.getByRole('menuitem', { name: '✏️ Rename', exact: true }).click();
+			title = 'Offline display ' + title;
+			await page.getByRole('textbox', { name: 'Thing title', exact: true }).fill(title);
+			await page.getByRole('dialog').getByRole('button', { name: 'Rename', exact: true }).click();
+			await page.getByRole('dialog').waitFor({ state: 'hidden' });
+			await page.reload();
+			await page.getByRole('link', { name: title, exact: true }).waitFor();
 			await select(title);
 			await select(dataName);
 			await page.getByRole('button', { name: '📁 Move', exact: true }).click();
@@ -151,9 +160,10 @@ test(
 			await reconnect();
 			await until(async () => {
 				const [theme, data] = await Promise.all([read(themeId), read(dataId)]);
-				return theme.thing?.folderId === folderId && data.thing?.folderId === folderId;
+				return theme.thing?.folderId === folderId && theme.thing?.crystal.title === title && data.thing?.folderId === folderId;
 			});
 			assert.equal((await read(themeId)).thing.visibility, 'private');
+			assert.equal((await read(themeId)).thing.crystal.name, sourceTitle);
 			assert.equal((await guest.request.get(url('/api/v1/things?id=' + themeId))).status(), 404);
 			await page.setViewportSize({ width: 1440, height: 1000 });
 			await page.goto(url('/things'));
@@ -194,7 +204,11 @@ test(
 			);
 			await writeFile(
 				resolve(artifacts!, 'verification.json'),
-				JSON.stringify({ checks, writes, deviceReads, errors, viewports: [1440, 390, 320] }, null, 2)
+				JSON.stringify(
+					{ checks, offlineRename: true, sourceTitle, displayTitle: title, writes, deviceReads, errors, viewports: [1440, 390, 320] },
+					null,
+					2
+				)
 			);
 		} catch (error) {
 			await page.screenshot({ path: resolve(artifacts!, 'failure.png'), fullPage: true }).catch(() => {});
@@ -241,9 +255,10 @@ test(
 			if (!['GET', 'HEAD', 'OPTIONS'].includes(request.method())) writes.push(new URL(request.url()).pathname);
 		});
 		page.on('pageerror', (error: Error) => errors.push(error.message));
-		const title = 'Anonymous peach ' + randomUUID().slice(0, 6),
+		let title = 'Anonymous peach ' + randomUUID().slice(0, 6),
 			folderName = 'Anonymous looks ' + randomUUID().slice(0, 6),
 			url = (path: string) => new URL(path, origin).href;
+		const sourceTitle = title;
 		await mkdir(resolve(artifacts!), { recursive: true });
 		const file = resolve(artifacts!, 'anonymous-input.json');
 		await writeFile(
@@ -294,18 +309,46 @@ test(
 			await page.getByRole('link', { name: title, exact: true }).waitFor();
 			await page.reload();
 			await page.getByRole('link', { name: title, exact: true }).waitFor();
-			await page.screenshot({ path: resolve(artifacts!, 'anonymous-theme-drained-390.png'), fullPage: true, animations: 'disabled' });
+			await page.getByRole('link', { name: title, exact: true }).click({ button: 'right' });
+			await page.getByRole('menuitem', { name: '✏️ Rename', exact: true }).click();
+			title = 'Offline display ' + title;
+			await page.getByRole('textbox', { name: 'Thing title', exact: true }).fill(title);
+			await page.getByRole('dialog').getByRole('button', { name: 'Rename', exact: true }).click();
+			await page.getByRole('dialog').waitFor({ state: 'hidden' });
+			await page.reload();
+			await page.getByRole('link', { name: title, exact: true }).waitFor();
+			for (const width of [1440, 390, 320]) {
+				await page.setViewportSize({ width, height: width === 1440 ? 1000 : 844 });
+				await page.evaluate(() => window.scrollTo(0, 0));
+				await page.waitForTimeout(100);
+				assert.equal(await page.evaluate(() => document.documentElement.scrollWidth), width);
+				await page.screenshot({ path: resolve(artifacts!, `anonymous-theme-title-${width}.png`), fullPage: true, animations: 'disabled' });
+			}
 			await remove(title);
 			await page.reload();
 			assert.equal(await page.getByRole('link', { name: title, exact: true }).count(), 0);
 			await page.goto(url('/themes'));
 			await page.getByRole('button', { name: 'Save theme 💾', exact: true }).waitFor();
-			assert.equal(await page.getByText(title + ' ⭐', { exact: true }).count(), 0);
+			assert.equal(await page.getByText(sourceTitle + ' ⭐', { exact: true }).count(), 0);
 			assert.deepEqual(writes, []);
 			assert.deepEqual(errors, []);
 			await writeFile(
 				resolve(artifacts!, 'anonymous-verification.json'),
-				JSON.stringify({ anonymous: true, offlineFolderDrain: true, offlineAppliedThemeDeletion: true, writes, errors }, null, 2)
+				JSON.stringify(
+					{
+						anonymous: true,
+						offlineRename: true,
+						sourceTitle,
+						displayTitle: title,
+						viewports: [1440, 390, 320],
+						offlineFolderDrain: true,
+						offlineAppliedThemeDeletion: true,
+						writes,
+						errors
+					},
+					null,
+					2
+				)
 			);
 		} catch (error) {
 			await page.screenshot({ path: resolve(artifacts!, 'anonymous-failure.png'), fullPage: true }).catch(() => {});

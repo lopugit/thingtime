@@ -1063,12 +1063,8 @@ const ThingsLibraryPage = () => {
         setFolderMeta((prev) => ({ ...prev, [thing.id]: { ...(prev[thing.id] || { folderId: thing.folderId }), name } }));
       }
       try {
-        // Local validation and the workspace lease authorize device-only writes.
-        // A cold offline editor has no remote capability manifest to negotiate.
-        if (!user?.localOnly) {
-          const { requireThingtimeCapability } = await import('~/api/utils/capabilities/requireCapability.client');
-          await requireThingtimeCapability('api.things', '1.27.0');
-        }
+        // The selected adapter validates local writes and negotiates remote
+        // capabilities only when it actually sends an account request.
         const response = isManagedLibraryThing(thing)
           ? await apiRef.current.v1.things.renameLibrary({ id: thing.id, displayTitle: name, expectedUpdatedAt: thing.updatedAt })
           : thing.thingtime.includes('attachment')
@@ -1084,7 +1080,7 @@ const ThingsLibraryPage = () => {
         return false;
       }
     },
-    [refreshAfterMutation, sourceKeysOf, user?.localOnly]
+    [refreshAfterMutation, sourceKeysOf]
   );
 
   const createFolder = useCallback(

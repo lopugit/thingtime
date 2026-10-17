@@ -1,3 +1,4 @@
+import { normalizeLibraryTitle } from '../utils/libraryTitle';
 import { LOCAL_TIMELINE_FOLDER, localTimelineFolder, recordLocalThingChanges, type LocalMutationCapture } from './timeline';
 import { captureThingChanges, type ThingTransactionCapture } from './thingChanges';
 import { isLocalInteraction } from './interactions';
@@ -72,7 +73,7 @@ export class LocalThings {
 		private builtins: readonly TransferThing[] = [], private now = () => new Date().toISOString(), private uuid = () => crypto.randomUUID(), private onWrite?: LocalThingMutation,
 		private onFileWrite?: LocalFileMutation, private acceptsExternalTarget?: (tx: WorkspaceTransaction, id: string) => Promise<boolean>,
 		private captureAccountChanges?: ThingTransactionCapture, private onRecover?: LocalThingRecovery,
-		private themeMutations?: { import(tx: WorkspaceTransaction, row: LocalThing): Promise<void>; move(tx: WorkspaceTransaction, row: LocalThing, previous: LocalThing): Promise<void> }) {}
+		private themeMutations?: { import(tx: WorkspaceTransaction, row: LocalThing): Promise<void>; move(tx: WorkspaceTransaction, row: LocalThing, previous: LocalThing): Promise<void>; rename(tx: WorkspaceTransaction, row: LocalThing, previous: LocalThing): Promise<void> }) {}
 	private transaction<T>(mode: IDBTransactionMode, run: (tx: WorkspaceTransaction) => Promise<T>, captures?: Map<string, LocalMutationCapture>, signal?: AbortSignal) {
 		const lease: WorkspaceLease = signal ? { assertCurrent: () => { this.lease.assertCurrent(); signal.throwIfAborted(); }, onInvalidate: cb => { const off = this.lease.onInvalidate(cb); signal.addEventListener('abort', cb, { once: true }); return () => { off(); signal.removeEventListener('abort', cb); }; } } : this.lease;
 		return this.db.transaction(this.scope, mode, lease, async tx => {
@@ -222,6 +223,31 @@ export class LocalThings {
 			await this.placement(tx, row); await tx.put('things', id, row); await tx.putBytes(id, bytes);
 			await this.onFileWrite?.(tx, row);
 			signal?.throwIfAborted(); return row;
+		});
+	}
+	/** Rename a theme through its dedicated local transaction and sync adapter. */
+	async renameLibrary(input: { id: string; displayTitle: unknown; expectedUpdatedAt?: string }) {
+		const title = normalizeLibraryTitle(input.displayTitle);
+		if (title === null || Object.keys(input).some(key => !['id', 'displayTitle', 'expectedUpdatedAt'].includes(key)))
+			fail('INVALID_TITLE', 'Choose a title of 1–120 characters');
+		if (input.expectedUpdatedAt !== undefined && (typeof input.expectedUpdatedAt !== 'string' || !Number.isFinite(Date.parse(input.expectedUpdatedAt))))
+			fail('INVALID_VERSION', 'Invalid rename version');
+		return this.transaction('readwrite', async tx => {
+			const previous = await tx.get<LocalThing>('things', input.id);
+			if (!previous || !isTransferTheme(previous)) return fail('LOCAL_OPERATION_UNAVAILABLE', 'This item requires its dedicated title adapter', 409);
+			if (input.expectedUpdatedAt !== undefined && previous.updatedAt !== input.expectedUpdatedAt)
+				fail('WRITE_CONFLICT', 'This theme changed. Reload before renaming.', 409);
+			if (previous.crystal.title === title) return previous;
+			const row: LocalThing = {
+				...previous, crystal: { ...previous.crystal, title: title! }, revision: previous.revision + 1,
+				updatedAt: new Date(Math.max(Date.parse(this.now()), Date.parse(previous.updatedAt) + 1)).toISOString()
+			};
+			validateTransferTheme(row);
+			if (this.scope.kind === 'account' && !this.themeMutations)
+				fail('LOCAL_OPERATION_UNAVAILABLE', 'Account themes require their dedicated sync adapter');
+			await tx.put('things', row.id, row);
+			if (this.scope.kind === 'account') await this.themeMutations!.rename(tx, row, previous);
+			return row;
 		});
 	}
 	/** Owner display text on a stored local file, reusing the shared canonical
@@ -439,7 +465,7 @@ export class LocalThings {
 
 			const normalized = normalizeSavedTheme(original.crystal);
 			if (!normalized.ok) return fail('INVALID_THEME', normalized.error);
-			return { thingtime: ['theme'], crystal: snapshotTransferValue({ name: normalized.name, theme: normalized.theme }) as TransferThing['crystal'] };
+			return { thingtime: ['theme'], crystal: snapshotTransferValue({ name: normalized.name, theme: normalized.theme, ...('title' in original.crystal ? {title:original.crystal.title} : {}) }) as TransferThing['crystal'] };
 		};
 		const rows: LocalThing[] = manifest.things.map(original => ({
 			...importedContent(original),

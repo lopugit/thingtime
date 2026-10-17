@@ -36,7 +36,7 @@ export function accountThemeTransport(
 			if (window.location.origin !== scope.origin) throw new WorkspaceError('WORKSPACE_CHANGED', 'Account origin changed.', 409);
 			await requireThingtimeCapability(
 				'api.themes-sync',
-				operation === 'snapshot' ? '1.2.0' : operation === 'selection' || operation === 'select' ? '1.1.0' : command && 'folderId' in command ? '1.3.0' : '1.0.1'
+				operation === 'snapshot' ? '1.4.0' : operation === 'selection' || operation === 'select' ? '1.1.0' : command && 'title' in command ? '1.4.0' : command && 'folderId' in command ? '1.3.0' : '1.0.1'
 			);
 			await requireThingtimeCapability('api.mongodb-endpoint', '1.1.0');
 			lease.assertCurrent();
@@ -93,7 +93,9 @@ export function accountThemeTransport(
 			const result = await request('snapshot', undefined, signal);
 			if (result.complete !== true)
 				throw new WorkspaceError('INCOMPLETE_THEME_SNAPSHOT', 'Account theme catalogue is incomplete. Device themes are preserved.', 502);
-			return parseAccountThemeSnapshot(result.themes);
+			const rows=parseAccountThemeSnapshot(result.themes);
+			if(rows.some(row=>row.title === undefined)) throw new WorkspaceError('INVALID_THEME_SNAPSHOT','Account theme title metadata is incomplete.',502);
+			return rows;
 		},
 		write: async (command, signal) => parseThemeWriteAcknowledgment((await request('write', command, signal)).acknowledgment)
 	};

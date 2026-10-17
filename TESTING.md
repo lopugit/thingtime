@@ -11707,3 +11707,22 @@ verification limits are in `docs/local-workspaces.md`.
       makes no remote device-list/poll request and shows no automatic computers
       refresh error. Reconnect resumes discovery only for the authenticated
       account; an offline workspace identity is never remote authorization.
+
+
+- [ ] Rename a saved theme in the normal library while anonymous/offline, then
+      cold reload. The library title changes; Theme Studio source name, tokens
+      and active selection stay intact. Verify desktop/390/320px and zero account
+      mutations. Export/import the theme with fresh IDs and the same display title.
+- [ ] Rename a retained account theme offline, edit again after a lost successful
+      write reply and reconnect: replay the frozen request before the later
+      title. Verify no generic protected mutation, publication or selection change.
+- [ ] Refuse stale title edits, invalid/oversized titles and home-title changes
+      under a custom selection atomically. Old cached snapshots need complete
+      title metadata before export; refreshing must preserve pending token edits.
+- [ ] Run the extended isolated `themeImport.api.test.ts`: title/content/receipt
+      atomicity, unchanged replay, altered replay refusal, omitted-title
+      preservation and normal canonical export/import with legitimate ID remapping.
+
+- [ ] Cold offline account Rename must reach the local adapter without requiring
+      a live capability manifest in the UI. A later remote request must still
+      negotiate its own capability and matching account/origin/plane lease.

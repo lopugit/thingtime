@@ -1,3 +1,4 @@
+import { validOptionalLibraryTitle } from '../../../utils/libraryTitle';
 import { copyBoundedJson } from '../../../utils/boundedJson';
 import { normalizeSavedTheme } from '../../../theme/savedTheme';
 import type { TtTheme } from '../../../theme/tokens';
@@ -11,7 +12,7 @@ const fail = (): never => {
 };
 const object = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value);
 export type ThemeWrite = { id: string; writeId: string; expectedVersion: string | null } & (
-	| { action: 'save'; name: string; theme: TtTheme; visibility: 'private' | 'public'; folderId?: string | null }
+	| { action: 'save'; name: string; theme: TtTheme; visibility: 'private' | 'public'; folderId?: string | null; title?: string | null }
 	| { action: 'delete'; expectedVersion: string }
 );
 export type ThemeWriteAcknowledgment = {
@@ -46,7 +47,8 @@ export function parseThemeWrite(input: unknown): ThemeWrite {
 	if (
 		value.action !== 'save' ||
 		!['private', 'public'].includes(String(value.visibility)) ||
-		Object.keys(value).some((key) => !['id', 'writeId', 'expectedVersion', 'action', 'name', 'theme', 'visibility', 'folderId'].includes(key)) ||
+		Object.keys(value).some((key) => !['id', 'writeId', 'expectedVersion', 'action', 'name', 'theme', 'visibility', 'folderId', 'title'].includes(key)) ||
+		('title' in value && !validOptionalLibraryTitle(value.title)) ||
 		('folderId' in value &&
 			value.folderId !== null &&
 			(!identity(value.folderId) || value.folderId === value.id || value.folderId.startsWith('timeline-')))
@@ -60,6 +62,7 @@ export function parseThemeWrite(input: unknown): ThemeWrite {
 		name: normalized.name,
 		theme: normalized.theme,
 		visibility: value.visibility as 'private' | 'public',
+		...('title' in value ? { title: value.title as string | null } : {}),
 		...('folderId' in value ? { folderId: value.folderId as string | null } : {})
 	};
 }

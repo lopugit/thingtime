@@ -1,3 +1,4 @@
+import { isTransferTheme } from '../utils/thingTransfer/theme';
 import { RESERVED_COMPONENT_ID_PREFIX } from '../components/ComponentsLibrary/componentBrowseTypes';
 import { browseLocalDefinitions } from './definitionCatalog';
 import { searchLocalThings } from './structuredSearch';
@@ -155,7 +156,13 @@ export function anonymousApi<T extends Record<string, any>>(remote: T): T {
 		comment: async ({ id, ...input }: { id: string } & Record<string, unknown>) => { const things = service(); await things.get(id); const result = await write({ ...localPostInput({ type: 'text', ...input }), thingtime: ['post', 'comment'], targetId: id }); return { ...result, comment: result.post, commentCount: (await things.snapshot()).filter(row => row.thingtime.includes('comment') && row.targetId === id).length }; },
 		remove: async ({ id }: { id: string }) => { const result = await service().remove([id]); announceLocalWorkspaceChange(result.deleted); return changed(result); },
 		create: (input: ThingWrite) => write(input), update: (input: ThingWrite) => write(input, true),
-		renameLibrary: ({ id, displayTitle, expectedUpdatedAt }: { id: string; displayTitle: string; expectedUpdatedAt?: string }) => write({ id, crystal: { title: displayTitle }, expectedUpdatedAt }, true),
+		renameLibrary: async (input: { id: string; displayTitle: string; expectedUpdatedAt?: string }) => {
+			if (!isTransferTheme(await service().get(input.id)))
+				return write({ id: input.id, crystal: { title: input.displayTitle }, expectedUpdatedAt: input.expectedUpdatedAt }, true);
+			const row = await service().renameLibrary(input);
+			announceLocalWorkspaceChange([row.id]);
+			return changed({ ok: true, id: row.id, title: row.crystal.title, updatedAt: row.updatedAt, thing: project(row) });
+		},
 		fork: async ({ id }: { id: string; key?: string }) => {
 			const things = service(), bundle = await things.export([id]);
 			const result = await things.import(bundle.manifest, null, bundle.files);

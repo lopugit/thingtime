@@ -27,6 +27,7 @@ const project = (doc: any, legacy = false) => ({
 		legacy ? doc : { ...doc, name: doc.crystal?.name, theme: doc.crystal?.theme, visibility: doc.acl?.includes('tt:all') ? 'public' : 'private' }
 	),
 	folderId: legacy ? null : doc.folderId ?? null,
+	title: legacy ? null : doc.crystal?.title ?? null,
 	version: themeVersion(doc)
 });
 
@@ -70,6 +71,7 @@ export async function synchronizeThemeWrite(
 	} catch {
 		throw new ThemeSyncError(400, 'Invalid theme synchronization command.');
 	}
+	if (command.action === 'save' && command.title !== undefined && command.expectedVersion !== null && selectedPlane !== 'home') throw new ThemeSyncError(409, 'Theme display titles belong to the home library.');
 	if (command.action === 'save' && command.folderId !== undefined && selectedPlane !== 'home' && (command.expectedVersion !== null || command.folderId !== null))
 		throw new ThemeSyncError(409, 'Theme folder placement belongs to the home library. Device changes have been kept.');
 	const things = await getHomeThingsCollection(),
@@ -90,6 +92,7 @@ export async function synchronizeThemeWrite(
 	const boundary: ThemeMutationBoundary = {
 		createId: command.id,
 		...(command.action === 'save' && command.folderId !== undefined ? {folderId:command.folderId} : {}),
+		...(command.action === 'save' && command.title !== undefined ? {title:command.title} : {}),
 		capture,
 		beforeWrite: async (before, old, session) => {
 			await admit();

@@ -80,7 +80,7 @@ export class AccountThingSync {
 	readonly things: LocalThings;
 	constructor(private db: WorkspaceDatabase, readonly scope: AccountScope, private lease: WorkspaceLease,
 		private now = () => Date.now(), private uuid = () => crypto.randomUUID(),
-		private files?: AccountContentFiles, private themes?: Pick<AccountThemeSync, 'scope' | 'importIn' | 'moveIn' | 'removeIn' | 'viewIn' | 'isDeletedIn' | 'prepareFolderDelete'>) {
+		private files?: AccountContentFiles, private themes?: Pick<AccountThemeSync, 'scope' | 'importIn' | 'moveIn' | 'removeIn' | 'viewIn' | 'isDeletedIn' | 'prepareFolderDelete' | 'renameIn'>) {
 		if (scope.kind !== 'account') throw new WorkspaceError('ACCOUNT_REQUIRED', 'Anonymous workspaces never sync', 403);
 		if (themes && workspaceScopeKey(themes.scope) !== workspaceScopeKey(scope)) throw new WorkspaceError('WORKSPACE_CHANGED', 'Theme imports belong to a different account workspace.', 409);
 		this.things = new LocalThings(db, scope, lease, [], () => new Date(now()).toISOString(), uuid,
@@ -91,7 +91,7 @@ export class AccountThingSync {
 					if (row?.post && (!refusal || row.at > refusal.at)) return true;
 				}
 				return false;
-			}, (tx, run, captures) => captureAccountThingChanges(tx, scope, run, () => new Date(this.now()).toISOString(), this.uuid, captures), (tx, id) => this.prepareRecovery(tx, id), themes ? { import:(tx,row)=>themes.importIn(tx,row), move:(tx,row,previous)=>themes.moveIn(tx,row,previous) } : undefined);
+			}, (tx, run, captures) => captureAccountThingChanges(tx, scope, run, () => new Date(this.now()).toISOString(), this.uuid, captures), (tx, id) => this.prepareRecovery(tx, id), themes ? { import:(tx,row)=>themes.importIn(tx,row), move:(tx,row,previous)=>themes.moveIn(tx,row,previous), rename:(tx,row,previous)=>themes.renameIn(tx,row,previous) } : undefined);
 	}
 	/** Recovery changes the latest device intent, never an already-sent request.
 	 * Its revision must exceed every earlier write so delayed replies cannot

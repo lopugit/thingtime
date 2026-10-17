@@ -3317,3 +3317,36 @@ no errors and five pre-existing warnings. Evidence:
 Account theme History, library title editing, home-partition integration, shared
 gallery retention, broader identity/cache boundaries and the full acceptance
 matrix remain unfinished. These are local results only; no merge or deployment.
+
+
+## 2026-10-18 — offline theme display titles
+
+Normal library Rename now commits theme display metadata locally for anonymous
+and retained account content. Source names, tokens, selection, ownership and
+visibility stay intact. Account writes use the existing dedicated conditional
+sync command and immutable receipts; later renames cannot replace a frozen retry.
+Older caches require title coverage before complete export. Canonical transfer
+v1 preserves optional crystal.title through local and normal API import/export,
+with fresh private copy IDs. Contracts: themes-sync 1.4.0, things-import 1.12.0,
+things-export 1.16.0. Remote clients negotiate those versions.
+
+A real offline account check found the Rename UI still requiring a network
+manifest before calling its local adapter. Negotiation now belongs to the
+selected adapter; the remote adapter keeps its check. The rebuilt client passes
+both anonymous and account title/move/drain/delete workflows, cold reload and
+reconnect at 1440/390/320px, with zero offline account mutations and no page
+errors. The isolated API test proves normal remapped import/export, metadata
+preservation/clearing, replay identity and atomic refusal. Fixtures use normal
+API writes and cleanup. Evidence: tmp/theme-title-live-api/ and
+tmp/theme-title-live-browser/.
+
+Validation: 529 workspace passes plus four shell checks; 62 opt-in skips. The
+browser and API fixtures ran explicitly. Client build passes; raw TypeScript
+retains 91 baseline diagnostics with no new normalized signatures. Focused lint
+has zero errors and six existing warnings. Title/transport/transfer and
+capability checks pass. The previous organization semantic graph refresh
+completed; the title source/docs refresh is recorded separately below.
+
+Account theme History, home-partition integration, other protected-kind titles,
+algorithm sync, wider identity/cache boundaries, latest-main reconciliation and
+the full acceptance matrix remain open. No merge or deployment is claimed.

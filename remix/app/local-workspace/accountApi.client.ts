@@ -794,6 +794,20 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 			const row = await sync.things.create(input); changed();
 			return { ok: true, id: row.id, thing: project(await sync.view(row.id)), savedLocally: true };
 		},
+		renameLibrary: async (input: { id: string; displayTitle: string; expectedUpdatedAt?: string }) => {
+			facadeLease.assertCurrent();
+			const { sync } = worker();
+			if (await sync.isDeleted(input.id)) throw new WorkspaceError('LOCAL_THING_DELETED', 'This Thing was deleted.', 409);
+			let cached = await sync.view(input.id);
+			if (!cached && navigator.onLine !== false && canSyncAccountWorkspace(scope)) {
+				await refresh({ id: input.id });
+				cached = await sync.view(input.id);
+			}
+			if (!cached || !isTransferTheme(cached)) return online.things.renameLibrary(input);
+			const row = await sync.things.renameLibrary(input);
+			changed();
+			return { ok: true, id: row.id, title: row.crystal.title, updatedAt: row.updatedAt, thing: project(await sync.view(row.id)), savedLocally: true };
+		},
 		update: async (input: AccountThingWrite & { id: string }) => {
 			const { sync } = worker();
 			if (await sync.isDeleted(input.id)) throw new WorkspaceError('LOCAL_THING_DELETED', 'This Thing was deleted. Restore it before editing.', 409);

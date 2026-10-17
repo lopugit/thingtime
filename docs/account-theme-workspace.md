@@ -250,3 +250,54 @@ origin/plane isolation remains an audit item.
 These are local results. CI, deployed acceptance and the full rollout are not
 complete. Ignored JSON/screenshots are under
 `tmp/account-theme-organization-browser-reviewed/`.
+
+
+## Offline display titles — 2026-10-18
+
+The normal library Rename dialog now uses a metadata-only local theme operation.
+It keeps the source name, tokens, selected theme, ownership and visibility intact.
+The existing workspace transaction commits the display title and account intent
+together. Stale timestamps, invalid titles, missing ownership and custom-plane
+renames refuse without partial changes. Generic protected-content updates remain
+unavailable. Anonymous renames record their approved theme History projection
+and never construct an account sender.
+
+The existing conditional theme command gains optional `title` in
+`api.themes-sync` 1.4.0. Omission preserves stored metadata; explicit null clears
+it. Snapshot responses include title or explicit null. Retained older caches
+require a metadata refresh before claiming a complete export, and upgrade only
+the missing metadata without replacing pending token edits or local title intent.
+Lost write replies replay the original immutable command before later renames.
+The canonical writer commits content, title, accounting, History and receipt
+together. Existing home title changes require home selection; independent new
+copies can carry their own title under a custom selection.
+
+Portable `thingtime.transfer` v1 theme crystals retain optional display titles.
+Normal server import/export and local remapped copies use the same validator;
+owned title metadata is read with the existing home-library boundary. Public
+theme projections remain unchanged. Import/export capabilities advance to
+1.12.0 / 1.16.0, and first-party clients negotiate them before remote transfer.
+
+Local validation: 529 workspace checks and four offline-shell checks pass; 62
+opt-in cases remain skipped in that default suite. Both title/organization browser
+cases ran explicitly against the built client and disposable loopback API and
+passed. Normal anonymous/account Rename survives cold offline reload at
+1440/390/320px with no page errors or offline account mutations. Account title,
+source name, folder moves, folder drain and deletion converge after reconnect.
+The live API fixture proves title/content/receipt atomicity, exact replay,
+changed-replay refusal, omitted-title preservation, explicit-null clearing,
+foreign-folder/custom-plane refusal and normal canonical export/import into a
+fresh private ID. Fixture entries are cleaned through the API. Evidence:
+`tmp/theme-title-live-api/` and `tmp/theme-title-live-browser/`.
+
+The first account browser run exposed a duplicate capability preflight in the
+library Rename UI. The selected adapter now owns capability negotiation: local
+completion needs no network manifest, while remote mutation still uses the
+existing negotiated adapter. The rebuilt-client rerun passes both account and
+anonymous cases. The client build passes; TypeScript reports the same 91 baseline
+diagnostics (47 distinct normalized signatures), and focused lint has no errors
+and six pre-existing warnings. Capability and title/transport/transfer checks pass.
+These are local results; current-head CI and deployed acceptance are unverified.
+
+Wider protected-kind renaming, account theme History, home-partition integration,
+shared gallery retention and the full matrix remain open.

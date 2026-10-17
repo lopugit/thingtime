@@ -128,6 +128,7 @@ const assertLegacyThemeMutationAllowed = async (ownerId: string, things: any, se
 export type ThemeMutationBoundary = {
  createId?: string;
  folderId?: string | null;
+ title?: string | null;
  capture?: ThingMutationCapture;
  beforeWrite?(before: any | null, legacy: any | null, session: any): Promise<void>;
  afterWrite?(after: any | null, session: any): Promise<void>;
@@ -165,7 +166,7 @@ export const saveTheme = async (ownerId: string, input: SaveThemeInput, boundary
 					await boundary.beforeWrite?.(before, null, session);
 					const placement = boundary.folderId === undefined ? {} : prepareManagedPlacement(before as any, ownerId, await lockFolderDestination(things, ownerId, boundary.folderId, session), now);
 					const visibility = explicitVisibility ?? (Array.isArray(before.acl) && before.acl.includes(ACL_ALL) ? 'public' : 'private');
-					const crystal = { ...(before.crystal || {}), name, theme };
+					const crystal = { ...(before.crystal || {}), name, theme, ...(boundary.title !== undefined ? {title:boundary.title} : {}) };
 					const extended = before.extended ?? null;
 					const tags = Array.isArray(before.tags) ? before.tags : [];
 					const sizeBytes = thingStorageSizeBytes({ crystal, extended, tags });
@@ -231,7 +232,7 @@ export const saveTheme = async (ownerId: string, input: SaveThemeInput, boundary
      const current = await themes.findOne({ _id: existing._id, ownerId }, { session });
      await boundary.beforeWrite(null, current, session);
     }
-				if (boundary.folderId !== undefined) throw new StorageMutationError(409, 'storage_conflict', 'Legacy themes must be migrated before folder placement can change');
+				if (boundary.folderId !== undefined || boundary.title !== undefined) throw new StorageMutationError(409, 'storage_conflict', 'Legacy themes must be migrated before library metadata can change');
 				const write = await themes.updateOne(
 					{ _id: new ObjectId(existing._id), ownerId, updatedAt: existing.updatedAt },
 					{ $set: { name, theme, visibility, schemaVersion: COLLECTION_SCHEMA_VERSIONS.themes, updatedAt: now } },
@@ -260,7 +261,7 @@ export const saveTheme = async (ownerId: string, input: SaveThemeInput, boundary
     shareId: boundary.createId ?? randomUUID(),
     schemaVersion: COLLECTION_SCHEMA_VERSIONS.things,
     thingtime: ['theme'],
-    crystal: { name, theme },
+    crystal: { name, theme, ...(boundary.title !== undefined ? {title:boundary.title} : {}) },
 		extended: null,
     ownerId,
     acl: themeAcl(visibility),

@@ -56,7 +56,7 @@ test(
 			assert.equal(health.replicaSet, 'draftPreview');
 			assert.equal(health.custom, false);
 			const capabilities = await read(await owner.get('/api/v1/capabilities'), 'placement contract active');
-			assert.equal(capabilities.features['api.themes-sync'], '1.3.0');
+			assert.equal(capabilities.features['api.themes-sync'], '1.4.0');
 			for (const context of [owner, other]) {
 				const username = 'themeimport-' + randomUUID().slice(0, 8);
 				const result = await read(
@@ -81,11 +81,12 @@ test(
 				);
 				ids.push(result.thing.id);
 			}
-			const create = command({ folderId: folders[0] });
+			const create = command({ folderId: folders[0], title: 'Imported library title' });
 			themes.add(create.id);
 			const receipt = (await read(await write(create), 'create tokens and folder atomically')).acknowledgment;
 			let theme = (await snapshot()).find((row: any) => row.id === create.id);
 			assert.equal(theme.folderId, folders[0]);
+			assert.equal(theme.title, 'Imported library title');
 			assert.equal(theme.version, receipt.resultVersion);
 			assert.deepEqual((await read(await write(create), 'exact placed create replay')).acknowledgment, receipt);
 			await read(await write({ ...create, folderId: null }), 'same write ID cannot change placement', 409);
@@ -93,6 +94,7 @@ test(
 			await read(await write(update), 'omitted placement preserves existing folder');
 			theme = (await snapshot()).find((row: any) => row.id === create.id);
 			assert.equal(theme.folderId, folders[0]);
+			assert.equal(theme.title, 'Imported library title');
 			assert.equal(theme.name, 'Later tokens');
 			const before = theme;
 			for (const folderId of [randomUUID(), foreignFolders[0]]) {
@@ -121,7 +123,7 @@ test(
 				'custom plane cannot change home placement',
 				409
 			);
-			const rootCreate = command({ folderId: null });
+			const rootCreate = command({ folderId: null, title: 'Independent home copy' });
 			themes.add(rootCreate.id);
 			await read(await write(rootCreate, selected), 'custom plane may create standalone home theme');
 			const cleared = (
@@ -130,6 +132,59 @@ test(
 			theme = (await snapshot()).find((row: any) => row.id === create.id);
 			assert.equal(theme.folderId, null);
 			assert.equal(theme.version, cleared.resultVersion);
+			const titleWrite = command({ id: create.id, expectedVersion: theme.version, title: 'New library title', name: theme.name, theme: theme.theme });
+			const titleReceipt = (await read(await write(titleWrite), 'conditional title rename')).acknowledgment;
+			assert.deepEqual((await read(await write(titleWrite), 'exact title replay')).acknowledgment, titleReceipt);
+			await read(await write({ ...titleWrite, title: 'Changed replay' }), 'title replay cannot change command', 409);
+			theme = (await snapshot()).find((row: any) => row.id === create.id);
+			assert.equal(theme.title, 'New library title');
+			assert.equal(theme.name, titleWrite.name);
+			assert.deepEqual(theme.theme, titleWrite.theme);
+			await read(
+				await write(command({ id: create.id, expectedVersion: theme.version, title: 'Wrong plane' }), selected),
+				'custom plane cannot rename existing home title',
+				409
+			);
+			await read(
+				await write(command({ id: create.id, expectedVersion: theme.version, title: 'x'.repeat(121) })),
+				'invalid title refuses entire mutation',
+				400
+			);
+			assert.deepEqual(
+				(await snapshot()).find((row: any) => row.id === create.id),
+				theme
+			);
+			const exported = await read(
+				await owner.post('/api/v1/things/export', { headers, data: { ids: [create.id] } }),
+				'normal export retains display title'
+			);
+			const portable = exported.plan.things.find((row: any) => row.id === create.id);
+			assert.equal(portable.crystal.title, theme.title);
+			assert.equal(portable.crystal.name, theme.name);
+			const imported = await read(
+				await owner.post('/api/v1/things/import', {
+					headers,
+					data: { manifest: { format: 'thingtime.transfer', version: 1, roots: [create.id], things: [portable], files: [] } }
+				}),
+				'normal import remaps titled private theme'
+			);
+			const copiedId = imported.roots[0];
+			themes.add(copiedId);
+			assert.notEqual(copiedId, create.id);
+			const copied = (await snapshot()).find((row: any) => row.id === copiedId);
+			assert.equal(copied.title, theme.title);
+			assert.equal(copied.name, theme.name);
+			assert.equal(copied.visibility, 'private');
+			assert.deepEqual(copied.theme, theme.theme);
+			await read(await guest.get('/api/v1/themes/shared', { params: { id: copiedId } }), 'remapped copy stays private', 404);
+			await read(
+				await write(command({ id: copiedId, expectedVersion: copied.version, name: copied.name, theme: copied.theme, title: null })),
+				'explicit null clears display metadata'
+			);
+			const withoutTitle = (await snapshot()).find((row: any) => row.id === copiedId);
+			assert.equal(withoutTitle.title, null);
+			assert.equal(withoutTitle.name, copied.name);
+			assert.deepEqual(withoutTitle.theme, copied.theme);
 			await read(await guest.get('/api/v1/themes/shared', { params: { id: create.id } }), 'imported theme stays private', 404);
 			completed = true;
 		} finally {

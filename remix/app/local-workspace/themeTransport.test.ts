@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { requireThingtimeCapability } from '../api/utils/capabilities/requireCapability.client';
 import { parseThemeWrite } from '../api/utils/themes/themeSyncContract';
 import { accountThemeTransport } from './themeTransport.client';
 import { bindLocalWorkspace, accountWorkspaceLease } from './runtime.client';
@@ -51,7 +52,10 @@ test('theme transport rejects missing capability, offline authority, partial cat
 		capability = '1.1.0';
 		await assert.rejects(bind().snapshot(signal()));
 		assert.equal(calls.length, 0, 'snapshots require the complete folder-placement contract');
-		capability = '1.2.0';
+		capability = '1.3.0';
+		await assert.rejects(bind().snapshot(signal()), /incompatible/);
+		assert.equal(calls.length,0,'older snapshots cannot silently omit titles');
+		capability = '1.4.0';
 		assert.deepEqual(await bind().snapshot(signal()), []);
 		assert.equal(calls[0].url, '/api/v1/themes/sync');
 		assert.equal(calls[0].init.credentials, 'same-origin');
@@ -79,12 +83,19 @@ test('theme transport rejects missing capability, offline authority, partial cat
 		assert.deepEqual(await bind().write(command, signal()), acknowledgment);
 		assert.deepEqual(JSON.parse(String(calls.at(-1)!.init.body)), { operation: 'write', expectedOwnerId: 'owner', command });
 		const beforePlacement = calls.length;
+		await assert.rejects(requireThingtimeCapability('api.themes-sync','2.0.0'));
+		capability = '1.2.0';
 		if (command.action !== 'save') throw new Error('Expected a save fixture');
 		await assert.rejects(bind().write({ ...command, folderId: null }, signal()), /incompatible/);
 		assert.equal(calls.length, beforePlacement, '1.2.0 cannot silently drop imported folder placement');
 		capability = '1.3.0';
 		response = Response.json({ ok: true, ownerId: 'owner', dataPlane: 'home', storagePlane: 'home', acknowledgment });
 		assert.deepEqual(await bind().write({ ...command, folderId: null }, signal()), acknowledgment);
+
+		await assert.rejects(bind().write({...command,title:'Display label'},signal()),/incompatible/);
+		capability='1.4.0';
+		response=Response.json({ok:true,ownerId:'owner',dataPlane:'home',storagePlane:'home',acknowledgment});
+		assert.deepEqual(await bind().write({...command,title:'Display label'},signal()),acknowledgment);
 
 		const selection = { themeId: null, version: 'theme-selection-v1:' + 'a'.repeat(64) };
 		response = Response.json({ ok: true, ownerId: 'owner', dataPlane: 'home', storagePlane: 'home', selection });
@@ -96,7 +107,7 @@ test('theme transport rejects missing capability, offline authority, partial cat
 		assert.deepEqual(await bind().select(selectionCommand, signal()), selectionReceipt);
 		assert.deepEqual(JSON.parse(String(calls.at(-1)!.init.body)), { operation: 'select', expectedOwnerId: 'owner', command: selectionCommand });
 
-		capability = '1.2.0';
+		capability = '1.4.0';
 		response = Response.json({ ok: true, ownerId: 'owner', dataPlane: 'home', storagePlane: 'home', complete: false, themes: [] });
 		await assert.rejects(bind().snapshot(signal()), /incomplete/);
 		response = Response.json({ ok: true, ownerId: 'owner', dataPlane: 'home', complete: true, themes: [] });
