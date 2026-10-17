@@ -1,3 +1,4 @@
+import type { LocalTrashContext } from './localTrash';
 import { getNativeBridge } from '../utils/nativeBridge';
 import type { SavedFileSyncConfiguration } from './configuredPlan';
 import { parseFileSyncConfiguration } from './configuration';
@@ -7,6 +8,7 @@ import {
 	requestMobileFolders,
 	supportsMobileFolderPublication,
 	supportsMobileTrash,
+	supportsMobileTrashTransitions,
 	type FolderCapabilities,
 	type MobileWriteApproval
 } from './mobileFolders.client';
@@ -46,25 +48,36 @@ export async function approveMobileSyncTarget(
 	const approved = await request(scope.ownerId, { action: 'write-approve', rootId, approval }, signal);
 	if (!approved.writeApproval || JSON.stringify(approved.writeApproval) !== JSON.stringify(approval))
 		throw Error('Native folder write approval is unavailable.');
-	const transfer = (operation: Parameters<LocalSyncTarget['lookup']>[0], current: SyncScope) => {
+	const transfer = (operation: Parameters<LocalSyncTarget['lookup']>[0], current: SyncScope, context?: LocalTrashContext) => {
 		signal.throwIfAborted();
 		if (!sameSyncScope(scope, current)) throw Error('Native download scope changed.');
-		return { scope: { ...scope }, rootId, operation: { ...structuredClone(operation), confirmed: false } };
+		if (context && (context.parent || context.childrenOperationId) && !supportsMobileTrashTransitions(bridge))
+			throw Error('Update the app to safely remove folders after their children.');
+		return { ...structuredClone(context ?? {}), scope: { ...scope }, rootId, operation: { ...structuredClone(operation), confirmed: false } };
 	};
 	return {
 		...(configuration.propagateDeletes
 			? {
-					trash: async (operation: Parameters<LocalSyncTarget['lookup']>[0], current: SyncScope) => {
-						const result = await request(scope.ownerId, { action: 'trash', rootId, trash: transfer(operation, current), approval }, signal);
+					trash: async (operation: Parameters<LocalSyncTarget['lookup']>[0], current: SyncScope, context?: LocalTrashContext) => {
+						const result = await request(scope.ownerId, { action: 'trash', rootId, trash: transfer(operation, current, context), approval }, signal);
 						if (result.trash?.status !== 'complete') throw Error('Native trash is not confirmed.');
 						return result.trash.receipt;
 					}
 			  }
 			: {}),
-		lookup: async (operation, current) => {
+		...(configuration.propagateDeletes && supportsMobileTrashTransitions(bridge)
+			? {
+					trashExpected: async (operation: Parameters<LocalSyncTarget['lookup']>[0], current: SyncScope, context?: LocalTrashContext) => {
+						const result = await request(scope.ownerId, { action: 'trash-expected', rootId, trash: transfer(operation, current, context) }, signal);
+						if (!result.expectedEntry) throw Error('Native folder precondition is unavailable.');
+						return result.expectedEntry;
+					}
+			  }
+			: {}),
+		lookup: async (operation, current, context) => {
 			if (operation.mutation.kind === 'trash' && operation.mutation.side === 'local') {
 				if (!supportsMobileTrash(bridge)) throw Error('Recoverable native trash is unavailable on this device.');
-				const result = await request(scope.ownerId, { action: 'trash-lookup', rootId, trash: transfer(operation, current) }, signal);
+				const result = await request(scope.ownerId, { action: 'trash-lookup', rootId, trash: transfer(operation, current, context) }, signal);
 				if (!result.trash) throw Error('Native trash lookup is unavailable.');
 				return result.trash;
 			}

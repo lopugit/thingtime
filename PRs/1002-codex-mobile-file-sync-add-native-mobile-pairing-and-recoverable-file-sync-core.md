@@ -1692,3 +1692,32 @@ The full acceptance ledger remains open: automatic local Trash propagation
 (including folder stamps after child removals), recovery UI, Android parity,
 background/Photos sync, independent account backup export at large scale and
 physical-drive delivery are unfinished. No main/production promotion occurred.
+
+
+## Foreground Apple deletion and recovery browser — 2026-10-17
+
+Connect the shared runner to approved native Trash after a fresh root/path
+absence check, including deleted cloud ancestors. Immutable native child
+receipts carry bounded parent-stamp transitions for children-before-parent
+removal. No refreshed scan silently replaces the original operation precondition.
+
+Native Trash 1.2 adds owned paged recovery and separate native confirmation for
+restoring a reviewed retained file/folder into an absent destination. Existing
+restore intents survive restart and lost replies. The UI includes prior
+connections and pairing IDs under the same surviving native grant; removing or
+rechoosing that grant still blocks UI recovery and is disclosed. Android remains
+gated. No cross-device atomicity, background worker, device-loss recovery or
+whole-account backup completion is claimed.
+
+Validation: Apple package 47; focused Mac identity/adapter/XPC 43; iOS simulator
+27; shared sync 146 plus one mocked fingerprint test; four fresh-process Trash
+recovery cases. Raw TypeScript remains at 91 existing diagnostics, none in changed
+files. Full Mac suite retains the previously documented Bluetooth test-host
+limitation. Browser fixture at 1280/390px has no horizontal overflow and 40px
+controls; invalid paths disable restoration and reviewed completion is visible.
+
+Real Mac/API fixture: planner-driven child/parent deletion, lost Trash reply,
+native and IndexedDB restart with original IDs, recovery enumeration, reviewed
+restore with lost reply/restart, exact bytes, occupied-target preservation and
+revocation all passed (280 native calls, 562 fresh identity checks). Picker,
+consent and credentials are isolated fixture adapters, not installed-app evidence.

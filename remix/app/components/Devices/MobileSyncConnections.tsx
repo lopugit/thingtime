@@ -1,3 +1,4 @@
+import { NativeFileRecovery } from './NativeFileRecovery';
 import { TIMELINE_CHANGED_EVENT } from '~/timeline/clientEvents';
 import React, { useEffect, useId, useRef, useState, useSyncExternalStore } from 'react';
 import { SyncConflictReview } from './SyncConflictReview';
@@ -15,7 +16,8 @@ import {
 	requestMobileFolders,
 	mobileFolderSource,
 	supportsMobileSyncConditions,
-	supportsMobileFolderPublication
+	supportsMobileFolderPublication,
+	supportsMobileTrashRecovery
 } from '~/fileSync/mobileFolders.client';
 import { openSyncJournal, withSyncRootLock, syncScopeKey } from '~/fileSync/journal.client';
 import { readCloudFolderInventory } from '~/fileSync/cloudInventory.client';
@@ -464,8 +466,27 @@ function Connections({
 			</Flex>
 			<Text fontSize="12px" color="var(--tt-muted, #71717a)">
 				Transfer selected folders in either direction while this app stays open. Downloads and two-way sync require native folder approval and
-				deletion propagation off. Conflicting changes preserve both copies for review. Background transfers are still being added.
+				recoverable device Trash for deletion propagation. Conflicting changes preserve both copies for review. Background transfers are still being
+				added.
 			</Text>
+			{scope.dataPlane === 'home' && supportsMobileTrashRecovery(capabilities) && (
+				<NativeFileRecovery
+					roots={roots}
+					busy={busy}
+					perform={(work) =>
+						run(async (assertActive) => {
+							await work(async (request) => {
+								assertActive();
+								await authorizeDevice(scope.deviceId, controller.current!.signal);
+								assertActive();
+								const result = await requestFolders(scope.ownerId, request, controller.current!.signal);
+								assertActive();
+								return result;
+							});
+						})
+					}
+				/>
+			)}
 			{connections.map((saved) => {
 				const progress = transfers[saved.id] ?? readStampedCache<ForegroundSyncProgress & { message?: string }>(progressKey(saved.id));
 				const running = busy && activeTransfer === saved.id;
@@ -478,7 +499,7 @@ function Connections({
 							roots.find((root) => root.id === saved.configuration.localRootId),
 							capabilities
 						) &&
-						!saved.configuration.propagateDeletes);
+						(!saved.configuration.propagateDeletes || supportsMobileTrashRecovery(capabilities)));
 				const allowed =
 					supportsMobileSyncConditions(capabilities) &&
 					scope.dataPlane === 'home' &&
@@ -496,7 +517,7 @@ function Connections({
 									? 'Paused'
 									: !supported
 									? downloading || twoWay
-										? 'Downloads and two-way sync need a supported device folder and deletion propagation off'
+										? 'Downloads and two-way sync need folder approval and an updated app for recoverable deletions'
 										: 'This direction is not available yet'
 									: !supportsMobileSyncConditions(capabilities)
 									? 'Update this app to transfer files'

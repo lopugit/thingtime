@@ -1980,3 +1980,43 @@ gate remains: parent folder stamps after child removals, end-to-end local Trash
 routing, Android Trash and product recovery controls still require work. No
 cross-device atomicity, automatic background sync, Photos import, independent
 account backup completion or physical-drive delivery is claimed here.
+
+
+### Foreground Apple deletion and recovery browser — 2026-10-17
+
+This supersedes the prior automatic-deletion gate for capable Mac/iOS hosts.
+Native Trash 1.2 exposes owned retained-item browsing and reviewed restoration.
+The UI requires that capability before permitting download/two-way deletion
+propagation, plus the existing explicit per-configuration native deletion consent.
+Android remains gated. Cloud paths are rechecked before the native call; the
+native adapter revalidates source stamps. This is not an atomic transaction
+across cloud and device filesystems.
+
+Children move before empty parents. Each immutable operation derives at most
+one previous sibling and one last-child receipt link. Native receipts bind the
+original expected parent to its observed stamp after a successful child move;
+changed identity, unexpected edits or missing saved transitions refuse. A crash
+before saving the parent transition cannot manufacture one during recovery.
+
+Recovery lists up to 20 native journal records per page across prior connections
+and pairing IDs for the same owner/origin and surviving picker grant. Listing
+reads metadata; reviewing hashes the retained bytes. Restore asks for separate
+native confirmation, never overwrites a destination and persists its exact
+intent before movement. An interrupted restore remains discoverable, including
+when its bytes already moved, and can resume after restart with the same intent.
+
+Limits: removing/rechoosing a grant still blocks recovery through these controls;
+no arbitrary new-grant destination, Android Trash, background deletion, scalable
+journal index, native recovery backup or device-loss guarantee is provided.
+A retained directory can preserve racing children but is not a recursive snapshot.
+Canonical Timeline file version history remains separate from native operation
+recovery. Independent whole-account snapshot copies, full account export/restore,
+100 GB/100 TB throughput acceptance and physical-media fulfillment remain open.
+
+
+Validation for this checkpoint: Apple 47, focused Mac 43, iOS simulator 27,
+shared sync 146 plus one fingerprint mock, and four fresh-process Trash cases.
+Real Mac/API acceptance verifies planner child/parent removal and exact restored
+bytes across lost replies/restart with 280 native calls and 562 fresh identity
+checks. Fixture picker/consent remains synthetic. Desktop/phone browser layout
+checks passed; raw TypeScript remains at 91 baseline diagnostics, none introduced.

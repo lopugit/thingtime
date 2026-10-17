@@ -225,7 +225,7 @@ test('foreground downloads recover native receipts and checkpoint failure withou
 			input(),
 			new AbortController().signal
 		),
-		/deletion propagation disabled/
+		/deletion propagation requires recoverable native Trash/
 	);
 	journal.close();
 });

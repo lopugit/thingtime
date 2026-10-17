@@ -10960,3 +10960,27 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
   recreate checks with independent ids and an uppercase alias refusal.
 - [ ] Enable local deletion propagation only after parent stamp transitions,
   native recovery controls and platform-specific Trash support are verified.
+
+
+### Foreground Apple deletion and recovery browser — 2026-10-17
+
+- [x] Parent stamps advance only from exact same-scope completed child receipts;
+  intervening edits, foreign receipts and incomplete post-crash transitions refuse.
+  The immutable run and original operation IDs stay unchanged.
+- [x] Fresh cloud path replacement, missing roots and failed reads stop native
+  removal. Every removal rechecks cloud absence and native source identity.
+- [x] Native recovery pages limit returned records to 20, preserve pagination
+  across unrelated records, filter owner/origin/grant, and include prior pairing
+  and connection IDs only under that same owned surviving grant.
+- [x] Explicit native restore consent is separate from sync approval. Cancelled
+  consent, revoked identity and occupied destinations preserve retained bytes.
+  Interrupted restore retains its exact intent and resumes without a new path.
+- [x] Recovery UI at 1280px and 390px: long paths wrap, controls are 40px high,
+  no horizontal page overflow, invalid destination disabled and restore feedback
+  visible. Synthetic browser fixture; native consent is tested separately.
+- [x] Real Mac/API: shared planner removes children then parent; lose Trash reply,
+  restart native/IndexedDB, resume original IDs, list retained files, restore with
+  lost reply/restart and verify exact bytes. Revocation refuses later access.
+- [ ] Installed native recovery consent and selected-folder lifecycle; Android
+  parity, external/provider volumes, recovery after removing/rechoosing a grant,
+  and inclusion of native recovery storage in device-loss backups remain open.

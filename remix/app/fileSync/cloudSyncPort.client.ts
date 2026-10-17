@@ -1,3 +1,4 @@
+import { localTrashContexts } from './localTrash';
 import { createCloudDownloadSource } from './cloudDownloadSource';
 import { validateLocalStage, type LocalSyncTarget } from './localSyncTarget';
 import { cloudRequests } from './cloudTransport';
@@ -38,29 +39,33 @@ export function createCloudSyncPort(
 	const fileTransport = run.version === 2 ? createCloudRetentionTransport : createCloudFileTransport;
 	const downloads = run.cloudWrites.some((write) => write.operation.mutation.kind === 'copy' && write.operation.mutation.from === 'remote');
 	if (downloads && !input.localTarget) throw Error('Native staged publication is required for downloads.');
+	const trashContexts = localTrashContexts(run);
+	if (run.operations.some((op) => op.mutation.kind === 'trash' && op.mutation.side === 'local') && !input.localTarget?.trash)
+		throw Error('Recoverable native Trash is required for local deletion.');
 	const writes = new Map(run.cloudWrites.map((write) => [write.operation.id, write]));
 	const paths = new Map(run.cloudWrites.map((write) => [write.operation.mutation.path, write]));
 	const get = (id: string, scope: SyncScope) => {
 		if (!sameSyncScope(scope, run.scope) || !writes.has(id)) throw Error('Unknown cloud sync operation.');
 		return writes.get(id)!;
 	};
+	const isLocalTrash = (write: ReturnType<typeof get>) => write.operation.mutation.kind === 'trash' && write.operation.mutation.side === 'local';
 	const isDownload = (write: ReturnType<typeof get>) => write.operation.mutation.kind === 'copy' && write.operation.mutation.from === 'remote';
-	const readDownload = async (write: ReturnType<typeof get>) => {
+	const readLocalSource = async (write: ReturnType<typeof get>) => {
 		const m = write.operation.mutation;
-		if (m.kind !== 'copy' || m.from !== 'remote') throw Error('Expected a download.');
+		if (!isDownload(write) && !isLocalTrash(write)) throw Error('Expected a local destination.');
 		const rootId = write.cloudRootId ?? input.cloudRootId;
 		if (!rootId) throw Error('This saved download has no pinned cloud root; reconcile it before publishing.');
 		if (write.cloudRootId && input.cloudRootId && write.cloudRootId !== input.cloudRootId) throw Error('Saved cloud roots disagree.');
 		return readCloudPathEntry(runtime, run.scope, rootId, m.path, input.signal);
 	};
 	const transport = (write: ReturnType<typeof get>) =>
-		isDownload(write)
+		isDownload(write) || isLocalTrash(write)
 			? {
-					read: () => readDownload(write),
+					read: () => readLocalSource(write),
 					lookup: async () => {
 						const { check } = cloudRequests(runtime, run.scope, input.signal);
 						check();
-						const result = await input.localTarget!.lookup(structuredClone(write.operation), { ...run.scope });
+						const result = await input.localTarget!.lookup(structuredClone(write.operation), { ...run.scope }, trashContexts.get(write.operation.id));
 						check();
 						return result;
 					}
@@ -82,10 +87,38 @@ export function createCloudSyncPort(
 			return transport(write).read();
 		},
 		lookup: (id, scope) => transport(get(id, scope)).lookup(),
+		trashExpected: async (operation, scope) => {
+			const write = get(operation.id, scope),
+				m = operation.mutation;
+			if (m.kind !== 'trash') throw Error('Expected a Trash operation.');
+			if (!isLocalTrash(write)) return m.expected;
+			const context = trashContexts.get(operation.id);
+			if (!input.localTarget?.trashExpected) {
+				if (context?.parent || context?.childrenOperationId) throw Error('Native folder transition support is required.');
+				return m.expected;
+			}
+			const { check } = cloudRequests(runtime, run.scope, input.signal);
+			check();
+			const result = await input.localTarget.trashExpected(structuredClone(operation), { ...scope }, structuredClone(context));
+			check();
+			return result;
+		},
 		apply: async (operation, scope) => {
 			const write = get(operation.id, scope);
 			if (JSON.stringify({ ...operation, confirmed: false }) !== JSON.stringify({ ...write.operation, confirmed: false }))
 				throw Error('Cloud sync operation changed.');
+
+			if (isLocalTrash(write)) {
+				const { check } = cloudRequests(runtime, run.scope, input.signal);
+				check();
+				await runtime.authorizeMutation?.(input.signal);
+				check();
+				if ((await readLocalSource(write)) !== null) throw Error('The cloud path reappeared; preserve the local item.');
+				check();
+				const receipt = await input.localTarget!.trash!(structuredClone(operation), { ...scope }, structuredClone(trashContexts.get(operation.id)));
+				check();
+				return receipt;
+			}
 			if (isDownload(write)) {
 				const m = operation.mutation;
 				if (m.kind !== 'copy') throw Error('Expected a download.');
@@ -96,7 +129,7 @@ export function createCloudSyncPort(
 				check();
 				validateLocalStage(staged, operation, run.scope);
 				if (source) await source.verify!();
-				if (!sameSyncStamp(m.source, await readDownload(write))) throw Error('Cloud path changed before local publication.');
+				if (!sameSyncStamp(m.source, await readLocalSource(write))) throw Error('Cloud path changed before local publication.');
 				check();
 				const result = await input.localTarget!.publish(structuredClone(operation), { ...run.scope }, structuredClone(staged));
 				check();

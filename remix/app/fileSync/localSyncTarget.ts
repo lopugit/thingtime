@@ -1,3 +1,4 @@
+import type { LocalTrashContext } from './localTrash';
 import type { FingerprintSource } from './contentFingerprint';
 import type { SyncOperation, SyncReceipt, SyncReceiptLookup } from './execute';
 import { sameSyncContent, sameSyncScope, validSyncEntry, type SyncEntry, type SyncScope } from './reconcile';
@@ -15,8 +16,9 @@ import { sameSyncContent, sameSyncScope, validSyncEntry, type SyncEntry, type Sy
 export type LocalStagedCopy = { operationId: string; scope: SyncScope; token: string; entry: SyncEntry };
 export type LocalSyncTarget = {
 	/** Present only after native deletion consent; never an unlink fallback. */
-	trash?(operation: SyncOperation, scope: SyncScope): Promise<SyncReceipt>;
-	lookup(operation: SyncOperation, scope: SyncScope): Promise<SyncReceiptLookup>;
+	trash?(operation: SyncOperation, scope: SyncScope, context?: LocalTrashContext): Promise<SyncReceipt>;
+	trashExpected?(operation: SyncOperation, scope: SyncScope, context?: LocalTrashContext): Promise<SyncEntry>;
+	lookup(operation: SyncOperation, scope: SyncScope, context?: LocalTrashContext): Promise<SyncReceiptLookup>;
 	stage(operation: SyncOperation, scope: SyncScope, source?: FingerprintSource): Promise<LocalStagedCopy>;
 	publish(operation: SyncOperation, scope: SyncScope, stage: LocalStagedCopy): Promise<SyncReceipt>;
 };

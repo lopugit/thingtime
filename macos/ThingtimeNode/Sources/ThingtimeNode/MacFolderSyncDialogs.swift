@@ -34,6 +34,17 @@ final class MacFolderSyncDialogs {
             dialog.informativeText += " Files deleted in other connected locations can also be moved into Thingtime's private recovery storage. Restoring a retained file never overwrites an existing file."
         }
         dialog.addButton(withTitle: "Cancel"); dialog.addButton(withTitle: allowTrash ? "Allow sync and trash" : "Allow downloads")
+        return present(dialog)
+    }
+    func restore(_ grant: MobileFolderStore.Grant, request: MobileSyncTrash.Restore) async throws -> Bool {
+        guard picker == nil, alert == nil else { return false }
+        let dialog = NSAlert(); alert = dialog
+        dialog.messageText = "Restore this \(request.expected.kind) to \(grant.name)?"
+        dialog.informativeText = "Restore \(request.expected.path) as \(request.path) in this selected folder on \(grant.scope.origin.absoluteString). Existing files are never overwritten."
+        dialog.addButton(withTitle: "Cancel"); dialog.addButton(withTitle: "Restore")
+        return present(dialog)
+    }
+    private func present(_ dialog: NSAlert) -> Bool {
         let timeout = Timer(timeInterval: 120, repeats: false) { [weak dialog] _ in
             guard let dialog, NSApp.modalWindow === dialog.window else { return }
             NSApp.abortModal(); dialog.window.orderOut(nil)

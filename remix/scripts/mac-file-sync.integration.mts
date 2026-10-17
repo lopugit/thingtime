@@ -1,7 +1,7 @@
 // Opt-in real MacFolderSync + cloud acceptance. Picker/consent and credentials
 // are isolated test adapters; this never uses the installed Node or Keychain.
 import assert from 'node:assert/strict';
-import { readFile, writeFile, mkdtemp, rm, stat } from 'node:fs/promises';
+import { readFile, writeFile, mkdtemp, mkdir, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -178,7 +178,7 @@ async function send(payload: any) {
 	});
 }
 const signal = new AbortController().signal;
-const caps: FolderCapabilities = { platform: 'macos', fileAccessVersion: '1.2.0', fileStagingVersion: '1.1.0', filePublicationVersion: '1.1.0', fileTrashVersion: '1.0.0' };
+const caps: FolderCapabilities = { platform: 'macos', fileAccessVersion: '1.2.0', fileStagingVersion: '1.1.0', filePublicationVersion: '1.1.0', fileTrashVersion: '1.2.0' };
 let deviceId: string | undefined, remoteRoot: string | undefined, configurationId: string | undefined;
 const deviceName = 'Mac sync acceptance ' + randomUUID();
 const factory = new IDBFactory();
@@ -235,6 +235,7 @@ try {
 		{ mode: 0o600 }
 	);
 	await startNative();
+	let loseTrash = false, loseRestore = false;
 	const request = async (ownerId: string, input: FolderRequest, abort: AbortSignal) => {
 		abort.throwIfAborted();
 		const expected = { requestId: randomUUID(), ownerId, origin: base.origin };
@@ -254,6 +255,8 @@ try {
 			losePublication = false;
 			throw Error('Lost accepted native publication');
 		}
+		if (input.action === 'trash' && loseTrash) { loseTrash = false; throw Error('Lost accepted native Trash'); }
+		if (input.action === 'trash-restore-reviewed' && loseRestore) { loseRestore = false; throw Error('Lost accepted restore'); }
 		return result;
 	};
 	const nativeRoot = (await request(fixture.userId, { action: 'choose' }, signal)).roots[0].id;
@@ -264,6 +267,7 @@ try {
 			crystal: {
 				...newFileSyncConfiguration({ name: deviceName, deviceId: deviceId!, localRootId: nativeRoot, remoteFolderId: remoteRoot! }),
 				mode: 'two-way',
+				propagateDeletes: true,
 				paused: false
 			}
 		})
@@ -466,8 +470,49 @@ try {
         assert.notEqual(replacementChild, child);
         assert.equal((await readProbe())!.id, replacementChild);
     } finally { await removeProbeFolders(); }
-    // Direct native recovery acceptance: deliberately independent of the sync
-    // deletion planner, which remains gated until fresh remote absence is wired.
+    // Shared planner, fresh cloud absence and recoverable child-before-parent removal.
+    await mkdir(path.join(directory, 'selected/deleted-tree'));
+    await writeFile(path.join(directory, 'selected/deleted-tree/a.bin'), new Uint8Array([1, 2, 3]));
+    await writeFile(path.join(directory, 'selected/deleted-tree/b.bin'), new Uint8Array([4, 5, 6]));
+    await run();
+    const tree = (await inventory()).nodes.filter(node => node.path === 'deleted-tree' || node.path.startsWith('deleted-tree/'));
+    assert.equal(tree.length, 3);
+    for (const node of tree) if (node.kind === 'file') {
+        const f = node.file;
+        await api('/api/v1/files', { id: f.id, operationId: randomUUID(), expectedRevision: f.revision,
+            name: f.name, folderId: f.folderId, attachmentId: f.content.attachmentId, contentVersion: f.content.version, trashed: true });
+    }
+    const cloudParent = tree.find(node => node.kind === 'folder')!;
+    assert.equal(cloudParent.kind, 'folder');
+    await api('/api/v1/things?id=' + cloudParent.id, undefined, 'DELETE');
+    loseTrash = true;
+    await assert.rejects(run(), /Lost accepted native Trash/);
+    const deletionIds = (await journal.read(scope))!.operations.map(op => op.id);
+    assert.equal(deletionIds.length, 3);
+    await stopNative(); journal.close(); journal = await openSyncJournal(factory); await startNative();
+    await run();
+    assert.deepEqual((await journal.read(scope))!.operations.map(op => op.id), deletionIds);
+    assert.ok((await journal.read(scope))!.operations.every(op => op.confirmed));
+    await assert.rejects(stat(path.join(directory, 'selected/deleted-tree')), { code: 'ENOENT' });
+    const recoveryPage = (await request(fixture.userId, { action: 'trash-list', rootId: nativeRoot }, signal)).trashPage!;
+    const retainedTree = recoveryPage.items.filter(item => item.request.operation.mutation.path.startsWith('deleted-tree'));
+    assert.equal(retainedTree.length, 3);
+    retainedTree.sort((a, b) => a.request.operation.mutation.path.length - b.request.operation.mutation.path.length);
+    for (const item of retainedTree) {
+        const inspected = await request(fixture.userId, { action: 'trash-inspect', rootId: nativeRoot, trash: item.request }, signal);
+        const restore = { path: item.request.operation.mutation.path, expected: inspected.retainedEntry! };
+        const input = { action: 'trash-restore-reviewed' as const, rootId: nativeRoot, trash: item.request, restore };
+        loseRestore = true;
+        await assert.rejects(request(fixture.userId, input, signal), /Lost accepted restore/);
+        await stopNative(); await startNative();
+        const resumed = await request(fixture.userId, { action: 'trash-inspect', rootId: nativeRoot, trash: item.request }, signal);
+        assert.deepEqual(resumed.restoreIntent!.request, restore);
+        assert.ok((await request(fixture.userId, input, signal)).restoredEntry);
+    }
+    assert.deepEqual(await readFile(path.join(directory, 'selected/deleted-tree/a.bin')), Buffer.from([1, 2, 3]));
+    assert.deepEqual(await readFile(path.join(directory, 'selected/deleted-tree/b.bin')), Buffer.from([4, 5, 6]));
+    assert.equal((await request(fixture.userId, { action: 'trash-list', rootId: nativeRoot }, signal)).trashPage!.items.length, 0);
+    // Additional direct recovery leaves an occupied destination untouched.
     const recoverBytes = new Uint8Array(131_079).fill(63);
     await writeFile(path.join(directory, 'selected/recover-only.bin'), recoverBytes);
     const recoverEntry = (await request(fixture.userId, { action: 'scan', rootId: nativeRoot }, signal)).entries!.find(e => e.path === 'recover-only.bin')!;
@@ -504,6 +549,9 @@ try {
 			checks: [
 				'signed-pairing',
                 'native-trash-restart-recovery',
+                'planner-child-parent-deletion',
+                'native-recovery-list-and-approved-restore',
+                'lost-restore-reply-restart',
                 'exclusive-native-trash-restore',
                 'native-trash-revoked-identity',
 				'live-native-identity',

@@ -509,6 +509,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
                 verify: { owner, device in try await apiClient.verifyFileSyncIdentity(ownerID: owner, deviceID: device) },
                 choose: { try await folderDialogs.choose() }, approve: { try await folderDialogs.approve($0) },
                 approveTrash: { try await folderDialogs.approve($0, allowTrash: true) },
+                approveRestore: { try await folderDialogs.restore($0, request: $1) },
                 cancelDialog: { folderDialogs.cancel() }, conditions: { folderConditions.snapshot() })
             let controller = ThingtimeNodeController(
                 journal: journal,

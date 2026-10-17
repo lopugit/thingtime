@@ -68,6 +68,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-17 — **Codex (AI)**: Wire approved Mac/iOS foreground deletions to
+  recoverable native Trash with child-receipt parent stamps. Add paged device
+  recovery, separate native restore consent and restart-safe restore intents.
+  Android, regrant recovery and whole-account backup coverage remain open.
+  Details: [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
 - 2026-10-17 — **Codex (AI)**: Fresh cloud path observations now protect native
   downloads from moved ancestors and replaced path identities. Files 1.4.0
   distinguishes explicit absence from unavailable roots and failed reads; new

@@ -29,6 +29,130 @@ final class MobileSyncTrashTests: XCTestCase {
     private func inspect(_ f: Fixture) throws -> MobileFolderReader.Entry {
         try XCTUnwrap(f.trash.inspect(f.request, owner: f.owner, bookmark: f.bookmark))
     }
+    private func request(_ f: Fixture, entry: MobileFolderReader.Entry, parent: MobileSyncTrash.Parent? = nil,
+                         child: String? = nil) -> MobileSyncTrash.Request {
+        .init(scope: f.request.scope, rootId: f.request.rootId,
+            operation: .init(id: UUID().uuidString.lowercased(), mutation: .init(kind: "trash", side: "local", path: entry.path, expected: entry), confirmed: false),
+            parent: parent, childrenOperationId: child)
+    }
+    func testRecoveryPagesPreserveOwnershipAndPendingRestoreAcrossRestart() throws {
+        struct Interrupted: Error {}
+        let f = try fixture()
+        _ = try f.trash.trash(f.request, owner: f.owner, bookmark: f.bookmark)
+        let page = try f.trash.list(owner: f.owner, rootId: f.request.rootId, bookmark: f.bookmark)
+        XCTAssertEqual(page.items.count, 1); XCTAssertNil(page.nextCursor)
+        XCTAssertEqual(page.items[0].request, f.request); XCTAssertEqual(page.items[0].state, "retained")
+        let other = try FileSyncOwnerScope(ownerId: "another-owner", url: f.owner.origin)
+        XCTAssertTrue(try f.trash.list(owner: other, rootId: f.request.rootId, bookmark: f.bookmark).items.isEmpty)
+        XCTAssertTrue(try f.trash.list(owner: f.owner, rootId: UUID().uuidString, bookmark: f.bookmark).items.isEmpty)
+        XCTAssertThrowsError(try f.trash.list(owner: f.owner, rootId: f.request.rootId, bookmark: f.bookmark, cursor: "../bad"))
+        let restore = MobileSyncTrash.Restore(path: "recovered", expected: try inspect(f))
+        try Data("occupied".utf8).write(to: f.selected.appendingPathComponent(restore.path))
+        XCTAssertThrowsError(try f.trash.reviewRestore(f.request, owner: f.owner, bookmark: f.bookmark, restore: restore))
+        XCTAssertNil(try f.trash.restoration(f.request, owner: f.owner, bookmark: f.bookmark))
+        try FileManager.default.removeItem(at: f.selected.appendingPathComponent(restore.path))
+        try f.trash.reviewRestore(f.request, owner: f.owner, bookmark: f.bookmark, restore: restore)
+        XCTAssertNil(try f.trash.resumeRestore(f.request, owner: f.owner, bookmark: f.bookmark, restore: restore))
+        let interrupted = MobileSyncTrash(directory: f.storage, afterRestore: { throw Interrupted() })
+        XCTAssertThrowsError(try interrupted.restore(f.request, owner: f.owner, bookmark: f.bookmark, restore: restore))
+        let pending = try f.trash.list(owner: f.owner, rootId: f.request.rootId, bookmark: f.bookmark)
+        XCTAssertEqual(pending.items.count, 1); XCTAssertEqual(pending.items[0].state, "restoring")
+        XCTAssertEqual(pending.items[0].restore, restore)
+        XCTAssertThrowsError(try f.trash.resumeRestore(f.request, owner: f.owner, bookmark: f.bookmark,
+            restore: .init(path: "another-destination", expected: restore.expected)))
+        let receipt = try XCTUnwrap(f.trash.resumeRestore(f.request, owner: f.owner, bookmark: f.bookmark, restore: restore))
+        XCTAssertEqual(receipt.path, restore.path)
+        XCTAssertEqual(try Data(contentsOf: f.selected.appendingPathComponent(restore.path)), Data("original bytes".utf8))
+        XCTAssertTrue(try f.trash.list(owner: f.owner, rootId: f.request.rootId, bookmark: f.bookmark).items.isEmpty)
+        XCTAssertEqual(try f.trash.restoration(f.request, owner: f.owner, bookmark: f.bookmark)?.receipt, receipt)
+    }
+    func testRecoveryPaginationHasNoDuplicatesAndIncludesPreviousConnections() throws {
+        let f = try fixture()
+        _ = try f.trash.trash(f.request, owner: f.owner, bookmark: f.bookmark)
+        for i in 0..<23 {
+            let path = "file-\(i)"
+            try Data("bytes".utf8).write(to: f.selected.appendingPathComponent(path))
+            let entry = try XCTUnwrap(MobileFolderReader.scan(bookmark: f.bookmark).first { $0.path == path })
+            let op = request(f, entry: entry)
+            let old = MobileSyncTrash.Request(scope: .init(origin: f.owner.origin.absoluteString, ownerId: f.owner.ownerId,
+                dataPlane: "home", rootId: "prior-connection", deviceId: "prior-device"), rootId: f.request.rootId, operation: op.operation)
+            _ = try f.trash.trash(old, owner: f.owner, bookmark: f.bookmark)
+        }
+        let first = try f.trash.list(owner: f.owner, rootId: f.request.rootId, bookmark: f.bookmark)
+        XCTAssertEqual(first.items.count, 20)
+        let second = try f.trash.list(owner: f.owner, rootId: f.request.rootId, bookmark: f.bookmark, cursor: XCTUnwrap(first.nextCursor))
+        XCTAssertEqual(second.items.count, 4); XCTAssertNil(second.nextCursor)
+        XCTAssertEqual(Set((first.items + second.items).map { $0.request.operation.id }).count, 24)
+        let foreign = try FileSyncOwnerScope(ownerId: "another-owner", url: f.owner.origin)
+        let empty = try f.trash.list(owner: foreign, rootId: f.request.rootId, bookmark: f.bookmark)
+        XCTAssertTrue(empty.items.isEmpty); XCTAssertNotNil(empty.nextCursor)
+    }
+    func testChildReceiptsAdvanceAnEmptyParentWithoutChangingTheOriginalOperation() throws {
+        let f = try fixture(), parent = try XCTUnwrap(MobileFolderReader.scan(bookmark: f.bookmark).first { $0.path == "nested" })
+        let child = request(f, entry: f.request.operation.mutation.expected, parent: .init(expected: parent))
+        _ = try f.trash.trash(child, owner: f.owner, bookmark: f.bookmark)
+        let folder = request(f, entry: parent, child: child.operation.id)
+        let expected = try f.trash.expected(folder, owner: f.owner, bookmark: f.bookmark)
+        XCTAssertEqual(expected.id, parent.id); XCTAssertNotEqual(expected.version, parent.version)
+        XCTAssertEqual(folder.operation.mutation.expected, parent)
+        _ = try f.trash.trash(folder, owner: f.owner, bookmark: f.bookmark)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: f.selected.appendingPathComponent("nested").path))
+        XCTAssertEqual(try f.trash.lookup(child, owner: f.owner, bookmark: f.bookmark).status, "complete")
+        let retainedParent = try XCTUnwrap(f.trash.inspect(folder, owner: f.owner, bookmark: f.bookmark))
+        _ = try f.trash.restore(folder, owner: f.owner, bookmark: f.bookmark, restore: .init(path: "nested", expected: retainedParent))
+        let retainedChild = try XCTUnwrap(f.trash.inspect(child, owner: f.owner, bookmark: f.bookmark))
+        _ = try f.trash.restore(child, owner: f.owner, bookmark: f.bookmark, restore: .init(path: "nested/item", expected: retainedChild))
+        XCTAssertEqual(try Data(contentsOf: f.target), Data("original bytes".utf8))
+    }
+    func testSiblingsUseBoundedReceiptLinksAndRejectInterveningParentChanges() throws {
+        for changed in [false, true] {
+            let f = try fixture(), other = f.selected.appendingPathComponent("nested/other")
+            try Data("sibling".utf8).write(to: other)
+            let scan = try MobileFolderReader.scan(bookmark: f.bookmark)
+            let parent = try XCTUnwrap(scan.first { $0.path == "nested" })
+            let first = request(f, entry: f.request.operation.mutation.expected, parent: .init(expected: parent))
+            let second = request(f, entry: try XCTUnwrap(scan.first { $0.path == "nested/other" }),
+                parent: .init(expected: parent, previousOperationId: first.operation.id))
+            _ = try f.trash.trash(first, owner: f.owner, bookmark: f.bookmark)
+            if changed {
+                let temporary = f.selected.appendingPathComponent("nested/external")
+                try Data("external".utf8).write(to: temporary); try FileManager.default.removeItem(at: temporary)
+                XCTAssertThrowsError(try f.trash.trash(second, owner: f.owner, bookmark: f.bookmark))
+                XCTAssertEqual(try Data(contentsOf: other), Data("sibling".utf8))
+            } else {
+                _ = try f.trash.trash(second, owner: f.owner, bookmark: f.bookmark)
+                _ = try f.trash.trash(request(f, entry: parent, child: second.operation.id), owner: f.owner, bookmark: f.bookmark)
+                XCTAssertFalse(FileManager.default.fileExists(atPath: other.deletingLastPathComponent().path))
+            }
+        }
+    }
+    func testPostCrashChildReceiptDoesNotInventAParentTransition() throws {
+        struct Interrupted: Error {}
+        let f = try fixture(), parent = try XCTUnwrap(MobileFolderReader.scan(bookmark: f.bookmark).first { $0.path == "nested" })
+        let child = request(f, entry: f.request.operation.mutation.expected, parent: .init(expected: parent))
+        let worker = MobileSyncTrash(directory: f.storage, afterMove: { throw Interrupted() })
+        XCTAssertThrowsError(try worker.trash(child, owner: f.owner, bookmark: f.bookmark))
+        XCTAssertEqual(try f.trash.lookup(child, owner: f.owner, bookmark: f.bookmark).status, "complete")
+        let folder = request(f, entry: parent, child: child.operation.id)
+        XCTAssertThrowsError(try f.trash.expected(folder, owner: f.owner, bookmark: f.bookmark))
+        XCTAssertThrowsError(try f.trash.trash(folder, owner: f.owner, bookmark: f.bookmark))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: f.selected.appendingPathComponent("nested").path))
+    }
+    func testRebasedFolderMoveRecoversAfterInterruptionAndRejectsForeignPredecessors() throws {
+        struct Interrupted: Error {}
+        let f = try fixture(), parent = try XCTUnwrap(MobileFolderReader.scan(bookmark: f.bookmark).first { $0.path == "nested" })
+        let child = request(f, entry: f.request.operation.mutation.expected, parent: .init(expected: parent))
+        _ = try f.trash.trash(child, owner: f.owner, bookmark: f.bookmark)
+        XCTAssertThrowsError(try f.trash.expected(request(f, entry: parent, child: UUID().uuidString), owner: f.owner, bookmark: f.bookmark))
+        let otherGrant = MobileSyncTrash.Request(scope: child.scope, rootId: UUID().uuidString, operation: request(f, entry: parent).operation,
+            childrenOperationId: child.operation.id)
+        XCTAssertThrowsError(try f.trash.expected(otherGrant, owner: f.owner, bookmark: f.bookmark))
+        let folder = request(f, entry: parent, child: child.operation.id)
+        let worker = MobileSyncTrash(directory: f.storage, afterMove: { throw Interrupted() })
+        XCTAssertThrowsError(try worker.trash(folder, owner: f.owner, bookmark: f.bookmark))
+        XCTAssertEqual(try f.trash.lookup(folder, owner: f.owner, bookmark: f.bookmark).status, "complete")
+        XCTAssertEqual(try f.trash.inspect(folder, owner: f.owner, bookmark: f.bookmark)?.id, parent.id)
+    }
     func testTrashAndExclusiveRestorePreserveFilesEmptyFilesAndEmptyFolders() throws {
         for kind in ["file", "empty-file", "folder"] {
             let bytes = kind == "empty-file" ? Data() : Data(repeating: 39, count: 131_079)

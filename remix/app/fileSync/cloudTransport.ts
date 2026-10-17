@@ -114,7 +114,8 @@ function cloudFileTransport(runtime: CloudTransportRuntime, saved: CloudWrite, s
 	const write = parseCloudWrite(saved),
 		scope = write.scope,
 		m = write.operation.mutation;
-	if (isCloudFolderWrite(write) || (m.kind === 'copy' && m.from !== 'local')) throw Error('Use the matching cloud folder or download transport.');
+	if (isCloudFolderWrite(write) || (m.kind === 'copy' ? m.from !== 'local' : m.side !== 'remote'))
+		throw Error('Use the matching cloud folder or download transport.');
 	if (retained && (!write.before || m.kind !== 'copy' || m.from !== 'local' || m.source.kind !== 'file' || m.expectedTarget?.kind !== 'file'))
 		throw Error('Retaining conflicts requires two existing file versions.');
 	const { check, json, negotiate: negotiateRequirements } = cloudRequests(runtime, scope, signal);

@@ -9,8 +9,8 @@ verified private staging, atomic destination checks and durable native receipts.
 1.0.0) and coordinated publication (`filePublicationVersion` 1.0.0). Native
 Keychain approvals bind the account, origin, device, connection, selected grant
 and reviewed settings. `mobileSyncTarget.client.ts` connects stage/publish/lookup
-to the shared runner. iOS Download now is available with deletion propagation
-disabled; Per-platform publication acceptance and background workers are tracked in the sync ledger.
+to the shared runner. iOS Download now supports explicit deletion propagation with native Trash 1.2;
+per-platform publication acceptance and background workers are tracked in the sync ledger.
 Publication uses same-volume exclusive rename or swap with no-follow/beneath
 resolution, retains displaced inodes in the existing transfer record, and
 recovers durable receipts without touching later edits. This is not an inode-CAS
@@ -22,11 +22,15 @@ installed-app acceptance remain tracked in the full sync ledger.
 `apple/FileSync/MobileSyncTrash.swift` (under `Sources/AppleFileSync`) provides
 recoverable same-volume Apple moves and explicit exclusive restore. It reuses
 `NativeFileJournal` and `NativeFileDestination`; these are operation recovery,
-not Timeline history. Mac/iOS bridge actions negotiate `fileTrashVersion` 1.0.0
+not Timeline history. Mac/iOS bridge actions negotiate `fileTrashVersion` 1.2.0
 and separately bind deletion consent (`allowTrash`). Run the Apple package tests,
 `apple/FileSync/scripts/test-trash-process.sh`, the focused Mac adapter suite,
 iOS `MobileSyncTrashTests`/`MobileSyncStagingTests`, and the real Mac/API fixture.
-Automatic local deletion and retained-item browsing remain gated; see the
+`localTrash.ts` derives bounded parent/child receipt links so the shared runner
+can remove children before empty parents. `NativeFileRecovery.tsx` lists owned
+retained records under the same surviving picker grant and requests native
+confirmation for exclusive restoration. Android Trash, regrant recovery and
+whole-account backup of native recovery bytes remain open; see the
 [recovery checkpoint](../mobile-file-sync.md#recoverable-apple-native-trash-foundation--2026-10-17).
 
 

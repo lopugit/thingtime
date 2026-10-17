@@ -11,10 +11,16 @@ export function parseCloudWrite(value: CloudWrite): CloudWrite {
 	const row = structuredClone(value);
 	validateSyncScope(row.scope);
 	validateSyncRun({ version: 1, id: 'validate-' + row.operation?.id, scope: row.scope, operations: [row.operation] });
-	if (row.cloudRootId !== undefined && (typeof row.cloudRootId !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(row.cloudRootId))) throw Error('Invalid pinned cloud root.');
+	if (row.cloudRootId !== undefined && (typeof row.cloudRootId !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(row.cloudRootId)))
+		throw Error('Invalid pinned cloud root.');
 	if (row.scope.dataPlane !== 'home') throw Error('Cloud file sync requires the home data plane.');
 	const op = row.operation,
 		m = op?.mutation;
+	if (m?.kind === 'trash' && m.side === 'local') {
+		if (!row.cloudRootId || row.before !== null || row.folderId !== null)
+			throw Error('Local Trash requires a pinned cloud root and observed path absence.');
+		return row;
+	}
 	if (m?.kind === 'copy' && m.from === 'remote') {
 		if (m.source.kind === 'folder') {
 			if (row.before !== null || m.expectedTarget !== null || row.folderId === null)
@@ -118,6 +124,10 @@ export function prepareCloudInventoryRun(run: SyncRun, value: CloudInventory): C
 		const m = operation.mutation,
 			parentPath = m.path.split('/').slice(0, -1).join('/'),
 			folderId = parents.get(parentPath);
+		if (m.kind === 'trash' && m.side === 'local') {
+			if (nodes.has(m.path)) throw Error('A local Trash path is still present in the cloud inventory.');
+			return { folderId: null, before: null };
+		}
 		if (!folderId) throw Error('A cloud parent is missing from the complete inventory and prepared run.');
 		const before = nodes.get(m.path);
 		if (m.kind === 'copy' && m.from === 'remote') {
@@ -139,5 +149,8 @@ export function prepareCloudInventoryRun(run: SyncRun, value: CloudInventory): C
 		if (before && before.kind !== 'file') throw Error('Cloud file destination changed kind.');
 		return { folderId, before: before?.kind === 'file' ? before.file : null };
 	});
-	return prepareCloudSyncRun(run, targets.map(target => ({ ...target, cloudRootId: inventory.rootId })));
+	return prepareCloudSyncRun(
+		run,
+		targets.map((target) => ({ ...target, cloudRootId: inventory.rootId }))
+	);
 }

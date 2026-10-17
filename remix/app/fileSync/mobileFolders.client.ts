@@ -1,3 +1,5 @@
+import { parseNativeRecoveryPage, validNativeRestore, type NativeRestore, type NativeRecoveryPage } from './nativeRecovery';
+import { validateTrashExpected, type LocalTrashContext } from './localTrash';
 import type { CloudFile } from './cloudFile';
 import { mobileRangeFrame, receiveMobileReadFrame } from './mobileRangeFrames';
 import { validateLocalStage, type LocalStagedCopy } from './localSyncTarget';
@@ -10,10 +12,13 @@ import type { FingerprintSource } from './contentFingerprint';
 
 export type MobileFolder = { id: string; name: string; publicationVersion?: string };
 export type MobileStageRequest = { scope: SyncScope; rootId: string; operation: SyncOperation };
+export type MobileTrashRequest = MobileStageRequest & LocalTrashContext;
 export type MobileWriteApproval = { scope: SyncScope; configurationRevision: string; configurationHash: string; allowTrash?: boolean };
 export type FolderRequest =
 	| { action: 'list' | 'choose' | 'conditions' }
 	| { action: 'remove' | 'scan'; rootId: string }
+	| { action: 'trash-list'; rootId: string; cursor?: string }
+	| { action: 'trash-restore-reviewed'; rootId: string; trash: MobileTrashRequest; restore: NativeRestore }
 	| { action: 'read' | 'read-range'; rootId: string; path: string; version: string; offset: number; length: number; verifiedChunks?: true }
 	| { action: 'stage-begin' | 'stage-finish'; rootId: string; transfer: MobileStageRequest }
 	| { action: 'stage-download'; rootId: string; transfer: MobileStageRequest; offset: number; length: number; cloudFile: CloudFile }
@@ -22,12 +27,12 @@ export type FolderRequest =
 	| { action: 'write-approve'; rootId: string; approval: MobileWriteApproval }
 	| { action: 'publication-lookup'; rootId: string; transfer: MobileStageRequest }
 	| { action: 'publish'; rootId: string; transfer: MobileStageRequest; stage: LocalStagedCopy; approval: MobileWriteApproval }
-	| { action: 'trash-lookup' | 'trash-inspect'; rootId: string; trash: MobileStageRequest }
-	| { action: 'trash'; rootId: string; trash: MobileStageRequest; approval: MobileWriteApproval }
+	| { action: 'trash-lookup' | 'trash-expected' | 'trash-inspect'; rootId: string; trash: MobileTrashRequest }
+	| { action: 'trash'; rootId: string; trash: MobileTrashRequest; approval: MobileWriteApproval }
 	| {
 			action: 'trash-restore';
 			rootId: string;
-			trash: MobileStageRequest;
+			trash: MobileTrashRequest;
 			restore: { path: string; expected: SyncEntry };
 			approval: MobileWriteApproval;
 	  };
@@ -37,6 +42,9 @@ export type FolderResult = {
 	trash?: SyncReceiptLookup;
 	retainedEntry?: SyncEntry | null;
 	restoredEntry?: SyncEntry;
+	expectedEntry?: SyncEntry;
+	trashPage?: NativeRecoveryPage;
+	restoreIntent?: { request: NativeRestore; receipt?: SyncEntry | null } | null;
 	staging?: { received: number; stage?: LocalStagedCopy };
 	roots: MobileFolder[];
 	conditions?: SyncConditions;
@@ -86,7 +94,10 @@ export function parseMobileFolderResult(
 			...(r.publicationVersion !== undefined ? { publicationVersion: r.publicationVersion } : {})
 		}))
 	};
-	if (request.action === 'write-approve') {
+	if (request.action === 'trash-list') {
+		if (payload.rootId !== request.rootId) throw Error('Native recovery folder changed.');
+		result.trashPage = parseNativeRecoveryPage(payload.trashPage, expected, request.rootId);
+	} else if (request.action === 'write-approve') {
 		const approved = payload.writeApproval;
 		if (
 			payload.rootId !== request.rootId ||
@@ -101,16 +112,33 @@ export function parseMobileFolderResult(
 	} else if (
 		request.action === 'trash' ||
 		request.action === 'trash-lookup' ||
+		request.action === 'trash-expected' ||
 		request.action === 'trash-inspect' ||
-		request.action === 'trash-restore'
+		request.action === 'trash-restore' ||
+		request.action === 'trash-restore-reviewed'
 	) {
 		const m = request.trash.operation.mutation;
 		if (payload.rootId !== request.rootId || m.kind !== 'trash' || m.side !== 'local') throw Error('Native trash scope changed.');
-		if (request.action === 'trash-inspect') {
+		if (request.action === 'trash-expected') {
+			validateTrashExpected(request.trash.operation, payload.expectedEntry);
+			result.expectedEntry = structuredClone(payload.expectedEntry);
+		} else if (request.action === 'trash-inspect') {
 			const entry = payload.retainedEntry;
 			if (entry !== null && (!validSyncEntry(entry) || entry.path !== m.path)) throw Error('Invalid retained native item.');
 			result.retainedEntry = entry === null ? null : structuredClone(entry);
-		} else if (request.action === 'trash-restore') {
+			const intent = payload.restoreIntent;
+			if (
+				intent != null &&
+				(!validNativeRestore(intent.request, m.path) ||
+					(intent.receipt != null &&
+						(!validSyncEntry(intent.receipt) ||
+							intent.receipt.path !== intent.request.path ||
+							intent.receipt.id !== intent.request.expected.id ||
+							!sameSyncContent(intent.receipt, intent.request.expected))))
+			)
+				throw Error('Invalid native restoration intent.');
+			if (payload.restoreIntent !== undefined) result.restoreIntent = intent == null ? null : structuredClone(intent);
+		} else if (request.action === 'trash-restore' || request.action === 'trash-restore-reviewed') {
 			const entry = payload.restoredEntry;
 			if (
 				!validSyncEntry(entry) ||
@@ -261,6 +289,8 @@ export const supportsMobilePublication = (bridge: FolderCapabilities | undefined
 	supportsMobileStaging(bridge) && /^1\.\d+\.\d+$/.test(bridge?.filePublicationVersion ?? '');
 export const supportsMobileTrash = (bridge: FolderCapabilities | undefined = getNativeBridge()) =>
 	supportsMobilePublication(bridge) && /^1\.\d+\.\d+$/.test(bridge?.fileTrashVersion ?? '');
+export const supportsMobileTrashTransitions = (bridge: FolderCapabilities | undefined = getNativeBridge()) =>
+	supportsMobileTrash(bridge) && Number(bridge!.fileTrashVersion!.split('.')[1]) >= 1;
 /** Publication 1.1 adds explicit per-folder capability. Earlier iOS 1.0
  * adapters support their selected roots; Android never falls back to that rule. */
 export function supportsMobileFolderPublication(folder: MobileFolder | undefined, bridge: FolderCapabilities | undefined = getNativeBridge()) {
@@ -268,6 +298,9 @@ export function supportsMobileFolderPublication(folder: MobileFolder | undefined
 	if (Number(bridge!.filePublicationVersion!.split('.')[1]) >= 1) return /^1\.\d+\.\d+$/.test(folder.publicationVersion ?? '');
 	return bridge!.platform === 'ios';
 }
+export const supportsMobileTrashRecovery = (bridge: FolderCapabilities | undefined = getNativeBridge()) =>
+	supportsMobileTrash(bridge) && Number(bridge!.fileTrashVersion!.split('.')[1]) >= 2;
+
 export function requestMobileFolders(ownerId: string, request: FolderRequest, signal: AbortSignal): Promise<FolderResult> {
 	const bridge = getNativeBridge();
 	if (!supportsMobileFolders(bridge)) return Promise.reject(Error('Folder access requires an updated mobile app.'));
@@ -318,6 +351,13 @@ export function requestMobileFolders(ownerId: string, request: FolderRequest, si
 		!supportsMobileTrash(bridge)
 	)
 		return Promise.reject(Error('Update the app to use recoverable native trash.'));
+	if (
+		(request.action === 'trash-expected' || ('trash' in request && (request.trash.parent || request.trash.childrenOperationId))) &&
+		!supportsMobileTrashTransitions(bridge)
+	)
+		return Promise.reject(Error('Update the app to safely remove folders after their children.'));
+	if (['trash-list', 'trash-restore-reviewed'].includes(request.action) && !supportsMobileTrashRecovery(bridge))
+		return Promise.reject(Error('Update the app to browse and restore retained files.'));
 	const input = structuredClone(request),
 		expected = { requestId: crypto.randomUUID(), ownerId, origin: window.location.origin };
 	return new Promise((resolve, reject) => {
@@ -399,7 +439,10 @@ export function requestMobileFolders(ownerId: string, request: FolderRequest, si
 				'publication-lookup',
 				'trash',
 				'trash-lookup',
+				'trash-expected',
 				'trash-inspect',
+				'trash-restore-reviewed',
+				'trash-list',
 				'trash-restore'
 			].includes(input.action)
 				? 300_000

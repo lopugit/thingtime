@@ -1,3 +1,4 @@
+import { localTrashContexts } from './localTrash';
 import type { LocalSyncTarget } from './localSyncTarget';
 import { planConflictRetention, resolveFileSyncConflicts, type SyncConflict, type SyncConflictReviewResult } from './conflictResolution';
 import { parseFileSyncConfiguration } from './configuration';
@@ -43,8 +44,11 @@ export async function runForegroundCloudSync(
 	signal: AbortSignal
 ) {
 	const configuration = parseFileSyncConfiguration(reviewed.configuration);
-	if (['download', 'two-way'].includes(configuration.mode) && (!input.localTarget || configuration.propagateDeletes))
-		throw Error('Downloads and two-way sync require native write approval with deletion propagation disabled.');
+	if (
+		['download', 'two-way'].includes(configuration.mode) &&
+		(!input.localTarget || (configuration.propagateDeletes && (!input.localTarget.trash || !input.localTarget.trashExpected)))
+	)
+		throw Error('Downloads and two-way sync require native write approval; deletion propagation requires recoverable native Trash.');
 	const approved = { ...structuredClone(reviewed), configuration, scope: { ...scope } };
 	const empty = { scope, complete: true, entries: [] };
 	const check = () => {
@@ -128,14 +132,15 @@ export async function runForegroundCloudSync(
 			},
 			scope
 		);
+		const trashContexts = localTrashContexts(saved);
 		const pairs = new Map(saved.startingBaseline.entries.map((pair) => [pair.path, pair]));
 		const operations = new Map(saved.operations.map((operation) => [operation.id, operation]));
 		for (const write of saved.cloudWrites) {
 			const operation = operations.get(write.operation.id)!;
 			if (!operation.confirmed) continue;
-			const downloading = operation.mutation.kind === 'copy' && operation.mutation.from === 'remote';
+			const downloading = operation.mutation.kind === 'copy' ? operation.mutation.from === 'remote' : operation.mutation.side === 'local';
 			const transport = downloading
-				? { lookup: () => input.localTarget!.lookup({ ...write.operation, confirmed: false }, scope) }
+				? { lookup: () => input.localTarget!.lookup({ ...write.operation, confirmed: false }, scope, trashContexts.get(operation.id)) }
 				: isCloudFolderWrite(write)
 				? createCloudFolderTransport(runtime, write, signal)
 				: createCloudFileTransport(runtime, write, signal);
@@ -280,7 +285,23 @@ export async function runForegroundCloudSync(
 			},
 			localTarget: input.localTarget
 				? {
-						lookup: (operation, current) => input.localTarget!.lookup(operation, current),
+						lookup: (operation, current, context) => input.localTarget!.lookup(operation, current, context),
+						...(input.localTarget.trash
+							? {
+									trash: async (operation, current, context) => {
+										await authorize();
+										return input.localTarget!.trash!(operation, current, context);
+									}
+							  }
+							: {}),
+						...(input.localTarget.trashExpected
+							? {
+									trashExpected: async (operation, current, context) => {
+										await authorize();
+										return input.localTarget!.trashExpected!(operation, current, context);
+									}
+							  }
+							: {}),
 						stage: async (operation, current, source) => {
 							await authorize();
 							return input.localTarget!.stage(operation, current, source);

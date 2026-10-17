@@ -247,7 +247,7 @@ final class MacFolderSyncTests: XCTestCase {
             }, choose: { selected }, approve: { _ in writePrompts += 1; return true },
             approveTrash: { _ in trashPrompts += 1; return allowTrash })
         let context = try await service.handle(request("context")).decode([String: JSONValue].self)
-        XCTAssertEqual(try XCTUnwrap(context["capabilities"]).decode([String: String].self)["fileTrashVersion"], "1.0.0")
+        XCTAssertEqual(try XCTUnwrap(context["capabilities"]).decode([String: String].self)["fileTrashVersion"], "1.1.0")
         let id = try await root(service)
         let scan = try await service.handle(request("scan", ["rootId": .string(id)])).decode([String: JSONValue].self)
         let entry = try XCTUnwrap(scan["entries"]).decode([MobileFolderReader.Entry].self)[0]
@@ -292,6 +292,52 @@ final class MacFolderSyncTests: XCTestCase {
         _ = try await service.handle(request("remove", ["rootId": .string(id)]))
         await rejects { try await service.handle(self.request("trash-inspect", fields)) }
         XCTAssertEqual(try Data(contentsOf: target), bytes)
+    }
+
+    func testReviewedRecoveryNeedsNativeConsentAndResumesOnlyTheApprovedDestination() async throws {
+        struct Interrupted: Error {}
+        var saved: [String: Data] = [:], accept = false, live = true, prompts = 0, interrupt = true
+        let selected = folder.appendingPathComponent("selected"), target = selected.appendingPathComponent("recover.bin")
+        try Data("retained".utf8).write(to: target)
+        let store = MobileFolderStore(load: { saved[$0.key] }, save: { saved[$0.key] = $1 })
+        let trash = MobileSyncTrash(directory: folder.appendingPathComponent("trash"), afterRestore: { if interrupt { throw Interrupted() } })
+        let service = try MacFolderSync(origin: origin, store: store,
+            staging: MobileSyncStaging(directory: folder.appendingPathComponent("staging")), trash: trash,
+            verify: { _, _ in guard live else { throw MobileFolderStore.Failure.unavailable } },
+            choose: { selected }, approve: { _ in false }, approveTrash: { _ in false },
+            approveRestore: { _, _ in prompts += 1; return accept })
+        let context = try await service.handle(request("context")).decode([String: JSONValue].self)
+        XCTAssertEqual(try XCTUnwrap(context["capabilities"]).decode([String: String].self)["fileTrashVersion"], "1.2.0")
+        let id = try await root(service), owner = try FileSyncOwnerScope(ownerId: "owner", url: origin), grant = try store.grant(owner, id: id)
+        let entry = try XCTUnwrap(MobileFolderReader.scan(bookmark: grant.bookmark).first { $0.path == "recover.bin" })
+        let oldScope = MobileSyncStaging.Scope(origin: origin.absoluteString, ownerId: "owner", dataPlane: "home", rootId: "old-connection", deviceId: "old-device")
+        let operation = MobileSyncTrash.Request(scope: oldScope, rootId: id, operation: .init(id: UUID().uuidString.lowercased(),
+            mutation: .init(kind: "trash", side: "local", path: entry.path, expected: entry), confirmed: false))
+        _ = try trash.trash(operation, owner: owner, bookmark: grant.bookmark)
+        let listed = try await service.handle(request("trash-list", ["rootId": .string(id)])).decode([String: JSONValue].self)
+        XCTAssertEqual(try XCTUnwrap(listed["trashPage"]).decode(MobileSyncTrash.Page.self).items.count, 1)
+        var fields: [String: JSONValue] = ["rootId": .string(id), "trash": try .from(operation)]
+        let inspected = try await service.handle(request("trash-inspect", fields)).decode([String: JSONValue].self)
+        let retained = try XCTUnwrap(inspected["retainedEntry"]).decode(MobileFolderReader.Entry.self)
+        fields["restore"] = try .from(MobileSyncTrash.Restore(path: "new-path", expected: retained))
+        await rejects { try await service.handle(self.request("trash-restore-reviewed", fields)) }
+        XCTAssertEqual(prompts, 1); XCTAssertNil(try trash.restoration(operation, owner: owner, bookmark: grant.bookmark))
+        accept = true; live = false
+        await rejects { try await service.handle(self.request("trash-restore-reviewed", fields)) }
+        XCTAssertEqual(prompts, 1)
+        live = true
+        await rejects { try await service.handle(self.request("trash-restore-reviewed", fields)) }
+        XCTAssertEqual(prompts, 2)
+        let pending = try await service.handle(request("trash-inspect", fields)).decode([String: JSONValue].self)
+        XCTAssertNotEqual(pending["restoreIntent"], .null)
+        var changed = fields
+        changed["restore"] = try .from(MobileSyncTrash.Restore(path: "different", expected: retained))
+        await rejects { try await service.handle(self.request("trash-restore-reviewed", changed)) }
+        interrupt = false
+        _ = try await service.handle(request("trash-restore-reviewed", fields))
+        XCTAssertEqual(prompts, 2)
+        XCTAssertEqual(try Data(contentsOf: selected.appendingPathComponent("new-path")), Data("retained".utf8))
+        await rejects { try await service.handle(self.request("trash", fields)) }
     }
 
     func testOldNativeAdapterCannotApproveTrash() async throws {

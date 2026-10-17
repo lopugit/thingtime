@@ -29,6 +29,8 @@ export type SyncExecutionPort = {
 	read(side: SyncSide, path: string): Promise<SyncEntry | null>;
 	lookup(operationId: string, scope: SyncScope): Promise<SyncReceiptLookup>;
 	apply(operation: SyncOperation, scope: SyncScope): Promise<SyncReceipt>;
+	/** Resolve changed folder stamps only from native-verified child receipts. */
+	trashExpected?(operation: SyncOperation, scope: SyncScope): Promise<SyncEntry>;
 	/** Resolve only after the complete immutable run is durable. Must serialize
 	 * one runner per root (native lock / browser Web Lock), including restarts. */
 	persist(run: SyncRun): Promise<void>;
@@ -133,6 +135,10 @@ const executeRun = async (saved: SyncRun, port: SyncExecutionPort, signal: Abort
 		if (previous.status === 'complete') receipt = previous.receipt;
 		else {
 			const mutation = operation.mutation;
+			const expected =
+				mutation.kind === 'trash' ? (port.trashExpected ? await port.trashExpected(structuredClone(operation), run.scope) : mutation.expected) : null;
+			check();
+			if (expected) validateTrashExpected(operation, expected);
 			const local = await port.read('local', mutation.path);
 			check();
 			const remote = await port.read('remote', mutation.path);
@@ -143,10 +149,7 @@ const executeRun = async (saved: SyncRun, port: SyncExecutionPort, signal: Abort
 					!sameSyncStamp(mutation.expectedTarget, mutation.from === 'local' ? remote : local)
 				)
 					throw new Error('Sync file changed; preserve this run and reconcile before retrying.');
-			} else if (
-				!sameSyncStamp(mutation.expected, mutation.side === 'local' ? local : remote) ||
-				(mutation.side === 'local' ? remote : local) !== null
-			)
+			} else if (!sameSyncStamp(expected, mutation.side === 'local' ? local : remote) || (mutation.side === 'local' ? remote : local) !== null)
 				throw new Error('Sync deletion changed; preserve the file and reconcile before retrying.');
 			receipt = await port.apply(structuredClone(operation), run.scope);
 			check();
@@ -167,3 +170,18 @@ const executeRun = async (saved: SyncRun, port: SyncExecutionPort, signal: Abort
 
 export const executeSyncRun = (saved: SyncRun, port: SyncExecutionPort, signal?: AbortSignal) => executeRun(saved, port, signal, false);
 export const executeRetentionRun = (saved: SyncRun, port: SyncExecutionPort, signal?: AbortSignal) => executeRun(saved, port, signal, true);
+
+/** A native receipt chain may advance only a folder stamp. It never changes
+ * a file precondition, path, identity, kind or expected bytes. */
+export function validateTrashExpected(operation: SyncOperation, expected: SyncEntry): void {
+	const m = operation.mutation;
+	if (
+		m.kind !== 'trash' ||
+		!validSyncEntry(expected) ||
+		expected.path !== m.path ||
+		expected.id !== m.expected.id ||
+		!sameSyncContent(expected, m.expected) ||
+		(expected.kind !== 'folder' && expected.version !== m.expected.version)
+	)
+		throw Error('Native trash precondition changed identity or content.');
+}

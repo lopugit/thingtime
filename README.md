@@ -5264,7 +5264,10 @@ credential-store adapters. Native storage is endpoint-specific on Mac
 (`FolderSyncTrash-v1-<endpoint identifier>`) and app-private on iOS
 (`MobileSyncTrash-v1`). It is excluded from OS backup and has no automatic purge;
 this recovery state is not yet included in whole-account snapshots. Cross-volume
-moves refuse. Foreground automatic deletion and recovery browsing remain pending;
+moves refuse. Mac/iOS native Trash 1.2 enables explicitly approved foreground
+deletion and recovery browsing under the same surviving picker grant. Removing
+or rechoosing that grant currently loses UI recovery access; retain it until
+files have been restored. Android Trash and recovery across regrants remain open;
 see [the acceptance ledger](docs/mobile-file-sync.md).
 
 
@@ -5274,3 +5277,12 @@ refusal). New downloads require that capability and a pinned cloud root; a
 missing root or old server cannot authorize publication. No additional secrets
 or environment variables are required. The path reader shares the inventory
 bounds described in [the acceptance ledger](docs/mobile-file-sync.md).
+
+
+Recovery UI layout checks use the real component with synthetic responses only:
+open `/scripts/native-recovery-preview.html` on this checkout's PM2 dev server.
+Verify 1280px and 390px layouts, invalid paths, destination review and completed
+feedback. This fixture does not grant filesystem access or exercise native
+consent. Native recovery itself requires no new secrets, dashboards or services.
+The Mac/API fixture now exercises planner-driven child/parent deletion, lost
+native replies, restart, paged recovery listing and reviewed restore.
