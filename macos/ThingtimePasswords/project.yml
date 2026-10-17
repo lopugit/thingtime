@@ -1,0 +1,83 @@
+name: ThingtimePasswords
+options:
+  deploymentTarget:
+    macOS: "14.0"
+packages:
+  ThingtimePasswordCore:
+    path: ../../apple/Passwords
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    ENABLE_DEBUG_DYLIB: false
+    MARKETING_VERSION: "1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    CODE_SIGN_STYLE: Automatic
+    ENABLE_HARDENED_RUNTIME: true
+    THINGTIME_PASSWORD_KEYCHAIN_GROUP: $(AppIdentifierPrefix)com.thingtime.passwords
+    THINGTIME_WEB_URL: https://thingtime.com
+targets:
+  ThingtimePasswords:
+    type: application
+    platform: macOS
+    sources: [PasswordApp.swift]
+    dependencies:
+      - package: ThingtimePasswordCore
+      - target: ThingtimePasswordProvider
+    info:
+      path: Resources/Info.plist
+      properties:
+        CFBundleDisplayName: Thingtime Passwords
+        ThingtimePasswordKeychainGroup: $(THINGTIME_PASSWORD_KEYCHAIN_GROUP)
+        ThingtimeWebURL: $(THINGTIME_WEB_URL)
+        LSUIElement: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.thingtime.passwords
+        PROVISIONING_PROFILE_SPECIFIER: $(THINGTIME_PASSWORD_HOST_PROFILE)
+        PRODUCT_NAME: Thingtime Passwords
+    entitlements:
+      path: Resources/Host.entitlements
+      properties:
+        com.apple.security.app-sandbox: true
+        com.apple.security.network.client: true
+        com.apple.developer.authentication-services.autofill-credential-provider: true
+        keychain-access-groups: [$(THINGTIME_PASSWORD_KEYCHAIN_GROUP)]
+  ThingtimePasswordProvider:
+    type: app-extension
+    platform: macOS
+    sources:
+      - path: ../../apple/PasswordProvider/CredentialProviderViewController.swift
+    dependencies:
+      - package: ThingtimePasswordCore
+    info:
+      path: Resources/Extension-Info.plist
+      properties:
+        CFBundleDisplayName: Thingtime
+        ThingtimePasswordKeychainGroup: $(THINGTIME_PASSWORD_KEYCHAIN_GROUP)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.authentication-services-credential-provider-ui
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).CredentialProviderViewController
+          NSExtensionAttributes:
+            ASCredentialProviderExtensionShowsConfigurationUI: true
+            ASCredentialProviderExtensionCapabilities:
+              ProvidesPasswords: true
+              ProvidesPasskeys: true
+              ProvidesOneTimeCodes: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.thingtime.passwords.provider
+        PROVISIONING_PROFILE_SPECIFIER: $(THINGTIME_PASSWORD_PROVIDER_PROFILE)
+        APPLICATION_EXTENSION_API_ONLY: true
+        SKIP_INSTALL: true
+    entitlements:
+      path: Resources/Provider.entitlements
+      properties:
+        com.apple.security.app-sandbox: true
+        com.apple.security.network.client: true
+        com.apple.developer.authentication-services.autofill-credential-provider: true
+        keychain-access-groups: [$(THINGTIME_PASSWORD_KEYCHAIN_GROUP)]
+schemes:
+  ThingtimePasswords:
+    build:
+      targets:
+        ThingtimePasswords: all

@@ -117,3 +117,9 @@ macos/ThingtimeWidgets/release-upload/
 # Claude Code per-checkout tooling state (worktree-derived dev ports, local permissions)
 .claude/launch.json
 .claude/settings.local.json
+
+# Credential provider generated projects and build output
+apple/Passwords/.build/
+apple/Passwords/.swiftpm/
+macos/ThingtimePasswords/*.xcodeproj/
+macos/ThingtimePasswords/build/

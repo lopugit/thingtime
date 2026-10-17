@@ -1,9 +1,8 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('thingtimeDesktop', {
-	mailSyncVersion: '1.0.0',
-	syncMail: (request) => ipcRenderer.invoke('thingtime-desktop:mail-sync', request),
-	cancelMailSync: (request) => ipcRenderer.invoke('thingtime-desktop:mail-cancel', request),
+	passwordsVersion: process.platform === 'darwin' ? '1.0.0' : undefined,
+	passwordProvider: (request) => ipcRenderer.invoke('thingtime-desktop:password-provider', request),
 	speechRecognitionVersion: process.platform === 'darwin' ? '1.1.0' : undefined,
 	startSpeechRecognition: (request) => ipcRenderer.invoke('thingtime-desktop:speech-start', request),
 	stopSpeechRecognition: (request) => ipcRenderer.invoke('thingtime-desktop:speech-stop', request),
