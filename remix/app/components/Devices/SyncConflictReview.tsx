@@ -2,6 +2,7 @@ import React, { useId, useState } from 'react';
 import { Box, Button, Flex, FormControl, FormLabel, Select, Stack, Text } from '@chakra-ui/react';
 import { conflictCopySides, type SyncConflict, type SyncConflictChoice } from '~/fileSync/conflictResolution';
 import type { SyncMode, SyncSide } from '~/fileSync/reconcile';
+import { openThingHistory } from '../Timeline/TimelineHost';
 
 export function SyncConflictReview({
 	conflicts,
@@ -52,6 +53,11 @@ export function SyncConflictReview({
 							<Text fontSize="12px" marginBottom={1}>
 								Device: {describe('local')} · Cloud: {describe('remote')}
 							</Text>
+							{conflict.remote?.kind === 'file' && (
+								<Button size="xs" variant="link" mb={2} onClick={() => openThingHistory(conflict.remote!.id, ['file'])}>
+									Cloud version history
+								</Button>
+							)}
 							{options.length ? (
 								<Select
 									id={label}

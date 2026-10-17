@@ -10634,3 +10634,19 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
   independently verify both sides' hashes and repeat convergence after each.
 - [ ] Verify installed iOS/Mac review and physical devices; folder conflict
   resolution, keep-both rename, retained-version browsing and restore controls.
+
+### Retained cloud file versions — 2026-10-17
+
+- [x] File Things open home Timeline; malformed, foreign, draft and unsupported
+  snapshots do not offer file actions. Content IDs include byte length and
+  multipart framing rather than mislabeling the multipart hash as whole-file SHA256.
+- [x] Review restore shows the current name; Cancel sends no mutation. A concurrent
+  file change refuses the stale command. Review latest file requires fresh review.
+- [x] Lose an accepted reply, reopen the version and Retry: the same persisted
+  operation completes with one write. Verify account changes during a pending
+  read cannot reveal a restore review or enable a download.
+- [x] Long names and content IDs fit 390px and 1280px browser layouts without overflow.
+- [x] Real API acceptance: serialized restore replay, original/current byte hashes,
+  permission failures and canonical Timeline snapshots (`file-versions.integration.mts`).
+- [ ] Installed iOS, Android and Mac History/download/restore acceptance; local
+  device retained-version browsing and content-ID search across folders.

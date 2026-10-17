@@ -257,3 +257,15 @@ native consent. Cancellation and an approved retry must preserve the complete
 cloud inventory, native identities and full byte hashes. The Android README
 documents the two consent prompts; this covers settings saved elsewhere, not
 the connection edit form or background execution.
+
+## Retained file history
+
+`components/Timeline/TimelineFileVersions.tsx` renders canonical `file-content`
+Timeline snapshots and uses `fileSync/fileVersions.ts` for content identity and
+restore validation. `useApi().v1.files` reads/commits through the existing files
+API with account/origin/home fences. Downloads use `attachmentContentUrl` and the
+existing `getAttachmentDownload` permission gate. Restore commands persist only
+retry metadata; bytes/history remain in accounted attachments and Timeline.
+`fileVersions.test.ts`, `storageScope.test.ts`, `scripts/file-history.browser.html`
+and `scripts/file-versions.integration.mts` cover this path. Installed native
+History/download acceptance and native retained-version browsing remain open.

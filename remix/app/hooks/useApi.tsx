@@ -1,4 +1,6 @@
 import { FILE_SYNC_REQUIREMENTS } from '~/fileSync/configuration';
+import { parseCloudFile, parseCloudFileCommit, type CloudFileCommit } from '~/fileSync/cloudFile';
+import type { TimelineScope } from '~/timeline/contract';
 import type { VersionRequest } from '../timeline/publishedVersion';
 import type { BranchCheckoutRequest } from '../timeline/branchCheckout';
 import { timelineRequestScope, type TimelineStorage } from '../timeline/storageScope';
@@ -132,6 +134,25 @@ export function useApi() {
   actionActor.current = actionUser?.id;
 
   const v1 = {
+    files: {
+      read: useCallback(async (scope: TimelineScope, id: string, options?: { signal?: AbortSignal }) => {
+        if (scope.dataPlane !== 'home') throw Error('Files require home storage.');
+        await requireThingtimeCapability('api.files', '1.0.0');
+        await requireThingtimeCapability('api.actions-run', '1.7.0');
+        await requireThingtimeCapability('api.mongodb-endpoint', '1.1.0');
+        const result = await getJson(`/api/v1/files${toQuery({ id })}`, { ...options, expectedActor: scope.ownerId, expectedDataPlane: 'home', expectedApiOrigin: scope.apiOrigin });
+        const file = parseCloudFile(result?.file);
+        if (file.id !== id) throw Error('File identity changed.');
+        return file;
+      }, []),
+      commit: useCallback(async (scope: TimelineScope, input: CloudFileCommit, options?: { signal?: AbortSignal }) => {
+        if (scope.dataPlane !== 'home') throw Error('Files require home storage.');
+        const command = parseCloudFileCommit(input);
+        await requireThingtimeCapability('api.files', '1.0.0');
+        await requireThingtimeCapability('api.actions-run', '1.7.0');
+        return asyncFetcher.submit(command, { action: '/api/v1/files', ...options, expectedActor: scope.ownerId, expectedDataPlane: 'home', expectedApiOrigin: scope.apiOrigin });
+      }, [asyncFetcher])
+    },
     drafts: useCallback((input?: Record<string, unknown>, query?: Record<string, string>) => draftRequest(actionActor.current || '', input, query), []),
     webpages: {
       resolveComponents: useCallback(async (scope: { ownerId: string; dataPlane: string }, blocks: unknown[], options?: { signal?: AbortSignal }) => {

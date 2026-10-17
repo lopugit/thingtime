@@ -1410,3 +1410,37 @@ existing data in its current folders. It deliberately does not promise retrieval
 by a content ID before retained-version browsing exists. When one copy is missing,
 it refers to existing data rather than claiming two copies exist. The final copy
 was checked in the browser at 390px and 1280px, with no horizontal overflow.
+
+## Retained cloud file History — 2026-10-17
+
+The shared Timeline now renders before/after retained file versions. It exposes
+canonical multipart content IDs and the existing authorized attachment download
+route. File Things open home history. Restore reviews the current file, keeps its
+current name and folder, takes it out of Trash if needed, and uses the existing
+revision-guarded file commit API. A small account/origin/file-version-scoped local
+command is persisted before POST; reopening that version retries the same operation.
+Canonical file history and bytes remain in Timeline and accounted attachments.
+Completion validates the owner/file/operation-derived receipt ID, exact attachment,
+size, fingerprint and reviewed placement before retiring the pending command.
+
+Browser fixture acceptance covers Cancel, a concurrent edit refusal, fresh review,
+an accepted-write/lost-reply/reopen retry with one write, and an account change
+during a delayed read. Layout was measured at 390px and 1280px without overflow.
+The fixture is `remix/scripts/file-history.browser.html`; it uses the actual shared
+version card and API client with synthetic responses. This does not establish
+installed native downloads or restore, cross-folder content-ID lookup, or durable
+retention of ignored native conflict copies. Those remain in the full goal.
+
+Real HTTP acceptance passed after the managed worktree stack was restarted and
+Nitro finished warming: same stable file ID, current name/folder preserved on
+restore, exact serialized retry, both retained byte hashes, independent content
+IDs, Timeline projections, stale/concurrent writer refusal, and anonymous denial.
+The synthetic file was moved to private Trash with accounted versions retained.
+The direct API-port diagnostic correctly refused a signed upload URL belonging
+to the configured web origin; no origin guard was relaxed. Early runs hit Nitro
+runner readiness errors, so only the final successful run establishes acceptance.
+121 shared file-sync tests and nine focused file-history/scope tests pass;
+targeted lint passes. Full TypeScript matches the same 91 baseline diagnostics.
+The conflict review now links each cloud file to its home History, with measured
+390px layout and cancellation preserving both folders. Installed native restore
+and downloads are still unverified.

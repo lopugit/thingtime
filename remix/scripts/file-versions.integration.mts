@@ -6,6 +6,7 @@ import { randomUUID, createHash } from 'node:crypto';
 import { parseTimelineEntry } from '../app/timeline/contract';
 import { parseCloudInventory } from '../app/fileSync/cloudInventory';
 import { cloudFileSyncEntry } from '../app/fileSync/cloudFile';
+import { fileRestoreCommand, checkFileRestoreReceipt, fileContentId, timelineFileVersion } from '../app/fileSync/fileVersions';
 const path = process.argv[2];
 if (!path || ((await stat(path)).mode & 0o077)) throw Error('Pass a private mode-0600 test fixture');
 const fixture = JSON.parse(await readFile(path, 'utf8'));
@@ -81,8 +82,13 @@ try {
  latest = (await ok(`/api/v1/files?id=${id}`)).file; assert.equal(latest.folderId, null);
  const trash = { ...replacement, operationId: randomUUID(), expectedRevision: latest.revision, name: latest.name, trashed: true };
  latest = (await ok('/api/v1/files', trash)).file; assert.equal(latest.trashed, true);
- const restore = { ...create, operationId: randomUUID(), expectedRevision: latest.revision };
- latest = (await ok('/api/v1/files', restore)).file; assert.equal(latest.trashed, false); assert.equal(cloudFileSyncEntry(latest, latest.name).id, id);
+ const restore = fileRestoreCommand(latest, initial.file, randomUUID());
+ latest = await checkFileRestoreReceipt((await ok('/api/v1/files', restore)).file, restore, initial.file, fixture.userId);
+ assert.equal(latest.trashed, false); assert.equal(cloudFileSyncEntry(latest, latest.name).id, id);
+ assert.equal(latest.name, restore.name); assert.equal(latest.folderId, restore.folderId);
+ const restoreRetry = await ok('/api/v1/files', JSON.parse(JSON.stringify(restore)));
+ assert.equal(restoreRetry.replayed, true); assert.deepEqual(await checkFileRestoreReceipt(restoreRetry.file, restore, initial.file, fixture.userId), latest);
+ assert.equal(fileContentId(latest), fileContentId(initial.file)); assert.notEqual(fileContentId(latest), fileContentId(next.file));
  for (const file of uploaded) {
   const response = await fetch(base.origin+`/api/v1/attachments/content?id=${file.id}&cache=bytes`, { headers: { Cookie: [...cookies].map(([k,v])=>`${k}=${v}`).join('; ') }, redirect: 'error', signal: AbortSignal.timeout(30_000) });
   assert.equal(response.status, 200); assert.equal(hash(new Uint8Array(await response.arrayBuffer())), hash(file.bytes));
@@ -92,7 +98,14 @@ try {
  assert.equal((await call(`/api/v1/files?id=${id}`, undefined, false)).response.status, 401);
  const history = await ok(`/api/v1/timeline?ownerId=${encodeURIComponent(fixture.userId)}&dataPlane=home&thingId=${id}`);
  const entries = history.entries.map(parseTimelineEntry); assert.equal(entries.length, 7); assert.equal(entries.filter((e: any) => e.event.after.adapter === 'file-content').length, 5);
+ const retained = entries.map((entry: any) => timelineFileVersion(entry.event, 'after')).filter(Boolean);
+ assert.ok(retained.some((file: any) => fileContentId(file) === fileContentId(initial.file)));
+ assert.ok(retained.some((file: any) => fileContentId(file) === fileContentId(next.file)));
+ console.log('PASS: Timeline file-version projections, distinct content IDs, guarded restore preserving current placement, serialized exact restore replay and retained byte downloads.');
  console.log('PASS: stable file identity; real replacement; concurrent writer refusal; exact replay/lookup; Timeline history; library listing; guarded folder moves and folder deletion; trash/restore; independent hashes of both retained versions; protected deletion and anonymous denial');
+} catch (error) {
+ console.error('File-version acceptance failed before cleanup:', error);
+ throw error;
 } finally {
  try {
   for (const child of inventoryFixtures.reverse()) await call(`/api/v1/things?id=${child}`, undefined, true, 'DELETE');
