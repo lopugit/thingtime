@@ -58,7 +58,7 @@ isolated temporary `pnpm` shim resolving to the same pin, so an unrelated
 global pnpm cannot silently change the packaged dependency graph. The shim is
 removed after success or failure.
 
-`build:web` runs the Remix/Nitro build with `NITRO_PRESET=node_server`,
+`build:web` runs the Remix/Nitro build with `NITRO_PRESET=node_middleware`,
 materializes `remix/.output` into `electron/dist/web/.output` without external
 worktree symlinks, and builds both MCP desktop entry points. `build:native`
 builds the SwiftPM helper and one-shot XPC bridge, signs them with the explicit
@@ -354,3 +354,35 @@ while processing/replying, and routes final text through the selected chat/model
 Run `pnpm --dir electron test` plus the `desktopSpeechRecognition.test.ts` and
 `voice*.test.ts` tests in Remix. Verify a spoken turn and stopping capture in
 the installed signed app; mocked callbacks cannot prove macOS recognition.
+
+## Renderer restart verification
+
+Desktop owns the HTTP listening socket and keeps its port in the profile's
+`renderer-origin.json` (schema version 1, mode 0600). First startup binds port 0,
+flushes the new record and publishes it without overwriting another launch's
+record. Later startups bind exactly that port. An occupied port, unreadable or
+malformed record fails before creating a window; no random-port fallback or
+request to the other server is allowed. Stop the conflicting application and
+retry. Preserve the record alongside the Chromium profile for recovery/backups.
+Do not delete it as a routine startup workaround.
+
+Only HTTP cache is cleared on launch. IndexedDB and localStorage retain the
+shared sync records, keyed by canonical API origin/account/home/device/root.
+This requires no new environment variables or credentials. Old random-port
+origins are left intact but are not automatically migrated. Independent temporary
+dev profiles still receive independent origins and are cleaned up by their owner.
+
+After `build:web` and `verify:web`, run:
+
+```sh
+corepack pnpm --dir electron run verify:renderer-restart
+```
+
+The command creates a disposable profile, bundles the production journal,
+executor and configuration draft modules using MCP's installed esbuild dependency,
+and runs four separate Electron processes against the staged Nitro middleware.
+It checks pending IDs/drafts, scope isolation, receipt recovery without replay,
+a completion baseline and collision refusal followed by recovery. Native dispatch
+is absent and receipts are synthetic; this is not signed installed Mac transfer
+acceptance, a power-loss test or background-worker coverage. Installed app state
+and its managed Node are never used or modified.

@@ -259,6 +259,7 @@ test('content loader treats service credentials as anonymous and keeps signed re
 				url: 'https://s3.example/private?signature=secret',
 				expiresAt: nowIso,
 				cacheKey: 'a'.repeat(64),
+				version: 'b'.repeat(64),
 				size: 500,
 				contentType: 'image/png',
 				disposition: 'inline',
@@ -442,6 +443,7 @@ test('cache receipts authorize every request without exposing signed URLs, and r
 						url: 'https://private.example/secret',
 						expiresAt: 'later',
 						cacheKey: 'a'.repeat(64),
+				version: 'b'.repeat(64),
 						size: 500,
 						contentType: 'image/png',
 						disposition: 'inline',
@@ -473,6 +475,7 @@ test('conditional byte reuse authorizes before returning a cacheable 304', async
 						url: 'https://private.example/not-fetched',
 						expiresAt: 'later',
 						cacheKey: 'a'.repeat(64),
+				version: 'b'.repeat(64),
 						size: 500,
 						contentType: 'image/png',
 						disposition: 'inline',
@@ -655,5 +658,104 @@ test('the local object-storage route is inert unless the stand-in directory is c
 		}
 	} finally {
 		if (previous !== undefined) process.env.THINGTIME_LOCAL_ATTACHMENT_STORAGE_DIR = previous;
+	}
+});
+
+test('fingerprint requests retain the content audience, no-store headers and fail-closed rate limit', async () => {
+	let observed: any; let called = 0; let limited = false;
+	const payload = { ok: true as const, id: 'fixture', version: 'a'.repeat(64), size: 1, fingerprint: { algorithm: 'sha256-parts-v1' as const, partSizeBytes: 8388608, partCount: 1, sha256: 'b'.repeat(64) } };
+	const loader = createAttachmentContentLoader({ getUser: async () => user, enrichViewer: async viewer => ({ ...viewer!, groupIds: new Set(['group']) }),
+		enforceLimit: (async () => limited ? { allowed: false, unavailable: true } : allowed()) as any,
+		download: async () => { throw Error('must not issue a download URL'); },
+		fingerprint: async (viewer, id) => { called++; observed = viewer; assert.equal(id, 'fixture'); return payload; } });
+	const request = new Request('https://thingtime.example/api/v1/attachments/content?id=fixture&fingerprint=1&key=link&sharedRoot=page');
+	const result = await loader({ request }); assert.deepEqual(await result.json(), payload);
+	assert.equal(observed.id, user.id); assert.equal(observed.sharedRoot, 'page'); assert.deepEqual([...observed.linkKeys], ['link']); assert.deepEqual([...observed.groupIds], ['group']);
+	assert.match(result.headers.get('Cache-Control')!, /private.*no-store/);
+	for (const variant of ['&width=64', '&cache=bytes']) assert.equal((await loader({ request: new Request(request.url + variant) })).status, 400);
+	assert.equal(called, 1); limited = true; assert.equal((await loader({ request })).status, 503); assert.equal(called, 1);
+});
+
+test('version-pinned ranges bound upstream bytes and reauthorize before returning private content', async () => {
+	const version = 'a'.repeat(64),
+		url = 'https://thingtime.example/api/v1/attachments/content?id=fixture&range=1&version=' + version + '&offset=2&length=3';
+	const metadata = {
+		ok: true as const,
+		url: 'https://storage.example/pinned',
+		expiresAt: 'later',
+		cacheKey: 'opaque',
+		version,
+		size: 20 * 1024 * 1024,
+		contentType: 'application/octet-stream',
+		disposition: 'attachment; filename="fixture"',
+		image: false
+	};
+	let authorizations = 0,
+		revoked = false,
+		changed = false,
+		mode = 'valid',
+		fetched = 0;
+	const route = createAttachmentContentLoader({
+		getUser: async () => user,
+		enforceLimit: allowed as any,
+		enrichViewer: async (v) => v,
+		download: async () => {
+			authorizations++;
+			return authorizations % 2 === 0 && revoked
+				? { ok: false as const, status: 404, error: 'Attachment not found' }
+				: { ...metadata, version: authorizations % 2 === 0 && changed ? 'b'.repeat(64) : version };
+		},
+		rangeFetch: async (_target, init) => {
+			fetched++;
+			assert.equal(init?.redirect, 'error');
+			assert.equal(new Headers(init?.headers).get('Range'), 'bytes=2-4');
+			if (mode === 'redirect') return new Response(null, { status: 302 });
+			const bytes = mode === 'short' ? new Uint8Array([2, 3]) : mode === 'long' ? new Uint8Array([2, 3, 4, 5]) : new Uint8Array([2, 3, 4]);
+			return new Response(bytes, {
+				status: 206,
+				headers: { 'Content-Range': mode === 'wrong' ? 'bytes 3-5/' + metadata.size : 'bytes 2-4/' + metadata.size, 'Content-Length': '3' }
+			});
+		}
+	});
+	let result = await route({ request: new Request(url) });
+	assert.equal(result.status, 206);
+	assert.deepEqual(new Uint8Array(await result.arrayBuffer()), new Uint8Array([2, 3, 4]));
+	assert.match(result.headers.get('Cache-Control')!, /no-store/);
+	assert.equal(result.headers.get('ETag'), '"' + version + '"');
+	assert.equal(authorizations, 2);
+	revoked = true;
+	result = await route({ request: new Request(url) });
+	assert.equal(result.status, 404);
+	revoked = false;
+	changed = true;
+	result = await route({ request: new Request(url) });
+	assert.equal(result.status, 409);
+	changed = false;
+	for (const value of ['short', 'long', 'wrong', 'redirect']) {
+		mode = value;
+		authorizations = 0;
+		result = await route({ request: new Request(url) });
+		assert.equal(result.status, 502);
+		assert.equal(authorizations, 1);
+	}
+	mode = 'valid';
+	authorizations = 0;
+	const before = fetched;
+	result = await route({ request: new Request(url.replace(version, 'c'.repeat(64))) });
+	assert.equal(result.status, 409);
+	assert.equal(fetched, before);
+	result = await route({ request: new Request(url.replace('offset=2', 'offset=' + metadata.size)) });
+	assert.equal(result.status, 416);
+	assert.equal(fetched, before);
+	for (const query of [
+		'range=2',
+		'range=1&version=x&offset=0&length=1',
+		'range=1&version=' + version + '&offset=-1&length=1',
+		'range=1&version=' + version + '&offset=0&length=2097153',
+		'range=1&version=' + version + '&offset=0&length=1&cache=bytes',
+		'range=1&version=' + version + '&offset=0&length=1&offset=1'
+	]) {
+		result = await route({ request: new Request('https://thingtime.example/api/v1/attachments/content?id=fixture&' + query) });
+		assert.equal(result.status, 400);
 	}
 });

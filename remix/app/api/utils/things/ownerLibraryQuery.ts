@@ -8,6 +8,7 @@ export const ownerLibraryMatch = (ownerId: string, excludedKinds: readonly strin
   $or: [
     { thingtime: { $nin: [...excludedKinds] } },
     { thingtime: ['theme'] },
+    { thingtime: ['file'], 'crystal.trashed': false },
     { thingtime: ['feed-algorithm'] },
     { thingtime: ['custom-emoji'], targetId: null },
     ...(includeArchives ? [{ thingtime: ['chat-archive'], archiveVersion: 1, archiveDeleting: { $in: [null, false] },

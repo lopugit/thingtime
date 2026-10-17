@@ -22,11 +22,13 @@
 		"install:local": "node scripts/install-local-app.mjs",
 		"start": "electron .",
 		"test": "node --test test/**/*.test.cjs",
+		"verify:folder-sync-host": "electron test/fixtures/folder-sync-host.cjs",
 		"verify:native": "node scripts/verify-native-node.mjs",
 		"verify:release-shim": "node scripts/release-workflow-contract.cjs shim ../.github/workflows/electron-release.yml",
 		"verify:signed": "node scripts/verify-signed-app.mjs",
 		"verify:unsigned": "node scripts/verify-unsigned-app.mjs",
-		"verify:web": "node scripts/verify-web-build.mjs"
+		"verify:web": "node scripts/verify-web-build.mjs",
+		"verify:renderer-restart": "node scripts/verify-renderer-restart.mjs"
 	},
 	"build": {
 		"appId": "com.thingtime.desktop",

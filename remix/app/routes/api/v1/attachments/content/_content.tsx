@@ -1,8 +1,9 @@
+import { parseAttachmentRange, readExactRange } from '~/api/utils/attachments/attachmentRanges';
 import { withFoundPostBrowser } from '~/api/utils/things/foundPostRequest';
 import { attachmentImageResponse, parseImageWidth } from '~/api/utils/attachments/imageVariants';
 import { json, redirect } from '~/api/http';
 import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
-import { getAttachmentDownload } from '~/api/utils/attachments/attachments';
+import { getAttachmentDownload, getAttachmentFingerprint } from '~/api/utils/attachments/attachments';
 import { withAttachmentPrivateResponse } from '~/api/utils/attachments/attachmentResponses';
 import { fetchStoredObject } from '~/api/utils/attachments/localAttachmentStorage';
 import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
@@ -12,14 +13,18 @@ type ContentDependencies = {
 	getUser: typeof getCurrentUser;
 	enforceLimit: typeof enforceRateLimit;
 	download: typeof getAttachmentDownload;
+	fingerprint: typeof getAttachmentFingerprint;
 	enrichViewer: typeof withFriendIds;
+	rangeFetch: typeof fetchStoredObject;
 };
 
 const defaultDependencies: ContentDependencies = {
 	getUser: getCurrentUser,
 	enforceLimit: enforceRateLimit,
 	download: getAttachmentDownload,
-	enrichViewer: withFriendIds
+	fingerprint: getAttachmentFingerprint,
+	enrichViewer: withFriendIds,
+	rangeFetch: fetchStoredObject
 };
 
 export const createAttachmentContentLoader = (overrides: Partial<ContentDependencies> = {}) => {
@@ -27,8 +32,15 @@ export const createAttachmentContentLoader = (overrides: Partial<ContentDependen
 	return async ({ request }: { request: Request }) =>
 		withAttachmentPrivateResponse(async () => {
 			const url = new URL(request.url);
+			let range: ReturnType<typeof parseAttachmentRange>;
+			try {
+				range = parseAttachmentRange(url);
+			} catch {
+				return json({ ok: false, error: 'Invalid attachment byte range' }, { status: 400 });
+			}
 			const sharedRoot = url.searchParams.get('sharedRoot');
-			if (sharedRoot !== null && !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(sharedRoot)) return json({ ok: false, error: 'Invalid shared root' }, { status: 400 });
+			if (sharedRoot !== null && !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(sharedRoot))
+				return json({ ok: false, error: 'Invalid shared root' }, { status: 400 });
 			const width = parseImageWidth(url.searchParams.get('width'));
 			if (width === null) return json({ ok: false, error: 'Unsupported image width' }, { status: 400 });
 			const resolvedUser = await dependencies.getUser(request);
@@ -45,7 +57,19 @@ export const createAttachmentContentLoader = (overrides: Partial<ContentDependen
 				return json({ ok: false, error: 'Too many attachment requests' }, rateLimitedResponseInit(limit));
 			}
 
-			const audience = await dependencies.enrichViewer(withLinkKeys(withFoundPostBrowser(viewerOf(user), request, !resolvedUser), [url.searchParams.get('key') || '']));
+			const audience = await dependencies.enrichViewer(
+				withLinkKeys(withFoundPostBrowser(viewerOf(user), request, !resolvedUser), [url.searchParams.get('key') || ''])
+			);
+			if (url.searchParams.get('fingerprint') === '1') {
+				if (width || url.searchParams.has('cache'))
+					return json({ ok: false, error: 'Fingerprint requests cannot select image or byte-cache variants' }, { status: 400 });
+				const result = await dependencies.fingerprint(
+					audience || sharedRoot ? { id: '', ...audience, ...(user?.isAdmin ? { isAdmin: true } : {}), ...(sharedRoot ? { sharedRoot } : {}) } : null,
+					url.searchParams.get('id')
+				);
+				if (result.ok === false) return json({ ok: false, error: result.error }, { status: result.status });
+				return json(result);
+			}
 			const result = await dependencies.download(
 				// isAdmin rides along so admins can fetch quarantined (blocked)
 				// evidence for moderation review; everyone else 404s on blocked docs.
@@ -54,6 +78,50 @@ export const createAttachmentContentLoader = (overrides: Partial<ContentDependen
 				url.searchParams.get('download') === '1'
 			);
 			if (result.ok === false) return json({ ok: false, error: result.error }, { status: result.status });
+			if (range) {
+				if (result.version !== range.version) return json({ ok: false, error: 'Attachment version changed' }, { status: 409 });
+				if (range.offset + range.length > result.size) return json({ ok: false, error: 'Attachment range is outside the file' }, { status: 416 });
+				const signal = AbortSignal.any([request.signal, AbortSignal.timeout(30_000)]);
+				let bytes: Uint8Array<ArrayBuffer>;
+				try {
+					const upstream = await dependencies.rangeFetch(result.url, {
+						redirect: 'error',
+						signal,
+						headers: { Range: `bytes=${range.offset}-${range.offset + range.length - 1}` }
+					});
+					bytes = await readExactRange(upstream, range, result.size, () => signal.throwIfAborted());
+				} catch {
+					return json({ ok: false, error: 'Attachment range unavailable; retry the same version' }, { status: 502 });
+				}
+				signal.throwIfAborted();
+				const refreshedAudience = await dependencies.enrichViewer(
+					withLinkKeys(withFoundPostBrowser(viewerOf(user), request, !resolvedUser), [url.searchParams.get('key') || ''])
+				);
+				const current = await dependencies.download(
+					refreshedAudience || sharedRoot
+						? { id: '', ...refreshedAudience, ...(user?.isAdmin ? { isAdmin: true } : {}), ...(sharedRoot ? { sharedRoot } : {}) }
+						: null,
+					url.searchParams.get('id'),
+					false
+				);
+				if (current.ok === false) return json({ ok: false, error: current.error }, { status: current.status });
+				if (current.version !== range.version || current.size !== result.size)
+					return json({ ok: false, error: 'Attachment changed during the range read' }, { status: 409 });
+				signal.throwIfAborted();
+				return new Response(bytes, {
+					status: 206,
+					headers: {
+						'Content-Type': 'application/octet-stream',
+						'Content-Disposition': result.disposition,
+						'Content-Length': String(bytes.length),
+						'Content-Range': `bytes ${range.offset}-${range.offset + range.length - 1}/${result.size}`,
+						'Accept-Ranges': 'bytes',
+						ETag: `"${range.version}"`,
+						'Cache-Control': 'private, no-store',
+						'X-Content-Type-Options': 'nosniff'
+					}
+				});
+			}
 			if (width && (!result.image || result.size > 20 * 1024 * 1024)) {
 				return json({ ok: false, error: 'Image preview unavailable; use the original' }, { status: 415 });
 			}

@@ -17,6 +17,8 @@ struct WebView: UIViewRepresentable {
         configuration.defaultWebpagePreferences.allowsContentJavaScript = true
         configuration.websiteDataStore = .default()
         configuration.userContentController.addUserScript(Self.bridgeUserScript)
+        configuration.userContentController.addUserScript(MobileDeviceBridge.script)
+        configuration.userContentController.addUserScript(MobileFolderBridge.script)
         configuration.userContentController.add(context.coordinator, name: Self.nativeMessageHandlerName)
 
         let webView = ThingtimeWKWebView(frame: .zero, configuration: configuration)
@@ -51,6 +53,8 @@ struct WebView: UIViewRepresentable {
         // and detaches its queued uploads, even when a widget tap is delivered in
         // the same update. Widget navigation alone stays within the same origin.
         if rootChanged { WidgetStore.clear(); context.coordinator.resetChatActivity() }
+        context.coordinator.mobileDevice.suspend()
+        context.coordinator.mobileFolders.suspend()
         context.coordinator.cancelVoice()
         if rootChanged { context.coordinator.suspendRecordingUploads() }
         context.coordinator.loadedRootURL = url
@@ -62,6 +66,8 @@ struct WebView: UIViewRepresentable {
     final class Coordinator: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
         weak var webView: WKWebView?
         var loadedRootURL: URL?
+        let mobileDevice = MobileDeviceBridge()
+        let mobileFolders = MobileFolderBridge()
         private let lopuVoice = LopuVoiceSessionController()
         private let lopuChats = LopuChatActivityController()
 
@@ -88,6 +94,11 @@ struct WebView: UIViewRepresentable {
             }
         }
 
+        func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
+            mobileDevice.suspend()
+            mobileFolders.suspend()
+        }
+
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
             (webView as? ThingtimeWKWebView)?.applyThingtimeScrollInsets(forceSafeAreaUpdate: true)
 
@@ -99,6 +110,9 @@ struct WebView: UIViewRepresentable {
                 "lopuVoiceVersion": "1.3.0",
                 "lopuChatActivityVersion": "1.0.0",
                 "notificationsVersion": "1.0.0",
+                "devicePairingVersion": "1.0.0",
+                "fileAccessVersion": MobileFolderBridge.accessVersion,
+                "fileStagingVersion": MobileFolderBridge.stagingVersion, "filePublicationVersion": MobileFolderBridge.publicationVersion,
                 "watchNotifications": true
             ])
         }
@@ -121,6 +135,25 @@ struct WebView: UIViewRepresentable {
                 return
             }
             switch type {
+            case "mobile-files":
+                guard message.frameInfo.isMainFrame, let webView, let root = loadedRootURL,
+                      let current = webView.url, LopuVoiceContract.sameOrigin(current, root),
+                      let frame = message.frameInfo.request.url, LopuVoiceContract.sameOrigin(frame, root) else { return }
+                mobileFolders.handle(body, webView: webView, root: root,
+                    currentRoot: { [weak self] in self?.loadedRootURL },
+                    verifyOwner: { [weak self, weak webView] scope, check in
+                        guard let self, let webView else { throw CancellationError() }
+                        try await self.mobileDevice.verifyOwner(scope, webView: webView,
+                            cookies: { [weak self] values, url in self?.cookies(values, matching: url) ?? [] }, check: check)
+                    }, reply: { [weak self] type, payload in self?.sendToWeb(type: type, payload: payload) })
+            case "mobile-device":
+                guard message.frameInfo.isMainFrame, let webView, let root = loadedRootURL,
+                      let current = webView.url, LopuVoiceContract.sameOrigin(current, root),
+                      let frame = message.frameInfo.request.url, LopuVoiceContract.sameOrigin(frame, root) else { return }
+                mobileDevice.handle(body, webView: webView, root: root,
+                    currentRoot: { [weak self] in self?.loadedRootURL },
+                    cookies: { [weak self] values, url in self?.cookies(values, matching: url) ?? [] },
+                    reply: { [weak self] type, payload in self?.sendToWeb(type: type, payload: payload) })
             case "lopu-chat-activity-sync":
                 guard message.frameInfo.isMainFrame, let webView, let root = loadedRootURL,
                       let current = webView.url, LopuVoiceContract.sameOrigin(current, root),

@@ -1,4 +1,6 @@
+import { fileSyncSchema, parseFileSyncConfiguration, FILE_SYNC_KIND } from '../fileSync/configuration';
 import { TIMELINE_SNAPSHOT_PART_KIND } from '../timeline/snapshotParts.ts';
+import { DEVICE_PLATFORMS } from '../devices/platform.ts';
 import { TIMELINE_BRANCH_KIND, TIMELINE_BRANCH_HEAD_KIND } from '../timeline/branches.ts';
 import { TIMELINE_NOTE_KIND } from '../timeline/notes.ts';
 import { TIMELINE_VERSION_NAME_KIND } from '../timeline/versionNames.ts';
@@ -1039,6 +1041,19 @@ const postSchema: ThingtimeSchema = {
     listing: null,
     thing: null
   }
+};
+
+const fileSchema: ThingtimeSchema = {
+  id: 'file', version: 1, kind: 'crystal', collection: null, title: 'File',
+  summary: 'A stable file identity with retained attachment versions and Timeline history.',
+  detail: 'The dedicated file writer changes the current content atomically using an expected revision and immutable operation identity. Bytes remain separately accounted attachment Things linked by parentId/targetId. Trash retains content until an explicit retention workflow removes it.',
+  createdVia: 'POST /api/v1/files',
+  example: { name: 'notes.txt', trashed: false, content: { attachmentId: 'att-example', version: 'a'.repeat(64), size: 1, fingerprint: { algorithm: 'sha256-parts-v1', partSizeBytes: 8388608, partCount: 1, sha256: 'b'.repeat(64) } } },
+  fields: [
+    { name: 'name', type: 'string', required: true, max: 255, description: 'Editable filename.' },
+    { name: 'trashed', type: 'boolean', required: true, description: 'Recoverable trash state; retained bytes remain accounted.' },
+    { name: 'content', type: 'object', required: true, description: 'Verified attachment identity, opaque content version, byte size and multipart fingerprint.' }
+  ]
 };
 
 const attachmentSchema: ThingtimeSchema = {
@@ -3789,7 +3804,7 @@ const deviceSchema: ThingtimeSchema = {
 	fields: [
 		{ name: 'deviceKey', type: 'string', required: true, description: 'Server-hashed unique owner/device key.' },
 		{ name: 'name', type: 'string', required: true, max: 120, description: 'User-facing computer name.' },
-		{ name: 'platform', type: 'enum', required: true, values: ['macos', 'windows', 'linux', 'watchos'], description: 'Operating-system family.' },
+		{ name: 'platform', type: 'enum', required: true, values: [...DEVICE_PLATFORMS], description: 'Operating-system family; capabilities are negotiated separately.' },
 		{ name: 'model', type: 'string', required: false, max: 160, description: 'Bounded hardware model label.' },
 		{ name: 'osVersion', type: 'string', required: false, max: 80, description: 'Bounded OS version label.' },
 		{ name: 'appVersion', type: 'string', required: false, max: 80, description: 'Thingtime node version.' },
@@ -4200,6 +4215,7 @@ export const DEVICE_CONTROL_THINGTIME = ['device-command', 'device-command-event
 export const CHAT_ARCHIVE_THINGTIME = ['chat-archive', 'chat-archive-participant', 'chat-archive-message', 'chat-archive-reaction'] as const;
 
 export const PROTECTED_THINGTIME = [
+  'file',
   'password-manager-entry',
   'draft',
   TIMELINE_EVENT_KIND, TIMELINE_LINK_KIND, TIMELINE_BRANCH_KIND, TIMELINE_BRANCH_HEAD_KIND, TIMELINE_SNAPSHOT_PART_KIND, TIMELINE_NOTE_KIND, TIMELINE_VERSION_NAME_KIND,
@@ -4460,6 +4476,7 @@ export const thingtimeSchemas: ThingtimeSchema[] = [
   rootThingSchema,
   postSchema,
 	attachmentSchema,
+	fileSchema,
   commentSchema,
   reactionSchema,
   shareSchema,
@@ -4503,6 +4520,7 @@ export const thingtimeSchemas: ThingtimeSchema[] = [
   subspaceTombstoneSchema,
   subspaceReportSchema,
   folderSchema,
+  fileSyncSchema,
   appSchema,
   appDataSchema,
   // admin-plane kinds (PROTECTED: written only through admin endpoints)
@@ -6903,6 +6921,11 @@ const crystalSanitizers: Record<
 	attachment: sanitizeAttachmentCrystal,
   post: sanitizePostCrystal,
   folder: sanitizeFolderCrystal,
+  [FILE_SYNC_KIND]: (input, ids) => {
+    if (ids.length !== 1) return fail(400, 'File sync configurations stand alone');
+    try { return { ok: true, crystal: { ...parseFileSyncConfiguration(input) } }; }
+    catch (error) { return fail(400, error instanceof Error ? error.message : 'Invalid file sync configuration'); }
+  },
   comment: sanitizeCommentCrystal,
   reaction: sanitizeReactionCrystal,
   share: () => ({ ok: true, crystal: {} }),

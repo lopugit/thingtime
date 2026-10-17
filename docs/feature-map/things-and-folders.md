@@ -312,3 +312,58 @@ so decrypted fields never enter shared client history/cache. The reusable
 `Thingtime` fields mod renders the entry without global Thing persistence.
 Native integrations live in `apple/Passwords`, `apple/PasswordProvider`,
 `iOS/Thingtime/Web/PasswordBridge.swift` and `electron/lib/password-provider.cjs`.
+
+
+Stable file roots (`api.files` 1.0.0) use `api/utils/files/files.ts` with the
+shared `fileSync/cloudFile.ts` contract and `file-content` Timeline snapshots.
+Their byte versions are canonical bound attachments. `ownerLibraryQuery.ts`
+lists live roots once; existing managed placement/recordFolderPlacement handles
+file moves and folder deletion. `test:files` and `file-versions.integration.mts`
+cover the API; see the full mobile sync ledger for pending product integration.
+
+
+Android offline folders use the bounded native `ManagedFileStore` catalog and
+`OfflineDocumentsProvider`, exposed only after the native `FolderBridge`
+creation consent. Android Files gets read-only document snapshots; editable
+connection Things and Timeline remain shared. `OfflineDocumentsProviderTest`
+and the opt-in `THINGTIME_OFFLINE_FILES_TEST=1` installed-app flow cover root
+visibility, ancestry, read-only handles, migration and real picker/byte reads.
+See [mobile sync](../mobile-file-sync.md) for pending download integration and
+the broader cross-device requirements.
+
+
+Android `ManagedFolderAccess` connects the shared foreground download target to
+Thingtime offline roots. Publication bridge 1.1 requires each selected root's
+capability, current OS read grant and native approval bound to the exact saved
+connection. Generic SAF roots remain upload/read-only. The native catalog serves
+stable scan/read versions and shared publication receipts; provider notifications
+refresh Android Files. `media-cache-core.mjs` excludes pinned ranges, fingerprint
+JSON and expected-actor/data-plane requests from media interception. See the
+[download acceptance ledger](../mobile-file-sync.md).
+
+
+`foregroundSync.ts` also executes two-way runs through the existing cloud and
+native adapters. `MobileSyncConnections` obtains scoped native approval and
+exposes Sync now only for publication-capable roots with deletes disabled.
+`foregroundSync.test.ts` covers mixed-direction recovery and pre-effect conflicts;
+Android's optional `THINGTIME_TWO_WAY_SYNC_TEST=1` checks actual mixed bytes and
+independent edits. Mac adapters and native workers remain in the mobile sync ledger.
+
+
+Apple native grants, scan/read and publication are now shared in
+`apple/FileSync/Sources/AppleFileSync`; iOS `MobileFolderBridge` imports that
+local package. `FileSyncOwnerScope` preserves the pairing/grant key and JSON.
+`FolderBookmark` owns the iOS/macOS bookmark differences. Common folder and
+publication tests live under the package; iOS retains its host bridge extensions.
+The shared `PublicationProcessAcceptance` fixture runs through iOS's test host
+and Mac's test-only child executable. `ThingtimeNodeCore/MacFolderSync.swift`
+now wraps that package in local XPC dispatch, live paired-identity checks,
+owner-scoped grants and configuration-bound native write consent. The Node app
+owns picker/approval dialogs and endpoint-isolated staging. Generic/leased
+commands cannot call it. `electron/lib/folder-sync.cjs` now verifies the active
+Chromium account and selected origin around native dispatch. `DesktopFolderAccess`
+reuses `MobileFolderAccess`/`MobileSyncConnections` through a `FolderHost`; the
+desktop runtime maps canonical API requests onto the bundled cookie proxy and
+preserves anonymous signed uploads. Native network/power conditions use the shared
+contract. Installed acceptance, restart persistence and native streaming remain
+pending; see the current release boundary in the mobile sync ledger.

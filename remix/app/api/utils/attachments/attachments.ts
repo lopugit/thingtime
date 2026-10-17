@@ -1,3 +1,5 @@
+import { fingerprintFromVerifiedHead, attachmentContentVersion } from './contentFingerprint';
+import { contentPartPlan, MIN_CONTENT_PART_BYTES, MAX_CONTENT_PART_BYTES, type ContentFingerprint } from '../../../fileSync/contentFingerprint';
 import { ownedMediaDraftIds } from '../drafts/media';
 import { attachmentCountLimit } from '../../../schemas/attachmentLimits';
 import { createHash, randomUUID } from 'node:crypto';
@@ -54,8 +56,8 @@ import { findUserById, userPublicUploadsEnabled, userPrivateUploadsEnabled } fro
 
 export const ATTACHMENT_UPLOAD_TTL_MS = 24 * 60 * 60 * 1000;
 export const ATTACHMENT_READY_DRAFT_TTL_MS = 24 * 60 * 60 * 1000;
-export const ATTACHMENT_MIN_PART_BYTES = 8 * 1024 * 1024;
-export const ATTACHMENT_MAX_PART_BYTES = 5 * 1024 * 1024 * 1024;
+export const ATTACHMENT_MIN_PART_BYTES = MIN_CONTENT_PART_BYTES;
+export const ATTACHMENT_MAX_PART_BYTES = MAX_CONTENT_PART_BYTES;
 export const ATTACHMENT_MAX_OBJECT_BYTES = 5 * 1024 * 1024 * 1024 * 1024;
 export const MAX_PART_URLS_PER_REQUEST = 20;
 export const MAX_EXPIRED_ATTACHMENTS_PER_REAP = 1000;
@@ -156,16 +158,8 @@ export const attachmentIdForRequest = (ownerId: string, requestId: string): stri
 	`att_${createHash('sha256').update('thingtime-attachment-request-v1\0').update(ownerId).update('\0').update(requestId).digest('hex')}`;
 
 export const attachmentPartPlan = (sizeBytes: number) => {
-	const oneMiB = 1024 * 1024;
-	const minimumForTenThousand = Math.ceil(sizeBytes / 10_000);
-	const partSizeBytes = Math.ceil(Math.max(ATTACHMENT_MIN_PART_BYTES, minimumForTenThousand) / oneMiB) * oneMiB;
-	if (partSizeBytes > ATTACHMENT_MAX_PART_BYTES) {
-		throw new AttachmentServiceError(400, 'Attachment is too large');
-	}
-	return {
-		partSizeBytes,
-		partCount: Math.ceil(sizeBytes / partSizeBytes)
-	};
+	try { return contentPartPlan(sizeBytes); }
+	catch (error) { throw new AttachmentServiceError(400, (error as Error).message); }
 };
 
 export const attachmentExpectedPartBytes = (objectSizeBytes: number, partNumber: number): number => {
@@ -1333,7 +1327,7 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 
 	const download = async (
 		viewer: AttachmentViewer, idInput: unknown, forceDownload: boolean
-	): Promise<AttachmentResult<{ url: string; expiresAt: string; cacheKey: string; size: number; contentType: string; disposition: string; image: boolean }>> => {
+	): Promise<AttachmentResult<{ url: string; expiresAt: string; cacheKey: string; version: string; size: number; contentType: string; disposition: string; image: boolean }>> => {
 		try {
 			const readable = await readableStoredAttachment(viewer, idInput);
 			if (readable.ok === false) return readable;
@@ -1349,6 +1343,7 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 			return {
 				ok: true,
 				...signed,
+				version: attachmentContentVersion(doc.shareId, doc.objectKey, doc.objectVersionId!),
 				// Opaque and viewer-scoped: never expose an object key, bucket or VersionId.
 				cacheKey: createHash('sha256')
 					.update(JSON.stringify([doc.shareId, doc.objectVersionId, viewer?.id || 'anonymous', forceDownload, doc.crystal.contentType]))
@@ -1361,6 +1356,25 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 		} catch (error) {
 			return knownFailure(error) || unavailable('download', error);
 		}
+	};
+
+	// Exact-version integrity receipt through the same authorization as content.
+	const fingerprint = async (viewer: AttachmentViewer, idInput: unknown): Promise<AttachmentResult<{ id: string; version: string; size: number; fingerprint: ContentFingerprint }>> => {
+		try {
+			const result = await readableStoredAttachment(viewer, idInput);
+			if (result.ok === false) return result;
+			const { doc } = result;
+			const head = await verifiedHeadForDoc(dependencies.getS3(), doc, doc.objectVersionId);
+			const value = fingerprintFromVerifiedHead(head);
+			if (!value) return fail(409, 'Verified content fingerprint is unavailable; keep both files and retry or re-upload.');
+			// Recheck access and lifecycle after the storage request; a revoked or
+			// deleted attachment cannot yield a fresh comparison receipt.
+			const current = await readableStoredAttachment(viewer, idInput, false, false);
+			if (current.ok === false) return current;
+			if (current.doc.objectVersionId !== head.versionId || current.doc.objectKey !== doc.objectKey) return fail(409, 'Attachment changed during fingerprint verification');
+			const version = attachmentContentVersion(doc.shareId, doc.objectKey, head.versionId);
+			return { ok: true, id: doc.shareId, version, size: head.sizeBytes, fingerprint: value };
+		} catch (error) { return knownFailure(error) || unavailable('fingerprint', error); }
 	};
 
 	// The download gates without a signed URL: size and served type only. The
@@ -1521,6 +1535,7 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 		remove,
 		download,
 		inspectDownload,
+		fingerprint,
 		describeTransfer,
 		copy,
 		inspectForPost,
@@ -1543,6 +1558,7 @@ export const cancelAttachmentUpload = service.cancel;
 export const deleteAttachment = service.remove;
 export const getAttachmentDownload = service.download;
 export const inspectAttachmentDownload = service.inspectDownload;
+export const getAttachmentFingerprint = service.fingerprint;
 export const describeAttachmentTransfer = service.describeTransfer;
 export const copySharedAttachment = service.copy;
 export const inspectReadyAttachmentsForPost = service.inspectForPost;

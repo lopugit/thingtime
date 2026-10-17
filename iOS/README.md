@@ -225,3 +225,56 @@ when both finish. Repeat across account/destination changes, manual stop, an
 automatic retry, a disabled Live Activities setting, and a user-dismissed activity.
 Verify a concurrent voice session retains its existing behavior. Simulator build
 and unit tests do not prove APNs delivery or physical lock-screen behavior.
+
+
+### Resumable private file staging
+
+`fileStagingVersion` 1.0.0 adds begin/append/finish calls to the existing native
+folder bridge. Requests require the current origin/account and an owned folder
+grant. They write only to private application support storage, excluded from
+backup, and preserve immutable operation identity, acknowledged progress and
+verified content across reopen. `filePublicationVersion` 1.0.0 adds native consent,
+publication and receipt lookup. Selecting a read-only grant does not grant writes.
+Approvals bind reviewed configuration revision/hash, device and connection and
+are cleared by removing/reselecting the folder. Publication uses coordinated,
+same-volume exclusive rename/swap, retains displaced inodes privately and refuses
+unsupported providers. A racing uncoordinated edit is retained as a pending
+conflict, not an automatic rollback. Existing transfer records carry receipts;
+background transfers, conflict/restore controls and retention remain pending.
+
+`MobileSyncStagingTests` verifies multipart bytes, replay, interrupted checkpoint
+recovery, checksum and symlink refusal, plus the real WebKit/native handler with
+synthetic authentication and a local test grant. Run it with `MobileFolderTests`
+and `MobileDevicePairingTests` after `xcodegen generate`. See the root README for
+the concrete simulator command and `docs/mobile-file-sync.md` for remaining
+cloud, provider, permission and physical-device acceptance.
+
+
+### Real installed download and process-exit checks
+
+`./scripts/test-mobile-publication-process.sh` runs opt-in
+`MobilePublicationProcessTests` across separate test-host processes. It exits
+after exclusive create/swap but before receipt persistence and checks original
+operation recovery, retained replacement bytes and edit-before-recovery refusal.
+The script requires a concrete simulator `DEST`; it touches only its private
+fixture directory.
+
+`./scripts/test-mobile-sync-installed.sh /private/account.json` prepares the
+actual installed Things UI with a disposable loopback account and empty Documents
+folder. Use the visible Files picker, connection editor and native consent
+controls, then independently verify the cloud file hashes before recording test
+completion. This is opt-in and never enables itself in ordinary test runs. See
+the root README for fixture preparation, replacement and cleanup. The native
+consent cancellation message is distinct from missing folder access; shared
+pairing requests serialize foreground checks with periodic status refresh.
+
+
+### Shared file-sync core
+
+`project.yml` links the local `../apple/FileSync` package. Regenerate with
+`xcodegen generate` after updating the checkout. Folder grants, reads and staged
+publication use this shared source; existing v1 storage, scope keys and bridge
+contracts are preserved. The test target includes the shared folder/publication
+cases plus iOS-only WebKit bridge cases. See the [package runbook](../apple/FileSync/README.md)
+for Mac filesystem tests and the existing `scripts/test-mobile-publication-process.sh`
+for iOS fresh-process recovery. This extraction does not enable Mac host sync.

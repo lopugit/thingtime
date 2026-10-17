@@ -1,5 +1,6 @@
 import { normalizeFilesystemInput, type FilesystemInput } from './deviceFilesystemCore';
 import { createHash } from 'node:crypto';
+import { isDevicePlatform, type DevicePlatform } from '../../../devices/platform';
 
 export const DEVICE_COMMAND_KINDS = [
 	'filesystem',
@@ -169,7 +170,7 @@ export const devicePayloadHash = (value: unknown): string => createHash('sha256'
 
 export type DeviceDescriptor = {
 	name: string;
-	platform: 'macos' | 'windows' | 'linux' | 'watchos';
+	platform: DevicePlatform;
 	model: string | null;
 	osVersion: string | null;
 	appVersion: string | null;
@@ -180,10 +181,7 @@ export const normalizeDeviceDescriptor = (value: unknown): DeviceDescriptor | nu
 	const raw = value as Record<string, unknown>;
 	if (!Object.keys(raw).every((key) => ['name', 'platform', 'model', 'osVersion', 'appVersion'].includes(key))) return null;
 	const name = bounded(raw.name, 120);
-	const platform =
-		raw.platform === 'macos' || raw.platform === 'windows' || raw.platform === 'linux' || raw.platform === 'watchos'
-			? raw.platform
-			: null;
+	const platform = isDevicePlatform(raw.platform) ? raw.platform : null;
 	if (!name || !platform) return null;
 	return {
 		name,

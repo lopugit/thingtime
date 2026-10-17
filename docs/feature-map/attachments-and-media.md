@@ -1,5 +1,84 @@
 # Attachments and media
 
+Attachment-content 1.14.0 also serves bounded exact-version byte ranges through
+`attachmentRanges.ts` and the existing content loader. `cloudDownloadSource.ts`
+checks current file metadata and exact range/ETag framing. Download operations
+reuse `CloudSyncRun` and the existing journal/executor; `LocalSyncTarget` requires
+verified private staging, atomic destination checks and durable native receipts.
+`MobileSyncStaging.swift` supplies verified iOS staging (`fileStagingVersion`
+1.0.0) and coordinated publication (`filePublicationVersion` 1.0.0). Native
+Keychain approvals bind the account, origin, device, connection, selected grant
+and reviewed settings. `mobileSyncTarget.client.ts` connects stage/publish/lookup
+to the shared runner. iOS Download now is available with deletion propagation
+disabled; Android/Mac publication and background workers remain pending.
+Publication uses same-volume exclusive rename or swap with no-follow/beneath
+resolution, retains displaced inodes in the existing transfer record, and
+recovers durable receipts without touching later edits. This is not an inode-CAS
+primitive: a racing uncoordinated writer is retained and leaves a pending conflict.
+Unsupported providers/volumes refuse. Process-kill, provider and authenticated
+installed-app acceptance remain tracked in the full sync ledger.
+
+
+Persistent file sync work lives in `app/fileSync/`: `reconcile.ts` plans bounded
+three-way inventory reconciliation, `execute.ts` persists stable operations and
+resolves uncertain receipts, and `journal.client.ts` stores the browser queue.
+The content endpoint also serves exact-version `sha256-parts-v1` fingerprints
+through `getAttachmentFingerprint`; `contentFingerprint.ts` shares part planning
+and bounded local hashing, and `attachmentFingerprint.client.ts` reads the
+authorized receipt. Run `test:file-sync` and `test:attachments`. The editable `file-sync` schema in `configuration.ts` persists bounded connection
+preferences through ordinary Things (1.35.0, private by default).
+`configuredPlan.ts` checks owned/private projections, separately supplied local
+approval, conditions and symmetric exclusions, including excluded ancestor
+deletion protection. Run `scripts/file-sync-configuration.integration.mts` for
+real API storage/revision and editor lost-response recovery checks.
+`components/Devices/MobileSyncConnections.tsx` connects selected roots to those
+Things through shared `configurationEditor.ts` save/recovery logic. Drafts are
+local, scoped and verified before writes; fixed IDs and revision guards survive
+reloads. A saved connection is not native execution approval. Android/Mac native file
+write adapters and persistent workers remain pending. `foregroundSync.ts` now
+connects explicit mobile upload/backup and approved iOS download controls to complete scans, live native
+policy signals, journal retries and durable common-baseline checkpoints;
+see [mobile sync acceptance](../mobile-file-sync.md). File writes must continue
+through the canonical attachment and Timeline paths described below.
+
+`api/utils/files/inventory.ts` adds complete private cloud folder scans through
+`GET /api/v1/files?rootId=...` (Files 1.1.0). Snapshot transactions and bounded
+breadth queries produce exact file/folder observations; any inaccessible,
+ambiguous or oversized tree fails without partial data. `cloudInventory.ts`
+validates the shared response and `cloudInventory.client.ts` pins account,
+origin and home storage while reading it. Run `test:files`, `test:file-sync`
+and `scripts/file-versions.integration.mts`. Files 1.2.0 additionally supplies immutable folder-creation receipts through
+`api/utils/files/folders.ts`, composing the ordinary Things writer and Timeline.
+`prepareCloudInventoryRun` pins new parent IDs for nested uploads, and the cloud
+port resumes them through the same journal. Directory deletion, Android/Mac local writes and
+background workers remain pending.
+
+Stable file roots are protected `file` Things written by `api/utils/files/files.ts`
+through `/api/v1/files`. The shared `fileSync/cloudFile.ts` contract maps a file
+revision into a sync entry. Bound `file` attachments retain each byte version;
+Timeline stores the guarded commit/receipt and prior metadata. Run `test:files`
+and the opt-in `scripts/file-versions.integration.mts` acceptance. Retention,
+sharing and full native sync acceptance remain tracked in the sync ledger.
+
+`fileSync/cloudWrite.ts`, `cloudTransport.ts` and `cloudSyncPort.client.ts` connect
+prepared upload/backup and remote Trash runs to the real file/attachment APIs.
+Pinned destinations persist in the existing sync journal; multipart retries reuse
+the operation ID, and exact receipts recover accepted writes without reading the
+source again. `test:file-sync` and `scripts/file-sync-cloud.integration.mts` cover
+this path. Background workers and cross-platform download acceptance remain separate work.
+
+`iOS/Thingtime/Files/` now supplies account/origin-scoped native picker grants,
+complete bounded scans and version-checked descriptor-relative reads.
+`fileSync/mobileFolders.client.ts` validates bridge replies and adapts chunked
+reads to the shared fingerprint/upload source contract. The paired-device card
+uses `MobileFolderAccess.tsx` to choose/check/remove access; it does not launch
+transfers. Bookmarks remain native. Android's equivalent adapters live in
+`android/app/src/main/java/com/thingtime/mobile/FolderBridge.java`, `FolderStore.java`,
+`FolderReader.java` and `SafFolderProvider.java`. The shared controls negotiate
+both native platforms. Android keeps read-only tree URIs in encrypted native
+storage and verifies content despite unreliable provider timestamps. Native
+destination writes and persistent schedulers remain pending.
+
 Stored files are `attachment` Things (`thingtime: ['attachment']`) whose bytes
 live in a private, versioned S3 bucket (or the local filesystem stand-in).
 Every attachment is bound to exactly one target (post, comment, page, message,
@@ -110,3 +189,45 @@ private draft API, editor recovery, account isolation and independent media copi
 `ComponentUpload.tsx` commits selected bytes through `componentUploadCommit.ts`: a valid private text Post and a non-reserved retry ID hold the upload. `copyStoredAttachment.ts` also supports owner-private `file` copies for Lopu's `save_attachment` in `chatTools.ts`. It reads an authorized pinned source version, reserves quota, copies bytes and uses normal moderation/finalization. The returned file ID and content URL can be used as Thing properties; `managedPlacement.ts` files it in an owned folder. Request replay returns the existing file. Rollback only claims unfinished private uploads, so concurrent retries cannot delete a committed file. Shared/public copy revocation still removes its draft.
 
 Run `test:attachments`, `test:components`, `test:lopu` and the isolated real-byte `scripts/verify-schema-files.ts` acceptance flow. See the public-schema/upload/Lopu checklist in `TESTING.md`.
+
+
+## Mac native/cloud acceptance and throttling
+
+`remix/scripts/mac-file-sync.integration.mts` runs the shared foreground engine
+against the real loopback APIs and `MacFolderSync` through the test-only Swift
+`MacFolderSyncFixture` executable. It exercises actual native bytes, explicit
+synthetic picker/consent, live credential verification, both directions, independent
+replacements, lost replies, process restart and revoked-device refusal. It does
+not cover signed Electron/XPC, installed Keychain/TCC or AppKit. See the command
+and fixture prerequisites in README's Mac sync acceptance section.
+`ThingtimeAPIClient.verifyFileSyncIdentity` honors one integer `Retry-After`
+(1–60 seconds) for a 429, then rechecks cancellation and the exact local credential
+before repeating the live request. Identity remains uncached; auth errors,
+invalid/long delays and repeated 429s fail. Streaming/throughput remains open.
+
+
+`CloudTransportRuntime.authorizeMutation` supplies the foreground configuration,
+device and policy recheck before each POST/PUT. `cloudRequests` and the signed
+part writer await it before creating their HTTP deadline, then recheck scope,
+cancellation and (for parts) source identity. Request bodies are captured before
+the wait. Read requests still bypass mutation authorization. This prevents a
+native consent/cooldown wait from expiring an unsent request; caller cancellation
+and 30-second JSON / 120-second upload deadlines remain enforced. Regression
+coverage lives in `foregroundSync.test.ts`, `cloudTransport.test.ts` and the
+`--cooldown-before-upload` Mac integration option.
+
+## Mac range stream
+
+Mac file access 1.2 uses `mobileFolderSource` → `read-range` →
+`electron/lib/folder-sync.cjs` → `thingtime-node-bridge.cjs` / `folder-stream.cjs`
+→ the signed XPC byte sink → `MacFolderSync` → `MobileFolderReader.stream`.
+One coordinated range (32 MiB maximum) carries acknowledged 64 KiB frames,
+with source checks between frames, live identity before/after and browser-account
+verification before returning binary bytes. A 15-second missing-ack limit,
+cancellation and exact range/binding validation reject unfinished transfers.
+Ordinary XPC frames remain capped; no new HTTP endpoint or device permission.
+Tests: `folder-stream.test.cjs`, `folder-sync.test.cjs`, isolated Electron
+`test/fixtures/folder-sync-host.cjs`, `FolderStreamXPCTests`, `MacFolderSyncTests`,
+`MobileFolderTests`, and `mobileFolders.client.test.ts`. Real API acceptance is
+`mac-file-sync.integration.mts --large-upload`. Installed Mac acceptance,
+download/mobile streaming and sustained large-folder throughput remain open.
