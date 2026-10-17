@@ -1469,3 +1469,29 @@ The production popup renders at 390px/1280px without overflow. Browser input
 commands did not reach existing Edit/Upload controls during this run; a static
 review fixture verifies layout, not interactive capture. Installed capture,
 stale uncaptured-run re-review, content-ID lookup and whole backups remain open.
+
+## Portable backup foundation — 2026-10-17
+
+Added `thingtime-backup-v1`, a bounded portable manifest with canonical Timeline
+snapshots, exact cumulative decimal counters, independent 8 MiB chunks, durable
+range receipts and a verified completion seal. The internal native/worker engine
+resumes capture and independent export without refetching captured source chunks.
+The private POSIX filesystem provider publishes immutable files durably. Offline
+CLI commands verify/copy sealed vaults and restore one file without overwriting
+an existing destination; metadata names are never used as filesystem paths.
+
+Seven tests pass, including real disk source deletion, interrupted capture and
+export, loss of the first vault, exact recovery from the second, child-process
+CLI restore, corruption/manifest tampering, account/cancellation fences and
+concurrent immutable writes. 100 TB/10 PB metadata checks prove counters and
+bounded pages, not throughput. The opt-in real API fixture passed capture via
+existing authorized ranges, lost receipt/reopen after source Trash, independent
+copy and original-vault removal with full restored-byte hash comparison. Targeted
+lint passes; TypeScript retains the same 91 normalized pre-existing diagnostics.
+
+This increment is a storage/export foundation. The complete account/device
+inventory boundary, protected manifest/job Things, cloud copies, quota/retention,
+scheduling, server Timeline lifecycle, native product UI and encrypted media
+remain unfinished. The engine is for long-running native/workers, not one
+serverless request. Verification restarts after interruption; retained chunks
+survive. The new [format/runbook](../docs/portable-backups.md) records these limits.

@@ -68,6 +68,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-17 — **Codex (AI)**: Add portable backup manifests, independently retained
+  chunks, resumable copy and offline verification/restore tooling. Source-loss
+  and real API range acceptance pass; complete account snapshots and product
+  controls remain unfinished. [PR #1002 evidence](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md#portable-backup-foundation--2026-10-17).
+
 - 2026-10-17 — **Codex (AI)**: Add “Save versions and ignore” to file conflict
   review, with muted content-ID guidance and durable Timeline capture that keeps
   both live files unchanged. Lost-response/source-loss recovery passes real

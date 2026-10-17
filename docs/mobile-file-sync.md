@@ -1770,3 +1770,22 @@ Uncaptured changed/missing sources retain their pending run and fail closed;
 explicit abandonment/re-review of such a run remains future work. Capturing one
 pair does not provide a complete backup, cross-folder content-ID search or a
 100 TB export. The whole-backup requirements above remain active.
+
+## Portable backup foundation — 2026-10-17
+
+The [portable vault engine](portable-backups.md) now freezes a supplied ordered
+inventory into bounded hash-linked pages, independently retains verified byte
+chunks, resumes capture/export from durable receipts and seals only after full
+retained-byte verification. Canonical Timeline snapshots remain the metadata
+contract; a small completion descriptor is ready for the existing Timeline
+writer, which is not wired yet. The offline CLI verifies/copies a vault and
+restores one file to an explicit non-overwriting destination.
+
+Real filesystem tests delete the original and then the first vault, recovering
+byte-identical output from the second copy. The real API fixture captures one
+explicit file through existing authenticated ranges, then recovers after source
+Trash and loss of its first vault. Metadata tests cover exact 100 TB/10 PB totals;
+no actual transfer at those sizes is claimed. Full account/device inventory,
+independent cloud storage, jobs/quota/retention, Timeline lifecycle, product UI,
+remote export and physical-media encryption remain unfinished. The whole-backup
+requirements above remain active.

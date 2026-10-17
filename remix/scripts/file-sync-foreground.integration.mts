@@ -2,7 +2,19 @@ import { createCloudDownloadSource } from '../app/fileSync/cloudDownloadSource';
 // Opt-in real cloud/API acceptance. Native grants/conditions are explicit test
 // adapters; browser and native UI acceptance is tracked separately.
 import assert from 'node:assert/strict';
-import { readFile, stat } from 'node:fs/promises';
+import { readFile, stat, mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { BACKUP_FORMAT, type BackupItem } from '../app/backups/manifest';
+import { openLocalBackupStore } from '../app/api/utils/backups/localBackupStore';
+import {
+	prepareBackup,
+	captureBackup,
+	sealBackup,
+	copySealedBackup,
+	verifySealedBackup,
+	openBackupItem
+} from '../app/api/utils/backups/portableBackup';
 import { randomUUID, createHash } from 'node:crypto';
 import { IDBFactory } from 'fake-indexeddb';
 import { openSyncJournal } from '../app/fileSync/journal.client';
@@ -315,6 +327,104 @@ try {
 	console.log(
 		'PASS: configured conflict capture; durable lost-response recovery after source removal; both independent byte hashes; unchanged live file/baseline; repeated Ignore reuses captured receipts. Native source/consent remains an explicit test adapter.'
 	);
+
+	if (process.argv.includes('--portable-backup')) {
+		const vaultRoot = await mkdtemp(join(tmpdir(), 'thingtime-api-backup-'));
+		try {
+			const snapshotId = randomUUID(),
+				store = await openLocalBackupStore(join(vaultRoot, 'capture'));
+			const startedAt = new Date().toISOString(),
+				pinned = (await api('/api/v1/files?id=' + file.id)).file;
+			const completedAt = new Date().toISOString();
+			const backupAccess = { scope: { apiOrigin: base.origin, ownerId: fixture.userId, dataPlane: 'home' }, authorize: async () => {} };
+			async function* selectedFile(): AsyncIterable<BackupItem> {
+				yield {
+					ordinal: 0,
+					thingId: pinned.id,
+					revision: pinned.revision,
+					snapshot: { adapter: 'file-content', version: 1, value: pinned },
+					content: { size: pinned.content.size, fingerprint: pinned.content.fingerprint }
+				};
+			}
+			await prepareBackup(
+				store,
+				{
+					format: BACKUP_FORMAT,
+					snapshotId,
+					scope: backupAccess.scope,
+					boundary: { kind: 'capture-interval', token: pinned.revision, startedAt, completedAt },
+					coverage: { selectionId: pinned.id, description: 'One explicit disposable file; not an account-wide inventory' }
+				},
+				selectedFile(),
+				backupAccess
+			);
+			const cloud = createCloudDownloadSource(runtime, scope, pinned);
+			let sourceReads = 0,
+				lostRange = true;
+			const reader = {
+				read: async (_item: BackupItem, offset: number, length: number, signal?: AbortSignal) => {
+					sourceReads++;
+					return cloud.read(offset, length, signal);
+				}
+			};
+			await assert.rejects(
+				captureBackup(
+					{
+						...store,
+						put: async (key, data) => {
+							await store.put(key, data);
+							if (key.includes('/ranges/') && lostRange) {
+								lostRange = false;
+								throw Error('Lost backup range reply');
+							}
+						}
+					},
+					snapshotId,
+					reader,
+					backupAccess
+				),
+				/Lost backup range reply/
+			);
+			const afterCapture = sourceReads;
+			await api('/api/v1/files', {
+				id: pinned.id,
+				operationId: randomUUID(),
+				expectedRevision: pinned.revision,
+				name: pinned.name,
+				folderId: pinned.folderId,
+				attachmentId: pinned.content.attachmentId,
+				contentVersion: pinned.content.version,
+				trashed: true
+			});
+			await assert.rejects(cloud.read(0, pinned.content.size), /changed|unavailable/);
+			const recovered = await openLocalBackupStore(join(vaultRoot, 'capture'));
+			await captureBackup(
+				recovered,
+				snapshotId,
+				{
+					read: async () => {
+						throw Error('Source access removed');
+					}
+				},
+				backupAccess
+			);
+			const sealed = await sealBackup(recovered, snapshotId, backupAccess);
+			assert.equal(sourceReads, afterCapture);
+			const exported = await openLocalBackupStore(join(vaultRoot, 'export'));
+			assert.deepEqual((await copySealedBackup(recovered, exported, snapshotId, backupAccess)).seal, sealed);
+			await rm(join(vaultRoot, 'capture'), { recursive: true });
+			assert.deepEqual(await verifySealedBackup(exported, snapshotId, backupAccess), sealed);
+			const restored = await openBackupItem(exported, snapshotId, pinned.id, backupAccess),
+				hasher = createHash('sha256');
+			for await (const chunk of restored.ranges) hasher.update(chunk);
+			assert.equal(hasher.digest('hex'), createHash('sha256').update(liveBytesBeforeCapture).digest('hex'));
+			console.log(
+				'PASS: real authorized API ranges into independent portable backup; lost capture receipt/reopen; original file trashed; copy survives removal of first vault; exact byte hash and canonical file snapshot. One-file fixture, not account-wide or 100 TB acceptance.'
+			);
+		} finally {
+			await rm(vaultRoot, { recursive: true, force: true });
+		}
+	}
 } finally {
 	try {
 		if (rootId) {

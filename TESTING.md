@@ -10801,3 +10801,30 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
   existing Edit/Upload handlers; rendered layout is not click-through evidence.
 - [ ] Add explicit re-review/abandonment for a pending uncaptured version that
   changes, folder/missing-file capture, content-ID lookup and whole backups.
+
+### Portable backup storage and export — 2026-10-17
+
+- [x] Capture a real local file in bounded chunks, lose an accepted range-page
+  reply, reopen the private vault and read only the remaining source bytes.
+  Delete the original, seal/read back the backup and compare the full byte hash.
+- [x] Interrupt export after an accepted chunk, resume without retransmitting
+  that chunk, then delete the first vault and restore from the second. A fully
+  repeated export fetches no source chunks. Verify empty files and metadata-only
+  items, and preserve canonical Timeline snapshot data and placement as metadata.
+- [x] Exercise offline `backup:vault verify`, `copy` and `restore-file` in child
+  processes. Restore byte-identical output; refuse overwriting an existing path.
+  A missing source vault is not created by the verify command.
+- [x] Missing/corrupt bytes, reordered/missing manifest pages, overlapping ranges
+  and altered seals must fail. Cancellation and wrong/revoked scope stop work;
+  revoked access after a range read must yield no bytes to the restore consumer.
+  Unsafe paths/symlinks and concurrent changed immutable writes are refused.
+- [x] Stream 100 TB and 10 PB metadata inventories through bounded pages, keeping
+  exact cumulative decimal counters beyond Number.MAX_SAFE_INTEGER. This is not
+  evidence of a 100 TB byte transfer or disk-throughput acceptance.
+- [x] Run the real API foreground fixture with `--portable-backup`: capture exact
+  authorized cloud ranges, lose a capture reply, Trash the source, reopen/recover,
+  copy independently, remove the first vault and verify the restored byte hash.
+- [ ] Implement/verify the complete server inventory boundary, protected job and
+  manifest Things, quota, cloud replicas, scheduling/retention and server Timeline
+  events. Add native consent/UI, encrypted media, multi-item restore and measured
+  large-data export. Existing helper/CLI checks do not prove those product flows.

@@ -5104,3 +5104,37 @@ separate. `--large-download` uses a 2 MiB-plus download and the acceptance scrip
 now always loses one accepted staging reply, restarts its private native fixture,
 and verifies exact offset recovery. Older Mac and current mobile hosts keep the
 64 KiB append path. No new credentials, network authority or environment setup.
+
+## Portable backup vault tooling
+
+The [portable backup format](docs/portable-backups.md) provides independent chunk
+storage, interruption recovery and offline verification/copy/restore for a
+supplied frozen inventory. Account-wide snapshot creation, scheduled cloud jobs
+and the product backup UI are still in development. No new secret, environment
+variable, bucket permission or public HTTP endpoint is added by this increment.
+
+Use a private directory owned by your OS user for each vault. The destination's
+parent must already exist. The current local adapter requires POSIX permissions,
+hard-link publication and directory sync; it is not a raw FAT/USB-media writer.
+The format is not encrypted: future cloud/physical-media adapters must supply
+appropriate storage encryption and key recovery before offering that service.
+Never pass a vault's archived filenames as destination paths.
+
+```sh
+# Verify an existing sealed vault without changing it.
+corepack pnpm --dir remix run backup:vault verify /private/source-vault SNAPSHOT_UUID
+# Resume a verified independent copy into another private destination.
+corepack pnpm --dir remix run backup:vault copy /private/source-vault SNAPSHOT_UUID /private/destination-vault
+# Restore one file to the exact chosen path; an existing file is never replaced.
+corepack pnpm --dir remix run backup:vault restore-file /private/destination-vault SNAPSHOT_UUID /chosen/output.bin THING_ID
+# Synthetic local filesystem and offline CLI acceptance (no account credentials).
+corepack pnpm --dir remix run test:backups
+# Disposable real API fixture; follow the existing foreground-sync fixture setup.
+corepack pnpm --dir remix exec tsx scripts/file-sync-foreground.integration.mts /private/fixture.json --portable-backup
+```
+
+The real API fixture must be mode 0600 and contain only the disposable loopback
+account described in the existing sync acceptance runbook. It moves its generated
+cloud file to private Trash and removes its own temporary local vaults. Offline
+CLI access comes from possession of the private vault; online product adapters
+must continue to enforce the current account, origin and device permissions.

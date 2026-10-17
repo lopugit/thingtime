@@ -333,3 +333,15 @@ separate capture from sync/checkpoint publication. `createCloudRetentionTranspor
 uses the ordinary verified multipart source and immutable retention receipts.
 `conflictRetention.test.ts` covers reopen/source-loss, unchanged live/baseline,
 repeat capture and account/configuration/cancellation fences.
+
+## Portable backup vault
+
+`app/backups/manifest.ts` defines bounded portable metadata/range pages and the
+small canonical Timeline snapshot descriptor. `api/utils/backups/portableBackup.ts`
+freezes a supplied inventory, captures independent chunk bytes, validates source
+fingerprints, seals and resumes copies without re-fetching existing chunks.
+`localBackupStore.ts` supplies private immutable filesystem storage, not a public
+HTTP route or a new database. Providers must supply access/quota and source
+boundary guarantees. Run `test:backups`, the `backup:vault` offline CLI and the
+foreground API fixture's `--portable-backup` mode. [Format, limits and unfinished
+product integration](../portable-backups.md).
