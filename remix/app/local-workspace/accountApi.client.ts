@@ -33,7 +33,7 @@ import { parseTransfer, serializeTransfer, validateTransfer } from '../utils/thi
 import { resolveWorkspacePage, type LocalWebpageTarget } from './webpageResolution';
 import { accountWriteSupported, accountThingCanCache, AccountThingSync, type AccountThingWrite } from './accountSync';
 import { accountThingTransport } from './accountTransport.client';
-import { assertAccountSyncAllowed, canSyncAccountWorkspace, subscribeWorkspaceBinding, accountWorkspaceLease, accountRemoteWorkspaceLease, announceLocalWorkspaceChange, workspaceDatabase } from './runtime.client';
+import { assertAccountSyncAllowed, canSyncAccountWorkspace, subscribeWorkspaceBinding, accountWorkspaceLease, accountRemoteWorkspaceLease, announceLocalWorkspaceChange, announceAccountHomeThemeChange, workspaceDatabase } from './runtime.client';
 import { rootIdentity } from '../utils/rootIdentity';
 import { WorkspaceError, workspaceScopeKey, type WorkspaceScope } from './storage';
 
@@ -45,10 +45,11 @@ const workers = new Map<string, ReturnType<typeof createWorker>>();
 /** Matches the sync claim window: the longest a blocked pass must wait before
  * a crashed tab's lease expires and this tab can replay the frozen write. */
 const BLOCKED_RETRY_MS = 60_000;
-function createWorker(scope: AccountScope, dispose: () => void) {
-	const lease = accountWorkspaceLease(scope), db = workspaceDatabase();
+function createWorker(scope: AccountScope, dispose: () => void, authorityScope: AccountScope = scope) {
+	const lease = accountWorkspaceLease(authorityScope), db = workspaceDatabase();
+	const announce = () => scope.dataPlane === 'home' ? announceAccountHomeThemeChange() : announceLocalWorkspaceChange();
 	const files = new AccountFileSync(db, scope, lease);
-	const themes = new AccountThemeSync(db,scope,lease), themeTransport = accountThemeTransport(scope,lease);
+	const themes = new AccountThemeSync(db,scope,lease), themeTransport = accountThemeTransport(authorityScope,lease);
 	const sync = new AccountThingSync(db, scope, lease, undefined, undefined, files.contentHooks, themes), transport = accountThingTransport(scope, lease), interactions = new AccountInteractionSync(db, scope, lease), posts = new AccountPostCache(db, scope, lease);
 	const drafts = new AccountDraftSync(db, scope, lease, files.draftHooks), catalog = new AccountDraftCatalog(db, scope, lease);
 	const discussions = new AccountDiscussionCache(db, scope, lease);
@@ -83,33 +84,36 @@ function createWorker(scope: AccountScope, dispose: () => void) {
 	});
  let themeRead:Promise<void>|null=null,selectionRead:Promise<void>|null=null,themeReadAt=0,selectionReadAt=0;
  const refreshThemes=(force=false):Promise<void>=>{
-  if(stopped||navigator.onLine===false||!canSyncAccountWorkspace(scope))return Promise.resolve();
+  if(stopped||navigator.onLine===false||!canSyncAccountWorkspace(authorityScope))return Promise.resolve();
   if(themeRead)return themeRead;if(!force&&Date.now()-themeReadAt<30_000)return Promise.resolve();themeReadAt=Date.now();
-  themeRead=themes.refresh(themeTransport,controller.signal).then(changed=>{lease.assertCurrent();const error=themeErrors.catalog;themeErrors.catalog='';if(changed||error)announceLocalWorkspaceChange();}).catch(()=>{lease.assertCurrent();const error='Account themes could not be refreshed. Device saves are still available.';if(themeErrors.catalog!==error){themeErrors.catalog=error;announceLocalWorkspaceChange();}}).finally(()=>{themeRead=null;});return themeRead;
+  themeRead=themes.refresh(themeTransport,controller.signal).then(changed=>{lease.assertCurrent();const error=themeErrors.catalog;themeErrors.catalog='';if(changed||error)announce();}).catch(()=>{lease.assertCurrent();const error='Account themes could not be refreshed. Device saves are still available.';if(themeErrors.catalog!==error){themeErrors.catalog=error;announce();}}).finally(()=>{themeRead=null;});return themeRead;
  };
  const refreshThemeSelection=(force=false):Promise<void>=>{
-  if(stopped||navigator.onLine===false||!canSyncAccountWorkspace(scope))return Promise.resolve();
+  if(stopped||navigator.onLine===false||!canSyncAccountWorkspace(authorityScope))return Promise.resolve();
   if(selectionRead)return selectionRead;if(!force&&Date.now()-selectionReadAt<30_000)return Promise.resolve();selectionReadAt=Date.now();
-  selectionRead=themes.selection.refresh(themeTransport,controller.signal).then(changed=>{lease.assertCurrent();const error=themeErrors.selection;themeErrors.selection='';if(changed||error)announceLocalWorkspaceChange();}).catch(()=>{lease.assertCurrent();const error='Account theme selection could not be refreshed. This device keeps its choice.';if(themeErrors.selection!==error){themeErrors.selection=error;announceLocalWorkspaceChange();}}).finally(()=>{selectionRead=null;});return selectionRead;
+  selectionRead=themes.selection.refresh(themeTransport,controller.signal).then(changed=>{lease.assertCurrent();const error=themeErrors.selection;themeErrors.selection='';if(changed||error)announce();}).catch(()=>{lease.assertCurrent();const error='Account theme selection could not be refreshed. This device keeps its choice.';if(themeErrors.selection!==error){themeErrors.selection=error;announce();}}).finally(()=>{selectionRead=null;});return selectionRead;
  };
- const themeSelectionPump=createSyncPump(()=>!stopped&&navigator.onLine!==false&&canSyncAccountWorkspace(scope),async()=>{
+ const themeSelectionPump=createSyncPump(()=>!stopped&&navigator.onLine!==false&&canSyncAccountWorkspace(authorityScope),async()=>{
   const before=JSON.stringify(await themes.selection.status());
   let result;
   try { result=await themes.selection.sync(themeTransport,async id=>!!(await themes.status()).find(row=>row.id===id)?.baseVersion,controller.signal); }
   catch { lease.assertCurrent(); return BLOCKED_RETRY_MS; }
   const row=await themes.selection.status();
-  if(JSON.stringify(row)!==before)announceLocalWorkspaceChange();
+  if(JSON.stringify(row)!==before)announce();
   return row&&['pending','syncing'].includes(row.state)?result.completed?0:Math.max(1000,row.retryAt>Date.now()?row.retryAt-Date.now():BLOCKED_RETRY_MS):null;
  });
- const themePump=createSyncPump(()=>!stopped&&navigator.onLine!==false&&canSyncAccountWorkspace(scope),async()=>{
+ const themePump=createSyncPump(()=>!stopped&&navigator.onLine!==false&&canSyncAccountWorkspace(authorityScope),async()=>{
   const before=JSON.stringify(await themes.status()),result=await themes.sync(themeTransport,controller.signal),rows=await themes.status();
-  if(JSON.stringify(rows)!==before)announceLocalWorkspaceChange();if(result.completed){themeSelectionPump.wake();wake();}
+  if(JSON.stringify(rows)!==before)announce();if(result.completed){themeSelectionPump.wake();wake();}
   const pending=rows.filter(row=>['pending','syncing'].includes(row.state)),waits=pending.map(row=>row.retryAt-Date.now()).filter(wait=>wait>0);
   return pending.length?result.completed?0:waits.length?Math.min(...waits):BLOCKED_RETRY_MS:null;
  });
 	const wake = () => {
-		if (stopped || navigator.onLine === false || !canSyncAccountWorkspace(scope)) return;
-		draftPump.wake();themePump.wake();themeSelectionPump.wake();void refreshThemes().catch(()=>{});void refreshThemeSelection().catch(()=>{});
+		if (stopped || navigator.onLine === false || !canSyncAccountWorkspace(authorityScope)) return;
+		themePump.wake();themeSelectionPump.wake();void refreshThemes().catch(()=>{});void refreshThemeSelection().catch(()=>{});
+		// A home view grants local access only. Generic queues wait for home to be selected.
+		if (!canSyncAccountWorkspace(scope)) return;
+		draftPump.wake();
 		if (running) { wakeRequested = true; return; }
 		if (timer) clearTimeout(timer);
 		timer = setTimeout(() => { timer = null; void drain(); }, 0);
@@ -161,21 +165,28 @@ function createWorker(scope: AccountScope, dispose: () => void) {
 	const draftClient = new AccountDraftClient({ drafts, catalog, files, transport, db, lease, wake }, scope, () => navigator.onLine !== false && canSyncAccountWorkspace(scope), () => announceLocalWorkspaceChange());
 	return { sync, interactions, posts, discussions, files, drafts, catalog, draftClient, historyExport, historyVersion, fileRetentionErrors, transport, db, lease, wake, stop, themes, themeTransport, themeErrors, refreshThemes, refreshThemeSelection };
 }
-export const accountWorkspaceWorker = (scope: AccountScope) => {
-	const key = `${workspaceScopeKey(scope)}:${rootIdentity.read().generation}`;
+export type AccountLocalView = { localPlane?: 'home' };
+export const accountWorkspaceWorker = (authorityScope: AccountScope, view: AccountLocalView = {}) => {
+	if (view.localPlane !== undefined && view.localPlane !== 'home') throw new WorkspaceError('INVALID_WORKSPACE', 'Choose the selected workspace or home.');
+	const scope = view.localPlane === 'home' ? { ...authorityScope, dataPlane: 'home' } : authorityScope;
+	const key = `${workspaceScopeKey(scope)}:${workspaceScopeKey(authorityScope)}:${rootIdentity.read().generation}`;
 	let worker = workers.get(key);
-	if (!worker) { worker = createWorker(scope, () => workers.delete(key)); workers.set(key, worker); }
+	if (!worker) { worker = createWorker(scope, () => workers.delete(key), authorityScope); workers.set(key, worker); }
 	return worker;
 };
 /** Root-bound bootstrap, invoked in an effect, never during React rendering. */
 export const startAccountWorkspaceSync = (scope: AccountScope) => { accountWorkspaceWorker(scope).wake(); };
 
-export function accountApi<T extends Record<string, any>>(remote: T, owner: Owner, dataPlane: string): T {
-	const scope: AccountScope = { kind: 'account', origin: window.location.origin, ownerId: owner.id, dataPlane };
+export function accountApi<T extends Record<string, any>>(remote: T, owner: Owner, dataPlane: string, view: AccountLocalView = {}): T {
+	// Keep retained callbacks bound to the destination chosen at construction.
+	view = { localPlane: view.localPlane };
+	if (view.localPlane !== undefined && view.localPlane !== 'home') throw new WorkspaceError('INVALID_WORKSPACE', 'Choose the selected workspace or home.');
+	const authorityScope: AccountScope = { kind: 'account', origin: window.location.origin, ownerId: owner.id, dataPlane };
+	const scope: AccountScope = view.localPlane === 'home' ? { ...authorityScope, dataPlane: 'home' } : authorityScope;
 	// Capture this facade's generation so a retained callback cannot adopt a
 	// later account, even when a worker for that new session already exists.
-	const facadeLease = accountWorkspaceLease(scope);
-	const worker = () => { facadeLease.assertCurrent(); return accountWorkspaceWorker(scope); };
+	const facadeLease = accountWorkspaceLease(authorityScope);
+	const worker = () => { facadeLease.assertCurrent(); return accountWorkspaceWorker(authorityScope, view); };
 	const guard = (value: any): any => {
 		// API methods are promise-based. Refusals must reject that promise so an
 		// optional remote probe's .catch() can handle offline/unconfirmed identity
@@ -394,7 +405,7 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 			throw error;
 		}
 	};
-	const changed = () => { announceLocalWorkspaceChange(); worker().wake(); };
+	const changed = () => { if (scope.dataPlane === 'home') announceAccountHomeThemeChange(); else announceLocalWorkspaceChange(); worker().wake(); };
 	const removeFile = async (id: string, localFileId: string | null, expectedUpdatedAt?: string) => {
 		if (expectedUpdatedAt !== undefined) throw new WorkspaceError('UNSUPPORTED_LOCAL_DELETE', 'Review account file deletion through File sync.', 409);
 		const { files } = worker();

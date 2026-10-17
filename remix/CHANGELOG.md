@@ -68,6 +68,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-18 — **Codex (AI)**: Add atomic local home storage, lossless theme
+  migration primitives and an explicit home destination in the normal local API.
+  Selected-database remote admission remains independent; native migration UI
+  activation is still pending. Details: [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+
 - 2026-10-18 — **Codex (AI)**: Preserve immutable home theme/selection receipt
   identity across selected-plane changes. The additive themes-sync 1.5.0 context
   retains current session/origin/plane checks and canonical home ownership.

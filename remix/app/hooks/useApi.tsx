@@ -2,7 +2,7 @@ import { parseTimelineVersionExport } from '../timeline/exportVersion';
 import { startNotificationHistorySync } from '../local-workspace/notifications.client';
 import { WorkspaceApiIdentity } from '../local-workspace/apiIdentity';
 import { useOfflineWorkspace } from './useWorkspaceUser';
-import { accountApi, startAccountWorkspaceSync } from '../local-workspace/accountApi.client';
+import { accountApi, startAccountWorkspaceSync, type AccountLocalView } from '../local-workspace/accountApi.client';
 import { anonymousApi } from '../local-workspace/api.client';
 import type { VersionRequest } from '../timeline/publishedVersion';
 import type { BranchCheckoutRequest } from '../timeline/branchCheckout';
@@ -107,7 +107,7 @@ const toQuery = (args?: Record<string, unknown>) => {
   return qs ? `?${qs}` : '';
 };
 
-export function useApi() {
+export function useApi(view: AccountLocalView = {}) {
   const dataPlane = useDataPlane();
   const planeRef = useRef(dataPlane); planeRef.current = dataPlane;
   const asyncFetcher = useAsyncFetcher();
@@ -1613,10 +1613,10 @@ export function useApi() {
   const workspaceApi = useRef(new WorkspaceApiIdentity<typeof v1>());
   const identity = rootIdentity.read();
   const workspaceKey = JSON.stringify([identity.generation, identity.pending, offlineWorkspace || null,
-    actionUser?.id || null, actionUser?.temporary || false, dataPlane || null,
+    actionUser?.id || null, actionUser?.temporary || false, dataPlane || null, view.localPlane || null,
     actionUser?.username, actionUser?.displayName, actionUser?.avatarUrl]);
   return { v1: workspaceApi.current.resolve(workspaceKey, v1, remote =>
-    offlineWorkspace ? accountApi(remote, { id: offlineWorkspace.ownerId, displayName: 'Offline workspace' }, offlineWorkspace.dataPlane)
-    : actionUser && !actionUser.temporary && dataPlane ? accountApi(remote, { id: actionUser.id, username: actionUser.username, displayName: actionUser.displayName, avatarUrl: actionUser.avatarUrl }, dataPlane)
+    offlineWorkspace ? accountApi(remote, { id: offlineWorkspace.ownerId, displayName: 'Offline workspace' }, offlineWorkspace.dataPlane, view)
+    : actionUser && !actionUser.temporary && dataPlane ? accountApi(remote, { id: actionUser.id, username: actionUser.username, displayName: actionUser.displayName, avatarUrl: actionUser.avatarUrl }, dataPlane, view)
     : actionUser && !actionUser.temporary ? remote : anonymousApi(remote)) };
 }

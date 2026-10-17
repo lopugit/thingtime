@@ -24,6 +24,8 @@ type State = {
 	error?: string;
 };
 const key = 'account-theme-selection';
+export type AccountThemeSelectionState = State;
+export { key as ACCOUNT_THEME_SELECTION };
 const fail = (message: string): never => {
 	throw new WorkspaceError('SELECTION_CONFLICT', message, 409);
 };

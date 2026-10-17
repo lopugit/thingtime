@@ -11745,3 +11745,23 @@ verification limits are in `docs/local-workspaces.md`.
 - [ ] Consolidate existing selected-plane theme caches without losing conflicting
       or uncertain pending edits; prove shared home selection, cross-tab refresh,
       mixed import/export and protected account History before enabling migration.
+
+
+### Local home destination and lossless theme migration (2026-10-18)
+
+- [x] Import a mixed folder/theme/data bundle through the normal explicit-home
+      facade while another database is selected. Browse, edit and canonically
+      export it offline; no part may appear in the selected partition.
+- [x] Changing the destination argument after facade creation cannot redirect a
+      retained callback. Account/plane changes retire old callbacks; anonymous
+      binding cannot read home. Generic home transport stays refused while the
+      independently gated theme sender can run. Run `accountHomeApi.test.ts`.
+- [x] Preserve uncertain requests, claims, conflicting versions, tombstones,
+      same-ID folder collisions and dangling parents during consolidation.
+      Quota/lease failures roll back; only acknowledged equivalent caches
+      deduplicate. Run `accountHomeStorage.test.ts`, `homeThemeMigration.test.ts`,
+      `homeThemes.test.ts` and `runtime.test.ts`.
+- [ ] Before enabling migration, use the native UI to review all retained
+      variants and navigate/import/export complete home bundles across database
+      switches at desktop/390/320px. Verify matching-account cross-tab refresh,
+      protected History and zero anonymous account writes.

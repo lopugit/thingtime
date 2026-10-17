@@ -70,8 +70,14 @@ test(
 				await page.setViewportSize({ width, height: width === 1440 ? 1000 : 844 });
 				assert.equal(await page.evaluate(() => document.documentElement.scrollWidth), width);
 				await page.screenshot({ path: resolve(artifacts!, `themes-${width}.png`), animations: 'disabled', fullPage: true });
-				await page.getByTestId('thing-transfer-menu').last().click();
+				const transferMenu = page.getByTestId('thing-transfer-menu').last();
+				await transferMenu.click();
+				const menuId = await transferMenu.getAttribute('aria-controls');
+				assert.ok(menuId);
 				await page.getByRole('menuitem', { name: 'Export / Download…', exact: true }).click();
+				// The dialog hides background roles before Framer finishes closing
+				// the menu. Wait for visual hiding, not only ARIA hiding.
+				await page.locator(`[id=${JSON.stringify(menuId)}]`).waitFor({ state: 'hidden' });
 				await page.getByLabel('Download format', { exact: true }).selectOption('json');
 				await page.screenshot({ path: resolve(artifacts!, `theme-download-${width}.png`), animations: 'disabled' });
 				const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Download', exact: true }).click()]);

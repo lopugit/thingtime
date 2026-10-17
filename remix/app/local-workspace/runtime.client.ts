@@ -14,6 +14,10 @@ const currentChangeScope = () => {
  if (!binding || binding.generation !== rootIdentity.read().generation || rootIdentity.read().pending) return null;
  return binding.anonymous ? workspaceScopeKey({ kind: 'anonymous' }) : binding.account ? workspaceScopeKey(binding.account) : null;
 };
+const currentHomeChangeScope = () => {
+ const selected = currentChangeScope();
+ return selected && binding?.account && !binding.anonymous ? workspaceScopeKey({...binding.account,dataPlane:'home'}) : null;
+};
 const dispatchChange = (removedIds?: string[]) => {
  window.dispatchEvent(Object.assign(new Event(LOCAL_WORKSPACE_CHANGED), { removedIds }));
  window.dispatchEvent(new Event(TIMELINE_CHANGED_EVENT));
@@ -24,7 +28,8 @@ const ensureChangeChannel = () => {
   changeChannel = new window.BroadcastChannel('thingtime:workspace-changes:v1');
   changeChannel.onmessage = event => {
    // Invalidation only: no Thing content, credentials or authority crosses tabs.
-   if (event.data?.scope && event.data.scope === currentChangeScope()) dispatchChange();
+   if (event.data?.scope && (event.data.scope === currentChangeScope() ||
+    (event.data.type === 'home-themes' && event.data.scope === currentHomeChangeScope()))) dispatchChange();
   };
  } catch { /* Local writes remain available where tab messaging is disabled. */ }
 };
@@ -59,6 +64,15 @@ export function announceLocalWorkspaceChange(removedIds?: string[]) {
  dispatchChange(removedIds);
  const scope = currentChangeScope();
  try { if (scope) changeChannel?.postMessage({ scope }); } catch { /* Device storage already committed. */ }
+}
+
+/** Only invalidation crosses tabs. Home theme changes are visible under any
+ * selected plane for this exact account/origin, without granting remote sync. */
+export function announceAccountHomeThemeChange() {
+ const scope = currentHomeChangeScope();
+ if (!scope) return;
+ dispatchChange();
+ try { changeChannel?.postMessage({ type:'home-themes',scope }); } catch { /* The local transaction already committed. */ }
 }
 
 export function accountWorkspaceLease(scope: Extract<WorkspaceScope, { kind: 'account' }>): WorkspaceLease {

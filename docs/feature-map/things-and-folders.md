@@ -760,3 +760,10 @@ guide for verification status and remaining integration gates.
 The library Rename callback delegates capability negotiation to the selected
 adapter, so cached account themes and ordinary Things can finish locally after
 cold offline reload. The normal remote rename adapter retains its manifest check.
+
+
+Explicit local home views use `useApi({localPlane: 'home'})` and the existing
+`accountApi` facade. `accountHomeApi.test.ts` verifies whole mixed transfers and
+independent generic/theme sender admission. `homeThemeMigration.ts` and
+`homeThemes.ts` provide the not-yet-activated consolidation path; see
+[account theme workspace](../account-theme-workspace.md) for UI integration gates.

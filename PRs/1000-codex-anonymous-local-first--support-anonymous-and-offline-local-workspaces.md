@@ -3391,3 +3391,40 @@ pending conflicts and original receipt contexts, then integrate mixed imports,
 selection, cross-tab invalidation and protected account History. Other local-only
 feature families, latest-main reconciliation and full acceptance remain open.
 No merge, production deployment or existing-account mutation was performed.
+
+
+## Local home API and preserved migration foundation — 2026-10-18
+
+The normal local account facade now accepts an explicit home destination while
+retaining the selected-account lease. Mixed folder/theme/data imports stay
+whole and are immediately editable, browsable and exportable with the canonical
+transfer path. Generic home transport cannot run while a custom plane is selected;
+the dedicated theme sender has its own existing selected-plane admission.
+Mutable caller options cannot redirect an already-created facade.
+
+Atomic home/selected storage transactions, bounded same-account partition
+lookup, lossless legacy theme/selection consolidation and explicit home
+cross-tab invalidation are now in the source tree. Active claims, uncertain
+commands, conflicting versions, malformed state, deletion intent and local
+relationships remain preserved. Filed themes never silently attach to an
+unrelated same-ID home folder. Default screens have not switched to the new
+home destination; migration activation still requires native destination
+navigation and visible review of every retained variant.
+
+Local validation: 557 workspace tests passed, 62 opt-in fixtures skipped, and
+all four offline-shell checks passed. The focused migration/facade checks pass;
+TypeScript retains 91 baseline errors with no new normalized signatures. Client
+build passes (248 verified offline assets); focused lint has zero errors and
+one existing constructor warning. The disposable-account native browser fixture
+passes offline save/apply/reload/export at 1440/390/320px with zero offline
+writes or browser errors, followed by independent private sync and cleanup.
+Screenshots wait for the transfer menu to close before capture.
+
+Evidence: `tmp/home-theme-integrated-workspace.log`,
+`tmp/home-theme-facade-reviewed.log`, `tmp/home-theme-facade-authority.log`,
+`tmp/home-theme-integrated-typecheck.log`, `tmp/home-theme-integrated-build.log`,
+`tmp/home-theme-integrated-lint.log`, and `tmp/home-theme-integrated-browser/`.
+These prove local regressions and programmatic home integration, not a finished
+native cross-plane workflow, full feature coverage, CI or deployed acceptance.
+Account theme History, the remaining feature matrix and latest-main acceptance
+remain required before the requested merge.

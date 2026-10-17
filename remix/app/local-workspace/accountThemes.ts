@@ -54,6 +54,8 @@ type State = {
 const collection = 'account-theme-sync',
 	catalogKey = 'account-theme-catalog';
 type Catalog = { epoch: number; read: number; complete: boolean };
+export type AccountThemeState = State;
+export { collection as ACCOUNT_THEME_SYNC, catalogKey as ACCOUNT_THEME_CATALOG };
 const blankCatalog = (): Catalog => ({ epoch: 0, read: 0, complete: false });
 const fail = (message: string, code = 'THEME_SYNC_CONFLICT', status = 409): never => {
 	throw new WorkspaceError(code, message, status);

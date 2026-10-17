@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { bindLocalWorkspace, accountWorkspaceLease, accountRemoteWorkspaceLease, assertAccountSyncAllowed, canSyncAccountWorkspace, isAnonymousWorkspace, announceLocalWorkspaceChange, LOCAL_WORKSPACE_CHANGED } from './runtime.client';
+import { bindLocalWorkspace, accountWorkspaceLease, accountRemoteWorkspaceLease, assertAccountSyncAllowed, canSyncAccountWorkspace, isAnonymousWorkspace, announceLocalWorkspaceChange, announceAccountHomeThemeChange, LOCAL_WORKSPACE_CHANGED } from './runtime.client';
 import { rootIdentity } from '../utils/rootIdentity';
 import { createRootDataLoader } from '../utils/rootDataLoader';
 import { RootDataUnavailableError } from '../utils/rootDataRecovery';
@@ -61,6 +61,22 @@ test('cross-tab changes are scoped invalidations without data or message echoes'
   channels[0].onmessage!({ data: { scope: key } });
   assert.ok(received.includes(LOCAL_WORKSPACE_CHANGED)); assert.deepEqual(sent, []);
   announceLocalWorkspaceChange(['test-id']); assert.deepEqual(sent, [{ scope: key }]);
+  const custom = {...scope,dataPlane:'custom-'+'a'.repeat(64)};
+  bindLocalWorkspace(false, rootIdentity.read().generation, custom, false);
+  let prior = received.length;
+  channels[0].onmessage!({data:{scope:key}});assert.equal(received.length,prior,'ordinary home content does not invalidate another selected plane');
+  channels[0].onmessage!({data:{type:'home-themes',scope:key}});assert.ok(received.length>prior);
+  assert.equal(canSyncAccountWorkspace(custom),false,'home invalidation never upgrades offline authority');
+  prior=received.length;
+  for(const other of [{...scope,ownerId:'other'},{...scope,origin:'https://other.example'}]) channels[0].onmessage!({data:{type:'home-themes',scope:workspaceScopeKey(other)}});
+  assert.equal(received.length,prior);
+  announceAccountHomeThemeChange();assert.deepEqual(sent.at(-1),{type:'home-themes',scope:key});
+  assert.equal(JSON.stringify(sent.at(-1)).includes('test-id'),false);
+  bindLocalWorkspace(true,rootIdentity.read().generation);
+  const sentBefore=sent.length;prior=received.length;
+  announceAccountHomeThemeChange();channels[0].onmessage!({data:{type:'home-themes',scope:key}});
+  assert.equal(sent.length,sentBefore);assert.equal(received.length,prior,'anonymous tabs never observe account home invalidations');
+  bindLocalWorkspace(false,rootIdentity.read().generation,custom,false);
   const count = received.length; rootIdentity.changed();
   channels[0].onmessage!({ data: { scope: key } }); assert.equal(received.length, count);
  } finally {

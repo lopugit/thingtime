@@ -334,3 +334,36 @@ This is receipt compatibility for the home-cache integration. The device theme
 cache still uses the selected-plane partition. Lossless consolidation of old
 partitions, mixed imports, cross-tab home invalidation and account theme History
 remain unfinished. No cache migration is enabled by this increment.
+
+
+## Local home storage and API destination — 2026-10-18
+
+`useApi({ localPlane: 'home' })` and the matching `accountApi` option reuse the
+normal local Things, files, theme, import and export adapters. The destination
+is captured with the current account/origin/selected-plane lease. It grants no
+new remote authority: generic home requests and senders remain disabled while
+a custom plane is selected. The dedicated theme sender retains the verified
+selected-plane transport. Anonymous callers continue using their own adapter.
+The API destination is explicit; no default screen switches storage yet.
+
+`WorkspaceDatabase.accountHomeTransaction` atomically updates the selected and
+home partitions with independent quota ledgers. `accountScopes` discovers only
+bounded same-account, same-origin local partition keys. `LocalAccountHomeThemes`
+uses these primitives to consolidate unambiguous legacy themes and selection,
+preserving frozen receipt context, later edits and deletion intent. Active
+claims, conflicting versions, malformed state, same-ID collisions and local
+folder/dependency relationships stay intact and are reported. Only equivalent
+acknowledged caches may collapse; quota failures roll back both partitions.
+Cross-tab home invalidations carry no content or credentials.
+
+`accountHomeApi.test.ts` exercises the normal facade's whole-bundle import,
+library, edit and canonical download; destination capture; selected-plane
+isolation; separate theme/generic sender admission; account switch retirement;
+and anonymous refusal. Storage, migration, domain and runtime tests cover
+atomicity, legacy recovery, exact file bytes and cross-tab scope fences.
+
+Still required before activating the home migration: native destination
+navigation, visible review of every retained legacy variant, UI integration and
+live cross-plane browser acceptance. Account theme History and the remaining
+local-first feature matrix also remain open. This foundation is not evidence
+of completed native UI integration, deployed acceptance or permission to merge.
