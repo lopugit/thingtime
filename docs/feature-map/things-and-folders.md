@@ -469,3 +469,13 @@ source and API reservation before reuse and releases only verified completions.
 `test-upload-part-process.sh` exercise corruption, limits and real process exits;
 the installed photo test checks cache cleanup. This remains foreground retry input,
 not native background scheduling or a separate version-history database.
+
+### iOS whole-file upload handoff
+
+`fileUploadVersion` 1.2.0 connects `FingerprintSource.uploadFile` and
+`cloudTransport.ts` to `NativeFileUploadJob.swift`. The native loop uses retained
+parts and verifies the multipart composite before attachment completion; the
+shared runner checks stored content and publishes the existing Timeline write.
+`NativeUploadAuthorization.swift` checks the reviewed private configuration,
+pairing and network/power conditions between parts. This remains foreground-only;
+it does not introduce a second history database or enable OS background work.

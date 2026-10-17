@@ -11173,3 +11173,23 @@ this simulator: it returns no protection attribute. The separate
 hardware; device lock/reboot enforcement remains an open acceptance check. Read
 protection values as strings, as specified by
 [Apple's protectionKey API](https://developer.apple.com/documentation/foundation/fileattributekey/protectionkey).
+
+### Native whole-file upload jobs
+
+- [ ] In the disposable iOS photo acceptance, require two whole-file bridge
+      requests, at least four native part progress events, exact original-byte
+      download hashes and no bulk read/per-part upload fallback through WebKit.
+      Verify new-photo discovery, cloud retention after local deletion, and no
+      successful part-cache leftovers.
+- [ ] Between parts, pause/edit the connection or revoke pairing; change owner,
+      audience, roots, network or charging state. No subsequent part/completion
+      may run under the stale authorization. Cancellation preserves the original
+      journal and any unfinished retained part.
+- [ ] Reject changed upload identity, malformed digest and wrong composite before
+      completion. A ready reservation skips retransmission; a wrong server
+      fingerprint still blocks Timeline publication. Exact accepted file replay
+      does not repeat the native job.
+- [ ] Reject foreign, duplicate, backwards, noncanonical or oversized progress
+      messages; they cannot extend the 15-minute inactivity deadline. Custom
+      runtime mutation policies continue through the original per-part path.
+- [ ] Do not count foreground acceptance as background/reboot/force-quit proof.

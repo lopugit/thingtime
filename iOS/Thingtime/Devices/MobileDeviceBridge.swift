@@ -86,6 +86,12 @@ final class MobileDeviceBridge {
                      cookies: @escaping ([HTTPCookie], URL) -> [HTTPCookie], check: @escaping () throws -> Void) async throws {
         try await makeEngine(webView: webView, cookies: cookies, check: check).verifyIdentity(scope)
     }
+    func verifyDevice(_ scope: MobileDevicePairing.Scope, deviceId: String, webView: WKWebView,
+                      cookies: @escaping ([HTTPCookie], URL) -> [HTTPCookie], check: @escaping () throws -> Void) async throws {
+        let status = try await makeEngine(webView: webView, cookies: cookies, check: check).status(scope)
+        try check()
+        guard status.state == "paired", status.deviceId == deviceId else { throw MobileDevicePairing.Failure.revoked }
+    }
     private func makeEngine(webView: WKWebView, cookies: @escaping ([HTTPCookie], URL) -> [HTTPCookie],
                             check: @escaping () throws -> Void) -> MobileDevicePairing {
         return MobileDevicePairing(load: MobileDeviceKeychain.load, save: MobileDeviceKeychain.save,

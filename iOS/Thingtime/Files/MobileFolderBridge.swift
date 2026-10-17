@@ -7,7 +7,7 @@ import UniformTypeIdentifiers
 
 @MainActor
 final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
-    static let uploadVersion = "1.1.0"
+    static let uploadVersion = "1.2.0"
     static let accessVersion = "1.1.1"
     static let stagingVersion = "1.2.0"
     static let publicationVersion = "1.0.0"
@@ -119,6 +119,54 @@ final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
             presenter.present(dialog, animated: true)
         }
     }
+    private func uploadPart(_ request: NativeUploadPartRequest, scope: FileSyncOwnerScope,
+                            rootId: String, grant: MobileFolderStore.Grant,
+                            transport: NativeFileSession, current: @escaping () throws -> Void) async throws -> String {
+        let photos = self.photos
+        let uploadParts = self.uploadParts
+        let retained = FileUploadPartStore.Request(scope: scope, rootId: rootId,
+            grantHash: PhotoLibraryReader.hash(Data((grant.sourceKind ?? "folder").utf8) + grant.bookmark),
+            uploadId: request.uploadId, requestId: request.requestId, source: request.source,
+            partNumber: request.partNumber, offset: request.offset, length: request.length)
+        try retained.validate()
+        // Revalidate the live source even when its exact part
+        // was retained by a previous interrupted app process.
+        let verifySource: @Sendable () throws -> Void = {
+            if grant.sourceKind == "photos" {
+                _ = try photos.read(scope: scope.key + ":" + grant.id, path: request.source.path, version: request.source.version, offset: 0, length: 1)
+            } else {
+                _ = try MobileFolderReader.read(bookmark: grant.bookmark, path: request.source.path, version: request.source.version, offset: 0, length: 1)
+            }
+        }
+        let before = Task.detached { try verifySource() }
+        try await withTaskCancellationHandler(operation: { try await before.value }, onCancel: { before.cancel() })
+        try current(); try await transport.verifyOwner()
+        // Replay the original reservation before allocating disk
+        // or obtaining a fresh signed URL. No credentials persist.
+        let started = try await transport.json("/api/v1/attachments/uploads", body: ["requestId": request.requestId,
+            "filename": String(request.source.path.split(separator: "/").last ?? ""), "contentType": "application/octet-stream",
+            "sizeBytes": request.source.size, "purpose": "file"])
+        let ready = try request.verifyPlan(started)
+        let worker = Task.detached {
+            try uploadParts.prepare(retained) { offset, length, receive in
+                if grant.sourceKind == "photos" {
+                    return try photos.stream(scope: scope.key + ":" + grant.id, path: request.source.path, version: request.source.version, offset: offset, length: length, receive: receive)
+                }
+                return try MobileFolderReader.stream(bookmark: grant.bookmark, path: request.source.path, version: request.source.version, offset: offset, length: length, receive: receive)
+            }
+        }
+        let part = try await withTaskCancellationHandler(operation: { try await worker.value }, onCancel: { worker.cancel() })
+        try current(); try await transport.verifyOwner()
+        if !ready { try await transport.uploadPart(part, uploadId: request.uploadId, partNumber: request.partNumber) }
+        try current()
+        let verify = Task.detached { try verifySource() }
+        try await withTaskCancellationHandler(operation: { try await verify.value }, onCancel: { verify.cancel() })
+        try current(); try await transport.verifyOwner()
+        let release = Task.detached { try uploadParts.release(retained) }
+        try await withTaskCancellationHandler(operation: { try await release.value }, onCancel: { release.cancel() })
+        try current()
+        return part.sha256
+    }
     private func decode<T: Decodable>(_ value: Any?, as type: T.Type) throws -> T {
         guard let value = value as? [String: Any] else { throw MobileFolderStore.Failure.invalid }
         let data = try JSONSerialization.data(withJSONObject: value)
@@ -134,10 +182,11 @@ final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
     func handle(_ body: [String: Any], webView: WKWebView, root: URL, currentRoot: @escaping () -> URL?,
                 cookies: (([HTTPCookie], URL) -> [HTTPCookie])? = nil,
                 verifyOwner: @escaping (MobileDevicePairing.Scope, @escaping () throws -> Void) async throws -> Void,
+                verifyDevice: ((MobileDevicePairing.Scope, String, @escaping () throws -> Void) async throws -> Void)? = nil,
                 reply: @escaping (String, [String: Any]) -> Void) {
         guard let payload = body["payload"] as? [String: Any], let id = payload["requestId"] as? String, UUID(uuidString: id) != nil,
               let owner = payload["ownerId"] as? String, let action = payload["action"] as? String,
-              ["list", "choose", "remove", "scan", "read", "upload-part", "conditions", "suspend", "stage-begin", "stage-append", "stage-download", "stage-finish", "write-approve", "publish", "publication-lookup", "trash", "trash-lookup", "trash-expected", "trash-inspect", "trash-restore", "trash-list", "trash-restore-reviewed"].contains(action),
+              ["list", "choose", "remove", "scan", "read", "upload-part", "upload-file", "conditions", "suspend", "stage-begin", "stage-append", "stage-download", "stage-finish", "write-approve", "publish", "publication-lookup", "trash", "trash-lookup", "trash-expected", "trash-inspect", "trash-restore", "trash-list", "trash-restore-reviewed"].contains(action),
               let scope = try? MobileDevicePairing.Scope(ownerId: owner, url: root) else { return }
         if action == "suspend" { if requestId == id { suspend() }; return }
         let base: [String: Any] = ["requestId": id, "ownerId": owner, "origin": scope.origin.absoluteString]
@@ -181,10 +230,11 @@ final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
                     }
                     else {
                         let grant = try self.store.grant(scope, id: rootId)
-                        guard grant.sourceKind != "photos" || ["scan", "read", "upload-part"].contains(action) else { throw MobileFolderStore.Failure.invalid }
-                        if action == "upload-part" {
+                        guard grant.sourceKind != "photos" || ["scan", "read", "upload-part", "upload-file"].contains(action) else { throw MobileFolderStore.Failure.invalid }
+                        if action == "upload-part" || action == "upload-file" {
                             guard let cookies else { throw MobileFolderStore.Failure.unavailable }
-                            let request = try self.decode(payload["upload"], as: NativeUploadPartRequest.self)
+                            let fileRequest = action == "upload-file" ? try self.decode(payload["upload"], as: NativeUploadFileRequest.self) : nil
+                            let request = try fileRequest?.part(1) ?? self.decode(payload["upload"], as: NativeUploadPartRequest.self)
                             try request.validate()
                             let photos = self.photos
                             let current = {
@@ -197,51 +247,37 @@ final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
                                 cookies: cookies, check: current, invalidated: { [weak self] in if self?.generation == operation { self?.suspend() } })
                             self.transport = transport; try await transport.open()
                             try await transport.require([("api.auth-me", [1,0,0]), ("api.attachment-uploads", [1,5,0]), ("api.attachment-upload-parts", [1,1,0])])
-                            let uploadParts = self.uploadParts
-                            let retained = FileUploadPartStore.Request(scope: scope, rootId: rootId,
-                                grantHash: PhotoLibraryReader.hash(Data((grant.sourceKind ?? "folder").utf8) + grant.bookmark),
-                                uploadId: request.uploadId, requestId: request.requestId, source: request.source,
-                                partNumber: request.partNumber, offset: request.offset, length: request.length)
-                            try retained.validate()
-                            // Revalidate the live source even when its exact part
-                            // was retained by a previous interrupted app process.
-                            let verifySource: @Sendable () throws -> Void = {
-                                if grant.sourceKind == "photos" {
-                                    _ = try photos.read(scope: scope.key + ":" + grant.id, path: request.source.path, version: request.source.version, offset: 0, length: 1)
-                                } else {
-                                    _ = try MobileFolderReader.read(bookmark: grant.bookmark, path: request.source.path, version: request.source.version, offset: 0, length: 1)
-                                }
+                            if let fileRequest {
+                                try await transport.require([("api.attachment-upload-complete", [1,4,0])])
+                                guard let verifyDevice else { throw MobileFolderStore.Failure.unavailable }
+                                let authorization = fileRequest.authorization
+                                try authorization.validate(owner: scope, rootId: rootId, photos: grant.sourceKind == "photos")
+                                try await transport.require([("api.things", [1,35,0])])
+                                try await NativeFileUploadJob.run(fileRequest, check: current, authorize: {
+                                    try current()
+                                    try await verifyDevice(scope, authorization.scope.deviceId, current)
+                                    let saved = try await transport.json("/api/v1/things?id=" + authorization.id)
+                                    try current()
+                                    let battery = UIDevice.current.batteryState
+                                    try authorization.verify(saved, network: self.networkKind, charging: battery == .charging || battery == .full)
+                                }, json: { path, body in
+                                    try await transport.json(path, body: body)
+                                }, upload: { part in
+                                    try await self.uploadPart(part, scope: scope, rootId: rootId, grant: grant, transport: transport, current: current)
+                                }, progress: { received in
+                                    reply("mobile-files-progress", base.merging(["rootId": rootId, "uploadId": fileRequest.uploadId,
+                                        "operationId": fileRequest.requestId, "version": request.source.version,
+                                        "size": request.source.size, "received": received]) { _, new in new })
+                                })
+                                result = ["rootId": rootId, "uploadedFile": ["uploadId": request.uploadId, "requestId": request.requestId,
+                                    "version": request.source.version, "size": request.source.size,
+                                    "fingerprint": try JSONSerialization.jsonObject(with: JSONEncoder().encode(request.source.fingerprint!))]]
+                            } else {
+                                let digest = try await self.uploadPart(request, scope: scope, rootId: rootId, grant: grant, transport: transport, current: current)
+                                result = ["rootId": rootId, "uploadedPart": ["uploadId": request.uploadId, "requestId": request.requestId,
+                                    "partNumber": request.partNumber, "offset": request.offset, "length": request.length,
+                                    "version": request.source.version, "size": request.source.size, "sha256": digest]]
                             }
-                            let before = Task.detached { try verifySource() }
-                            try await withTaskCancellationHandler(operation: { try await before.value }, onCancel: { before.cancel() })
-                            try current(); try await transport.verifyOwner()
-                            // Replay the original reservation before allocating disk
-                            // or obtaining a fresh signed URL. No credentials persist.
-                            let started = try await transport.json("/api/v1/attachments/uploads", body: ["requestId": request.requestId,
-                                "filename": String(request.source.path.split(separator: "/").last ?? ""), "contentType": "application/octet-stream",
-                                "sizeBytes": request.source.size, "purpose": "file"])
-                            let ready = try request.verifyPlan(started)
-                            let worker = Task.detached {
-                                try uploadParts.prepare(retained) { offset, length, receive in
-                                    if grant.sourceKind == "photos" {
-                                        return try photos.stream(scope: scope.key + ":" + grant.id, path: request.source.path, version: request.source.version, offset: offset, length: length, receive: receive)
-                                    }
-                                    return try MobileFolderReader.stream(bookmark: grant.bookmark, path: request.source.path, version: request.source.version, offset: offset, length: length, receive: receive)
-                                }
-                            }
-                            let part = try await withTaskCancellationHandler(operation: { try await worker.value }, onCancel: { worker.cancel() })
-                            try current(); try await transport.verifyOwner()
-                            if !ready { try await transport.uploadPart(part, uploadId: request.uploadId, partNumber: request.partNumber) }
-                            try current()
-                            let verify = Task.detached { try verifySource() }
-                            try await withTaskCancellationHandler(operation: { try await verify.value }, onCancel: { verify.cancel() })
-                            try current(); try await transport.verifyOwner()
-                            let release = Task.detached { try uploadParts.release(retained) }
-                            try await withTaskCancellationHandler(operation: { try await release.value }, onCancel: { release.cancel() })
-                            try current()
-                            result = ["rootId": rootId, "uploadedPart": ["uploadId": request.uploadId, "requestId": request.requestId,
-                                "partNumber": request.partNumber, "offset": request.offset, "length": request.length,
-                                "version": request.source.version, "size": request.source.size, "sha256": part.sha256]]
                         } else if action == "trash-list" {
                             let trash = self.trash
                             let cursor = payload["cursor"] as? String

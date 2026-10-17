@@ -68,6 +68,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-18 — **Codex (AI)**: iOS upload 1.2 moves multipart orchestration
+  and attachment completion into a native job with live configuration, pairing
+  and network/power checks; the shared runner still verifies stored bytes and
+  publishes canonical Timeline history. Foreground-only; background acceptance
+  remains pending. See the [PR #1002 evidence ledger](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
 - 2026-10-18 — **Codex (AI)**: iOS upload retries retain verified native parts
   across app-process exits under the original owner/grant/upload identity.
   Document cache bounds, source reauthorization, fresh-process tests and the

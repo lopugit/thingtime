@@ -105,6 +105,8 @@ export async function runForegroundCloudSync(
 	};
 	const runtime: CloudTransportRuntime = {
 		...input.runtime,
+		// Custom mutation policies must remain in the shared per-part path.
+		nativeUploadApproval: input.runtime.authorizeMutation ? undefined : approved,
 		currentScope: input.currentScope,
 		authorizeMutation: async () => {
 			check();

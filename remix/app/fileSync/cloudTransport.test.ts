@@ -189,3 +189,24 @@ test('an uncertain native part retries the same reservation before any completio
  await createCloudFileTransport(f.runtime,write).apply(native);
  assert.deepEqual(requests[0],requests[1]);assert.equal(f.counts().commits,1);assert.equal(f.counts().puts,0);
 });
+
+test('whole-file handoff independently verifies stored bytes before canonical publication and recovers accepted completion',async()=>{
+ for(const mismatch of [false,true]) {
+  const f=await fixture(),run=f.make();let jobs=0,completes=0;
+  f.runtime.nativeUploadApproval={id:scope.rootId,updatedAt:'2026-10-18T00:00:00Z',scope,
+   configuration:{configurationVersion:1,name:'Backup',deviceId:scope.deviceId,localRootId:'local',remoteFolderId:'cloud',mode:'backup',paused:false,propagateDeletes:false,network:'any',chargingOnly:false,excludedPaths:[]}};
+  const fetch=f.runtime.fetch;
+  f.runtime.fetch=async(url,init)=>{if(String(url).endsWith('/complete'))completes++;return fetch(url,init);};
+  if(mismatch)f.hook((path)=>path.endsWith('/content')?Response.json({ok:true,id:'att1',version:'a'.repeat(64),size:bytes.length,fingerprint:{...f.entry.fingerprint,sha256:'f'.repeat(64)}}):null);
+  const native={...source(),read:async()=>{throw Error('No JS byte reads');},uploadFile:async(request:any)=>{
+   jobs++;assert.equal(request.requestId,run.cloudWrites[0].operation.id);assert.equal(request.uploadId,'att1');
+   assert.deepEqual(request.authorization,f.runtime.nativeUploadApproval);return {fingerprint:f.entry.fingerprint!};
+  }};
+  if(mismatch)await assert.rejects(createCloudFileTransport(f.runtime,run.cloudWrites[0]).apply(native),/Uploaded bytes/);
+  else {
+   await createCloudFileTransport(f.runtime,run.cloudWrites[0]).apply(native);
+   await createCloudFileTransport(f.runtime,run.cloudWrites[0]).apply(native);
+  }
+  assert.equal(jobs,1);assert.equal(completes,0);assert.equal(f.counts().puts,0);assert.equal(f.counts().commits,mismatch?0:1);
+ }
+});

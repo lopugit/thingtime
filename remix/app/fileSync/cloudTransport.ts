@@ -1,3 +1,4 @@
+import type { FileSyncApproval } from './configuredPlan';
 import { fileRetentionEventId } from './fileVersions';
 import { CLOUD_FOLDER_REQUIREMENTS, parseCloudFolder, parseCloudFolderCreate, cloudFolderSyncEntry } from './cloudFolder';
 import {
@@ -23,6 +24,8 @@ export const CLOUD_TRANSFER_REQUIREMENTS = {
 	'api.actions-run': '1.7.0'
 } as const;
 export type CloudTransportRuntime = {
+	/** Offload only when native configuration/device/network checks cover the runtime policy. */
+	nativeUploadApproval?: FileSyncApproval;
 	currentScope(): SyncScope;
 	origin(): string;
 	fetch: typeof fetch;
@@ -177,7 +180,9 @@ function cloudFileTransport(runtime: CloudTransportRuntime, saved: CloudWrite, s
 			if (m.kind === 'trash') return commit(write.before!.content);
 			if (!source || source.size !== m.source.size) throw Error('Pinned source bytes are unavailable.');
 			const plan = contentPartPlan(source.size);
-			if (!source.uploadPart && plan.partSizeBytes > 32 * 1024 * 1024) throw Error('This file requires native streaming upload support.');
+			const nativeApproval = runtime.nativeUploadApproval && sameSyncScope(runtime.nativeUploadApproval.scope, scope) ? runtime.nativeUploadApproval : undefined;
+			const nativeUpload = nativeApproval ? source.uploadFile : undefined;
+			if (!nativeUpload && !source.uploadPart && plan.partSizeBytes > 32 * 1024 * 1024) throw Error('This file requires native streaming upload support.');
 			const sourceCheck = async () => {
 				check();
 				await source.check();
@@ -195,7 +200,14 @@ function cloudFileTransport(runtime: CloudTransportRuntime, saved: CloudWrite, s
 			const upload = started.upload;
 			if (!identifier(upload?.id) || upload.partSizeBytes !== plan.partSizeBytes || upload.partCount !== plan.partCount)
 				throw Error('Invalid cloud upload plan.');
-			if (upload.state !== 'ready') {
+			if (upload.state !== 'ready' && nativeUpload && nativeApproval) {
+				await runtime.authorizeMutation?.(signal);
+				await sourceCheck();
+				const uploaded = await nativeUpload({ uploadId: upload.id, requestId: write.operation.id, authorization: structuredClone(nativeApproval) }, signal, progress);
+				await sourceCheck();
+				if (!uploaded?.fingerprint || !equalContentFingerprints(uploaded.fingerprint, m.source.fingerprint!))
+					throw Error('Native upload does not match the planned fingerprint.');
+			} else if (upload.state !== 'ready') {
 				const digests = new Uint8Array(plan.partCount * 32);
 				for (let i = 0; i < plan.partCount; i++) {
 					await sourceCheck();

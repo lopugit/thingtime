@@ -424,3 +424,28 @@ this simulator: it returns no protection attribute. The separate
 hardware; device lock/reboot enforcement remains an open acceptance check. Read
 protection values as strings, as specified by
 [Apple's protectionKey API](https://developer.apple.com/documentation/foundation/fileattributekey/protectionkey).
+
+### Native multipart jobs
+
+Upload bridge 1.2.0 accepts one original attachment reservation, source descriptor
+and reviewed file-sync configuration for a complete file. `NativeFileUploadJob`
+streams one retained part at a time using the existing cache and redirect-refusing
+upload session, computes the canonical composite SHA-256, then completes the
+attachment. Original IDs survive retry. An already-ready reservation skips
+resending bytes; the shared runner independently verifies the stored fingerprint
+before publishing the original file operation into Timeline.
+
+`NativeUploadAuthorization` rereads the same private owned configuration and
+checks its exact revision/fields, live paired device, grant, source, network and
+power before every part and completion. Account/navigation/cancellation fences
+remain active. Custom shared mutation policies retain the per-part path unless
+a native policy explicitly covers them. Only increasing canonical byte-progress
+messages extend the bridge inactivity deadline; no payload bytes cross WebKit.
+
+No new fork configuration or secrets are required. The opt-in installed photo
+acceptance now requires whole-file handoffs, native part progress, downloaded
+original hashes and released cache entries. Background execution, OS relaunch,
+force-quit/reboot recovery and physical-device throughput are still unverified
+and not enabled by this change. Apple's background URLSession follows redirects
+unconditionally, so it cannot replace the current plaintext transport without
+revisiting destination protection.

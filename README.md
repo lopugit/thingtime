@@ -5426,3 +5426,14 @@ large-library paging and background work remain open. Forks must retain
 `NSPhotoLibraryUsageDescription` in both the native helper Info.plist and
 Electron's `build.mac.extendInfo`; no extra secret is required. See
 [Mac setup and acceptance](macos/ThingtimeNode/README.md#photo-library-backup).
+
+#### iOS native multipart jobs
+
+Build an updated iOS host advertising `fileUploadVersion` 1.2.0 to upload a whole
+file through one native request. Existing hosts retain their per-part path. No
+new environment variables, credentials or services are required. Keep the
+existing Things/device/attachment capability endpoints enabled. The host rereads
+the reviewed private file-sync Thing and checks pairing, folder/photo access,
+Wi-Fi and charging policy before each part and completion. Transfers still need
+the foreground app; this is preparation for background scheduling. See
+[iOS upload-job details](iOS/README.md#native-multipart-jobs).

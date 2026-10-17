@@ -160,6 +160,10 @@ struct WebView: UIViewRepresentable {
                         guard let self, let webView else { throw CancellationError() }
                         try await self.mobileDevice.verifyOwner(scope, webView: webView,
                             cookies: { [weak self] values, url in self?.cookies(values, matching: url) ?? [] }, check: check)
+                    }, verifyDevice: { [weak self, weak webView] scope, deviceId, check in
+                        guard let self, let webView else { throw CancellationError() }
+                        try await self.mobileDevice.verifyDevice(scope, deviceId: deviceId, webView: webView,
+                            cookies: { [weak self] values, url in self?.cookies(values, matching: url) ?? [] }, check: check)
                     }, reply: { [weak self] type, payload in self?.sendToWeb(type: type, payload: payload) })
             case "mobile-device":
                 guard message.frameInfo.isMainFrame, let webView, let root = loadedRootURL,

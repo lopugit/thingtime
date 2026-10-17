@@ -2292,3 +2292,31 @@ protection values as strings, as specified by
 
 Final iOS simulator checks: 17 tests selected, 16 passed and the one physical-device
 protection test explicitly skipped; no failures. Shell syntax and diff checks pass.
+
+## Native iOS multipart orchestration — 2026-10-18
+
+Upload bridge 1.2.0 moves a full file's part loop and attachment completion into
+the native host. The shared sync journal keeps original reservation/operation
+identity; the host retains one bounded part at a time and verifies the composite
+SHA-256 before finalization. The shared runner independently checks stored bytes
+and alone publishes the original file/Timeline operation. Ready attachment replay
+skips native byte uploads. Legacy hosts and custom shared mutation policies keep
+their existing per-part transport.
+
+Native authority now includes rereading the same private owned configuration,
+matching revision and all parsed fields, verifying live device pairing, native
+grant/source access and current network/power policy between parts and before
+completion. Progress is correlated and monotonic. This removes the WebView-owned
+loop, but the app intentionally remains foreground-only until OS task lifecycle
+and cancellation/relaunch acceptance are implemented. Whole-account snapshots,
+100 GB–100 TB acceptance and physical-media fulfillment remain open.
+
+Verification: 160 shared file-sync tests and ten selected iOS upload/session tests
+pass. Installed iOS 26.5 photo acceptance passes in 184.429 seconds: two whole-file
+jobs, four native parts, 18,897,576 bytes, zero legacy bulk reads, matching original
+download hashes, new-photo discovery, cloud retention and successful cache cleanup.
+Native unit tests cover changed configuration/account/audience/network/power,
+revoked authorization, changed reservation and wrong multipart digest. Targeted
+lint passes. Raw TypeScript still reports 91 diagnostics outside changed files;
+this is not a clean whole-project typecheck. Background execution and hardware
+lock/reboot/large-volume acceptance remain open.

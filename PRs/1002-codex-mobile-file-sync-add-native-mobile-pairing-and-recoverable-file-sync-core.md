@@ -2054,3 +2054,29 @@ protection values as strings, as specified by
 
 Final iOS simulator checks: 17 tests selected, 16 passed and the one physical-device
 protection test explicitly skipped; no failures. Shell syntax and diff checks pass.
+
+## Native iOS whole-file jobs — 2026-10-18
+
+- Upload capability 1.2.0 sends a pinned file and reviewed configuration through
+  one native request. The native loop uses retained parts, original reservation
+  IDs, redirect-refusing PUTs and composite checks before attachment completion.
+  The shared runner verifies stored bytes and publishes the canonical Timeline
+  file operation. Ready reservation replay avoids reuploading; accepted file
+  replay skips the native job.
+- Every part and completion checks live pairing, exact private configuration
+  identity/revision/fields, native grant/source, network and charging policy.
+  Unknown custom mutation policies retain their shared per-part path. Progress
+  messages must match the request and increase at canonical boundaries.
+- No background-task authority or OS scheduler is enabled. The next step is
+  explicit native task lifecycle/cancellation and background acceptance, without
+  weakening the existing redirect protection or persisting the web cookie.
+
+Verification: 160 shared file-sync tests and ten selected iOS upload/session tests
+pass. Installed iOS 26.5 photo acceptance passes in 184.429 seconds: two whole-file
+jobs, four native parts, 18,897,576 bytes, zero legacy bulk reads, matching original
+download hashes, new-photo discovery, cloud retention and successful cache cleanup.
+Native unit tests cover changed configuration/account/audience/network/power,
+revoked authorization, changed reservation and wrong multipart digest. Targeted
+lint passes. Raw TypeScript still reports 91 diagnostics outside changed files;
+this is not a clean whole-project typecheck. Background execution and hardware
+lock/reboot/large-volume acceptance remain open.

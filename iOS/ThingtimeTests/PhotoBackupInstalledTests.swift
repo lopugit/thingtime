@@ -65,7 +65,24 @@ final class PhotoBackupInstalledTests: XCTestCase {
         let scope = try FileSyncOwnerScope(ownerId: owner, url: origin), store = MobileFolderStore()
         let prior = try store.list(scope).first { $0.sourceKind == "photos" }
         guard prior == nil || prior?.id == env["THINGTIME_PHOTO_RESUME_GRANT"] else { throw XCTSkip("Preserve existing photo grant \(prior?.id ?? "unknown") unless its exact disposable-test ID is supplied") }
-        web.configuration.userContentController.addUserScript(WKUserScript(source: "window.__nativeUploadStats={parts:0,bytes:0,legacy:0};window.__photoScans=0;const photoOriginalPost=window.thingtimeNativeBridge.postMessage;window.thingtimeNativeBridge.postMessage=function(m){if(m.type==='mobile-files'){if(m.payload?.action==='scan')window.__photoScans++;if(m.payload?.action==='upload-part'){window.__nativeUploadStats.parts++;window.__nativeUploadStats.bytes+=m.payload.upload.length;}if(m.payload?.action==='read'&&m.payload.length>1)window.__nativeUploadStats.legacy++;}return photoOriginalPost.call(this,m)}", injectionTime: .atDocumentStart, forMainFrameOnly: true))
+        web.configuration.userContentController.addUserScript(WKUserScript(source: """
+        window.__nativeUploadStats={files:0,parts:0,bytes:0,legacy:0};window.__photoScans=0;
+        const photoOriginalPost=window.thingtimeNativeBridge.postMessage;
+        window.thingtimeNativeBridge.postMessage=function(m){
+          if(m.type==='mobile-files'){
+            if(m.payload?.action==='scan')window.__photoScans++;
+            if(m.payload?.action==='upload-file')window.__nativeUploadStats.files++;
+            if(m.payload?.action==='upload-part')throw Error('Whole-file capability fell back to bridge part uploads');
+            if(m.payload?.action==='read'&&m.payload.length>1)window.__nativeUploadStats.legacy++;
+          }return photoOriginalPost.call(this,m);
+        };
+        const received=new Map();
+        window.addEventListener('thingtime:native-message',e=>{
+          if(e.detail?.type!=='mobile-files-progress')return;
+          const p=e.detail.payload, prior=received.get(p.requestId)||0;
+          if(p.received>prior){window.__nativeUploadStats.parts++;window.__nativeUploadStats.bytes+=p.received-prior;received.set(p.requestId,p.received);}
+        });
+        """, injectionTime: .atDocumentStart, forMainFrameOnly: true))
         web.load(URLRequest(url: origin.appendingPathComponent("things")))
         for _ in 0..<100 where UIApplication.shared.applicationState != .active { try await Task.sleep(nanoseconds: 100_000_000) }
         try await awaitTrue(web, "Array.from(document.querySelectorAll('button')).some(b=>b.textContent.trim()==='Add this device'||b.textContent.trim()==='Choose folder')")
@@ -171,11 +188,13 @@ final class PhotoBackupInstalledTests: XCTestCase {
             XCTAssertEqual(retained["revision"] as? String, firstFile["revision"] as? String)
             let observedStats = try await web.evaluateJavaScript("window.__nativeUploadStats")
             let stats = try XCTUnwrap(observedStats as? [String: Int])
+            XCTAssertEqual(stats["files"], 2)
             XCTAssertGreaterThanOrEqual(stats["parts"] ?? 0, 4)
             XCTAssertEqual(stats["bytes"], bytes.count * 2)
             XCTAssertEqual(stats["legacy"], 0)
             XCTAssertEqual(try retainedParts(), retainedBefore, "Successful native parts must release their private cache")
             print("IOS_UPLOAD_CACHE_RELEASE_PASS")
+            print("IOS_NATIVE_FILE_JOB_PASS: files=\(stats["files"] ?? 0)")
             print("IOS_NATIVE_UPLOAD_PASS: parts=\(stats["parts"] ?? 0) bytes=\(stats["bytes"] ?? 0) legacy=\(stats["legacy"] ?? -1)")
             let shot = UIGraphicsImageRenderer(bounds: web.bounds).image { _ in web.drawHierarchy(in: web.bounds, afterScreenUpdates: true) }
             if let png = shot.pngData() { try png.write(to: FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("photo-backup-complete.png")) }

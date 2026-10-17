@@ -1,3 +1,4 @@
+import type { FileSyncApproval } from './configuredPlan';
 import type { CloudFile } from './cloudFile';
 import type { SyncScope } from './reconcile';
 /** Canonical multipart fingerprint. This is SHA-256 of concatenated part
@@ -29,8 +30,13 @@ export function validContentFingerprint(value: unknown, size: number): value is 
 export const equalContentFingerprints = (a: ContentFingerprint, b: ContentFingerprint): boolean =>
 	a.algorithm === b.algorithm && a.partSizeBytes === b.partSizeBytes && a.partCount === b.partCount && a.sha256 === b.sha256;
 
+export type NativeFileUpload = { uploadId: string; requestId: string; authorization: FileSyncApproval };
 export type NativePartUpload = { uploadId: string; requestId: string; partNumber: number; offset: number; length: number };
 export type FingerprintSource = {
+	/** Native multipart loop and attachment completion. The caller still verifies
+	 * stored bytes and publishes the canonical file/Timeline operation. */
+	uploadFile?(request: NativeFileUpload, signal?: AbortSignal, progress?: (bytes: number, total: number) => void): Promise<{ fingerprint: ContentFingerprint }>;
+
 	/** Native file-backed multipart upload. Resolves only after authenticated
 	 * signing, bounded storage upload and source checks; returns the part hash. */
 	uploadPart?(request: NativePartUpload, signal?: AbortSignal): Promise<{ sha256: string }>;
