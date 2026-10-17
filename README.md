@@ -4686,3 +4686,46 @@ admin Secure Vault, after which short-lived GitHub OIDC identities fetch only th
 Apple release bundle. See [setup, fork configuration, migration and release
 verification](docs/ios-automatic-testflight.md). No additional Vercel environment
 variables or permanent GitHub-to-vault password are required.
+
+
+### Native mail and browser API relay
+
+Email settings separates cloud storage from the encrypted device copy. For new
+accounts, the desktop app defaults to **Directly from this app**; browsers and
+iOS default to **Thingtime API relay — no installation**. Existing accounts keep
+their paired-connector choice until changed explicitly.
+
+- **Directly from this app** uses Electron IPC and the same bounded read-only
+  IMAP/POP3 implementation as the API. No loopback listener or pairing token is
+  needed. Credentials and message content stay on the device unless cloud sync
+  is also enabled. Navigation, cancellation and app exit abort active work.
+- **Thingtime API relay** sends credentials to the currently selected Thingtime
+  server for each request. `POST /api/v1/mail/sync` returns the shared version 1
+  batch without saving credentials, accounts or messages. It requires a full
+  Thingtime session, `expectedOwnerId` in query and body, and explicit
+  `account.sync.transport: "relay"` with `sync.local: true`. It needs working auth
+  and rate-limit storage but no mail vault encryption key. The host must allow
+  outbound TCP to public mail servers on 993/143/995/110 with verified TLS.
+- Cloud sync remains the separate option for encrypted server storage. The
+  desktop app forwards private mail API requests only to its explicitly selected
+  HTTPS account endpoint, through the existing trusted loopback proxy. Ordinary
+  incomplete web deployments refuse fallback, and native failures never fall
+  back to a cloud transport.
+
+The iOS drawer has a **Mail** shortcut to the selected site's `/mail`; its relay
+uses the WebView's current session and the same encrypted device store. iOS does
+not advertise direct IMAP/POP3 support. Other web-based native hosts can use the
+same relay endpoint; standalone Watch/Widget companions do not sync mail.
+
+Desktop builds stage `electron/dist/mail/provider.cjs` from the canonical web
+provider using the existing MCP esbuild toolchain. `electron build:web` installs
+that toolchain and builds/verifies the artifact; no global Node connector is
+required by an installed app. Use the normal Electron `dev:parallel`, signed
+`build` and `install:local` commands. No additional secrets or deployment
+variables are needed. Do not enable request-body logging for private mail routes.
+
+For relay HTTP regression checks, use the disposable mail replica and fixture
+created by `test:mail:integration`, then run
+`MAIL_TEST_BASE=http://127.0.0.1:<worktree-port> npm --prefix remix run test:mail:relay`.
+It checks the real session, endpoint, explicit mode and absence of cloud writes
+using DNS-only POP3 discovery; it never attempts a provider login.

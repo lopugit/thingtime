@@ -70,6 +70,14 @@ let desktopSettings = null;
 let desktopSettingsLastError = null;
 let endpointCompatibility = null;
 const aiSyncSessions = new Map();
+const { DesktopMailSync } = require('./lib/mail-sync.cjs');
+const desktopMail = new DesktopMailSync({
+  trustedOrigin: () => appOrigin,
+  fetchBatch: (...args) => require(app.isPackaged
+    ? path.join(process.resourcesPath, 'mail', 'provider.cjs')
+    : path.join(__dirname, 'dist', 'mail', 'provider.cjs')).fetchMailBatch(...args)
+});
+app.on('before-quit', () => desktopMail.stop());
 const thingtimeNode = new ThingtimeNodeIntegration({ app, electronDir: __dirname });
 
 function getSessionHash() {
@@ -1689,6 +1697,8 @@ ipcMain.handle('thingtime-desktop:speech-stop', (event, request) => {
 	return desktopSpeech.stop(request.sessionId);
 });
 
+ipcMain.handle('thingtime-desktop:mail-sync', (event, request) => desktopMail.sync(event, request));
+ipcMain.handle('thingtime-desktop:mail-cancel', (event, request) => desktopMail.cancel(event, request));
 ipcMain.handle('thingtime-desktop:get-info', () => getDesktopInfo());
 ipcMain.handle('thingtime-desktop:get-node-panel-preference', (event, request) => {
 	requireTrustedAiBridgeEvent(event);

@@ -38,6 +38,7 @@ await assertExists(serverEntry, 'Nitro server entry');
 await assertExists(indexHtml, 'Vite public index');
 await assertExists(aiConnectorBundle, 'AI desktop connector bundle');
 await assertExists(nodeRuntimeBundle, 'Thingtime Node connector runtime');
+await assertExists(path.join(electronDir, 'dist', 'mail', 'provider.cjs'), 'native mail provider bundle');
 await assertSelfContained(webOutputDir);
 
 const html = await readFile(indexHtml, 'utf8');

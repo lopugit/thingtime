@@ -9,7 +9,7 @@ export type MailAccount = {
 	address: string;
 	revision: number;
 	servers: Partial<Record<MailProtocol, MailServer>>;
-	sync: { cloud: boolean; local: boolean };
+	sync: { cloud: boolean; local: boolean; transport?: 'connector' | 'native' | 'relay' };
 };
 export type MailFolder = { id: string; accountId: string; protocol: MailProtocol; path: string; name: string; inbox: boolean };
 export type MailMessage = {
@@ -76,6 +76,8 @@ export function validateMailAccount(raw: any): MailAccount {
 	}
 	if (!Object.keys(servers).length) throw new MailError(400, 'Enable IMAP or POP3.');
 	if (typeof raw.sync?.cloud !== 'boolean' || typeof raw.sync?.local !== 'boolean') throw new MailError(400, 'Choose where this account syncs.');
+	if (raw.sync.transport !== undefined && !['connector', 'native', 'relay'].includes(raw.sync.transport))
+		throw new MailError(400, 'Choose a supported device sync connection.');
 	const address = mailText(raw.address, 'email address', 320).trim();
 	if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(address)) throw new MailError(400, 'Enter an email address.');
 	return {
@@ -84,7 +86,7 @@ export function validateMailAccount(raw: any): MailAccount {
 		address,
 		revision: revision(raw.revision),
 		servers,
-		sync: { cloud: raw.sync.cloud, local: raw.sync.local }
+		sync: { cloud: raw.sync.cloud, local: raw.sync.local, ...(raw.sync.transport ? { transport: raw.sync.transport } : {}) }
 	};
 }
 export function publicMailAccount(account: MailAccount): MailAccount {

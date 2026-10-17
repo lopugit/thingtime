@@ -642,9 +642,18 @@ const deviceEndpointDocs: ApiEndpointDoc[] = [
 
 export const apiEndpointDocs: ApiEndpointDoc[] = [
   endpoint({
-    id: 'mail', contractVersion: '1.0.0', featureVersion: '1.0.0', group: 'auth', title: 'Private incoming mail', endpoint: '/api/v1/mail',
+    id: 'mail-sync', contractVersion: '1.0.0', featureVersion: '1.0.0', group: 'auth', title: 'Incoming mail API relay', endpoint: '/api/v1/mail/sync',
+    summary: 'Read IMAP or POP3 into a device cache without installing a connector or saving cloud mail.',
+    detail: 'POST operation relay, account (including transient app password, sync.local true and sync.transport relay), protocol, optional path, cursor and discover. expectedOwnerId is required in query and body. Credentials and bounded mail pass through this server in memory; neither is saved by this endpoint. Uses the same pinned public DNS, mail-only ports, verified TLS, read-only commands, 45-second deadline and ten-message pages as cloud sync. Never forwards to another Thingtime origin. Does not require cloud vault encryption configuration. The device must opt in; direct device sync never falls back here.',
+    auth: { mode: 'session-or-bearer', description: 'Full current account session; temporary, service and scoped-token accounts refused.' }, methods: ['POST'],
+    steps: ['Choose Thingtime API relay in Email device sync settings.', 'Send one bounded sync request; retain the returned version 1 batch in your encrypted device cache.'],
+    requestExamples: [{ name: 'Relay folders', description: 'Account settings include the app password only for this request.', method: 'POST', query: { expectedOwnerId: '<account-id>' }, body: { operation: 'relay', expectedOwnerId: '<account-id>', account: '<configured account>', protocol: 'imap', discover: true } }],
+    responseExamples: [{ status: 200, description: 'Transient mail batch, no cloud record written.', body: { ok: true, ownerId: '<account-id>', version: 1, folders: [], messages: [], nextCursor: null } }]
+  }),
+  endpoint({
+    id: 'mail', contractVersion: '1.0.0', featureVersion: '1.1.0', group: 'auth', title: 'Private incoming mail', endpoint: '/api/v1/mail',
     summary: 'Connect IMAP and POP3 accounts and combine folders in virtual inboxes.',
-    detail: 'GET pages 50 encrypted owner records by kind and cursor. All requests require expectedOwnerId in the query; POST also requires it in the body. save-account and save-inbox use an id, writeId and revision. sync discovers IMAP folders or reads ten messages with a continuation cursor; POP3 is read-only and never deletes server mail. Cloud-off accounts cannot sync here. Account passwords are write-only; local-only passwords must stay on the device. delete leaves tombstones and removes cached account contents without modifying provider mail. Both runtimes share mail record version 1.',
+    detail: 'GET pages 50 encrypted owner records by kind and cursor. All requests require expectedOwnerId in the query; POST also requires it in the body. save-account and save-inbox use an id, writeId and revision. sync discovers IMAP folders or reads ten messages with a continuation cursor; POP3 is read-only and never deletes server mail. Cloud-off accounts cannot sync here. Account passwords are write-only; this storage endpoint never accepts device-only passwords. sync.transport optionally selects connector, native or relay for device sync; omitted means the legacy connector. delete leaves tombstones and removes cached account contents without modifying provider mail. Both runtimes share mail record version 1.',
     auth: { mode: 'session-or-bearer', description: 'Full current account session; temporary, service and scoped-token accounts refused.' }, methods: ['GET', 'POST'],
     steps: ['Sign in and configure an account in Settings → Email.', 'Sync a folder, or create a proxy inbox with owned folder ids.'],
     requestExamples: [{ name: 'Email accounts', description: 'List owned email accounts.', method: 'GET', query: { kind: 'mail-account', expectedOwnerId: '<account-id>' } }],

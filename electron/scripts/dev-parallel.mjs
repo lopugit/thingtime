@@ -53,5 +53,6 @@ try {
 	if (profilePath) await rm(profilePath, { force: true, recursive: true });
 	await rm(stagedWebDir, { force: true, recursive: true });
 	await rm(stagedAiDir, { force: true, recursive: true });
+	await rm(path.join(electronDir, 'dist', 'mail'), { force: true, recursive: true });
 	console.log('Removed the Thingtime Dev profile and staged web/AI bundles.');
 }

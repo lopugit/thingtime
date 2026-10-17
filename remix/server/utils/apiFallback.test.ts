@@ -103,13 +103,15 @@ test('fallback forwards the database identity, selection and cookie for upstream
 	});
 });
 
-test('password manager refuses implicit fallback without reading secrets', async () => {
+test('private account services refuse implicit fallback without reading secrets', async () => {
  await withFallbackEnv('https://thingtime.com', async () => {
   const prior = process.env.THINGTIME_DESKTOP; delete process.env.THINGTIME_DESKTOP;
   try {
-   const request = new Request('http://127.0.0.1:17340/api/v1/passwords', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{"entry":"synthetic-secret"}' });
-   const response = await (handleApi as any)({ req: request, context: { params: { path: 'v1/passwords' } } });
+   for (const path of ['v1/passwords', 'v1/mail', 'v1/mail/sync']) {
+   const request = new Request(`http://127.0.0.1:17340/api/${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{"entry":"synthetic-secret"}' });
+   const response = await (handleApi as any)({ req: request, context: { params: { path } } });
    assert.equal(response.status, 503); assert.equal(request.bodyUsed, false);
+   }
   } finally { if (prior === undefined) delete process.env.THINGTIME_DESKTOP; else process.env.THINGTIME_DESKTOP = prior; }
  });
 });
@@ -124,11 +126,11 @@ test('desktop vault proxy requires the bundled origin and pinned HTTPS endpoint'
    return Response.json({ ok: true });
   });
   try {
-   for (const [origin, status] of [['https://attacker.test', 403], ['http://127.0.0.1:17340', 200]] as const) {
-    const request = new Request('http://127.0.0.1:17340/api/v1/passwords', { method: 'POST', headers: { Origin: origin, 'Content-Type': 'application/json' }, body: '{}' });
-    assert.equal((await (handleApi as any)({ req: request, context: { params: { path: 'v1/passwords' } } })).status, status);
+   for (const path of ['v1/passwords', 'v1/mail', 'v1/mail/sync']) for (const [origin, status] of [['https://attacker.test', 403], ['http://127.0.0.1:17340', 200]] as const) {
+    const request = new Request(`http://127.0.0.1:17340/api/${path}`, { method: 'POST', headers: { Origin: origin, 'Content-Type': 'application/json' }, body: '{}' });
+    assert.equal((await (handleApi as any)({ req: request, context: { params: { path } } })).status, status);
    }
-   assert.equal(calls, 1);
+   assert.equal(calls, 3);
   } finally { mock.mock.restore(); if (prior === undefined) delete process.env.THINGTIME_DESKTOP; else process.env.THINGTIME_DESKTOP = prior; }
  });
 });

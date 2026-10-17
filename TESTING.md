@@ -10024,3 +10024,29 @@ separate from deterministic discovery/lease tests.
   web-only pushes do not, and feature-branch manual dispatch cannot publish.
   Check exact App Store Connect build, internal tester availability and the real
   iPhone Home/Lock Screen widget pickers before claiming device delivery.
+
+
+### Native mail and API relay
+
+- In Email settings, verify existing accounts retain connector mode; new desktop
+  accounts offer direct app sync and new browser/iOS accounts offer API relay.
+  Change modes and reopen the editor; cloud storage and device sync stay independent.
+- Relay without a connector: keep cloud storage off, select API relay, sync IMAP
+  and POP3, reload, read cached mail, and combine folders in a proxy inbox. Confirm
+  the API receives the password only on explicit sync, never settings storage.
+- Refuse cross-origin, wrong-owner, anonymous, scoped/service, oversized, disabled
+  or non-relay requests; rate-limit before dialing; revoked sessions suppress
+  the reply. No provider exception, password or message body appears in logs.
+- Direct desktop sync uses the bundled provider, without a localhost helper.
+  Verify top-level origin isolation, cancellation, navigation and two-request
+  concurrency; failures never fall back to the API or reveal provider errors.
+- Private desktop API proxy accepts only its pinned HTTPS endpoint and same-origin
+  loopback caller. Ordinary web deployments must refuse fallback without reading
+  or forwarding credentials. Exercise both `/mail` and `/mail/sync` boundaries.
+- Build/install the signed desktop app and iOS simulator. In the iOS drawer,
+  Mail opens the selected deployment; relay uses that session and saves the device
+  cache. Do not claim direct iOS sockets, background sync or Watch mail support.
+- Add/Edit account opens its form immediately, even though settings groups default
+  to collapsed; collapsing and reopening preserves unsaved edits.
+- Check the connection selector and explanatory text at desktop and narrow mobile
+  sizes; credentials are masked and the buttons remain reachable.
