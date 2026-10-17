@@ -11786,3 +11786,23 @@ verification limits are in `docs/local-workspaces.md`.
       60/min shared theme endpoint limit and allow the 60s interrupted-tab claim
       window. Check HTTP status before reading selection payloads; do not change
       production rate limits or erase claims to make acceptance pass.
+
+
+### Native local home library destination (2026-10-18)
+
+- [x] Import a mixed folder/theme/data bundle in Home library offline; enter its
+      folder, rename content, reload and canonically download at 1440/390/320px.
+      The entire bundle stays home with remapped identities and folder links.
+- [x] Restore a different selected local plane in a disposable browser, create
+      selected content and revisit Home library. Lists/caches never mix, and a
+      foreign/anonymous or malformed home link never opens another account.
+      Home links preserve folder and owner; detail/inspect links remain qualified.
+- [ ] Verify live custom-database selection, complete home detail/editor routing,
+      protected History and migration activation before claiming complete home
+      navigation. New post/data links still leave for their selected-library UI.
+- [x] Cut intent requires the same full workspace/destination to authorize a move.
+      Cross-destination paste can import portable content but cannot move a
+      same-ID Thing in the destination. Run `intent.test.ts` and
+      `thingsLocation.test.ts` alongside `homeLibrary.browser.test.ts`.
+- [x] A retired-identity snapshot regression waits for actual request admission,
+      not a 10ms sleep. The late result must still be refused under full-suite load.

@@ -261,7 +261,7 @@ const InertLabel = ({ kind, author, platform }: { kind: string; author: string |
 // ACL-aware Things API.
 export default function ThingPage() {
 	const [params] = useSearchParams();
-	const dataPlane = useDataPlane(); const user = useCurrentUser(); const api = useApi();
+	const dataPlane = useDataPlane(); const user = useWorkspaceUser(); const api = useApi();
 	const [busy, setBusy] = React.useState(false); const [error, setError] = React.useState('');
 	const expected = params.get('dataPlane'); const expectedOwner = params.get('historyOwner');
 	const invalid = params.getAll('dataPlane').length > 1 || params.getAll('historyOwner').length > 1 || (expected !== null && !isDataPlane(expected));

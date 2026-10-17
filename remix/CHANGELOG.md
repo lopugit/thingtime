@@ -68,6 +68,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-18 — **Codex (AI)**: Add native local Home library browsing, mixed
+  import/export and scoped caches/cut intent. Keep account-bound links and
+  selected-plane remote authority separate. Cross-plane detail/editor routing
+  and automatic consolidation remain pending. Details: [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
 - 2026-10-18 — **Codex (AI)**: Theme Studio can review retained device variants
   offline, preserve their original sync requests and recover one private home
   copy with canonical download. Native home library routing and automatic

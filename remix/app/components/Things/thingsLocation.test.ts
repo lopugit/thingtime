@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { readThingsLocation, writeThingsLocation, thingBrowseHref } from './thingsLocation';
+import { readThingsLocation, writeThingsLocation, thingBrowseHref, readLibraryDestination, homeLibraryHref, thingInspectHref } from './thingsLocation';
 import { isPlainLinkClick, safeMenuHref } from '~/utils/linkNavigation';
 
 test('Things location round-trips searches and every view preference', () => {
@@ -51,4 +51,24 @@ test('native link modifiers, middle clicks and prevented events are never hijack
 test('menu links allow real destinations but reject executable or malformed protocols', () => {
   for (const href of ['/things?q=hello%20world', '#details', 'https://thingtime.test/thing/123', 'mailto:hello@example.test']) assert.equal(safeMenuHref(href), href);
   for (const href of ['javascript:alert(1)', 'data:text/html,test', '//evil.test', '/\\evil.test', 'java\nscript:alert(1)', ' /things']) assert.equal(safeMenuHref(href), undefined);
+});
+
+
+test('home library links preserve destination through folders and qualify detail identity', () => {
+  const home = new URL(homeLibraryHref('owner'), 'https://thingtime.test');
+  assert.equal(readLibraryDestination(home.searchParams, {id:'owner'}), 'home');
+  const folder = new URL(thingBrowseHref({id:'same',thingtime:['folder']}, home.search), home);
+  assert.equal(folder.searchParams.get('workspaceOwner'), 'owner');
+  assert.equal(folder.searchParams.get('localPlane'), 'home');
+  const detail = new URL(thingBrowseHref({id:'same',thingtime:['data']}, folder.search), home);
+  assert.equal(detail.searchParams.get('dataPlane'), 'home');
+  assert.equal(detail.searchParams.get('historyOwner'), 'owner');
+  assert.equal(thingInspectHref('same', folder.search), detail.pathname + detail.search);
+  assert.equal(thingInspectHref('same'), '/thing/same?from=things');
+  assert.equal(readLibraryDestination(new URLSearchParams(), {id:'owner'}), 'selected');
+  for (const owner of [null, {id:'other'}, {id:'owner',localOnly:true as const}])
+    assert.equal(readLibraryDestination(home.searchParams, owner), 'invalid');
+  for (const query of ['localPlane=unknown&workspaceOwner=owner','localPlane=home','workspaceOwner=owner',
+    'localPlane=home&localPlane=home&workspaceOwner=owner','localPlane=home&workspaceOwner=owner&workspaceOwner=owner'])
+    assert.equal(readLibraryDestination(new URLSearchParams(query), {id:'owner'}), 'invalid');
 });

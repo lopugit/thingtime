@@ -1,3 +1,5 @@
+import { useDataPlane } from '~/hooks/useDataPlane';
+import { LocalApiView, useLocalApiView } from '~/local-workspace/LocalApiView';
 import { useWorkspaceScope } from '~/hooks/useWorkspaceScope';
 import { LOCAL_WORKSPACE_CHANGED } from '~/local-workspace/runtime.client';
 import { openThingHistory, TimelineLibrary } from '~/components/Timeline/TimelineHost';
@@ -5,7 +7,7 @@ import { isManagedLibraryThing } from './thingsCore';
 import { FilesystemThingsPage } from './FilesystemThingsBrowser';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { transferIntent } from '~/utils/thingTransfer/intent';
-import { readThingsLocation, writeThingsLocation, type ThingsLocationState } from './thingsLocation';
+import { readThingsLocation, writeThingsLocation, thingBrowseHref, thingInspectHref, readLibraryDestination, homeLibraryHref, type ThingsLocationState } from './thingsLocation';
 
 import { Box, Button, Flex, Input, Menu, MenuButton, MenuItem, MenuList, MenuDivider, MenuOptionGroup, MenuItemOption, Portal, Text } from '@chakra-ui/react';
 import { ArrowUpDown, Columns3, Eye, FolderDown, LayoutGrid, Layers, Plus, Rows3, Settings, Search as SearchIcon, Tag, X } from 'lucide-react';
@@ -60,8 +62,6 @@ import {
   thingDisplayName,
   thingRenameCrystal,
   thingShareLink,
-  thingOpenHref,
-  thingsCacheKey
 } from './thingsCore';
 import type {
 	ThingsCache,
@@ -137,17 +137,26 @@ const dedupeById = (things: ThingsThing[]): ThingsThing[] => {
 
 export const ThingsPage = () => {
   const [params] = useSearchParams();
+  const user = useWorkspaceUser();
+  const destination = readLibraryDestination(params, user);
   const folder = params.get('folder');
-  return folder?.startsWith('timeline-folder-') ? <TimelineLibrary folderId={folder} storage={params.get('historyStorage') === 'home' ? 'home' : 'selected'} /> : <ThingsPageContents />;
+  if (destination === 'invalid') return <Box p={6} pt="100px"><Text role="alert">This library link does not match the current account workspace.</Text><Button as={RouterLink} to="/things" mt={3}>Open current library</Button></Box>;
+  return <LocalApiView.Provider value={destination === 'home' ? { localPlane: 'home' } : {}}>{folder?.startsWith('timeline-folder-') ? <TimelineLibrary folderId={folder} storage={destination === 'home' || params.get('historyStorage') === 'home' ? 'home' : 'selected'} /> : <ThingsPageContents />}</LocalApiView.Provider>;
 };
 
 const ThingsPageContents = () => {
   const [params] = useSearchParams();
   const scope = useWorkspaceScope();
-  return params.has("files") ? <FilesystemThingsPage /> : <ThingsLibraryPage key={scope} />;
+  const view = useLocalApiView();
+  return params.has("files") && !view.localPlane ? <FilesystemThingsPage /> : <ThingsLibraryPage key={`${scope}:${view.localPlane || "selected"}`} />;
 };
 
 const ThingsLibraryPage = () => {
+  const scope = useWorkspaceScope();
+  const localView = useLocalApiView();
+  const homeView = localView.localPlane === "home";
+  const selectedPlane = useDataPlane();
+  const destinationKey = JSON.stringify([scope, localView.localPlane || "selected"]);
   const user = useWorkspaceUser();
   const authenticatedUser = useCurrentUser();
   const [importOpen, setImportOpen] = useState(false);
@@ -179,13 +188,13 @@ const ThingsLibraryPage = () => {
 
   const folderId = searchParams.get('folder') || null;
   const previewParam = searchParams.get('preview') || null;
-	const deviceParam = searchParams.get('device') || null;
+	const deviceParam = homeView ? null : searchParams.get('device') || null;
 	const devicePageMode = Boolean(deviceParam && searchParams.get('deviceView') === 'page');
   const currentKey = folderKeyOf(folderId);
 
   const archive = useAttachmentArchive();
 
-	const devicesEnabled = Boolean(authenticatedUser && authenticatedUser.id === user?.id && authenticatedUser.accountKind === 'user' && !authenticatedUser.temporary);
+	const devicesEnabled = Boolean(!homeView && authenticatedUser && authenticatedUser.id === user?.id && authenticatedUser.accountKind === 'user' && !authenticatedUser.temporary);
 	const deviceStore = useDeviceStore({
 		userId: user?.id,
 		selectedDeviceId: deviceParam,
@@ -208,7 +217,8 @@ const ThingsLibraryPage = () => {
 	const localDeviceControlFor = localNode.controlFor;
 	const executeLocalDeviceAction = localNode.executeAction;
 
-  const cacheKey = thingsCacheKey(user?.id);
+  // Never seed a destination with the ambiguous legacy account-only cache.
+  const cacheKey = `tt-things-workspace-${destinationKey}`;
   const cached = useMemo(() => readLocalCache<ThingsCache>(cacheKey), [cacheKey]);
 
   const locationState = readThingsLocation(searchParams, cached);
@@ -288,7 +298,7 @@ const ThingsLibraryPage = () => {
   const [selection, setSelection] = useState<Set<string>>(new Set());
   const anchorRef = useRef<string | null>(null);
   const [clipboard, setClipboard] = useState<ThingsClipboard>(() => {
-    const cut = transferIntent.peek(user?.id);
+    const cut = transferIntent.peek(user?.id, destinationKey);
     return cut ? { mode: 'cut', ids: [...cut.ids] } : null;
   });
 
@@ -759,9 +769,9 @@ const ThingsLibraryPage = () => {
         navigateToFolder(thing.id);
         return;
       }
-      navigate(thingOpenHref(thing, 'things'));
+      navigate(thingBrowseHref(thing, searchParams.toString()));
     },
-    [navigate, navigateToFolder]
+    [navigate, navigateToFolder, searchParams]
   );
 
   const toggleSelect = useCallback((thing: ThingsThing) => {
@@ -809,7 +819,7 @@ const ThingsLibraryPage = () => {
       const controller = new AbortController();
       transferOperation.current = controller;
       const ownerId = recordingOwner.current;
-      const ticket = transferIntent.ticket(ownerId);
+      const ticket = transferIntent.ticket(ownerId, destinationKey);
       const bundle = apiRef.current.v1.things.export({ ids }, { signal: controller.signal }).then(async (result) => {
         if (!result?.ok) throw new Error(result?.error || 'Export failed');
         const value = await bundleFromPlan(result.plan, { signal: controller.signal });
@@ -825,13 +835,13 @@ const ThingsLibraryPage = () => {
         } else transferIntent.clear();
         setClipboard({ mode, ids });
         lopuRef.current({ title: mode === 'copy' ? `Copied ${ids.length} 📋` : `Cut ${ids.length} ✂️`,
-          description: 'Copied portable content to your clipboard. Paste in Things to import; cut moves only within this account.', status: 'success' });
+          description: 'Copied portable content to your clipboard. Paste in Things to import; cut moves only within this workspace.', status: 'success' });
       }).catch((error) => {
         const cancelled = controller.signal.aborted;
         controller.abort();
         if (!cancelled && recordingOwner.current === ownerId) lopuRef.current({ title: 'Could not copy', description: error instanceof Error ? error.message : 'Use Download instead.', status: 'error' });
       });
-	}, []);
+	}, [destinationKey]);
 
 	const runBulk = useCallback(async (op: 'move' | 'copy' | 'delete', ids: string[], destination?: string | null) => {
       try {
@@ -880,7 +890,7 @@ const ThingsLibraryPage = () => {
         if (text.length > MAX_CLIPBOARD_BYTES) throw new Error('Clipboard content is too large. Import the ZIP file instead.');
         const digest = await transferChecksum(new TextEncoder().encode(text));
         if (controller.signal.aborted || recordingOwner.current !== ownerId) return;
-        const cut = transferIntent.match(ownerId, digest);
+        const cut = transferIntent.match(ownerId, digest, destinationKey);
         if (cut) {
           const ids = [...cut.ids];
           const result = await runBulk('move', ids, destination);
@@ -900,7 +910,7 @@ const ThingsLibraryPage = () => {
         if (!controller.signal.aborted && recordingOwner.current === ownerId) lopuRef.current({ title: 'Could not paste', description: error instanceof Error ? error.message : 'Choose a Thingtime transfer file instead.', status: 'error' });
       }
     },
-    [refreshAfterMutation, runBulk, sourceKeysOf, summarize]
+    [destinationKey, refreshAfterMutation, runBulk, sourceKeysOf, summarize]
   );
 
   const pasteClipboard = useCallback(() => pasteClipboardTo(folderId), [folderId, pasteClipboardTo]);
@@ -1107,7 +1117,7 @@ const ThingsLibraryPage = () => {
   );
 
   const copyLink = useCallback(async (thing: ThingsThing) => {
-    const url = `${window.location.origin}${thingShareLink(thing)}`;
+    const url = `${window.location.origin}${homeView ? thingBrowseHref(thing, searchParams.toString()) : thingShareLink(thing)}`;
     try {
       await navigator.clipboard.writeText(url);
       lopuRef.current({
@@ -1119,11 +1129,15 @@ const ThingsLibraryPage = () => {
     } catch {
       lopuRef.current({ title: 'Couldn’t copy the link', description: url, status: 'error' });
     }
-  }, []);
+  }, [homeView, searchParams]);
 
   const sendRecording = useCallback(async (thing: ThingsThing) => {
     const ownerId = recordingOwner.current;
     if (!ownerId || recordingHandoffBusy.current) return;
+    if (homeView && selectedPlane !== 'home') {
+      lopuRef.current({ title: 'Select home before sending this recording', description: 'Local home browsing does not change the connected database.', status: 'error' });
+      return;
+    }
     recordingHandoffBusy.current = true;
     try {
       const sent = await sendRecordingThingToLopu(thing, ownerId, {
@@ -1136,13 +1150,17 @@ const ThingsLibraryPage = () => {
       if (recordingOwner.current === ownerId) lopuRef.current({ title: 'Recording needs attention',
         description: error instanceof Error ? error.message : 'Check Recording activity before retrying.', status: 'error', link: { label: 'Recording settings', href: '/lopu/recordings' } });
     } finally { recordingHandoffBusy.current = false; }
-  }, []);
+  }, [homeView, selectedPlane]);
 
   const onItemAction = useCallback(
     (thing: ThingsThing, action: ThingsItemAction) => {
+      if (homeView && selectedPlane !== 'home' && ['download-archive', 'share-download-link'].includes(action)) {
+        lopuRef.current({ title: 'Select home for account download links', description: 'Use Download for a portable device copy.', status: 'error' });
+        return;
+      }
       const group = selection.has(thing.id) && selection.size > 1 ? selectedThings : [thing];
       switch (action) {
-        case 'history': openThingHistory(thing.id, thing.thingtime); break;
+        case 'history': openThingHistory(thing.id, thing.thingtime, homeView ? 'home' : undefined); break;
         case 'download':
           setExportIds(group.map((entry) => entry.id));
           break;
@@ -1162,7 +1180,7 @@ const ThingsLibraryPage = () => {
           setPreviewThing(thing);
           break;
         case 'inspect':
-          navigate(`/thing/${encodeURIComponent(thing.id)}`);
+          navigate(thingInspectHref(thing.id, searchParams.toString()));
           break;
         case 'paste-into':
           pasteClipboardTo(thing.id);
@@ -1203,7 +1221,7 @@ const ThingsLibraryPage = () => {
           break;
       }
     },
-    [archive, copyLink, copyToClipboard, duplicateThings, openThing, selectedThings, selection, sendRecording, navigate, pasteClipboardTo]
+    [archive, copyLink, copyToClipboard, duplicateThings, openThing, selectedThings, selection, sendRecording, navigate, pasteClipboardTo, homeView, selectedPlane, searchParams]
   );
 
   // ------------------------------------------------------------------ drag & drop
@@ -1307,7 +1325,7 @@ const ThingsLibraryPage = () => {
     ({ action }: ThingContextMenuAction) => {
       if (!menuThing) return;
       switch (action.command) {
-        case 'history': openThingHistory(menuThing.id, menuThing.thingtime); break;
+        case 'history': openThingHistory(menuThing.id, menuThing.thingtime, homeView ? 'home' : undefined); break;
         case 'download':
           onItemAction(menuThing, 'download');
           break;
@@ -1325,7 +1343,7 @@ const ThingsLibraryPage = () => {
           setPreviewThing(menuThing);
           break;
         case 'inspect':
-          navigate(`/thing/${encodeURIComponent(menuThing.id)}`);
+          onItemAction(menuThing, 'inspect');
           break;
         case 'copy-link':
           copyLink(menuThing);
@@ -1357,7 +1375,7 @@ const ThingsLibraryPage = () => {
           break;
       }
     },
-    [copyLink, menuThing, onItemAction, openThing, pasteClipboardTo]
+    [copyLink, menuThing, onItemAction, openThing, pasteClipboardTo, homeView]
   );
 
   const backgroundMenuModel = useMemo(
@@ -1589,10 +1607,15 @@ const ThingsLibraryPage = () => {
         <Flex alignItems="baseline" gap={3} wrap="wrap">
           <Text {...monoLabel}>Thingtime · Things</Text>
           <Button as={RouterLink} to="/things?files=thingtime" size="sm" variant="ghost">Browse files</Button>
+          {user && !user.localOnly ? <Flex gap={2} wrap="wrap" aria-label="Library storage">
+            <Button as={RouterLink} to="/things" size="sm" variant={homeView ? 'outline' : 'solid'} aria-pressed={!homeView}>Selected library</Button>
+            <Button as={RouterLink} to={homeLibraryHref(user.id)} size="sm" variant={homeView ? 'solid' : 'outline'} aria-pressed={homeView}>Home library</Button>
+          </Flex> : null}
         </Flex>
 				{devicesEnabled && !folderId && !searchMode && !shouldHideLocalNodePanel(localNode, nodePanelDismissed) ? (
 					<LocalNodeSetupCard onDismiss={() => setNodePanelDismissed(true)} onRefresh={localNode.refresh} controlFor={localDeviceControlFor} onAction={executeLocalDeviceAction} state={localNode} />
 				) : null}
+        {homeView ? <Text fontSize="sm">Home library on this device. Local edits and imports finish here; account sync runs separately when its matching connection is available.</Text> : null}
         <Flex alignItems="center" gap={3} wrap="wrap">
           <Text
             as="h1"
@@ -1636,10 +1659,10 @@ const ThingsLibraryPage = () => {
               <MenuList fontSize="13px" zIndex={10250}>
                 <MenuItem onClick={() => openNewFolder(folderId)}>📁 New folder</MenuItem>
                 <MenuItem as={RouterLink} to="/feed">
-                  📝 New post
+                  📝 {homeView && selectedPlane !== 'home' ? 'New post in selected library' : 'New post'}
                 </MenuItem>
                 <MenuItem as={RouterLink} to="/schemas">
-                  💎 New data thing
+                  💎 {homeView && selectedPlane !== 'home' ? 'New data in selected library' : 'New data thing'}
                 </MenuItem>
               </MenuList>
             </Portal>

@@ -1,3 +1,5 @@
+import { Link } from 'react-router';
+import { homeLibraryHref } from '../components/Things/thingsLocation';
 import React from 'react';
 import { Box, Button, Flex, Text } from '@chakra-ui/react';
 import { ThingExportDialog } from '../components/Things/ThingExportDialog';
@@ -14,7 +16,7 @@ export function RetainedThemeReview({ renderPreview }: { renderPreview: (theme: 
 		const scope = currentAccountWorkspace();
 		if (!scope) return null;
 		const worker = accountWorkspaceWorker(scope, { localPlane: 'home' });
-		return { worker, retained: new RetainedAccountThemes(worker.db, scope, worker.lease, worker.themes) };
+		return { worker, ownerId: scope.ownerId, retained: new RetainedAccountThemes(worker.db, scope, worker.lease, worker.themes) };
 	});
 	const [entries, setEntries] = React.useState<RetainedThemeEntry[]>([]),
 		[review, setReview] = React.useState<Review | null>(null);
@@ -94,6 +96,7 @@ export function RetainedThemeReview({ renderPreview }: { renderPreview: (theme: 
 	return (
 		<Box aria-label="Retained theme edits" mt={4} p={3} border="1px solid var(--tt-border)" borderRadius="var(--tt-radius-md)" minWidth={0}>
 			<Text fontWeight={600}>Retained theme edits</Text>
+            <Button as={Link} to={homeLibraryHref(services.ownerId)} size="sm" mt={2}>Open home library</Button>
 			<Text fontSize="sm">
 				Older database workspaces may contain different device edits. Review them offline; recovery creates a private copy in home storage and
 				preserves the original request, folder and selection.

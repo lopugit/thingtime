@@ -175,7 +175,7 @@ export const accountWorkspaceWorker = (authorityScope: AccountScope, view: Accou
 	return worker;
 };
 /** Root-bound bootstrap, invoked in an effect, never during React rendering. */
-export const startAccountWorkspaceSync = (scope: AccountScope) => { accountWorkspaceWorker(scope).wake(); };
+export const startAccountWorkspaceSync = (scope: AccountScope, view: AccountLocalView = {}) => { accountWorkspaceWorker(scope, view).wake(); };
 
 export function accountApi<T extends Record<string, any>>(remote: T, owner: Owner, dataPlane: string, view: AccountLocalView = {}): T {
 	// Keep retained callbacks bound to the destination chosen at construction.

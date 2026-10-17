@@ -3467,3 +3467,26 @@ versions and the remapped selection through reload. The final retained-edit
 browser rerun also explicitly checks the unchanged active theme and exactly one
 recovered identity after reload/retry. Focused lint is clean apart from the
 shared configuration deprecation notice.
+
+
+## Local home library checkpoint — 2026-10-18
+
+Home library is now an explicit account-bound native Things destination. Existing
+folder/import/export/rename dialogs inherit the local API view, and normal account
+workers retain their original root authority. Home links survive folder navigation;
+foreign/malformed destinations fail closed. Home content and selected content use
+separate optimistic caches and cut intents. Portable copy/paste still works, while
+same-ID cut moves cannot cross destinations. Detail/inspect links qualify account
+and data plane; their existing matching-plane guard is preserved.
+
+The native offline fixture imports a mixed folder/theme/data bundle, renames it,
+reloads and downloads canonical content at 1440/390/320px. It also restores a
+custom local pointer in its disposable browser, creates separate selected content
+and revisits home. This proves local routing, not live remote custom selection.
+General cross-plane detail/editor navigation, account theme History, automatic
+consolidation and the full rollout remain incomplete. New post/data links state
+when they open the selected library. No merge or manual deployment occurred.
+
+The full suite initially exposed a pre-existing 10ms timing assumption in the
+late account-theme snapshot test. It now waits for its snapshot callback before
+retiring identity; the real stale-response assertion is unchanged.

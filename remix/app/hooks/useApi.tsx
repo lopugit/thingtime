@@ -1,3 +1,4 @@
+import { useLocalApiView } from '../local-workspace/LocalApiView';
 import { parseTimelineVersionExport } from '../timeline/exportVersion';
 import { startNotificationHistorySync } from '../local-workspace/notifications.client';
 import { WorkspaceApiIdentity } from '../local-workspace/apiIdentity';
@@ -107,7 +108,9 @@ const toQuery = (args?: Record<string, unknown>) => {
   return qs ? `?${qs}` : '';
 };
 
-export function useApi(view: AccountLocalView = {}) {
+export function useApi(explicitView?: AccountLocalView) {
+  const inheritedView = useLocalApiView();
+  const view = explicitView ?? inheritedView;
   const dataPlane = useDataPlane();
   const planeRef = useRef(dataPlane); planeRef.current = dataPlane;
   const asyncFetcher = useAsyncFetcher();
@@ -1607,9 +1610,9 @@ export function useApi(view: AccountLocalView = {}) {
   useEffect(() => {
     if (actionUser?.id && !actionUser.temporary && dataPlane) {
       const scope = { kind: 'account' as const, origin: window.location.origin, ownerId: actionUser.id, dataPlane };
-      startAccountWorkspaceSync(scope); startNotificationHistorySync(scope);
+      startAccountWorkspaceSync(scope, { localPlane: view.localPlane }); startNotificationHistorySync(scope);
     }
-  }, [actionUser?.id, actionUser?.temporary, dataPlane]);
+  }, [actionUser?.id, actionUser?.temporary, dataPlane, view.localPlane]);
   const workspaceApi = useRef(new WorkspaceApiIdentity<typeof v1>());
   const identity = rootIdentity.read();
   const workspaceKey = JSON.stringify([identity.generation, identity.pending, offlineWorkspace || null,

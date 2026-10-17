@@ -775,3 +775,15 @@ share `AccountThemeSync.copyIn`. `ThingExportDialog.localView` selects the norma
 home API for recovered downloads without changing remote authority. Local
 `theme-recovery` receipts prevent duplicate/recreated copies. See
 `retainedThemes.test.ts` and `retainedThemes.browser.test.ts`.
+
+
+## Local home library destination
+
+`ThingsPage.tsx` validates account-bound destination URLs through
+`thingsLocation.ts` and scopes its existing dialogs with `LocalApiView`.
+`useApi` inherits that local destination while preserving actual root authority;
+`useDataPlane` remains the selected remote identity. Cache and cut-intent keys
+include destination scope. Home folder links retain that scope, while detail and
+inspect links retain the existing owner/database guard. See
+[account theme workspace](../account-theme-workspace.md#native-home-library-destination--2026-10-18)
+for current native evidence and unfinished detail/editor integration.

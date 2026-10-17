@@ -31,8 +31,8 @@ import { apiErrorMessage } from '../../hooks/apiFailure';
 import { workspaceStorageIdentity, subscribeWorkspaceStorage } from '../../local-workspace/storageStatus.client';
 
 const OPEN_HISTORY = 'thingtime:open-history';
-export function openThingHistory(thingId: string, thingtime?: readonly string[]) {
-	window.dispatchEvent(new CustomEvent(OPEN_HISTORY, { detail: { thingId, storage: historyStorageForThing(thingtime) } }));
+export function openThingHistory(thingId: string, thingtime?: readonly string[], storage?: TimelineStorage) {
+	window.dispatchEvent(new CustomEvent(OPEN_HISTORY, { detail: { thingId, storage: storage ?? historyStorageForThing(thingtime) } }));
 }
 
 const date = (value: string) => new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value));

@@ -403,3 +403,37 @@ browser's IndexedDB. It verifies offline review/recovery/reload/download at
 This proves a home-selected native account reviewing a retained custom-plane
 variant. Full native selected-custom navigation, general home library routing,
 automatic consolidation and account theme History remain unfinished.
+
+
+## Native home library destination — 2026-10-18
+
+The Things toolbar and retained-theme review now link to an explicit local home
+library. The URL binds the expected account, survives folder navigation/reload,
+and refuses anonymous, foreign or malformed destination links. The existing
+Things list, folder operations and import/export dialogs inherit the local home
+API view. This does not select a remote database or change credentials. Normal
+anonymous `/things` remains its separate browser workspace.
+
+Optimistic library caches and tab-local cut intent now include the workspace and
+local destination. Clipboard text can still be imported into another workspace,
+but cannot authorize moving a same-ID source there. Home detail/inspect links
+pin owner and home plane; the existing detail guard still requires a matching
+selected plane. Generic detail/editor routing across planes therefore remains an
+integration gate. New post/data links disclose when they leave for the selected
+library; remote recording and archive actions require the matching connection.
+
+`homeLibrary.browser.test.ts` uses normal registration in the isolated loopback
+fixture and native offline import/rename/download. It checks complete mixed
+folder/theme/data exports at 1440/390/320px, source placement, separate selected
+content and foreign-link refusal. A disposable browser-only restored custom
+pointer exercises local destination routing without granting remote authority;
+it is not verification of live custom-database switching. Cross-tab refresh and
+zero offline writes are asserted. General home detail/edit flows, live selected-
+custom acceptance, automatic theme consolidation and protected History remain.
+
+Run from `remix/` with `TT_HOME_LIBRARY_URL`, `TT_HOME_LIBRARY_ARTIFACTS`,
+`TT_SHARED_PLAYWRIGHT_PATH` and optional `TT_SHARED_CHROME_PATH`:
+
+```sh
+node --import tsx --test app/local-workspace/homeLibrary.browser.test.ts
+```

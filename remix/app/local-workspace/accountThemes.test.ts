@@ -275,14 +275,17 @@ test('unknown outcomes cannot be reviewed away and retired identities cannot ret
 		});
 		await assert.rejects(f.sync.inspect(row.id, s.transport), /not ready/);
 		let release!: (value: AccountThemeSnapshot[]) => void;
+		let started!: () => void;
+		const entered = new Promise<void>(resolve => { started = resolve; });
 		const delayed = f.sync.refresh({
 			...s.transport,
 			snapshot: () =>
 				new Promise((resolve) => {
 					release = resolve;
+					started();
 				})
 		});
-		await new Promise((resolve) => setTimeout(resolve, 10));
+		await entered;
 		f.retire();
 		release([saved()]);
 		await assert.rejects(delayed, /Changed account/);
