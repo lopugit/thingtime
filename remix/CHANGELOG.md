@@ -73,6 +73,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   Lopu/shared selectors; per-provider allow-all and auto-allow-new checkboxes
   preserve individual choices. Includes Fable 5.1, transactional publication,
   complete-list validation and fork-safe cron setup in README.
+  Details: [PR #1004](../PRs/1004-codex-provider-model-sync--sync-available-provider-models-and-admin-allow-controls.md).
 
 
 - 2026-10-16 — **Codex (AI)**: Raise Lopu model/settings popup positioners above the floating window and mobile scrim; bound long popup bodies to the viewport so their controls remain scrollable.
