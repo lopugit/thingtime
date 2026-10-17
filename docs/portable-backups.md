@@ -6,7 +6,57 @@ It can independently retain a supplied frozen inventory, resume interrupted byte
 capture/copy and recover exact files without the original source. It does **not**
 yet create an account-wide inventory, run scheduled cloud jobs or expose a backup
 button. Those integrations remain required; a fixture is not a complete account
-backup or a demonstrated 100 TB transfer.
+backup or a demonstrated 100 TB transfer. The internal account inventory producer
+below establishes a database snapshot boundary, but refuses unsupported managed
+families and is not exposed as a whole-account backup feature.
+
+## Account inventory producer
+
+`api/utils/backups/accountInventory.ts` freezes owner metadata through one
+read-only MongoDB snapshot session. Census pages contain at most 128 IDs/kinds;
+each supported family uses one projected payload query per page. Every query
+uses the first server-selected cluster timestamp. Ordinary Things use the
+canonical `thing-content` Timeline snapshot; files use `file-content` with their
+exact retained content version and fingerprint. Root credentials, token grants,
+link keys and private binary envelopes are not projected into the vault.
+
+The census covers every owned row in the home Things collection. A managed kind
+without an approved exporter, missing payload, expired database snapshot,
+oversized metadata, changed account or revoked access refuses the plan. It never
+skips an unsupported row and then reports complete coverage. Existing Timeline,
+attachment, account and other protected families still need dedicated adapters;
+ordinary real accounts therefore cannot yet complete this producer. Settings in
+other collections and device-local data also need separate coverage contracts.
+
+Successful enumeration seals the durable metadata plan before byte capture.
+It uses a server `mongo:<seconds>:<increment>` boundary rather than a client clock.
+Interrupted enumeration requires a **new snapshot ID**: it cannot restart with
+live data under the old timestamp. After the plan is durable, independent file
+byte copying may continue beyond the database history window. File availability
+still requires retention/pinning; a metadata plan alone does not copy file bytes.
+
+MongoDB 5+ snapshot reads and a sufficient snapshot history window are required.
+An expired history window is an explicit failure, not permission to continue
+from a newer timestamp. See [MongoDB snapshot read concern](https://www.mongodb.com/docs/v8.0/reference/read-concern-snapshot/).
+The central modern index plan installs `{ ownerId: 1, shareId: 1 }` with simple
+collation. The producer explicitly hints it. Legacy-compatible databases do not
+install it until their existing migration retires legacy indexes; they refuse
+the producer rather than exceed MongoDB's 64-index limit or scan all accounts.
+The modern default plan uses 52 slots; the full legacy-compatible plan uses 64.
+No worker endpoints, scheduling, quota admission, encryption or Timeline backup
+lifecycle receipts are introduced by this internal producer.
+
+Validation: `accountInventory.test.ts` exercises 300-item paging, immutable file
+references, secret exclusion, failures and retained metadata after source loss.
+`scripts/account-snapshot.integration.mts` uses a fresh disposable database on an
+explicit loopback replica. With 6,000 rows across owners, concurrent majority
+writes changed, deleted and inserted source records between reads; the saved
+300-item inventory retained its original values. It was sealed and read after
+dropping the source database. Empty inventories and missing-index refusal are
+also checked. The index experiment examined 2,560 keys for a 128-row page using
+the global ID index versus 128 using owner/ID. This synthetic storage proof does
+not establish authenticated account export, protected family coverage or large
+transfer throughput. Run instructions are in the root README.
 
 ## Format and invariants
 

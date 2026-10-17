@@ -1893,3 +1893,23 @@ identity verification remains required on compatible servers. Renderer rejection
 handling recognizes only the fixed compatibility message and hides other native
 transport details. Production promotion and authenticated installed sync acceptance
 remain pending; no pairing, consent or selected endpoint was changed.
+
+## Account inventory boundary — 2026-10-17
+
+The internal account producer now freezes bounded owner pages at one MongoDB
+snapshot timestamp and emits canonical Timeline snapshots into the durable backup
+plan. It supports ordinary Thing metadata and immutable file references. A missing
+managed-family adapter refuses the entire plan, so this is **not yet a complete
+account exporter**. The original whole-account, independent byte copy, Timeline
+lifecycle, scheduled jobs, native UI and large-data delivery requirements remain.
+
+The disposable replica proof retained 300 owned records across three pages while
+majority writes edited, deleted and inserted source records between reads. Saved
+metadata was sealed/read after source removal; empty inventories and missing-index
+refusal also passed. An owner/ID index reduced a 128-result page from 2,560 keys
+examined to 128 in this fixture. The central index registry adds it only to the
+modern plan (52/64); the full legacy-compatible plan stays at 64 and cannot use
+this producer until migration. Ninety-four backup/Mongo regression tests pass;
+targeted lint passes and full TypeScript retains the same 91 baseline diagnostics.
+There is no new public route, installed-app surface or native binary change.
+See [coverage and setup](portable-backups.md#account-inventory-producer).

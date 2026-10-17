@@ -5114,6 +5114,26 @@ and the product backup UI are still in development. The explicit cloud-folder
 worker below uses existing authenticated APIs; it adds no server configuration,
 bucket permission or public endpoint.
 
+The internal [account inventory producer](docs/portable-backups.md#account-inventory-producer)
+requires MongoDB 5+ snapshot reads, enough retained database history to finish
+enumeration, and the central modern `{ ownerId: 1, shareId: 1 }` index. Legacy
+database migration must finish before this index can be installed within the
+existing budget. Snapshot expiry or a missing index refuses the operation.
+Do not increase a production history window blindly: measure enumeration time
+and the database storage cost first. No new credentials or app environment
+variables are needed. This producer is internal and refuses unsupported managed
+families; it does not yet supply a whole-account backup API.
+
+For its isolated consistency check, start a disposable local MongoDB 5+ replica
+set and explicitly provide its loopback port and replica name. This script does
+not load app `.env` files; it creates and removes only a randomly named test
+database and a temporary vault. The variable below is test-only:
+
+```sh
+THINGTIME_ACCOUNT_SNAPSHOT_TEST_URI='mongodb://127.0.0.1:20337/?replicaSet=timeline-rs' \
+  corepack pnpm --dir remix exec tsx scripts/account-snapshot.integration.mts
+```
+
 Use a private directory owned by your OS user for each vault. The destination's
 parent must already exist. The current local adapter requires POSIX permissions,
 hard-link publication and directory sync; it is not a raw FAT/USB-media writer.

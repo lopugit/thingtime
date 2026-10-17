@@ -1597,3 +1597,27 @@ version requirement; account/endpoint checks still run before dispatch and nativ
 identity verification remains mandatory. Renderer errors hide arbitrary native
 paths/IPC details. Production promotion and installed authenticated transfer
 acceptance remain pending; existing pairing, consent and endpoint are unchanged.
+
+## Account snapshot inventory foundation — 2026-10-17
+
+Add a read-only MongoDB snapshot session and bounded owner inventory producer.
+All pages retain the server-selected timestamp; ordinary Things and file content
+references use canonical Timeline snapshots. Unsupported protected kinds, expired
+snapshots, missing content, account changes and oversized metadata refuse a final
+plan. Credentials/private envelopes are never selected by the census or approved
+payload projections. An interrupted metadata freeze needs a new snapshot ID.
+
+The owner/ID index is registered only for the modern schema. The default plan
+uses 52/64 slots; full legacy compatibility still fits at 64. A missing index
+causes explicit refusal, and index audit reports the selected plan rather than
+combining mutually exclusive modern/legacy definitions. The disposable replica
+test examined 128 instead of 2,560 index keys for one 128-result owner page.
+
+Validation: 94 backup/Mongo tests, targeted lint, unchanged 91 TypeScript baseline
+diagnostics. The real loopback replica test froze 300 records over three pages
+during majority-committed edits/inserts/deletes, then verified retained metadata
+after source database removal. Empty inventory and missing-index cases passed.
+This proves the storage boundary for synthetic ordinary metadata, not complete
+account export, auth, protected family adapters, independent file copying or
+100 TB throughput. Those integrations, background cloud jobs, UI and Timeline
+backup lifecycle remain open. Setup and full scope: [portable backups](../docs/portable-backups.md#account-inventory-producer).
