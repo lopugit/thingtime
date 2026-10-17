@@ -1,3 +1,4 @@
+import { isClientDraftVersion } from '../../timeline/exportVersion';
 import type { LocalTimelineRow } from '../../timeline/localStore';
 import type { TimelineEvent } from '../../timeline/contract';
 import { TIMELINE_UNDO_LABEL } from '../../timeline/publishedVersion';
@@ -8,11 +9,12 @@ import { TIMELINE_VERSION_NAME_MAX_CHARS } from '../../timeline/versionNames';
  * local authority also works offline. Export covers saved deletions when its
  * adapter can resolve their `before` content. */
 export type VersionControlState = { name: boolean; export: boolean; title: string };
-export function versionControlState(row: Pick<LocalTimelineRow, 'status' | 'event'>, verified: boolean): VersionControlState {
+export function versionControlState(row: Pick<LocalTimelineRow, 'status' | 'event'>, verified: boolean, localExport = false): VersionControlState {
 	const { event } = row;
+	if (localExport && isClientDraftVersion(event)) return { name: false, export: true, title: 'Only saved versions can be named; device drafts can be exported' };
 	if (event.mode !== 'revision') return { name: false, export: false, title: 'Only saved versions can be named or exported' };
 	if (row.status !== 'accepted') return { name: false, export: false, title: 'Sync this version first' };
-	if (!verified) return { name: false, export: false, title: 'Reconnect to name or export versions' };
+	if (!verified) return { name: false, export: localExport, title: localExport ? 'Reconnect to name versions' : 'Reconnect to name or export versions' };
 	if (event.after === null) return { name: false, export: true, title: 'Only saved versions can be named' };
 	return { name: true, export: true, title: '' };
 }

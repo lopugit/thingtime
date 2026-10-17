@@ -35,3 +35,14 @@ test('the ancestry line names an undo by the change it reverted and the head it 
 	assert.equal(historyAncestryLine({ parentIds: ['head-1', 'source-1'], operation: 'restore', label: 'Restored' }), 'Combined from head-1 + source-1');
 	assert.equal(historyAncestryLine({ parentIds: ['head-1', 'source-1'], operation: 'merge', label: TIMELINE_UNDO_LABEL }), 'Combined from head-1 + source-1');
 });
+
+
+test('a bound device reader can export retained revisions and client drafts without claiming naming authority', () => {
+ const revision=versionControlState({status:'accepted',event:saved()},false,true);
+ assert.equal(revision.export,true);assert.equal(revision.name,false);
+ const draft=versionControlState({status:'pending',event:eventFixture()},false,true);
+ assert.equal(draft.export,true);assert.equal(draft.name,false);
+ assert.equal(versionControlState({status:'pending',event:saved()},false,true).export,false);
+ assert.equal(versionControlState({status:'pending',event:eventFixture('foreign',{actorId:'other'})},false,true).export,false);
+ assert.equal(versionControlState({status:'accepted',event:saved({mode:'effect',operation:'effect'})},false,true).export,false);
+});

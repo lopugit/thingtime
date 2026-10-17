@@ -4776,3 +4776,11 @@ removes its test Thing. Normal signup rate limits apply; no admin fixture is use
 Run `test:local-workspace` and `test:timeline` for protocol/quota regressions.
 See [coverage](docs/local-workspaces.md#account-device-history-capture-and-sync--2026-10-17)
 for remaining account History controls.
+
+
+The account History fixture also exercises the normal Export button after cold
+offline reload. Its artifact directory receives actual downloaded History JSON
+and screenshots at 1440/390/320px. No additional environment variables, services
+or credentials are needed. These are version archives, not portable Thing import
+bundles; device exports explicitly mark note/name context as partial. See
+[offline History export](docs/local-workspaces.md#offline-account-history-export--2026-10-17).

@@ -1,3 +1,7 @@
+import { exportAccountTimelineVersion } from './accountTimelineExport';
+import { AccountTimeline, AccountTimelineStore, accountTimelineScope } from './accountTimeline';
+import { IndexedDbTimelineBackend } from '../timeline/indexedDb';
+import { TimelineNoteStore } from '../timeline/noteStore';
 import { AccountDraftSync } from './accountDrafts';
 import { AccountDraftCatalog } from './accountDraftCatalog';
 import { AccountDraftClient } from './accountDraftClient.client';
@@ -43,6 +47,16 @@ function createWorker(scope: AccountScope, dispose: () => void) {
 	const discussions = new AccountDiscussionCache(db, scope, lease);
 	const controller = new AbortController();
 	const fileRetentionErrors = new Map<string, string>();
+ let historyBackend: IndexedDbTimelineBackend | null = null;
+ const historyExport = (eventId: string, signal?: AbortSignal) => {
+  lease.assertCurrent();
+  historyBackend ??= new IndexedDbTimelineBackend(globalThis.indexedDB);
+  const timelineScope = accountTimelineScope(scope);
+  return exportAccountTimelineVersion(eventId, {
+   store: new AccountTimelineStore(timelineScope, historyBackend, new AccountTimeline(db, scope, lease)),
+   notes: new TimelineNoteStore(timelineScope, historyBackend), lease
+  }, signal);
+ };
 	let running = false, wakeRequested = false, timer: ReturnType<typeof setTimeout> | null = null, stopped = false;
 	const draftPump = createSyncPump(() => !stopped && navigator.onLine !== false && canSyncAccountWorkspace(scope), async () => {
 		lease.assertCurrent(); const before = JSON.stringify(await drafts.status());
@@ -100,12 +114,12 @@ function createWorker(scope: AccountScope, dispose: () => void) {
 	const unbind = subscribeWorkspaceBinding(wake);
 	const stop = () => {
 		if (stopped) return;
-		stopped = true; controller.abort(); draftPump.stop(); if (timer) clearTimeout(timer);
+		stopped = true; controller.abort(); void historyBackend?.close().catch(() => {}); draftPump.stop(); if (timer) clearTimeout(timer);
 		window.removeEventListener('online', wake); window.removeEventListener('focus', wake); unsubscribe(); unbind(); dispose();
 	};
 	window.addEventListener('online', wake); window.addEventListener('focus', wake);
 	const draftClient = new AccountDraftClient({ drafts, catalog, files, transport, db, lease, wake }, scope, () => navigator.onLine !== false && canSyncAccountWorkspace(scope), () => announceLocalWorkspaceChange());
-	return { sync, interactions, posts, discussions, files, drafts, catalog, draftClient, fileRetentionErrors, transport, db, lease, wake, stop };
+	return { sync, interactions, posts, discussions, files, drafts, catalog, draftClient, historyExport, fileRetentionErrors, transport, db, lease, wake, stop };
 }
 export const accountWorkspaceWorker = (scope: AccountScope) => {
 	const key = `${workspaceScopeKey(scope)}:${rootIdentity.read().generation}`;
@@ -463,7 +477,27 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 			changed();
 			return { ok: true, roots: result.roots, ids: result.idMap, imported: result.things.length, filesImported: manifest.files.length, linksImported: 0, savedLocally: true };
 		};
-	return { ...online, auth: remote.auth, login: remote.login,
+	const localHistoryScope = (requested: {apiOrigin?: string; ownerId: string; dataPlane: string}) =>
+  requested.ownerId === scope.ownerId && requested.dataPlane === scope.dataPlane && (requested.apiOrigin === undefined || requested.apiOrigin === scope.origin);
+ return { ...online, auth: remote.auth, login: remote.login,
+  timeline: { ...online.timeline,
+   canExportLocally: (requested: {apiOrigin?: string; ownerId: string; dataPlane: string}) => {
+    try { facadeLease.assertCurrent(); return localHistoryScope(requested); } catch { return false; }
+   },
+   exportVersion: async (requested: {apiOrigin?: string; ownerId: string; dataPlane: string}, eventId: string, options?: {signal?: AbortSignal}) => {
+    facadeLease.assertCurrent();
+    if (!localHistoryScope(requested)) return online.timeline.exportVersion(requested, eventId, options);
+    const result = await withExportDeadline(async signal => {
+     try { return await worker().historyExport(eventId, signal); }
+     catch (error) {
+      facadeLease.assertCurrent(); signal.throwIfAborted();
+      if (!(error instanceof WorkspaceError) || error.code !== 'HISTORY_NOT_RETAINED' || navigator.onLine === false || !canSyncAccountWorkspace(scope)) throw error;
+      return online.timeline.exportVersion(requested, eventId, {signal});
+     }
+    }, options?.signal);
+    return {ok:true,export:result.export ?? result,assertAvailable:()=>{facadeLease.assertCurrent();options?.signal?.throwIfAborted();result.assertAvailable?.();}};
+   }
+  },
 		attachments: { ...online.attachments,
 			annotate: async (input: { id: string; title?: string | null; description?: string | null; filenamePreview?: string | null }) => {
 				const id = await fileAlias(input.id);

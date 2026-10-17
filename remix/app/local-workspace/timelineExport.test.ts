@@ -60,7 +60,7 @@ test('History export matches the account archive contract, keeps the selected co
 		assert.equal(result.export.name?.name, 'Original checkpoint');
 		assert.equal(result.export.notes[0].text, 'Keep the earlier content.');
 		assert.deepEqual(parseTimelineEntry({ event: result.export.event, receipt: result.export.receipt }), h.original);
-		assert.equal(timelineExportRecord(result, h.original.event), result.export);
+		assert.deepEqual(timelineExportRecord(result, h.original.event), JSON.parse(JSON.stringify(result.export)));
 		assert.deepEqual(await h.history.page({ thingId: null, before: null, after: null, limit: 40 }), before);
 		assert.equal((await h.things.get(h.thing.id)).crystal.value, 2);
 	} finally {

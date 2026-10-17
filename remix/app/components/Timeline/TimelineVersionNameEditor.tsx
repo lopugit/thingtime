@@ -42,7 +42,7 @@ export function TimelineVersionNameEditor({ row, current, drafts, draftKey }: { 
 		seen.current = stamp;
 		if (!drafts.has(draftKey)) setValue(live?.name ?? '');
 	}, [live?.revision, live?.updatedAt, live?.name, drafts, draftKey]);
-	const state = versionControlState(row, !!connection?.verified);
+	const state = versionControlState(row, !!connection?.verified, !!connection && api.v1.timeline.canExportLocally?.(connection.scope));
 	const name = normalizeVersionName(value);
 	const unchanged = name === (live?.name ?? '');
 	const change = (next: string) => { setValue(next); if (next === (live?.name ?? '')) drafts.delete(draftKey); else drafts.set(draftKey, next); };
@@ -86,7 +86,7 @@ export function TimelineVersionNameEditor({ row, current, drafts, draftKey }: { 
 			const result = await api.v1.timeline.exportVersion(connection.scope, event.id, { signal: attempt.signal });
 			if (!alive.current || attempt.signal.aborted) return;
 			const filename = downloadTimelineVersionExport(result, event);
-			if (alive.current) setNotice(`Exported ${live?.name ?? event.label} · ${filename}`);
+			if (alive.current) setNotice(`Exported ${live?.name ?? event.label} · ${filename}${((result as any)?.export?.context ?? result?.context)?.source === 'device' ? ' · Notes and names include retained context only.' : ''}`);
 		} catch (failure: any) { if (alive.current) setError({ message: failure?.error || failure?.message || 'Could not export this version.', stale: false }); }
 		finally { if (exportController.current === attempt) exportController.current = null; working.current = false; if (alive.current) setExporting(false); }
 	};

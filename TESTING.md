@@ -11196,3 +11196,22 @@ and `test:nav`.
 
 Use the README loopback variables for `accountTimeline.browser.test.ts` and
 `historyMenu.browser.test.ts`; default opt-in skips are not browser acceptance.
+
+
+### Offline account History downloads (2026-10-17)
+
+- [x] Cold reload offline, select a cached accepted revision, and use the normal
+  Export button. Validate the downloaded archive, exact historical content and
+  original receipt without any Timeline request.
+- [x] Export an unacknowledged intermediate edit at desktop/390/320px. Keep
+  client/draft provenance and a null receipt; notes/names must identify partial
+  device context. Reconnect and verify genuine receipts independently of export.
+- [x] Refuse wrong account/origin/plane, missing ancestry/parts, invalid context,
+  oversized archives and aborted requests. A prepared download must become
+  unavailable when its workspace retires or its caller cancels.
+- [ ] Verify offline restore/undo/branches/notes/naming and complete retained
+  note/name context; these are not established by an export-only test.
+
+Run `accountTimelineExport.test.ts`, `accountApi.test.ts`, shared Timeline tests
+and the README-enabled `accountTimeline.browser.test.ts`. Default browser skips
+are not native acceptance evidence.

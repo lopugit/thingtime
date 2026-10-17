@@ -3255,3 +3255,38 @@ Remaining: protected feature-specific History adapters, full account-offline
 restore/export/branch/note controls, cross-origin/data-plane native transitions
 and the broader local-first matrix. This checkpoint does not establish current
 CI/deployed acceptance and does not close the merge gate.
+
+
+## Offline account History export — 2026-10-17
+
+The normal History Export button now reads retained account versions locally,
+including unacknowledged client-authored drafts. It uses the existing shared
+version materializer and archive validator; it neither syncs content nor reads
+current Things to substitute for missing historical data. Matching account,
+origin, data-plane and active workspace leases are required. A prepared download
+is invalidated by cancellation or a workspace switch. Missing ancestry, missing
+snapshot parts and oversized archives fail explicitly; an online fallback requires
+verified account authority.
+
+The format remains the History archive (`formatVersion: 1`), not a portable
+`thingtime.transfer` bundle. Device drafts carry `receipt: null` until a real
+receipt exists. Network exports still require an authority receipt. Device archives
+mark notes/names as `context: { source: "device", complete: false }`; only retained
+canonical notes and accepted naming effects are included. Full account note/name
+retention and offline editing remain outstanding.
+
+Local checks: 406 workspace/offline tests and 239 Timeline tests pass (645 total;
+43 opt-in cases skipped). The enabled production-client account History browser
+case passes: cold offline reload, native exports of a cached server revision and
+an unsynced intermediate edit at 1440/390/320px, zero Timeline requests caused by
+export, no offline writes or browser errors, and exact canonical receipts after
+reconnect. Four downloaded archives and three screenshots are retained under
+`tmp/account-history-export-native/`. Additional facade assertions verify wrong
+owner/origin/plane refusal, abort after preparation and retired-download fencing.
+The production client build contains 247 verified offline assets (21,728,677
+bytes). TypeScript still has 91 baseline diagnostics and none in changed files.
+
+Remaining gates include account-offline restore/undo, branches, notes and names,
+protected History adapters and the broader local-first acceptance matrix. This
+checkpoint establishes local evidence only; current-head CI/deployed acceptance
+and the main merge gate remain open.

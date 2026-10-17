@@ -70,7 +70,7 @@ export function createVersionGraphTools(reject: (status: number, message: string
 	/** Select the nearest full version and latest replacement of each compact
 	 * field. Folder moves inherit the preceding crystal and its dependency links;
 	 * no payload is borrowed from the live Thing. */
-	function versionContentSources(graph: Map<string, TimelineGraphNode>, entry: TimelineEntry) {
+	function versionContentSources(graph: Map<string, TimelineGraphNode>, entry: Pick<TimelineEntry, 'event'>) {
 		const selected: string[] = [];
 		const fields = new Set<string>();
 		const seen = new Set<string>();
@@ -104,13 +104,13 @@ export function createVersionGraphTools(reject: (status: number, message: string
 		return { selected, crystalId };
 	}
 
-	function createVersionContentReader(
+	function createVersionContentReader<Entry extends Pick<TimelineEntry, 'event'>>(
 		graph: Map<string, TimelineGraphNode>,
-		read: (ids: string[]) => Promise<TimelineEntry[]>,
-		snapshot: (entry: TimelineEntry) => Promise<TimelineSnapshot | null>
+		read: (ids: string[]) => Promise<Entry[]>,
+		snapshot: (entry: Entry) => Promise<TimelineSnapshot | null>
 	) {
-		const cached = new Map<string, TimelineEntry>();
-		return async (entry: TimelineEntry) => {
+		const cached = new Map<string, Entry>();
+		return async (entry: Entry) => {
 			cached.set(entry.event.id, entry);
 			const { selected } = versionContentSources(graph, entry);
 			const missing = selected.filter((key) => !cached.has(key));

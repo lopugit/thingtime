@@ -68,6 +68,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-17 — **Codex (AI)**: Export retained account History through the normal
+  button while offline, including unacknowledged device versions with null
+  receipts and explicit partial note/name context. Shared archive validation,
+  cancellation and identity fences protect downloads. Native cold-reload exports
+  pass at 1440/390/320px; remaining offline History controls and full rollout gates
+  stay open. [PR #1000 details](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
 - 2026-10-17 — **Codex (AI)**: Retain each ordinary account edit and its canonical
   device History atomically, including local deletion and reviewed replacement.
   Reuse Timeline sync for private client drafts and preserve authoritative device

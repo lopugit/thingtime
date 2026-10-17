@@ -653,3 +653,13 @@ Server receipts remain authoritative; uploaded device versions use client/draft
 provenance. Tests: `accountTimeline.test.ts`, opt-in
 `accountTimeline.browser.test.ts`, and `historyMenu.browser.test.ts`. See
 [coverage and remaining controls](../local-workspaces.md#account-device-history-capture-and-sync--2026-10-17).
+
+
+Account History Export uses `local-workspace/accountTimelineExport.ts` over the
+existing scoped Timeline stores. `accountApi.client.ts` exposes local capability
+to the normal version controls and permits verified network fallback only for
+missing retained history. `timeline/exportVersion.ts` owns shared materialization
+and archive validation; server receipts remain mandatory on network reads.
+`accountTimelineExport.test.ts`, `accountApi.test.ts` and the enabled native
+`accountTimeline.browser.test.ts` cover offline downloads and identity fences.
+See [remaining History controls](../local-workspaces.md#offline-account-history-export--2026-10-17).

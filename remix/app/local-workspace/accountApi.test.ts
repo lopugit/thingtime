@@ -4,6 +4,7 @@ import { IDBFactory } from 'fake-indexeddb';
 import { accountApi, accountWorkspaceWorker, resolveAccountWebpage } from './accountApi.client';
 import { bindLocalWorkspace, workspaceDatabase } from './runtime.client';
 import { rootIdentity } from '../utils/rootIdentity';
+import { AccountTimeline } from './accountTimeline';
 
 test('account local facade and native page resolution work offline without uploading anonymous content', async () => {
  const oldWindow = globalThis.window, oldFactory = globalThis.indexedDB, oldFetch = globalThis.fetch;
@@ -14,7 +15,7 @@ test('account local facade and native page resolution work offline without uploa
  let remoteCalls = 0; const remote = async (..._args: any[]) => { remoteCalls++; return { ok: true }; };
  try {
   bindLocalWorkspace(false, rootIdentity.read().generation, scope); rootIdentity.confirm(rootIdentity.read().generation);
-  const api: any = accountApi({ actions: { run: remote }, things: { comment: remote, create: remote, update: remote, get: remote, list: remote, search: remote, bulk: remote, import: remote, export: remote, fork: remote } }, { id: scope.ownerId }, scope.dataPlane);
+  const api: any = accountApi({ timeline: { exportVersion: remote }, actions: { run: remote }, things: { comment: remote, create: remote, update: remote, get: remote, list: remote, search: remote, bulk: remote, import: remote, export: remote, fork: remote } }, { id: scope.ownerId }, scope.dataPlane);
   const component: any = await api.things.create({ thingtime: ['component'], crystal: { name: 'Card', componentKey: 'card', version: 1, render: { tag: 'p', children: 'Locally rendered' } } } as any);
   const page: any = await api.things.create({ thingtime: ['webpage'], crystal: { name: 'Offline page', blocks: [{ id: 'card', type: 'component', component: 'card' }] } } as any);
   const resolved = await resolveAccountWebpage(scope, { kind: 'id', id: page.id });
@@ -27,6 +28,26 @@ test('account local facade and native page resolution work offline without uploa
   bindLocalWorkspace(false, rootIdentity.read().generation, scope, false);
   const offlineEdit: any = await api.things.update({ id: page.id, crystal: { name: 'Cold offline account' } });
   assert.equal(offlineEdit.thing.crystal.name, 'Cold offline account');
+  const historyWorker = accountWorkspaceWorker(scope);
+  const versions = await new AccountTimeline(historyWorker.db, scope, historyWorker.lease).rows({thingId: page.id});
+  const version = versions.find(row => (row.event.after?.value as any).crystal.name === 'Cold offline account')!;
+  const archive = await api.timeline.exportVersion({apiOrigin:scope.origin,ownerId:scope.ownerId,dataPlane:scope.dataPlane},version.event.id);
+  assert.equal(archive.export.receipt,null);assert.equal(archive.export.event.mode,'draft');
+  assert.equal(archive.export.content.value.crystal.name,'Cold offline account');
+  assert.deepEqual(archive.export.context,{source:'device',complete:false});
+  assert.equal(remoteCalls,1,'offline History export does not upload drafts or contact the server');
+  const historyScope = {apiOrigin:scope.origin,ownerId:scope.ownerId,dataPlane:scope.dataPlane};
+  assert.equal(api.timeline.canExportLocally(historyScope),true);
+  for (const other of [{...historyScope,ownerId:'other-owner'},{...historyScope,dataPlane:'other-plane'},{...historyScope,apiOrigin:'https://other.example'}]) {
+   assert.equal(api.timeline.canExportLocally(other),false);
+   await assert.rejects(api.timeline.exportVersion(other,version.event.id),/offline/);
+  }
+  await assert.rejects(api.timeline.exportVersion(historyScope,'missing-history'),/not retained/);
+  const cancelExport = new AbortController();
+  const cancelledArchive = await api.timeline.exportVersion(historyScope,version.event.id,{signal:cancelExport.signal});
+  cancelledArchive.assertAvailable();cancelExport.abort();
+  assert.throws(()=>cancelledArchive.assertAvailable(),/abort/i,'prepared downloads retain their caller cancellation fence');
+  await assert.rejects(api.timeline.exportVersion(historyScope,version.event.id,{signal:cancelExport.signal}),/abort/i);
   const library: any = await api.things.list({ limit: 1 });
   assert.equal(library.incomplete, true); assert.equal(library.things.length, 1); assert.ok(library.nextCursor.startsWith('device:'));
   const secondPage: any = await api.things.list({ limit: 1, cursor: library.nextCursor });
@@ -103,6 +124,9 @@ test('account local facade and native page resolution work offline without uploa
   assert.equal((await api.things.get({ id: withMedia.id }) as any).post.attachments.length, 0);
   assert.equal(remoteCalls, 1, 'repeated native removal completes locally without account or draft requests');
   rootIdentity.changed(); bindLocalWorkspace(true, rootIdentity.read().generation); rootIdentity.confirm(rootIdentity.read().generation);
+  assert.equal(api.timeline.canExportLocally(historyScope),false);
+  assert.throws(()=>archive.assertAvailable(),/workspace changed/i,'a prepared account export cannot download after switching workspace');
+  await assert.rejects(api.timeline.exportVersion(historyScope,version.event.id),/workspace changed/i);
   await assert.rejects(api.things.create({ thingtime: ['data'], crystal: {} } as any), /workspace changed/i);
   await assert.rejects(api.things.get({ id: page.id, key: 'old-key' } as any), /workspace changed/i);
   await assert.rejects(api.things.search({ workspace: true, device: true }), /workspace changed/i);
