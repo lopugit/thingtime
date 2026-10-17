@@ -22,11 +22,21 @@ test('dedicated theme writers advertise durable history on both capability manif
 	const route = createApiCapabilitiesManifest().features;
 	const wellKnown = thingtimeCapabilityManifest('https://thingtime.test').features;
 	for (const feature of ['api.themes', 'api.themes-delete']) {
-		assert.equal(route[feature], '1.1.0');
-		assert.equal(wellKnown[feature].version, '1.1.0');
+		assert.equal(route[feature], '1.1.1');
+		assert.equal(wellKnown[feature].version, '1.1.1');
 		assert.equal(capabilitySatisfies(route[feature], '1.1.0'), true);
 		for (const version of [undefined, '1.0.0', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.1.0'), false);
 	}
+});
+
+
+test('conditional theme synchronization is registered on both manifests', () => {
+ const feature = 'api.themes-sync';
+ assert.equal(createApiCapabilitiesManifest().features[feature], '1.0.0');
+ const manifest = thingtimeCapabilityManifest('https://thingtime.test');
+ assert.equal(manifest.features[feature].version, '1.0.0');
+ assert.ok(manifest.operations.some(operation => operation.feature === feature && operation.path === '/api/v1/themes/sync' && operation.methods.includes('POST')));
+ assert.equal(typeof routeModules['v1/themes/sync'], 'function');
 });
 
 test('JSON Action inputs and draft-saving suites negotiate both origin manifests', () => {

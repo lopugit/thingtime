@@ -3789,3 +3789,37 @@ and corrected one old expected reveal version. These are local results only;
 current-head CI/deployment and the broader identity/native matrix remain open.
 Artifacts: `tmp/provider-settings-verified/`, `tmp/provider-settings-anonymous/`,
 `tmp/provider-review-integrated-retry/` and `tmp/provider-settings-*.log`.
+
+
+## Conditional theme synchronization groundwork — 2026-10-17
+
+`api.themes-sync` 1.0.0 exposes bounded complete snapshots and immutable
+conditional writes through `/api/v1/themes/sync`. The new service calls the
+canonical home-plane theme writer; it does not use generic protected-kind CRUD
+or a second collection. Existing token sanitization, storage accounting,
+Timeline content history and legacy migration rules remain authoritative.
+New device IDs must be UUIDs and cannot occupy reserved system namespaces.
+Complete stored BSON versions detect dedicated edits and generic library-title
+changes. A protected Timeline effect acknowledges the exact normalized command;
+replaying an old create after deletion cannot resurrect the theme. Selected
+content-plane identity is checked even though theme storage remains at home.
+
+The normal create path now counts both storage eras inside the same transaction.
+The pre-change loopback test reproduced two successful requests for the final
+slot; the repaired fixture admits one and refuses the other. Deletion clears the
+matching active-theme pointer inside its content transaction before its receipt.
+
+Local API verification covers concurrent exact retries, stale-write refusal,
+cross-writer version invalidation, home storage under a custom selected plane,
+private read boundaries, active-pointer cleanup and replay after deletion.
+All theme fixtures are disposable and cleaned through normal APIs. The API test
+requires `TT_THEME_SYNC_API_URL`, `TT_THEME_SYNC_API_ARTIFACTS` and the shared
+Playwright runtime path; it additionally verifies the loopback Mongo fixture at
+127.0.0.1:22463 / replica set `draftPreview` before registering an account.
+`themeQuota.api.test.ts` is a separate opt-in concurrent-limit fixture. Run
+`npm --prefix remix run test:theme-sync` for unit/contract regressions.
+
+This is the server prerequisite. Account theme queues, active-selection sync,
+conflict UI, account algorithm sync and protected local History remain unfinished;
+the ordinary account theme UI is not yet an offline implementation. No merge or
+deployed verification is claimed by these local checks.

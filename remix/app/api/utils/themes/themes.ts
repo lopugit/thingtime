@@ -10,7 +10,7 @@ import { ACL_ALL, ACL_OWNER, COLLECTION_SCHEMA_VERSIONS } from '~/schemas/regist
 import { clearUserActiveTheme } from '../auth/users';
 import { StorageMutationError, USER_STORAGE_ACCOUNTING_VERSION, currentContentStorageSizeBytes, thingStorageSizeBytes } from '../storage/storageCore';
 import { applyUserStorageDelta, markUserStorageNeedsReconcile, readyUserStorageMatch } from '../storage/userStorage';
-import { newThingMutationCapture } from '../timeline/recordMutation';
+import { newThingMutationCapture, type ThingMutationCapture } from '../timeline/recordMutation';
 import { recordThemeMutation } from '../timeline/themeContent';
 
 // Themes are THINGS now (thingtime ["theme"], see
@@ -120,8 +120,18 @@ const assertLegacyThemeMutationAllowed = async (ownerId: string, things: any, se
 	}
 };
 
+/** Server-only synchronization boundary. Routes never spread request fields
+ * into it. Hooks run inside the canonical accounted home transaction, including
+ * its legacy policy and protected history writer. */
+export type ThemeMutationBoundary = {
+ createId?: string;
+ capture?: ThingMutationCapture;
+ beforeWrite?(before: any | null, legacy: any | null, session: any): Promise<void>;
+ afterWrite?(after: any | null, session: any): Promise<void>;
+};
+
 // Create or update (when `id` is an owned theme's shareId) a saved theme.
-export const saveTheme = async (ownerId: string, input: SaveThemeInput): Promise<SaveResult> => {
+export const saveTheme = async (ownerId: string, input: SaveThemeInput, boundary: ThemeMutationBoundary = {}): Promise<SaveResult> => {
   const normalized = normalizeSavedTheme(input);
   if (normalized.ok === false) return normalized;
   const { name, theme } = normalized;
@@ -132,7 +142,7 @@ export const saveTheme = async (ownerId: string, input: SaveThemeInput): Promise
   const things = await getThingsCollection();
   const themes = await getThemesCollection();
   const now = new Date();
-	const capture = newThingMutationCapture(ownerId);
+	const capture = boundary.capture ?? newThingMutationCapture(ownerId);
 
   if (typeof input.id === 'string' && input.id) {
     // Update whichever store holds the doc: things first, legacy fallback.
@@ -149,6 +159,7 @@ export const saveTheme = async (ownerId: string, input: SaveThemeInput): Promise
 					if (!before) {
 						throw new StorageMutationError(409, 'storage_conflict', 'Theme changed while it was being updated — try again');
 					}
+					await boundary.beforeWrite?.(before, null, session);
 					const visibility = explicitVisibility ?? (Array.isArray(before.acl) && before.acl.includes(ACL_ALL) ? 'public' : 'private');
 					const crystal = { ...(before.crystal || {}), name, theme };
 					const extended = before.extended ?? null;
@@ -190,6 +201,7 @@ export const saveTheme = async (ownerId: string, input: SaveThemeInput): Promise
 						updatedAt: now
 					};
 					await recordThemeMutation(things, before, updatedThing, capture, session);
+					await boundary.afterWrite?.(updatedThing, session);
 				});
 			} catch (error) {
 				const projected = storageFail(error);
@@ -209,6 +221,10 @@ export const saveTheme = async (ownerId: string, input: SaveThemeInput): Promise
 		try {
 			await withHomeMongoTransaction(async (session) => {
 				await assertLegacyThemeMutationAllowed(ownerId, things, session);
+				if (boundary.beforeWrite) {
+     const current = await themes.findOne({ _id: existing._id, ownerId }, { session });
+     await boundary.beforeWrite(null, current, session);
+    }
 				const write = await themes.updateOne(
 					{ _id: new ObjectId(existing._id), ownerId, updatedAt: existing.updatedAt },
 					{ $set: { name, theme, visibility, schemaVersion: COLLECTION_SCHEMA_VERSIONS.themes, updatedAt: now } },
@@ -217,6 +233,7 @@ export const saveTheme = async (ownerId: string, input: SaveThemeInput): Promise
 				if (write.matchedCount === 0) {
 					throw new StorageMutationError(409, 'storage_conflict', 'Theme changed while it was being updated — try again');
 				}
+				await boundary.afterWrite?.(await themes.findOne({ _id: existing._id, ownerId }, { session }), session);
 			});
 		} catch (error) {
 			const projected = storageFail(error);
@@ -228,22 +245,12 @@ export const saveTheme = async (ownerId: string, input: SaveThemeInput): Promise
 
   const visibility = explicitVisibility ?? 'private';
 
-  // The 100-theme cap must span BOTH eras — counting one store would let
-  // users near the cap double their quota during the dual-era window.
-  const [thingCount, legacyCount] = await Promise.all([
-    things.countDocuments({ thingtime: 'theme', ownerId } as any),
-    themes.countDocuments({ ownerId })
-  ]);
-  if (thingCount + legacyCount >= MAX_THEMES_PER_USER) {
-    return { ok: false, status: 400, error: `Theme limit reached (${MAX_THEMES_PER_USER})` };
-  }
-
   // New themes are theme things. shareId keeps its caller-visible randomUUID
   // semantics (share links, users.meta.activeThemeId pointers), and the things
   // unique shareId index enforces the same uniqueness the legacy themes index
   // did.
   const thing = {
-    shareId: randomUUID(),
+    shareId: boundary.createId ?? randomUUID(),
     schemaVersion: COLLECTION_SCHEMA_VERSIONS.things,
     thingtime: ['theme'],
     crystal: { name, theme },
@@ -263,9 +270,16 @@ export const saveTheme = async (ownerId: string, input: SaveThemeInput): Promise
 	});
 	try {
 		await withHomeMongoTransaction(async (session) => {
+   await boundary.beforeWrite?.(null, null, session);
+   // Count both storage eras inside the same transaction as the owner ledger
+   // and Timeline fence, so concurrent creates retry against the new count.
+   const thingCount = await things.countDocuments({ thingtime: 'theme', ownerId } as any, { session });
+   const legacyCount = await themes.countDocuments({ ownerId }, { session });
+   if (thingCount + legacyCount >= MAX_THEMES_PER_USER) throw new StorageMutationError(400, 'storage_conflict', `Theme limit reached (${MAX_THEMES_PER_USER})`);
 			await applyUserStorageDelta(ownerId, sizeBytes, session);
 			await things.insertOne(thing as any, { session });
 			await recordThemeMutation(things, null, thing, capture, session);
+			await boundary.afterWrite?.(thing, session);
 		});
 	} catch (error) {
 		const projected = storageFail(error);
@@ -349,12 +363,12 @@ export const getOwnedTheme = async (ownerId: string, shareId: string): Promise<P
   return doc ? toPublicTheme(doc) : null;
 };
 
-export const deleteTheme = async (ownerId: string, shareId: unknown): Promise<{ ok: false; status: number; error: string } | { ok: true }> => {
+export const deleteTheme = async (ownerId: string, shareId: unknown, boundary: ThemeMutationBoundary = {}): Promise<{ ok: false; status: number; error: string } | { ok: true }> => {
   if (typeof shareId !== 'string' || !shareId.trim()) {
     return { ok: false, status: 400, error: 'Theme id is required' };
   }
   const id = shareId.trim();
-	const capture = newThingMutationCapture(ownerId);
+	const capture = boundary.capture ?? newThingMutationCapture(ownerId);
   // Delete from BOTH stores (owner-scoped, so someone else's shareId 404s like
 	// an unknown one). A Thing deletion refunds its exact before-image in the
 	// same transaction. A ready account is never allowed to mutate a leftover
@@ -366,7 +380,11 @@ export const deleteTheme = async (ownerId: string, shareId: unknown): Promise<{ 
 	let deletedLegacy = false;
 	try {
 		await withHomeMongoTransaction(async (session) => {
-			const legacy = await themes.findOne({ shareId: id, ownerId }, { projection: { _id: 1 }, session });
+			const legacy = await themes.findOne({ shareId: id, ownerId }, { session, ...(!boundary.beforeWrite ? { projection: { _id: 1 } } : {}) });
+   if (boundary.beforeWrite) {
+    const current = await things.findOne({ thingtime: 'theme', shareId: id, ownerId } as any, { session });
+    await boundary.beforeWrite(current, legacy, session);
+   }
 			if (legacy) await assertLegacyThemeMutationAllowed(ownerId, things, session);
 			const before = await things.findOneAndDelete({ thingtime: 'theme', shareId: id, ownerId } as any, { session });
 			const legacyRes = await themes.deleteOne({ shareId: id, ownerId }, { session });
@@ -376,6 +394,10 @@ export const deleteTheme = async (ownerId: string, shareId: unknown): Promise<{ 
 				else await applyUserStorageDelta(ownerId, -exactBytes, session);
 				await recordThemeMutation(things, before, null, capture, session);
 			}
+			if (before || legacyRes.deletedCount > 0) {
+    await clearUserActiveTheme(ownerId, id, session);
+    await boundary.afterWrite?.(null, session);
+   }
 			deletedThing = !!before;
 			deletedLegacy = legacyRes.deletedCount > 0;
 		});
@@ -387,9 +409,5 @@ export const deleteTheme = async (ownerId: string, shareId: unknown): Promise<{ 
 	if (!deletedThing && !deletedLegacy) {
     return { ok: false, status: 404, error: 'Theme not found' };
   }
-  // Don't leave the owner's active theme dangling at a deleted shareId. The
-  // pointer lives on the user doc — and users are dual-era things themselves
-  // now — so the users store owns the conditional clear.
-  await clearUserActiveTheme(ownerId, id);
   return { ok: true };
 };

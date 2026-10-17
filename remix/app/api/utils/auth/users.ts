@@ -2,7 +2,7 @@ import type { UserVaultKeyRegistry } from './vaultKeys';
 import { randomUUID as lopuSettingsRevision } from 'node:crypto';
 import { LopuPromptConflictError, validateLopuInstructions, type LopuInstructionSettings } from '../lopu/promptSettingsCore';
 import { createHash } from 'node:crypto';
-import { Binary, ObjectId } from 'mongodb';
+import { Binary, ObjectId, type ClientSession } from 'mongodb';
 
 import {
 	ADMIN_SNAPSHOT_LOOKAHEAD_LIMIT,
@@ -638,11 +638,11 @@ export const insertUser = async (
 // exceed realistic burst width
 const SECURE_CAS_ATTEMPTS = 20;
 type SecureMutateResult = 'mutated' | 'missing' | 'contended';
-const mutateUserThingSecure = async (userId: string, mutate: (secure: SecurePayload) => void | Promise<void>, strict = false): Promise<SecureMutateResult> => {
+const mutateUserThingSecure = async (userId: string, mutate: (secure: SecurePayload) => void | Promise<void>, strict = false, session?: ClientSession): Promise<SecureMutateResult> => {
 	const things = await getThingsCollection();
 	const base = { shareId: String(userId), thingtime: 'user' } as any;
 	for (let attempt = 0; attempt < SECURE_CAS_ATTEMPTS; attempt++) {
-		const thing = await things.findOne(base, { projection: { secure: 1, secureVersion: 1 } });
+		const thing = await things.findOne(base, { projection: { secure: 1, secureVersion: 1 }, ...(session ? { session } : {}) });
 		if (!thing) return 'missing';
 		const version = (thing as any).secureVersion; // number | undefined (pre-versioned docs)
 		const secure = strict ? strictVaultPayload((thing as any).secure) : unpackSecure((thing as any).secure);
@@ -652,7 +652,8 @@ const mutateUserThingSecure = async (userId: string, mutate: (secure: SecurePayl
 		const guard = version === undefined ? { secureVersion: { $exists: false } } : { secureVersion: version };
 		const res = await things.updateOne(
 			{ ...base, ...guard },
-			{ $set: { secure: packSecure(secure), secureVersion: (version ?? 0) + 1, updatedAt: new Date() } }
+			{ $set: { secure: packSecure(secure), secureVersion: (version ?? 0) + 1, updatedAt: new Date() } },
+			{ ...(session ? { session } : {}) }
 		);
 		if (res.modifiedCount) return 'mutated';
 		// lost the CAS — another writer won; small jittered backoff so a burst of
@@ -1252,17 +1253,17 @@ export const setUserActiveTheme = async (userId: string, themeShareId: string | 
 // Clear the user's active theme pointer ONLY if it still points at the given
 // theme shareId — theme deletion uses this so it never stomps a pointer the
 // user has since moved to another theme.
-export const clearUserActiveTheme = async (userId: string, themeShareId: string) => {
+export const clearUserActiveTheme = async (userId: string, themeShareId: string, session?: ClientSession) => {
 	const cleared = await mutateUserThingSecure(userId, (s) => {
 		if (s.meta!.activeThemeId === themeShareId) s.meta!.activeThemeId = null;
-	});
+	}, false, session);
 	// A matched user thing (cleared or pointer already moved) needs no legacy write.
 	if (cleared === 'mutated') return;
 	if (cleared === 'contended') throw new SecureWriteContendedError(userId);
 	if (!ObjectId.isValid(userId)) return;
 	await (
 		await getUsersCollection()
-	).updateOne({ _id: new ObjectId(userId), 'meta.activeThemeId': themeShareId }, { $set: { 'meta.activeThemeId': null, updatedAt: new Date() } });
+	).updateOne({ _id: new ObjectId(userId), 'meta.activeThemeId': themeShareId }, { $set: { 'meta.activeThemeId': null, updatedAt: new Date() } }, { ...(session ? { session } : {}) });
 };
 
 // Set (or clear, with null) the user's active feed algorithm shareId in meta.

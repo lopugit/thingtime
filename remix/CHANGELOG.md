@@ -68,6 +68,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-17: Add conditional home-plane theme sync prerequisites, durable retry receipts, transactional theme quota and selected-theme deletion cleanup. Extend provider account-switch acceptance. Local API checks only; full local-first rollout remains gated by [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
 - 2026-10-17 — **Codex (AI)**: Account provider Settings now saves in the
   encrypted device workspace independently of account sync, with atomic
   environment conflict review and explicit fresh selected-value retention.

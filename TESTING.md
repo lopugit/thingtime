@@ -11641,3 +11641,23 @@ commits all reviewed records/commands atomically and never rewrites a frozen
 request. `providerReview.test.ts`, `providerReview.api.test.ts` and
 `accountProviders.browser.test.ts` cover this boundary; fixture commands and
 verification limits are in `docs/local-workspaces.md`.
+
+
+## Conditional device theme synchronization
+
+- [ ] Use a disposable full account through `/api/v1/themes/sync`. Confirm exact
+  retries return the same receipt, changed payloads cannot reuse a write ID,
+  stale versions refuse changes, and old create receipts cannot resurrect a
+  deleted theme. Generic title edits must also invalidate a device preimage.
+- [ ] Verify anonymous, temporary, service, internal Action, wrong-origin,
+  changed-account and changed-plane requests cannot read or write the catalogue.
+  A confirmed custom content-plane selection still stores themes at home.
+- [ ] With one saved-theme slot left, race two ordinary create requests: exactly
+  one succeeds. Delete a selected theme and confirm its active pointer is cleared
+  before acknowledging completion. Clean all fixture entries through normal APIs.
+  Run `test:theme-sync` and opt in to the two guarded loopback API fixtures.
+- [ ] In native account Settings, switch accounts while a provider proof response
+  or selected-value encryption is held. Deliver the old completion after switching:
+  no old value may display or persist; returning to the original account still
+  requires fresh proof. `providerIdentity.browser.test.ts` covers these three
+  cross-tab races; origin/plane transitions remain separate acceptance work.

@@ -270,6 +270,7 @@ export const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/subspaces/transfer': () => import('../../../app/routes/api/v1/subspaces/transfer/_transfer'),
   'v1/subspaces/update': () => import('../../../app/routes/api/v1/subspaces/update/_update'),
   'v1/themes': () => import('../../../app/routes/api/v1/themes/_themes'),
+  'v1/themes/sync': () => import('../../../app/routes/api/v1/themes/sync/_sync'),
   'v1/themes/active': () => import('../../../app/routes/api/v1/themes/active/_active'),
   'v1/themes/delete': () => import('../../../app/routes/api/v1/themes/delete/_delete'),
   'v1/themes/shared': () => import('../../../app/routes/api/v1/themes/shared/_shared'),

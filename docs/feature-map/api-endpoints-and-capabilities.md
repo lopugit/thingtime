@@ -74,7 +74,7 @@ requests preserve their header and selection through the same fallback as root
 data; the upstream enforces the precondition. `app/api/utils/mongodb/dataPlane.ts` owns the identity and guard;
 `app/utils/dataPlane.ts` owns the shared public validation/header/link helpers.
 
-Saved theme history uses `api.themes` / `api.themes-delete` 1.1.0 and
+Saved theme history uses `api.themes` / `api.themes-delete` 1.1.1 and
 `api.timeline` 1.5.0. The dedicated home writer records approved token versions
 and retained deletion in its content transaction; no new endpoint or collection
 is introduced. See [the Timeline contract](../unified-timeline.md).
@@ -425,3 +425,16 @@ The native release script negotiates the origin manifest before requesting a
 single-use GitHub OIDC credential delivery or explicitly enabled create-only
 migration. No origin fallback is allowed. Run `test:ios-release`, capability and
 API fallback tests; see [the release runbook](../ios-automatic-testflight.md).
+
+
+`api.themes-sync` 1.0.0 is the private full-session prerequisite for conditional
+account theme synchronization. `api/utils/themes/themeSync.ts` extends the
+canonical writer with in-transaction hooks and protected Timeline receipts;
+`things/storedSnapshot.ts` supplies the shared complete BSON comparison used by
+both themes and Vault. The route, import map, rate rule and docs registration are
+kept together. `test:theme-sync`, the opt-in `themeSync.api.test.ts` and
+`themeQuota.api.test.ts` cover admission, immutable retries, cross-writer conflicts,
+transactional quota and active-pointer cleanup. Client account theme sync remains
+pending in the [local workspace matrix](../local-workspaces.md).
+
+`api.themes` and `api.themes-delete` 1.1.1 preserve the request shape while fixing concurrent quota admission and transactional active-pointer cleanup.
