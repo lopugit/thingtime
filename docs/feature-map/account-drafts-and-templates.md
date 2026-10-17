@@ -189,3 +189,18 @@ account connectivity only for fetching the account-only source. Anonymous/device
 editing and already copied text remain local. Run `accountDraftClient.test.ts`,
 `plainCommentDraft.test.ts`, the enabled remote-plain and account-switch browser
 fixtures, and the existing device/anonymous regressions. [Setup and evidence](../local-workspaces.md#account-only-older-plain-drafts--2026-10-17).
+
+
+## Rich composer context isolation
+
+PostComposer now uses `useWorkspaceDraft` for post/edit/rich-comment sessions and
+keys its UI by the current workspace generation. `workspaceDraftContextSync`
+computes the existing SHA-256 context on first render; the async helper retains
+its original contract. Working drafts must match the exact destination context.
+The shared picker can explicitly include reusable post templates; LocalDrafts
+instantiates an independent copy with the destination context, atomically remaps
+media, fences retry/concurrent context changes and refuses pending submissions.
+Old unscoped working drafts remain preserved for the unfinished explicit legacy
+recovery flow. Run richWorkspace.browser, accountDraftSync.browser and
+remotePlainComment.browser plus the workspace/draft/feed suites.
+[Setup, scope and evidence](../local-workspaces.md#rich-composer-workspace-scope--2026-10-17).

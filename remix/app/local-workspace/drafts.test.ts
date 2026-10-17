@@ -96,3 +96,29 @@ test('draft expiry reaps only released selections and never bound working files'
   await assert.rejects(things.readFile(file.id), /not stored/);
  } finally { await db.close(); }
 });
+
+
+test('template selection copies into the destination context without replaying pending submissions', async () => {
+ const db = new WorkspaceDatabase(new IDBFactory()), scope = { kind: 'anonymous' as const }, lease = { assertCurrent() {}, onInvalidate: () => () => {} };
+ const drafts = new LocalDrafts(db, scope, lease), things = new LocalThings(db, scope, lease);
+ try {
+  const file = await things.saveFile({ requestId: 'template-context-file', name: 'note.txt', contentType: 'text/plain', bytes: new Uint8Array([1, 2]), purpose: 'post' });
+  const source = await drafts.createTemplate('template', { ...content, surface: 'post', context: 'post:new:', attachmentIds: [file.id], snapshot: JSON.stringify({ attachments: [{ id: file.id }], postEditorValue: { kind: 'rich-text', blocks: [{ type: 'paragraph', data: { text: '<b>Rich template</b>' } }] } }) });
+  const request = { operation: 'instantiate', sourceId: 'template', id: 'working', context: 'post:new:workspace:current' };
+  const copied = await drafts.request(request);
+  assert.equal(copied.draft.context, request.context);
+  assert.equal(JSON.parse(copied.draft.snapshot).postEditorValue.blocks[0].data.text, '<b>Rich template</b>');
+  assert.notEqual(copied.draft.attachmentIds[0], source.attachmentIds[0]);
+  assert.deepEqual((await things.readFile(copied.draft.attachmentIds[0])).bytes, new Uint8Array([1, 2]));
+  assert.deepEqual(await drafts.request(request), copied);
+  await assert.rejects(drafts.request({ ...request, context: 'other' }), /another editor context/);
+  assert.deepEqual((await drafts.request(undefined, { id: 'template' })).draft, source);
+  const race = await Promise.allSettled(['first', 'second'].map(context => drafts.request({ ...request, id: 'racing-copy', context })));
+  assert.equal(race.filter(result => result.status === 'fulfilled').length, 1);
+  assert.equal(race.filter(result => result.status === 'rejected').length, 1);
+  await assert.rejects(drafts.request({ ...request, id: 'invalid', context: 'x'.repeat(301) }), /Invalid draft/);
+  await drafts.createTemplate('pending', { ...content, snapshot: JSON.stringify({ pendingSubmission: { shareId: 'old-operation', payload: { text: 'Not a template' } } }) });
+  await assert.rejects(drafts.request({ ...request, id: 'never-created', sourceId: 'pending' }), /unfinished submission/);
+  await assert.rejects(drafts.request(undefined, { id: 'never-created' }), /not found/);
+ } finally { await db.close(); }
+});

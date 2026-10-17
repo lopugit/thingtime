@@ -48,6 +48,7 @@ function DraftPickerSession({
 	surface,
 	targetId,
 	context,
+	includeTemplates = false,
 	label,
 	disabled,
 	beforeOpen,
@@ -58,6 +59,7 @@ function DraftPickerSession({
 	surface?: DraftSurface;
 	targetId?: string;
 	context?: string;
+	includeTemplates?: boolean;
 	label?: string;
 	disabled?: boolean;
 	beforeOpen?: () => Promise<void>;
@@ -92,7 +94,7 @@ function DraftPickerSession({
 		setError('');
 		const sequence=++refreshSequence.current;
 		try {
-			const response = await request<{drafts:DraftSummary[];nextCursor:string|null;partial?:boolean}>(actor, undefined, { ...(surface ? { surface } : {}), ...(context ? { context } : {}), ...(next ? { cursor: next } : {}) });
+			const response = await request<{drafts:DraftSummary[];nextCursor:string|null;partial?:boolean}>(actor, undefined, { ...(surface ? { surface } : {}), ...(context && !includeTemplates ? { context } : {}), ...(next ? { cursor: next } : {}) });
 			if (!mounted.current || sequence!==refreshSequence.current) return;
 			setPartial(!!response.partial);
 			setRows((previous) => {
@@ -117,7 +119,7 @@ function DraftPickerSession({
 			if (!copies.current.has(row.id)) copies.current.set(row.id, crypto.randomUUID());
 			const response =
 				row.mode === 'template'
-					? await request(actor, { operation: 'instantiate', sourceId: row.id, id: copies.current.get(row.id) })
+					? await request(actor, { operation: 'instantiate', sourceId: row.id, id: copies.current.get(row.id), ...(context ? { context } : {}) })
 					: await request(actor, undefined, { id: row.id });
 			await onLoad(response.draft);
 			copies.current.delete(row.id);
@@ -149,7 +151,7 @@ function DraftPickerSession({
 	const visibleRows = rows.filter(
 		(row) =>
 			!row.context.startsWith('post:edit:') &&
-			(!context || row.context === context) &&
+			(!context || row.context === context || (includeTemplates && row.mode === 'template')) &&
 			(!targetId || row.context.endsWith(`:${targetId}`)) &&
 			!localStorage.getItem(`tt-account-draft:${location.origin}:${actor}:${row.context}:retired:${row.id}`) &&
 			!localStorage.getItem(`tt-account-draft:${location.origin}:${actor}:${row.context}:workspace-store:${binding?workspaceScopeKey(binding.scope):'unconfirmed'}:retired:${row.id}`) &&

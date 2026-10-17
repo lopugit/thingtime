@@ -2864,6 +2864,20 @@ email whose link points at the attacker.
 
 ## Account drafts and reusable post templates
 
+- Rich workspace isolation regression (2026-10-17): seed a matching scoped rich
+  draft, another database's draft and an older unscoped pending submission. Only
+  the matching draft resumes; the latter two never enter the working picker or
+  execute. Explicit template selection makes a new scoped copy, preserving source
+  and independent file bytes. Concurrent retries cannot reuse its ID for another
+  context; templates with pending submissions fail without creating a copy.
+  Cold-reload rich account/anonymous drafts offline; verify first-render recovery
+  and subsequent typing even when WebCrypto digest stalls, and confirm anonymous
+  posting emits no account draft requests or remote mutations. A fresh browser for
+  the same account preserves its matching immutable pending operation without
+  replay. Run `richWorkspace.browser.test.ts`, accountDraftSync and remotePlainComment
+  with their loopback opt-ins; inspect 1440/390/320px screenshots and overflow bounds.
+  Older rich/media migration and actual native data-plane transitions remain open.
+
 - [ ] Save and reopen native account drafts after a cold offline reload. Inspect
       the picker at 1440, 390 and 320px. Reconnect with only the draft endpoint
       failing or held unresolved: posting must commit locally and sync privately

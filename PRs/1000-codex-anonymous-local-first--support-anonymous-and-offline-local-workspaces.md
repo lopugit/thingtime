@@ -2303,3 +2303,48 @@ TypeScript retains 91 baseline diagnostics, none in changed files. This closes
 remote-only recovery for old raw-context plain drafts. Rich/media reconciliation,
 origin/data-plane transitions, the remaining local-first matrix, current-head CI
 and deployed acceptance remain open. No merge or manual deployment is included.
+
+
+## Rich composer workspace scope — 2026-10-17
+
+Rich post/edit/comment drafts now use the same account/origin/data-plane context
+as other workspace editors. Automatic resume and working-draft selection require
+that exact context; changing workspace generation remounts the composer. Older
+unscoped working drafts and pending submissions remain untouched and are not
+assigned to a new database. Explicit legacy rich/media review remains a merge gate.
+
+Template selection still works across editor contexts: the existing local
+instantiate transaction copies validated content and independent bytes into the
+chosen context, preserves the original, and keeps a stable copy ID for retries.
+Concurrent reuse of that ID for another context fails. A template containing an
+unfinished submission cannot be rebound and replayed as a new draft. Account sync
+uses the ordinary canonical save queue; no endpoint or account permission changes.
+
+The shared context helper now calculates the identical SHA-256 identity on first
+render using pinned `@noble/hashes` (only the SHA-256 submodule). This removes the
+asynchronous preparation window before recovery and typing. The asynchronous
+helper remains compatible; tests compare both forms with Node's SHA-256. Install
+with the normal locked pnpm workflow; there is no private configuration.
+
+Run `test:drafts`, `test:local-workspace`, `test:feed`, and enable
+`app/drafts/richWorkspace.browser.test.ts` with `TT_LOCAL_RICH_DRAFT_URL` pointing
+to the loopback production-client server and `TT_LOCAL_RICH_DRAFT_ARTIFACTS` pointing
+to an ignored output directory. Use the shared Playwright/Chrome environment setup
+above. The fixture uses disposable API-created account drafts and clean browser
+stores; it checks formatted scoped resume, foreign/legacy working-draft exclusion,
+canonical template-copy context and source preservation, exact pending-operation
+recovery without replay, cold offline reload, editing when WebCrypto digest stalls,
+and anonymous offline draft/post completion without account draft requests.
+Screenshots/bounds cover 1440/390/320px. Also run accountDraftSync and remotePlainComment
+browser fixtures to verify independent posting and the shared recovery hook.
+
+Current local evidence: `tmp/rich-scope-native-verified/verification.json`,
+`tmp/rich-scope-native-verified/anonymous-verification.json`,
+`tmp/rich-scope-account-regression/verification.json`, and
+`tmp/rich-scope-plain-regression/verification.json`. Unit checks: 433 workspace/draft
+and 79 feed checks pass; 47 default opt-in skips are not acceptance. The build
+verifies 247 offline assets (21,716,177 bytes). Raw TypeScript has 91 baseline
+diagnostics and no changed-file diagnostics; focused lint has one existing
+`no-useless-constructor` warning in LocalDrafts. These are local results. Native
+origin/data-plane transitions, rich/media legacy reconciliation and the complete
+local-first acceptance matrix remain open; no main merge or manual deployment.

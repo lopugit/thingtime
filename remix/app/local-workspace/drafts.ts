@@ -127,6 +127,7 @@ export class LocalDrafts {
   // Exact retry success does not depend on bytes subsequently donated to a post.
   if (validDraftId(input.id)) {
    const existing = await this.transaction('readonly', tx => tx.get<StoredDraft>('drafts', input!.id as string));
+   if (existing && input.operation === 'instantiate' && input.context !== undefined && existing.draft.context !== input.context) return fail(409, 'This template copy belongs to another editor context.');
    if (existing && !existing.deleted && ((input.operation === 'save' && existing.draft.mode === 'draft' && existing.writeId === input.writeId) ||
     ((input.operation === 'instantiate' || input.operation === 'recover') && existing.source?.id === input.sourceId && existing.source.kind === (input.operation === 'instantiate' ? 'template' : 'draft')))) return { ok: true, draft: existing.draft };
   }
@@ -153,13 +154,17 @@ export class LocalDrafts {
     if (existing) {
      if (existing.deleted) return fail(410, 'This draft was already discarded or published');
      if (existing.source?.kind !== kind || existing.source.id !== input!.sourceId) return fail(409, 'Draft id is already in use');
+     if (input!.operation === 'instantiate' && input!.context !== undefined && existing.draft.context !== input!.context) return fail(409, 'This template copy belongs to another editor context.');
      return { ok: true, draft: existing.draft };
     }
     const source = await tx.get<StoredDraft>('drafts', input!.sourceId);
     if (input!.sourceRevision !== undefined && source?.draft.revision !== input!.sourceRevision) return fail(409, 'The source draft changed. Review it again.');
     if (!source || (kind === 'template' && (source.deleted || source.draft.mode !== 'template'))) return fail(404, 'Draft source not found');
     if (kind === 'template' && JSON.stringify(content) !== JSON.stringify(source.draft)) return fail(409, 'Template changed. Retry with its current contents.');
-    const copied = await this.copy(tx, content!, prepared);
+    const destination = input!.operation === 'instantiate' && input!.context !== undefined
+     ? validateDraftContent({ ...content, context: input!.context }) : content!;
+    if (input!.operation === 'instantiate' && input!.context !== undefined && JSON.parse(destination.snapshot).pendingSubmission) return fail(409, 'This template contains an unfinished submission. Recover it in its original workspace.');
+    const copied = await this.copy(tx, destination, prepared);
     return { ok: true, draft: await this.save(tx, { id: input!.id, writeId: input!.id, revision: 0, content: copied.content }, copied.files, 'draft', { kind, id: input!.sourceId }) };
    }
    return fail(400, 'Unknown local draft operation');

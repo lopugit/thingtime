@@ -1,4 +1,5 @@
-import { useAccountDraft } from '~/drafts/useAccountDraft';
+import { useWorkspaceDraft } from '~/drafts/useWorkspaceDraft';
+import { subscribeWorkspaceStorage, workspaceStorageIdentity } from '~/local-workspace/storageStatus.client';
 import { DraftPicker, DraftSaveStatus } from '~/drafts/DraftPicker';
 import { PostThingPicker } from './PostThingPicker';
 import { composePostThing, postThingDraft, postThingReferences, type PostThingReference } from './postThingReferences';
@@ -163,7 +164,8 @@ const Eyebrow = ({ children }: { children: React.ReactNode }) => (
 
 export const PostComposer = (props: PostComposerProps) => {
   const user = useWorkspaceUser();
-  return <AccountPostComposer key={`${user?.id || 'guest'}:${props.editPost?.id || props.parentId || 'new'}:${props.subspace?.id || ''}`} {...props} />;
+  const identity = React.useSyncExternalStore(subscribeWorkspaceStorage, workspaceStorageIdentity, () => '');
+  return <AccountPostComposer key={`${identity}:${user?.id || 'guest'}:${props.editPost?.id || props.parentId || 'new'}:${props.subspace?.id || ''}`} {...props} />;
 };
 const AccountPostComposer = (props: PostComposerProps) => {
   const { onPosted, parentId, onClose, editPost, subspace } = props;
@@ -529,7 +531,7 @@ const AccountPostComposer = (props: PostComposerProps) => {
     editAttachments, legacyImages, pendingSubmission: pendingPostSubmissionRef.current
   });
   const draftContext = isEdit ? `post:edit:${editPost!.id}` : isComment ? `comment:rich:${parentId}` : `post:new:${subspace?.id || ''}`;
-  const accountDraft = useAccountDraft({ actor: user?.id, context: draftContext, surface: isComment ? 'comment' : 'post',
+  const accountDraft = useWorkspaceDraft({ context: draftContext, surface: isComment ? 'comment' : 'post',
     onRestore: (saved) => {
       const value = JSON.parse(saved.snapshot);
       pendingPostSubmissionRef.current = value.pendingSubmission || null;
@@ -556,15 +558,17 @@ const AccountPostComposer = (props: PostComposerProps) => {
     }
   });
   const draftContent = {
-    surface: (isComment ? 'comment' : 'post') as 'comment' | 'post', context: draftContext,
+    surface: (isComment ? 'comment' : 'post') as 'comment' | 'post', context: accountDraft.context,
     name: (postTitle || title || text || (thingOn ? 'Thing draft' : 'Post draft')).slice(0, 160), snapshot: draftSnapshot,
     attachmentIds: [...draftAttachments.map(file => file.id), ...attachmentSnapshot.attachmentIds].filter(id => !isLegacyLinkedSeedId(id))
   };
   React.useEffect(() => {
-    if (!posting && !submissionUncertain) accountDraft.capture(draftContent, !!(text || title || postTitle || thingOn || photosOn || marketOn || pollOn || tagsInput));
+    if (accountDraft.context && !posting && !submissionUncertain) {
+      accountDraft.capture(draftContent, !!(text || title || postTitle || thingOn || photosOn || marketOn || pollOn || tagsInput));
+    }
     // Snapshot is the complete editing state; method identities are stable.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [draftSnapshot, posting, submissionUncertain]);
+  }, [draftSnapshot, posting, submissionUncertain, accountDraft.context, accountDraft.capture]);
 
   const preserveComposerDraft = async () => {
     const value = await capturePostEditorValue(postTextEditorRef.current, postEditorValue);
@@ -964,9 +968,12 @@ const AccountPostComposer = (props: PostComposerProps) => {
 				</Flex>
 			)}
 			<Box display="contents" inert={posting || submissionUncertain ? true : undefined}>
-      {user && <Flex gap={2} align="center" flexWrap="wrap"><DraftSaveStatus status={accountDraft.status} error={accountDraft.error} retry={accountDraft.retry} />{!isEdit && <DraftPicker actor={user.id} surface={isComment ? 'comment' : 'post'} targetId={isComment ? parentId : undefined} disabled={posting || submissionUncertain} beforeOpen={preserveComposerDraft}
+      {user && <Flex gap={2} align="center" flexWrap="wrap"><DraftSaveStatus status={accountDraft.status} error={accountDraft.error} retry={accountDraft.retry} />{!isEdit && <DraftPicker actor={user.id} surface={isComment ? 'comment' : 'post'} context={accountDraft.context} includeTemplates={!isComment} disabled={!accountDraft.context || posting || submissionUncertain} beforeOpen={preserveComposerDraft}
       onDeleted={async id => { if (accountDraft.current()?.id === id) { await accountDraft.forget(id); reset(); } }}
-      onLoad={accountDraft.load} />}</Flex>}
+      onLoad={async saved => {
+        if (saved.context !== accountDraft.context || saved.surface !== (isComment ? 'comment' : 'post')) throw new Error('This draft belongs to another editor workspace. Its original has been kept.');
+        await accountDraft.load(saved);
+      }} />}</Flex>}
       {/* type badges — additive toggles that wrap on narrow screens. Text is
       the always-on base; Photos/Marketplace/Things each switch their field
       group on without deselecting the others, and clicking Text switches
