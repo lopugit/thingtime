@@ -63,3 +63,36 @@ export function parseNativeRecoveryPage(value: any, owner: { ownerId: string; or
 	}
 	return { items: structuredClone(value.items), nextCursor: value.nextCursor ?? null };
 }
+
+export type NativeVersion = { versionId: string; entry: SyncEntry; capturedAt: number | null };
+export type NativeVersionPage = { items: NativeVersion[]; nextCursor: string | null };
+export type NativeVersionRestore = NativeRestore & { versionId: string; operationId: string };
+export function parseNativeVersionPage(value: any): NativeVersionPage {
+	if (!value || !Array.isArray(value.items) || value.items.length > 20 || (value.nextCursor != null && !uuid(value.nextCursor)))
+		throw Error('Invalid native version page.');
+	const ids = new Set<string>();
+	const items = value.items.map((item: any) => {
+		if (
+			!uuid(item?.versionId) ||
+			ids.has(item.versionId) ||
+			!validSyncEntry(item.entry) ||
+			item.entry.kind !== 'file' ||
+			(item.capturedAt !== null && (!Number.isSafeInteger(item.capturedAt) || item.capturedAt < 0 || item.capturedAt > 8_640_000_000_000_000))
+		)
+			throw Error('Invalid retained native version.');
+		ids.add(item.versionId);
+		return { versionId: item.versionId, entry: structuredClone(item.entry), capturedAt: item.capturedAt };
+	});
+	return { items, nextCursor: value.nextCursor ?? null };
+}
+
+export function readNativeVersionRestore(raw: string | null): NativeVersionRestore | null {
+	if (raw === null) return null;
+	if (raw.length > 65536) throw Error('Saved version restore is invalid.');
+	const value = JSON.parse(raw);
+	const versionId = value?.versionId,
+		operationId = value?.operationId;
+	if (!uuid(value?.versionId) || !uuid(value?.operationId) || value.expected?.kind !== 'file' || !validNativeRestore(value, value.expected.path))
+		throw Error('Saved version restore is invalid.');
+	return { versionId, operationId, path: value.path, expected: structuredClone(value.expected) };
+}

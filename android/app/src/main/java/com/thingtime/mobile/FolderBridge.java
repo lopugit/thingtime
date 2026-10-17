@@ -42,7 +42,7 @@ final class FolderBridge {
         FolderStore.Grant approvalGrant,restoreGrant; JSONObject reviewedRestore; boolean restoreConsent; WriteApproval approval; boolean chooseExisting,offlineConsent; String offlineName;
         final String id,action;final DeviceScope scope;final JSONObject payload,base;final JavaScriptReplyProxy reply;final long generation;final long deadline;
         Request(JSONObject payload,DeviceScope scope,JavaScriptReplyProxy reply,long generation) throws Exception {
-            this.payload=payload;this.scope=scope;this.reply=reply;this.generation=generation;id=payload.getString("requestId");action=payload.getString("action");deadline=android.os.SystemClock.elapsedRealtime()+((action.equals("choose") || action.startsWith("trash") || action.equals("write-approve") || action.equals("scan") || action.equals("read-range") || action.equals("stage-begin") || action.equals("stage-range") || action.equals("stage-finish") || action.equals("publish") || action.equals("publication-lookup"))?300000:30000);
+            this.payload=payload;this.scope=scope;this.reply=reply;this.generation=generation;id=payload.getString("requestId");action=payload.getString("action");deadline=android.os.SystemClock.elapsedRealtime()+((action.equals("choose") || action.startsWith("trash") || action.startsWith("version-") || action.equals("write-approve") || action.equals("scan") || action.equals("read-range") || action.equals("stage-begin") || action.equals("stage-range") || action.equals("stage-finish") || action.equals("publish") || action.equals("publication-lookup"))?300000:30000);
             base=new JSONObject().put("requestId",id).put("ownerId",scope.owner).put("origin",scope.origin);
         }
     }
@@ -77,7 +77,7 @@ final class FolderBridge {
         if(!UUID.fromString(id).toString().equalsIgnoreCase(id)) return;
         DeviceScope scope=new DeviceScope(payload.getString("ownerId"),origin,BuildConfig.DEBUG);
         if(action.equals("suspend")) { if(pending!=null && pending.id.equals(id)) suspend();return; }
-        if(!java.util.Arrays.asList("list","choose","remove","scan","read","read-range","conditions","stage-begin","stage-append","stage-range","stage-finish","write-approve","publication-lookup","publish","trash","trash-lookup","trash-expected","trash-inspect","trash-list","trash-restore","trash-restore-reviewed").contains(action)) return;
+        if(!java.util.Arrays.asList("list","choose","remove","scan","read","read-range","conditions","stage-begin","stage-append","stage-range","stage-finish","write-approve","publication-lookup","publish","trash","trash-lookup","trash-expected","trash-inspect","trash-list","trash-restore","trash-restore-reviewed","version-list","version-inspect","version-restore-reviewed","version-restore-status").contains(action)) return;
         if((action.equals("stage-range") || action.equals("read-range")) && !WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_ARRAY_BUFFER))return;
         if(pending!=null) { reply(new Request(payload,scope,reply,generation.get()),new JSONObject(),"Another folder request is running.");return; }
         Request request=new Request(payload,scope,reply,generation.incrementAndGet());pending=request;execute(request,null,false);
@@ -168,6 +168,31 @@ final class FolderBridge {
                             approve(request,check);return;
                         }
                         result.put("rootId",rootId).put("writeApproval",approval.json());
+                    }
+                    else if(request.action.startsWith("version-")) {
+                        FolderStore.Grant grant=store.snapshot(request.scope,rootId);result.put("rootId",rootId);
+                        if(request.action.equals("version-list")) {
+                            if(request.payload.has("cursor") && !(request.payload.get("cursor") instanceof String))throw new FolderReader.Failure("Invalid version cursor.");
+                            result.put("versionPage",offline.versionList(request.scope,grant,request.payload.has("cursor")?request.payload.getString("cursor"):null));
+                        } else if(request.action.equals("version-inspect")) {
+                            result.put("retainedEntry",offline.versionInspect(request.scope,grant,SyncStaging.uuid(request.payload,"versionId")));
+                        } else {
+                            JSONObject restore=request.payload.getJSONObject("restore"),restored=offline.restoreVersion(request.scope,grant,restore,false);
+                            if(request.action.equals("version-restore-status")) {
+                                result.put("versionRestore",restored==null?new JSONObject().put("status","missing"):new JSONObject().put("status","complete").put("entry",restored));
+                            } else {
+                            if(restored==null) {
+                                if(!request.restoreConsent) {
+                                    offline.reviewVersionRestore(request.scope,grant,restore);
+                                    request.restoreGrant=grant;request.reviewedRestore=new JSONObject(restore.toString());approveRestore(request,check);return;
+                                }
+                                if(request.restoreGrant==null || request.reviewedRestore==null || !SyncTrash.same(request.reviewedRestore,restore))throw new FolderReader.Failure("Restore review changed.");
+                                restored=offline.restoreVersion(request.scope,request.restoreGrant,restore,true);
+                            }
+                            result.put("restoredEntry",restored).put("operationId",restore.getString("operationId"));
+                            OfflineDocumentsProvider.changed(activity,android.provider.DocumentsContract.getTreeDocumentId(grant.uri));
+                            }
+                        }
                     }
                     else if(request.action.equals("trash") || request.action.startsWith("trash-")) {
                         FolderStore.Grant grant=store.snapshot(request.scope,rootId);result.put("rootId",rootId);

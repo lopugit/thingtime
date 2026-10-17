@@ -2075,3 +2075,37 @@ JVM tests and lint, then passed all 61 instrumentation tests in 331.348 seconds
 with this live recovery scenario enabled. Its readiness prompts appeared while
 waiting, and the restored file was inspected in Android Files. A focused shell
 check confirms both JUnit and adb failures still produce unsuccessful exits.
+
+
+### Android retained replacement versions — 2026-10-18
+
+Android advertises `fileVersionsVersion` 1.0.0. The existing offline-folder
+catalog now exposes publication-retained versions through bounded 20-item pages,
+verified review, separate native restore consent and exact operation receipts.
+Schema 4 preserves existing blobs/IDs and derives the original grant from the
+publication receipt; unknown historical capture times remain unknown. Restoring
+creates an independent file at an unused path, preserving the current file and
+retained version. Account/origin/root/grant checks apply before reads and commit.
+
+The shared Recover device files screen can show replaced versions. Its scoped
+pending request and Web Lock preserve the same operation and destination through
+cancellation/reload; changing an uncertain destination first queries the native
+receipt. No response or invalid receipt can claim successful restoration.
+
+The installed API 35 emulator run passed all 67 instrumentation tests in 174.246
+seconds, plus build, JVM tests and lint. It exercised real replacement, review,
+cancel, reload, native restore confirmation, independent full restored-byte hash,
+current-file preservation, exact replay and Android Files inspection of both
+8.39 MB copies. Six native cases cover migration, pagination, corruption,
+permission revocation, rollback/lost reply and destination/identity conflicts.
+The shared suite passed 148 tests; targeted lint passed. Raw TypeScript retains
+91 diagnostics outside changed files. Live synthetic layout checks passed at
+390px and 1280px without horizontal overflow. An initial run lost a folder reply
+during source editing; a second exposed a test click before refreshed controls
+were enabled. The final harness waits for enabled controls after reload.
+
+This is local recovery from existing immutable blobs. It does not capture a new
+canonical Timeline event for native restore or create an independent backup.
+Apple retained-version browsing, recovery after replacing a grant, native history
+in device-loss snapshots, background workers and whole-account large-volume
+backup/export remain open. Existing cloud history still uses canonical Timeline.

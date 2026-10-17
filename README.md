@@ -5342,3 +5342,31 @@ software graphics, stop that test emulator and cold-start the same AVD with
 and app data, then restore the local port forwarding. This removed the observed stale
 paint layers on the local API 35 test AVD, but intermittent WebView timeouts
 remained. It is not physical-device coverage or a reason to disable checks.
+
+
+### Android retained-version recovery development
+
+Catalog schema 4 adds grant-scoped browsing and copy restoration of versions
+already preserved by offline-folder replacement. No new secrets, services or
+permissions are required. It keeps current and retained files; an exact restore
+retry reuses its receipt. Old capture dates are shown as unknown rather than
+invented. These local bytes remain excluded from OS backup.
+
+Use the existing JDK 17/SDK and mode-0600 loopback account fixture setup:
+
+```sh
+ANDROID_SERIAL=emulator-5554 THINGTIME_OFFLINE_FILES_TEST=1 \
+  THINGTIME_NATIVE_VERSIONS_TEST=1 \
+  android/scripts/test-mobile-devices.sh /path/to/private-local-fixture.json
+```
+
+Wait for the streamed folder prompt and create/select only the named synthetic
+empty folder. The test handles version review/cancel/reload/restore consent,
+then asks you to inspect `nested/original.bin` and `nested/earlier-copy.bin` in
+Android Files. Return to Thingtime and acknowledge with the same
+`files/offline-files-confirmed` command above. Screenshots are saved as
+`files/native-version-*.png` in the debug app. Keep source files unchanged during
+installed acceptance so hot reload cannot replace a pending bridge listener.
+The shared synthetic layout fixture also exercises replaced-version controls.
+Removing a grant, uninstalling the app and device loss are not recovery paths;
+independent snapshots and large-volume export remain separate acceptance work.

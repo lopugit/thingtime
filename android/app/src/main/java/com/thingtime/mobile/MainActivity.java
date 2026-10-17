@@ -42,7 +42,7 @@ public final class MainActivity extends Activity {
           };
           window.thingtimeDeviceTransport.onmessage = event => { try { receive(event.data instanceof ArrayBuffer ? {type:"mobile-files-read-frame",payload:{frame:event.data}} : JSON.parse(event.data)); } catch {} };
           window.thingtimeNativeBridge = {
-            version:'1.4.0', platform:'android', isNativeWebView:true, devicePairingVersion:'1.0.0', fileAccessVersion:'__ACCESS_VERSION__', fileStagingVersion:'__STAGING_VERSION__', filePublicationVersion:'1.1.0', fileTrashVersion:'1.2.0', fileExportVersion:'1.0.0',
+            version:'1.4.0', platform:'android', isNativeWebView:true, devicePairingVersion:'1.0.0', fileAccessVersion:'__ACCESS_VERSION__', fileStagingVersion:'__STAGING_VERSION__', filePublicationVersion:'1.1.0', fileTrashVersion:'1.2.0', fileVersionsVersion:'1.0.0', fileExportVersion:'1.0.0',
             postMessage:message => window.thingtimeDeviceTransport.postMessage(JSON.stringify(message)),
             __BINARY_METHOD__
             onMessage:listener => { listeners.add(listener); return () => listeners.delete(listener); },

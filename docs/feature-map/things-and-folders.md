@@ -407,3 +407,14 @@ files. `MobileSyncConnections` shows muted saved confirmation only after the
 foreground retention run completes and links to Timeline's Files view. Capture
 keeps the conflict unresolved and the sync baseline unchanged. See
 `docs/mobile-file-sync.md` for installed acceptance and whole-backup boundaries.
+
+
+Android offline retained versions use `ManagedFileStore.versionList`,
+`versionInspect` and `restoreVersion`, gated by `ManagedFolderAccess` and the
+origin/account-authenticated `FolderBridge`. Schema 4 keeps the existing
+immutable blobs and atomic receipts. `fileVersionsVersion` 1.0.0 enables the
+version mode in `NativeFileRecovery`; `nativeRecovery.ts` validates saved intents
+and `mobileFolders.client.ts` verifies native replies. `ManagedVersionTest`,
+`NativeVersionAcceptance` and `native-recovery.browser.tsx` cover storage,
+installed cancel/reload/copy restore and responsive controls. This is local
+recovery; cloud versions continue through the canonical Timeline path above.

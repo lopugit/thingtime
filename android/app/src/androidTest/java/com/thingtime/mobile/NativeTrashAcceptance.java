@@ -60,7 +60,7 @@ final class NativeTrashAcceptance {
         DeviceLiveTest.awaitTrue(web,"Array.from(document.querySelectorAll('button')).some(b=>b.textContent.trim()==="+JSONObject.quote(label)+"&&!b.disabled)");
         DeviceLiveTest.evaluate(web,"Array.from(document.querySelectorAll('button')).find(b=>b.textContent.trim()==="+JSONObject.quote(label)+"&&!b.disabled).click()");
     }
-    private static void screenshot(Context context,String name) throws Exception {
+    static void screenshot(Context context,String name) throws Exception {
         try(FileOutputStream output=new FileOutputStream(new File(context.getFilesDir(),name))){assertTrue(InstrumentationRegistry.getInstrumentation().getUiAutomation().takeScreenshot().compress(android.graphics.Bitmap.CompressFormat.PNG,100,output));}
     }
     private static AccessibilityNodeInfo find(AccessibilityNodeInfo node,String text) {

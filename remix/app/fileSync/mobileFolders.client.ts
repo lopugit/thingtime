@@ -1,4 +1,12 @@
-import { parseNativeRecoveryPage, validNativeRestore, type NativeRestore, type NativeRecoveryPage } from './nativeRecovery';
+import {
+	parseNativeRecoveryPage,
+	validNativeRestore,
+	type NativeRestore,
+	type NativeRecoveryPage,
+	parseNativeVersionPage,
+	type NativeVersionPage,
+	type NativeVersionRestore
+} from './nativeRecovery';
 import { validateTrashExpected, type LocalTrashContext } from './localTrash';
 import type { CloudFile } from './cloudFile';
 import { mobileRangeFrame, receiveMobileReadFrame } from './mobileRangeFrames';
@@ -17,6 +25,9 @@ export type MobileWriteApproval = { scope: SyncScope; configurationRevision: str
 export type FolderRequest =
 	| { action: 'list' | 'choose' | 'conditions' }
 	| { action: 'remove' | 'scan'; rootId: string }
+	| { action: 'version-list'; rootId: string; cursor?: string }
+	| { action: 'version-inspect'; rootId: string; versionId: string; expected: SyncEntry }
+	| { action: 'version-restore-reviewed' | 'version-restore-status'; rootId: string; restore: NativeVersionRestore }
 	| { action: 'trash-list'; rootId: string; cursor?: string }
 	| { action: 'trash-restore-reviewed'; rootId: string; trash: MobileTrashRequest; restore: NativeRestore }
 	| { action: 'read' | 'read-range'; rootId: string; path: string; version: string; offset: number; length: number; verifiedChunks?: true }
@@ -44,6 +55,8 @@ export type FolderResult = {
 	restoredEntry?: SyncEntry;
 	expectedEntry?: SyncEntry;
 	trashPage?: NativeRecoveryPage;
+	versionPage?: NativeVersionPage;
+	versionRestore?: { status: 'missing' } | { status: 'complete'; entry: SyncEntry };
 	restoreIntent?: { request: NativeRestore; receipt?: SyncEntry | null } | null;
 	staging?: { received: number; stage?: LocalStagedCopy };
 	roots: MobileFolder[];
@@ -54,7 +67,7 @@ export type FolderResult = {
 };
 export type FolderCapabilities = Pick<
 	ThingtimeNativeBridge,
-	'platform' | 'fileAccessVersion' | 'fileStagingVersion' | 'filePublicationVersion' | 'fileTrashVersion'
+	'platform' | 'fileAccessVersion' | 'fileStagingVersion' | 'filePublicationVersion' | 'fileTrashVersion' | 'fileVersionsVersion'
 >;
 export const supportsFolderAccess = (bridge: FolderCapabilities | undefined) =>
 	Boolean(bridge && ['ios', 'android', 'macos'].includes(bridge.platform) && /^1\.\d+\.\d+$/.test(bridge.fileAccessVersion ?? ''));
@@ -94,7 +107,42 @@ export function parseMobileFolderResult(
 			...(r.publicationVersion !== undefined ? { publicationVersion: r.publicationVersion } : {})
 		}))
 	};
-	if (request.action === 'trash-list') {
+	if (request.action.startsWith('version-')) {
+		if (payload.rootId !== ('rootId' in request && request.rootId)) throw Error('Native version folder changed.');
+		if (request.action === 'version-list') result.versionPage = parseNativeVersionPage(payload.versionPage);
+		else if (request.action === 'version-inspect') {
+			const entry = payload.retainedEntry;
+			if (
+				!validSyncEntry(entry) ||
+				entry.kind !== 'file' ||
+				entry.id !== request.expected.id ||
+				entry.version !== request.expected.version ||
+				entry.path !== request.expected.path ||
+				!sameSyncContent(entry, request.expected)
+			)
+				throw Error('Retained version changed.');
+			result.retainedEntry = structuredClone(entry);
+		} else if (request.action === 'version-restore-reviewed' || request.action === 'version-restore-status') {
+			const status = request.action === 'version-restore-status' ? payload.versionRestore?.status : 'complete';
+			if (status === 'missing') {
+				result.versionRestore = { status: 'missing' };
+				return result;
+			}
+			if (status !== 'complete') throw Error('Invalid version restore status.');
+			const entry = request.action === 'version-restore-status' ? payload.versionRestore.entry : payload.restoredEntry;
+			if (
+				!validSyncEntry(entry) ||
+				entry.kind !== 'file' ||
+				entry.path !== request.restore.path ||
+				entry.id === request.restore.expected.id ||
+				!sameSyncContent(entry, request.restore.expected) ||
+				(request.action === 'version-restore-reviewed' && payload.operationId !== request.restore.operationId)
+			)
+				throw Error('Native version restore is not confirmed.');
+			if (request.action === 'version-restore-status') result.versionRestore = { status: 'complete', entry: structuredClone(entry) };
+			else result.restoredEntry = structuredClone(entry);
+		}
+	} else if (request.action === 'trash-list') {
 		if (payload.rootId !== request.rootId) throw Error('Native recovery folder changed.');
 		result.trashPage = parseNativeRecoveryPage(payload.trashPage, expected, request.rootId);
 	} else if (request.action === 'write-approve') {
@@ -301,6 +349,9 @@ export function supportsMobileFolderPublication(folder: MobileFolder | undefined
 export const supportsMobileTrashRecovery = (bridge: FolderCapabilities | undefined = getNativeBridge()) =>
 	supportsMobileTrash(bridge) && Number(bridge!.fileTrashVersion!.split('.')[1]) >= 2;
 
+export const supportsNativeFileVersions = (bridge: FolderCapabilities | undefined = getNativeBridge()) =>
+	supportsMobilePublication(bridge) && /^1\.\d+\.\d+$/.test(bridge?.fileVersionsVersion ?? '');
+
 export function requestMobileFolders(ownerId: string, request: FolderRequest, signal: AbortSignal): Promise<FolderResult> {
 	const bridge = getNativeBridge();
 	if (!supportsMobileFolders(bridge)) return Promise.reject(Error('Folder access requires an updated mobile app.'));
@@ -358,6 +409,8 @@ export function requestMobileFolders(ownerId: string, request: FolderRequest, si
 		return Promise.reject(Error('Update the app to safely remove folders after their children.'));
 	if (['trash-list', 'trash-restore-reviewed'].includes(request.action) && !supportsMobileTrashRecovery(bridge))
 		return Promise.reject(Error('Update the app to browse and restore retained files.'));
+	if (request.action.startsWith('version-') && !supportsNativeFileVersions(bridge))
+		return Promise.reject(Error('Update this app to restore retained file versions.'));
 	const input = structuredClone(request),
 		expected = { requestId: crypto.randomUUID(), ownerId, origin: window.location.origin };
 	return new Promise((resolve, reject) => {
@@ -443,6 +496,10 @@ export function requestMobileFolders(ownerId: string, request: FolderRequest, si
 				'trash-inspect',
 				'trash-restore-reviewed',
 				'trash-list',
+				'version-list',
+				'version-inspect',
+				'version-restore-reviewed',
+				'version-restore-status',
 				'trash-restore'
 			].includes(input.action)
 				? 300_000

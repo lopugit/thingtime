@@ -41,10 +41,10 @@ final class ManagedFileStore implements AutoCloseable {
         db=SQLiteDatabase.openOrCreateDatabase(catalog,null);
         try {
             db.disableWriteAheadLogging();db.execSQL("PRAGMA synchronous=FULL");db.execSQL("PRAGMA foreign_keys=ON");
-            if(db.getVersion()!=3) {
+            if(db.getVersion()!=4) {
                 db.beginTransaction();
                 try {
-                    int version=db.getVersion();if(version<0 || version>3)throw unavailable();
+                    int version=db.getVersion();if(version<0 || version>4)throw unavailable();
                     db.execSQL("CREATE TABLE IF NOT EXISTS roots (id TEXT PRIMARY KEY, owner TEXT NOT NULL, origin TEXT NOT NULL, name TEXT NOT NULL)");
                     db.execSQL("CREATE TABLE IF NOT EXISTS entries (root TEXT NOT NULL REFERENCES roots(id), path TEXT NOT NULL, folded TEXT NOT NULL, entry TEXT NOT NULL, blob TEXT, PRIMARY KEY(root,path), UNIQUE(root,folded))");
                     db.execSQL("CREATE TABLE IF NOT EXISTS receipts (key TEXT PRIMARY KEY, root TEXT NOT NULL REFERENCES roots(id), request TEXT NOT NULL, receipt TEXT NOT NULL)");
@@ -66,7 +66,21 @@ final class ManagedFileStore implements AutoCloseable {
                     }
                     db.execSQL("CREATE TABLE IF NOT EXISTS trash_receipts (key TEXT PRIMARY KEY, root TEXT NOT NULL REFERENCES roots(id), grantId TEXT NOT NULL, request TEXT NOT NULL, retainedEntry TEXT NOT NULL, blob TEXT, receipt TEXT NOT NULL, parentAfter TEXT, restoration TEXT)");
                     db.execSQL("CREATE INDEX IF NOT EXISTS trash_recovery_page ON trash_receipts(root,grantId,key) WHERE restoration IS NULL");
-                    db.setVersion(3);db.setTransactionSuccessful();
+                    if(version<4) {
+                        db.execSQL("ALTER TABLE retained ADD COLUMN grantId TEXT");
+                        db.execSQL("ALTER TABLE retained ADD COLUMN capturedAt INTEGER");
+                        try(Cursor rows=db.rawQuery("SELECT v.id,v.root,r.root,r.request FROM retained v LEFT JOIN receipts r ON r.key=v.operation",null)) {
+                            while(rows.moveToNext()) {
+                                check.run();if(rows.isNull(2) || !rows.getString(1).equals(rows.getString(2)))throw unavailable();
+                                JSONObject request=new JSONObject(rows.getString(3));ContentValues update=new ContentValues();
+                                update.put("grantId",SyncStaging.uuid(request,"rootId"));
+                                db.update("retained",update,"id=?",new String[]{rows.getString(0)});
+                            }
+                        }
+                    }
+                    db.execSQL("CREATE INDEX IF NOT EXISTS retained_versions_page ON retained(root,grantId,id)");
+                    db.execSQL("CREATE TABLE IF NOT EXISTS version_restores (key TEXT PRIMARY KEY, root TEXT NOT NULL REFERENCES roots(id), grantId TEXT NOT NULL, request TEXT NOT NULL, receipt TEXT NOT NULL)");
+                    db.setVersion(4);db.setTransactionSuccessful();
                 } finally { db.endTransaction(); }
                 syncDirectory(directory);
             }
@@ -191,7 +205,7 @@ final class ManagedFileStore implements AutoCloseable {
             if(previous==null)db.insertOrThrow("entries",null,values);
             else {
                 if(previous.blob==null)throw changed();
-                ContentValues retained=new ContentValues();retained.put("id",UUID.randomUUID().toString());retained.put("root",root);retained.put("operation",key);retained.put("entry",SyncStaging.canonical(previous.json));retained.put("blob",previous.blob);
+                ContentValues retained=new ContentValues();retained.put("id",UUID.randomUUID().toString());retained.put("root",root);retained.put("operation",key);retained.put("grantId",grant);retained.put("capturedAt",System.currentTimeMillis());retained.put("entry",SyncStaging.canonical(previous.json));retained.put("blob",previous.blob);
                 db.insertOrThrow("retained",null,retained);if(db.update("entries",values,"root=? AND path=?",new String[]{root,path})!=1)throw changed();
             }
             // Ancestor stamps change with descendants; historical receipts stay
@@ -338,6 +352,80 @@ final class ManagedFileStore implements AutoCloseable {
             db.insertOrThrow("entries",null,values);bumpDirectParent(root,path);
             ContentValues update=new ContentValues();update.put("restoration",SyncStaging.canonical(new JSONObject().put("request",restore).put("receipt",result)));
             if(db.update("trash_receipts",update,"key=? AND root=? AND grantId=?",new String[]{SyncStaging.key(request),root,grant})!=1)throw changed();
+            check.run();beforeCommit.run();check.run();db.setTransactionSuccessful();
+        }finally{db.endTransaction();}
+        afterCommit.run();return result;
+    }
+    /** Publication-retained versions use the existing immutable blobs and catalog.
+     * They remain available after restore; each copy has its own durable operation. */
+    private Entry retainedVersion(DeviceScope owner,String root,String grant,String versionId) throws Exception {
+        root(owner,root);uuid(grant);uuid(versionId);
+        try(Cursor row=db.rawQuery("SELECT v.entry,v.blob,r.request,r.root FROM retained v JOIN receipts r ON r.key=v.operation WHERE v.id=? AND v.root=? AND v.grantId=?",
+            new String[]{versionId,root,grant})) {
+            if(!row.moveToFirst() || !root.equals(row.getString(3)))throw changed();
+            JSONObject publication=SyncStaging.request(new JSONObject(row.getString(2)),owner,grant);
+            Entry value=new Entry(row.getString(0),uuid(row.getString(1)));
+            JSONObject entry=SyncStaging.entry(value.json),expected=publication.getJSONObject("operation").getJSONObject("mutation").getJSONObject("expectedTarget");
+            if(!"file".equals(entry.getString("kind")) || !SyncTrash.same(entry,expected))throw changed();return value;
+        }
+    }
+    private void verifyVersion(Entry value) throws Exception {
+        FileDescriptor fd=open(new File(blobs,uuid(value.blob)),OsConstants.O_RDONLY);
+        try{verify(fd,value.json,null,0,0);}finally{Os.close(fd);}
+    }
+    JSONObject versionList(DeviceScope owner,String root,String grant,String cursor) throws Exception {
+        root(owner,root);uuid(grant);if(cursor!=null)uuid(cursor);JSONArray items=new JSONArray();String next=null,last=null;
+        try(Cursor rows=db.rawQuery("SELECT id,capturedAt FROM retained WHERE root=? AND grantId=? AND id>? ORDER BY id LIMIT 21",new String[]{root,grant,cursor==null?"":cursor})) {
+            while(rows.moveToNext()) {
+                check.run();if(items.length()==20){next=last;break;}last=rows.getString(0);
+                Entry version=retainedVersion(owner,root,grant,last);
+                items.put(new JSONObject().put("versionId",last).put("entry",version.json).put("capturedAt",rows.isNull(1)?JSONObject.NULL:rows.getLong(1)));
+            }
+        }
+        return new JSONObject().put("items",items).put("nextCursor",next==null?JSONObject.NULL:next);
+    }
+    JSONObject versionInspect(DeviceScope owner,String root,String grant,String versionId) throws Exception {
+        Entry value=retainedVersion(owner,root,grant,versionId);verifyVersion(value);check.run();return value.json;
+    }
+    private JSONObject versionRestoreRequest(JSONObject input) throws Exception {
+        if(input.toString().getBytes(StandardCharsets.UTF_8).length>65536)throw changed();
+        String path=SyncStaging.text(input,"path",4096);FolderReader.path(path);
+        JSONObject expected=SyncStaging.entry(input.getJSONObject("expected"));if(!"file".equals(expected.getString("kind")))throw changed();
+        return new JSONObject().put("versionId",SyncStaging.uuid(input,"versionId")).put("operationId",SyncStaging.uuid(input,"operationId")).put("path",path).put("expected",expected);
+    }
+    private String versionRestoreKey(DeviceScope owner,String root,String grant,JSONObject request) throws Exception {
+        return FolderReader.hex(MessageDigest.getInstance("SHA-256").digest(new JSONArray().put(owner.owner).put(owner.origin).put(root).put(grant).put(request.getString("operationId")).toString().getBytes(StandardCharsets.UTF_8)));
+    }
+    private JSONObject versionRestoreReceipt(String root,String grant,String key,JSONObject request) throws Exception {
+        try(Cursor row=db.rawQuery("SELECT root,grantId,request,receipt FROM version_restores WHERE key=?",new String[]{key})) {
+            if(!row.moveToFirst())return null;
+            if(!root.equals(row.getString(0)) || !grant.equals(row.getString(1)) || !SyncStaging.canonical(request).equals(row.getString(2)))throw changed();
+            return SyncStaging.entry(new JSONObject(row.getString(3)));
+        }
+    }
+    private Entry reviewVersion(String root,DeviceScope owner,String grant,JSONObject request) throws Exception {
+        Entry value=retainedVersion(owner,root,grant,request.getString("versionId"));
+        if(!SyncTrash.same(value.json,request.getJSONObject("expected")))throw changed();verifyVersion(value);
+        String path=request.getString("path"),parent=SyncTrash.parent(path);
+        if(count("SELECT COUNT(*) FROM entries WHERE root=? AND folded=?",new String[]{root,folded(path)})!=0 || count("SELECT COUNT(*) FROM entries WHERE root=?",new String[]{root})>=FolderReader.MAX_ENTRIES)throw changed();
+        if(!parent.isEmpty()) {Entry directory=entry(root,parent);if(directory==null || !"folder".equals(directory.json.getString("kind")))throw changed();}
+        return value;
+    }
+    void reviewVersionRestore(DeviceScope owner,String root,String grant,JSONObject input) throws Exception {
+        root(owner,root);uuid(grant);JSONObject request=versionRestoreRequest(input);
+        db.beginTransaction();try{reviewVersion(root,owner,grant,request);check.run();db.setTransactionSuccessful();}finally{db.endTransaction();}
+    }
+    JSONObject restoreVersion(DeviceScope owner,String root,String grant,JSONObject input,boolean approved) throws Exception {
+        root(owner,root);uuid(grant);JSONObject request=versionRestoreRequest(input);String key=versionRestoreKey(owner,root,grant,request);JSONObject result;
+        db.beginTransaction();try {
+            root(owner,root);result=versionRestoreReceipt(root,grant,key,request);if(result!=null)return result;
+            if(!approved)return null;Entry value=reviewVersion(root,owner,grant,request);String path=request.getString("path");
+            // A restored version is an independent file. Reusing the live file's
+            // document ID would collide with the current version and alias readers.
+            result=new JSONObject(value.json.toString()).put("id",UUID.randomUUID().toString()).put("version",UUID.randomUUID().toString()).put("path",path);
+            ContentValues values=documentColumns(result);values.put("root",root);values.put("path",path);values.put("folded",folded(path));values.put("entry",SyncStaging.canonical(result));values.put("blob",value.blob);
+            db.insertOrThrow("entries",null,values);bumpDirectParent(root,path);
+            ContentValues receipt=new ContentValues();receipt.put("key",key);receipt.put("root",root);receipt.put("grantId",grant);receipt.put("request",SyncStaging.canonical(request));receipt.put("receipt",SyncStaging.canonical(result));db.insertOrThrow("version_restores",null,receipt);
             check.run();beforeCommit.run();check.run();db.setTransactionSuccessful();
         }finally{db.endTransaction();}
         afterCommit.run();return result;

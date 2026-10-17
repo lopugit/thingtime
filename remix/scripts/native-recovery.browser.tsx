@@ -7,6 +7,7 @@ import type { FolderRequest, FolderResult } from '../app/fileSync/mobileFolders.
 const root = { id: '00000000-0000-4000-8000-000000000001', name: 'Personal archive' };
 const path = 'Photos/2026/Family-holiday-with-a-long-name-for-layout-checking.jpeg';
 const entry = { path, id: 'fixture-inode', version: '1', kind: 'file' as const, size: 123456789, sha256: 'a'.repeat(64) };
+const retainedVersion = { versionId: '00000000-0000-4000-8000-000000000003', entry, capturedAt: 1792240000000 };
 const item = {
 	request: {
 		rootId: root.id,
@@ -27,6 +28,11 @@ function Fixture() {
 	const [done, setDone] = useState(false);
 	async function request(input: FolderRequest): Promise<FolderResult> {
 		await new Promise((resolve) => setTimeout(resolve, 200));
+		if (input.action === 'version-list') return { roots: [root], versionPage: { items: [retainedVersion], nextCursor: null } };
+		if (input.action === 'version-inspect') return { roots: [root], retainedEntry: entry };
+		if (input.action === 'version-restore-status') return { roots: [root], versionRestore: { status: 'missing' } };
+		if (input.action === 'version-restore-reviewed')
+			return { roots: [root], restoredEntry: { ...entry, id: 'copy-id', path: input.restore.path, version: '2' } };
 		if (input.action === 'trash-list') return { roots: [root], trashPage: { items: done ? [] : [item], nextCursor: null } };
 		if (input.action === 'trash-inspect') return { roots: [root], retainedEntry: entry, restoreIntent: null };
 		if (input.action === 'trash-restore-reviewed') {
@@ -42,6 +48,7 @@ function Fixture() {
 			</Text>
 			<NativeFileRecovery
 				roots={[root]}
+				versionsScopeKey="synthetic-layout-fixture"
 				busy={busy}
 				perform={async (work) => {
 					setBusy(true);

@@ -72,3 +72,51 @@ test('native recovery is advertised only with its own compatible protocol versio
 		assert.equal(supportsMobileTrashRecovery({ ...bridge, fileTrashVersion: version }), false);
 	assert.equal(supportsMobileTrashRecovery({ ...bridge, fileTrashVersion: '1.2.0' }), true);
 });
+
+test('retained native versions validate bounded pages, independent copies and original retry identity', async () => {
+	const { parseNativeVersionPage, readNativeVersionRestore } = await import('./nativeRecovery');
+	const versionId = '00000000-0000-4000-8000-000000000003';
+	const restore = { versionId, operationId: '00000000-0000-4000-8000-000000000004', path: 'earlier-copy', expected: entry };
+	const version = { versionId, entry, capturedAt: null };
+	assert.deepEqual(parseNativeVersionPage({ items: [version], nextCursor: null }).items, [version]);
+	assert.deepEqual(readNativeVersionRestore(JSON.stringify(restore)), restore);
+	for (const value of [
+		{ ...restore, path: '../escape' },
+		{ ...restore, operationId: 'bad' },
+		{ ...restore, expected: { ...entry, kind: 'folder' } }
+	])
+		assert.throws(() => readNativeVersionRestore(JSON.stringify(value)));
+	for (const items of [
+		[version, version],
+		Array(21).fill(version),
+		[{ ...version, capturedAt: NaN }],
+		[{ ...version, entry: { ...entry, path: '../escape' } }]
+	])
+		assert.throws(() => parseNativeVersionPage({ items, nextCursor: null }));
+	const request = { action: 'version-restore-reviewed' as const, rootId, restore };
+	const restored = { ...entry, path: restore.path, id: 'independent-copy', version: 'new' };
+	assert.deepEqual(
+		parseMobileFolderResult(response({ restoredEntry: restored, operationId: restore.operationId }), owner, request)?.restoredEntry,
+		restored
+	);
+	for (const changed of [{ id: entry.id }, { path: 'wrong' }, { sha256: 'b'.repeat(64) }])
+		assert.throws(() =>
+			parseMobileFolderResult(response({ restoredEntry: { ...restored, ...changed }, operationId: restore.operationId }), owner, request)
+		);
+	assert.throws(() => parseMobileFolderResult(response({ restoredEntry: restored, operationId: 'wrong' }), owner, request));
+	const status = { ...request, action: 'version-restore-status' as const };
+	assert.deepEqual(parseMobileFolderResult(response({ versionRestore: { status: 'missing' } }), owner, status)?.versionRestore, {
+		status: 'missing'
+	});
+	assert.deepEqual(parseMobileFolderResult(response({ versionRestore: { status: 'complete', entry: restored } }), owner, status)?.versionRestore, {
+		status: 'complete',
+		entry: restored
+	});
+	assert.throws(() => parseMobileFolderResult(response({ versionRestore: { status: 'unknown' } }), owner, status));
+	assert.throws(() =>
+		parseMobileFolderResult(response({ rootId: 'foreign', versionPage: { items: [version], nextCursor: null } }), owner, {
+			action: 'version-list',
+			rootId
+		})
+	);
+});

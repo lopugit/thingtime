@@ -91,6 +91,10 @@ public class DeviceLiveTest {
                 assertFalse("Recovery acceptance uses the original synthetic fixture",download);
                 NativeTrashAcceptance.run(web,context,scope,grantId,fixture);
             }
+            if("true".equals(InstrumentationRegistry.getArguments().getString("nativeVersions"))) {
+                assertFalse("Version acceptance uses the original synthetic fixture",download);
+                NativeVersionAcceptance.run(web,context,scope,grantId,fixture);
+            }
             android.content.Intent browse=new android.content.Intent(android.content.Intent.ACTION_OPEN_DOCUMENT).setType("*/*")
                 .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK).putExtra(android.provider.DocumentsContract.EXTRA_INITIAL_URI,OfflineDocumentsProvider.rootUri(context,root));
             context.startActivity(browse);
@@ -99,7 +103,7 @@ public class DeviceLiveTest {
             assertTrue("Confirm the rendered Files inspection",confirmed.exists());Files.delete(confirmed.toPath());
             folderRequest(web,scope,new JSONObject().put("action","remove").put("rootId",grantId));
             assertEquals(0,grants.list(scope).length());
-            try(ManagedFileStore store=fixture.store()){assertEquals(download?("true".equals(InstrumentationRegistry.getArguments().getString("twoWaySync"))?4:3):2,store.scan(scope,root).length());assertEquals(root,store.document(root).id);}
+            try(ManagedFileStore store=fixture.store()){assertEquals(download?("true".equals(InstrumentationRegistry.getArguments().getString("twoWaySync"))?4:3):("true".equals(InstrumentationRegistry.getArguments().getString("nativeVersions"))?3:2),store.scan(scope,root).length());assertEquals(root,store.document(root).id);}
             progress("OFFLINE_FILES_QA_PASS: native creation, actual Files selection, scoped grant, nested provider bytes, bridge scan and non-destructive access removal.");
         } finally {
             grants.remove(scope,grantId);Files.deleteIfExists(confirmed.toPath());
@@ -107,7 +111,7 @@ public class DeviceLiveTest {
             try(android.database.sqlite.SQLiteDatabase db=android.database.sqlite.SQLiteDatabase.openDatabase(new File(fixture.managed,"catalog.sqlite").getPath(),null,0)) {
                 db.beginTransaction();try {
                     try(android.database.Cursor rows=db.rawQuery("SELECT blob FROM entries WHERE root=? AND blob IS NOT NULL",new String[]{root})) {while(rows.moveToNext())blobs.add(rows.getString(0));}
-                    for(String table:new String[]{"trash_receipts","receipts","retained","entries"})db.delete(table,"root=?",new String[]{root});
+                    for(String table:new String[]{"version_restores","trash_receipts","receipts","retained","entries"})db.delete(table,"root=?",new String[]{root});
                     db.delete("roots","id=?",new String[]{root});db.setTransactionSuccessful();
                 }finally{db.endTransaction();}
             }

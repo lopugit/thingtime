@@ -509,3 +509,21 @@ upload frames with no legacy multi-byte reads. The native range limit is 32 MiB;
 frames are 64 KiB with one outstanding acknowledgement. Managed offline reads
 verify the full immutable blob for each range; background workers and iOS binary
 transport remain separate work in the acceptance ledger.
+
+
+### Retained replacement versions (native versions 1.0)
+
+Offline-folder schema 4 exposes previously preserved replacement versions through
+20-item pages and native-reviewed independent copy restore. The original grant,
+account and origin remain required; a copy receives a new document identity and
+an atomic operation receipt. Current and retained bytes stay intact. Existing
+schema 3 history is migrated without inventing capture timestamps.
+
+Run `THINGTIME_OFFLINE_FILES_TEST=1 THINGTIME_NATIVE_VERSIONS_TEST=1
+android/scripts/test-mobile-devices.sh /path/to/private-fixture.json` from the
+repo root, with the SDK/JDK setup above. Follow streamed synthetic-folder prompts,
+then inspect both copies in Files and acknowledge as in the root README. The
+installed API 35 suite passed 67 tests, including cancellation, WebView reload,
+exact operation replay and full restored hash. This storage is local and excluded
+from OS backup; independent snapshot inclusion and physical-device acceptance
+remain open. See [the acceptance ledger](../docs/mobile-file-sync.md).

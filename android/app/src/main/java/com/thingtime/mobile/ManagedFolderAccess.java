@@ -88,6 +88,20 @@ final class ManagedFolderAccess {
         requireApproval(scope,grant,approval);
         try(ManagedFileStore store=store(()->requireApproval(scope,grant,approval))){return store.restoreTrash(scope,root(scope,grant,store),grant.id,request,restore,true);}
     }
+    JSONObject versionList(DeviceScope scope,FolderStore.Grant grant,String cursor) throws Exception {
+        try(ManagedFileStore store=store(()->{})){JSONObject result=store.versionList(scope,root(scope,grant,store),grant.id,cursor);active.run();grants.requireRead(scope,grant);return result;}
+    }
+    JSONObject versionInspect(DeviceScope scope,FolderStore.Grant grant,String versionId) throws Exception {
+        try(ManagedFileStore store=store(()->{})){JSONObject result=store.versionInspect(scope,root(scope,grant,store),grant.id,versionId);active.run();grants.requireRead(scope,grant);return result;}
+    }
+    void reviewVersionRestore(DeviceScope scope,FolderStore.Grant grant,JSONObject request) throws Exception {
+        try(ManagedFileStore store=store(()->{})){store.reviewVersionRestore(scope,root(scope,grant,store),grant.id,request);active.run();grants.requireRead(scope,grant);}
+    }
+    JSONObject restoreVersion(DeviceScope scope,FolderStore.Grant grant,JSONObject request,boolean approved) throws Exception {
+        try(ManagedFileStore store=store(()->{active.run();grants.requireRead(scope,grant);})){
+            JSONObject result=store.restoreVersion(scope,root(scope,grant,store),grant.id,request,approved);active.run();grants.requireRead(scope,grant);return result;
+        }
+    }
     JSONArray scan(DeviceScope scope,FolderStore.Grant grant) throws Exception {
         try(ManagedFileStore store=store(()->{})){return store.scan(scope,root(scope,grant,store));}
     }

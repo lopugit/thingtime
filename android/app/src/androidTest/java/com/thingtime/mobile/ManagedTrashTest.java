@@ -114,7 +114,7 @@ public class ManagedTrashTest {
     }
     @Test public void versionTwoMigrationKeepsExistingFilesAndPublicationReceipts() throws Exception {
         byte[] bytes={1};JSONObject publication=f.request("file",bytes,false),receipt=f.publish(publication,bytes);
-        try(SQLiteDatabase db=SQLiteDatabase.openDatabase(new File(f.managed,"catalog.sqlite").getPath(),null,SQLiteDatabase.OPEN_READWRITE)){db.execSQL("DROP TABLE trash_receipts");db.setVersion(2);}
+        try(SQLiteDatabase db=SQLiteDatabase.openDatabase(new File(f.managed,"catalog.sqlite").getPath(),null,SQLiteDatabase.OPEN_READWRITE)){db.execSQL("DROP TABLE trash_receipts");ManagedVersionTest.legacyRetained(db);db.setVersion(2);}
         try(ManagedFileStore s=f.store()){assertTrue(SyncTrash.same(receipt,s.lookup(f.fixture.owner,f.root,f.fixture.grant,publication).getJSONObject("receipt")));assertEquals(1,s.scan(f.fixture.owner,f.root).length());assertEquals(0,s.trashList(f.fixture.owner,f.root,f.fixture.grant,null).getJSONArray("items").length());}
         assertArrayEquals(bytes,f.read(receipt.getJSONObject("entry"),0,1));trash(request(f,receipt.getJSONObject("entry")));
     }

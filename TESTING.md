@@ -11036,3 +11036,29 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
   331.348 seconds, including the opt-in live planner recovery scenario; build,
   JVM unit tests and Android lint passed. A focused shell check of the actual
   runner block verifies success, JUnit failure and adb failure exit handling.
+
+
+### Android retained replacement versions — 2026-10-18
+
+- [x] Schema 3 to 4 migration retains original file/blob/publication identity,
+  derives only its original grant and leaves unknown capture time null.
+- [x] Paged lists return at most 20; foreign owner/origin/grant, stale review,
+  corrupt bytes, occupied/case-alias destinations and missing parents refuse.
+- [x] Restore creates an independent file and keeps both current and retained
+  versions. Precommit failure or grant revocation rolls back; lost replies and
+  later edits replay the original receipt without a second write.
+- [x] Installed API 35 WebView: replace, review, cancel, reload, resume the same
+  saved operation, native confirmation, complete restored hash, exact retry and
+  both 8.39 MB copies visibly present in Android Files. Wait for enabled controls
+  after reload before clicking; presence alone is insufficient during refresh.
+- [x] Shared response validation rejects wrong folder, content, path, operation
+  or reused file identity. Live synthetic 390px/1280px controls fit without
+  horizontal overflow and show completed-copy feedback.
+- [ ] Physical devices, Apple native version browsing, native history in
+  independent backups, grant replacement and actual process-kill acceptance
+  specific to version-copy restore remain open.
+
+Canonical runner: 67 instrumentation tests passed in 174.246 seconds, with build,
+JVM tests and Android lint. Shared suite: 148 passed. Raw TypeScript: 91 existing
+diagnostics outside changed files. These results do not establish 100 TB data
+transfer, whole-account snapshots or production deployment.

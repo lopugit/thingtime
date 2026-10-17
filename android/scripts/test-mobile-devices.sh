@@ -14,6 +14,9 @@ conflict_review="${THINGTIME_CONFLICT_SYNC_TEST:-0}"
 [[ "$sync_deletion" == 0 || "$conflict_review" == 0 ]] || { echo 'Run deletion and concurrent edit review acceptance separately.' >&2; exit 1; }
 file_history="${THINGTIME_FILE_HISTORY_TEST:-0}"
 file_export="${THINGTIME_FILE_EXPORT_TEST:-0}"
+native_versions="${THINGTIME_NATIVE_VERSIONS_TEST:-0}"
+[[ "$native_versions" == 0 || "$native_versions" == 1 ]] || { echo 'THINGTIME_NATIVE_VERSIONS_TEST must be 0 or 1.' >&2; exit 1; }
+[[ "$native_versions" == 0 || ( "$offline_test" == 1 && -z "$download_state" ) ]] || { echo 'Native versions acceptance requires THINGTIME_OFFLINE_FILES_TEST=1 without a cloud download fixture.' >&2; exit 1; }
 native_trash="${THINGTIME_NATIVE_TRASH_TEST:-0}"
 [[ "$native_trash" == 0 || "$native_trash" == 1 ]] || { echo 'THINGTIME_NATIVE_TRASH_TEST must be 0 or 1.' >&2; exit 1; }
 [[ "$native_trash" == 0 || ( "$offline_test" == 1 && -z "$download_state" ) ]] || { echo 'Native recovery acceptance requires THINGTIME_OFFLINE_FILES_TEST=1 without a cloud download fixture.' >&2; exit 1; }
@@ -84,6 +87,7 @@ result="$(mktemp)"
 test_args=()
 if [[ "$sync_deletion" == 1 ]]; then test_args+=(-e syncDeletion true); fi
 if [[ "$native_trash" == 1 ]]; then test_args+=(-e nativeTrash true); fi
+if [[ "$native_versions" == 1 ]]; then test_args+=(-e nativeVersions true); fi
 if [[ "$file_export" == 1 ]]; then test_args+=(-e fileExport true); fi
 if [[ "$file_history" == 1 ]]; then test_args+=(-e fileHistory true); fi
 if [[ "$offline_test" == 1 ]]; then

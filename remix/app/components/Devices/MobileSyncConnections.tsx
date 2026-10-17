@@ -17,7 +17,8 @@ import {
 	mobileFolderSource,
 	supportsMobileSyncConditions,
 	supportsMobileFolderPublication,
-	supportsMobileTrashRecovery
+	supportsMobileTrashRecovery,
+	supportsNativeFileVersions
 } from '~/fileSync/mobileFolders.client';
 import { openSyncJournal, withSyncRootLock, syncScopeKey } from '~/fileSync/journal.client';
 import { readCloudFolderInventory } from '~/fileSync/cloudInventory.client';
@@ -471,8 +472,9 @@ function Connections({
 			</Text>
 			{scope.dataPlane === 'home' && supportsMobileTrashRecovery(capabilities) && (
 				<NativeFileRecovery
-					roots={roots.filter(root => supportsMobileFolderPublication(root, capabilities))}
+					roots={roots.filter((root) => supportsMobileFolderPublication(root, capabilities))}
 					busy={busy}
+					versionsScopeKey={supportsNativeFileVersions(capabilities) ? key : undefined}
 					perform={(work) =>
 						run(async (assertActive) => {
 							await work(async (request) => {

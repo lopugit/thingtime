@@ -16,6 +16,7 @@ export type ThingtimeNativeBridge = {
   fileStagingVersion?: string;
   filePublicationVersion?: string;
   fileTrashVersion?: string;
+  fileVersionsVersion?: string;
   fileExportVersion?: string;
   platform: 'ios' | 'macos' | 'android';
   isNativeWebView: true;

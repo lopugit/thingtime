@@ -68,6 +68,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-18 — **Codex (AI)**: Android offline folders can browse versions kept
+  during replacement and restore an independent copy with native confirmation,
+  preserving exact retry intent through reload. Schema migration, 67 installed
+  Android tests and 390px/1280px controls verified. Local history remains outside
+  independent backups. See the [PR #1002 ledger](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
 - 2026-10-18 — **Codex (AI)**: Verify installed Android planner deletion across
   a lost reply and WebView reload, original operation replay, reviewed tree
   restoration, exact bytes and Android Files visibility. Stream operator
