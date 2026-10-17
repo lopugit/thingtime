@@ -399,3 +399,10 @@ metadata through `NativeCloudFile.swift`; `mobileStaging.client.ts` keeps the sh
 journal/verification flow while the host fetches byte ranges directly. See the
 [iOS native cloud range runbook](../../iOS/README.md#native-cloud-download-ranges)
 and the corresponding `TESTING.md` checklist.
+
+
+`SyncConflictReview` offers explicit Save versions and ignore for two existing
+files. `MobileSyncConnections` shows muted saved confirmation only after the
+foreground retention run completes and links to Timeline's Files view. Capture
+keeps the conflict unresolved and the sync baseline unchanged. See
+`docs/mobile-file-sync.md` for installed acceptance and whole-backup boundaries.

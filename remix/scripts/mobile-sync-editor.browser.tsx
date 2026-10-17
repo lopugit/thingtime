@@ -1,18 +1,33 @@
+import { fingerprintSource } from '../app/fileSync/contentFingerprint';
+import { fileRetentionEventId } from '../app/fileSync/fileVersions';
 // Render the production editor and useApi under StrictMode. Only the Things API
 // and native grants are synthetic. Never loads credentials or real user files.
-import React, { StrictMode } from 'react';
+import React, { StrictMode, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { Box, Button, ChakraProvider, Flex, Text } from '@chakra-ui/react';
+import { SyncConflictReview } from '../app/components/Devices/SyncConflictReview';
 import { DesktopFolderAccess } from '../app/components/Devices/DesktopFolderAccess';
 import { MobileFolderAccess } from '../app/components/Devices/MobileFolderAccess';
 import { nativeBridgeMessageEvent } from '../app/utils/nativeBridge';
 const desktop = new URLSearchParams(location.search).get('platform') === 'desktop';
-const conflictQA = new URLSearchParams(location.search).has('conflicts');
+const captureQA = new URLSearchParams(location.search).has('capture');
+const conflictQA = captureQA || new URLSearchParams(location.search).has('conflicts');
+const captureBytes = new Uint8Array([1, 2, 3]);
+const captureFingerprint = await fingerprintSource({
+	size: 3,
+	check: () => {},
+	read: async (offset, length) => captureBytes.slice(offset, offset + length)
+});
+const captureKey = 'tt:fixture:conflict-captures:' + (desktop ? 'desktop' : 'mobile');
+const captureReceipts = new Map<string, any>(JSON.parse(localStorage.getItem(captureKey) ?? '[]'));
+let capturePuts = 0,
+	captureRedraw = () => {};
+const captureReady = new Set<string>();
 const canonicalOrigin = 'https://desktop-sync.invalid';
 const ownerId = 'sync-ui-fixture',
 	deviceId = 'sync-ui-device',
-	databaseKey = 'tt:fixture:sync-editor-database' + (conflictQA ? ':conflicts' : '');
+	databaseKey = 'tt:fixture:sync-editor-database' + (captureQA ? ':capture' : conflictQA ? ':conflicts' : '');
 let rows: any[] = JSON.parse(localStorage.getItem(databaseKey) || 'null') ?? [
 	{ id: 'cloud-documents', thingtime: ['folder'], author: { id: ownerId }, acl: ['tt:user'], crystal: { name: 'Cloud documents' } }
 ];
@@ -20,15 +35,60 @@ let transferFolders: any[] = JSON.parse(localStorage.getItem('tt:fixture:sync-tr
 let holdNextScan = false;
 let loseTransferReply = false,
 	network = 'wifi';
-const localEntries = conflictQA ? Array.from({ length: 22 }, (_, i) => ({ path: `Report-${String(i + 1).padStart(2, '0')}${i === 0 ? '-a-long-filename-for-review-on-a-small-phone-screen' : ''}.txt`,
-	id: `native-${i}`, version: 'local-1', kind: 'file', size: 3, sha256: null,
-	fingerprint: { algorithm: 'sha256-parts-v1', partSizeBytes: 8388608, partCount: 1, sha256: 'a'.repeat(64) } }))
+const localEntries = conflictQA
+	? Array.from({ length: captureQA ? 2 : 22 }, (_, i) => ({
+			path: `Report-${String(i + 1).padStart(2, '0')}${i === 0 ? '-a-long-filename-for-review-on-a-small-phone-screen' : ''}.txt`,
+			id: `native-${i}`,
+			version: 'local-1',
+			kind: 'file',
+			size: 3,
+			sha256: null,
+			fingerprint: captureQA ? captureFingerprint : { algorithm: 'sha256-parts-v1', partSizeBytes: 8388608, partCount: 1, sha256: 'a'.repeat(64) }
+	  }))
 	: [{ path: 'Upload sample', id: 'native-sample-folder', version: 'native-v1', kind: 'folder', size: 0, sha256: null }];
 let conflictRevision = 'cloud-1';
-if (conflictQA && !rows.some(row => row.thingtime.includes('file-sync'))) rows.push({
-	id: 'conflict-connection', updatedAt: '2026-10-17T00:00:00.000Z', thingtime: ['file-sync'], author: { id: ownerId }, acl: ['tt:user'],
-	crystal: { configurationVersion: 1, name: 'Conflicting documents', deviceId, localRootId: '11111111-1111-4111-8111-111111111111', remoteFolderId: 'cloud-documents',
-		mode: 'backup', paused: false, propagateDeletes: false, network: 'any', chargingOnly: false, excludedPaths: [] }
+if (conflictQA && !rows.some((row) => row.thingtime.includes('file-sync')))
+	rows.push({
+		id: captureQA ? 'capture-connection' : 'conflict-connection',
+		updatedAt: '2026-10-17T00:00:00.000Z',
+		thingtime: ['file-sync'],
+		author: { id: ownerId },
+		acl: ['tt:user'],
+		crystal: {
+			configurationVersion: 1,
+			name: 'Conflicting documents',
+			deviceId,
+			localRootId: '11111111-1111-4111-8111-111111111111',
+			remoteFolderId: 'cloud-documents',
+			mode: 'backup',
+			paused: false,
+			propagateDeletes: false,
+			network: 'any',
+			chargingOnly: false,
+			excludedPaths: []
+		}
+	});
+const conflictFiles = () =>
+	localEntries.map((entry, i) => ({
+		id: `11111111-1111-4111-8111-${String(i).padStart(12, '0')}`,
+		revision: conflictRevision,
+		name: entry.path,
+		folderId: 'cloud-documents',
+		trashed: false,
+		content: {
+			attachmentId: `attachment-${i}`,
+			version: 'b'.repeat(64),
+			size: 4,
+			fingerprint: { algorithm: 'sha256-parts-v1', partSizeBytes: 8388608, partCount: 1, sha256: 'b'.repeat(64) }
+		}
+	}));
+const captureChunk = (request: any) => ({
+	chunk: {
+		version: request.version,
+		size: 3,
+		offset: request.offset,
+		data: btoa(String.fromCharCode(...captureBytes.slice(request.offset, request.offset + request.length)))
+	}
 });
 let roots = [{ id: '11111111-1111-4111-8111-111111111111', name: 'Project documents' }],
 	loseReply = false,
@@ -48,6 +108,36 @@ window.fetch = async function (this: unknown, input, init) {
 		(url.origin !== location.origin || new Headers(init?.headers).get('X-Thingtime-Expected-Api-Origin') !== canonicalOrigin)
 	)
 		throw Error('Desktop proxy destination was not pinned');
+	if (captureQA && url.pathname === '/fixture-capture-part') {
+		capturePuts++;
+		captureRedraw();
+		return new Response(null);
+	}
+	if (captureQA && url.pathname.startsWith('/api/v1/attachments/')) {
+		const body = typeof init?.body === 'string' ? JSON.parse(init.body) : undefined;
+		if (url.pathname.endsWith('/uploads'))
+			return fixtureJson({
+				ok: true,
+				upload: {
+					id: 'capture-' + body.requestId,
+					partSizeBytes: captureFingerprint.partSizeBytes,
+					partCount: 1,
+					...(captureReady.has('capture-' + body.requestId) ? { state: 'ready' } : {})
+				}
+			});
+		if (url.pathname.endsWith('/parts'))
+			return fixtureJson({
+				ok: true,
+				parts: [{ partNumber: 1, url: location.origin + '/fixture-capture-part', headers: { 'x-amz-checksum-sha256': body.parts[0].checksumSha256 } }]
+			});
+		if (url.pathname.endsWith('/complete')) {
+			captureReady.add(body.uploadId);
+			return fixtureJson({ ok: true });
+		}
+		if (url.pathname.endsWith('/content'))
+			return fixtureJson({ ok: true, id: url.searchParams.get('id'), version: 'c'.repeat(64), size: 3, fingerprint: captureFingerprint });
+		throw Error('Unexpected synthetic attachment request');
+	}
 	if (url.pathname === '/api/v1/files') {
 		if (unavailable) throw Error('Fixture is offline');
 		const headers = new Headers(init?.headers);
@@ -55,6 +145,28 @@ window.fetch = async function (this: unknown, input, init) {
 			return fixtureJson({ ok: false }, { status: 409 });
 		if (init?.method === 'POST') {
 			const body = JSON.parse(String(init.body));
+			if (captureQA && body.kind === 'retained-version') {
+				const prior = captureReceipts.get(body.operationId);
+				if (prior) {
+					if (prior.body !== JSON.stringify(body)) return fixtureJson({ ok: false }, { status: 409 });
+					return fixtureJson({ ok: true, file: prior.file, retained: true, replayed: true });
+				}
+				const before = conflictFiles().find((file) => file.id === body.id);
+				if (!before || before.revision !== body.expectedRevision) return fixtureJson({ ok: false }, { status: 409 });
+				const file = {
+					...before,
+					revision: await fileRetentionEventId(ownerId, body.id, body.operationId),
+					content: { attachmentId: body.attachmentId, version: body.contentVersion, size: 3, fingerprint: captureFingerprint }
+				};
+				captureReceipts.set(body.operationId, { body: JSON.stringify(body), file });
+				localStorage.setItem(captureKey, JSON.stringify([...captureReceipts]));
+				captureRedraw();
+				if (loseTransferReply) {
+					loseTransferReply = false;
+					throw Error('Fixture lost accepted retention reply');
+				}
+				return fixtureJson({ ok: true, file, retained: true, replayed: false });
+			}
 			if (body.kind !== 'folder') throw Error('No real file uploads in this fixture');
 			const existing = transferFolders.find((row) => row.id === body.id);
 			if (existing) return fixtureJson({ ok: true, folder: existing, replayed: true });
@@ -75,12 +187,24 @@ window.fetch = async function (this: unknown, input, init) {
 					complete: true,
 					rootId: url.searchParams.get('rootId'),
 					rootRevision: 'fixture-root-v1',
-					nodes: conflictQA ? localEntries.map((entry, i) => ({ kind: 'file', path: entry.path, file: {
-						id: `11111111-1111-4111-8111-${String(i).padStart(12, '0')}`, revision: conflictRevision, name: entry.path, folderId: 'cloud-documents', trashed: false,
-						content: { attachmentId: `attachment-${i}`, version: 'b'.repeat(64), size: 4, fingerprint: { algorithm: 'sha256-parts-v1', partSizeBytes: 8388608, partCount: 1, sha256: 'b'.repeat(64) } }
-					} })) : transferFolders.map((row) => ({ kind: 'folder', path: row.name, id: row.id, folderId: row.folderId, revision: row.revision }))
+					nodes: conflictQA
+						? conflictFiles().map((file) => ({ kind: 'file', path: file.name, file }))
+						: transferFolders.map((row) => ({ kind: 'folder', path: row.name, id: row.id, folderId: row.folderId, revision: row.revision }))
 				}
 			});
+		if (captureQA && url.searchParams.has('id')) {
+			if (url.searchParams.has('operationId'))
+				return fixtureJson({
+					ok: true,
+					receipt:
+						url.searchParams.get('kind') === 'retained-version'
+							? captureReceipts.get(url.searchParams.get('operationId')!)
+								? { file: captureReceipts.get(url.searchParams.get('operationId')!)!.file }
+								: null
+							: null
+				});
+			return fixtureJson({ ok: true, file: conflictFiles().find((file) => file.id === url.searchParams.get('id')) });
+		}
 		const folder = transferFolders.find((row) => row.id === url.searchParams.get('folderId'));
 		if (url.searchParams.has('operationId')) return fixtureJson({ ok: true, receipt: folder ?? null });
 		return folder ? fixtureJson({ ok: true, folder }) : fixtureJson({ ok: false }, { status: 404 });
@@ -152,6 +276,7 @@ window.thingtimeNativeBridge = {
 								...request,
 								roots,
 								...(request.action === 'scan' ? { complete: true, entries: localEntries } : {}),
+								...(captureQA && request.action === 'read' ? captureChunk(request) : {}),
 								...(request.action === 'conditions' ? { conditions: { network: unavailable ? 'offline' : network, charging: true } } : {})
 							}
 						}
@@ -187,21 +312,38 @@ if (desktop) {
 				roots,
 				...(manifest ? { capabilities: { fileAccessVersion: '1.1.0' }, apiCapabilities: { ...manifest, origin: canonicalOrigin } } : {}),
 				...(request.action === 'scan' ? { complete: true, entries: localEntries } : {}),
+				...(captureQA && request.action === 'read' ? captureChunk(request) : {}),
 				...(request.action === 'conditions' ? { conditions: { network: unavailable ? 'offline' : network, charging: true } } : {})
 			};
 		}
 	};
 }
 function Fixture() {
+	const [, redraw] = useState(0);
+	captureRedraw = () => redraw((n) => n + 1);
 	return (
 		<ChakraProvider>
 			<Box maxWidth="760px" margin="auto" padding={4}>
 				<Text as="h1" fontSize="20px" fontWeight="bold">
 					{desktop ? 'Desktop sync editor regression' : 'Mobile sync editor regression'}
 				</Text>
-				<Text fontSize="12px">Synthetic API and native grants. No files are accessed or uploaded.</Text>
+				<Text fontSize="12px">Synthetic API and native grants. No real files are accessed or uploaded.</Text>
+				{captureQA && (
+					<Text role="status">
+						Captured versions: {captureReceipts.size}. Upload parts this page: {capturePuts}. Cloud revision: {conflictRevision}.
+					</Text>
+				)}
 				<Flex gap={2} wrap="wrap" marginY={3}>
-					{conflictQA && <Button size="sm" onClick={() => { conflictRevision += '-edited'; }}>Change conflicted cloud file</Button>}
+					{conflictQA && (
+						<Button
+							size="sm"
+							onClick={() => {
+								conflictRevision += '-edited';
+							}}
+						>
+							Change conflicted cloud file
+						</Button>
+					)}
 					<Button
 						size="sm"
 						onClick={() => {
@@ -274,7 +416,21 @@ function Fixture() {
 				</Flex>
 				<Box border="1px solid #ddd" borderRadius="12px" padding={4}>
 					<Text fontWeight="bold">This device is added</Text>
-					{desktop ? (
+					{captureQA && new URLSearchParams(location.search).get('view') === 'review' ? (
+						<SyncConflictReview
+							mode="backup"
+							conflicts={localEntries.map((entry, i) => ({
+								kind: 'conflict' as const,
+								path: entry.path,
+								reason: 'both-changed' as const,
+								local: entry,
+								remote: { ...entry, id: conflictFiles()[i].id, version: conflictRevision, size: 4 }
+							}))}
+							onApply={() => {}}
+							onRetain={() => {}}
+							onCancel={() => {}}
+						/>
+					) : desktop ? (
 						<DesktopFolderAccess ownerId={ownerId} pairedDeviceIds={[deviceId]} ownedDeviceIds={[deviceId]} />
 					) : (
 						<MobileFolderAccess ownerId={ownerId} deviceId={deviceId} />

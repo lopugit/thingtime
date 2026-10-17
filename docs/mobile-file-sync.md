@@ -1730,7 +1730,43 @@ live revision using the current placement and expected revision.
 Real local HTTP/object-storage acceptance verifies no live change, concurrent
 retention/publication, retained replay after later edits, restore and independent
 hashes of every retained attachment. Unit checks cover privacy, stale placement,
-rollback and forged receipt refusal. The conflict-review UI does **not yet call**
-this operation; durable native capture/retry and content-ID lookup remain required.
+rollback and forged receipt refusal. The conflict-review UI now calls this operation through the shared native-source
+upload transport and durable journal, as described below. Installed capture
+acceptance and cross-folder content-ID lookup remain required.
 No independent backup or source-loss recovery of an uncaptured device file is
 claimed. Whole-data snapshots remain the scope defined above.
+
+
+## Save conflict versions and ignore — 2026-10-17
+
+For conflicts between two existing files, the shared conflict review now offers
+**Save versions and ignore**. It uploads the device version to the existing
+file's private Timeline and retains the cloud version without replacing either
+live file. The muted message explains content-derived IDs and later download or
+restore. Only a fully acknowledged capture shows the saved confirmation and a
+link to Timeline's Files view. Cancel does not upload anything. Folder/type and
+missing-file conflicts cannot use this action.
+
+Capture persists a version-2 run with explicit `retain-conflicts` intent in the
+existing scoped sync journal before any upload. Version-1 clients reject this
+format, and normal sync execution/checkpoint completion rejects retention runs.
+Capture never advances the common sync baseline. Repeating capture for the same
+reviewed pair reuses its original receipts; a later sync still reviews the
+unresolved conflict. Existing native source adapters, multipart fingerprints,
+account/configuration checks and `api.files` 1.3 negotiation are reused.
+
+Real local API/object-storage acceptance verifies a lost accepted response,
+journal reopen, recovery after the captured source becomes unavailable, unchanged
+live bytes and baseline, both independent byte hashes, and repeat receipt reuse.
+Five focused regressions additionally cover cancellation, changed account/settings,
+changed review, journal failure and separation from normal sync execution.
+The browser renders the production popup at 390px and 1280px without horizontal
+overflow, with muted text and wrapped 40px action controls. Browser input delivery
+failed for both existing Edit and Upload controls during this run, so the rendered
+review fixture proves layout only; full interactive and installed capture
+acceptance remains open.
+
+Uncaptured changed/missing sources retain their pending run and fail closed;
+explicit abandonment/re-review of such a run remains future work. Capturing one
+pair does not provide a complete backup, cross-folder content-ID search or a
+100 TB export. The whole-backup requirements above remain active.

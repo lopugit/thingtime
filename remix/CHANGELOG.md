@@ -68,6 +68,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-17 — **Codex (AI)**: Add “Save versions and ignore” to file conflict
+  review, with muted content-ID guidance and durable Timeline capture that keeps
+  both live files unchanged. Lost-response/source-loss recovery passes real
+  storage checks; installed capture and whole backups remain open.
+  [PR #1002 evidence](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md#durable-conflict-capture--2026-10-17).
+
 - 2026-10-17: Files API 1.3 retains alternate uploaded versions in Timeline without
   publishing them over the live file. Exact replay, concurrent publication and
   restore pass real storage acceptance. Conflict capture UI and whole backups

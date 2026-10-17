@@ -1,8 +1,8 @@
 import type { LocalSyncTarget } from './localSyncTarget';
-import { resolveFileSyncConflicts, type SyncConflict, type SyncConflictChoice } from './conflictResolution';
+import { planConflictRetention, resolveFileSyncConflicts, type SyncConflict, type SyncConflictReviewResult } from './conflictResolution';
 import { parseFileSyncConfiguration } from './configuration';
 import { planConfiguredFileSync, readOwnedFileSyncConfiguration, type SavedFileSyncConfiguration, type SyncConditions } from './configuredPlan';
-import { createSyncRun, executeSyncRun, type SyncRun } from './execute';
+import { createSyncRun, executeSyncRun, executeRetentionRun, type SyncRun } from './execute';
 import { advanceSyncBaseline, validateSyncCheckpoint } from './checkpoint';
 import { parseCloudSyncRun, prepareCloudInventoryRun, isCloudFolderWrite, type CloudSyncRun } from './cloudWrite';
 import { inventorySyncEntry, parseCloudInventory, type CloudInventory } from './cloudInventory';
@@ -13,7 +13,7 @@ import type { openSyncJournal } from './journal.client';
 import { sameSyncScope, type SyncEntry, type SyncScope, type SyncBaseline } from './reconcile';
 
 export type ForegroundSyncProgress = {
-	stage: 'checking' | 'scanning' | 'reviewing' | 'transferring' | 'verifying' | 'complete';
+	stage: 'checking' | 'scanning' | 'reviewing' | 'transferring' | 'verifying' | 'complete' | 'retaining' | 'retained';
 	confirmed: number;
 	total: number;
 	path?: string;
@@ -38,7 +38,7 @@ export async function runForegroundCloudSync(
 		journal: Awaited<ReturnType<typeof openSyncJournal>>;
 		runtime: CloudTransportRuntime;
 		progress(value: ForegroundSyncProgress): void;
-		reviewConflicts?(conflicts: SyncConflict[]): Promise<SyncConflictChoice[]>;
+		reviewConflicts?(conflicts: SyncConflict[]): Promise<SyncConflictReviewResult>;
 	},
 	signal: AbortSignal
 ) {
@@ -155,14 +155,17 @@ export async function runForegroundCloudSync(
 	};
 	if (
 		existing &&
+		existing.version === 1 &&
 		existing.operations.every((op) => op.confirmed) &&
 		checkpoint?.runId !== existing.id &&
 		JSON.stringify((existing as ConfiguredRun).configuration) === JSON.stringify(configuration)
 	)
 		baseline = await recordedBaseline(parseCloudSyncRun(existing) as ConfiguredRun);
 	let run: ConfiguredRun;
+	let retain = false;
 	if (existing && existing.operations.some((op) => !op.confirmed)) {
 		run = parseCloudSyncRun(existing) as ConfiguredRun;
+		retain = run.version === 2;
 		validateSyncCheckpoint(
 			{
 				version: 1,
@@ -217,16 +220,41 @@ export async function runForegroundCloudSync(
 				conditions: await authorize()
 			});
 			if (planned.status !== 'ready') throw Error('Transfer conditions changed. Try again.');
-			planned = { status: 'ready', plan: resolveFileSyncConflicts(planned.plan, reviewedConflicts, choices, configuration.mode) };
+			retain = !Array.isArray(choices) && choices.action === 'retain';
+			planned = {
+				status: 'ready',
+				plan: retain
+					? planConflictRetention(planned.plan, reviewedConflicts)
+					: resolveFileSyncConflicts(
+							planned.plan,
+							reviewedConflicts,
+							choices as Exclude<SyncConflictReviewResult, { action: 'retain' }>,
+							configuration.mode
+					  )
+			};
 		}
 		run = {
 			...prepareCloudInventoryRun(createSyncRun(planned.plan), observed.inventory),
 			configuration,
 			startingBaseline: structuredClone(baseline)
 		};
+		if (retain) {
+			run = { ...run, version: 2, intent: 'retain-conflicts' };
+			// Repeating Ignore for the same pair reuses its saved operation IDs
+			// and receipts instead of uploading/accounting a duplicate copy.
+			if (existing?.version === 2) {
+				const previous = parseCloudSyncRun(existing) as ConfiguredRun;
+				const identity = (value: ConfiguredRun) =>
+					JSON.stringify({
+						configuration: value.configuration,
+						writes: value.cloudWrites.map((w) => ({ mutation: w.operation.mutation, folderId: w.folderId, before: w.before }))
+					});
+				if (identity(previous) === identity(run)) run = previous;
+			}
+		}
 	}
 	let confirmedCount = run.operations.filter((op) => op.confirmed).length;
-	const report = (value: SyncRun, stage: ForegroundSyncProgress['stage'] = 'transferring') => {
+	const report = (value: SyncRun, stage: ForegroundSyncProgress['stage'] = retain ? 'retaining' : 'transferring') => {
 		confirmedCount = value.operations.filter((op) => op.confirmed).length;
 		input.progress({ stage, confirmed: confirmedCount, total: value.operations.length });
 	};
@@ -266,7 +294,7 @@ export async function runForegroundCloudSync(
 			progress: (path, bytes, size) => {
 				check();
 				input.progress({
-					stage: 'transferring',
+					stage: retain ? 'retaining' : 'transferring',
 					confirmed: confirmedCount,
 					total: run.operations.length,
 					path,
@@ -277,8 +305,12 @@ export async function runForegroundCloudSync(
 		},
 		runtime
 	);
-	const done = await executeSyncRun(run, port, signal);
+	const done = await (retain ? executeRetentionRun : executeSyncRun)(run, port, signal);
 	check();
+	if (retain) {
+		report(done, 'retained');
+		return done;
+	}
 	report(done, 'verifying');
 	await authorize();
 	baseline = await recordedBaseline({ ...run, operations: done.operations });

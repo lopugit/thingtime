@@ -1,6 +1,6 @@
 import React, { useId, useState } from 'react';
 import { Box, Button, Flex, FormControl, FormLabel, Select, Stack, Text } from '@chakra-ui/react';
-import { conflictCopySides, type SyncConflict, type SyncConflictChoice } from '~/fileSync/conflictResolution';
+import { canRetainFileConflicts, conflictCopySides, type SyncConflict, type SyncConflictChoice } from '~/fileSync/conflictResolution';
 import type { SyncMode, SyncSide } from '~/fileSync/reconcile';
 import { openThingHistory } from '../Timeline/TimelineHost';
 
@@ -8,11 +8,13 @@ export function SyncConflictReview({
 	conflicts,
 	mode,
 	onApply,
+	onRetain,
 	onCancel
 }: {
 	conflicts: SyncConflict[];
 	mode: SyncMode;
 	onApply(choices: SyncConflictChoice[]): void;
+	onRetain?(): void;
 	onCancel(): void;
 }) {
 	const id = useId();
@@ -35,8 +37,9 @@ export function SyncConflictReview({
 					Files and settings are checked again before copying. Unfinished transfers retain their original choices after they start.
 				</Text>
 				<Text fontSize="13px" color="var(--tt-muted, #71717a)">
-					{conflicts.every((conflict) => conflict.local && conflict.remote) ? 'Both versions of your data' : 'Your existing data'} will remain saved
-					and accessible in their current folders if you choose to ignore this conflict for now.
+					{onRetain && canRetainFileConflicts(conflicts)
+						? 'Choose “Save versions and ignore” to keep both versions in your private Timeline with IDs built from their contents. After saving, you can download or restore either version later, even while this conflict remains unresolved.'
+						: 'Your existing data will remain saved in its current folders if you cancel this review. Folder and missing-file conflicts need a separate review.'}
 				</Text>
 				{conflicts.slice(page * pageSize, (page + 1) * pageSize).map((conflict, index) => {
 					const options = conflictCopySides(conflict, mode),
@@ -112,6 +115,11 @@ export function SyncConflictReview({
 					>
 						Apply choices and sync
 					</Button>
+					{onRetain && (
+						<Button minHeight="40px" variant="outline" isDisabled={!canRetainFileConflicts(conflicts)} onClick={onRetain}>
+							Save versions and ignore
+						</Button>
+					)}
 					<Button minHeight="40px" variant="outline" onClick={onCancel}>
 						Cancel review
 					</Button>

@@ -1,5 +1,13 @@
+import { fileRetentionEventId } from './fileVersions';
 import { CLOUD_FOLDER_REQUIREMENTS, parseCloudFolder, parseCloudFolderCreate, cloudFolderSyncEntry } from './cloudFolder';
-import { CLOUD_FILE_REQUIREMENTS, cloudFileSyncEntry, parseCloudFile, type CloudFile } from './cloudFile';
+import {
+	CLOUD_FILE_RETENTION_REQUIREMENTS,
+	parseCloudFileRetention,
+	CLOUD_FILE_REQUIREMENTS,
+	cloudFileSyncEntry,
+	parseCloudFile,
+	type CloudFile
+} from './cloudFile';
 import { cloudWriteCommit, parseCloudWrite, isCloudFolderWrite, type CloudWrite } from './cloudWrite';
 import { contentPartPlan, equalContentFingerprints, type FingerprintSource } from './contentFingerprint';
 import { sameSyncContent, sameSyncScope, type SyncScope } from './reconcile';
@@ -102,13 +110,15 @@ export function cloudRequests(runtime: CloudTransportRuntime, scope: SyncScope, 
 	};
 	return { check, json, negotiate };
 }
-export function createCloudFileTransport(runtime: CloudTransportRuntime, saved: CloudWrite, signal?: AbortSignal) {
+function cloudFileTransport(runtime: CloudTransportRuntime, saved: CloudWrite, signal: AbortSignal | undefined, retained: boolean) {
 	const write = parseCloudWrite(saved),
 		scope = write.scope,
 		m = write.operation.mutation;
-	if (isCloudFolderWrite(write) || (m.kind==='copy' && m.from!=='local')) throw Error('Use the matching cloud folder or download transport.');
+	if (isCloudFolderWrite(write) || (m.kind === 'copy' && m.from !== 'local')) throw Error('Use the matching cloud folder or download transport.');
+	if (retained && (!write.before || m.kind !== 'copy' || m.from !== 'local' || m.source.kind !== 'file' || m.expectedTarget?.kind !== 'file'))
+		throw Error('Retaining conflicts requires two existing file versions.');
 	const { check, json, negotiate: negotiateRequirements } = cloudRequests(runtime, scope, signal);
-	const negotiate = () => negotiateRequirements(CLOUD_TRANSFER_REQUIREMENTS);
+	const negotiate = () => negotiateRequirements({ ...CLOUD_TRANSFER_REQUIREMENTS, ...(retained ? CLOUD_FILE_RETENTION_REQUIREMENTS : {}) });
 	const fileId = write.before?.id ?? write.operation.id;
 	const receipt = (value: unknown): SyncReceipt => {
 		const file = parseCloudFile(value);
@@ -124,16 +134,22 @@ export function createCloudFileTransport(runtime: CloudTransportRuntime, saved: 
 		return { operationId: write.operation.id, scope: { ...scope }, entry: file.trashed ? null : cloudFileSyncEntry(file, m.path) };
 	};
 	const commit = async (content: CloudFile['content'], replayOnly = false) => {
-		const result = await json('/api/v1/files', cloudWriteCommit(write, content));
+		const command = cloudWriteCommit(write, content);
+		const result = await json('/api/v1/files', retained ? parseCloudFileRetention({ ...command, kind: 'retained-version' }) : command);
+		if (retained && result.retained !== true) throw Error('The server did not confirm version retention.');
 		if (replayOnly && result.replayed !== true) throw Error('Cloud operation receipt was not an exact replay.');
 		const file = parseCloudFile(result.file);
+		if (retained && file.revision !== (await fileRetentionEventId(scope.ownerId, fileId, write.operation.id)))
+			throw Error('Retention receipt changed operation identity.');
 		if (file.content.attachmentId !== content.attachmentId || file.content.version !== content.version)
 			throw Error('Cloud commit changed the attachment identity.');
 		return receipt(file);
 	};
 	const lookup = async (): Promise<SyncReceiptLookup> => {
 		await negotiate();
-		const result = await json('/api/v1/files?' + new URLSearchParams({ id: fileId, operationId: write.operation.id }));
+		const result = await json(
+			'/api/v1/files?' + new URLSearchParams({ id: fileId, operationId: write.operation.id, ...(retained ? { kind: 'retained-version' } : {}) })
+		);
 		if (result.receipt === null) return { status: 'missing' };
 		const file = parseCloudFile(result.receipt?.file);
 		receipt(file);
@@ -250,11 +266,16 @@ export function createCloudFileTransport(runtime: CloudTransportRuntime, saved: 
 	};
 }
 
+export const createCloudFileTransport = (runtime: CloudTransportRuntime, saved: CloudWrite, signal?: AbortSignal) =>
+	cloudFileTransport(runtime, saved, signal, false);
+export const createCloudRetentionTransport = (runtime: CloudTransportRuntime, saved: CloudWrite, signal?: AbortSignal) =>
+	cloudFileTransport(runtime, saved, signal, true);
+
 export function createCloudFolderTransport(runtime: CloudTransportRuntime, saved: CloudWrite, signal?: AbortSignal) {
 	const write = parseCloudWrite(saved),
 		scope = write.scope,
 		m = write.operation.mutation;
-	if (!isCloudFolderWrite(write) || m.kind!=='copy' || m.from!=='local') throw Error('A cloud folder creation operation is required.');
+	if (!isCloudFolderWrite(write) || m.kind !== 'copy' || m.from !== 'local') throw Error('A cloud folder creation operation is required.');
 	const input = parseCloudFolderCreate({
 		kind: 'folder',
 		id: write.operation.id,

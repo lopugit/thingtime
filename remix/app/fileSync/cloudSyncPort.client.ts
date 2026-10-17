@@ -4,7 +4,7 @@ import { cloudRequests } from './cloudTransport';
 import { cloudFolderSyncEntry, parseCloudFolder } from './cloudFolder';
 import { cloudFileSyncEntry, parseCloudFile } from './cloudFile';
 import { requireThingtimeCapability } from '~/api/utils/capabilities/requireCapability.client';
-import { createCloudFileTransport, createCloudFolderTransport, type CloudTransportRuntime } from './cloudTransport';
+import { createCloudFileTransport, createCloudRetentionTransport, createCloudFolderTransport, type CloudTransportRuntime } from './cloudTransport';
 import { parseCloudSyncRun, isCloudFolderWrite } from './cloudWrite';
 import type { FingerprintSource } from './contentFingerprint';
 import { sameSyncScope, sameSyncStamp, type SyncEntry, type SyncScope } from './reconcile';
@@ -33,6 +33,7 @@ export function createCloudSyncPort(
 	}
 ): SyncExecutionPort {
 	const run = parseCloudSyncRun(saved);
+	const fileTransport = run.version === 2 ? createCloudRetentionTransport : createCloudFileTransport;
 	const downloads = run.cloudWrites.some((write) => write.operation.mutation.kind === 'copy' && write.operation.mutation.from === 'remote');
 	if (downloads && !input.localTarget) throw Error('Native staged publication is required for downloads.');
 	const writes = new Map(run.cloudWrites.map((write) => [write.operation.id, write]));
@@ -76,7 +77,7 @@ export function createCloudSyncPort(
 			  }
 			: isCloudFolderWrite(write)
 			? createCloudFolderTransport(runtime, write, input.signal)
-			: createCloudFileTransport(runtime, write, input.signal);
+			: fileTransport(runtime, write, input.signal);
 
 	return {
 		currentScope: input.currentScope,
@@ -113,9 +114,7 @@ export function createCloudSyncPort(
 			}
 			if (isCloudFolderWrite(write)) return createCloudFolderTransport(runtime, write, input.signal).apply();
 			const source = operation.mutation.kind === 'copy' ? await input.openSource(operation.mutation.source) : undefined;
-			return createCloudFileTransport(runtime, write, input.signal).apply(source, (bytes, total) =>
-				input.progress?.(operation.mutation.path, bytes, total)
-			);
+			return fileTransport(runtime, write, input.signal).apply(source, (bytes, total) => input.progress?.(operation.mutation.path, bytes, total));
 		}
 	};
 }

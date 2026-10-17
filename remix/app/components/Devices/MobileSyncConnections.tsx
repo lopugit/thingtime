@@ -1,6 +1,7 @@
+import { TIMELINE_CHANGED_EVENT } from '~/timeline/clientEvents';
 import React, { useEffect, useId, useRef, useState, useSyncExternalStore } from 'react';
 import { SyncConflictReview } from './SyncConflictReview';
-import type { SyncConflict, SyncConflictChoice } from '~/fileSync/conflictResolution';
+import type { SyncConflict, SyncConflictChoice, SyncConflictReviewResult } from '~/fileSync/conflictResolution';
 import { Box, Button, Checkbox, Flex, FormControl, FormLabel, Input, Select, Stack, Text, Textarea } from '@chakra-ui/react';
 import type { FolderHost } from '~/fileSync/desktopFolders.client';
 import { getNativeBridge } from '~/utils/nativeBridge';
@@ -124,6 +125,7 @@ function Connections({
 		id: string;
 		conflicts: SyncConflict[];
 		apply(choices: SyncConflictChoice[]): void;
+		retain(): void;
 		cancel(): void;
 	} | null>(null);
 	const [folders, setFolders] = useState<{ id: string; name: string }[]>([]);
@@ -257,6 +259,7 @@ function Connections({
 				assertActive();
 				setTransfers((previous) => ({ ...previous, [saved.id]: value }));
 				writeStampedCache(progressKey(saved.id), value);
+				if (value.stage === 'retained') window.dispatchEvent(new Event(TIMELINE_CHANGED_EVENT));
 				pruneCacheNamespace('tt:sync-progress:', progressKey(saved.id), 32);
 			};
 			setActiveTransfer(saved.id);
@@ -315,8 +318,8 @@ function Connections({
 								},
 								progress: publish,
 								reviewConflicts: (conflicts) =>
-									new Promise<SyncConflictChoice[]>((resolve, reject) => {
-										const finish = (choices?: SyncConflictChoice[]) => {
+									new Promise<SyncConflictReviewResult>((resolve, reject) => {
+										const finish = (choices?: SyncConflictReviewResult) => {
 											active.signal.removeEventListener('abort', abort);
 											if (mounted.current) setFileReview(null);
 											if (active.signal.aborted) reject(active.signal.reason);
@@ -329,7 +332,13 @@ function Connections({
 											abort();
 											return;
 										}
-										setFileReview({ id: saved.id, conflicts, apply: (choices) => finish(choices), cancel: () => finish() });
+										setFileReview({
+											id: saved.id,
+											conflicts,
+											apply: (choices) => finish(choices),
+											retain: () => finish({ action: 'retain' }),
+											cancel: () => finish()
+										});
 									})
 							},
 							active.signal
@@ -499,7 +508,13 @@ function Connections({
 								{!roots.some((root) => root.id === saved.configuration.localRootId) ? ' · Folder access missing' : ''}
 							</Text>
 							{progress && (
-								<Text role="status" fontSize="12px" marginTop={1} overflowWrap="anywhere">
+								<Text
+									role="status"
+									fontSize="12px"
+									color={progress.stage === 'retained' ? 'var(--tt-muted, #71717a)' : undefined}
+									marginTop={1}
+									overflowWrap="anywhere"
+								>
 									{running
 										? progress.stage === 'reviewing'
 											? 'Waiting for your conflict choices.'
@@ -511,8 +526,17 @@ function Connections({
 											? `${progress.path}: ${Math.round(((progress.bytes ?? 0) / Math.max(1, progress.size ?? 1)) * 100)}%`
 											: `${progress.confirmed} of ${progress.total} operations confirmed`
 										: progress.message ||
-										  (progress.stage === 'complete' ? 'Last transfer finished.' : 'Transfer stopped or interrupted. Retry to recover saved work.')}
+										  (progress.stage === 'retained'
+												? 'Both versions are saved in Timeline with IDs built from their contents. You can download or restore them later. This conflict remains unresolved.'
+												: progress.stage === 'complete'
+												? 'Last transfer finished.'
+												: 'Transfer stopped or interrupted. Retry to recover saved work.')}
 								</Text>
+							)}
+							{progress?.stage === 'retained' && (
+								<Button as="a" href="/history?storage=home&kind=file" size="xs" variant="link" mt={2}>
+									View saved versions
+								</Button>
 							)}
 						</Box>
 						<Button size="sm" minHeight="40px" variant="outline" isDisabled={busy || !!draft || !ready} onClick={() => open(saved.id)}>
@@ -524,7 +548,13 @@ function Connections({
 							</Button>
 						) : (
 							<Button size="sm" minHeight="40px" isDisabled={!allowed || busy || !!draft || !ready} onClick={() => transfer(saved)}>
-								{progress && progress.stage !== 'complete' ? 'Retry transfer' : twoWay ? 'Sync now' : downloading ? 'Download now' : 'Upload now'}
+								{progress && !['complete', 'retained'].includes(progress.stage)
+									? 'Retry transfer'
+									: twoWay
+									? 'Sync now'
+									: downloading
+									? 'Download now'
+									: 'Upload now'}
 							</Button>
 						)}
 						{fileReview?.id === saved.id && (
@@ -532,6 +562,7 @@ function Connections({
 								conflicts={fileReview.conflicts}
 								mode={saved.configuration.mode}
 								onApply={fileReview.apply}
+								onRetain={fileReview.retain}
 								onCancel={fileReview.cancel}
 							/>
 						)}

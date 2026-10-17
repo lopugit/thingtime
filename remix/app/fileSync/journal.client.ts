@@ -101,7 +101,7 @@ export const openSyncJournal = async (factory: IDBFactory = indexedDB, name = 't
 				try {
 					const run = request.result;
 					validateSyncRun(run);
-					if (syncScopeKey(run.scope) !== key || run.id !== saved.runId || run.operations.some((op: any) => !op.confirmed))
+					if (run.version !== 1 || syncScopeKey(run.scope) !== key || run.id !== saved.runId || run.operations.some((op: any) => !op.confirmed))
 						throw Error('Only the current fully confirmed run may advance its baseline.');
 					tx.objectStore('checkpoints').put(saved, key);
 				} catch (error) {

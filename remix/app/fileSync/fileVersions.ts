@@ -59,10 +59,13 @@ export function fileRestoreKey(scope: TimelineScope, version: CloudFile): string
 	return `tt-file-restore:${timelineScopeKey(scope)}:${version.id}:${version.revision}`;
 }
 
-export async function fileCommitEventId(ownerId: string, id: string, operationId: string): Promise<string> {
+async function fileOperationEventId(ownerId: string, id: string, operationId: string, kind: 'commit' | 'retain'): Promise<string> {
 	const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify([ownerId, id, operationId])));
-	return `file-commit-${[...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('')}`;
+	return `file-${kind}-${[...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('')}`;
 }
+
+export const fileCommitEventId = (ownerId: string, id: string, operationId: string) => fileOperationEventId(ownerId, id, operationId, 'commit');
+export const fileRetentionEventId = (ownerId: string, id: string, operationId: string) => fileOperationEventId(ownerId, id, operationId, 'retain');
 
 export async function checkFileRestoreReceipt(value: unknown, command: CloudFileCommit, version: CloudFile, ownerId: string): Promise<CloudFile> {
 	const file = parseCloudFile(value);

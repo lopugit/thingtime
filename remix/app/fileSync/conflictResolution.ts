@@ -1,6 +1,9 @@
 import { sameSyncStamp, validSyncEntry, type SyncDecision, type SyncMode, type SyncPlan, type SyncSide } from './reconcile';
 
 export type SyncConflict = Extract<SyncDecision, { kind: 'conflict' }>;
+export type SyncConflictReviewResult = SyncConflictChoice[] | { action: 'retain' };
+export const canRetainFileConflicts = (conflicts: readonly SyncConflict[]) =>
+	conflicts.length > 0 && conflicts.every((c) => c.local?.kind === 'file' && c.remote?.kind === 'file' && c.reason !== 'excluded-descendants');
 export type SyncConflictChoice = { path: string; from: SyncSide };
 
 /** A choice may copy an existing file, never grant deletion or change direction. */
@@ -53,4 +56,17 @@ export function resolveFileSyncConflicts(
 			};
 		})
 	};
+}
+
+/** Explicit capture is separate from choosing a winning sync version. */
+export function planConflictRetention(plan: SyncPlan, reviewed: readonly SyncConflict[]): SyncPlan {
+	if (!canRetainFileConflicts(reviewed)) throw Error('Only conflicts between two existing files can be saved here.');
+	const resolved = resolveFileSyncConflicts(
+		plan,
+		reviewed,
+		reviewed.map((c) => ({ path: c.path, from: 'local' })),
+		'two-way'
+	);
+	const paths = new Set(reviewed.map((c) => c.path));
+	return { scope: resolved.scope, decisions: resolved.decisions.filter((d) => paths.has(d.path)) };
 }

@@ -10778,3 +10778,26 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
   client retry state; verify Ignore after capture, reload and source-file loss on
   installed Mac/iOS/Android. This API alone does not preserve an uncaptured device
   file, implement content-ID search or provide independent whole-data backups.
+
+
+### Durable conflict capture — 2026-10-17
+
+- [x] Save two-existing-file conflicts through the shared foreground transport.
+  Verify the root bytes/revision stay unchanged, both versions are independently
+  readable and no common sync baseline advances. A later normal sync must still
+  require a winner choice; repeating Ignore reuses its immutable receipt.
+- [x] Lose an accepted capture reply, reopen IndexedDB and remove the source.
+  Recover using the original receipt without scanning, reopening or uploading
+  the captured source. Exercise the real local API/object store with
+  `scripts/file-sync-foreground.integration.mts`.
+- [x] Cancellation, account/settings changes, a changed review and failed durable
+  persistence stop before upload. Version-1 execution and baseline completion
+  reject a version-2 retention run; persisted intent cannot be changed in place.
+- [x] Render `mobile-sync-editor.browser.html?capture=1&view=review` at 390px and
+  1280px: muted content-ID copy, long filenames and 40px action buttons wrap
+  without horizontal overflow. This static review fixture does not upload data.
+- [ ] Complete interactive browser and installed iOS/Android/Mac capture, reload
+  and source-loss acceptance. This run's browser inputs did not reach either
+  existing Edit/Upload handlers; rendered layout is not click-through evidence.
+- [ ] Add explicit re-review/abandonment for a pending uncaptured version that
+  changes, folder/missing-file capture, content-ID lookup and whole backups.

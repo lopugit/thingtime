@@ -323,5 +323,13 @@ Receipt lookup requires the same kind, file and operation. `fileVersions.ts`
 recognizes only server retention effects with the reserved receipt identity;
 existing History download/restore cards and Files filtering apply. The real
 `file-versions.integration.mts` check covers concurrent publication, exact replay,
-restore and byte readback. Conflict UI/native capture and independent backups
-remain unfinished; see `docs/mobile-file-sync.md`.
+restore and byte readback. Shared conflict capture now reuses these APIs and native source adapters;
+installed capture acceptance and independent backups remain unfinished; see `docs/mobile-file-sync.md`.
+
+
+`foregroundSync.ts` plans explicit conflict retention through
+`conflictResolution.ts`; `executeRetentionRun` and the version-2 journal intent
+separate capture from sync/checkpoint publication. `createCloudRetentionTransport`
+uses the ordinary verified multipart source and immutable retention receipts.
+`conflictRetention.test.ts` covers reopen/source-loss, unchanged live/baseline,
+repeat capture and account/configuration/cancellation fences.

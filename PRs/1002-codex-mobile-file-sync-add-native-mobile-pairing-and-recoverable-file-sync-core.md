@@ -1443,3 +1443,29 @@ Validation: 29 files API tests, 239 Timeline tests and 129 shared file-sync chec
 pass; targeted ESLint passes. Full TypeScript exactly matches the preceding
 91 normalized baseline diagnostics. No native source or layout changed in this
 increment; installed conflict-capture acceptance remains outstanding.
+
+
+## Durable conflict capture — 2026-10-17
+
+The shared popup now offers **Save versions and ignore** for two-existing-file
+conflicts. It captures the device version into the existing private Timeline
+without replacing live bytes. Muted text explains content IDs and later restore;
+a saved confirmation and Files History link appear only after all operations are
+acknowledged. Cancel and unsupported folder/missing-file cases do not capture.
+
+An explicit version-2 retention intent in the existing durable journal prevents
+old clients or normal executors from interpreting capture as sync overwrite.
+Capture never checkpoints agreement. Exact receipt recovery survives a lost
+accepted response and missing source; repeating the same capture avoids another
+upload. A later normal sync still reviews the unresolved pair.
+
+Validation: 134 shared sync checks pass (including five new capture regressions).
+Real API/object-storage acceptance confirms both byte hashes, unchanged live
+revision/baseline, lost-response recovery after source removal and repeat receipt
+reuse. Targeted ESLint passes; the integration .mts file is executed through tsx
+because the existing ESLint configuration does not parse it. Full TypeScript
+matches the 91 normalized pre-existing diagnostics after fixing fixture typing.
+The production popup renders at 390px/1280px without overflow. Browser input
+commands did not reach existing Edit/Upload controls during this run; a static
+review fixture verifies layout, not interactive capture. Installed capture,
+stale uncaptured-run re-review, content-ID lookup and whole backups remain open.

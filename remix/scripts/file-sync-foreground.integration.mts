@@ -171,35 +171,150 @@ try {
 	);
 	// A fresh device baseline sees divergent copies and must obtain a specific
 	// version choice. Use the real file API for replacement and retained bytes.
-	const retained = structuredClone(file), retainedBytes = bytes.slice();
+	const retained = structuredClone(file),
+		retainedBytes = bytes.slice();
 	const reviewFactory = new IDBFactory();
-	journal.close(); journal = await openSyncJournal(reviewFactory);
-	bytes = new Uint8Array([41, 42, 43, 44, 45, 46]); version = 'conflicting-local';
+	journal.close();
+	journal = await openSyncJournal(reviewFactory);
+	bytes = new Uint8Array([41, 42, 43, 44, 45, 46]);
+	version = 'conflicting-local';
 	const beforeReview = puts;
-	await assert.rejects(runForegroundCloudSync(saved, scope, { ...input(), reviewConflicts: async () => { throw Error('Review cancelled'); } }, new AbortController().signal), /Review cancelled/);
-	assert.equal(await journal.read(scope), null); assert.equal(puts, beforeReview);
-	await assert.rejects(runForegroundCloudSync(saved, scope, { ...input(), reviewConflicts: async conflicts => {
-		assert.equal(conflicts[0].path, 'sample.bin'); version = 'changed-during-review';
-		return [{ path: 'sample.bin', from: 'local' }];
-	} }, new AbortController().signal), /changed during review/);
-	assert.equal(await journal.read(scope), null); assert.equal(puts, beforeReview);
-	let reviews = 0; lost = true;
-	const chosenInput = () => ({ ...input(), reviewConflicts: async () => { reviews++; return [{ path: 'sample.bin', from: 'local' as const }]; } });
+	await assert.rejects(
+		runForegroundCloudSync(
+			saved,
+			scope,
+			{
+				...input(),
+				reviewConflicts: async () => {
+					throw Error('Review cancelled');
+				}
+			},
+			new AbortController().signal
+		),
+		/Review cancelled/
+	);
+	assert.equal(await journal.read(scope), null);
+	assert.equal(puts, beforeReview);
+	await assert.rejects(
+		runForegroundCloudSync(
+			saved,
+			scope,
+			{
+				...input(),
+				reviewConflicts: async (conflicts) => {
+					assert.equal(conflicts[0].path, 'sample.bin');
+					version = 'changed-during-review';
+					return [{ path: 'sample.bin', from: 'local' }];
+				}
+			},
+			new AbortController().signal
+		),
+		/changed during review/
+	);
+	assert.equal(await journal.read(scope), null);
+	assert.equal(puts, beforeReview);
+	let reviews = 0;
+	lost = true;
+	const chosenInput = () => ({
+		...input(),
+		reviewConflicts: async () => {
+			reviews++;
+			return [{ path: 'sample.bin', from: 'local' as const }];
+		}
+	});
 	await assert.rejects(runForegroundCloudSync(saved, scope, chosenInput(), new AbortController().signal), /Lost accepted commit/);
-	const chosen = (await journal.read(scope))!, afterChosen = puts;
-	journal.close(); journal = await openSyncJournal(reviewFactory);
+	const chosen = (await journal.read(scope))!,
+		afterChosen = puts;
+	journal.close();
+	journal = await openSyncJournal(reviewFactory);
 	const resumed = await runForegroundCloudSync(saved, scope, chosenInput(), new AbortController().signal);
-	assert.equal(resumed.id, chosen.id); assert.equal(reviews, 1); assert.equal(puts, afterChosen);
+	assert.equal(resumed.id, chosen.id);
+	assert.equal(reviews, 1);
+	assert.equal(puts, afterChosen);
 	file = (await api('/api/v1/files?id=' + retained.id)).file;
-	assert.equal(file.id, retained.id); assert.notEqual(file.revision, retained.revision);
-	for (const [content, expected] of [[retained.content, retainedBytes], [file.content, bytes]] as const) {
+	assert.equal(file.id, retained.id);
+	assert.notEqual(file.revision, retained.revision);
+	for (const [content, expected] of [
+		[retained.content, retainedBytes],
+		[file.content, bytes]
+	] as const) {
 		const response = await sessionFetch(new URL('/api/v1/attachments/content?id=' + content.attachmentId + '&cache=bytes', base));
 		assert.equal(response.status, 200);
-		assert.equal(createHash('sha256').update(new Uint8Array(await response.arrayBuffer())).digest('hex'), createHash('sha256').update(expected).digest('hex'));
+		assert.equal(
+			createHash('sha256')
+				.update(new Uint8Array(await response.arrayBuffer()))
+				.digest('hex'),
+			createHash('sha256').update(expected).digest('hex')
+		);
 	}
 	const repeat = await runForegroundCloudSync(saved, scope, chosenInput(), new AbortController().signal);
-	assert.equal(repeat.operations.length, 0); assert.equal(reviews, 1); assert.equal(puts, afterChosen);
-	console.log('PASS: conflict cancellation and stale review write nothing; chosen replacement survives lost commit/reopen without another choice or upload; stable identity, both retained byte hashes and repeat convergence. Native permissions are fixture adapters.');
+	assert.equal(repeat.operations.length, 0);
+	assert.equal(reviews, 1);
+	assert.equal(puts, afterChosen);
+	console.log(
+		'PASS: conflict cancellation and stale review write nothing; chosen replacement survives lost commit/reopen without another choice or upload; stable identity, both retained byte hashes and repeat convergence. Native permissions are fixture adapters.'
+	);
+	// Capture an alternate version, lose its accepted response and then make
+	// the local source unavailable. Recovery must use its durable receipt.
+	const captureFactory = new IDBFactory();
+	journal.close();
+	journal = await openSyncJournal(captureFactory);
+	const liveBeforeCapture = structuredClone(file),
+		liveBytesBeforeCapture = bytes.slice();
+	bytes = new Uint8Array([71, 72, 73, 74, 75, 76, 77]);
+	version = 'capture-local';
+	let captureReviews = 0;
+	const captureInput = () => ({
+		...input(),
+		reviewConflicts: async () => {
+			captureReviews++;
+			return { action: 'retain' as const };
+		}
+	});
+	lost = true;
+	await assert.rejects(runForegroundCloudSync(saved, scope, captureInput(), new AbortController().signal), /Lost accepted commit/);
+	const pendingCapture = (await journal.read(scope))!,
+		capturePuts = puts;
+	assert.equal(pendingCapture.version, 2);
+	assert.equal(pendingCapture.intent, 'retain-conflicts');
+	assert.deepEqual((await api('/api/v1/files?id=' + file.id)).file, liveBeforeCapture);
+	journal.close();
+	journal = await openSyncJournal(captureFactory);
+	const unavailableSource = async (): Promise<never> => {
+		throw Error('Device source removed after accepted capture');
+	};
+	const captured = await runForegroundCloudSync(
+		saved,
+		scope,
+		{ ...captureInput(), scanLocal: unavailableSource, source: unavailableSource },
+		new AbortController().signal
+	);
+	assert.equal(captured.id, pendingCapture.id);
+	assert.ok(captured.operations.every((op) => op.confirmed));
+	assert.equal(puts, capturePuts);
+	assert.equal(captureReviews, 1);
+	assert.equal(await journal.checkpoint(scope), null);
+	const captureReceipt = (await api(`/api/v1/files?id=${file.id}&operationId=${captured.operations[0].id}&kind=retained-version`)).receipt.file;
+	for (const [content, expected] of [
+		[captureReceipt.content, bytes],
+		[liveBeforeCapture.content, liveBytesBeforeCapture]
+	] as const) {
+		const response = await sessionFetch(new URL('/api/v1/attachments/content?id=' + content.attachmentId + '&cache=bytes', base));
+		assert.equal(response.status, 200);
+		assert.equal(
+			createHash('sha256')
+				.update(new Uint8Array(await response.arrayBuffer()))
+				.digest('hex'),
+			createHash('sha256').update(expected).digest('hex')
+		);
+	}
+	await runForegroundCloudSync(saved, scope, captureInput(), new AbortController().signal);
+	assert.equal(puts, capturePuts);
+	assert.equal(captureReviews, 2);
+	assert.deepEqual((await api('/api/v1/files?id=' + file.id)).file, liveBeforeCapture);
+	console.log(
+		'PASS: configured conflict capture; durable lost-response recovery after source removal; both independent byte hashes; unchanged live file/baseline; repeated Ignore reuses captured receipts. Native source/consent remains an explicit test adapter.'
+	);
 } finally {
 	try {
 		if (rootId) {
