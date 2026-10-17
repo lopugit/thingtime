@@ -9928,6 +9928,12 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
 
 ## Password manager and native AutoFill
 
+- Password archive regression: in React StrictMode, open an imported entry and
+  verify related source documents/icons populate after effects replay. Export,
+  reimport, and verify the remapped source entry still owns byte-identical files;
+  edited values, removed fields, category changes, and password history survive.
+  Original metadata and raw source members stay intact independently of edits.
+
 - [ ] On desktop and 390px, add two entries for one website, edit/reorder custom
   fields, mask/reveal, close/reopen and delete one without changing the other.
   The heading clears the fixed navigation and device safe area.
@@ -9938,9 +9944,17 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
   Invalid images, oversized images, HOTP and FIDO handoff codes fail clearly.
 - [ ] Preview/import 1Password 1PUX/CSV, Chrome CSV and Apple CSV; test quoted,
   multiline and whitespace-sensitive passwords, Unicode, custom fields, TOTP,
-  cancellation, malformed ZIP and bounded expansion. Export acknowledgement
+  cancellation, malformed ZIP, CRC failures, and bounded working memory. Export acknowledgement
   is required; 1PUX re-import preserves complete ordered Thingtime entries.
-  More than 2,000 accounts export as numbered parts that all import successfully.
+  More than 2,000 accounts and archives over 20 MiB must import without a cap.
+- [ ] Import a 1PUX matrix containing every category and field type, multiple
+  accounts/vaults, attrs after items, archived/favourite flags, nested tags,
+  password history, documents, icons, linked IDs and unknown JSON/ZIP members.
+  Compare source member bytes and edited field values after export/re-import.
+  Empty and multi-part encrypted files download exactly; corrupted, truncated,
+  reordered and wrong-key frames fail. Generic attachment routes must refuse
+  password files, even for the owner. Test failed-save retry and file retry,
+  other-owner denial, private-upload permission, deletion races and recovery.
 - [ ] Use the HTTP fixture with two owners: session unlock, other-owner denial,
   account-switch fence, same-origin proxy handling, no-store, exact retry,
   stale revision, delete tombstones, password recovery and immediate revocation.
@@ -10070,6 +10084,7 @@ separate from deterministic discovery/lease tests.
   to collapsed; collapsing and reopening preserves unsaved edits.
 - Check the connection selector and explanatory text at desktop and narrow mobile
   sizes; credentials are masked and the buttons remain reachable.
+
 
 ## Gmail Google authorization
 

@@ -12,9 +12,9 @@ test('all CSV formats preserve quoted and multiline passwords exactly', () => {
     assert.equal(decoded.fields.some(f => f.type === 'totp'), format !== 'chrome');
   }
 });
-test('1PUX preserves multiple accounts and custom concealed and authenticator fields', () => {
+test('1PUX preserves multiple accounts and custom concealed and authenticator fields', async () => {
   const entry = fixture(); entry.fields.push({ id: 'pin', label: 'PIN', type: 'password', value: '12345' });
-  const result = import1Pux(exportPasswords([entry, { ...entry, title: 'Second account' }], '1pux').bytes);
+  const result = await import1Pux(exportPasswords([entry, { ...entry, title: 'Second account' }], '1pux').bytes);
   assert.equal(result.entries.length, 2); assert.equal(result.entries[0].fields[1].value, entry.fields[1].value);
   assert.equal(result.entries[0].fields.find(f => f.label.endsWith('PIN'))?.value, '12345'); assert.equal(result.entries[0].fields.find(f => f.type === 'totp')?.value, entry.fields.find(f => f.type === 'totp')?.value);
 });
@@ -23,11 +23,12 @@ test('CSV rejects malformed structure and preserves unknown columns as custom fi
   assert.throws(() => importPasswordCsv('name,password\nonly-title'));
   assert.equal(importPasswordCsv('\uFEFFTitle,Password,Recovery\r\nExample,pw,recovery-code').entries[0].fields.find(f => f.label === 'Recovery')?.value, 'recovery-code');
 });
-test('field schema rejects prototype keys, duplicate ids, and oversized input without altering secret whitespace', () => {
+test('field schema rejects prototype keys and duplicate ids without arbitrary size or character caps', () => {
   const entry = fixture(); assert.equal(validatePasswordEntry(entry).fields[1].value, entry.fields[1].value);
   assert.throws(() => validatePasswordEntry({ ...entry, fields: [...entry.fields, entry.fields[0]] }));
   assert.throws(() => validatePasswordEntry({ ...entry, fields: [{ id: '__proto__', label: 'bad', type: 'text', value: '' }] }));
-  assert.throws(() => validatePasswordEntry({ ...entry, fields: [{ ...entry.fields[0], value: 'x'.repeat(16385) }] }));
+  const large = { ...entry, title: 'title'.repeat(100), fields: Array.from({ length: 100 }, (_, i) => ({ id: `field-${i}`, label: 'label'.repeat(100), type: 'notes' as const, value: '🦊'.repeat(20000) })) };
+  assert.deepEqual(validatePasswordEntry(large), large);
   assert.deepEqual(moveThingField(['username', 'password', 'website'], 1, -1), ['password', 'username', 'website']);
 });
 test('TOTP RFC 6238 SHA1 vectors including times beyond 2038', async () => {
@@ -40,25 +41,25 @@ test('TOTP parsing rejects handoff QR, HOTP, duplicate options and invalid param
   assert.equal(decodeBase32('GEZDGNBVGY3TQOJQ').length, 10);
 });
 
-test('Thingtime 1PUX round trips preserve field ids, labels, ordering and category', () => {
+test('Thingtime 1PUX round trips preserve field ids, labels, ordering and category', async () => {
  const entry = fixture(); entry.passwordType = 'api-key'; entry.fields.reverse();
- assert.deepEqual(import1Pux(exportPasswords([entry], '1pux').bytes).entries, [entry]);
+ assert.deepEqual((await import1Pux(exportPasswords([entry], '1pux').bytes)).entries, [entry]);
 });
 test('external 1PUX imports use the standard format without the Thingtime extension', async () => {
  const { zipSync, strToU8 } = await import('fflate');
  const data = { accounts: [{ vaults: [{ items: [{ categoryUuid: '001', overview: { title: 'External login', url: 'https://example.test' }, details: { loginFields: [{ designation: 'username', value: 'external@example.test' }, { designation: 'password', value: '  exact external password  ' }], sections: [{ title: 'Recovery', fields: [{ title: 'Secret', value: { concealed: 'fixture-recovery' } }, { title: 'Code', value: { totp: 'otpauth://totp/Fixture?secret=GEZDGNBVGY3TQOJQ' } }] }] } }] }] }] };
  const bytes = zipSync({ 'export.attributes': strToU8('{"version":3}'), 'export.data': strToU8(JSON.stringify(data)) });
- const entry = import1Pux(bytes).entries[0];
+ const entry = (await import1Pux(bytes)).entries[0];
  assert.equal(entry.fields[1].value, '  exact external password  ');
- assert.equal(entry.fields.find(field => field.label === 'Recovery · Secret')?.value, 'fixture-recovery');
+ assert.equal(entry.fields.find(field => field.label === 'Secret' && field.section === 'Recovery')?.value, 'fixture-recovery');
  assert.equal(entry.fields.filter(field => field.type === 'totp').length, 1);
- assert.throws(() => import1Pux(new Uint8Array([1, 2, 3])));
+ await assert.rejects(import1Pux(new Uint8Array([1, 2, 3])));
 });
 
 test('large backups split into individually restorable files without dropping accounts', async () => {
  const { unzipSync } = await import('fflate');
  const entries = Array.from({length: 2001}, (_, index) => ({ ...fixture(), title: `Account ${index}` }));
  const backup = exportPasswordBackup(entries, '1pux'); assert.equal(backup.extension, 'zip');
- const restored = Object.entries(unzipSync(backup.bytes)).filter(([name]) => name.endsWith('.1pux')).flatMap(([, bytes]) => import1Pux(bytes).entries);
+ const restored = (await Promise.all(Object.entries(unzipSync(backup.bytes)).filter(([name]) => name.endsWith('.1pux')).map(async ([, bytes]) => (await import1Pux(bytes)).entries))).flat();
  assert.deepEqual(restored, entries);
 });

@@ -29,6 +29,21 @@ update stale details. Do not recursively reread this file through its aliases.
 - For PR reviews, prioritize code quality, performance, potential bugs,
   crashes, and especially security issues before style commentary.
 
+## Power users: no arbitrary product limits
+
+Thingtime is for power users and should stay simple to use at any scale. Do not
+impose arbitrary file-size, character-count, field-count, item-count, or similar
+limits on features, uploads, text inputs, imports, or exports. A product limit is
+allowed only when the user explicitly requests it for that particular feature.
+Use streaming, chunking, pagination, backpressure, cancellation and resumable
+operations to manage resources without rejecting or truncating valid user data.
+Processing batch sizes are implementation details, not maximum user data sizes.
+Preserve authorization, integrity validation and legitimate storage accounting.
+Where a protocol or external platform has an unavoidable constraint, identify it
+accurately, handle it transparently where possible, and explain the concrete
+constraint rather than presenting an invented Thingtime limit. Remove existing
+arbitrary caps in the flow being changed, including hidden UI/server mismatches.
+
 ## Feature maps — read the map for the domain you touch
 
 `docs/feature-map/` holds one short map per domain (attachments and media,
