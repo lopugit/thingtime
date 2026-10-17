@@ -10436,6 +10436,11 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
 - [x] Installed Android: use the optional two-way runbook, cancel/allow native
   consent, verify both transfer directions and independent replacements, repeat
   without changing file identities/revisions, inspect Files and remove access.
+- [x] Installed Android: change saved settings through the revision-guarded
+  Things API, refresh and require renewed native consent. Cancel, compare the
+  complete cloud inventory and native identities/full hashes, then allow the
+  retry and require unchanged convergence. This models settings saved elsewhere,
+  not editing through the connection form.
 - [x] Installed iOS simulator: cancel/retry native consent, run mixed uploads
   and downloads, independently replace each side, compare full byte hashes,
   and repeat without changing cloud revisions or local inodes/mtimes. Local

@@ -384,7 +384,17 @@ Use the same disposable cloud fixture as the download runbook, then add
 `THINGTIME_TWO_WAY_SYNC_TEST=1` to its test command. This opt-in case seeds a
 synthetic native file through the production catalog, exercises the installed
 **Sync now** control and native Cancel/Allow consent, independently hashes both
-transfer directions and repeats the run. At `TWO_WAY_EDIT_READY`, run from `remix/`:
+transfer directions and repeats the run. Once instrumentation has opened the
+app, follow its prompts in a second terminal using the current test process:
+
+```sh
+test_pid="$(adb -s <test-device-id> shell pidof com.thingtime.mobile.dev | tr -d '\r')"
+test -n "$test_pid" && adb -s <test-device-id> logcat --pid="$test_pid" -v brief -s System.out:I
+```
+
+The runner's final report is buffered, and these manual prompts are emitted to
+logcat. Obtain a new PID after each test launch; unscoped logcat can include
+messages from earlier runs. At `TWO_WAY_EDIT_READY`, run from `remix/`:
 
 ```sh
 node --import tsx scripts/mobile-sync-installed-fixture.mts /absolute/path/private-fixture.json /absolute/path/download-state.json replace
@@ -394,6 +404,18 @@ adb -s <test-device-id> shell run-as com.thingtime.mobile.dev sh -c '"cat > file
 This changes a cloud file while the test separately edits its local fixture.
 The next run must replace each opposite copy, retain the uploaded file's stable
 identity, and converge without further revisions on a repeated run. Complete
-Files inspection and normal cleanup as above. No native grants or replies are
+the settings reapproval sequence next: the test changes the connection name and
+exclusions through the ordinary revision-guarded Things API, then refreshes the
+installed UI. At `TWO_WAY_REAPPROVAL_CANCEL`, cancel the renewed native approval;
+at `TWO_WAY_REAPPROVAL_ALLOW`, allow the retry. Both checks require identical
+cloud inventory/revisions and native entries/full byte hashes. This models
+settings saved elsewhere; it does not test editing those fields in the form.
+Complete Files inspection and normal cleanup as above. No native grants or replies are
 fabricated, and all cloud writes use canonical APIs. Test fixture creation is
 not evidence of an Android Files editing UI.
+
+The full two-way sequence, including settings reapproval, passed on the Android
+15 / API 35 emulator on 2026-10-17: 46 executed native checks and two skipped
+opt-in process cases (`OK (48 tests)`), 26 JVM checks, debug build and lint.
+This confirms foreground behavior with synthetic fixtures; physical devices,
+throughput, background work and interrupted two-way restart remain open.

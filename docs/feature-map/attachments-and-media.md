@@ -247,3 +247,13 @@ to inventory and cloud transports. WebKit rejects invoking a copied native fetch
 with a transport object as its receiver. `mobile-sync-editor.browser.tsx` now
 models that receiver constraint; installed iOS two-way acceptance exercises the
 real WebKit call through canonical inventory, upload and download APIs.
+
+## Android saved-settings consent acceptance
+
+`DeviceLiveTest.verifySettingsReapproval` extends the opt-in two-way installed
+test after independent edits converge. It updates the saved Thing through the
+revision-guarded API, refreshes the real connection controls, and requires fresh
+native consent. Cancellation and an approved retry must preserve the complete
+cloud inventory, native identities and full byte hashes. The Android README
+documents the two consent prompts; this covers settings saved elsewhere, not
+the connection edit form or background execution.

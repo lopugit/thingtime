@@ -150,6 +150,7 @@ public class DeviceLiveTest {
                 JSONArray repeated=verifyCloudBytes(context,scope,root,expected);assertEquals(replacedEntries.length(),repeated.length());
                 for(int i=0;i<repeated.length();i++)assertEquals(SyncStaging.canonical(replacedEntries.getJSONObject(i)),SyncStaging.canonical(repeated.getJSONObject(i)));
                 assertEquals(uploaded.getString("revision"),verifyUploadedBytes(web,cloud.getString("rootId"),edited).getString("revision"));
+                verifySettingsReapproval(web,context,scope,connection,root,expected,cloud.getString("rootId"));
                 System.out.println("TWO_WAY_SYNC_PASS: mixed cloud/native creates and independent edits, stable uploaded identity, exact downloaded and uploaded hashes, repeated convergence.");
             }
             System.out.println("OFFLINE_DOWNLOAD_PASS: actual Download now, native Cancel/Allow, cloud nested bytes, independent hashes and unchanged repeated transfer.");
@@ -164,6 +165,42 @@ public class DeviceLiveTest {
             }
             if(connection!=null)webApi(web,"/api/v1/things?id="+connection,"DELETE",null);
         }
+    }
+    private static void verifySettingsReapproval(android.webkit.WebView web,Context context,DeviceScope scope,String connection,String root,JSONArray expected,String remoteRoot) throws Exception {
+        JSONArray before=verifyCloudBytes(context,scope,root,expected);
+        String inventory=inventorySignature(webApi(web,"/api/v1/files?rootId="+remoteRoot,"GET",null).getJSONObject("inventory"));
+        JSONObject saved=webApi(web,"/api/v1/things?id="+connection,"GET",null).getJSONObject("thing");
+        JSONObject config=new JSONObject(saved.getJSONObject("crystal").toString());
+        config.put("name","Android two-way settings reapproval").put("excludedPaths",new JSONArray().put("not-selected"));
+        // Simulate settings saved elsewhere through the canonical revision-guarded API.
+        JSONObject changed=webApi(web,"/api/v1/things","PATCH",new JSONObject().put("id",connection)
+            .put("expectedUpdatedAt",saved.getString("updatedAt")).put("crystal",config)).getJSONObject("thing");
+        assertNotEquals(saved.getString("updatedAt"),changed.getString("updatedAt"));
+        evaluate(web,"Array.from(document.querySelectorAll('button')).find(b=>b.textContent.trim()==='Refresh'&&!b.disabled).click()");
+        awaitTrue(web,"document.body.innerText.includes('Android two-way settings reapproval') && Array.from(document.querySelectorAll('button')).some(b=>b.textContent.trim()==='Sync now'&&!b.disabled)");
+        evaluate(web,"Array.from(document.querySelectorAll('button')).find(b=>b.textContent.trim()==='Sync now'&&!b.disabled).click()");
+        System.out.println("TWO_WAY_REAPPROVAL_CANCEL: Changed settings must show fresh native consent. Cancel it.");
+        awaitTrue(web,"document.body.innerText.includes('Download approval cancelled')",300000);
+        JSONArray cancelled=verifyCloudBytes(context,scope,root,expected);
+        assertEquals(before.length(),cancelled.length());
+        for(int i=0;i<before.length();i++)assertEquals(SyncStaging.canonical(before.getJSONObject(i)),SyncStaging.canonical(cancelled.getJSONObject(i)));
+        assertEquals(inventory,inventorySignature(webApi(web,"/api/v1/files?rootId="+remoteRoot,"GET",null).getJSONObject("inventory")));
+        evaluate(web,"Array.from(document.querySelectorAll('button')).find(b=>b.textContent.trim()==='Retry transfer'&&!b.disabled).click()");
+        System.out.println("TWO_WAY_REAPPROVAL_ALLOW: Allow the revised connection in the native dialog.");
+        awaitDownload(web);
+        JSONArray approved=verifyCloudBytes(context,scope,root,expected);
+        assertEquals(before.length(),approved.length());
+        for(int i=0;i<before.length();i++)assertEquals(SyncStaging.canonical(before.getJSONObject(i)),SyncStaging.canonical(approved.getJSONObject(i)));
+        assertEquals(inventory,inventorySignature(webApi(web,"/api/v1/files?rootId="+remoteRoot,"GET",null).getJSONObject("inventory")));
+        System.out.println("TWO_WAY_REAPPROVAL_PASS: revised saved settings require fresh native consent; cancellation and approved convergence preserve cloud revisions, native identities and bytes.");
+    }
+    private static String inventorySignature(JSONObject inventory) throws Exception {
+        JSONObject metadata=new JSONObject(inventory.toString());
+        JSONArray nodes=metadata.getJSONArray("nodes");metadata.remove("nodes");
+        java.util.List<String> entries=new java.util.ArrayList<>();
+        for(int i=0;i<nodes.length();i++)entries.add(SyncStaging.canonical(nodes.getJSONObject(i)));
+        java.util.Collections.sort(entries);
+        return SyncStaging.canonical(metadata)+"\n"+new JSONArray(entries).toString();
     }
     private static JSONObject expectedFile(String path,byte[] bytes) throws Exception {
         return new JSONObject().put("path",path).put("size",bytes.length).put("sha256",FolderReader.hex(java.security.MessageDigest.getInstance("SHA-256").digest(bytes)));

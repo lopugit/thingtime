@@ -1040,3 +1040,30 @@ permission or pairing response was injected. This verifies foreground two-way
 transfers on the simulator's local provider; external Files editing, interrupted
 two-way restart recovery, settings reapproval, physical devices, mobile streaming,
 background workers, Photos, peers and the remaining product scope stay open.
+
+
+## Android saved-settings reapproval acceptance — 2026-10-17
+
+The installed two-way test now revises a saved connection's name and exclusion
+list through the normal revision-guarded Things API after both sides converge.
+It refreshes the actual connection controls and starts Sync now, requiring a new
+native approval. Cancelling must leave the complete cloud inventory and native
+entries unchanged, including full local byte hashes. Allowing the retry must
+converge without changing cloud revisions or native identities. Inventory
+comparison canonicalizes each node and sorts the signatures, retaining all
+metadata while ignoring response order. Production operation serialization is
+unchanged.
+
+This covers settings saved elsewhere and consumed by the installed Android app.
+It does not establish connection-form editing, iOS reapproval, concurrent edits,
+interrupted two-way restarts, background execution, or physical-device coverage.
+The test still uses synthetic local edits rather than an Android Files editor.
+
+The Android 15 / API 35 emulator run passed all 46 executed native checks, with
+both opt-in process-restart cases skipped (`OK (48 tests)`), plus the 26 JVM
+checks, debug build and lint. The new consent check passed after independent
+257-to-513-byte uploads and 8 MiB-plus cloud replacements, repeated convergence,
+and real Files inspection. No consent or grant reply was fabricated. A first
+attempt exposed a test-only array serialization mistake before the reapproval
+step; node-wise canonical comparison fixed it, and the full sequence was rerun.
+Fixtures use normal cleanup and retain accounted cloud versions in private Trash.
