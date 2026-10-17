@@ -104,7 +104,7 @@ public class DeviceLiveTest {
         boolean binary=androidx.webkit.WebViewFeature.isFeatureSupported(androidx.webkit.WebViewFeature.WEB_MESSAGE_ARRAY_BUFFER);
         if(binary) {
             assertEquals("\"1.1.0\"",evaluate(web,"window.thingtimeNativeBridge.fileStagingVersion"));
-            evaluate(web,"window.__rangeQA={ranges:0,frames:0,bytes:0,appends:0,lastAction:null};window.__rangeQAPost=window.thingtimeNativeBridge.postMessage;window.__rangeQAFrame=window.thingtimeNativeBridge.postFileFrame;window.thingtimeNativeBridge.postMessage=m=>{if(m.type==='mobile-files'){window.__rangeQA.lastAction=m.payload.action;if(m.payload.action==='stage-range')window.__rangeQA.ranges++;if(m.payload.action==='stage-append')window.__rangeQA.appends++}return window.__rangeQAPost(m)};window.thingtimeNativeBridge.postFileFrame=f=>{if(!(f instanceof ArrayBuffer)||f.byteLength<37||f.byteLength>65572)throw Error('Invalid binary frame');window.__rangeQA.frames++;window.__rangeQA.bytes+=f.byteLength-36;return window.__rangeQAFrame(f)};");
+            evaluate(web,"window.__rangeQA={ranges:0,frames:0,bytes:0,appends:0,lastAction:null};window.__rangeQAPost=window.thingtimeNativeBridge.postMessage;window.__rangeQAFrame=window.thingtimeNativeBridge.postFileFrame;window.thingtimeNativeBridge.postMessage=m=>{if(m.type==='mobile-files'){window.__rangeQA.lastAction=m.payload.action;if(m.payload.action==='stage-range')window.__rangeQA.ranges++;if(m.payload.action==='stage-append')window.__rangeQA.appends++}return window.__rangeQAPost(m)};window.thingtimeNativeBridge.postFileFrame=f=>{if(!(f instanceof ArrayBuffer)||f.byteLength<36||f.byteLength>65572)throw Error('Invalid binary frame');if(f.byteLength>36){window.__rangeQA.frames++;window.__rangeQA.bytes+=f.byteLength-36;}return window.__rangeQAFrame(f)};");
         }
 
         byte[] localBytes=new byte[257];java.util.Arrays.fill(localBytes,(byte)41);
@@ -296,7 +296,7 @@ public class DeviceLiveTest {
         }
     }
     private static void verifySelectedFolder(android.webkit.WebView web,Context context,DeviceScope scope) throws Exception {
-        awaitTrue(web,"window.thingtimeNativeBridge?.fileAccessVersion==='1.3.0' && document.body.innerText.includes('Folder access') && Array.from(document.querySelectorAll('button')).some(b=>b.textContent.trim()==='Choose folder'&&!b.disabled)");
+        awaitTrue(web,"window.thingtimeNativeBridge?.fileAccessVersion==='"+(androidx.webkit.WebViewFeature.isFeatureSupported(androidx.webkit.WebViewFeature.WEB_MESSAGE_ARRAY_BUFFER)?"1.4.0":"1.3.0")+"' && document.body.innerText.includes('Folder access') && Array.from(document.querySelectorAll('button')).some(b=>b.textContent.trim()==='Choose folder'&&!b.disabled)");
         assertNotNull(folderRequest(web,scope,new JSONObject().put("action","list")).getJSONArray("roots"));
         JSONObject conditions=folderRequest(web,scope,new JSONObject().put("action","conditions")).getJSONObject("conditions");
         assertTrue(java.util.Arrays.asList("wifi","cellular","ethernet","offline","unknown").contains(conditions.getString("network")));
@@ -402,15 +402,28 @@ public class DeviceLiveTest {
     }
     private static void verifySelectedUpload(android.webkit.WebView web,Context context,DeviceScope scope,String localRootId) throws Exception {
         String remoteRoot=null,connectionId=null;
+        String connectionName="Android upload acceptance "+java.util.UUID.randomUUID();
+        boolean binary=androidx.webkit.WebViewFeature.isFeatureSupported(androidx.webkit.WebViewFeature.WEB_MESSAGE_ARRAY_BUFFER);
+        if(binary)evaluate(web,"window.__uploadQA={ranges:0,legacyBytes:0,frames:0,bytes:0,requests:0,replies:0,lastAction:null,lastError:null};window.__uploadPost=window.thingtimeNativeBridge.postMessage;window.thingtimeNativeBridge.postMessage=m=>{if(m.type==='mobile-files'){window.__uploadQA.requests++;window.__uploadQA.lastAction=m.payload.action;if(m.payload.action==='read-range')window.__uploadQA.ranges++;if(m.payload.action==='read'&&m.payload.length>1)window.__uploadQA.legacyBytes+=m.payload.length}return window.__uploadPost(m)};window.__uploadFrames=e=>{if(e.detail?.type==='mobile-files-result'){window.__uploadQA.replies++;window.__uploadQA.lastError=e.detail.payload?.error||null}if(e.detail?.type==='mobile-files-read-frame'){const b=e.detail.payload.frame;if(!(b instanceof ArrayBuffer)||b.byteLength<77||b.byteLength>65612)throw Error('Invalid upload frame');window.__uploadQA.frames++;window.__uploadQA.bytes+=b.byteLength-76}};window.addEventListener('thingtime:native-message',window.__uploadFrames);");
         try {
             remoteRoot=webApi(web,"/api/v1/things","POST",new JSONObject().put("thingtime",new JSONArray().put("folder")).put("crystal",new JSONObject().put("name","Android upload acceptance "+java.util.UUID.randomUUID()))).getJSONObject("thing").getString("id");
             String deviceId=new KeystoreDeviceStore(context).load(scope).getString("deviceId");
-            JSONObject config=new JSONObject().put("configurationVersion",1).put("name","Android upload acceptance").put("deviceId",deviceId).put("localRootId",localRootId).put("remoteFolderId",remoteRoot).put("mode","backup").put("paused",false).put("propagateDeletes",false).put("network","any").put("chargingOnly",false).put("excludedPaths",new JSONArray());
+            JSONObject config=new JSONObject().put("configurationVersion",1).put("name",connectionName).put("deviceId",deviceId).put("localRootId",localRootId).put("remoteFolderId",remoteRoot).put("mode","backup").put("paused",false).put("propagateDeletes",false).put("network","any").put("chargingOnly",false).put("excludedPaths",new JSONArray());
             connectionId=webApi(web,"/api/v1/things","POST",new JSONObject().put("thingtime",new JSONArray().put("file-sync")).put("crystal",config)).getJSONObject("thing").getString("id");
             evaluate(web,"Array.from(document.querySelectorAll('button')).find(b=>b.textContent.trim()==='Refresh'&&!b.disabled).click()");
-            awaitTrue(web,"document.body.innerText.includes('Android upload acceptance') && Array.from(document.querySelectorAll('button')).some(b=>b.textContent.trim()==='Upload now'&&!b.disabled)");
-            evaluate(web,"Array.from(document.querySelectorAll('button')).find(b=>b.textContent.trim()==='Upload now'&&!b.disabled).click()");
-            awaitTrue(web,"document.body.innerText.includes('Last upload finished.')",240000);
+            String card="Array.from(document.querySelectorAll('p')).find(e=>e.textContent==="+JSONObject.quote(connectionName)+")?.parentElement?.parentElement";
+            awaitTrue(web,"Array.from(("+card+")?.querySelectorAll('button')||[]).some(b=>b.textContent.trim()==='Upload now'&&!b.disabled)");
+            evaluate(web,"Array.from(("+card+").querySelectorAll('button')).find(b=>b.textContent.trim()==='Upload now'&&!b.disabled).click()");
+            long uploadDeadline=System.currentTimeMillis()+240000,nextDiagnostic=0;
+            while(!"true".equals(evaluate(web,"("+card+")?.querySelector('[role=status]')?.textContent==='Last transfer finished.'"))) {
+                if(binary && System.currentTimeMillis()>=nextDiagnostic) {
+                    System.out.println("ANDROID_UPLOAD_PROGRESS: "+evaluate(web,"JSON.stringify(window.__uploadQA)"));
+                    System.out.println("ANDROID_UPLOAD_STATUS: "+evaluate(web,"("+card+")?.querySelector('[role=status]')?.textContent"));
+                    nextDiagnostic=System.currentTimeMillis()+10000;
+                }
+                if(System.currentTimeMillis()>=uploadDeadline)fail("Installed upload did not finish within four minutes.");
+                Thread.sleep(250);
+            }
             JSONArray nodes=webApi(web,"/api/v1/files?rootId="+remoteRoot,"GET",null).getJSONObject("inventory").getJSONArray("nodes");JSONObject file=null;
             for(int i=0;i<nodes.length();i++){JSONObject n=nodes.getJSONObject(i);if(n.getString("path").equals("original.bin"))file=n.getJSONObject("file");}
             assertNotNull(file);assertEquals(8*1024*1024+17,file.getJSONObject("content").getLong("size"));
@@ -420,8 +433,13 @@ public class DeviceLiveTest {
             byte[] expected=new byte[8*1024*1024+17];java.util.Arrays.fill(expected,(byte)13);
             String hash=FolderReader.hex(java.security.MessageDigest.getInstance("SHA-256").digest(expected));
             assertEquals(hash,new JSONTokener(evaluate(web,"window.__syncHash")).nextValue());
+            if(binary){
+                assertEquals("true",evaluate(web,"window.__uploadQA.ranges>0 && window.__uploadQA.frames>window.__uploadQA.ranges && window.__uploadQA.legacyBytes===0 && window.__uploadQA.bytes>=8388625"));
+                System.out.println("ANDROID_BINARY_UPLOAD_PASS: "+evaluate(web,"JSON.stringify(window.__uploadQA)"));
+            }
             System.out.println("FOLDER_UPLOAD_PASS: installed Android WebView control, real SAF bytes, configured executor, cloud multipart publication, independent downloaded-byte SHA-256.");
         } finally {
+            if(binary)evaluate(web,"window.thingtimeNativeBridge.postMessage=window.__uploadPost;window.removeEventListener('thingtime:native-message',window.__uploadFrames);delete window.__uploadPost;delete window.__uploadFrames;");
             if(remoteRoot!=null) {
                 JSONArray nodes=webApi(web,"/api/v1/files?rootId="+remoteRoot,"GET",null).getJSONObject("inventory").getJSONArray("nodes");
                 for(int i=0;i<nodes.length();i++){JSONObject node=nodes.getJSONObject(i);if(!node.getString("kind").equals("file"))continue;JSONObject f=node.getJSONObject("file"),c=f.getJSONObject("content");

@@ -111,4 +111,18 @@ public class FolderReaderTest {
         proofs.put("late",new byte[32],generation);assertNull(proofs.get("late",proofs.generation()));
     }
 
+    @Test public void binaryRangeUsesOneProviderStreamAndChecksEveryTouchedChunk() throws Exception {
+        int[] opens={0};Provider p=new Provider(){@Override public InputStream open(String id){opens[0]++;return super.open(id);}};
+        byte[] bytes=new byte[2*1024*1024+19];new Random(7).nextBytes(bytes);p.file("file","file",bytes);
+        FolderReader.ProofCache proofs=new FolderReader.ProofCache();FolderReader reader=new FolderReader(p,()->{},proofs,"scope");
+        String version=reader.scan().getJSONObject(0).getString("version");opens[0]=0;
+        FolderReader.Range range=reader.readRange("file",version,3,bytes.length-3);
+        assertArrayEquals(Arrays.copyOfRange(bytes,3,bytes.length),range.bytes);assertEquals(1,opens[0]);assertFalse(range.metadata().has("data"));
+        p.bytes.get("file")[65537]^=1;
+        assertThrows(Exception.class,()->reader.readRange("file",version,0,bytes.length));
+        assertThrows(Exception.class,()->reader.readRange("file",version,0,FolderReader.MAX_RANGE+1));
+        assertThrows(Exception.class,()->reader.readRange("file",version,bytes.length-1,2));
+        proofs.clear();assertThrows(Exception.class,()->reader.readRange("file",version,0,3));
+    }
+
 }

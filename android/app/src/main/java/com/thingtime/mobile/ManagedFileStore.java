@@ -219,14 +219,21 @@ final class ManagedFileStore implements AutoCloseable {
         } finally {db.endTransaction();}
     }
     JSONObject read(DeviceScope owner,String root,String path,String version,long offset,int length) throws Exception {
-        root(owner,root);FolderReader.path(path);if(offset<0 || length<0 || length>FolderReader.MAX_READ)throw unavailable();
+        if(length>FolderReader.MAX_READ)throw unavailable();return readBytes(owner,root,path,version,offset,length).chunk();
+    }
+    FolderReader.Range readRange(DeviceScope owner,String root,String path,String version,long offset,int length) throws Exception {
+        if(length<1)throw unavailable();FolderReader.Range range=readBytes(owner,root,path,version,offset,length);
+        if(range.bytes.length!=length)throw changed();return range;
+    }
+    private FolderReader.Range readBytes(DeviceScope owner,String root,String path,String version,long offset,int length) throws Exception {
+        root(owner,root);FolderReader.path(path);if(offset<0 || length<0 || length>FolderReader.MAX_RANGE)throw unavailable();
         Entry selected=entry(root,path);
         if(selected==null || selected.blob==null || !selected.json.getString("version").equals(version) || offset>selected.json.getLong("size"))throw changed();
         FileDescriptor fd=open(new File(blobs,uuid(selected.blob)),OsConstants.O_RDONLY);
         try {
             byte[] bytes=verify(fd,selected.json,null,offset,length);Entry current=entry(root,path);
             if(current==null || !SyncStaging.canonical(current.json).equals(SyncStaging.canonical(selected.json)))throw changed();
-            return new JSONObject().put("data",java.util.Base64.getEncoder().encodeToString(bytes)).put("offset",offset).put("size",selected.json.getLong("size")).put("version",version);
+            return new FolderReader.Range(version,selected.json.getLong("size"),offset,bytes);
         } finally {Os.close(fd);}
     }
     private static ContentValues documentColumns(JSONObject entry) throws Exception {

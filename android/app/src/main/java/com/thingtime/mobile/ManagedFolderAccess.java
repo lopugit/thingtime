@@ -61,6 +61,9 @@ final class ManagedFolderAccess {
     JSONObject read(DeviceScope scope,FolderStore.Grant grant,String path,String version,long offset,int length) throws Exception {
         try(ManagedFileStore store=store(()->{})){return store.read(scope,root(scope,grant,store),path,version,offset,length);}
     }
+    FolderReader.Range readRange(DeviceScope scope,FolderStore.Grant grant,String path,String version,long offset,int length) throws Exception {
+        try(ManagedFileStore store=store(()->{})){return store.readRange(scope,root(scope,grant,store),path,version,offset,length);}
+    }
     JSONArray capabilities(DeviceScope scope) throws Exception {
         JSONArray roots=grants.list(scope);
         for(int i=0;i<roots.length();i++) {

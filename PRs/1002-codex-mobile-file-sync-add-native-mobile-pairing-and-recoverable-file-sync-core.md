@@ -1311,3 +1311,48 @@ or third-party provider behavior. Installed account-switch/revocation while
 saving, low-storage/process-kill scenarios, Mac native History export/restore,
 native retained-version browsing, cross-folder content-ID lookup and durable
 ignored-conflict retention remain open with the broader sync ledger.
+
+## Android binary upload ranges — 2026-10-17
+
+Android now advertises `fileAccessVersion` 1.4.0 when its installed WebView
+supports binary messages; older WebViews keep 1.3.0. The shared upload source
+negotiates `read-range` and keeps the existing base64 path for older hosts.
+A range is bounded to 32 MiB (the upload executor normally reads smaller
+ranges), verified natively, then delivered as at most 64 KiB binary frames.
+Frames bind a request UUID, a fresh acknowledgement nonce and relative byte
+offset. Only one frame is outstanding; stale acknowledgements are ignored,
+malformed acknowledgements fail, and a missing acknowledgement times out.
+JavaScript returns bytes only after every frame and the exact final metadata
+match. Cancellation removes the listener and suspends the exact native request.
+
+SAF range reads reuse the account/root/version-scoped chunk proofs from a full
+scan and read one provider stream per range; cache misses revalidate the whole
+file. Managed offline ranges verify their immutable blob and current catalog
+entry before returning bytes. Both paths retain the full source verification
+before cloud publication. The native owner is rechecked before disclosure;
+every frame checks the selected grant, foreground generation and pinned auth
+cookie. No provider URI, filesystem path or credential enters a frame.
+
+This is foreground bounded-range transport. It does not establish background
+sync, iOS binary transfer, restart-resumable native upload sessions, generic
+provider publication or physical-device performance. The managed adapter still
+hashes the full blob for each range, and one verified range is buffered natively.
+
+
+Installed Android 15 / API 35 acceptance passed the real SAF picker and shared
+Upload now control for an 8,388,625-byte file. It used two binary ranges and
+129 frames with zero legacy multi-byte reads. An independent cloud download
+matched the original full SHA-256. The complete runner passed 49 executed checks
+with two opt-in process-restart cases skipped (`OK (51 tests)`). Both installed
+APKs match the final build hashes and the development app was relaunched.
+The first run timed out on an obsolete “Last upload finished” test predicate;
+the corrected assertion uses the current shared “Last transfer finished” status
+and the uniquely named new connection, so another completed card cannot pass it.
+Process-scoped counters now identify transfer-stage progress without logging bytes
+or credentials. The synthetic cloud file is retained in private Trash after cleanup.
+
+Final verification: 127 shared file-sync checks and 39 JVM tests pass, with Android
+build/lint and targeted ESLint passing. TypeScript remains at exactly the same
+91 normalized baseline diagnostics. The screenshot captures the installed control
+showing completion; this run is functional emulator acceptance, not a sustained
+throughput benchmark or a physical-provider test.

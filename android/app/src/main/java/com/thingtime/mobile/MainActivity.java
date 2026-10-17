@@ -40,9 +40,9 @@ public final class MainActivity extends Activity {
             window.dispatchEvent(new CustomEvent('thingtime:native-message', {detail:message}));
             for (const listener of listeners) { try { listener(message); } catch {} }
           };
-          window.thingtimeDeviceTransport.onmessage = event => { try { receive(JSON.parse(event.data)); } catch {} };
+          window.thingtimeDeviceTransport.onmessage = event => { try { receive(event.data instanceof ArrayBuffer ? {type:"mobile-files-read-frame",payload:{frame:event.data}} : JSON.parse(event.data)); } catch {} };
           window.thingtimeNativeBridge = {
-            version:'1.4.0', platform:'android', isNativeWebView:true, devicePairingVersion:'1.0.0', fileAccessVersion:'1.3.0', fileStagingVersion:'__STAGING_VERSION__', filePublicationVersion:'1.1.0', fileExportVersion:'1.0.0',
+            version:'1.4.0', platform:'android', isNativeWebView:true, devicePairingVersion:'1.0.0', fileAccessVersion:'__ACCESS_VERSION__', fileStagingVersion:'__STAGING_VERSION__', filePublicationVersion:'1.1.0', fileExportVersion:'1.0.0',
             postMessage:message => window.thingtimeDeviceTransport.postMessage(JSON.stringify(message)),
             __BINARY_METHOD__
             onMessage:listener => { listeners.add(listener); return () => listeners.delete(listener); },
@@ -98,7 +98,7 @@ public final class MainActivity extends Activity {
                 handle(body,reply);
             } catch(Exception invalid) { /* Malformed messages have no effects. */ }
         });
-        if(WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) WebViewCompat.addDocumentStartJavaScript(web,SCRIPT.replace("__STAGING_VERSION__",binary?"1.1.0":"1.0.0")
+        if(WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) WebViewCompat.addDocumentStartJavaScript(web,SCRIPT.replace("__ACCESS_VERSION__",binary?"1.4.0":"1.3.0").replace("__STAGING_VERSION__",binary?"1.1.0":"1.0.0")
             .replace("__BINARY_METHOD__",binary?"postFileFrame:frame => window.thingtimeDeviceTransport.postMessage(frame),":""),Collections.singleton(origin));
         web.loadUrl(origin);
     }

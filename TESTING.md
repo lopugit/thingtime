@@ -10708,3 +10708,23 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
 - [ ] Repeat with a physical iPhone/iPad, external Files providers, low storage,
   account change/revocation while a picker or copy is pending, and process kill.
   Background export and native Mac History export remain separate coverage.
+
+
+### Android binary upload ranges (2026-10-17)
+
+- [x] Bound native ranges and frames; require exact request/offset/length/final
+  metadata. Reject stale source versions, unchanged-metadata content edits,
+  early completion and malformed acknowledgements. Ignore foreign frames.
+- [x] Check acknowledgement timeout, cancellation while waiting and proof-cache
+  eviction; preserve full pre-publication source verification.
+- [x] Negotiate access 1.4 only with WebView binary support; retain older-host
+  chunk transport and existing Android binary downloads.
+- [x] Real selected-folder upload through the installed API 35 app: independent
+  cloud SHA-256 matches 8,388,625 bytes; two ranges, 129 binary frames, zero legacy
+  multi-byte reads. Scope completion to the newly created connection and use
+  the shared current status text, so old completed cards cannot satisfy it.
+- [x] Final native runner: 49 executed checks, two opt-in restart cases skipped;
+  39 JVM tests, 127 shared checks, Android build/lint and targeted lint pass.
+  Both installed APK hashes match the built outputs and the app is relaunched.
+- [ ] Physical devices, API 26, background uploads, large provider-performance
+  runs, and iOS binary ranges remain separate acceptance.

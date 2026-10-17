@@ -38,11 +38,11 @@ final class FolderBridge {
     private Request pending; private boolean selecting; private Intent selectedResult; private boolean resultArrived;
     private CancellationSignal cancellation=new CancellationSignal();
     private static final class Request {
-        volatile FolderRangeSource range;
+        volatile FolderRangeSource range; volatile FolderRangeSink sink;
         FolderStore.Grant approvalGrant; WriteApproval approval; boolean chooseExisting,offlineConsent; String offlineName;
         final String id,action;final DeviceScope scope;final JSONObject payload,base;final JavaScriptReplyProxy reply;final long generation;final long deadline;
         Request(JSONObject payload,DeviceScope scope,JavaScriptReplyProxy reply,long generation) throws Exception {
-            this.payload=payload;this.scope=scope;this.reply=reply;this.generation=generation;id=payload.getString("requestId");action=payload.getString("action");deadline=android.os.SystemClock.elapsedRealtime()+((action.equals("choose") || action.equals("write-approve") || action.equals("scan") || action.equals("stage-begin") || action.equals("stage-range") || action.equals("stage-finish") || action.equals("publish") || action.equals("publication-lookup"))?300000:30000);
+            this.payload=payload;this.scope=scope;this.reply=reply;this.generation=generation;id=payload.getString("requestId");action=payload.getString("action");deadline=android.os.SystemClock.elapsedRealtime()+((action.equals("choose") || action.equals("write-approve") || action.equals("scan") || action.equals("read-range") || action.equals("stage-begin") || action.equals("stage-range") || action.equals("stage-finish") || action.equals("publish") || action.equals("publication-lookup"))?300000:30000);
             base=new JSONObject().put("requestId",id).put("ownerId",scope.owner).put("origin",scope.origin);
         }
     }
@@ -56,7 +56,7 @@ final class FolderBridge {
         proofs.clear();
         if(approvalDialog!=null) { approvalDialog.dismiss();approvalDialog=null; }
         Request old=pending;pending=null;selecting=false;selectedResult=null;resultArrived=false;generation.incrementAndGet();cancellation.cancel();cancellation=new CancellationSignal();
-        if(old!=null) { if(old.range!=null)old.range.close();reply(old,new JSONObject(),"Folder access paused. Try again when the app is active."); }
+        if(old!=null) { if(old.range!=null)old.range.close();if(old.sink!=null)old.sink.close();reply(old,new JSONObject(),"Folder access paused. Try again when the app is active."); }
     }
     void pause() { if(!selecting) suspend(); }
     void activityResult(int code,int result,Intent data) {
@@ -70,15 +70,15 @@ final class FolderBridge {
     }
     void handleFrame(byte[] bytes) {
         Request request=pending;
-        if(request!=null && request.range!=null && active.get())request.range.accept(bytes);
+        if(request!=null && active.get()) {if(request.range!=null)request.range.accept(bytes);if(request.sink!=null)request.sink.accept(bytes);}
     }
     void handle(JSONObject body,JavaScriptReplyProxy reply) throws Exception {
         JSONObject payload=body.getJSONObject("payload");String id=payload.getString("requestId"),action=payload.getString("action");
         if(!UUID.fromString(id).toString().equalsIgnoreCase(id)) return;
         DeviceScope scope=new DeviceScope(payload.getString("ownerId"),origin,BuildConfig.DEBUG);
         if(action.equals("suspend")) { if(pending!=null && pending.id.equals(id)) suspend();return; }
-        if(!java.util.Arrays.asList("list","choose","remove","scan","read","conditions","stage-begin","stage-append","stage-range","stage-finish","write-approve","publication-lookup","publish").contains(action)) return;
-        if(action.equals("stage-range") && !WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_ARRAY_BUFFER))return;
+        if(!java.util.Arrays.asList("list","choose","remove","scan","read","read-range","conditions","stage-begin","stage-append","stage-range","stage-finish","write-approve","publication-lookup","publish").contains(action)) return;
+        if((action.equals("stage-range") || action.equals("read-range")) && !WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_ARRAY_BUFFER))return;
         if(pending!=null) { reply(new Request(payload,scope,reply,generation.get()),new JSONObject(),"Another folder request is running.");return; }
         Request request=new Request(payload,scope,reply,generation.incrementAndGet());pending=request;execute(request,null,false);
     }
@@ -191,7 +191,7 @@ final class FolderBridge {
                                     check.run();if(pending!=request)throw new java.util.concurrent.CancellationException();
                                     JSONObject pull=new JSONObject(request.base.toString()).put("token",token).put("offset",offset).put("length",length);
                                     request.reply.postMessage(new JSONObject().put("type","mobile-files-range-pull").put("payload",pull).toString());
-                                } catch(Exception error) { if(request.range!=null)request.range.close(); }
+                                } catch(Exception error) { if(request.range!=null)request.range.close();if(request.sink!=null)request.sink.close(); }
                             }))) {
                                 request.range=range;check.run();
                                 progress=staging.appendRange(transfer,request.scope,rootId,
@@ -215,8 +215,26 @@ final class FolderBridge {
                         if(request.action.equals("scan")) result.put("complete",true).put("entries",managed?offline.scan(request.scope,grant):reader.scan());
                         else {
                             String path=request.payload.getString("path"),version=request.payload.getString("version");
-                            long offset=integer(request.payload,"offset",9007199254740991L),length=integer(request.payload,"length",FolderReader.MAX_READ);
-                            result.put("path",path).put("chunk",managed?offline.read(request.scope,grant,path,version,offset,(int)length):reader.read(path,version,offset,(int)length,Boolean.TRUE.equals(request.payload.opt("verifiedChunks"))));
+                            long offset=integer(request.payload,"offset",9007199254740991L),length=integer(request.payload,"length",request.action.equals("read-range")?FolderReader.MAX_RANGE:FolderReader.MAX_READ);
+                            if(request.action.equals("read-range")) {
+                                FolderReader.Range bytes=managed?offline.readRange(request.scope,grant,path,version,offset,(int)length):reader.readRange(path,version,offset,(int)length);
+                                // Recheck the owner before disclosing verified bytes. During
+                                // backpressure every frame rechecks the same grant and lifecycle.
+                                String authentication=SessionCookie.auth(CookieManager.getInstance().getCookie(request.scope.origin+"/api/v1/auth/me"));
+                                auth.identity(request.scope);check.run();
+                                PairingEngine.Check frameCheck=()->{
+                                    check.run();store.requireRead(request.scope,grant);
+                                    if(!authentication.equals(SessionCookie.auth(CookieManager.getInstance().getCookie(request.scope.origin+"/api/v1/auth/me"))))
+                                        throw new java.util.concurrent.CancellationException();
+                                };
+                                try(FolderRangeSink sink=new FolderRangeSink(request.id,frameCheck,frame->activity.runOnUiThread(()-> {
+                                    try {frameCheck.run();if(pending!=request)throw new java.util.concurrent.CancellationException();request.reply.postMessage(frame);}
+                                    catch(Exception error){if(request.sink!=null)request.sink.close();}
+                                }))) {
+                                    request.sink=sink;sink.write(bytes.bytes);
+                                } finally {request.sink=null;}
+                                frameCheck.run();result.put("path",path).put("chunk",bytes.metadata());
+                            } else result.put("path",path).put("chunk",managed?offline.read(request.scope,grant,path,version,offset,(int)length):reader.read(path,version,offset,(int)length,Boolean.TRUE.equals(request.payload.opt("verifiedChunks"))));
                         }
                     }
                 }
@@ -293,7 +311,7 @@ final class FolderBridge {
         });
     }
     private void finish(Request request,JSONObject result,String error) {
-        if(request.range!=null)request.range.close();
+        if(request.range!=null)request.range.close();if(request.sink!=null)request.sink.close();
         activity.runOnUiThread(()-> {
             if(generation.get()!=request.generation || pending!=request || !active.get()) return;
             if(approvalDialog!=null) { approvalDialog.dismiss();approvalDialog=null; }

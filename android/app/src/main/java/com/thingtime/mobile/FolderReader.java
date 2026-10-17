@@ -13,7 +13,7 @@ import java.util.*;
  * Opt-in ranges verify every touched chunk against a complete observed file;
  * legacy reads and final publication checks still verify the whole source. */
 final class FolderReader {
-    static final int MAX_ENTRIES=10000, MAX_READ=65536;
+    static final int MAX_ENTRIES=10000, MAX_READ=65536, MAX_RANGE=32*1024*1024;
     static final class Failure extends Exception { Failure(String message) { super(message); } }
     static final class Doc {
         final String id,name; final boolean directory; final long size,modified;
@@ -67,7 +67,7 @@ final class FolderReader {
     private static String listing(List<Doc> rows) throws Exception { StringBuilder text=new StringBuilder();for(Doc row:rows) text.append(row.metadata()).append('\n');return hash(text.toString()); }
     private static final class Content { JSONObject fingerprint; String digest; byte[] bytes; }
     private Content content(Doc doc,long offset,int length) throws Exception {
-        check.run(); valid(doc); if(doc.directory || offset<0 || offset>doc.size || length<0 || length>MAX_READ) throw unavailable();
+        check.run(); valid(doc); if(doc.directory || offset<0 || offset>doc.size || length<0 || length>MAX_RANGE) throw unavailable();
         long mib=1048576L, partSize=((Math.max(8*mib,(doc.size+9999)/10000)+mib-1)/mib)*mib;
         if(partSize>5*1024*mib) throw new Failure("File exceeds the current transfer limit.");
         MessageDigest composite=MessageDigest.getInstance("SHA-256"), part=MessageDigest.getInstance("SHA-256"), chunk=MessageDigest.getInstance("SHA-256");
@@ -131,7 +131,7 @@ final class FolderReader {
         return current;
     }
     private byte[] verifiedRange(Doc doc,String expected,long offset,int length,byte[] proof) throws Exception {
-        if(doc.directory || offset<0 || offset>doc.size || length<=0 || length>MAX_READ || proof.length!=((doc.size+MAX_READ-1)/MAX_READ)*32) throw unavailable();
+        if(doc.directory || offset<0 || offset>doc.size || length<=0 || length>MAX_RANGE || proof.length!=((doc.size+MAX_READ-1)/MAX_READ)*32) throw unavailable();
         byte[] result=new byte[(int)Math.min(length,doc.size-offset)];
         if(result.length==0) return result;
         long first=offset/MAX_READ, last=(offset+result.length-1)/MAX_READ, at=first*MAX_READ;
@@ -152,8 +152,14 @@ final class FolderReader {
         }
         check.run();if(!doc.metadata().equals(provider.stat(doc.id).metadata()))throw unavailable();return result;
     }
-    JSONObject read(String path,String expected,long offset,int length,boolean verifiedChunks) throws Exception {
-        if(length<=0 || length>MAX_READ || expected.length()>512)throw unavailable();
+    static final class Range {
+        final String version; final long size,offset; final byte[] bytes;
+        Range(String version,long size,long offset,byte[] bytes) {this.version=version;this.size=size;this.offset=offset;this.bytes=bytes;}
+        JSONObject metadata() throws Exception {return new JSONObject().put("version",version).put("size",size).put("offset",offset).put("length",bytes.length);}
+        JSONObject chunk() throws Exception {return metadata().put("data",java.util.Base64.getEncoder().encodeToString(bytes));}
+    }
+    private Range readBytes(String path,String expected,long offset,int length,boolean verifiedChunks) throws Exception {
+        if(length<=0 || length>MAX_RANGE || expected.length()>512)throw unavailable();
         Doc doc=resolve(path);byte[] proof=verifiedChunks?proofs.get(proofKey(doc,expected),proofGeneration):null;
         byte[] bytes;
         if(proof==null) {
@@ -161,7 +167,14 @@ final class FolderReader {
             if(!expected.equals(version(doc,content.digest)))throw unavailable();bytes=content.bytes;
         } else bytes=verifiedRange(doc,expected,offset,length,proof);
         if(!doc.metadata().equals(resolve(path).metadata()))throw unavailable();check.run();
-        return new JSONObject().put("version",expected).put("size",doc.size).put("offset",offset).put("data",java.util.Base64.getEncoder().encodeToString(bytes));
+        return new Range(expected,doc.size,offset,bytes);
+    }
+    Range readRange(String path,String expected,long offset,int length) throws Exception {
+        Range range=readBytes(path,expected,offset,length,true);
+        if(range.bytes.length!=length)throw unavailable();return range;
+    }
+    JSONObject read(String path,String expected,long offset,int length,boolean verifiedChunks) throws Exception {
+        if(length>MAX_READ)throw unavailable();return readBytes(path,expected,offset,length,verifiedChunks).chunk();
     }
     JSONObject read(String path,String expected,long offset,int length) throws Exception {
         return read(path,expected,offset,length,false);

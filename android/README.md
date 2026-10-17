@@ -487,3 +487,25 @@ cookie refreshes do not cancel a save; changed/missing/ambiguous auth still stop
 it. The native adapter rechecks the current owner and exact attachment after the
 picker before copying. API 35 installed acceptance and independent Downloads
 byte checks passed; physical devices and other document providers remain open.
+
+### Binary upload transport (native access 1.4)
+
+Updated WebViews negotiate acknowledged binary upload ranges. This uses the
+existing selected-folder grant, account, upload APIs and cloud quota flow; no
+new permissions, private settings or credentials are needed. Older WebViews
+keep access 1.3 and bounded chunk messages. Downloads keep staging 1.1.
+
+Run the existing real SAF upload acceptance with the disposable account and
+`Documents/ThingtimeSyncQA/original.bin` described above:
+
+```sh
+THINGTIME_FOLDER_UPLOAD_TEST=1 ANDROID_SERIAL=<test-device-id> \
+  android/scripts/test-mobile-devices.sh /absolute/path/private-fixture.json
+```
+
+Choose only that synthetic folder in the system picker. The test checks the
+cloud file's complete SHA-256 and, on binary-capable WebViews, requires binary
+upload frames with no legacy multi-byte reads. The native range limit is 32 MiB;
+frames are 64 KiB with one outstanding acknowledgement. Managed offline reads
+verify the full immutable blob for each range; background workers and iOS binary
+transport remain separate work in the acceptance ledger.

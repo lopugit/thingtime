@@ -141,4 +141,16 @@ public class ManagedFileStoreTest {
             try(ManagedFileStore store=store()){assertEquals(1,store.scan(fixture.owner,root).length());String x=store.lookup(fixture.owner,root,fixture.grant,one).getString("status"),y=store.lookup(fixture.owner,root,fixture.grant,two).getString("status");assertNotEquals(x,y);}
         } finally {workers.shutdownNow();}
     }
+    @Test public void binaryReadRangeVerifiesFullContentAndRejectsStaleVersions() throws Exception {
+        byte[] bytes=new byte[2*1024*1024+17];new java.util.Random(31).nextBytes(bytes);
+        JSONObject entry=publish(request("binary.bin",bytes,true),bytes).getJSONObject("entry");
+        try(ManagedFileStore store=store()) {
+            FolderReader.Range range=store.readRange(fixture.owner,root,"binary.bin",entry.getString("version"),3,bytes.length-3);
+            assertArrayEquals(java.util.Arrays.copyOfRange(bytes,3,bytes.length),range.bytes);
+            assertFalse(range.metadata().has("data"));
+            assertThrows(Exception.class,()->store.readRange(fixture.owner,root,"binary.bin","changed",0,1));
+            assertThrows(Exception.class,()->store.readRange(fixture.owner,root,"binary.bin",entry.getString("version"),bytes.length-1,2));
+        }
+    }
+
 }

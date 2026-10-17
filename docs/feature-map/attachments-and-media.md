@@ -303,3 +303,15 @@ Tests: `FileVersionExportTests`, `FileExportBridgeTests`, and opt-in
 installed acceptance script. See README for the disposable fixture and manual
 steps. Installed simulator export and restore pass; physical providers, Mac
 exports and cross-folder content-ID retrieval remain in the sync ledger.
+
+
+## Android binary upload ranges
+
+Access 1.4 selects `read-range` in `fileSync/mobileFolders.client.ts`.
+`mobileRangeFrames.receiveMobileReadFrame` assembles strictly ordered, correlated
+binary frames and acknowledges each native nonce. Android `FolderRangeSink`
+bounds backpressure; `FolderReader.readRange` and `ManagedFileStore.readRange`
+return verified bounded bytes through the existing `FolderBridge` grant and
+owner checks. `MainActivity` advertises 1.4 only with WebView ArrayBuffer support.
+Tests extend mobile folder/frame tests, `FolderRangeSinkTest`, `FolderReaderTest`,
+`ManagedFileStoreTest`, and `DeviceLiveTest`'s opt-in real SAF upload acceptance.

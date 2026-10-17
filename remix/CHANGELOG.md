@@ -68,6 +68,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-17: Android native access 1.4 streams verified upload ranges through acknowledged binary WebView frames, preserving older-host compatibility and scoped source checks. Details: [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
 - 2026-10-17 — **Codex (AI)**: Add iOS History exports through Files with verified ranges, temporary destination access, exclusive collision naming and saved-byte readback. Installed simulator checks also verify restore cancellation and retained versions. See [PR #1002 iOS acceptance](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md#ios-historical-file-exports--2026-10-17).
 
 - 2026-10-17 — **Codex (AI)**: Add Android History Save As with verified exact-version ranges, system destination selection, provider readback and cancellation fences. See [PR #1002 export acceptance](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md#android-historical-file-exports--2026-10-17).
