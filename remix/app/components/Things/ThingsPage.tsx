@@ -62,6 +62,7 @@ import {
   thingDisplayName,
   thingRenameCrystal,
   thingShareLink,
+  thingsWorkspaceCacheKey,
 } from './thingsCore';
 import type {
 	ThingsCache,
@@ -218,7 +219,7 @@ const ThingsLibraryPage = () => {
 	const executeLocalDeviceAction = localNode.executeAction;
 
   // Never seed a destination with the ambiguous legacy account-only cache.
-  const cacheKey = `tt-things-workspace-${destinationKey}`;
+  const cacheKey = thingsWorkspaceCacheKey(scope, localView.localPlane);
   const cached = useMemo(() => readLocalCache<ThingsCache>(cacheKey), [cacheKey]);
 
   const locationState = readThingsLocation(searchParams, cached);

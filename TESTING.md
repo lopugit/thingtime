@@ -11806,3 +11806,26 @@ verification limits are in `docs/local-workspaces.md`.
       `thingsLocation.test.ts` alongside `homeLibrary.browser.test.ts`.
 - [x] A retired-identity snapshot regression waits for actual request admission,
       not a 10ms sleep. The late result must still be refused under full-suite load.
+
+
+### Local schema detail preview (2026-10-18)
+
+- [x] In a clean anonymous context and a disposable offline account, import a
+      schema with a render template and a data Thing referencing it through the
+      normal import dialog. Open its native detail view and cold reload at
+      1440/390/320px. Exact interpolated text must render without account writes
+      or Thing API reads. Download canonical JSON containing both dependencies.
+- [ ] Remove the fixture schema through the normal library menu. Reopen the data
+      Thing: a clear schema-preview error and Retry appear, the data stays
+      inspectable, and a cached template cannot remain as a successful preview.
+- [x] Shared/keyed schema reads preserve root/key context. Owned reads use the
+      local adapter first; only a definitive 403/404 can try the existing
+      authorized composition. Offline, cancellation, identity and 401 failures
+      do not start that fallback. Preview caches differ across account, origin,
+      database and local destination. `test:things` includes these regressions.
+
+Native fixture: set `TT_LOCAL_SCHEMA_URL`, `TT_LOCAL_SCHEMA_ARTIFACTS`,
+`TT_SHARED_PLAYWRIGHT_PATH` and `TT_SHARED_CHROME_PATH`, then run
+`node --import tsx --test app/local-workspace/schemaDetail.browser.test.ts` from
+`remix/`. It requires the isolated loopback replica for its disposable account;
+never point it at an existing account or deployment.

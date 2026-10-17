@@ -787,3 +787,16 @@ include destination scope. Home folder links retain that scope, while detail and
 inspect links retain the existing owner/database guard. See
 [account theme workspace](../account-theme-workspace.md#native-home-library-destination--2026-10-18)
 for current native evidence and unfinished detail/editor integration.
+
+
+## Local schema-backed detail previews
+
+The native `/thing/:id` view reads owned schemas through `readThingSchema.ts`
+and `useApi`, so an anonymous or offline record can render its saved template
+without capability HTTP. Shared/keyed roots keep the authorized composition
+read. A directly refused foreign schema may use that same root read; network,
+authentication, identity and cancellation failures do not trigger a fallback.
+Library/detail preview caches share `thingsWorkspaceCacheKey` and include the
+full workspace and local destination. Failed schema reads surface a retry control
+while the Thing data remains available. Tests: `readThingSchema.test.ts`,
+`thingsCore.test.ts`, and opt-in `schemaDetail.browser.test.ts`.

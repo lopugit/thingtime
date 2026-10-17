@@ -68,6 +68,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-18 — **Codex (AI)**: Native schema-backed Thing details now resolve
+  locally for anonymous/offline workspaces, with scoped preview caches and
+  recoverable dependency errors. Shared-schema authorization is preserved.
+  See the [PR #1000 checkpoint](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md#local-schema-detail-checkpoint--2026-10-18).
+
+
 - 2026-10-18 — **Codex (AI)**: Add native local Home library browsing, mixed
   import/export and scoped caches/cut intent. Keep account-bound links and
   selected-plane remote authority separate. Cross-plane detail/editor routing

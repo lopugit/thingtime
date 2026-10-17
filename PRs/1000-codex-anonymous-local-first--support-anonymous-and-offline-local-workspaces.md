@@ -3490,3 +3490,51 @@ when they open the selected library. No merge or manual deployment occurred.
 The full suite initially exposed a pre-existing 10ms timing assumption in the
 late account-theme snapshot test. It now waits for its snapshot callback before
 retiring identity; the real stale-response assertion is unchanged.
+
+
+## Local schema detail checkpoint — 2026-10-18
+
+The native Thing detail page previously waited for remote capability negotiation
+and used a shared-root read even for the viewer's own local schema. A clean
+anonymous browser reproduced the missing preview after successful offline import.
+The view now reads owned schemas through the existing local API facade. Shared
+and bearer-key roots retain composition authorization; a directly refused foreign
+schema can use that existing path, while network/identity/cancellation failures
+cannot broaden the read. Remote capability negotiation remains in the remote API
+adapter.
+
+The library and detail page share a cache key including full workspace identity
+and local destination. A dependency read failure exposes a retry control and
+keeps the data inspectable. A failed/read-refused template is not treated as an
+authoritative owned schema.
+
+The browser fixture uses ordinary transfer import and download, actual native
+rendering at 1440/390/320px, cold offline reload and dependency deletion. Its
+account is disposable and guarded by the isolated loopback replica status. It
+never logs in to or changes an existing account. The importer may legitimately
+remap schema names as well as IDs; assertions use the actual exported identity.
+
+This removes a confirmed local rendering dependency, but does not complete the
+full feature gate. Cross-plane home detail/editor routing still needs local media,
+draft recovery, navigation and History to carry the same destination. Account
+Actions, live custom-plane acceptance, latest-main reconciliation, full CI and
+deployed acceptance remain separate gates. No merge or manual deployment.
+
+Validation for this checkpoint: 331 Things tests and 560 workspace tests passed,
+with 66 opt-in workspace skips; the four offline-shell checks passed separately.
+The client build passed with 249 verified assets (21,947,711 bytes). TypeScript
+reported the same 91 normalized baseline diagnostics; focused lint reported no
+errors and four existing warnings. The initial native anonymous/account tests
+passed import, exact schema rendering and cold reload at all three widths, with
+zero offline mutation or Thing API requests. Expanded runs downloaded valid
+two-Thing exports before their deletion assertion.
+
+Final deletion/retry browser acceptance remains pending. The fixture now waits
+for the deletion dialog to close (the row disappears optimistically before the
+transaction completes), accepts legitimate imported schema-name remapping, and
+reads root identity through its own clean context before navigating. During
+reruns the shared local PM2 daemon resurrected; the QA listener returned, but API
+requests then timed out and PM2 status requests stalled. These are runtime
+failures, not a passing acceptance result. No global PM2 restart or account
+repair was attempted. The final error-display branch and latest build require
+a fresh native rerun after the local API recovers.

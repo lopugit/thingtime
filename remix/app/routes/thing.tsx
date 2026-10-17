@@ -19,7 +19,9 @@ import { WebpageRuntimeProvider } from '~/components/Builder/webpageRuntime';
 import { ForkSharedThingButton } from '~/components/Sharing/ForkSharedThingButton';
 import { ThingTransferControls } from '~/components/Things/ThingTransferControls';
 import { canForkThing } from '~/components/Sharing/forkThingCore';
-import { requireThingtimeCapability } from '~/api/utils/capabilities/requireCapability.client';
+import { readThingSchema } from '~/components/Things/readThingSchema';
+import { useWorkspaceScope } from '~/hooks/useWorkspaceScope';
+import { useLocalApiView } from '~/local-workspace/LocalApiView';
 import { PostCard } from '~/components/Feed/PostCard';
 import { mergeReactionOverlay } from '~/components/Feed/reactionOverlay';
 import type { PostChange, PublicPost } from '~/components/Feed/feedTypes';
@@ -31,7 +33,7 @@ import {
 	type SensitiveThingRevealDescriptor
 } from '~/components/Things/SensitiveThingReveal';
 import { isSourceActionKey } from '~/components/ComponentsLibrary/componentBrowseTypes';
-import { parseThingsReferrer, schemaIdOf, schemaRenderOf, thingDisplayName, thingLink, thingRenameCrystal, thingsCacheKey } from '~/components/Things/thingsCore';
+import { parseThingsReferrer, schemaIdOf, schemaRenderOf, thingDisplayName, thingLink, thingRenameCrystal, thingsWorkspaceCacheKey } from '~/components/Things/thingsCore';
 import type { ThingsCache, ThingsReferrer } from '~/components/Things/thingsCore';
 import { apiErrorMessage } from '~/hooks/apiFailure';
 import { clearLocalCache, pruneCacheNamespace, readLocalCache, readStampedCache, writeStampedCache } from '~/hooks/localCache';
@@ -623,27 +625,32 @@ function GenericThingPage() {
 	// a data thing's schema render template: the /things Previews cache paints
 	// it instantly, the schema fetch reconciles (null = fetched, has none)
 	const schemaId = thing && isData ? schemaIdOf({ thingtime: kinds, crystal: thing.crystal || {} }) : null;
-	const schemaContext = schemaId && thing ? JSON.stringify([thing.id, schemaId, currentUser?.id || '', linkKey || '']) : null;
-	const [schemaRender, setSchemaRender] = React.useState<{ context: string; template: Record<string, unknown> | null; owned: boolean } | null>(null);
+	const schemaWorkspace = useWorkspaceScope();
+	const schemaView = useLocalApiView();
+	const schemaCacheKey = thingsWorkspaceCacheKey(schemaWorkspace, schemaView.localPlane);
+	const schemaContext = schemaId && thing ? JSON.stringify([requestKey, schemaId, schemaCacheKey]) : null;
+	const [schemaRender, setSchemaRender] = React.useState<{ context: string; template: Record<string, unknown> | null; owned: boolean; error?: string } | null>(null);
 	React.useEffect(() => {
 		if (!schemaId || !schemaContext || !thing?.id) return;
 		// Inherited templates are capabilities of this root/key/viewer, never a
 		// schema-only persistent cache entry reusable on a different shared page.
-		const cached = isThingOwner ? readLocalCache<ThingsCache>(thingsCacheKey(currentUser?.id))?.schemaRenders?.[schemaId] : undefined;
+		const cached = isThingOwner && !linkKey ? readLocalCache<ThingsCache>(schemaCacheKey)?.schemaRenders?.[schemaId] : undefined;
 		if (cached !== undefined) setSchemaRender({ context: schemaContext, template: cached, owned: false });
-		let cancelled = false;
-		void requireThingtimeCapability('api.things', '1.6.0')
-			.then(() => cancelled ? null : apiRef.current.v1.things.get({ id: schemaId, sharedRoot: thing.id, ...(linkKey ? { key: linkKey } : {}) }))
+		const controller = new AbortController();
+		void readThingSchema(apiRef.current.v1.things.get, { schemaId, rootId: thing.id, owned: isThingOwner, linkKey }, controller.signal)
 			.then((response: any) => {
-				if (!cancelled) setSchemaRender({ context: schemaContext, template: schemaRenderOf(response?.thing), owned: !!currentUser?.id && response?.thing?.author?.id === currentUser.id });
+				if (!controller.signal.aborted) setSchemaRender({ context: schemaContext, template: schemaRenderOf(response?.thing), owned: !!currentUser?.id && response?.thing?.author?.id === currentUser.id });
 			})
-			.catch(() => {
-				if (!cancelled) setSchemaRender((current) => isThingOwner && current?.context === schemaContext ? { ...current, owned: false } : { context: schemaContext, template: null, owned: false });
+			.catch((error) => {
+				if (!controller.signal.aborted) setSchemaRender((current) => ({
+					context: schemaContext,
+					template: isThingOwner && !linkKey && canKeepThingAfterReadFailure(error) && current?.context === schemaContext ? current.template : null,
+					owned: false,
+					error: apiErrorMessage(error, 'Could not load this schema preview.')
+				}));
 			});
-		return () => {
-			cancelled = true;
-		};
-	}, [schemaId, schemaContext, thing?.id, currentUser?.id, linkKey, isThingOwner]);
+		return () => controller.abort();
+	}, [schemaId, schemaContext, schemaCacheKey, thing?.id, currentUser?.id, linkKey, isThingOwner, historyRefresh]);
 	const dataTemplate = schemaContext && schemaRender?.context === schemaContext ? schemaRender.template : null;
 
 	// ---------------------------------------------------------------- view
@@ -1021,7 +1028,7 @@ function GenericThingPage() {
 							<WebpageRuntimeProvider
 								key={`${thing.id}:${currentUser?.id || ''}:${linkKey}`}
 								pageId={thing.id}
-								shared={shared || (isData && (!isThingOwner || (!!schemaId && !(schemaRender?.context === schemaContext && schemaRender.owned))))}
+								shared={shared || (isData && (!isThingOwner || (!!dataTemplate && !(schemaRender?.context === schemaContext && schemaRender.owned))))}
 								linkKey={linkKey}
 								pageKey={isWebpage && typeof thing.crystal?.pageKey === 'string' ? thing.crystal.pageKey : null}
 								suiteKey={suiteKey ?? null}
@@ -1039,6 +1046,12 @@ function GenericThingPage() {
 											</Text>
 										) : null}
 									</Flex>
+									{isData && schemaContext && schemaRender?.context === schemaContext && schemaRender.error ? (
+										<Flex role="alert" align="center" gap={3} wrap="wrap" mb={3}>
+											<Text fontSize="sm">Schema preview unavailable: {schemaRender.error}</Text>
+											<Button size="xs" onClick={refreshThing}>Retry schema preview</Button>
+										</Flex>
+									) : null}
 									<Box minW={0} width="100%">{previewBody}</Box>
 								</Box>
 							</WebpageRuntimeProvider>

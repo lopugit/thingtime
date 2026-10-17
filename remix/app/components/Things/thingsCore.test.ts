@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { groupThings, parseThingsReferrer, schemaRenderOf, thingLink, thingOpenHref, type ThingsThing } from './thingsCore';
+import { groupThings, thingsWorkspaceCacheKey, parseThingsReferrer, schemaRenderOf, thingLink, thingOpenHref, type ThingsThing } from './thingsCore';
 
 const makeThing = (id: string, kind: string): ThingsThing => ({
   id,
@@ -104,4 +104,13 @@ test('explicit legacy Lopu folder markers use canonical browse links and sort be
   assert.deepEqual(folder.crystal.value, { kept: true });
   for (const crystal of [{ name: 'folder' }, { type: 'Folder' }, { folder: true }]) assert.equal(isFolder({ ...folder, crystal }), false);
   assert.equal(isFolder({ ...folder, thingtime: ['post', 'data'] }), false);
+});
+
+
+test('preview caches isolate full workspace identity and local destination', () => {
+ const home = JSON.stringify(['account', 'https://one.test', 'owner', 'home']);
+ const scopes = [home, JSON.stringify(['account', 'https://one.test', 'owner', 'custom']), JSON.stringify(['account', 'https://two.test', 'owner', 'home']), JSON.stringify(['account', 'https://one.test', 'other', 'home']), JSON.stringify(['anonymous', 1])];
+ const keys = scopes.flatMap(scope => [thingsWorkspaceCacheKey(scope), thingsWorkspaceCacheKey(scope, 'home')]);
+ assert.equal(new Set(keys).size, keys.length);
+ assert.equal(thingsWorkspaceCacheKey(home), `tt-things-workspace-${JSON.stringify([home, 'selected'])}`);
 });
