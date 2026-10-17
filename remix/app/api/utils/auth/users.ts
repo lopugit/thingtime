@@ -1312,10 +1312,10 @@ export const setUserActiveFeedAlgorithm = async (userId: string, algorithmShareI
 // Clear the active feed-algorithm pointer only if it still points at the given
 // algorithm — the twin of clearUserActiveTheme, so algorithm delete stops
 // hand-rolling the users-store layout (was inlined in deleteAlgorithm).
-export const clearUserActiveFeedAlgorithm = async (userId: string, algorithmShareId: string) => {
+export const clearUserActiveFeedAlgorithm = async (userId: string, algorithmShareId: string, session?: ClientSession) => {
 	const cleared = await mutateUserThingSecure(userId, (s) => {
 		if (s.meta!.activeFeedAlgorithmId === algorithmShareId) s.meta!.activeFeedAlgorithmId = null;
-	});
+	}, false, session);
 	if (cleared === 'mutated') return;
 	if (cleared === 'contended') throw new SecureWriteContendedError(userId);
 	if (!ObjectId.isValid(userId)) return;
@@ -1323,7 +1323,8 @@ export const clearUserActiveFeedAlgorithm = async (userId: string, algorithmShar
 		await getUsersCollection()
 	).updateOne(
 		{ _id: new ObjectId(userId), 'meta.activeFeedAlgorithmId': algorithmShareId },
-		{ $set: { 'meta.activeFeedAlgorithmId': null, updatedAt: new Date() } }
+		{ $set: { 'meta.activeFeedAlgorithmId': null, updatedAt: new Date() } },
+		{ session }
 	);
 };
 

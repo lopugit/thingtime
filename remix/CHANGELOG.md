@@ -68,6 +68,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-18 — **Codex (AI)**: Added conditional private algorithm profile
+  synchronization through the existing protected writer, canonical Timeline
+  receipts and atomic deletion/active-selection cleanup. Disposable real-API
+  checks cover retries, conflicts and exact canonical transfer round-trip.
+  Account offline editor and queue integration remain pending. Details:
+  [PR #1000 checkpoint](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md#conditional-algorithm-profile-synchronization--2026-10-18).
+
+
 - 2026-10-18 — **Codex (AI)**: Retained owned account Actions can execute
   offline through the native interpreters and queue their ordinary content
   changes for independent sync. Preserve operation leases, distinguish device

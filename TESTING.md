@@ -1364,6 +1364,28 @@ persisted; every check is client-side.
   the mutation or delete potentially committed recordings. A ready upload-start
   receipt must go directly to completion metadata, never PUT the bytes again.
 
+## Conditional account algorithm sync
+
+- [ ] On a disposable loopback replica, use API-created accounts to create a
+  private canonical profile through `/api/v1/algorithms/sync`. Repeat the exact
+  write and verify one profile with unchanged training counts; changed content
+  under the same write ID must fail. Two different saves at one version must
+  yield one success and one conflict. A normal metadata edit invalidates an old
+  offline version. Normal export/import preserves exact profile content with
+  fresh IDs, no publication and no active-selection change.
+- [ ] Anonymous, temporary, service, other-owner, cross-origin and stale-plane
+  requests must not reach private storage. An oversized or incomplete catalogue
+  must be an error, never a successful empty snapshot. Discover both versioned
+  manifests before writes. Keep the current selected-plane check when retrying
+  a home-bound receipt after a verified selection change.
+- [ ] Delete the selected profile and verify selection clears atomically. Select
+  another profile, retry the old delete and verify the new selection survives.
+  Replaying an old creation receipt must not resurrect the deleted profile.
+  Run `algorithmSync.api.test.ts` using the README disposable fixture setup.
+- [ ] Account offline editor, selection queue, review and native reconnect tests
+  remain required before declaring account algorithms locally complete. Existing
+  anonymous algorithm checks above must remain independent of this endpoint.
+
 ## Portable theme transfers
 
 - [ ] In Settings → Things → Feed algorithms, copy/download a trained profile,

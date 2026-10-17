@@ -12,6 +12,7 @@ relational children aggregated on read (`FUNDAMENTALS.md` §3).
 | --- | --- |
 | Public projections (`PublicPost`, attachments, counts, audiences) | `app/api/utils/things/things.ts` (`resolvePostAttachments`, post projection block) |
 | Anonymous local algorithm profiles | `app/local-workspace/algorithms.ts`, `api.client.ts`; canonical `api/utils/algorithms/algorithmContent.ts`, `algorithmTransferCore.ts` and `utils/thingTransfer/algorithm.ts` |
+| Conditional account algorithm profile sync | `app/api/utils/algorithms/algorithmSync*.ts`, `app/routes/api/v1/algorithms/sync/`; extends the canonical protected writer, home storage and Timeline receipts |
 | Feed ranking / algorithms | `app/api/utils/things/feedRanking.ts`, `app/components/Feed/defaultAlgorithms.ts`, `AlgorithmMenu.tsx` |
 | Engagement | `app/api/utils/things/updown.ts`, `vote.ts`, `saved.ts`, `views.ts`; routes under `app/routes/api/v1/things/{react,save,vote,updown,views,comment,share}` |
 | Client types | `app/components/Feed/feedTypes.ts` (`PublicPost`, `PublicComment`, `CIRCLE_META`) |
@@ -190,3 +191,14 @@ same scoped draft adapter. Parent deletion includes bound media through the
 existing file cleanup service; reusable templates and their independent bytes
 survive. See [offline template acceptance](../local-workspaces.md#offline-post-templates-and-bound-parent-deletion--2026-10-17)
 for cold browser, private reconnect and uncertain-operation coverage.
+
+
+The conditional algorithm sync contract is available independently of editor
+integration. It transfers canonical profile state with exact stored versions and
+immutable receipts; it never replays training events or changes publication.
+Normal deletion now clears only its matching active selection in the same home
+transaction. `test:feed` covers command/receipt validation and route admission;
+`test:api-capabilities` pins both manifests. The opt-in
+`algorithmSync.api.test.ts` proves real storage, concurrency and normal transfer
+round-trip using disposable API-created accounts. Account local editing,
+selection sync and native reconnect remain outstanding in the coverage matrix.

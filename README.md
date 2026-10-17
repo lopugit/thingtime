@@ -5123,3 +5123,28 @@ local API environment, explicitly set
 `THINGTIME_API_FALLBACK_ORIGIN=http://127.0.0.1:<isolated-api-port>` so its normal
 proxy targets the disposable API. Use the repository dev lifecycle instructions
 for server ownership and cleanup. No production credentials are required.
+
+
+### Disposable algorithm synchronization verification
+
+Run `remix/app/api/utils/algorithms/algorithmSync.api.test.ts` against a disposable
+loopback app using the isolated replica at `127.0.0.1:22463` (`draftPreview`). The
+fixture refuses another database host or replica before registering accounts.
+Use the existing shared Playwright runtime; no browser profile, account token or
+production credentials are needed. From `remix/`:
+
+```sh
+TT_ALGORITHM_SYNC_API_URL=http://127.0.0.1:<isolated-api-port> \
+TT_ALGORITHM_SYNC_API_ARTIFACTS=/path/to/private-test-artifacts \
+TT_SHARED_PLAYWRIGHT_PATH=/path/to/playwright/index.mjs \
+node --import tsx --test app/api/utils/algorithms/algorithmSync.api.test.ts
+```
+
+It discovers `api.algorithms-sync` 1.0.0 and `api.algorithms-delete` 1.0.1 on both
+live manifests, registers fresh private accounts through the normal API and
+checks conditional profile writes, retries, access boundaries, concurrency,
+active-pointer deletion and a normal export/import round-trip. It deletes only
+its own created profiles and writes a portable JSON artifact plus verification
+results locally. This server contract is a prerequisite for account offline
+algorithm editing; it does not yet connect that editor or a background queue.
+Anonymous profiles continue to stay entirely on the device.

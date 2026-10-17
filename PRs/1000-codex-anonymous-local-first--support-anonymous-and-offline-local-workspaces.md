@@ -3588,3 +3588,48 @@ request bodies and nested HTTP Action references, further local endpoint
 adapters, cross-plane home editor/media/draft navigation, custom-plane live
 acceptance, latest-main reconciliation and final CI/deployed acceptance remain.
 No merge or manual deployment.
+
+
+## Conditional algorithm profile synchronization — 2026-10-18
+
+The missing server contract for account algorithms now extends the existing
+protected algorithm writer. `/api/v1/algorithms/sync` (`api.algorithms-sync`
+1.0.0) returns a complete, bounded private home catalogue and accepts conditional
+canonical profile saves/deletes. It copies validated weights and training
+statistics instead of replaying engagement events. New profiles are private and
+unlisted; updates cannot change sharing, listing, authority or existing lineage.
+Legacy profiles require the existing migration before full-content replacement.
+
+Every call rechecks the current full-account session, exact origin, owner and
+selected data plane. Storage and immutable Timeline receipts remain home-pinned.
+An identical retry resolves its receipt even after a newly verified plane change;
+altered reuse and stale document versions fail without discarding device work.
+Content, quota accounting, receipt and exact active-pointer cleanup commit in the
+same transaction. The normal delete capability is patched to 1.0.1 for atomic
+selection cleanup. Input, catalogue and request rates remain bounded; no new
+collection or generic protected-kind access was added.
+
+Local real-API acceptance uses disposable registered accounts on the isolated
+loopback replica, never direct Mongo writes. It covers owner/anonymous/origin/plane
+refusals, private projection, exact retries, concurrent divergent saves, stale
+metadata conflicts, preserved training counts, home receipt replay, normal
+canonical export/import with fresh IDs and exact profile content, and deletion
+replay that preserves a newer active selection. The fixture also checks both live
+capability manifests. Evidence: `tmp/algorithm-sync-api/` and
+`tmp/algorithm-sync-api-final.log`.
+
+This is the server prerequisite, not completed offline account algorithms. The
+account local queue, editor/feed facade, selection synchronization, conflict
+review and native offline/reconnect acceptance still need implementation.
+Anonymous algorithms continue to use the existing device-only path and never
+call this endpoint. Full local-first coverage, main reconciliation, CI and
+deployed acceptance remain open; no merge or manual deployment is authorized by
+this checkpoint alone.
+
+Validation: 85 feed/algorithm tests passed (one opt-in API case skipped in the
+ordinary suite); 105 capability tests passed; the separately enabled API fixture
+passed. Focused lint is clean. Raw TypeScript remains at the same 91 normalized
+baseline diagnostics with no new signatures. Structural Graphify still reports
+two unrelated Swift parse warnings; document semantic freshness is tracked
+separately and is not inferred from AST results. This checkpoint changes server
+behavior and API fixtures, not a native UI surface.

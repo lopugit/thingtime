@@ -6362,6 +6362,17 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		notes: ['No response or log contains the cron secret. Free omni text screening makes draining the off-era backlog costless.']
 	}),
   endpoint({
+    id: 'algorithms-sync', featureVersion: '1.0.0', contractVersion: '1.0.0', group: 'algorithms',
+    title: 'Device algorithm synchronization', endpoint: '/api/v1/algorithms/sync',
+    summary: 'Reads private versioned profiles and conditionally synchronizes device-trained content without replaying training events.',
+    detail: 'Every POST requires the exact Origin, a current full account session, expectedOwnerId and X-Thingtime-Expected-Data-Plane. Storage remains in the canonical home plane. Snapshot returns a bounded complete owned catalogue, opaque document versions and portable profile content. Write commands carry id, writeId, expectedVersion and action save/delete. Saves carry canonical content and description; new copies may supply an owned parentId. Creation uses a new UUID and expectedVersion=null. Existing writes require the exact snapshot version; changes to trained weights, sharing or metadata cause conflicts. Saves never change sharing, listing or existing lineage. New copies are private and unlisted. The existing protected algorithm writer handles storage accounting and legacy migration policy. Content, an immutable protected Timeline receipt and deletion selection cleanup commit atomically. Retry the identical command after an uncertain response; altered writeId reuse is refused. Receipts belong to home storage and can be replayed after a newly verified selected-plane change; the current selection header remains mandatory. No raw training events are executed. Commands are capped at 2 MiB; catalogues at 8 MiB. Anonymous workspaces never call this endpoint.',
+    auth: {mode:'session-or-bearer',description:'Current full-account session token; temporary, service and internal Action identities are refused.'},
+    methods:['POST'],
+    steps:['Read operation=snapshot with expectedOwnerId.','Write a complete validated profile using the exact expectedVersion and an immutable writeId.','Keep device work on conflict; do not silently overwrite or replay training.'],
+    requestExamples:[{name:'Private profile snapshot',description:'Confirm current account and selected plane.',method:'POST',headers:{Origin:'https://thingtime.com','X-Thingtime-Expected-Data-Plane':'home'},body:{operation:'snapshot',expectedOwnerId:'current-user-id'}}],
+    responseExamples:[{status:200,description:'Complete owned home catalogue.',body:{ok:true,ownerId:'current-user-id',dataPlane:'home',storagePlane:'home',complete:true,algorithms:[]}},{status:409,description:'Preserve device work for conflict review.',body:{ok:false,error:'The account algorithm changed. Device changes have been kept.'}}]
+  }),
+  endpoint({
     id: 'themes-sync', featureVersion: '1.5.0', contractVersion: '1.5.0',
     group: 'themes', title: 'Device theme synchronization', endpoint: '/api/v1/themes/sync',
     summary: 'Reads versioned private theme snapshots and acknowledges conditional device saves.',
@@ -7997,12 +8008,12 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
-    id: 'algorithms-delete',
+    id: 'algorithms-delete', featureVersion: '1.0.1', contractVersion: '1.0.1',
     group: 'algorithms',
     title: 'Delete feed algorithm',
     endpoint: '/api/v1/algorithms/delete',
     summary: 'Deletes one of the current user feed algorithms.',
-    detail: 'This route removes a user-owned algorithm and clears the active algorithm pointer when it pointed at the deleted algorithm.',
+    detail: 'This route removes a user-owned algorithm and atomically clears the active algorithm pointer only when it still points at that algorithm. Deletion and selection cleanup share the canonical home transaction.',
     auth: {
       mode: 'session-or-bearer',
       description: 'Requires an auth cookie or Authorization: Bearer token.'

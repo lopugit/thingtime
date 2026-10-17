@@ -303,10 +303,20 @@ export type CreateAlgorithmInput = {
   description?: unknown;
 };
 
+/** Trusted in-process boundary for conditional device synchronization. Public
+ * request bodies are never spread into these transaction callbacks. */
+export type AlgorithmMutationBoundary = {
+  createId?: string;
+  parentId?: string | null;
+  content?: AlgorithmTransferContent;
+  beforeWrite?(before: any | null, legacy: any | null, session: any): Promise<void>;
+  afterWrite?(after: any | null, session: any): Promise<void>;
+};
+
 // Create a fresh algorithm, optionally branched from an existing one (weights
 // copied, lineage kept in parentId) and optionally seed-trained from a batch
 // of session events ("save this doomscroll session as an algorithm").
-export const createAlgorithm = async (ownerId: string, input: CreateAlgorithmInput, transferSeed?: AlgorithmTransferContent): Promise<Fail | { ok: true; algorithm: PublicAlgorithm }> => {
+export const createAlgorithm = async (ownerId: string, input: CreateAlgorithmInput, transferSeed?: AlgorithmTransferContent, boundary: AlgorithmMutationBoundary = {}): Promise<Fail | { ok: true; algorithm: PublicAlgorithm }> => {
   // Validate again at the writer boundary, even for an in-process caller.
   const imported = transferSeed === undefined ? undefined : parseAlgorithmTransfer(transferSeed);
   if (imported && (input.branchFrom != null || input.events !== undefined)) return fail(400, 'An imported profile cannot also branch or train');
@@ -360,13 +370,13 @@ export const createAlgorithm = async (ownerId: string, input: CreateAlgorithmInp
   }
 
   const doc: FeedAlgorithmDoc = {
-    shareId: randomUUID(),
+    shareId: boundary.createId ?? randomUUID(),
     ownerId,
     name,
     description: typeof input.description === 'string' ? input.description.trim().slice(0, 300) : '',
     listed: false,
     emoji: sanitizeEmoji(input.emoji),
-    parentId,
+    parentId: boundary.parentId === undefined ? parentId : boundary.parentId,
     weights,
     eventCount,
     lastTrainedAt,
@@ -412,8 +422,13 @@ export const createAlgorithm = async (ownerId: string, input: CreateAlgorithmInp
 	});
 	try {
 		await withHomeMongoTransaction(async (session) => {
+      await boundary.beforeWrite?.(null, null, session);
+      const count = await things.countDocuments({ thingtime: 'feed-algorithm', ownerId } as any, { session }) +
+        await algorithms.countDocuments({ ownerId }, { session });
+      if (count >= MAX_ALGORITHMS_PER_USER) throw new StorageMutationError(409, 'storage_conflict', 'Algorithm limit reached');
 			await applyUserStorageDelta(ownerId, sizeBytes, session);
 			await things.insertOne(thing as any, { session });
+      await boundary.afterWrite?.(thing, session);
 		});
 	} catch (error) {
 		const projected = storageFail(error);
@@ -427,11 +442,14 @@ export const createAlgorithm = async (ownerId: string, input: CreateAlgorithmInp
 
 export const updateAlgorithm = async (
   ownerId: string,
-  input: { id?: unknown; name?: unknown; emoji?: unknown; shared?: unknown; listed?: unknown; description?: unknown }
+  input: { id?: unknown; name?: unknown; emoji?: unknown; shared?: unknown; listed?: unknown; description?: unknown },
+  boundary: AlgorithmMutationBoundary = {}
 ): Promise<Fail | { ok: true; algorithm: PublicAlgorithm }> => {
   const found = await findOwnedAlgorithmWithEra(ownerId, input.id);
   if (!found) return fail(404, 'Algorithm not found');
   const { doc, era } = found;
+  const content = boundary.content === undefined ? undefined : parseAlgorithmTransfer(boundary.content);
+  if (content && era === 'legacy') return fail(409, 'Migrate this algorithm before synchronizing its content');
 
   const set: Record<string, any> = { updatedAt: new Date() };
   if (input.name !== undefined) {
@@ -473,7 +491,9 @@ export const updateAlgorithm = async (
 				if (!before) {
 					throw new StorageMutationError(409, 'storage_conflict', 'Algorithm changed while it was being updated — try again');
 				}
+				await boundary.beforeWrite?.(before, null, session);
 				const crystal = { ...(before.crystal || {}) };
+        if (content) Object.assign(crystal, content, { lastTrainedAt: content.lastTrainedAt ? new Date(content.lastTrainedAt) : null });
 				if (set.name !== undefined) crystal.name = set.name;
 				if (set.emoji !== undefined) crystal.emoji = set.emoji;
 				if (set.shared !== undefined) crystal.shared = set.shared;
@@ -519,6 +539,7 @@ export const updateAlgorithm = async (
 					storageAccountingVersion: USER_STORAGE_ACCOUNTING_VERSION,
 					updatedAt: set.updatedAt
 				});
+        await boundary.afterWrite?.(await things.findOne({ _id: before._id, ownerId } as any, { session }), session);
 			});
   } else {
 			const things = await getThingsCollection();
@@ -529,11 +550,13 @@ export const updateAlgorithm = async (
 				if (!before) {
 					throw new StorageMutationError(409, 'storage_conflict', 'Algorithm changed while it was being updated — try again');
 				}
+				await boundary.beforeWrite?.(null, before, session);
 				const write = await algorithms.updateOne({ _id: before._id, ownerId, updatedAt: before.updatedAt } as any, { $set: set }, { session });
 				if (write.matchedCount === 0) {
 					throw new StorageMutationError(409, 'storage_conflict', 'Algorithm changed while it was being updated — try again');
 				}
 				updatedDoc = { ...before, ...set };
+        await boundary.afterWrite?.(updatedDoc, session);
 			});
 		}
 	} catch (error) {
@@ -544,7 +567,7 @@ export const updateAlgorithm = async (
 	return { ok: true, algorithm: await toPublicAlgorithm(updatedDoc || { ...doc, ...set }) };
 };
 
-export const deleteAlgorithm = async (ownerId: string, shareId: unknown): Promise<Fail | { ok: true }> => {
+export const deleteAlgorithm = async (ownerId: string, shareId: unknown, boundary: AlgorithmMutationBoundary = {}): Promise<Fail | { ok: true }> => {
   if (typeof shareId !== 'string' || !shareId.trim()) return fail(400, 'Algorithm id is required');
   const id = shareId.trim();
 
@@ -557,7 +580,10 @@ export const deleteAlgorithm = async (ownerId: string, shareId: unknown): Promis
 	let deletedLegacy = false;
 	try {
 		await withHomeMongoTransaction(async (session) => {
-			const legacy = await algorithms.findOne({ shareId: id, ownerId } as any, { projection: { _id: 1 }, session });
+			const legacy = await algorithms.findOne({ shareId: id, ownerId } as any, { ...(!boundary.beforeWrite ? { projection: { _id: 1 } } : {}), session });
+      if (boundary.beforeWrite) await boundary.beforeWrite(
+        await things.findOne({ shareId: id, ownerId, thingtime: 'feed-algorithm' } as any, { session }), legacy, session
+      );
 			if (legacy) await assertLegacyAlgorithmMutationAllowed(ownerId, things, session);
 			const before = await things.findOneAndDelete({ shareId: id, ownerId, thingtime: 'feed-algorithm' } as any, { session });
 			const legacyRes = await algorithms.deleteOne({ shareId: id, ownerId } as any, { session });
@@ -566,6 +592,10 @@ export const deleteAlgorithm = async (ownerId: string, shareId: unknown): Promis
 				if (exactBytes === null) await markUserStorageNeedsReconcile(ownerId, session);
 				else await applyUserStorageDelta(ownerId, -exactBytes, session);
 			}
+      if (before || legacyRes.deletedCount > 0) {
+        await clearUserActiveFeedAlgorithm(String(ownerId), id, session);
+        await boundary.afterWrite?.(null, session);
+      }
 			deletedThing = !!before;
 			deletedLegacy = legacyRes.deletedCount > 0;
 		});
@@ -576,9 +606,8 @@ export const deleteAlgorithm = async (ownerId: string, shareId: unknown): Promis
 	}
 	if (!deletedThing && !deletedLegacy) return fail(404, 'Algorithm not found');
 
-  // don't leave the owner's active algorithm dangling at a deleted id — the
-  // users-store layout (secure blob, either era) is owned by auth/users
-  await clearUserActiveFeedAlgorithm(String(ownerId), id);
+  // Active selection was cleared by auth/users in the same transaction.
+  // The secure users-store layout stays owned by that module.
   // orphaned branches keep working — parentId is lineage metadata, not a live link
   return { ok: true };
 };

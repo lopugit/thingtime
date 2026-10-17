@@ -110,6 +110,7 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   // anonymous browse shape as schemas.browse; it only ever returns public theme
   // projections, but each call is two indexed reads and up to 60 token docs
   'themes.gallery': { limit: 120, windowMs: 60_000, enabled: true },
+  'algorithms.sync': { limit: 60, windowMs: 60_000, enabled: true },
   'themes.sync': { limit: 60, windowMs: 60_000, enabled: true },
   // third-party connections (/api/v1/connections) — reads of stored feed
   // pages and connection lists, bounded like the other authenticated reads
