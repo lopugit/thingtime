@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Button, Flex, Select, Text } from '@chakra-ui/react';
+import { Box, Button, Checkbox, Flex, Select, Text } from '@chakra-ui/react';
 
 import { LopuToggle } from '~/components/Lopu/LopuModelPicker';
 import { describeCheckedAt, PROVIDER_KEY_STATE_LABELS, providerKeyState, type LopuProviderKeyState } from '~/components/Lopu/lopuProviderCore';
@@ -9,7 +9,6 @@ import {
 	describeLopuEffort,
 	describeLopuModelChoice,
 	findLopuCatalogModel,
-	LOPU_CATALOG_CACHE_KEY,
 	normalizeLopuCatalog,
 	normalizeLopuCatalogModel,
 	normalizeLopuSpeed,
@@ -100,14 +99,15 @@ const describeProviderKey = (provider: string, info: LopuCatalogProvider | undef
 		state === 'missing'
 			? `set ${PROVIDER_ENV_HINTS[provider] ?? 'the provider key'} on the server`
 			: state === 'verified'
-				? 'the provider accepted the key'
-				: (info?.reason ?? (state === 'invalid' ? 'the provider rejected the key' : 'not checked yet'));
+			? 'the provider accepted the key'
+			: info?.reason ?? (state === 'invalid' ? 'the provider rejected the key' : 'not checked yet');
 	const checked = describeCheckedAt(info?.checkedAt);
 	return checked ? `${detail} · ${checked}` : detail;
 };
 
 // a model's availability from the editor's point of view (optimistic toggles)
-const providerUsable = (info: LopuCatalogProvider | undefined, fallback: boolean): boolean => (info ? info.configured && info.verified !== false : fallback);
+const providerUsable = (info: LopuCatalogProvider | undefined, fallback: boolean): boolean =>
+	info ? info.configured && info.verified !== false : fallback;
 
 const normalizeDefaults = (raw: unknown): LopuCatalogDefaults => {
 	const source = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
@@ -132,7 +132,7 @@ const errorMessage = (error: unknown, fallback: string): string => {
 export const LopuModelsEditor = () => {
 	const api = useApi();
 	const lopu = useLopu();
-	const { catalog, hasCatalog, loading, failed, refresh, setCatalog } = useLopuModelCatalog(true);
+	const { catalog, hasCatalog, loading, failed, refresh, setCatalog } = useLopuModelCatalog(true, true);
 
 	const apiRef = React.useRef(api);
 	apiRef.current = api;
@@ -174,11 +174,11 @@ export const LopuModelsEditor = () => {
 	);
 
 	const toggleModel = async (model: LopuCatalogModel, enabled: boolean) => {
-		if (busyId) return;
+		if (busyId || loading || probing || seeding) return;
 		const usable = providerUsable(catalog.providers[model.provider], model.available);
 		const previous = { enabled: model.enabled, available: model.available };
 		// optimistic — the switch flips now and reverts if the server refuses
-		patchModel(model.id, { enabled, available: enabled && usable });
+		patchModel(model.id, { enabled, available: enabled && usable && model.providerAvailable !== false });
 		setBusyId(model.id);
 		try {
 			const resp = await apiRef.current.v1.admin.setAiModel({ id: model.id, enabled });
@@ -198,7 +198,65 @@ export const LopuModelsEditor = () => {
 		}
 	};
 
+	const saveProvider = async (provider: string, patch: { allowAll?: boolean; autoAllowNewModels?: boolean }) => {
+		if (busyId || loading || probing || seeding) return;
+		const previous = catalog;
+		setBusyId(provider);
+		setCatalog({
+			...catalog,
+			models: catalog.models.map((model) =>
+				model.provider === provider && patch.allowAll !== undefined
+					? {
+							...model,
+							enabled: patch.allowAll,
+							available: patch.allowAll && model.providerAvailable !== false && providerUsable(catalog.providers[provider], model.available)
+					  }
+					: model
+			),
+			policies: {
+				...catalog.policies,
+				[provider]: {
+					...catalog.policies?.[provider],
+					autoAllowNewModels: patch.autoAllowNewModels ?? catalog.policies?.[provider]?.autoAllowNewModels ?? false
+				}
+			}
+		});
+		try {
+			const response = await apiRef.current.v1.admin.setAiModel({ provider, ...patch });
+			if (!response?.ok) throw new Error(response?.error || 'Could not save provider settings.');
+			setCatalog(normalizeLopuCatalog(response));
+			lopu({ title: `${providerLabel(provider)} model settings saved`, status: 'success' });
+		} catch (error) {
+			setCatalog(previous);
+			lopu({ title: 'Could not save provider settings', description: errorMessage(error, 'Please try again.'), status: 'error' });
+		} finally {
+			setBusyId(null);
+		}
+	};
+	const syncModels = async () => {
+		if (busyId || loading || probing || seeding) return;
+		setBusyId('sync');
+		try {
+			const response = await apiRef.current.v1.admin.setAiModel({ sync: true });
+			if (response?.models) setCatalog(normalizeLopuCatalog(response));
+			const refreshed = response?.report?.some((row: any) => row.status === 'synced');
+			lopu({
+				title: response?.ok ? (refreshed ? 'Model catalogue refreshed' : 'No providers refreshed') : 'Some providers could not be refreshed',
+				description:
+					response?.report
+						?.map((row: any) => `${providerLabel(row.provider)}: ${row.status}${row.count !== undefined ? ` (${row.count} models)` : ''}`)
+						.join(' · ') || 'Previous availability is kept for any provider that could not be checked.',
+				status: response?.ok ? (refreshed ? 'success' : 'info') : 'error'
+			});
+		} catch (error) {
+			lopu({ title: 'Could not sync models', description: errorMessage(error, 'Please try again.'), status: 'error' });
+		} finally {
+			setBusyId(null);
+		}
+	};
+
 	const seed = async () => {
+		if (busyId || loading || probing || seeding) return;
 		setSeeding(true);
 		try {
 			const resp = await apiRef.current.v1.admin.setAiModel({ seed: true });
@@ -220,14 +278,14 @@ export const LopuModelsEditor = () => {
 	// carries the freshly verified providers + the re-projected catalog, so
 	// the editor paints it straight away and the per-device cache follows
 	const recheckKeys = async () => {
-		if (probing) return;
+		if (busyId || loading || probing || seeding) return;
 		setProbing(true);
 		try {
 			const resp = await apiRef.current.v1.admin.setAiModel({ probe: true });
 			if (resp?.ok) {
 				const next = normalizeLopuCatalog(resp);
 				setCatalog(next);
-				writeLocalCache(LOPU_CATALOG_CACHE_KEY, next);
+				writeLocalCache('tt-lopu-admin-catalog', next);
 				const summary = Object.entries(next.providers)
 					.map(([provider, info]) => `${providerLabel(provider)}: ${PROVIDER_KEY_STATE_LABELS[providerKeyState(info)]}`)
 					.join(' · ');
@@ -293,10 +351,20 @@ export const LopuModelsEditor = () => {
 		<Flex flexDirection="column" rowGap={3}>
 			<Text sx={eyebrow}>Lopu models 🦄</Text>
 			<Text fontSize="xs" color={LOPU_UI.muted} lineHeight="1.5">
-				The catalog Lopu may think with. A model is offered to people only while it is enabled here, its provider credential is configured, and provider access is available.
+				The catalog Lopu may think with. A model is offered to people only while it is enabled here, its provider credential is configured, and
+				provider access is available.
 			</Text>
 
 			<Text sx={eyebrow}>Provider access</Text>
+			<Button
+				size="xs"
+				alignSelf="flex-start"
+				isDisabled={!!busyId || loading || probing || seeding}
+				isLoading={busyId === 'sync'}
+				onClick={() => void syncModels()}
+			>
+				Sync available models
+			</Button>
 			<Flex flexDirection="column" rowGap={1}>
 				{providerRows.map(([provider, info]) => {
 					const state = providerKeyState(info);
@@ -325,16 +393,56 @@ export const LopuModelsEditor = () => {
 							<Text fontSize="11px" color={LOPU_UI.muted} minWidth={0} flex="1 1 220px" wordBreak="break-word">
 								{describeProviderKey(provider, info, state)}
 							</Text>
+							<Flex width="100%" gap={3} flexWrap="wrap">
+								<Checkbox
+									size="sm"
+									isDisabled={!!busyId || loading || probing || seeding}
+									isChecked={
+										catalog.models.some((model) => model.provider === provider) &&
+										catalog.models.filter((model) => model.provider === provider).every((model) => model.enabled)
+									}
+									onChange={(event) => void saveProvider(provider, { allowAll: event.target.checked })}
+								>
+									Allow all current models
+								</Checkbox>
+								<Checkbox
+									size="sm"
+									isDisabled={!!busyId || loading || probing || seeding}
+									isChecked={catalog.policies?.[provider]?.autoAllowNewModels === true}
+									onChange={(event) => void saveProvider(provider, { autoAllowNewModels: event.target.checked })}
+								>
+									Auto-allow new models
+								</Checkbox>
+								<Text fontSize="11px" color={LOPU_UI.muted}>
+									New compatible chat models only. Existing individual choices are kept.
+								</Text>
+								{(catalog.policies?.[provider]?.lastSyncedAt || catalog.policies?.[provider]?.status === 'failed') && (
+									<Text fontSize="11px">
+										Catalogue{' '}
+										{catalog.policies?.[provider]?.lastSyncedAt ? describeCheckedAt(catalog.policies[provider].lastSyncedAt) : 'not yet synced'}
+										{catalog.policies[provider].status === 'failed' ? ' · latest sync failed' : ''}
+									</Text>
+								)}
+							</Flex>
 						</Flex>
 					);
 				})}
 			</Flex>
 			<Flex columnGap={2} rowGap={2} flexWrap="wrap" alignItems="center">
-				<Button size="xs" variant="outline" borderColor={LOPU_UI.borderColor} color={LOPU_UI.ink} borderRadius={LOPU_UI.radiusSm} isLoading={probing} onClick={recheckKeys}>
+				<Button
+					size="xs"
+					variant="outline"
+					borderColor={LOPU_UI.borderColor}
+					color={LOPU_UI.ink}
+					borderRadius={LOPU_UI.radiusSm}
+					isLoading={probing}
+					onClick={recheckKeys}
+				>
 					Re-check access
 				</Button>
 				<Text fontSize="xs" color={LOPU_UI.muted}>
-					Checks Claude OAuth configuration in the System vault and OpenAI key access. Claude model access and available usage are checked when a reply runs.
+					Checks Claude OAuth configuration in the System vault and OpenAI key access. Claude model access and available usage are checked when a
+					reply runs.
 				</Text>
 			</Flex>
 
@@ -379,8 +487,15 @@ export const LopuModelsEditor = () => {
 									</Text>
 									<Chip>{providerLabel(model.provider)}</Chip>
 									{model.isDefault && <Chip tone="ink">default</Chip>}
-									{(keyState === 'missing' || (!keyInfo && model.enabled && !model.available)) && <Chip tone="danger">needs {model.provider === 'anthropic' ? 'Claude OAuth' : `${providerLabel(model.provider)} key`}</Chip>}
-									{keyState === 'invalid' && <Chip tone="danger">{model.provider === 'anthropic' ? 'Claude OAuth unavailable' : `${providerLabel(model.provider)} key invalid`}</Chip>}
+									{model.providerAvailable === false && <Chip>not offered by provider</Chip>}
+									{(keyState === 'missing' || (!keyInfo && model.enabled && !model.available)) && (
+										<Chip tone="danger">needs {model.provider === 'anthropic' ? 'Claude OAuth' : `${providerLabel(model.provider)} key`}</Chip>
+									)}
+									{keyState === 'invalid' && (
+										<Chip tone="danger">
+											{model.provider === 'anthropic' ? 'Claude OAuth unavailable' : `${providerLabel(model.provider)} key invalid`}
+										</Chip>
+									)}
 								</Flex>
 								<Text fontSize="11px" color={LOPU_UI.muted} wordBreak="break-word" mt="2px">
 									{model.id}
@@ -392,7 +507,12 @@ export const LopuModelsEditor = () => {
 								<Text fontSize="xs" color={LOPU_UI.muted}>
 									{model.enabled ? 'On' : 'Off'}
 								</Text>
-								<LopuToggle checked={model.enabled} disabled={busyId === model.id} label={`${model.label} enabled`} onChange={(next) => toggleModel(model, next)} />
+								<LopuToggle
+									checked={model.enabled}
+									disabled={!!busyId || loading || probing || seeding}
+									label={`${model.label} enabled`}
+									onChange={(next) => toggleModel(model, next)}
+								/>
 							</Flex>
 						</Flex>
 					);
@@ -400,7 +520,15 @@ export const LopuModelsEditor = () => {
 			</Flex>
 
 			<Flex columnGap={2} rowGap={2} flexWrap="wrap" alignItems="center">
-				<Button size="xs" variant="outline" borderColor={LOPU_UI.borderColor} color={LOPU_UI.ink} borderRadius={LOPU_UI.radiusSm} isLoading={seeding} onClick={seed}>
+				<Button
+					size="xs"
+					variant="outline"
+					borderColor={LOPU_UI.borderColor}
+					color={LOPU_UI.ink}
+					borderRadius={LOPU_UI.radiusSm}
+					isLoading={seeding}
+					onClick={seed}
+				>
 					{catalog.models.length ? 'Re-seed catalog' : 'Seed catalog'}
 				</Button>
 				<Text fontSize="xs" color={LOPU_UI.muted}>
@@ -419,7 +547,14 @@ export const LopuModelsEditor = () => {
 				.
 			</Text>
 			<Flex columnGap={2} rowGap={2} flexWrap="wrap" alignItems="center">
-				<Select size="xs" maxWidth="240px" value={current.model ?? ''} aria-label="Default model" sx={selectSx} onChange={(event) => pickDefaultModel(event.target.value)}>
+				<Select
+					size="xs"
+					maxWidth="240px"
+					value={current.model ?? ''}
+					aria-label="Default model"
+					sx={selectSx}
+					onChange={(event) => pickDefaultModel(event.target.value)}
+				>
 					{!current.model && (
 						<option value="" disabled>
 							Pick a model…
@@ -429,7 +564,11 @@ export const LopuModelsEditor = () => {
 						<option key={model.id} value={model.id}>
 							{model.label}
 							{model.enabled ? '' : ' — disabled'}
-							{model.enabled && !model.available ? (model.verified === false ? ` — ${model.provider === 'anthropic' ? 'Claude OAuth unavailable' : `${providerLabel(model.provider)} key invalid`}` : ` — needs ${model.provider === 'anthropic' ? 'Claude OAuth' : `${providerLabel(model.provider)} key`}`) : ''}
+							{model.enabled && !model.available
+								? model.verified === false
+									? ` — ${model.provider === 'anthropic' ? 'Claude OAuth unavailable' : `${providerLabel(model.provider)} key invalid`}`
+									: ` — needs ${model.provider === 'anthropic' ? 'Claude OAuth' : `${providerLabel(model.provider)} key`}`
+								: ''}
 						</option>
 					))}
 				</Select>

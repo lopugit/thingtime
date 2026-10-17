@@ -70,7 +70,7 @@ export const createAiModelsHandlers = (dependencies: HandlerDependencies) => {
     }
     // every model carries its list price (USD per million tokens, public — the
     // balance chip and the per-turn footer read it; verified-access design note §2)
-    const models = result.models.map((model) => ({ ...model, pricing: publicAiModelPricing(model.id) }));
+    const models = result.models.filter((model) => model.available).map((model) => ({ ...model, pricing: publicAiModelPricing(model.id) }));
     return json({ ...result, models, ...extras }, { headers: NO_STORE_HEADERS });
   };
 

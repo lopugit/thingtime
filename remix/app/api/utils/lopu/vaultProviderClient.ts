@@ -14,6 +14,7 @@ import { createClaudeOAuthClient, type runClaudeOAuth } from '../ai/claudeOAuth'
 // provider-minted short-lived credential, never the stored key.
 
 import { lookup } from 'node:dns/promises';
+import { isModelUnavailableError } from '../ai/modelDiscovery';
 import { AiTransportFailure } from '../ai/providerWaterfall';
 
 import {
@@ -321,8 +322,13 @@ export const callVaultProviderCompletion = async (provider: LopuVaultProviderRec
 	// readBoundedJson throw "unreadable response" over the one fact the caller
 	// needs — the status. Nothing reads `result` on the failure path anyway.
 	if (!response.ok) {
-		await response.body?.cancel().catch(() => {});
-		throw new AiTransportFailure(response.status);
+    const failure = new AiTransportFailure(response.status);
+    if ([400, 404, 410].includes(response.status)) {
+      const body = await readBoundedJson(response).catch(() => null);
+      if (isModelUnavailableError({ status: response.status, code: body?.error?.code, message: body?.error?.message }))
+        failure.code = 'model_not_available';
+    } else await response.body?.cancel().catch(() => {});
+    throw failure;
 	}
 	const result = await readBoundedJson(response);
 	const text = extractPlainCompletionText(provider.provider, result);

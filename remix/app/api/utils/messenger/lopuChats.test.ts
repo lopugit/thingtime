@@ -39,7 +39,7 @@ test('normalizeLopuChatSettings accepts catalog models, composed ids and null re
 });
 
 test('normalizeLopuChatSettings rejects unknown models and unsupported explicit knobs, clamps inherited ones', () => {
-	const unknown = normalizeLopuChatSettings({ model: 'gpt-9000' });
+	const unknown = normalizeLopuChatSettings({ model: 'unknown-chat-model' });
 	assert.equal(unknown.ok, false);
 	assert.equal((unknown as any).status, 400);
 
@@ -59,6 +59,14 @@ test('normalizeLopuChatSettings rejects unknown models and unsupported explicit 
 	assert.deepEqual(preferHigh, { ok: true, settings: { accessMode: 'ask', model: 'gpt-5', effort: 'high', speed: 'fast', providerId: null }, changed: true });
 	// a null (catalog default) model accepts any known effort token
 	assert.equal(normalizeLopuChatSettings({ effort: 'ultra' }).ok, true);
+});
+
+test('chat settings preserve discovered version IDs with conservative capabilities', () => {
+	const result = normalizeLopuChatSettings({ model: 'gpt-9000' });
+	assert.equal(result.ok, true);
+	assert.equal((result as any).settings.model, 'gpt-9000');
+	assert.equal((result as any).settings.effort, null);
+	assert.equal(normalizeLopuChatSettings({ model: 'gpt-9000', speed: 'fast' }).ok, false);
 });
 
 test('lopuChatStateOf reads stored settings forgivingly', () => {
