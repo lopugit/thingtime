@@ -21,7 +21,8 @@ export function resolveSettingsTab(value?: string | null, hash = ''): SettingsTa
 	// Keep existing section bookmarks and links working after introducing tabs.
 	if (hash === '#ai-waterfalls') return 'ai-waterfalls';
 	if (hash === '#secure-vault') return 'security';
-	if (hash === '#lopu') return 'lopu';
+	if (hash === '#lopu' || hash === '#lopu-instructions') return 'lopu';
+	if (hash === '#lopu-accounts' || hash === '#lopu-base-prompt') return 'admin';
 	return 'profile';
 }
 export const settingsTabHref = (tab: SettingsTab) => `/settings/${tab}`;

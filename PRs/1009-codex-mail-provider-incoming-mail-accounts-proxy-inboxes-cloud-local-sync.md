@@ -1,6 +1,6 @@
 # PR #1009 — Incoming mail accounts, proxy inboxes and cloud/local sync
 
-[PR](https://github.com/lopugit/thingtime/pull/1009) · branch `codex/mail-provider` · target `develop`
+[PR](https://github.com/lopugit/thingtime/pull/1009) · branch `codex/mail-provider` · target `main` (explicitly authorized on 2026-10-17)
 
 ## Behavior
 
@@ -83,6 +83,6 @@ the worktree's managed PM2 stack was restarted and HTTP/browser checks resumed.
 - Local QA uses `127.0.0.1:13760` and disposable Mongo replica `mail-qa-rs` on
   `127.0.0.1:20437`. No public Funnel was enabled for this test database. The
   installed Tailscale CLI shim points to a missing Tailscale app, so Funnel
-  status cannot be verified. Production and main have not been changed.
+  status cannot be verified. Production verification is performed after the authorized main merge.
 - Graphify refresh/semantic extraction results are recorded in the PR's final
   validation update. Missing semantic extraction must not be treated as indexed.
