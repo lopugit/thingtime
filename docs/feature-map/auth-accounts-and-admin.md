@@ -171,3 +171,14 @@ corruption. `providerVault.browser.test.ts` is the opt-in actual offline Setting
 fixture. `userVaultModel.test.ts` and `userVaultEnvironment.test.ts` cover shared
 validation and rejection of malformed replacement tokens (`api.lopu-vault`
 1.2.1). See [local provider setup and verification](../local-workspaces.md#anonymous-provider-vault).
+
+Account provider groundwork adds `userVaultMetadata.ts` and `userVaultVersion.ts`
+for complete bounded, value-free snapshots of actual stored Things. The existing
+Vault POST delegates `sync-metadata` to `routes/api/v1/lopu/vault/metadata.ts`
+(`api.lopu-vault` 1.3.0); selected personal reveals optionally return the same
+record's version after fresh proof (`api.vault-reveal` 1.2.0). The device adapter
+retains explicit remote-only metadata and exact-version selected values through
+`providerTransport.client.ts`. `providerMetadata.api.test.ts` is an opt-in
+loopback API fixture; `test:lopu`, `test:sensitive-reveal`, `test:api-capabilities`
+and `test:local-workspace` include the corresponding unit contracts. Account
+Settings integration and conditional write synchronization remain unfinished.

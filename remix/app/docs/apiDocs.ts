@@ -4907,8 +4907,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		// audioInput 'realtime' for direct-voice models), four more kinds
 		// (mistral, deepseek, groq, cohere) — compatible additions.
 		// 1.2.1: reject malformed supplied tokens instead of retaining an older value.
-		contractVersion: '1.2.1',
-		featureVersion: '1.2.1',
+		// 1.3.0: optional complete, versioned device metadata snapshots; no decrypted values.
+		contractVersion: '1.3.0',
+		featureVersion: '1.3.0',
 		group: 'lopu',
 		title: 'Lopu Secure Vault',
 		endpoint: '/api/v1/lopu/vault',
@@ -4919,6 +4920,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		methods: ['GET', 'POST'],
 		steps: [
 			'GET the provider templates, environments, and redacted entry metadata.',
+            'POST sync-metadata with expectedOwnerId for a complete owner-scoped snapshot (at most 500 records and 32 MiB of source documents). Requires a current full session and exact same-origin request. Returns complete:true, groups and entries with opaque vault-state-v1 versions; never values or ciphertext. Oversized/inconsistent snapshots fail explicitly without returning partial data. Versions identify actual stored Thing state, including generic edits; they are not authorization grants.',
 			'POST create-group, save-secret, or save-provider to create write-only records.',
 			'POST move-entry with id and groupId to move a secret or provider between owned environments; null or an empty string means Ungrouped. Only metadata changes; the encrypted value is preserved without decryption.',
 			'POST delete with an owner-scoped record id to remove it.'
@@ -13661,18 +13663,18 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 	}),
 	endpoint({
 		id: 'vault-reveal',
-		contractVersion: '1.1.0',
-		featureVersion: '1.1.0',
+		contractVersion: '1.2.0',
+		featureVersion: '1.2.0',
 		group: 'auth',
 		title: 'Verify and reveal one vault credential',
 		endpoint: '/api/v1/vault/reveal',
 		summary: 'Fresh password or user-verified passkey confirmation for one saved credential.',
-		detail: 'Supports ci and admin vaults for current admins, and personal Secure Vault entries for their owner only. Lists remain value-free. Same-origin JSON POST, a live full account session, and fresh verification are required. Passkey options issue a two-minute single-use challenge bound to the current session, origin and selected item. Login assertions cannot be reused. Five reveal attempts per fifteen minutes, including successful requests, apply independently of subscription tier. Deployment selection reveals one encrypted Vercel environment value from the server-configured Thingtime project only. Vercel sensitive values cannot be revealed. No arbitrary secure fields, bulk export or cached reveal grants are supported.',
+		detail: 'Supports ci and admin vaults for current admins, and personal Secure Vault entries for their owner only. Lists remain value-free. Same-origin JSON POST, a live full account session, and fresh verification are required. Passkey options issue a two-minute single-use challenge bound to the current session, origin and selected item. Login assertions cannot be reused. Five reveal attempts per fifteen minutes, including successful requests, apply independently of subscription tier. Deployment selection reveals one encrypted Vercel environment value from the server-configured Thingtime project only. Vercel sensitive values cannot be revealed. No arbitrary secure fields, bulk export or cached reveal grants are supported. Optional includeVersion:true on a personal selection returns its opaque version alongside the selected value from the same document. A device may retain this value only after explicit user selection in its separately encrypted vault, matching that exact metadata version; ordinary reveal display remains transient.',
 		auth: { mode: 'session-or-bearer', description: 'Live full account plus current password or a fresh user-verified passkey assertion; admin role for shared admin/CI vaults.' },
 		methods: ['POST'],
 		steps: ['Choose vault and id.', 'POST action options for passkey options and ticket, or use your current password.', 'POST action reveal with password OR ticket and response.', 'Keep the returned value transient and hide it after use.'],
 		requestExamples: [{ name: 'Verify selected entry', description: 'Current-password confirmation for one personal credential.', method: 'POST', body: { vault: 'personal', id: 'example-secret', action: 'reveal', password: '<current password>' } }],
-		responseExamples: [{ status: 200, description: 'One verified value; never stored in client caches.', body: { ok: true, vault: 'personal', id: 'example-secret', value: '<selected secret>' } }, { status: 401, description: 'Verification required or failed.', body: { ok: false, error: 'Verification failed' } }],
+		responseExamples: [{ status: 200, description: 'One verified value; ordinary reveal display is transient.', body: { ok: true, vault: 'personal', id: 'example-secret', value: '<selected secret>' } }, { status: 401, description: 'Verification required or failed.', body: { ok: false, error: 'Verification failed' } }],
 		notes: ['All responses, including errors and unsupported methods, are private and no-store. Clients must negotiate api.vault-reveal >=1.0.0 with matching major at the current origin.', 'Options are limited to ten per fifteen minutes. Password/passkey attempts never bypass security limits for paid subscriptions.']
 	}),
 	endpoint({

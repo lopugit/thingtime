@@ -3575,3 +3575,47 @@ Account provider/environment local UI, ordered conditional account sync,
 explicit fresh-reveal retention of existing server values and the remaining
 full-feature matrix are still open. This anonymous authoring increment does
 not complete that matrix or establish provider execution/native integration.
+
+### Account Vault metadata and selected retention (implementation in progress)
+
+`api.lopu-vault` 1.3.0 adds `POST /api/v1/lopu/vault` with
+`{ "action": "sync-metadata", "expectedOwnerId": "<current account id>" }`.
+The current full session, exact origin, expected actor and selected data-plane
+fences still apply. It returns a complete metadata snapshot with opaque
+`vault-state-v1` comparison versions, without decrypting credentials. More than
+500 records, more than 32 MiB of source documents or malformed references fail
+explicitly; a partial list is never treated as a complete account snapshot.
+Versions include the actual stored Thing, so edits through the generic editor
+are visible even when the embedded Vault timestamp does not change.
+
+`api.vault-reveal` 1.2.0 optionally accepts `includeVersion: true` for one personal
+selection. Existing password/passkey verification and fixed rate limits remain;
+the value and version come from the same document. Normal reveal display remains
+transient. Explicit offline retention belongs in the separately unlocked device
+Vault and must match the selected item's local revision and server version.
+There is no bulk plaintext read.
+
+The device adapter now represents remote-only values explicitly, encrypts
+metadata, preserves pending edits and needed environments during reconciliation,
+and refuses stale reveals. `accountProviderMetadataTransport` negotiates the
+new API and uses direct bounded requests with current actor/origin/plane leases.
+The account Settings adapter, ordered conditional write transport and reviewed
+conflict/retry lifecycle are **not wired yet**. These APIs and storage methods
+are groundwork, not completed account offline support.
+
+The reproducible API fixture only accepts loopback URLs and creates a disposable
+account with synthetic values. It deletes its Vault entries through the normal
+API; the synthetic account remains because there is no account-delete API.
+Use the same local Vault key and disposable replica-set setup described above:
+
+```sh
+TT_PROVIDER_METADATA_API_URL=http://127.0.0.1:<local-port> \
+TT_PROVIDER_METADATA_API_ARTIFACTS=<ignored-output-directory> \
+TT_SHARED_PLAYWRIGHT_PATH=<playwright-module> \
+node --import tsx --test app/local-workspace/providerMetadata.api.test.ts
+```
+
+Run from `remix/`. The fixture proves value-free complete metadata, exact selected
+versions, generic-edit detection, anonymous/cross-origin/actor/plane refusals,
+wrong-password rejection and empty readback after cleanup. It does not prove
+account Settings integration or the unfinished write synchronization contract.

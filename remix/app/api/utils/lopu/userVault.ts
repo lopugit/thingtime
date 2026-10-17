@@ -2,7 +2,9 @@ import { createCipheriv, createDecipheriv, createHmac, randomBytes, randomUUID }
 
 import { normalizeUserVaultGroup, normalizeUserVaultSecret, normalizeUserVaultProvider, type PublicVaultGroup, type PublicVaultEntry } from './userVaultModel';
 
-import { getThingsCollection } from '../mongodb/collections';
+import { getThingsCollection, withMongoTransaction } from '../mongodb/collections';
+import { projectUserVaultMetadata, USER_VAULT_SNAPSHOT_LIMIT } from './userVaultMetadata';
+import { userVaultSnapshotVersion, type VaultSnapshotDocument } from './userVaultVersion';
 import { createThing, deletePost, isFail, updateThing } from '../things/things';
 import { ACL_OWNER } from '~/schemas/registry';
 import {
@@ -115,6 +117,26 @@ const assertGroup = async (ownerId: string, groupId: unknown): Promise<string | 
 export const revealUserVaultValue = async (ownerId: string, id: string): Promise<string | null> => {
 	const doc = await ownVaultDoc(ownerId, id);
 	return doc && ['secret', 'provider'].includes(doc.crystal.recordKind) && doc.crystal.encryptedValue ? decryptValue(doc) : null;
+};
+
+/** Optional device metadata read; it neither decrypts nor publishes entries. */
+export const listUserVaultMetadata = async (ownerId: string) => {
+ const things = await getThingsCollection();
+ return withMongoTransaction(async session => {
+  const cursor = things.find({ ownerId, thingtime: 'data', 'crystal.systemType': LOPU_USER_VAULT_SYSTEM_TYPE } as any, { session, maxTimeMS: 10_000 })
+   .limit(USER_VAULT_SNAPSHOT_LIMIT + 1).batchSize(10);
+  try { return await projectUserVaultMetadata(ownerId, cursor as any); }
+  finally { await cursor.close(); }
+ });
+};
+
+/** Version and selected plaintext come from exactly the same stored document.
+ * Only the existing freshly verified reveal route may call this function. */
+export const revealUserVaultValueVersion = async (ownerId: string, id: string) => {
+ const doc = await ownVaultDoc(ownerId, id);
+ if (!doc || !['secret', 'provider'].includes(doc.crystal.recordKind) || !doc.crystal.encryptedValue) return null;
+ const version = userVaultSnapshotVersion(doc as unknown as VaultSnapshotDocument);
+ return { version, value: decryptValue(doc) };
 };
 
 export const listUserVault = async (ownerId: string) => {

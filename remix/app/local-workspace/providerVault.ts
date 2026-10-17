@@ -3,19 +3,26 @@ import { WorkspaceError, type WorkspaceDatabase, type WorkspaceLease, type Works
 import { deviceVaultWriteDigest, openDeviceVaultValue, sealDeviceVaultValue } from '../passwords/vaultCrypto';
 import type { VaultEnvelope } from '../passwords/vaultEnvelopeContract';
 import {
- LOPU_PROVIDER_TEMPLATES, normalizeUserVaultGroup, normalizeUserVaultSecret, normalizeUserVaultProvider, normalizeUserVaultGroupId, safeVaultId,
+ LOPU_PROVIDER_TEMPLATES, validUserVaultSnapshotVersion as validRemoteVersion, normalizeUserVaultSecretMetadata, validUserVaultValue, normalizeUserVaultGroup, normalizeUserVaultSecret, normalizeUserVaultProvider, normalizeUserVaultGroupId, safeVaultId,
  type PublicVaultEntry, type PublicVaultGroup, type UserVaultGroupFields, type UserVaultSecretFields, type UserVaultProviderFields
 } from '../api/utils/lopu/userVaultModel';
 const collections = deviceVaultCollections('providers');
 const MAX_ENTRIES = 500;
-type Content = ({ kind: 'group' } & UserVaultGroupFields) | ({ kind: 'secret' } & UserVaultSecretFields) | ({ kind: 'provider' } & Omit<UserVaultProviderFields, 'token'> & { token: string });
-export type DeviceProviderRecord = { id: string; revision: number; remoteRevision: number; createdAt: string; updatedAt: string; encryptedValue?: VaultEnvelope; deleted?: true; writeId: string; writeDigest: string };
+type RetainedContent = ({ kind: 'group' } & UserVaultGroupFields) | ({ kind: 'secret' } & UserVaultSecretFields) | ({ kind: 'provider' } & Omit<UserVaultProviderFields, 'token'> & { token: string });
+type RemoteContent = (({ kind: 'secret' } & Omit<UserVaultSecretFields, 'value'>) | ({ kind: 'provider' } & Omit<UserVaultProviderFields, 'token'>)) & { remoteOnly: true };
+type Content = RetainedContent | RemoteContent;
+const remoteOnly = (value: Content): value is RemoteContent => 'remoteOnly' in value && value.remoteOnly === true;
+const validTimestamp = (value: unknown): value is string => typeof value === 'string' && Number.isFinite(Date.parse(value)) && new Date(value).toISOString() === value;
+export type ProviderVaultMetadataTransport = {
+ metadata(signal: AbortSignal): Promise<{ complete: true; groups: Array<PublicVaultGroup & { version: string }>; entries: Array<PublicVaultEntry & { version: string }> }>;
+};
+export type DeviceProviderRecord = { id: string; revision: number; remoteRevision: number; remoteVersion?: string; createdAt: string; updatedAt: string; encryptedValue?: VaultEnvelope; deleted?: true; writeId?: string; writeDigest?: string };
 export type DeviceProviderCommand = { id: string; recordId: string; localRevision: number; sequence: number; encryptedValue: VaultEnvelope; state: 'pending' | 'frozen' | 'refused' };
 export type DeviceProviderGroup = PublicVaultGroup & { revision: number };
-export type DeviceProviderEntry = PublicVaultEntry & { revision: number };
+export type DeviceProviderEntry = PublicVaultEntry & { revision: number; valueAvailableOffline: boolean };
 const fail = (code: string, message: string, status = 409): never => { throw new WorkspaceError(code, message, status); };
 const revision = (value: unknown): value is number => Number.isSafeInteger(value) && Number(value) >= 0 && Number(value) < Number.MAX_SAFE_INTEGER;
-const stamp = (rows: DeviceProviderRecord[]) => JSON.stringify(rows.map(row => [row.id, row.revision, !!row.deleted]).sort((a,b) => String(a[0]).localeCompare(String(b[0]))));
+const stamp = (rows: DeviceProviderRecord[]) => JSON.stringify(rows.map(row => [row.id, row.revision, !!row.deleted, row.remoteVersion ?? null, row.remoteRevision]).sort((a,b) => String(a[0]).localeCompare(String(b[0]))));
 const fields: Record<string, string[]> = {
  'create-group': ['name'], 'save-secret': ['name','key','value','groupId'], 'save-provider': ['name','provider','endpoint','model','token','groupId'],
  'move-entry': ['groupId'], 'delete': []
@@ -47,7 +54,8 @@ export class LocalProviderVault extends DeviceVaultSession {
  constructor(db: WorkspaceDatabase, scope: WorkspaceScope, lease: WorkspaceLease, origin: string) { super(db, scope, lease, origin, 'providers'); }
  private validateRow(id: string, row: DeviceProviderRecord) {
   try {
-   if (!row || row.id !== id || !safeVaultId(id) || !revision(row.revision) || row.revision < 1 || !revision(row.remoteRevision) || !safeVaultId(row.writeId) || typeof row.writeDigest !== 'string' || !row.writeDigest || row.writeDigest.length > 256 ||
+   if (!row || row.id !== id || !safeVaultId(id) || !revision(row.revision) || row.revision < 1 || !revision(row.remoteRevision) || ((row.writeId !== undefined || row.writeDigest !== undefined) && (!safeVaultId(row.writeId) || typeof row.writeDigest !== 'string' || !row.writeDigest || row.writeDigest.length > 256)) ||
+    (row.remoteVersion !== undefined && (this.scope.kind !== 'account' || !validRemoteVersion(row.remoteVersion))) ||
     new Date(row.createdAt).toISOString() !== row.createdAt || new Date(row.updatedAt).toISOString() !== row.updatedAt ||
     (row.deleted === true ? row.encryptedValue !== undefined : row.deleted !== undefined || !row.encryptedValue)) throw Error();
    return row;
@@ -65,6 +73,16 @@ export class LocalProviderVault extends DeviceVaultSession {
   try {
    const value = JSON.parse(plain);
    if (value.kind === 'group') return { kind: 'group', ...normalizeUserVaultGroup(value) };
+   if (value.remoteOnly === true) {
+    if (this.scope.kind !== 'account' || !validRemoteVersion(row.remoteVersion) || 'value' in value || 'token' in value) throw Error();
+    if (value.kind === 'secret') return { kind: 'secret', remoteOnly: true, ...normalizeUserVaultSecretMetadata(value) };
+    if (value.kind === 'provider') {
+     const { token: _token, ...metadata } = normalizeUserVaultProvider(value);
+     return { kind: 'provider', remoteOnly: true, ...metadata };
+    }
+    throw Error();
+   }
+   if (value.remoteOnly !== undefined) throw Error();
    if (value.kind === 'secret') return { kind: 'secret', ...normalizeUserVaultSecret(value) };
    if (value.kind === 'provider') {
     const normalized = normalizeUserVaultProvider(value); if (!normalized.token) throw Error();
@@ -76,7 +94,7 @@ export class LocalProviderVault extends DeviceVaultSession {
  private metadata(row: DeviceProviderRecord, value: Content): DeviceProviderGroup | DeviceProviderEntry {
   const base = { id: row.id, revision: row.revision, name: value.name, createdAt: row.createdAt, updatedAt: row.updatedAt };
   if (value.kind === 'group') return base;
-  return { ...base, kind: value.kind, groupId: value.groupId, hasValue: true,
+  return { ...base, kind: value.kind, groupId: value.groupId, hasValue: true, valueAvailableOffline: !remoteOnly(value),
    ...(value.kind === 'secret' ? { key: value.key } : { provider: value.provider, endpoint: value.endpoint, ...(value.model ? { model: value.model } : {}) }) };
  }
  async list(signal?: AbortSignal) {
@@ -96,6 +114,7 @@ export class LocalProviderVault extends DeviceVaultSession {
   const op = this.operation(signal, false), row = await this.db.transaction(this.scope, 'readonly', op.lease, tx => tx.get<DeviceProviderRecord>(collections.records, id));
   if (!row) return fail('VAULT_MISSING', 'Vault entry not found.', 404);
   const value = await this.decode(this.validateRow(id, row), op); if (value.kind === 'group') return fail('VAULT_MISSING', 'Vault entry not found.', 404);
+  if (remoteOnly(value)) return fail('VAULT_VALUE_REMOTE', 'This value has not been retained on this device. Reconnect and verify the selected value to keep it offline.', 409);
   return { id, revision: row.revision, value: value.kind === 'secret' ? value.value : value.token };
  }
  async mutate(raw: Record<string, unknown>, signal?: AbortSignal) {
@@ -118,9 +137,14 @@ export class LocalProviderVault extends DeviceVaultSession {
    next = { kind: 'secret', ...normalizeUserVaultSecret(command) };
   } else if (command.action === 'save-provider') {
    if (current && current.kind !== 'provider') return fail('VAULT_KIND', 'Select a provider entry.', 400);
-   const normalized = normalizeUserVaultProvider(command), token = normalized.token ?? (current?.kind === 'provider' ? current.token : null);
-   if (!token) return fail('VAULT_INPUT', 'A provider token is required when creating a connection.', 400);
-   next = { kind: 'provider', ...normalized, token };
+   const normalized = normalizeUserVaultProvider(command), token = normalized.token ?? (current?.kind === 'provider' && !remoteOnly(current) ? current.token : null);
+   if (!token && current?.kind === 'provider' && remoteOnly(current)) {
+    const { token: _token, ...metadata } = normalized;
+    next = { kind: 'provider', remoteOnly: true, ...metadata };
+   } else {
+    if (!token) return fail('VAULT_INPUT', 'A provider token is required when creating a connection.', 400);
+    next = { kind: 'provider', ...normalized, token };
+   }
   } else if (command.action === 'move-entry') {
    if (!current || current.kind === 'group') return fail('VAULT_MISSING', 'Vault entry not found.', 404);
    next = { ...current, groupId: normalizeUserVaultGroupId((command as any).groupId) };
@@ -137,7 +161,7 @@ export class LocalProviderVault extends DeviceVaultSession {
   }
   if (!before && rows.filter(row => !row.deleted).length >= MAX_ENTRIES) return fail('VAULT_LIMIT', 'Keep at most 500 entries in this device vault.', 413);
   const time = new Date().toISOString(), record: DeviceProviderRecord = { id: command.id, revision: command.revision + 1, remoteRevision: before?.remoteRevision ?? 0,
-   createdAt: before?.createdAt ?? time, updatedAt: time, writeId: command.writeId, writeDigest: digest,
+   ...(before?.remoteVersion ? { remoteVersion: before.remoteVersion } : {}), createdAt: before?.createdAt ?? time, updatedAt: time, writeId: command.writeId, writeDigest: digest,
    ...(next ? { encryptedValue: await sealDeviceVaultValue(owner, op.key, command.id, JSON.stringify(next)) } : { deleted: true as const }) };
   const encryptedCommand = this.scope.kind === 'account' ? await sealDeviceVaultValue(owner, op.key, `command:${command.id}:${command.writeId}`, JSON.stringify(command)) : null;
   const expected = stamp(rows);
@@ -155,6 +179,82 @@ export class LocalProviderVault extends DeviceVaultSession {
  }
  private result(row: DeviceProviderRecord, value: Content) {
   const metadata = this.metadata(row, value); return value.kind === 'group' ? { ok: true as const, group: metadata as DeviceProviderGroup } : { ok: true as const, entry: metadata as DeviceProviderEntry };
+ }
+ /** A complete metadata snapshot never requests credential values. Prepare every
+  * encrypted replacement before one atomic adoption; pending local work wins. */
+ async reconcileMetadata(transport: ProviderVaultMetadataTransport, signal?: AbortSignal) {
+  if (this.scope.kind !== 'account') return fail('ACCOUNT_REQUIRED', 'Anonymous vaults never synchronize.', 403);
+  const op = this.operation(signal, false), controller = new AbortController(), off = op.lease.onInvalidate(() => controller.abort());
+  const combined = AbortSignal.any([controller.signal, ...(signal ? [signal] : [])]);
+  try {
+   const baseline = await this.rows(op), expected = stamp(baseline);
+   const dependencies = new Map<string, string>();
+   for (const row of baseline.filter(item => !item.deleted)) { const content = await this.decode(row, op); if (content.kind !== 'group' && content.groupId) dependencies.set(row.id, content.groupId); }
+   const snapshot = await transport.metadata(combined); op.lease.assertCurrent(); combined.throwIfAborted();
+   if (!snapshot || snapshot.complete !== true || !Array.isArray(snapshot.groups) || !Array.isArray(snapshot.entries) || snapshot.groups.length + snapshot.entries.length > MAX_ENTRIES)
+    return fail('VAULT_RESPONSE', 'The account returned an incomplete or oversized vault snapshot.', 502);
+   if (snapshot.groups.some(row => !row || typeof row !== 'object' || Array.isArray(row) || 'kind' in row) ||
+    snapshot.entries.some(row => !row || typeof row !== 'object' || Array.isArray(row) || !['secret','provider'].includes(row.kind)))
+    return fail('VAULT_RESPONSE', 'The account returned invalid vault metadata.', 502);
+   const seen = new Set<string>(), groups = new Set(snapshot.groups.map(row => row.id)), prepared: DeviceProviderRecord[] = [];
+   for (const raw of [...snapshot.groups.map(row => ({ ...row, kind: 'group' as const })), ...snapshot.entries]) {
+    const allowed = new Set(['id','kind','version','name','createdAt','updatedAt',...(raw.kind === 'group' ? [] : ['groupId','hasValue',...(raw.kind === 'secret' ? ['key'] : ['provider','endpoint','model'])])]);
+    if (!raw || Object.keys(raw).some(key => !allowed.has(key)) || !safeVaultId(raw.id) || seen.has(raw.id) || !validRemoteVersion(raw.version) ||
+     !validTimestamp(raw.createdAt) || !validTimestamp(raw.updatedAt))
+     return fail('VAULT_RESPONSE', 'The account returned invalid vault metadata.', 502);
+    seen.add(raw.id);
+    let content: Content;
+    try {
+     if (raw.kind === 'group') content = { kind: 'group', ...normalizeUserVaultGroup(raw) };
+     else if (raw.kind === 'secret') content = { kind: 'secret', remoteOnly: true, ...normalizeUserVaultSecretMetadata(raw) };
+     else if (raw.kind === 'provider') {
+      const { token: _token, ...metadata } = normalizeUserVaultProvider(raw);
+      content = { kind: 'provider', remoteOnly: true, ...metadata };
+     } else throw Error();
+     if (content.kind !== 'group' && (!('hasValue' in raw) || raw.hasValue !== true || (content.groupId && !groups.has(content.groupId)))) throw Error();
+    } catch { return fail('VAULT_RESPONSE', 'The account returned invalid vault metadata.', 502); }
+    const before = baseline.find(row => row.id === raw.id);
+    if (before?.remoteVersion === raw.version && !before.deleted) { prepared.push(before); continue; }
+    const record: DeviceProviderRecord = { id: raw.id, revision: (before?.revision ?? 0) + 1, remoteRevision: before?.remoteRevision ?? 0, remoteVersion: raw.version,
+     createdAt: raw.createdAt, updatedAt: raw.updatedAt, encryptedValue: await sealDeviceVaultValue(await this.context, op.key, raw.id, JSON.stringify(content)) };
+    this.validateRow(record.id, record); prepared.push(record);
+   }
+   await this.db.transaction(this.scope, 'readwrite', op.lease, async tx => {
+    if (stamp((await tx.list<DeviceProviderRecord>(collections.records)).map(row => row.value)) !== expected) return fail('VAULT_CONFLICT', 'The vault changed while metadata was loading. Local edits have been kept.');
+    const pending = new Set((await tx.list<DeviceProviderCommand>(collections.commands)).map(row => row.value.recordId));
+    // Keep environment metadata needed by unsent children, including when a
+    // generic account edit removed that environment. Sync must review it later.
+    for (const id of [...pending]) { const group = dependencies.get(id); if (group) pending.add(group); }
+    const adopted = new Map(baseline.map(row => [row.id, row]));
+    for (const row of prepared) if (!pending.has(row.id)) adopted.set(row.id, row);
+    for (const row of baseline) if (!seen.has(row.id) && row.remoteVersion && !row.deleted && !pending.has(row.id))
+     adopted.set(row.id, { ...row, revision: row.revision + 1, deleted: true, encryptedValue: undefined });
+    if ([...adopted.values()].filter(row => !row.deleted).length > MAX_ENTRIES) return fail('VAULT_LIMIT', 'Account metadata and pending device entries exceed this device limit. Existing data has been kept.', 413);
+    for (const [id, row] of adopted) await tx.put(collections.records, id, row);
+   });
+   op.lease.assertCurrent(); return { complete: true as const };
+  } finally { off(); }
+ }
+ /** Called only for an explicitly selected, freshly verified reveal response.
+  * The response must identify the exact server snapshot; no bulk value API. */
+ async retainSelectedValue(id: string, revision: number, response: { id: string; version: string; value: string }, signal?: AbortSignal) {
+  if (this.scope.kind !== 'account') return fail('ACCOUNT_REQUIRED', 'Anonymous vaults do not retain account values.', 403);
+  const op = this.operation(signal), rows = await this.rows(op), row = rows.find(row => row.id === id);
+  if (!row || row.deleted || row.revision !== revision || response.id !== id || !validRemoteVersion(response.version) || row.remoteVersion !== response.version)
+   return fail('VAULT_CONFLICT', 'This value belongs to a different account snapshot. Refresh and verify it again.');
+  const value = validUserVaultValue(response.value); if (!value) return fail('VAULT_RESPONSE', 'The account returned an invalid selected value.', 502);
+  const current = await this.decode(row, op); if (current.kind === 'group') return fail('VAULT_INPUT', 'Select a vault entry.', 400);
+  const { remoteOnly: _remoteOnly, ...metadata } = current as Content & { remoteOnly?: true };
+  const content = { ...metadata, ...(current.kind === 'secret' ? { value } : { token: value }) };
+  const encryptedValue = await sealDeviceVaultValue(await this.context, op.key, id, JSON.stringify(content));
+  await this.db.transaction(this.scope, 'readwrite', op.lease, async tx => {
+   const latest = await tx.get<DeviceProviderRecord>(collections.records, id);
+   const pending = (await tx.list<DeviceProviderCommand>(collections.commands)).some(item => item.value.recordId === id);
+   if (pending || !latest || latest.revision !== revision || latest.remoteVersion !== response.version || latest.deleted)
+    return fail('VAULT_CONFLICT', 'The vault changed before the selected value could be retained.');
+   await tx.put(collections.records, id, { ...latest, revision: revision + 1, encryptedValue });
+  });
+  op.lease.assertCurrent();
  }
  async syncStatus() {
   this.check(); if (this.scope.kind === 'anonymous') return [];

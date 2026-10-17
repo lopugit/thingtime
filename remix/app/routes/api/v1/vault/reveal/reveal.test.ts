@@ -154,3 +154,17 @@ test('deployment values require both current admin access and fresh verification
     assert.deepEqual(reads, []);
   }
 });
+
+test('optional personal version identifies the same freshly verified selected value', async () => {
+ const version='vault-state-v1:'+'a'.repeat(64);let versionReads=0;
+ const {action,reads}=fixture({revealUserVaultValueVersion:async(owner:string,id:string)=>{assert.equal(owner,'owner');assert.equal(id,selection.id);versionReads++;return {version,value:'selected versioned value'};}});
+ const response=await action({request:post({...selection,vault:'personal',includeVersion:true})});assert.equal(response.status,200);privateResponse(response);
+ assert.deepEqual(await response.json(),{ok:true,vault:'personal',id:selection.id,version,value:'selected versioned value'});assert.equal(versionReads,1);assert.deepEqual(reads,[]);
+ for(const body of [{...selection,includeVersion:true},{...selection,vault:'personal',includeVersion:'true'}])assert.equal((await action({request:post(body)})).status,400);
+ assert.equal(versionReads,1);
+});
+test('versioned personal reveal still refuses failed proof and revocation before disclosure',async()=>{
+ let revealed=0,resolutions=0;const shared={revealUserVaultValueVersion:async()=>{revealed++;return {version:'vault-state-v1:'+'a'.repeat(64),value:'never disclosed'};}};
+ const failed=fixture({...shared,confirmCurrentPassword:async()=> 'mismatch'});assert.equal((await failed.action({request:post({...selection,vault:'personal',includeVersion:true})})).status,401);assert.equal(revealed,0);
+ const revoked=fixture({...shared,resolveTokenUser:async()=>++resolutions<3?account:null});const response=await revoked.action({request:post({...selection,vault:'personal',includeVersion:true})});assert.equal(response.status,403);assert.equal(revealed,1);assert.ok(!(await response.text()).includes('never disclosed'));
+});

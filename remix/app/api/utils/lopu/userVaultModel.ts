@@ -241,10 +241,15 @@ export type UserVaultProviderFields = { name: string; provider: LopuProviderKind
 export const normalizeUserVaultGroup = (input: { name?: unknown }): UserVaultGroupFields => {
  const name = boundedVaultText(input.name, 80); if (!name) throw new Error('Environment name is required.'); return { name };
 };
+export const normalizeUserVaultSecretMetadata = (input: { name?: unknown; key?: unknown; groupId?: unknown }): Omit<UserVaultSecretFields, 'value'> => {
+ const name = boundedVaultText(input.name, 120), key = boundedVaultText(input.key, 120);
+ if (!name || !key) throw new Error('Secret name and key are required.');
+ return { name, key, groupId: normalizeUserVaultGroupId(input.groupId) };
+};
 export const normalizeUserVaultSecret = (input: { name?: unknown; key?: unknown; value?: unknown; groupId?: unknown }): UserVaultSecretFields => {
- const name = boundedVaultText(input.name, 120), key = boundedVaultText(input.key, 120), value = validUserVaultValue(input.value);
- if (!name || !key || !value) throw new Error('Secret name, key, and a non-empty bounded value are required.');
- return { name, key, value, groupId: normalizeUserVaultGroupId(input.groupId) };
+ const metadata = normalizeUserVaultSecretMetadata(input), value = validUserVaultValue(input.value);
+ if (!value) throw new Error('Secret name, key, and a non-empty bounded value are required.');
+ return { ...metadata, value };
 };
 export const normalizeUserVaultProvider = (
  input: { name?: unknown; provider?: unknown; endpoint?: unknown; model?: unknown; token?: unknown; groupId?: unknown },
@@ -257,3 +262,9 @@ export const normalizeUserVaultProvider = (
  if (modelGiven && !model) throw new Error('Model id must be at most 200 characters of letters, digits, . _ : / @ or -.');
  return { name, provider, endpoint, ...(model ? { model } : {}), token, groupId: normalizeUserVaultGroupId(input.groupId) };
 };
+
+// Public comparison syntax shared by server snapshots and the device adapter.
+// A version is not an authorization grant or a caller-assigned revision.
+export const USER_VAULT_VERSION_PREFIX = 'vault-state-v1:';
+export const validUserVaultSnapshotVersion = (version: unknown): version is string =>
+ typeof version === 'string' && /^vault-state-v1:[a-f0-9]{64}$/.test(version);

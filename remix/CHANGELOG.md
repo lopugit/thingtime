@@ -68,6 +68,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-17 — **Codex (AI)**: Account Vault groundwork adds bounded, value-free metadata snapshots and exact-version selected reveals with encrypted device retention and stale-response protection. The loopback API fixture verifies existing authorization boundaries; account Settings/write sync remains in progress. See [PR #1000 notes](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
 - 2026-10-17 — **Codex (AI)**: Secure Vault environments, secrets and provider
   connections can be authored anonymously and offline through the existing
   Settings forms and an encrypted device vault. Fix deletion notifications

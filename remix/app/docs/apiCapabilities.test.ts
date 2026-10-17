@@ -139,9 +139,9 @@ test('poll votes publish the shared-identity correction', () => {
 });
 
 test('verified vault reveal is explicit on both manifests with compatible client requirements', () => {
-	assert.equal(createApiCapabilitiesManifest().features['api.vault-reveal'], '1.1.0');
+	assert.equal(createApiCapabilitiesManifest().features['api.vault-reveal'], '1.2.0');
 	const manifest = thingtimeCapabilityManifest('https://thingtime.test');
-	assert.equal(manifest.features['api.vault-reveal'].version, '1.1.0');
+	assert.equal(manifest.features['api.vault-reveal'].version, '1.2.0');
 	assert.ok(manifest.operations.some(operation => operation.feature === 'api.vault-reveal' && operation.path === '/api/v1/vault/reveal' && operation.methods.includes('POST')));
 	assert.equal(capabilitySatisfies('1.1.0', '1.0.0'), true);
 	assert.equal(capabilitySatisfies('2.0.0', '1.0.0'), false);
@@ -296,8 +296,8 @@ test('the Lopu family publishes its minor capability updates (own providers, ver
 	// 1.1.0: optional provider `model` + templates with catalog models / more kinds (vault);
 	// optional per-turn model, effort, speed (voice turn) — on top of the 1.0.1 fences;
 	// 1.2.0 (voice reply): the gate on conversation turns + billing/usage/costMicros on done
-	assert.equal(manifest.features['api.lopu-vault'], '1.2.1');
-	assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.lopu-vault'].version, '1.2.1');
+	assert.equal(manifest.features['api.lopu-vault'], '1.3.0');
+	assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.lopu-vault'].version, '1.3.0');
 	assert.equal(manifest.features['api.lopu-voice-reply'], '1.4.0');
 	// direct voice (§6.1): the ephemeral realtime credential; 1.1.0: the gate + a usage row per session
 	assert.equal(manifest.features['api.lopu-voice-session'], '1.2.0');

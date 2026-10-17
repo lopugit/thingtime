@@ -11495,3 +11495,24 @@ connectivity or draft saving; retrying an ambiguous upload must not silently
 advance its revision or overwrite a competing device's value. Evidence:
 `tmp/account-passwords-native-accepted/`, `tmp/account-passwords-anonymous-regression/`
 and the focused sync/transport test logs. These are local results, not CI or deployed acceptance.
+
+### Account provider metadata / selected offline retention — 2026-10-17
+
+- [x] Unit checks: metadata and values stay encrypted; remote-only entries cannot
+  be revealed as invented empty tokens; generic edits/BSON type changes produce
+  distinct server versions; incomplete, malformed and oversized snapshots fail.
+- [x] Unit races: older metadata and selected-value replies cannot replace local
+  edits; pending children retain their environment metadata; local/remote totals
+  respect the device entry bound; locking and anonymous scope stop adoption.
+- [x] Real loopback API with a disposable account: metadata contains no values or
+  ciphertext, generic editing changes its comparison version, and fresh selected
+  verification returns the exact corresponding value/version. Wrong password,
+  wrong account, expected actor/plane mismatch and cross-origin are refused.
+- [ ] Account Settings retention/reconnect and ordered conditional write sync,
+  including lost replies after generic deletion, remain unfinished.
+
+Regression: a Vault's embedded `crystal.updatedAt` is not an authoritative sync
+version because ordinary Thing edits can leave it unchanged. A selected old
+credential must never attach to a newer device/account metadata version. Run the
+opt-in `providerMetadata.api.test.ts` through the documented loopback setup in
+[local workspaces](docs/local-workspaces.md#account-vault-metadata-and-selected-retention-implementation-in-progress).

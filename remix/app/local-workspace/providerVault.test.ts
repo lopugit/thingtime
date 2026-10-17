@@ -91,3 +91,115 @@ test('damaged record metadata fails closed without replacing encrypted work',asy
   await assert.rejects(f.vault.mutate(command('save-secret',{name:'Replacement',key:'KEY',value:'new'},one.id,0)),/metadata is invalid/);assert.deepEqual(await raw(f),before);
  }finally{await f.close();}
 });
+
+const accountScope:WorkspaceScope={kind:'account',ownerId:'fixture-owner',origin,dataPlane:'home'};
+const remoteVersion=(letter='a')=>'vault-state-v1:'+letter.repeat(64);
+const remoteGroup=()=>({id:'fixture-remote-group',name:'Account environment',version:remoteVersion(),createdAt:'2026-10-17T00:00:00.000Z',updatedAt:'2026-10-17T00:00:00.000Z'});
+const remoteSecret=()=>({id:'fixture-remote-secret',kind:'secret' as const,name:'Metadata without secret',key:'REMOTE_KEY',hasValue:true as const,groupId:'fixture-remote-group',version:remoteVersion(),createdAt:'2026-10-17T00:00:00.000Z',updatedAt:'2026-10-17T00:00:00.000Z'});
+const remoteProvider=()=>({...remoteSecret(),id:'fixture-remote-provider',kind:'provider' as const,key:undefined,provider:'openai' as const,endpoint:'https://api.openai.com/v1'});
+function remoteSnapshot(){const provider=remoteProvider();delete provider.key;return {complete:true as const,groups:[remoteGroup()],entries:[remoteSecret(),provider]};}
+const metadataTransport=(snapshot:any=remoteSnapshot())=>({metadata:async()=>structuredClone(snapshot)});
+
+test('account metadata is encrypted, cold-readable, and explicit about values unavailable offline',async()=>{
+ const f=await fixture(accountScope);let reopened:LocalProviderVault|undefined;
+ try{
+  await f.vault.reconcileMetadata(metadataTransport());const list=await f.vault.list();
+  assert.equal(list.groups.length,1);assert.equal(list.entries.length,2);assert.ok(list.entries.every(row=>row.valueAvailableOffline===false));
+  await assert.rejects(f.vault.reveal(remoteSecret().id),/not been retained/);assert.deepEqual(await f.vault.syncStatus(),[]);
+  const saved=JSON.stringify(await raw(f));for(const text of ['Account environment','Metadata without secret','REMOTE_KEY','api.openai.com'])assert.ok(!saved.includes(text));
+  f.vault.dispose();reopened=new LocalProviderVault(f.db,f.scope,gate,origin);await reopened.unlock(phrase);
+  assert.equal((await reopened.list()).entries.length,2);await assert.rejects(reopened.reveal(remoteProvider().id),/not been retained/);
+ }finally{reopened?.dispose();await f.close();}
+});
+test('selected retention is bound to exact id, local revision and server state; refresh invalidates an older value',async()=>{
+ const f=await fixture(accountScope),id=remoteSecret().id, value='  explicit synthetic retained secret\n';
+ try{
+  await f.vault.reconcileMetadata(metadataTransport());
+  for(const response of [{id:'another-entry',version:remoteVersion(),value},{id,version:remoteVersion('b'),value}])await assert.rejects(f.vault.retainSelectedValue(id,1,response),/different account snapshot/);
+  await assert.rejects(f.vault.retainSelectedValue(id,0,{id,version:remoteVersion(),value}),/different account snapshot/);
+  await f.vault.retainSelectedValue(id,1,{id,version:remoteVersion(),value});assert.equal((await f.vault.reveal(id)).value,value);
+  assert.deepEqual(await f.vault.syncStatus(),[]);assert.ok(!JSON.stringify(await raw(f)).includes(value));
+  await f.vault.reconcileMetadata(metadataTransport());assert.equal((await f.vault.reveal(id)).value,value);
+  const newer=remoteSnapshot();newer.entries[0].version=remoteVersion('b');await f.vault.reconcileMetadata(metadataTransport(newer));
+  await assert.rejects(f.vault.reveal(id),/not been retained/);assert.equal((await f.vault.list()).entries.find(row=>row.id===id)?.valueAvailableOffline,false);
+ }finally{await f.close();}
+});
+test('server-only providers can move or change metadata locally without manufacturing a token',async()=>{
+ const f=await fixture(accountScope),id=remoteProvider().id;
+ try{
+  await f.vault.reconcileMetadata(metadataTransport());
+  await f.vault.mutate(command('move-entry',{groupId:null},id,1));
+  await f.vault.mutate(command('save-provider',{name:'Offline rename',provider:'openai',endpoint:'https://api.openai.com/v1',token:'',groupId:null},id,2));
+  const entry=(await f.vault.list()).entries.find(row=>row.id===id);assert.equal(entry?.name,'Offline rename');assert.equal(entry?.valueAvailableOffline,false);
+  await assert.rejects(f.vault.reveal(id),/not been retained/);assert.equal((await f.vault.syncStatus()).length,2);
+  await assert.rejects(f.vault.retainSelectedValue(id,3,{id,version:remoteVersion(),value:'stale remote value'}),/changed before/);
+  await f.vault.reconcileMetadata(metadataTransport());assert.equal((await f.vault.list()).entries.find(row=>row.id===id)?.name,'Offline rename');
+ }finally{await f.close();}
+});
+test('complete snapshot deletion preserves pending account work and device creations',async()=>{
+ const f=await fixture(accountScope),id=remoteSecret().id;
+ try{
+  await f.vault.reconcileMetadata(metadataTransport());
+  await f.vault.mutate(command('save-secret',{name:'Pending',key:'KEY',value:'new local secret',groupId:null},id,1));
+  const created=command('save-secret',{name:'New device entry',key:'KEY',value:'unsent local value'});await f.vault.mutate(created);
+  await f.vault.reconcileMetadata(metadataTransport({complete:true,groups:[],entries:[]}));
+  const list=await f.vault.list();assert.equal(list.groups.length,0);assert.deepEqual(new Set(list.entries.map(row=>row.id)),new Set([id,created.id]));
+  assert.equal((await f.vault.reveal(id)).value,'new local secret');assert.equal((await f.vault.syncStatus()).length,2);
+ }finally{await f.close();}
+});
+test('malformed, incomplete, secret-bearing or oversized metadata snapshots cannot partially replace device data',async()=>{
+ const f=await fixture(accountScope);
+ try{
+  await f.vault.reconcileMetadata(metadataTransport());const before=await raw(f);
+  const base=remoteSnapshot();const bad:any[]=[{...base,groups:[null]},{...base,entries:[{...base.entries[0],kind:'group'}]},{...base,entries:[{...base.entries[0],createdAt:'invalid'}]},{...base,complete:false},{...base,groups:[],entries:base.entries},{...base,entries:[base.entries[0],base.entries[0]]},{...base,entries:[{...base.entries[0],value:'unexpected bulk secret'}]},{...base,entries:[{...base.entries[0],encryptedValue:{cipherText:'unexpected'}}]},{...base,entries:[{...base.entries[0],version:'invalid'}]},{...base,entries:Array.from({length:501},()=>base.entries[0])}];
+  for(const snapshot of bad){await assert.rejects(f.vault.reconcileMetadata(metadataTransport(snapshot)));assert.deepEqual(await raw(f),before);}
+ }finally{await f.close();}
+});
+test('a delayed snapshot cannot overwrite an edit made after its fetch began',async()=>{
+ const f=await fixture(accountScope);let entered!:()=>void,release!:(value:any)=>void;
+ const started=new Promise<void>(yes=>entered=yes),response=new Promise<any>(yes=>release=yes);
+ try{
+  await f.vault.reconcileMetadata(metadataTransport());const reading=f.vault.reconcileMetadata({metadata:async()=>{entered();return response;}});await started;
+  await f.vault.mutate(command('save-secret',{name:'Concurrent edit',key:'KEY',value:'keep this',groupId:null},remoteSecret().id,1));
+  release(remoteSnapshot());await assert.rejects(reading,/Local edits have been kept/);
+  assert.equal((await f.vault.reveal(remoteSecret().id)).value,'keep this');assert.equal((await f.vault.syncStatus()).length,1);
+ }finally{release?.(remoteSnapshot());await f.close();}
+});
+test('locking during metadata fetch stops adoption and anonymous vaults never call account transport',async()=>{
+ const f=await fixture(accountScope),anonymous=await fixture();let entered!:()=>void,release!:(value:any)=>void;
+ const started=new Promise<void>(yes=>entered=yes),response=new Promise<any>(yes=>release=yes);let requests=0;
+ try{
+  await assert.rejects(anonymous.vault.reconcileMetadata({metadata:async()=>{requests++;return remoteSnapshot();}}),/never synchronize/);assert.equal(requests,0);
+  const reading=f.vault.reconcileMetadata({metadata:async()=>{entered();return response;}});await started;f.vault.lock();release(remoteSnapshot());await assert.rejects(reading,/locked/);
+  assert.deepEqual((await raw(f)).records,[]);
+ }finally{release?.(remoteSnapshot());await f.close();await anonymous.close();}
+});
+
+test('unsent children retain the environment metadata they need after remote group deletion',async()=>{
+ const f=await fixture(accountScope);
+ try{
+  await f.vault.reconcileMetadata(metadataTransport());
+  await f.vault.mutate(command('save-secret',{name:'Pending child',key:'KEY',value:'keep child',groupId:remoteGroup().id},remoteSecret().id,1));
+  await f.vault.reconcileMetadata(metadataTransport({complete:true,groups:[],entries:[]}));
+  const list=await f.vault.list();assert.equal(list.groups[0].id,remoteGroup().id);assert.equal(list.entries.length,1);assert.equal(list.entries[0].groupId,remoteGroup().id);
+ }finally{await f.close();}
+});
+test('a selected reveal arriving after a local value replacement cannot overwrite it',async()=>{
+ const f=await fixture(accountScope),original=f.db.transaction.bind(f.db);let entered!:()=>void,release!:()=>void;
+ const started=new Promise<void>(yes=>entered=yes),waiting=new Promise<void>(yes=>release=yes);
+ try{
+  await f.vault.reconcileMetadata(metadataTransport());let intercept=true;
+  f.db.transaction=(async(...args:any[])=>{if(args[1]==='readwrite'&&intercept){intercept=false;entered();await waiting;}return (original as any)(...args);}) as any;
+  const retaining=f.vault.retainSelectedValue(remoteSecret().id,1,{id:remoteSecret().id,version:remoteVersion(),value:'old remote value'});await started;
+  await f.vault.mutate(command('save-secret',{name:'New local value',key:'KEY',value:'new local value',groupId:null},remoteSecret().id,1));
+  release();await assert.rejects(retaining,/changed before/);assert.equal((await f.vault.reveal(remoteSecret().id)).value,'new local value');
+ }finally{release?.();f.db.transaction=original;await f.close();}
+});
+test('account metadata plus pending local entries cannot exceed the device limit',async()=>{
+ const f=await fixture(accountScope);
+ try{
+  await f.vault.mutate(command('create-group',{name:'Pending local environment'}));const before=await raw(f);
+  const groups=Array.from({length:500},(_,index)=>({...remoteGroup(),id:'remote-group-'+index,name:'Remote '+index}));
+  await assert.rejects(f.vault.reconcileMetadata(metadataTransport({complete:true,groups,entries:[]})),/exceed this device limit/);assert.deepEqual(await raw(f),before);
+ }finally{await f.close();}
+});

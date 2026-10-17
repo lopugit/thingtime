@@ -2927,3 +2927,45 @@ This checkpoint provides anonymous device authoring. Ordered conditional
 account provider sync, retained account offline authoring/reveal, native provider
 integration and all other unfinished items in the full local-feature matrix
 remain the merge gate. Current-head CI/deployed acceptance is still unproven.
+
+### Account provider metadata and selected retention groundwork — 2026-10-17
+
+The anonymous-provider checkpoint's final semantic snapshot is verified against
+its frozen source fingerprint, all 14 changed code hashes and all six document
+hashes/membership. It was pushed in `385e13e9f`; this confirms that checkpoint's
+index coverage, not subsequent account work or full-feature completion.
+
+Current account work adds complete, bounded metadata reads (`api.lopu-vault`
+1.3.0), opaque versions over actual stored BSON Things, and optional same-record
+versions on freshly verified personal reveals (`api.vault-reveal` 1.2.0). The
+existing generic Thing editor remains usable; its edits must invalidate sync
+versions even when the embedded Vault timestamp stays unchanged. Neither API
+returns bulk plaintext or ciphertext. The device adapter encrypts remote-only
+metadata, requires explicit exact-version value retention, preserves pending
+edits/dependent environments and fences stale replies. Its direct metadata
+transport uses current actor/origin/selected-plane confirmation.
+
+Local verification so far: 108 focused contracts, 471 workspace/offline-shell
+checks (50 opt-in skips excluded), 101 capability checks and 21 sensitive-reveal
+checks pass. Counts overlap and must not be summed. TypeScript matches all 91
+previous baseline diagnostics with no additions; focused lint passes. The built
+client verifies 247 assets (21,821,166 bytes). Actual disposable-account API
+checks verify metadata redaction, generic-edit versions, exact selected reveal,
+wrong-password/origin/account/actor/plane refusals and cleanup. Evidence lives in
+`tmp/provider-account-*.log` and `tmp/provider-account-metadata-api.json`.
+
+The API fixture is now reproducible as `providerMetadata.api.test.ts`; its
+loopback-only setup is in the local-workspaces guide. Account Settings wiring,
+conditional write synchronization, immutable retry receipts surviving generic
+physical deletion, and conflict review remain unfinished. Do not route retained
+accounts through anonymous storage or describe this groundwork as full account
+support. Current source still needs final validation/indexing as that integration
+continues; CI/deployed acceptance and the broad completion matrix remain open.
+
+The rebuilt anonymous native regression also passes (46.86s) at 1440/390/320px:
+no horizontal overflow, plaintext storage, account records/commands, protected
+requests or browser errors. Screenshots were inspected; existing floating
+assistant controls still overlap the narrow right edge. The checked-in API
+fixture passes in 12.63s. Evidence: `tmp/provider-account-anonymous-regression/`
+and `tmp/provider-account-api-repro/`. These checks cover anonymous UI and the
+new account API boundary, not account UI synchronization.
