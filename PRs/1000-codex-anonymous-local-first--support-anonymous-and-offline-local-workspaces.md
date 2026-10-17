@@ -3529,12 +3529,21 @@ passed import, exact schema rendering and cold reload at all three widths, with
 zero offline mutation or Thing API requests. Expanded runs downloaded valid
 two-Thing exports before their deletion assertion.
 
-Final deletion/retry browser acceptance remains pending. The fixture now waits
-for the deletion dialog to close (the row disappears optimistically before the
-transaction completes), accepts legitimate imported schema-name remapping, and
-reads root identity through its own clean context before navigating. During
-reruns the shared local PM2 daemon resurrected; the QA listener returned, but API
-requests then timed out and PM2 status requests stalled. These are runtime
-failures, not a passing acceptance result. No global PM2 restart or account
-repair was attempted. The final error-display branch and latest build require
-a fresh native rerun after the local API recovers.
+Final native acceptance subsequently passed for both anonymous and offline
+account contexts after the local runtime recovered. The fixture waits for the
+deletion dialog to close (the row disappears optimistically before commit),
+accepts legitimate imported schema-name remapping, and verifies root identity
+through its own clean context before navigation. Both runs produced native
+1440/390/320 screenshots and canonical two-Thing downloads, then deleted the
+schema through the library and verified a clear error, Retry and no obsolete
+server warning. Both recorded zero offline mutations, zero Thing API reads and
+zero page errors. Evidence: `tmp/schema-detail-verified/`,
+`tmp/schema-detail-verified.log` (account pass), and
+`tmp/schema-detail-anonymous-final.log` (final anonymous pass).
+
+Earlier expanded attempts failed during the shared local PM2 daemon's
+resurrection and offline-shell installation. The existing 90-second installer
+deadline and integrity checks were not relaxed. The final source build passed
+with 249 assets / 21,947,711 bytes. This remains local verification; current-head
+CI and deployed feature acceptance are not complete. Structural Graphify includes
+the changed code; semantic document freshness is not claimed.

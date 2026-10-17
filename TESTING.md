@@ -11815,7 +11815,7 @@ verification limits are in `docs/local-workspaces.md`.
       normal import dialog. Open its native detail view and cold reload at
       1440/390/320px. Exact interpolated text must render without account writes
       or Thing API reads. Download canonical JSON containing both dependencies.
-- [ ] Remove the fixture schema through the normal library menu. Reopen the data
+- [x] Remove the fixture schema through the normal library menu. Reopen the data
       Thing: a clear schema-preview error and Retry appear, the data stays
       inspectable, and a cached template cannot remain as a successful preview.
 - [x] Shared/keyed schema reads preserve root/key context. Owned reads use the
