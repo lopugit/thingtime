@@ -3518,3 +3518,15 @@ existing local Timeline constructor warning. Earlier native attempts exposed
 and repaired the async capability predicate regression and ambiguous/late-read
 fixture selectors; their failures are retained in the logs and are not counted
 as passes. These are local results, not current-head CI or deployed acceptance.
+
+
+## Latest-main integration — 2026-10-17
+
+`main` at `ac0ab1c93` is integrated into this branch. Shared Settings cards remain
+collapsed by default; local device storage stays available without login and
+through a cold offline reload. Keyboard/pointer access, background editor-tree
+saves, scoped byte accounting and unchanged authored records now have combined
+branch browser coverage at 1440/390/320px. Anonymous and account History native
+checks also pass after integration. 1,287 automated checks pass; TypeScript keeps
+91 unchanged baseline diagnostics. See the [integration evidence and limits](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md#upstream-integration-and-offline-settings-acceptance--2026-10-17).
+The wider completion matrix above is unchanged and remains the merge gate.

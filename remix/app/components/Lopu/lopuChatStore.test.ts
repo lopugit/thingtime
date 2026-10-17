@@ -769,3 +769,24 @@ test('rapid access changes preserve the last server-confirmed mode and await the
   setLopuSettings({ accessMode: 'full' }); // Same selected mode retries a failed save.
   assert.equal((await sendLopuMessage('retry')).ok, true);
 });
+
+test('catalog errors retain last-known state and an old account refresh cannot publish', async () => {
+  resetLopuStoreForTests();
+  const { client } = fakeClient();
+  bindLopuApi(client);
+  hydrateLopuStore('catalog-first');
+  await loadLopuModels();
+  const previous = getLopuStoreSnapshot().models;
+  client.models = async () => ({ ok: false, error: 'Temporary database outage' });
+  await loadLopuModels();
+  assert.deepEqual(getLopuStoreSnapshot().models, previous);
+  let resolve!: (value: any) => void;
+  client.models = () => new Promise((done) => { resolve = done; });
+  const pending = loadLopuModels();
+  hydrateLopuStore('catalog-second');
+  const afterSwitch = getLopuStoreSnapshot().models;
+  resolve({ok:true,models:[model('gpt-99','openai')],vaultProviders:VAULT});
+  await pending;
+  assert.deepEqual(getLopuStoreSnapshot().models, afterSwitch);
+  assert.deepEqual(getLopuStoreSnapshot().vaultProviders, []);
+});

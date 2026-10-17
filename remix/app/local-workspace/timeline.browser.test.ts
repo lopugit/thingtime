@@ -160,6 +160,7 @@ test('clean anonymous offline import, rename, history reload and native recorded
   await page.getByText(/Needs attention · This change already has 8 notes/).first().waitFor();
   await page.getByRole('button', { name: 'Dismiss', exact: true }).click();
   await page.getByText('Note command cancelled. Your change remains in History.', { exact: true }).waitFor();
+  await page.getByText('Ninth note stays available for review.', { exact: true }).first().waitFor({ state: 'detached' });
   assert.equal(await page.getByText('Ninth note stays available for review.', { exact: true }).count(), 0);
   await page.getByRole('tab', { name: 'Versions', exact: true }).click();
   const namedForm = page.locator('form.history-version-controls').filter({ has: page.locator('input[aria-label="Version name"]:enabled') }).first();

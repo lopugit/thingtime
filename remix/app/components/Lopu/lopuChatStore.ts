@@ -1,3 +1,4 @@
+import { isRunningLopuChatTask } from '~/api/utils/lopu/backgroundTaskCore';
 import { lopuAccessMode, type LopuAccessMode } from '~/api/utils/lopu/accessMode';
 import { continuationContext, continuationRequestId, LOPU_MAX_RECOVERY_FAILURES, type LopuManagement } from '~/api/utils/lopu/continuationCore';
 import { bindLopuQueue, pauseLopuQueue } from './lopuQueueStore';
@@ -500,9 +501,12 @@ const writeChatsCache = (userId: string | null, chats: LopuChatSummary[]) => {
 
 export const loadLopuModels = async (): Promise<void> => {
 	if (!client || state.modelsLoading) return;
+  const generation = accountGeneration;
 	setState({ modelsLoading: true });
 	try {
 		const response = await client.models();
+    if (generation !== accountGeneration) return;
+    if (response?.ok === false || !Array.isArray(response?.models)) throw new Error('Model catalogue unavailable');
 		const models: AiModelPublic[] = Array.isArray(response?.models) ? response.models : [];
 		const defaults: LopuChatDefaults | null = response?.defaults && typeof response.defaults === 'object' ? response.defaults : null;
 		const providers: LopuProvidersInfo | null = response?.providers && typeof response.providers === 'object' ? response.providers : null;
@@ -514,7 +518,7 @@ export const loadLopuModels = async (): Promise<void> => {
 		persistSettings(state.userId, settings);
 		setState({ models, defaults, providers, vaultProviders, vault, modelsLoaded: true, modelsLoading: false, settings });
 	} catch {
-		setState({ modelsLoading: false, modelsLoaded: true });
+		if (generation === accountGeneration) setState({ modelsLoading: false, modelsLoaded: true });
 	}
 };
 
@@ -1075,7 +1079,7 @@ const sendLopuMessagePart = async (text: string, options: SendLopuOptions = {}, 
 		notice('Sign in to chat with Lopu 🦄', { status: 'info' });
 		return { ok: false, error: 'Sign in to chat with Lopu', text };
 	}
-	if (Object.values(state.turns).some(turn => turn.chatId === chatId && isLopuTurnActive(turn)) || getAiTasks().some(task => task.chatId === chatId && (task.status === 'running' || task.workflowStatus === 'running') && task.requestId !== continuation?.previousRequestId)) {
+	if (Object.values(state.turns).some(turn => turn.chatId === chatId && isLopuTurnActive(turn)) || getAiTasks().some(task => isRunningLopuChatTask(task, chatId) && task.requestId !== continuation?.previousRequestId)) {
 		notice('Lopu is still replying — stop it first or wait a moment ✨', { status: 'info' });
 		return { ok: false, error: 'Lopu is still replying', text };
 	}
@@ -1166,6 +1170,7 @@ const sendLopuMessagePart = async (text: string, options: SendLopuOptions = {}, 
 				break;
 			}
 			case 'error': {
+        if (foreground()) void loadLopuModels();
 				if (!event.retryable) notice(event.message || 'Lopu hit a snag', { status: 'error', description: event.retryable ? 'You can try again.' : undefined });
 				break;
 			}
@@ -1282,7 +1287,7 @@ export const abortLopuTurn = (): void => {
  if (turn) stoppedRequests.add(turn.requestId);
  const pending = [...state.turnOrder].reverse().map(id => state.turns[id]).find(item => item.chatId === state.activeChatId && shouldAutoContinueLopuReply(item));
  if (!turn && pending) { setState(current => ({ recoveryChatIds: current.recoveryChatIds.filter(id => id !== pending.chatId) })); stoppedRequests.add(pending.requestId); void stopAiTaskRequest(pending.requestId).catch(() => notice('Could not stop the recovery.', { status: 'error' })); }
- const runningTask = getAiTasks().find(task => task.chatId === state.activeChatId && (task.status === 'running' || task.workflowStatus === 'running'));
+ const runningTask = getAiTasks().find(task => isRunningLopuChatTask(task, state.activeChatId));
  if (!turn && runningTask) { stoppedRequests.add(runningTask.requestId); void stopAiTaskRequest(runningTask.requestId).catch(() => notice('Could not stop the task.', { status: 'error' })); }
  if (turn) void stopAiTaskRequest(turn.requestId).then(() => controllers.get(turn.requestId)?.abort()).catch(() => notice('Could not stop the task. Open Background tasks to try again.', { status: 'error' }));
 };

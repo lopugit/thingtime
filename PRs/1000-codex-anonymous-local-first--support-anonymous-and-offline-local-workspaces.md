@@ -2745,3 +2745,50 @@ The broader local-feature goal remains active. Branch/editor-source breadth,
 protected and attachment recovery, shared/managed/linked transfer and sync,
 identity transitions, encrypted Vault and other matrix items remain incomplete.
 No merge, manual deployment or public publishing was performed.
+
+
+## Upstream integration and offline Settings acceptance — 2026-10-17
+
+Integrated `main` at `ac0ab1c93` (17 upstream-only commits) into this feature
+branch. Preserved model discovery/admission controls, Astra transport fixes,
+Lopu task/popover fixes and the shared collapsible Settings cards alongside the
+local workspace adapters. Source merges were clean; documentation conflicts
+were independent additions and both sets were retained. Generated graph rename
+conflicts use one complete feature-branch snapshot before regeneration.
+
+Local validation on the combined source:
+
+- 1,287 automated checks pass: local workspace/offline shell 425, Timeline 258,
+  capabilities 101, Settings 39, Lopu UI 234, AI/model/runtime 127, actual SDK
+  streaming fixtures 64, admin integrations 25, Vercel packaging/configuration 14.
+  The 46 opt-in workspace skips are not counted as passes.
+- Three enabled production-client browser fixtures pass: anonymous offline
+  storage (33.1s), anonymous offline History (74.1s), and disposable-account
+  History/reconnect (49.5s). Storage checks cover collapsed defaults, Enter/Space
+  and pointer access, cold reload, other-tab writes, retained usage on an invalid
+  ledger, recovery and actual 1440/390/320px screenshots. History checks retain
+  native draft naming/export, immutable provenance, private guest refusals and
+  zero anonymous/account-offline mutation traffic or page errors.
+- The real SettingsSection/SettingRow browser fixture passes at 1440/390/320px:
+  retained field state, nested deep links, unrelated cards remaining collapsed,
+  readable labels and no horizontal overflow. No authenticated settings or
+  provider configuration was changed.
+- Client build verifies 247 offline assets (21,761,155 bytes). TypeScript retains
+  the same 91 baseline diagnostics; focused fixture lint has no errors/warnings.
+
+The storage fixture previously assumed the complete workspace byte count stayed
+constant through Settings initialization. Record-level diagnostics show only the
+native editor tree/header growing; authored Things, History and notifications
+remain identical. It now checks those unchanged records and the refreshed exact
+byte total. The History fixture now awaits the cancelled note row detaching after
+its status message; an immediate count raced the queued projection refresh.
+Failed attempts are retained and are not counted as acceptance.
+
+Evidence: `tmp/upstream-integration-*.log`,
+`tmp/upstream-integration-storage-verified/`,
+`tmp/upstream-integration-anonymous-verified/`, `tmp/upstream-integration-account/`
+and `tmp/upstream-integration-settings-browser/`. These are local results;
+current-head CI and deployed acceptance remain unverified. The full coverage
+matrix remains open, including protected/media recovery, broader branch controls,
+shared/managed/linked transfer, identity transitions and local encrypted Vault.
+This integration updates only the feature branch, not remote `main`.

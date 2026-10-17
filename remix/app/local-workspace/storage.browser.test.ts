@@ -17,6 +17,8 @@ test('anonymous storage settings work after cold offline reload, follow other-ta
  await context.addInitScript(() => window.addEventListener('error', event => { const target = event.target as HTMLScriptElement | null; if (target?.tagName === 'SCRIPT' && target.type === 'module') console.warn('Storage fixture module error', target.src); }, true));
  const monitor = (tab: any) => { tab.on('pageerror', (error: Error) => errors.push(error.message)); tab.on('console', (message: any) => { if (message.text().startsWith('Storage fixture module error')) errors.push(message.text()); }); };
  monitor(page);
+ const storageRows = () => page.evaluate(async () => { const db = await new Promise<IDBDatabase>((resolve, reject) => { const req = indexedDB.open('thingtime.local-workspaces.v1'); req.onsuccess = () => resolve(req.result); req.onerror = () => reject(req.error); }); try { return await new Promise((resolve, reject) => { const req = db.transaction('records').objectStore('records').getAll(); req.onsuccess = () => resolve(req.result.map((row: any) => ({ collection: row.collection, id: row.id, bytes: row.bytes }))); req.onerror = () => reject(req.error); }); } finally { db.close(); } });
+ let firstStorage: unknown;
  const importNote = async (tab: any, name: string) => {
   await tab.getByRole('button', { name: 'Import…', exact: true }).click();
   await tab.getByRole('textbox', { name: 'Copied Thingtime content', exact: true }).fill(transfer(name));
@@ -25,18 +27,34 @@ test('anonymous storage settings work after cold offline reload, follow other-ta
   await tab.getByRole('link', { name, exact: true }).waitFor();
  };
  try {
-  const root = page.waitForResponse((response: any) => new URL(response.url()).pathname === '/api/root-data');
-  await page.goto(new URL('/things', base).href); assert.equal((await (await root).json()).user, null);
+  const root = page.waitForResponse((response: any) => new URL(response.url()).pathname === '/api/root-data').then(async (response: any) => { assert.equal(response.status(), 200); return response.json(); });
+  const [, initial] = await Promise.all([page.goto(new URL('/things', base).href), root]); assert.equal(initial.user, null);
   await page.waitForFunction(async () => { await navigator.serviceWorker.ready; if (!navigator.serviceWorker.controller) return false; for (const key of await caches.keys()) if (key.startsWith('thingtime:offline-shell:') && await (await caches.open(key)).match('/__thingtime_offline_shell_complete__')) return true; return false; });
   await context.setOffline(true);
   assert.equal(await page.evaluate(async () => { try { await fetch('/api/root-data', { cache: 'no-store' }); return false; } catch { return true; } }), true);
   await importNote(page, 'Device storage first fixture');
   await page.goto(new URL('/settings/things', base).href);
   const panel = page.getByTestId('workspace-storage-settings'), usage = panel.getByRole('status');
-  await usage.waitFor(); const first = await usage.innerText();
+  const card = page.locator('details').filter({ has: panel }), summary = card.locator(':scope > summary');
+  await summary.waitFor(); assert.equal(await card.evaluate((element: HTMLDetailsElement) => element.open), false);
+  await summary.focus(); await summary.press('Enter');
+  await usage.waitFor(); let first = await usage.innerText(); firstStorage = await storageRows();
   assert.match(first, /of 67,108,864 bytes/); assert.doesNotMatch(first, /^0 bytes/);
   await page.getByText('Things, drafts, files and History saved in this browser. Anonymous content is never uploaded.', { exact: true }).waitFor();
-  await page.reload(); await usage.waitFor(); assert.equal(await usage.innerText(), first);
+  await summary.press('Space'); assert.equal(await card.evaluate((element: HTMLDetailsElement) => element.open), false);
+  await summary.press('Enter'); await usage.waitFor(); assert.equal(await usage.innerText(), first);
+  await page.reload(); await summary.waitFor(); assert.equal(await card.evaluate((element: HTMLDetailsElement) => element.open), false);
+  await summary.click(); await usage.waitFor();
+  // Settings initialization may legitimately persist a larger native editor
+  // tree. Reload must preserve authored content and report the current ledger,
+  // rather than assume that all background preference writes have stopped.
+  const reloadedRows = await storageRows() as { collection: string; id: string; bytes: number }[];
+  const authoredRows = (rows: typeof reloadedRows) => rows.filter(row => row.collection !== 'editor-tree' && row.id !== 'editor-tree:root:v1');
+  assert.deepEqual(authoredRows(reloadedRows), authoredRows(firstStorage as typeof reloadedRows));
+  const reloadedBytes = reloadedRows.reduce((sum, row) => sum + row.bytes, 0);
+  await panel.getByRole('button', { name: 'Refresh usage', exact: true }).click();
+  await page.waitForFunction((expected: string) => document.querySelector('[data-testid="workspace-storage-settings"] [role="status"]')?.textContent?.startsWith(expected), `${reloadedBytes.toLocaleString()} bytes of `);
+  first = await usage.innerText();
   const second = await context.newPage(); monitor(second);
   await second.goto(new URL('/things', base).href); await importNote(second, 'Device storage second tab fixture');
   await panel.getByRole('button', { name: 'Refresh usage', exact: true }).click();
@@ -73,7 +91,7 @@ test('anonymous storage settings work after cold offline reload, follow other-ta
   await page.getByRole('link', { name: 'Device storage first fixture', exact: true }).waitFor();
   await page.getByRole('link', { name: 'Device storage second tab fixture', exact: true }).waitFor();
   assert.deepEqual(mutations, []); assert.deepEqual(errors, []);
-  if (artifacts) await writeFile(resolve(artifacts, 'verification.json'), JSON.stringify({ anonymous: true, offline: true, coldReload: true, otherTabWrite: true, missingLedgerRetainsLastKnownUsage: true, contentPreserved: true, first, after, protection, bounds, mutations, errors }, null, 2));
- } catch (error) { if (artifacts) { await mkdir(resolve(artifacts), { recursive: true }); await page.screenshot({ path: resolve(artifacts, 'failure.png'), fullPage: true }); await writeFile(resolve(artifacts, 'failure.txt'), await page.locator('body').innerText()); await writeFile(resolve(artifacts, 'failure-errors.json'), JSON.stringify({ url: page.url(), errors, mutations })); } throw error; }
+  if (artifacts) await writeFile(resolve(artifacts, 'verification.json'), JSON.stringify({ anonymous: true, offline: true, coldReload: true, collapsedSettingsKeyboardAndPointer: true, otherTabWrite: true, missingLedgerRetainsLastKnownUsage: true, contentPreserved: true, first, after, protection, bounds, mutations, errors }, null, 2));
+ } catch (error) { if (artifacts) { await mkdir(resolve(artifacts), { recursive: true }); await page.screenshot({ path: resolve(artifacts, 'failure.png'), fullPage: true }); await writeFile(resolve(artifacts, 'failure.txt'), await page.locator('body').innerText()); await writeFile(resolve(artifacts, 'failure-errors.json'), JSON.stringify({ url: page.url(), errors, mutations, firstStorage, currentStorage: await storageRows() })); } throw error; }
  finally { await browser.close(); }
 });

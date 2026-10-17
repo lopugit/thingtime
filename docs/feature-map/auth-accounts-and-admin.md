@@ -111,3 +111,20 @@ and a delayed successful private-comment response cannot enter the next account;
 the original account retains edits, recovery sources and exactly one acknowledged
 comment. This is local account-switch acceptance, not coverage of every origin,
 data-plane or editor transition. Setup: [local workspaces](../local-workspaces.md#native-cross-tab-draft-isolation--2026-10-17).
+
+## AI provider model availability
+
+`api/utils/ai/modelDiscovery.ts` reads complete credential-scoped provider lists;
+`modelSync.ts` publishes them atomically into protected home-plane `ai-model`
+Things with a durable settings lease/cooldown. `models.ts` projects availability
+and preserves admin choices. Daily authenticated cron and admin manual sync use
+this same service; shared inference model-not-found errors trigger a bounded
+refresh without replay. `LopuModelsEditor.tsx` owns per-provider allow-all and
+future auto-admission controls. Public model selectors consume the live catalogue;
+unknown model capabilities and pricing are conservative. See README automatic AI
+model catalogue sync and TESTING daily provider model availability.
+
+`settings/prConflictResolverModelWaterfallCore.ts` owns known reasoning tiers and
+native Responses requirements (including GPT-6 Astra); `lopu/chat.ts` consumes
+that transport policy. `chat.streaming.test.mts` exercises Astra default/High/Max
+reasoning and tool-result replay through the real SDK against an HTTP fixture.

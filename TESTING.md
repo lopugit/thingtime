@@ -1408,6 +1408,20 @@ persisted; every check is client-side.
 
 ## Unified Lopu conversations, scheduled Things and discussions
 
+- [ ] Model and settings popovers remain visible and clickable above the floating
+  Lopu window/mobile scrim. Repeat on `/lopu` and embedded chat at 390×844,
+  desktop, and a short viewport. Select a model after scrolling the list; toggle
+  a setting and reopen to confirm it sticks; test repeated trigger taps,
+  Escape, and outside taps without closing the chat. Scroll to the last setting.
+  Regression fixture: `/scripts/lopu-popovers.browser.html?surface=floating&autorun=1`
+  (`surface=page` or `surface=embedded` for the other real surfaces). Synthetic
+  HTTP/preferences only; assert hit testing, not just DOM presence. Chakra's
+  **positioner wrapper** must use the shared popup layer; content-only z-index
+  leaves a visible-in-DOM menu trapped beneath the window.
+
+- [ ] With a musing, AI completion, or chat request without a chat ID running, open a fresh Lopu chat on the page, floating window, and Messenger. It must show Send and accept a first message; Stop must not cancel unrelated tasks. An existing chat with a running reply or workflow must still prevent duplicate sends and stop its own task. Regression: `lopuRecoveryReload.test.mts`.
+
+
 - [ ] A saved Lopu reply stopped by a tool/hop/time/token limit automatically continues without a fixed count cap with fresh request IDs and the same chat/model. Stop, an account change, pending confirmation, incomplete tool, missing saved assistant, or a truncated stream prevents continuation. Switching chats must not redirect the continuation or change the newly selected model. Continuations do not resend attachments, stale builder blocks, or confirmation grants; provider/network failures keep manual Retry / Continue available. Exceed the former 24 tools, 12 hops and four-minute deadline; a healthy task continues. Hosting checkpoints rotate only after completed tool batches.
 - Browser regression: `/scripts/lopu-send.browser.html` mounts the real chat
   view, uploader, store and background-task transport with synthetic HTTP. Run
@@ -5928,7 +5942,8 @@ clientId>` (tt:all, other apps, other users, exclusions) 400s; an
 - [ ] `/admin` renders the 🔐 gate card for anonymous/non-admin visitors and
       the dashboard for admins; `/admin/users`, `/admin/apps`,
       `/admin/moderation`, `/admin/tiers`, `/admin/ci-control`,
-      `/admin/external-integrations`, and `/admin/system` each open the exact
+      `/admin/external-integrations`, `/admin/ai-providers`, `/admin/lopu`,
+      `/admin/platform`, and `/admin/access` each open the exact
       matching tab, remain correct through refresh/back/forward, and an unknown
       admin section safely returns to `/admin`. The drawer's Account section
       shows the 🛠️ Admin item only for admins.
@@ -8362,6 +8377,8 @@ a label. Browse cards and `/things` tiles are LINKS, never armed controls.
       it, which costs a reviewer real time.
 ## Lopu AI assistant (`/lopu`, floating launcher, `remix/app/components/Lopu/`, `/api/v1/lopu/chats*`, `/api/v1/ai/models`)
 
+- [ ] GPT-6 Astra: choose provider-default, High and Max reasoning; only Low/Medium/High/Extra high/Max are offered, never None/Minimal/Ultra. On an authorized deployment, verify a plain reply and a harmless read-only tool round trip, keeping the selected model and effort. Native calls must use Responses with `store:false`; encrypted reasoning stays server-side and failed requests never retry with weaker reasoning. Reload to confirm saved model choices and terminal replies. Public catalogue 1.5.1 and reply 1.19.3 must agree in both manifests.
+
 - [ ] Action discovery: inspect an owned server/browser Action in Ask mode;
       no confirmation or run is created. Check enum choices, required fields,
       numeric bounds, reference hints and oversized JSON defaults. Candidate
@@ -8507,7 +8524,7 @@ Design note: `PRs/592-claude-lopu-ai-chatbot-358029--lopu-ai-assistant.md`. Auto
 `TT_VERIFY_ADMIN_PASSWORD` for the admin section).
 
 - Catalog: `GET /api/v1/ai/models` is public, `Cache-Control: no-store`, lists
-  every `AI_WORKFLOW_BASE_MODELS` entry as an `ai-model` Thing projection
+  only available enabled compatible `ai-model` Thing projections (including discovered versions)
   (`enabled`, `available = enabled && provider key configured && not
   rejected`, `verified`, `isDefault`); `providers.<p>` carries
   `{ configured, verified, checkedAt, reason? }` from the bounded key probe
@@ -8515,9 +8532,8 @@ Design note: `PRs/592-claude-lopu-ai-chatbot-358029--lopu-ai-assistant.md`. Auto
   generic `/api/v1/things` paths refuse to create/update/delete `ai-model`
   rows (protected, control plane).
 - Provider keys (`api/utils/ai/providerProbe.ts`): with a wrong
-  `OPENAI_API_KEY` (any string) the catalog lists every OpenAI model
-  `available: false, verified: false`, the picker shows them disabled with
-  "OpenAI key invalid", `defaults.model` falls to the first Anthropic model
+  `OPENAI_API_KEY` (any string) the public catalog omits OpenAI models; admin retains them with
+  `available: false, verified: false`, `defaults.model` falls to the first Anthropic model
   and an explicit per-turn pick of one is a 400 naming the rejected key; with
   the provider unreachable (`OPENAI_BASE_URL` pointing at a closed port) they
   stay offered with `verified: null` and the admin row reads "? key
@@ -11324,3 +11340,76 @@ not continue starting writes while disconnected.
   booleans for the current local scope and false for foreign/retired scopes.
   The remote-method blocking adapter must not turn capability predicates into
   rejected promises or generate unhandled errors during normal History render.
+
+## Daily provider model availability (2026-10-17)
+
+- [ ] Admin provider checkboxes persist after reload; Allow all current models
+  updates every existing compatible row, while Auto-allow new models affects
+  future discoveries only. Individually disabled rows stay disabled after sync.
+- [ ] Desktop and 390px admin layouts: checkboxes are labeled, wrap inside the
+  provider card, and disable while a save/sync is pending. Failed saves roll back.
+- [ ] A complete paginated list adds compatible new versions and hides absent
+  models from public Lopu/shared waterfall selectors. Admin keeps retired rows.
+  An explicitly selected retired model fails without a substituted/replayed turn.
+- [ ] Empty/malformed/oversized lists, authentication failures, generic 404s,
+  quota failures and partial pagination do not erase prior availability. Cold
+  database failure does not re-enable all models. Test first-sync-before-seed.
+- [ ] Concurrent processes honor the Mongo lease and cooldown; publication is
+  atomic and an expired worker cannot overwrite a newer snapshot. A concurrent
+  admin policy edit is re-read on transaction retry. Run against a replica set.
+- [ ] Cron rejects missing/wrong credentials and HEAD/POST; response is no-store.
+  Admin manual sync rejects non-admins and is rate-limited. Daily production
+  execution requires CRON_SECRET and credential scopes (README setup).
+- [ ] Model-not-found in shared chat/musing/waterfall requests refreshes only
+  that provider; personal vault errors never mutate the shared catalogue.
+  Failed discovery is reported, with no raw credential/provider error leakage.
+
+Automated regressions: `modelSync.test.ts`, `models.test.ts`,
+`models.route.test.ts`, `vercel-config.test.mjs`; existing Lopu streaming and
+model-selection suites cover the consuming surfaces. Live provider calls remain
+separate from deterministic discovery/lease tests.
+
+- Anthropic catalogue discovery: a dedicated ANTHROPIC_MODELS_API_KEY takes precedence over the legacy API key; neither reaches inference. A 401/403 shows a redacted credential hint and preserves prior availability. Raw provider bodies and credentials never enter sync reports.
+
+## Collapsible settings cards (2026-10-17)
+
+- [ ] At desktop and 390px, visit every personal Settings category in both the
+      full page and popup. Sections start collapsed with a title, description,
+      and available status. Expand/collapse using pointer, Enter, and Space;
+      controls stay reachable and an unsaved field survives closing/reopening.
+- [ ] Admin AI Providers, Lopu, Platform, and Access & limits contain the former
+      System controls in the matching category. Verify reload, Back, and legacy
+      `/admin/system#secure-vault` and `/admin/system#lopu-accounts` links.
+      Anonymous and non-admin visitors still see the access gate.
+- [ ] Deep-linked sections (`#secure-vault`, `#lopu-instructions`,
+      `#lopu-credits`, `#gift-invites`) open their enclosing cards automatically.
+      Unrelated sections remain collapsed. A card can still be closed afterward.
+- [ ] Expand long labels, hints, endpoint names, model descriptions and wide
+      controls at 390px and in the settings popup. Text must retain readable
+      width, controls wrap below it, and there is no horizontal page overflow.
+- [ ] Run `/scripts/settings-sections.browser.html` on local Vite: the regression
+      uses real card/row components with synthetic fields to check initial state,
+      draft preservation, nested deep links and narrow layout. It performs no
+      API writes and does not prove authenticated server mutation behavior.
+
+
+## Offline workspace with collapsed Settings cards (2026-10-17)
+
+- [x] Clean anonymous production client: import offline, open Settings → Things,
+  require Device storage initially collapsed; expand/collapse with Enter/Space
+  and pointer. Reopen and cold reload without losing authored Things/History.
+- [x] A background native editor-tree save may change total usage. Require
+  unchanged authored records and a meter matching current exact record bytes;
+  do not use an earlier total as a false data-loss signal.
+- [x] Another tab's imported Thing updates usage. A missing ledger retains the
+  last-known value with an explicit error; restoring it recovers the meter.
+  Account writes and browser errors remain absent. Inspect 1440/390/320px.
+- [x] Run the shared Settings card fixture at those widths for field retention,
+  nested deep links and no horizontal overflow; rerun anonymous/account native
+  History and canonical export after upstream API/settings integration.
+
+Bug classes: cold-reload usage assertions must account for legitimate preference
+writes, and a cancellation status can precede the subscribed History projection;
+wait for row removal before asserting absence. These checks do not imply all
+Settings categories, authenticated admin mutations or the full local matrix are
+complete. Evidence is linked in the PR #1000 integration note.

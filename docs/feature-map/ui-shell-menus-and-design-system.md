@@ -82,6 +82,13 @@ browser acceptance also checks reload and repeated search through the renderer.
 
 ## Tests
 
+- `scripts/lopu-popovers.browser.html` mounts the real floating host, full page,
+  or embedded chat with synthetic HTTP/preferences. It checks popup hit testing,
+  model/list selection and scrolling, setting persistence, repeat taps, Escape
+  and outside dismissal. Lopu popovers set `rootProps.zIndex` on Chakra’s
+  positioner, using `DRAWER_POPUP_Z`; child content alone cannot escape a lower
+  stacking context.
+
 - `scripts/lopu-dictation.browser.html` exercises the real Lopu voice surface
   with synthetic speech/HTTP: live composer revisions, stop/resume, edits,
   mode switches, stale callbacks, recognition failure and rejected-send recovery.
@@ -178,3 +185,21 @@ Run the enabled `details.browser.test.ts` and `historyMenu.browser.test.ts` alon
 Things, Timeline, navigation and local-workspace suites. See the
 [History checkpoint](../local-workspaces.md#native-anonymousoffline-history-menu--2026-10-17)
 for cached-account versus authoritative anonymous coverage and remaining sync work.
+
+## Settings sections
+
+`SettingsSection.tsx` is the shared, initially collapsed disclosure card for
+personal settings (page and popup) and admin configuration. It keeps children
+mounted, exposes a title/description/summary, and opens enclosing cards for
+fragment links. `SettingRow` gives labels a readable wrapping basis before
+controls move to the next line. Admin categories live in `adminRoutesCore.ts`:
+AI Providers, Lopu, Platform, and Access & limits replace System; legacy System
+links resolve to AI Providers or to Lopu for Lopu anchors. Browser regression:
+`/scripts/settings-sections.browser.html`; route coverage: `test:admin-integrations`.
+
+
+The local storage browser regression explicitly opens the shared collapsed card
+with keyboard and pointer, checks cold offline reload, and compares unchanged
+authored records plus refreshed byte accounting while native editor-tree
+preferences initialize. See `storage.browser.test.ts` and the PR #1000 upstream
+integration note for 1440/390/320px coverage.

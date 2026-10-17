@@ -1,3 +1,4 @@
+import { isRunningLopuChatTask } from '~/api/utils/lopu/backgroundTaskCore';
 import { syncNativeLopuChatActivity } from '~/utils/lopuChatActivity';
 import { getAiTasks, getAiTaskContextKey, getServerAiTasks, subscribeAiTasks } from './aiTasks.client';
 import { addLopuQueueMessage, drainLopuQueue, getLopuQueue, subscribeLopuQueue } from './lopuQueueStore';
@@ -310,7 +311,7 @@ export const useLopuChat = (options: UseLopuChatOptions = {}): UseLopuChat => {
     await refreshQueueTasks();
     for (const target of new Set(queue.items.map(item => item.chatId))) {
      if (cancelled) return;
-     if (queueTasks().some(task => task.chatId === target && (task.status === 'running' || task.workflowStatus === 'running'))) continue;
+     if (queueTasks().some(task => isRunningLopuChatTask(task, target))) continue;
      const live = getLopuStoreSnapshot();
      if (Object.values(live.turns).some(turn => turn.chatId === target && turn.status === 'streaming')) continue;
      await drainLopuQueue(target, sendLopuMessage);
@@ -369,7 +370,7 @@ export const useLopuChat = (options: UseLopuChatOptions = {}): UseLopuChat => {
 		turns,
 		timeline,
 		streaming,
-		sending: !!streaming || (!!activeChatId && snapshot.recoveryChatIds.includes(activeChatId)) || tasks.some(task => task.chatId === activeChatId && (task.status === 'running' || task.workflowStatus === 'running')),
+		sending: !!streaming || (!!activeChatId && snapshot.recoveryChatIds.includes(activeChatId)) || tasks.some(task => isRunningLopuChatTask(task, activeChatId)),
 		send, enqueue, sendNote, queue,
 		resume: requestId => activeChatId ? resumeLopuChat(activeChatId, requestId) : Promise.resolve({ ok: false, error: 'Select a conversation first.', text: '' }),
 		abort: abortLopuTurn,

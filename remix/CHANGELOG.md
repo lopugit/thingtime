@@ -68,6 +68,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-17 — **Codex (AI)**: Integrate current main into the local-first
+  feature branch; preserve Settings cards and upstream AI/Lopu changes. Verify
+  offline storage/card access and anonymous/account History at desktop and phone
+  widths, with 1,287 automated checks passing. Full rollout remains open.
+  [PR #1000 integration evidence](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md#upstream-integration-and-offline-settings-acceptance--2026-10-17).
+
 - 2026-10-17 — **Codex (AI)**: Name device-authored History drafts offline and
   export anonymous draft content through the normal version reader. Shared
   naming keeps draft provenance and waits for account admission before syncing
@@ -596,6 +602,27 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   and [coverage matrix](../docs/local-workspaces.md). No rollout merge or
   deployment is implied by this checkpoint.
 
+- 2026-10-17: Split admin System settings into AI Providers, Lopu, Platform,
+  and Access & limits. Shared settings cards start collapsed, show descriptions
+  and status summaries, preserve drafts, and open for legacy deep links. Labels
+  and controls wrap without squeezing helper text into a narrow column. Details:
+  [PR #1008](../PRs/1008-codex-settings-cards-split-system-settings-into-focused-tabs-and-collapsible-cards.md). — **Codex (AI)**
+
+- 2026-10-17 — **Codex (AI)**: Fix Astra replies rejected by Chat Completions tool/reasoning compatibility. The shared model registry now routes GPT-6 Astra native tools through Responses, publishes its supported reasoning levels and pricing, and preserves provider-default or selected reasoning across tool hops. Both API manifests advertise reply 1.19.3 and catalogue 1.5.1.
+
+- 2026-10-17 — **Codex (AI)**: Support a separate Anthropic Models API credential for catalogue discovery when Claude OAuth cannot list models. Keep replies on Claude Code OAuth and show redacted HTTP failure reasons in admin sync reports.
+
+- 2026-10-17 — **Codex (AI)**: Daily provider model inventory sync, bounded
+  model-not-available recovery and admin manual refresh. Retired models leave
+  Lopu/shared selectors; per-provider allow-all and auto-allow-new checkboxes
+  preserve individual choices. Includes Fable 5.1, transactional publication,
+  complete-list validation and fork-safe cron setup in README.
+  Details: [PR #1004](../PRs/1004-codex-provider-model-sync--sync-available-provider-models-and-admin-allow-controls.md).
+
+
+- 2026-10-16 — **Codex (AI)**: Raise Lopu model/settings popup positioners above the floating window and mobile scrim; bound long popup bodies to the viewport so their controls remain scrollable.
+
+- 2026-10-16 — **Codex (AI)**: Keep fresh Lopu chats ready to send while unrelated background tasks run; scope busy checks and Stop to the selected conversation.
 
 - 2026-10-16 — **Codex (AI)**: Post creation, editing, rich comments and plain
   comments/replies no longer await account draft sync or cleanup. Completed

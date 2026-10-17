@@ -379,7 +379,7 @@ export const LopuComposer = ({
 										</IconButton>
 									</Box>
 								</PopoverTrigger>
-								<Portal appendToParentPortal={false}><PopoverContent zIndex={DRAWER_POPUP_Z}
+								<Portal appendToParentPortal={false}><PopoverContent rootProps={{ zIndex: DRAWER_POPUP_Z }} zIndex={DRAWER_POPUP_Z}
 									width="300px"
 									maxW="calc(100vw - 24px)"
 									sx={lopuPopoverSx}
@@ -387,7 +387,7 @@ export const LopuComposer = ({
 									_focusVisible={{ outline: 'none', boxShadow: LOPU_UI.shadowPopover }}
 									aria-label="Chat settings"
 								>
-									<PopoverBody px={3} py={2}>
+									<PopoverBody px={3} py={2} maxH="calc(100dvh - 24px)" overflowY="auto" overscrollBehavior="contain">
 										<Text as="span" display="block" sx={lopuEyebrowSx} pt={1} pb={1}>
 											This chat
 										</Text>
@@ -471,7 +471,7 @@ export const LopuComposer = ({
 												<ChevronDown size={14} />
 											</Box>
 										</PopoverTrigger>
-										<Portal appendToParentPortal={false}><PopoverContent zIndex={DRAWER_POPUP_Z} width="220px" maxW="calc(100vw - 24px)" sx={lopuPopoverSx}>
+										<Portal appendToParentPortal={false}><PopoverContent rootProps={{ zIndex: DRAWER_POPUP_Z }} zIndex={DRAWER_POPUP_Z} width="220px" maxW="calc(100vw - 24px)" sx={lopuPopoverSx}>
 											<PopoverBody p={2}>
 												<Button width="100%" size="sm" variant="ghost" justifyContent="flex-start" isDisabled={!canSend} onClick={submit}>
 													Send after reply
@@ -520,7 +520,7 @@ export const LopuComposer = ({
 <Flex align="center" gap={1}>
         {onSendManaged ? <Popover placement="top-end" isLazy strategy="fixed" gutter={8} modifiers={[{ name: "preventOverflow", options: { padding: 12 } }, { name: "flip", options: { padding: 12 } }]}>
           <PopoverTrigger><Box as="button" type="button" aria-label="More send options" width={isMobile ? '40px' : '28px'} height={`${controlSize}px`} display="grid" placeItems="center" borderRadius="full"><ChevronDown size={14} /></Box></PopoverTrigger>
-          <Portal appendToParentPortal={false}><PopoverContent zIndex={DRAWER_POPUP_Z} width="260px" maxW="calc(100vw - 24px)" sx={lopuPopoverSx}><PopoverBody p={2}>
+          <Portal appendToParentPortal={false}><PopoverContent rootProps={{ zIndex: DRAWER_POPUP_Z }} zIndex={DRAWER_POPUP_Z} width="260px" maxW="calc(100vw - 24px)" sx={lopuPopoverSx}><PopoverBody p={2}>
            <Button width="100%" size="sm" variant="ghost" justifyContent="flex-start" isDisabled={!canSend} onClick={() => onSendManaged(value.trim(), 'server')}>Send with Vercel management</Button>
            <Button width="100%" size="sm" variant="ghost" justifyContent="flex-start" isDisabled={!canSend} onClick={() => onSendManaged(value.trim(), 'client')}>Send with local management</Button>
            <Text fontSize="xs" color={LOPU_UI.muted} px={3} py={2}>Local management needs an open page to continue. Both modes use your selected AI provider.</Text>

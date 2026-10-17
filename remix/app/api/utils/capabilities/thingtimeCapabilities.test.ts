@@ -251,8 +251,8 @@ test('AI archive clients require the presentation contract before import, export
 test('the Lopu catalog family publishes its verified-provider-key minor updates', () => {
   const manifest = thingtimeCapabilityManifest('https://thingtime.test');
   // 1.4.0: models[].pricing (verified-access design note §2)
-  assert.equal(manifest.features['api.ai-models']?.version, '1.4.1');
-  assert.equal(manifest.features['api.admin-ai-models']?.version, '1.1.0');
+  assert.equal(manifest.features['api.ai-models']?.version, '1.5.1');
+  assert.equal(manifest.features['api.admin-ai-models']?.version, '1.3.0');
   assert.equal(manifest.features['api.settings-lopu-chat-defaults']?.version, '1.1.0');
   // own providers (design note §1.3): providerId on create / update / reply;
   // 1.1.1 = the write buckets fail closed, 1.2.0 = server-verified confirmations;
@@ -260,7 +260,7 @@ test('the Lopu catalog family publishes its verified-provider-key minor updates'
   // and reply 1.4.0 = the in-flight cap (429 LOPU_TURN_IN_FLIGHT past three billed turns at once)
   assert.equal(manifest.features['api.lopu-chats']?.version, '1.6.0');
   assert.equal(manifest.features['api.lopu-chats-update']?.version, '1.5.0');
-  assert.equal(manifest.features['api.lopu-chats-reply']?.version, '1.19.2');
+  assert.equal(manifest.features['api.lopu-chats-reply']?.version, '1.19.3');
   // verified access + credits (design note "Lopu verified access, usage accounting and credits")
   for (const feature of ['api.admin-users-lopu-access', 'api.settings-lopu-access', 'api.lopu-account', 'api.lopu-account-history', 'api.lopu-account-topup-request', 'api.admin-lopu-accounts', 'api.admin-lopu-credits']) {
     assert.equal(manifest.features[feature]?.version, '1.0.0', feature);
@@ -272,7 +272,7 @@ test('historical Lopu receipts advertise a compatible reply patch on both manife
     thingtimeCapabilityManifest('https://thingtime.test').features['api.lopu-chats-reply'].version,
     createApiCapabilitiesManifest().features['api.lopu-chats-reply']
   ]) {
-    assert.equal(version, '1.19.2');
+    assert.equal(version, '1.19.3');
     assert.equal(capabilitySatisfies(version, '1.6.0'), true);
     assert.equal(capabilitySatisfies(version, '1.6.1'), true);
     assert.equal(capabilitySatisfies('1.6.0', '1.6.1'), false);
