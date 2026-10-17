@@ -4,9 +4,10 @@ import { Button, Checkbox, Flex, Modal, ModalBody, ModalCloseButton, ModalConten
 import { useApi } from '~/hooks/useApi';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { bundleFromPlan, downloadTransfer } from '~/utils/thingTransfer/browser';
+import type { AccountLocalView } from '~/local-workspace/accountApi.client';
 
-export const ThingExportDialog = ({ ids, linkKey, onClose }: { ids: string[]; linkKey?: string; onClose: () => void }) => {
-  const api = useApi();
+export const ThingExportDialog = ({ ids, linkKey, onClose, localView }: { ids: string[]; linkKey?: string; onClose: () => void; localView?: AccountLocalView }) => {
+  const api = useApi(localView);
   const lopu = useLopu();
   const [format, setFormat] = useState<'zip' | 'json'>('zip');
   const [children, setChildren] = useState(true);

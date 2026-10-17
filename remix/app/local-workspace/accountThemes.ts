@@ -232,6 +232,27 @@ export class AccountThemeSync {
 		const state = (await tx.get<State>(collection, row.id))!;
 		await tx.put(collection, row.id, { ...state, placementKnown: true, placementIntent: true });
 	}
+	/** Shared private-copy writer for remote conflict review and retained device
+	 * variants. Call within the transaction that verifies the reviewed source. */
+	async copyIn(tx: WorkspaceTransaction, local: LocalThing, options: { folderId?: string | null; replaceSource?: boolean } = {}) {
+		this.lease.assertCurrent();
+		validateTransferTheme(local);
+		const count = (await tx.list<LocalThing>('things')).filter(({ value }) => isTransferTheme(value)).length;
+		const replacing = options.replaceSource && !!await tx.get('things', local.id);
+		if (count - (replacing ? 1 : 0) + 1 > MAX_SAVED_THEMES) return fail('This workspace has reached its saved-theme limit.', 'LOCAL_QUOTA', 413);
+		const id = this.uuid();
+		if ((await tx.get('things', id)) || (await tx.get(collection, id)) || (await tx.get('thing-sync', id)))
+			return fail('A new theme identity collided. Retry the copy.');
+		const normalized = normalizeSavedTheme({ name: (String(local.crystal.name) + ' (device copy)').slice(0, 60), theme: local.crystal.theme });
+		if (!normalized.ok) return fail('The device theme is invalid.');
+		const stamp = new Date(this.now()).toISOString(), folderId = options.folderId === undefined ? local.folderId : options.folderId;
+		const copy: LocalThing = { id, thingtime: ['theme'],
+			crystal: { name: normalized.name, theme: normalized.theme as any, ...('title' in local.crystal ? {title:local.crystal.title} : {}) },
+			...(folderId ? {folderId} : {}), createdAt: stamp, updatedAt: stamp, revision: 1 };
+		await tx.put('things', id, copy);
+		await this.importIn(tx, copy);
+		return copy;
+	}
 	/** Protected theme projections and mutations used by the normal library. */
 	async viewIn(tx: WorkspaceTransaction, id: string) {
 		this.lease.assertCurrent();
@@ -632,23 +653,7 @@ export class AccountThemeSync {
 				const independent = keep === 'copy' || (keep === 'local' && !remote && !!local);
 				if (independent) {
 					if (!local || !isTransferTheme(local)) return fail('There is no device theme to copy.');
-					const count = (await tx.list<LocalThing>('things')).filter(({ value }) => isTransferTheme(value)).length;
-					if (count - (remote ? 0 : 1) + 1 > MAX_SAVED_THEMES) return fail('This workspace has reached its saved-theme limit.', 'LOCAL_QUOTA', 413);
-					copyId = this.uuid();
-					if ((await tx.get('things', copyId)) || (await tx.get(collection, copyId))) return fail('A new theme identity collided. Retry the copy.');
-					const normalized = normalizeSavedTheme({ name: (String(local.crystal.name) + ' (device copy)').slice(0, 60), theme: local.crystal.theme });
-					if (!normalized.ok) return fail('The device theme is invalid.');
-					const stamp = new Date(this.now()).toISOString();
-					const copy: LocalThing = {
-						...local,
-						id: copyId,
-						crystal: { ...local.crystal, name: normalized.name, theme: normalized.theme as any },
-						createdAt: stamp,
-						updatedAt: stamp,
-						revision: 1
-					};
-					await tx.put('things', copyId, copy);
-					await this.mutated(tx, copy, null, { visibility: 'private' });
+					copyId = (await this.copyIn(tx, local, { replaceSource: !remote })).id;
 					if ((await tx.get('settings', 'active-theme')) === row.id) {
 						await tx.put('settings', 'active-theme', copyId);
 						await this.selection.setIn(tx, copyId);

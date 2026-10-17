@@ -767,3 +767,11 @@ Explicit local home views use `useApi({localPlane: 'home'})` and the existing
 independent generic/theme sender admission. `homeThemeMigration.ts` and
 `homeThemes.ts` provide the not-yet-activated consolidation path; see
 [account theme workspace](../account-theme-workspace.md) for UI integration gates.
+
+
+`RetainedThemeReview` in Theme Studio reads legacy account partitions through
+`RetainedAccountThemes`; private recovery and ordinary remote conflict copies
+share `AccountThemeSync.copyIn`. `ThingExportDialog.localView` selects the normal
+home API for recovered downloads without changing remote authority. Local
+`theme-recovery` receipts prevent duplicate/recreated copies. See
+`retainedThemes.test.ts` and `retainedThemes.browser.test.ts`.

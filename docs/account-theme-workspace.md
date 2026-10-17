@@ -367,3 +367,39 @@ navigation, visible review of every retained legacy variant, UI integration and
 live cross-plane browser acceptance. Account theme History and the remaining
 local-first feature matrix also remain open. This foundation is not evidence
 of completed native UI integration, deployed acceptance or permission to merge.
+
+
+## Native retained-edit review — 2026-10-18
+
+Theme Studio now discovers retained theme content, deletion intent and selection
+records in other local partitions of the same account and origin. The panel
+uses the existing theme preview card and exposes exact data in an expandable
+review. It performs no migration or remote snapshot request. Anonymous sessions
+never construct this account service.
+
+“Keep a private home copy” uses the dedicated theme writer inside one atomic
+source/home transaction. It rechecks the exact reviewed content and intent,
+creates a fresh private root copy, preserves the optional display title, and
+leaves the original folder, selection, live claim and frozen request untouched.
+A local `theme-recovery` receipt keyed by the reviewed snapshot makes repeated
+or concurrent recovery return the same copy. Removing that copy does not allow
+a retry to resurrect it. The receipt is quota-accounted local metadata and is
+excluded from portable exports and remote synchronization.
+
+The normal Download dialog accepts an explicit local home view for recovered
+content. Download works before sync or any account response. Existing remote
+conflict review reuses the same private-copy writer. Invalid/stale/deleted
+reviews fail clearly without changing either partition.
+
+`retainedThemes.test.ts` covers concurrent replay, source preservation, canonical
+export, deletion refusal and owner/origin/lease isolation. The opt-in native
+`retainedThemes.browser.test.ts` uses `TT_RETAINED_THEMES_URL`,
+`TT_RETAINED_THEMES_ARTIFACTS` and `TT_SHARED_PLAYWRIGHT_PATH`; it requires the
+isolated loopback replica and a disposable account. It creates the initial
+content through the UI and reproduces an older partition only in that fresh
+browser's IndexedDB. It verifies offline review/recovery/reload/download at
+1440/390/320px, unchanged source records and no server-side themes.
+
+This proves a home-selected native account reviewing a retained custom-plane
+variant. Full native selected-custom navigation, general home library routing,
+automatic consolidation and account theme History remain unfinished.

@@ -90,15 +90,22 @@ test(
 			let rows: any[] = [],
 				copy: any,
 				selection: any;
-			for (let i = 0; i < 60; i++) {
-				rows = await snapshot();
-				copy = rows.find((row: any) => row.id !== original.id);
+			// A reload can leave a legitimate 60s claim. Poll one operation at a
+			// time within the 60/min endpoint budget, leaving room for app sync.
+			for (let i = 0; i < 40; i++) {
+				if (!copy) {
+					rows = await snapshot();
+					copy = rows.find((row: any) => row.id !== original.id);
+				}
 				if (copy) {
 					const selected = await post('/api/v1/themes/sync', { operation: 'selection', expectedOwnerId: owner });
-					selection = (await selected.json()).selection;
+					const response = await selected.json();
+					assert.equal(selected.status(), 200, JSON.stringify(response));
+					selection = response.selection;
+					assert.ok(selection, 'Selection response must be complete');
 					if (selection.themeId === copy.id) break;
 				}
-				await page.waitForTimeout(500);
+				await page.waitForTimeout(3000);
 			}
 			assert.ok(copy);
 			assert.equal(copy.visibility, 'private');

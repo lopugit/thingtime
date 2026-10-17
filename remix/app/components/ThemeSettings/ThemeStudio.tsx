@@ -8,6 +8,7 @@ import { openThingHistory } from '~/components/Timeline/TimelineHost';
 import { useApi } from '~/hooks/useApi';
 import { useWorkspaceUser } from '~/hooks/useWorkspaceUser';
 import { AccountThemeSyncStatus } from '~/local-workspace/AccountThemeSyncStatus';
+import { RetainedThemeReview } from '~/local-workspace/RetainedThemeReview';
 import { LOCAL_WORKSPACE_CHANGED, workspaceIdentityKey, subscribeWorkspaceIdentity } from '~/local-workspace/runtime.client';
 import { rootIdentity } from '~/utils/rootIdentity';
 import { useTtTheme } from '~/hooks/useTtTheme';
@@ -645,6 +646,7 @@ const ThemeStudioWorkspace = () => {
 				</Flex>
 
 				<AccountThemeSyncStatus onAdopt={saved => { if (saved) applyThemeDoc(saved.theme, {shareId: saved.id}); else setPreset('Thingtime'); }} />
+				<RetainedThemeReview renderPreview={theme => <ThemePreviewCard theme={theme} />} />
 				{/* My themes */}
 				<Text {...sectionHeaderStyle} marginTop={10} marginBottom={2}>
 					My themes

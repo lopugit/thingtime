@@ -3428,3 +3428,42 @@ These prove local regressions and programmatic home integration, not a finished
 native cross-plane workflow, full feature coverage, CI or deployed acceptance.
 Account theme History, the remaining feature matrix and latest-main acceptance
 remain required before the requested merge.
+
+
+## Native retained theme recovery — 2026-10-18
+
+Theme Studio can review older local account variants without an account request.
+It uses the existing visual preview, expandable exact data and the shared private
+copy writer. Recovery verifies the reviewed source atomically, retains original
+content/intent/placement/selection and records a local replay receipt so repeated
+or concurrent recovery returns one private home copy. The existing Download
+dialog exports it through the normal explicit-home API before synchronization.
+
+Local checks: 560 workspace passes, 63 opt-in skips, four shell passes; focused
+recovery/conflict tests pass. TypeScript retains the 91-error baseline without
+new signatures. Build passes with 248 verified offline assets. Native browser
+acceptance covers home-selected review of a retained custom-plane variant,
+offline recovery and canonical exports at 1440/390/320px, source preservation,
+reload/retry and zero offline mutation requests/server themes. Browser fixture
+accounts are disposable; only that fresh browser's own legacy IDB is seeded.
+
+Evidence: `tmp/retained-theme-workspace.log`, `tmp/retained-theme-final-unit.log`,
+`tmp/retained-theme-final-typecheck.log`, `tmp/retained-theme-build.log`,
+`tmp/retained-theme-final-lint.log`, `tmp/retained-theme-browser/`.
+Full selected-custom native navigation, general home library routing, automatic
+consolidation, account theme History and the broader coverage matrix remain open.
+These are local results; current-head CI and deployed acceptance are unverified.
+
+
+The additional native account-conflict regression exposed a harness defect:
+it polled snapshot plus selection every 500ms against a 60/min endpoint and
+assumed every response contained a selection. Its polling now checks one
+operation at a time, reports HTTP refusals and allows the existing 60s claim
+window. Production rate limits and claims were not changed. Rerun evidence is
+recorded in `tmp/retained-theme-conflict-browser.log`.
+
+The paced account-conflict rerun passes at all three viewports, preserving both
+versions and the remapped selection through reload. The final retained-edit
+browser rerun also explicitly checks the unchanged active theme and exactly one
+recovered identity after reload/retry. Focused lint is clean apart from the
+shared configuration deprecation notice.

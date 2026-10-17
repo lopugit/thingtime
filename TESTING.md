@@ -11765,3 +11765,24 @@ verification limits are in `docs/local-workspaces.md`.
       variants and navigate/import/export complete home bundles across database
       switches at desktop/390/320px. Verify matching-account cross-tab refresh,
       protected History and zero anonymous account writes.
+
+
+### Native recovery of retained theme edits (2026-10-18)
+
+- [x] In a disposable browser account, retain a second local variant under an
+      older database partition. Offline, review it in Theme Studio, expand exact
+      data, recover a private home copy and download canonical JSON at
+      1440/390/320px. Verify title/tokens, fresh identity, original source records,
+      unchanged selection, zero browser mutation requests and no server themes.
+- [x] Reload/retry and recover concurrently from two tabs/services: the same
+      reviewed version returns one copy. A removed recovered copy must not
+      reappear. New source edits, changed sync intent, selection-only entries,
+      deletion intent and retired/foreign identity must refuse safely. Run
+      `retainedThemes.test.ts` and `retainedThemes.browser.test.ts`.
+- [ ] Verify complete home library navigation and native recovery with a custom
+      database currently selected before enabling automatic theme consolidation.
+
+- [x] Account conflict browser polling must leave room for the app under the
+      60/min shared theme endpoint limit and allow the 60s interrupted-tab claim
+      window. Check HTTP status before reading selection payloads; do not change
+      production rate limits or erase claims to make acceptance pass.

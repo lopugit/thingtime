@@ -68,6 +68,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-18 — **Codex (AI)**: Theme Studio can review retained device variants
+  offline, preserve their original sync requests and recover one private home
+  copy with canonical download. Native home library routing and automatic
+  consolidation remain pending. Details: [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+
 - 2026-10-18 — **Codex (AI)**: Add atomic local home storage, lossless theme
   migration primitives and an explicit home destination in the normal local API.
   Selected-database remote admission remains independent; native migration UI
