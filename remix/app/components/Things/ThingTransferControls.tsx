@@ -3,7 +3,7 @@ import { Button, Menu, MenuButton, MenuItem, MenuList, Portal, Text, IconButton,
 import { Settings } from 'lucide-react';
 import { Link } from 'react-router';
 import { useApi } from '~/hooks/useApi';
-import { useCurrentUser } from '~/hooks/useCurrentUser';
+import { useWorkspaceUser } from '~/hooks/useWorkspaceUser';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { bundleFromPlan, writeTransferClipboard } from '~/utils/thingTransfer/browser';
 import { transferChecksum } from '~/utils/thingTransfer/archive';
@@ -17,7 +17,7 @@ type Props = { id?: string | null; linkKey?: string; disabledReason?: string; on
 /** Shared persisted-Thing entry point. Account, source or key changes tear down
  * every pending transfer before another context can receive its result. */
 export const ThingTransferControls = (props: Props) => {
-  const user = useCurrentUser();
+  const user = useWorkspaceUser();
   return <TransferControls key={`${user?.id || 'anonymous'}:${props.id || ''}:${props.linkKey || ''}`}
     {...props} ownerId={user?.id} />;
 };

@@ -1,3 +1,5 @@
+import { builtPlatformScriptHash } from './platform-runtime.mjs';
+
 // Single source of truth for the Content-Security-Policy.
 //
 // Consumed by:
@@ -41,6 +43,10 @@ const directives = ({ dev = false } = {}) => ({
 		// Native property maps: fixed Google SDK hosts; no inline/eval exception.
 		'https://maps.googleapis.com',
 		'https://maps.gstatic.com',
+		// srcdoc inherits this policy. Authorize only the exact shipped renderer,
+		// already permitted as a same-origin external script. Never arbitrary
+		// inline code, blob scripts, eval, or caller-supplied program source.
+		...(!dev && builtPlatformScriptHash() ? [builtPlatformScriptHash()] : []),
 		// Dev only: @vitejs/plugin-react injects an inline react-refresh preamble.
 		...(dev ? ["'unsafe-inline'"] : [])
 	],

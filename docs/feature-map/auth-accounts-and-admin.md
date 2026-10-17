@@ -125,5 +125,22 @@ fences and secret-free native catalog projections; `auth/vaultEnvelope.ts` and
 intentionally bypasses general request diagnostics and automatic origin fallback
 so decrypted fields never enter shared client history/cache. The reusable
 `Thingtime` fields mod renders the entry without global Thing persistence.
-Native integrations live in `apple/Passwords`, `apple/PasswordProvider`,
-`iOS/Thingtime/Web/PasswordBridge.swift` and `electron/lib/password-provider.cjs`.
+Native provider implementation and signed release are tracked separately in
+[PR #996](https://github.com/lopugit/thingtime/pull/996); this release exposes the
+private catalog and negotiates an optional supported native bridge.
+
+Local account workers are bound to the confirmed root identity generation,
+origin, owner ID and data plane (`app/local-workspace/runtime.client.ts`).
+Expected-actor mismatch now also returns `code: ACTOR_CHANGED`; the existing
+409 refusal remains. A mismatched queue stops before another request and root
+identity refreshes. Temporary/anonymous users do not start account workers, and
+logging in does not adopt anonymous content. See the incomplete
+[local workspace acceptance matrix](../local-workspaces.md).
+
+Offline account roots contain only a local workspace pointer and `user: null`
+(`local-workspace/rootFallback.ts`), never a cached authenticated profile. Local
+and remote leases are separate. `createRootDataLoader` installs workspace binding
+only after its latest-request fence; a stale success/failure cannot change a
+newer pointer. `useWorkspaceUser` is content identity only. Legacy anonymous tree
+hydration does not silently claim data for an account. Test `test:root-data`,
+`test:local-workspace` and `test:autosave` for these boundaries.

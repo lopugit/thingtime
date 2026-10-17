@@ -657,3 +657,17 @@ test('the local object-storage route is inert unless the stand-in directory is c
 		if (previous !== undefined) process.env.THINGTIME_LOCAL_ATTACHMENT_STORAGE_DIR = previous;
 	}
 });
+
+test('explicit owned-file retention is full-user, same-origin and unscoped while ordinary cache reads keep their gates', async () => {
+ let principal:any=user, calls=0;
+ const file={ownerId:'user-1',updatedAt:'2026-10-17T00:00:00.000Z',folderId:null,attachment:{id:'file',name:'file.txt',size:3,contentType:'text/plain',mediaKind:'file' as const}};
+ const route=createAttachmentContentLoader({getUser:async()=>principal,enforceLimit:allowed as any,enrichViewer:async viewer=>viewer,
+  download:async (_viewer,_id,download,retain)=>{calls++;assert.equal(download,true);assert.equal(retain,true);return {ok:true,url:'https://private.test/secret',expiresAt:'later',cacheKey:'a'.repeat(64),size:3,contentType:'application/octet-stream',disposition:'attachment',image:false,retention:file};}});
+ const url='https://thingtime.example/api/v1/attachments/content?id=file&cache=retain&download=1';
+ const response=await route({request:new Request(url,{headers:{Origin:'https://thingtime.example'}})});
+ assert.equal(response.status,200);assert.deepEqual(await response.json(),{ok:true,cacheKey:'a'.repeat(64)+':original',size:3,file});assert.match(response.headers.get('Cache-Control')!,/private.*no-store/);
+ for(const query of ['&key=x','&sharedRoot=root','&width=64'])assert.equal((await route({request:new Request(url+query)})).status,400);
+ assert.equal((await route({request:new Request(url,{headers:{Origin:'https://foreign.test'}})})).status,403);
+ for(const value of [null,{id:'service',accountKind:'service'}]) {principal=value;assert.equal((await route({request:new Request(url)})).status,401);}
+ assert.equal(calls,1);
+});

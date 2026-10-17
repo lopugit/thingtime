@@ -50,7 +50,7 @@ test('external avatar export requires the bounded-download contract on both mani
 
 test('emoji transfer, library and move capabilities reject pre-support origins', () => {
   const manifest = thingtimeCapabilityManifest('https://thingtime.test');
-  for (const [feature, version] of [['api.things-export', '1.15.0'], ['api.things-import', '1.11.0'], ['api.things', '1.33.2'], ['api.things-bulk', '1.5.0']]) {
+  for (const [feature, version] of [['api.things-export', '1.15.0'], ['api.things-import', '1.11.0'], ['api.things', '1.33.2'], ['api.things-bulk', '1.6.0']]) {
     assert.equal(manifest.features[feature].version, version);
     assert.equal(capabilitySatisfies(version, version), true);
     assert.equal(capabilitySatisfies('1.0.0', version), false);
@@ -60,8 +60,8 @@ test('emoji transfer, library and move capabilities reject pre-support origins',
 });
 
 test('archive root moves negotiate the additive bulk contract on both manifests', () => {
-  assert.equal(createApiCapabilitiesManifest().features['api.things-bulk'], '1.5.0');
-  assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.things-bulk'].version, '1.5.0');
+  assert.equal(createApiCapabilitiesManifest().features['api.things-bulk'], '1.6.0');
+  assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.things-bulk'].version, '1.6.0');
   for (const version of [undefined, '1.3.0', '1.3.1', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.4.0'), false);
   for (const version of ['1.4.0', '1.4.1', '1.5.0']) assert.equal(capabilitySatisfies(version, '1.4.0'), true);
 });
@@ -317,8 +317,8 @@ test('the Lopu verified-access and credits family publishes its contracts', () =
 });
 
 test('persistent attachment content and resized previews advertise their additive contract', () => {
-	assert.equal(createApiCapabilitiesManifest().features['api.attachment-content'], '1.12.0');
-	assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.attachment-content'].version, '1.12.0');
+	assert.equal(createApiCapabilitiesManifest().features['api.attachment-content'], '1.13.0');
+	assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.attachment-content'].version, '1.13.0');
 	for (const unsupported of ['', '1.1.1', '1.2.1', '1.3.0', '1.4.0', '1.5.0', '1.6.0', '2.0.0']) assert.equal(capabilitySatisfies(unsupported, '1.6.1'), false);
 	assert.equal(capabilitySatisfies('1.6.1', '1.6.1'), true);
 	assert.equal(capabilitySatisfies('1.6.2', '1.6.1'), true);
@@ -677,12 +677,11 @@ test('range programs require the additive owned-boundary contract', () => {
   assert.equal(typeof routeModules['v1/passwords'], 'function');
  });
 
-test('Gmail OAuth and its one-use callback are advertised on both manifests and registered', () => {
-	const legacy = createApiCapabilitiesManifest().features;
-	const manifest = thingtimeCapabilityManifest('https://thingtime.test').features;
-	assert.equal(legacy['api.mail'], '1.2.0');
-	assert.equal(manifest['api.mail'].version, '1.2.0');
-	assert.equal(legacy['api.mail-google-callback'], '1.0.0');
-	assert.equal(manifest['api.mail-google-callback'].version, '1.0.0');
-	assert.equal(typeof routeModules['v1/mail/google/callback'], 'function');
+
+test('conditional file metadata contracts appear on both capability manifests', () => {
+  const registry = createApiCapabilitiesManifest(), routed = thingtimeCapabilityManifest('https://thingtime.test');
+  for (const [feature, version] of [['api.attachment-annotate','1.2.0'],['api.things-bulk','1.6.0']]) {
+    assert.equal(registry.features[feature], version);
+    assert.equal(routed.features[feature].version, version);
+  }
 });

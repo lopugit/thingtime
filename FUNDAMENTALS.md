@@ -211,6 +211,15 @@ How (see `api/utils/things/things.ts`):
   anchor until no comments/replies/reactions/saves/attachment bytes can survive
   it.
 
+- Durable upload cancellation uses the same private attachment Thing identity.
+  `attachmentCancellationRequested` fences the deleting claim; verified cleanup
+  retains a closed `cancelled` receipt with zero object bytes, no target/upload
+  fields and no expiry. Its small JSON payload remains quota-accounted. A receipt
+  must never be expired or purged by normal attachment cleanup: an arbitrarily
+  delayed original upload start would otherwise recreate the object. Full user
+  authentication is required to reserve a receipt before start; finalized/bound
+  uploads require reviewed deletion through their existing lifecycle.
+
 ### Account storage is one exact, transactional ledger
 
 Timeline uses protected relational `timeline-event` Things in the owner's

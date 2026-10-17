@@ -1,6 +1,9 @@
 import React from 'react';
 import { useApi } from '../hooks/useApi';
-import { useCurrentUser } from '../hooks/useCurrentUser';
+import { useWorkspaceUser } from '../hooks/useWorkspaceUser';
+import { useWorkspaceScope } from '../hooks/useWorkspaceScope';
+import { localTimelineScope, LOCAL_TIMELINE_FOLDER, LOCAL_TIMELINE_PLANE } from '../local-workspace/timeline';
+import { anonymousWorkspaceLease } from '../local-workspace/runtime.client';
 import { localTimelineBackend } from './localBackend.client';
 import { TimelineLocalStore } from './localStore';
 import { TimelineBranchStore } from './branchStore';
@@ -23,9 +26,9 @@ const failureMessage = (error: unknown) => error instanceof Error ? error.messag
 export const timelineAccessFailure = (error: unknown): boolean => [401, 403].includes((error as { status?: number })?.status ?? 0);
 
 function useTimelineConnection(pool: TimelineConnectionPool, storage: TimelineStorage, onDenied: (failure: unknown) => Promise<void>): Session {
-	const user = useCurrentUser(); const api = useApi(); const apiRef = React.useRef(api); apiRef.current = api;
+	const user = useWorkspaceUser(); const workspace = useWorkspaceScope(); const api = useApi(); const apiRef = React.useRef(api); apiRef.current = api;
 	const selectedPlane = useDataPlane();
-	const expectedPlane = storage === 'home' ? 'home' : selectedPlane;
+	const expectedPlane = user?.localOnly ? LOCAL_TIMELINE_PLANE : storage === 'home' ? 'home' : selectedPlane;
 	const [connection, setConnection] = React.useState<Connection | null>(null);
 	const [error, setError] = React.useState('');
 	const [epoch, setEpoch] = React.useState(0);
@@ -35,6 +38,24 @@ function useTimelineConnection(pool: TimelineConnectionPool, storage: TimelineSt
 	React.useEffect(() => {
 		if (!user?.id) return;
 		const ownerId = user.id; const origin = window.location.origin;
+		if (user.localOnly) {
+			if (workspace === 'pending') return;
+			const guard = anonymousWorkspaceLease(); guard.assertCurrent();
+			const acquired = pool.acquire(localTimelineScope(origin), LOCAL_TIMELINE_FOLDER);
+			const next = { ...acquired.connection, verified: true }; setConnection(next); setError('');
+			let alive = true;
+			const flush = async () => {
+				try { guard.assertCurrent(); const count = await next.sync.pushPending(); if (alive) { setError(''); if (count) window.dispatchEvent(new Event(TIMELINE_CHANGED_EVENT)); } }
+				catch (failure) { if (alive) {
+					if (failure instanceof TimelineBranchCommandRefusal || failure instanceof TimelineNoteCommandRefusal) { setError(''); window.dispatchEvent(new Event(TIMELINE_CHANGED_EVENT)); }
+					else setError(failureMessage(failure));
+				} }
+			};
+			retry.current = flush; redact.current = async () => {};
+			window.addEventListener(TIMELINE_CHANGED_EVENT, flush); void flush();
+			return () => { alive = false; acquired.release(); window.removeEventListener(TIMELINE_CHANGED_EVENT, flush); retry.current = async () => {}; };
+		}
+
 		const key = storage === 'home' ? `thingtime:timeline-scope:home:${ownerId}` : `thingtime:timeline-scope:${ownerId}`;
 		let alive = true; let generation = 0; let busy = false;
 		const forget = () => { try { sessionStorage.removeItem(key); } catch {} };
@@ -102,9 +123,9 @@ function useTimelineConnection(pool: TimelineConnectionPool, storage: TimelineSt
 		window.addEventListener('online', refresh); window.addEventListener('focus', refresh); window.addEventListener(TIMELINE_CHANGED_EVENT, edited);
 		const timer = setInterval(refresh, 15_000); void connect(true);
 		return () => { alive = false; generation++; lease?.release(); lease = null; active.current = null; clearInterval(timer); unlisten(); window.removeEventListener('online', refresh); window.removeEventListener('focus', refresh); window.removeEventListener(TIMELINE_CHANGED_EVENT, edited); retry.current = async () => {}; redact.current = async () => {}; };
-	}, [user?.id, pool, storage, onDenied, expectedPlane]);
-	const scoped = timelineConnectionForViewer(connection, user?.id, expectedPlane);
-	return { storage, identity: JSON.stringify([user?.id ?? null, storage, epoch]), ownerId: user?.id ?? null, connection: scoped, error, retry: () => retry.current(), redact: failure => redact.current(failure) };
+	}, [user?.id, user?.localOnly, workspace, pool, storage, onDenied, expectedPlane]);
+	const scoped = timelineConnectionForViewer(connection, workspace === 'pending' ? null : user?.id, expectedPlane);
+	return { storage, identity: JSON.stringify([user?.id ?? null, workspace, storage, epoch]), ownerId: user?.id ?? null, connection: scoped, error, retry: () => retry.current(), redact: failure => redact.current(failure) };
 }
 
 /** Home and the selected database use identical records and separate scope
@@ -112,19 +133,20 @@ function useTimelineConnection(pool: TimelineConnectionPool, storage: TimelineSt
 export function TimelineProvider({ children }: { children: React.ReactNode }) {
 	const api = useApi(); const apiRef = React.useRef(api); apiRef.current = api;
 	const [pool] = React.useState(() => new TimelineConnectionPool((scope, folderId) => {
+		const connectionApi = apiRef.current;
 		const store = new TimelineLocalStore(scope, localTimelineBackend());
 		const branches = new TimelineBranchStore(scope, localTimelineBackend());
 		const notes = new TimelineNoteStore(scope, localTimelineBackend());
 		const names = new TimelineNameStore(scope);
 		const sync = new TimelineSync(store, {
-			push: async (event, signal) => (await apiRef.current.v1.timeline.push(scope, event, { signal })).entry,
-			recoverOutcome: async (event, proof, signal) => (await apiRef.current.v1.timeline.recoverOutcome(scope, { formatVersion: 1, event, dataPlane: scope.dataPlane, proof }, { signal })).entry,
-			page: (request, signal) => apiRef.current.v1.timeline.page(scope, request, { signal }),
-			branch: (command, signal) => apiRef.current.v1.timeline.branch(scope, command, { signal }),
-			branchHead: (branchId, thingId, signal) => apiRef.current.v1.timeline.branchHead(scope, branchId, thingId, { signal }),
-			entry: async (eventId, signal) => { const { entry, notes, names } = await apiRef.current.v1.timeline.entry(scope, eventId, { signal }); return { entry, notes, names }; },
-			branches: (thingId, before, signal) => apiRef.current.v1.timeline.branches(scope, thingId, before, { signal }),
-			note: (command, signal) => apiRef.current.v1.timeline.note(scope, command, { signal })
+			push: async (event, signal) => (await connectionApi.v1.timeline.push(scope, event, { signal })).entry,
+			recoverOutcome: async (event, proof, signal) => (await connectionApi.v1.timeline.recoverOutcome(scope, { formatVersion: 1, event, dataPlane: scope.dataPlane, proof }, { signal })).entry,
+			page: (request, signal) => connectionApi.v1.timeline.page(scope, request, { signal }),
+			branch: (command, signal) => connectionApi.v1.timeline.branch(scope, command, { signal }),
+			branchHead: (branchId, thingId, signal) => connectionApi.v1.timeline.branchHead(scope, branchId, thingId, { signal }),
+			entry: async (eventId, signal) => { const { entry, notes, names } = await connectionApi.v1.timeline.entry(scope, eventId, { signal }); return { entry, notes, names }; },
+			branches: (thingId, before, signal) => connectionApi.v1.timeline.branches(scope, thingId, before, { signal }),
+			note: (command, signal) => connectionApi.v1.timeline.note(scope, command, { signal })
 		}, branches, notes, names);
 		return { scope, folderId, store, branches, notes, names, sync };
 	}));

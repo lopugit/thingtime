@@ -1,3 +1,5 @@
+import { useWorkspaceRefresh } from '~/local-workspace/useWorkspaceRefresh';
+import { useWorkspaceUser } from '~/hooks/useWorkspaceUser';
 import { audienceDescription, audienceOfAcl, THING_AUDIENCE_META } from '~/components/Sharing/audienceCore';
 import React from 'react';
 import { ChatArchivePage } from '~/components/Things/ChatArchivePage';
@@ -287,7 +289,11 @@ function GenericThingPage() {
 	const apiRef = React.useRef(api);
 	apiRef.current = api;
 	const { v1 } = api;
-	const currentUser = useCurrentUser();
+	// Content ownership follows the active workspace, including restored IDs
+	// and offline account copies. The projection's author must still match;
+	// account/data-plane gates above continue to require real authentication.
+	const currentUser = useWorkspaceUser();
+	const authenticatedUser = useCurrentUser();
 	const dataPlane = useDataPlane();
 	const lopu = useLopu();
 	const lopuRef = React.useRef(lopu);
@@ -311,7 +317,7 @@ function GenericThingPage() {
 			if (diagnosticRoute) return { key, loading: true, data: null, error: null };
 			if (!cacheKey) return { key, loading: true, data: null, error: null };
 			const cached = readStampedCache<ThingViewData>(cacheKey);
-			const data = cached?.kind === 'thing' && cached.thing?.id === id ? cached : null;
+			const data = cached?.kind === 'thing' && (cached.thing?.id === id || ((cached.thing as any)?.localOnly === true && (cached.thing as any)?.accountFileId === id)) ? cached : null;
 			return { key, loading: true, data, error: null };
 		},
 		[cacheKey, diagnosticRoute, id]
@@ -319,6 +325,7 @@ function GenericThingPage() {
 	const [loadState, setLoadState] = React.useState<ThingLoadState>(() => seedState(requestKey));
 	const [historyRefresh, setHistoryRefresh] = React.useState(0);
 	const refreshThing = React.useCallback(() => setHistoryRefresh(value => value + 1), []);
+	useWorkspaceRefresh(refreshThing, !diagnosticRoute && !linkKey);
 	React.useEffect(() => {
 		const applied = (event: Event) => {
 			if ((event as CustomEvent).detail?.thingId === id) setHistoryRefresh(value => value + 1);
@@ -548,7 +555,7 @@ function GenericThingPage() {
 			}
 			lopuRef.current({ title: `Installing ${suite.emoji} ${suite.title}…`, description: 'Your own schemas, controls, actions, and pages.', status: 'info', duration: 4000 });
 			if (suite.app) {
-				const installed = await kit.install.installSuiteOnServer(suite.key);
+				const installed = await kit.install.installSuiteForWorkspace(suite.key);
 				const href = `/p/${encodeURIComponent(installed.entryPageKey)}`;
 				lopuRef.current({
 					title: `${suite.emoji} ${suite.title} installed ✨`,
@@ -982,7 +989,8 @@ function GenericThingPage() {
 							</Flex>
 						) : null}
 
-						{sections.preview && attachment ? <ThingAttachmentDetail attachment={attachment} references={references} /> : null}
+						{attachment && (thing as any)?.localRetentionError ? <Text role="status" color="orange.700" fontSize="sm">{(thing as any).localRetentionError}</Text> : null}
+						{sections.preview && attachment ? <ThingAttachmentDetail key={requestKey} attachment={attachment} references={references} onSaveDetails={!linkKey && thing?.author?.id === currentUser?.id && !thing?.targetId && attachment.id.startsWith('local-file-') ? async details => { await api.v1.attachments.annotate({ id: attachment.id, ...details }); refreshThing(); } : undefined} /> : null}
 
 						{sections.preview && post ? (
 							<Stack spacing={3} minW={0}>
@@ -1006,7 +1014,7 @@ function GenericThingPage() {
 							</Stack>
 						) : null}
 
-						{sections.preview && thing && !post ? (
+						{sections.preview && thing && !post && !attachment ? (
 							// The page runtime is what makes a live surface live: sources
 							// load and refetch after every run, `$refresh`/`$install` work.
 							// Its source is the viewer's ownership; its installer exists only
@@ -1068,9 +1076,11 @@ function GenericThingPage() {
 						) : null}
 
 						{thing && isThingOwner && ['scheduled-task', 'reminder'].includes(thing.crystal?.type) ? <ScheduledTaskPanel key={`${currentUser?.id}:${thing.id}`} thingId={thing.id} /> : null}
-						{thing && (!post || !sections.preview) ? dataPlane?.startsWith('custom-')
+						{thing && (!post || !sections.preview) ? (thing as any).accountFileId && (!authenticatedUser || navigator.onLine === false)
+							? <Text color={MUTED} fontSize="sm">Reconnect to load this account file’s comments.</Text>
+							: dataPlane?.startsWith('custom-')
 							? <Text color={MUTED} fontSize="sm">Comments are available in your home database.</Text>
-							: <ThingComments collectionControls thingId={thing.id} linkKey={linkKey} initialPost={visibleState.data?.kind === 'thing' ? visibleState.data.discussion || visibleState.data.post : null} /> : null}
+							: <ThingComments collectionControls thingId={(thing as any).accountFileId || thing.id} linkKey={linkKey} initialPost={visibleState.data?.kind === 'thing' ? visibleState.data.discussion || visibleState.data.post : null} /> : null}
 
 						{diagnostic?.revealables.length ? (
 							<SensitiveThingReveal

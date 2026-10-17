@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { moveManagedContent } from './managedPlacement';
 import { isProtectedThingtime } from '../../../schemas/registry';
 import { orderedTransferAttachments, serializeTransfer, transferAnnotations, validateTransfer, type ThingTransfer, type TransferThing } from '../../../utils/thingTransfer/format';
-import { rewriteComposition } from '../actions/forkCompositionCore';
+import { importedThingCrystal, orderTransferImports } from '../../../utils/thingTransfer/importContent';
 import { rewriteTransferMedia } from './transferMediaCore';
 import { annotateAttachment, linkAttachment, deleteAttachment, createReadyAttachmentPostInsertHook, inspectReadyAttachmentsForPost, prepareAttachmentCascadeForThing } from '../attachments/attachments';
 import { attachmentStore, commitRecordingImport } from '../attachments/attachmentStore';
@@ -16,6 +16,8 @@ import { createTransferEmoji, removeTransferEmoji } from './emojiTransfer';
 import { isTransferChatArchive, validateChatArchives, type ChatArchiveGroup } from '../../../utils/thingTransfer/chatArchive';
 import { createTransferChatArchive } from './chatArchiveTransfer';
 import { removeTransferChatArchive } from './chatArchiveDeleteTransfer';
+
+export { orderTransferImports } from '../../../utils/thingTransfer/importContent';
 
 type ImportDependencies = {
   create: typeof createThing;
@@ -41,22 +43,6 @@ type ImportDependencies = {
 };
 const defaults: ImportDependencies = { create: createThing, remove: deleteThing, inspectFiles: inspectReadyAttachmentsForPost, getFile: attachmentStore.getOwned, bindFiles: createReadyAttachmentPostInsertHook, uuid: randomUUID, link: linkAttachment, annotate: annotateAttachment, removeFile: deleteAttachment, createTheme: createTransferTheme, removeTheme: removeTransferTheme, createAlgorithm: createTransferAlgorithm, removeAlgorithm: removeTransferAlgorithm, createRecording: commitRecordingImport, moveRecording: moveManagedContent, createEmoji: createTransferEmoji, removeEmoji: removeTransferEmoji };
 const dedicatedTransfer = (thing: TransferThing) => isTransferTheme(thing) || isTransferAlgorithm(thing) || isTransferRecording(thing) || isTransferEmoji(thing) || isTransferChatArchive(thing);
-
-/** Import ordering only constrains structural/provenance references. Action
- * cycles are legal: their fresh IDs are allocated before any create call.
- */
-export const orderTransferImports = (manifest: ThingTransfer): TransferThing[] => {
-  const remaining = new Map(manifest.things.map((thing) => [thing.id, thing]));
-  const ordered: TransferThing[] = [];
-  while (remaining.size) {
-    const next = [...remaining.values()].find((thing) => ![thing.folderId, thing.targetId,
-      ...(thing.thingtime.includes('data') && typeof thing.crystal.schemaId === 'string' ? [thing.crystal.schemaId] : [])
-    ].some((id) => id && remaining.has(id)));
-    if (!next) throw new Error('Circular folder, target, or schema provenance in the import');
-    ordered.push(next); remaining.delete(next.id);
-  }
-  return ordered;
-};
 
 export const importTransfer = async (
   viewer: Viewer, input: { manifest?: unknown; files?: unknown; folderId?: unknown },
@@ -209,13 +195,7 @@ export const importTransfer = async (
     for (const thing of ordered) {
       check();
       if (dedicatedTransfer(thing)) continue;
-      const crystal = rewriteComposition(thing.thingtime, crystals.get(thing.id)!, (_kind, id) => ids.get(id) || id);
-      for (const key of ['componentKey', 'actionKey', 'pageKey']) if (typeof crystal[key] === 'string') crystal[key] = `${crystal[key].slice(0, 48)}-${suffix}`;
-      if (thing.thingtime.includes('schema') && typeof crystal.name === 'string') crystal.name = `${crystal.name.slice(0, 48)}-${suffix}`;
-      // Import is content creation, never site publication or posting back
-      // into the original community just because the source carried a route.
-      if (thing.thingtime.includes('webpage')) delete crystal.siteRoute;
-      if (thing.thingtime.includes('post')) { delete crystal.subspaceId; delete crystal.flairId; }
+      const crystal = importedThingCrystal(thing, crystals.get(thing.id)!, ids, suffix);
       const bound = attachments.filter((file) => file.targetId === thing.id).map((file) => files.get(file.id)!);
       const inspected = inspections.get(thing.id);
       const result = await deps.create(viewer.id, {

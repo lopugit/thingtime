@@ -1,3 +1,4 @@
+import { useWorkspaceUser } from '~/hooks/useWorkspaceUser';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { draftRequest } from '~/drafts/draftClient';
@@ -22,7 +23,9 @@ export function PostThingMenu({ post, mediaThing, isOwner, canModerate, canRepor
     remove: () => void; moderate: (action: string, extra?: Record<string, unknown>) => void; flair: (id: string | null) => void;
     downloadArchive?: () => void; shareDownloadLink?: () => void };
 }) {
-  const user = useCurrentUser(), lopu = useLopu();
+  const accountUser = useCurrentUser(), workspace = useWorkspaceUser(), lopu = useLopu();
+  const localOnly = workspace?.localOnly === true && post.author?.localOnly === true && post.author.id === workspace.id;
+  const user = localOnly ? workspace : accountUser;
   const [savingTemplate, setSavingTemplate] = React.useState(false);
   const templateId = React.useRef<string | null>(null);
   const saveTemplate = async () => {
@@ -38,7 +41,7 @@ export function PostThingMenu({ post, mediaThing, isOwner, canModerate, canRepor
   };
   const extensions: ThingContextSection[] = [];
   if (user && !mediaThing && !post.thingtime.includes('comment')) extensions.push({ id: 'templates', actions: [{ id: 'save-template', command: 'save-template', label: savingTemplate ? 'Saving template…' : 'Save as template', icon: '📋', disabled: savingTemplate }] });
-  const files = archive ? buildArchiveMenuSection({ fileCount: archive.fileCount, noun: archive.noun }) : null;
+  const files = archive && !localOnly ? buildArchiveMenuSection({ fileCount: archive.fileCount, noun: archive.noun }) : null;
   if (files) extensions.push(files);
   const privacy: ThingContextSection = { id: 'privacy', label: 'Privacy', actions: (Object.keys(CIRCLE_META) as PostVisibility[]).map(value => ({
     id: `privacy-${value}`, command: 'privacy', payload: value, label: CIRCLE_META[value].label, icon: CIRCLE_META[value].emoji, selected: post.visibility === value
@@ -60,7 +63,7 @@ export function PostThingMenu({ post, mediaThing, isOwner, canModerate, canRepor
   }
   return <PersistedThingMenu id={post.id} initialThing={post} label={mediaThing ? 'Media options' : 'Post options'} openHref={openHref}
     onOpen={onOpen} onRenamed={handlers.rename} extensions={extensions} capabilities={{ edit: isOwner && !mediaThing, delete: isOwner && !mediaThing,
-      share: isOwner && !mediaThing ? { submenu: { title: 'Share / permissions', sections: [privacy] } } : false }}
+      share: isOwner && !mediaThing && !localOnly ? { submenu: { title: 'Share / permissions', sections: [privacy] } } : false }}
     onAction={({ action }) => {
       const command = action.command;
       if (command === 'save-template') { void saveTemplate(); }

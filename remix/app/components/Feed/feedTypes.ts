@@ -16,6 +16,7 @@ export type PublicProfile = {
   username: string;
   displayName: string | null;
   temporary?: boolean;
+  localOnly?: true;
   bio: string | null;
   avatarUrl: string | null;
   bannerUrl: string | null;
@@ -32,6 +33,7 @@ export type FeedAuthor = {
   username: string;
   displayName: string | null;
   temporary?: boolean;
+  localOnly?: true;
   avatarUrl: string | null;
   external?: boolean;
   externalUrl?: string | null;
@@ -51,7 +53,7 @@ export type FeedAuthor = {
 export type AuthorLinkTarget = { external: boolean; href: string };
 
 export const authorLinkTarget = (author: FeedAuthor | null): AuthorLinkTarget | null => {
-  if (!author?.username) return null;
+  if (!author?.username || author.localOnly) return null;
   if (author.external) return author.externalUrl ? { external: true, href: author.externalUrl } : null;
   return { external: false, href: `/profile/${author.username}` };
 };

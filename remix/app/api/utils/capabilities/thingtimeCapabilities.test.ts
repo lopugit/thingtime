@@ -107,13 +107,13 @@ test('Thingtime capability manifest is origin scoped and covers the generated AP
 	assert.equal(manifest.features['api.devices-node-state']?.version, '1.10.0');
 	assert.equal(capabilitySatisfies('1.9.0', '1.10.0'), false);
 	assert.equal(capabilitySatisfies('1.11.0', '1.10.0'), true);
-  for (const [feature, required, previous] of [['api.things-export', '1.15.0', '1.12.0'], ['api.attachment-content', '1.12.0', '1.6.4']]) {
+  for (const [feature, required, previous] of [['api.things-export', '1.15.0', '1.12.0'], ['api.attachment-content', '1.13.0', '1.6.4']]) {
     assert.equal(manifest.features[feature]?.version, required);
     assert.equal(capabilitySatisfies(required, required), true);
     assert.equal(capabilitySatisfies(previous, required), false);
     assert.equal(capabilitySatisfies('2.0.0', required), false);
   }
-  assert.equal(manifest.features['api.things-bulk']?.version, '1.5.0');
+  assert.equal(manifest.features['api.things-bulk']?.version, '1.6.0');
   for (const version of ['1.2.0', '1.2.1', '1.3.0']) assert.equal(capabilitySatisfies(version, '1.2.0'), true);
   for (const version of ['1.0.0', '1.1.0', '1.1.1', '2.0.0', '']) assert.equal(capabilitySatisfies(version, '1.2.0'), false);
   assert.equal(capabilitySatisfies('1.2.0', '1.3.0'), false);
@@ -157,7 +157,7 @@ test('Thingtime capability manifest is origin scoped and covers the generated AP
   assert.equal(manifest.features['api.lopu-recordings-run']?.version, '1.5.0');
   assert.equal(manifest.features['api.lopu-recordings-personal']?.version, '1.1.0');
   assert.equal(manifest.features['api.notifications-test']?.version, '1.2.0');
-  assert.equal(manifest.features['api.attachment-content']?.version, '1.12.0');
+  assert.equal(manifest.features['api.attachment-content']?.version, '1.13.0');
   // round 2 S6 — discovery: the home feed takes scope=all|subspaces ("My
   // subspaces" — only the viewer's ACTIVE subspaces, empty for guests) and
   // echoes it (1.5.0, additive)
@@ -466,4 +466,35 @@ test('server Action outcomes are discoverable in both capability manifests', () 
     assert.equal(capabilitySatisfies('1.16.0', '1.17.0'), false);
     assert.equal(capabilitySatisfies('1.17.0', '1.18.0'), false);
   }
+});
+
+
+test('conditional interaction sync advertises a distinct compatible capability', () => {
+ for (const features of [createApiCapabilitiesManifest().features, Object.fromEntries(Object.entries(thingtimeCapabilityManifest('https://interactions.test').features).map(([id, feature]) => [id, feature.version]))]) {
+  assert.equal(features['api.things-interactions'], '1.0.0');
+  assert.equal(capabilitySatisfies(features['api.things-interactions'], '1.0.0'), true);
+ }
+ for (const version of ['', '0.9.0', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.0.0'), false);
+ assert.equal(capabilitySatisfies('1.1.0', '1.0.0'), true);
+});
+
+
+test('existing owned file receipt deletion is advertised by both capability manifests', () => {
+  assert.equal(createApiCapabilitiesManifest().features['api.attachment-delete'], '1.4.0');
+  assert.equal(thingtimeCapabilityManifest('https://files.test').features['api.attachment-delete'].version, '1.4.0');
+  for (const version of ['', '1.0.0', '1.1.0', '1.3.0', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.4.0'), false);
+});
+
+
+test('durable upload cancellation requires the additive 1.2.0 contract on both manifests', () => {
+  assert.equal(createApiCapabilitiesManifest().features['api.attachment-upload-abort'], '1.2.0');
+  assert.equal(thingtimeCapabilityManifest('https://files.test').features['api.attachment-upload-abort'].version, '1.2.0');
+  for (const version of ['', '1.0.0', '1.1.0', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.2.0'), false);
+});
+
+
+test('owned file retention requires the additive content 1.13.0 contract', () => {
+  assert.equal(createApiCapabilitiesManifest().features['api.attachment-content'], '1.13.0');
+  assert.equal(thingtimeCapabilityManifest('https://files.test').features['api.attachment-content'].version, '1.13.0');
+  assert.equal(capabilitySatisfies('1.12.0', '1.13.0'), false);
 });

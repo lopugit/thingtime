@@ -765,7 +765,7 @@ const rootThingSchema: ThingtimeSchema = {
 			values: [...ATTACHMENT_STATES],
 			system: true,
 			description:
-				'Private upload lifecycle state. Pending, finalizing, ready, and deleting objects all remain billable until their source Thing is removed.'
+				'Private upload lifecycle state. Pending, finalizing, ready, and deleting objects remain billable until cleanup. Cancelled receipts retain only their small JSON allocation and permanently fence delayed upload starts.'
 		},
 		{
 			name: 'objectSizeBytes',
@@ -788,6 +788,11 @@ const rootThingSchema: ThingtimeSchema = {
 			required: false,
 			system: true,
 			description: 'Private immutable S3 version id used for exact reads and permanent deletion before quota is refunded.'
+		},
+		{
+			name: 'attachmentCancellationRequested',
+			type: 'boolean', required: false, system: true,
+			description: 'Server-only durable cancellation intent on deleting uploads and their zero-object cancelled receipts. Never accepted from generic input.'
 		},
 		{
 			name: 'attachmentRequestFingerprint',

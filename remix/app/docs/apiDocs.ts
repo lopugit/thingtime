@@ -5859,8 +5859,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 	}),
 	endpoint({
 		id: 'attachment-upload-abort',
-		contractVersion: '1.1.0',
-		featureVersion: '1.1.0',
+		contractVersion: '1.2.0',
+		featureVersion: '1.2.0',
 		group: 'attachments',
 		title: 'Cancel attachment upload',
 		endpoint: '/api/v1/attachments/uploads/abort',
@@ -5873,7 +5873,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		},
 		methods: ['POST'],
 		steps: [
-			'POST either the returned upload id or the original requestId when the user removes a draft file or abandons composition; lookup remains owner-scoped.',
+			'POST {requestId} with a full user session to durably cancel the original upload request, including before its start arrives. The private quota-accounted receipt never expires. cancelled:true proves the request identity is fenced; deferred still reports outstanding byte cleanup. Already-ready/finalizing/bound uploads return 409 and require a fresh reviewed deletion.',
+			'Legacy {uploadId} cleanup still accepts the returned attachment id or original request id, but missing-row success does not fence a delayed start. Watch credentials retain only this legacy mode.',
 			'Treat ok:true as idempotent.',
 			'When deferred is true, quota remains reserved until the cleanup job passes retryAt and completes its separated verification.'
 		],
@@ -5896,7 +5897,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 	}),
 	endpoint({
 		id: 'attachment-annotate',
-		featureVersion: '1.1.0',
+		contractVersion: '1.2.0',
+		featureVersion: '1.2.0',
 		group: 'attachments',
 		title: 'Annotate attachment',
 		endpoint: '/api/v1/attachments/annotate',
@@ -5911,7 +5913,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		steps: [
 			'POST the canonical attachment id with filenamePreview, title, and/or description.',
 			'Omit a field to leave it unchanged; send null or an empty string to clear it.',
-			'Store the returned attachment metadata (it includes the updated title/description).',
+			'Optionally send expectedUpdatedAt from the current Thing read to refuse stale edits atomically (409). Store the returned attachment metadata and updatedAt timestamp.',
 			'Retry a 409 after refreshing — the attachment changed or is still uploading.'
 		],
 		requestExamples: [
@@ -6004,7 +6006,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 	}),
 	endpoint({
 		id: 'attachment-delete',
-		featureVersion: '1.1.0',
+		contractVersion: '1.4.0',
+		featureVersion: '1.4.0',
 		group: 'attachments',
 		title: 'Delete attachment',
 		endpoint: '/api/v1/attachments/delete',
@@ -6018,8 +6021,11 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		methods: ['POST'],
 		steps: [
 			'POST the canonical attachment id; include the exact targetId when deleting from an existing post or comment.',
-			'On success, remove it from local draft state.',
-			'Retry a temporary 503; the source row stays charged until S3 deletion succeeds.'
+			'Optionally send expectedUpdatedAt from the current Thing read. A stale version returns 409 before claiming deletion, including a concurrent edit between read and claim.',
+			'After deletion is claimed, retrying resumes cleanup even if its lifecycle timestamp advanced. A deferred response includes retryAt; storage remains charged until cleanup is verified. Missing rows are idempotent success, not a durable cancellation fence against a delayed upload start.',
+			'For a standalone file created by an upload request, include requestId and expectedUpdatedAt with its canonical id, without targetId. This full-user mode returns deleted:true only after retaining a private accounted replay fence, including an already-missing file. Stale live versions still return 409; pending, finalizing and bound files are refused. The receipt never expires; delayed upload starts cannot recreate the deleted file.',
+			'For an existing saved standalone file whose upload requestId is unavailable, send retainReceipt:true and expectedUpdatedAt with its canonical id (attachment-delete 1.4.0). This full-user mode retains the same durable receipt, but never reserves a missing ID. Missing/foreign IDs return 404; linked files, expiring import drafts and bound files are refused. Do not send requestId or targetId with retainReceipt. A lost response can replay the identical request; an unconfirmed concurrent legacy removal returns 503 without deleted:true.',
+			'Retry a temporary 503 with the identical request; the source row stays charged until S3 deletion succeeds.'
 		],
 		requestExamples: [
 			{
@@ -6027,19 +6033,26 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 				description: 'Delete one owned attachment.',
 				method: 'POST',
 				body: { id: '3bda8208-625c-4f5d-941f-348020021848', targetId: 'post_123' }
+			},
+			{
+				name: 'Delete existing saved file with a retry receipt',
+				description: 'Use a freshly read version of an owned standalone file. No original upload request ID is needed.',
+				method: 'POST',
+				body: { id: '3bda8208-625c-4f5d-941f-348020021848', expectedUpdatedAt: '2026-10-16T00:00:00.000Z', retainReceipt: true }
 			}
 		],
 		responseExamples: [{ status: 200, description: 'Attachment absent.', body: { ok: true } }]
 	}),
 	endpoint({
 		id: 'attachment-content',
-		contractVersion: '1.12.0',
-		featureVersion: '1.12.0',
+		contractVersion: '1.13.0',
+		featureVersion: '1.13.0',
 		group: 'attachments',
 		title: 'Read attachment content',
 		endpoint: '/api/v1/attachments/content',
 		summary: 'Authorizes a stable same-origin attachment URL and redirects to short-lived private S3 content.',
 		detail:
+			'Same-origin full users can request cache=retain&download=1 for an owned saved standalone file up to 16 MiB. This returns only public metadata, owner identity, observed version, folder placement and an opaque byte cache key for an explicit account-scoped device copy. Shared roots/keys, import drafts, linked/bound files and blocked media never grant retention. No signed URL or storage key is returned. Ordinary media cache validation still reauthorizes every read. ' +
 			'Standalone file-purpose attachments use the same exact-owner access checks as saved recordings, including moderation, object-version and storage gates. ' +
 			'Owner-created service workspaces add live membership-based read/comment access to enrolled records and the bound webpage; customer and B2B users are limited to their linked customer and properties. Inherited comments/media recheck membership on every request; app/PAT scopes, custom endpoints, explicit private ACL changes and moderation remain enforced. Inherited comment media also enforce moderation on every intervening ancestor, including comments on media. ' +
 			'Unlisted post/page/comment media opens by canonical attachment id without a secret key. Current parent ACL, moderation and storage gates are rechecked on every request. Saved profile discoveries remain tied to the account or anonymous browser identity; IP metadata never grants access. ' +
@@ -9905,8 +9918,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'things-bulk',
-    featureVersion: '1.5.0',
-    contractVersion: '1.5.0',
+    featureVersion: '1.6.0',
+    contractVersion: '1.6.0',
     // 1.4.0: first-party owners can move complete private archive roots.
     // Dedicated home-plane moves also accept owned current-schema themes/algorithms.
     group: 'things',
@@ -9925,6 +9938,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     methods: ['POST'],
     steps: [
       'POST op (move, copy, delete, or share), ids (1–100 shareIds you own), and folderId for move/copy destinations.',
+      'A single-item move optionally accepts expectedUpdatedAt from the current Thing read. A stale source returns a per-item status 409 without moving; inspect results even when HTTP is 200. Other operations and multi-item moves reject this field.',
       'Move also supports owned durable standalone recordings through the dedicated home-plane placement writer. Folder-only placement preserves bytes, ACLs and accounting; drafts, bound/profile media and custom-endpoint placement are refused. Generic protected-record editing remains forbidden.',
       'share additionally takes acl (or legacy visibility) and optional recursive: true to flow a folder’s audience to everything inside.',
       'Read the per-item results list — each entry carries ok plus error (failures), newId (copies), and copied/applied/skipped counts for recursive folder ops.',
@@ -10200,6 +10214,16 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         body: '<?xml version="1.0" encoding="UTF-8"?>\n<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">…</sitemapindex>'
       }
     ]
+  }),
+  endpoint({
+    id: 'things-interactions', featureVersion: '1.0.0', contractVersion: '1.0.0', group: 'things',
+    title: 'Conditional account interactions', endpoint: '/api/v1/things/interactions',
+    summary: 'Read private bookmark/reaction membership and conditionally set it for durable account synchronization.',
+    detail: 'GET id (comma-separated, at most 50 distinct IDs) returns states { id, revision, saved, reactions }. POST { id, expectedRevision, kind: save|reaction, active, emoji? } sets one membership atomically through normal permission, quota and history writers. The opaque revision is concurrency metadata, never ownership. A stale command returns 409 and does not change content. After a lost response read state and reconcile; never replay a toggle or silently replace a newer revision. Generic creates/deletes and legacy toggles also invalidate revisions. Responses are private, no-store. Legacy embedded reactions require reconciliation before this sync path. First-party account sessions only; PAT/app tokens retain their existing routes and scopes. Same-origin mutation requests are required.',
+    auth: { mode: 'session-or-bearer', description: 'First-party account session; no PAT or app credentials.' }, methods: ['GET','POST'],
+    steps: ['Read current states for visible targets.', 'Set one membership using its observed revision.', 'On 409 preserve local intent and review current state.'],
+    requestExamples: [{ name:'Read states', description:'Read two targets.', method:'GET', query:{id:'thing_one,thing_two'} },{ name:'Save', description:'Save against the observed initial revision.', method:'POST',body:{id:'thing_one',expectedRevision:null,kind:'save',active:true}}],
+    responseExamples:[{status:200,description:'Private membership snapshot.',body:{ok:true,states:[{id:'thing_one',revision:null,saved:false,reactions:[]}]}},{status:409,description:'Newer interaction state exists.',body:{ok:false,error:'Interactions changed. Review your local choice before syncing.'}}]
   }),
   endpoint({
     id: 'things-react',

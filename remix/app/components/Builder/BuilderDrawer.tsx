@@ -1,3 +1,4 @@
+import { useWorkspaceUser } from '~/hooks/useWorkspaceUser';
 import { HEIC_IMAGE_ACCEPT } from '../Attachments/heicImage';
 import React from 'react';
 import { Box, Button, Flex, Input, Select, Switch, Text, Textarea } from '@chakra-ui/react';
@@ -449,7 +450,7 @@ const BlockInspector = ({
 						</Text>
 					) : (
 						<FieldRow label="Text">
-							<Textarea {...inputStyles} rows={4} value={block.text || ''} onChange={(event) => patch({ text: event.target.value })} />
+							<Textarea aria-label="Block text" {...inputStyles} rows={4} value={block.text || ''} onChange={(event) => patch({ text: event.target.value })} />
 						</FieldRow>
 					)}
 					<RichTextEditorButton block={block} patch={patch} />
@@ -738,6 +739,7 @@ export const BuilderDrawer = (props: {
 		onUploadToBlock
 	} = props;
 	const lopu = useLopu();
+	const localOnly = useWorkspaceUser()?.localOnly === true;
 	const drawerWidth = useBuilderDrawerWidth();
 	const [saving, setSaving] = React.useState(false);
 	// name/visibility edits live here (not in the block draft), so they mark
@@ -897,7 +899,7 @@ export const BuilderDrawer = (props: {
 						<FieldRow label="Name">
 							<Input
 								{...inputStyles}
-								value={pageName}
+								aria-label="Page name" value={pageName}
 								onChange={(event) => {
 									onPageName(event.target.value);
 									setMetaDirty(true);
@@ -908,6 +910,7 @@ export const BuilderDrawer = (props: {
 						</FieldRow>
 						{mode === 'page' ? (
 							<ThingAudienceControl
+                                localOnly={localOnly}
 								acl={audienceAcl}
 								onChange={(next) => {
 									onAudienceAcl(next);
@@ -922,7 +925,7 @@ export const BuilderDrawer = (props: {
 									: 'Saving forks this page into your Things — only you see your version.'}
 							</Text>
 						)}
-						{mode === 'page' && pageId && source === 'user' && !draft.branch ? (
+						{mode === 'page' && pageId && source === 'user' && !draft.branch && !localOnly ? (
 							<Flex alignItems="center" gap={2} minWidth={0}>
 								<Box
 									as="a"
@@ -945,7 +948,7 @@ export const BuilderDrawer = (props: {
 								</Button>
 							</Flex>
 						) : null}
-						{mode === 'page' && !pageId ? (
+						{mode === 'page' && !pageId && !localOnly ? (
 							<Text color="var(--tt-faint, #b6b6c0)" fontSize="11px">
 								Save this page to create its link.
 							</Text>

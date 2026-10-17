@@ -4702,270 +4702,88 @@ PNGs and JSON as inline resources without an account or HTTP access from the
 agent host. No private environment variables are needed. See the
 [fork-safe setup, actual tool connection, bounds and disposable importer QA](docs/no-login-draft-preview.md).
 
+### Local workspace development (in progress)
 
-### Automatic AI model catalogue sync
+The ordinary Builder now has a browser workspace adapter under
+`remix/app/local-workspace/`. See [coverage and limits](docs/local-workspaces.md)
+before treating the rollout as complete. IndexedDB requires a stable origin and
+available site storage. Clearing site data removes unsynced device content.
+Anonymous work never enters an account queue. Account sync uses the existing
+same-origin API and session; there is no new secret or alternate authentication
+setup. Unsupported dedicated features retain their current adapters.
 
-Thingtime refreshes the server Anthropic and OpenAI model inventories daily at
-03:23 UTC (`/api/v1/ai/models/sync` in the root `vercel.json`). Set a random
-`CRON_SECRET=<random-secret>` in the deployment environment; Vercel sends it as
-`Authorization: Bearer <random-secret>`. Outside Vercel, schedule that authenticated
-GET once daily. A missing secret refuses the job. MongoDB must support transactions
-(replica set / Atlas), as with other home control-plane mutations.
-
-OpenAI discovery uses `OPENAI_API_KEY` (and optional `OPENAI_ORG_ID`,
-`OPENAI_PROJECT_ID`, `OPENAI_BASE_URL`). For Anthropic model discovery, configure
-`ANTHROPIC_MODELS_API_KEY=<models-api-key>` in the server deployment environment.
-If absent, an existing `ANTHROPIC_API_KEY` is used for catalogue reads only. These
-keys are never passed to Claude inference, which continues using the isolated
-Claude Code runtime and its admin-vault OAuth credential.
-
-Without either discovery key, Thingtime attempts the model-list endpoint with
-Claude OAuth from the admin credential vault or `CLAUDE_CODE_OAUTH_TOKEN_THINGTIME`
-/ `CLAUDE_CODE_OAUTH_TOKEN`. Subscription OAuth may not grant Models API access;
-HTTP 401/403 is reported with a discovery-credential hint. A denied scope,
-timeout, malformed/empty list or incomplete pagination preserves the previous
-inventory and reports failure; it is not treated as a provider-wide retirement.
-Claude Code's initialization model list is not an authoritative replacement:
-it can return built-in models even with invalid credentials.
-Personal Secure Vault endpoints have their own configuration and do not alter
-the shared catalogue.
-
-Admin → Lopu models → **Sync available models** runs a manual refresh. Provider
-model-not-available errors also request a refresh, without replaying the failed
-turn or silently changing its model. A shared five-minute cooldown and two-minute
-lease prevent concurrent requests from hammering providers. Inspect the per-provider
-sync report/status to distinguish success, failure and skipped/cooling-down jobs.
-
-**Allow all current models** changes the existing compatible model toggles for that
-provider. **Auto-allow new models** defaults off and controls newly discovered
-compatible chat models; it preserves individual disable choices on subsequent
-syncs. Unsupported model types remain recorded but are not offered for chat.
-New model versions use conservative provider-default reasoning/standard speed;
-pricing and context limits remain unknown until explicitly supported. Unknown
-pricing remains `priced: false` in usage accounting; it is never presented as a
-provider price of zero. Admins should consider this before enabling auto-allow.
-
-A complete provider snapshot atomically marks absent models unavailable, retaining
-their records and admin choices. The public catalogue and shared model selectors
-only offer enabled, available models. Admin retains all compatible rows for audit.
-
-### Incoming mail (Gmail, IMAP, POP3 and offline inboxes)
-
-Open `/settings/email` to connect email accounts, then `/mail` (`/email` is an
-alias). Each account can independently enable **Cloud** and **Local** sync.
-IMAP discovers selectable folders; POP3 exposes its single inbox. **All inboxes**
-combines inbox folders. A proxy inbox is a saved selection of folders from any
-connected accounts: it changes only the view and never copies, moves or deletes
-provider messages. Both protocols can be enabled, so the same provider message
-may appear once per protocol/folder; independent source identities are preserved.
-
-Cloud sync uses the existing account vault bootstrap key
-(`THINGTIME_USER_VAULT_KEY`, or the already configured admin vault key), the home
-Mongo data plane, and the normal transactional storage allowance. Configure the
-vault using the existing Secure Vault setup; no mail-specific encryption key is
-needed. Missing encryption fails closed. Credentials and message content are
-account-bound encrypted protected Things; generic search/sharing cannot expose
-them. Use an app password where your provider requires one. Providers that have
-disabled password authentication require OAuth: Gmail supports **Connect Gmail
-with Google** below; other OAuth-only providers need an adapter. Do not enter a
-normal account password when the provider requires OAuth. These are incoming
-mail readers; the existing transactional email outbox remains separate.
-
-Ordinary browser pages cannot open raw TCP/TLS connections to POP3 or IMAP.
-**Local** means the browser stores and renders mail offline and talks to a paired
-loopback connector for network sync. The connector runs the same read-only
-protocol adapter as the cloud; local-only credentials never go to Thingtime's
-cloud. To run it from a clone with Node 24 and the Remix dependencies installed:
-
-```sh
-export THINGTIME_MAIL_ORIGIN=https://your-thingtime-origin.example
-# Generate a random token privately and paste the same token into Email settings.
-# Never commit or share the resulting token.
-export THINGTIME_MAIL_TOKEN="$(openssl rand -hex 32)"
-npm --prefix remix run mail:connector
-```
-
-`THINGTIME_MAIL_ORIGIN` must be the exact browser origin without a trailing slash
-(for this development worktree, `http://127.0.0.1:13760`). The connector binds
-only `127.0.0.1:17879`, checks Host, Origin and a bearer pairing token, accepts no
-cookies, and allows at most two concurrent syncs. Close its terminal process to
-stop it. Your browser may require local-network permission. Pair each browser
-separately; do not expose the connector through a public proxy or Funnel.
-
-TLS ports are IMAP 993 / POP3 995; mandatory STARTTLS uses 143 / 110. Certificate
-verification is always enabled. The adapters reject private/reserved addresses
-and pin the validated DNS address to prevent rebinding. Plaintext, custom ports,
-internal mail servers and OAuth for the raw IMAP/POP3 adapters are not supported. No mail
-server deletion/mark-read/move commands are issued.
-
-Sync is explicit through **Sync inbox** / **Sync folders**, with **Load older
-mail** for bounded ten-message provider pages. It is not a background cron or
-push service. A device caches up to 2,000 messages, with up to 12,000 text
-characters per message, and marks truncated/oversized messages. HTML is rendered
-as text; remote images and scripts are never loaded. Attachments remain at the
-provider and are counted, not downloaded by this version. Cloud-only proxy
-inboxes sync across your devices; views including device-only accounts stay on
-that device. Browser records are individually AES-GCM encrypted with a
-non-exportable device key; stale-tab writes are refused. This protects stored
-bytes from accidental disclosure, not an attacker running scripts in the same
-origin or an unlocked operating-system account.
-
-#### Gmail with Google authorization
-
-Email settings → **Connect Gmail with Google** starts a ten-minute connection.
-Open **Continue with Google** in a new browser tab (Safari/system browser in
-native apps), choose the Google account and grant Gmail read and write access. Return to
-Thingtime, press **I’ve finished with Google** if needed, and confirm the shown
-address. This connects a mailbox to the current Thingtime account; it does not
-change the Thingtime sign-in identity. No app password or local connector is
-needed, including with Google two-step verification.
-
-The default stores message copies on the device. The refresh authorization is
-always stored encrypted in the existing Thingtime account vault, allowing
-Thingtime’s API to read and manage Gmail on request. Enable cloud message storage separately
-in Edit. Pausing sync keeps the authorization; removing the account removes its
-saved authorization and Thingtime cache without changing Gmail. You can also
-revoke access in your Google Account’s third-party connections settings. If
-Google revokes/expires the grant, remove the old connection and connect again.
-Messages use the same encrypted records and proxy inboxes as other providers.
-Gmail pages contain at most 20 messages; large messages show a partial notice.
-Google-connected accounts also support mark read/unread, archive, move to Trash,
-restore from Trash, create/rename labels and add/remove message labels. The Mail
-composer saves edits encrypted on the device immediately; **Save draft to Gmail**
-creates or updates a Google draft. **Review and send** shows the sender and all
-To/Cc/Bcc recipients before the explicit **Send email** action. No permanent
-mail deletion is exposed. IMAP/POP3 adapters remain read-only.
-
-The composer supports plain-text drafts up to 30,000 characters and 50 addresses
-per recipient field. Existing rich-text/attachment drafts open in Gmail to avoid
-silently losing their formatting or files. Device drafts stay separate from the
-Google draft until saved. Sending uses the confirmed fields; a changed Google
-draft message ID refuses the write. Google does not provide a transactional
-compare-and-swap against edits made simultaneously in another Gmail client.
-
-Provider mutations require a stable writeId and create an encrypted accounted
-`mail-operation` child before network I/O. Completed retries return the saved
-result. An interrupted/uncertain send is never automatically replayed: check
-Gmail Sent before deliberately creating another message. Receipts remain after
-account removal to retain duplicate protection; they contain no mail body or
-Google grant. A short account lease serializes Thingtime mutations and fences
-stale sync cache writes. This is at-most-once admission, not guaranteed delivery
-or automatic recovery after a lost provider response.
-
-Fork/deployment setup (admin only):
-
-1. Create a Google Cloud **Web application** OAuth client, enable **Gmail API**,
-   and configure the consent screen with `openid`, `email`, and
-   `https://www.googleapis.com/auth/gmail.modify`. Add test users while the
-   Google app is in Testing. Register each exact callback URL, for example
-   `https://your-thingtime.example/api/v1/mail/google/callback`.
-2. In the existing Admin System Secure Vault, save a secret with the fixed label
-   `google-mail-oauth`. Its JSON selects credentials by exact origin:
-
-   ```json
-   {
-     "origins": {
-       "https://your-thingtime.example": {
-         "clientId": "YOUR_WEB_CLIENT_ID.apps.googleusercontent.com",
-         "clientSecret": "YOUR_WEB_CLIENT_SECRET",
-         "redirectUri": "https://your-thingtime.example/api/v1/mail/google/callback"
-       }
-     }
-   }
-   ```
-
-   Use separate development/production clients and explicit origin entries.
-   Unlisted preview origins fail closed; no environment borrows credentials.
-   Local testing may register `http://127.0.0.1:<port>` or `http://localhost:<port>`
-   with the same callback path. Use the existing admin/user vault bootstrap;
-   no additional Vercel environment variables are needed. Never commit real
-   client secrets or tokens. Rotation of the Google client ID requires users to
-   reconnect; changing a secret for the same client preserves existing grants.
-3. For public launch, complete Google’s consent verification for restricted
-   Gmail scopes and the applicable security assessment for server-transmitted
-   data. Testing-mode refresh authorization may expire after seven days.
-   See [Google scope requirements](https://developers.google.com/workspace/gmail/api/auth/scopes)
-   and [OAuth production requirements](https://developers.google.com/identity/protocols/oauth2/production-readiness/restricted-scope-verification).
-4. Verify a real consent/refresh/revoke flow on that origin before claiming it
-   active. Unit/synthetic tests do not prove Google app verification or account
-   consent. Provider tokens never enter browser/native storage, callback HTML,
-   public account projections or generic Thing APIs.
-
-Validation commands:
-
-```sh
-npm --prefix remix run test:mail
-npm --prefix remix run test:mail:transport
-npm --prefix remix run test:mail:connector
-# Opt-in HTTP checks refuse any DB except 127.0.0.1:20437 / mail-qa-rs.
-MAIL_TEST_BASE=http://127.0.0.1:13760 npm --prefix remix run test:mail:integration
-# Requires the same disposable DB/vault/JWT settings in remix/.env.local.
-MAIL_TEST_BASE=http://127.0.0.1:13760 npm --prefix remix run test:mail:storage
-```
-
-The transport test uses temporary self-signed fixture certificates trusted only
-by its child Node process and synthetic TLS servers. It does not weaken the
-production connector's certificate or destination checks. HTTP tests create
-fixture users through the real API, never by inserting Mongo records. The local
-web app uses the normal PM2 worktree lifecycle (`npm run web-pms`). No public
-Tailscale/Funnel endpoint is configured for the disposable mail QA database.
-
-The storage integration uses the production HTTP route and real authenticated
-replica transactions with a synthetic provider boundary to force a sync/delete
-race. The connector integration can run with `--serve` for synthetic browser QA;
-never use its published fixture token for real mail. The production connector
-requires your own random token. Browser offline checks cover cached reading and
-search in an already loaded app; offline cold-launch of the whole app is separate.
-
-### Automatic iOS TestFlight publishing
-
-Native changes merged to `main` can publish tested, signed TestFlight builds with
-matching phone/Watch/widget versions. The existing GitHub credentials remain the
-initial source; an explicit one-time migration can move them into the encrypted
-admin Secure Vault, after which short-lived GitHub OIDC identities fetch only the
-Apple release bundle. See [setup, fork configuration, migration and release
-verification](docs/ios-automatic-testflight.md). No additional Vercel environment
-variables or permanent GitHub-to-vault password are required.
+For offline shell checks, run `npm --prefix remix run build:client`; this generates
+an integrity-checked static asset manifest. Use the repository PM2 lifecycle for
+development, and an isolated local database/account fixture for mutation tests.
+Do not point a fixture preview at production API fallback URLs. Saved account pages now reopen and remain editable after a fully offline cold
+start; the server must verify the account before sync resumes. The remaining
+feature matrix is not yet complete.
 
 
-### Native mail and browser API relay
+The offline Web Platform renderer uses the same compiled runtime as the standalone
+sandbox. `build:client` runs `build:platform` first, then includes that static code
+in a sandboxed document and authorizes its exact hash in production CSP. Use the
+normal build command; if running main Vite directly in a clean checkout, first run
+`npm --prefix remix run build:platform`. The managed dev stack already builds and
+watches the platform runtime; the app reloads its virtual document when that output
+changes. No additional environment values or secrets are needed. Embed and inert
+draft bundles retain the standalone runtime URL and their existing policies. Keep
+`patch:vercel-output` and `verify:vercel-output` in deployment builds so runtime
+bytes and CSP remain paired. See [the offline execution checks](docs/local-workspaces.md#offline-web-platform-execution--2026-10-16).
 
-Email settings separates cloud storage from the encrypted device copy. For new
-accounts, the desktop app defaults to **Directly from this app**; browsers and
-iOS default to **Thingtime API relay — no installation**. Existing accounts keep
-their paired-connector choice until changed explicitly.
+### Disposable Timeline restore and related-history regressions
 
-- **Directly from this app** uses Electron IPC and the same bounded read-only
-  IMAP/POP3 implementation as the API. No loopback listener or pairing token is
-  needed. Credentials and message content stay on the device unless cloud sync
-  is also enabled. Navigation, cancellation and app exit abort active work.
-- **Thingtime API relay** sends credentials to the currently selected Thingtime
-  server for each request. `POST /api/v1/mail/sync` returns the shared version 1
-  batch without saving credentials, accounts or messages. It requires a full
-  Thingtime session, `expectedOwnerId` in query and body, and explicit
-  `account.sync.transport: "relay"` with `sync.local: true`. It needs working auth
-  and rate-limit storage but no mail vault encryption key. The host must allow
-  outbound TCP to public mail servers on 993/143/995/110 with verified TLS.
-- Cloud sync remains the separate option for encrypted server storage. The
-  desktop app forwards private mail API requests only to its explicitly selected
-  HTTPS account endpoint, through the existing trusted loopback proxy. Ordinary
-  incomplete web deployments refuse fallback, and native failures never fall
-  back to a cloud transport.
+The `remix/scripts/timeline-versions.integration.mts`,
+`timeline-published-components.integration.mts` and
+`timeline-related.integration.mts` scripts require a loopback
+`TIMELINE_TEST_BASE` and verify the server's database status before registering
+new fixture accounts. Their default replica is `timeline-rs` at
+`127.0.0.1:20337`. For a different explicitly disposable local replica, set
+`TIMELINE_TEST_MONGO_HOST=127.0.0.1:<disposable-mongo-port>` and
+`TIMELINE_TEST_REPLICA_SET=<disposable-replica-name>` as well. Never point the app
+at an existing account database for these checks. All three scripts clean up their own
+created Things, including restored component copies, in `finally`; synthetic
+accounts and immutable audit remain in the disposable database. Run each from
+`remix` with `node --import tsx scripts/<script-name>.integration.mts`.
 
-The iOS drawer has a **Mail** shortcut to the selected site's `/mail`; its relay
-uses the WebView's current session and the same encrypted device store. iOS does
-not advertise direct IMAP/POP3 support. Other web-based native hosts can use the
-same relay endpoint; standalone Watch/Widget companions do not sync mail.
 
-Desktop builds stage `electron/dist/mail/provider.cjs` from the canonical web
-provider using the existing MCP esbuild toolchain. `electron build:web` installs
-that toolchain and builds/verifies the artifact; no global Node connector is
-required by an installed app. Use the normal Electron `dev:parallel`, signed
-`build` and `install:local` commands. No additional secrets or deployment
-variables are needed. Do not enable request-body logging for private mail routes.
+### Durable account file adapter regression
 
-For relay HTTP regression checks, use the disposable mail replica and fixture
-created by `test:mail:integration`, then run
-`MAIL_TEST_BASE=http://127.0.0.1:<worktree-port> npm --prefix remix run test:mail:relay`.
-It checks the real session, endpoint, explicit mode and absence of cloud writes
-using DNS-only POP3 discovery; it never attempts a provider login.
+From `remix`, run `node --import tsx --test
+app/local-workspace/accountFiles.browser.test.ts` with
+`TT_LOCAL_FILE_SYNC_URL=http://127.0.0.1:<vite-port>`,
+`TT_LOCAL_FILE_SYNC_ADMIN_FIXTURE=/path/to/ignored-fixture-admin.json`, and optional
+`TT_LOCAL_FILE_SYNC_ARTIFACTS=/path/to/local-evidence`. Set
+`TT_SHARED_PLAYWRIGHT_PATH` and `TT_SHARED_CHROME_PATH` to installed Playwright and
+its matching Chromium executable. Use the PM2-managed Vite dev origin: this
+adapter-focused test loads actual source modules and does not assert offline
+cold reload. It captures the exact workspace module URLs requested by the app;
+Vite HMR timestamps must be retained to avoid creating a second unbound runtime.
+The fixture also checks offline metadata/folder edits, reviewed conflicts, and
+lost annotation receipts. The account file picker is not switched to this adapter yet.
+
+Use only an explicitly disposable local Mongo replica. Register a disposable
+administrator through the normal API, add its username to ignored
+`remix/.env` as `ADMIN_USERNAMES=<fixture-admin>`, then store its username/password
+in the ignored JSON fixture (restrict it to mode 0600). Enable the existing
+filesystem object-store stand-in with
+`THINGTIME_LOCAL_ATTACHMENT_STORAGE_DIR=<ignored-directory>`. If setting
+`THINGTIME_LOCAL_ATTACHMENT_STORAGE_ORIGIN`, use the **same Vite origin** the
+browser opens; a different Nitro port is a different origin and is correctly
+blocked by the normal CSP. The default root-relative signed URLs also work.
+Restart this checkout using `npm run web-pms` after environment changes.
+
+The test creates its own ordinary account, proves private upload refusal, then
+uses the disposable admin's normal API to approve only that new account. It
+cleans up its completed file and sessions; fixture accounts remain only in the
+disposable database. Never substitute an existing account or production database,
+weaken CSP, alter rate limits, or commit credentials/evidence storage.
+
+
+The ordinary account Files picker/native-preview acceptance uses the same
+loopback setup: run `node --import tsx --test
+app/local-workspace/accountFileUi.browser.test.ts` from `remix/`, with
+`TT_LOCAL_FILE_SYNC_URL`, `TT_SHARED_PLAYWRIGHT_PATH`, `TT_SHARED_CHROME_PATH`
+and optional `TT_LOCAL_FILE_SYNC_ARTIFACTS` as above. It creates only a disposable
+local account and needs no administrator approval because its saves finish
+offline. The separate lifecycle fixture tests protected upload approval and sync.
