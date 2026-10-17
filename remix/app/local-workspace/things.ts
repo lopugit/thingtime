@@ -71,7 +71,8 @@ export class LocalThings {
 	constructor(private db: WorkspaceDatabase, readonly scope: WorkspaceScope, private lease: WorkspaceLease,
 		private builtins: readonly TransferThing[] = [], private now = () => new Date().toISOString(), private uuid = () => crypto.randomUUID(), private onWrite?: LocalThingMutation,
 		private onFileWrite?: LocalFileMutation, private acceptsExternalTarget?: (tx: WorkspaceTransaction, id: string) => Promise<boolean>,
-		private captureAccountChanges?: ThingTransactionCapture, private onRecover?: LocalThingRecovery) {}
+		private captureAccountChanges?: ThingTransactionCapture, private onRecover?: LocalThingRecovery,
+		private onThemeImport?: (tx: WorkspaceTransaction, row: LocalThing) => Promise<void>) {}
 	private transaction<T>(mode: IDBTransactionMode, run: (tx: WorkspaceTransaction) => Promise<T>, captures?: Map<string, LocalMutationCapture>, signal?: AbortSignal) {
 		const lease: WorkspaceLease = signal ? { assertCurrent: () => { this.lease.assertCurrent(); signal.throwIfAborted(); }, onInvalidate: cb => { const off = this.lease.onInvalidate(cb); signal.addEventListener('abort', cb, { once: true }); return () => { off(); signal.removeEventListener('abort', cb); }; } } : this.lease;
 		return this.db.transaction(this.scope, mode, lease, async tx => {
@@ -394,7 +395,7 @@ export class LocalThings {
 		if (importedAlgorithms.length && this.scope.kind !== 'anonymous') fail('LOCAL_OPERATION_UNAVAILABLE', 'Account algorithms require their dedicated sync adapter');
 		for (const algorithm of importedAlgorithms) { validateTransferAlgorithm(algorithm); if (manifest.files.some(file => file.targetId === algorithm.id) || manifest.things.some(row => row.targetId === algorithm.id || row.folderId === algorithm.id)) fail('INVALID_ALGORITHM', 'Algorithm transfers cannot contain child Things'); }
 		const importedThemes = manifest.things.filter(isTransferTheme);
-		if (importedThemes.length && this.scope.kind !== 'anonymous') fail('LOCAL_OPERATION_UNAVAILABLE', 'Account themes require their dedicated sync adapter');
+		if (importedThemes.length && this.scope.kind !== 'anonymous' && !this.onThemeImport) fail('LOCAL_OPERATION_UNAVAILABLE', 'Account themes require their dedicated sync adapter');
 		for (const theme of importedThemes) {
 			validateTransferTheme(theme);
 			if (manifest.files.some(file => file.targetId === theme.id) || manifest.things.some(row => row.targetId === theme.id || row.folderId === theme.id)) fail('INVALID_THEME', 'Theme transfers cannot contain child Things');
@@ -444,6 +445,7 @@ export class LocalThings {
 				}
 				await tx.put('things', row.id, row);
 				if (isLocalAttachment(row)) await this.onFileWrite?.(tx, row);
+				else if (isTransferTheme(row) && this.scope.kind === 'account') await this.onThemeImport!(tx, row);
 				else await this.onWrite?.(tx, row, null, row);
 			}
 			for (const file of manifest.files) { signal?.throwIfAborted(); await tx.putBytes(fileMap.get(file.id)!, bytes.get(file.id)!); }

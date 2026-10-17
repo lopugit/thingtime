@@ -12,6 +12,8 @@ import { StorageMutationError, USER_STORAGE_ACCOUNTING_VERSION, currentContentSt
 import { applyUserStorageDelta, markUserStorageNeedsReconcile, readyUserStorageMatch } from '../storage/userStorage';
 import { newThingMutationCapture, type ThingMutationCapture } from '../timeline/recordMutation';
 import { recordThemeMutation } from '../timeline/themeContent';
+import { lockFolderDestination } from '../things/folderPlacement';
+import { prepareManagedPlacement } from '../things/managedPlacementCore';
 
 // Themes are THINGS now (thingtime ["theme"], see
 // TODO/claude-todo/22-everything-is-a-thing-collections.md): the resolved,
@@ -125,6 +127,7 @@ const assertLegacyThemeMutationAllowed = async (ownerId: string, things: any, se
  * its legacy policy and protected history writer. */
 export type ThemeMutationBoundary = {
  createId?: string;
+ folderId?: string | null;
  capture?: ThingMutationCapture;
  beforeWrite?(before: any | null, legacy: any | null, session: any): Promise<void>;
  afterWrite?(after: any | null, session: any): Promise<void>;
@@ -160,6 +163,7 @@ export const saveTheme = async (ownerId: string, input: SaveThemeInput, boundary
 						throw new StorageMutationError(409, 'storage_conflict', 'Theme changed while it was being updated — try again');
 					}
 					await boundary.beforeWrite?.(before, null, session);
+					const placement = boundary.folderId === undefined ? {} : prepareManagedPlacement(before as any, ownerId, await lockFolderDestination(things, ownerId, boundary.folderId, session), now);
 					const visibility = explicitVisibility ?? (Array.isArray(before.acl) && before.acl.includes(ACL_ALL) ? 'public' : 'private');
 					const crystal = { ...(before.crystal || {}), name, theme };
 					const extended = before.extended ?? null;
@@ -180,7 +184,8 @@ export const saveTheme = async (ownerId: string, input: SaveThemeInput, boundary
 								storageClass: 'content',
 								sizeBytes,
 								storageAccountingVersion: USER_STORAGE_ACCOUNTING_VERSION,
-            updatedAt: now
+            updatedAt: now,
+            ...placement
           }
 						},
 						{ session }
@@ -198,7 +203,8 @@ export const saveTheme = async (ownerId: string, input: SaveThemeInput, boundary
 						storageClass: 'content',
 						sizeBytes,
 						storageAccountingVersion: USER_STORAGE_ACCOUNTING_VERSION,
-						updatedAt: now
+						updatedAt: now,
+						...placement
 					};
 					await recordThemeMutation(things, before, updatedThing, capture, session);
 					await boundary.afterWrite?.(updatedThing, session);
@@ -225,6 +231,7 @@ export const saveTheme = async (ownerId: string, input: SaveThemeInput, boundary
      const current = await themes.findOne({ _id: existing._id, ownerId }, { session });
      await boundary.beforeWrite(null, current, session);
     }
+				if (boundary.folderId !== undefined) throw new StorageMutationError(409, 'storage_conflict', 'Legacy themes must be migrated before folder placement can change');
 				const write = await themes.updateOne(
 					{ _id: new ObjectId(existing._id), ownerId, updatedAt: existing.updatedAt },
 					{ $set: { name, theme, visibility, schemaVersion: COLLECTION_SCHEMA_VERSIONS.themes, updatedAt: now } },
@@ -271,6 +278,7 @@ export const saveTheme = async (ownerId: string, input: SaveThemeInput, boundary
 	try {
 		await withHomeMongoTransaction(async (session) => {
    await boundary.beforeWrite?.(null, null, session);
+   if (boundary.folderId !== undefined) Object.assign(thing, prepareManagedPlacement(thing, ownerId, await lockFolderDestination(things, ownerId, boundary.folderId, session), now));
    // Count both storage eras inside the same transaction as the owner ledger
    // and Timeline fence, so concurrent creates retry against the new count.
    const thingCount = await things.countDocuments({ thingtime: 'theme', ownerId } as any, { session });

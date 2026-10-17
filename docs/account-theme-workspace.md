@@ -3,7 +3,7 @@
 Theme Studio now uses the device adapter for account saves, deletes and selected
 theme changes. Each commits locally; content and selection have independent
 background senders. This is one part of the incomplete
-[local workspace rollout](local-workspaces.md). Account import, protected local
+[local workspace rollout](local-workspaces.md). Protected local
 History and the wider feature matrix remain integration gates.
 
 `local-workspace/accountThemes.ts` wraps the existing `LocalThemes` writer with
@@ -123,7 +123,7 @@ node --import tsx --test app/local-workspace/accountThemes.browser.test.ts
 
 ## Remaining integration
 
-Complete account theme import and protected local History through the existing
+Complete protected local History and theme organization through the existing
 shared contracts. Expand native acceptance to editing, conflict comparison,
 private copies and identity transitions. Check public/shared gallery retention
 and selection, not just the owned catalogue. Reconcile latest main and verify
@@ -144,7 +144,7 @@ Older caches cannot silently assume root placement: they require a fresh compati
 snapshot. Same-version metadata upgrades preserve pending token edits. A home
 theme cannot be attached to a same-ID folder in a selected custom database.
 Prepared downloads recheck theme deletion and workspace identity. Generic
-protected mutations and account import remain restricted to their dedicated paths.
+protected mutations remain restricted to their dedicated paths.
 
 `accountThemeExport.test.ts` covers new/pending themes, folder membership,
 canonical round-trip with fresh IDs, old metadata, deletion and owner/origin/plane
@@ -152,3 +152,52 @@ isolation. `accountApi.test.ts` exercises offline facade dispatch. The native
 `accountThemes.browser.test.ts` downloads and validates actual JSON at
 1440/390/320px before reconnecting; `themeSync.api.test.ts` checks folder placement
 through the normal API and its effect on conditional versions.
+
+## Local import and private duplication — 2026-10-17
+
+The normal JSON/ZIP importer admits account themes through a dedicated hook in
+the same local transaction as ordinary Things, ID remapping and folder placement.
+Theme content uses canonical validation and becomes a new private copy. Import
+does not change active selection. Copy/fork reuse the same exporter/importer.
+No account request or draft save is needed for local completion. Invalid content,
+quota or cross-plane placement refuses the entire transfer without partial rows.
+
+Imported theme intent uses the existing independent theme sender. Only that
+sender waits for an imported folder's account receipt. A frozen request retains
+its original content and placement through an uncertain result; later edits queue
+behind it. Catalogues keep the 1.2.0 requirement. Commands with folderId negotiate
+api.themes-sync 1.3.0; other write and selection minima are unchanged. The canonical
+theme writer locks the owned home folder and commits tokens, placement, storage
+accounting, protected History and the immutable receipt in one transaction.
+Omitting placement preserves the stored folder. Legacy placement requires migration.
+
+Themes stay home-pinned. A selected custom data plane may import an unfiled
+theme; a transfer joining it to a selected-plane folder must be imported in the
+home library. This preserves the existing managed-placement restriction. General
+offline theme moves and folder-deletion reconciliation, account-authored History,
+shared gallery retention and the wider feature matrix remain unfinished.
+
+Run accountThemeImport.test.ts and accountApi.test.ts for atomicity, private
+remapping, offline copy/fork, background dependency ordering and scope refusal.
+The guarded themeImport.api.test.ts covers real canonical placement, rollback,
+immutable replay, private reads and selected-plane boundaries. The native
+accountThemeImport.browser.test.ts imports a filed editable theme offline, reloads
+and downloads the remapped folder, then reconnects through independent senders.
+
+Local validation (2026-10-17): 104 focused import, copy, export, transport,
+receipt and capability checks pass; the full device suite has 518 passes and
+60 opt-in skips, plus four offline-shell passes. Conflict copies preserve an
+uncached existing folder without waiting for a nonexistent device create;
+imported new folders still gate only the background sender. TypeScript retains
+the same 91 normalized pre-existing diagnostics. Focused lint has no errors and
+the unchanged constructor warning. The final client build passes.
+
+The opt-in real API fixture passes 26 checks with cleanup: placement/content
+atomicity, immutable replay, invalid/foreign-folder rollback, omitted-placement
+preservation, home/custom boundaries and private reads. The native clean-browser
+fixture passes offline normal import, cold reload, canonical folder download,
+remapped IDs/tokens and independent private synchronization after reconnect.
+It records no offline mutations or page errors and measures/screenshots
+1440/390/320px without horizontal overflow. An initial API attempt reached the
+stale 1.2.0 process and refused placement; the managed stack was refreshed and
+1.3.0 verified before the passing rerun. These are local results only.

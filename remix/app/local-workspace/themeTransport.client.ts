@@ -36,7 +36,7 @@ export function accountThemeTransport(
 			if (window.location.origin !== scope.origin) throw new WorkspaceError('WORKSPACE_CHANGED', 'Account origin changed.', 409);
 			await requireThingtimeCapability(
 				'api.themes-sync',
-				operation === 'snapshot' ? '1.2.0' : operation === 'selection' || operation === 'select' ? '1.1.0' : '1.0.1'
+				operation === 'snapshot' ? '1.2.0' : operation === 'selection' || operation === 'select' ? '1.1.0' : command && 'folderId' in command ? '1.3.0' : '1.0.1'
 			);
 			await requireThingtimeCapability('api.mongodb-endpoint', '1.1.0');
 			lease.assertCurrent();

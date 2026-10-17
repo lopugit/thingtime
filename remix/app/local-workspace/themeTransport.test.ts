@@ -78,6 +78,13 @@ test('theme transport rejects missing capability, offline authority, partial cat
 		response = Response.json({ ok: true, ownerId: 'owner', dataPlane: 'home', storagePlane: 'home', acknowledgment });
 		assert.deepEqual(await bind().write(command, signal()), acknowledgment);
 		assert.deepEqual(JSON.parse(String(calls.at(-1)!.init.body)), { operation: 'write', expectedOwnerId: 'owner', command });
+		const beforePlacement = calls.length;
+		if (command.action !== 'save') throw new Error('Expected a save fixture');
+		await assert.rejects(bind().write({ ...command, folderId: null }, signal()), /incompatible/);
+		assert.equal(calls.length, beforePlacement, '1.2.0 cannot silently drop imported folder placement');
+		capability = '1.3.0';
+		response = Response.json({ ok: true, ownerId: 'owner', dataPlane: 'home', storagePlane: 'home', acknowledgment });
+		assert.deepEqual(await bind().write({ ...command, folderId: null }, signal()), acknowledgment);
 
 		const selection = { themeId: null, version: 'theme-selection-v1:' + 'a'.repeat(64) };
 		response = Response.json({ ok: true, ownerId: 'owner', dataPlane: 'home', storagePlane: 'home', selection });

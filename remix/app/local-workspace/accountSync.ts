@@ -1,10 +1,11 @@
 import { captureAccountThingChanges } from './accountTimeline';
+import type { AccountThemeSync } from './accountThemes';
 import { isLocalAttachment } from './attachments';
 import { normalizePublicAttachment } from '../components/Attachments/attachmentUiCore';
 import { postThingReferences } from '../components/Feed/postThingReferences';
 import { accountReadRefusals, ACCOUNT_READ_COLLECTIONS } from './accountReadRevocation';
 import { LocalThings, type LocalThing, type ThingWrite, type LocalFileMutation } from './things';
-import { type WorkspaceDatabase, WorkspaceError, type WorkspaceLease, type WorkspaceScope, type WorkspaceTransaction } from './storage';
+import { type WorkspaceDatabase, WorkspaceError, workspaceScopeKey, type WorkspaceLease, type WorkspaceScope, type WorkspaceTransaction } from './storage';
 import { snapshotTransferValue } from '../utils/thingTransfer/value';
 import { aclFromVisibility, sanitizeAcl, visibilityFromAcl, isProtectedThingtime, validateThingtimeCrystal } from '../schemas/registry';
 
@@ -78,8 +79,9 @@ export class AccountThingSync {
 	readonly things: LocalThings;
 	constructor(private db: WorkspaceDatabase, readonly scope: AccountScope, private lease: WorkspaceLease,
 		private now = () => Date.now(), private uuid = () => crypto.randomUUID(),
-		private files?: AccountContentFiles) {
+		private files?: AccountContentFiles, themes?: Pick<AccountThemeSync, 'scope' | 'importIn'>) {
 		if (scope.kind !== 'account') throw new WorkspaceError('ACCOUNT_REQUIRED', 'Anonymous workspaces never sync', 403);
+		if (themes && workspaceScopeKey(themes.scope) !== workspaceScopeKey(scope)) throw new WorkspaceError('WORKSPACE_CHANGED', 'Theme imports belong to a different account workspace.', 409);
 		this.things = new LocalThings(db, scope, lease, [], () => new Date(now()).toISOString(), uuid,
 			(tx, row, previous, input) => this.enqueue(tx, row, previous, input as AccountThingWrite), files?.mutate, async (tx, id) => {
 				const refusal = (await accountReadRefusals(tx)).get(id);
@@ -88,7 +90,7 @@ export class AccountThingSync {
 					if (row?.post && (!refusal || row.at > refusal.at)) return true;
 				}
 				return false;
-			}, (tx, run, captures) => captureAccountThingChanges(tx, scope, run, () => new Date(this.now()).toISOString(), this.uuid, captures), (tx, id) => this.prepareRecovery(tx, id));
+			}, (tx, run, captures) => captureAccountThingChanges(tx, scope, run, () => new Date(this.now()).toISOString(), this.uuid, captures), (tx, id) => this.prepareRecovery(tx, id), themes ? (tx, row) => themes.importIn(tx,row) : undefined);
 	}
 	/** Recovery changes the latest device intent, never an already-sent request.
 	 * Its revision must exceed every earlier write so delayed replies cannot

@@ -70,6 +70,8 @@ export async function synchronizeThemeWrite(
 	} catch {
 		throw new ThemeSyncError(400, 'Invalid theme synchronization command.');
 	}
+	if (command.action === 'save' && command.folderId !== undefined && selectedPlane !== 'home' && (command.expectedVersion !== null || command.folderId !== null))
+		throw new ThemeSyncError(409, 'Theme folder placement belongs to the home library. Device changes have been kept.');
 	const things = await getHomeThingsCollection(),
 		legacy = await getThemesCollection();
 	const digest = themeWriteDigest(ownerId, selectedPlane, command),
@@ -87,6 +89,7 @@ export async function synchronizeThemeWrite(
 	};
 	const boundary: ThemeMutationBoundary = {
 		createId: command.id,
+		...(command.action === 'save' && command.folderId !== undefined ? {folderId:command.folderId} : {}),
 		capture,
 		beforeWrite: async (before, old, session) => {
 			await admit();

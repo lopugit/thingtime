@@ -5068,3 +5068,24 @@ created by `test:mail:integration`, then run
 `MAIL_TEST_BASE=http://127.0.0.1:<worktree-port> npm --prefix remix run test:mail:relay`.
 It checks the real session, endpoint, explicit mode and absence of cloud writes
 using DNS-only POP3 discovery; it never attempts a provider login.
+
+### Local theme import acceptance
+
+Use a disposable loopback app backed by the isolated replica fixture
+(127.0.0.1:22463, replica set draftPreview). Never point these tests at an existing
+account or production. Reuse the shared Playwright runtime variables described
+above; no token or account credentials are needed in files.
+
+```sh
+TT_THEME_IMPORT_API_URL=http://127.0.0.1:<qa-port> \
+TT_THEME_IMPORT_API_ARTIFACTS=/path/to/private-test-artifacts \
+node --import tsx --test app/api/utils/themes/themeImport.api.test.ts
+
+TT_ACCOUNT_THEME_IMPORT_URL=http://127.0.0.1:<qa-port> \
+TT_ACCOUNT_THEME_IMPORT_ARTIFACTS=/path/to/private-test-artifacts \
+node --import tsx --test app/local-workspace/accountThemeImport.browser.test.ts
+```
+
+Run from remix/. The native test needs the built offline shell and optional
+TT_SHARED_CHROME_PATH. Tests register disposable private accounts through normal
+APIs, and output actual imported/exported JSON, PNGs and verification summaries.

@@ -12,7 +12,7 @@ import {
 import { normalizeSavedTheme, MAX_SAVED_THEMES } from '../theme/savedTheme';
 import { copyBoundedJson } from '../utils/boundedJson';
 import { accountSyncDeadline, type SyncState } from './accountSync';
-import { isTransferTheme } from '../utils/thingTransfer/theme';
+import { isTransferTheme, validateTransferTheme } from '../utils/thingTransfer/theme';
 
 type Scope = Extract<WorkspaceScope, { kind: 'account' }>;
 export type AccountThemeSnapshot = {
@@ -38,6 +38,7 @@ type State = {
 	state: SyncState;
 	deleted: boolean;
 	placementKnown?: boolean;
+	placementIntent?: boolean;
 	pending?: { command: ThemeWrite; revision: number };
 	claim?: { token: string; expiresAt: number };
 	retryAt: number;
@@ -144,6 +145,7 @@ export class AccountThemeSync {
 		const id = row?.id ?? previous!.id,
 			old = await tx.get<State>(collection, id);
 		if (previous && !old) return fail('Refresh this account theme before editing it.');
+		if (!previous && row?.folderId && this.scope.dataPlane !== 'home') return fail('Create filed theme copies in the home library.', 'THEME_PLACEMENT_SCOPE');
 		if (!row && old?.baseVersion === null && !old.pending) {
 			await tx.delete(collection, id);
 			await this.bump(tx);
@@ -160,6 +162,7 @@ export class AccountThemeSync {
 			state: old?.state === 'conflict' || old?.state === 'error' ? old.state : 'pending',
 			deleted: !row,
 			placementKnown: old?.placementKnown ?? (!old?.base || old.base.folderId !== undefined),
+			placementIntent: old?.placementIntent ?? (!previous && row?.folderId ? true : undefined),
 			pending: old?.pending,
 			claim: old?.claim,
 			attempts: old?.attempts ?? 0,
@@ -201,6 +204,17 @@ export class AccountThemeSync {
 	async save(input: LocalThemeInput) {
 		const result = await this.themes.save(input);
 		return { ok: true, theme: (await this.list()).themes.find((row) => row.id === result.theme.id)! };
+	}
+	/** Called only by the canonical import transaction after schema validation
+	 * and ID remapping. Generic protected mutations never enter this hook. */
+	async importIn(tx: WorkspaceTransaction, row: LocalThing) {
+		this.lease.assertCurrent();
+		validateTransferTheme(row);
+		if (row.folderId && this.scope.dataPlane !== 'home') return fail('Import filed themes into the home library; folders in another database cannot contain home themes.', 'THEME_PLACEMENT_SCOPE');
+		if (await tx.get(collection, row.id) || await tx.get('thing-sync', row.id)) return fail('An imported theme must have an independent identity.', 'THEME_IMPORT_IDENTITY');
+		await this.mutated(tx, row, null, { visibility: 'private' });
+		const state = (await tx.get<State>(collection, row.id))!;
+		await tx.put(collection, row.id, { ...state, placementKnown: true, placementIntent: true });
 	}
 	remove(id: string) {
 		return this.themes.remove(id);
@@ -351,11 +365,19 @@ export class AccountThemeSync {
 					let pending = row.pending;
 					if (!pending) {
 						const thing = await tx.get<LocalThing>('things', row.id);
+						if (!row.deleted && row.placementIntent && thing?.folderId) {
+							// Only the sender waits for the imported folder's receipt. Local
+							// import/edit/export complete in the original device transaction.
+							// An uncached existing folder has no device create to wait for;
+							// the canonical server writer still validates its ownership.
+							const parent = await tx.get<{base?:{id?:string};deleted?:unknown}>('thing-sync', thing.folderId);
+							if (parent && (!parent.base || parent.base.id !== thing.folderId || parent.deleted)) continue;
+						}
 						const common = { id: row.id, writeId: this.uuid(), expectedVersion: row.baseVersion };
 						const command = parseThemeWrite(
 							row.deleted
 								? { ...common, action: 'delete' }
-								: { ...common, action: 'save', name: thing?.crystal.name, theme: thing?.crystal.theme, visibility: row.visibility }
+								: { ...common, action: 'save', name: thing?.crystal.name, theme: thing?.crystal.theme, visibility: row.visibility, ...(row.placementIntent ? {folderId:thing?.folderId || null} : {}) }
 						);
 						pending = { command, revision: row.revision };
 					}
@@ -392,6 +414,7 @@ export class AccountThemeSync {
 					await tx.put(collection, row.id, {
 						...row,
 						baseVersion: acknowledgment.resultVersion,
+						placementIntent: row.revision === claimed.pending!.revision ? undefined : row.placementIntent,
 						pending: undefined,
 						claim: undefined,
 						state: row.revision === claimed.pending!.revision ? 'synced' : 'pending',

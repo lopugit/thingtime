@@ -28,7 +28,8 @@ test('theme receipt replays only the exact admitted owner, selected plane and no
 	for (const [owner, plane, changed] of [
 		['other', 'home', command],
 		['owner', 'other', command],
-		['owner', 'home', { ...command, name: 'New' }]
+		['owner', 'home', { ...command, name: 'New' }],
+		['owner', 'home', { ...command, folderId: 'different-folder' }]
 	] as const) {
 		const wrong = themeWriteDigest(owner, plane, changed);
 		assert.notEqual(wrong, digest);

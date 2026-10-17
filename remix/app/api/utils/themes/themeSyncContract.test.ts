@@ -18,6 +18,7 @@ test('theme synchronization shares canonical token normalization and stable requ
 	assert.ok(normalized.ok);
 	assert.deepEqual(parsed, { ...save, name: normalized.name, theme: normalized.theme });
 	assert.deepEqual(parseThemeWrite(parsed), parsed);
+	for (const folderId of [null, 'owned-folder']) assert.equal((parseThemeWrite({ ...save, folderId }) as any).folderId, folderId);
 	assert.deepEqual(parseThemeWrite({ action: 'delete', id: save.id, writeId: save.writeId, expectedVersion: version }), {
 		action: 'delete',
 		id: save.id,
@@ -31,6 +32,7 @@ test('theme synchronization refuses ambiguous operations, authority fields and o
 		[],
 		{},
 		{ ...save, ownerId: 'forged' },
+		...[{}, 4, '', '../folder', save.id, 'timeline-forged'].map((folderId) => ({ ...save, folderId })),
 		{ ...save, acl: ['tt:all'] },
 		{ ...save, writeId: '' },
 		{ ...save, id: '../../escape' },

@@ -35,6 +35,18 @@ test('account local facade and native page resolution work offline without uploa
   assert.equal(themeDownload.plan.things[0].crystal.name,'Offline account theme');
   assert.equal(themeDownload.plan.things[0].crystal.theme.colors.accent,savedTheme.theme.colors.accent);
   assert.equal(remoteCalls,0,'offline theme download uses the dedicated local snapshot');
+  const themeCopy = await api.things.import({manifest:{format:'thingtime.transfer',version:1,roots:themeDownload.plan.roots,things:themeDownload.plan.things,files:[]},files:{},folderId:null});
+  assert.equal(themeCopy.savedLocally,true);assert.notEqual(themeCopy.roots[0],savedTheme.id);
+  assert.equal((await localThemes.list()).activeThemeId,savedTheme.id,'import never changes the selected theme');
+  assert.equal((await localThemes.list()).themes.find((row:any)=>row.id===themeCopy.roots[0]).visibility,'private');
+  assert.equal(remoteCalls,0,'the normal import facade completes without account HTTP or draft saving');
+  const themeDuplicate=await api.things.bulk({op:'copy',ids:[savedTheme.id]});
+  const themeFork=await api.things.fork({id:savedTheme.id});
+  assert.equal(themeDuplicate.savedLocally,true);assert.equal(themeFork.savedLocally,true);
+  assert.notEqual(themeDuplicate.results[0].newId,savedTheme.id);assert.notEqual(themeFork.id,savedTheme.id);
+  assert.equal(remoteCalls,0,'theme duplication uses the same local importer');
+  await localThemes.remove({id:themeDuplicate.results[0].newId});await localThemes.remove({id:themeFork.id});
+  await localThemes.remove({id:themeCopy.roots[0]});
   await localThemes.remove({id:savedTheme.id});
   assert.equal((await localThemes.list()).activeThemeId,null);
   assert.equal(remoteCalls,0,'theme save/apply/delete complete locally without account HTTP');

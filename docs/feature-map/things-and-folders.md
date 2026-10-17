@@ -722,3 +722,12 @@ custom-plane folder collisions refuse. `accountThemeExport.test.ts` covers
 canonical remapped round-trip, pending edits, deletion, old cache upgrades and
 scope refusal. `accountThemes.browser.test.ts` exercises the real offline
 Transfer download; `themeSync.api.test.ts` verifies normal managed placement.
+
+Account theme import adds the dedicated AccountThemeSync.importIn hook to the
+existing LocalThings transaction and AccountThingSync constructor. Generic
+protected writes stay refused. accountImportSupported is shared by the UI,
+import facade and duplicate/fork path. Theme sender placement waits for the
+folder receipt; AccountThingSync completion wakes that sender. Tests:
+accountThemeImport.test.ts, accountApi.test.ts, accountThemeImport.browser.test.ts
+and themes/themeImport.api.test.ts. See the theme workspace guide for unfinished
+organization/History work.

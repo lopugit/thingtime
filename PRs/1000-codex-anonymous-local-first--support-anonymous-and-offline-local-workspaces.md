@@ -3255,3 +3255,35 @@ preview responds with No build found. Current semantic graph coverage remains
 unverified after the prior shrink-guard refusal. Account theme import, authored
 History, the wider feature matrix, latest-main integration and exact-head CI /
 deployed acceptance remain open. No merge or deployment is claimed.
+
+
+### 2026-10-17 — Offline account theme import and duplication
+
+Normal import/copy/fork now reuse canonical transfer validation and the existing
+local transaction, with a dedicated theme queue hook. Fresh identities, normalized
+tokens, home-folder placement and private intent commit together; active selection
+is unchanged. Only the background sender waits for newly imported folder receipts.
+Conflict copies retain existing folder placement without waiting for an absent
+local create. Generic protected writers remain restricted.
+
+api.themes-sync 1.3.0 adds optional placement to conditional saves, reusing the
+canonical folder lock and managed placement validator inside the theme storage,
+History and immutable-receipt transaction. Omitted placement preserves its value;
+a selected custom plane cannot mutate home placement or attach a home theme to
+its own folder. Standalone custom-plane theme imports remain available.
+
+Local evidence: 104 focused tests; 518 full workspace passes and 60 opt-in skips;
+four shell checks; explicitly run API fixture with 26 checks and cleanup; clean
+browser import/reload/download/reconnect at 1440/390/320px, zero offline mutation
+requests and zero page errors. Build passes. TypeScript retains 91 identical
+baseline signatures; lint has no errors and one unchanged constructor warning.
+The first API attempt encountered the stale 1.2.0 process, refused the new field
+and cleaned up; the PM2 lifecycle refreshed it and the 1.3.0 rerun passed.
+
+Evidence: tmp/account-theme-import-api-final/verification.json,
+tmp/account-theme-import-browser/verification.json, its imported-folder.json and
+imported-theme-{1440,390,320}.png. Prior export-source semantic extraction has now
+completed; the import-source graph refresh is separate. General managed theme
+moves/deletion, account-authored History, algorithms, the remaining matrix,
+latest-main reconciliation and current-head CI/deployed acceptance remain open.
+The PR stays draft and unmerged.

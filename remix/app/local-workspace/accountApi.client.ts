@@ -47,10 +47,10 @@ const BLOCKED_RETRY_MS = 60_000;
 function createWorker(scope: AccountScope, dispose: () => void) {
 	const lease = accountWorkspaceLease(scope), db = workspaceDatabase();
 	const files = new AccountFileSync(db, scope, lease);
-	const sync = new AccountThingSync(db, scope, lease, undefined, undefined, files.contentHooks), transport = accountThingTransport(scope, lease), interactions = new AccountInteractionSync(db, scope, lease), posts = new AccountPostCache(db, scope, lease);
+	const themes = new AccountThemeSync(db,scope,lease), themeTransport = accountThemeTransport(scope,lease);
+	const sync = new AccountThingSync(db, scope, lease, undefined, undefined, files.contentHooks, themes), transport = accountThingTransport(scope, lease), interactions = new AccountInteractionSync(db, scope, lease), posts = new AccountPostCache(db, scope, lease);
 	const drafts = new AccountDraftSync(db, scope, lease, files.draftHooks), catalog = new AccountDraftCatalog(db, scope, lease);
 	const discussions = new AccountDiscussionCache(db, scope, lease);
- const themes = new AccountThemeSync(db,scope,lease), themeTransport = accountThemeTransport(scope,lease);
  const themeErrors = {catalog: '', selection: ''};
 	const controller = new AbortController();
 	const fileRetentionErrors = new Map<string, string>();
@@ -128,7 +128,7 @@ function createWorker(scope: AccountScope, dispose: () => void) {
 			const completed = outcomes.reduce((sum, result) => sum + result.completed, 0);
 			const contentStatus = await sync.status(), interactionStatus = await interactions.status(), fileStatus = await files.status(), status = [...contentStatus, ...interactionStatus, ...fileStatus];
 			if (JSON.stringify([contentStatus, interactionStatus, fileStatus]) !== before) announceLocalWorkspaceChange();
-			if (completed) draftPump.wake(); // Newly uploaded originals can unblock a draft.
+			if (completed) { draftPump.wake(); themePump.wake(); } // Uploaded originals/folders unblock dependent senders only.
 			const pending = status.filter(row => row.state === 'pending' || row.state === 'syncing');
 			if (pending.length && !stopped) {
 				// A row whose retryAt has already passed is not schedulable work: the
@@ -626,7 +626,7 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 			facadeLease.assertCurrent();
 			if (!input || Object.keys(input).some(key => !['id', 'key'].includes(key))) throw new WorkspaceError('INVALID_COPY', 'Unsupported copy options.');
 			const request = { id: input.id, key: input.key }, { plan } = await exportThings({ ids: [request.id], key: request.key });
-			if (plan.files?.length || plan.links?.length || !plan.things.every(accountThingCanCache)) {
+			if (plan.files?.length || plan.links?.length || !accountImportSupported({format:'thingtime.transfer',version:1,roots:plan.roots,things:plan.things,files:[]})) {
 				if ((await worker().sync.status()).some(row => row.state !== 'synced')) throw new WorkspaceError('DEDICATED_COPY_REQUIRED', 'Copy device edits separately from items requiring their dedicated online adapter.', 409);
 				return worker().transport.fork(request);
 			}
@@ -648,7 +648,7 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 					(input.folderId != null && (typeof input.folderId !== 'string' || !input.folderId.trim()))) throw new WorkspaceError('INVALID_COPY', 'Choose between 1 and 200 distinct Things and a copy destination.');
 				const request = { ids: [...input.ids], folderId: input.folderId };
 				const { plan } = await exportThings({ ids: request.ids });
-				if (plan.files?.length || plan.links?.length || !plan.things.every(accountThingCanCache)) {
+				if (plan.files?.length || plan.links?.length || !accountImportSupported({format:'thingtime.transfer',version:1,roots:plan.roots,things:plan.things,files:[]})) {
 					if ((await worker().sync.status()).some(row => row.state !== 'synced')) throw new WorkspaceError('DEDICATED_COPY_REQUIRED', 'Copy device edits separately from items requiring their dedicated online adapter.', 409);
 					return online.things.bulk({ op: 'copy', ...request });
 				}

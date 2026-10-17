@@ -11,7 +11,7 @@ const fail = (): never => {
 };
 const object = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value);
 export type ThemeWrite = { id: string; writeId: string; expectedVersion: string | null } & (
-	| { action: 'save'; name: string; theme: TtTheme; visibility: 'private' | 'public' }
+	| { action: 'save'; name: string; theme: TtTheme; visibility: 'private' | 'public'; folderId?: string | null }
 	| { action: 'delete'; expectedVersion: string }
 );
 export type ThemeWriteAcknowledgment = {
@@ -46,12 +46,22 @@ export function parseThemeWrite(input: unknown): ThemeWrite {
 	if (
 		value.action !== 'save' ||
 		!['private', 'public'].includes(String(value.visibility)) ||
-		Object.keys(value).some((key) => !['id', 'writeId', 'expectedVersion', 'action', 'name', 'theme', 'visibility'].includes(key))
+		Object.keys(value).some((key) => !['id', 'writeId', 'expectedVersion', 'action', 'name', 'theme', 'visibility', 'folderId'].includes(key)) ||
+		('folderId' in value &&
+			value.folderId !== null &&
+			(!identity(value.folderId) || value.folderId === value.id || value.folderId.startsWith('timeline-')))
 	)
 		return fail();
 	const normalized = normalizeSavedTheme({ name: value.name, theme: value.theme });
 	if (!normalized.ok) return fail();
-	return { ...base, action: 'save', name: normalized.name, theme: normalized.theme, visibility: value.visibility as 'private' | 'public' };
+	return {
+		...base,
+		action: 'save',
+		name: normalized.name,
+		theme: normalized.theme,
+		visibility: value.visibility as 'private' | 'public',
+		...('folderId' in value ? { folderId: value.folderId as string | null } : {})
+	};
 }
 export function parseThemeWriteAcknowledgment(input: unknown): ThemeWriteAcknowledgment {
 	if (

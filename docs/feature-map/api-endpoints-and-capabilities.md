@@ -451,3 +451,10 @@ ownership or sharing metadata. Both manifests derive the version from `apiDocs.t
 write and selection minima remain 1.0.1 and 1.1.0. Test incompatible cached
 contracts, missing placement, managed folder moves and pending-edit preservation
 with theme transport, sync API and account export tests.
+
+api.themes-sync 1.3.0 adds optional command.folderId to conditional saves. The
+canonical theme writer reuses lockFolderDestination and prepareManagedPlacement
+inside its accounted home transaction. Normal token writes omit the property;
+imported placement negotiates 1.3.0. Retained catalogue reads still require 1.2.0.
+Both manifests derive from apiDocs.ts. Run theme contract/receipt/transport and
+capability suites plus guarded themeImport.api.test.ts for the new write boundary.
