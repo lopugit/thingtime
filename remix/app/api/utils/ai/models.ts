@@ -1,9 +1,10 @@
 import { getHomeThingsCollection } from '../mongodb/collections';
-import { thingUniqueKey, thingUniqueKeyFilter, thingUniqueKeysFilter } from '../mongodb/uniqueKeys';
+import { thingUniqueKey, thingUniqueKeyFilter } from '../mongodb/uniqueKeys';
 import { getStoredLopuChatDefaults } from '../settings/lopuChatDefaults';
 import { ACL_ALL, COLLECTION_SCHEMA_VERSIONS } from '~/schemas/registry';
 import {
   AI_MODEL_CATALOG,
+  getAiModelCatalogEntry,
   AI_MODEL_PROVIDER_IDS,
   AI_MODEL_THINGTIME,
   AI_MODEL_UNIQUE_KEY_FIELD,
@@ -159,7 +160,6 @@ const stableJson = (value: unknown): string => JSON.stringify(value);
 
 export const createAiModelsService = (dependencies: AiModelsServiceDependencies) => {
   const catalog = dependencies.catalog ?? AI_MODEL_CATALOG;
-  const catalogIds = catalog.map((entry) => entry.modelId);
   const catalogById = new Map(catalog.map((entry) => [entry.modelId, entry]));
   const now = dependencies.now ?? (() => new Date());
   const log = dependencies.log ?? ((message: string, error?: unknown) => console.error(message, error));
@@ -173,12 +173,12 @@ export const createAiModelsService = (dependencies: AiModelsServiceDependencies)
   });
 
   const readCatalogDocs = async (things: AiModelThingsCollection, projection: Record<string, unknown>): Promise<Map<string, any>> => {
-    const docs = await things.find(thingUniqueKeysFilter(AI_MODEL_UNIQUE_KEY_FIELD, catalogIds), { projection }).toArray();
+    const docs = await things.find({ thingtime: AI_MODEL_THINGTIME, ownerId: 'system' }, { projection }).toArray();
     const byModelId = new Map<string, any>();
     for (const doc of docs) {
       if (!genuineAiModelDoc(doc)) continue;
       const modelId = typeof doc.crystal.modelId === 'string' ? doc.crystal.modelId : '';
-      if (modelId && catalogById.has(modelId)) byModelId.set(modelId, doc);
+      if (modelId && getAiModelCatalogEntry(modelId)?.provider === doc.crystal.provider) byModelId.set(modelId, doc);
     }
     return byModelId;
   };
@@ -309,31 +309,47 @@ export const createAiModelsService = (dependencies: AiModelsServiceDependencies)
     return providers;
   };
 
-  const readEnabledFlags = async (): Promise<Map<string, boolean>> => {
-    const enabledById = new Map<string, boolean>();
+  const readEnabledFlags = async (): Promise<Map<string, any>> => {
+    const enabledById = new Map<string, any>();
     try {
       await ensureAiModelCatalog();
       const docs = await readCatalogDocs(await dependencies.getThingsCollection(), {
         thingtime: 1,
         ownerId: 1,
         'crystal.modelId': 1,
-        'crystal.enabled': 1
+        'crystal.provider': 1,
+        'crystal.label': 1,
+        'crystal.enabled': 1,
+        'crystal.providerAvailable': 1,
+        'crystal.lastSyncedAt': 1
       });
-      for (const [modelId, doc] of docs) enabledById.set(modelId, doc.crystal.enabled !== false);
+      for (const [modelId, doc] of docs) enabledById.set(modelId, doc.crystal);
     } catch (error) {
-      log('[ai-models] catalog read unavailable — serving the code catalog with every model enabled', error);
+      log('[ai-models] catalog read unavailable — preserving client cached state', error);
+      throw new Error('Model catalogue temporarily unavailable');
     }
     return enabledById;
   };
 
-  // The public list. The catalog itself is code, so a Mongo outage degrades
-  // to "every model enabled" (availability still gated by provider keys)
-  // instead of an empty picker — and is logged, never silent. The provider
-  // probe and the catalog read run side by side.
+  // Database failures must not resurrect retired or admin-disabled models.
+  // Clients retain their last known catalog when this read fails.
   const listAiModels = async (_viewer?: AiModelsViewer, options: ListAiModelsOptions = {}): Promise<ListAiModelsResult> => {
     const [providers, enabledById] = await Promise.all([resolveProviderStatus(options), readEnabledFlags()]);
     const stored = await readStoredDefaults();
-    const models = catalog.map((entry) => publicAiModel(entry, enabledById.get(entry.modelId) ?? true, providers));
+    const entries = [...catalog];
+    for (const [id, stored] of enabledById) {
+      if (catalogById.has(id)) continue;
+      const entry = getAiModelCatalogEntry(id);
+      if (entry && entry.provider === stored.provider) entries.push({ ...entry, label: typeof stored.label === 'string' ? stored.label.slice(0, 120) : entry.label });
+    }
+    const models = entries.map((entry) => {
+      const stored = enabledById.get(entry.modelId);
+      const model = publicAiModel(entry, stored?.enabled !== false, providers);
+      model.providerAvailable = typeof stored?.providerAvailable === 'boolean' ? stored.providerAvailable : null;
+      model.lastSyncedAt = stored?.lastSyncedAt instanceof Date ? stored.lastSyncedAt.toISOString() : null;
+      model.available &&= model.providerAvailable !== false;
+      return model;
+    });
     const defaults = pickLopuChatDefaults(models, stored);
     for (const model of models) model.isDefault = model.id === defaults.model;
     return { ok: true, models, defaults, providers };
@@ -344,7 +360,7 @@ export const createAiModelsService = (dependencies: AiModelsServiceDependencies)
     pickLopuChatDefaults(models, await readStoredDefaults());
 
   const setAiModelEnabled = async (modelId: unknown, enabled: unknown): Promise<SetAiModelEnabledResult | Fail> => {
-    const entry = typeof modelId === 'string' ? catalogById.get(modelId.trim()) : undefined;
+    const entry = typeof modelId === 'string' ? getAiModelCatalogEntry(modelId.trim()) : undefined;
     if (!entry) return fail(404, 'Unknown model — id must be a catalog model id');
     if (typeof enabled !== 'boolean') return fail(400, 'enabled must be true or false');
 

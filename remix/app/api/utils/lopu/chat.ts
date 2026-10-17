@@ -1,3 +1,4 @@
+import { refreshUnavailableAiModel } from '../ai/modelSync';
 import { normalizeReadReferences, rememberReadReference, restoreReadContext, type LopuReadReference } from './readContext';
 import { looksLikeUnexecutedToolCall } from './toolTextParser';
 import { checkpointResultContext } from './checkpointResults';
@@ -1320,6 +1321,7 @@ export async function* streamLopuChatTurn(input: LopuChatTurnInput): AsyncGenera
         state.stopReason = 'aborted';
         return outcome(attempt.provider, attempt.choice, state);
       }
+      await refreshUnavailableAiModel(attempt.provider === 'claude' ? 'anthropic' : 'openai', error);
       lastError = error;
       console.error(`[lopu] ${attempt.provider} failed before replying:`, (error as any)?.message || error);
       continue;
@@ -1339,6 +1341,7 @@ export async function* streamLopuChatTurn(input: LopuChatTurnInput): AsyncGenera
     } catch (error) {
       if (isAbortError(error)) state.stopReason = 'aborted';
       else {
+        await refreshUnavailableAiModel(attempt.provider === 'claude' ? 'anthropic' : 'openai', error);
         await recordErrorLog(error, { source: 'lopu-chat-stream', provider: attempt.provider });
         state.stopReason = 'error';
         state.error = String((error as any)?.message || error).slice(0, 300);

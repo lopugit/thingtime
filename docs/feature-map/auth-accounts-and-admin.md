@@ -87,3 +87,16 @@ so decrypted fields never enter shared client history/cache. The reusable
 Native provider implementation and signed release are tracked separately in
 [PR #996](https://github.com/lopugit/thingtime/pull/996); this release exposes the
 private catalog and negotiates an optional supported native bridge.
+
+
+## AI provider model availability
+
+`api/utils/ai/modelDiscovery.ts` reads complete credential-scoped provider lists;
+`modelSync.ts` publishes them atomically into protected home-plane `ai-model`
+Things with a durable settings lease/cooldown. `models.ts` projects availability
+and preserves admin choices. Daily authenticated cron and admin manual sync use
+this same service; shared inference model-not-found errors trigger a bounded
+refresh without replay. `LopuModelsEditor.tsx` owns per-provider allow-all and
+future auto-admission controls. Public model selectors consume the live catalogue;
+unknown model capabilities and pricing are conservative. See README automatic AI
+model catalogue sync and TESTING daily provider model availability.

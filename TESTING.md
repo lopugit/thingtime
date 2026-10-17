@@ -8016,7 +8016,7 @@ Design note: `PRs/592-claude-lopu-ai-chatbot-358029--lopu-ai-assistant.md`. Auto
 `TT_VERIFY_ADMIN_PASSWORD` for the admin section).
 
 - Catalog: `GET /api/v1/ai/models` is public, `Cache-Control: no-store`, lists
-  every `AI_WORKFLOW_BASE_MODELS` entry as an `ai-model` Thing projection
+  only available enabled compatible `ai-model` Thing projections (including discovered versions)
   (`enabled`, `available = enabled && provider key configured && not
   rejected`, `verified`, `isDefault`); `providers.<p>` carries
   `{ configured, verified, checkedAt, reason? }` from the bounded key probe
@@ -8024,9 +8024,8 @@ Design note: `PRs/592-claude-lopu-ai-chatbot-358029--lopu-ai-assistant.md`. Auto
   generic `/api/v1/things` paths refuse to create/update/delete `ai-model`
   rows (protected, control plane).
 - Provider keys (`api/utils/ai/providerProbe.ts`): with a wrong
-  `OPENAI_API_KEY` (any string) the catalog lists every OpenAI model
-  `available: false, verified: false`, the picker shows them disabled with
-  "OpenAI key invalid", `defaults.model` falls to the first Anthropic model
+  `OPENAI_API_KEY` (any string) the public catalog omits OpenAI models; admin retains them with
+  `available: false, verified: false`, `defaults.model` falls to the first Anthropic model
   and an explicit per-turn pick of one is a 400 naming the rejected key; with
   the provider unreachable (`OPENAI_BASE_URL` pointing at a closed port) they
   stay offered with `verified: null` and the admin row reads "? key
@@ -9938,3 +9937,32 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
 - Password QR capture: close/hide the editor while the picker or video is pending. The scan cancels immediately; any later stream stops before pixels are read. Blank-frame errors and playback timeouts must also stop every track.
 
 - Password vault routes reject request-scoped internal Action actors for every operation, even if the internal request carries an Authorization header. A full browser session is required directly; internal account authority cannot substitute for it.
+
+
+## Daily provider model availability (2026-10-17)
+
+- [ ] Admin provider checkboxes persist after reload; Allow all current models
+  updates every existing compatible row, while Auto-allow new models affects
+  future discoveries only. Individually disabled rows stay disabled after sync.
+- [ ] Desktop and 390px admin layouts: checkboxes are labeled, wrap inside the
+  provider card, and disable while a save/sync is pending. Failed saves roll back.
+- [ ] A complete paginated list adds compatible new versions and hides absent
+  models from public Lopu/shared waterfall selectors. Admin keeps retired rows.
+  An explicitly selected retired model fails without a substituted/replayed turn.
+- [ ] Empty/malformed/oversized lists, authentication failures, generic 404s,
+  quota failures and partial pagination do not erase prior availability. Cold
+  database failure does not re-enable all models. Test first-sync-before-seed.
+- [ ] Concurrent processes honor the Mongo lease and cooldown; publication is
+  atomic and an expired worker cannot overwrite a newer snapshot. A concurrent
+  admin policy edit is re-read on transaction retry. Run against a replica set.
+- [ ] Cron rejects missing/wrong credentials and HEAD/POST; response is no-store.
+  Admin manual sync rejects non-admins and is rate-limited. Daily production
+  execution requires CRON_SECRET and credential scopes (README setup).
+- [ ] Model-not-found in shared chat/musing/waterfall requests refreshes only
+  that provider; personal vault errors never mutate the shared catalogue.
+  Failed discovery is reported, with no raw credential/provider error leakage.
+
+Automated regressions: `modelSync.test.ts`, `models.test.ts`,
+`models.route.test.ts`, `vercel-config.test.mjs`; existing Lopu streaming and
+model-selection suites cover the consuming surfaces. Live provider calls remain
+separate from deterministic discovery/lease tests.

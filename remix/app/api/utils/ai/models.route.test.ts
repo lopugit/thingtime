@@ -288,3 +288,23 @@ test('admin POST validates the body, passes util failures through, and honours t
     (error: unknown) => error instanceof Response && error.status === 413 && error.headers.get('Cache-Control') === 'private, no-store, max-age=0'
   );
 });
+
+
+test('admin provider policy validates booleans, persists explicit changes, and returns sync failures honestly', async () => {
+  const policies: any[] = [];
+  const { action } = createAdmin({
+    setPolicy: async (provider: string, policy: unknown) => { policies.push({ provider, policy }); },
+    readPolicies: async () => ({ anthropic: { autoAllowNewModels: true } }),
+    syncModels: async () => [{ provider: 'anthropic', status: 'failed' }]
+  });
+  for (const body of [{provider:'wrong',allowAll:true}, {provider:'anthropic',allowAll:'true'}, {provider:'anthropic'}])
+    assert.equal((await action({request:postRequest(body)})).status,400);
+  assert.equal(policies.length, 0);
+  const saved: any = await (await action({ request: postRequest({ provider:'anthropic', allowAll:false, autoAllowNewModels:true }) })).json();
+  assert.equal(saved.policies.anthropic.autoAllowNewModels,true);
+  assert.deepEqual(policies,[{provider:'anthropic',policy:{allowAll:false,autoAllowNewModels:true}}]);
+  const synced: any = await (await action({request:postRequest({sync:true})})).json();
+  assert.equal(synced.ok,false);
+  assert.equal(synced.report[0].status,'failed');
+  assert.ok(synced.models.length);
+});

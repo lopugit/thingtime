@@ -68,6 +68,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-17 — **Codex (AI)**: Daily provider model inventory sync, bounded
+  model-not-available recovery and admin manual refresh. Retired models leave
+  Lopu/shared selectors; per-provider allow-all and auto-allow-new checkboxes
+  preserve individual choices. Includes Fable 5.1, transactional publication,
+  complete-list validation and fork-safe cron setup in README.
+
+
 - 2026-10-16 — **Codex (AI)**: Raise Lopu model/settings popup positioners above the floating window and mobile scrim; bound long popup bodies to the viewport so their controls remain scrollable.
 
 - 2026-10-16 — **Codex (AI)**: Keep fresh Lopu chats ready to send while unrelated background tasks run; scope busy checks and Stop to the selected conversation.

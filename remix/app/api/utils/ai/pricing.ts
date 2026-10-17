@@ -80,6 +80,7 @@ const openai = (inputPerM: number, outputPerM: number, cacheReadPerM: number | n
 // coverage), plus the test provider's synthetic model.
 export const AI_MODEL_PRICING: Readonly<Record<string, AiModelPrice>> = Object.freeze({
   // --- Anthropic (list prices) --------------------------------------------
+  'claude-fable-5-1': { ...anthropic(10, 50), cacheReadPerM: 0.25 },
   'claude-fable-5': anthropic(10, 50),
   'claude-opus-5': anthropic(5, 25),
   'claude-opus-4-8': anthropic(5, 25),
