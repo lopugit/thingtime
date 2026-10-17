@@ -1,5 +1,5 @@
 import { TIMELINE_SNAPSHOT_PARTS_ADAPTER, parseTimelineSnapshotReference } from './snapshotParts.ts';
-import { TIMELINE_EVENT_MAX_BYTES, parseTimelineEvent, parseTimelineEntry, type TimelineEntry, type TimelineEvent, type TimelineReceipt, type TimelineSnapshot } from './contract.ts';
+import { TIMELINE_EVENT_MAX_BYTES, isClientDraftVersion, parseTimelineEvent, parseTimelineEntry, type TimelineEntry, type TimelineEvent, type TimelineReceipt, type TimelineSnapshot } from './contract.ts';
 import { parseTimelineNote, TIMELINE_NOTES_PER_EVENT, type TimelineNote } from './notes.ts';
 import { copyBoundedJson } from '../utils/boundedJson.ts';
 import { versionContent } from './versions.ts';
@@ -83,7 +83,7 @@ export function createVersionExportReader<Entry extends TimelineExportSource = T
 }
 
 /** A retained draft does not imply that any account mutation was executed. */
-export const isClientDraftVersion = (event: TimelineEvent) => event.mode === 'draft' && event.source === 'client' && event.actorId === event.ownerId && event.clientId !== null;
+export { isClientDraftVersion } from './contract.ts';
 
 /** Archive validation is shared by network reads, local exports and downloads.
  * Network responses still require a real receipt; a device archive can explicitly

@@ -242,10 +242,17 @@ test('anonymous Timeline uses local authority, canonical component responses, an
  const remote = async (..._args: any[]): Promise<any> => { remoteCalls++; throw new Error('Unexpected remote Timeline'); };
  bindLocalWorkspace(true, rootIdentity.read().generation);
  try {
-  const api = anonymousApi({ timeline: { discover: remote, page: remote, push: remote, entry: remote, componentBindings: remote, branch: remote, note: remote, nameVersion: remote, branchHead: remote, branches: remote, checkoutBranch: remote, branchMerge: remote, version: remote, exportVersion: remote }, things: { create: remote } });
+  const api = anonymousApi({ timeline: { canChangeLocally: (_scope:any) => false, canExportLocally: (_scope:any) => false, discover: remote, page: remote, push: remote, entry: remote, componentBindings: remote, branch: remote, note: remote, nameVersion: remote, branchHead: remote, branches: remote, checkoutBranch: remote, branchMerge: remote, version: remote, exportVersion: remote }, things: { create: remote } });
   const row = await api.things.create({ thingtime: ['data'], crystal: { name: 'Local history adapter' } });
   const scope = { ownerId: 'local-workspace', dataPlane: 'local-workspace', apiOrigin: 'https://thingtime.example' };
   assert.equal((await api.timeline.discover(scope.ownerId)).dataPlane, scope.dataPlane);
+  for (const check of [api.timeline.canChangeLocally, api.timeline.canExportLocally]) {
+   assert.equal(check(scope),true,'Capability predicates must return synchronous booleans');
+   assert.equal(check({...scope,ownerId:'other'}),false);
+   assert.equal(check({...scope,dataPlane:'home'}),false);
+   assert.equal(check({...scope,apiOrigin:'https://other.example'}),false);
+  }
+
   const page = await api.timeline.page(scope, { thingId: row.id, before: null, after: null, limit: 40 });
   assert.equal(page.ok, true); assert.equal(page.entries.length, 1);
   assert.equal((await api.timeline.entry(scope, page.entries[0].event.id)).entry.event.thingId, row.id);
@@ -279,6 +286,7 @@ test('anonymous Timeline uses local authority, canonical component responses, an
   const aborted = new AbortController(); aborted.abort();
   await assert.rejects(api.timeline.exportVersion(scope, command.eventId, { signal: aborted.signal }), /abort/i);
   rootIdentity.changed(); bindLocalWorkspace(false, rootIdentity.read().generation); rootIdentity.confirm(rootIdentity.read().generation);
+  assert.equal(api.timeline.canChangeLocally(scope),false);assert.equal(api.timeline.canExportLocally(scope),false);
   await assert.rejects(async () => api.timeline.nameVersion(scope, named), /Workspace changed/);
   await assert.rejects(async () => api.timeline.branch(scope, branchCommand), /Workspace changed/);
   await assert.rejects(async () => api.timeline.branchMerge(scope, {}), /Workspace changed/);

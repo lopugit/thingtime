@@ -101,7 +101,7 @@ test('compact folder revisions export recorded ancestry, and deletion exports it
 	}
 });
 
-test('missing, invalid, draft and effect versions refuse; scope retirement and cancellation cannot return an archive', async () => {
+test('draft content exports while missing, invalid and effect versions refuse; scope retirement and cancellation cannot return an archive', async () => {
 	const h = await fixture();
 	try {
 		await assert.rejects(h.history.exportVersion('missing'), /not stored/);
@@ -114,7 +114,10 @@ test('missing, invalid, draft and effect versions refuse; scope retirement and c
 			parentIds: [h.original.event.id]
 		});
 		await h.history.push(draft);
-		await assert.rejects(h.history.exportVersion(draft.id), /Only saved/);
+		const draftExport = await h.history.exportVersion(draft.id);
+		assert.deepEqual(draftExport.export.event, draft);
+		assert.equal(draftExport.export.content.adapter, 'thing-content');
+		assert.ok(draftExport.export.receipt, 'The isolated local authority retains its own receipt');
 		const named = await h.history.nameVersion({
 			command: 'name-version',
 			operationId: randomUUID(),

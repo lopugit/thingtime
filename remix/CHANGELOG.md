@@ -68,6 +68,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-17 — **Codex (AI)**: Name device-authored History drafts offline and
+  export anonymous draft content through the normal version reader. Shared
+  naming keeps draft provenance and waits for account admission before syncing
+  (`api.timeline` 1.20.0). Fixed anonymous capability checks returning rejected
+  promises; native anonymous/account desktop and phone flows pass locally.
+  [PR #1000 evidence and limits](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md#device-draft-names-and-anonymous-version-export--2026-10-17).
+
 - 2026-10-17 — **Codex (AI)**: History notes can be removed before their first
   sync; durable private removal identities and scoped cache revisions stop late
   retries and reads from restoring deleted notes (`api.timeline` 1.19.0).

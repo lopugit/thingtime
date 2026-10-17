@@ -11277,8 +11277,8 @@ suites and README-enabled `accountTimelineRecovery.browser.test.ts`.
   preserve pending work. Unrelated names can sync after a definitive refusal.
 - [x] Upgrade a v6 database without dropping pending notes. Export acknowledged
   cached names after reload; omit pending projections and retain clear tombstones.
-- [ ] Complete naming client/draft versions and the broader History/local-feature
-  acceptance matrix. Pending-note removal has its separate checklist below.
+- [ ] Complete the broader History/local-feature acceptance matrix. Pending-note
+  removal and device draft naming have separate checklists below.
 
 Run `test:timeline`, `test:local-workspace`, and README-enabled
 `accountTimelineNames.browser.test.ts`. An offline browser flag is checked at
@@ -11302,3 +11302,25 @@ not continue starting writes while disconnected.
   first sync, cold reload, zero offline requests and private guest refusals.
 - [x] Run real replica add/remove races and delayed retries through
   `test:timeline:notes` using README's guarded disposable database settings.
+
+
+### Device draft naming and anonymous export (2026-10-17)
+
+- [x] Name/rename/clear an anonymous authored draft, reopen storage and verify
+  canonical metadata, unchanged provenance and no account records. Refuse
+  foreign/malformed targets, effects and versions without after content.
+- [x] Queue a name before its account version upload; lose the upload reply,
+  reopen the queue and verify exact upload replay before the name is sent.
+  Real name receipts must not change the original draft event or its identity.
+- [x] Use normal local export for an anonymous client draft; preserve editable
+  content, accepted local name and local authority receipt. Account partial
+  exports must not label pending name projections as accepted metadata.
+- [x] In clean browsers, verify anonymous native Builder drafts and offline
+  account edits at 1440/390/320px, cold reload names and download actual JSON.
+  Anonymous checks must make no account mutations or Timeline requests; account
+  naming must finish locally and synchronize only through verified reconnect.
+
+- [x] Anonymous `canChangeLocally` and `canExportLocally` return synchronous
+  booleans for the current local scope and false for foreign/retired scopes.
+  The remote-method blocking adapter must not turn capability predicates into
+  rejected promises or generate unhandled errors during normal History render.

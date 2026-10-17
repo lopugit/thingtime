@@ -1,5 +1,6 @@
 import { timelineScopeKey, TIMELINE_PAGE_SIZE, type TimelineScope, type TimelineEvent } from './contract';
 import {
+	canNameTimelineVersion,
 	parseTimelineVersionName,
 	parseTimelineVersionNameCommand,
 	parseTimelineVersionNameResult,
@@ -161,10 +162,9 @@ export class TimelineNameQueue {
 			target.ownerId !== this.scope.ownerId ||
 			target.id !== command.eventId ||
 			target.thingId !== command.thingId ||
-			target.mode !== 'revision' ||
-			!target.after
+			!canNameTimelineVersion(target)
 		)
-			fail('Only a retained saved version can be named.');
+			fail('Only a retained content version can be named.');
 		await this.change((state) => {
 			const duplicate = state.pending.find((row) => row.command.operationId === command.operationId);
 			if (duplicate) {

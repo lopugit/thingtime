@@ -3411,7 +3411,7 @@ baseline diagnostics; focused lint has zero errors and seven existing warnings.
 Client build verifies 247 offline assets. These are local results, not current
 CI or deployed acceptance.
 
-Remaining: naming client/draft versions, broader branch
+Remaining: broader branch
 controls, protected/attachment-bound recovery and the full local-feature matrix.
 This checkpoint preserves existing saved-version eligibility; it does not claim
 that every History feature or the full local-first goal is finished.
@@ -3442,7 +3442,7 @@ restore a removed cached note. Existing v7 names and notes survive migration.
 Remote note commands negotiate `api.timeline` 1.19.0; no fallback bypasses that
 contract or account/origin/data-plane verification.
 
-This is a History increment. Client/draft version naming, broader branch controls,
+This is a History increment. Broader branch controls,
 protected and attachment recovery, and the full local-feature matrix remain open.
 
 Local validation: 424 workspace/offline checks, 255 Timeline checks and 100
@@ -3459,3 +3459,62 @@ diagnostics; focused lint has zero errors and seven existing warnings. Client
 build verifies 247 offline assets. These are local results, not CI or deployment
 acceptance. Earlier native attempts failed before fixture creation while the
 local Nitro runner restarted; those failures are not counted as passes.
+
+
+## Device draft names and anonymous version export — 2026-10-17
+
+Retained owner-authored client drafts now use the same canonical version-name
+contract as saved revisions. The shared eligibility check requires retained
+`after` content and the original client/owner provenance; effects, deleted
+versions without after content and mismatched provenance remain ineligible.
+The original event is immutable: naming never publishes it or changes its
+`draft` mode, client source, owner, identity or receipt.
+
+Account names finish in the existing scoped local queue, including before the
+version upload. The queue replays an uncertain upload exactly and waits for its
+real acknowledgement before sending the name. Remote naming negotiates
+`api.timeline` 1.20.0. Anonymous drafts are named by their isolated local
+Timeline authority, with the same rename/clear, revision, replay and transaction
+rules; they never enter an account queue.
+
+Anonymous History can also export retained client draft content using the normal
+version reader and downloadable JSON. Local canonical names and local receipts
+are included without inventing account authority. Unsupported/non-content
+snapshots keep the normal explicit export errors. Account device exports retain
+the existing partial-context marker and omit unacknowledged name projections;
+that is distinct from an anonymous authority's accepted local metadata.
+
+Remaining work includes the wider branch controls and editor-source matrix,
+protected and attachment recovery, shared/managed/linked import/export and sync,
+account/origin/data-plane transitions, encrypted local Vault and the other
+unfinished items in the full feature matrix. This does not complete the rollout.
+
+
+The full anonymous browser run also exposed an adapter regression: remote
+capability predicates were replaced by async refusal functions. Explicit local
+`canChangeLocally`/`canExportLocally` checks now return synchronous booleans,
+validate the current local scope/lease, and return false after retirement or for
+a foreign scope. Mutating remote operations remain blocked. This removes
+unhandled promise errors from otherwise local History rendering.
+
+
+Local validation: 784 automated checks pass (425 workspace/offline shell,
+258 Timeline and 101 capability checks; 46 opt-in skips excluded), with focused
+adapter/server reruns after the final fixes. The production-client account
+fixture passes offline draft naming, cold reload at 1440/390/320px, canonical
+exports, unchanged draft provenance and real name acceptance after reconnect,
+with zero offline writes or page errors. The complete anonymous native fixture
+passes Builder draft naming and actual JSON downloads at the same widths,
+alongside its import, previews, branch editing/merge, restore, comments and
+reload checks: zero account mutations, Timeline requests or browser errors.
+Screenshots were inspected at all widths. Evidence: `tmp/device-version-names-account-verified/`
+and `tmp/device-version-names-anonymous-accepted/` (including the downloaded
+History JSON files). These archives use the existing History version format,
+not `thingtime.transfer`.
+
+The final build verifies 247 offline assets (21,751,558 bytes). TypeScript keeps
+exactly the same 91 baseline diagnostics; focused lint has no errors and one
+existing local Timeline constructor warning. Earlier native attempts exposed
+and repaired the async capability predicate regression and ambiguous/late-read
+fixture selectors; their failures are retained in the logs and are not counted
+as passes. These are local results, not current-head CI or deployed acceptance.

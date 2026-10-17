@@ -33,6 +33,9 @@ export type TimelineEvent = {
 	dependencies: TimelineDependency[];
 };
 
+/** Client-authored versions retain draft provenance even after authority admission. */
+export const isClientDraftVersion = (event: TimelineEvent) => event.mode === 'draft' && event.source === 'client' && event.actorId === event.ownerId && event.clientId !== null;
+
 /** Authority-issued order; client timestamps are descriptive, never conflict rules.
  * Browser-only workspaces issue receipts in their isolated local data plane.
  * Those receipts never authorize account writes or enter account sync.

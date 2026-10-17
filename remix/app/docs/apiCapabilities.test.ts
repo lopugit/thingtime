@@ -10,8 +10,8 @@ import { capabilitySatisfies } from '../api/utils/capabilities/capabilityContrac
 test('Timeline synchronization is registered and versioned on both capability manifests', () => {
 	assert.equal(createApiCapabilitiesManifest().features['api.mongodb-endpoint'], '1.1.0');
 	assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.mongodb-endpoint'].version, '1.1.0');
-	assert.equal(createApiCapabilitiesManifest().features['api.timeline'], '1.19.0');
-	assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.timeline'].version, '1.19.0');
+	assert.equal(createApiCapabilitiesManifest().features['api.timeline'], '1.20.0');
+	assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.timeline'].version, '1.20.0');
 	assert.equal(typeof routeModules['v1/timeline'], 'function');
 	assert.equal(capabilitySatisfies('1.18.0','1.19.0'),false);
 	assert.equal(capabilitySatisfies(createApiCapabilitiesManifest().features['api.timeline'],'1.19.0'),true);
@@ -691,4 +691,10 @@ test('conditional file metadata contracts appear on both capability manifests', 
 test('both manifests advertise conditional independent draft and template synchronization', () => {
  assert.equal(createApiCapabilitiesManifest().features['api.drafts'], '1.1.0');
  assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.drafts'].version, '1.1.0');
+});
+
+
+test('draft naming requires the explicit Timeline 1.20 contract', () => {
+ assert.equal(capabilitySatisfies('1.19.0','1.20.0'),false);
+ assert.equal(capabilitySatisfies(createApiCapabilitiesManifest().features['api.timeline'],'1.20.0'),true);
 });

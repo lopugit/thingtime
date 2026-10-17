@@ -44,7 +44,7 @@ export function TimelineVersionNameEditor({ row, current, drafts, draftKey }: { 
 		seen.current = stamp;
 		if (!drafts.has(draftKey)) setValue(live?.name ?? '');
 	}, [live?.revision, live?.updatedAt, live?.name, drafts, draftKey]);
-	const state = versionControlState(row, !!connection?.verified || !!connection?.nameQueue, !!connection && api.v1.timeline.canExportLocally?.(connection.scope));
+	const state = versionControlState(row, !!connection?.verified || !!connection?.nameQueue, !!connection && api.v1.timeline.canExportLocally?.(connection.scope), !!connection?.nameQueue);
 	const name = normalizeVersionName(value);
 	const unchanged = name === (live?.name ?? '');
 	const change = (next: string) => { setValue(next); if (next === (live?.name ?? '')) drafts.delete(draftKey); else drafts.set(draftKey, next); };

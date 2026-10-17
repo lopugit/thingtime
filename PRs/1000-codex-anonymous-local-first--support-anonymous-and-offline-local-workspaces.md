@@ -2663,7 +2663,7 @@ baseline diagnostics; focused lint has zero errors and seven existing warnings.
 Client build verifies 247 offline assets. These are local results, not current
 CI or deployed acceptance.
 
-Remaining: naming client/draft versions, broader branch
+Remaining: broader branch
 controls, protected/attachment-bound recovery and the full local-feature matrix.
 This checkpoint preserves existing saved-version eligibility; it does not claim
 that every History feature or the full local-first goal is finished.
@@ -2699,6 +2699,49 @@ build verifies 247 offline assets. These are local results, not CI or deployment
 acceptance. Earlier native attempts failed before fixture creation while the
 local Nitro runner restarted; those failures are not counted as passes.
 
-Remaining: client/draft version naming, broader branch controls, protected and
+Remaining: broader branch controls, protected and
 attachment recovery, and the full local-feature acceptance matrix. This remains
 a draft PR; no merge, deployment or public publishing was performed.
+
+
+## Device draft names and anonymous version export — 2026-10-17
+
+The existing name queue, shared mutation planner and local/account authorities
+now accept retained owner-authored client drafts without changing their events.
+Names finish locally before account upload; synchronization waits for the exact
+draft acknowledgement (`api.timeline` 1.20.0). Anonymous drafts also export
+through the normal version reader with their accepted local names and receipts.
+No new format, collection, authentication shortcut or remote anonymous path.
+
+Full anonymous browser validation exposed and fixed synchronous capability
+predicates being wrapped as rejected promises; local scope checks now return
+actual booleans and fail closed on foreign or retired scopes. Startup body reads
+and rendered-comment selectors were tightened in the native fixture. See
+[the current coverage and remaining matrix](../docs/local-workspaces.md#device-draft-names-and-anonymous-version-export--2026-10-17).
+
+
+Local validation: 784 automated checks pass (425 workspace/offline shell,
+258 Timeline and 101 capability checks; 46 opt-in skips excluded), with focused
+adapter/server reruns after the final fixes. The production-client account
+fixture passes offline draft naming, cold reload at 1440/390/320px, canonical
+exports, unchanged draft provenance and real name acceptance after reconnect,
+with zero offline writes or page errors. The complete anonymous native fixture
+passes Builder draft naming and actual JSON downloads at the same widths,
+alongside its import, previews, branch editing/merge, restore, comments and
+reload checks: zero account mutations, Timeline requests or browser errors.
+Screenshots were inspected at all widths. Evidence: `tmp/device-version-names-account-verified/`
+and `tmp/device-version-names-anonymous-accepted/` (including the downloaded
+History JSON files). These archives use the existing History version format,
+not `thingtime.transfer`.
+
+The final build verifies 247 offline assets (21,751,558 bytes). TypeScript keeps
+exactly the same 91 baseline diagnostics; focused lint has no errors and one
+existing local Timeline constructor warning. Earlier native attempts exposed
+and repaired the async capability predicate regression and ambiguous/late-read
+fixture selectors; their failures are retained in the logs and are not counted
+as passes. These are local results, not current-head CI or deployed acceptance.
+
+The broader local-feature goal remains active. Branch/editor-source breadth,
+protected and attachment recovery, shared/managed/linked transfer and sync,
+identity transitions, encrypted Vault and other matrix items remain incomplete.
+No merge, manual deployment or public publishing was performed.

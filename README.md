@@ -4842,3 +4842,20 @@ server database status before creating its own accounts. Do not point it at an
 existing account database. Normal permissions, signup limits and storage quotas
 apply. No tokens or account credentials are needed. `api.timeline` 1.19.0 is
 required for remote note writes with durable removal identities.
+
+
+### Device draft naming and local History exports
+
+The existing `accountTimeline.browser.test.ts` fixture now names a device
+version while offline, cold-reloads at 1440/390/320px, exports its canonical
+content, and verifies the unchanged draft plus accepted name after reconnect.
+Use `TT_LOCAL_ACCOUNT_HISTORY_URL`, `TT_LOCAL_ACCOUNT_HISTORY_ARTIFACTS` and the
+shared Playwright/Chromium variables from the account History setup above.
+`timeline.browser.test.ts` uses `TT_LOCAL_TIMELINE_URL` and
+`TT_LOCAL_TIMELINE_ARTIFACTS` to test clean anonymous offline Builder draft
+names and downloads at the same widths, with no account Timeline requests or
+mutations. Both need the built production client/offline shell; account checks
+use only the guarded disposable loopback API and their own fresh fixture.
+Remote draft naming requires `api.timeline` 1.20.0. Anonymous work needs no
+account, credentials or remote capability discovery. See
+[coverage and limits](docs/local-workspaces.md#device-draft-names-and-anonymous-version-export--2026-10-17).

@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import {
-	TIMELINE_VERSION_NAME_KIND, parseTimelineVersionName, parseTimelineVersionNameCommand, timelineVersionNameEventId,
+	TIMELINE_VERSION_NAME_KIND, canNameTimelineVersion, parseTimelineVersionName, parseTimelineVersionNameCommand, timelineVersionNameEventId,
 	type TimelineVersionName, type TimelineVersionNameCommand, type TimelineVersionNameResult
 } from '../../../timeline/versionNames.ts';
 import { planVersionName, replayVersionName, VersionNameMutationError } from '../../../timeline/versionNameMutation';
@@ -58,10 +58,10 @@ export function createVersionNameService(overrides: Partial<typeof dependencies>
 			const prior = (await deps.entries(things, ownerId, [eventId], session))[0];
 			const replay = replayVersionName(prior ?? null, ownerId, signature);
 			if (replay) return replay;
-			// Only a synced saved version can be named: effects, client drafts and deletions are refused.
+			// The authority must already hold this exact version; naming does not alter draft provenance.
 			const target = (await deps.entries(things, ownerId, [command.eventId], session))[0];
 			if (!target || target.event.ownerId !== ownerId || target.event.thingId !== command.thingId) refuse(404, 'Version not found.');
-			if (target!.event.mode !== 'revision' || !target!.event.after) refuse(422, 'Only a saved version can be named.');
+			if (!canNameTimelineVersion(target!.event)) refuse(422, 'Only a retained content version can be named.');
 			const shareId = timelineVersionNameThingId(ownerId, command.eventId);
 			const doc = await things.findOne({ ownerId, thingtime: TIMELINE_VERSION_NAME_KIND, shareId }, { session });
 			// A tombstone (cleared name) reads as "no name" to clients but keeps the revision counter, so a

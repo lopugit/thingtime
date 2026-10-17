@@ -11,7 +11,7 @@ test('name and export controls follow sync state, mode, content and the live con
 	assert.deepEqual(versionControlState({ status: 'accepted', event: saved() }, true), { name: true, export: true, title: '' });
 	assert.deepEqual(versionControlState({ status: 'pending', event: saved() }, true), { name: false, export: false, title: 'Sync this version first' });
 	assert.deepEqual(versionControlState({ status: 'accepted', event: saved() }, false), { name: false, export: false, title: 'Reconnect to name or export versions' });
-	assert.equal(versionControlState({ status: 'accepted', event: eventFixture('draft') }, true).name, false);
+	assert.equal(versionControlState({ status: 'accepted', event: eventFixture('draft') }, true).name, true);
 	assert.equal(versionControlState({ status: 'accepted', event: eventFixture('draft') }, true).export, false);
 	assert.equal(versionControlState({ status: 'accepted', event: saved({ mode: 'effect', operation: 'effect', before: null }) }, true).export, false);
 	// A synced deletion has `before` content the server can export, but no `after` to name.
@@ -45,4 +45,14 @@ test('a bound device reader can export retained revisions and client drafts with
  assert.equal(versionControlState({status:'pending',event:saved()},false,true).export,false);
  assert.equal(versionControlState({status:'pending',event:eventFixture('foreign',{actorId:'other'})},false,true).export,false);
  assert.equal(versionControlState({status:'accepted',event:saved({mode:'effect',operation:'effect'})},false,true).export,false);
+});
+
+
+test('device draft names can finish locally without changing draft or export authority', () => {
+ const event = eventFixture('device-version');
+ assert.deepEqual(versionControlState({ status: 'pending', event }, false, true, true), { name: true, export: true, title: '' });
+ assert.equal(versionControlState({ status: 'pending', event }, true, true).name, false, 'a direct authority must admit the version first');
+ for (const invalid of [{...event, source:'api' as const}, {...event, actorId:'other'}, {...event, after:null}])
+  assert.equal(versionControlState({ status:'pending', event:invalid }, false, true, true).name, false);
+ assert.equal(event.mode, 'draft');
 });

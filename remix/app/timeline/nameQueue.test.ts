@@ -132,7 +132,7 @@ test('concurrent tabs serialize optimistic names, reject stale local edits and r
 		const response = await f.write(first);
 		await Promise.all([f.queue.acknowledge(first, response), queue.acknowledge(first, response)]);
 		assert.equal((await queue.queued()).length, 0);
-		await assert.rejects(queue.enqueue(command('Foreign'), { ...target(), ownerId: 'other' }), /retained saved version/);
+		await assert.rejects(queue.enqueue(command('Foreign'), { ...target(), ownerId: 'other' }), /retained content version/);
 		assert.equal((await new TimelineNameQueue({ ...scope, ownerId: 'other' }, other).view(['base'])).size, 0);
 	} finally {
 		await other.close();
@@ -284,4 +284,28 @@ test('offline transport gates preserve every command without attempting network 
 	} finally {
 		await f.backend.close();
 	}
+});
+
+
+test('device draft names survive a lost upload reply and wait for the exact draft acknowledgement', async () => {
+ const factory=new IDBFactory(),backend=new IndexedDbTimelineBackend(factory),store=new TimelineLocalStore(scope,backend),queue=new TimelineNameQueue(scope,backend);
+ const draft=eventFixture('queued-device-version',{ownerId:scope.ownerId,actorId:scope.ownerId,thingId:'page'}),name=command('Local experiment',draft.id);
+ let lost=true,acceptedDraft=false,names=0;
+ const original=structuredClone(draft);
+ const transport={page:unused,push:async(event:any)=>{assert.deepEqual(event,original);acceptedDraft=true;if(lost){lost=false;throw new Error('lost upload reply');}return entryFixture(event,1);},nameVersion:async(input:TimelineVersionNameCommand)=>{
+  assert.ok(acceptedDraft);assert.equal((await store.forThing('page')).find(row=>row.event.id===draft.id)?.status,'accepted');names++;
+  const plan=planVersionName({ownerId:scope.ownerId,command:input,signature:input.operationId,target:entryFixture(draft,1),current:null,baseRevision:0,previousUpdatedAt:null,now:new Date().toISOString()});
+  return {ok:true as const,name:plan.name,entry:entryFixture(plan.event!,2)};
+ }};
+ try {
+  await store.enqueue(draft);await queue.enqueue(name,draft);
+  const sync=new TimelineSync(store,transport,undefined,undefined,undefined,queue);
+  await assert.rejects(sync.pushPending(),/lost upload reply/);assert.equal(names,0);
+  const reopened=new TimelineNameQueue(scope,backend);
+  assert.equal((await reopened.view([draft.id])).get(draft.id)?.name,name.name);
+  await new TimelineSync(store,transport,undefined,undefined,undefined,reopened).pushPending();
+  assert.equal(names,1);assert.equal((await reopened.queued()).length,0);
+  assert.equal((await reopened.accepted([draft.id])).get(draft.id)?.name,name.name);
+  assert.deepEqual((await store.forThing('page')).find(row=>row.event.id===draft.id)?.event,original);
+ } finally { await backend.close(); }
 });

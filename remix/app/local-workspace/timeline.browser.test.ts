@@ -11,7 +11,7 @@ const fixture = { format: 'thingtime.transfer', version: 1, roots: ['page'], thi
  { id: 'card', thingtime: ['component'], crystal: { name: 'Offline history component', componentKey: 'history-card', version: 1, render: { tag: 'p', children: 'A saved local version stays here.' } } }
 ], files: [] };
 
-test('clean anonymous offline import, rename, history reload and native recorded preview never call account Timeline', { skip: !base || !playwrightPath, timeout: 120_000 }, async () => {
+test('clean anonymous offline import, rename, history reload and native recorded preview never call account Timeline', { skip: !base || !playwrightPath, timeout: 180_000 }, async () => {
  assert.ok(['localhost', '127.0.0.1'].includes(new URL(base!).hostname));
  assert.ok(['blocked-requests', 'offline-emulation'].includes(networkMode));
  const { chromium } = await import(playwrightPath!);
@@ -36,8 +36,11 @@ test('clean anonymous offline import, rename, history reload and native recorded
  });
  page.on('pageerror', (error: Error) => failures.push(error.message));
  try {
-  const root = page.waitForResponse((response: any) => new URL(response.url()).pathname === '/api/root-data');
-  await page.goto(new URL('/things', base).href); assert.equal((await (await root).json()).user, null);
+  const root = page.waitForResponse((response: any) => new URL(response.url()).pathname === '/api/root-data').then(async (response: any) => {
+   assert.equal(response.status(), 200); return response.json();
+  });
+  const [, initial] = await Promise.all([page.goto(new URL('/things', base).href), root]);
+  assert.equal(initial.user, null);
   await page.waitForFunction(async () => {
    await navigator.serviceWorker.ready;
    if (!navigator.serviceWorker.controller) return false;
@@ -272,6 +275,31 @@ test('clean anonymous offline import, rename, history reload and native recorded
   await page.getByText('A saved local version stays here.', { exact: true }).waitFor();
   assert.equal(await page.getByRole('textbox').inputValue(), 'Offline history page');
   await page.goto(new URL(`/history?thing=${encodeURIComponent(thingId)}`, base).href);
+  for(const width of [1440,390,320]) {
+   await page.setViewportSize({width,height:width===1440?1000:844});
+   await page.reload();
+   await page.getByRole('button', { name: /Edit Offline variation Native Builder variation edit/ }).click();
+   await page.getByRole('tab',{name:'Versions',exact:true}).click();
+   const controls=page.locator('.history-version[data-selected="true"]');
+   if(width===1440){
+    await controls.getByRole('textbox',{name:'Version name',exact:true}).fill('Anonymous draft experiment');
+    await controls.getByRole('button',{name:'Save',exact:true}).click();
+    await controls.getByText('Named this version “Anonymous draft experiment”.',{exact:true}).waitFor();
+   }
+   assert.equal(await controls.getByRole('textbox',{name:'Version name',exact:true}).inputValue(),'Anonymous draft experiment');
+   const ready=page.waitForEvent('download');await controls.getByRole('button',{name:'Export',exact:true}).click();
+   const download=await ready,exported=JSON.parse(await readFile((await download.path())!,'utf8'));
+   assert.equal(exported.event.mode,'draft');assert.equal(exported.event.source,'client');
+   assert.equal(exported.name.name,'Anonymous draft experiment');assert.equal(exported.event.ownerId,'local-workspace');
+   assert.ok(exported.receipt);assert.equal(exported.content.value.crystal.name,'Native Builder variation edit');
+   if(artifacts)await download.saveAs(resolve(artifacts,`anonymous-draft-${width}.json`));
+   await controls.getByText(/Exported Anonymous draft experiment/).waitFor();
+   await controls.scrollIntoViewIfNeeded();
+
+   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth),width);
+   if(artifacts)await page.screenshot({path:resolve(artifacts,`anonymous-draft-name-${width}.png`),animations:'disabled'});
+  }
+  await page.setViewportSize({width:1440,height:1000});await page.reload();
   await page.getByRole('button', { name: /Edit Offline variation Native Builder variation edit/ }).click();
   await page.getByRole('button', { name: 'Review and combine…', exact: true }).click();
   await page.getByRole('button', { name: 'Apply merge', exact: true }).click();
@@ -315,11 +343,11 @@ test('clean anonymous offline import, rename, history reload and native recorded
   await page.getByRole('heading', { name: 'Comments', exact: true }).waitFor();
   await page.getByPlaceholder('Write a comment… 💬', { exact: true }).fill('A restored component has its own local discussion.');
   await page.getByRole('button', { name: 'Send comment', exact: true }).click();
-  await page.getByText('A restored component has its own local discussion.', { exact: true }).waitFor();
+  await page.getByLabel('Comments results').getByText('A restored component has its own local discussion.', { exact: true }).waitFor();
   await page.getByRole('button', { name: 'Reply to Local workspace', exact: true }).click();
   await page.getByPlaceholder('Reply to Local workspace… 💬', { exact: true }).fill('A nested reply stays offline.');
   await page.getByRole('button', { name: 'Send reply', exact: true }).click();
-  await page.getByText('A nested reply stays offline.', { exact: true }).waitFor();
+  await page.getByLabel('Comments results').getByRole('paragraph').filter({ hasText: 'A nested reply stays offline.' }).waitFor();
   await page.getByRole('button', { name: 'Thing actions', exact: true }).click();
   await page.getByRole('menuitem', { name: '✏️ Rename', exact: true }).click();
   await page.getByRole('textbox', { name: 'Thing title', exact: true }).fill('Restored component edited offline');
@@ -327,9 +355,9 @@ test('clean anonymous offline import, rename, history reload and native recorded
   await page.getByRole('heading', { name: 'Restored component edited offline', exact: true }).waitFor();
   await page.reload();
   await page.getByRole('heading', { name: 'Restored component edited offline', exact: true }).waitFor();
-  await page.getByText('A restored component has its own local discussion.', { exact: true }).waitFor();
+  await page.getByLabel('Comments results').getByText('A restored component has its own local discussion.', { exact: true }).waitFor();
   await page.getByRole('button', { name: 'View replies', exact: true }).click();
-  await page.getByText('A nested reply stays offline.', { exact: true }).waitFor();
+  await page.getByLabel('Comments results').getByRole('paragraph').filter({ hasText: 'A nested reply stays offline.' }).waitFor();
   const restoredDetailBounds = [];
   for (const [width, height] of [[1440, 1000], [390, 844], [320, 844]]) {
    await page.setViewportSize({ width, height });
@@ -343,7 +371,7 @@ test('clean anonymous offline import, rename, history reload and native recorded
   await page.reload();
   await page.getByRole('button', { name: /Edited Thing Restored component edited offline/ }).waitFor();
   assert.deepEqual(timelineRequests, []); assert.deepEqual(mutations, []); assert.deepEqual(failures, []); assert.deepEqual(restoredPublicReads, []);
-  if (artifacts) await writeFile(resolve(artifacts, 'verification.json'), JSON.stringify({ anonymous: true, networkMode, offlineTimelineFolderReload: true, folderBounds, offlineImportAndRename: true, coldOfflineReload: true, nativeRecordedComponent: true, offlineNoteSaveReloadRemove: true, rejectedNinthNotePreservedAndDismissed: true, offlineVersionNameRenameClearReload: true, offlineVariationFieldsAndBuilderSaveReload: true, currentThingUnchanged: true, offlineBranchMergeConflictReviewSaveReload: true, offlineHistoryArchiveDownload: true, offlineUndoCurrentMergeRecordedRestoreReload: true, relatedHistoryOfflineColdReload: true, relatedMembershipResetAfterRestore: true, relatedBounds, restoredDetailRoutingCommentsRenameReload: true, restoredPublicReads, restoredDetailBounds, restoreBounds, mergeBounds, branchBounds, mutations, timelineRequests, failures, bounds }, null, 2));
+  if (artifacts) await writeFile(resolve(artifacts, 'verification.json'), JSON.stringify({ anonymous: true, networkMode, offlineTimelineFolderReload: true, folderBounds, offlineImportAndRename: true, coldOfflineReload: true, nativeRecordedComponent: true, offlineNoteSaveReloadRemove: true, rejectedNinthNotePreservedAndDismissed: true, offlineVersionNameRenameClearReload: true, anonymousDraftNamingReload: true, offlineVariationFieldsAndBuilderSaveReload: true, currentThingUnchanged: true, offlineBranchMergeConflictReviewSaveReload: true, offlineHistoryArchiveDownload: true, offlineUndoCurrentMergeRecordedRestoreReload: true, relatedHistoryOfflineColdReload: true, relatedMembershipResetAfterRestore: true, relatedBounds, restoredDetailRoutingCommentsRenameReload: true, restoredPublicReads, restoredDetailBounds, restoreBounds, mergeBounds, branchBounds, mutations, timelineRequests, failures, bounds }, null, 2));
  } catch (error) {
   if (artifacts) { await mkdir(resolve(artifacts), { recursive: true }); await page.screenshot({ path: resolve(artifacts, 'failure.png'), fullPage: true }); await writeFile(resolve(artifacts, 'failure.txt'), await page.locator('body').innerText()); await writeFile(resolve(artifacts, 'failure-diagnostics.json'), JSON.stringify({ url: page.url(), networkMode, failures, diagnostics }, null, 2)); }
   throw error;

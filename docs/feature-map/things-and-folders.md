@@ -692,8 +692,14 @@ freezes requests, rebases unsent successors and preserves ambiguous retries;
 after local queueing, independently of remote sync. `accountTimelineExport.ts`
 uses accepted retained names only. Tests: `nameQueue.test.ts`,
 `accountTimelineExport.test.ts`, v6 migration in `indexedDb.test.ts`, and the
-README-enabled native `accountTimelineNames.browser.test.ts`. Client/draft
-naming remains open; see the local workspace matrix. Pending-note removal uses
+README-enabled native `accountTimelineNames.browser.test.ts`. Client drafts now use
+the shared `canNameTimelineVersion` eligibility rule and the same queue/authority
+contract (`api.timeline` 1.20.0). Names wait for the exact draft acknowledgement
+without changing its provenance. Anonymous draft exports reuse
+`createVersionExportReader` with local authority and no account fallback.
+Regressions extend `accountTimeline.browser.test.ts`, `timeline.browser.test.ts`,
+`timelineVersionNames.test.ts`, `timelineExport.test.ts` and name queue tests.
+See the local workspace matrix for remaining broader coverage. Pending-note removal uses
 `TimelineNoteStore.ready` to wait for its exact add acknowledgement. IndexedDB
 v8 adds one read revision fence per scope; old reads and duplicate add replies
 cannot recache removed notes. The shared `TimelineNoteRemoval` record replaces

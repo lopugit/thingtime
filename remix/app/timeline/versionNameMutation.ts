@@ -1,5 +1,5 @@
 import { parseTimelineEvent, type TimelineEntry, type TimelineEvent, type TimelineSnapshot } from './contract';
-import { parseTimelineVersionName, timelineVersionNameEventId, timelineVersionNameId, TIMELINE_VERSION_NAME_KIND, TIMELINE_VERSION_NAME_LABELS, type TimelineVersionName, type TimelineVersionNameCommand, type TimelineVersionNameResult } from './versionNames';
+import { canNameTimelineVersion, parseTimelineVersionName, timelineVersionNameEventId, timelineVersionNameId, TIMELINE_VERSION_NAME_KIND, TIMELINE_VERSION_NAME_LABELS, type TimelineVersionName, type TimelineVersionNameCommand, type TimelineVersionNameResult } from './versionNames';
 
 /** Shared mutation semantics; adapters own scope, transactions, hashing and
  * persistence. A local authority issues the same effect contract in its own
@@ -23,7 +23,7 @@ export function planVersionName(input: {
 }): { name: TimelineVersionName | null; event: TimelineEvent | null; revision: number; updatedAt: string } {
  const { ownerId, command, signature, target, current, baseRevision, previousUpdatedAt, now } = input;
  if (!target || target.event.ownerId !== ownerId || target.event.thingId !== command.thingId || target.event.id !== command.eventId) refuse(404, 'Version not found.');
- if (target!.event.mode !== 'revision' || !target!.event.after) refuse(422, 'Only a saved version can be named.');
+ if (!canNameTimelineVersion(target!.event)) refuse(422, 'Only a retained content version can be named.');
  if (current && (current.ownerId !== ownerId || current.eventId !== command.eventId || current.thingId !== command.thingId || current.revision !== baseRevision)) refuse(409, 'This version name record is damaged.');
  if (current ? current.revision !== command.expectedRevision : command.expectedRevision !== 0) refuse(409, 'This version name changed on another device. Refresh and try again.');
  if (command.name === null ? !current : current?.name === command.name) return { name: current, event: null, revision: baseRevision, updatedAt: previousUpdatedAt ?? now };

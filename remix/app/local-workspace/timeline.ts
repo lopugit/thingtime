@@ -211,7 +211,7 @@ export class LocalTimeline {
     snapshot: async (entry, side) => entry.event[side],
     notes: async entry => localNotesForEntry(await readLocalTimelineNotes(tx, LOCAL_TIMELINE_OWNER), entry),
     names: async entry => localNamesForEntry(await readLocalVersionNames(tx, LOCAL_TIMELINE_OWNER), entry),
-    now: () => new Date(this.now()), refuse: (status, message) => fail(message, status), retainedLocation: 'this device'
+    now: () => new Date(this.now()), refuse: (status, message) => fail(message, status), retainedLocation: 'this device', allowClientDrafts: true
    })(LOCAL_TIMELINE_OWNER, eventId);
    if (!result) fail('This version is not stored in this workspace.', 404);
    return { ok: true as const, export: result! };

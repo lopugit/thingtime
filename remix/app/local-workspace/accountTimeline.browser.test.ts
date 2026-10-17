@@ -13,7 +13,8 @@ test('native account edits retain intermediate History offline and upload canoni
  const context=await browser.newContext({viewport:{width:1440,height:1000}}),guest=await browser.newContext(),page=await context.newPage();
  const url=(path:string)=>new URL(path,base).href,headers={Origin:new URL(base!).origin};
  const titles=['Original account history fixture','First offline history edit','Second offline history edit'];
- const errors:string[]=[],offlineWrites:string[]=[],pushes:any[]=[],timelineRequests:string[]=[],downloads:any[]=[];let thingId='',ownerId='',offline=false;
+ const errors:string[]=[],offlineWrites:string[]=[],pushes:any[]=[],timelineRequests:string[]=[],downloads:any[]=[];let thingId='',ownerId='',offline=false,namedEventId='';
+ const draftName='Offline draft experiment';
  page.setDefaultTimeout(20_000);page.on('pageerror',(error:Error)=>errors.push(error.message));
  page.on('request',(r:any)=>{if(new URL(r.url()).pathname==='/api/v1/timeline')timelineRequests.push(r.method());if(!['GET','HEAD','OPTIONS'].includes(r.method())){
   if(offline)offlineWrites.push(new URL(r.url()).pathname);
@@ -62,12 +63,22 @@ test('native account edits retain intermediate History offline and upload canoni
   const originalArchive=await downloadVersion(history,titles[0],1440);assert.equal(originalArchive.event.source,'api');assert.ok(originalArchive.receipt);
   await close();
   for(const width of [1440,390,320]){
-   await page.setViewportSize({width,height:width===1440?1000:844});await open();
+   await page.setViewportSize({width,height:width===1440?1000:844});await page.reload();await page.getByRole('heading',{name:titles[2],exact:true}).waitFor();await open();
    await history.getByRole('button',{name:new RegExp('Edited Thing on this device '+titles[1])}).click();
    const details=width===1440?history:page.getByRole('dialog',{name:'Version details',exact:true});
    if(await details.getByRole('button',{name:'View data',exact:true}).isVisible())await details.getByRole('button',{name:'View data',exact:true}).click();await details.locator('pre').filter({hasText:titles[1]}).waitFor();await page.evaluate(()=>document.fonts.ready);
    const bounds=await details.boundingBox();assert.ok(bounds&&bounds.x>=0&&bounds.x+bounds.width<=width+1);assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth),width);
    const archive=await downloadVersion(details,titles[1],width);assert.equal(archive.receipt,null);assert.equal(archive.event.mode,'draft');
+   const controls=details.locator('.history-version[data-selected="true"]');
+   if(width===1440){
+    namedEventId=archive.event.id;
+    await controls.getByRole('textbox',{name:'Version name',exact:true}).fill(draftName);
+    await controls.getByRole('button',{name:'Save',exact:true}).click();
+    await controls.getByText('Version name saved on this device. Account sync runs separately.',{exact:true}).waitFor();
+   }
+   assert.equal(await controls.getByRole('textbox',{name:'Version name',exact:true}).inputValue(),draftName);
+   assert.equal(archive.name,null,'A pending projection is not exported as accepted account metadata');
+
    if(artifacts)await page.screenshot({path:resolve(artifacts,`account-history-edit-${width}.png`),animations:'disabled'});
    if(width!==1440)await details.getByRole('button',{name:'Close',exact:true}).click();await close();
   }
@@ -80,13 +91,20 @@ test('native account edits retain intermediate History offline and upload canoni
   assert.ok(accepted,'History receives real server receipts after reconnect');
   const remote=await context.request.get(url('/api/v1/things?id='+thingId));assert.equal((await remote.json()).thing.crystal.name,titles[2]);
   const endpoint=await context.request.get(url('/api/v1/timeline?'+new URLSearchParams({thingId,ownerId,dataPlane:JSON.parse(before[0].scope)[1]})));assert.equal(endpoint.status(),200,await endpoint.text());
-  const entries=(await endpoint.json()).entries;for(const row of await recorded()){
+  let payload=await endpoint.json();
+  for(let attempt=0;attempt<150&&!payload.names?.some((name:any)=>name.eventId===namedEventId&&name.name===draftName);attempt++){
+   await new Promise(resolve=>setTimeout(resolve,200));
+   payload=await (await context.request.get(url('/api/v1/timeline?'+new URLSearchParams({thingId,ownerId,dataPlane:JSON.parse(before[0].scope)[1]})))).json();
+  }
+  assert.ok(payload.names.some((name:any)=>name.eventId===namedEventId&&name.name===draftName),'The draft name receives canonical account acceptance');
+  assert.equal(payload.entries.find((entry:any)=>entry.event.id===namedEventId).event.mode,'draft');
+  const entries=payload.entries;for(const row of await recorded()){
    const entry=entries.find((entry:any)=>entry.event.id===row.event.id);assert.ok(entry);assert.deepEqual(entry.receipt,row.receipt);assert.deepEqual(splitTimelineEvent(entry.event).event,row.event);
   }
   assert.equal((await guest.request.get(url('/api/v1/things?id='+thingId))).status(),404);
   assert.equal((await guest.request.get(url('/api/v1/timeline?thingId='+thingId))).status(),401);
   assert.deepEqual(errors,[]);
-  if(artifacts)await writeFile(resolve(artifacts,'verification.json'),JSON.stringify({thingId,ownerId,deviceEvents:before.map(row=>row.event.id),nativeEdits:true,coldOfflineReload:true,intermediateVersions:true,canonicalReceipts:true,privateGuestRefusals:true,viewports:[1440,390,320],offlineWrites,errors,historyPushCount:pushes.length,offlineVersionDownloads:downloads},null,2));
+  if(artifacts)await writeFile(resolve(artifacts,'verification.json'),JSON.stringify({thingId,ownerId,deviceEvents:before.map(row=>row.event.id),nativeEdits:true,coldOfflineReload:true,intermediateVersions:true,canonicalReceipts:true,offlineDraftNaming:true,draftNameAccepted:true,privateGuestRefusals:true,viewports:[1440,390,320],offlineWrites,errors,historyPushCount:pushes.length,offlineVersionDownloads:downloads},null,2));
  }catch(error){if(artifacts){await page.screenshot({path:resolve(artifacts,'failure.png')}).catch(()=>{});await writeFile(resolve(artifacts,'failure.json'),JSON.stringify({body:await page.locator('body').innerText().catch(()=>''),thingId,errors,offlineWrites,pushes},null,2));}throw error;}
  finally{await page.close();await context.setOffline(false).catch(()=>{});if(thingId)await context.request.delete(url('/api/v1/things'),{headers,data:{id:thingId}}).catch(()=>{});await guest.close();await context.close();await browser.close();}
 });

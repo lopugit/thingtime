@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { createHash, randomUUID } from 'node:crypto';
 import test from 'node:test';
 import { IDBFactory } from 'fake-indexeddb';
+import { eventFixture } from '../timeline/testFixtures';
 import { WorkspaceDatabase } from './storage';
 import { LocalThings } from './things';
 import { LocalTimeline, LOCAL_TIMELINE_OWNER } from './timeline';
@@ -129,5 +130,30 @@ test('damaged name identity/state fails closed; pages attach names only to selec
   await assert.rejects(history.nameVersion(command({ expectedRevision: 1, name: 'No bypass' })), /metadata is damaged/);
   await db.transaction(scope, 'readwrite', lease, tx => tx.put('timeline-version-names', result.name!.id, { ...result.name, ownerId: 'foreign' }));
   await assert.rejects(history.entry(event.id), /metadata is damaged/);
+ } finally { await db.close(); }
+});
+
+
+test('anonymous authored drafts can be named, renamed and cleared without account persistence', async () => {
+ const factory = new IDBFactory(), db = new WorkspaceDatabase(factory);
+ const history = new LocalTimeline(db,lease,'https://thingtime.example');
+ const draft = eventFixture('anonymous-editable-draft',{ownerId:LOCAL_TIMELINE_OWNER,actorId:LOCAL_TIMELINE_OWNER,after:{adapter:'definition-source',version:1,value:{source:'unfinished editable JSON'}}});
+ try {
+  await history.push(draft);
+  const first:TimelineVersionNameCommand={command:'name-version',operationId:randomUUID(),eventId:draft.id,thingId:draft.thingId,name:'Keep this experiment',expectedRevision:0};
+  const named=await history.nameVersion(first);
+  assert.deepEqual((await history.entry(draft.id)).entry.event,draft);
+  assert.deepEqual(await history.nameVersion(first),named);
+  await db.close();
+  const reopened=new WorkspaceDatabase(factory),next=new LocalTimeline(reopened,lease,history.origin);
+  try {
+   assert.equal((await next.entry(draft.id)).names[0].name,first.name);
+   const renamed=await next.nameVersion({...first,operationId:randomUUID(),name:'Renamed experiment',expectedRevision:1});
+   assert.equal(renamed.name?.revision,2);
+   await next.nameVersion({...first,operationId:randomUUID(),name:null,expectedRevision:2});
+   assert.deepEqual((await next.entry(draft.id)).names,[]);
+   assert.deepEqual((await next.entry(draft.id)).entry.event,draft);
+   await reopened.transaction({kind:'account',ownerId:'account',origin:history.origin,dataPlane:'home'},'readonly',lease,async tx=>assert.equal((await tx.list('timeline-version-names')).length,0));
+  } finally { await reopened.close(); }
  } finally { await db.close(); }
 });

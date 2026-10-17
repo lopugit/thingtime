@@ -37,11 +37,14 @@ export function anonymousApi<T extends Record<string, any>>(remote: T): T {
 	};
 	const local = blocked(remote);
 	const history = new LocalTimeline(anonymousWorkspaceDatabase(), lease, window.location?.origin || 'http://localhost');
+	const ownsTimeline = (scope: any): boolean => { try { history.assertScope(scope); return true; } catch { return false; } };
 	const timelineUnavailable = async () => { lease.assertCurrent(); throw new WorkspaceError('LOCAL_TIMELINE_UNAVAILABLE', 'This local History operation is not available yet. Your saved history remains on this device.', 422); };
 	local.timeline = { ...Object.fromEntries(Object.keys(remote.timeline || {}).map(key => [key, timelineUnavailable])),
 		discover: (ownerId: string) => history.discover(ownerId),
 		page: (scope: any, request: any, options?: { signal?: AbortSignal }) => { history.assertScope(scope); return history.page(request, options?.signal); },
 		push: (scope: any, event: any, options?: { signal?: AbortSignal }) => { history.assertScope(scope); return history.push(event, options?.signal); },
+		canChangeLocally: ownsTimeline,
+		canExportLocally: ownsTimeline,
 		exportVersion: (scope: any, eventId: string, options?: { signal?: AbortSignal }) => { history.assertScope(scope); return history.exportVersion(eventId, options?.signal); },
 		version: (scope: any, request: any, options?: { signal?: AbortSignal }) => { history.assertScope(scope); return new LocalTimelineVersions(anonymousWorkspaceDatabase(), lease, service()).request(request, options?.signal).then(result => request.command === 'apply-version' ? changed(result) : result); },
 		branchMerge: (scope: any, request: any, options?: { signal?: AbortSignal }) => { history.assertScope(scope); return history.branchMerge(request, options?.signal); },
