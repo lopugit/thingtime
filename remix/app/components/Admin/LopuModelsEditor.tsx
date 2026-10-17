@@ -244,7 +244,7 @@ export const LopuModelsEditor = () => {
 				title: response?.ok ? (refreshed ? 'Model catalogue refreshed' : 'No providers refreshed') : 'Some providers could not be refreshed',
 				description:
 					response?.report
-						?.map((row: any) => `${providerLabel(row.provider)}: ${row.status}${row.count !== undefined ? ` (${row.count} models)` : ''}`)
+						?.map((row: any) => `${providerLabel(row.provider)}: ${row.status}${row.count !== undefined ? ` (${row.count} models)` : ''}${row.reason ? ` — ${row.reason}` : ''}`)
 						.join(' · ') || 'Previous availability is kept for any provider that could not be checked.',
 				status: response?.ok ? (refreshed ? 'success' : 'info') : 'error'
 			});

@@ -4554,14 +4554,21 @@ Thingtime refreshes the server Anthropic and OpenAI model inventories daily at
 GET once daily. A missing secret refuses the job. MongoDB must support transactions
 (replica set / Atlas), as with other home control-plane mutations.
 
-Discovery uses the same configured credentials as inference: OpenAI's
-`OPENAI_API_KEY` (and optional `OPENAI_ORG_ID`, `OPENAI_PROJECT_ID`,
-`OPENAI_BASE_URL`), and Claude OAuth from the admin credential vault or
-`CLAUDE_CODE_OAUTH_TOKEN_THINGTIME` / `CLAUDE_CODE_OAUTH_TOKEN`. Claude discovery
-calls the provider's paginated `/v1/models` with OAuth; it never switches to an
-Anthropic API key. Credentials must permit listing models. A denied scope,
+OpenAI discovery uses `OPENAI_API_KEY` (and optional `OPENAI_ORG_ID`,
+`OPENAI_PROJECT_ID`, `OPENAI_BASE_URL`). For Anthropic model discovery, configure
+`ANTHROPIC_MODELS_API_KEY=<models-api-key>` in the server deployment environment.
+If absent, an existing `ANTHROPIC_API_KEY` is used for catalogue reads only. These
+keys are never passed to Claude inference, which continues using the isolated
+Claude Code runtime and its admin-vault OAuth credential.
+
+Without either discovery key, Thingtime attempts the model-list endpoint with
+Claude OAuth from the admin credential vault or `CLAUDE_CODE_OAUTH_TOKEN_THINGTIME`
+/ `CLAUDE_CODE_OAUTH_TOKEN`. Subscription OAuth may not grant Models API access;
+HTTP 401/403 is reported with a discovery-credential hint. A denied scope,
 timeout, malformed/empty list or incomplete pagination preserves the previous
 inventory and reports failure; it is not treated as a provider-wide retirement.
+Claude Code's initialization model list is not an authoritative replacement:
+it can return built-in models even with invalid credentials.
 Personal Secure Vault endpoints have their own configuration and do not alter
 the shared catalogue.
 
