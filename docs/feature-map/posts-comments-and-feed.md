@@ -202,3 +202,14 @@ transaction. `test:feed` covers command/receipt validation and route admission;
 `algorithmSync.api.test.ts` proves real storage, concurrency and normal transfer
 round-trip using disposable API-created accounts. Account local editing,
 selection sync and native reconnect remain outstanding in the coverage matrix.
+
+
+Account algorithm queue preparation now lives in
+`local-workspace/accountAlgorithms.ts`, reusing `LocalAlgorithms` transaction
+hooks and home-scoped Things. `algorithmTransport.client.ts` verifies current
+selected authority independently of storage destination. Frozen retries,
+catalogue epochs, tombstones and conflict review use the same workspace/lease
+infrastructure as other account queues. Native facade/feed/editor activation,
+selection sync and transfer/library hooks remain pending. Run
+`test:local-workspace`; dedicated cases cover two tabs, deletion during creation,
+training after lost responses, stale review, large profiles and branch ordering.

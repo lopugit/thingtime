@@ -77,7 +77,7 @@ change this pointer; logout/account changes revoke it.
 | Timeline | Canonical anonymous revisions and authored draft admission now use transactional browser authority, the existing History UI and recorded native page previews. Owner notes now save/remove offline through the existing canonical queue and note contract. Version names now name/rename/clear through the shared mutation contract offline. Local variations now create, advance, checkout, edit and merge offline in History and the native Builder, including recorded-component conflict review. Ordinary current-content restore/undo/merge and deleted recovery now reuse the canonical account planner and atomic local writer; native offline restore/undo/merge/reload is verified. Historical version archive export now works offline through the shared account resolver, including compact ancestry, deleted before-images, names and notes. Page + related History now resolves stored local composition and arguments offline, with bounded membership, cursor resets and cold-reload browser coverage. The managed Timeline folder now appears in the local library and literal search, with native offline navigation and cold-rename coverage. Scoped device usage and browser protection controls are available in Settings. Protected-kind adapters and account synchronization remain required. Restored component detail/discussion/Action routing now uses scoped local records and local author projections, with offline regression coverage; IDs alone grant no local access. |
 | Attachments and media | Anonymous canonical ZIP import/export/copy/delete now stores metadata and bytes atomically with shared quota accounting; normal UI offline round-trip verified. Normal file-picker save, download, copy/move and native image preview now pass offline browser checks. Native composer file selection and draft/template copies now pass offline browser checks. Account upload and metadata queues now have local service/browser acceptance, including reviewed conflicts and folder dependencies. Completed standalone-file deletion has a durable scoped queue, native review and replay fencing. Ordinary account picker/list/media integration, existing-file retention and file ZIP transfer have browser evidence in the checkpoints below. Standalone recording import/retention and independent offline edit/delete use the shared path (checkpoint below). Finish bound/linked/managed media, native microphone capture, audio cache identity/revocation and remaining audio/video acceptance. Never treat a cached cloud attachment as locally authorized bytes. |
 | Posts, comments and saved items | Native local post create/edit, image attachments, comment/reply reads and writes pass offline browser checks. Saved items, emoji reactions and poll cast/change/removal now pass native offline browser checks; up/down votes and scoped relational storage pass adapter tests. Retained account posts now support offline bookmarks/reactions, Saved/permalink reload and cross-tab membership, with independent conditional sync and known-refusal eviction (checkpoint below). Generic account discussions and canonical comment-only permalinks now retain scoped offline reads with explicit partial coverage and atomic cross-projection refusal cleanup (checkpoint below). Account text/rich-text post and comment/reply authorship now commits locally with independent verified-account sync (checkpoint below). Account post/comment file admission, upload dependency tracking and canonical binding now use the device queue (checkpoint below). Device-authored bound-media removal now has offline/retry coverage (checkpoint below). Existing owned bound-file retention now has fresh-device offline edit/removal and reconnect evidence (checkpoint below). Offline parent/root navigation now has anonymous/account native-browser evidence, including generic Thing discussions (checkpoint below). Bound-file import and reconciliation, remaining linked-Thing surfaces, full edit/privacy/deletion browser coverage and broader cross-account/device acceptance remain. Public posting, remote reactions and recipient delivery remain authenticated operations. |
-| Themes, visual settings and algorithms | Anonymous saved-theme CRUD, active selection, quota and canonical transfer now work through Theme Studio and have offline browser evidence. Anonymous algorithms now support local CRUD/branching, active selection, bounded public-feed training, per-page ranking and canonical JSON round-trip. Account themes have independent device content/selection sync and canonical offline export/import; anonymous themes have canonical local History. Account theme organization now commits locally with independent conditional sync; anonymous folder deletion preserves children. Theme library display titles now rename locally and survive canonical transfer, with anonymous/account native browser and isolated real API verification (checkpoint below). Account algorithm sync, account-authored theme History, other protected-kind titles and wider cross-tab acceptance remain outstanding. |
+| Themes, visual settings and algorithms | Anonymous saved-theme CRUD, active selection, quota and canonical transfer now work through Theme Studio and have offline browser evidence. Anonymous algorithms now support local CRUD/branching, active selection, bounded public-feed training, per-page ranking and canonical JSON round-trip. Account themes have independent device content/selection sync and canonical offline export/import; anonymous themes have canonical local History. Account theme organization now commits locally with independent conditional sync; anonymous folder deletion preserves children. Theme library display titles now rename locally and survive canonical transfer, with anonymous/account native browser and isolated real API verification (checkpoint below). Account algorithm server/queue prerequisites are validated, but native facade, selection and review integration remain pending. Account-authored theme History, other protected-kind titles and wider cross-tab acceptance remain outstanding. |
 | Passwords | Anonymous encrypted device storage/unlock now reuses the canonical vault envelopes and normal password editor/transfer UI. Offline clean-browser acceptance covers lock/reload, two-tab conflicts, normal CSV export/import and 1440/390/320px layouts with zero account/password API writes. Account encrypted device unlock/edit/export now has offline browser evidence, with separately fenced sync, immutable retries and reviewed conflict copies. The real fixture verifies reconnect and second-account isolation. Provider/environment credentials, wider native identity/plane transitions and signed offline provider integration remain unfinished. See [password-manager.md](password-manager.md). |
 | Incoming mail | Latest-main integration brings the existing encrypted offline mail store and explicit desktop/loopback/relay transports. Audit anonymous local setup, account/origin partitions and offline reader behavior before rollout; remote mailbox access still requires its own credentials and explicit transport selection. No mail acceptance is claimed by the Vault checks below. |
 | Apps, integrations and native/browser tools | Separate locally available adapters from paired remote devices, external services and their consent requirements. Verify each applicable local surface. |
@@ -3981,3 +3981,44 @@ baseline diagnostics with no new signatures. Structural Graphify still reports
 two unrelated Swift parse warnings; document semantic freshness is tracked
 separately and is not inferred from AST results. This checkpoint changes server
 behavior and API fixtures, not a native UI surface.
+
+
+## Account algorithm device queue — 2026-10-18
+
+`LocalAlgorithms` now accepts an explicit workspace, clock, UUID source and
+transactional mutation/selection hooks. Anonymous callers keep the original
+scope and IDs. `AccountAlgorithmSync` reuses that canonical local writer and
+stores bounded retry metadata beside home-scoped Things. Local create, edit,
+training and deletion do not call a transport. A failed local queue write rolls
+back its corresponding content change atomically; remote failures preserve the
+already committed device work.
+
+The queue freezes an immutable command per attempt, claims it across tabs,
+checks exact acknowledgments, retries uncertain responses unchanged, and keeps
+newer revisions pending independently. It never replays engagement events.
+Complete validated catalogues and read epochs fence stale responses; confirmed
+deletions keep tombstones. Reviewed conflicts support account/device choices and
+independent private copies, with both sides rechecked before applying a choice.
+A branch waits for its source's creation receipt, and source deletion waits for
+an unsent branch. An unavailable unsent source retains the branch for explicit
+independent-copy review. Base metadata omits full weight maps, keeping large
+profiles within per-record storage bounds.
+
+`algorithmTransport.client.ts` negotiates `api.algorithms-sync` 1.0.0 and the
+selected-plane contract, then repeats current remote/local lease checks around
+bounded same-origin requests. It preserves the current selected plane while
+confirming home storage. Anonymous, offline-unconfirmed, changed-account/origin,
+partial, oversized and mismatched responses cannot acknowledge device work.
+
+This checkpoint supplies the queue and transport; **the account API facade,
+native editor/feed integration, active-selection synchronization and conflict UI
+are not wired yet**. Normal account transfer/library hooks and native offline,
+reconnect and multi-tab acceptance remain required. No server, existing account,
+public content, merge or manual deployment was changed during this checkpoint.
+
+Validation: 575 local-workspace tests passed with 67 opt-in skips, plus all four
+offline-shell checks. Fourteen focused algorithm/transport tests passed after
+final acknowledgment hardening. Focused lint is clean; TypeScript reports the
+same 91 normalized baseline diagnostics and no new signatures. The queue and
+transport are tested independently; no native UI, deployed feature acceptance
+or complete account algorithm flow is claimed by these results.

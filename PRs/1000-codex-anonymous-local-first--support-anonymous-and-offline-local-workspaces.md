@@ -3633,3 +3633,44 @@ baseline diagnostics with no new signatures. Structural Graphify still reports
 two unrelated Swift parse warnings; document semantic freshness is tracked
 separately and is not inferred from AST results. This checkpoint changes server
 behavior and API fixtures, not a native UI surface.
+
+
+## Account algorithm device queue — 2026-10-18
+
+`LocalAlgorithms` now accepts an explicit workspace, clock, UUID source and
+transactional mutation/selection hooks. Anonymous callers keep the original
+scope and IDs. `AccountAlgorithmSync` reuses that canonical local writer and
+stores bounded retry metadata beside home-scoped Things. Local create, edit,
+training and deletion do not call a transport. A failed local queue write rolls
+back its corresponding content change atomically; remote failures preserve the
+already committed device work.
+
+The queue freezes an immutable command per attempt, claims it across tabs,
+checks exact acknowledgments, retries uncertain responses unchanged, and keeps
+newer revisions pending independently. It never replays engagement events.
+Complete validated catalogues and read epochs fence stale responses; confirmed
+deletions keep tombstones. Reviewed conflicts support account/device choices and
+independent private copies, with both sides rechecked before applying a choice.
+A branch waits for its source's creation receipt, and source deletion waits for
+an unsent branch. An unavailable unsent source retains the branch for explicit
+independent-copy review. Base metadata omits full weight maps, keeping large
+profiles within per-record storage bounds.
+
+`algorithmTransport.client.ts` negotiates `api.algorithms-sync` 1.0.0 and the
+selected-plane contract, then repeats current remote/local lease checks around
+bounded same-origin requests. It preserves the current selected plane while
+confirming home storage. Anonymous, offline-unconfirmed, changed-account/origin,
+partial, oversized and mismatched responses cannot acknowledge device work.
+
+This checkpoint supplies the queue and transport; **the account API facade,
+native editor/feed integration, active-selection synchronization and conflict UI
+are not wired yet**. Normal account transfer/library hooks and native offline,
+reconnect and multi-tab acceptance remain required. No server, existing account,
+public content, merge or manual deployment was changed during this checkpoint.
+
+Validation: 575 local-workspace tests passed with 67 opt-in skips, plus all four
+offline-shell checks. Fourteen focused algorithm/transport tests passed after
+final acknowledgment hardening. Focused lint is clean; TypeScript reports the
+same 91 normalized baseline diagnostics and no new signatures. The queue and
+transport are tested independently; no native UI, deployed feature acceptance
+or complete account algorithm flow is claimed by these results.

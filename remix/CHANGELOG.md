@@ -68,6 +68,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-18 — **Codex (AI)**: Prepared account algorithm device storage and
+  conditional sync queues using the shared local writer, current authority
+  checks, immutable retries and reviewed conflicts. Native facade, selection
+  and editor activation remain pending. Details:
+  [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md#account-algorithm-device-queue--2026-10-18).
+
+
 - 2026-10-18 — **Codex (AI)**: Added conditional private algorithm profile
   synchronization through the existing protected writer, canonical Timeline
   receipts and atomic deletion/active-selection cleanup. Disposable real-API

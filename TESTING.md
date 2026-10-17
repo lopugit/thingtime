@@ -1364,6 +1364,27 @@ persisted; every check is client-side.
   the mutation or delete potentially committed recordings. A ready upload-start
   receipt must go directly to completion metadata, never PUT the bytes again.
 
+## Account algorithm device queue
+
+- [ ] Lose a profile save response, then edit/train again locally. Retry the
+  original command unchanged before sending the newer profile. Training counts
+  must not double; a forged or mismatched acknowledgment cannot mark it synced.
+- [ ] Use two tabs: one live claim sends once, deletion during a create remains
+  pending after its receipt, and older catalogue reads cannot resurrect it.
+  Conflict review must reject either side changing after review. An independent
+  copy receives a new private ID and preserves profile weights/statistics.
+- [ ] Branch before the source has synced, then remove that source. When its
+  creation was confirmed, sync the branch before deleting the source. When it
+  never existed remotely, keep local branch content for explicit copy review.
+  Local operations must not wait for network access in either case.
+- [ ] Retain a large valid profile, edit it and sync without duplicating its
+  entire weight map into base metadata. Wrong account/origin/selected plane,
+  missing capabilities, oversized or incomplete responses must preserve local
+  work. Run the account algorithm and transport tests in `test:local-workspace`.
+- [ ] The native account facade, editor/feed, selection worker, transfer hooks
+  and conflict UI still require activation and clean-browser acceptance before
+  declaring the algorithm family complete.
+
 ## Conditional account algorithm sync
 
 - [ ] On a disposable loopback replica, use API-created accounts to create a
