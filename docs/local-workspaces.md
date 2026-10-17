@@ -3110,8 +3110,8 @@ post copying online retains the existing authorized server path.
 Deleting a post/comment now passes its bound files through the existing file
 cleanup service in the same local transaction. Unsent bytes are cancelled locally;
 started uploads and uncertain parent writes keep their durable replay identities.
-Account parent deletion waits for bound-file cleanup, while unrelated content can
-continue syncing. A protected child rolls back the entire cascade. Restoring a
+The original checkpoint made account parent deletion wait for file cleanup.
+The later parent-deletion conflict checkpoint below supersedes that ordering. A protected child rolls back the entire cascade. Restoring a
 file during deletion requires review before the parent can be deleted remotely.
 No account route, authentication, upload admission or same-origin rule changed.
 
@@ -3137,3 +3137,79 @@ native cases were enabled separately. The client build verifies 247 assets
 diagnostics and none in changed files. These are local results. Full legacy
 rich/media recovery, broader identity-transition and lifecycle acceptance, the
 remaining matrix, current-head CI and deployed verification are still open.
+
+
+## Native anonymous/offline History menu — 2026-10-17
+
+`PersistedThingMenu` now uses scoped workspace ownership for History, as it already
+does for Rename. An anonymous owned Thing and a retained offline account Thing can
+open the existing History modal. Remote handoff still requires a real account;
+private account History retains its existing authorization and cache boundaries.
+The shared menu identity includes the workspace generation, and the History modal
+captures that identity when opened. Pending identity or account/origin/data-plane
+changes close the old view; returning to an account does not revive its old modal.
+
+The anonymous detail fixture previously asserted History was hidden. It now proves
+that a cold offline rename retains the original recorded Component data, opened
+through the normal menu with no account-draft or mutation request. The new
+`historyMenu.browser.test.ts` loads an authorized account version, disconnects and
+cold-reloads, then opens its cached canonical data through the same menu. It reads
+the version at 1440/390/320px, switches accounts through Settings in another tab,
+verifies the old History closes and private access is refused, then returns to the
+owner and explicitly reopens History. All browser contexts are disposable.
+
+Local evidence: `tmp/local-history-menu-anonymous/browser-verification.json` and
+`tmp/local-history-menu-account-verified-final/verification.json`. Workspace and
+offline-shell (392), Things (322), Timeline (238), and navigation (17) checks pass:
+969 total, excluding 42 opt-in skips. The two native cases were separately enabled.
+Build: 247 verified assets, 21,718,258 bytes. Focused lint is clean. Raw TypeScript
+retains 91 baseline diagnostics with no changed-file diagnostics. Native screenshot
+inspection and recorded version interaction cover desktop and both phone widths.
+
+This removes a menu gate; it does not complete account Timeline capture/sync.
+Current `LocalThings.transaction` records authoritative device Timeline changes
+only for the anonymous scope. Offline account History here is the existing
+previously authorized version cache. Account-local mutation capture, durable
+reconciliation, protected Action receipts and broader origin/data-plane transitions
+remain explicit full-rollout gates. No parallel history format, anonymous-to-account
+migration, endpoint, authentication or service permission was introduced.
+
+
+## Parent deletion conflicts preserve media — 2026-10-17
+
+A real disposable-account browser regression exposed an ordering defect: a queued
+parent deletion removed its image before the parent version check rejected a newer
+remote edit. `AccountFileSync` now holds bound-file cleanup while the parent is
+pending, refused or conflicting. `AccountThingSync` replays uncertain content writes,
+waits for active file claims, then uses the canonical version-checked parent DELETE.
+Keeping the reviewed account version atomically restores its retained local files.
+Files whose account binding changed remain recoverable and require review.
+
+DELETE `/api/v1/things` adds optional `retainAttachmentReceipts:true` with
+`expectedUpdatedAt`, negotiated as `api.things` 1.34.0. Only a same-origin full-user
+owner can request it. The existing attachment cascade and accounted cancellation
+receipts preserve post/comment upload identities after byte cleanup. This allows
+fresh retained-file clients to reconcile without inventing request IDs or treating
+404 as a durable receipt. Linked files and legacy callers keep their existing
+cleanup contract. No new storage collection, credential borrowing or publishing
+path is introduced. Both manifests derive the version from the canonical registry.
+
+Local acceptance: three enabled native production-client cases cover anonymous
+and account independent templates, normal deletion, and a remote edit before
+reconnect. The conflict keeps the newer text and original image, then native
+Compare versions → Keep account version restores both through a cold offline
+reload. Normal deletion confirms an existing-file receipt without the upload
+request ID. Invalid receipt options return 400; a foreign Origin returns 403;
+private media remains readable only by its owner. All cases use disposable
+accounts, record zero offline writes, and check 1440/390/320px. Evidence:
+`tmp/parent-conflict-native-final/`; the failing pre-fix case is
+`tmp/parent-delete-race/account/concurrent-parent.json` (parent 200, image 404).
+
+Workspace/offline-shell, attachment, capability, draft and Things checks are rerun
+for this checkpoint; prior History and Timeline evidence remains above. Client
+build: 247 verified offline assets, 21,719,451 bytes. Focused lint is clean; raw
+TypeScript retains 91 baseline diagnostics, none in changed files. This closes
+the reproduced client ordering failure, not the full rollout. A remote mutation
+*during* server cascade, deeper child conflicts, retained/shared binding changes,
+quota and native identity races remain acceptance work. Current-head CI and
+deployed acceptance are unverified. No main merge or manual deployment occurred.

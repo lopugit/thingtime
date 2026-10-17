@@ -8,7 +8,7 @@ import { useNavigate } from 'react-router';
 import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { useWorkspaceUser } from '~/hooks/useWorkspaceUser';
-import { useWorkspaceScope } from '~/hooks/useWorkspaceScope';
+import { workspaceStorageIdentity, subscribeWorkspaceStorage } from '~/local-workspace/storageStatus.client';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { canOfferRecordingHandoff, sendRecordingThingToLopu, type RecordingThingIdentity } from '~/components/Lopu/recordingThingHandoff';
 import type { ThingActionId } from '~/schemas/thingActions';
@@ -34,7 +34,7 @@ export function PersistedThingMenu({ id, initialThing, label, extensions = [], c
   // still determines whether this Thing offers owner actions.
   const localIdentity = workspace?.localOnly || workspace?.offline;
   const user = localIdentity ? workspace : accountUser;
-  const scope = useWorkspaceScope();
+  const scope = React.useSyncExternalStore(subscribeWorkspaceStorage, workspaceStorageIdentity, () => '');
   const navigate = useNavigate();
   const lopu = useLopu();
   const identity = `${scope}:${user?.id || ''}:${id}`;
@@ -81,11 +81,12 @@ export function PersistedThingMenu({ id, initialThing, label, extensions = [], c
       if (currentIdentity.current === identity) lopu({ title: 'Could not send to Lopu', description: error instanceof Error ? error.message : 'Check Recording activity before retrying.', status: 'error' });
     } finally { busy.current = false; setSending(false); }
   };
-  const model = id.startsWith('timeline-folder-') ? buildThingEntityMenu({ open: { href }, 'copy-link': true }) : buildThingEntityMenu({ history: !!accountUser?.id && thing?.author?.id === accountUser.id, rename: !!user?.id && !!thing && thing.author?.id === user.id, open: { href }, inspect: { href: inspectHref }, 'copy-link': true, download: true, ...capabilities,
+  const model = id.startsWith('timeline-folder-') ? buildThingEntityMenu({ open: { href }, 'copy-link': true }) : buildThingEntityMenu({ history: !!scope && !!user?.id && thing?.author?.id === user.id, rename: !!user?.id && !!thing && thing.author?.id === user.id, open: { href }, inspect: { href: inspectHref }, 'copy-link': true, download: true, ...capabilities,
     'send-to-lopu': !!thing && canOfferRecordingHandoff(thing, accountUser?.id) ? { disabled: sending || handoffDisabled } : false
   }, extensions);
   return <><ThingActionMenuButton identity={identity} label={label} model={model} onOpen={() => void resolve()}
     onAction={event => {
+      if (currentIdentity.current !== identity) return;
       switch (event.action.command) {
         case 'open': navigate(href); break;
         case 'inspect': navigate(inspectHref); break;

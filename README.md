@@ -4737,3 +4737,26 @@ production accounts or commit credentials. Both cases verify cold offline copyin
 independent media after source deletion, and responsive native previews; account
 verification includes private sync and deletion after reconnect. See
 [coverage and boundaries](docs/local-workspaces.md#offline-post-templates-and-bound-parent-deletion--2026-10-17).
+
+
+### Native offline History menu regression
+
+From `remix/`, enable `app/local-workspace/details.browser.test.ts` with
+`TT_LOCAL_DETAILS_URL=http://127.0.0.1:<client-port>` and optional
+`TT_LOCAL_DETAILS_ARTIFACTS=/path/to/ignored-evidence` for anonymous History.
+Enable `app/local-workspace/historyMenu.browser.test.ts` with
+`TT_LOCAL_HISTORY_MENU_URL=http://127.0.0.1:<client-port>` and optional
+`TT_LOCAL_HISTORY_MENU_ARTIFACTS=/path/to/ignored-evidence` for cached account
+History. Both use the shared Playwright/Chrome setup above and the production
+client's complete offline shell. The latter creates two disposable local accounts;
+it needs no admin fixture or production credentials. Normal signup rate limits
+remain in force. See [coverage](docs/local-workspaces.md#native-anonymousoffline-history-menu--2026-10-17)
+for the boundary between cached account reads and unfinished account history sync.
+
+
+Offline account parent deletion requires the selected origin to advertise
+`api.things` 1.34.0. The existing same-origin DELETE and attachment cleanup retain
+durable private upload receipts; no additional environment variables or secrets
+are required. Older origins leave work on-device for retry. The loopback template
+fixture now also tests a newer remote edit, native conflict recovery and retained
+media after offline reload. See [the deletion checkpoint](docs/local-workspaces.md#parent-deletion-conflicts-preserve-media--2026-10-17).

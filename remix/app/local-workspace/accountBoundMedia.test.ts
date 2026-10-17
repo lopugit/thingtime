@@ -184,7 +184,7 @@ test('parent deletion rolls back all file cleanup when another child needs a ded
  }finally{await f.db.close();}
 });
 
-test('parent deletion settles uncertain writes and file cleanup before its immutable remote delete',async()=>{
+test('parent deletion settles uncertain writes before its immutable delete and only then file cleanup',async()=>{
  const f=fixture();try{
   const file=await f.select(),post=await f.sync.things.savePost({thingtime:['post'],crystal:{type:'text',text:'Delete later'},attachmentIds:[file.id]});await f.files.sync(f.upload);
   await f.sync.sync({...f.content,write:async op=>{await f.content.write(op,new AbortController().signal);throw Error('Lost parent');},get:async()=>{throw Error('Offline');}});
@@ -193,8 +193,28 @@ test('parent deletion settles uncertain writes and file cleanup before its immut
   const upload=removalTransport(f,async()=>{order.push('file');return {deleted:true,deferred:false};});
   const content={...f.content,remove:async(op:any)=>{deletes.push(op);order.push('post');if(deletes.length===1)throw Error('Lost deletion');f.remote.delete(post.id);}};
   await f.files.sync(upload);assert.deepEqual(order,[]);
-  f.tick();await f.sync.sync(content);assert.deepEqual(f.writes[1],frozen);assert.deepEqual(order,[]);
-  await f.files.sync(upload);assert.deepEqual(order,['file']);await f.sync.sync(content);assert.equal(deletes.length,1);
-  f.tick();await f.sync.sync(content);assert.deepEqual(deletes[1],deletes[0]);assert.deepEqual(order,['file','post','post']);assert.equal(f.remote.has(post.id),false);
+  f.tick();await f.sync.sync(content);assert.deepEqual(f.writes[1],frozen);assert.deepEqual(order,['post']);
+  await f.files.sync(upload);assert.deepEqual(order,['post']);assert.equal(deletes.length,1);
+  f.tick();await f.sync.sync(content);assert.deepEqual(deletes[1],deletes[0]);
+  await f.files.sync(upload);assert.deepEqual(order,['post','post','file']);assert.equal(f.remote.has(post.id),false);
+ }finally{await f.db.close();}
+});
+
+
+test('a refused parent deletion preserves media through retry and restoring the account version',async()=>{
+ const f=fixture();try{
+  const file=await f.select(),post=await f.sync.things.savePost({thingtime:['post'],crystal:{type:'text',text:'Original'},attachmentIds:[file.id]});
+  await f.files.sync(f.upload);await f.sync.sync(f.content);await f.sync.remove([post.id]);
+  const remote=f.remote.get(post.id)!;remote.updatedAt=new Date(Date.parse(remote.updatedAt)+1000).toISOString();remote.crystal.text='Newer account version';
+  let fileDeletes=0;
+  const upload=removalTransport(f,async()=>{fileDeletes++;return {deleted:true,deferred:false};});
+  const content={...f.content,remove:async()=>{throw {status:409};}};
+  await f.files.sync(upload);await f.sync.sync(content);await f.files.sync(upload);
+  assert.equal((await f.sync.status())[0].state,'conflict');assert.equal(fileDeletes,0);
+  await f.sync.retry(post.id);await f.files.sync(upload);await f.sync.sync(content);await f.files.sync(upload);assert.equal(fileDeletes,0);
+  const conflict=await f.sync.inspectConflict(content,post.id);
+  await f.sync.resolveConflict(content,{id:post.id,keep:'remote',localRevision:conflict.localRevision,remoteUpdatedAt:conflict.remote.updatedAt});
+  await f.files.sync(upload);assert.equal(fileDeletes,0);assert.deepEqual((await f.files.readFile(file.id)).bytes,f.bytes);
+  assert.equal((await f.sync.view(post.id))!.crystal.text,'Newer account version');
  }finally{await f.db.close();}
 });

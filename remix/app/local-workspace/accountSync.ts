@@ -39,6 +39,7 @@ type AccountContentFiles = {
 	prepare(tx: WorkspaceTransaction, row: LocalThing): Promise<(LocalThing & { attachmentIds?: string[] }) | null>;
 	restore?: <T extends LocalThing>(tx: WorkspaceTransaction, row: T) => Promise<T>;
 	removeBound?(tx: WorkspaceTransaction, id: string, targetId: string): Promise<void>;
+	restoreParent?(tx: WorkspaceTransaction, targetId: string, attachmentIds: string[]): Promise<void>;
 	prepareRemove?(tx: WorkspaceTransaction, targetId: string): Promise<boolean>;
 };
 const COLLECTION = 'thing-sync';
@@ -268,6 +269,7 @@ export class AccountThingSync {
 			if (state?.state !== 'conflict' || !local || local.revision !== choice.localRevision)
 				throw new WorkspaceError('SYNC_CONFLICT_CHANGED', 'Your local version changed. Review it again.', 409);
 			if (choice.keep === 'remote') {
+				if (state.deleted) await this.files?.restoreParent?.(tx, choice.id, remote.accountAttachmentIds || []);
 				await tx.delete(DELETED_CONTENT, choice.id);
 				await tx.put('things', choice.id, { ...remote, revision: local.revision + 1, updatedAt: new Date(Math.max(this.now(), Date.parse(local.updatedAt) + 1)).toISOString() });
 			}
@@ -311,8 +313,8 @@ export class AccountThingSync {
 					if (candidate.deleted && rows.some(other => other.id !== candidate.id && other.state !== 'synced' &&
 						[other.base?.folderId, other.base?.targetId, other.pending?.body.folderId, other.pending?.body.targetId].includes(candidate.id))) continue;
 					if (!candidate.deleted && [content.folderId, content.targetId, content.thingtime.includes('data') ? content.crystal.schemaId : null, ...((content.thingtime.includes('post') || content.thingtime.includes('comment')) ? postThingReferences(content.crystal.thing).map(ref => ref.id) : [])].some(id => id && rows.some(other => other.id === id && !other.base))) continue;
-					// Resolve an uncertain parent write first; then settle bound
-					// file cleanup before starting the parent's remote deletion.
+					// Resolve an uncertain parent write and active file claims first.
+					// The version-checked parent DELETE owns remote attachment cascade.
 					if (candidate.deleted && !candidate.pending && this.files?.prepareRemove) {
 						try { if (!await this.files.prepareRemove(tx, candidate.id)) continue; }
 						catch (error) {

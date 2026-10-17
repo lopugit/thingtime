@@ -71,6 +71,7 @@ export function accountThingTransport(scope: Extract<WorkspaceScope, { kind: 'ac
 		await requireThingtimeCapability(capability[0], capability[1]);
 		if (endpoint === 'attachments/delete' && args.targetId !== undefined) await requireThingtimeCapability('api.attachment-delete', args.retainReceipt === true ? '1.7.0' : '1.6.0');
 		if (endpoint === 'things/export' && args.includeFiles !== false) await requireThingtimeCapability('api.attachment-content', '1.11.0');
+		if (endpoint === 'things' && method === 'DELETE') await requireThingtimeCapability('api.things', '1.34.0');
 		if (method === 'PATCH') await requireThingtimeCapability('api.things-update', args.attachmentIds !== undefined ? '1.11.0' : '1.10.0');
 		await requireThingtimeCapability('api.mongodb-endpoint', '1.1.0');
 		lease.assertCurrent(); remoteLease.assertCurrent(); retired.signal.throwIfAborted(); signal?.throwIfAborted();
@@ -149,7 +150,7 @@ export function accountThingTransport(scope: Extract<WorkspaceScope, { kind: 'ac
 		export: (args, signal) => request('POST', args, signal, 'things/export'),
 		fork: (args, signal) => request('POST', args, signal, 'things/fork'),
 		get: async (id, signal) => withPostAttachments(await request('GET', { id }, signal)).thing as AccountThing,
-		remove: async (operation, signal) => { await request('DELETE', operation.body, signal); },
+		remove: async (operation, signal) => { await request('DELETE', { ...operation.body, retainAttachmentReceipts: true }, signal); },
 		write: async (operation, signal) => {
 			if (operation.method === 'create' && Array.isArray(operation.body.thingtime) && operation.body.thingtime.includes('comment')) {
 				const crystal = operation.body.crystal as Record<string, unknown>;

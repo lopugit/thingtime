@@ -1605,7 +1605,7 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 		return inspected;
 	};
 
-	const beforeCascade = async (root: { shareId: string; ownerId: string }): Promise<AttachmentResult> => {
+	const beforeCascade = async (root: { shareId: string; ownerId: string }, retainReceipts = false): Promise<AttachmentResult> => {
 		try {
 			// A custom data-plane shareId can collide with a home post id. Those
 			// roots cannot own private Thingtime S3 attachments and must never drive
@@ -1616,7 +1616,8 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 			let s3: AttachmentS3 | null = null;
 			const getS3 = () => (s3 ??= dependencies.getS3());
 			for (const doc of docs) {
-				const outcome = await cleanupClaimedDoc(getS3, doc, { kind: 'target', targetId: root.shareId });
+				const outcome = await cleanupClaimedDoc(getS3, doc, { kind: 'target', targetId: root.shareId,
+					...(retainReceipts && !doc.attachmentLinked && ['post', 'comment'].includes(doc.attachmentPurpose || '') ? { retainCancellation: true as const } : {}) });
 				if (outcome.status === 'deferred') {
 					throw new AttachmentServiceError(503, 'Attachment deletion is still settling — try again');
 				}

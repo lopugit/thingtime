@@ -634,3 +634,12 @@ appears only on generic editor/view routes, not embedded foreign previews.
 Run `editorTree.test.ts`, opt-in `editorTree.browser.test.ts`, generic draft
 browser recovery and account draft/post independence regressions. Setup and
 remaining gates are in [local workspaces](../local-workspaces.md#legacy-native-editor-tree-isolation--2026-10-17).
+
+
+The generic Thing detail menu now offers existing History for scoped anonymous
+ownership and retained offline account ownership. `TimelineHost` retires its target
+on workspace-generation changes; account-only handoff remains authenticated.
+`details.browser.test.ts` verifies anonymous cold-reload history and
+`historyMenu.browser.test.ts` verifies cached account versions, native account
+switching and desktop/390/320px interaction. Account-local history capture/sync
+remains open in the [coverage matrix](../local-workspaces.md#native-anonymousoffline-history-menu--2026-10-17).

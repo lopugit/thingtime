@@ -64,13 +64,22 @@ test('anonymous Thing discussions and owner rename survive a cold offline reload
 		await page.waitForFunction(() => (document.querySelector('textarea[placeholder="Reply to Local workspace… 💬"]') as HTMLTextAreaElement)?.value === '');
 		await page.getByText('Nested reply stays local too.', { exact: true }).waitFor();
 		await page.getByRole('button', { name: 'Thing actions', exact: true }).click();
-		assert.equal(await page.getByRole('menuitem', { name: /History|Send to Lopu/ }).count(), 0);
+		await page.getByRole('menuitem', { name: /History/ }).waitFor();
+		assert.equal(await page.getByRole('menuitem', { name: /Send to Lopu/ }).count(), 0);
 		await page.getByRole('menuitem', { name: '✏️ Rename', exact: true }).click();
 		await page.getByRole('textbox', { name: 'Thing title', exact: true }).fill('Renamed entirely offline');
 		await page.getByRole('button', { name: 'Rename', exact: true }).click();
 		await page.getByRole('heading', { name: 'Renamed entirely offline', exact: true }).waitFor();
 		await page.reload();
 		await page.getByRole('heading', { name: 'Renamed entirely offline', exact: true }).waitFor();
+        await page.getByRole('button', { name: 'Thing actions', exact: true }).click();
+        await page.getByRole('menuitem', { name: /History/ }).click();
+        const history = page.getByRole('dialog', { name: 'History', exact: true });
+        await history.getByText('Saved on this device · never uploaded', { exact: true }).waitFor();
+        await history.getByRole('button', { name: /Created Thing Local discussion acceptance/ }).click();
+        await history.getByRole('button', { name: 'View data', exact: true }).click();
+        await history.locator('pre').filter({ hasText: 'Editable Component with local discussion.' }).waitFor();
+        await history.getByRole('button', { name: 'Close', exact: true }).click();
 		await page.getByText('A comment saved entirely on this device.', { exact: true }).waitFor();
 		await page.getByRole('button', { name: 'View replies', exact: true }).click();
 		await page.getByText('Nested reply stays local too.', { exact: true }).waitFor();
@@ -107,7 +116,7 @@ test('anonymous Thing discussions and owner rename survive a cold offline reload
 			await writeFile(
 				resolve(dir, 'browser-verification.json'),
 				JSON.stringify(
-					{ anonymous: true, coldOfflineReload: true, commentAndReply: true, offlineThreadNavigation: true, ownerRename: true, commentSearch: true, mutations, accountDraftRequests, bounds },
+					{ anonymous: true, coldOfflineReload: true, commentAndReply: true, offlineThreadNavigation: true, ownerRename: true, nativeHistory: true, commentSearch: true, mutations, accountDraftRequests, bounds },
 					null,
 					2
 				)

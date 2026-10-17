@@ -40,6 +40,8 @@ type FileRecord = {
 	controlReserve?: string;
 	started?: boolean;
 	deleteRequested?: true;
+	/** Cleanup requested by deleting the parent, not by removing a file in its editor. */
+	parentDeletion?: true;
 	deleteVersion?: string;
 	deletingLocal?: LocalAttachment;
 	cancelRequested?: true;
@@ -111,20 +113,33 @@ export class AccountFileSync {
 		// Reserve bounded control space at admission, so a full workspace can
 		// still record cancellation, claim it, retry and acknowledge it. Account
 		// response/part data remain separately charged at their actual size.
-		const { state, phase, started, deleteRequested, deleteVersion, cancelRequested, cancelled, attempts, retryAt, error, claim } = row;
-		const controls = JSON.stringify({ state, phase, started, deleteRequested, deleteVersion, cancelRequested, cancelled, attempts, retryAt, error, claim, ...(row.deletingLocal ? { deletingLocal: null } : {}) });
+		const { state, phase, started, deleteRequested, parentDeletion, deleteVersion, cancelRequested, cancelled, attempts, retryAt, error, claim } = row;
+		const controls = JSON.stringify({ state, phase, started, deleteRequested, parentDeletion, deleteVersion, cancelRequested, cancelled, attempts, retryAt, error, claim, ...(row.deletingLocal ? { deletingLocal: null } : {}) });
 		const controlReserve = ' '.repeat(Math.max(0, 1024 - new TextEncoder().encode(controls).length));
 		return tx.put(COLLECTION, row.id, { ...row, controlReserve });
 	}
 	/** Both writers participate in the importer's existing transaction. Only
 	 * confirmed upload receipts can rewrite a device file to an account ID. */
 	readonly contentHooks = {
-		removeBound: (tx: WorkspaceTransaction, id: string, targetId: string) => this.removeBoundInTransaction(tx, id, targetId),
+		removeBound: (tx: WorkspaceTransaction, id: string, targetId: string) => this.removeBoundInTransaction(tx, id, targetId, true),
 		prepareRemove: async (tx: WorkspaceTransaction, targetId: string) => {
 			// A restored file needs explicit review before deleting its parent.
 			if ((await tx.list<LocalThing>('things')).some(({value}) => isLocalAttachment(value) && value.targetId === targetId))
 				throw new WorkspaceError('BOUND_FILE_KEPT', 'A file was kept on this device. Review it before retrying parent deletion.', 409);
-			return !(await tx.list<FileRecord>(COLLECTION)).some(({value}) => value.deleteRequested && !value.cancelled && value.deletingLocal?.targetId === targetId);
+			// The canonical parent DELETE checks its version before attachment cascade.
+			// Never pre-delete its files: a stale parent must keep its original media.
+			return !(await tx.list<FileRecord>(COLLECTION)).some(({value}) => !value.cancelled && value.deletingLocal?.targetId === targetId && value.claim && value.claim.expiresAt > this.now());
+		},
+		restoreParent: async (tx: WorkspaceTransaction, targetId: string, attachmentIds: string[]) => {
+			for (const {value} of await tx.list<FileRecord>(COLLECTION)) {
+				if (!value.parentDeletion || value.cancelled || value.deletingLocal?.targetId !== targetId) continue;
+				if (!value.remote || !attachmentIds.includes(value.remote.id)) {
+					await this.putRecord(tx, {...value, state: 'error', error: 'The account file binding changed. Recovery bytes remain on this device.'}); continue;
+				}
+				await tx.put('things', value.id, value.deletingLocal);
+				await this.putRecord(tx, {...value, parentDeletion: undefined, deleteRequested: undefined, deletingLocal: undefined,
+					deleteVersion: undefined, state: 'synced', claim: undefined, error: undefined, retryAt: 0});
+			}
 		},
 		mutate: (tx: WorkspaceTransaction, row: LocalAttachment, previous?: LocalAttachment) => this.enqueue(tx, row, previous),
 		prepare: async (tx: WorkspaceTransaction, row: LocalThing): Promise<(LocalThing & { attachmentIds?: string[] }) | null> => {
@@ -466,7 +481,7 @@ export class AccountFileSync {
 	async removeBound(id: string, targetId: string) {
 		await this.tx('readwrite', tx => this.removeBoundInTransaction(tx, id, targetId));
 	}
-	private async removeBoundInTransaction(tx: WorkspaceTransaction, id: string, targetId: string) {
+	private async removeBoundInTransaction(tx: WorkspaceTransaction, id: string, targetId: string, parentDeletion = false) {
 		const record = await tx.get<FileRecord>(COLLECTION, id);
 		if (!record || !['post','comment'].includes(record.request.purpose)) throw new WorkspaceError('MISSING_UPLOAD', 'This workspace has no matching post file.', 404);
 		if (record.cancelled) return;
@@ -475,7 +490,7 @@ export class AccountFileSync {
 		if (!local || local.targetId !== targetId || local.localAttachment.draftId || !parent?.thingtime.includes('post')) throw new WorkspaceError('BOUND_UPLOAD', 'Select the file in its owning editor.', 409);
 		if (record.started === false && !record.remote && !record.claim) return this.finishCancellation(tx, record);
 		await tx.delete('things', id);
-		await this.putRecord(tx, { ...record, deleteRequested: true, deletingLocal: local, state: record.claim ? record.state : 'pending', error: undefined, retryAt: 0 });
+		await this.putRecord(tx, { ...record, deleteRequested: true, ...(parentDeletion ? {parentDeletion: true as const} : {}), deletingLocal: local, state: record.claim ? record.state : 'pending', error: undefined, retryAt: 0 });
 	}
 
 	async inspectDeletion(transport: FileMetadataTransport, id: string, signal = new AbortController().signal) {
@@ -541,7 +556,12 @@ export class AccountFileSync {
 					// Editor selections alone never upload. A committed post or an
 					// active private draft must bind them first. Once started,
 					// finish the same request even if a newer editor removes the file.
-					if (value.deleteRequested && value.deletingLocal?.targetId && (await tx.get<any>('thing-sync', value.deletingLocal.targetId))?.pending) continue;
+					if (value.deleteRequested && value.deletingLocal?.targetId) {
+						const parent = await tx.get<any>('thing-sync', value.deletingLocal.targetId);
+						if (parent?.pending || (parent?.deleted && parent.state !== 'synced')) continue;
+						// A kept/replaced parent requires explicit file reconciliation.
+						if (value.parentDeletion && parent && !parent.deleted) continue;
+					}
 					if (!value.deleteRequested && value.started === false && ['post','comment'].includes(value.request.purpose)) {
 						const local = await tx.get<LocalAttachment>('things', value.id);
 						if (!local?.targetId) {

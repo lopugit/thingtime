@@ -404,13 +404,18 @@ export const action = async ({ request }: { request: Request }) => {
   }
 
   if (method === 'DELETE') {
+    const retainReceipts = body?.retainAttachmentReceipts;
+    if (retainReceipts !== undefined && (retainReceipts !== true || typeof body?.expectedUpdatedAt !== 'string'))
+      return json({ ok: false, error: 'Retaining attachment receipts requires true and expectedUpdatedAt' }, { status: 400, headers: cors });
+    if (retainReceipts && (actor.kind !== 'user' || user.accountKind !== 'user' || !isSameOriginAttachmentRequest(request)))
+      return json({ ok: false, error: 'Attachment receipt retention requires the same-origin account owner' }, { status: 403, headers: cors });
     const id = (new URL(request.url).searchParams.get('id') || '').trim() || body?.id;
     const archiveResult = await deleteOwnedChatArchive({ actorKind: actor.kind, accountKind: user.accountKind,
       ownerId: user.id, id, sameOrigin: isSameOriginAttachmentRequest(request), expectedUpdatedAt: body?.expectedUpdatedAt });
     if (archiveResult) return json(archiveResult, { status: archiveResult.ok === false ? archiveResult.status : 200, headers: { ...cors, 'Cache-Control': 'private, no-store' } });
     const attachmentHooks =
       actor.kind !== 'app' && user.accountKind === 'user'
-        ? { beforeCascade: prepareAttachmentCascadeForThing, expectedUpdatedAt: body?.expectedUpdatedAt }
+        ? { beforeCascade: (root: Parameters<typeof prepareAttachmentCascadeForThing>[0]) => prepareAttachmentCascadeForThing(root, retainReceipts === true), expectedUpdatedAt: body?.expectedUpdatedAt }
         : { expectedUpdatedAt: body?.expectedUpdatedAt };
     const result = await deleteThing(viewer, id, app, attachmentHooks);
     if (result.ok === false) {

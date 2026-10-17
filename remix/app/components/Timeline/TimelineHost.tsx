@@ -28,6 +28,8 @@ import { useDataPlane } from '../../hooks/useDataPlane';
 import { thingHistoryHref } from '../../utils/dataPlane';
 import { apiErrorMessage } from '../../hooks/apiFailure';
 
+import { workspaceStorageIdentity, subscribeWorkspaceStorage } from '../../local-workspace/storageStatus.client';
+
 const OPEN_HISTORY = 'thingtime:open-history';
 export function openThingHistory(thingId: string, thingtime?: readonly string[]) {
 	window.dispatchEvent(new CustomEvent(OPEN_HISTORY, { detail: { thingId, storage: historyStorageForThing(thingtime) } }));
@@ -546,19 +548,20 @@ export function HistoryPage() {
 }
 
 export function TimelineHost() {
-	const [target, setTarget] = React.useState<{ thingId: string; storage: TimelineStorage } | null>(null);
-	const user = useCurrentUser();
+	const identity = React.useSyncExternalStore(subscribeWorkspaceStorage, workspaceStorageIdentity, () => '');
+	const [selectedTarget, setTarget] = React.useState<{ identity: string; thingId: string; storage: TimelineStorage } | null>(null);
+	const target = selectedTarget?.identity === identity ? selectedTarget : null;
 	const location = useLocation();
 	React.useEffect(() => setTarget(null), [location.key]);
 	React.useEffect(() => {
 		const open = (event: Event) => {
 			const id = (event as CustomEvent).detail?.thingId;
-			if (typeof id === 'string' && id.length > 0 && id.length <= 200)
-				setTarget({ thingId: id, storage: (event as CustomEvent).detail?.storage === 'home' ? 'home' : 'selected' });
+			if (identity && typeof id === 'string' && id.length > 0 && id.length <= 200)
+				setTarget({ identity, thingId: id, storage: (event as CustomEvent).detail?.storage === 'home' ? 'home' : 'selected' });
 		};
 		window.addEventListener(OPEN_HISTORY, open);
 		return () => window.removeEventListener(OPEN_HISTORY, open);
-	}, []);
+	}, [identity]);
 	return (
 		<Modal isOpen={target !== null} onClose={() => setTarget(null)} size="5xl" scrollBehavior="inside" isCentered>
 			<ModalOverlay zIndex={DRAWER_MODAL_OVERLAY_Z} />
@@ -568,7 +571,7 @@ export function TimelineHost() {
 				<ModalBody pb={6} minW={0}>
 					{target ? (
 						<TimelineStorageProvider storage={target.storage}>
-							<TimelinePanel key={`${user?.id}:${target.thingId}:${target.storage}`} thingId={target.thingId} />
+							<TimelinePanel key={`${identity}:${target.thingId}:${target.storage}`} thingId={target.thingId} />
 						</TimelineStorageProvider>
 					) : null}
 				</ModalBody>

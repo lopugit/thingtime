@@ -51,6 +51,14 @@ profile slot, emoji, subspace branding) or is an owner-only draft/recording.
 Canonical rules: [`FUNDAMENTALS.md`](../../FUNDAMENTALS.md) §3 (appended data
 is relational; attachments target their parent via `targetId`).
 
+Parent deletion uses the canonical version check before bound-file cleanup.
+`AccountThingSync` and `AccountFileSync.contentHooks` retain recovery while the
+parent is refused/conflicting and restore files with the reviewed account version.
+Same-origin owner DELETE opts into durable cascade receipts through `api.things`
+1.34.0; `attachments.beforeCascade` reuses cancellation claims. See the
+[parent conflict checkpoint](../local-workspaces.md#parent-deletion-conflicts-preserve-media--2026-10-17).
+`offlinePostTemplate.browser.test.ts` now covers both accepted and refused deletes.
+
 ## Where the code lives
 
 | Layer | Path | Notes |

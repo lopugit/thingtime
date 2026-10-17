@@ -168,3 +168,13 @@ same portable JSON/ZIP flow; file-only archive actions remain distinct. The
 opt-in `accountBoundRetention.browser.test.ts` exercises keyboard menu opening,
 touch selection, responsive dialogs and real offline export/import. Managed
 Timeline folders continue to use their dedicated History workflow.
+
+
+Owned anonymous and offline account Things expose History through
+`PersistedThingMenu` using workspace content identity. Its menu callbacks and
+`TimelineHost` targets include the root generation; identity changes retire the old
+modal and callbacks. Server handoff and account History authorization stay separate.
+Run the enabled `details.browser.test.ts` and `historyMenu.browser.test.ts` alongside
+Things, Timeline, navigation and local-workspace suites. See the
+[History checkpoint](../local-workspaces.md#native-anonymousoffline-history-menu--2026-10-17)
+for cached-account versus authoritative anonymous coverage and remaining sync work.

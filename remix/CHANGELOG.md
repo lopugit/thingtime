@@ -68,6 +68,22 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-17 — **Codex (AI)**: Offline parent deletion now holds bound-media
+  cleanup until the canonical parent version check accepts deletion. Reviewed
+  account restoration preserves local image bytes; same-origin opt-in cascade
+  receipts negotiate `api.things` 1.34.0. Three disposable native cases verify
+  normal deletion, a newer remote edit, and cold-offline recovery. Full-rollout,
+  current-head CI and deployed acceptance remain open. [PR #1000 details](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+
+- 2026-10-17 — **Codex (AI)**: Open existing History from owned anonymous and
+  offline account Thing menus; retire old menu callbacks and History modals when
+  workspace identity changes. Cold-browser checks cover anonymous recorded data,
+  private account cache reads, native account switches and 1440/390/320px version
+  interaction. 969 focused checks pass; account-local Timeline capture/sync remains
+  unfinished. Details: [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+
 - 2026-10-17 — **Codex (AI)**: Restore Save as template for owned offline account
   posts with scoped retry/retirement guards. Delete bound post/comment media through
   the existing local file cleanup transaction and settle uncertain writes before

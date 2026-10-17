@@ -9206,8 +9206,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // owner-library files. The combined 1.27.0 contract adds shared
     // Thing discussions, linked references, display-metadata renames and
     // optional cursor-backed rich comment projections.
-    featureVersion: '1.33.2',
-    contractVersion: '1.33.2',
+    // 1.34.0: same-origin full-user DELETE may retain durable post/comment upload receipts.
+    featureVersion: '1.34.0',
+    contractVersion: '1.34.0',
     group: 'things',
     // 1.33.1: placement and folder deletion share transactional ancestry fences.
     // 1.33.2: protected library display-title renames commit title-only history.
@@ -9249,6 +9250,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     },
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
     steps: [
+      'Same-origin account owners may DELETE with retainAttachmentReceipts:true and expectedUpdatedAt. The canonical version-checked cascade keeps private, accounted zero-byte receipts for post/comment uploads, preventing delayed upload replay and allowing retained-file cleanup to reconcile. Other callers cannot request this mode.',
       'POST { thingtime: ["post"], crystal: { type, text, richText?, images, listing, thing }, acl, tags } — or the legacy post body — to create. type is text, image, marketplace, or thingtime.',
       'Post captions may include richText: a bounded native Editor.js document ({ kind: "rich-text", blocks: [...] }). The server derives crystal.text from those blocks as the canonical plain-text search, moderation, notification, and older-client fallback.',
       'Thingtime posts (type "thingtime") carry a free-form structured thing under crystal.thing — bounded like data crystals and searchable as crystal.thing.<field> on /search. They can also carry images and an optional marketplace listing (validated like a marketplace post’s when present).',

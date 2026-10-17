@@ -1583,6 +1583,19 @@ test('cascade S3 claim is fenced to the exact owner target relation', async () =
 	assert.deepEqual(claimArgs[3], { kind: 'target', targetId: 'post-1' });
 });
 
+test('parent receipt retention uses the existing owner/target cleanup claim only for stored post media', async () => {
+ const claims: any[] = [];
+ const docs = [attachmentDoc({ attachmentState: 'ready', targetId: 'post-1', attachmentPurpose: 'post', uploadId: undefined }),
+  attachmentDoc({ shareId:'linked', attachmentState:'ready', targetId:'post-1', attachmentPurpose:'post', attachmentLinked:true, uploadId:undefined })];
+ const service = createAttachmentService({ customMongoActive:()=>false, getS3:()=>noopS3(), store:{
+  listForTarget:async()=>docs, claimDeleting:async(...args:any[])=>{claims.push(args);return null;}, getOwned:async()=>null
+ } as any });
+ assert.deepEqual(await service.beforeCascade({shareId:'post-1',ownerId:'user-1'},true),{ok:true});
+ assert.deepEqual(claims.map(args=>args[3]),[
+  {kind:'target',targetId:'post-1',retainCancellation:true}, {kind:'target',targetId:'post-1'}
+ ]);
+});
+
 test('cascade removes each exact-version row immediately and leaves a later failure retryable', async () => {
 	const first = attachmentDoc({
 		shareId: 'attachment-1',

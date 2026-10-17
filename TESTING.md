@@ -11133,3 +11133,45 @@ Run `app/local-workspace/components.browser.test.ts` with
 
 Run `test:local-workspace`, `test:drafts`, `test:feed` and separately enable
 `app/drafts/offlinePostTemplate.browser.test.ts` as documented in README.
+
+
+### Native anonymous/offline History menu (2026-10-17)
+
+- [x] In a clean anonymous context, import and rename an editable Component while
+  offline. Cold reload its normal detail page, open Thing actions → History, and
+  inspect the original recorded data. History must be offered; Send to Lopu must
+  remain absent. No remote mutations or account-draft requests occur.
+- [x] In disposable account A, create a private Thing and read its canonical History
+  online. Disconnect and cold reload the detail page. Open the normal History menu
+  and read the cached version data at 1440/390/320px, including scrolling to and
+  opening the version on a phone. Cached content stays visible when refresh fails.
+- [x] With History open, use Settings in another tab to switch to disposable B.
+  The modal closes, the old recorded value disappears and B receives a private
+  Thing 404. Return to A: History stays closed until explicitly reopened.
+- [ ] Complete account-local mutation capture and remote reconciliation, plus
+  native origin/data-plane switches. Cached account History reads are not proof of
+  either. Keep the full local-first merge gate open.
+
+Enable `details.browser.test.ts` and `historyMenu.browser.test.ts` with the loopback
+variables in README; also run `test:local-workspace`, `test:things`, `test:timeline`
+and `test:nav`.
+
+
+### Offline parent deletion and bound media conflict regression
+
+- In a disposable approved account, save a private post with an image, allow sync,
+  disconnect, and delete through Post options. Independently edit the remote post
+  before reconnect. Confirm sync reports a conflict and both newer text and image
+  remain available remotely. No attachment DELETE may precede parent acceptance.
+- Use Review sync → Compare versions → Keep account version, cold-reload offline,
+  and verify the restored text/image. A changed file binding must retain recovery
+  bytes for review. Repeat an uncertain parent write/delete with its original ID.
+- Without a remote edit, delete offline and reconnect: parent and image disappear,
+  a separate template image survives, and `retainReceipt:true` reconciles the
+  existing attachment ID without its upload request ID. Refuse malformed options,
+  foreign Origin and an origin lacking `api.things` 1.34.0 before mutation.
+- Enable `offlinePostTemplate.browser.test.ts` with the documented loopback fixture
+  variables. It runs three native cases, including the conflict/recovery case;
+  default skipped cases are not acceptance evidence. Mid-cascade server writes,
+  deeper child conflicts and broader retained/shared-file races remain separate
+  full-rollout checks.

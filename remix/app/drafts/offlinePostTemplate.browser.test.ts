@@ -4,13 +4,13 @@ import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 const base=process.env.TT_LOCAL_POST_TEMPLATE_URL,playwrightPath=process.env.TT_SHARED_PLAYWRIGHT_PATH,artifacts=process.env.TT_LOCAL_POST_TEMPLATE_ARTIFACTS,adminFile=process.env.TT_LOCAL_FILE_SYNC_ADMIN_FIXTURE;
-for(const account of [true,false])test(`${account?'offline account':'anonymous'} post templates keep independent media after source deletion`,{skip:!base||!playwrightPath||(account&&!adminFile),timeout:180_000},async()=>{
+for(const [account,conflict] of [[true,false],[false,false],[true,true]])test(`${account?'offline account':'anonymous'} post templates keep independent media after source deletion${conflict?' and a refused parent deletion':''}`,{skip:!base||!playwrightPath||(account&&!adminFile),timeout:180_000},async()=>{
  assert.ok(['localhost','127.0.0.1'].includes(new URL(base!).hostname));
  const {chromium}=await import(playwrightPath!);
  const browser=await chromium.launch({executablePath:process.env.TT_SHARED_CHROME_PATH,headless:true,chromiumSandbox:true});
  const context=await browser.newContext({viewport:{width:1440,height:1000}}),page=await context.newPage(),guest=await browser.newContext();
  const url=(path:string)=>new URL(path,base).href,headers={Origin:new URL(base!).origin},errors:string[]=[],offlineWrites:string[]=[],accountDraftRequests:string[]=[];
- const directory=artifacts&&resolve(artifacts,account?'account':'anonymous');
+ const directory=artifacts&&resolve(artifacts,conflict?'account-conflict':account?'account':'anonymous');
  let offline=false,owner='',sourceId='',postId='',templateId='';
  page.setDefaultTimeout(20_000);page.on('pageerror',(error:Error)=>errors.push(error.message));
  page.on('request',(request:any)=>{const path=new URL(request.url()).pathname;if(offline&&!['GET','HEAD','OPTIONS'].includes(request.method()))offlineWrites.push(path);if(path==='/api/v1/drafts')accountDraftRequests.push(request.method());});
@@ -66,19 +66,51 @@ for(const account of [true,false])test(`${account?'offline account':'anonymous'}
    assert.deepEqual(remote.thing.acl,['tt:user']);assert.notEqual(remote.post.attachments[0].id,remoteTemplate.draft.attachmentIds[0]);
    for(const id of [remote.post.attachments[0].id,remoteTemplate.draft.attachmentIds[0]]){const bytes=await context.request.get(url('/api/v1/attachments/content?id='+id+'&download=1'));assert.equal(bytes.status(),200);assert.deepEqual(await bytes.body(),png);assert.equal((await guest.request.get(url('/api/v1/attachments/content?id='+id))).status(),404);}
    assert.equal((await context.request.get(url('/api/v1/things?id='+sourceId))).status(),404);assert.equal((await guest.request.get(url('/api/v1/things?id='+postId))).status(),404);synced=true;
+   for(const data of [{id:postId,retainAttachmentReceipts:false},{id:postId,retainAttachmentReceipts:true}]){
+    const refused=await context.request.delete(url('/api/v1/things'),{headers,data});assert.equal(refused.status(),400);
+   }
+   const crossOrigin=await context.request.delete(url('/api/v1/things'),{headers:{Origin:'https://unrelated.example'},data:{id:postId,retainAttachmentReceipts:true,expectedUpdatedAt:remote.thing.updatedAt}});
+   assert.equal(crossOrigin.status(),403);
+   assert.equal((await context.request.get(url('/api/v1/attachments/content?id='+remote.post.attachments[0].id))).status(),200);
    // A retained account post must also delete offline through the native menu.
    offline=true;await context.setOffline(true);await page.reload();
    await page.getByRole('button',{name:'Post options',exact:true}).first().click();await page.getByText('Delete',{exact:true}).click();
    await poll(records,rows=>!rows.some((r:any)=>r.collection==='things'&&r.id===postId));
    assert.deepEqual(offlineWrites,[]);
+   if(conflict){
+   const newerText='Concurrent remote edit must retain its original image';
+   const newer=await context.request.patch(url('/api/v1/things'),{headers,data:{id:postId,crystal:{text:newerText,richText:{time:0,blocks:[{id:'concurrent',type:'paragraph',data:{text:newerText}}],version:'2.31.0'}}}});
+   assert.equal(newer.status(),200,await newer.text());
+   offline=false;await context.setOffline(false);await page.goto(url('/feed'));
+   await poll(records,rows=>rows.some((r:any)=>r.collection==='thing-sync'&&r.id===postId&&r.value.state==='conflict'));
+   const remaining=await context.request.get(url('/api/v1/things?id='+postId)),remainingFile=await context.request.get(url('/api/v1/attachments/content?id='+remote.post.attachments[0].id));
+   const remainingThing=await remaining.json();
+   if(directory)await writeFile(resolve(directory,'concurrent-parent.json'),JSON.stringify({postId,postStatus:remaining.status(),postText:remainingThing.thing?.crystal?.text,fileId:remote.post.attachments[0].id,fileStatus:remainingFile.status()},null,2));
+   assert.equal(remaining.status(),200);assert.equal(remainingThing.thing.crystal.text,newerText);assert.equal(remainingFile.status(),200,'A refused parent deletion must preserve the newer remote version image');
+   await page.getByText('Review sync',{exact:true}).click();
+   await page.getByRole('button',{name:'Compare versions',exact:true}).click();
+   await page.getByRole('button',{name:'Keep account version',exact:true}).click();
+   await poll(records,rows=>rows.some((r:any)=>r.collection==='things'&&r.id===postId&&r.value.crystal.text===newerText));
+   await page.goto(url('/post/'+postId));await page.getByText(newerText,{exact:true}).waitFor();
+   offline=true;await context.setOffline(true);await page.reload();
+   await page.getByText(newerText,{exact:true}).waitFor();
+   await page.getByRole('button',{name:'View template-source.png',exact:true}).locator('img').evaluate((img:HTMLImageElement)=>img.decode());
+   if(directory)await page.screenshot({path:resolve(directory,'restored-conflict.png'),animations:'disabled'});
+   offline=false;await context.setOffline(false);
+
+   }else{
    offline=false;await context.setOffline(false);await page.goto(url('/feed'));
    await poll(async()=> (await context.request.get(url('/api/v1/things?id='+postId))).status(),status=>status===404);
    assert.equal((await context.request.get(url('/api/v1/attachments/content?id='+remote.post.attachments[0].id))).status(),404);
+   // A fresh device without the upload request ID can reconcile the same durable receipt.
+   const receipt=await context.request.post(url('/api/v1/attachments/delete'),{headers,data:{id:remote.post.attachments[0].id,targetId:postId,retainReceipt:true,expectedUpdatedAt:new Date(0).toISOString()}});
+   assert.equal(receipt.status(),200,await receipt.text());assert.equal((await receipt.json()).deleted,true);
+   }
    const preserved=await context.request.get(url('/api/v1/attachments/content?id='+remoteTemplate.draft.attachmentIds[0]+'&download=1'));
    assert.equal(preserved.status(),200);assert.deepEqual(await preserved.body(),png);
 
   }else assert.deepEqual(accountDraftRequests,[]);
-  assert.deepEqual(errors,[]);if(directory)await writeFile(resolve(directory,'verification.json'),JSON.stringify({sourceId,postId,templateId,sourceDeleted:true,independentBytes:true,templatePreserved:true,syncedPostDeleted:account,offlineWrites,anonymousAccountRequests:account?undefined:accountDraftRequests,synced,viewports:[1440,390,320],errors},null,2));
+  assert.deepEqual(errors,[]);if(directory)await writeFile(resolve(directory,'verification.json'),JSON.stringify({sourceId,postId,templateId,sourceDeleted:true,independentBytes:true,templatePreserved:true,syncedPostDeleted:account&&!conflict,parentConflictPreservesMedia:conflict,offlineWrites,anonymousAccountRequests:account?undefined:accountDraftRequests,synced,viewports:[1440,390,320],errors},null,2));
  }catch(error){if(directory){await page.screenshot({path:resolve(directory,'failure.png')}).catch(()=>{});await writeFile(resolve(directory,'failure.json'),JSON.stringify({body:await page.locator('body').innerText().catch(()=>''),sourceId,postId,templateId,errors,offlineWrites,accountDraftRequests},null,2));}throw error;
  }finally{
   await page.close();offline=false;await context.setOffline(false).catch(()=>{});

@@ -25,7 +25,7 @@ test('transport pins account and database on reads and writes and retires mismat
  const lease = { assertCurrent() { if (rootIdentity.read().generation !== generation) throw new Error('Retired workspace'); }, onInvalidate: () => () => {} };
  let result = Response.json({ ok: true, thing: { id: 'thing' } });
  Object.assign(globalThis, { window: { location: { origin }, dispatchEvent(event: Event) { events.push(event.type); } }, fetch: async (url: string, init: RequestInit) => {
-  if (url.includes('capabilities')) return Response.json({ schemaVersion: 1, origin, features: { 'api.drafts': { version: '1.1.0' }, 'api.attachment-delete': { version: '1.5.0' }, 'api.attachment-upload-abort': { version: '1.2.0' }, 'api.attachment-annotate': { version: '1.2.0' }, 'api.things-bulk': { version: '1.6.0' }, 'api.attachment-uploads': { version: '1.5.0' }, 'api.attachment-upload-parts': { version: '1.1.0' }, 'api.attachment-upload-complete': { version: '1.4.0' }, 'api.things-comment': { version: '1.8.0' }, 'api.things': { version: '1.33.0' }, 'api.things-update': { version: '1.10.0' }, 'api.things-export': { version: '1.15.0' }, 'api.things-fork': { version: '1.6.0' }, 'api.components-browse': { version: '1.0.0' }, 'api.schemas-browse': { version: '1.0.0' }, 'api.attachment-content': { version: '1.11.0' }, 'api.mongodb-endpoint': { version: '1.1.0' } } });
+  if (url.includes('capabilities')) return Response.json({ schemaVersion: 1, origin, features: { 'api.drafts': { version: '1.1.0' }, 'api.attachment-delete': { version: '1.5.0' }, 'api.attachment-upload-abort': { version: '1.2.0' }, 'api.attachment-annotate': { version: '1.2.0' }, 'api.things-bulk': { version: '1.6.0' }, 'api.attachment-uploads': { version: '1.5.0' }, 'api.attachment-upload-parts': { version: '1.1.0' }, 'api.attachment-upload-complete': { version: '1.4.0' }, 'api.things-comment': { version: '1.8.0' }, 'api.things': { version: '1.34.0' }, 'api.things-update': { version: '1.10.0' }, 'api.things-export': { version: '1.15.0' }, 'api.things-fork': { version: '1.6.0' }, 'api.components-browse': { version: '1.0.0' }, 'api.schemas-browse': { version: '1.0.0' }, 'api.attachment-content': { version: '1.11.0' }, 'api.mongodb-endpoint': { version: '1.1.0' } } });
   calls.push({ url, init }); return result.clone();
  } });
  try {
@@ -53,6 +53,7 @@ test('transport pins account and database on reads and writes and retires mismat
   result = Response.json({ ok: true });
   await transport.remove!({ id: 'thing', operationId: 'delete', version: 1, method: 'delete', body: { id: 'thing', expectedUpdatedAt: '2026-01-01T00:00:00.000Z' } }, new AbortController().signal);
   assert.equal(calls.at(-1).init.method, 'DELETE');
+  assert.equal(JSON.parse(calls.at(-1).init.body).retainAttachmentReceipts,true);
   assert.equal(JSON.parse(calls.at(-1).init.body).expectedUpdatedAt, '2026-01-01T00:00:00.000Z');
   const beforeBoundDelete=calls.length;
   await assert.rejects(transport.files.remove!({id:'file',requestId:'request',targetId:'post',expectedUpdatedAt:'2026-10-17T00:00:00Z'},new AbortController().signal),/incompatible/);
@@ -179,4 +180,24 @@ test('bounded file reader refuses missing, oversized and truncated bodies',async
  await assert.rejects(readBoundedBytes(new Response(new Uint8Array(2)),3),/incomplete/);
  await assert.rejects(readBoundedBytes(new Response(new Uint8Array(4)),3),/exceeds/);
  await assert.rejects(readBoundedBytes(new Response(new Uint8Array(3)),17*1024*1024),/Invalid file size/);
+});
+
+test('parent deletion refuses an origin without durable cascade receipts and permits a compatible retry',async()=>{
+ const saved={window:globalThis.window,fetch:globalThis.fetch};
+ const origin='https://cascade-receipts.test',scope={kind:'account' as const,origin,ownerId:'owner',dataPlane:'home'};
+ let version='1.33.2';const mutations:any[]=[];
+ Object.assign(globalThis,{window:{location:{origin},dispatchEvent(){}},fetch:async(url:string,init:RequestInit)=>{
+  if(url.includes('capabilities'))return Response.json({schemaVersion:1,origin,features:{'api.things':{version},'api.mongodb-endpoint':{version:'1.1.0'}}});
+  mutations.push(init);return Response.json({ok:true});
+ }});
+ try{
+  rootIdentity.confirm(rootIdentity.read().generation);bindLocalWorkspace(false,rootIdentity.read().generation,scope);
+  const transport=accountThingTransport(scope,{assertCurrent(){},onInvalidate:()=>()=>{}});
+  const op={id:'post',operationId:'delete',version:1,method:'delete' as const,body:{id:'post',expectedUpdatedAt:'2026-10-17T00:00:00.000Z'}};
+  // The checker first rejects any cached manifest from another origin.
+  await assert.rejects(transport.remove!(op,new AbortController().signal),/incompatible/);
+  await assert.rejects(transport.remove!(op,new AbortController().signal),/incompatible/);assert.deepEqual(mutations,[]);
+  version='1.34.0';await transport.remove!(op,new AbortController().signal);
+  assert.deepEqual(JSON.parse(mutations[0].body),{...op.body,retainAttachmentReceipts:true});
+ }finally{Object.assign(globalThis,saved);}
 });
