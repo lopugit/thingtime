@@ -153,7 +153,7 @@ function SettingsEditor({ draft, name, onName, children }: { draft: UseWebpageDr
     <Button size="xs" mb={2} onClick={() => setOpen(true)}>Open Builder inspector</Button>
     {children(builder.chrome)}{builder.insertMenu}
     {open && <BuilderDrawer allowedBlockTypes={SETTINGS_BLOCK_TYPES} allowDataSources={false} title="Settings layout" mode="site" hideTransfer draft={draft} selectedId={builder.selectedId}
-      onDeselect={builder.deselect} onClose={() => setOpen(false)} pageName={name} onPageName={onName}
+      onSelectBlock={id => builder.chrome.onSelect(id)} onDeselect={builder.deselect} onClose={() => setOpen(false)} pageName={name} onPageName={onName}
       audienceAcl={['tt:user']} onAudienceAcl={() => {}} helpText="Edit this layout with normal Builder blocks. Live credential operations pause while editing. Save stores only the authored layout." />}
   </>;
 }
