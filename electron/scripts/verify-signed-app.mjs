@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 
 const require = createRequire(import.meta.url);
 const { parseCodeSignatureDetails, verifySignedArtifacts } = require('../lib/thingtime-node-bridge.cjs');
+const { verifyAgentPackage } = require('../lib/verify-agent-package.cjs');
 const electronDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 async function findBuiltApp() {
@@ -31,8 +32,10 @@ async function findBuiltApp() {
 function parseArguments(values) {
 	let appArgument = null;
 	let mode = 'local';
+	let requireAgentBrowser = false;
 	for (let index = 0; index < values.length; index += 1) {
 		const value = values[index];
+		if (value === '--require-agent-browser') { requireAgentBrowser = true; continue; }
 		if (value === '--mode') {
 			mode = values[index + 1] || '';
 			index += 1;
@@ -46,7 +49,7 @@ function parseArguments(values) {
 	if (!['local', 'production', 'runtime'].includes(mode)) {
 		throw new Error('Signature verification mode must be local, production, or runtime.');
 	}
-	return { appArgument, mode };
+	return { appArgument, mode, requireAgentBrowser };
 }
 
 function run(command, args, label) {
@@ -58,7 +61,7 @@ function run(command, args, label) {
 	return `${result.stdout || ''}\n${result.stderr || ''}`;
 }
 
-const { appArgument, mode } = parseArguments(process.argv.slice(2));
+const { appArgument, mode, requireAgentBrowser } = parseArguments(process.argv.slice(2));
 const appPath = appArgument ? path.resolve(appArgument) : await findBuiltApp();
 const helperApp = path.join(appPath, 'Contents', 'Helpers', 'Thingtime Node.app');
 const helperExecutable = path.join(helperApp, 'Contents', 'MacOS', 'ThingtimeNode');
@@ -88,6 +91,7 @@ if (mode === 'production') {
 	run('/usr/bin/xcrun', ['stapler', 'validate', appPath], 'Thingtime notarization staple validation');
 }
 
+verifyAgentPackage(appPath, undefined, { required: requireAgentBrowser });
 console.log(`Verified ${appPath}`);
 console.log(`Identifier: ${desktop.identifier}`);
 console.log(`SignatureMode: ${signature.identityClass}`);
