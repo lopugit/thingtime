@@ -131,3 +131,11 @@ editor opts into live server model lists through `waterfallCatalog.ts` and await
 its settings write through `AiWaterfallSelector.onSaveApply`. Regression coverage:
 `modelSync.test.ts`, `waterfallCatalog.test.ts`, and the Claude public catalogue /
 workflow save checklist in TESTING.
+
+## Incident cleanup
+
+`api/utils/migrations/accidentalCatalogAccount.ts` registers the destructive,
+incident-specific catalog fixture cleanup. The existing admin migration API
+requires dry-run/confirmation, checks exact identity and idle account state, and
+deletes account/bootstrap/auth records atomically in the home DB. It cannot
+accept arbitrary target accounts. Delivery and migration audit records remain.

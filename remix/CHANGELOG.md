@@ -73,6 +73,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-18 — **Codex (AI)**: Remove implicit production API forwarding from
+  Vite and Nitro; missing local database/signing settings now fail closed before
+  handlers or DB warmup. Restrict fixture destinations and redirects, add an OS
+  isolated server smoke, and provide guarded admin cleanup for the accidental
+  catalog acceptance account, with atomic identity/activity checks and dry-run.
+
+
 - Claude catalogue/workflow persistence validation: [PR #1016 notes](../PRs/1016-claude-catalog-workflow-keyless-claude-model-sync.md).
 
 - 2026-10-17 — **Codex (AI)**: Stream complete 1PUX imports, preserve source data and rich fields, and add encrypted password attachments and file-inclusive backups. Remove arbitrary import/editor caps and document fork-safe storage setup. [PR #1015 validation](../PRs/1015-codex-password-import-fix-preserve-complete-1pux-imports-and-encrypted-password-attachments.md).

@@ -1,3 +1,4 @@
+import { accidentalCatalogAccountMigration } from './accidentalCatalogAccount';
 import { createHash, randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 
@@ -3246,6 +3247,7 @@ const retireLegacyThingIndexes: Migration = {
 	run: migrateLegacyThingIndexLayout
 };
 export const migrations: Migration[] = [
+	accidentalCatalogAccountMigration,
 	// Physical residue must land in the current generation before any logical
 	// shape or byte-ledger migration can declare its source universe complete.
 	mergeLegacyCollections,
