@@ -1706,8 +1706,11 @@ function PostCardImpl(props: PostCardProps) {
     }
   };
 	const effectiveAcl = post.audience?.acl || post.acl;
-	const circle = CIRCLE_META[audienceOfAcl(effectiveAcl)];
-	const audienceText = audienceDescription(effectiveAcl, mediaThing ? 'media' : 'post', !!post.audience && post.audience.sourceId !== post.id);
+	const privateSubspace = post.subspace?.access === 'private';
+	const circle = privateSubspace ? { emoji: '🔒', label: 'Private subspace', hint: 'Subspace membership is required' } : CIRCLE_META[audienceOfAcl(effectiveAcl)];
+	const audienceText = privateSubspace && audienceOfAcl(effectiveAcl) === 'public'
+		? 'only members of this private subspace can see this post'
+		: `${privateSubspace ? 'private subspace · ' : ''}${audienceDescription(effectiveAcl, mediaThing ? 'media' : 'post', !!post.audience && post.audience.sourceId !== post.id)}`;
 
   // Every reaction token on the post, most-used first — feeds the merged
   // react button (top emojis + total count).

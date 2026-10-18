@@ -2,11 +2,15 @@
 
 ## Characters
 
+- [x] Isolated real API + desktop/390px browser acceptance (2026-10-18): create a separate-login Character, select/restore the session, post, comment, reply and post in a private subspace; compare persisted author IDs. API checks cover all login modes, membership denial, owner privacy, tier changes and revocation.
+- [x] Type immediately into a newly mounted editor after changing Character. Post must become enabled without another keystroke; initial editor setup must reconcile input made before listeners attach.
+
 - [ ] Create switch-only, inherited-password and separate-password Characters through Settings. Reload and verify their generated IDs, names and modes against the owner-only API roster.
 - [ ] Inherited login follows the owner's current password and email second factor. Separate login rejects the owner's password; switch-only rejects password login.
 - [ ] Post, comment and reply as each identity. Public profiles/posts never reveal the private owner ID; direct Character sessions cannot list siblings, select the owner or become admins.
 - [ ] Lock one session to a Character; another session remains unchanged. The account roster continues to represent the authenticated principal. Return to the owner and verify its session still works.
 - [ ] After Character writes, verify both its ledger and the owner's ledger remain valid. Change the owner's tier/overrides and verify Character reads and write admission agree without copying owner audit fields or usage.
+- [ ] Private-subspace post cards describe their membership restriction rather than claiming anyone can see them.
 - [ ] A Character cannot read or post in a private subspace before explicit membership; after admission it can coordinate through posts/comments, while a stranger remains blocked.
 - [ ] Disable a Character after login and while selected; revoke direct sessions and reject further login/posts. Re-enable without restoring revoked credentials. Unavailable selections never fall back to anonymous authorship.
 - [ ] Switch composer identities with unsaved drafts/media; drafts remain account-specific, delayed requests retain their actor, and a restored media preview reauthorizes the selected Character.

@@ -50,6 +50,14 @@ try {
   }
   await page.setViewportSize({width:1440,height:1000});
   const row=page.locator('div').filter({has:page.locator(`input[aria-label="Display name for ${cedar.user.username}"]`)}).filter({has:page.getByRole('button',{name:'Use for this session',exact:true})}).last();
+  await page.getByLabel('Character ID to inspect').fill(cedar.user.id);
+  await page.getByRole('button',{name:'Look up owner',exact:true}).click();
+  await page.getByText('Owner ID: '+roster.principal.id,{exact:true}).waitFor();
+  await row.getByRole('button',{name:'Disable and revoke sessions',exact:true}).click();
+  await row.getByRole('button',{name:'Enable',exact:true}).waitFor();
+  assert.equal(await row.getByRole('button',{name:'Use for this session',exact:true}).isEnabled(),false);
+  await row.getByRole('button',{name:'Enable',exact:true}).click();
+  await row.getByRole('button',{name:'Disable and revoke sessions',exact:true}).waitFor();
   await Promise.all([page.waitForEvent('load'), row.getByRole('button',{name:'Use for this session',exact:true}).click()]);
   await page.getByRole('button',{name:/Return this session to/}).waitFor({timeout:30000});
   const me=await page.evaluate(async()=>await(await fetch('/api/v1/auth/me')).json());assert.equal(me.user.id,cedar.user.id);
@@ -65,6 +73,8 @@ try {
   await editor.fill('Browser acceptance post from Cedar');
   await page.screenshot({path:join(out,'character-post-composer-desktop.png'),fullPage:true});
   const publish=page.getByRole('button',{name:/^Post(?:\s|$)/}).filter({hasNotText:'Post as'}).first();
+  await publish.waitFor({state:'visible'});
+  await page.waitForFunction(() => [...document.querySelectorAll('button')].some(button => /^Post\s/.test(button.textContent) && !button.disabled));
   await note('Publishing');
   await page.evaluate(() => { window.__characterAlerts = []; new MutationObserver(() => { const text = [...document.querySelectorAll('[role=alert]')].map(e=>e.textContent).join(' | '); if(text && window.__characterAlerts.at(-1) !== text) window.__characterAlerts.push(text); }).observe(document.body,{subtree:true,childList:true}); });
   const [published] = await Promise.all([page.waitForResponse(r => new URL(r.url()).pathname === '/api/v1/things' && r.request().method() === 'POST'), publish.click()]);
@@ -109,6 +119,7 @@ try {
   const subEditor=page.locator('[contenteditable="true"]').first();
   if(!await subEditor.isVisible())await page.getByText(/on your mind/).first().click();
   await subEditor.fill('Aspen private subspace browser coordination');
+  await page.waitForFunction(() => [...document.querySelectorAll('button')].some(button => /^Post\s/.test(button.textContent) && !button.disabled));
   const [subResponse]=await Promise.all([page.waitForResponse(r=>new URL(r.url()).pathname==='/api/v1/things'&&r.request().method()==='POST'),page.getByRole('button',{name:/^Post(?:\s|$)/}).filter({hasNotText:'Post as'}).first().click()]);
   const subPost=await subResponse.json();assert.equal(subResponse.status(),200,JSON.stringify(subPost));assert.equal(subPost.post.author.id,aspen.id);
   await page.getByText('Aspen private subspace browser coordination',{exact:true}).waitFor();
@@ -119,6 +130,7 @@ try {
     assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'Subspace horizontal overflow');
     await page.screenshot({path:join(out,`character-subspace-${viewport.width}.png`),fullPage:true});
   }
+  assert(await page.getByTestId('post-audience').first().textContent().then(text=>text.includes('private subspace')), 'Private membership restriction must be visible');
   await note('Private subspace posting verified');
   await writeFile(join(out,'diagnostics.json'),JSON.stringify(diagnostics,null,2));
   await writeFile(join(out,'browser-result.json'),JSON.stringify({ok:true,characterId:cedar.user.id,errors},null,2));
