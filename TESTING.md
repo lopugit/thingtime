@@ -10167,6 +10167,11 @@ separate from deterministic discovery/lease tests.
 
 ## Mac menu bar and reusable device scripts
 
+- Device and approval links must open `/things`, where paired devices live.
+- Installed browser Actions must reach the selected HTTPS account API with actor
+  and database preconditions intact; changed actors and cross-origin mutations
+  fail before execution. Unconfigured web servers and vault reveal still refuse.
+
 - Install both suites privately; edit the saved Component and Action source in
   Builder, and verify page refresh retains last-known readings.
 - On the signed installed Mac app, compare inventory program/path/PID with

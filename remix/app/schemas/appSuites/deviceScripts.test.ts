@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { materializeSuite } from '../behaviourSuites';
+import { macMenuBarSuite } from './macMenuBar';
 import { deviceScriptsSuite } from './deviceScripts';
 import { executeBrowserAction, type BrowserActionHost } from '../../components/Actions/browserActionRuntime';
 import { sanitizeActionCrystal, sanitizeExtended, validateThingtimeCrystal } from '../registry';
@@ -93,4 +94,13 @@ test('saving a result re-reads the exact owner command and refuses pending/expir
 	assert.deepEqual(saved.extended.result, result);
 	assert.equal(saved.crystal.exitCode, 0);
 	assert.equal(saved.crystal.result, undefined);
+});
+
+
+test('paired-device suites link to the existing Things device surface', () => {
+ for (const suite of [macMenuBarSuite, deviceScriptsSuite]) {
+  const content = JSON.stringify(materializeSuite(suite, 'own'));
+  assert.equal(content.includes('"/devices"'), false);
+  assert.equal(content.includes('/things'), true);
+ }
 });

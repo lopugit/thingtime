@@ -12859,13 +12859,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     id: 'actions-run',
     // 1.34.0 adds owned XPath evaluator, compiled expression and result objects.
     // 1.34.1 retains trusted mutation provenance; 1.35.0 adds native traversal and reusable synchronous data callbacks.
-    featureVersion: '1.37.0',
-    contractVersion: '1.37.0',
+    featureVersion: '1.37.1',
+    contractVersion: '1.37.1',
     group: 'actions',
     title: 'Run an action',
     endpoint: '/api/v1/actions/run',
     summary: 'Execute one action thing inside its declared capability + budget envelope. OAuth callers must explicitly approve actions.run, including declared action side effects and costs.',
     detail:
+      'Version 1.37.1 fixes browser Action requests in the installed desktop shell: same-origin requests use the selected HTTPS account endpoint with actor and database preconditions preserved; incomplete web servers still fail closed. ' +
       'Version 1.37.0 adds history.recovery:{formatVersion:1,event,dataPlane,proof} when completion retries fail and configured signing keys can seal the exact immutable outcome. API clients should retain this bounded bundle and retry it through api.timeline 1.16.0; never rerun the Action to repair delivery. The first-party client durably queues the same event before reporting local retention, then synchronizes normally across reloads. A lost response or process death before sealing cannot supply a known outcome; incomplete without recovery remains explicit. ' +
       'Version 1.36.0 journals admitted ordinary server runs and outcomes in canonical Timeline, including read-only runs. A failed admission returns 507/503 before execution. Completed runs include history:{status:recorded|incomplete,startedEventId,outcomeEventId:string|null}; incomplete preserves the actual run result and warns that completion was not acknowledged after bounded receipt retries. Do not replay the Action to repair History. A process that stops after admission can leave only a started event. Outcomes omit runtime payloads, use the invoker account/data plane and survive Action deletion. Browser preparation and shared runs remain unrecorded. The bounded action-run records below remain a supplementary debug cache. ' +
       'Traversal programs expose native TreeWalker, NodeIterator and NodeFilter behavior on owned detached trees. Generic synchronous callback objects or functions execute bounded data definitions with explicit bindings through the existing DOM policy, preserving native callback identity, pointer/removal semantics, reentrancy and thrown data. Source evaluation and asynchronous callbacks are not used for synchronous filters. ' +
