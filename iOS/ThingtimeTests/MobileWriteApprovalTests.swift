@@ -11,6 +11,7 @@ final class MobileWriteApprovalTests: XCTestCase {
         let grant: MobileFolderStore.Grant
         let approval: MobileFolderStore.WriteApproval
         let webView = WKWebView()
+        var window: UIWindow?
         let store: MobileFolderStore
         var bridge: MobileFolderBridge
         var ownerChecks = 0
@@ -37,6 +38,7 @@ final class MobileWriteApprovalTests: XCTestCase {
         }
 
         func load() async throws {
+            window = try await MobileBridgeTestReadiness.attach(webView)
             webView.loadHTMLString("<html><body>Isolated native approval fixture</body></html>", baseURL: owner.origin)
             for _ in 0..<100 {
                 if let value = try? await webView.evaluateJavaScript("window.thingtimeNativeBridge?.filePublicationVersion"), value as? String == "1.2.0" { return }
@@ -47,6 +49,7 @@ final class MobileWriteApprovalTests: XCTestCase {
 
         func call(_ test: XCTestCase, approval: MobileFolderStore.WriteApproval? = nil, deviceVerifier: Bool = true,
                   action: String = "write-check", rootId: String? = nil) async throws -> [String: Any] {
+            try await MobileBridgeTestReadiness.require(webView, origin: owner.origin)
             let done = test.expectation(description: "native saved approval result")
             var result: [String: Any]?
             let encoded = try JSONSerialization.jsonObject(with: JSONEncoder().encode(approval ?? self.approval))
@@ -70,6 +73,9 @@ final class MobileWriteApprovalTests: XCTestCase {
         addTeardownBlock { @MainActor in
             fixture.onOwner = nil; fixture.onDevice = nil
             fixture.bridge.suspend()
+            fixture.window?.isHidden = true
+            fixture.window?.rootViewController = nil
+            fixture.window = nil
             try? FileManager.default.removeItem(at: fixture.directory)
         }
         if approved { try fixture.store.approveWrite(fixture.owner, grant: fixture.grant, approval: fixture.approval) }

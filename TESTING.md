@@ -11811,3 +11811,17 @@ resume unfinished Android gates only when requested.
 - These generated/offline cases are not physical-device, whole-account or
   100 GB–100 TB throughput acceptance. Re-run actual native/provider restore
   acceptance when those adapters are connected.
+
+
+### iOS native bridge fixture lifecycle (2026-10-19)
+
+- Retain a real scene-backed window for every bridge WebView, and remove it in
+  teardown. Fail explicitly if no scene connects, UIApplication stays inactive
+  or the loaded page has the wrong origin; never skip or inject an active state.
+- Run the 66 selected `MobileDevicePairingTests`, `MobileFolderInventoryTests`,
+  `MobileSyncStagingTests`, `MobileSyncTrashTests`, `MobileWriteApprovalTests`
+  and `NativeUploadBackgroundTests` on a task-owned iOS 27 simulator. Verify
+  all 13 bridge cases complete and the non-bridge filesystem regressions pass.
+- Repeat on the signed physical test host before replacing the historical
+  53-pass/13-fail hardware result. Simulator success does not prove real picker
+  grants, physical background expiry, OS scheduling or installed recovery.

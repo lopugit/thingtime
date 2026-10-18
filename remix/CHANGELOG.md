@@ -74,6 +74,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-19 — **Codex (AI)**: Repair the iOS sync test host by retaining real
+  scene-backed WebViews and diagnosing foreground/origin prerequisites. All 66
+  selected iOS 27 simulator checks pass; physical-device rerun remains open.
+  Production guards are unchanged. See [PR 1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+
 - 2026-10-19 — **Codex (AI)**: Whole-tree restore now uses bounded private disk
   indexes and streamed CLI review output, removing the old 10,001-item/32-MiB
   memory limit while retaining v1 review hashes and recoverable receipts.

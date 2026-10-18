@@ -3334,3 +3334,24 @@ and WebView-origin preconditions were not recorded, so neither a product nor
 fixture root cause is claimed. Native checks and installed-app acceptance are
 unchanged. Full account restore, independent replicas, encryption, production
 rollout and measured large-volume exports remain open; Android stays deferred.
+
+
+## 2026-10-19 — Scene-backed iOS bridge test host
+
+The iOS 27 simulator reproduced all 13 previously failing bridge tests. New
+preflight diagnostics showed a loaded same-origin WebView while UIApplication
+remained inactive; the fixtures had created unattached WebViews. The shared
+fixture now waits for the actual UIWindowScene, retains a visible window for
+each WebView and releases it during teardown. It requires the real foreground
+state and exact page origin before dispatch, reporting absent prerequisites as
+failures rather than callback timeouts or skips. Product lifecycle, origin,
+account, grant and device checks are unchanged.
+
+The same task-owned iOS 27 simulator now passes all 66 selected pairing,
+inventory, staging, Trash, saved-approval and background-lease tests, with zero
+failures or skips. This includes all 13 previously failing bridge tests and the
+10,001-file inventory cases. The host uses a separate bundle identity, loopback
+web origin, disposable files and synthetic authorization; this is not real
+provider, OS scheduling or cross-device acceptance. Physical-device rerun remains
+open: CoreDevice currently refuses the trusted-connectivity/power assertion.
+The original iPhone app and Aster's reserved Mac installation are preserved.

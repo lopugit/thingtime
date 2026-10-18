@@ -17,6 +17,8 @@ extension MobileSyncStagingTests {
         let transfer = MobileSyncStaging.Request(scope: initial.scope, rootId: grant.id, operation: initial.operation)
         let bridge = MobileFolderBridge(store: store, staging: MobileSyncStaging(directory: cache))
         let webView = WKWebView()
+        let window = try await MobileBridgeTestReadiness.attach(webView)
+        defer { window.isHidden = true; window.rootViewController = nil }
         webView.configuration.userContentController.addUserScript(WKUserScript(source: "window.thingtimeNativeBridge = {};", injectionTime: .atDocumentStart, forMainFrameOnly: true))
         webView.configuration.userContentController.addUserScript(MobileFolderBridge.script)
         webView.loadHTMLString("<html><body>Native staging fixture</body></html>", baseURL: owner.origin)
@@ -29,6 +31,7 @@ extension MobileSyncStagingTests {
         let encoded = try JSONSerialization.jsonObject(with: JSONEncoder().encode(transfer))
         var authorizations = 0
         func call(_ action: String) async throws -> [String: Any] {
+            try await MobileBridgeTestReadiness.require(webView, origin: owner.origin)
             let complete = expectation(description: action)
             var response: [String: Any]?
             bridge.handle(["payload": ["requestId": UUID().uuidString, "ownerId": owner.ownerId, "rootId": grant.id,
@@ -52,6 +55,7 @@ extension MobileSyncStagingTests {
         let approval = MobileFolderStore.WriteApproval(scope: transfer.scope, configurationRevision: "v1", configurationHash: String(repeating: "a", count: 64))
         let encodedApproval = try JSONSerialization.jsonObject(with: JSONEncoder().encode(approval))
         func publish() async throws -> [String: Any] {
+            try await MobileBridgeTestReadiness.require(webView, origin: owner.origin)
             let complete = expectation(description: "publication"), id = UUID().uuidString
             var response: [String: Any]?
             bridge.handle(["payload": ["requestId": id, "ownerId": owner.ownerId, "rootId": grant.id,
@@ -88,6 +92,8 @@ extension MobileSyncStagingTests {
         let bridge = MobileFolderBridge(store: store, staging: MobileSyncStaging(directory: cache.appendingPathComponent("staging")),
             trash: MobileSyncTrash(directory: cache.appendingPathComponent("trash")))
         let webView = WKWebView()
+        let window = try await MobileBridgeTestReadiness.attach(webView)
+        defer { window.isHidden = true; window.rootViewController = nil }
         webView.configuration.userContentController.addUserScript(WKUserScript(source: "window.thingtimeNativeBridge = {};", injectionTime: .atDocumentStart, forMainFrameOnly: true))
         webView.configuration.userContentController.addUserScript(MobileFolderBridge.script)
         webView.loadHTMLString("<html><body>Native trash fixture</body></html>", baseURL: owner.origin)
@@ -102,6 +108,7 @@ extension MobileSyncStagingTests {
         let deletion = MobileFolderStore.WriteApproval(scope: initial.scope, configurationRevision: "v1", configurationHash: ordinary.configurationHash, allowTrash: true)
         var approval = ordinary, live = true
         func call(_ action: String, restore: MobileSyncTrash.Restore? = nil) async throws -> [String: Any] {
+            try await MobileBridgeTestReadiness.require(webView, origin: owner.origin)
             let complete = expectation(description: action)
             var response: [String: Any]?
             var payload: [String: Any] = ["requestId": UUID().uuidString, "ownerId": owner.ownerId, "rootId": grant.id,
