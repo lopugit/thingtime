@@ -22,6 +22,8 @@
 - [ ] At desktop and 390px widths scroll the complete page and preview; open
       the JSON editor and saved Component controls. No clipping, overlap or
       horizontal overflow, including progress, errors, video and download.
+- [ ] Shared documentation examples still validate through saved-Thing grammar
+      after adding guide sections; locate examples by section ID, not position.
 - [ ] Lopu's default and custom base prompt paths retain framework-discovery
       guidance for `/docs/builder`, components, demos and Action inspection.
       Missing tools or short Action budgets never imply encoding is impossible.

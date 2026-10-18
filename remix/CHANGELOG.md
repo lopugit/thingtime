@@ -82,6 +82,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   the opaque preview sandbox and deny network access. Lopu now receives shared
   framework-discovery guidance. Suite installation requires capability 1.4.0;
   browser acceptance verifies real MP4/WebM outputs and responsive layout.
+  [PR 1024 validation](../PRs/1024-media-pipeline-reusable-local-video-compression.md).
 
 - 2026-10-17 — **Codex (AI)**: Stream complete 1PUX imports, preserve source data and rich fields, and add encrypted password attachments and file-inclusive backups. Remove arbitrary import/editor caps and document fork-safe storage setup. [PR #1015 validation](../PRs/1015-codex-password-import-fix-preserve-complete-1pux-imports-and-encrypted-password-attachments.md).
 
