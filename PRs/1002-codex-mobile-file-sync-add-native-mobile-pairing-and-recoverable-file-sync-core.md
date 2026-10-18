@@ -3109,3 +3109,21 @@ tombstone traversal during large reruns. Nine cleanup regressions pass, includin
 advancing range starts, restart, pin protection and atomic rollback. The slow
 pre-seek wide runs were stopped after this diagnosed correction; only final-source
 reruns count as acceptance.
+
+Final-source acceptance (code `be360940b`, 19 October 2026) passed the wide
+command: 10,001 real folders plus two files, 316 native pages and 316 cloud
+pages, complete local/remote checkpoints, original operation IDs after lost
+cloud/staging/publication replies and native restart, and an unchanged repeat
+without replayed transfers. Independent local/remote hashes covered an
+8,388,625-byte upload and a 2,097,169-byte download. The fixture used an
+OS-enforced disposable API/Mongo environment and synthetic picker/credential
+stores; it did not test an installed app or a real external provider.
+
+The full shared suite passed 291 checks, including the 10,001-path checkpoint
+and legacy-limit refusal; all nine cleanup regressions passed. Apple library
+75 tests, Mac adapter 18 tests and the iOS simulator build passed. Desktop and
+390px phone controls passed isolated Chromium review/Ignore/reload checks with
+generated adapters. Project TypeScript still reports 91 diagnostics outside
+changed files. The earlier HTTP timeout remains recorded as a failed attempt;
+the diagnostic rerun passed without increasing the request timeout, reducing
+the path count or changing the workload.
