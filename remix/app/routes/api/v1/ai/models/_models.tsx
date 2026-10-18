@@ -1,3 +1,5 @@
+import { getChatGPTPlanRuntime } from '~/api/utils/ai/chatgptPlanRuntime';
+import { chatGPTPlanScope } from '~/api/utils/ai/chatgptPlanScope';
 import { json } from '~/api/http';
 
 import { listAiModels } from '~/api/utils/ai/models';
@@ -35,6 +37,7 @@ type HandlerDependencies = {
   listAiModels: typeof listAiModels;
   listVaultProviders: (viewerId: string) => Promise<LopuVaultProviderPublic[]>;
   vaultConfigured: () => boolean;
+  listPlanProviders?: (request: Request, viewerId: string) => Promise<LopuVaultProviderPublic[]>;
   log?: (message: string, error?: unknown) => void;
 };
 
@@ -68,6 +71,13 @@ export const createAiModelsHandlers = (dependencies: HandlerDependencies) => {
         log('[ai-models] Secure Vault providers unavailable — serving the catalog without them', error);
       }
     }
+    if (user?.id && user.accountKind !== 'service' && !user.temporary && dependencies.listPlanProviders) {
+      try {
+        extras.vaultProviders.push(...await dependencies.listPlanProviders(request, user.id));
+      } catch {
+        log('[ai-models] Local ChatGPT plan connections are unavailable');
+      }
+    }
     // every model carries its list price (USD per million tokens, public — the
     // balance chip and the per-turn footer read it; verified-access design note §2)
     const models = result.models.filter((model) => model.available).map((model) => ({ ...model, pricing: publicAiModelPricing(model.id) }));
@@ -88,6 +98,18 @@ const handlers = createAiModelsHandlers({
       defaultModel: defaultVaultProviderModel,
       realtimeModels: realtimeVaultProviderModels
     }),
+  listPlanProviders: async (request, viewerId) => {
+    const runtime = getChatGPTPlanRuntime();
+    if (!runtime) return [];
+    const { accounts } = await runtime.list(await chatGPTPlanScope(request, viewerId));
+    return accounts.map((account) => ({
+      id: account.id, name: `ChatGPT plan · ${account.label} · ${account.id.slice(-8)}`,
+      kind: 'openai' as const, model: account.model, endpointHost: 'api.openai.com',
+      available: account.connected && !!account.model,
+      ...(!account.connected ? { reason: 'Reconnect this ChatGPT account in Settings.' } : !account.model ? { reason: 'Choose an available ChatGPT model in Settings.' } : {}),
+      realtimeModels: []
+    }));
+  },
   vaultConfigured: userVaultConfigured
 });
 

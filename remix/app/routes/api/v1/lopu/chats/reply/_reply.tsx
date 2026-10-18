@@ -1,3 +1,5 @@
+import { getChatGPTPlanRuntime } from '~/api/utils/ai/chatgptPlanRuntime';
+import { chatGPTPlanScope, chatGPTPlanFailure, isChatGPTPlanProvider } from '~/api/utils/ai/chatgptPlanScope';
 import { isLopuAccessActor, lopuAccessMode } from '~/api/utils/lopu/accessMode';
 import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
 import type { ResolveActionActor } from '~/api/utils/actions/firstPartyActionHost';
@@ -297,7 +299,17 @@ export const replyAsUser = async (request: Request, user: Awaited<ReturnType<typ
   let vaultProvider: LopuVaultTurnProvider | null = null;
   let clearStoredProvider = false;
   if (wantedProviderId) {
-    if (!userVaultConfigured()) {
+    if (isChatGPTPlanProvider(wantedProviderId)) {
+      try {
+        const runtime = getChatGPTPlanRuntime();
+        if (!runtime) throw new Error('Local ChatGPT runtime unavailable');
+        const resolved = await runtime.resolveProvider(await chatGPTPlanScope(request, user.id), wantedProviderId);
+        vaultProvider = { ...resolved, effort: null, requestedModel: null };
+      } catch (error) {
+        // A saved plan pin is strict too: losing a runtime must never spend API credits.
+        return json({ ok: false, ...chatGPTPlanFailure(error) }, { status: 409, headers: { 'Cache-Control': 'private, no-store' } });
+      }
+    } else if (!userVaultConfigured()) {
       if (providerExplicit) return json({ ok: false, error: 'Secure Vault is not configured on this server — pick a Thingtime model instead' }, { status: 400 });
       clearStoredProvider = true;
     } else {

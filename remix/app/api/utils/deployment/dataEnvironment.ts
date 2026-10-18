@@ -19,11 +19,12 @@ const normaliseId = (value: unknown): string | null => {
 	return ID.test(normalised) ? normalised : null;
 };
 
-const normaliseOrigin = (value: unknown): string | null => {
+const normaliseOrigin = (value: unknown, allowLoopback = false): string | null => {
 	if (typeof value !== 'string' || !value.trim()) return null;
 	try {
 		const url = new URL(value.trim());
-		if (url.protocol !== 'https:' || url.username || url.password || url.pathname !== '/' || url.search || url.hash) return null;
+		const loopback = allowLoopback && url.protocol === 'http:' && ['127.0.0.1', 'localhost', '[::1]'].includes(url.hostname);
+		if ((url.protocol !== 'https:' && !loopback) || url.username || url.password || url.pathname !== '/' || url.search || url.hash) return null;
 		return url.origin;
 	} catch {
 		return null;
@@ -60,7 +61,7 @@ export const getDeploymentDataEnvironment = (
 	}
 
 	const authorityOrigin =
-		normaliseOrigin(env.THINGTIME_DATA_AUTHORITY_ORIGIN) ||
+		normaliseOrigin(env.THINGTIME_DATA_AUTHORITY_ORIGIN, kind === 'custom') ||
 		(kind === 'production' ? 'https://thingtime.com' : kind === 'development' ? 'https://dev.thingtime.com' : null);
 	if (kind === 'custom' && !authorityOrigin) return null;
 

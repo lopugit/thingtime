@@ -1,18 +1,19 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { getApiFallbackOrigin, shouldProxyApiToFallback, proxyApiRequestToFallback } from './apiFallback';
+import { getApiFallbackOrigin, hasSelfHostedApiEnv, selectedRuntimeSupportsPlan, shouldProxyApiToFallback, proxyApiRequestToFallback } from './apiFallback';
 import handleApi from '../routes/api/[...]';
 import handleRootData from '../routes/api/root-data.get';
 import { enforceExpectedDataPlane, mongoDataPlane } from '../../app/api/utils/mongodb/dataPlane';
 import { getRequestMongoEndpoint } from '../../app/api/utils/mongodb/endpoint';
 import { EXPECTED_DATA_PLANE_HEADER } from '../../app/utils/dataPlane';
 
-const ENV_KEYS = ['JWT_PRIVATE_KEY', 'JWT_SECRET', 'MONGODB_CONNECTION_STRING', 'THINGTIME_API_FALLBACK_ORIGIN', 'THINGTIME_DESKTOP', 'NODE_ENV', 'MONGO_PASS'] as const;
+const ENV_KEYS = ['JWT_PRIVATE_KEY', 'JWT_SECRET', 'MONGODB_CONNECTION_STRING', 'THINGTIME_API_FALLBACK_ORIGIN', 'THINGTIME_DESKTOP', 'THINGTIME_DESKTOP_API_MODE', 'NODE_ENV', 'MONGO_PASS'] as const;
 
 const withFallbackEnv = async (fallbackOrigin: string | undefined, run: () => Promise<void> | void) => {
 	const previous = Object.fromEntries(ENV_KEYS.map((key) => [key, process.env[key]]));
 	delete process.env.THINGTIME_DESKTOP;
+	delete process.env.THINGTIME_DESKTOP_API_MODE;
 	process.env.NODE_ENV = 'production';
 	delete process.env.JWT_PRIVATE_KEY;
 	delete process.env.JWT_SECRET;
@@ -159,5 +160,190 @@ test('iOS release identities and migration bodies never follow an origin fallbac
     assert.match(response.headers.get('Cache-Control'), /no-store/);
     assert.equal(request.bodyUsed, false);
     assert.ok(!(await response.text()).includes('synthetic'));
+  });
+});
+
+test('explicit local mode never falls through to a remote account backend', async () => {
+  await withFallbackEnv('https://selected.test', async () => {
+    process.env.THINGTIME_DESKTOP = '1';
+    process.env.THINGTIME_DESKTOP_API_MODE = 'local';
+    const request = new Request('http://127.0.0.1:18731/api/v1/auth/register', { method: 'POST', body: '{}' });
+    assert.equal(shouldProxyApiToFallback(request), false);
+    assert.equal((await (handleApi as any)({ req: request, context: { params: { path: 'v1/auth/register' } } })).status, 503);
+    assert.equal(request.bodyUsed, false);
+  });
+});
+
+test('explicit remote mode cannot activate inherited local database credentials', async () => {
+  await withFallbackEnv('https://selected.test', () => {
+    process.env.THINGTIME_DESKTOP = '1';
+    process.env.THINGTIME_DESKTOP_API_MODE = 'remote';
+    process.env.MONGODB_CONNECTION_STRING = 'mongodb://127.0.0.1:18732/local';
+    process.env.JWT_SECRET = 'synthetic';
+    assert.equal(hasSelfHostedApiEnv(), false);
+    assert.equal(shouldProxyApiToFallback(new Request('http://127.0.0.1:18731/api/root-data')), true);
+    assert.equal(shouldProxyApiToFallback(new Request('https://unrelated.test/api/root-data')), false);
+  });
+});
+
+test('explicit selected runtime supports loopback and refuses cleartext remote targets', async () => {
+  await withFallbackEnv('http://127.0.0.1:18733', () => {
+    process.env.THINGTIME_DESKTOP = '1';
+    process.env.THINGTIME_DESKTOP_API_MODE = 'remote';
+    assert.equal(getApiFallbackOrigin(), 'http://127.0.0.1:18733');
+    assert.equal(shouldProxyApiToFallback(new Request('http://127.0.0.1:18731/api/root-data')), true);
+    process.env.THINGTIME_API_FALLBACK_ORIGIN = 'http://remote.test';
+    assert.equal(getApiFallbackOrigin(), null);
+  });
+});
+
+test('plan management only forwards to an explicitly selected runtime with same-origin mutation checks', async t => {
+  await withFallbackEnv('https://selected.test', async () => {
+    process.env.THINGTIME_DESKTOP = '1';
+    let calls = 0;
+    const upstream = t.mock.method(globalThis, 'fetch', async (url: URL, init: RequestInit) => {
+      if (url.pathname === '/.well-known/thingtime-capabilities.json') {
+        assert.equal(new Headers(init.headers).has('cookie'), false);
+        return Response.json({ schemaVersion: 1, origin: url.origin, features: { 'api.ai-chatgpt-plan': { version: '1.1.0' } } });
+      }
+      calls++;
+      assert.equal(url.origin, 'https://selected.test');
+      const headers = new Headers(init.headers);
+      assert.equal(headers.get('origin'), 'https://selected.test');
+      assert.equal(headers.has('x-forwarded-host'), false);
+      assert.equal(headers.get('X-Thingtime-Expected-User'), 'synthetic-owner');
+      return Response.json({ ok: true, available: true, accounts: [], attempts: [] });
+    });
+    try {
+      const request = (origin: string) => new Request('http://127.0.0.1:18731/api/v1/ai/chatgpt-plan', {
+        method: 'POST', headers: { Origin: origin, 'Content-Type': 'application/json', 'X-Thingtime-Expected-User': 'synthetic-owner', 'x-forwarded-host': 'attacker.test' }, body: '{"action":"prepare-import"}'
+      });
+      const handle = (req: Request) => (handleApi as any)({ req, context: { params: { path: 'v1/ai/chatgpt-plan' } } });
+      assert.equal((await handle(request('http://127.0.0.1:18731'))).status, 503);
+      process.env.THINGTIME_DESKTOP_API_MODE = 'remote';
+      assert.equal((await handle(request('https://attacker.test'))).status, 403);
+      assert.equal((await handle(request('http://127.0.0.1:18731'))).status, 200);
+      assert.equal(calls, 1);
+    } finally { upstream.mock.restore(); }
+  });
+});
+
+test('selected ChatGPT runtime negotiation rejects wrong origins and missing/breaking contracts', async t => {
+  await withFallbackEnv('https://selected.test', async () => {
+    process.env.THINGTIME_DESKTOP = '1';
+    process.env.THINGTIME_DESKTOP_API_MODE = 'remote';
+    let manifest: any;
+    const mock = t.mock.method(globalThis, 'fetch', async () => Response.json(manifest));
+    try {
+      for (const [origin, version, expected] of [
+        ['https://selected.test', '1.1.0', true], ['https://selected.test', '1.2.0', true],
+        ['https://selected.test', '1.0.0', false], ['https://selected.test', '2.0.0', false],
+        ['https://other.test', '1.1.0', false], ['https://selected.test', '', false]
+      ] as const) {
+        manifest = { schemaVersion: 1, origin, features: { 'api.ai-chatgpt-plan': { version } } };
+        assert.equal(await selectedRuntimeSupportsPlan(), expected);
+      }
+    } finally { mock.mock.restore(); }
+  });
+});
+
+test('a delayed plan manifest cannot authorize a newly selected endpoint or consume the handoff', async t => {
+  await withFallbackEnv('https://first.test', async () => {
+    process.env.THINGTIME_DESKTOP = '1';
+    process.env.THINGTIME_DESKTOP_API_MODE = 'remote';
+    let release!: () => void;
+    let started!: () => void;
+    const manifestStarted = new Promise<void>(resolve => { started = resolve; });
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    const calls: string[] = [];
+    const mock = t.mock.method(globalThis, 'fetch', async (url: URL) => {
+      calls.push(url.toString()); started(); await gate;
+      return Response.json({ schemaVersion: 1, origin: 'https://first.test', features: { 'api.ai-chatgpt-plan': { version: '1.1.0' } } });
+    });
+    const request = new Request('http://127.0.0.1:18731/api/v1/ai/chatgpt-plan', {
+      method: 'POST', headers: { Origin: 'http://127.0.0.1:18731', 'Content-Type': 'application/json' }, body: '{"action":"import","encrypted":"synthetic"}'
+    });
+    try {
+      const pending = (handleApi as any)({ req: request, context: { params: { path: 'v1/ai/chatgpt-plan' } } });
+      await manifestStarted;
+      process.env.THINGTIME_API_FALLBACK_ORIGIN = 'https://second.test';
+      release();
+      const response = await pending;
+      assert.equal(response.status, 409);
+      assert.equal(request.bodyUsed, false);
+      assert.deepEqual(calls, ['https://first.test/.well-known/thingtime-capabilities.json']);
+      const direct = await proxyApiRequestToFallback(request, 'https://first.test');
+      assert.equal(direct.status, 409);
+      assert.equal(request.bodyUsed, false);
+      assert.equal(calls.length, 1);
+    } finally { release(); mock.mock.restore(); }
+  });
+});
+
+test('desktop proxy streams uploads and replies without waiting for completion, and downstream cancel reaches upstream', async t => {
+  await withFallbackEnv('https://selected.test', async () => {
+    process.env.THINGTIME_DESKTOP = '1';
+    process.env.THINGTIME_DESKTOP_API_MODE = 'remote';
+    let cancelled = false;
+    const upstreamBody = new ReadableStream<Uint8Array>({
+      start(controller) { controller.enqueue(new TextEncoder().encode('{"type":"delta","text":"First"}\n')); },
+      cancel() { cancelled = true; }
+    });
+    const upload = new ReadableStream<Uint8Array>({ start(controller) { controller.enqueue(new TextEncoder().encode('partial upload')); } });
+    const request = new Request('http://127.0.0.1:18731/api/v1/lopu/chats/reply', { method: 'POST', body: upload, duplex: 'half' } as any);
+    const mock = t.mock.method(globalThis, 'fetch', async (_url: URL, init: RequestInit) => {
+      assert.equal(init.body, request.body);
+      assert.equal(init.signal, request.signal);
+      return new Response(upstreamBody, { headers: { 'content-type': 'application/x-ndjson' } });
+    });
+    try {
+      const response = await proxyApiRequestToFallback(request);
+      assert.equal(response.headers.get('content-type'), 'application/x-ndjson');
+      const reader = response.body!.getReader();
+      const chunk = await reader.read();
+      assert.equal(new TextDecoder().decode(chunk.value), '{"type":"delta","text":"First"}\n');
+      assert.equal(chunk.done, false);
+      await reader.cancel();
+      assert.equal(cancelled, true);
+    } finally { await request.body?.cancel(); mock.mock.restore(); }
+  });
+});
+
+test('desktop proxy propagates request cancellation without logging or echoing fetch errors', async t => {
+  await withFallbackEnv('https://selected.test', async () => {
+    process.env.THINGTIME_DESKTOP = '1';
+    const controller = new AbortController();
+    let started!: () => void;
+    const ready = new Promise<void>(resolve => { started = resolve; });
+    const logs: unknown[] = [];
+    const log = t.mock.method(console, 'error', (...args: unknown[]) => { logs.push(args); });
+    const mock = t.mock.method(globalThis, 'fetch', async (_url: URL, init: RequestInit) => new Promise<Response>((_resolve, reject) => {
+      init.signal!.addEventListener('abort', () => reject(new Error('synthetic-private-fetch-error')), { once: true });
+      started();
+    }));
+    try {
+      const pending = proxyApiRequestToFallback(new Request('http://127.0.0.1:18731/api/v1/lopu/chats/reply', { method: 'POST', body: '{}', signal: controller.signal }));
+      const rejected = assert.rejects(pending, { name: 'AbortError', message: 'Desktop API request cancelled.' });
+      await ready; controller.abort(); await rejected;
+      assert.equal(logs.length, 0);
+    } finally { mock.mock.restore(); log.mock.restore(); }
+  });
+});
+
+test('desktop proxy discards a response and its cookies if the selected endpoint changed while awaiting headers', async t => {
+  await withFallbackEnv('https://first.test', async () => {
+    process.env.THINGTIME_DESKTOP = '1';
+    let cancelled = false;
+    const mock = t.mock.method(globalThis, 'fetch', async (url: URL) => {
+      assert.equal(url.origin, 'https://first.test');
+      process.env.THINGTIME_API_FALLBACK_ORIGIN = 'https://second.test';
+      return new Response(new ReadableStream({ cancel() { cancelled = true; } }), { headers: { 'Set-Cookie': 'tt_auth=synthetic-old-session' } });
+    });
+    try {
+      const response = await proxyApiRequestToFallback(new Request('http://127.0.0.1:18731/api/v1/auth/me'));
+      assert.equal(response.status, 409);
+      assert.equal(response.headers.get('set-cookie'), null);
+      assert.equal(cancelled, true);
+    } finally { mock.mock.restore(); }
   });
 });
