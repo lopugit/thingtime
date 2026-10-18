@@ -1383,6 +1383,7 @@ async function switchDesktopEndpoint(endpointId, { confirm = true } = {}) {
 		if (!approved) return getDesktopInfo();
 	}
 	try {
+		await passwordProvider.disconnect();
 		await settings.selectEndpoint(target.id);
 		setApiFallbackEndpoint(target.url);
 		const compatibility = await checkSelectedEndpointCompatibility({ syncNode: true });
@@ -1696,6 +1697,9 @@ ipcMain.handle('thingtime-desktop:speech-stop', (event, request) => {
 	if (typeof request?.sessionId !== 'string') throw new Error('Invalid speech session.');
 	return desktopSpeech.stop(request.sessionId);
 });
+
+const passwordProvider = require('./lib/password-provider.cjs').createPasswordProvider({ app, root: __dirname, origin: () => appOrigin, endpoint: () => requireDesktopSettings().snapshot().selectedEndpoint.url });
+ipcMain.handle('thingtime-desktop:password-provider', (event, request) => passwordProvider(event, request));
 
 ipcMain.handle('thingtime-desktop:mail-sync', (event, request) => desktopMail.sync(event, request));
 ipcMain.handle('thingtime-desktop:mail-cancel', (event, request) => desktopMail.cancel(event, request));
