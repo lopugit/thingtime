@@ -5,7 +5,7 @@ Branch: `codex/password-manager` (base `main`)
 
 ## Release split
 
-The web vault was merged into main at `998bdb83c` by [PR #997](https://github.com/lopugit/thingtime/pull/997). This branch incorporates that web base and retains the Apple providers, native packaging and signing setup. It stays a draft until provisioning and actual OS ceremonies can be validated. The evidence below includes the shared web prerequisite.
+The web vault was merged into main at `998bdb83c` by [PR #997](https://github.com/lopugit/thingtime/pull/997). This branch incorporates that web base and retains the Apple providers, native packaging and signing setup. It is open for review; signed installation now passes, while actual OS fill/passkey ceremonies remain acceptance gates. The evidence below includes the shared web prerequisite.
 
 ## Product and security contract
 
@@ -99,9 +99,21 @@ large backups split into individually restorable parts.
   newer bundled UI cannot silently search against an older listing contract.
   Nine proxy tests cover real Nitro requests, version rejection, wrong-origin
   manifests and no credential/body forwarding before compatibility succeeds.
-  The repaired bundle still needs rebuilding and installed verification.
+  The repaired signed bundle (`1851b2e7c`) passes canonical verification and is
+  installed in `~/Applications/Thingtime.app`. Installed signatures and running
+  executable paths verify, the designated requirement remains stable, and real
+  vault metadata now loads through the selected production server.
 - Passwords was absent from sidebar and Commander navigation. Both existing
-  catalogues now include the page; installed navigation acceptance is pending.
+  catalogues now include the page. Installed Commander, sidebar and Security
+  settings destinations pass. An isolated Chromium run verifies the Commander
+  destination and the complete search regression flow at 1280px and 390px,
+  including full-page scrolling, editor closure, retry and session expiry.
+- The signed iOS device build also passes with the production HTTPS endpoint;
+  no physical iPhone installation or OS acceptance is claimed.
+- The final compiled server under Electron Node passes six real GET/POST
+  bridge checks and manifest versions, inside an OS network sandbox. It rejects
+  unavailable selected-server capabilities before forwarding private requests.
+  All 101 focused password/capability/proxy checks pass.
 - Live passkey registration on WebAuthn.io is awaiting user-controlled new
   credential creation and device verification. No private keys or real-account
   sessions were copied into test tools.
