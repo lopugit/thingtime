@@ -1,48 +1,45 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { spawnSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
-
-// Execute the exact checked-in loader shell with a fixture HTTP response.
-// No credentials, provider requests, or live settings writes are involved.
-for (const workflow of ['resolve-pr-conflicts', 'rebase-pr-stacks', 'all-branch']) {
-  const source = readFileSync(new URL(`../workflows/${workflow}.yml`, import.meta.url), 'utf8');
-  const endpoint = source.indexOf('https://thingtime.com/api/v1/settings/pr-conflict-auto-resolver-model-waterfall');
-  const start = source.lastIndexOf('        run: |\n', endpoint) + '        run: |\n'.length;
-  const output = source.indexOf('echo "model_args=', endpoint);
-  const end = source.indexOf('\n', output);
-  const script = source.slice(start, end).replace(/^          /gm, '');
-  assert.ok(endpoint > 0 && output > endpoint);
-  const run = (waterfall, failFetch = false) => {
-    const dir = mkdtempSync(join(tmpdir(), 'ai-order-'));
-    try {
-      writeFileSync(join(dir, 'response.json'), JSON.stringify({ ok: true, key: 'Thingtime.PRConflictAutoResolverModelWaterfall', waterfall }));
-      writeFileSync(join(dir, 'out'), '');
-      writeFileSync(join(dir, 'curl'), '#!/bin/sh\n[ "$FAIL_FETCH" != "1" ] || exit 22\nwhile [ "$#" -gt 0 ]; do\n if [ "$1" = "--output" ]; then cp "$RUNNER_TEMP/response.json" "$2"; exit 0; fi\n shift\ndone\nexit 1\n', { mode: 0o700 });
-      const result = spawnSync('bash', ['-c', script], { encoding: 'utf8', env: { ...process.env, PATH: `${dir}:${process.env.PATH}`, RUNNER_TEMP: dir, GITHUB_OUTPUT: join(dir, 'out'), FAIL_FETCH: failFetch ? '1' : '0' } });
-      return { ...result, output: readFileSync(join(dir, 'out'), 'utf8') };
-    } finally { rmSync(dir, { recursive: true, force: true }); }
-  };
-  test(`${workflow}: executes exactly the configured compatible model order`, () => {
-    for (const [waterfall, args] of [
-      [['claude-opus-5:high'], '--model claude-opus-5 --effort high'],
-      [['claude-fable-5', 'claude-opus-5'], '--model claude-fable-5 --fallback-model claude-opus-5 --effort max'],
-      [['default', 'claude-opus-5'], '--model default --fallback-model claude-opus-5 --effort max'],
-      [['claude-opus-5', 'default'], '--model claude-opus-5 --fallback-model default --effort max']
-    ]) {
-      const result = run(waterfall);
-      assert.equal(result.status, 0, result.stderr);
-      assert.equal(result.output, `model_args=${args}\n`);
-    }
-  });
-  test(`${workflow}: unusable settings never select an unconfigured model`, () => {
-    for (const waterfall of [[], ['gpt-5.6-sol'], ['--tools=Bash'], ['claude-opus-5:high:low'], ['claude-opus-5', 'claude-opus-5'], Array.from({length: 60}, (_, i) => `claude-${'a'.repeat(40)}${i}`)]) {
-      const result = run(waterfall);
-      assert.notEqual(result.status, 0);
-      assert.equal(result.output, '');
-    }
-    assert.notEqual(run(['claude-opus-5'], true).status, 0);
-  });
-}
+import { parseWaterfall, orderedAttempts, compileAction, taskClaudeArgs, acceptsCapabilities, retryableOpenAiError } from './lopu-model-waterfall.mjs';
+const models = [{ id: 'claude-opus-5', provider: 'anthropic', efforts: ['high','medium'] }, { id: 'gpt-6-astra', provider: 'openai', efforts: ['medium','high'] }, { id: 'gpt-5.6-sol', provider: 'openai', efforts: ['high'] }];
+const setting = waterfall => ({ ok: true, key: 'Thingtime.PRConflictAutoResolverModelWaterfall', waterfall, models });
+for (const workflow of ['resolve-pr-conflicts', 'rebase-pr-stacks', 'all-branch']) test(`${workflow}: reads the shared DB waterfall helper`, () => {
+ const source = readFileSync(new URL(`../workflows/${workflow}.yml`, import.meta.url), 'utf8');
+ assert.match(source, /lopu-model-waterfall\.mjs" metadata/);
+ assert.doesNotMatch(source, /https:\/\/thingtime.com\/api\/v1\/settings\/pr-conflict-auto-resolver-model-waterfall/);
+});
+test('mixed providers, reverse order and reasoning variants retain exact administrator order', () => {
+ for (const order of [['claude-opus-5:high','gpt-6-astra:medium'],['gpt-6-astra:medium','claude-opus-5:high','gpt-6-astra:high'],['gpt-5.6-sol:high']]) {
+  const plan = parseWaterfall(setting(order)); assert.deepEqual(plan.map(x => x.id), order);
+  const attempts = orderedAttempts(plan, { Anthropic: [{name:'a'},{name:'b'}], OpenAI: [{name:'c'}] });
+  assert.deepEqual(attempts.map(x => [x.id,x.slot]), plan.flatMap(x => x.backend === 'claude' ? [[x.id,1],[x.id,2]] : [[x.id,1]]));
+  const actions = compileAction(attempts).runs.steps.filter(x => x.uses);
+  assert.deepEqual(actions.map(x => x.with.model ?? attempts[actions.indexOf(x)].model), attempts.map(x => x.model));
+  assert.equal(actions.length, attempts.length);
+ }
+});
+test('no unconfigured model or substituted reasoning is admitted', () => {
+ for (const order of [[],['unknown:high'],['gpt-6-astra:bogus'],['gpt-6-astra:medium:high'],['gpt-6-astra:medium','gpt-6-astra:medium'],['--model=evil'],['gpt-6-astra:fast']]) assert.throws(() => parseWaterfall(setting(order)));
+ assert.deepEqual(parseWaterfall(setting(['claude-opus-5'])).map(x => x.effort), ['']);
+ assert.equal(taskClaudeArgs('--max-turns 100 --model old --fallback-model other --effort max --allowedTools Bash'), '--max-turns 100    --allowedTools Bash');
+});
+test('missing credentials preserve the model entry and advances only with explicit classification', () => {
+ const attempts = orderedAttempts(parseWaterfall(setting(['gpt-6-astra:medium','claude-opus-5:high'])), {});
+ assert.deepEqual(attempts.map(x => x.slot), [0,0]);
+ const steps = compileAction(attempts, {'plan.json':'a'.repeat(64)}).runs.steps;
+ assert.match(steps.find(x => x.id === 'check_1').if, /result_0.outputs.retryable == 'true'/);
+ assert.match(steps[0].run, /sha256sum --check --status/);
+ assert.equal(steps.find(x => x.id === 'agent_0').with.effort, 'medium');
+});
+test('manifest origin and semantic versions fence credential-dependent operations', () => {
+ const manifest = { schemaVersion: 1, origin: 'https://example.test', features: { 'api.settings-pr-conflict-auto-resolver-model-waterfall': {version:'1.1.0'}, 'api.integration-ci-credentials': {version:'1.1.1'} } };
+ assert.equal(acceptsCapabilities(manifest, manifest.origin), true);
+ assert.equal(acceptsCapabilities(manifest, 'https://other.test'), false);
+ manifest.features['api.integration-ci-credentials'].version = '2.0.0'; assert.equal(acceptsCapabilities(manifest, manifest.origin), false);
+});
+test('only explicit provider rejections advance preflight; task or network failures do not', () => {
+ for (const status of [401,403,429,500,502,503,504]) assert.equal(retryableOpenAiError(status), true);
+ assert.equal(retryableOpenAiError(404,'model_not_found'), true);
+ for (const status of [400,404,408,0]) assert.equal(retryableOpenAiError(status), false);
+});

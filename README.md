@@ -322,47 +322,32 @@ protected/default heads, and `no-ai-merge` or `ai-merge-paused` PRs remain
 excluded; a worker that finds its exact base already present exits successfully
 without creating a graph-only commit or pushing the branch.
 
-The default backend is Claude. To use Codex through the OpenAI Platform API,
-configure these repository settings (all names and values are examples; never
-commit a real key):
+### Use the saved admin model waterfall
 
-```text
-Repository variable: LOPU_AGENT_BACKEND=codex
-Repository variable: LOPU_CODEX_MODEL=gpt-5.6-terra
-Repository variable: LOPU_CODEX_REASONING_EFFORT=xhigh
-Actions secret:      OPENAI_API_KEY=<OpenAI-Platform-project-key>
-```
+GitHub Lopu reads the complete `Thingtime.PRConflictAutoResolverModelWaterfall`
+from the configured Thingtime origin at each invocation. Provider, model and
+reasoning effort come from that setting. The native Claude and OpenAI adapters
+run in the saved order; no Astra-specific model or fallback order is built in.
+For example, append **GPT-6 Astra · Medium** in Admin → AI Providers and save to
+use it after Claude, or move it first to make it primary.
 
-`LOPU_CODEX_MODEL` accepts `gpt-5.6-terra` or `gpt-5.6-sol`, and reasoning
-effort accepts `medium`, `high`, `xhigh`, or `max`. Runs are visibly attributed
-as Lopu and report a label such as `OpenAI API GPT-5.6 Terra Extra High`.
-`LOPU_REVIEW_BACKEND` remains a compatibility fallback, but
-`LOPU_AGENT_BACKEND` is the canonical single selector for the whole agent.
+Store enabled named credentials under the matching **Anthropic** or **OpenAI**
+platform in the shared encrypted vault. `OPENAI_THINGTIME_API_KEY` is a suitable
+OpenAI credential name; the value must be an OpenAI Platform API key. GitHub only
+needs `THINGTIME_CI_ROUTER_SECRET` and the trusted vault origin. It does not need
+a separate OpenAI repository secret. Accounts are attempted in their saved vault
+priority within each configured model entry. Missing account credentials advance
+to the next configured entry; malformed settings, unsupported providers/speeds,
+invalid manifests and ambiguous errors stop without inventing another model.
 
-For Claude instead, set `LOPU_AGENT_BACKEND=claude` (or omit it) and configure
-`ANTHROPIC_API_KEY` or `CLAUDE_CODE_OAUTH_TOKEN`. GitHub-hosted automation does
-not accept an OpenAI account username/password or browser session. A Codex run
-uses the OpenAI Platform project associated with `OPENAI_API_KEY`; it does not
-consume a ChatGPT Pro weekly allowance.
-
-Lopu also supports one ordered secondary Claude account:
-
-```text
-Primary Actions secret:   ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN
-Fallback Actions secret:  ANTHROPIC_API_KEY_FALLBACK or CLAUDE_CODE_OAUTH_TOKEN_FALLBACK
-```
-
-The protected Lopu action retries the same task with the fallback slot only
-when the primary result reports a plan/weekly limit, API rate or credit limit,
-or rejected credential. It does not treat `error_max_turns` as failover: that
-continues the exact session with whichever slot started it. Both slots are
-included in every generated-output credential scan.
-
-Use `CLAUDE_CODE_OAUTH_TOKEN_FALLBACK` for another Claude subscription's
-included Claude Code allowance (generate it with `claude setup-token` while
-signed into that account). `ANTHROPIC_API_KEY_FALLBACK` instead uses the Claude
-Platform organization's separate pay-as-you-go API credits; a Claude Pro/Max
-subscription does not include Console API usage.
+Only explicit credential or capacity failures advance the waterfall. Ordinary
+task failures remain failed runs. OpenAI calls use the native Codex action and
+Responses API with the configured effort. Actual provider outputs guard Claude
+session continuation. Keys are masked and cached privately for raw/base64
+publication scans; generated action helpers and the plan are verified before
+each operation. Legacy model selector inputs are accepted for caller compatibility
+but do not override the admin setting. Custom Feature Stack endpoint waterfalls
+remain independently configured.
 
 ## The bare-tree invariant
 

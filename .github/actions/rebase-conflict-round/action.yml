@@ -160,6 +160,7 @@ runs:
                 .github/scripts/classify-claude-credential-failure.mjs \
                 .github/scripts/graphify-cas.mjs \
                 .github/scripts/lopu-credential-vault.mjs \
+                .github/scripts/lopu-model-waterfall.mjs \
                 .github/scripts/stage-graphify-snapshots.mjs
             } | LC_ALL=C sort -z)
           ) | sha256_stdin
@@ -186,6 +187,7 @@ runs:
           classify-claude-credential-failure.mjs \
           graphify-cas.mjs \
           lopu-credential-vault.mjs \
+          lopu-model-waterfall.mjs \
           stage-graphify-snapshots.mjs; do
           [[ -f "$source_trusted/.github/scripts/$helper" \
              && ! -L "$source_trusted/.github/scripts/$helper" ]] || {
@@ -209,6 +211,7 @@ runs:
           "$source_trusted/.github/scripts/classify-claude-credential-failure.mjs" \
           "$source_trusted/.github/scripts/graphify-cas.mjs" \
           "$source_trusted/.github/scripts/lopu-credential-vault.mjs" \
+          "$source_trusted/.github/scripts/lopu-model-waterfall.mjs" \
           "$source_trusted/.github/scripts/stage-graphify-snapshots.mjs" \
           "$safe_trusted/.github/scripts/"
 
@@ -285,6 +288,7 @@ runs:
         cp -p \
           "$SAFE_TRUSTED_PATH/.github/scripts/classify-claude-credential-failure.mjs" \
           "$SAFE_TRUSTED_PATH/.github/scripts/lopu-credential-vault.mjs" \
+          "$SAFE_TRUSTED_PATH/.github/scripts/lopu-model-waterfall.mjs" \
           "$WORKSPACE_PATH/trusted/.github/scripts/"
 
         # claude-code-action configures its bot identity with repository-local
@@ -414,7 +418,7 @@ runs:
           --allowedTools "Bash(*),Read,Edit,Write,Glob,Grep,WebFetch,WebSearch"
 
     - name: Continue the exact Claude session until it finishes
-      if: steps.prepare.outputs.needs_ai == 'true' && inputs.backend == 'claude' && steps.lopu.outcome == 'failure'
+      if: steps.prepare.outputs.needs_ai == 'true' && steps.lopu.outputs.backend == 'claude' && steps.lopu.outcome == 'failure'
       shell: bash
       env:
         MODEL_ARGS: ${{ inputs.model-args }}
@@ -615,6 +619,7 @@ runs:
                 .github/scripts/classify-claude-credential-failure.mjs \
                 .github/scripts/graphify-cas.mjs \
                 .github/scripts/lopu-credential-vault.mjs \
+                .github/scripts/lopu-model-waterfall.mjs \
                 .github/scripts/stage-graphify-snapshots.mjs
             } | LC_ALL=C sort -z)
           ) | sha256_stdin
@@ -877,12 +882,12 @@ runs:
         }
 
         needles="$temp_dir/secret-needles"
-        if [[ -s "$RUNNER_TEMP/lopu-credential-vault.json" ]]; then
+        if [[ -s "$RUNNER_TEMP/lopu-credential-vault.json" || -s "$RUNNER_TEMP/lopu-openai-vault.json" ]]; then
           node "$SAFE_TRUSTED_ABS/.github/scripts/lopu-credential-vault.mjs" needles "$needles"
         else
           : >"$needles"
         fi
-        for secret in "${OPENAI_API_KEY:-}" "${ACTION_GITHUB_TOKEN:-}"; do
+        for secret in "${LOPU_OPENAI_API_KEY:-}" "${OPENAI_API_KEY:-}" "${ACTION_GITHUB_TOKEN:-}"; do
           [[ -n "$secret" ]] || continue
           {
             printf '%s\n' "$secret"
@@ -1167,6 +1172,7 @@ runs:
                 .github/scripts/classify-claude-credential-failure.mjs \
                 .github/scripts/graphify-cas.mjs \
                 .github/scripts/lopu-credential-vault.mjs \
+                .github/scripts/lopu-model-waterfall.mjs \
                 .github/scripts/stage-graphify-snapshots.mjs
             } | LC_ALL=C sort -z)
           ) | sha256_stdin
@@ -1211,6 +1217,7 @@ runs:
           "$safe_trusted_abs/.github/scripts/classify-claude-credential-failure.mjs" \
           "$safe_trusted_abs/.github/scripts/graphify-cas.mjs" \
           "$safe_trusted_abs/.github/scripts/lopu-credential-vault.mjs" \
+          "$safe_trusted_abs/.github/scripts/lopu-model-waterfall.mjs" \
           "$safe_trusted_abs/.github/scripts/stage-graphify-snapshots.mjs" \
           "$restored/.github/scripts/"
         [[ "$(hash_trusted_tree "$restored")" == "$EXPECTED_TRUSTED_SHA256" ]] || {

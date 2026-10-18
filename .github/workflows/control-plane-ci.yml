@@ -109,6 +109,9 @@ jobs:
       - name: Validate main/develop sync merger
         run: node .github/scripts/merge-main-develop-sync-pr.mjs --self-test
 
+      - name: Validate configured provider waterfall and secret scanning
+        run: node --test .github/scripts/lopu-credential-vault.test.mjs .github/scripts/admin-model-order.test.mjs .github/scripts/lopu-model-waterfall.test.mjs
+
       - name: Validate Claude credential failover classification
         run: node .github/scripts/classify-claude-credential-failure.mjs --self-test
 
