@@ -11331,3 +11331,25 @@ protection values as strings, as specified by
   whole-file job, zero bulk WebView reads, complete downloaded hash and cleanup.
 - [ ] OS-scheduled background work, autonomous relaunch, physical devices,
   power loss during fsync, interrupted actual network PUT and sustained large data.
+
+
+### Android current-file OS continuation — 2026-10-18
+
+Deferred by user on 2026-10-18. Preserve this code and evidence in PR #1002;
+resume unfinished Android gates only when requested.
+
+- [x] Bug class: notification consent may pause the activity. Request it before
+  creating transfer authority, then reauthenticate on return; first approval must
+  not cancel the subsequent upload. Old clients never receive the new action.
+- [x] Exact OS acknowledgement gates hidden uploads. Refusal cannot be revived
+  by a late callback; normal completion releases the job without cancelling work.
+- [x] Real notification Pause, stale Pause, OS stop and completion remove only the
+  current job/notification; stopped work is not automatically rescheduled.
+- [ ] Run `THINGTIME_BACKGROUND_UPLOAD_TEST=1` using the documented 32 MiB + 17
+  byte synthetic SAF file. Observe pending then ready while the real activity is
+  paused, return and verify pinned downloaded-byte SHA-256 and zero bulk bridge bytes.
+- [ ] Disabled notifications must keep foreground fallback. Validate Android 8–13
+  foreground-service admission on an installed device, as well as physical-device
+  sleep, network loss, policy changes, process death and explicit retry.
+- [ ] Full-folder autonomous background work, relaunch/reboot and sustained
+  100 GB–100 TB delivery remain outside this checkpoint.

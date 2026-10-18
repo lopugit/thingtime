@@ -2279,3 +2279,25 @@ runner): an 8,388,625-byte upload uses one native job and zero bulk WebView read
 then an independent download matches SHA-256 and synthetic state is cleaned.
 Other opt-in process tests in this runner remain skipped; only the separately
 invoked capture/recover phases establish fresh-process cache recovery here.
+
+
+## Android continuation deferred by request — 2026-10-18
+
+The unfinished Android current-file OS continuation remains in this PR, but
+further Android implementation and acceptance are postponed until requested.
+Non-Android sync, Timeline and backup work continues. The HTML tracker groups
+remaining Android work under “TODO at a later date”.
+
+Preserved work includes API 34+ user-initiated jobs, older foreground-service
+admission, notification progress/Pause, exact operation leases, and separate
+notification preparation before upload authority. The previous checkpoint had
+59 JVM and 165 shared checks passing plus Android build/lint evidence. An
+installed run observed hidden pending-to-ready completion and three OS-control
+tests passed, but the final combined run is **not verified**: the latest attempt
+stopped at SAF picker readiness. Its earlier full-byte check exceeded the old
+16 MiB endpoint bound; the retained test now uses pinned ranges.
+
+Resume gates: one clean installed full-hash run, disabled-notification fallback,
+Android 8–13 installed service admission, physical devices, interruption/reboot,
+and review of the native preparation deadline versus the shared timeout. This
+is a preserved unfinished checkpoint, not an Android completion claim.

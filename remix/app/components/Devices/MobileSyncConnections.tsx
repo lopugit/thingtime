@@ -20,7 +20,8 @@ import {
 	supportsMobileSyncConditions,
 	supportsMobileFolderPublication,
 	supportsMobileTrashRecovery,
-	supportsNativeFileVersions
+	supportsNativeFileVersions,
+	supportsNativeBackgroundUploads
 } from '~/fileSync/mobileFolders.client';
 import { openSyncJournal, withSyncRootLock, syncScopeKey } from '~/fileSync/journal.client';
 import { readCloudFolderInventory } from '~/fileSync/cloudInventory.client';
@@ -136,6 +137,7 @@ function Connections({
 	const [folders, setFolders] = useState<{ id: string; name: string }[]>([]);
 	const [connectionCursor, setConnectionCursor] = useState<string | null>(null),
 		[folderCursor, setFolderCursor] = useState<string | null>(null);
+	const preparingUpload = useRef(false);
 	const controller = useRef<AbortController | null>(null),
 		mounted = useRef(false);
 	const assertCurrent = () => {
@@ -230,7 +232,7 @@ function Connections({
 		};
 		const hidden = () => {
 			const active = controller.current;
-			if (document.visibilityState !== 'visible' && active && !nativeUploadMayContinue(active.signal)) active.abort();
+			if (document.visibilityState !== 'visible' && active && !preparingUpload.current && !nativeUploadMayContinue(active.signal)) active.abort();
 		};
 		const leave = () => controller.current?.abort();
 		window.addEventListener('pagehide', leave);
@@ -269,6 +271,18 @@ function Connections({
 				if (value.stage === 'retained') window.dispatchEvent(new Event(TIMELINE_CHANGED_EVENT));
 				pruneCacheNamespace('tt:sync-progress:', progressKey(saved.id), 32);
 			};
+			if (capabilities?.platform === 'android' && supportsNativeBackgroundUploads(capabilities) && saved.configuration.mode !== 'download') {
+				// The OS permission dialog may pause the activity. No transfer is active
+				// until the native preparation returns after foreground reauthentication.
+				preparingUpload.current = true;
+				try {
+					await requestFolders(scope.ownerId, { action: 'prepare-upload' }, active.signal);
+				} finally {
+					preparingUpload.current = false;
+				}
+				assertActive();
+				if (document.visibilityState !== 'visible') throw Error('Return to the app to start your upload.');
+			}
 			setActiveTransfer(saved.id);
 			const currentScope = () => {
 				assertActive();

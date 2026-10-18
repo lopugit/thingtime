@@ -491,3 +491,18 @@ and visibility-aware inactivity deadlines. `MobileSyncConnections.tsx` preserves
 only those acknowledged jobs on visibility changes; page exit still cancels.
 Timeline publication stays in the shared runner. Scheduler refusal falls back to
 foreground; actual background completion and relaunch acceptance remain open.
+
+
+### Android current-file upload continuation
+
+`NativeUploadContinuation.java` owns one nonpersistent, token-scoped OS lease.
+`NativeUploadJobService.java` implements Android 14+ user-initiated transfer jobs;
+`NativeUploadForegroundService.java` is the older Android compatibility service.
+`NativeUploadStopReceiver.java` handles only the matching notification Pause.
+`FolderBridge.java` separates notification preparation from upload authority and
+holds completed replies until foreground account validation. Shared
+`MobileSyncConnections.tsx` negotiates Android preparation before starting sync,
+then uses the existing exact background acknowledgement and Timeline journal.
+`NativeUploadBackgroundAcceptance.java` observes real API completion while the
+activity is paused; `NativeUploadServiceTest.java` verifies OS lifecycle controls.
+No process-relaunch scheduler or independent history store is introduced.

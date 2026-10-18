@@ -35,6 +35,9 @@ if [[ -n "$download_state" ]]; then offline_test=1; fi
 [[ "$offline_test" == 0 || "$offline_test" == 1 ]] || { echo 'THINGTIME_OFFLINE_FILES_TEST must be 0 or 1.' >&2; exit 1; }
 [[ "$offline_test" == 0 || -n "$fixture" ]] || { echo 'Offline Files acceptance requires a disposable local account fixture.' >&2; exit 1; }
 upload_test="${THINGTIME_FOLDER_UPLOAD_TEST:-0}"
+background_upload="${THINGTIME_BACKGROUND_UPLOAD_TEST:-0}"
+[[ "$background_upload" == 0 || "$background_upload" == 1 ]] || { echo 'THINGTIME_BACKGROUND_UPLOAD_TEST must be 0 or 1.' >&2; exit 1; }
+if [[ "$background_upload" == 1 ]]; then upload_test=1; fi
 descriptor_test="${THINGTIME_FOLDER_DESCRIPTOR_TEST:-0}"
 approval_test="${THINGTIME_FOLDER_APPROVAL_TEST:-0}"
 [[ "$approval_test" == 0 || "$approval_test" == 1 ]] || { echo 'THINGTIME_FOLDER_APPROVAL_TEST must be 0 or 1.' >&2; exit 1; }
@@ -110,6 +113,7 @@ if [[ "$picker_test" == 1 ]]; then
   if [[ "$descriptor_test" == 1 ]]; then test_args+=(-e folderDescriptor true); fi
   if [[ "$approval_test" == 1 ]]; then test_args+=(-e folderApproval true); fi
   if [[ "$upload_test" == 1 ]]; then test_args+=(-e folderUpload true); fi
+  if [[ "$background_upload" == 1 ]]; then test_args+=(-e uploadBackground true); fi
   echo 'When the installed app is ready, choose Documents/ThingtimeSyncQA through its Folder access control.'
 fi
 echo 'Wait for the live QA_READY or consent prompt before interacting with the app.'

@@ -21,12 +21,7 @@ public class NativeUploadRecoveryTest {
         Memory memory=new Memory();FolderReader reader=new FolderReader(memory,()->{});JSONObject source=reader.scan().getJSONObject(0);memory.readBytes=0;
         DeviceScope owner=new DeviceScope("native-upload-recovery-fixture","https://recovery.test",false);
         String rootId="11111111-1111-4111-8111-111111111111";
-        JSONObject config=new JSONObject().put("configurationVersion",1).put("name","Recovery fixture").put("deviceId","device")
-            .put("localRootId",rootId).put("remoteFolderId","folder").put("mode","upload").put("paused",false).put("propagateDeletes",false)
-            .put("network","wifi").put("chargingOnly",false).put("excludedPaths",new JSONArray());
-        JSONObject scope=new JSONObject().put("ownerId",owner.owner).put("origin",owner.origin).put("deviceId","device").put("rootId","connection").put("dataPlane","home");
-        NativeUploadRequest request=new NativeUploadRequest(new JSONObject().put("source",source).put("uploadId","recovery-upload").put("requestId","recovery-operation")
-            .put("authorization",new JSONObject().put("id","connection").put("updatedAt","2026-10-18T00:00:00.000Z").put("scope",scope).put("configuration",config)),owner,rootId,false);
+        NativeUploadRequest request=request(owner,rootId,source);
         NativeUploadPartStore.Binding binding=new NativeUploadPartStore.Binding(owner,rootId,"a".repeat(64));
         final int[] puts={0},completions={0};
         NativeUploadJob.Transport cloud=new NativeUploadJob.Transport() {
@@ -72,7 +67,15 @@ public class NativeUploadRecoveryTest {
             }
         }
     }
-    private static final class Memory implements FolderReader.Provider {
+    static NativeUploadRequest request(DeviceScope owner,String rootId,JSONObject source) throws Exception {
+        JSONObject config=new JSONObject().put("configurationVersion",1).put("name","Recovery fixture").put("deviceId","device")
+            .put("localRootId",rootId).put("remoteFolderId","folder").put("mode","upload").put("paused",false).put("propagateDeletes",false)
+            .put("network","wifi").put("chargingOnly",false).put("excludedPaths",new JSONArray());
+        JSONObject scope=new JSONObject().put("ownerId",owner.owner).put("origin",owner.origin).put("deviceId","device").put("rootId","connection").put("dataPlane","home");
+        return new NativeUploadRequest(new JSONObject().put("source",source).put("uploadId","recovery-upload").put("requestId","recovery-operation")
+            .put("authorization",new JSONObject().put("id","connection").put("updatedAt","2026-10-18T00:00:00.000Z").put("scope",scope).put("configuration",config)),owner,rootId,false);
+    }
+    static final class Memory implements FolderReader.Provider {
         final byte[] bytes=new byte[8*1024*1024+17];long readBytes;
         Memory(){new Random(71).nextBytes(bytes);}
         public FolderReader.Doc root(){return new FolderReader.Doc("root","Fixture",true,0,1);}

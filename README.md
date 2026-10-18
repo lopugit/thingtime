@@ -4758,14 +4758,19 @@ retaining a full pre-publication source check. For the optional installed-app
 picker/upload acceptance and its synthetic-file requirements, see
 [Android foreground upload acceptance](android/README.md#verified-reads-and-foreground-upload-acceptance).
 
-Android upload capability 1.2 performs whole-file multipart uploads in the native
+Android upload capability 1.3 performs whole-file multipart uploads in the native
 host, with no bulk WebView bytes. It needs the existing selected-folder/photo
 grant and account upload API setup, plus private disk space for one multipart
 part and any uncertain parts retained for retry (bounded to 32 parts / 5 GiB).
 Retries reauthorize and hash-check retained bytes under the original upload IDs;
 removing a folder selection clears its cache. No new secrets are required.
-It remains foreground-only; see
-[native upload limits and acceptance](android/README.md#native-whole-file-uploads-upload-capability-12).
+On Android 14+, a user-started current-file upload may continue under an OS
+user-initiated transfer job; older Android uses a foreground service. Notifications
+must be enabled for progress and Pause controls. The first Upload now asks for
+notification access before starting transfer work; declining keeps foreground
+behavior. Folder progression and Timeline publication resume when the app returns.
+No new server secrets or dashboard setup are required. See
+[background upload limits and acceptance](android/README.md#current-file-background-upload-continuation).
 The optional `THINGTIME_FOLDER_UPLOAD_TEST=1` run uses the same disposable
 localhost account and normal upload-approval/storage setup; it needs no new
 service credentials. It remains separate from the passing provider/bridge tests.

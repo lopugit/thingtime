@@ -615,3 +615,52 @@ duplicate names, permission/cancellation fencing, and pending/trashed media.
 
 Android contracts: [partial access](https://developer.android.com/about/versions/14/changes/partial-photo-video-access)
 and [original formats and media generations](https://developer.android.com/reference/android/provider/MediaStore).
+
+
+### Current-file background upload continuation
+
+Upload capability 1.3 admits one foreground-started file to Android 14+ UIDT
+(`JobScheduler`) or an Android 8–13 data-sync foreground service. A generic
+notification shows progress and Pause without filenames/account details. The
+legacy service holds a bounded wake lock; it is not sticky. OS stop, notification
+Pause, account/navigation changes, revoked grants, network/power policy changes
+and activity destruction cancel native work. Completed parts release their cache;
+uncertain parts keep the existing scoped recovery contract.
+
+The Android connection control performs `prepare-upload` before reservation or
+transfer work. Android 13+ asks for POST_NOTIFICATIONS once, then reauthenticates
+on returning to the foreground. Declining or disabling notifications/channel,
+unsupported admission or OS refusal keeps foreground-only behavior. Preparation
+carries no file or upload authority. Other clients never send this Android-only
+action. Only an exact, correlated OS-start acknowledgement permits the current
+native upload to survive visibility changes; page exit still cancels.
+
+After the native file completes, the result waits for a foreground owner check.
+The existing shared journal verifies the stored result and publishes the canonical
+file/Timeline write. It then advances the folder. No credentials or job authority
+are persisted, and process death does not restart an authenticated job. This is
+current-file continuation, not autonomous whole-folder background sync.
+
+For installed acceptance, use `THINGTIME_BACKGROUND_UPLOAD_TEST=1` with
+`android/scripts/test-mobile-devices.sh /path/to/private-fixture.json`. In the
+same disposable `Documents/ThingtimeSyncQA` folder, temporarily replace only the
+synthetic `original.bin` with 32 MiB + 17 bytes, all value 13; restore the ordinary
+8 MiB + 17 byte fixture afterward. Select that folder through the real picker.
+Allow the observed Thingtime notification prompt on the first run. The account
+needs normal upload permission and enough available storage for new versions:
+old acceptance files remain accounted for in private Trash and Timeline. Restore
+any temporary local test-account quota override afterward; never erase history
+to make acceptance pass.
+
+The test observes a pending reservation, backgrounds the actual activity, then
+checks its exact stored fingerprint through read-only API calls until ready. It
+returns to the WebView, downloads pinned ranges to verify the full SHA-256, and
+checks one native job with zero bulk WebView upload bytes. OS tests exercise the
+notification Pause action, stale Pause, scheduler cancellation and normal cleanup.
+Without enabled notifications, ordinary service tests are explicitly skipped;
+the background acceptance mode requires them. Physical devices, Android 8–13
+installed service behavior, process relaunch and sustained large-data throughput
+still require acceptance.
+
+Android contracts: [user-initiated transfers](https://developer.android.com/develop/background-work/background-tasks/uidt)
+and [foreground service launch](https://developer.android.com/develop/background-work/services/fgs/launch).

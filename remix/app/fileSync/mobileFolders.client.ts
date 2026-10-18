@@ -42,7 +42,7 @@ export type MobileWriteApproval = { scope: SyncScope; configurationRevision: str
 export type FolderRequest =
 	| { action: 'upload-file'; rootId: string; upload: NativeFileUpload & { source: SyncEntry } }
 	| { action: 'upload-part'; rootId: string; upload: NativePartUpload & { source: SyncEntry } }
-	| { action: 'list' | 'choose' | 'conditions' }
+	| { action: 'list' | 'choose' | 'conditions' | 'prepare-upload' }
 	| { action: 'remove' | 'scan'; rootId: string }
 	| { action: 'version-list'; rootId: string; cursor?: string }
 	| { action: 'version-inspect'; rootId: string; versionId: string; expected: SyncEntry }
@@ -561,6 +561,8 @@ export function requestMobileFolders(
 			request.offset < 0)
 	)
 		return Promise.reject(Error('Invalid native download range.'));
+	if (request.action === 'prepare-upload' && (bridge?.platform !== 'android' || !supportsNativeBackgroundUploads(bridge)))
+		return Promise.reject(Error('Update the Android app to prepare background uploads.'));
 	if (request.action === 'conditions' && !supportsMobileSyncConditions(bridge))
 		return Promise.reject(Error('Update the mobile app to run folder transfers.'));
 	if (request.action.startsWith('stage-') && !supportsMobileStaging(bridge))
@@ -679,6 +681,7 @@ export function requestMobileFolders(
 				? 900_000
 				: [
 						'choose',
+						'prepare-upload',
 						'scan',
 						'read-range',
 						'stage-begin',

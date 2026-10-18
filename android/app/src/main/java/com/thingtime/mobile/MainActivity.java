@@ -42,7 +42,7 @@ public final class MainActivity extends Activity {
           };
           window.thingtimeDeviceTransport.onmessage = event => { try { receive(event.data instanceof ArrayBuffer ? {type:"mobile-files-read-frame",payload:{frame:event.data}} : JSON.parse(event.data)); } catch {} };
           window.thingtimeNativeBridge = {
-            version:'1.4.0', platform:'android', isNativeWebView:true, devicePairingVersion:'1.0.0', fileUploadVersion:'1.2.0', fileAccessVersion:'__ACCESS_VERSION__', fileStagingVersion:'__STAGING_VERSION__', filePublicationVersion:'1.1.0', fileTrashVersion:'1.2.0', fileVersionsVersion:'1.0.0', fileExportVersion:'1.0.0',
+            version:'1.4.0', platform:'android', isNativeWebView:true, devicePairingVersion:'1.0.0', fileUploadVersion:'1.3.0', fileAccessVersion:'__ACCESS_VERSION__', fileStagingVersion:'__STAGING_VERSION__', filePublicationVersion:'1.1.0', fileTrashVersion:'1.2.0', fileVersionsVersion:'1.0.0', fileExportVersion:'1.0.0',
             postMessage:message => window.thingtimeDeviceTransport.postMessage(JSON.stringify(message)),
             __BINARY_METHOD__
             onMessage:listener => { listeners.add(listener); return () => listeners.delete(listener); },
@@ -93,7 +93,8 @@ public final class MainActivity extends Activity {
                 // The system Save As picker pauses this activity. A web account
                 // change or unmount must still be able to cancel that request.
                 boolean cancelExport="file-export".equals(body.optString("type")) && body.optJSONObject("payload")!=null && "cancel".equals(body.getJSONObject("payload").optString("action"));
-                if(!active && !cancelExport)return;
+                boolean cancelUpload="mobile-files".equals(body.optString("type")) && body.optJSONObject("payload")!=null && "suspend".equals(body.getJSONObject("payload").optString("action"));
+                if(!active && !cancelExport && !cancelUpload)return;
                 if(!"mobile-files".equals(body.optString("type")) && data.length()>4096)return;
                 handle(body,reply);
             } catch(Exception invalid) { /* Malformed messages have no effects. */ }

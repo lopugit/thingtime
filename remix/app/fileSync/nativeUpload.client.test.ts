@@ -47,6 +47,7 @@ test('native upload capability is explicit and the descriptor stays bound to the
 	assert.equal(supportsNativePartUploads({ ...host, platform: 'android', fileUploadVersion: undefined }), false);
 	assert.equal(supportsNativeFileUploads({ ...host, platform: 'android', fileUploadVersion: '1.2.0' }), true);
 	assert.equal(supportsNativeBackgroundUploads({ ...host, platform: 'android', fileUploadVersion: '1.2.0' }), false);
+	assert.equal(supportsNativeBackgroundUploads({ ...host, platform: 'android', fileUploadVersion: '1.3.0' }), true);
 	const native = mobileFolderSource(
 		'owner',
 		rootId,
@@ -276,5 +277,34 @@ test('accepted hidden uploads pause the JS deadline, foreground restores it and 
 		else delete (globalThis as any).window;
 		if (previousDocument) Object.defineProperty(globalThis, 'document', previousDocument);
 		else delete (globalThis as any).document;
+	}
+});
+
+test('Android notification preparation is capability gated and never grants upload authority', async () => {
+	const previous = Object.getOwnPropertyDescriptor(globalThis, 'window');
+	const target = Object.assign(new EventTarget(), { location: { origin: expected.origin } }) as any;
+	const messages: any[] = [],
+		authority: boolean[] = [];
+	target.thingtimeNativeBridge = { ...host, isNativeWebView: true, fileUploadVersion: '1.3.0', postMessage: (m: any) => messages.push(m.payload) };
+	Object.defineProperty(globalThis, 'window', { configurable: true, value: target });
+	try {
+		const controller = new AbortController();
+		await assert.rejects(requestMobileFolders('owner', { action: 'prepare-upload' }, controller.signal), /Update the Android app/);
+		target.thingtimeNativeBridge.platform = 'android';
+		target.thingtimeNativeBridge.fileUploadVersion = '1.2.0';
+		await assert.rejects(requestMobileFolders('owner', { action: 'prepare-upload' }, controller.signal), /Update the Android app/);
+		assert.equal(messages.length, 0);
+		target.thingtimeNativeBridge.fileUploadVersion = '1.3.0';
+		const pending = requestMobileFolders('owner', { action: 'prepare-upload' }, controller.signal, undefined, (value) => authority.push(value));
+		const cancelled = assert.rejects(pending, { name: 'AbortError' });
+		assert.equal(messages[0].action, 'prepare-upload');
+		assert.deepEqual(authority, []);
+		controller.abort();
+		await cancelled;
+		assert.equal(messages[1].action, 'suspend');
+		assert.deepEqual(authority, [false]);
+	} finally {
+		if (previous) Object.defineProperty(globalThis, 'window', previous);
+		else delete (globalThis as any).window;
 	}
 });
