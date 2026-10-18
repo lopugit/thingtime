@@ -12593,3 +12593,12 @@ Local results do not establish current-head CI or deployed acceptance.
 - [x] Reauthorize the Character on admission, immediately before writes and before disclosure. Preserve same-origin, full-session, rate, selected-plane and conditional-write checks; never fall back to the principal.
 - [x] Run `characterProfileSync.browser.test.ts` explicitly in the network-none native test runtime. Register disposable accounts through the API, verify separate principal/sibling/foreign catalogues, private saves and selections, exact retries, session-selected actors, guest refusal and disable/revocation. Verify built manifest versions and release the runtime.
 - [ ] Complete delegated offline posting, attachment and principal-scoped History acceptance before enabling the full Character workspace facade. This API checkpoint is not that completion.
+
+### Character History cache partitions (2026-10-19)
+
+- [x] Reopen event, branch, note and name queues with the same principal/Character; reject cross-principal, direct-login, origin and plane reuse.
+- [x] Preserve canonical authored History identities and ancestry from the old proven workspace partition; never adopt the ambiguous shared cache.
+- [x] Retire stale readers after account or generation changes; direct-account cache keys remain unchanged.
+- [ ] Complete native delegated Character posting/attachments and History UI acceptance.
+- Regression: `characterTimeline.test.ts`, `test:local-workspace`, `test:timeline`; `accountTimelineNames.browser.test.ts` requires a verified isolated runtime.
+- [x] Native ordinary-account History names/notes: offline save/reload and reconnect at 1440/390/320px; server audit uses an independent disposable browser login; replay after removal returns 409. This does not close delegated Character UI acceptance.

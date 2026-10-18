@@ -4733,3 +4733,31 @@ zero page errors/mutation requests and server 404 for the local post.
 network-none runtime is released with no OOM. This is anonymous-path evidence,
 not native Character delegation acceptance. Initial harness-only assertions
 were corrected to match the canonical response and observed native navigation.
+
+## Character History partitions — 2026-10-19
+
+`TimelineScope` now carries an optional device-only `delegatedBy` discriminator.
+Direct-account keys retain their existing bytes; delegated event caches, branch
+commands, notes and version-name queues use the principal as well as actor,
+origin and data plane. Portable events, links, receipts and remote requests keep
+the canonical schema. No credentials or remote permissions come from this key.
+
+`accountTimelineScope` and the browser store use that discriminator; a foreign
+principal/origin/plane or retired root lease is refused. A direct-account History
+provider cannot reopen a delegated cached scope. Existing authored versions can
+rekey inside their already-proven principal/actor workspace, preserving IDs,
+content, ancestry and receipts. The shared cache has no provable old principal
+and is deliberately not adopted. No account content or production data changed.
+
+Four focused tests cover cold IndexedDB reopen, all command queues, direct-login
+and two-principal separation, existing-version continuation and stale readers.
+727 workspace tests plus four offline-shell checks and 258 Timeline tests pass;
+78 native opt-ins remain skipped in the workspace command. Client/server builds
+and lint pass; TypeScript retains 91 unchanged baseline diagnostics. Native
+account History regression passes separately. Full delegated offline
+posting/attachments and the Character History UI remain open; this is a storage
+prerequisite, not completion of that feature.
+
+Native ordinary-account History acceptance also passes at 1440/390/320px: names and notes save offline, cold reload, verified reconnect, canonical acknowledgements, separate note removal and three delayed retries refused with 409. No offline writes or page errors; the network-none runtime was released with zero OOM. Evidence: `tmp/character-history-native/native/verification.json` and PNGs. The fixture uses a separate normal browser sign-in for server audit while the editor is disconnected; no cookie/token extraction. Earlier APIRequestContext 401s and a full-Docker image build are retained as fixture/setup failures, not product failures.
+
+Structural Graphify refresh and targeted Characters/auth-map semantic extraction (26 nodes, 28 edges) completed. Full documentation semantic freshness is not claimed.

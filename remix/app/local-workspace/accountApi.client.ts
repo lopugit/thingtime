@@ -564,8 +564,8 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 			changed();
 			return { ok: true, roots: result.roots, ids: result.idMap, imported: result.things.length, filesImported: manifest.files.length, linksImported: 0, savedLocally: true };
 		};
-	const localHistoryScope = (requested: {apiOrigin?: string; ownerId: string; dataPlane: string}, includeHome = false) =>
-  requested.ownerId === scope.ownerId && (requested.dataPlane === scope.dataPlane || (includeHome && requested.dataPlane === 'home')) && (requested.apiOrigin === undefined || requested.apiOrigin === scope.origin);
+	const localHistoryScope = (requested: {apiOrigin?: string; ownerId: string; dataPlane: string; delegatedBy?: string}, includeHome = false) =>
+  requested.ownerId === scope.ownerId && requested.delegatedBy === scope.delegatedBy && (requested.dataPlane === scope.dataPlane || (includeHome && requested.dataPlane === 'home')) && (requested.apiOrigin === undefined || requested.apiOrigin === scope.origin);
  return { ...online, auth: remote.auth, login: remote.login,
   actions: { ...online.actions,
    run: async (args: {action?: unknown; inputs?: unknown; source?: string} = {}) => {

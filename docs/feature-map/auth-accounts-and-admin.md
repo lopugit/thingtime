@@ -342,3 +342,9 @@ composer’s selected Character there without changing the root account binding.
 remote loading fenced and uses these labels offline. Neither retained labels nor
 local draft access grants remote Character authority. See `characterDrafts.test.ts`,
 `characterRoster.test.ts` and the opt-in `characterDrafts.browser.test.ts`.
+
+Character History cache separation uses optional device-only `TimelineScope.delegatedBy`
+and `accountTimelineScope`, with lease-checked assembly in `timeline/localBackend.client.ts`.
+`local-workspace/characterTimeline.test.ts` proves principal/actor isolation,
+legacy authored-version preservation and separate branch/note/name queues.
+The canonical Timeline event/receipt schema and server authority are unchanged.

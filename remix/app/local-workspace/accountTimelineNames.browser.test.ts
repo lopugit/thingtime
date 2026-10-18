@@ -12,11 +12,24 @@ test(
 	{ skip: !base || !playwrightPath, timeout: 180_000 },
 	async () => {
 		assert.ok(['localhost', '127.0.0.1'].includes(new URL(base!).hostname), 'Disposable loopback fixtures only');
+		const health = await (await fetch(new URL('/api/v1/health/nitro', base))).json();
+		assert.equal(health.testEnvironment?.mode, 'isolated-agent-test');
+		if (process.env.TT_RENDER_SESSION) assert.equal(health.testEnvironment.sessionId, process.env.TT_RENDER_SESSION);
 		const { chromium } = await import(playwrightPath!),
 			browser = await chromium.launch({ executablePath: process.env.TT_SHARED_CHROME_PATH, headless: true, chromiumSandbox: true });
 		const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } }),
 			guest = await browser.newContext(),
 			page = await context.newPage();
+		const audit = await browser.newContext(), auditPage = await audit.newPage();
+		const network = await context.newCDPSession(page);
+		await network.send('Network.enable');
+		// The runtime keeps network:none. This models loopback availability and
+		// disconnection for the app without changing the enforced boundary.
+		const connectivity = async (offline: boolean) => {
+			await context.setOffline(offline);
+			await network.send('Network.overrideNetworkState', {offline, latency:1, downloadThroughput:100_000_000, uploadThroughput:100_000_000, connectionType:'ethernet'});
+		};
+		await connectivity(false);
 		const url = (path: string) => new URL(path, base).href,
 			headers = { Origin: new URL(base!).origin };
 		const title = 'Offline names fixture',
@@ -55,25 +68,29 @@ test(
 		};
 		const version = (root: any) => root.locator('.history-version[data-selected="true"]');
 		const remote = async () => {
-			const response = await context.request.get(url('/api/v1/timeline?' + new URLSearchParams({ thingId, ownerId, dataPlane })));
-			assert.equal(response.status(), 200, await response.text());
-			return response.json();
+			const response = await auditPage.evaluate(async path => { const r = await fetch(path); return {status:r.status,data:await r.json()}; }, '/api/v1/timeline?' + new URLSearchParams({ thingId, ownerId, dataPlane }));
+			assert.equal(response.status, 200, JSON.stringify(response.data));
+			return response.data;
 		};
 		try {
 			if (artifacts) await mkdir(resolve(artifacts), { recursive: true });
-			const username = 'localnames-' + randomUUID().slice(0, 8),
+			const username = 'localnames-' + randomUUID().slice(0, 8), password = randomUUID() + randomUUID(),
 				registration = await context.request.post(url('/api/v1/auth/register'), {
 					headers,
-					data: { username, email: username + '@example.test', password: randomUUID() + randomUUID() }
+					data: { username, email: username + '@example.test', password }
 				});
 			assert.equal(registration.status(), 200, await registration.text());
 			ownerId = (await registration.json()).user.id;
-			const created = await context.request.post(url('/api/v1/things'), {
-				headers,
-				data: { thingtime: ['data'], crystal: { name: title, value: 'Private History name and note fixture' }, acl: ['tt:user'] }
-			});
-			assert.equal(created.status(), 200, await created.text());
-			thingId = (await created.json()).thing.id;
+			// Independent normal browser login for server readback while the editor
+			// is offline. No cookie/token extraction or production identity is used.
+			await auditPage.goto(url('/.well-known/thingtime-capabilities.json'));
+			const login = await auditPage.evaluate(async credentials => { const r=await fetch('/api/v1/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(credentials)});return r.status; }, {username,password});
+			assert.equal(login,200);
+			await page.goto(url('/feed'));
+			assert.equal(await page.evaluate(async()=> (await (await fetch('/api/v1/auth/me')).json()).user?.id),ownerId);
+			const created = await page.evaluate(async data => { const r=await fetch('/api/v1/things',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});return {status:r.status,data:await r.json()}; }, { thingtime: ['data'], crystal: { name: title, value: 'Private History name and note fixture' }, acl: ['tt:user'] });
+			assert.equal(created.status, 200, JSON.stringify(created.data));
+			thingId = created.data.thing.id;
 			await page.goto(url('/thing/' + thingId));
 			await open();
 			await history.getByRole('tab', { name: 'Versions', exact: true }).click();
@@ -88,7 +105,7 @@ test(
 				return false;
 			});
 			offline = true;
-			await context.setOffline(true);
+			await connectivity(true);
 			await open();
 			await history.getByRole('tab', { name: 'Versions', exact: true }).click();
 			for (const name of ['First offline name', 'Renamed offline']) {
@@ -143,7 +160,7 @@ test(
 			assert.equal((before.names ?? []).length, 0);
 			assert.equal((before.notes ?? []).length, 0);
 			offline = false;
-			await context.setOffline(false);
+			await connectivity(false);
 			await page.setViewportSize({ width: 1440, height: 1000 });
 			const reconnect = page.getByRole('button', { name: 'Reconnect', exact: true });
 			if (await reconnect.isVisible()) await reconnect.click();
@@ -158,8 +175,8 @@ test(
 			}
 			assert.ok(accepted, 'queued names and note receive real account acknowledgements');
             const pendingAdd=commands.find(command=>command.command==='add-note'&&command.text===pendingNote);assert.ok(pendingAdd);
-            const retries=await Promise.all(Array.from({length:3},()=>context.request.post(url('/api/v1/timeline?'+new URLSearchParams({ownerId,dataPlane})),{headers,data:pendingAdd})));
-            for(const retry of retries)assert.equal(retry.status(),409,await retry.text());
+            const retries=await auditPage.evaluate(async({path,command})=>Promise.all(Array.from({length:3},async()=>{const r=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(command)});return {status:r.status,data:await r.json()};})),{path:'/api/v1/timeline?'+new URLSearchParams({ownerId,dataPlane}),command:pendingAdd});
+            for(const retry of retries)assert.equal(retry.status,409,JSON.stringify(retry.data));
             assert.ok(!(await remote()).notes.some((entry:any)=>entry.text===pendingNote),'Delayed concurrent adds cannot recreate removed text');
 			await open();
 			await history.getByRole('tab', { name: 'Versions', exact: true }).click();
@@ -170,7 +187,7 @@ test(
 			await open();
 			await close();
 			offline = true;
-			await context.setOffline(true);
+			await connectivity(true);
 			await page.reload();
 			await open();
 			await history.getByRole('tab', { name: 'Versions', exact: true }).click();
@@ -189,7 +206,7 @@ test(
 			);
 			await close();
 			offline = false;
-			await context.setOffline(false);
+			await connectivity(false);
 			if (await reconnect.isVisible()) await reconnect.click();
 			let removed = false;
 			for (let n = 0; n < 150; n++) {

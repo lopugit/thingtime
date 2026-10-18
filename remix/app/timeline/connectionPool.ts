@@ -11,8 +11,8 @@ export type TimelineConnection = { scope: TimelineScope; folderId: string; store
 
 /** A signed-out render has neither a viewer nor a connection. Check both
  * before comparing identities: undefined === undefined is not an account. */
-export function timelineConnectionForViewer<T extends Pick<TimelineConnection, 'scope'>>(connection: T | null, ownerId: string | null | undefined, dataPlane: string | null | undefined): T | null {
-	if (!connection || !ownerId || connection.scope.ownerId !== ownerId || (dataPlane && connection.scope.dataPlane !== dataPlane)) return null;
+export function timelineConnectionForViewer<T extends Pick<TimelineConnection, 'scope'>>(connection: T | null, ownerId: string | null | undefined, dataPlane: string | null | undefined, delegatedBy?: string): T | null {
+	if (!connection || !ownerId || connection.scope.ownerId !== ownerId || connection.scope.delegatedBy !== delegatedBy || (dataPlane && connection.scope.dataPlane !== dataPlane)) return null;
 	return connection;
 }
 

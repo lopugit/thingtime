@@ -80,6 +80,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-19: Separate delegated Character History caches and command queues by principal while preserving canonical records and direct-account keys. Keep older authored versions in their proven workspace; full Character UI integration remains open. See [PR #1000 notes](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md). — Codex (AI)
+
 - 2026-10-19: Resolve delegated/session-selected Characters in private theme and
   algorithm sync, with repeated authorization and negotiated actor contracts.
   Native isolated account/API checks pass; full offline Character work remains

@@ -174,3 +174,14 @@ No personal profile or production credential is copied. It retains screenshots
 and compares rendered actions with persisted API results. The temporary servers
 and database are removed after the run. These test listeners are intentionally
 not exposed through Funnel and are not a persistent development server.
+
+### Device History separation
+
+Delegated Timeline cache keys include the principal in addition to the Character,
+origin and data plane (`timeline/contract.ts`, `local-workspace/accountTimeline.ts`).
+This does not change portable event/receipt formats or grant remote authority.
+Older authored versions remain readable only within their proven workspace;
+ambiguous shared-cache records are not adopted. Direct Character sign-in keeps
+a separate partition. `characterTimeline.test.ts` covers every command queue,
+cold reopen and identity retirement. Full offline Character History UI remains
+an explicit gate in [the workspace matrix](local-workspaces.md).

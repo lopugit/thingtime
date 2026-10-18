@@ -76,7 +76,7 @@ function useTimelineConnection(pool: TimelineConnectionPool, storage: TimelineSt
 		// until discovery confirms the current account and data source again.
 		try {
 			const cached = JSON.parse(sessionStorage.getItem(key) || 'null');
-			if (cached?.scope?.ownerId === ownerId && cached.scope.apiOrigin === origin && (!expectedPlane || cached.scope.dataPlane === expectedPlane) && typeof cached.folderId === 'string') {
+			if (cached?.scope?.ownerId === ownerId && cached.scope.delegatedBy === undefined && cached.scope.apiOrigin === origin && (!expectedPlane || cached.scope.dataPlane === expectedPlane) && typeof cached.folderId === 'string') {
 				timelineScopeKey(cached.scope); install(cached.scope, cached.folderId, false);
 			}
 		} catch { forget(); }

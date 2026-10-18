@@ -13,7 +13,7 @@ type AccountScope = Extract<WorkspaceScope, {kind:'account'}>;
 const EVENTS='timeline-events', LINKS='timeline-links', INDEX='timeline-index', META='timeline-meta';
 type Stored = Omit<LocalTimelineRow,'event'> & {event:TimelineEventRecord; reserve:string};
 type Header = TimelineLocalIndex & {reserve:string};
-export const accountTimelineScope=(scope:AccountScope):TimelineScope=>({apiOrigin:scope.origin,ownerId:scope.ownerId,dataPlane:scope.dataPlane});
+export const accountTimelineScope=(scope:AccountScope):TimelineScope=>({apiOrigin:scope.origin,ownerId:scope.ownerId,dataPlane:scope.dataPlane,...(scope.delegatedBy === undefined ? {} : {delegatedBy:scope.delegatedBy})});
 const failure=(message:string):never=>{throw new WorkspaceError('ACCOUNT_HISTORY',message,409);};
 /** Receipt/control space is admitted with the edit, so acknowledgements do not
  * require new quota after the device fills. Snapshot and link bytes are exact. */
@@ -28,10 +28,15 @@ export async function readAccountTimelineRow(tx:WorkspaceTransaction,scope:Timel
   ...Array.from({length:event.parentCount},(_,n)=>timelineLinkId(id,'parent',n)),...Array.from({length:event.dependencyCount},(_,n)=>timelineLinkId(id,'dependency',n))];
  const links:TimelineLink[]=[];for(const id of ids){const link=await tx.get<TimelineLink>(LINKS,id);if(!link)failure('Account History relationships are incomplete.');links.push(link!);}
  const {reserve:_reserve,...value}=stored;
- const row=validateTimelineRow({...value,event:joinTimelineEvent(event,links)},key);
+ // Older authored rows already live inside the principal/actor workspace.
+ // Re-key only that trusted partition's metadata; never adopt the unscoped
+ // shared cache, whose originating principal cannot be proven.
+ const legacyKey=scope.delegatedBy === undefined ? key : timelineScopeKey({...scope,delegatedBy:undefined});
+ const row=validateTimelineRow({...value,scope:value.scope===legacyKey?key:value.scope,event:joinTimelineEvent(event,links)},key);
  if(row.event.id!==id||row.event.ownerId!==scope.ownerId)failure('Account History identity changed.');
  const header=await tx.get<Header>(INDEX,id);if(!header)failure('Account History index is missing.');
- const {reserve:_headerReserve,...index}=header!;validateTimelineIndex(index,key);
+ const {reserve:_headerReserve,...storedIndex}=header!;
+ const index={...storedIndex,scope:storedIndex.scope===legacyKey?key:storedIndex.scope};validateTimelineIndex(index,key);
  if(JSON.stringify(index)!==JSON.stringify(timelineLocalIndex(row)))failure('Account History index does not match its event.');
  return row;
 }
@@ -96,7 +101,8 @@ export class AccountTimeline {
   return this.tx('readonly',async tx=>{
    const result:LocalTimelineRow[]=[];
    for(const {id,value} of await tx.list<Header>(INDEX)){
-    validateTimelineIndex(value,timelineScopeKey(this.timelineScope));
+    const key=timelineScopeKey(this.timelineScope),legacyKey=timelineScopeKey({...this.timelineScope,delegatedBy:undefined});
+    validateTimelineIndex({...value,scope:value.scope===legacyKey?key:value.scope},key);
     if((selection?.thingId&&value.thingId!==selection.thingId)||(selection?.thingIds&&!selection.thingIds.includes(value.thingId))||(selection?.status&&value.status!==selection.status))continue;
     const row=await readAccountTimelineRow(tx,this.timelineScope,id);if(!row)failure('Account History payload is missing.');result.push(row!);
    }
