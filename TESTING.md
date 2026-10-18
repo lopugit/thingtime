@@ -10256,6 +10256,9 @@ separate from deterministic discovery/lease tests.
 
 ## Mac menu bar and reusable device scripts
 
+- Editable-block regression: expand a saved HTML-template Component into blocks; select the title, input, button, image and a nested repeated-card field separately. Change text/style, duplicate/reorder/delete a child, save and reload. Verify Action references and source refresh still work. Exact boolean props must preserve false; details/dialog are open in edit mode and respect their binding in view mode. Restricted editor hosts must hide disallowed block types and data sources.
+- Menu list: Show all is the default, every snapshot row appears, changing to 5 and back works, search reaches the last item, and desktop/mobile full-page scrolling has no overflow. Compare a rendered icon with its actual menu-bar item; application fallback is explicitly labelled. Missing Screen Recording never prompts from telemetry; locked snapshots contain no icons/items.
+
 - Device and approval links must open `/things`, where paired devices live.
 - Installed browser Actions must reach the selected HTTPS account API with actor
   and database preconditions intact; changed actors and cross-origin mutations
