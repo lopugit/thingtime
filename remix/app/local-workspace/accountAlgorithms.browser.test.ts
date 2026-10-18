@@ -23,6 +23,7 @@ test(
 		const checks: string[] = [],
 			errors: string[] = [],
 			writes: string[] = [],
+			syncResponses: { status: number; retryAfter: string | null }[] = [],
 			layouts: any[] = [];
 		let owner = '',
 			complete = false;
@@ -37,6 +38,9 @@ test(
 			errors.push(error.stack || error.message);
 			console.info('Browser error:', error.stack || error.message);
 		});
+		context.on('response', (response) => {
+			if (new URL(response.url()).pathname === '/api/v1/algorithms/sync') syncResponses.push({ status: response.status(), retryAfter: response.headers()['retry-after'] ?? null });
+		});
 		context.on('request', (request) => {
 			if (request.method() !== 'GET' && /\/api\/v1\/(algorithms|drafts)/.test(request.url())) writes.push(request.url());
 		});
@@ -47,10 +51,11 @@ test(
 			return (await response.json()).algorithms;
 		};
 		const until = async (predicate: () => Promise<boolean>, label: string) => {
-			const end = Date.now() + 30000;
+			// Interrupted tab claims and server rate windows can last 60 seconds.
+			const end = Date.now() + 90000;
 			while (!(await predicate())) {
 				assert.ok(Date.now() < end, label);
-				await new Promise((resolve) => setTimeout(resolve, 1000));
+				await new Promise((resolve) => setTimeout(resolve, 2000));
 			}
 		};
 		const open = async (target = page) => {
@@ -106,6 +111,18 @@ test(
 			await second.getByRole('button', { name, exact: true }).waitFor();
 			await second.close();
 			checks.push('second offline tab reads the same home profile');
+			const title = 'Offline shelf ' + randomUUID().slice(0, 6);
+			await page.goto(origin + '/things');
+			await page.getByRole('link', { name, exact: true }).click({ button: 'right' });
+			await page.getByRole('menuitem', { name: '✏️ Rename', exact: true }).click();
+			await page.getByRole('textbox', { name: 'Thing title', exact: true }).fill(title);
+			await page.getByRole('dialog').getByRole('button', { name: 'Rename', exact: true }).click();
+			await page.getByRole('dialog').waitFor({ state: 'hidden' });
+			await page.reload();
+			await page.getByRole('link', { name: title, exact: true }).waitFor();
+			assert.equal(writes.length, before);
+			checks.push('normal library display-title rename survives offline reload without account requests');
+			await open();
 			await page.locator('.lopuToast').first().waitFor({ state: 'hidden', timeout: 20_000 });
 			for (const viewport of [
 				{ width: 390, height: 844 },
@@ -129,6 +146,7 @@ test(
 			const manifest = parseTransfer(await readFile(output + '/native-profile.thingtime.json', 'utf8'));
 			assert.equal(manifest.roots[0], id);
 			assert.equal(manifest.things[0].crystal.name, name);
+			assert.equal(manifest.things[0].crystal.title, title);
 			assert.doesNotMatch(JSON.stringify(manifest), /"ownerId"|"shared"|"listed"|"writeId"/);
 			await page.getByTestId('algorithm-manager').getByRole('button', { name: 'Transfer', exact: true }).first().click();
 			await page.getByRole('menuitem', { name: 'Import into my Things…', exact: true }).click();
@@ -147,7 +165,7 @@ test(
 				const response = await context.request.get(origin + '/api/v1/auth/me');
 				return (await response.json()).user.activeFeedAlgorithmId === id;
 			}, 'selection did not synchronize');
-			assert.ok((await snapshot()).every((row: any) => !row.shared && !row.listed));
+			assert.ok((await snapshot()).every((row: any) => !row.shared && !row.listed && row.content.title === title));
 			checks.push('reconnect synchronizes two private copies and independent active choice');
 			await until(async () => !(await page.getByTestId('algorithm-sync-status').isVisible()), 'initial queues did not settle');
 			await context.setOffline(true);
@@ -202,7 +220,7 @@ test(
 						assert.equal(removed.status(), 200);
 					}
 			}
-			await writeFile(output + '/verification.json', JSON.stringify({ complete, checks, layouts, errors }, null, 2));
+			await writeFile(output + '/verification.json', JSON.stringify({ complete, checks, layouts, errors, syncResponses }, null, 2));
 			await context.close();
 			await browser.close();
 		}

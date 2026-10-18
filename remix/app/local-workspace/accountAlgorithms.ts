@@ -208,6 +208,16 @@ export class AccountAlgorithmSync {
 		const state = (await tx.get<State>(collection, row.id))!;
 		await tx.put(collection, row.id, { ...state, placementIntent: true });
 	}
+	async renameIn(tx: WorkspaceTransaction, row: LocalThing, previous: LocalThing) {
+		this.lease.assertCurrent();
+		if (this.scope.dataPlane !== 'home') return fail('Rename algorithms in the home library.');
+		validateTransferAlgorithm({ ...row, crystal: algorithmTransferContent(row.crystal) });
+		const { title: _new, ...next } = row.crystal, { title: _old, ...before } = previous.crystal;
+		const stable = (value: unknown) => JSON.stringify(copyBoundedJson(value, { maxBytes: 2 * 1024 * 1024, maxDepth: 12, maxNodes: 65000, sortKeys: true }));
+		if (row.id !== previous.id || row.folderId !== previous.folderId || stable(next) !== stable(before))
+			return fail('Algorithm title changes cannot replace protected content.');
+		await this.mutated(tx, row, previous);
+	}
 	removeIn(tx: WorkspaceTransaction, id: string) {
 		return this.algorithms.removeIn(tx, id);
 	}

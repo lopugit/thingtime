@@ -35,6 +35,7 @@ export type FeedAlgorithmDoc = {
   _id?: any;
   shareId: string;
   ownerId: string;
+  title?: string | null;
   name: string;
   emoji: string;
   parentId: string | null;
@@ -123,6 +124,7 @@ const algorithmThingToDoc = (thing: any): FeedAlgorithmDoc => ({
   shareId: thing.shareId,
   ownerId: thing.ownerId,
   name: thing.crystal?.name || '',
+  ...(Object.prototype.hasOwnProperty.call(thing.crystal || {}, 'title') ? { title: thing.crystal.title } : {}),
   emoji: thing.crystal?.emoji || DEFAULT_EMOJI,
   parentId: thing.crystal?.parentId ?? null,
   weights: thing.crystal?.weights || emptyWeights(),
@@ -286,7 +288,7 @@ export const getOwnedAlgorithmWeights = async (ownerId: string, shareId: string)
  * possessing a preview URL is not authority for this export path. */
 export const getOwnedAlgorithmTransfer = async (ownerId: string, shareId: string): Promise<AlgorithmTransferContent | null> => {
   const doc = await findOwnedAlgorithm(ownerId, shareId);
-  return doc ? parseAlgorithmTransfer({ name: doc.name, emoji: doc.emoji, weights: doc.weights || emptyWeights(),
+  return doc ? parseAlgorithmTransfer({ ...(Object.prototype.hasOwnProperty.call(doc, 'title') ? { title: doc.title } : {}), name: doc.name, emoji: doc.emoji, weights: doc.weights || emptyWeights(),
     eventCount: doc.eventCount, lastTrainedAt: doc.lastTrainedAt ? new Date(doc.lastTrainedAt).toISOString() : null }) : null;
 };
 
@@ -375,6 +377,7 @@ export const createAlgorithm = async (ownerId: string, input: CreateAlgorithmInp
   const doc: FeedAlgorithmDoc = {
     shareId: boundary.createId ?? randomUUID(),
     ownerId,
+    ...(imported && Object.prototype.hasOwnProperty.call(imported, 'title') ? { title: imported.title } : {}),
     name,
     description: typeof input.description === 'string' ? input.description.trim().slice(0, 300) : '',
     listed: false,
@@ -400,6 +403,7 @@ export const createAlgorithm = async (ownerId: string, input: CreateAlgorithmInp
     thingtime: ['feed-algorithm'],
     crystal: {
       name: doc.name,
+      ...(Object.prototype.hasOwnProperty.call(doc, 'title') ? { title: doc.title } : {}),
       emoji: doc.emoji,
       parentId: doc.parentId,
       weights: doc.weights,

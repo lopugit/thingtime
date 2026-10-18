@@ -78,3 +78,21 @@ test('algorithm imports enforce the shared quota atomically and preserve built-i
 		assert.equal((await algorithms.list()).algorithms.length, MAX_SAVED_ALGORITHMS);
 	} finally { await db.close(); }
 });
+
+
+test('anonymous library rename preserves trained content through normal export and import', async (t) => {
+  const { db, algorithms, things } = fixture();
+  t.after(() => db.close());
+  const created = (await algorithms.create({ name: 'Original name' })).algorithm;
+  const before = await things.get(created.id);
+  const renamed = await things.renameLibrary({ id: created.id, displayTitle: ' Reading shelf ', expectedUpdatedAt: before.updatedAt });
+  assert.equal(renamed.crystal.title, 'Reading shelf');
+  assert.deepEqual({ ...renamed.crystal, title: undefined }, { ...before.crystal, title: undefined });
+  await assert.rejects(things.renameLibrary({ id: created.id, displayTitle: 'Stale', expectedUpdatedAt: before.updatedAt }), /changed/);
+  await assert.rejects(things.renameLibrary({ id: created.id, displayTitle: 'Forged', weights: {} } as any), /title/);
+  await assert.rejects(things.update({ id: created.id, crystal: { title: 'Generic bypass' } }), /dedicated/);
+  const exported = (await things.export([created.id])).manifest;
+  const imported = await things.import(exported);
+  assert.notEqual(imported.roots[0], created.id);
+  assert.equal((await things.get(imported.roots[0])).crystal.title, 'Reading shelf');
+});

@@ -470,3 +470,14 @@ details are distinct from server receipts and never enter content sync.
 `accountActions.test.ts`, `accountApi.test.ts` and the opt-in
 `accountActions.browser.test.ts` cover this boundary; see
 [local workspaces](../local-workspaces.md#account-local-action-execution--2026-10-18).
+
+
+`api.algorithms-sync` 1.3.0 preserves optional library display titles in private
+catalogues and canonical content. The existing shared parser bounds the title;
+omission preserves stored metadata and null clears it. Catalogue retention and
+title-bearing writes negotiate 1.3.0; placement and selection keep their existing
+minima. Both generated manifests derive from the same endpoint documentation.
+
+Normal remote algorithm title transfers also require `api.things-export` 1.17.0
+and `api.things-import` 1.13.0. The shared client negotiates these before normal
+remote transfer, and both live manifests are checked by the API fixture.

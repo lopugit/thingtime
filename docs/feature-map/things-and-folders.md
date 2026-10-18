@@ -800,3 +800,11 @@ Library/detail preview caches share `thingsWorkspaceCacheKey` and include the
 full workspace and local destination. Failed schema reads surface a retry control
 while the Thing data remains available. Tests: `readThingSchema.test.ts`,
 `thingsCore.test.ts`, and opt-in `schemaDetail.browser.test.ts`.
+
+
+Algorithm library titles use the existing `LocalThings.renameLibrary` adapter
+and `AccountAlgorithmSync.renameIn`. The canonical algorithm transfer/parser
+preserves optional `crystal.title`; private catalogues and title writes negotiate
+`api.algorithms-sync` 1.3.0. Run algorithm library/facade/transport tests and the
+opt-in algorithm API/native browser fixtures. See
+[algorithm display titles](../local-workspaces.md#algorithm-library-display-titles--2026-10-18).

@@ -1,3 +1,4 @@
+import { isTransferAlgorithm } from '../utils/thingTransfer/algorithm';
 import { isTransferTheme } from '../utils/thingTransfer/theme';
 import { RESERVED_COMPONENT_ID_PREFIX } from '../components/ComponentsLibrary/componentBrowseTypes';
 import { browseLocalDefinitions } from './definitionCatalog';
@@ -157,7 +158,8 @@ export function anonymousApi<T extends Record<string, any>>(remote: T): T {
 		remove: async ({ id }: { id: string }) => { const result = await service().remove([id]); announceLocalWorkspaceChange(result.deleted); return changed(result); },
 		create: (input: ThingWrite) => write(input), update: (input: ThingWrite) => write(input, true),
 		renameLibrary: async (input: { id: string; displayTitle: string; expectedUpdatedAt?: string }) => {
-			if (!isTransferTheme(await service().get(input.id)))
+			const existing = await service().get(input.id);
+			if (!isTransferTheme(existing) && !isTransferAlgorithm(existing))
 				return write({ id: input.id, crystal: { title: input.displayTitle }, expectedUpdatedAt: input.expectedUpdatedAt }, true);
 			const row = await service().renameLibrary(input);
 			announceLocalWorkspaceChange([row.id]);

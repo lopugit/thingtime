@@ -11896,8 +11896,8 @@ never point it at an existing account or deployment.
   versions and one receipt; never leave a deleted profile active.
 - Refuse another account's saved profile and stale account/origin/plane authority.
   Retain pending device choice/content when a remote catalogue loses its profile.
-- Native account editor/feed/transfer and conflict UI activation is still pending;
-  the queue/API checks are not full offline browser acceptance.
+- Verify native account editor/feed/transfer and conflict UI behavior using the
+  native account algorithms checklist below; queue tests alone are insufficient.
 
 ### Account algorithm library transfer and placement
 
@@ -11916,8 +11916,8 @@ never point it at an existing account or deployment.
   algorithms-sync 1.2 must receive no placement writes.
 - Delete a profile or change account after preparing an export; the old plan
   must refuse download. Refuse mismatched home/account adapters.
-- Native account facade/editor/feed integration is still an outstanding gate;
-  adapter tests alone do not count as full native browser acceptance.
+- Verify native account facade/editor/feed integration with the browser fixture
+  below; adapter tests alone do not count as full native browser acceptance.
 
 
 ### Native account algorithms and isolated feed observations
@@ -11945,3 +11945,19 @@ never point it at an existing account or deployment.
 - Delay capability negotiation for an explicit sharing/branching request, then
   switch accounts or databases. The request must keep its original actor/plane
   headers and abort before sending with the new session; no mutation may occur.
+
+### Offline algorithm library titles
+
+- Rename an anonymous or retained home-account algorithm through the normal
+  Things menu, cold-reload offline and export/import it. Preserve the display
+  title separately from the original profile name and every trained weight.
+- Refuse stale title versions, oversized titles and generic protected-content
+  edits. Rename must complete without account/draft requests or active sync.
+- Lose a conditional save response, rename again and retry. The exact frozen
+  command must precede the new title; no duplicated training or generic write.
+- Verify real API normal-library rename causes stale profile sync to conflict;
+  omitted title preserves it, null clears it, and changed receipt replay refuses.
+- Confirm imported title metadata survives normal canonical account export and
+  import. Normal branches and shared previews must not inherit library aliases.
+- A host below algorithms-sync 1.3 must receive neither catalogue retention
+  requests nor title writes. Anonymous work must never call account sync.

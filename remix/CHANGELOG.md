@@ -68,6 +68,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-18 — **Codex (AI):** Preserve algorithm library display titles through
+  local Rename, canonical transfer and conditional account sync; negotiate
+  `api.algorithms-sync` 1.3.0 and retain protected profile boundaries. Verification
+  is tracked in [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
 - 2026-10-18 — **Codex (AI):** Route native account algorithm editing, selection
   and transfers through independent local queues; isolate training features and
   sessions by source workspace, add conflict review, and keep Vercel Analytics

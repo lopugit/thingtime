@@ -28,7 +28,16 @@ test(
 			checks.push(label);
 			return response.json();
 		};
-		const sync = (data: unknown, extra = {}) => owner.post('/api/v1/algorithms/sync', { headers: { ...headers, ...extra }, data });
+		const sync = async (data: unknown, extra = {}) => {
+			const send = () => owner.post('/api/v1/algorithms/sync', { headers: { ...headers, ...extra }, data });
+			const response = await send();
+			if (response.status() !== 429) return response;
+			const seconds = Number(response.headers()['retry-after']);
+			assert.ok(Number.isFinite(seconds) && seconds > 0 && seconds <= 60, 'bounded server retry delay');
+			checks.push('honor rate limit before retrying identical fixture request');
+			await new Promise(resolve => setTimeout(resolve, seconds * 1000 + 100));
+			return send();
+		};
 		const write = (command: unknown, extra = {}) => sync({ operation: 'write', expectedOwnerId: ownerId, command }, extra);
 		const snapshot = async (extra = {}) => {
 			const response = await sync({ operation: 'snapshot', expectedOwnerId: ownerId }, extra);
@@ -49,7 +58,9 @@ test(
 			const routes = await read(await guest.get('/api/v1/capabilities'), 'live route capability discovery');
 			assert.equal(capabilities.origin, origin);
 			for (const [feature, required] of [
-				['api.algorithms-sync', '1.2.0'],
+				['api.algorithms-sync', '1.3.0'],
+				['api.things-export', '1.17.0'],
+				['api.things-import', '1.13.0'],
 				['api.algorithms-delete', '1.0.1']
 			]) {
 				assert.ok(capabilitySatisfies(capabilities.features[feature]?.version, required));
@@ -83,6 +94,7 @@ test(
 				description: 'Created offline',
 				content: {
 					name: 'Offline reading',
+					title: 'Private library title',
 					emoji: '🧠',
 					weights: { types: { text: 0.5 }, tags: { kindness: 2 }, authors: {} },
 					eventCount: 7,
@@ -290,6 +302,27 @@ test(
 				'explicit null moves profile to root'
 			);
 			assert.equal((await snapshot()).find((row: any) => row.id === placed.id).folderId, null);
+			const titleBefore = (await snapshot()).find((row: any) => row.id === placed.id);
+			await read(await owner.patch('/api/v1/things', { headers, data: {
+				id: placed.id, displayTitle: 'Renamed in normal library', expectedUpdatedAt: titleBefore.updatedAt
+			} }), 'normal library title rename');
+			await read(await write({ ...unchanged, writeId: randomUUID(), expectedVersion: titleBefore.version }), 'rename conflicts with stale profile sync', 409);
+			const titleAfter = (await snapshot()).find((row: any) => row.id === placed.id);
+			assert.equal(titleAfter.content.title, 'Renamed in normal library');
+			const { title: _omitted, ...withoutTitle } = titleAfter.content;
+			await read(await write({ ...unchanged, content: withoutTitle, writeId: randomUUID(), expectedVersion: titleAfter.version }), 'legacy content omission preserves title');
+			const preserved = (await snapshot()).find((row: any) => row.id === placed.id);
+			assert.equal(preserved.content.title, 'Renamed in normal library');
+			const clearTitle = { ...unchanged, content: { ...withoutTitle, title: null }, writeId: randomUUID(), expectedVersion: preserved.version };
+			const clearedAck = (await read(await write(clearTitle), 'explicit null clears library title')).acknowledgment;
+			assert.equal((await snapshot()).find((row: any) => row.id === placed.id).content.title, null);
+			await read(await write({ ...clearTitle, content: { ...clearTitle.content, title: 'Changed retry' } }), 'title belongs to immutable receipt identity', 409);
+			assert.deepEqual((await read(await write(clearTitle), 'exact title-clear replay')).acknowledgment, clearedAck);
+			await read(await write({ ...clearTitle, content: { ...clearTitle.content, title: 'Private source alias' }, writeId: randomUUID(), expectedVersion: clearedAck.resultVersion }), 'restore private library alias');
+			const branched = await read(await owner.post('/api/v1/algorithms', { headers, data: { name: 'Normal branch', branchFrom: placed.id } }), 'normal private profile branch');
+			ids.add(branched.algorithm.id);
+			const branchSnapshot = (await snapshot()).find((row: any) => row.id === branched.algorithm.id);
+			assert.equal(Object.prototype.hasOwnProperty.call(branchSnapshot.content, 'title'), false, 'branch copies interests, never private library alias');
 			complete = true;
 		} finally {
 			try {

@@ -29,6 +29,7 @@ const project = (doc: any, legacy = false) => {
 		id: doc.shareId,
 		version: version(doc),
 		content: parseAlgorithmTransfer({
+			...(Object.prototype.hasOwnProperty.call(content, 'title') ? { title: content.title } : {}),
 			name: content.name,
 			emoji: content.emoji,
 			weights: content.weights,

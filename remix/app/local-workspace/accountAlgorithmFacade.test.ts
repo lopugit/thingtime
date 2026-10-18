@@ -92,7 +92,11 @@ test('native account facade edits, applies, trains and transfers offline without
 		assert.equal(state.activeAlgorithmId, created.id);
 		assert.equal(state.algorithms[0].name, 'Edited on device');
 		assert.equal(state.algorithms[0].eventCount, 1);
+		const renamed = await api.things.renameLibrary({ id: created.id, displayTitle: 'My reading shelf' });
+		assert.equal(renamed.savedLocally, true);
 		const plan = (await api.things.export({ ids: [created.id] })).plan;
+		assert.equal(plan.things[0].crystal.title, 'My reading shelf');
+		assert.equal(plan.things[0].crystal.name, 'Edited on device');
 		const copy = await api.things.import({
 			manifest: { format: 'thingtime.transfer', version: 1, roots: plan.roots, things: plan.things, files: [] },
 			files: {},
@@ -103,7 +107,7 @@ test('native account facade edits, applies, trains and transfers offline without
 		assert.equal((await api.algorithms.list()).activeAlgorithmId, created.id);
 		await assert.rejects(api.algorithms.update({ id: created.id, shared: false }), /Synchronize or review/);
 		assert.equal(calls, 0);
-		await api.algorithms.remove({ id: created.id });
+		await api.things.remove({ id: created.id });
 		assert.equal((await api.algorithms.list()).activeAlgorithmId, null);
 		assert.equal((await service.algorithms.selection.status())?.desired, null);
 		assert.equal((await accountWorkspaceWorker(scope).drafts.status()).length, 0);

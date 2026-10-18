@@ -455,7 +455,7 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 			if (!await sync.view(id)) {
 				if (navigator.onLine === false || !canSyncAccountWorkspace(scope)) throw new WorkspaceError('LOCAL_CONTENT_MISSING', 'Open these Things online once before deleting them offline.', 409);
 				const result = await refresh({ id });
-				if (!result.thing || (!accountThingCanCache(result.thing) && !isTransferTheme(result.thing)) || result.thing.author?.id !== owner.id) { dedicated = true; continue; }
+				if (!result.thing || (!accountThingCanCache(result.thing) && !isTransferTheme(result.thing) && !(scope.dataPlane === 'home' && isTransferAlgorithm(result.thing))) || result.thing.author?.id !== owner.id) { dedicated = true; continue; }
 			}
 			cached.push(id);
 		}
@@ -909,7 +909,7 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 				await refresh({ id: input.id });
 				cached = await sync.view(input.id);
 			}
-			if (!cached || !isTransferTheme(cached)) return online.things.renameLibrary(input);
+			if (!cached || (!isTransferTheme(cached) && !(scope.dataPlane === 'home' && isTransferAlgorithm(cached)))) return online.things.renameLibrary(input);
 			const row = await sync.things.renameLibrary(input);
 			changed();
 			return { ok: true, id: row.id, title: row.crystal.title, updatedAt: row.updatedAt, thing: project(await sync.view(row.id)), savedLocally: true };

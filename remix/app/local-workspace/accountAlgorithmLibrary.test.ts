@@ -283,3 +283,30 @@ test('conflict resolution preserves the chosen device folder and independent cop
 	assert.equal(s.rows.get(copyId)!.folderId, 'original-folder');
 	assert.equal(s.rows.get(copyId)!.parentId, null);
 });
+
+
+test('account library title renames keep protected content and immutable retries through export and sync', async (t) => {
+  const f = fixture(), s = server();
+  t.after(() => f.db.close());
+  const row = (await f.algorithms.algorithms.create({ name: 'Profile name' })).algorithm;
+  await f.algorithms.sync(s.transport);
+  const before = (await f.sync.view(row.id))!;
+  const renamed = await f.sync.things.renameLibrary({ id: row.id, displayTitle: 'First title', expectedUpdatedAt: before.updatedAt });
+  assert.equal(renamed.crystal.name, 'Profile name');
+  assert.deepEqual(renamed.crystal.weights, before.crystal.weights);
+  await assert.rejects(f.sync.things.renameLibrary({ id: row.id, displayTitle: 'Stale', expectedUpdatedAt: before.updatedAt }), /changed/);
+  s.loseNext();
+  await f.algorithms.sync(s.transport);
+  const retryIndex = s.calls.length;
+  const frozen = structuredClone(s.calls.at(-1));
+  await f.sync.things.renameLibrary({ id: row.id, displayTitle: 'Second title' });
+  await f.algorithms.retry(row.id);
+  await f.algorithms.sync(s.transport);
+  assert.deepEqual(s.calls[retryIndex], frozen);
+  await f.algorithms.sync(s.transport);
+  assert.equal(s.rows.get(row.id)!.content.title, 'Second title');
+  const exported = manifest((await exportAccountThings({ ids: [row.id] }, f)).plan);
+  assert.equal(exported.things[0].crystal.title, 'Second title');
+  assert.equal(exported.things[0].crystal.name, 'Profile name');
+  assert.equal((await f.sync.status()).length, 0, 'No generic protected-content write');
+});

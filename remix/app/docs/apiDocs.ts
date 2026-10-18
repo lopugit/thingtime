@@ -6362,9 +6362,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		notes: ['No response or log contains the cron secret. Free omni text screening makes draining the off-era backlog costless.']
 	}),
   endpoint({
-    id: 'algorithms-sync', featureVersion: '1.2.0', contractVersion: '1.2.0', group: 'algorithms',
+    id: 'algorithms-sync', featureVersion: '1.3.0', contractVersion: '1.3.0', group: 'algorithms',
     title: 'Device algorithm synchronization', endpoint: '/api/v1/algorithms/sync',
     summary: 'Reads private versioned profiles and conditionally synchronizes device-trained content without replaying training events.',
+    notes: ['Version 1.3.0 preserves optional crystal.title display metadata in canonical portable content, catalogue reads, imports and conditional writes. Omission preserves an existing title; null clears it. Private library titles are never included in shared previews or inherited by branching another profile. Clients retaining catalogues or sending title metadata must negotiate 1.3.0.'],
     detail: 'Every POST requires the exact Origin, a current full account session, expectedOwnerId and X-Thingtime-Expected-Data-Plane. Storage remains in the canonical home plane. Snapshot returns a bounded complete owned catalogue, opaque document versions and portable profile content. Write commands carry id, writeId, expectedVersion and action save/delete. Saves carry canonical content and description; new copies may supply an owned parentId. Creation uses a new UUID and expectedVersion=null. Existing writes require the exact snapshot version; changes to trained weights, sharing or metadata cause conflicts. Saves never change sharing, listing or existing lineage. New copies are private and unlisted. The existing protected algorithm writer handles storage accounting and legacy migration policy. Content, an immutable protected Timeline receipt and deletion selection cleanup commit atomically. Retry the identical command after an uncertain response; altered writeId reuse is refused. Receipts belong to home storage and can be replayed after a newly verified selected-plane change; the current selection header remains mandatory. No raw training events are executed. Commands are capped at 2 MiB; catalogues at 8 MiB. Anonymous workspaces never call this endpoint. Version 1.1.0 adds operation=selection to read the private active algorithm pointer and operation=select with command { algorithmId, expectedVersion, writeId }. Selection is independent of profile synchronization, supports built-in choices and null clearing, and uses the canonical secure account writer with an atomic home Timeline receipt. Only owned saved profiles can be selected. A lost selection response reuses its exact command even after later account choices or profile deletion. Version 1.2.0 accepts optional folderId on save commands: omission preserves placement, null moves to the home root, and a folder ID must resolve to an owned home folder. The normal protected writer locks the full destination ancestry and commits placement, content and the exact receipt atomically. Folder IDs never select a data plane or grant access; the selected-plane authority header remains mandatory.',
     auth: {mode:'session-or-bearer',description:'Current full-account session token; temporary, service and internal Action identities are refused.'},
     methods:['POST'],
@@ -12826,9 +12827,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'things-export',
+    // 1.17.0: preserve optional owned algorithm library display titles.
     // 1.16.0: retain optional owned theme display titles through canonical transfer.
-    featureVersion: '1.16.0',
-    contractVersion: '1.16.0',
+    featureVersion: '1.17.0',
+    contractVersion: '1.17.0',
     // 1.12.0: include shared emoji content referenced by authorized live history.
     // Standalone emoji exports remain owner-only; stored bytes keep current gates.
     // 1.11.1: preserve the canonical ISO crystal edit/deletion timestamps.
@@ -12866,12 +12868,13 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'things-import',
+    // 1.13.0: preserve optional owned algorithm library display titles.
     // 1.12.0: retain optional owned theme display titles through canonical transfer.
     // 1.4.0: owner-only algorithm snapshots and private validated restoration.
     // 1.9.0: atomic private chat archives with importer identity substitution.
     // 1.9.1: accept canonical stored-upload custom emoji IDs in archives.
-    featureVersion: '1.12.0',
-    contractVersion: '1.12.0',
+    featureVersion: '1.13.0',
+    contractVersion: '1.13.0',
     notes: [
       'Historical participants may carry avatarPreset lopu, chatgpt or claude instead of avatarFileId, never on self. Messages may carry toolHistory with at most 20 display-only {name, ok, summary} receipts (80/240 character limits). Extra fields and deleted-message receipts are rejected. These fields survive private storage and re-export; they never authorize tools or resolve live accounts.',
       'Chat archive records use only chat-archive, chat-archive-participant, chat-archive-message and chat-archive-reaction kinds. A root contains name, topic, chatType (dm/group/channel), createdAt and selfParticipantId. Participants target the root and contain username, displayName, nickname, joinedAt and optional avatarFileId. Messages target the root and contain participantId, text, createdAt, deleted and optional editedAt, replyToId, threadRootId and systemText. Reactions target a message and contain participantId, emoji and createdAt. Dates are canonical millisecond UTC ISO strings; all participant, reply and thread references must stay inside the same archive.',
@@ -12883,7 +12886,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     group: 'things',
     title: 'Import portable Things',
     endpoint: '/api/v1/things/import',
-    summary: 'Import private caller-owned content, preserving templated media and file/link annotations. Themes and feed algorithms use dedicated home-plane writers with fresh IDs and quota checks, without changing active selections. Themes accept name and token data. Algorithms accept name, emoji, weights, eventCount and canonical ISO lastTrainedAt or null; each weight bucket allows at most 10000 keys of at most 512 characters and finite weights from -50 to 50. Malformed data fails without truncation. Imported algorithms start unshared with no branch lineage and never execute training events. Both kinds retain folder placement but reject child Things, extended fields and gallery files. Other account/control kinds remain protected.',
+    summary: 'Import private caller-owned content, preserving templated media and file/link annotations. Themes and feed algorithms use dedicated home-plane writers with fresh IDs and quota checks, without changing active selections. Themes accept name and token data. Algorithms accept name, optional display title, emoji, weights, eventCount and canonical ISO lastTrainedAt or null; each weight bucket allows at most 10000 keys of at most 512 characters and finite weights from -50 to 50. Malformed data fails without truncation. Imported algorithms start unshared with no branch lineage and never execute training events. Both kinds retain folder placement but reject child Things, extended fields and gallery files. Other account/control kinds remain protected.',
     detail: 'Theme imports preserve validated optional crystal.title display metadata on fresh private copies. Standalone file transfers require fresh file-import uploads; the manifest filePurpose=file must match the immutable upload purpose before any mutation. Commit uses the existing accounted attachment writer. ' +
       'Recording attachment Things contain only crystal.recordingFileId referencing one stored file targeted at that Thing, with optional folderId but without extra fields, children or links. Upload those bytes with purpose recording-import and private-upload approval. Import validates a fresh ready owner draft, commits annotations and durability atomically without changing purpose or moderation, returns the new recording ID, and remaps embedded recording URLs. Included recording folders are remapped after all parent folders exist; otherwise recordings use the selected import destination. Placement uses the dedicated transactional home-plane writer, without changing bytes or ACLs. Existing recordings cannot be reused. Later failures delete newly committed recordings through the attachment lifecycle; deferred cleanup appears in remainingIds. Other content allocates fresh IDs, remaps composition, folder, target and schema references, and uses normal schema validation, quota accounting and transactional attachment binding. Never restores ownership, ACL grants, link secrets, site routes or managed account records. Other stored files use normal post-purpose uploads. Optional links recreate private URL-backed gallery drafts without fetching external bytes. Repeated successful requests create separate copies; never automatically retry an uncertain mutation. Returns linksImported separately from filesImported.',
     auth: { mode: 'session', description: 'Requires a first-party user account. Cross-origin requests, app tokens, PATs and service accounts are not supported.' },

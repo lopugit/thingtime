@@ -36,7 +36,7 @@ export function accountAlgorithmTransport(
 			if (window.location.origin !== scope.origin) throw new WorkspaceError('WORKSPACE_CHANGED', 'Account origin changed.', 409);
 			await requireThingtimeCapability(
 				'api.algorithms-sync',
-				operation === 'write' && command && 'folderId' in command ? '1.2.0' : ['selection', 'select'].includes(operation) ? '1.1.0' : '1.0.0'
+				operation === 'snapshot' || (operation === 'write' && command && 'content' in command && Object.prototype.hasOwnProperty.call(command.content, 'title')) ? '1.3.0' : operation === 'write' && command && 'folderId' in command ? '1.2.0' : ['selection', 'select'].includes(operation) ? '1.1.0' : '1.0.0'
 			);
 			await requireThingtimeCapability('api.mongodb-endpoint', '1.1.0');
 			lease.assertCurrent();

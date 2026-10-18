@@ -1035,7 +1035,7 @@ export function useApi(explicitView?: AccountLocalView) {
       }, [asyncFetcher]),
       export: useCallback(async (args: { ids: string[]; key?: string; includeChildren?: boolean; includeDependencies?: boolean; includeFiles?: boolean; includeLinks?: boolean }, options?: { signal?: AbortSignal }) => {
         return withExportDeadline(async signal => {
-          await requireThingtimeCapability('api.things-export', '1.16.0');
+          await requireThingtimeCapability('api.things-export', '1.17.0');
           if (args.includeFiles !== false) await requireThingtimeCapability('api.attachment-content', '1.11.0');
           signal.throwIfAborted();
           return asyncFetcher.submit(args, { action: '/api/v1/things/export', signal, errorContext: 'export Things' });
@@ -1043,7 +1043,7 @@ export function useApi(explicitView?: AccountLocalView) {
       }, [asyncFetcher]),
       import: useCallback(async (args: { manifest: unknown; files?: Record<string, string>; localFiles?: Map<string, Uint8Array>; folderId?: string | null }, options?: { signal?: AbortSignal }) => {
         if (args.localFiles !== undefined) throw new Error('Local file bytes require the local workspace importer; they cannot be sent to an account endpoint');
-        await requireThingtimeCapability('api.things-import', '1.12.0');
+        await requireThingtimeCapability('api.things-import', '1.13.0');
         return asyncFetcher.submit(args, { action: '/api/v1/things/import', signal: options?.signal, errorContext: 'import Things' });
       }, [asyncFetcher]),
       // scope: 'subspaces' narrows the page to posts from the viewer's ACTIVE

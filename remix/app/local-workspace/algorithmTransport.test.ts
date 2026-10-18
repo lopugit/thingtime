@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { accountAlgorithmTransport } from './algorithmTransport.client';
 import { bindLocalWorkspace, accountWorkspaceLease } from './runtime.client';
+import { requireThingtimeCapability } from '../api/utils/capabilities/requireCapability.client';
 import { rootIdentity } from '../utils/rootIdentity';
 import { parseAlgorithmWrite } from '../api/utils/algorithms/algorithmSyncContract';
 const signal = () => new AbortController().signal;
@@ -43,12 +44,12 @@ test('algorithm transport requires current authority and compatible origin, boun
 	try {
 		await assert.rejects(bind(false).snapshot(signal()), /offline/);
 		assert.equal(calls.length, 0);
-		for (const unsupported of [undefined, '0.9.0', '2.0.0']) {
+		for (const unsupported of [undefined, '0.9.0', '1.0.0', '1.1.0', '1.2.0', '2.0.0']) {
 			capability = unsupported;
 			await assert.rejects(bind().snapshot(signal()), /incompatible/);
 		}
 		assert.equal(calls.length, 0);
-		capability = '1.0.0';
+		capability = '1.3.0';
 		assert.deepEqual(await bind().snapshot(signal()), []);
 		assert.equal(calls[0].url, '/api/v1/algorithms/sync');
 		assert.equal(calls[0].init.credentials, 'same-origin');
@@ -78,6 +79,8 @@ test('algorithm transport requires current authority and compatible origin, boun
 		await assert.rejects(bind().write(command, signal()), /does not match/);
 		const selection = { algorithmId: 'hot', version: 'algorithm-selection-v1:' + 'c'.repeat(64) };
 		const select = { algorithmId: 'hot', expectedVersion: selection.version, writeId: 'choose-hot' };
+		capability = '1.0.0';
+		await assert.rejects(requireThingtimeCapability('test-refresh', '1.0.0'));
 		await assert.rejects(bind().selection(signal()), /incompatible/);
 		capability = '1.1.0';
 		const beforePlacement = calls.length;
@@ -87,6 +90,16 @@ test('algorithm transport requires current authority and compatible origin, boun
 		response = Response.json({ ok: true, ownerId: 'owner', dataPlane: plane, storagePlane: 'home', acknowledgment: ack });
 		assert.deepEqual(await bind().write({ ...command, folderId: null } as any, signal()), ack);
 		assert.equal(JSON.parse(String(calls.at(-1)!.init.body)).command.folderId, null);
+		assert.equal(command.action, 'save');
+		if (command.action !== 'save') throw Error('Expected save command');
+		const titled = { ...command, content: { ...command.content, title: 'Library title' } };
+		const beforeTitle = calls.length;
+		await assert.rejects(bind().write(titled as any, signal()), /incompatible/);
+		assert.equal(calls.length, beforeTitle);
+		capability = '1.3.0';
+		response = Response.json({ ok: true, ownerId: 'owner', dataPlane: plane, storagePlane: 'home', acknowledgment: ack });
+		assert.deepEqual(await bind().write(titled as any, signal()), ack);
+		assert.equal(JSON.parse(String(calls.at(-1)!.init.body)).command.content.title, 'Library title');
 		response = Response.json({ ok: true, ownerId: 'owner', dataPlane: plane, storagePlane: 'home', selection });
 		assert.deepEqual(await bind().selection(signal()), selection);
 		response = Response.json({
