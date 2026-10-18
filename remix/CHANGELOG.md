@@ -73,6 +73,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-18 — **Codex (AI)**: Give installed Device scripts pages a centered, padded Builder container. Remove fixture-provided layout so browser acceptance catches missing page spacing.
+
 - 2026-10-18 — **Codex (AI)**: Restore the existing password-title search, pagination and api.passwords 1.2.0 contract accidentally removed by the menu-bar merge. Preserve all menu-bar and script functionality.
 
 - 2026-10-18 — **Codex (AI)**: Fix installed desktop browser Actions through the

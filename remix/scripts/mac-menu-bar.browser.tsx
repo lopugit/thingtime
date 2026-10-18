@@ -120,7 +120,7 @@ function App() {
 	const page = suite.pages[0].crystal as any;
 	const components = Object.fromEntries(suite.components.map((c) => [c.crystal.componentKey, { id: c.shareId, crystal: c.crystal }]));
 	return (
-		<main style={{ maxWidth: 1100, margin: '0 auto', padding: 16 }}>
+		<main>
 			<label>
 				Acceptance scenario{' '}
 				<select

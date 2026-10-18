@@ -10211,6 +10211,8 @@ separate from deterministic discovery/lease tests.
   search and paginate every item; locked snapshots must contain no inventory.
 - At desktop and 390px widths expand details, long paths, output and earlier-run
   controls, then scroll to the bottom with no clipping or horizontal overflow.
+- Render each installed suite without a fixture-supplied page container; verify
+  the suite itself centers its content and preserves mobile side padding.
 - Run harmless printf via a paired Mac. Inspect the complete source in approval;
   deny one request, approve another, and verify exact stdout/exit status.
 - Script runs must require fresh approval regardless of always-allow policy;
