@@ -53,6 +53,36 @@ large backups split into individually restorable parts.
 
 ## Outstanding gates
 
+### Current recheck — 2026-10-18
+
+- The former Apple agreement failure did not recur. The development Mac was
+  registered through Xcode's provisioning flow, and a signed development build
+  succeeded. No legal agreement or privacy prompt was accepted automatically.
+- Reproduced and fixed the distribution build failure caused by combining
+  automatic signing with a Developer ID build identity. The canonical helper
+  build now archives using Xcode development signing, then exports with the
+  explicitly requested Developer ID identity. Manual host/extension profile
+  overrides must be supplied together.
+- Two independent Developer ID exports pass signature, timestamp, team,
+  bundle-specific AutoFill profile and shared-Keychain verification. Their
+  designated requirement is identical. An incorrect expected signer is rejected.
+  Export verification happens before replacing the prior staged helper.
+- The verified helper is installed at `~/Applications/Thingtime Passwords.app`.
+  Its installed signature and executable pass; it launches, and macOS lists
+  Thingtime Passwords for passkeys, passwords and codes in AutoFill settings.
+  Provider enablement is awaiting the user's permission; no OS credential
+  ceremony is claimed yet. Visual inspection found clipped setup text, fixed
+  with multiline intrinsic sizing and included in the next signed rebuild.
+- Six Swift tests pass with the independent WebAuthn fixture enabled; the
+  HTTPS client integration remains explicitly skipped in this fresh run.
+  Independent registration/assertion verification and wrong-RP rejection pass,
+  as do both desktop bridge origin/ordering tests.
+- Current main is integrated, preserving native mail IPC and iOS widget signing
+  alongside the password provider. Full desktop/iOS rebuilds are in progress.
+
+The entries below are historical evidence from October 15; their agreement and
+profile failures are superseded by the current recheck above.
+
 - Follow-up native audit fixed a macOS Keychain integration bug: all session
   operations now explicitly target the data-protection Keychain with the shared
   access group and synchronization disabled. Missing/unexpanded group settings

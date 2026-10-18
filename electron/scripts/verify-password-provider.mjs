@@ -8,7 +8,7 @@ function run(command, args, input) {
   return result.stdout;
 }
 const plist = text => JSON.parse(run('/usr/bin/plutil', ['-convert', 'json', '-o', '-', '-'], text));
-export async function verifyPasswordProvider(app, { unsigned = false, teamIdentifier } = {}) {
+export async function verifyPasswordProvider(app, { unsigned = false, teamIdentifier, signingIdentity } = {}) {
   const bundles = [
     [app, process.env.THINGTIME_PASSWORD_HOST_BUNDLE_ID || 'com.thingtime.passwords'],
     [path.join(app, 'Contents/PlugIns/ThingtimePasswordProvider.appex'), process.env.THINGTIME_PASSWORD_PROVIDER_BUNDLE_ID || 'com.thingtime.passwords.provider']
@@ -19,6 +19,11 @@ export async function verifyPasswordProvider(app, { unsigned = false, teamIdenti
     if (info.CFBundleIdentifier !== identifier) throw new Error('Password provider bundle identifier mismatch.');
     run('/usr/bin/codesign', ['--verify', '--deep', '--strict', bundle]);
     if (unsigned) continue; // Ad-hoc builds exercise structure, not system permission.
+    if (signingIdentity) {
+      const details = spawnSync('/usr/bin/codesign', ['--display', '--verbose=4', bundle], { encoding: 'utf8' });
+      if (details.status !== 0 || !details.stderr.split('\n').includes(`Authority=${signingIdentity}`)) throw new Error('Password provider signing identity mismatch.');
+      if (signingIdentity.startsWith('Developer ID Application:') && !/^Timestamp=/m.test(details.stderr)) throw new Error('Password provider secure signing timestamp missing.');
+    }
     const entitlements = plist(run('/usr/bin/codesign', ['--display', '--entitlements', ':-', bundle]));
     if (!entitlements['com.apple.developer.authentication-services.autofill-credential-provider']) throw new Error('Password provider AutoFill entitlement missing.');
     const team = entitlements['com.apple.developer.team-identifier'];
@@ -30,5 +35,6 @@ export async function verifyPasswordProvider(app, { unsigned = false, teamIdenti
     const profile = { ExpirationDate: run('/usr/bin/plutil', ['-extract', 'ExpirationDate', 'raw', '-o', '-', '-'], profileXML).trim(), TeamIdentifier: JSON.parse(run('/usr/bin/plutil', ['-extract', 'TeamIdentifier', 'json', '-o', '-', '-'], profileXML)), Entitlements: JSON.parse(run('/usr/bin/plutil', ['-extract', 'Entitlements', 'json', '-o', '-', '-'], profileXML)) };
     const permitted = profile.Entitlements;
     if (new Date(profile.ExpirationDate).getTime() <= Date.now() || !profile.TeamIdentifier?.includes(team) || permitted?.['com.apple.developer.authentication-services.autofill-credential-provider'] !== true) throw new Error('Password provider provisioning profile is invalid or lacks AutoFill.');
+    if (permitted['com.apple.application-identifier'] !== `${team}.${identifier}`) throw new Error('Password provider profile bundle identifier mismatch.');
   }
 }

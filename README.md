@@ -33,9 +33,16 @@ Keychain group fails closed; it must not fall back to the macOS legacy Keychain.
 requires `THINGTIME_PASSWORD_SIGNING_IDENTITY=<Apple signing identity>` (or the
 existing `THINGTIME_NODE_SIGNING_IDENTITY`) and `APPLE_TEAM_ID=<team>`; local
 Apple Development signing can request profiles through the signed-in Xcode
-account. For manual distribution signing, set
+account. With a Developer ID Application identity and no profile overrides,
+the build creates an intermediate development archive and exports it through
+Xcode's Developer ID workflow; the final host and extension must match the
+requested distribution identity, timestamp, team and bundle-specific profiles.
+If Xcode reports an unregistered development Mac, deliberately opt into device
+registration with `THINGTIME_PASSWORD_REGISTER_DEVICE=1` for that build.
+For manual distribution signing, set both
 `THINGTIME_PASSWORD_HOST_PROFILE=<host profile>` and
-`THINGTIME_PASSWORD_PROVIDER_PROFILE=<extension profile>`. Unsigned builds
+`THINGTIME_PASSWORD_PROVIDER_PROFILE=<extension profile>`; a partial pair fails
+before building. Unsigned builds
 compile the feature but cannot provide the system's signed credential-provider
 access. iOS Fastlane syncs a separate provider profile; its override is
 `PASSWORD_PROVIDER_PROVISIONING_PROFILE_SPECIFIER=<profile name>`. Follow

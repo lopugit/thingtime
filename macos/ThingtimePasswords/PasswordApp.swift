@@ -42,6 +42,7 @@ import ThingtimePasswordCore
         let content = VStack(alignment: .leading, spacing: 16) {
             Text("Thingtime Passwords").font(.title).bold()
             Text("Open Passwords in the Thingtime desktop app and select Connect Password AutoFill. Then enable Thingtime in System Settings → General → AutoFill & Passwords.")
+                .fixedSize(horizontal: false, vertical: true)
             Button("Open Thingtime") {
                 if let appURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.thingtime.desktop") { NSWorkspace.shared.openApplication(at: appURL, configuration: NSWorkspace.OpenConfiguration(), completionHandler: nil) }
             }

@@ -9994,6 +9994,7 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
 - Password QR capture: close/hide the editor while the picker or video is pending. The scan cancels immediately; any later stream stops before pixels are read. Blank-frame errors and playback timeouts must also stop every track.
 
 - Native Password AutoFill: while connecting, focus the app to trigger background sync; the connection must finish. Switching accounts/logout cancels it, settles the request, and queues identity removal after any outstanding catalog update.
+- Native provider signing: build with a Developer ID Application identity and no manual profile overrides. The archive/export path must produce a timestamped Developer ID host and extension with matching AutoFill profiles and shared Keychain group. Reject a partial profile pair or a different signer; preserve the previous verified helper if export/verification fails. Development signing is intermediate evidence only, not distribution acceptance.
 - Native Keychain: session save/read/delete must use the data-protection store,
   the same explicit access group and no synchronization. Missing or unexpanded
   group configuration must fail closed. On a signed macOS build, connect in the
