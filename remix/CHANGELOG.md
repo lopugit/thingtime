@@ -68,6 +68,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-18 — **Codex (AI)**: Added encrypted account password-file queue and
+  retention groundwork with parent ordering, renewable cross-tab claims and
+  whole-transfer identity fences. Account UI activation, delete replay and native
+  acceptance remain pending; see [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
 - 2026-10-18 — **Codex (AI)**: Integrate main's complete password imports and Gmail
   changes into the local-first branch. Anonymous password attachments and normal
   1PUX backups now use encrypted device storage through a shared archive backend;

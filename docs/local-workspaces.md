@@ -4211,3 +4211,45 @@ verification. The existing device workspace storage limits also need review
 against the updated power-user policy. This checkpoint does not claim those
 features complete or authorize merging early. The PR API still advertises an
 older head than the actual feature branch, so its checks/preview are stale.
+
+## Account password file sync groundwork — 2026-10-18
+
+`LocalPasswordVault.fileStorage()` now commits account file bytes and an encrypted
+upload intent atomically. Anonymous writes still create no intent. Separate
+`synchronizeFiles()` and `reconcileFiles()` methods share the canonical file
+frames and transfer implementation; they are not yet connected to the account UI.
+The account UI continues to use its existing remote file backend until conflict
+review and deletion receipt handling are completed and browser-verified.
+
+The file worker waits for parent entry acknowledgement only in the background.
+It renews cross-tab claims during long transfers, records the actual server file
+ID before sending bytes, preserves exact metadata/identity on uncertain retries,
+and retains deferred deletions. Removing a file before its first dispatch cancels
+the local intent. Removal during upload cannot restore the file from a late
+receipt. Parent deletion keeps uncertain child intents until canonical parent
+cleanup is acknowledged. An unknown start receipt is recovered through the same
+idempotent `file-start` operation, with normal upload permission still required.
+
+`passwordFileTransport.client.ts` requires `api.passwords` 1.1.0 and current local
+and remote leases across the whole transfer, including download consumption.
+Object requests omit account credentials. Download retention reuses the local
+encrypted chunk writer without adding upload commands. Incomplete traversals,
+changed parents, pending local edits and invalid metadata preserve saved files;
+only complete validated pages can remove unchanged clean retained generations.
+
+Local checks: 620 workspace tests passed (68 opt-in cases skipped), plus four
+offline-shell tests and 50 password tests. The focused file/transport tests cover
+reopening, cross-tab renewal, lost receipts, lock/identity cancellation, parent
+ordering, delete races and partial retention. No account UI, real API, CI or
+deployment acceptance is claimed for these new worker methods. See ignored
+`tmp/account-password-files-*.log` for local results.
+
+Before enabling account file workers: preserve attachments/source links through
+entry conflict-copy/discard; provide file retry/review status; handle remote parent
+removal without losing pending file work; and fix the existing server delete
+replay gap. Currently `file-delete` requires a matching attachment row before
+calling the canonical cleanup service, so a lost success followed by a retry may
+return 404 after the row was removed. Treating that response as successful cleanup
+would not establish a replay fence. Native offline/reconnect/retention tests must
+then use disposable accounts through the normal API. Large-entry codec parity,
+workspace limits and the remaining full-suite matrix also remain open.

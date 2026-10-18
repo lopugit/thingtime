@@ -10489,6 +10489,16 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
 
 ## Password manager and native AutoFill
 
+- Account file queue regression: local file creation and encrypted intent must
+  commit together while offline; parent admission delays only background upload.
+  Test two tabs, claim renewal, lock/account changes, lost start/complete replies,
+  removal before dispatch and during upload, deferred cleanup and parent deletion.
+  A late receipt must not restore a deleted file. Complete validated pulls may
+  remove unchanged retained copies; partial pages, concurrent edits, mismatched
+  metadata and missing bytes must keep existing work and report failure. Confirm
+  retained downloads create no upload commands. Before account UI activation,
+  also verify real server delete replay and attachment-preserving conflict copies.
+
 - Anonymous file regression: in a clean offline browser, add a device password
   attachment, cold reload/unlock, export normal 1PUX, delete and reimport it,
   and download identical bytes. No password API calls, account queue entries,

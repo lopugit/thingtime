@@ -149,6 +149,13 @@ network sync, and conflict choices preserve independent copies.
 `passwordSync.test.ts`, `passwordTransport.test.ts` and the opt-in
 `accountPasswords.browser.test.ts` cover the new boundary. Settings provider
 credentials and signed native offline integration are still outstanding.
+
+File sync groundwork: `local-workspace/passwordFileSync.ts`,
+`passwordFileReconcile.ts` and `passwordFileTransport.client.ts` expose separate
+account queue/retention methods with whole-transfer authority fences. The account
+UI still uses its remote file backend pending conflict-copy, server delete replay
+and native acceptance. `passwordFileSync.test.ts` and
+`passwordFileTransport.test.ts` are included in `test:local-workspace`.
 `passwords/vaultCrypto.test.ts` verifies server interoperability;
 `local-workspace/passwordVault.test.ts` and the opt-in browser fixture cover
 storage isolation, cancellation, conflicts and real offline editor/transfer use.

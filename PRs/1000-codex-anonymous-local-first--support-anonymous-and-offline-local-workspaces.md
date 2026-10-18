@@ -3873,3 +3873,25 @@ verification. The existing device workspace storage limits also need review
 against the updated power-user policy. This checkpoint does not claim those
 features complete or authorize merging early. The PR API still advertises an
 older head than the actual feature branch, so its checks/preview are stale.
+
+## Account password file worker groundwork — 2026-10-18
+
+Added atomic encrypted account file intents, separate upload/delete and retention
+workers, renewable cross-tab claims and whole-transfer account authority fences.
+The existing canonical file transfer is shared by legacy account operations and
+the new transport. Local completion is independent of remote parent admission;
+late upload receipts cannot resurrect removals. Downloads use the same encrypted
+local chunks without creating upload intents. No account file UI is switched yet.
+
+Local verification: 620 workspace tests passed with 68 explicit opt-in skips,
+four offline-shell tests and 50 password tests. Focused tests cover actual protocol
+receipt shape, identity retirement, long-transfer renewal, uncertain retries,
+parent cleanup, deferred deletion, complete/partial retention and concurrent edits.
+No real account/API/browser, current-head CI or deployed acceptance for this
+increment. Full details and activation gates are in
+[local workspaces](../docs/local-workspaces.md#account-password-file-sync-groundwork--2026-10-18).
+
+Remaining: server deletion replay proof; attachment-preserving entry conflict
+review and remote-parent removal; file status/retry UI and pump wiring; native
+account offline/reconnect verification; large local entry/storage parity and the
+full acceptance matrix. No merge or deployment was performed.

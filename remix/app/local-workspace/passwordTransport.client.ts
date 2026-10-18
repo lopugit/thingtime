@@ -9,14 +9,14 @@ import type { PasswordVaultTransport } from './passwordVault';
 
 /** Direct, same-origin vault requests: no diagnostics/history, origin fallback,
  * stored credential or inferred authority from the encrypted device copy. */
-export function accountPasswordTransport(scope: Extract<WorkspaceScope, { kind: 'account' }>, lease: WorkspaceLease): PasswordVaultTransport {
+export function accountPasswordRequest(scope: Extract<WorkspaceScope, { kind: 'account' }>, lease: WorkspaceLease, minimumVersion = '1.0.0') {
  const request = async (body: Record<string, unknown>, signal: AbortSignal) => {
   lease.assertCurrent(); const remote = accountRemoteWorkspaceLease(scope); remote.assertCurrent();
   const controller = new AbortController(), off = remote.onInvalidate(() => controller.abort());
   const combined = AbortSignal.any([signal, controller.signal, AbortSignal.timeout(20_000)]);
   try {
    if (window.location.origin !== scope.origin) throw new WorkspaceError('WORKSPACE_CHANGED', 'Account origin changed.', 409);
-   await requireThingtimeCapability('api.passwords', '1.0.0');
+   await requireThingtimeCapability('api.passwords', minimumVersion);
    await requireThingtimeCapability('api.mongodb-endpoint', '1.1.0');
    lease.assertCurrent(); remote.assertCurrent(); combined.throwIfAborted();
    const response = await fetch('/api/v1/passwords', { method: 'POST', credentials: 'same-origin', cache: 'no-store', redirect: 'error', signal: combined,
@@ -35,6 +35,11 @@ export function accountPasswordTransport(scope: Extract<WorkspaceScope, { kind: 
    return result;
   } finally { off(); }
  };
+ return request;
+}
+
+export function accountPasswordTransport(scope: Extract<WorkspaceScope, { kind: 'account' }>, lease: WorkspaceLease): PasswordVaultTransport {
+ const request = accountPasswordRequest(scope, lease);
  return {
   write: (command, signal) => request(command, signal),
   page: (cursor, signal) => request({ operation: 'export', ...(cursor ? { cursor } : {}) }, signal),

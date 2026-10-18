@@ -1,5 +1,13 @@
 # Attachments and media
 
+Account password-file sync groundwork reuses `passwords/fileTransfer.ts` and the
+local encrypted chunk writer through `local-workspace/passwordFileSync.ts`,
+`passwordFileReconcile.ts` and `passwordFileTransport.client.ts`. Local file
+completion queues encrypted intents; remote parent admission is a worker concern.
+The account UI is not switched yet. Delete replay, attachment-preserving entry
+conflicts and native acceptance remain gates. Run `test:local-workspace` and
+`test:passwords`; see the latest [local workspace checkpoint](../local-workspaces.md#account-password-file-sync-groundwork--2026-10-18).
+
 `localThingProjection` derives standalone file edit eligibility from scoped
 storage; `thingAttachmentDetailCore.canEditLocalFileDetails` applies current
 viewer/link checks. Never infer edit rights from an ID prefix. The normal
