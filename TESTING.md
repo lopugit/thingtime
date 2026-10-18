@@ -11453,3 +11453,13 @@ resume unfinished Android gates only when requested.
 - [ ] Upgrade a version-4 database containing captures, a complete plan and a legacy run. Verify all old data before preparing the paged run.
 - [ ] Repeat the OS-isolated Chromium proof with 10,001 operations and two process restarts. Verify 257 accepted receipts versus 256 confirmations at interruption and exactly 9,744 new effects after resume. Keep source metadata and independent receipt readback separate from journal assertions.
 - [ ] Connect real paged native/cloud adapters and checkpoint publication, then exercise installed Mac/iOS transfers before lifting the live scan limit. Generated receipt tests alone do not satisfy this gate. Android is deferred.
+
+
+## Paged sync checkpoint recovery (2026-10-18)
+
+- [x] Run `pagedCheckpointJournal.test.ts`: refuse capture before full confirmation; retain post-copy edits; resume bounded merges and output sealing; prevent case aliases and account changes from publishing.
+- [x] Interrupt between local/remote output page writes, reopen, replay the same page, and verify the previous published head survives until both outputs seal.
+- [x] Verify recreated public inventory IDs cannot rebind an existing plan; original capture instances remain pinned through execution and checkpoint preparation.
+- [x] Retry an old publication while a later run is active and after a later checkpoint publishes. Neither the new run nor its baseline may be released or overwritten; legacy writers and stale plans must refuse.
+- [x] Isolated Chromium: three process restarts, 400 independent receipts, interruption at 257 accepted/256 confirmed, checkpoint restart at 128 paths, exact 400 baseline pairs, post-copy edit and next-run preservation. Evidence: `paged-checkpoint-evidence-2026-10-18` beside the HTML tracker. Generated metadata only; no live account or file bytes.
+- [ ] Connect paged native/cloud scans, destination preparation, Trash receipt chains and checkpoint publication to the foreground/worker lifecycle; run real installed Mac/iOS acceptance before lifting the 10,000-path cap. Android remains deferred.

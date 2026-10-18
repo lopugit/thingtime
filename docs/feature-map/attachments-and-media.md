@@ -414,3 +414,16 @@ paged checkpoint handoff. `pagedRunJournal.test.ts` covers recovery, ordering,
 conflicts, concurrency, migration and baseline preservation. The isolated
 Chromium 10,001-operation proof uses generated metadata and independent receipts;
 native/cloud integration and the live 10,000-path limit remain open.
+
+
+### Paged baseline publication (2026-10-18)
+
+`fileSync/pagedCheckpointJournal.ts` advances version-6 journal baselines after
+complete runs and fresh sealed scans. A bounded five-stream merge overlays
+confirmed receipts on the previous baseline before applying the shared agreement
+rule, preserving later edits. Exact internal capture instances, distinct pins,
+paired-page retries, sealed outputs and atomic publication protect recovery.
+Old retries cannot release a newer run or replace its head; legacy writers cannot
+downgrade a published paged baseline. `pagedCheckpointJournal.test.ts` and the
+400-operation isolated browser proof cover these boundaries. Native/cloud adapter
+integration and installed Mac/iOS acceptance are still open; Android is deferred.

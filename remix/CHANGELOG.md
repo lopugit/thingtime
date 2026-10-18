@@ -68,6 +68,15 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-18 — **Codex (AI)**: Add resumable paged sync checkpoint publication,
+  exact inventory-instance retention and post-copy edit preservation. Bounded
+  merges survive interruption between baseline copies and browser restarts;
+  stale retries cannot replace newer checkpoints. The shared suite passes 208
+  checks; the existing TypeScript baseline remains. Native/cloud adapter rollout
+  is still open and Android deferred. See the
+  [PR #1002 ledger](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md#resumable-paged-checkpoint-handoff--2026-10-18).
+
+
 - 2026-10-18 — **Codex (AI)**: Added resumable paged sync operation storage and
   execution using shared ordering, receipt checks and root locks. Chromium
   verified 10,001 generated operations across two restarts, including a lost

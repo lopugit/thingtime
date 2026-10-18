@@ -1,7 +1,8 @@
-import { validateSyncCheckpoint, type SyncCheckpoint } from './checkpoint';
+import { PAGED_CHECKPOINT_HEADS, validateSyncCheckpoint, type SyncCheckpoint } from './checkpoint';
 import { validateSyncRun, type SyncRun } from './execute';
 import { syncScopeKey, type SyncScope } from './reconcile';
 import { inventoryJournal, upgradeInventoryJournal } from './inventoryJournal';
+import { pagedCheckpointJournal, upgradePagedCheckpointJournal } from './pagedCheckpointJournal';
 import { pagedPlanJournal, upgradePagedPlanJournal } from './pagedPlanJournal';
 
 import { PAGED_RUN_HEADS, pagedRunJournal, upgradePagedRunJournal } from './pagedRunJournal';
@@ -12,12 +13,13 @@ export { syncScopeKey } from './reconcile';
  * history remains in Timeline. IDB errors are fatal before any new mutation. */
 export const openSyncJournal = async (factory: IDBFactory = indexedDB, name = 'thingtime-file-sync-v1', keyRange?: typeof IDBKeyRange) => {
 	const db = await new Promise<IDBDatabase>((resolve, reject) => {
-		const request = factory.open(name, 5);
+		const request = factory.open(name, 6);
 		request.onupgradeneeded = () => {
 			for (const store of ['runs', 'checkpoints']) if (!request.result.objectStoreNames.contains(store)) request.result.createObjectStore(store);
 			upgradeInventoryJournal(request.result);
 			upgradePagedPlanJournal(request.result);
 			upgradePagedRunJournal(request.result);
+			upgradePagedCheckpointJournal(request.result);
 		};
 		request.onsuccess = () => resolve(request.result);
 		request.onerror = () => reject(request.error);
@@ -49,7 +51,7 @@ export const openSyncJournal = async (factory: IDBFactory = indexedDB, name = 't
 		validateSyncRun(run);
 		const key = syncScopeKey(run.scope);
 		return new Promise((resolve, reject) => {
-			const tx = db.transaction(['runs', PAGED_RUN_HEADS], 'readwrite', { durability: 'strict' });
+			const tx = db.transaction(['runs', PAGED_RUN_HEADS, PAGED_CHECKPOINT_HEADS], 'readwrite', { durability: 'strict' });
 			const store = tx.objectStore('runs'),
 				request = store.get(key);
 			refusePagedRun(tx, key, reject);
@@ -77,9 +79,11 @@ export const openSyncJournal = async (factory: IDBFactory = indexedDB, name = 't
 
 	const checkpoint = (scope: SyncScope): Promise<SyncCheckpoint | null> =>
 		new Promise((resolve, reject) => {
-			const tx = db.transaction('checkpoints', 'readonly'),
+			const tx = db.transaction(['checkpoints', PAGED_CHECKPOINT_HEADS], 'readonly'),
 				request = tx.objectStore('checkpoints').get(syncScopeKey(scope));
 			let value: SyncCheckpoint | null = null;
+			const paged = tx.objectStore(PAGED_CHECKPOINT_HEADS).get(syncScopeKey(scope));
+			paged.onsuccess = () => { if (paged.result !== undefined) { reject(Error('Read the current paged sync checkpoint.')); tx.abort(); } };
 			request.onsuccess = () => {
 				try {
 					if (request.result !== undefined) {
@@ -99,7 +103,7 @@ export const openSyncJournal = async (factory: IDBFactory = indexedDB, name = 't
 			scope = saved.baseline.scope;
 		validateSyncCheckpoint(saved, scope);
 		return new Promise((resolve, reject) => {
-			const tx = db.transaction(['runs', 'checkpoints', PAGED_RUN_HEADS], 'readwrite', { durability: 'strict' }),
+			const tx = db.transaction(['runs', 'checkpoints', PAGED_RUN_HEADS, PAGED_CHECKPOINT_HEADS], 'readwrite', { durability: 'strict' }),
 				key = syncScopeKey(scope),
 				request = tx.objectStore('runs').get(key);
 			refusePagedRun(tx, key, reject);
@@ -119,14 +123,16 @@ export const openSyncJournal = async (factory: IDBFactory = indexedDB, name = 't
 			tx.onabort = tx.onerror = () => reject(tx.error ?? Error('Could not save sync completion.'));
 		});
 	};
-	return { read, persist, checkpoint, complete, pagedRuns: (access: Parameters<typeof pagedRunJournal>[1]) => pagedRunJournal(db, access, keyRange), plans: (access: Parameters<typeof pagedPlanJournal>[1]) => pagedPlanJournal(db, access, keyRange), inventory: (access: Parameters<typeof inventoryJournal>[1]) => inventoryJournal(db, access, keyRange), close: () => db.close() };
+	return { read, persist, checkpoint, complete, pagedCheckpoints: (access: Parameters<typeof pagedCheckpointJournal>[1]) => pagedCheckpointJournal(db, access, keyRange), pagedRuns: (access: Parameters<typeof pagedRunJournal>[1]) => pagedRunJournal(db, access, keyRange), plans: (access: Parameters<typeof pagedPlanJournal>[1]) => pagedPlanJournal(db, access, keyRange), inventory: (access: Parameters<typeof inventoryJournal>[1]) => inventoryJournal(db, access, keyRange), close: () => db.close() };
 };
 
 function refusePagedRun(tx: IDBTransaction, key: string, reject: (error: Error) => void) {
-	const head = tx.objectStore(PAGED_RUN_HEADS).get(key);
-	head.onsuccess = () => { if (head.result !== undefined) {
-		reject(Error('Resume the active paged sync run before changing the legacy journal.')); tx.abort();
-	} };
+	for (const store of [PAGED_RUN_HEADS, PAGED_CHECKPOINT_HEADS]) {
+		const head = tx.objectStore(store).get(key);
+		head.onsuccess = () => { if (head.result !== undefined) {
+			reject(Error('Resume the paged sync journal before changing the legacy journal.')); tx.abort();
+		} };
+	}
 }
 
 /** Web clients serialize an entire scan/plan/resume cycle across tabs. Native

@@ -191,6 +191,8 @@ test('version-4 plans, captures and legacy runs survive the operation-journal up
 	});
 	const f = await fixture(factory); assert.equal((await f.journal.read(scope))?.id, 'legacy');
 	assert.deepEqual((await f.inventory.read(s.plan.local)).entries, []); assert.equal(await f.runs.active(), null);
+	await assert.rejects(f.runs.prepare(s), /Rebuild this older/);
+	assert.equal(await f.runs.active(), null); await f.plans.discard(s.plan); await f.plans.build(s.plan);
 	assert.equal((await f.runs.prepare(s)).phase, 'ready'); await f.runs.discard(s); assert.equal(await f.runs.active(), null);
 	f.journal.close();
 });
@@ -202,4 +204,43 @@ test('a paged run preserves the previous checkpoint and refuses legacy advanceme
 	await f.journal.complete(checkpoint); await f.runs.prepare(s); await f.runs.start(s);
 	await assert.rejects(f.journal.complete({ ...checkpoint, localRootId: 'changed' }), /paged/);
 	assert.deepEqual(await f.journal.checkpoint(scope), checkpoint); f.journal.close();
+});
+
+
+test('a replacement capture with the same public identity cannot rebind a completed plan', async () => {
+	const f = await fixture(), s = spec(); await seed(f, s, [file('a')]);
+	await f.inventory.discard(s.plan.baseline.local);
+	await f.inventory.begin(s.plan.baseline.local);
+	await f.inventory.append(s.plan.baseline.local, { ordinal: 0, entries: [file('a', '2')], totalEntries: 1 });
+	await f.inventory.seal(s.plan.baseline.local);
+	await assert.rejects(f.runs.begin(s), /replaced/); assert.equal(await f.runs.active(), null);
+	await f.inventory.discard(s.plan.local); // Earlier pin writes rolled back with the refusal.
+	f.journal.close();
+});
+
+test('ready, running and completed queues retain all original inventory generations', async () => {
+	let f = await fixture(); const s = spec(); await seed(f, s, [file('a')]); await f.runs.prepare(s);
+	const inputs = [s.plan.local, s.plan.remote, s.plan.baseline.local, s.plan.baseline.remote];
+	for (const id of inputs) await assert.rejects(f.inventory.discard(id), /pinned/);
+	await f.runs.start(s); for (const id of inputs) await assert.rejects(f.inventory.discard(id), /pinned/);
+	for (const op of (await f.runs.read(s)).operations) await f.runs.confirm(s, receipt(op));
+	f.journal.close(); f = await fixture(f.factory);
+	assert.equal((await f.runs.active())?.progress.phase, 'complete');
+	for (const id of inputs) await assert.rejects(f.inventory.discard(id), /pinned/);
+	f.journal.close();
+});
+
+test('run and plan pins cannot erase each other even when their IDs match', async () => {
+	const f = await fixture(), s = spec(); s.id = s.plan.id;
+	await seed(f, s, [file('a')]); await f.runs.prepare(s);
+	const other = { ...s.plan, id: 'other-plan' }; await f.plans.begin(other);
+	await f.runs.discard(s); await assert.rejects(f.inventory.discard(s.plan.local), /pinned/);
+	await f.plans.discard(other); await f.inventory.discard(s.plan.local); f.journal.close();
+});
+
+test('one capture used for both current and baseline keeps one internal generation', async () => {
+	const f = await fixture(), s = spec(); await seed(f, s, [file('a')], [file('a')], [file('a')]);
+	await f.plans.discard(s.plan); s.plan.baseline = { local: s.plan.local, remote: s.plan.remote };
+	await f.plans.build(s.plan); await f.runs.prepare(s); assert.equal((await f.runs.start(s)).phase, 'complete');
+	await assert.rejects(f.inventory.discard(s.plan.local), /pinned/); f.journal.close();
 });

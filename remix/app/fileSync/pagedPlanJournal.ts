@@ -16,7 +16,7 @@ export type PagedPlanSpec = {
 export type PagedPlanProgress = { phase: 'indexing' | 'planning' | 'complete'; indexed: number; planned: number; decisions: number };
 export type PagedPlanCursor = { id: string; scope: SyncScope; after: string; read: number };
 type Position = { after: string | null; read: number };
-export type PagedPlanHeader = PagedPlanProgress & { scope: string; instance: string; spec: PagedPlanSpec; positions: Position[]; totals: number[]; revision: number };
+export type PagedPlanHeader = PagedPlanProgress & { scope: string; instance: string; spec: PagedPlanSpec; positions: Position[]; totals: number[]; inputInstances?: string[]; revision: number };
 export const PLAN_PIN_STORE = 'sync-plan-pins';
 export const PLAN_STORES = ['sync-plans', 'sync-plan-ancestors', 'sync-plan-decisions'] as const;
 const STORES = PLAN_STORES;
@@ -45,6 +45,7 @@ export function parsePagedPlanSpec(value: PagedPlanSpec): PagedPlanSpec {
 
 export const validatePagedPlanHeader = (h: PagedPlanHeader, spec: PagedPlanSpec, key: string) => {
 	if (!h || !identifier(h.instance) || h.scope !== key || JSON.stringify(h.spec) !== JSON.stringify(spec) ||
+		(h.inputInstances !== undefined && (!Array.isArray(h.inputInstances) || h.inputInstances.length !== 4 || h.inputInstances.some(id => !identifier(id)))) ||
 		!['indexing', 'planning', 'complete'].includes(h.phase) || !nonnegative(h.revision) ||
 		![h.indexed, h.planned, h.decisions].every(nonnegative) || h.decisions > h.planned || h.planned > h.indexed ||
 		!Array.isArray(h.totals) || h.totals.length !== 4 || !h.totals.every(nonnegative) ||
@@ -83,18 +84,23 @@ export function pagedPlanJournal(db: IDBDatabase, access: JournalAccess, keyRang
 			request.onsuccess = () => { try {
 				check();
 				if (request.result) { validate(request.result, spec); done(progress(request.result)); return; }
-				const totals: number[] = []; let remaining = 4;
+				const totals: number[] = [], inputInstances: string[] = [], instances = new Map<string, string>(); let remaining = 4;
 				captures(spec).forEach((capture, i) => {
 					const read = tx.objectStore(INVENTORY_STORES[0]).get([key, capture.id]);
 					read.onsuccess = () => { try {
 						check(); validateInventoryHeader(read.result, capture, key);
 						const header: InventoryHeader = read.result;
 						if (header.phase !== 'complete') throw Error('Sync planning requires complete inventories.');
+						// Legacy captures acquire one immutable internal instance while pinned.
+						// Recreating the same caller ID/generation must not rebind a run.
+						const instance = instances.get(capture.id) ?? header.instance ?? crypto.randomUUID();
+						instances.set(capture.id, instance); inputInstances[i] = instance;
+						if (!header.instance) tx.objectStore(INVENTORY_STORES[0]).put({ ...header, instance }, [key, capture.id]);
 						totals[i] = header.entries;
 						tx.objectStore(INVENTORY_PIN_STORE).put(true, [key, capture.id, spec.id]);
 						if (--remaining) return;
 						if (!Number.isSafeInteger(totals.reduce((a, b) => a + b, 0))) throw Error('Sync inventory count exceeds its safe range.');
-						const h: Header = { scope: key, instance: crypto.randomUUID(), spec, totals, positions: initialPositions(), revision: 0,
+						const h: Header = { scope: key, instance: crypto.randomUUID(), spec, totals, inputInstances, positions: initialPositions(), revision: 0,
 							phase: 'indexing', indexed: 0, planned: 0, decisions: 0 };
 						store.add(h, [key, spec.id]); done(progress(h));
 					} catch (error) { fail(error); } };

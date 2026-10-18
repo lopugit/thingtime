@@ -2516,3 +2516,53 @@ publication, and installed Mac/iOS transfer acceptance. The foreground path
 continues to enforce its 10,000-path bound. This proof transfers no real file
 bytes and makes no production throughput claim. Android remains deferred with
 its unfinished implementation preserved in PR #1002.
+
+
+## Resumable paged checkpoint handoff — 2026-10-18
+
+The version-6 sync journal now includes `pagedCheckpointJournal.ts`. A completed
+run pins the exact internal instances of all four original inventories; callers
+cannot discard and recreate the same public ID/generation to change its recovery
+inputs. Older plans remain readable, but a new run requires rebuilding a plan
+that predates internal capture identities. Existing run recovery is retained.
+
+Checkpoint capture identities are created atomically only after every operation
+is confirmed. After fresh local and remote scans are sealed, a five-stream merge
+reads their observations, the old baseline pair and path-ordered confirmed
+receipts in bounded pages. It applies confirmed copies/deletions before the
+shared baseline agreement rule, preserving edits made after a successful copy.
+Each step consumes at most 128 union paths and stays within its byte budget.
+Paired output pages use exact ordinal/digest retries; their cursor advances only
+after both copies are durable. Interrupted validation and publication resume.
+
+Both complete outputs must seal before one transaction publishes the new head,
+releases only that run's root/plan/input pins and retains the new baseline pins.
+Old publication retries neither overwrite a later head nor release a newer run.
+New runs must use the current paged baseline. Legacy journal writes and legacy
+checkpoint reads refuse to replace or return stale state after paged publication.
+The output is reconciliation metadata, not another Timeline history store.
+
+Validation: seven new checkpoint regressions cover pre-run capture refusal,
+post-copy edits, bounded merge/reopen/deletions, interruption between output
+replicas, old publication retries, path aliases and account changes. Four input
+binding regressions and the migration check cover retained original generations.
+The shared suite passes 207 TypeScript tests; its separate module-mock test passes
+with the package script's experimental mock flag. Focused lint passes. Whole-project
+TypeScript retains the identical 91-diagnostic baseline, with no new diagnostics.
+
+Chrome for Testing also used the actual current journal/executor in an isolated
+fixture with 400 generated operations and three full browser process restarts.
+An independent receipt store had 257 effects at interruption and 256 confirmations;
+resume applied exactly 143 more. Checkpoint building stopped after 128 paths with
+no published head, then resumed and verified all 400 baseline pairs against the
+independent receipt store. A post-copy local edit remained a single-sided update;
+an old retry preserved the next active run. Browser and fixture server were
+OS-restricted to loopback 28174; hostname, direct-IP and redirect denials were
+checked. Screenshot, four traces and the fixture script are retained with the
+HTML tracker. Temporary browser profile/downloads and listeners were removed.
+
+Still open: connect this lifecycle to consistent native/cloud paged scans,
+indexed destination preparation and native Trash receipt chains, then verify
+real file transfers in installed Mac/iOS apps. The foreground 10,000-path limit
+remains. This is a storage/recovery proof using generated metadata, not native
+transfer or 100 GB–100 TB throughput acceptance. Android stays deferred.

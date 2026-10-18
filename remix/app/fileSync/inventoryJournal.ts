@@ -8,7 +8,7 @@ export const INVENTORY_STORES = ['inventory-captures', 'inventory-pages', 'inven
 export type InventoryIdentity = { id: string; source: 'local' | 'remote'; generation: string };
 export type InventoryCursor = InventoryIdentity & { scope: SyncScope; after: string; read: number };
 export type InventoryProgress = { phase: 'collecting' | 'captured' | 'complete'; pages: number; entries: number; validatedEntries: number };
-export type InventoryHeader = InventoryIdentity & InventoryProgress & { scope: string; validatedThrough: string | null };
+export type InventoryHeader = InventoryIdentity & InventoryProgress & { scope: string; instance?: string; validatedThrough: string | null };
 type Row = { scope: string; capture: string; path: string; identity: string; entry: SyncEntry };
 const encoder = new TextEncoder();
 const identifier = (value: unknown): value is string => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(value);
@@ -21,6 +21,7 @@ export const inventoryIdentity = (value: InventoryIdentity): InventoryIdentity =
 };
 export const validateInventoryHeader = (header: InventoryHeader, expected: InventoryIdentity, key: string) => {
 	if (!header || header.scope !== key || header.id !== expected.id || header.source !== expected.source || header.generation !== expected.generation ||
+		(header.instance !== undefined && !identifier(header.instance)) ||
 		!['collecting', 'captured', 'complete'].includes(header.phase) || !Number.isSafeInteger(header.pages) || header.pages < 0 ||
 		!Number.isSafeInteger(header.entries) || header.entries < 0 || (header.phase !== 'collecting' && header.pages === 0) ||
 		!Number.isSafeInteger(header.validatedEntries) || header.validatedEntries < 0 || header.validatedEntries > header.entries ||
@@ -28,6 +29,10 @@ export const validateInventoryHeader = (header: InventoryHeader, expected: Inven
 		(header.phase === 'collecting' && header.validatedEntries !== 0) || (header.phase === 'complete' && header.validatedEntries !== header.entries))
 		throw Error('Inventory generation changed or is unavailable.');
 };
+
+export const newInventoryHeader = (identity: InventoryIdentity, scope: string): InventoryHeader => ({
+	...inventoryIdentity(identity), scope, instance: crypto.randomUUID(), phase: 'collecting', pages: 0, entries: 0, validatedEntries: 0, validatedThrough: null
+});
 
 export function upgradeInventoryJournal(db: IDBDatabase) {
 	if (!db.objectStoreNames.contains(INVENTORY_PIN_STORE)) db.createObjectStore(INVENTORY_PIN_STORE);
@@ -67,7 +72,7 @@ export function inventoryJournal(db: IDBDatabase, access: JournalAccess, keyRang
 				const store = tx.objectStore(INVENTORY_STORES[0]), request = store.get([key, expected.id]);
 				request.onsuccess = () => { try {
 					check();
-					const header: InventoryHeader = request.result ?? { ...expected, scope: key, phase: 'collecting', pages: 0, entries: 0, validatedEntries: 0, validatedThrough: null };
+					const header: InventoryHeader = request.result ?? newInventoryHeader(expected, key);
 					validate(header, expected);
 					if (!request.result) store.add(header, [key, expected.id]);
 					done(progress(header));
