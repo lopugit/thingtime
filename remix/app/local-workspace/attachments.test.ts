@@ -1,7 +1,7 @@
+import { createQuotaFactory, TEST_STORAGE_CAPACITY } from './storageTestFixture';
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { IDBFactory } from 'fake-indexeddb';
-import { WorkspaceDatabase, WORKSPACE_LIMITS } from './storage';
+import { WorkspaceDatabase } from './storage';
 import { LocalThings, localThingProjection } from './things';
 import { AccountFileSync } from './accountFiles';
 import { transferChecksum, encodeTransferArchive, decodeTransferArchive } from '../utils/thingTransfer/archive';
@@ -12,7 +12,7 @@ import { bundleFromPlan } from '../utils/thingTransfer/browser';
 
 const scope = { kind: 'anonymous' } as const;
 const lease = { assertCurrent() {}, onInvalidate: () => () => {} };
-const fixture = () => { const db = new WorkspaceDatabase(new IDBFactory()); return { db, things: new LocalThings(db, scope, lease) }; };
+const fixture = () => { const db = new WorkspaceDatabase(createQuotaFactory()); return { db, things: new LocalThings(db, scope, lease) }; };
 const bytes = new TextEncoder().encode('Exact local file bytes\n\u0000\u00ff');
 const bundle = async (standalone = true) => ({
  manifest: { format: 'thingtime.transfer', version: 1, roots: ['root'], things: [standalone
@@ -23,7 +23,7 @@ const bundle = async (standalone = true) => ({
 });
 
 test('binary and metadata writes share atomic quota, survive reopen, isolate scopes and refund deletion', async () => {
- const factory = new IDBFactory(); const db = new WorkspaceDatabase(factory);
+ const factory = createQuotaFactory(); const db = new WorkspaceDatabase(factory);
  try {
   await db.transaction(scope, 'readwrite', lease, async tx => {
    const mutable = Uint8Array.from(bytes); const write = tx.putBytes('file', mutable); mutable.fill(0); await write;
@@ -33,7 +33,7 @@ test('binary and metadata writes share atomic quota, survive reopen, isolate sco
   assert.deepEqual(await db.transaction(scope, 'readonly', lease, tx => tx.getBytes('file')), bytes);
   assert.equal(await db.transaction({ kind:'account', origin:'https://example.com', ownerId:'other', dataPlane:'home' }, 'readonly', lease, tx => tx.getBytes('file')), undefined);
   await assert.rejects(db.transaction(scope, 'readwrite', lease, tx => tx.put('@bytes', 'file', {})), /binary storage/);
-  const full = new Uint8Array(WORKSPACE_LIMITS.binaryBytes);
+  const full = new Uint8Array(TEST_STORAGE_CAPACITY.binaryBytes);
   await assert.rejects(db.transaction(scope, 'readwrite', lease, async tx => {
    await Promise.all([0,1,2,3].map(n => tx.putBytes(`full-${n}`, full)));
   }), /workspace is full/);
@@ -90,7 +90,7 @@ test('invalid byte content and oversized local files fail before any metadata is
   const input = await bundle();
   await assert.rejects(things.import(input.manifest,null,new Map([['bytes', new Uint8Array(bytes.length)]])),/checksum/);
   await assert.rejects(things.import(input.manifest),/missing or unexpected/);
-  await assert.rejects(things.import({ ...input.manifest,files:[{...input.manifest.files[0],bytes:WORKSPACE_LIMITS.binaryBytes+1}] },null,input.files),/16 MiB/);
+  await assert.rejects(things.import({ ...input.manifest,files:[{...input.manifest.files[0],bytes:TEST_STORAGE_CAPACITY.binaryBytes+1}] },null,input.files),/16 MiB/);
   assert.equal((await things.snapshot()).length,0);
   let active=true; const fenced = new LocalThings(db,scope,{assertCurrent(){if(!active)throw new Error('retired')},onInvalidate:()=>()=>{}});
   const pending=fenced.import(input.manifest,null,input.files); active=false;

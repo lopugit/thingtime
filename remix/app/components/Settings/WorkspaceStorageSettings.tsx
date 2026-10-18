@@ -1,10 +1,10 @@
 import React from 'react';
-import { Button, Flex, Progress, Text } from '@chakra-ui/react';
+import { Button, Flex, Text } from '@chakra-ui/react';
 import { SettingsSection } from './SettingsSection';
 import { LOCAL_WORKSPACE_CHANGED } from '~/local-workspace/runtime.client';
 import { workspaceStorageBinding, workspaceStorageIdentity, subscribeWorkspaceStorage } from '~/local-workspace/storageStatus.client';
 import { storageProtection, type StorageProtection } from '~/local-workspace/storagePersistence';
-import { WORKSPACE_LIMITS, type WorkspaceUsage } from '~/local-workspace/storage';
+import { type WorkspaceUsage } from '~/local-workspace/storage';
 
 const message = (error: unknown) => error instanceof Error ? error.message : 'Device storage is unavailable. Try again.';
 const bytesLabel = (bytes: number) => `${bytes.toLocaleString()} bytes`;
@@ -58,9 +58,8 @@ function WorkspaceStoragePanel({ identity }: { identity: string }) {
  return <SettingsSection eyebrow="Device storage" description={access?.scope.kind === 'anonymous' ? 'Things, drafts, files and History saved in this browser. Anonymous content is never uploaded.' : 'Local copies, drafts and pending edits for this account and database. Account storage is measured separately.'}>
   <Flex direction="column" gap={3} data-testid="workspace-storage-settings">
    {usage ? <>
-    <Text role="status" fontSize="sm">{error ? 'Last known usage: ' : ''}{bytesLabel(usage.bytes)} of {bytesLabel(WORKSPACE_LIMITS.bytes)} · {usage.records.toLocaleString()} of {WORKSPACE_LIMITS.records.toLocaleString()} records</Text>
-    <Progress aria-label="Device workspace storage used" value={Math.min(100, usage.bytes / WORKSPACE_LIMITS.bytes * 100)} size="xs" borderRadius="full" />
-    <Text fontSize="xs" color="var(--tt-muted)">Logical workspace usage includes file bytes, saved history and internal records. Browser files and media caches are measured separately.</Text>
+    <Text role="status" fontSize="sm">{error ? 'Last known usage: ' : ''}{bytesLabel(usage.bytes)} stored · {usage.records.toLocaleString()} records</Text>
+    <Text fontSize="xs" color="var(--tt-muted)">Logical workspace usage includes file bytes, saved history and internal records. Available space is controlled by your browser and device. Browser files and media caches use additional space.</Text>
    </> : <Text fontSize="sm">{error ? 'Usage unavailable' : 'Checking device storage…'}</Text>}
    {error ? <Text role="alert" fontSize="sm">{error}</Text> : null}
    <Flex wrap="wrap" gap={2}>

@@ -42,9 +42,14 @@ the authentication hook. Local identity is not accepted by server endpoints.
 Identity changes invalidate outstanding local operations and abort transactions.
 Anonymous work is never implicitly adopted by or uploaded to a later login.
 
-Writes and quota accounting are transactional across tabs. Current bounds are
-10,000 records, 1 MiB per ordinary JSON record, 16 MiB per file and 64 MiB per workspace (metadata and bytes together). Canonical Timeline records allow the shared 4 MiB event ceiling plus receipt overhead, and encrypted password records allow the canonical password codec capacity plus base64/receipt overhead; their relational links and headers count toward the same workspace quota. Failed saves report an
-error; failed imports roll back. Optimistic concurrency checks retain an editor's
+Writes and usage accounting are transactional across tabs. IndexedDB admission
+uses actual browser/device capacity, without a Thingtime-wide record-count,
+aggregate-byte, ordinary JSON-record or raw byte-record ceiling. Native
+`QuotaExceededError` becomes `LOCAL_QUOTA` (507); the whole failed transaction
+rolls back. Canonical Timeline event bounds and the account password codec
+contract remain enforced. Buffered file adapters still have separate 16 MiB
+file and 64 MiB batch/preview limits pending their streaming migration; these
+are not workspace storage capacity. Failed saves report an error; failed imports roll back. Optimistic concurrency checks retain an editor's
 base timestamp. Files require the dedicated local attachment adapter rather than
 reusing account attachment IDs.
 
@@ -313,7 +318,8 @@ folders, downloads, copy and cut/paste. Each file is saved with canonical
 attachment metadata and checksum-verified bytes in one transaction. A stable
 request ID makes exact retries idempotent; changed retries, missing/corrupt bytes,
 invalid placement, quota failures and cancelled writes fail explicitly. Empty
-files are supported. Local limits remain 16 MiB per file and 64 MiB per workspace.
+files are supported. This buffered adapter still limits individual files to 16 MiB; the generic
+workspace no longer has a 64 MiB aggregate ceiling.
 Paired-device discovery/commands require an account and never run in this adapter.
 
 The existing shared-media URL resolver reads canonical local attachment references
@@ -1155,8 +1161,9 @@ results, not CI or deployed acceptance. Do not merge yet.
 
 ## Device storage settings — 2026-10-16
 
-Settings → Things now shows the current device workspace's accounted bytes and
-record count against the existing 64 MiB / 10,000-record limits. The readonly
+Settings → Things shows the current device workspace's accounted bytes and
+record count. Available capacity belongs to the browser/device; no fixed quota
+or percentage is displayed. The readonly
 usage operation compares its scoped ledger with a key-only count in the same
 transaction. It does not enumerate other partitions, load file bodies, request
 account data or display browser-wide usage estimates. Missing/malformed or
@@ -1602,7 +1609,7 @@ alias candidates for account-owned definitions. Exact dependency IDs retain
 meaning; shared keys cannot capture a local component alias.
 
 Snapshots are keyed by selected IDs and every include option, limited to 16
-entries and the existing 1 MiB record / 64 MiB workspace quotas. Cache retention
+entries, subject to actual browser storage availability. Cache retention
 is optional: an over-quota snapshot does not prevent downloading the only local
 copy (`retainedOnDevice: false`). Local collection uses one content/sync snapshot;
 identity, cancellation and the canonical 30-second preparation deadline fence
@@ -2070,7 +2077,7 @@ unfinished. No main merge, manual deploy or existing-account mutation is claimed
 
 Cancellation control fields reserve 1 KiB at file admission; final cancellation
 releases bytes before updating its retained receipt in the same transaction. A
-real IndexedDB quota test fills all 64 MiB and proves both never-started and
+simulated IndexedDB capacity test fills its 64 MiB fixture budget and proves both never-started and
 previously attempted cancellation can still complete.
 
 Graph verification: the initial semantic refresh completed, but the follow-up
@@ -2084,7 +2091,7 @@ Latest documentation semantic freshness is therefore unverified.
 list atomically with durable deletion intent. Its bytes and removed snapshot stay
 in the same private account/origin/data-plane partition for recovery. Metadata
 sync pauses for that file; new writes cannot recreate its original identity.
-Deletion, conflict recording and restoration fit at the full 64 MiB device quota
+Deletion, conflict recording and restoration fit at an exhausted browser capacity
 using the upload record's reserved control space. Never-started/uncertain uploads
 continue to use cancellation, and bound/editor media retains its owning adapter.
 
@@ -2217,7 +2224,7 @@ The existing content route still authorizes each online byte read.
 The adapter checks the descriptor again after exact-length, version-bound bytes
 arrive, then atomically commits bytes, metadata and the owned alias. It coalesces
 repeated reads, permits at most three simultaneous retentions, uses the existing
-20-second deadline, 16 MiB file and 64 MiB workspace limits, and rolls back on
+20-second deadline and 16 MiB buffered-file limit, and rolls back on
 quota, retirement or cancellation. An uploaded file that completes during the
 read keeps its existing local identity. No original upload request ID is invented
 for an existing account file, and retained files never enter the upload path.
@@ -2890,7 +2897,8 @@ of the draft transport timeout, in addition to rejection/retirement handling.
 captured account, API origin, data plane and identity generation. `LocalEditorTree`
 uses the existing workspace database: its canonical storage bytes and integrity
 metadata commit atomically, count toward device quota, and abort on identity
-retirement. The tree has a 16 MiB limit within the existing 64 MiB workspace quota.
+retirement. The buffered tree codec still has a 16 MiB limit; workspace
+admission now depends on actual browser storage capacity.
 Invalid or damaged storage stays intact with a visible error; it never hydrates
 as a successful empty tree. This is internal editor storage, not transfer JSON.
 
@@ -4390,3 +4398,37 @@ write retry, re-encryption back to the device, and anonymous read refusal. The
 single newly minted entry was deleted through the normal API; normal protected
 receipts/session expiry remain. Device storage in this test is fake IndexedDB,
 not browser acceptance. Evidence: `tmp/password-capacity-api-verification.json`.
+
+
+## Browser-backed workspace capacity — 2026-10-18
+
+Generic IndexedDB admission no longer rejects valid content at 10,000 records,
+64 MiB total, 1 MiB ordinary JSON or 16 MiB raw byte records. Storage accounting
+and identity fencing remain transactional. Actual `QuotaExceededError` reports
+`LOCAL_QUOTA` (507) and rolls back the complete write before retry. Revocation
+prefers a non-growing replacement by releasing only clean display caches before
+refusal markers; authored work is retained. A physical browser quota failure
+still aborts atomically and must not be described as infallible revocation.
+Settings now displays accounted usage without an invented capacity percentage.
+
+Local checks: **639 workspace tests passed, 71 opt-in tests skipped**; **four
+offline-shell checks passed**. Production client build and Nitro template sync
+passed with 249 verified offline assets. Changed-file lint has zero errors and
+three existing warnings. Larger-data checks retain over 10,000 records and
+64 MiB through cold reopen; a 66 MiB encrypted password file streams back
+byte-for-byte with exact metadata. Synthetic quota errors cover rollback/retry,
+optional export retention, home/selected transactions, account caches, refusal
+cleanup and encrypted conflict copies. These tests use isolated fake IndexedDB;
+they do not prove real Chrome storage exhaustion.
+
+Evidence: `tmp/workspace-capacity-{workspace-final,offline,build,lint-final,
+typecheck-final}.log`. Native Chrome acceptance is pending after both supported
+control methods timed out in the assigned Thingtime window. The remaining
+16 MiB buffered-file/tree adapters, 64 MiB import/preview buffers, password
+traversal and other catalogue/partition caps are separate unfinished work.
+No merge, deployment, public exposure or existing-account mutation occurred.
+
+Graph refresh limitation: the local semantic proxy health request timed out
+at both 5 and 15 seconds; a read-only PM2 listing also stalled. This checkpoint
+uses the structural code refresh fallback. Changed documentation is not claimed
+as newly semantically indexed. No shared service was restarted.

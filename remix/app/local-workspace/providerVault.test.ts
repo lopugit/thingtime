@@ -1,14 +1,15 @@
+import { createQuotaFactory, TEST_STORAGE_CAPACITY } from './storageTestFixture';
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { IDBFactory, IDBKeyRange } from 'fake-indexeddb';
+import { IDBKeyRange } from 'fake-indexeddb';
 import { LocalProviderVault } from './providerVault';
 import { deviceVaultCollections } from './deviceVaultSession';
-import { WorkspaceDatabase, WORKSPACE_LIMITS, type WorkspaceScope } from './storage';
+import { WorkspaceDatabase, type WorkspaceScope } from './storage';
 const phrase='Synthetic local provider fixture passphrase', origin='https://device.example';
 const gate={assertCurrent(){},onInvalidate:()=>()=>{}}, collections=deviceVaultCollections('providers');
 const command=<T extends Record<string,unknown> = Record<string,unknown>>(action:string, values:T={} as T, id:string=crypto.randomUUID(), revision=0)=>({action,id,revision,writeId:crypto.randomUUID(),...values});
 async function fixture(scope:WorkspaceScope={kind:'anonymous'}){
- const db=new WorkspaceDatabase(new IDBFactory(),crypto.randomUUID(),10_000,IDBKeyRange), vault=new LocalProviderVault(db,scope,gate,origin);
+ const db=new WorkspaceDatabase(createQuotaFactory(),crypto.randomUUID(),10_000,IDBKeyRange), vault=new LocalProviderVault(db,scope,gate,origin);
  await vault.unlock(phrase,true); return {db,vault,scope,close:async()=>{vault.dispose();await db.close();}};
 }
 const raw=(f:Awaited<ReturnType<typeof fixture>>)=>f.db.transaction(f.scope,'readonly',gate,async tx=>({records:await tx.list(collections.records),commands:await tx.list(collections.commands)}));
@@ -69,7 +70,7 @@ test('environment removal is fenced against a concurrent child creation',async()
 test('quota refusal rolls encrypted content and account intent back together',async()=>{
  const f=await fixture({kind:'account',ownerId:'quota-owner',origin,dataPlane:'home'});
  try{
-  const usage=await f.db.transaction(f.scope,'readonly',gate,tx=>tx.usage());await f.db.transaction(f.scope,'readwrite',gate,async tx=>{for(let i=0;i<3;i++)await tx.putBytes(`fill-${i}`,new Uint8Array(WORKSPACE_LIMITS.binaryBytes));await tx.putBytes('fill-final',new Uint8Array(WORKSPACE_LIMITS.binaryBytes-usage.bytes));});
+  const usage=await f.db.transaction(f.scope,'readonly',gate,tx=>tx.usage());await f.db.transaction(f.scope,'readwrite',gate,async tx=>{for(let i=0;i<3;i++)await tx.putBytes(`fill-${i}`,new Uint8Array(TEST_STORAGE_CAPACITY.binaryBytes));await tx.putBytes('fill-final',new Uint8Array(TEST_STORAGE_CAPACITY.binaryBytes-usage.bytes));});
   await assert.rejects(f.vault.mutate(command('save-secret',{name:'Quota fixture',key:'KEY',value:'preserve'})),/workspace is full/);assert.deepEqual(await raw(f),{records:[],commands:[]});
  }finally{await f.close();}
 });

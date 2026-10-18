@@ -1,4 +1,3 @@
-import { PASSWORD_DEVICE_COLLECTIONS, PASSWORD_DEVICE_RECORD_BYTES } from '../passwords/capacity';
 import { TIMELINE_EVENT_MAX_BYTES } from '../timeline/contract';
 /** Browser persistence boundary for local content. Account scopes never confer
  * server authority and are never inferred from a record supplied by a caller. */
@@ -9,7 +8,9 @@ export const workspaceScopeKey = (scope: WorkspaceScope): string => {
 	return JSON.stringify(['account', scope.origin, scope.ownerId, scope.dataPlane]);
 };
 
-export const WORKSPACE_LIMITS = { records: 10000, recordBytes: 1024 * 1024, binaryBytes: 16 * 1024 * 1024, bytes: 64 * 1024 * 1024 } as const;
+// Buffered file adapters still use these processing bounds until their stream
+// migration is complete. IndexedDB admission itself uses the browser's quota.
+export const LEGACY_FILE_BUFFER_LIMITS = { binaryBytes: 16 * 1024 * 1024, bytes: 64 * 1024 * 1024 } as const;
 export class WorkspaceError extends Error {
 	readonly ok = false;
 	get error() {
@@ -178,7 +179,7 @@ export class WorkspaceDatabase {
 				native.abort();
 			} catch {}
 			await done.catch(() => {});
-			throw error;
+			throw workspaceStorageError(error);
 		} finally {
 			unsubscribe();
 		}
@@ -237,8 +238,8 @@ export class WorkspaceDatabase {
 				const usage: Usage = (await request(usageStore.get(scopeKey))) || { scope: scopeKey, records: 0, bytes: 0 };
 				usage.records += previous ? 0 : 1;
 				usage.bytes += bytes - (previous?.bytes || 0);
-				if (usage.records > WORKSPACE_LIMITS.records || usage.bytes > WORKSPACE_LIMITS.bytes)
-					throw new WorkspaceError('LOCAL_QUOTA', 'Local workspace is full. Export or remove some content before saving.', 413);
+				if (!Number.isSafeInteger(usage.records) || !Number.isSafeInteger(usage.bytes) || usage.records < 0 || usage.bytes < 0)
+					throw new WorkspaceError('LOCAL_ACCOUNTING_UNAVAILABLE', 'Device storage usage could not be updated safely. Saved content is unchanged.', 503);
 				lease.assertCurrent();
 				await request(records.put({ scope: scopeKey, collection, id, value, bytes } satisfies WorkspaceRecord));
 				await request(usageStore.put(usage));
@@ -299,14 +300,8 @@ export class WorkspaceDatabase {
 					const encoded = JSON.stringify(value);
 					if (encoded === undefined) throw new WorkspaceError('INVALID_RECORD', 'Local records must contain JSON');
 					const bytes = new TextEncoder().encode(encoded).byteLength;
-					const passwordRecord = PASSWORD_DEVICE_COLLECTIONS.has(collection);
-					const limit = collection === 'timeline-events' ? TIMELINE_EVENT_MAX_BYTES + 2048 : passwordRecord ? PASSWORD_DEVICE_RECORD_BYTES : WORKSPACE_LIMITS.recordBytes;
-					if (bytes > limit)
-						throw new WorkspaceError(
-							'LOCAL_QUOTA',
-							collection === 'timeline-events' ? 'This Timeline record exceeds 4 MiB' : passwordRecord ? 'This encrypted password record exceeds the account document capacity.' : 'This local record exceeds 1 MB',
-							413
-						);
+					if (collection === 'timeline-events' && bytes > TIMELINE_EVENT_MAX_BYTES + 2048)
+						throw new WorkspaceError('TIMELINE_EVENT_SIZE', 'This Timeline record exceeds the canonical event capacity.', 413);
 					await persist(collection, id, JSON.parse(encoded), bytes);
 				},
 				getBytes: async (id) => {
@@ -320,7 +315,6 @@ export class WorkspaceDatabase {
 				putBytes: async (id, value) => {
 					check(BINARY_COLLECTION, id, true);
 					if (!(value instanceof Uint8Array)) throw new WorkspaceError('INVALID_LOCAL_FILE', 'File bytes must be a byte array');
-					if (value.byteLength > WORKSPACE_LIMITS.binaryBytes) throw new WorkspaceError('LOCAL_QUOTA', 'A local file cannot exceed 16 MiB', 413);
 					await persist(BINARY_COLLECTION, id, Uint8Array.from(value), value.byteLength);
 				},
 				deleteBytes: async (id) => removeRecord(BINARY_COLLECTION, id, true),
@@ -336,7 +330,7 @@ export class WorkspaceDatabase {
 			tx.delete = (...args) => (writes = writes.then(() => remove(...args)));
 			tx.putBytes = (...args) => {
 				const [id, bytes] = args;
-				if (!(bytes instanceof Uint8Array) || bytes.byteLength > WORKSPACE_LIMITS.binaryBytes)
+				if (!(bytes instanceof Uint8Array))
 					return (writes = writes.then(() => putBytes(id, bytes)));
 				const copy = Uint8Array.from(bytes);
 				return (writes = writes.then(() => putBytes(id, copy)));
@@ -361,9 +355,16 @@ export class WorkspaceDatabase {
 				native.abort();
 			} catch {}
 			await done.catch(() => {});
-			throw error;
+			throw workspaceStorageError(error);
 		} finally {
 			unsubscribe();
 		}
 	}
+}
+
+/** Normalize the actual browser capacity failure without inventing an app quota. */
+function workspaceStorageError(error: unknown) {
+	if (error && typeof error === 'object' && 'name' in error && error.name === 'QuotaExceededError')
+		return new WorkspaceError('LOCAL_QUOTA', 'Local workspace is full because the browser could not allocate storage. Free device space or export/remove content, then retry.', 507);
+	return error;
 }

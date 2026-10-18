@@ -1,14 +1,14 @@
+import { createQuotaFactory, TEST_STORAGE_CAPACITY } from './storageTestFixture';
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { IDBFactory } from 'fake-indexeddb';
-import { WorkspaceDatabase, WORKSPACE_LIMITS } from './storage';
+import { WorkspaceDatabase } from './storage';
 import { LocalThings } from './things';
 import { LocalInteractions, localInteractionState, localSavedPage } from './interactions';
 import { localPostInput, localPostProjection } from './posts';
 const scope = { kind: 'anonymous' as const }, lease = { assertCurrent() {}, onInvalidate: () => () => {} };
 const account = { kind: 'account' as const, origin: 'https://example.test', ownerId: 'someone', dataPlane: 'home' };
 const fixture = () => {
- const factory = new IDBFactory(), db = new WorkspaceDatabase(factory);
+ const factory = createQuotaFactory(), db = new WorkspaceDatabase(factory);
  return { factory, db, things: new LocalThings(db, scope, lease), interactions: new LocalInteractions(db, scope, lease) };
 };
 
@@ -113,14 +113,15 @@ test('separate tabs serialize local toggles and retired/account callers cannot m
 });
 
 test('failed replacement rolls back the prior interaction atomically', async () => {
- const { db, things, interactions } = fixture();
+ const { db, things, interactions, factory } = fixture();
+ factory.capacity.bytes = TEST_STORAGE_CAPACITY.recordBytes;
  try {
   const post = await things.savePost(localPostInput({ type: 'text', text: 'Quota' }));
   await interactions.toggle('updown', post.id, 'up');
   // Oversized replacement fails after the existing child was deleted, so this
   // proves rollback restores the old slot rather than losing the prior vote.
-  const oversized = new LocalInteractions(db, scope, lease, () => crypto.randomUUID(), () => 'x'.repeat(WORKSPACE_LIMITS.recordBytes));
-  await assert.rejects(oversized.toggle('updown', post.id, 'down'), /exceeds 1 MB/);
+  const oversized = new LocalInteractions(db, scope, lease, () => crypto.randomUUID(), () => 'x'.repeat(TEST_STORAGE_CAPACITY.recordBytes));
+  await assert.rejects(oversized.toggle('updown', post.id, 'down'), /workspace is full/);
   const rows = (await things.snapshot()).filter(row => row.targetId === post.id);
   assert.deepEqual(localInteractionState(post, rows).votes, { up: 1, down: 0, score: 1, viewerVote: 'up' });
  } finally { await db.close(); }

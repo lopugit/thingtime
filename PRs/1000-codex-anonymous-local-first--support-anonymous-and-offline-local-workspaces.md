@@ -4001,3 +4001,37 @@ write retry, re-encryption back to the device, and anonymous read refusal. The
 single newly minted entry was deleted through the normal API; normal protected
 receipts/session expiry remain. Device storage in this test is fake IndexedDB,
 not browser acceptance. Evidence: `tmp/password-capacity-api-verification.json`.
+
+
+## Browser-backed workspace capacity — 2026-10-18
+
+Generic IndexedDB admission no longer rejects valid content at 10,000 records,
+64 MiB total, 1 MiB ordinary JSON or 16 MiB raw byte records. Storage accounting
+and identity fencing remain transactional. Actual `QuotaExceededError` reports
+`LOCAL_QUOTA` (507) and rolls back the complete write before retry. Revocation
+prefers a non-growing replacement by releasing only clean display caches before
+refusal markers; authored work is retained. A physical browser quota failure
+still aborts atomically and must not be described as infallible revocation.
+Settings now displays accounted usage without an invented capacity percentage.
+
+Local checks: **639 workspace tests passed, 71 opt-in tests skipped**; **four
+offline-shell checks passed**. Production client build and Nitro template sync
+passed with 249 verified offline assets. Changed-file lint has zero errors and
+three existing warnings. Larger-data checks retain over 10,000 records and
+64 MiB through cold reopen; a 66 MiB encrypted password file streams back
+byte-for-byte with exact metadata. Synthetic quota errors cover rollback/retry,
+optional export retention, home/selected transactions, account caches, refusal
+cleanup and encrypted conflict copies. These tests use isolated fake IndexedDB;
+they do not prove real Chrome storage exhaustion.
+
+Evidence: `tmp/workspace-capacity-{workspace-final,offline,build,lint-final,
+typecheck-final}.log`. Native Chrome acceptance is pending after both supported
+control methods timed out in the assigned Thingtime window. The remaining
+16 MiB buffered-file/tree adapters, 64 MiB import/preview buffers, password
+traversal and other catalogue/partition caps are separate unfinished work.
+No merge, deployment, public exposure or existing-account mutation occurred.
+
+Graph refresh limitation: the local semantic proxy health request timed out
+at both 5 and 15 seconds; a read-only PM2 listing also stalled. This checkpoint
+uses the structural code refresh fallback. Changed documentation is not claimed
+as newly semantically indexed. No shared service was restarted.

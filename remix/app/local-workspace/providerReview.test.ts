@@ -1,7 +1,8 @@
+import { createQuotaFactory } from './storageTestFixture';
 import { openDeviceVaultValue, sealDeviceVaultValue } from '../passwords/vaultCrypto';
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { IDBFactory, IDBKeyRange } from '/Users/lopu/.codex-2/worktrees/anonymous-render-export/thingtime/remix/node_modules/fake-indexeddb/build/esm/index.js';
+import { IDBFactory, IDBKeyRange } from 'fake-indexeddb';
 import { WorkspaceDatabase, type WorkspaceScope } from './storage';
 import { LocalProviderVault } from './providerVault';
 import { parseUserVaultWriteAcknowledgment, type UserVaultWrite } from '../api/utils/lopu/userVaultWriteContract';
@@ -10,8 +11,8 @@ const phrase = 'Synthetic separate device passphrase', gate = { assertCurrent() 
 const command = (action = 'save-secret', values: Record<string, unknown> = {}, id = crypto.randomUUID(), revision = 0) => ({
  action, id, revision, writeId: crypto.randomUUID(), ...(action === 'save-secret' ? { name: 'Fixture', key: 'FIXTURE_KEY', value: ' synthetic secret\n', groupId: null } : {}), ...values
 });
-async function fixture(selected: WorkspaceScope = scope) {
- const db = new WorkspaceDatabase(new IDBFactory(), crypto.randomUUID(), 10_000, IDBKeyRange), vault = new LocalProviderVault(db, selected, gate, origin);
+async function fixture(selected: WorkspaceScope = scope, factory = new IDBFactory()) {
+ const db = new WorkspaceDatabase(factory, crypto.randomUUID(), 10_000, IDBKeyRange), vault = new LocalProviderVault(db, selected, gate, origin);
  await vault.unlock(phrase, true); return { db, vault, close: async () => { vault.dispose(); await db.close(); } };
 }
 const deferred = () => { let resolve!: () => void; const promise = new Promise<void>(yes => { resolve = yes; }); return { promise, resolve }; };
@@ -160,7 +161,7 @@ test('partial account snapshots and corrupt sequence cannot erase the refused qu
  }finally{await f.close();}
 });
 test('device quota rolls back command removal and every copied record together',async()=>{
- const f=await fixture();
+ const f=await fixture(scope, createQuotaFactory());
  try{
   const one=command();await f.vault.mutate(one);await f.vault.synchronize(reject);const review=await f.vault.reviewRefused(one.id);
   const usage=await f.db.transaction(scope,'readonly',gate,tx=>tx.usage());

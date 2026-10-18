@@ -1,4 +1,4 @@
-import { WorkspaceError, WORKSPACE_LIMITS, type WorkspaceTransaction } from './storage';
+import { WorkspaceError, type WorkspaceTransaction } from './storage';
 import type { ThingTransfer } from '../utils/thingTransfer/format';
 export const ACCOUNT_READ_COLLECTIONS = ['account-post-projections', 'account-discussion-projections'] as const;
 export const ACCOUNT_EXPORT_SNAPSHOTS = 'thing-export-snapshots';
@@ -13,6 +13,7 @@ export const pruneAccountConversation = (post: any, denied: (id: string) => bool
  * and descendants must not survive via another permalink/cache shape. */
 export async function forgetAccountConversation(tx: WorkspaceTransaction, id: string, at: number) {
  if (typeof id !== 'string' || !id || id.length > 200 || !Number.isFinite(at) || at < 0) throw new WorkspaceError('INVALID_READ_REFUSAL', 'Invalid account read refusal.', 400);
+ const beforeUsage = await tx.usage();
  const rows = (await Promise.all(ACCOUNT_READ_COLLECTIONS.map(async collection => (await tx.list<Snapshot>(collection)).map(row => ({ ...row, collection }))))).flat();
  const owned = (await tx.list<{state:string;base:unknown}>('thing-sync')).filter(row => row.value.state === 'synced' && row.value.base);
  const ownedBodies = await Promise.all(owned.map(async row => ({id:row.id,value:await tx.get<{targetId?:string}>('things',row.id)})));
@@ -43,7 +44,9 @@ export async function forgetAccountConversation(tx: WorkspaceTransaction, id: st
   }
  }
  // Both formats consult the same refusal watermark; no duplicate records are needed.
- // Eviction, if necessary at the record cap, is limited to display snapshots.
+ // Prefer a non-growing replacement so revocation can succeed even when the
+ // browser is full. Only clean display snapshots may fund additional markers;
+ // never discard authored work. Actual browser quota failures still roll back.
  const writes = [...denied].map(target => ({ collection: ACCOUNT_READ_COLLECTIONS[0], target }));
  const index = new Map(rows.map(row => [JSON.stringify([row.collection,row.id]),row.value]));
  const watermarks = writes.map(({collection,target}) => {
@@ -53,9 +56,9 @@ export async function forgetAccountConversation(tx: WorkspaceTransaction, id: st
  const bytes = (value: unknown) => new TextEncoder().encode(JSON.stringify(value)).byteLength;
  const addedBytes = watermarks.reduce((sum,row) => sum+bytes(row.value),0), usage = await tx.usage();
  const evictable = rows.filter(row => !denied.has(row.id) && row.value.post).sort((a,b) => a.value.at-b.value.at);
- while (usage.records + watermarks.length > WORKSPACE_LIMITS.records || usage.bytes + addedBytes > WORKSPACE_LIMITS.bytes) {
+ while (usage.records + watermarks.length > beforeUsage.records || usage.bytes + addedBytes > beforeUsage.bytes) {
   const row = evictable.shift();
-  if (!row) throw new WorkspaceError('LOCAL_QUOTA','Cannot retain the account read refusal at the device limit.',413);
+  if (!row) break; // No expendable cache remains; the browser decides admission.
   const current = await tx.get(row.collection,row.id);
   if (current) { usage.records--; usage.bytes -= bytes(current); await tx.delete(row.collection,row.id); }
  }

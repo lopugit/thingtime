@@ -1,9 +1,10 @@
+import { createQuotaFactory, TEST_STORAGE_CAPACITY } from './storageTestFixture';
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { IDBFactory, IDBKeyRange } from 'fake-indexeddb';
+import { IDBKeyRange } from 'fake-indexeddb';
 import { AccountFileSync, type AccountFileRetentionTransport } from './accountFiles';
 import { AccountThingSync } from './accountSync';
-import { WorkspaceDatabase, WORKSPACE_LIMITS } from './storage';
+import { WorkspaceDatabase } from './storage';
 import { AccountDiscussionCache } from './accountDiscussions';
 import { exportAccountThings } from './accountExport';
 import { bundleFromPlan } from '../utils/thingTransfer/browser';
@@ -11,7 +12,7 @@ import { LocalThings } from './things';
 import { serializeTransfer } from '../utils/thingTransfer/format';
 
 function fixture(comment = false) {
- const db = new WorkspaceDatabase(new IDBFactory(), undefined, undefined, IDBKeyRange);
+ const db = new WorkspaceDatabase(createQuotaFactory(), undefined, undefined, IDBKeyRange);
  const scope = { kind: 'account', origin: 'https://retention.test', ownerId: 'owner', dataPlane: 'home' } as const;
  let now = Date.now(); const lease = { assertCurrent() {}, onInvalidate: () => () => {} };
  const files = new AccountFileSync(db, scope, lease, () => now), sync = new AccountThingSync(db, scope, lease, () => now, undefined, files.contentHooks);
@@ -101,7 +102,7 @@ test('partial bytes, wrong bindings, revocation and quota failure leave neither 
  for(const mode of ['bytes','binding','revoked','quota']){
   const f=fixture();try{
    const transport={...f.transport,retention:async(id:string,signal:AbortSignal,bound?:boolean)=>{const row=await f.transport.retention(id,signal,bound);if(mode==='binding')row.file.targetId='foreign';return row;},bytes:async(id:string)=>{if(id==='second'&&mode==='bytes')throw Error('Interrupted');if(mode==='revoked')throw {status:404};return f.bytes;}};
-   if(mode==='quota')await f.db.transaction(f.scope,'readwrite',f.lease,async tx=>{for(let i=0;i<4;i++)await tx.putBytes('fill-'+i,new Uint8Array(WORKSPACE_LIMITS.binaryBytes));});
+   if(mode==='quota')await f.db.transaction(f.scope,'readwrite',f.lease,async tx=>{for(let i=0;i<4;i++)await tx.putBytes('fill-'+i,new Uint8Array(TEST_STORAGE_CAPACITY.binaryBytes));});
    await assert.rejects(f.retain(f.parent,transport));
    assert.equal(await f.sync.view('post'),null);assert.deepEqual((await f.files.library(true)).things,[]);assert.deepEqual(await f.files.status(),[]);
   }finally{await f.db.close();}

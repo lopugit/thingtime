@@ -1,9 +1,10 @@
+import { createQuotaFactory, TEST_STORAGE_CAPACITY } from './storageTestFixture';
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { IDBFactory, IDBKeyRange } from 'fake-indexeddb';
+import { IDBKeyRange } from 'fake-indexeddb';
 import { decodeThingtime, stringifyThingtimeForStorage } from '../Providers/thingtimeSerialization';
 import { LocalEditorTree, legacyEditorTreeKey } from './editorTree';
-import { WorkspaceDatabase, WORKSPACE_LIMITS, type WorkspaceScope, type WorkspaceLease } from './storage';
+import { WorkspaceDatabase, type WorkspaceScope, type WorkspaceLease } from './storage';
 
 const account = { kind: 'account', origin: 'https://thingtime.example', ownerId: 'owner', dataPlane: 'home' } as const;
 function guard() {
@@ -11,7 +12,7 @@ function guard() {
  const lease: WorkspaceLease = { assertCurrent() { if (!active) throw Error('Workspace retired'); }, onInvalidate(fn) { listeners.add(fn); return () => { listeners.delete(fn); }; } };
  return { lease, retire() { active = false; for (const fn of listeners) fn(); } };
 }
-const createDb = () => new WorkspaceDatabase(new IDBFactory(), 'editor-tree-test', 10_000, IDBKeyRange);
+const createDb = () => new WorkspaceDatabase(createQuotaFactory(), 'editor-tree-test', 10_000, IDBKeyRange);
 const encoded = (text: string) => stringifyThingtimeForStorage({ Notes: text });
 
 test('native trees use independent account, origin, plane and anonymous partitions with canonical values', async () => {
@@ -76,7 +77,7 @@ test('oversized or damaged trees never replace a valid snapshot or silently hydr
  const db = createDb(), { lease } = guard(), store = new LocalEditorTree(db, account, lease);
  try {
   await store.setItem(store.key, encoded('Keep this tree'));
-  await assert.rejects(store.setItem(store.key, encoded('x'.repeat(WORKSPACE_LIMITS.binaryBytes))), /too large|16 MiB/);
+  await assert.rejects(store.setItem(store.key, encoded('x'.repeat(TEST_STORAGE_CAPACITY.binaryBytes))), /too large|16 MiB/);
   await assert.rejects(store.setItem(store.key, 'invalid'), /JSON/);
   assert.equal(decodeThingtime((await store.getItem(store.key))!).value.Notes, 'Keep this tree');
   await db.transaction(account, 'readwrite', lease, tx => tx.putBytes('editor-tree:root:v1', new TextEncoder().encode(encoded('Tampered tree'))));
@@ -106,13 +107,13 @@ test('workspace quota refusal preserves the previous tree and its usage for a la
   await store.setItem(store.key, encoded('Original tree'));
   const usage = await db.transaction(account, 'readonly', lease, tx => tx.usage());
   await db.transaction(account, 'readwrite', lease, async tx => {
-   for (let index = 0; index < 3; index++) await tx.putBytes(`fixture-${index}`, new Uint8Array(WORKSPACE_LIMITS.binaryBytes));
-   await tx.putBytes('fixture-final', new Uint8Array(WORKSPACE_LIMITS.binaryBytes - usage.bytes));
+   for (let index = 0; index < 3; index++) await tx.putBytes(`fixture-${index}`, new Uint8Array(TEST_STORAGE_CAPACITY.binaryBytes));
+   await tx.putBytes('fixture-final', new Uint8Array(TEST_STORAGE_CAPACITY.binaryBytes - usage.bytes));
   });
-  assert.equal((await db.transaction(account, 'readonly', lease, tx => tx.usage())).bytes, WORKSPACE_LIMITS.bytes);
+  assert.equal((await db.transaction(account, 'readonly', lease, tx => tx.usage())).bytes, TEST_STORAGE_CAPACITY.bytes);
   await assert.rejects(store.setItem(store.key, encoded('A larger replacement tree')), /workspace is full/);
   assert.equal(decodeThingtime((await store.getItem(store.key))!).value.Notes, 'Original tree');
-  assert.equal((await db.transaction(account, 'readonly', lease, tx => tx.usage())).bytes, WORKSPACE_LIMITS.bytes);
+  assert.equal((await db.transaction(account, 'readonly', lease, tx => tx.usage())).bytes, TEST_STORAGE_CAPACITY.bytes);
   await db.transaction(account, 'readwrite', lease, tx => tx.deleteBytes('fixture-final'));
   await store.setItem(store.key, encoded('A larger replacement tree'));
   assert.equal(decodeThingtime((await store.getItem(store.key))!).value.Notes, 'A larger replacement tree');

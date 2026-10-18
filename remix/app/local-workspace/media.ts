@@ -1,6 +1,6 @@
 import { attachmentMediaKindForContentType } from '../api/utils/attachments/attachmentCore';
 import type { WorkspaceLease } from './storage';
-import { WORKSPACE_LIMITS } from './storage';
+import { LEGACY_FILE_BUFFER_LIMITS } from './storage';
 
 export const LOCAL_MEDIA_UNAVAILABLE = ''; // Omit DOM src/href until validated bytes are ready.
 /** Only canonical relative local content references use device bytes. A remote
@@ -53,7 +53,7 @@ export class LocalMediaRegistry {
    void Promise.resolve().then(() => { entry.lease.assertCurrent(); return this.deps.read(id); }).then(result => {
     entry.lease.assertCurrent(); if (entry.cancelled || revision !== entry.revision || entry.dirty) return;
     const total = [...this.entries.values()].reduce((sum, item) => sum + (item === entry ? 0 : item.size), 0);
-    if (!(result.bytes instanceof Uint8Array) || result.bytes.byteLength > WORKSPACE_LIMITS.binaryBytes || total + result.bytes.byteLength > WORKSPACE_LIMITS.bytes) throw new Error('Local media exceeds the device preview limit.');
+    if (!(result.bytes instanceof Uint8Array) || result.bytes.byteLength > LEGACY_FILE_BUFFER_LIMITS.binaryBytes || total + result.bytes.byteLength > LEGACY_FILE_BUFFER_LIMITS.bytes) throw new Error('Local media exceeds the device preview limit.');
     // HTML/SVG and arbitrary files are opaque downloads, never active documents.
     const type = attachmentMediaKindForContentType(result.contentType) === 'file' ? 'application/octet-stream' : result.contentType;
     const next = this.deps.create(result.bytes, type);

@@ -1,16 +1,17 @@
+import { createQuotaFactory, TEST_STORAGE_CAPACITY } from './storageTestFixture';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { randomUUID } from 'node:crypto';
-import { IDBFactory, IDBKeyRange } from 'fake-indexeddb';
+import { IDBKeyRange } from 'fake-indexeddb';
 import { AccountFileSync, type AccountFileTransport } from './accountFiles';
 import { AccountThingSync, type AccountSyncTransport, type AccountThing } from './accountSync';
 import { AccountDiscussionCache } from './accountDiscussions';
 import { exportAccountThings } from './accountExport';
 import { localPostProjection } from './posts';
-import { WorkspaceDatabase, WORKSPACE_LIMITS } from './storage';
+import { WorkspaceDatabase } from './storage';
 
 function fixture() {
- const db = new WorkspaceDatabase(new IDBFactory(), undefined, undefined, IDBKeyRange);
+ const db = new WorkspaceDatabase(createQuotaFactory(), undefined, undefined, IDBKeyRange);
  const scope = { kind: 'account', origin: 'https://media.test', ownerId: 'owner', dataPlane: 'home' } as const;
  let now = Date.now(); const lease = { assertCurrent() {}, onInvalidate: () => () => {} };
  const files = new AccountFileSync(db, scope, lease, () => now), sync = new AccountThingSync(db, scope, lease, () => now, undefined, files.contentHooks);
@@ -151,7 +152,7 @@ test('removal during an uncertain upload finishes that same upload before deleti
 test('bound deletion can be reviewed and restored at the exact device quota without discarding bytes',async()=>{
  const f=fixture();try{
   const a=await f.select(),post=await f.sync.things.savePost({thingtime:['post'],crystal:{type:'text',text:'Private'},attachmentIds:[a.id]});await f.files.sync(f.upload);await f.sync.sync(f.content);
-  await f.db.transaction(f.scope,'readwrite',f.lease,async tx=>{let remaining=WORKSPACE_LIMITS.bytes-(await tx.usage()).bytes,n=0;while(remaining){const size=Math.min(remaining,WORKSPACE_LIMITS.binaryBytes);await tx.putBytes('fill-'+n++,new Uint8Array(size));remaining-=size;}});
+  await f.db.transaction(f.scope,'readwrite',f.lease,async tx=>{let remaining=TEST_STORAGE_CAPACITY.bytes-(await tx.usage()).bytes,n=0;while(remaining){const size=Math.min(remaining,TEST_STORAGE_CAPACITY.binaryBytes);await tx.putBytes('fill-'+n++,new Uint8Array(size));remaining-=size;}});
   await f.files.removeBound(a.id,post.id);const base=removalTransport(f,async()=>{throw Error('Must review before deletion');});
   const transport={...base,get:async(id:string)=>{const row=await base.get(id);return {...row,crystal:{...row.crystal,title:'Changed on another device'}};},annotate:async()=>{},move:async()=>{}};
   await f.files.sync(transport);assert.equal((await f.files.status())[0].state,'conflict');

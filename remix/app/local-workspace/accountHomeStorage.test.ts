@@ -1,11 +1,12 @@
+import { createQuotaFactory, TEST_STORAGE_CAPACITY } from './storageTestFixture';
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { IDBFactory, IDBKeyRange } from 'fake-indexeddb';
-import { WorkspaceDatabase, WORKSPACE_LIMITS, type WorkspaceLease } from './storage';
+import { IDBKeyRange } from 'fake-indexeddb';
+import { WorkspaceDatabase, type WorkspaceLease } from './storage';
 const selected = { kind: 'account', ownerId: 'owner', origin: 'https://home.test', dataPlane: 'custom' } as const;
 const home = { ...selected, dataPlane: 'home' };
 const lease = { assertCurrent() {}, onInvalidate: () => () => {} };
-const database = (factory = new IDBFactory()) => new WorkspaceDatabase(factory, 'home-transaction', 1000, IDBKeyRange);
+const database = (factory = createQuotaFactory()) => new WorkspaceDatabase(factory, 'home-transaction', 1000, IDBKeyRange);
 test('account partition discovery returns only exact current account and origin keys', async () => {
 	const db = database();
 	const otherPlane = { ...selected, dataPlane: 'custom-' + 'b'.repeat(64) };
@@ -84,16 +85,16 @@ test('home and selected-plane writes commit together without merging same-ID rec
 	}
 });
 test('a home quota or selected-plane error rolls back both content and both usage ledgers', async () => {
-	const db = database();
+	const db = database(createQuotaFactory({ bytes: TEST_STORAGE_CAPACITY.recordBytes }));
 	try {
 		for (const failed of ['home', 'selected'] as const) {
 			await assert.rejects(
 				db.accountHomeTransaction(selected, 'readwrite', lease, async (views) => {
 					await views.home.put('things', 'theme', {});
 					await views.selected.put('things', 'data', {});
-					await views[failed].put('things', 'oversize', 'x'.repeat(WORKSPACE_LIMITS.recordBytes));
+					await views[failed].put('things', 'oversize', 'x'.repeat(TEST_STORAGE_CAPACITY.recordBytes));
 				}),
-				/exceeds/
+				/workspace is full/
 			);
 			for (const scope of [home, selected])
 				assert.deepEqual(await db.transaction(scope, 'readonly', lease, (tx) => tx.usage()), { records: 0, bytes: 0 });
@@ -135,7 +136,7 @@ test('retiring the selected-account lease cancels home and selected writes atomi
 	}
 });
 test('concurrent home work from different selected planes shares one serialized home ledger', async () => {
-	const factory = new IDBFactory(),
+	const factory = createQuotaFactory(),
 		a = database(factory),
 		b = database(factory);
 	try {

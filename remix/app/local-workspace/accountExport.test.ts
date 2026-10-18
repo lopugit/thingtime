@@ -1,3 +1,4 @@
+import { createQuotaFactory } from './storageTestFixture';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { IDBFactory, IDBKeyRange } from 'fake-indexeddb';
@@ -8,8 +9,8 @@ import { bundleFromPlan } from '../utils/thingTransfer/browser';
 import { WorkspaceDatabase } from './storage';
 import { serializeTransfer, validateTransfer } from '../utils/thingTransfer/format';
 
-const setup = () => {
- const db = new WorkspaceDatabase(new IDBFactory(),undefined,undefined,IDBKeyRange), scope = { kind: 'account', ownerId: 'owner', origin: 'https://thingtime.example', dataPlane: 'home' } as const;
+const setup = (factory = new IDBFactory()) => {
+ const db = new WorkspaceDatabase(factory,undefined,undefined,IDBKeyRange), scope = { kind: 'account', ownerId: 'owner', origin: 'https://thingtime.example', dataPlane: 'home' } as const;
  let live = true, online = false;
  const lease = { assertCurrent() { if (!live) throw new Error('Workspace changed'); }, onInvalidate: () => () => {} };
  const sync = new AccountThingSync(db, scope, lease);
@@ -97,13 +98,16 @@ test('dedicated online exports remain available but cannot erase pending device 
 });
 
 
-test('export remains available when retaining its snapshot would exceed the record quota', async () => {
- const f = setup(); try {
+test('large exports retain successfully and remain available when actual browser capacity refuses retention', async () => {
+ const factory = createQuotaFactory(), f = setup(factory); try {
   const roots = [];
   for (let i = 0; i < 220; i++) roots.push((await f.sync.things.create({ thingtime: ['data'], crystal: { name: `Large ${i}`, text: 'x'.repeat(4900) } })).id);
+  factory.capacity.bytes = (await f.db.transaction(f.sync.scope, 'readonly', f.lease, tx => tx.usage())).bytes;
   const result = await exportAccountThings({ ids: roots }, f.deps);
   assert.equal(result.retainedOnDevice, false); assert.equal(result.plan.things.length, 220);
   assert.ok(serializeTransfer(manifest(result.plan)).length > 1024 * 1024);
+  factory.capacity.bytes = 64 * 1024 * 1024;
+  assert.equal((await exportAccountThings({ ids: roots }, f.deps)).retainedOnDevice, true);
  } finally { await f.db.close(); }
 });
 

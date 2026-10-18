@@ -3,7 +3,7 @@ import { Box, Button, Checkbox, Flex, Input, Modal, ModalBody, ModalCloseButton,
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import { useWorkspaceUser } from '~/hooks/useWorkspaceUser';
 import { useApi } from '~/hooks/useApi';
-import { WORKSPACE_LIMITS } from '~/local-workspace/storage';
+import { LEGACY_FILE_BUFFER_LIMITS } from '~/local-workspace/storage';
 import { LOCAL_WORKSPACE_CHANGED, workspaceIdentityKey, subscribeWorkspaceIdentity, currentAccountWorkspace, accountRemoteWorkspaceLease } from '~/local-workspace/runtime.client';
 import { formatAttachmentBytes } from '../Attachments/attachmentUiCore';
 import { FILESYSTEM_MAX_BYTES, filesystemPath } from '~/api/utils/devices/deviceFilesystemCore';
@@ -42,7 +42,7 @@ const FilesystemThingsContent = ({ deviceId, initialPath = '', initialFolderId =
   useEffect(() => {
     setLocation(current => (current.deviceId === deviceId && (deviceId ? current.path === initialPath : current.folderId === initialFolderId)) ? current : (deviceId ? { deviceId, path: initialPath } : { folderId: initialFolderId }));
   }, [deviceId, initialPath, initialFolderId]);
-  const fileLimit = location.deviceId ? FILESYSTEM_MAX_BYTES : WORKSPACE_LIMITS.binaryBytes;
+  const fileLimit = location.deviceId ? FILESYSTEM_MAX_BYTES : LEGACY_FILE_BUFFER_LIMITS.binaryBytes;
   const [history, setHistory] = useState<FileLocation[]>([]);
   const [items, setItems] = useState<ThingsThing[]>(() => listings.get(locationKey(identity, location)) || []);
   const [devices, setDevices] = useState<Array<{ id: string; name: string; capabilities: string[] }>>([]);
@@ -222,7 +222,7 @@ const FilesystemThingsContent = ({ deviceId, initialPath = '', initialFolderId =
       if (localOnly) throw new Error('Paired devices require a signed-in account.');
       return withRemote(signal, remoteSignal => writeRemoteFile(target.deviceId!, join(target.path!, file.name), file, remoteSignal, approve, progressFor(file.name)));
     }
-    if (file.size > WORKSPACE_LIMITS.binaryBytes) throw new Error('A local file cannot exceed 16 MiB.');
+    if (file.size > LEGACY_FILE_BUFFER_LIMITS.binaryBytes) throw new Error('A local file cannot exceed 16 MiB.');
     const bytes = new Uint8Array(await file.arrayBuffer()); signal.throwIfAborted();
     await apiRef.current.v1.attachments.saveLocalFile({ requestId: crypto.randomUUID(), name: file.name, contentType: file.type || 'application/octet-stream', bytes, folderId: target.folderId }, { signal });
   };

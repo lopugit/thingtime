@@ -71,7 +71,7 @@
       broader list membership remain separate acceptance gates.
 
 - [ ] Completed file deletion: delete an uploaded standalone file while offline
-      and at the full 64 MiB device quota. It disappears from Things immediately;
+      and with browser storage exhausted. It disappears from Things immediately;
       recovery bytes remain private until an exact durable acknowledgement.
       Change account details, reject a stale native review, restore the device
       file at full quota, and delete it again without losing the worker wake.
@@ -96,7 +96,7 @@
       Finalized, finalizing and bound uploads require reviewed deletion; legacy
       or malformed acknowledgements must retain bytes. Check competing tabs,
       owner/origin/plane isolation, original save replay refusal, cancellation at the
-      full 64 MiB device quota (both never-started and attempted uploads), and
+      exhausted browser storage (both never-started and attempted uploads), and
       multipart settlement. Verify native controls at 1440/390/320px, abort 1.2.0
       in both built manifests, anonymous 401 and Watch refusal for the new mode.
       Run workspace, attachment, storage, schema, Things and capability suites,
@@ -12092,3 +12092,12 @@ Local results do not establish current-head CI or deployed acceptance.
 - [x] Round-trip a synthetic large Unicode entry through the real private loopback API; verify exact replay/read, anonymous refusal and cleanup of only the new entry.
 - [ ] Complete connected-Chrome native large-value import/edit/export acceptance.
 - [ ] Replace arbitrary aggregate workspace/traversal caps with actual browser quota handling and resumable/backpressured work; verify atomic failure/cleanup at real capacity.
+
+
+### Device storage admission — 2026-10-18
+
+- [x] In isolated IndexedDB tests, retain more than 10,000 records, ordinary JSON above 1 MiB, raw byte records above 16 MiB and total data above 64 MiB; cold reopen preserves exact content and accounting.
+- [x] Stream a 66 MiB encrypted password file through the existing framed adapter and verify every decoded byte, metadata and cleanup.
+- [x] Inject native-class `QuotaExceededError` in isolated storage fixtures; verify atomic rollback and retry, shared home/selected-plane transactions, cache/export fallback, revocation markers and authored-content preservation. Test-only fixture limits must never become production admission policy.
+- [ ] In assigned Chrome, repeat larger-data save/reopen/export and actual storage-failure recovery; inspect Settings → Things at desktop, 390px and 320px, including scroll and protection controls.
+- [ ] Finish remaining buffered-file, import/preview, catalogue and traversal caps using streaming/pagination/cancellation. This storage-admission checkpoint does not complete that matrix.

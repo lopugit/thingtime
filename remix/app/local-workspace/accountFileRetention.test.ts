@@ -1,12 +1,13 @@
+import { createQuotaFactory, TEST_STORAGE_CAPACITY } from './storageTestFixture';
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { IDBFactory, IDBKeyRange } from 'fake-indexeddb';
+import { IDBKeyRange } from 'fake-indexeddb';
 import { AccountDiscussionCache } from './accountDiscussions';
 import { AccountFileSync, type AccountFileRetentionTransport } from './accountFiles';
-import { WorkspaceDatabase, WORKSPACE_LIMITS, type WorkspaceTransaction } from './storage';
+import { WorkspaceDatabase, type WorkspaceTransaction } from './storage';
 const scope = { kind: 'account' as const, ownerId: 'owner', origin: 'https://files.test', dataPlane: 'home' };
 function fixture() {
- const db = new WorkspaceDatabase(new IDBFactory(), undefined, undefined, IDBKeyRange);
+ const db = new WorkspaceDatabase(createQuotaFactory(), undefined, undefined, IDBKeyRange);
  let now = Date.parse('2026-10-17T00:00:00Z'), retired = false;
  const lease = { assertCurrent() { if (retired) throw new Error('Retired'); }, onInvalidate: () => () => {} };
  const files = new AccountFileSync(db, scope, lease, () => now), bytes = new TextEncoder().encode('Previously uploaded file bytes');
@@ -132,7 +133,7 @@ test('conflicting account and offline edits remain reviewable after retention re
 test('retained existing files can be removed at the exact device quota', async () => {
  const f=fixture();try{
   const {row}=await f.files.retain(f.transport,'account-file');
-  await f.db.transaction(scope,'readwrite',f.lease,async tx=>{let remaining=WORKSPACE_LIMITS.bytes-(await tx.usage()).bytes,index=0;while(remaining){const size=Math.min(remaining,WORKSPACE_LIMITS.binaryBytes);await tx.putBytes('fill-'+index++,new Uint8Array(size));remaining-=size;}});
+  await f.db.transaction(scope,'readwrite',f.lease,async tx=>{let remaining=TEST_STORAGE_CAPACITY.bytes-(await tx.usage()).bytes,index=0;while(remaining){const size=Math.min(remaining,TEST_STORAGE_CAPACITY.binaryBytes);await tx.putBytes('fill-'+index++,new Uint8Array(size));remaining-=size;}});
   await f.files.remove(row.id);await f.files.sync(f.transport);
   assert.deepEqual(await f.files.status(),[]);assert.equal((await f.files.library()).aliases.get('account-file'),null);
  }finally{await f.db.close();}

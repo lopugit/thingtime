@@ -21,6 +21,33 @@ async function fixture() {
 }
 const read = async (stream: ReadableStream<Uint8Array>) => new Uint8Array(await new Response(stream).arrayBuffer());
 const records = (db: WorkspaceDatabase) => db.transaction(scope, 'readonly', lease, async tx => ({ files: await tx.list('password-vault-files'), stages: await tx.list('password-vault-file-staging'), commands: await tx.list('password-vault-commands'), usage: await tx.usage() }));
+
+test('streamed password files exceed the former aggregate device quota without buffering the whole file', async () => {
+  const f = await fixture();
+  const parts = 66, size = parts * PASSWORD_FILE_FRAME_BYTES;
+  try {
+    const metadata = newPasswordFile('large-stream.bin', size);
+    await f.storage.uploadFile(f.id, metadata, () => {
+      let remaining = parts;
+      return new ReadableStream({ pull(controller) {
+        if (!remaining--) return controller.close();
+        controller.enqueue(new Uint8Array(PASSWORD_FILE_FRAME_BYTES).fill(7));
+      } });
+    });
+    assert.ok((await records(f.db)).usage.bytes > 64 * 1024 * 1024);
+    const opened = await f.storage.openFile(f.id, metadata.token), reader = opened.stream.getReader();
+    let received = 0;
+    try {
+      for (;;) {
+        const { done, value } = await reader.read(); if (done) break;
+        assert.ok(value.every(byte => byte === 7)); received += value.length;
+      }
+    } finally { reader.releaseLock(); }
+    assert.equal(received, size); assert.deepEqual(opened.metadata, metadata);
+    await f.storage.removeFile(f.id, metadata.token);
+    assert.equal((await records(f.db)).stages.length, 0);
+  } finally { await f.close(); }
+});
 test('removing a file fences an upload already reading and later retries without retaining its bytes or metadata', async () => {
   const f = await fixture();
   try {

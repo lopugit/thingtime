@@ -1,11 +1,12 @@
+import { createQuotaFactory } from './storageTestFixture';
 import { forgetAccountConversation } from './accountReadRevocation';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { IDBFactory, IDBKeyRange } from 'fake-indexeddb';
 import { AccountThingSync, type AccountThing, type AccountSyncTransport } from './accountSync';
 import { WorkspaceDatabase, type WorkspaceLease } from './storage';
-const setup = () => {
- const factory = new IDBFactory(), db = new WorkspaceDatabase(factory, undefined, undefined, IDBKeyRange);
+const setup = (factory = new IDBFactory()) => {
+ const db = new WorkspaceDatabase(factory, undefined, undefined, IDBKeyRange);
  let time = Date.now(), active = true;
  const listeners = new Set<() => void>();
  const lease: WorkspaceLease = { assertCurrent() { if (!active) throw new Error('Workspace changed'); }, onInvalidate(fn) { listeners.add(fn); return () => listeners.delete(fn); } };
@@ -234,7 +235,7 @@ test('schema-based data waits for its copied definition after a failed schema sy
 
 
 test('catalogue batches retain canonical owned content atomically without replacing pending edits or deletions', async () => {
- const f = setup(), stamp = new Date().toISOString();
+ const f = setup(createQuotaFactory({ bytes: 1024 * 1024 })), stamp = new Date().toISOString();
  const row = (id: string, text = id) => ({ id, author: { id: 'owner' }, thingtime: ['component'], crystal: { name: text, componentKey: id, version: 1, render: { tag: 'p', children: text } }, createdAt: stamp, updatedAt: stamp, acl: ['tt:user'], visibility: 'private', revision: 1 } as AccountThing);
  try {
   await assert.rejects(f.sync.rememberMany([row('first'), { ...row('foreign'), author: { id: 'other' } }]), /belong/);
@@ -243,8 +244,8 @@ test('catalogue batches retain canonical owned content atomically without replac
   await f.sync.things.update({ id:'first',crystal:{name:'Pending edit'} }); await f.sync.remove(['second']);
   const retained = await f.sync.rememberMany([row('first','Remote old'),row('second'),row('third')]);
   assert.equal(retained[0]?.crystal.name,'Pending edit'); assert.equal(retained[1],undefined); assert.equal(retained[2]?.id,'third');
-  // A valid but oversized record fails during the transaction after the first put.
-  await assert.rejects(f.sync.rememberMany([row('rolled-back'),{...row('too-large'),extended:{text:'x'.repeat(1024*1024)}}]), /large|limit|exceeds/i);
+  // The simulated browser fills during the batch after the first put.
+  await assert.rejects(f.sync.rememberMany([row('rolled-back'),{...row('too-large'),extended:{text:'x'.repeat(1024*1024)}}]), /workspace is full/i);
   assert.equal(await f.sync.view('rolled-back'),null);
   await assert.rejects(f.sync.rememberMany(Array.from({length:51},(_,i)=>row(`row-${i}`))), /page/);
  } finally { await f.db.close(); }

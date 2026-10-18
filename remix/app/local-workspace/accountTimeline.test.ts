@@ -1,7 +1,8 @@
+import { createQuotaFactory, TEST_STORAGE_CAPACITY } from './storageTestFixture';
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { IDBFactory, IDBKeyRange } from 'fake-indexeddb';
-import { WorkspaceDatabase, WORKSPACE_LIMITS, type WorkspaceScope, type WorkspaceLease, type WorkspaceTransaction } from './storage';
+import { IDBKeyRange } from 'fake-indexeddb';
+import { WorkspaceDatabase, type WorkspaceScope, type WorkspaceLease, type WorkspaceTransaction } from './storage';
 import { AccountThingSync } from './accountSync';
 import { AccountTimeline, AccountTimelineStore, accountTimelineScope } from './accountTimeline';
 import { IndexedDbTimelineBackend } from '../timeline/indexedDb';
@@ -11,7 +12,7 @@ import { capturedComponentBindings } from '../timeline/componentBindings';
 const scope={kind:'account',origin:'https://history.example',ownerId:'owner',dataPlane:'home'} as const;
 const lease={assertCurrent(){},onInvalidate:()=>()=>{}};
 test('account edits and deletion retain each device version atomically',async()=>{
- const db=new WorkspaceDatabase(new IDBFactory());const sync=new AccountThingSync(db,scope,lease);
+ const db=new WorkspaceDatabase(createQuotaFactory());const sync=new AccountThingSync(db,scope,lease);
  try{
   const row=await sync.things.create({thingtime:['data'],crystal:{name:'First'}});
   await sync.things.update({id:row.id,crystal:{name:'Second'}});await sync.remove([row.id]);
@@ -24,7 +25,7 @@ test('account edits and deletion retain each device version atomically',async()=
 });
 
 const setup = () => {
- const factory=new IDBFactory(), db=new WorkspaceDatabase(factory,undefined,undefined,IDBKeyRange);
+ const factory=createQuotaFactory(), db=new WorkspaceDatabase(factory,undefined,undefined,IDBKeyRange);
  const history=new AccountTimeline(db,scope,lease), backend=new IndexedDbTimelineBackend(factory);
  return {factory,db,history,backend,sync:new AccountThingSync(db,scope,lease),store:new AccountTimelineStore(accountTimelineScope(scope),backend,history)};
 };
@@ -94,7 +95,7 @@ test('an event failure rolls back the Thing and its sync intent in the same tran
    }}));
   }
  }
- const db=new FailingHistoryDatabase(new IDBFactory(),undefined,undefined,IDBKeyRange);
+ const db=new FailingHistoryDatabase(createQuotaFactory(),undefined,undefined,IDBKeyRange);
  try {
   await assert.rejects(new AccountThingSync(db,scope,lease).things.create({thingtime:['data'],crystal:{name:'Atomic'}}),/History write failed/);
   await db.transaction(scope,'readonly',lease,async tx=>{
@@ -110,8 +111,8 @@ test('reserved receipt space allows acknowledgement at the full workspace byte q
   await f.sync.things.create({thingtime:['data'],crystal:{name:'Retain me'}});
   const [event]=await f.store.pending();
   await f.db.transaction(scope,'readwrite',lease,async tx=>{
-   let available=WORKSPACE_LIMITS.bytes-(await tx.usage()).bytes,index=0;
-   while(available){const size=Math.min(available,WORKSPACE_LIMITS.binaryBytes);await tx.putBytes(`filler-${index++}`,new Uint8Array(size));available-=size;}
+   let available=TEST_STORAGE_CAPACITY.bytes-(await tx.usage()).bytes,index=0;
+   while(available){const size=Math.min(available,TEST_STORAGE_CAPACITY.binaryBytes);await tx.putBytes(`filler-${index++}`,new Uint8Array(size));available-=size;}
   });
   await assert.rejects(f.sync.things.create({thingtime:['data'],crystal:{name:'Over quota'}}),/full|quota|limit/i);
   await f.store.accept([entryFixture(event)]);

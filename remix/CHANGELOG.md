@@ -68,6 +68,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-18 — **Codex (AI)**: Remove fixed IndexedDB workspace/record budgets;
+  use browser quota errors with atomic rollback, preserve refusal-marker cleanup
+  and show stored usage without a fixed quota meter. Larger encrypted streams and
+  failure paths have local tests; buffered adapters and connected-Chrome acceptance
+  remain open. [PR #1000 details](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
 - 2026-10-18: Align device password entry/file-metadata codec and encrypted-record capacity with the canonical account writer; preserve exact large values through export, sync and conflict copies. Aggregate workspace policy and connected-Chrome acceptance remain open. See [PR #1000 details](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
 
 - 2026-10-18 — **Codex (AI)**: Activate encrypted device-backed account password

@@ -1,14 +1,15 @@
+import { createQuotaFactory, TEST_STORAGE_CAPACITY } from './storageTestFixture';
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { IDBFactory, IDBKeyRange } from 'fake-indexeddb';
+import { IDBKeyRange } from 'fake-indexeddb';
 import { AccountDiscussionCache } from './accountDiscussions';
 import { AccountPostCache, accountPostProjection } from './accountPosts';
-import { WorkspaceDatabase, WORKSPACE_LIMITS } from './storage';
+import { WorkspaceDatabase } from './storage';
 const scope = { kind: 'account' as const, origin: 'https://example.test', ownerId: 'viewer', dataPlane: 'home' };
 const lease = { assertCurrent() {}, onInvalidate: () => () => {} };
 const root = (id = 'root') => ({ id, thingtime: ['component'], text: 'A retained discussion', type: 'text', createdAt: '2026-10-17T00:00:00Z', author: { id: 'other', username: 'other' }, comments: [], repliesLoaded: false, linkKey: 'secret', attachments: [] });
 const comment = (id: string, targetId = 'root') => ({ ...root(id), thingtime: ['post', 'comment'], targetId, text: id });
-const fixture = () => { const db = new WorkspaceDatabase(new IDBFactory(), undefined, undefined, IDBKeyRange); return { db, cache: new AccountDiscussionCache(db, scope, lease) }; };
+const fixture = () => { const db = new WorkspaceDatabase(createQuotaFactory(), undefined, undefined, IDBKeyRange); return { db, cache: new AccountDiscussionCache(db, scope, lease) }; };
 test('generic discussions retain safe bounded display fields with explicit partial pages and preserved authors', async () => {
  const { db, cache } = fixture();
  try {
@@ -65,9 +66,9 @@ test('revocation releases body quota before installing descendant refusal waterm
  try {
   await cache.remember(root(), 10); await cache.rememberPage('root', [comment('a')], 10);
   await db.transaction(scope, 'readwrite', lease, async tx => {
-   let remaining = WORKSPACE_LIMITS.bytes - (await tx.usage()).bytes;
-   for (let i=0; remaining>0; i++) { const size=Math.min(remaining, WORKSPACE_LIMITS.recordBytes); await tx.put('padding', String(i), 'x'.repeat(size-2)); remaining -= size; }
-   assert.equal((await tx.usage()).bytes, WORKSPACE_LIMITS.bytes);
+   let remaining = TEST_STORAGE_CAPACITY.bytes - (await tx.usage()).bytes;
+   for (let i=0; remaining>0; i++) { const size=Math.min(remaining, TEST_STORAGE_CAPACITY.recordBytes); await tx.put('padding', String(i), 'x'.repeat(size-2)); remaining -= size; }
+   assert.equal((await tx.usage()).bytes, TEST_STORAGE_CAPACITY.bytes);
   });
   assert.equal(await cache.forget('root', 20), true); assert.equal(await cache.get('root'), null); assert.equal(await cache.get('a'), null);
  } finally { await db.close(); }
@@ -93,10 +94,10 @@ test('shared refusal watermarks fit at the record cap without evicting authored 
  try {
   await cache.remember(root(), 10); await cache.remember(root('other'), 10);
   await db.transaction(scope, 'readwrite', lease, async tx => {
-   for(let i=2;i<WORKSPACE_LIMITS.records;i++) await tx.put('authored',String(i),{ text:'Preserve' });
+   for(let i=2;i<TEST_STORAGE_CAPACITY.records;i++) await tx.put('authored',String(i),{ text:'Preserve' });
   });
   assert.equal(await cache.forget('root',20),true);
   assert.equal(await cache.get('root'),null); assert.ok(await cache.get('other'));
-  await db.transaction(scope,'readonly',lease,async tx=>{assert.equal((await tx.list('authored')).length,WORKSPACE_LIMITS.records-2);assert.equal((await tx.usage()).records,WORKSPACE_LIMITS.records);});
+  await db.transaction(scope,'readonly',lease,async tx=>{assert.equal((await tx.list('authored')).length,TEST_STORAGE_CAPACITY.records-2);assert.equal((await tx.usage()).records,TEST_STORAGE_CAPACITY.records);});
  } finally { await db.close(); }
 });

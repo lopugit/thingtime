@@ -1,7 +1,8 @@
+import type { IDBFactory } from 'fake-indexeddb';
+import { createQuotaFactory, TEST_STORAGE_CAPACITY } from './storageTestFixture';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { IDBFactory } from 'fake-indexeddb';
-import { WorkspaceDatabase, WORKSPACE_LIMITS, workspaceScopeKey, type WorkspaceLease } from './storage';
+import { WorkspaceDatabase, workspaceScopeKey, type WorkspaceLease } from './storage';
 
 export const testLease = () => {
 	let active = true; const listeners = new Set<() => void>();
@@ -14,7 +15,7 @@ export const testLease = () => {
 const anonymous = { kind: 'anonymous' } as const;
 
 test('anonymous, account, origin and selected data plane are distinct storage scopes', async () => {
-	const db = new WorkspaceDatabase(new IDBFactory()); const { lease } = testLease();
+	const db = new WorkspaceDatabase(createQuotaFactory()); const { lease } = testLease();
 	const scopes = [anonymous,
 		{ kind: 'account', origin: 'https://thingtime.com', ownerId: 'a', dataPlane: 'home' },
 		{ kind: 'account', origin: 'https://thingtime.com', ownerId: 'b', dataPlane: 'home' },
@@ -28,11 +29,11 @@ test('anonymous, account, origin and selected data plane are distinct storage sc
 });
 
 test('quota failure rolls back every write and usage accounting in a transaction', async () => {
-	const db = new WorkspaceDatabase(new IDBFactory()); const { lease } = testLease();
+	const db = new WorkspaceDatabase(createQuotaFactory({ bytes: TEST_STORAGE_CAPACITY.recordBytes })); const { lease } = testLease();
 	await assert.rejects(db.transaction(anonymous, 'readwrite', lease, async tx => {
 		await tx.put('things', 'first', { value: 'keep atomic' });
-		await tx.put('things', 'too-large', 'x'.repeat(WORKSPACE_LIMITS.recordBytes));
-	}), /exceeds 1 MB/);
+		await tx.put('things', 'too-large', 'x'.repeat(TEST_STORAGE_CAPACITY.recordBytes));
+	}), /workspace is full/);
 	assert.deepEqual(await db.transaction(anonymous, 'readonly', lease, tx => tx.list('things')), []);
 	await db.transaction(anonymous, 'readwrite', lease, tx => tx.put('things', 'first', { value: 'retry' }));
 	assert.deepEqual(await db.transaction(anonymous, 'readonly', lease, tx => tx.get('things', 'first')), { value: 'retry' });
@@ -40,7 +41,7 @@ test('quota failure rolls back every write and usage accounting in a transaction
 });
 
 test('identity invalidation aborts an already running write', async () => {
-	const db = new WorkspaceDatabase(new IDBFactory()); const { lease, invalidate } = testLease();
+	const db = new WorkspaceDatabase(createQuotaFactory()); const { lease, invalidate } = testLease();
 	await assert.rejects(db.transaction(anonymous, 'readwrite', lease, async tx => {
 		await tx.put('things', 'old-editor', { secret: 'not committed' }); invalidate();
 	}), /Workspace changed/);
@@ -49,7 +50,7 @@ test('identity invalidation aborts an already running write', async () => {
 });
 
 test('separate tabs serialize read-modify-write transactions without lost updates', async () => {
-	const factory = new IDBFactory(); const a = new WorkspaceDatabase(factory); const b = new WorkspaceDatabase(factory);
+	const factory = createQuotaFactory(); const a = new WorkspaceDatabase(factory); const b = new WorkspaceDatabase(factory);
 	const { lease } = testLease();
 	await Promise.all(Array.from({ length: 20 }, (_, index) => (index % 2 ? a : b).transaction(anonymous, 'readwrite', lease, async tx => {
 		const value = await tx.get<number>('settings', 'count') || 0;
@@ -60,7 +61,7 @@ test('separate tabs serialize read-modify-write transactions without lost update
 });
 
 test('committed local records survive closing and reopening the database', async () => {
-	const factory = new IDBFactory(); const db = new WorkspaceDatabase(factory); const { lease } = testLease();
+	const factory = createQuotaFactory(); const db = new WorkspaceDatabase(factory); const { lease } = testLease();
 	await db.transaction(anonymous, 'readwrite', lease, tx => tx.put('drafts', 'draft', { text: 'offline' })); await db.close();
 	const reopened = new WorkspaceDatabase(factory);
 	assert.deepEqual(await reopened.transaction(anonymous, 'readonly', lease, tx => tx.get('drafts', 'draft')), { text: 'offline' }); await reopened.close();
@@ -68,7 +69,7 @@ test('committed local records survive closing and reopening the database', async
 
 for (const failure of ['blocked', 'timeout', 'error', 'close'] as const) {
 	test(`a ${failure} opening fails clearly, closes late connections and permits retry`, async () => {
-		const real = new IDBFactory();
+		const real = createQuotaFactory();
 		let opened = 0, lateCloses = 0, lateUpgrades = 0;
 		const stalled = { result: { close: () => { lateCloses++; } }, transaction: { abort: () => { lateUpgrades++; } } } as unknown as IDBOpenDBRequest;
 		const factory = { open: (name: string, version: number) => opened++ ? real.open(name, version) : stalled } as IDBFactory;
@@ -95,7 +96,7 @@ for (const failure of ['blocked', 'timeout', 'error', 'close'] as const) {
 }
 
 test('deleting a record with damaged usage accounting neither throws nor goes negative', async () => {
-	const factory = new IDBFactory(), db = new WorkspaceDatabase(factory), { lease } = testLease();
+	const factory = createQuotaFactory(), db = new WorkspaceDatabase(factory), { lease } = testLease();
 	await db.transaction(anonymous, 'readwrite', lease, tx => tx.put('things', 'one', { text: 'a' }));
 	// Drop the usage row behind the adapter's back to simulate damaged accounting.
 	const raw = await new Promise<IDBDatabase>((resolve, reject) => {

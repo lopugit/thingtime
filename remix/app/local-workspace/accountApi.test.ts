@@ -1,3 +1,4 @@
+import { WorkspaceError } from './storage';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { IDBFactory } from 'fake-indexeddb';
@@ -365,7 +366,13 @@ test('online catalogue discovery retains owned definitions for device paging wit
   await worker.sync.things.update({id:'one',crystal:{name:'Pending name'}}); await worker.sync.remove(['two']);
   const refreshed:any=await api.components.browse({}); assert.equal(refreshed.components.find((r:any)=>r.id==='one').crystal.name,'Pending name'); assert.equal(refreshed.components.some((r:any)=>r.id==='two'),false);
   worker.transport.browse=async()=>({ok:true,components:[{...row('oversized'),extended:{text:'x'.repeat(1024*1024)}}]});
-  const full:any=await api.components.browse({}); assert.ok(full.localCacheError); assert.equal(full.components.length,1); assert.equal(await worker.sync.view('oversized'),null);
+  // Exercise the facade's optional-cache error path independently of the
+  // module-shared database fixture. Native quota rollback is covered in storage.
+  const remember = worker.sync.rememberMany;
+  worker.sync.rememberMany = async () => { throw new WorkspaceError('LOCAL_QUOTA', 'Browser storage exhausted', 507); };
+  try {
+   const full:any=await api.components.browse({}); assert.ok(full.localCacheError); assert.equal(full.components.length,1); assert.equal(await worker.sync.view('oversized'),null);
+  } finally { worker.sync.rememberMany = remember; }
   rootIdentity.changed(); bindLocalWorkspace(true,rootIdentity.read().generation); rootIdentity.confirm(rootIdentity.read().generation);
   await assert.rejects(api.components.browse({device:true}),/changed/i);
  } finally { rootIdentity.changed(); await workspaceDatabase().close(); Object.assign(globalThis,{window:saved.window,indexedDB:saved.indexedDB}); if(saved.navigator) Object.defineProperty(globalThis,'navigator',saved.navigator); }

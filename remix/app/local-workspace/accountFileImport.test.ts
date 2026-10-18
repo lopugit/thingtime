@@ -1,3 +1,4 @@
+import { createQuotaFactory } from './storageTestFixture';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { IDBFactory, IDBKeyRange } from 'fake-indexeddb';
@@ -11,8 +12,8 @@ import { recordingTransferFile } from '../utils/thingTransfer/recording';
 import { resolveTemplate } from '../components/ComponentsLibrary/componentTemplate';
 import { validateTransfer } from '../utils/thingTransfer/format';
 
-async function fixture() {
- const db = new WorkspaceDatabase(new IDBFactory(), undefined, undefined, IDBKeyRange);
+async function fixture(factory = new IDBFactory()) {
+ const db = new WorkspaceDatabase(factory, undefined, undefined, IDBKeyRange);
  const scope = { kind: 'account', origin: 'https://import.test', ownerId: 'owner', dataPlane: 'home' } as const;
  let active = true, now = Date.now();
  const lease = { assertCurrent() { if (!active) throw Error('Workspace changed'); }, onInvalidate: () => () => {} };
@@ -96,7 +97,7 @@ test('cancelled file dependencies surface an actionable content error without st
 
 test('bad bytes, missing placement, quota refusal and abort roll back content, files and all queues', async () => {
  for (const failure of ['bytes','folder','quota','abort']) {
-  const f = await fixture(); try {
+  const f = await fixture(createQuotaFactory()); try {
    let bytes = f.bytes;
    if (failure === 'quota') {
     await f.db.transaction(f.scope, 'readwrite', f.lease, async tx => { for (let n = 0; n < 4; n++) await tx.putBytes('filler-' + n, new Uint8Array((n === 3 ? 15 : 16) * 1024 * 1024)); });

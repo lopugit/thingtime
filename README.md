@@ -4621,6 +4621,12 @@ available site storage. Clearing site data removes unsynced device content.
 Anonymous work never enters an account queue. Account sync uses the existing
 same-origin API and session; there is no new secret or alternate authentication
 setup. Unsupported dedicated features retain their current adapters.
+Device storage admission uses the browser's actual capacity; there is no
+Thingtime-wide 64 MiB or 10,000-record quota. Failed native storage writes report
+`LOCAL_QUOTA` and roll back atomically. Some buffered file/import/preview paths
+retain separate limits while their streaming migration is unfinished; consult
+the coverage matrix before assuming every feature handles large files.
+
 
 For offline shell checks, run `npm --prefix remix run build:client`; this generates
 an integrity-checked static asset manifest. Use the repository PM2 lifecycle for

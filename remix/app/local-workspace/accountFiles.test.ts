@@ -1,14 +1,15 @@
+import { createQuotaFactory, TEST_STORAGE_CAPACITY } from './storageTestFixture';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { randomUUID } from 'node:crypto';
-import { IDBFactory, IDBKeyRange } from 'fake-indexeddb';
+import { IDBKeyRange } from 'fake-indexeddb';
 import { AccountFileSync, type AccountFileTransport } from './accountFiles';
-import { WorkspaceDatabase, WorkspaceError, WORKSPACE_LIMITS } from './storage';
+import { WorkspaceDatabase, WorkspaceError, } from './storage';
 import { LocalThings } from './things';
 const scope = { kind: 'account' as const, origin: 'https://example.test', ownerId: 'owner', dataPlane: 'home' };
 const lease = { assertCurrent() {}, onInvalidate: () => () => {} };
 function fixture() {
-	const factory = new IDBFactory(),
+	const factory = createQuotaFactory(),
 		db = new WorkspaceDatabase(factory, undefined, undefined, IDBKeyRange);
 	let now = 1000;
 	const service = new AccountFileSync(db, scope, lease, () => now),
@@ -346,12 +347,12 @@ test('full device quota still admits and completes never-started or queued cance
 				await f.service.retry(row.id);
 			}
 			await f.db.transaction(scope, 'readwrite', lease, async tx => {
-				let remaining = WORKSPACE_LIMITS.bytes - (await tx.usage()).bytes, part = 0;
+				let remaining = TEST_STORAGE_CAPACITY.bytes - (await tx.usage()).bytes, part = 0;
 				while (remaining > 0) {
-					const size = Math.min(remaining, WORKSPACE_LIMITS.binaryBytes);
+					const size = Math.min(remaining, TEST_STORAGE_CAPACITY.binaryBytes);
 					await tx.putBytes(`quota-fill-${part++}`, new Uint8Array(size)); remaining -= size;
 				}
-				assert.equal((await tx.usage()).bytes, WORKSPACE_LIMITS.bytes);
+				assert.equal((await tx.usage()).bytes, TEST_STORAGE_CAPACITY.bytes);
 			});
 			await f.service.cancel(row.id);
 			if (started) await f.service.sync({ ...f.transport, cancel: async () => ({ cancelled: true, deferred: false }) });
@@ -432,9 +433,9 @@ test('deletion and reviewed restore work at the exact device quota and survive r
 	const f = await completedFileFixture();
 	try {
 		await f.db.transaction(scope, 'readwrite', lease, async tx => {
-			let remaining = WORKSPACE_LIMITS.bytes - (await tx.usage()).bytes, part = 0;
-			while (remaining > 0) { const size = Math.min(remaining, WORKSPACE_LIMITS.binaryBytes); await tx.putBytes(`delete-fill-${part++}`, new Uint8Array(size)); remaining -= size; }
-			assert.equal((await tx.usage()).bytes, WORKSPACE_LIMITS.bytes);
+			let remaining = TEST_STORAGE_CAPACITY.bytes - (await tx.usage()).bytes, part = 0;
+			while (remaining > 0) { const size = Math.min(remaining, TEST_STORAGE_CAPACITY.binaryBytes); await tx.putBytes(`delete-fill-${part++}`, new Uint8Array(size)); remaining -= size; }
+			assert.equal((await tx.usage()).bytes, TEST_STORAGE_CAPACITY.bytes);
 		});
 		await f.service.remove(f.local.id);
 		f.account.crystal.title = 'Concurrent edit'; f.bump();
@@ -447,7 +448,7 @@ test('deletion and reviewed restore work at the exact device quota and survive r
 			await files.resolveDeletion(f.deletionTransport, { id: review.id, localRevision: review.localRevision, remoteUpdatedAt: review.remote.updatedAt, operationVersion: review.operationVersion, keep: 'file' });
 			assert.deepEqual((await files.things.readFile(f.local.id)).bytes, f.bytes);
 			await reopened.transaction(scope, 'readwrite', lease, async tx => {
-				const remaining = WORKSPACE_LIMITS.bytes - (await tx.usage()).bytes;
+				const remaining = TEST_STORAGE_CAPACITY.bytes - (await tx.usage()).bytes;
 				if (remaining) await tx.putBytes('refill-after-restore', new Uint8Array(remaining));
 			});
 			await files.remove(f.local.id); await files.sync(f.deletionTransport);

@@ -1,3 +1,4 @@
+import { createQuotaFactory } from './storageTestFixture';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { IDBFactory, IDBKeyRange } from 'fake-indexeddb';
@@ -65,7 +66,8 @@ test('retained post snapshots exclude credentials and never acquire ownership or
 	}
 });
 test('bounded post pages are atomic and older reads cannot replace newer retained content', async () => {
-	const db = new WorkspaceDatabase(new IDBFactory(), undefined, undefined, IDBKeyRange),
+	const factory = createQuotaFactory({ bytes: 1024 * 1024 });
+	const db = new WorkspaceDatabase(factory, undefined, undefined, IDBKeyRange),
 		cache = new AccountPostCache(db, scope, lease);
 	try {
 		await cache.remember([post()], 20);
@@ -77,6 +79,9 @@ test('bounded post pages are atomic and older reads cannot replace newer retaine
 		await assert.rejects(cache.remember(Array(51).fill(post())), /Invalid/);
 		await assert.rejects(cache.remember([{ ...post('huge'), text: 'x'.repeat(2 * 1024 * 1024) }]));
 		assert.equal(await cache.get('huge'), null);
+		factory.capacity.bytes = 4 * 1024 * 1024;
+		await cache.remember([{ ...post('huge'), text: 'x'.repeat(2 * 1024 * 1024) }]);
+		assert.equal((await cache.get('huge'))?.text, 'x'.repeat(2 * 1024 * 1024));
 		await cache.forget('post');
 		assert.equal(await cache.get('post'), null);
 	} finally {

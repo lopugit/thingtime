@@ -7,7 +7,7 @@ import { compositionAttachmentIds } from '../api/utils/actions/compositionMediaC
 import { rewriteTransferMedia } from '../api/utils/things/transferMediaCore';
 import { LocalThings, type LocalThing } from './things';
 import { createLocalAttachment, isLocalAttachment, type LocalAttachment } from './attachments';
-import { WORKSPACE_LIMITS, WorkspaceError, type WorkspaceDatabase, type WorkspaceLease, type WorkspaceScope, type WorkspaceTransaction } from './storage';
+import { LEGACY_FILE_BUFFER_LIMITS, WorkspaceError, type WorkspaceDatabase, type WorkspaceLease, type WorkspaceScope, type WorkspaceTransaction } from './storage';
 import { accountReadRefusals, forgetAccountConversation } from './accountReadRevocation';
 import { remapPostDraftAttachments } from '../drafts/postDraft';
 import { validateDraftContent, type AccountDraft, type DraftContent } from '../drafts/draftCore';
@@ -203,7 +203,7 @@ export class AccountFileSync {
 		const file = raw?.file, attachment = normalizePublicAttachment(file?.attachment);
 		const purpose = file?.purpose;
 		if (!(binding ? purpose === binding.purpose && file?.targetId === binding.targetId : isStandaloneAttachmentPurpose(purpose) && !file?.targetId) || !attachment || attachment.id !== id || file?.ownerId !== this.scope.ownerId || 'url' in file.attachment ||
-			!Number.isSafeInteger(raw.size) || raw.size < 1 || raw.size !== attachment.size || raw.size > WORKSPACE_LIMITS.binaryBytes ||
+			!Number.isSafeInteger(raw.size) || raw.size < 1 || raw.size !== attachment.size || raw.size > LEGACY_FILE_BUFFER_LIMITS.binaryBytes ||
 			!(/^[a-f0-9]{64}:original$/).test(raw.cacheKey || ''))
 			throw new WorkspaceError('INVALID_FILE_RETENTION', 'The account returned an invalid owned file descriptor.', 502);
 		const metadata = this.metadata.checked({ id, author: { id: file.ownerId }, thingtime: ['attachment'], crystal: attachment, updatedAt: file.updatedAt, folderId: file.folderId }, id);
@@ -309,7 +309,7 @@ export class AccountFileSync {
 			for (const [order, id] of draft.attachmentIds.entries()) {
 				const file = await this.loadRetention(transport, id, child, { targetId: draft.id, purpose: draft.surface === 'comment' ? 'comment' : 'post', order, draft: true });
 				total += file.copy.byteLength;
-				if (total > WORKSPACE_LIMITS.bytes) throw new WorkspaceError('DRAFT_FILES_LIMIT', 'Draft originals exceed this device workspace limit.', 413);
+				if (total > LEGACY_FILE_BUFFER_LIMITS.bytes) throw new WorkspaceError('DRAFT_FILES_LIMIT', 'Draft originals exceed this device workspace limit.', 413);
 				prepared.push(file);
 			}
 			const aliases = new Map(prepared.map(file => [file.id, file.fallbackId]));
@@ -330,7 +330,7 @@ export class AccountFileSync {
 	async retainPost<T>(transport: AccountFileRetentionTransport, input: { id: string; thingtime: string[]; attachments?: unknown[] }, commitParent: (admit: (tx: WorkspaceTransaction) => Promise<void>) => Promise<T>, signal = new AbortController().signal) {
 		if (this.retainingPost) throw new WorkspaceError('FILE_RETENTION_BUSY', 'Another post is being saved on this device. Retry shortly.', 503);
 		const attachments = input.attachments?.map(normalizePublicAttachment);
-		if (!input.thingtime.some(kind => ['post','comment'].includes(kind)) || !attachments || attachments.length > 200 || attachments.some(file => !file || file.url) || new Set(attachments.map(file => file?.id)).size !== attachments.length || attachments.reduce((sum, file) => sum + (file?.size || 0), 0) > WORKSPACE_LIMITS.bytes)
+		if (!input.thingtime.some(kind => ['post','comment'].includes(kind)) || !attachments || attachments.length > 200 || attachments.some(file => !file || file.url) || new Set(attachments.map(file => file?.id)).size !== attachments.length || attachments.reduce((sum, file) => sum + (file?.size || 0), 0) > LEGACY_FILE_BUFFER_LIMITS.bytes)
 			throw new WorkspaceError('INVALID_POST_RETENTION', 'This post needs its complete stored-file binding.', 409);
 		this.retainingPost = true;
 		try {
@@ -340,7 +340,7 @@ export class AccountFileSync {
 				for (const [order, file] of attachments.entries()) {
 					const retained = await this.loadRetention(transport, file!.id, child, { targetId: input.id, purpose: input.thingtime.includes('comment') ? 'comment' : 'post', order });
 					total += retained.copy.length;
-					if (total > WORKSPACE_LIMITS.bytes) throw new WorkspaceError('LOCAL_QUOTA', 'The post files exceed this device workspace limit.', 413);
+					if (total > LEGACY_FILE_BUFFER_LIMITS.bytes) throw new WorkspaceError('LOCAL_QUOTA', 'The post files exceed this device workspace limit.', 413);
 					result.push(retained);
 				}
 				return result;

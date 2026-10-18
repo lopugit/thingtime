@@ -23,7 +23,7 @@ import { algorithmTransferContent, isTransferAlgorithm, validateTransferAlgorith
 import { MAX_SAVED_ALGORITHMS } from '../api/utils/algorithms/algorithmContent';
 import { isTransferTheme, validateTransferTheme } from '../utils/thingTransfer/theme';
 import { normalizeSavedTheme, MAX_SAVED_THEMES } from '../theme/savedTheme';
-import { type WorkspaceDatabase, WorkspaceError, WORKSPACE_LIMITS, type WorkspaceLease, type WorkspaceScope, type WorkspaceTransaction } from './storage';
+import { type WorkspaceDatabase, WorkspaceError, LEGACY_FILE_BUFFER_LIMITS, type WorkspaceLease, type WorkspaceScope, type WorkspaceTransaction } from './storage';
 
 export type LocalThing = TransferThing & { createdAt: string; updatedAt: string; revision: number; localSubmission?: string };
 export type LocalFileMutation = (tx: WorkspaceTransaction, row: LocalAttachment, previous?: LocalAttachment) => Promise<void>;
@@ -202,7 +202,7 @@ export class LocalThings {
 		this.lease.assertCurrent(); signal?.throwIfAborted();
 		if (this.scope.kind !== 'anonymous' && !this.onFileWrite) fail('LOCAL_OPERATION_UNAVAILABLE', 'Account files require their dedicated sync adapter');
 		if (!/^[a-zA-Z0-9-]{16,80}$/.test(input.requestId)) fail('INVALID_REQUEST', 'A stable file save request ID is required');
-		if (!(input.bytes instanceof Uint8Array) || input.bytes.byteLength > WORKSPACE_LIMITS.binaryBytes) fail('LOCAL_QUOTA', 'A local file cannot exceed 16 MiB', 413);
+		if (!(input.bytes instanceof Uint8Array) || input.bytes.byteLength > LEGACY_FILE_BUFFER_LIMITS.binaryBytes) fail('LOCAL_QUOTA', 'A local file cannot exceed 16 MiB', 413);
 		const bytes = Uint8Array.from(input.bytes), sha256 = await transferChecksum(bytes);
 		this.lease.assertCurrent(); signal?.throwIfAborted();
 		const purpose = input.purpose ?? 'file';
@@ -428,7 +428,7 @@ export class LocalThings {
 		if (manifest.files.length && this.scope.kind !== 'anonymous' && !this.onFileWrite) fail('LOCAL_OPERATION_UNAVAILABLE', 'Account files require their dedicated sync adapter');
 		// Snapshot caller-owned bytes before asynchronous hashing or persistence.
 		if (!(fileBytes instanceof Map) || fileBytes.size !== manifest.files.length) fail('INVALID_LOCAL_FILE', 'The transfer has missing or unexpected file bytes');
-		if (manifest.files.some(file => file.bytes > WORKSPACE_LIMITS.binaryBytes) || manifest.files.reduce((total, file) => total+file.bytes, 0) > WORKSPACE_LIMITS.bytes) fail('LOCAL_QUOTA', 'Local files exceed the 16 MiB per-file or 64 MiB workspace limit', 413);
+		if (manifest.files.some(file => file.bytes > LEGACY_FILE_BUFFER_LIMITS.binaryBytes) || manifest.files.reduce((total, file) => total+file.bytes, 0) > LEGACY_FILE_BUFFER_LIMITS.bytes) fail('LOCAL_QUOTA', 'Local files exceed the 16 MiB per-file or 64 MiB workspace limit', 413);
 		const bytes = new Map(manifest.files.map(file => { const value = fileBytes.get(file.id); if (!(value instanceof Uint8Array) || value.byteLength !== file.bytes) return fail('INVALID_LOCAL_FILE', 'Transferred bytes do not match the manifest'); return [file.id, Uint8Array.from(value)] as const; }));
 		await verifyTransferFiles({ manifest, files: bytes }, signal); this.lease.assertCurrent();
 		const recordings = manifest.things.filter(isTransferRecording);

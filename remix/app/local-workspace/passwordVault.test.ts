@@ -1,8 +1,9 @@
+import { createQuotaFactory, TEST_STORAGE_CAPACITY } from './storageTestFixture';
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { IDBFactory, IDBKeyRange } from 'fake-indexeddb';
+import { IDBKeyRange } from 'fake-indexeddb';
 import { LocalPasswordVault, type PasswordVaultTransport } from './passwordVault';
-import { WorkspaceDatabase, WORKSPACE_LIMITS, type WorkspaceLease, type WorkspaceScope } from './storage';
+import { WorkspaceDatabase, type WorkspaceLease, type WorkspaceScope } from './storage';
 import { emptyPasswordEntry } from '../passwords/model';
 const origin = 'https://device.example', passphrase = 'A separate device passphrase 🦄';
 const anonymous = { kind: 'anonymous' } as const;
@@ -13,7 +14,7 @@ function guard() {
  const lease: WorkspaceLease = { assertCurrent() { if (!active) throw Error('Workspace retired'); }, onInvalidate(fn) { listeners.add(fn); return () => { listeners.delete(fn); }; } };
  return { lease, retire() { active = false; for (const fn of listeners) fn(); } };
 }
-const database = () => new WorkspaceDatabase(new IDBFactory(), crypto.randomUUID(), 10_000, IDBKeyRange);
+const database = () => new WorkspaceDatabase(createQuotaFactory(), crypto.randomUUID(), 10_000, IDBKeyRange);
 const save = (revision = 0, id = crypto.randomUUID(), title = entry.title) => ({ id, revision, writeId: crypto.randomUUID(), entry: { ...entry, title } });
 async function rows(db: WorkspaceDatabase, scope: WorkspaceScope, lease: WorkspaceLease) {
  return db.transaction(scope, 'readonly', lease, async tx => ({ key: await tx.get('password-vault-keys', 'key'), records: await tx.list('password-vault-records'), commands: await tx.list('password-vault-commands'), things: await tx.list('things'), timeline: await tx.list('timeline-events') }));
@@ -83,7 +84,7 @@ test('quota and malformed input preserve encrypted contents and never leave part
   await vault.unlock(passphrase, true); const input = save(); await vault.save(input);
   await assert.rejects(vault.save({ ...save(), entry: { ...entry, fields: [{ ...entry.fields[0], type: 'totp', value: 'not a totp' }] } }), /./);
   const before = await rows(db, account, gate.lease), usage = await db.transaction(account, 'readonly', gate.lease, tx => tx.usage());
-  await db.transaction(account, 'readwrite', gate.lease, async tx => { for (let i = 0; i < 3; i++) await tx.putBytes(`fill-${i}`, new Uint8Array(WORKSPACE_LIMITS.binaryBytes)); await tx.putBytes('fill-final', new Uint8Array(WORKSPACE_LIMITS.binaryBytes - usage.bytes)); });
+  await db.transaction(account, 'readwrite', gate.lease, async tx => { for (let i = 0; i < 3; i++) await tx.putBytes(`fill-${i}`, new Uint8Array(TEST_STORAGE_CAPACITY.binaryBytes)); await tx.putBytes('fill-final', new Uint8Array(TEST_STORAGE_CAPACITY.binaryBytes - usage.bytes)); });
   await assert.rejects(vault.save(save(1, input.id, 'Larger replacement data')), /workspace is full/);
   assert.deepEqual(await rows(db, account, gate.lease), before);
  } finally { vault.dispose(); await db.close(); }
@@ -127,7 +128,7 @@ for (const scope of [anonymous, account]) test(`${scope.kind} large password ent
   await vault.unlock(passphrase, true);
   await vault.save(input);
   const stored = await rows(db, scope, gate.lease);
-  assert.ok(JSON.stringify(stored.records[0]).length > WORKSPACE_LIMITS.recordBytes);
+  assert.ok(JSON.stringify(stored.records[0]).length > TEST_STORAGE_CAPACITY.recordBytes);
   assert.ok(!JSON.stringify(stored).includes('exact 🦄'));
   assert.equal(stored.commands.length, scope.kind === 'account' ? 1 : 0);
   vault.dispose(); await db.close();

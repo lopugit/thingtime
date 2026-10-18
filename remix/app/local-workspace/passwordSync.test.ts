@@ -1,8 +1,9 @@
+import { createQuotaFactory, TEST_STORAGE_CAPACITY } from './storageTestFixture';
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { IDBFactory, IDBKeyRange } from 'fake-indexeddb';
+import { IDBKeyRange } from 'fake-indexeddb';
 import { LocalPasswordVault, type PasswordVaultTransport, type PasswordVaultRemoteEntry } from './passwordVault';
-import { WorkspaceDatabase, WORKSPACE_LIMITS, type WorkspaceLease } from './storage';
+import { WorkspaceDatabase, type WorkspaceLease } from './storage';
 import { emptyPasswordEntry } from '../passwords/model';
 import { newPasswordFile } from '../passwords/fileCrypto';
 import { PASSWORD_FILES, PASSWORD_FILE_COMMANDS, type StoredFile, type PasswordFileCommand } from './passwordFiles';
@@ -13,7 +14,7 @@ const command = (id = crypto.randomUUID(), revision = 0, title?: string) => ({ i
 const gate = (): WorkspaceLease => ({ assertCurrent() {}, onInvalidate: () => () => {} });
 const deferred = () => { let resolve!: () => void; const promise = new Promise<void>(yes => { resolve = yes; }); return { promise, resolve }; };
 async function fixture() {
- const db = new WorkspaceDatabase(new IDBFactory(), crypto.randomUUID(), 10_000, IDBKeyRange), vault = new LocalPasswordVault(db, scope, gate(), scope.origin);
+ const db = new WorkspaceDatabase(createQuotaFactory(), crypto.randomUUID(), 10_000, IDBKeyRange), vault = new LocalPasswordVault(db, scope, gate(), scope.origin);
  await vault.unlock(phrase, true); return { db, vault, close: async () => { vault.dispose(); await db.close(); } };
 }
 function remote() {
@@ -142,7 +143,7 @@ test('failed pages retain entries and pulls cannot overwrite concurrent local ed
  } finally { release.resolve(); await f.close(); }
 });
 test('anonymous vaults refuse account sync before transport access', async () => {
- const db = new WorkspaceDatabase(new IDBFactory(), crypto.randomUUID(), 10_000, IDBKeyRange), vault = new LocalPasswordVault(db, { kind: 'anonymous' }, gate(), scope.origin), r = remote();
+ const db = new WorkspaceDatabase(createQuotaFactory(), crypto.randomUUID(), 10_000, IDBKeyRange), vault = new LocalPasswordVault(db, { kind: 'anonymous' }, gate(), scope.origin), r = remote();
  try {
   await vault.unlock(phrase, true); await vault.save(command());
   await assert.rejects(vault.synchronize(r.transport), /never synchronize/); await assert.rejects(vault.reconcile(r.transport), /never synchronize/);
@@ -165,7 +166,7 @@ test('quota failure rolls reviewed replacement and independent copy back togethe
  try {
   const one = command(); await f.vault.save(one); await f.vault.synchronize({ ...r.transport, write: async () => { throw Object.assign(Error('conflict'), { status: 409 }); } });
   const before = await stored(f.db), usage = await f.db.transaction(scope, 'readonly', gate(), tx => tx.usage());
-  await f.db.transaction(scope, 'readwrite', gate(), async tx => { for (let i = 0; i < 3; i++) await tx.putBytes(`fill-${i}`, new Uint8Array(WORKSPACE_LIMITS.binaryBytes)); await tx.putBytes('fill-final', new Uint8Array(WORKSPACE_LIMITS.binaryBytes - usage.bytes)); });
+  await f.db.transaction(scope, 'readwrite', gate(), async tx => { for (let i = 0; i < 3; i++) await tx.putBytes(`fill-${i}`, new Uint8Array(TEST_STORAGE_CAPACITY.binaryBytes)); await tx.putBytes('fill-final', new Uint8Array(TEST_STORAGE_CAPACITY.binaryBytes - usage.bytes)); });
   await assert.rejects(f.vault.resolveRefused(one.id, 1, 'copy', r.transport), /workspace is full/);
   assert.deepEqual(await stored(f.db), before); assert.equal((await f.vault.read(one.id)).entry.title, one.entry.title); assert.equal((await f.vault.page()).entries.length, 1);
  } finally { await f.close(); }
@@ -173,7 +174,7 @@ test('quota failure rolls reviewed replacement and independent copy back togethe
 
 for (const kind of ['anonymous', 'account'] as const) {
  test(`${kind} background title and list reads preserve idle expiry while user activity renews it`, async context => {
-  const db = new WorkspaceDatabase(new IDBFactory(), crypto.randomUUID(), 10_000, IDBKeyRange);
+  const db = new WorkspaceDatabase(createQuotaFactory(), crypto.randomUUID(), 10_000, IDBKeyRange);
   const vault = new LocalPasswordVault(db, kind === 'account' ? scope : { kind }, gate(), scope.origin);
   try {
    await vault.unlock(phrase, true); const one = command(); await vault.save(one);

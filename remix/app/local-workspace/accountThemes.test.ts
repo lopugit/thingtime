@@ -1,3 +1,4 @@
+import { createQuotaFactory } from './storageTestFixture';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { IDBFactory } from 'fake-indexeddb';
@@ -20,11 +21,11 @@ const saved = (id: string = randomUUID(), n = 1): AccountThemeSnapshot => ({
 	createdAt: '2026-10-17T00:00:00.000Z',
 	updatedAt: '2026-10-17T00:00:00.000Z'
 });
-function fixture() {
+function fixture(factory = new IDBFactory()) {
 	let now = 1000,
 		live = true;
 	const callbacks = new Set<() => void>();
-	const db = new WorkspaceDatabase(new IDBFactory());
+	const db = new WorkspaceDatabase(factory);
 	const lease = {
 		assertCurrent() {
 			if (!live) throw new WorkspaceError('WORKSPACE_CHANGED', 'Changed account', 409);
@@ -333,7 +334,7 @@ test('reviewed copies keep the account original and remap a deleted source to an
 });
 
 test('workspace quota failure rolls back theme content and its queued operation together', async () => {
-	const f = fixture();
+	const f = fixture(createQuotaFactory());
 	try {
 		await f.db.transaction(scope, 'readwrite', f.lease, async (tx) => {
 			for (let i = 0; i < 64; i++) await tx.put('fixture-padding', String(i), 'x'.repeat(1024 * 1024 - 16));

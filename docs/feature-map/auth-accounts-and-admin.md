@@ -272,3 +272,13 @@ credential defaults remain separate. `vaultCrypto.test.ts`, `passwordVault.test.
 `passwordSync.test.ts` and `passwordFileSync.test.ts` cover large-value parity,
 exact export/replay and conflict copies. Aggregate workspace capacity policy and
 native large-value acceptance remain open; this is not an unlimited-storage claim.
+
+
+`local-workspace/storage.ts` uses browser storage capacity for IndexedDB
+admission while preserving scoped atomic accounting and identity leases.
+`storageTestFixture.ts` injects quota-class errors only in tests;
+`storageCapacity.test.ts` verifies data beyond the removed application budgets.
+`accountReadRevocation.ts` frees clean display snapshots before refusal markers
+without deleting authored work. Settings shows accounted usage, not a fixed
+quota. Remaining buffered adapters and native acceptance are tracked in
+[local workspaces](../local-workspaces.md).
