@@ -41,9 +41,57 @@ final class MacFolderSyncTests: XCTestCase {
         let context = try await service.handle(request("context")).decode([String: JSONValue].self)
         XCTAssertEqual(context["deviceId"], .string("device"))
         let capabilities = try XCTUnwrap(context["capabilities"]).decode([String: String].self)
-        XCTAssertEqual(capabilities, ["fileAccessVersion": "1.3.0", "fileStagingVersion": "1.1.0", "filePublicationVersion": "1.1.0"])
+        XCTAssertEqual(capabilities, ["fileAccessVersion": "1.4.0", "fileStagingVersion": "1.1.0", "filePublicationVersion": "1.1.0"])
         let result = try await service.handle(request("conditions")).decode([String: JSONValue].self)
         XCTAssertEqual(result["conditions"], .object(["network": .string("unknown"), "charging": .null]))
+    }
+
+    func testSinglePathInspectionIsScopedAndReauthorizesBeforeReply() async throws {
+        var allowed = true, calls = 0
+        let service = try service(verify: { owner, device in
+            calls += 1
+            guard allowed, owner == "owner", device == "device" else { throw MobileFolderStore.Failure.unavailable }
+        })
+        let id = try await root(service)
+        try Data("real native bytes".utf8).write(to: folder.appendingPathComponent("selected/file.bin"))
+        let fields: [String: JSONValue] = ["rootId": .string(id), "path": .string("file.bin")]
+        calls = 0
+        let result = try await service.handle(request("inspect", fields)).decode([String: JSONValue].self)
+        let entry = try XCTUnwrap(result["entry"]).decode(MobileFolderReader.Entry.self)
+        XCTAssertEqual(entry.path, "file.bin"); XCTAssertEqual(entry.size, 17); XCTAssertEqual(calls, 2)
+        XCTAssertEqual(result["complete"], .bool(true)); XCTAssertNil(result["entries"])
+        let missing = try await service.handle(request("inspect", ["rootId": .string(id), "path": .string("missing")])).decode([String: JSONValue].self)
+        XCTAssertEqual(missing["entry"], .null)
+        for path in ["../outside", "/outside"] {
+            await rejects { try await service.handle(self.request("inspect", ["rootId": .string(id), "path": .string(path)])) }
+        }
+        allowed = false
+        await rejects { try await service.handle(self.request("inspect", fields)) }
+    }
+
+    func testInspectionRejectsIdentityOrGrantRevokedBeforeReply() async throws {
+        for revokeGrant in [false, true] {
+            var saved: [String: Data] = [:], calls = 0
+            var revoke = false, id = ""
+            let owner = try FileSyncOwnerScope(ownerId: "owner", url: origin)
+            let store = MobileFolderStore(load: { saved[$0.key] }, save: { saved[$0.key] = $1 })
+            let selected = folder.appendingPathComponent("selected")
+            let service = try MacFolderSync(origin: origin, store: store,
+                staging: MobileSyncStaging(directory: folder.appendingPathComponent(UUID().uuidString)),
+                verify: { _, _ in
+                    calls += 1
+                    if revoke && calls == 2 {
+                        if revokeGrant { try store.remove(owner, id: id) }
+                        else { throw MobileFolderStore.Failure.unavailable }
+                    }
+                }, choose: { selected }, approve: { _ in true }, chooseSource: { .folder(selected) })
+            id = try await root(service)
+            try Data("authorized before inspection".utf8).write(to: selected.appendingPathComponent("file.bin"))
+            calls = 0; revoke = true
+            await rejects { try await service.handle(self.request("inspect", ["rootId": .string(id), "path": .string("file.bin")])) }
+            XCTAssertEqual(calls, 2)
+            XCTAssertEqual(try Data(contentsOf: selected.appendingPathComponent("file.bin")), Data("authorized before inspection".utf8))
+        }
     }
 
     func testNativeSelectionReadAndAccountDeviceOriginFences() async throws {

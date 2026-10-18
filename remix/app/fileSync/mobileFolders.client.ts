@@ -18,7 +18,7 @@ import type { SyncOperation, SyncReceiptLookup } from './execute';
 import { sameSyncScope, sameSyncContent, type SyncScope } from './reconcile';
 import type { SyncConditions } from './configuredPlan';
 import { getNativeBridge, nativeBridgeMessageEvent, type ThingtimeNativeBridge } from '../utils/nativeBridge';
-import { planFileSync, validSyncEntry, type SyncEntry } from './reconcile';
+import { planFileSync, validSyncEntry, validSyncPath, type SyncEntry } from './reconcile';
 import {
 	contentPartPlan,
 	type FingerprintSource,
@@ -44,6 +44,7 @@ export type FolderRequest =
 	| { action: 'upload-part'; rootId: string; upload: NativePartUpload & { source: SyncEntry } }
 	| { action: 'list' | 'choose' | 'conditions' | 'prepare-upload' }
 	| { action: 'remove' | 'scan'; rootId: string }
+	| { action: 'inspect'; rootId: string; path: string }
 	| { action: 'version-list'; rootId: string; cursor?: string }
 	| { action: 'version-inspect'; rootId: string; versionId: string; expected: SyncEntry }
 	| { action: 'version-restore-reviewed' | 'version-restore-status'; rootId: string; restore: NativeVersionRestore }
@@ -83,6 +84,7 @@ export type FolderResult = {
 	roots: MobileFolder[];
 	conditions?: SyncConditions;
 	entries?: SyncEntry[];
+	inspectedEntry?: SyncEntry | null;
 	chunk?: { version: string; size: number; offset: number; data: string };
 	range?: { version: string; size: number; offset: number; bytes: Uint8Array<ArrayBuffer> };
 };
@@ -98,6 +100,11 @@ export type FolderCapabilities = Pick<
 >;
 export const supportsNativePartUploads = (bridge: FolderCapabilities | undefined = getNativeBridge()) =>
 	(bridge?.platform === 'ios' || bridge?.platform === 'android') && /^1\.\d+\.\d+$/.test(bridge.fileUploadVersion ?? '');
+/** These native access contracts independently add exact single-path inspection. */
+export const supportsNativePathInspection = (bridge: FolderCapabilities | undefined = getNativeBridge()) => {
+	const minimum = bridge?.platform === 'macos' ? 4 : bridge?.platform === 'ios' ? 2 : undefined;
+	return minimum !== undefined && /^1\.\d+\.\d+$/.test(bridge?.fileAccessVersion ?? '') && Number(bridge!.fileAccessVersion!.split('.')[1]) >= minimum;
+};
 export const supportsNativeFileUploads = (bridge: FolderCapabilities | undefined = getNativeBridge()) =>
 	supportsNativePartUploads(bridge) && Number(bridge!.fileUploadVersion!.split('.')[1]) >= 2;
 export const supportsNativeBackgroundUploads = (bridge: FolderCapabilities | undefined = getNativeBridge()) =>
@@ -433,6 +440,11 @@ export function parseMobileFolderResult(
 		if (!c || !['wifi', 'cellular', 'ethernet', 'offline', 'unknown'].includes(c.network) || (c.charging !== null && typeof c.charging !== 'boolean'))
 			throw Error('Native transfer conditions are unavailable.');
 		result.conditions = { network: c.network, charging: c.charging };
+	} else if (request.action === 'inspect') {
+		if (!validSyncPath(request.path) || payload.rootId !== request.rootId || payload.path !== request.path || payload.complete !== true ||
+			(payload.entry !== null && (!validSyncEntry(payload.entry) || payload.entry.path !== request.path)))
+			throw Error('Invalid native path observation.');
+		result.inspectedEntry = payload.entry === null ? null : structuredClone(payload.entry);
 	} else if (request.action === 'scan') {
 		if (
 			payload.rootId !== request.rootId ||
@@ -523,6 +535,8 @@ export function requestMobileFolders(
 ): Promise<FolderResult> {
 	const bridge = getNativeBridge();
 	if (!supportsMobileFolders(bridge)) return Promise.reject(Error('Folder access requires an updated mobile app.'));
+	if (request.action === 'inspect' && (!supportsNativePathInspection(bridge) || !validSyncPath(request.path)))
+		return Promise.reject(Error('Path inspection requires a supported app and a relative path.'));
 	if (request.action === 'upload-file' && (!supportsNativeFileUploads(bridge) || !validFileUpload(request.upload)))
 		return Promise.reject(Error('Native file upload requires a supported app and a canonical source.'));
 	if (request.action === 'upload-part' && (!supportsNativePartUploads(bridge) || !validPartUpload(request.upload)))
@@ -683,6 +697,7 @@ export function requestMobileFolders(
 						'choose',
 						'prepare-upload',
 						'scan',
+						'inspect',
 						'read-range',
 						'stage-begin',
 						'stage-range',

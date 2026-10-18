@@ -7,6 +7,7 @@ import {
 	supportsMobileFolders,
 	supportsMobileSyncConditions,
 	supportsMobileFolderPublication,
+	supportsNativePathInspection,
 	type FolderRequest
 } from './mobileFolders.client';
 import { nativeBridgeMessageEvent } from '../utils/nativeBridge';
@@ -15,6 +16,17 @@ const expected = { requestId: 'request', ownerId: 'owner', origin: 'https://nati
 const root = { id: rootId, name: 'Selected folder' };
 const entry = { path: 'file', id: 'inode', version: '1', kind: 'file' as const, size: 3, sha256: 'a'.repeat(64) };
 const response = (extra = {}) => ({ type: 'mobile-files-result', payload: { ...expected, roots: [root], ...extra } });
+test('single-path inspection negotiates the native contract and requires explicit scoped absence', () => {
+	for (const [platform, version, supported] of [
+		['macos', '1.3.0', false], ['macos', '1.4.0', true], ['ios', '1.1.1', false], ['ios', '1.2.0', true],
+		['ios', '2.0.0', false], ['android', '1.4.0', false], ['android', '1.9.0', false], ['ios', '1.bad.0', false]
+	] as const) assert.equal(supportsNativePathInspection({ platform, fileAccessVersion: version }), supported);
+	const parse = (extra: object) => parseMobileFolderResult(response({ rootId, path: 'file', complete: true, entry, ...extra }), expected, { action: 'inspect', rootId, path: 'file' });
+	assert.deepEqual(parse({})?.inspectedEntry, entry);
+	assert.equal(parse({ entry: null })?.inspectedEntry, null);
+	for (const patch of [{ entry: undefined }, { complete: false }, { path: 'other' }, { rootId: 'other' },
+		{ entry: { ...entry, path: 'other' } }, { entry: { ...entry, size: -1 } }]) assert.throws(() => parse(patch));
+});
 test('native folder capability is explicit and account/origin/request responses are fenced', () => {
 	assert.equal(supportsMobileFolders({ platform: 'ios', isNativeWebView: true } as any), false);
 	assert.equal(supportsMobileFolders({ platform: 'android', isNativeWebView: true, fileAccessVersion: '1.0.0' } as any), true);

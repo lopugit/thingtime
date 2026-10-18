@@ -1,7 +1,7 @@
 import { parseFileSyncConfiguration } from './configuration';
 import { planConfiguredFileSync, readOwnedFileSyncConfiguration, type SavedFileSyncConfiguration } from './configuredPlan';
 import { inventorySyncEntry, parseCloudInventory } from './cloudInventory';
-import { sameSyncScope, type SyncScope } from './reconcile';
+import { sameSyncScope, validSyncEntry, validSyncPath, type SyncScope } from './reconcile';
 import type { CloudTransportRuntime } from './cloudTransport';
 import type { ForegroundSyncInput } from './foregroundSync';
 
@@ -60,6 +60,14 @@ export function foregroundSyncContext(reviewed: SavedFileSyncConfiguration, scop
 			inventory
 		};
 	};
+	const readLocal = async (path: string) => {
+		check();
+		if (!validSyncPath(path)) throw Error('Invalid local sync path.');
+		const entry = input.inspectLocal ? await input.inspectLocal(path) : (await input.scanLocal()).find(row => row.path === path) ?? null;
+		check();
+		if (entry !== null && (!validSyncEntry(entry) || entry.path !== path)) throw Error('Native path observation changed.');
+		return entry === null ? null : structuredClone(entry);
+	};
 	const runtime: CloudTransportRuntime = {
 		...input.runtime,
 		// Custom mutation policies must remain in the shared per-part path.
@@ -89,5 +97,5 @@ export function foregroundSyncContext(reviewed: SavedFileSyncConfiguration, scop
 		stage: async (...args: Parameters<typeof input.localTarget.stage>) => { await authorize(); return input.localTarget!.stage(...args); },
 		publish: async (...args: Parameters<typeof input.localTarget.publish>) => { await authorize(); return input.localTarget!.publish(...args); }
 	} : undefined;
-	return { configuration, approved, check, authorize, scan, runtime, localTarget };
+	return { configuration, approved, check, authorize, scan, readLocal, runtime, localTarget };
 }

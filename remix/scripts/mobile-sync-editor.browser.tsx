@@ -12,6 +12,13 @@ import { SyncConflictReview } from '../app/components/Devices/SyncConflictReview
 import { DesktopFolderAccess } from '../app/components/Devices/DesktopFolderAccess';
 import { MobileFolderAccess } from '../app/components/Devices/MobileFolderAccess';
 import { nativeBridgeMessageEvent } from '../app/utils/nativeBridge';
+const inspectionQA = new URLSearchParams(location.search).has('inspect');
+const observations = { scans: 0, inspections: 0 };
+const observe = (request: any) => {
+	if (request.action === 'scan') observations.scans++;
+	if (request.action === 'inspect') observations.inspections++;
+};
+Object.assign(window, { syncInspectionFixture: { observations } });
 const photoQA = new URLSearchParams(location.search).has('photos');
 const desktop = new URLSearchParams(location.search).get('platform') === 'desktop';
 const captureQA = new URLSearchParams(location.search).has('capture');
@@ -263,9 +270,10 @@ window.thingtimeNativeBridge = {
 	platform: new URLSearchParams(location.search).get('platform') === 'ios' ? 'ios' : 'android',
 	isNativeWebView: true,
 	devicePairingVersion: '1.0.0',
-	fileAccessVersion: '1.1.0',
+	fileAccessVersion: inspectionQA && new URLSearchParams(location.search).get('platform') === 'ios' ? '1.2.0' : '1.1.0',
 	postMessage(message) {
 		const request = message.payload as any;
+		observe(request);
 		if (request.action === 'suspend') return;
 		if (request.action === 'scan' && holdNextScan) {
 			holdNextScan = false;
@@ -287,6 +295,7 @@ window.thingtimeNativeBridge = {
 								...request,
 								roots,
 								...(request.action === 'scan' ? { complete: true, entries: localEntries } : {}),
+								...(request.action === 'inspect' ? { complete: true, entry: localEntries.find(entry => entry.path === request.path) ?? null } : {}),
 								...(captureQA && request.action === 'read' ? captureChunk(request) : {}),
 								...(request.action === 'conditions' ? { conditions: { network: unavailable ? 'offline' : network, charging: true } } : {})
 							}
@@ -303,6 +312,7 @@ if (desktop) {
 	window.thingtimeDesktop = {
 		platform: 'darwin',
 		folderSyncRequest: async (request: any) => {
+			observe(request);
 			if (request.action === 'suspend') {
 				pending.get(request.requestId)?.({});
 				pending.delete(request.requestId);
@@ -321,9 +331,13 @@ if (desktop) {
 				...request,
 				origin: canonicalOrigin,
 				roots,
-				...(manifest ? { capabilities: { fileAccessVersion: '1.1.0' }, apiCapabilities: { ...manifest, origin: canonicalOrigin } } : {}),
+				...(manifest ? { capabilities: { fileAccessVersion: inspectionQA ? '1.4.0' : '1.1.0' }, apiCapabilities: { ...manifest, origin: canonicalOrigin } } : {}),
 				...(request.action === 'scan' ? { complete: true, entries: localEntries } : {}),
+				...(request.action === 'inspect' ? { complete: true, entry: localEntries.find(entry => entry.path === request.path) ?? null } : {}),
 				...(captureQA && request.action === 'read' ? captureChunk(request) : {}),
+				...(captureQA && request.action === 'read-range'
+					? { chunk: { version: request.version, size: captureBytes.length, offset: request.offset, length: request.length, bytes: captureBytes.slice(request.offset, request.offset + request.length) } }
+					: {}),
 				...(request.action === 'conditions' ? { conditions: { network: unavailable ? 'offline' : network, charging: true } } : {})
 			};
 		}

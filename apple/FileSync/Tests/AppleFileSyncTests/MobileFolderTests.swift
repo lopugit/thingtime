@@ -53,6 +53,46 @@ final class MobileFolderTests: XCTestCase {
         let chunk = try MobileFolderReader.read(bookmark: grant.bookmark, path: rows[1].path, version: rows[1].version, offset: 0, length: 1)
         XCTAssertEqual(chunk.data, "")
     }
+
+    func testInspectionMatchesCompleteScanButDoesNotTraverseUnrelatedItems() throws {
+        let (root, scope, store) = try fixture()
+        try FileManager.default.createDirectory(at: root.appendingPathComponent("nested"), withIntermediateDirectories: true)
+        try Data(repeating: 41, count: 65_537).write(to: root.appendingPathComponent("nested/file.bin"))
+        try Data().write(to: root.appendingPathComponent("empty"))
+        let grant = try store.add(scope, selected: root)
+        for row in try MobileFolderReader.scan(bookmark: grant.bookmark) {
+            XCTAssertEqual(try MobileFolderReader.inspect(bookmark: grant.bookmark, path: row.path), row)
+        }
+        try FileManager.default.createSymbolicLink(at: root.appendingPathComponent("unrelated-link"), withDestinationURL: root)
+        XCTAssertThrowsError(try MobileFolderReader.scan(bookmark: grant.bookmark))
+        XCTAssertEqual(try MobileFolderReader.inspect(bookmark: grant.bookmark, path: "nested/file.bin")?.size, 65_537)
+        XCTAssertNil(try MobileFolderReader.inspect(bookmark: grant.bookmark, path: "missing"))
+        XCTAssertNil(try MobileFolderReader.inspect(bookmark: grant.bookmark, path: "missing/child"))
+        for path in ["../outside", "nested/../empty", "unrelated-link/empty", "nested/FILE.bin", "empty/child"] {
+            XCTAssertThrowsError(try MobileFolderReader.inspect(bookmark: grant.bookmark, path: path), path)
+        }
+        try FileManager.default.removeItem(at: root)
+        XCTAssertThrowsError(try MobileFolderReader.inspect(bookmark: grant.bookmark, path: "missing"))
+    }
+
+    func testInspectionInWideDirectoriesHasNoWholeScanEntryLimit() throws {
+        let (root, scope, store) = try fixture(), grant = try store.add(scope, selected: root)
+        for index in 0...MobileFolderReader.maximumEntries {
+            try Data().write(to: root.appendingPathComponent("file-\(index)"))
+        }
+        XCTAssertThrowsError(try MobileFolderReader.scan(bookmark: grant.bookmark))
+        XCTAssertEqual(try MobileFolderReader.inspect(bookmark: grant.bookmark, path: "file-10000")?.size, 0)
+        XCTAssertNil(try MobileFolderReader.inspect(bookmark: grant.bookmark, path: "absent"))
+    }
+
+    func testCancelledInspectionCannotReportAbsence() async throws {
+        let (root, scope, store) = try fixture(), grant = try store.add(scope, selected: root)
+        let task = Task.detached {
+            withUnsafeCurrentTask { $0?.cancel() }
+            return try MobileFolderReader.inspect(bookmark: grant.bookmark, path: "absent")
+        }
+        do { _ = try await task.value; XCTFail("Cancelled lookup returned absence") } catch is CancellationError { }
+    }
     func testSymlinksTraversalAndChangedFilesCannotReturnBytes() throws {
         let (root, scope, store) = try fixture(); let file = root.appendingPathComponent("file")
         try Data("one".utf8).write(to: file); let grant = try store.add(scope, selected: root)

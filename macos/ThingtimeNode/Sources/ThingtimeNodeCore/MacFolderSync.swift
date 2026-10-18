@@ -5,7 +5,7 @@ import Foundation
 /// commands. The desktop host must also verify its active browser account.
 @MainActor
 public final class MacFolderSync {
-    public static let version = "1.3.0"
+    public static let version = "1.4.0"
     public enum SourceSelection { case folder(URL), photos }
     public struct Conditions: Codable, Sendable {
         public let network: String
@@ -72,7 +72,7 @@ public final class MacFolderSync {
             return .object([:])
         }
         guard active == nil else { throw ThingtimeNodeError.invalidRequest("Another folder request is running.") }
-        guard ["context", "conditions", "list", "choose", "remove", "scan", "read", "read-range", "stage-begin", "stage-append", "stage-range", "stage-finish", "write-approve", "publication-lookup", "publish", "trash", "trash-lookup", "trash-expected", "trash-inspect", "trash-restore", "trash-restore-reviewed", "trash-list"].contains(r.action) else { throw MobileFolderStore.Failure.invalid }
+        guard ["context", "conditions", "list", "choose", "remove", "scan", "inspect", "read", "read-range", "stage-begin", "stage-append", "stage-range", "stage-finish", "write-approve", "publication-lookup", "publish", "trash", "trash-lookup", "trash-expected", "trash-inspect", "trash-restore", "trash-restore-reviewed", "trash-list"].contains(r.action) else { throw MobileFolderStore.Failure.invalid }
         guard (r.action == "read-range") == (stream != nil), (r.action == "stage-range") == (receive != nil) else { throw MobileFolderStore.Failure.invalid }
         let task = Task { try await self.execute(r, owner: owner, stream: stream, receive: receive) }
         active = (r.requestId, r.ownerId, r.deviceId, task)
@@ -101,6 +101,7 @@ public final class MacFolderSync {
     private func execute(_ r: Request, owner: FileSyncOwnerScope, stream: (@Sendable (Data) throws -> Void)?, receive: (@Sendable (Int) throws -> Data)?) async throws -> JSONValue {
         try await authorized(r)
         var result: [String: JSONValue] = ["requestId": .string(r.requestId), "ownerId": .string(r.ownerId), "deviceId": .string(r.deviceId), "origin": .string(r.origin)]
+        var inspectedGrant: MobileFolderStore.Grant?
         if r.action == "context" {
             var capabilities: [String: JSONValue] = ["fileAccessVersion": .string(Self.version), "fileStagingVersion": .string("1.1.0"), "filePublicationVersion": .string("1.1.0")]
             if trash != nil, approveTrash != nil { capabilities["fileTrashVersion"] = .string(approveRestore == nil ? "1.1.0" : "1.2.0") }
@@ -185,6 +186,12 @@ public final class MacFolderSync {
                         }
                         result["trash"] = try value(lookup)
                     }
+                } else if r.action == "inspect" {
+                    guard let path = r.path else { throw MobileFolderStore.Failure.invalid }
+                    inspectedGrant = grant
+                    let entry = try await worker { try MobileFolderReader.inspect(bookmark: grant.bookmark, path: path) }
+                    result["path"] = .string(path); result["complete"] = .bool(true)
+                    result["entry"] = try entry.map { try value($0) } ?? .null
                 } else if r.action == "scan" {
                     result["entries"] = try value(await worker {
                         if grant.sourceKind == "photos" { return try photos.scan(scope: photoScope) }
@@ -254,6 +261,10 @@ public final class MacFolderSync {
             }
         }
         try await authorized(r)
+        if let inspectedGrant {
+            let current = try store.grant(owner, id: inspectedGrant.id)
+            guard current.bookmark == inspectedGrant.bookmark, current.sourceKind == nil else { throw MobileFolderStore.Failure.changed }
+        }
         result["roots"] = .array(try store.list(owner).map { grant in
             var row: [String: JSONValue] = ["id": .string(grant.id), "name": .string(grant.name)]
             if grant.sourceKind == "photos" {

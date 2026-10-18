@@ -2858,3 +2858,44 @@ five repeated Ignore actions at desktop/phone sizes and cleanup recovery after
 a full browser-process restart. This uses generated adapters and metadata, not
 installed-device or large-volume acceptance. Evidence:
 `journal-maintenance-evidence-2026-10-18` beside the HTML tracker.
+
+
+## Native single-path verification — 2026-10-18
+
+Mac folder access 1.4.0 and iOS folder access 1.2.0 add `inspect`, an exact
+relative-path observation returning either a canonical entry or explicit absence.
+The shared foreground context uses it for per-operation checks; both runners
+retain complete scans for planning and checkpoint publication. Older clients and
+Photos keep their existing scan path. Android implementation remains deferred.
+
+The Apple reader hashes only the selected file and retains O(path depth)
+metadata. It enumerates ancestor directory names to reject case/Unicode aliases,
+opens relative to authorized descriptors without following links, and rechecks
+ancestor/object identity after reading. Missing paths are distinct from provider,
+permission, cancellation and changed-file failures. Native bridges verify account,
+device/origin and the selected grant again before replying. A failed inspection
+never falls back to a scan or becomes a deletion. Inspection gets the same
+five-minute native read deadline as a complete scan.
+
+Verification: all 249 shared checks, 66 Apple library tests, 16 Mac adapter tests
+and 13 Electron folder bridge tests passed. Twenty-operation tests use exactly
+two full scans in each runner. A real 10,001-file directory supports targeted
+inspection while the existing full scan correctly refuses its size. Native tests
+reject revocation during final identity verification, including grant removal.
+Focused lint passes; TypeScript retains the exact same 91 diagnostics.
+
+Desktop (1440px) and iOS-sized (390px) isolated Chromium checks exercised the
+production controls, conflict choices, Save versions and ignore, and reload/retry.
+Each two-file retention run used two required review scans and two targeted
+inspections; retry reused retained versions without another upload. Full-page
+scroll checks found no horizontal overflow. Native/cloud adapters here are
+synthetic; actual filesystem semantics are covered separately by Swift tests.
+The fixture now implements the binary reads implied by Mac's negotiated version.
+Evidence: `native-path-inspection-evidence-2026-10-18` beside the HTML tracker.
+
+The unsigned iOS simulator build passed after removing a command-line iPhone SDK
+override that incorrectly compiled the Watch dependency for iOS. This is compile
+evidence only. Signed installed Mac and iOS action-path acceptance remain open.
+Stable paged native/cloud inventories are still unfinished; live synchronization
+retains its 10,000-path cap. This change does not establish large-root, background,
+physical-device or 100 GB–100 TB acceptance.

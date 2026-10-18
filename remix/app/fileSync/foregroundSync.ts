@@ -28,6 +28,7 @@ export type ForegroundSyncInput = {
 	authorizeDevice(): Promise<void>;
 	conditions(): Promise<SyncConditions>;
 	scanLocal(): Promise<SyncEntry[]>;
+	inspectLocal?(path: string): Promise<SyncEntry | null>;
 	inventory(): Promise<CloudInventory>;
 	source(entry: SyncEntry): Promise<FingerprintSource>;
 	localTarget?: LocalSyncTarget;
@@ -46,7 +47,7 @@ export async function runForegroundCloudSync(
 	input: ForegroundSyncInput,
 	signal: AbortSignal
 ) {
-	const { configuration, approved, check, authorize, scan, runtime, localTarget } = foregroundSyncContext(reviewed, scope, input, signal);
+	const { configuration, approved, check, authorize, scan, readLocal, runtime, localTarget } = foregroundSyncContext(reviewed, scope, input, signal);
 	input.progress({ stage: 'checking', confirmed: 0, total: 0 });
 	await authorize();
 	const checkpoint = await input.journal.checkpoint(scope);
@@ -210,11 +211,7 @@ export async function runForegroundCloudSync(
 				check();
 				report(value);
 			},
-			readLocal: async (path) => {
-				const entries = await input.scanLocal();
-				check();
-				return entries.find((entry) => entry.path === path) ?? null;
-			},
+			readLocal,
 			openSource: async (entry) => {
 				await authorize();
 				return input.source(entry);

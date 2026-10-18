@@ -8,7 +8,7 @@ import UniformTypeIdentifiers
 @MainActor
 final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
     static let uploadVersion = "1.3.0"
-    static let accessVersion = "1.1.1"
+    static let accessVersion = "1.2.0"
     static let stagingVersion = "1.2.0"
     static let publicationVersion = "1.0.0"
     static let trashVersion = "1.2.0"
@@ -208,7 +208,7 @@ final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
                 reply: @escaping (String, [String: Any]) -> Void) {
         guard let payload = body["payload"] as? [String: Any], let id = payload["requestId"] as? String, UUID(uuidString: id) != nil,
               let owner = payload["ownerId"] as? String, let action = payload["action"] as? String,
-              ["list", "choose", "remove", "scan", "read", "upload-part", "upload-file", "conditions", "suspend", "stage-begin", "stage-append", "stage-download", "stage-finish", "write-approve", "publish", "publication-lookup", "trash", "trash-lookup", "trash-expected", "trash-inspect", "trash-restore", "trash-list", "trash-restore-reviewed"].contains(action),
+              ["list", "choose", "remove", "scan", "inspect", "read", "upload-part", "upload-file", "conditions", "suspend", "stage-begin", "stage-append", "stage-download", "stage-finish", "write-approve", "publish", "publication-lookup", "trash", "trash-lookup", "trash-expected", "trash-inspect", "trash-restore", "trash-list", "trash-restore-reviewed"].contains(action),
               let scope = try? MobileDevicePairing.Scope(ownerId: owner, url: root) else { return }
         if action == "suspend" { if requestId == id { suspend() }; return }
         let base: [String: Any] = ["requestId": id, "ownerId": owner, "origin": scope.origin.absoluteString]
@@ -226,6 +226,7 @@ final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
             do {
                 try check(); try await verifyOwner(scope, check); try check()
                 var result: [String: Any] = [:]
+                var inspectedGrant: MobileFolderStore.Grant?
                 if action == "conditions" {
                     let battery = UIDevice.current.batteryState
                     let charging: Any = battery == .unknown ? NSNull() : (battery == .charging || battery == .full)
@@ -469,6 +470,13 @@ final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
                                 let progress = try await withTaskCancellationHandler(operation: { try await worker.value }, onCancel: { worker.cancel() })
                                 result = ["rootId": rootId, "staging": try JSONSerialization.jsonObject(with: JSONEncoder().encode(progress))]
                             }
+                        } else if action == "inspect" {
+                            guard let path = payload["path"] as? String else { throw MobileFolderStore.Failure.invalid }
+                            inspectedGrant = grant
+                            let worker = Task.detached { try MobileFolderReader.inspect(bookmark: grant.bookmark, path: path) }
+                            let entry = try await withTaskCancellationHandler(operation: { try await worker.value }, onCancel: { worker.cancel() })
+                            let encoded: Any = try entry.map { try JSONSerialization.jsonObject(with: JSONEncoder().encode($0)) } ?? NSNull()
+                            result = ["rootId": rootId, "path": path, "complete": true, "entry": encoded]
                         } else if action == "scan" {
                             let photos = self.photos
                             let worker = Task.detached { try grant.sourceKind == "photos" ? photos.scan(scope: scope.key + ":" + grant.id) : MobileFolderReader.scan(bookmark: grant.bookmark) }
@@ -493,6 +501,10 @@ final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
                     }
                 }
                 try check(); try await verifyOwner(scope, check); try check()
+                if let inspectedGrant {
+                    let current = try self.store.grant(scope, id: inspectedGrant.id)
+                    guard current.bookmark == inspectedGrant.bookmark, current.sourceKind == nil else { throw MobileFolderStore.Failure.changed }
+                }
                 result["roots"] = try self.store.list(scope).map { grant -> [String: Any] in
                     var row: [String: Any] = ["id": grant.id, "name": grant.name]
                     if grant.sourceKind == "photos" { row["sourceKind"] = "photos"; row["photoAccess"] = self.photos.access() }

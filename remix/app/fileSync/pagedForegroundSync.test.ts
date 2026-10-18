@@ -9,6 +9,33 @@ import type { ForegroundSyncInput } from './foregroundSync';
 const signal = () => new AbortController().signal;
 const access = (input: ForegroundSyncInput) => ({ scope: input.currentScope(), currentScope: input.currentScope });
 
+test('individual path checks avoid whole-root rescans in both foreground runners', async () => {
+	for (const run of [runForegroundCloudSync, runPagedForegroundCloudSync]) {
+		const f = await foregroundFixture(20), input: ForegroundSyncInput = f.input();
+		const originalScan = input.scanLocal; let scans = 0, inspections = 0;
+		input.scanLocal = async () => { scans++; return originalScan(); };
+		input.inspectLocal = async path => { inspections++; return structuredClone(f.local.find(row => row.path === path) ?? null); };
+		await run(saved, scope, input, signal());
+		assert.equal(scans, 2, 'Only initial inventory and post-run verification scan the root');
+		assert.ok(inspections >= 20); assert.equal(f.creates(), 20); f.journal().close();
+	}
+});
+
+test('failed, foreign and changed path observations never become absence or fall back to a scan', async () => {
+	for (const mode of ['failure', 'foreign', 'changed', 'account'] as const) {
+		const f = await foregroundFixture(), input: ForegroundSyncInput = f.input(); let scans = 0;
+		const originalScan = input.scanLocal;
+		input.scanLocal = async () => { scans++; return originalScan(); };
+		input.inspectLocal = async () => {
+			if (mode === 'failure') throw Error('Permission unavailable');
+			if (mode === 'account') input.currentScope = () => ({ ...scope, ownerId: 'other' });
+			return { ...f.local[0], ...(mode === 'foreign' ? { path: 'different' } : {}), ...(mode === 'changed' ? { version: 'newer' } : {}) };
+		};
+		await assert.rejects(runPagedForegroundCloudSync(saved, scope, input, signal()));
+		assert.equal(scans, 1); assert.equal(f.creates(), 0); f.journal().close();
+	}
+});
+
 test('paged foreground resumes original operation IDs across page boundaries and publishes an exact complete baseline', async () => {
 	const f = await foregroundFixture(135); f.lose();
 	await assert.rejects(runPagedForegroundCloudSync(saved, scope, f.input(), signal()), /lost accepted/);

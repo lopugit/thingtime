@@ -68,6 +68,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-18 — **Codex (AI)**: Mac/iOS foreground sync can verify a selected
+  path without hashing the whole root for every operation. Native contracts
+  negotiate exact observations and recheck owner/grant access before replying;
+  explicit absence stays distinct from errors. Shared/native/browser checks pass;
+  installed acceptance and stable large-root scan producers remain open. Android
+  stays deferred. Details: [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md#native-single-path-verification--2026-10-18).
+
+
 - 2026-10-18 — **Codex (AI)**: Bound foreground sync metadata growth with resumable
   journal cleanup. Preserve active transfers, current baselines, reader pins and
   retained conflict receipts; refuse identity reuse during partial deletion.

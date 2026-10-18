@@ -61,11 +61,10 @@ public struct MobileFolderReader {
         }
         return fd
     }
-    static func names(_ fd: Int32) throws -> [String] {
+    private static func visitNames(_ fd: Int32, visit: (String) throws -> Void) throws {
         let next = openat(fd, ".", O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
         guard next >= 0 else { throw Failure.unavailable }
         guard let directory = fdopendir(next) else { close(next); throw Failure.unavailable }; defer { closedir(directory) }
-        var result: [String] = []
         while true {
             try Task.checkCancellation(); errno = 0
             guard let ent = readdir(directory) else { if errno != 0 { throw Failure.unavailable }; break }
@@ -73,6 +72,12 @@ public struct MobileFolderReader {
                 p.withMemoryRebound(to: CChar.self, capacity: Int(ent.pointee.d_namlen) + 1) { String(validatingCString: $0) }
             }) else { throw Failure.invalid }
             if name == "." || name == ".." { continue }
+            try visit(name)
+        }
+    }
+    static func names(_ fd: Int32) throws -> [String] {
+        var result: [String] = []
+        try visitNames(fd) { name in
             result.append(name); guard result.count <= maximumEntries else { throw Failure.limit }
         }
         return result.sorted { $0.utf8.lexicographicallyPrecedes($1.utf8) }
@@ -111,6 +116,56 @@ public struct MobileFolderReader {
         if let error { throw error }; guard let result else { throw Failure.unavailable }; return try result.get()
     }
     public static func checkAccess(bookmark: Data) throws { try access(bookmark) { _ in try Task.checkCancellation() } }
+    private static func entry(_ fd: Int32, path: String) throws -> Entry {
+        let before = try info(fd), type = before.st_mode & S_IFMT
+        guard type == S_IFDIR || type == S_IFREG else { throw Failure.invalid }
+        guard before.st_size >= 0, before.st_size <= 9_007_199_254_740_991 else { throw Failure.limit }
+        let digest = type == S_IFREG ? try fingerprint(fd, size: before.st_size) : nil
+        guard try stamp(info(fd)) == stamp(before) else { throw Failure.changed }
+        return Entry(path: path, id: "\(before.st_dev):\(before.st_ino)", version: stamp(before), kind: type == S_IFDIR ? "folder" : "file",
+            size: type == S_IFDIR ? 0 : before.st_size, sha256: type == S_IFREG && before.st_size == 0 ? hex(SHA256.hash(data: Data())) : nil, fingerprint: digest)
+    }
+    /// Observe one exact relative path without hashing unrelated files or retaining
+    /// a directory listing. Absence is distinct from permission/provider errors.
+    /// Both traversals must resolve the same ancestors and the same final object.
+    public static func inspect(bookmark: Data, path: String) throws -> Entry? {
+        let parts = try components(path)
+        return try access(bookmark) { root in
+            func resolve() throws -> (fd: Int32?, ancestors: [String]) {
+                var fd = dup(root), ancestors: [String] = []
+                guard fd >= 0 else { throw Failure.unavailable }
+                do {
+                    for (index, name) in parts.enumerated() {
+                        try Task.checkCancellation()
+                        let before = try stamp(info(fd)); var found = false
+                        let key = name.precomposedStringWithCanonicalMapping.lowercased()
+                        try visitNames(fd) { candidate in
+                            if candidate.precomposedStringWithCanonicalMapping.lowercased() == key {
+                                guard candidate.utf8.elementsEqual(name.utf8), !found else { throw Failure.changed }
+                                found = true
+                            }
+                        }
+                        guard try stamp(info(fd)) == before else { throw Failure.changed }
+                        ancestors.append(before)
+                        if !found { close(fd); return (nil, ancestors) }
+                        let next = openat(fd, name, O_RDONLY | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK | (index < parts.count - 1 ? O_DIRECTORY : 0))
+                        guard next >= 0 else { throw Failure.unavailable }
+                        close(fd); fd = next
+                    }
+                    return (fd, ancestors)
+                } catch { close(fd); throw error }
+            }
+            let first = try resolve(); defer { if let fd = first.fd { close(fd) } }
+            let value = try first.fd.map { try entry($0, path: path) }
+            let second = try resolve(); defer { if let fd = second.fd { close(fd) } }
+            guard first.ancestors == second.ancestors else { throw Failure.changed }
+            if let value, let original = first.fd, let current = second.fd {
+                guard try stamp(info(original)) == value.version, try stamp(info(current)) == value.version else { throw Failure.changed }
+            } else if first.fd != nil || second.fd != nil { throw Failure.changed }
+            try Task.checkCancellation()
+            return value
+        }
+    }
     public static func scan(bookmark: Data) throws -> [Entry] {
         try access(bookmark) { root in
             let initial = try stamp(info(root)); var entries: [Entry] = [], aliases = Set<String>(), byteBudget = 0
@@ -122,16 +177,10 @@ public struct MobileFolderReader {
                     guard entries.count < maximumEntries else { throw Failure.limit }
                     let fd = openat(parent, name, O_RDONLY | O_NOFOLLOW | O_CLOEXEC | O_NONBLOCK)
                     guard fd >= 0 else { throw Failure.unavailable }; defer { close(fd) }
-                    let before = try info(fd), type = before.st_mode & S_IFMT
-                    guard type == S_IFDIR || type == S_IFREG else { throw Failure.invalid }
-                    guard before.st_size >= 0, before.st_size <= 9_007_199_254_740_991 else { throw Failure.limit }
-                    let digest = type == S_IFREG ? try fingerprint(fd, size: before.st_size) : nil
-                    guard try stamp(info(fd)) == stamp(before) else { throw Failure.changed }
-                    let entry = Entry(path: path, id: "\(before.st_dev):\(before.st_ino)", version: stamp(before), kind: type == S_IFDIR ? "folder" : "file",
-                        size: type == S_IFDIR ? 0 : before.st_size, sha256: type == S_IFREG && before.st_size == 0 ? hex(SHA256.hash(data: Data())) : nil, fingerprint: digest)
+                    let entry = try Self.entry(fd, path: path)
                     byteBudget += try JSONEncoder().encode(entry).count
                     guard byteBudget <= 4 * 1024 * 1024 else { throw Failure.limit }; entries.append(entry)
-                    if type == S_IFDIR { try walk(fd, prefix: path) }
+                    if entry.kind == "folder" { try walk(fd, prefix: path) }
                 }
                 guard try stamp(info(parent)) == initialDirectory else { throw Failure.changed }
             }

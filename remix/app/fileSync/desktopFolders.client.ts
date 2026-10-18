@@ -3,6 +3,7 @@ import { capabilitySatisfies } from '../api/utils/capabilities/capabilityContrac
 import {
 	parseMobileFolderResult,
 	supportsFolderAccess,
+	supportsNativePathInspection,
 	type FolderCapabilities,
 	type FolderRequest,
 	type FolderResult
@@ -190,6 +191,7 @@ export async function createDesktopFolderHost(input: {
 		fetch: fetchBound,
 		request: async (expectedOwner, request, signal) => {
 			if (expectedOwner !== ownerId) throw changed();
+			if (request.action === 'inspect' && !supportsNativePathInspection(context.capabilities)) throw Error('Update Thingtime Desktop to inspect individual sync paths.');
 			const payload = structuredClone(request);
 			const { value, expected } = await send(payload, signal);
 			const result = parseMobileFolderResult({ type: 'mobile-files-result', payload: value }, expected, payload);

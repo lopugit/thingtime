@@ -5,6 +5,16 @@ const test = require('node:test');
 const { DesktopFolderSync, readAccount, readCapabilities } = require('../lib/folder-sync.cjs');
 const { nodeRequestTimeoutMs } = require('../lib/thingtime-node-bridge.cjs');
 
+test('single-path inspection uses the same host account and origin fences', async () => {
+    const f = fixture(), input = f.input({ action: 'inspect', rootId: randomUUID(), path: 'nested/file.bin' });
+    f.run(async (_method, request) => ({ ...request, roots: [], complete: true, entry: null }));
+    assert.equal((await f.host.request(f.event, input)).entry, null);
+    assert.deepEqual(f.calls, [input]);
+    f.account('other');
+    await assert.rejects(f.host.request(f.event, f.input({ ...input, requestId: randomUUID() })));
+    assert.equal(f.calls.length, 1);
+});
+
 function fixture() {
     const frame = { url: 'http://127.0.0.1:12555/settings' }, sender = { mainFrame: frame };
     const window = { webContents: sender, isDestroyed: () => false };

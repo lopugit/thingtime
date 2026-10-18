@@ -21,6 +21,7 @@ import {
 	supportsMobileFolderPublication,
 	supportsMobileTrashRecovery,
 	supportsNativeFileVersions,
+	supportsNativePathInspection,
 	supportsNativeBackgroundUploads
 } from '~/fileSync/mobileFolders.client';
 import { openSyncJournal, withSyncRootLock, syncScopeKey } from '~/fileSync/journal.client';
@@ -297,7 +298,9 @@ function Connections({
 					syncScope,
 					async () => {
 						assertActive();
-						assertPhotoSourcePolicy(saved.configuration, (await requestFolders(scope.ownerId, { action: 'list' }, active.signal)).roots);
+						const nativeRoots = (await requestFolders(scope.ownerId, { action: 'list' }, active.signal)).roots;
+						assertPhotoSourcePolicy(saved.configuration, nativeRoots);
+						const inspectPaths = supportsNativePathInspection(capabilities) && nativeRoots.some(root => root.id === saved.configuration.localRootId && root.sourceKind !== 'photos');
 						assertActive();
 						const localTarget = ['download', 'two-way'].includes(saved.configuration.mode)
 							? await approveMobileSyncTarget(saved, syncScope, active.signal, requestFolders, capabilities)
@@ -325,6 +328,8 @@ function Connections({
 									(
 										await requestFolders(scope.ownerId, { action: 'scan', rootId: saved.configuration.localRootId }, active.signal)
 									).entries!,
+								...(inspectPaths ? { inspectLocal: async (path: string) => (await requestFolders(scope.ownerId,
+									{ action: 'inspect', rootId: saved.configuration.localRootId, path }, active.signal)).inspectedEntry! } : {}),
 								inventory: () =>
 									readCloudFolderInventory(syncScope, saved.configuration.remoteFolderId, {
 										currentScope,

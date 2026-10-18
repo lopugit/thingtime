@@ -468,3 +468,18 @@ remain protected. `pagedForegroundSync.ts` runs maintenance before new work;
 Unmanaged/legacy observations are preserved. Eight `journalMaintenance.test.ts`
 regressions and `scripts/journal-maintenance.browser.ts` cover interruption,
 transaction rollback, scope, stable storage counts and browser-process recovery.
+
+
+### Native single-path observation (2026-10-18)
+
+`MobileFolderReader.inspect` observes one exact path with bounded retained
+metadata, descriptor-relative access and before/after identity checks. Mac folder
+access 1.4.0 and iOS 1.2.0 expose it behind final owner/grant revalidation.
+`supportsNativePathInspection` negotiates those independent minimums;
+`foregroundSyncContext.readLocal` shares the observation between both runners.
+`MobileSyncConnections` enables it only for supported non-Photos roots. Missing
+entries are explicit; errors never become absence or trigger a scan fallback.
+The existing complete scans/10,000-path cap remain until paged producers ship.
+Native reader/adapter tests, shared runner tests and the `?capture&inspect`
+browser fixture cover the path. Installed acceptance remains open; Android is
+deferred. See the dated section in `docs/mobile-file-sync.md` for evidence.

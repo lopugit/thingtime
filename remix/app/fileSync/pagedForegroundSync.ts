@@ -31,7 +31,7 @@ const identity = (source: 'local' | 'remote'): InventoryIdentity => ({ id: crypt
 /** Called inside the foreground root lock, including review and checkpoint
  * publication. Android keeps its existing runner while its work is deferred. */
 export async function runPagedForegroundCloudSync(reviewed: SavedFileSyncConfiguration, scope: SyncScope, input: ForegroundSyncInput, signal: AbortSignal) {
-	const { configuration, check, authorize, scan, runtime, localTarget } = foregroundSyncContext(reviewed, scope, input, signal);
+	const { configuration, check, authorize, scan, readLocal, runtime, localTarget } = foregroundSyncContext(reviewed, scope, input, signal);
 	const access = { scope, currentScope: input.currentScope, signal, cleanup: 'foreground' as const }, inventory = input.journal.inventory(access),
 		plans = input.journal.plans(access), runs = input.journal.pagedRuns(access), checkpoints = input.journal.pagedCheckpoints(access);
 	input.progress({ stage: 'checking', confirmed: 0, total: 0 }); await authorize();
@@ -129,7 +129,7 @@ export async function runPagedForegroundCloudSync(reviewed: SavedFileSyncConfigu
 	};
 	const port = await createPagedCloudSyncPort(spec, configuration, runs, {
 		currentScope: input.currentScope, signal, localTarget,
-		readLocal: async path => { const rows = await input.scanLocal(); check(); return rows.find(e => e.path === path) ?? null; },
+		readLocal,
 		openSource: async entry => { await authorize(); return input.source(entry); },
 		progress: (path, bytes, size) => { check(); input.progress({ stage: retain ? 'retaining' : 'transferring', confirmed: state.confirmed, total: state.operations, path, bytes, size }); }
 	}, runtime);
