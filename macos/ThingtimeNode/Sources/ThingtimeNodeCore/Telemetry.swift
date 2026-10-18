@@ -420,7 +420,21 @@ public enum ThingtimeNodeLog {
 }
 
 @MainActor
-public final class DeviceTelemetryCollector {
+public protocol DeviceTelemetryProviding: Sendable {
+    func snapshot(now: Date) -> DeviceTelemetry
+    func sessionSnapshot() -> SessionTelemetry
+    func batterySnapshot() -> BatteryTelemetry
+    func permissionPreflight() -> PermissionPreflight
+    func requestPermission(_ kind: ThingtimePermissionKind) -> PermissionPreflight
+    func setPreventIdleSleep(_ enabled: Bool) throws
+}
+
+public extension DeviceTelemetryProviding {
+    func snapshot() -> DeviceTelemetry { snapshot(now: Date()) }
+}
+
+@MainActor
+public final class DeviceTelemetryCollector: DeviceTelemetryProviding {
     private let sessionActivity: SessionActivityMonitor
     private let powerAssertions: PowerAssertionController
 
@@ -481,7 +495,7 @@ public final class DeviceTelemetryCollector {
             soundEffectsOutputMuted: SystemAudio.soundEffectsOutputMuted(),
             audioDevices: SystemAudio.devices(),
             wifi: SystemWiFi.snapshot(),
-            session: sessionTelemetry(),
+            session: sessionSnapshot(),
             permissions: permissionPreflight(),
             runningApplications: NSWorkspace.shared.runningApplications
                 .map {
@@ -520,7 +534,8 @@ public final class DeviceTelemetryCollector {
         try powerAssertions.setPreventingIdleSleep(enabled)
     }
 
-    private func sessionTelemetry() -> SessionTelemetry {
+    /// Policy checks must not enumerate hardware or request unrelated privacy access.
+    public func sessionSnapshot() -> SessionTelemetry {
         let dictionary = CGSessionCopyCurrentDictionary() as? [String: Any]
         return SessionTelemetry(
             // NSWorkspace notifications are the public authority. The extra

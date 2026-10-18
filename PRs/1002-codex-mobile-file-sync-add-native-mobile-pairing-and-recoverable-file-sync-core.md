@@ -2763,3 +2763,27 @@ evidence only. Signed installed Mac and iOS action-path acceptance remain open.
 Stable paged native/cloud inventories are still unfinished; live synchronization
 retains its 10,000-path cap. This change does not establish large-root, background,
 physical-device or 100 GB–100 TB acceptance.
+
+## Mac session checks and test isolation — 2026-10-18
+
+Signed-app preparation exposed a reproducible XCTest abort: the leased desktop
+chat route read the full device snapshot just to check the session lock. That
+snapshot enumerated Bluetooth in an XCTest host without a Bluetooth usage
+purpose. Leased desktop/machine commands and lock confirmation now use the same
+conservative session-state calculation directly. Full inventory remains available
+for explicit telemetry and pairing; no privacy permission or usage purpose was
+changed to make tests pass.
+
+A small telemetry provider boundary lets routing, journal and pairing-recovery
+unit tests supply deterministic device observations. The real collector is still
+the default application dependency. Regressions cover the native narrow session
+read, no hardware inventory during locked/approval refusal, desktop delivery once
+across replay, lock refusal, and one explicit inventory read across telemetry
+replay. The older rejection test relied on the collector's implicit locked launch
+state; it now names and explicitly checks both locked/approved and
+unlocked/unapproved cases.
+
+The original desktop route reproduced signal 6 before the change. The complete
+Mac suite now passes: 161 tests, one deliberately skipped display-hardware test,
+zero failures. This is native unit/filesystem evidence, not signed installed-app,
+Bluetooth-consent or live account/device acceptance. Those gates remain open.

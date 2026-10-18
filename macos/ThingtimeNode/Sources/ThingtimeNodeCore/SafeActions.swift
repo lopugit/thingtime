@@ -333,9 +333,9 @@ public struct SafeActionPolicy: Sendable {
 @MainActor
 public final class SafeActionExecutor {
     private let policy: SafeActionPolicy
-    private let telemetry: DeviceTelemetryCollector
+    private let telemetry: any DeviceTelemetryProviding
 
-    public init(policy: SafeActionPolicy = SafeActionPolicy(), telemetry: DeviceTelemetryCollector) {
+    public init(policy: SafeActionPolicy = SafeActionPolicy(), telemetry: any DeviceTelemetryProviding) {
         self.policy = policy
         self.telemetry = telemetry
     }
@@ -632,7 +632,7 @@ public final class SafeActionExecutor {
         case .lockScreen:
             try SystemSession.lockScreen()
             for attempt in 0 ..< 20 {
-                if telemetry.snapshot().session.isLocked {
+                if telemetry.sessionSnapshot().isLocked {
                     return .object(["locked": .bool(true)])
                 }
                 if attempt < 19 { try await Task.sleep(for: .milliseconds(100)) }

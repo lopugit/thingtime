@@ -154,7 +154,7 @@ public actor ThingtimeNodeController {
     private let journal: CommandJournal
     private let pairing: PairingManager
     private let connector: ConnectorRuntime
-    private let telemetry: DeviceTelemetryCollector
+    private let telemetry: any DeviceTelemetryProviding
     private let actionExecutor: SafeActionExecutor
     private let controlPlaneClient: (any ControlPlaneClient)?
     private let desktopChat: DesktopChatRuntime?
@@ -165,7 +165,7 @@ public actor ThingtimeNodeController {
         folderSync: MacFolderSync? = nil,
         pairing: PairingManager,
         connector: ConnectorRuntime,
-        telemetry: DeviceTelemetryCollector,
+        telemetry: any DeviceTelemetryProviding,
         actionExecutor: SafeActionExecutor,
         controlPlaneClient: (any ControlPlaneClient)? = nil,
         desktopChat: DesktopChatRuntime? = nil,
@@ -519,7 +519,7 @@ public actor ThingtimeNodeController {
             }
             payload["commandId"] = .string(command.commandID)
             if DesktopChatRuntime.supports(connectorID: connectorID) {
-                let device = await telemetry.snapshot()
+                let session = await telemetry.sessionSnapshot()
                 return NodeRequest(
                     id: requestID,
                     commandId: command.commandID,
@@ -529,7 +529,7 @@ public actor ThingtimeNodeController {
                         "operation": .string(command.method),
                         "payload": .object(payload),
                         "explicitlyApproved": .bool(command.approvedForExecution),
-                        "sessionLocked": .bool(device.session.isLocked)
+                        "sessionLocked": .bool(session.isLocked)
                     ])
                 )
             }
@@ -843,12 +843,12 @@ public actor ThingtimeNodeController {
         default:
             throw ThingtimeNodeError.invalidRequest("Unknown leased command kind.")
         }
-        let device = await telemetry.snapshot()
+        let session = await telemetry.sessionSnapshot()
         let envelope = ActionEnvelope(
             action: action,
             context: SafeActionContext(
                 origin: .remoteAccount,
-                sessionLocked: device.session.isLocked,
+                sessionLocked: session.isLocked,
                 userApproved: command.approvedForExecution
             )
         )

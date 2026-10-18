@@ -616,6 +616,12 @@ persisted; every check is client-side.
   account's command IDs. Command history/events never contain chunk bytes.
   Repeat directory listing after temporary-upload cleanup: scanning on a
   duplicated descriptor must not consume the subsequent listing's cursor.
+- [ ] Session-lock policy checks and lock confirmation must use the narrow
+  session snapshot, without enumerating Bluetooth or other hardware. Run the
+  controller tests in an unsigned XCTest host: locked approved commands and
+  unlocked unapproved commands must be refused, desktop command replay must
+  send once, and explicit telemetry refresh must replay its retained response.
+  Hardware telemetry and privacy permissions require separate signed-app checks.
 - [ ] Run native `swift test`, `test:devices`, `test:things`, `test:attachments`,
   `test:api-capabilities`, a complete web build, and Electron tests. The
   opt-in `TT_BRIGHTNESS_HARDWARE_TEST=1 swift test --filter DisplayBrightnessTests`

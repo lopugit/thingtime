@@ -68,6 +68,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-18 — **Codex (AI)**: Mac session-lock checks now read session state
+  without enumerating Bluetooth or other hardware. Explicit telemetry fixtures
+  keep controller/recovery tests independent of the host's privacy permissions;
+  the full native suite passes (160 passed, one opt-in hardware test skipped).
+  Signed installed-app acceptance remains separate. Details:
+  [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md#mac-session-checks-and-test-isolation--2026-10-18).
+
 - 2026-10-18 — **Codex (AI)**: Mac/iOS foreground sync can verify a selected
   path without hashing the whole root for every operation. Native contracts
   negotiate exact observations and recheck owner/grant access before replying;
