@@ -5228,6 +5228,21 @@ cloud file to private Trash and removes its own temporary local vaults. Offline
 CLI access comes from possession of the private vault; online product adapters
 must continue to enforce the current account, origin and device permissions.
 
+### Independent cloud backup destination
+
+The `backup:replica upload|download VAULT SNAPSHOT_UUID` worker copies an existing
+sealed vault to or from a separately configured S3 destination. Forks must supply
+their own private, encrypted, independently retained bucket and prefix-restricted
+IAM policy. It uses no primary attachment settings or ambient AWS credentials.
+The owning app/vault supplies a bounded private stdin handoff; never put real
+credentials in CLI arguments, logs or checked-in configuration. Required provider
+operations, placeholder handoff fields, permission scopes and recovery behavior
+are documented in [independent S3 replicas](docs/portable-backups.md#independent-s3-replica-worker).
+Run `npm --prefix remix run test:backups` for the synthetic loopback transport and
+real child-process kill/resume proof. The native vault selector/background UI,
+live-provider validation, retention, full-account coverage and large-volume
+throughput remain open. No bucket is automatically created or made public.
+
 ### Capture a selected cloud folder
 
 `backup:cloud` is an explicit worker/operator tool, not the native backup UI.

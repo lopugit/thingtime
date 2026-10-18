@@ -26,6 +26,7 @@
     "test:backups": "node --import tsx --test app/api/utils/backups/*.test.ts",
     "backup:vault": "tsx scripts/backup-vault.mts",
     "backup:cloud": "tsx scripts/backup-cloud.mts",
+    "backup:replica": "tsx scripts/backup-replica.mts",
     "test:files": "node --import tsx --test app/api/utils/files/*.test.ts app/routes/api/v1/files/*.test.ts",
     "test:files:inventory-pages": "node scripts/test-cloud-inventory-pages.mjs",
 		"test:files:mac-paged": "node scripts/test-mac-paged-sync.mjs",

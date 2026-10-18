@@ -10,6 +10,85 @@ backup or a demonstrated 100 TB transfer. The internal account inventory produce
 below establishes a database snapshot boundary, but refuses unsupported managed
 families and is not exposed as a whole-account backup feature.
 
+## Independent S3 replica worker
+
+`s3BackupStore.ts` implements the same immutable `BackupObjectStore` as the local
+vault. `backup:replica upload|download VAULT SNAPSHOT_UUID` transfers a **sealed**
+snapshot between an explicitly chosen local vault and an independently configured
+S3 destination. It streams the existing 8 MiB chunks and bounded metadata pages;
+it does not build a whole-backup Blob or ZIP. Retrying the same snapshot verifies
+and reuses retained chunks. Completion follows a full destination readback, and
+JSON-line progress distinguishes copying, verifying and completion. Decimal byte
+counters preserve totals beyond JavaScript's integer precision.
+
+The destination is bound to the configured endpoint, bucket, prefix and canonical
+Timeline scope. Its namespace is `PREFIX/scopes/SHA256(timelineScopeKey(scope))/v1/`.
+There is no automatic use of the primary attachment bucket, browser sessions,
+AWS profiles, ambient credential chain, bucket provisioning, ACL changes or GC.
+The app must supply current authorization, quota and credentials from its vault.
+Namespace hashing is not authorization: the provider IAM policy must enforce the
+chosen prefix. An independently retained snapshot is only as complete as its
+manifest's stated coverage.
+
+Providers must implement atomic `PutObject If-None-Match: *`, SHA-256 upload
+checksums, AES256 server-side encryption and strong read-after-write consistency.
+An existing key succeeds only after exact byte comparison; a conflicting object
+is never overwritten. Conditional 409 retries are bounded; other provider errors
+fail closed. Reads require a bounded Content-Length and reject truncation,
+encoding, checksum mismatches and namespace escape. Requests stay on the selected
+endpoint, have a 60-second bound, and observe cancellation and authorization
+before/after effects and while consuming response bytes. AWS destinations require
+the expected 12-digit bucket owner. Other providers may explicitly use null only
+when they do not support that header. This is an S3 protocol adapter, **not a
+claim that Backblaze B2 or another provider supports every required operation**.
+See [AWS conditional writes](https://docs.aws.amazon.com/AmazonS3/latest/userguide/conditional-writes.html).
+
+The operator/native-process CLI accepts one bounded JSON handoff on a private
+stdin pipe (16 KiB maximum, 30-second handoff timeout). It refuses regular-file
+stdin; no credential values belong in arguments, shell history or logs. The
+handoff contains exactly `destination`, `scope` and `credentials`:
+
+```json
+{
+  "destination": {
+    "endpoint": "https://s3.REGION.amazonaws.com",
+    "region": "REGION",
+    "bucket": "independent-backup-bucket",
+    "prefix": "approved-backups",
+    "expectedBucketOwner": "123456789012"
+  },
+  "scope": {"apiOrigin": "https://your-thingtime.example", "ownerId": "OWNER_ID", "dataPlane": "home"},
+  "credentials": {"accessKeyId": "FROM_VAULT", "secretAccessKey": "FROM_VAULT"}
+}
+```
+
+These are placeholders, not a credential file to create. A scoped temporary
+credential also supplies `sessionToken` and ISO `expiration`; expired credentials
+stop the worker, and fresh credentials can resume the same snapshot. Provider
+errors and parser input are not echoed. The SDK receives detached credential
+objects because it annotates them internally; vault-owned objects remain intact.
+The shipped CLI is a worker handoff interface; a user-facing vault selector,
+native background job and restore controls are still required.
+
+The existing bucket must be private, independently retained, encrypted, and
+configured without expiry/deletion that could orphan shared chunks. Give the
+worker only scoped GetObject/PutObject and prefix-restricted ListBucket (needed
+for distinguishing missing objects); enforce conditional writes in bucket policy
+where supported. Download-only workers need no PutObject permission. Provisioning,
+live IAM/revocation acceptance, retention/pinning, client-side encryption and key
+recovery, scheduling, full account coverage and measured 100 GB–100 TB transfer
+remain open. No external provider was modified for this implementation.
+
+`s3BackupStore.test.ts` exercises the real AWS SDK over a disposable loopback HTTP
+protocol fixture with synthetic credentials. It kills the actual CLI after an
+accepted 8 MiB chunk, resumes without reuploading it, removes the original vault,
+downloads and verifies the replica, and retries the download with zero new copied
+bytes. It also checks immutable races, credential mutation, revocation, wrong
+scope, expiry, redirects, unsafe destinations and corrupt/oversized/truncated
+responses. `--local-http-fixture` permits literal loopback HTTP only for that
+explicit test; normal use requires HTTPS. This is not live cloud durability,
+installed-app acceptance, a full-account backup or a 100 TB benchmark.
+
 ## Account inventory producer
 
 `api/utils/backups/accountInventory.ts` freezes owner metadata through one

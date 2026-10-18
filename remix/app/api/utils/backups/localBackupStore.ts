@@ -3,6 +3,7 @@ import { mkdir, open, lstat, realpath, link, unlink } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import type { BackupObjectStore } from './portableBackup';
+import { assertBackupObjectKey } from './backupObjectKey';
 
 /** Local/native provider, never exposed as an HTTP filesystem path. The caller
  * must supply its private app-controlled directory under an approved destination.
@@ -20,12 +21,7 @@ export async function openLocalBackupStore(directory: string, options: { create?
 	if (!info.isDirectory() || info.isSymbolicLink() || (info.mode & 0o077) !== 0 || (process.getuid && info.uid !== process.getuid()))
 		throw Error('Backup destination must be a private directory');
 	const filePath = (key: string) => {
-		if (
-			!/^(chunks\/[a-f0-9]{64}|snapshots\/[0-9a-f-]{36}\/(header|plan|complete)\.json|snapshots\/[0-9a-f-]{36}\/plan\/(0|[1-9][0-9]{0,15})\.json|snapshots\/[0-9a-f-]{36}\/ranges\/(0|[1-9][0-9]{0,15})\/(0|[1-9][0-9]{0,15})\.json)$/.test(
-				key
-			)
-		)
-			throw Error('Invalid backup storage key');
+		assertBackupObjectKey(key);
 		return join(root, key);
 	};
 	const ensureParents = async (path: string, create: boolean) => {

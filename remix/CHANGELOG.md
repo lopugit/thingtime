@@ -74,6 +74,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-19: Added an independent S3 replica provider and resumable upload/download
+  worker for the existing portable backup format, with private credential handoff,
+  bounded progress and kill/resume/source-loss protocol checks. Fixed SDK mutation
+  of caller credentials and fenced account changes during credential resolution.
+  Live cloud and native backup UI acceptance remain open. See
+  [PR 1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md). — Codex (AI)
+
+
 - 2026-10-19 — **Codex (AI)**: Repair the iOS sync test host by retaining real
   scene-backed WebViews and diagnosing foreground/origin prerequisites. All 66
   selected iOS 27 simulator checks pass; physical-device rerun remains open.

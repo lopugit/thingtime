@@ -3355,3 +3355,31 @@ web origin, disposable files and synthetic authorization; this is not real
 provider, OS scheduling or cross-device acceptance. Physical-device rerun remains
 open: CoreDevice currently refuses the trusted-connectivity/power assertion.
 The original iPhone app and Aster's reserved Mac installation are preserved.
+
+## Independent S3 replica worker — 2026-10-19
+
+Adds an explicit private S3 provider for the existing portable v1 vault and a
+resumable `backup:replica upload|download` worker. It uses bounded chunks,
+conditional immutable writes, scope-qualified namespaces, expected bucket owner,
+SHA-256 checksums and full destination readback before completion. The native
+process handoff is a bounded private stdin pipe; no ambient credentials, bucket
+creation, ACL changes or primary-store fallback. Progress exposes decimal byte
+counters and copying/verifying/complete phases.
+
+The real AWS SDK loopback fixture kills the actual upload child after an accepted
+8 MiB chunk, resumes with that chunk reused, removes the source vault and recovers
+matching bytes from the independent copy. A repeated download copies zero bytes.
+Regression checks reproduce SDK mutation of a caller credential object and fence
+account changes during asynchronous credential resolution. Configuration, IAM
+errors, expiry, redirects, corruption, cancellation and immutable conflicts are
+covered. These checks do not establish live provider or installed-app acceptance.
+
+Live cloud IAM/durability, retention/pinning, complete account coverage, vault/UI
+selection, native schedules and measured 100 GB–100 TB transfers remain open.
+Original installed apps and Aster's combined Mac installation slot are preserved.
+Android stays in the later-date tracker section with its unfinished code intact.
+
+Validation: all 92 backup tests passed before the final credential-await race
+regression; all five final S3 transport/CLI tests then passed. Targeted lint and
+targeted worker/adapter TypeScript checks passed. Full project typecheck retains
+91 diagnostics outside changed files.

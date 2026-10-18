@@ -3470,3 +3470,26 @@ web origin, disposable files and synthetic authorization; this is not real
 provider, OS scheduling or cross-device acceptance. Physical-device rerun remains
 open: CoreDevice currently refuses the trusted-connectivity/power assertion.
 The original iPhone app and Aster's reserved Mac installation are preserved.
+
+## Independent S3 replica and resumable download worker — 2026-10-19
+
+The portable v1 vault now has an explicit S3 destination and
+`backup:replica upload|download` worker. Canonical Timeline scope binds the
+provider prefix; bounded chunks/pages and immutable conditional writes preserve
+resume identities. Exact readback precedes completion. Vault-supplied credentials
+arrive through a bounded private pipe, never ambient AWS configuration. The AWS
+SDK receives detached copies and authorization is checked again after credential
+resolution. No external API route or native visible interface was added.
+
+Real SDK/loopback transport and actual child-process tests cover an upload killed
+after an accepted 8 MiB chunk, safe retry without reuploading it, removal of the
+primary vault and exact download recovery. Wrong scope, expiry, missing access,
+corruption, redirection and incomplete streams fail. This is protocol-fixture
+evidence only. Full managed-family coverage, retention/pinning, live provider
+acceptance, vault/UI wiring, native scheduling and large-volume acceptance remain
+open; Android is still deferred. See the [provider contract and setup](portable-backups.md#independent-s3-replica-worker).
+
+Validation: all 92 backup tests passed before the final credential-await race
+regression; all five final S3 transport/CLI tests then passed. Targeted lint and
+targeted worker/adapter TypeScript checks passed. Full project typecheck retains
+91 diagnostics outside changed files.

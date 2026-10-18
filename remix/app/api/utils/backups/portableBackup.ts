@@ -372,7 +372,12 @@ async function verifySealedManifest(store: BackupObjectStore, id: string, access
  * verified chunks/pages and resume under the same identity. The destination
  * receives a completion seal only after a full readback; no source path/URL is
  * needed. This primitive does not provision cloud buckets or ship physical media. */
-export async function copySealedBackup(source: BackupObjectStore, destination: BackupObjectStore, id: string, access: BackupAccess) {
+export type BackupCopyProgress = {
+	snapshotId: string; phase: 'copying' | 'verifying' | 'complete';
+	copiedBytes: string; reusedBytes: string; totalBytes: string;
+};
+export async function copySealedBackup(source: BackupObjectStore, destination: BackupObjectStore, id: string, access: BackupAccess,
+	options: { onProgress?(progress: BackupCopyProgress): Promise<void> } = {}) {
 	// Validate source metadata once; fetch only chunks missing at the destination.
 	// Re-reading the entire source before each resumed copy would retransmit
 	// already captured terabytes. Final destination verification checks every byte.
@@ -384,6 +389,12 @@ export async function copySealedBackup(source: BackupObjectStore, destination: B
 	await putJson(destination, `${root}/plan.json`, plan, access, header);
 	let copiedBytes = BigInt(0),
 		reusedBytes = BigInt(0);
+	const report = async (phase: BackupCopyProgress['phase']) => {
+		await check(access, header);
+		await options.onProgress?.({ snapshotId: id, phase, copiedBytes: copiedBytes.toString(), reusedBytes: reusedBytes.toString(), totalBytes: plan.bytes });
+		await check(access, header);
+	};
+	await report('copying');
 	for await (const item of planItems(source, header, plan, access)) {
 		if (!item.content) continue;
 		let offset = 0,
@@ -405,13 +416,16 @@ export async function copySealedBackup(source: BackupObjectStore, destination: B
 					await destination.put(key, bytes);
 					copiedBytes += BigInt(range.length);
 				}
+				await report('copying');
 			}
 			await putJson(destination, key, page, access, header);
 			offset = next;
 			ordinal++;
 		}
 	}
+	await report('verifying');
 	const seal = await sealBackup(destination, id, access);
+	await report('complete');
 	return { seal, copiedBytes: copiedBytes.toString(), reusedBytes: reusedBytes.toString() };
 }
 

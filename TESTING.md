@@ -11825,3 +11825,25 @@ resume unfinished Android gates only when requested.
 - Repeat on the signed physical test host before replacing the historical
   53-pass/13-fail hardware result. Simulator success does not prove real picker
   grants, physical background expiry, OS scheduling or installed recovery.
+
+### Independent S3 backup replica worker — 2026-10-19
+
+- Run `npm --prefix remix run test:backups`. The S3 suite uses the real AWS SDK
+  against an ephemeral loopback protocol fixture and only synthetic credentials.
+- Verify conditional immutable writes, identical concurrent retries, bounded 409
+  conflicts, a lost acknowledgement, scope separation, redirects, denied/missing
+  buckets, unsafe keys/destinations and oversized/truncated/corrupt response bytes.
+- Regression: the SDK must not mutate a vault-owned credential object; a reused
+  strict credential handoff must stay valid. If account scope changes while the
+  credential provider awaits, zero network effects may occur.
+- Kill the real `backup:replica upload` child after the first 8 MiB object is
+  accepted. No complete seal may exist. Resume the same snapshot: that object
+  must have one successful write, 8 MiB reused and only 17 additional bytes copied.
+- Remove the primary local vault; download into a new private vault and compare
+  SHA-256 with the original bytes. A second download copies zero new bytes.
+- Refuse wrong-account, expired-credential and non-opted-in HTTP handoffs before
+  any network request. No secret value may appear on stdout/stderr. Revoking
+  access in the progress callback before verification must prevent completion.
+- Live-provider IAM, retention/durability, encryption/key recovery, actual vault
+  selection, scheduled native jobs and UI remain unverified. Run those paths
+  before offering independent cloud backup; this fixture is not 100 TB evidence.
