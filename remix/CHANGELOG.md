@@ -73,6 +73,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-18 — **Codex (AI)**: Add editable Mac menu bar and Device scripts
+  Builder suites, private menu telemetry, freshly approved paired-Mac Bash
+  commands, bounded result reads and explicit private-Thing/recipe saving.
+  Negotiate versioned device capabilities and include collection styles with
+  full inline search/pagination. Add isolated desktop/mobile acceptance tooling.
+
 - 2026-10-18 — **Codex (AI)**: Remove implicit production API forwarding from
   Vite and Nitro; missing local database/signing settings now fail closed before
   handlers or DB warmup. Restrict fixture destinations and redirects, add an OS

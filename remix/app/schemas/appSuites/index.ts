@@ -1,3 +1,5 @@
+import { deviceScriptsSuite } from './deviceScripts';
+import { macMenuBarSuite } from './macMenuBar';
 // The installable APP suites — whole apps rebuilt as behaviour suites
 // (schemas + components + actions + data + pages). Importing this module
 // registers them, so every consumer that materialises, seeds, installs, or
@@ -22,8 +24,10 @@ registerAppSuite(snapquestSuite);
 registerAppSuite(branchwoodSuite);
 registerAppSuite(gardenSuite);
 registerAppSuite(webStandardsSuite);
+registerAppSuite(macMenuBarSuite);
+registerAppSuite(deviceScriptsSuite);
 
-export const APP_SUITE_LIST: BehaviourSuite[] = [pokeworldSuite, starsalignSuite, dustedSuite, thingmonSuite, snapquestSuite, branchwoodSuite, gardenSuite, webStandardsSuite];
+export const APP_SUITE_LIST: BehaviourSuite[] = [pokeworldSuite, starsalignSuite, dustedSuite, thingmonSuite, snapquestSuite, branchwoodSuite, gardenSuite, webStandardsSuite, macMenuBarSuite, deviceScriptsSuite];
 
 export const ALL_SUITES: BehaviourSuite[] = [...BEHAVIOUR_SUITES, ...APP_SUITE_LIST];
 

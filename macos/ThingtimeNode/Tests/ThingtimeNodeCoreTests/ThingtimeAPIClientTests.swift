@@ -5,6 +5,7 @@ import XCTest
 
 private final class MockURLProtocol: URLProtocol, @unchecked Sendable {
     static let lock = NSLock()
+    nonisolated(unsafe) static var featureOverrides: [String: String] = [:]
     nonisolated(unsafe) static var handler: ((URLRequest) throws -> (Int, Data))?
 
     override class func canInit(with request: URLRequest) -> Bool { true }
@@ -13,6 +14,7 @@ private final class MockURLProtocol: URLProtocol, @unchecked Sendable {
         do {
             Self.lock.lock()
             let handler = Self.handler
+            let versions = ThingtimeAPIClient.capabilityRequirements.merging(Self.featureOverrides) { _, new in new }
             Self.lock.unlock()
             let status: Int, data: Data
             if request.url?.path == "/.well-known/thingtime-capabilities.json" {
@@ -20,7 +22,7 @@ private final class MockURLProtocol: URLProtocol, @unchecked Sendable {
                 var origin = URLComponents(url: request.url!, resolvingAgainstBaseURL: false)!
                 origin.path = ""; origin.query = nil
                 status = 200
-                data = try JSONSerialization.data(withJSONObject: ["schemaVersion": 1, "origin": origin.string!, "features": ThingtimeAPIClient.capabilityRequirements.mapValues { ["version": $0] }])
+                data = try JSONSerialization.data(withJSONObject: ["schemaVersion": 1, "origin": origin.string!, "features": versions.mapValues { ["version": $0] }])
             } else { (status, data) = try XCTUnwrap(handler)(request) }
             let response = HTTPURLResponse(url: try XCTUnwrap(request.url), statusCode: status, httpVersion: nil, headerFields: nil)!
             client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
@@ -34,6 +36,41 @@ private final class MockURLProtocol: URLProtocol, @unchecked Sendable {
 }
 
 final class ThingtimeAPIClientTests: XCTestCase {
+    override func tearDown() {
+        MockURLProtocol.lock.lock()
+        MockURLProtocol.featureOverrides = [:]
+        MockURLProtocol.handler = nil
+        MockURLProtocol.lock.unlock()
+        super.tearDown()
+    }
+
+    func testScriptLeaseRequiresCompatibleOriginAndFreshApprovedEnvelope() async throws {
+        let credential = DeviceCredential(deviceID: "device-1", refreshToken: "ttnode_test", signingPrivateKey: Data(), signingPublicKey: Data())
+        let command: [String: Any] = ["id": "script-1", "leaseId": "lease-1", "kind": "script.run", "input": ["script": "printf ok", "timeoutSeconds": 2], "leaseExpiresAt": "2099-08-18T04:00:30.123Z", "requiresApproval": true, "approvalState": "approved"]
+        func client() throws -> ThingtimeAPIClient {
+            try ThingtimeAPIClient(baseURL: URL(string: "https://thingtime.test")!, credentialStore: InMemoryDeviceCredentialStore(credential: credential), session: session())
+        }
+        func setResponse(_ command: [String: Any], version: String) throws {
+            let bytes = try JSONSerialization.data(withJSONObject: ["ok": true, "command": command])
+            MockURLProtocol.lock.lock()
+            MockURLProtocol.featureOverrides = ["api.devices-node-commands": version]
+            MockURLProtocol.handler = { _ in (200, bytes) }
+            MockURLProtocol.lock.unlock()
+        }
+        try setResponse(command, version: "1.9.0")
+        let older = try client()
+        await XCTAssertThrowsErrorAsync(try await older.leaseCommands(.init(deviceID: "device-1")))
+        try setResponse(command, version: "1.10.0")
+        let current = try client()
+        let batch = try await current.leaseCommands(.init(deviceID: "device-1"))
+        XCTAssertEqual(batch.commands.first?.method, "script.run")
+        XCTAssertEqual(batch.commands.first?.approvedForExecution, true)
+        for fields in [["requiresApproval": false, "approvalState": "approved"], ["requiresApproval": true, "approvalState": "pending"]] {
+            try setResponse(command.merging(fields) { _, new in new }, version: "1.10.0")
+            await XCTAssertThrowsErrorAsync(try await current.leaseCommands(.init(deviceID: "device-1")))
+        }
+    }
+
     func testCapabilityRequirementsRejectWrongOriginMissingAndBreakingFeatures() throws {
         let origin = URL(string: "https://thingtime.test")!
         let features = ThingtimeAPIClient.capabilityRequirements.mapValues { ["version": $0] }

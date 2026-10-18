@@ -10135,3 +10135,26 @@ separate from deterministic discovery/lease tests.
 - [ ] Missing/invalid fallback origins, normal web servers, and NODE_ENV=test must never proxy; explicit installed-desktop HTTPS bridges retain database preconditions.
 
 - OpenAI vault import: anonymous/non-admin and cross-origin requests must fail; missing server key must create nothing. Import from AI Providers, verify the redacted OpenAI entry named `OPENAI_THINGTIME_API_KEY`, reload, retry and confirm one unchanged entry. No secret may appear in browser responses. Existing chat and credential order must remain intact.
+
+## Mac menu bar and reusable device scripts
+
+- Install both suites privately; edit the saved Component and Action source in
+  Builder, and verify page refresh retains last-known readings.
+- On the signed installed Mac app, compare inventory program/path/PID with
+  NSRunningApplication; distinguish missing readings from zero and false.
+- Check partial/collecting/locked/offline/no-node/empty states, select a Mac,
+  search and paginate every item; locked snapshots must contain no inventory.
+- At desktop and 390px widths expand details, long paths, output and earlier-run
+  controls, then scroll to the bottom with no clipping or horizontal overflow.
+- Run harmless printf via a paired Mac. Inspect the complete source in approval;
+  deny one request, approve another, and verify exact stdout/exit status.
+- Script runs must require fresh approval regardless of always-allow policy;
+  unpaired, locked, incompatible or unapproved envelopes must fail closed.
+- Verify time/output limits, retry identity, expiry, owner isolation and no
+  result bytes in device event history. Save output only on explicit request.
+- Save a recipe containing literal `$input` text; execute the saved Action and
+  confirm only its declared runtime inputs are interpolated.
+- Regression: inline collection pagination/search must retain items beyond
+  10,000 while rendering only the current page and including default styles.
+- Run the isolated browser fixture and focused native/backend/capability suites;
+  smoke the built manifest before deploying and repeat the real installed path.
