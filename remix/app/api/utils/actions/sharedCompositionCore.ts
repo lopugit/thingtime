@@ -23,26 +23,15 @@ export const compositionReferences = (kinds: string[], crystal: Record<string, a
 	};
 	const source = (value: any) => add('action', value?.action);
 	const render = () => visitStoredTemplateActions(crystal.render, kinds.includes('component') ? storedComponentScope(crystal, args) : {}, (ref) => add('action', ref));
-	let visited = 0;
-	const blocks = (value: any, depth = 0): void => {
-		if (!Array.isArray(value)) return;
-		for (const block of value) {
-
-			if (!block || typeof block !== 'object') continue;
-			if (block.type === 'component') {
-				if (literal(block.component)) {
-					const blockArgs = block.args && typeof block.args === 'object' && !Array.isArray(block.args) ? block.args : undefined;
-					refs.set(`component:${block.component}:${JSON.stringify(blockArgs)}`, { kind: 'component', ref: block.component, ...(blockArgs ? { args: blockArgs } : {}) });
-				}
-				source(block.source);
-			}
-   source(block.source);
-   if (block.type === 'collection') source(block.props?.source);
-   if (block.type === 'element') visitStoredTemplateActions({ tag: block.tag, props: block.props, ttAction: block.props?.['data-tt-action'] }, storedComponentScope({}, block.args), ref => add('action', ref));
-   blocks(block.children, depth + 1);
-		}
-	};
-	if (kinds.includes('webpage')) blocks(crystal.blocks);
+	if (kinds.includes('webpage')) visitStoredBlocks(crystal.blocks, (block, scope) => {
+  if (block.type === 'component' && literal(block.component)) {
+   const blockArgs = block.args && typeof block.args === 'object' && !Array.isArray(block.args) ? block.args : undefined;
+   refs.set(`component:${block.component}:${JSON.stringify(blockArgs)}`, { kind: 'component', ref: block.component, ...(blockArgs ? {args:blockArgs} : {}) });
+  }
+  source(block.source);
+  if (block.type === 'collection') source(block.props?.source);
+  if (block.type === 'element') visitStoredTemplateActions(blockActionTemplate(block), scope, ref => add('action',ref));
+ });
 	if (kinds.includes('component')) { source(crystal.source); render(); }
 	if (kinds.includes('schema')) render();
 	if (kinds.includes('action') && Array.isArray(crystal.steps)) {
@@ -63,3 +52,20 @@ export const compositionReferences = (kinds: string[], crystal: Record<string, a
 
 export const sharedOperationAllowed = (op: string): boolean =>
 	['return', 'compute', 'fail', 'things.get', 'things.search', 'actions.invoke', 'each'].includes(op);
+
+/** Iterative stored-block traversal shares the same scope boundaries as the renderer.
+ * Runtime rows/results never create persistent grants. Cycles are invalid input. */
+export function visitStoredBlocks(nodes: unknown, visit: (block: Record<string, any>, scope: Record<string, unknown>) => void): void {
+ const pending = Array.isArray(nodes) ? nodes.map(block => ({block, scope:{} as Record<string,unknown>})).reverse() : [];
+ const seen = new WeakSet<object>();
+ while (pending.length) {
+  const {block,scope:parent} = pending.pop()!;
+  if (!block || typeof block !== 'object') continue;
+  if (seen.has(block)) throw new Error('Cyclic or repeated block reference');
+  seen.add(block);
+  const scope = block.source || (block.args && block.type !== 'component') ? storedComponentScope({},block.args) : parent;
+  visit(block,scope);
+  if (Array.isArray(block.children)) for (const child of [...block.children].reverse()) pending.push({block:child,scope});
+ }
+}
+export const blockActionTemplate = (block: Record<string,any>) => ({tag:block.tag,props:block.props,ttAction:block.props?.['data-tt-action'],ttActionRefs:block.props?.['data-tt-action-refs']});
