@@ -1,3 +1,4 @@
+import { LOCAL_WORKSPACE_CHANGED, workspaceIdentityKey } from '~/local-workspace/runtime.client';
 import React from 'react';
 import { Box, Button, Flex, Input, Text } from '@chakra-ui/react';
 import { useNavigate, useSearchParams } from 'react-router';
@@ -47,6 +48,7 @@ export const FeedPage = () => {
   const api = useApi();
   const user = useCurrentUser();
   const workspaceUser = useWorkspaceUser();
+  const localIdentity = workspaceIdentityKey();
   const lopu = useLopu();
 
   const [searchParams, setSearchParams] = useSearchParams();
@@ -73,13 +75,18 @@ export const FeedPage = () => {
   const [ranked, setRanked] = React.useState(false);
   const [localTrainingError, setLocalTrainingError] = React.useState<string | null>(null);
   React.useEffect(() => {
-    if (!workspaceUser?.localOnly || isDefaultAlgorithm(searchParams.get('sort'))) return;
-    let cancelled = false;
-    api.v1.algorithms.list().then((result: any) => { if (!cancelled) setAlgorithmId(result.activeAlgorithmId); }).catch(() => {});
-    return () => { cancelled = true; };
+    if (!workspaceUser || isDefaultAlgorithm(searchParams.get('sort'))) return;
+    let cancelled = false, sequence = 0;
+    const identity = workspaceIdentityKey();
+    const read = () => {
+      const ticket = ++sequence;
+      api.v1.algorithms.list().then((result: any) => { if (!cancelled && ticket === sequence && identity === workspaceIdentityKey()) setAlgorithmId(result.activeAlgorithmId); }).catch(() => {});
+    };
+    read(); window.addEventListener(LOCAL_WORKSPACE_CHANGED, read);
+    return () => { cancelled = true; window.removeEventListener(LOCAL_WORKSPACE_CHANGED, read); };
     // The captured API is scoped to this workspace; cancel on identity changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [workspaceUser?.id, workspaceUser?.localOnly]);
+  }, [workspaceUser?.id, workspaceUser?.localOnly, localIdentity, sortParam]);
 
 
   // login/logout swaps the viewer — re-seed the algorithm from their profile

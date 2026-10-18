@@ -235,3 +235,12 @@ placement retries remain separate from active-selection synchronization.
 `accountAlgorithmLibrary.test.ts` covers offline round trips, folder prerequisites,
 uncertain writes, conflict copies and export revocation. Native facade/editor/feed
 activation remains pending.
+
+
+Native account algorithms use `local-workspace/accountAlgorithmWorker.client.ts`
+and `accountApi.client.ts` to bind home profile/selection pumps to selected
+account authority. `AlgorithmSyncStatus.tsx` exposes fresh conflict review.
+`accountAlgorithmFacade.test.ts` covers source-plane observations, offline
+normal transfers and independent pumps; `accountAlgorithms.browser.test.ts`
+covers the native manager round-trip on the built Nitro app. The broader feed
+and account/plane browser gates remain in the coverage matrix.

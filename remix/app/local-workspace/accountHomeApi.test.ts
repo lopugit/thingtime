@@ -54,6 +54,8 @@ test('home facade uses normal library/import/export adapters without granting ho
   worker.themes.sync=async(...args)=>{themePasses++;return syncThemes(...args);};
   worker.themeTransport.snapshot=async()=>[];
   worker.themeTransport.selection=async()=>({themeId:null,version:'theme-selection-v1:'+'a'.repeat(64)});
+  worker.algorithmWorker!.transport.snapshot=async()=>[];
+  worker.algorithmWorker!.transport.selection=async()=>({algorithmId:null,version:'algorithm-selection-v1:'+'a'.repeat(64)});
   worker.sync.sync=async()=>{genericPasses++;throw Error('Home must be selected before sending generic content');};
   worker.wake();
   for(let n=0;n<50&&!themePasses;n++)await new Promise(resolve=>setTimeout(resolve,2));

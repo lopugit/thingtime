@@ -5148,3 +5148,14 @@ its own created profiles and writes a portable JSON artifact plus verification
 results locally. This server contract is a prerequisite for account offline
 algorithm editing; it does not yet connect that editor or a background queue.
 Anonymous profiles continue to stay entirely on the device.
+
+
+### Local production-shell verification
+
+For cold offline checks, run `npm --prefix remix run build:client` followed by
+`npm --prefix remix run sync:nitro-template`, then use this checkout's Nitro
+origin. Vite's HMR origin intentionally does not cache development modules.
+Vercel Analytics is mounted only when the server supplies Vercel deployment
+metadata (`VERCEL_URL` and a non-development environment); ordinary local and
+self-hosted forks need no Vercel credentials or Analytics setup. Do not copy
+production environment values merely to enable local verification.

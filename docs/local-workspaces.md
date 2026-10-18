@@ -4090,3 +4090,52 @@ The initial API attempt reached an unready dev runner before startup completed;
 the healthy-server rerun passed. Focused lint passed. TypeScript retained all
 91 normalized baseline diagnostics with no additions. No new native browser,
 CI or deployed verification is claimed for this checkpoint.
+
+
+## Native account algorithm integration — 2026-10-18
+
+The normal settings manager and feed now use protected home algorithm content
+through the account workspace facade. Create/edit/delete/apply/train and normal
+canonical transfers complete in IndexedDB; independent profile and selection
+pumps use the exact current selected account/origin/plane authority. A delayed
+profile upload does not block a built-in choice. Selecting another database
+does not authorize generic home content sync. Anonymous work never enters these
+account pumps. Account sharing/listing and unknown shared-profile branching
+remain explicit authorized online operations. Their requests carry captured
+actor/database headers and abort on workspace invalidation, including while
+waiting for capability negotiation. Older hosts must advertise the protected
+algorithm protocol before those account requests can run.
+
+Private feed features are partitioned by their selected source plane inside the
+account's home partition, bounded separately from profile content. Old unscoped
+account observations are ignored. Engagement sessions, queued events and
+observed DOM nodes retire on full workspace identity changes, including plane
+changes without a new root generation. The manager keeps cached first paint,
+uses cross-tab invalidation, and offers fresh conflict review with device/account
+choices and an independent copy. Offline cold startup still requires the native
+Reconnect action to verify the account before any upload.
+
+The new browser fixture is `accountAlgorithms.browser.test.ts`; set
+`TT_ACCOUNT_ALGORITHMS_URL` to the disposable loopback Nitro origin,
+`TT_ACCOUNT_ALGORITHMS_ARTIFACTS` to an ignored output directory and
+`TT_SHARED_PLAYWRIGHT_PATH` to the installed Playwright module. Build the current
+client and run `sync:nitro-template` before testing cold offline startup. The
+Vite HMR origin deliberately has no offline manifest. The fixture creates only
+a new disposable account, uses real APIs, exports/imports through the native
+controls, verifies fresh IDs and private ownership, and cleans up its profiles.
+It exercises 1440/390/320px layouts and immediate offline conflict-copy reload.
+
+Local checks: 592 workspace tests and four offline-shell tests passed, with 68
+opt-in browser/API skips; 88 feed tests passed with one opt-in skip. TypeScript
+retains the same 91 baseline diagnostics and focused lint has no errors (one
+existing Feed effect dependency warning). The production client build passed.
+The clean-browser fixture passed all five functional checkpoints with zero
+page errors: cold offline native create/apply, a second offline tab, canonical
+native export/import with fresh IDs, authorized reconnect sync and conflict
+review/keep-both surviving an immediate offline reload. Screenshots were checked
+at 1440, 390 and 320px. An initial failed run found the unavailable Vercel
+Analytics script on local Nitro; Analytics now follows existing server deployment
+metadata instead of loading on every local/fork production build. This checkpoint does not claim
+current-head CI, deployment verification or full feature-family acceptance.
+Native feed training across account/plane switches, the wider library pathways,
+latest-main reconciliation and the full coverage matrix remain merge gates.

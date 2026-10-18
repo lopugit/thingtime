@@ -68,6 +68,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-18 — **Codex (AI):** Route native account algorithm editing, selection
+  and transfers through independent local queues; isolate training features and
+  sessions by source workspace, add conflict review, and keep Vercel Analytics
+  out of local/offline shells. Browser acceptance and wider coverage remain
+  tracked in [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
 - 2026-10-18 — **Codex (AI)**: Added protected account algorithm import/export
   and library placement adapters, immutable folder retries and owned-home-folder
   validation (`api.algorithms-sync` 1.2.0). Native account editor/feed activation

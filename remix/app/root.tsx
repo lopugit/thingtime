@@ -186,7 +186,9 @@ export default function App() {
         </ThingDraftsProvider>
       </WorkspaceThingtimeProvider>
       <ScrollRestoration />
-      {mounted ? <Analytics /> : null}
+      {/* Only Vercel deployments serve the insights script. Local/fork and
+          offline shells must not parse their SPA fallback as JavaScript. */}
+      {mounted && envFromCookie.THINGTIME_VERCEL_URL && envFromCookie.THINGTIME_VERCEL_ENV !== 'development' ? <Analytics /> : null}
     </ChakraWrapper>
   );
 }

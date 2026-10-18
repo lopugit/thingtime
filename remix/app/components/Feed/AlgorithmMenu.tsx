@@ -1,3 +1,4 @@
+import { LOCAL_WORKSPACE_CHANGED } from '~/local-workspace/runtime.client';
 import React from 'react';
 import {
   Box,
@@ -244,7 +245,10 @@ export const AlgorithmMenu = (props: AlgorithmMenuProps) => {
   }, [user?.id]);
 
   React.useEffect(() => {
-    reload();
+    void reload();
+    const changed = () => { void reload(); };
+    window.addEventListener(LOCAL_WORKSPACE_CHANGED, changed);
+    return () => window.removeEventListener(LOCAL_WORKSPACE_CHANGED, changed);
   }, [reload]);
 
   const handleSelect = async (id: string | null) => {

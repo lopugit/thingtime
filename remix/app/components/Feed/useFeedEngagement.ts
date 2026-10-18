@@ -1,7 +1,7 @@
 import React from 'react';
 
 import { useApi } from '~/hooks/useApi';
-import { rootIdentity } from '~/utils/rootIdentity';
+import { subscribeWorkspaceIdentity, workspaceIdentityKey } from '~/local-workspace/runtime.client';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { crossedGrowthStage } from './algorithmGrowth';
 import { isDefaultAlgorithm } from './defaultAlgorithms';
@@ -60,24 +60,27 @@ export const useFeedEngagement = ({ activeAlgorithmId }: UseFeedEngagementArgs):
   lopuRef.current = lopu;
 
   // Identity invalidation can happen before React rerenders. Clear immediately,
-  // and never hand a previous visitor's session to the new API facade.
-  const generationRef = React.useRef(rootIdentity.read().generation);
-  const renderedGenerationRef = React.useRef(rootIdentity.read().generation);
-  renderedGenerationRef.current = rootIdentity.read().generation;
+  // including a source-plane change within the same root generation. Never
+  // hand old private post IDs or observations to the next API facade.
+  const identityRef = React.useRef(workspaceIdentityKey());
+  const renderedIdentityRef = React.useRef(workspaceIdentityKey());
+  renderedIdentityRef.current = workspaceIdentityKey();
   const ensureSession = React.useCallback(() => {
-    const identity = rootIdentity.read();
-    if (generationRef.current !== identity.generation) {
-      generationRef.current = identity.generation;
+    const identity = workspaceIdentityKey();
+    if (identityRef.current !== identity) {
+      identityRef.current = identity;
       sessionEventsRef.current = [];
       queueRef.current = [];
       viewSentRef.current.clear();
       dwellSentRef.current.clear();
       dwellStartRef.current.clear();
+      elementIdsRef.current.forEach((_id, element) => observerRef.current?.unobserve(element));
+      elementIdsRef.current.clear();
       setSessionEventCount(0);
     }
-    return !identity.pending && renderedGenerationRef.current === identity.generation;
+    return !!identity && renderedIdentityRef.current === identity;
   }, []);
-  React.useEffect(() => rootIdentity.subscribe(ensureSession), [ensureSession]);
+  React.useEffect(() => subscribeWorkspaceIdentity(ensureSession), [ensureSession]);
   const getSessionEvents = React.useCallback(() => ensureSession() ? sessionEventsRef.current.slice() : [], [ensureSession]);
 
   const recordEvent = React.useCallback((event: EngagementEvent) => {
@@ -122,7 +125,7 @@ export const useFeedEngagement = ({ activeAlgorithmId }: UseFeedEngagementArgs):
 
   const flush = React.useCallback(() => {
     if (!ensureSession() || !queueRef.current.length) return;
-    const generation = generationRef.current;
+    const identity = identityRef.current;
 
     // no active algorithm — the session still remembers, nothing to train
     if (!algorithmIdRef.current || isDefaultAlgorithm(algorithmIdRef.current)) {
@@ -139,7 +142,7 @@ export const useFeedEngagement = ({ activeAlgorithmId }: UseFeedEngagementArgs):
     apiRef.current.v1.algorithms
       .track({ algorithmId: algorithmIdRef.current, events: batch })
       .then((resp: any) => {
-        if (rootIdentity.read().pending || rootIdentity.read().generation !== generation) return;
+        if (!identity || workspaceIdentityKey() !== identity) return;
         // growth milestones (🥚→🐣→🐥→🧠): the server returns the
         // authoritative post-flush eventCount, so a crossing is detected from
         // before/after totals — monotonic, so each toast fires exactly once.
@@ -150,13 +153,13 @@ export const useFeedEngagement = ({ activeAlgorithmId }: UseFeedEngagementArgs):
         }
       })
       .catch(() => {
-        if (rootIdentity.read().pending || rootIdentity.read().generation !== generation) return;
+        if (!identity || workspaceIdentityKey() !== identity) return;
         lopuRef.current({ title: 'Algorithm training was not saved', description: 'Your feed is still available. Check your connection or device storage before training again.', status: 'error', duration: 6000 });
       });
   }, [ensureSession]);
 
   const observeCard = React.useCallback((element: Element | null, thingId: string) => {
-    if (!element || !thingId) return;
+    if (!ensureSession() || !element || !thingId) return;
     // sweep card nodes that left the DOM (filter/algorithm resets) so the
     // observer + map don't pin detached elements for the whole session
     elementIdsRef.current.forEach((_id, tracked) => {
@@ -168,7 +171,7 @@ export const useFeedEngagement = ({ activeAlgorithmId }: UseFeedEngagementArgs):
     if (elementIdsRef.current.get(element) === thingId) return;
     elementIdsRef.current.set(element, thingId);
     observerRef.current?.observe(element);
-  }, []);
+  }, [ensureSession]);
 
   React.useEffect(() => {
     const observer = new IntersectionObserver(

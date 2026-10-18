@@ -14,6 +14,7 @@ import { type WorkspaceDatabase, WorkspaceError, type WorkspaceLease, type Works
 
 export type LocalAlgorithmOptions = {
 	scope?: WorkspaceScope;
+	observationScope?: Extract<WorkspaceScope, { kind: 'account' }>;
 	now?: () => number;
 	uuid?: () => string;
 	onWrite?(tx: WorkspaceTransaction, row: LocalThing | null, previous: LocalThing | null): Promise<void>;
@@ -61,12 +62,29 @@ const project = (row: LocalThing) => ({
 	topInterests: topInterests(algorithmTransferContent(row.crystal).weights)
 });
 
-/** Local profiles use the canonical training/ranking maths. Observations come
- * only from the credential-free public feed adapter, never account reads. */
+/** Local profiles use canonical training/ranking maths. Anonymous observations
+ * come from credential-free public feeds; account observations are bounded and
+ * isolated by their authorized source plane, even though profiles live at home. */
 export class LocalAlgorithms {
 	private scope: WorkspaceScope;
+	private featureCollection: string;
 	constructor(private db: WorkspaceDatabase, private lease: WorkspaceLease, private options: LocalAlgorithmOptions = {}) {
 		this.scope = options.scope ?? { kind: 'anonymous' };
+		const source = options.observationScope;
+		if (
+			source &&
+			(this.scope.kind !== 'account' ||
+				source.ownerId !== this.scope.ownerId ||
+				source.origin !== this.scope.origin ||
+				!source.dataPlane ||
+				source.dataPlane.length > 200)
+		)
+			throw new WorkspaceError('WORKSPACE_CHANGED', 'Feed observations must belong to this account and origin.', 409);
+		// Account profiles live at home, but identical post IDs in different
+		// databases must never share observations. Old unscoped account entries
+		// deliberately confer no training input after this upgrade.
+		this.featureCollection =
+			this.scope.kind === 'anonymous' ? 'algorithm-post-features' : `algorithm-features-v1:${source?.dataPlane ?? this.scope.dataPlane}`;
 	}
 	private now() {
 		return this.options.now?.() ?? Date.now();
@@ -204,20 +222,25 @@ export class LocalAlgorithms {
 	private async features(tx: WorkspaceTransaction, ids: string[]) {
 		const result = new Map<string, PostFeatures>();
 		for (const id of new Set(ids)) {
-			const saved = await tx.get<SavedFeatures>('algorithm-post-features', id);
+			const saved = await tx.get<SavedFeatures>(this.featureCollection, id);
 			if (saved) result.set(id, { ...saved, createdAt: new Date(saved.createdAt) });
 		}
 		return result;
 	}
 	async observePublicPosts(posts: any[]) {
+		return this.observePosts(posts);
+	}
+	/** Input comes from the current adapter's authorized feed response. This
+	 * records bounded features only; it performs no reads or remote mutations. */
+	async observePosts(posts: any[]) {
 		return this.transaction('readwrite', async (tx) => {
 			for (const post of posts.slice(0, 200)) {
 				const features = publicFeatures(post);
-				if (features) await tx.put('algorithm-post-features', post.id, features);
+				if (features) await tx.put(this.featureCollection, post.id, features);
 			}
-			const all = await tx.list<SavedFeatures>('algorithm-post-features');
+			const all = await tx.list<SavedFeatures>(this.featureCollection);
 			all.sort((a, b) => b.value.observedAt - a.value.observedAt || a.id.localeCompare(b.id));
-			for (const row of all.slice(1000)) await tx.delete('algorithm-post-features', row.id);
+			for (const row of all.slice(1000)) await tx.delete(this.featureCollection, row.id);
 		});
 	}
 	async track(input: { algorithmId: string; events?: unknown }) {

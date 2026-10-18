@@ -11918,3 +11918,30 @@ never point it at an existing account or deployment.
   must refuse download. Refuse mismatched home/account adapters.
 - Native account facade/editor/feed integration is still an outstanding gate;
   adapter tests alone do not count as full native browser acceptance.
+
+
+### Native account algorithms and isolated feed observations
+
+- Cold-start the built Nitro app offline, create/apply/edit a profile, and
+  download/import canonical JSON through native controls. Require fresh IDs,
+  private inactive copies and no account or draft requests before Reconnect.
+- Block a profile upload while selecting a built-in algorithm. Require local
+  completion and independent selection sync; custom database authority must
+  never start the generic home content sender.
+- Reuse a post ID in two selected databases. Never train one source's features
+  from the other's events, and clear queued/session events and observed nodes
+  on identity changes even when the root generation is unchanged.
+- Create a concurrent device/account edit, review both, keep both, immediately
+  cold-reload offline and verify both names and the independent copy persist.
+- Check the native manager at 1440, 390 and 320px, after dismissing transient
+  notifications; controls must remain inside the viewport.
+- Local/fork production builds and offline shells must not request an unavailable
+  `/_vercel/insights/script.js` and parse their HTML fallback as JavaScript.
+  Vercel deployments retain Analytics through existing deployment metadata.
+- Run the opt-in `accountAlgorithms.browser.test.ts` against a newly created
+  disposable loopback fixture only. Build client assets and sync the Nitro
+  template first; the HMR origin is not an offline production shell.
+
+- Delay capability negotiation for an explicit sharing/branching request, then
+  switch accounts or databases. The request must keep its original actor/plane
+  headers and abort before sending with the new session; no mutation may occur.

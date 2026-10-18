@@ -104,13 +104,15 @@ export class AccountAlgorithmSync {
 		readonly scope: Scope,
 		private lease: WorkspaceLease,
 		private now = () => Date.now(),
-		private uuid = () => crypto.randomUUID()
+		private uuid = () => crypto.randomUUID(),
+		observationScope: Scope = scope
 	) {
 		if (scope.kind !== 'account') return fail('Anonymous algorithms never synchronize.', 'ACCOUNT_REQUIRED', 403);
 		if (scope.dataPlane !== 'home') return fail('Account algorithms belong to the home workspace.', 'ALGORITHM_HOME_REQUIRED');
 		this.selection = new AccountAlgorithmSelection(db, scope, lease, now, uuid);
 		this.algorithms = new LocalAlgorithms(db, lease, {
 			scope,
+			observationScope,
 			now,
 			uuid,
 			onActive: (tx, id) => this.selection.setIn(tx, id),

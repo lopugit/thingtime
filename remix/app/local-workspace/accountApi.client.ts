@@ -1,3 +1,6 @@
+import { createAccountAlgorithmWorker } from './accountAlgorithmWorker.client';
+import { isTransferAlgorithm } from '../utils/thingTransfer/algorithm';
+import { isDefaultAlgorithm } from '../components/Feed/defaultAlgorithms';
 import { LocalActions } from './actions';
 import { AccountThemeSync } from './accountThemes';
 import { isTransferTheme } from '../utils/thingTransfer/theme';
@@ -46,12 +49,23 @@ const workers = new Map<string, ReturnType<typeof createWorker>>();
 /** Matches the sync claim window: the longest a blocked pass must wait before
  * a crashed tab's lease expires and this tab can replay the frozen write. */
 const BLOCKED_RETRY_MS = 60_000;
+const snapshotOptionalInput = <T extends object>(input: T): T => {
+ if (!input || ![Object.prototype, null].includes(Object.getPrototypeOf(input)) || Object.getOwnPropertySymbols(input).length)
+  throw new WorkspaceError('INVALID_INPUT', 'Choose a plain request object.');
+ const entries = Object.entries(Object.getOwnPropertyDescriptors(input)).flatMap(([key, property]) => {
+  if (!property.enumerable || !('value' in property)) throw new WorkspaceError('INVALID_INPUT', 'Request accessors are not supported.');
+  return property.value === undefined ? [] : [[key, property.value]];
+ });
+ return snapshotTransferValue(Object.fromEntries(entries)) as T;
+};
 function createWorker(scope: AccountScope, dispose: () => void, authorityScope: AccountScope = scope) {
 	const lease = accountWorkspaceLease(authorityScope), db = workspaceDatabase();
 	const announce = () => scope.dataPlane === 'home' ? announceAccountHomeThemeChange() : announceLocalWorkspaceChange();
 	const files = new AccountFileSync(db, scope, lease);
+ const algorithmWorker = scope.dataPlane === 'home' ? createAccountAlgorithmWorker(db, authorityScope, lease, announce, () => wake()) : undefined;
+ const algorithms = algorithmWorker?.algorithms;
 	const themes = new AccountThemeSync(db,scope,lease), themeTransport = accountThemeTransport(authorityScope,lease);
-	const sync = new AccountThingSync(db, scope, lease, undefined, undefined, files.contentHooks, themes), transport = accountThingTransport(scope, lease), interactions = new AccountInteractionSync(db, scope, lease), posts = new AccountPostCache(db, scope, lease);
+	const sync = new AccountThingSync(db, scope, lease, undefined, undefined, files.contentHooks, themes, algorithms), transport = accountThingTransport(scope, lease), interactions = new AccountInteractionSync(db, scope, lease), posts = new AccountPostCache(db, scope, lease);
 	const drafts = new AccountDraftSync(db, scope, lease, files.draftHooks), catalog = new AccountDraftCatalog(db, scope, lease);
 	const discussions = new AccountDiscussionCache(db, scope, lease);
  const themeErrors = {catalog: '', selection: ''};
@@ -111,7 +125,7 @@ function createWorker(scope: AccountScope, dispose: () => void, authorityScope: 
  });
 	const wake = () => {
 		if (stopped || navigator.onLine === false || !canSyncAccountWorkspace(authorityScope)) return;
-		themePump.wake();themeSelectionPump.wake();void refreshThemes().catch(()=>{});void refreshThemeSelection().catch(()=>{});
+		algorithmWorker?.wake();themePump.wake();themeSelectionPump.wake();void refreshThemes().catch(()=>{});void refreshThemeSelection().catch(()=>{});
 		// A home view grants local access only. Generic queues wait for home to be selected.
 		if (!canSyncAccountWorkspace(scope)) return;
 		draftPump.wake();
@@ -134,7 +148,7 @@ function createWorker(scope: AccountScope, dispose: () => void, authorityScope: 
 			const completed = outcomes.reduce((sum, result) => sum + result.completed, 0);
 			const contentStatus = await sync.status(), interactionStatus = await interactions.status(), fileStatus = await files.status(), status = [...contentStatus, ...interactionStatus, ...fileStatus];
 			if (JSON.stringify([contentStatus, interactionStatus, fileStatus, await themes.status()]) !== before) announceLocalWorkspaceChange();
-			themePump.wake(); if (completed) { draftPump.wake(); } // Uploaded originals/folders unblock dependent senders only.
+			algorithmWorker?.wake();themePump.wake(); if (completed) { draftPump.wake(); } // Uploaded originals/folders unblock dependent senders only.
 			const pending = status.filter(row => row.state === 'pending' || row.state === 'syncing');
 			if (pending.length && !stopped) {
 				// A row whose retryAt has already passed is not schedulable work: the
@@ -156,15 +170,16 @@ function createWorker(scope: AccountScope, dispose: () => void, authorityScope: 
 		}
 	};
 	const unsubscribe = lease.onInvalidate(() => stop());
+	const reconnect = () => { algorithmWorker?.wake(true); wake(); };
 	const unbind = subscribeWorkspaceBinding(wake);
 	const stop = () => {
 		if (stopped) return;
-		stopped = true; controller.abort(); void historyBackend?.close().catch(() => {}); draftPump.stop(); themePump.stop(); themeSelectionPump.stop(); if (timer) clearTimeout(timer);
-		window.removeEventListener('online', wake); window.removeEventListener('focus', wake); unsubscribe(); unbind(); dispose();
+		stopped = true; controller.abort(); void historyBackend?.close().catch(() => {}); draftPump.stop(); algorithmWorker?.stop(); themePump.stop(); themeSelectionPump.stop(); if (timer) clearTimeout(timer);
+		window.removeEventListener('online', reconnect); window.removeEventListener('focus', wake); unsubscribe(); unbind(); dispose();
 	};
-	window.addEventListener('online', wake); window.addEventListener('focus', wake);
+	window.addEventListener('online', reconnect); window.addEventListener('focus', wake);
 	const draftClient = new AccountDraftClient({ drafts, catalog, files, transport, db, lease, wake }, scope, () => navigator.onLine !== false && canSyncAccountWorkspace(scope), () => announceLocalWorkspaceChange());
-	return { sync, interactions, posts, discussions, files, drafts, catalog, draftClient, historyExport, historyVersion, fileRetentionErrors, transport, db, lease, wake, stop, themes, themeTransport, themeErrors, refreshThemes, refreshThemeSelection };
+	return { sync, interactions, posts, discussions, files, drafts, catalog, draftClient, historyExport, historyVersion, fileRetentionErrors, transport, db, lease, wake, stop, themes, themeTransport, themeErrors, refreshThemes, refreshThemeSelection, algorithms, algorithmWorker };
 }
 export type AccountLocalView = { localPlane?: 'home' };
 export const accountWorkspaceWorker = (authorityScope: AccountScope, view: AccountLocalView = {}) => {
@@ -176,7 +191,7 @@ export const accountWorkspaceWorker = (authorityScope: AccountScope, view: Accou
 	return worker;
 };
 /** Root-bound bootstrap, invoked in an effect, never during React rendering. */
-export const startAccountWorkspaceSync = (scope: AccountScope, view: AccountLocalView = {}) => { accountWorkspaceWorker(scope, view).wake(); };
+export const startAccountWorkspaceSync = (scope: AccountScope, view: AccountLocalView = {}) => { accountWorkspaceWorker(scope, view).wake(); if (scope.dataPlane !== 'home' && view.localPlane !== 'home') accountWorkspaceWorker(scope, { localPlane: 'home' }).wake(); };
 
 export function accountApi<T extends Record<string, any>>(remote: T, owner: Owner, dataPlane: string, view: AccountLocalView = {}): T {
 	// Keep retained callbacks bound to the destination chosen at construction.
@@ -188,6 +203,16 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 	// later account, even when a worker for that new session already exists.
 	const facadeLease = accountWorkspaceLease(authorityScope);
 	const worker = () => { facadeLease.assertCurrent(); return accountWorkspaceWorker(authorityScope, view); };
+ const algorithmService = () => { facadeLease.assertCurrent(); return accountWorkspaceWorker(authorityScope, { localPlane: 'home' }).algorithmWorker!; };
+ const algorithmChanged = () => { facadeLease.assertCurrent(); announceAccountHomeThemeChange(); algorithmService().wake(); };
+ const algorithmOnline = async (method: string, input?: unknown) => {
+  const lease = accountRemoteWorkspaceLease(authorityScope); lease.assertCurrent();
+  const controller = new AbortController(), off = lease.onInvalidate(() => controller.abort());
+  try {
+   const result = await remote.algorithms[method](input, { signal: AbortSignal.any([controller.signal, AbortSignal.timeout(20_000)]), expectedActor: authorityScope.ownerId, expectedDataPlane: authorityScope.dataPlane });
+   facadeLease.assertCurrent(); lease.assertCurrent(); return result;
+  } finally { off(); }
+ };
 	const guard = (value: any): any => {
 		// API methods are promise-based. Refusals must reject that promise so an
 		// optional remote probe's .catch() can handle offline/unconfirmed identity
@@ -356,7 +381,7 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 			// Page membership belongs to the authorized server snapshot. Keep deleted
 			// IDs here; views hide tombstones and explicit conflict restoration can
 			// reveal them again without losing membership in the cached page.
-			const membership = Array.isArray(result.things) && result.things.every((thing: any) => (accountThingCanCache(thing) || isTransferTheme(thing)) && thing.author?.id === owner.id)
+			const membership = Array.isArray(result.things) && result.things.every((thing: any) => (accountThingCanCache(thing) || isTransferTheme(thing) || (scope.dataPlane === 'home' && isTransferAlgorithm(thing))) && thing.author?.id === owner.id)
 				? { ids: result.things.map((thing: any) => thing.id), nextCursor: result.nextCursor || null } : null;
 			const retain = async (thing: any) => {
 				if (thing.author?.id !== owner.id) return thing;
@@ -379,6 +404,11 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 						return thing;
 					}
 				}
+				if (isTransferAlgorithm(thing) && scope.dataPlane === 'home') {
+     await worker().algorithmWorker!.refresh();
+     const local = await sync.view(thing.id);
+     return await sync.isDeleted(thing.id) ? null : local ? project(local) : thing;
+    }
 				if (isTransferTheme(thing)) {
 					await worker().refreshThemes();
 					const local=await sync.view(thing.id);
@@ -554,6 +584,45 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
     } catch { facadeLease.assertCurrent(); return {...local,incomplete:true}; }
    }
   },
+  algorithms: { ...online.algorithms,
+   list: async () => {
+    const service = algorithmService();
+    void service.refresh().catch(() => {}); void service.refreshSelection().catch(() => {});
+    return { ...await service.algorithms.list(), syncError: service.errors.catalog, selectionSyncError: service.errors.selection };
+   },
+   create: async (input: Parameters<ReturnType<typeof algorithmService>['algorithms']['algorithms']['create']>[0]) => {
+    input = snapshotOptionalInput(input);
+    const service = algorithmService();
+    if (input.branchFrom && !(await service.algorithms.list()).algorithms.some(row => row.id === input.branchFrom)) {
+     // Only the canonical online branch operation can copy a shared stranger's
+     // profile. A public preview is never authority to invent its private weights.
+     const result = await algorithmOnline('create', input);
+     try { await service.algorithms.refresh(service.transport); } catch { facadeLease.assertCurrent(); result.localCacheError = 'The account copy was created, but could not be retained for offline editing. Reopen it online.'; }
+     algorithmChanged(); return result;
+    }
+    const result = await service.algorithms.algorithms.create(input); algorithmChanged(); return result;
+   },
+   update: async (input: Parameters<ReturnType<typeof algorithmService>['algorithms']['algorithms']['update']>[0]) => {
+    input = snapshotOptionalInput(input);
+    const service = algorithmService();
+    if (input.shared !== undefined || input.listed !== undefined) {
+     const state = (await service.algorithms.status()).find(row => row.id === input.id);
+     if (state && (state.state !== 'synced' || state.deleted)) throw new WorkspaceError('ALGORITHM_SYNC_REQUIRED', 'Your edits are saved on this device. Synchronize or review this profile before changing its account sharing.', 409);
+     const result = await algorithmOnline('update', input);
+     try { await service.algorithms.refresh(service.transport); } catch { facadeLease.assertCurrent(); result.localCacheError = 'Account sharing changed, but its device copy could not be refreshed.'; }
+     algorithmChanged(); return result;
+    }
+    const result = await service.algorithms.algorithms.update(input); algorithmChanged(); return { ...result, algorithm: (await service.algorithms.list()).algorithms.find(row => row.id === input.id) || result.algorithm };
+   },
+   remove: async ({ id }: { id: string }) => { const result = await algorithmService().algorithms.algorithms.remove(id); algorithmChanged(); return result; },
+   setActive: async ({ algorithmId }: { algorithmId: string | null }) => { const result = await algorithmService().algorithms.algorithms.setActive(algorithmId); algorithmChanged(); return result; },
+   track: async (input: { algorithmId: string; events?: unknown }) => { const result = await algorithmService().algorithms.algorithms.track(input); if (result.trained) algorithmChanged(); return result; },
+   getShared: async ({ id }: { id: string }) => {
+    const local = (await algorithmService().algorithms.list()).algorithms.find(row => row.id === id);
+    return local ? { ok: true, algorithm: local } : algorithmOnline('getShared', { id });
+   },
+   search: (input: unknown) => algorithmOnline('search', input)
+  },
   themes: {...online.themes,
    list: async()=>{const service=worker();void service.refreshThemes().catch(()=>{});void service.refreshThemeSelection().catch(()=>{});return {...await service.themes.list(),syncError:service.themeErrors.catalog};},
    save: async(input:Parameters<AccountThemeSync['save']>[0])=>{const result=await worker().themes.save(input);changed();return result;},
@@ -632,7 +701,15 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 		},
 		schemas: { ...online.schemas, browse: browse('schema') }, components: { ...online.components, browse: browse('component') }, things: { ...online.things,
 		save: (args: any) => interact('save', args), react: (args: any) => interact('reaction', args),
-		feed: async (...args: any[]) => { const startedAt = Date.now(); return retainPosts(await online.things.feed(...args), startedAt); },
+		feed: async (args: Record<string, unknown> = {}, ...rest: any[]) => {
+   args = snapshotOptionalInput(args);
+   const startedAt = Date.now(), service = algorithmService();
+   const id = typeof args.algorithm === 'string' && !isDefaultAlgorithm(args.algorithm) && (await service.algorithms.list()).algorithms.some(row => row.id === args.algorithm) ? args.algorithm : null;
+   const result = await retainPosts(await online.things.feed({ ...args, ...(id ? { algorithm: 'latest' } : {}) }, ...rest), startedAt);
+   try { await service.algorithms.algorithms.observePosts(result.posts || []); }
+   catch (error) { facadeLease.assertCurrent(); result.localTrainingError = error instanceof Error ? error.message : 'Device training storage is unavailable.'; }
+   return id ? { ...result, posts: await service.algorithms.algorithms.rankPage(id, result.posts || []), ranked: true, localRanking: true } : result;
+  },
 		trending: async (...args: any[]) => { const startedAt = Date.now(); return retainPosts(await online.things.trending(...args), startedAt); },
 		saved: async (args: {cursor?:string;limit?:number} = {}) => {
 			const service = worker();

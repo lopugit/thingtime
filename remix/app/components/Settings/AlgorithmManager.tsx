@@ -1,8 +1,12 @@
+import { readStampedCache, writeStampedCache, pruneCacheNamespace } from '~/hooks/localCache';
+import { LocalApiView } from '~/local-workspace/LocalApiView';
+import { LOCAL_WORKSPACE_CHANGED, workspaceIdentityKey } from '~/local-workspace/runtime.client';
+import { AlgorithmSyncStatus } from './AlgorithmSyncStatus';
 import React from 'react';
 import { Box, Button, Flex, Input, Spinner, Text } from '@chakra-ui/react';
 
 import { growthStageFor } from '~/components/Feed/algorithmGrowth';
-import { POST_TYPE_META, PostType, PublicAlgorithm, timeAgo } from '~/components/Feed/feedTypes';
+import { POST_TYPE_META, type PostType, type PublicAlgorithm, timeAgo } from '~/components/Feed/feedTypes';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { ThingTransferControls } from '~/components/Things/ThingTransferControls';
 import { useWorkspaceUser } from '~/hooks/useWorkspaceUser';
@@ -65,14 +69,27 @@ const ActiveBadge = () => (
   </Flex>
 );
 
-export const AlgorithmManager = () => {
+export const AlgorithmManager = () => <LocalApiView.Provider value={{ localPlane: 'home' }}><AlgorithmManagerContent /></LocalApiView.Provider>;
+
+const AlgorithmManagerContent = () => {
   const api = useApi();
-  const localOnly = !!useWorkspaceUser()?.localOnly;
+  const workspaceUser = useWorkspaceUser();
+  const localOnly = !!workspaceUser?.localOnly;
+  const cacheKey = `tt-algorithm-manager:${JSON.stringify([localOnly ? 'anonymous' : 'account', workspaceUser?.id])}`;
+  const [initial] = React.useState(() => {
+    const cached = readStampedCache<{ algorithms: PublicAlgorithm[]; activeAlgorithmId: string | null }>(cacheKey);
+    return cached && Array.isArray(cached.algorithms) && cached.algorithms.length <= 100 && cached.algorithms.every(row => row && typeof row.id === 'string' && typeof row.name === 'string' && typeof row.emoji === 'string' && Number.isFinite(row.eventCount) && Array.isArray(row.topInterests)) && (cached.activeAlgorithmId === null || typeof cached.activeAlgorithmId === 'string') ? cached : null;
+  });
   const lopu = useLopu();
 
-  const [algorithms, setAlgorithms] = React.useState<PublicAlgorithm[]>([]);
-  const [activeAlgorithmId, setActiveAlgorithmId] = React.useState<string | null>(null);
-  const [loading, setLoading] = React.useState(true);
+  const [algorithms, setAlgorithms] = React.useState<PublicAlgorithm[]>(initial?.algorithms || []);
+  const [activeAlgorithmId, setActiveAlgorithmId] = React.useState<string | null>(initial?.activeAlgorithmId ?? null);
+  const [loading, setLoading] = React.useState(!initial);
+  React.useEffect(() => {
+    if (loading) return;
+    writeStampedCache(cacheKey, { algorithms, activeAlgorithmId });
+    pruneCacheNamespace('tt-algorithm-manager:', cacheKey, 8);
+  }, [cacheKey, algorithms, activeAlgorithmId, loading]);
 
   const [renamingId, setRenamingId] = React.useState<string | null>(null);
   const [renameValue, setRenameValue] = React.useState('');
@@ -83,26 +100,32 @@ export const AlgorithmManager = () => {
   const [newName, setNewName] = React.useState('');
   const [newEmoji, setNewEmoji] = React.useState('🧠');
 
+  const refreshSequence = React.useRef(0);
   const refresh = async () => {
+    const ticket = ++refreshSequence.current, identity = workspaceIdentityKey();
+    const current = () => ticket === refreshSequence.current && identity === workspaceIdentityKey();
     try {
       const resp = await api.v1.algorithms.list();
+      if (!current()) return;
       setAlgorithms(resp?.algorithms || []);
       setActiveAlgorithmId(resp?.activeAlgorithmId ?? null);
     } catch (err: any) {
+      if (!current()) return;
       lopu({
         title: 'Could not load algorithms 😔',
         description: err?.error || err?.message || 'Please try again in a moment.',
         status: 'error'
       });
     } finally {
-      setLoading(false);
+      if (current()) setLoading(false);
     }
   };
 
+  const refreshRef = React.useRef(refresh); refreshRef.current = refresh;
   React.useEffect(() => {
-    refresh();
-    // mount-only: api/lopu identities change per render but the callbacks are stable
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    const changed = () => { void refreshRef.current(); };
+    changed(); window.addEventListener(LOCAL_WORKSPACE_CHANGED, changed);
+    return () => window.removeEventListener(LOCAL_WORKSPACE_CHANGED, changed);
   }, []);
 
   // arm the inline delete confirm briefly, then relax back
@@ -169,7 +192,7 @@ export const AlgorithmManager = () => {
         branchFrom: algorithm.id
       });
       if (resp?.algorithm) {
-        setAlgorithms((prev) => [...prev, resp.algorithm]);
+        setAlgorithms((prev) => [...prev.filter(item => item.id !== resp.algorithm.id), resp.algorithm]);
       }
       lopu({
         title: 'Algorithm branched 🌿',
@@ -277,7 +300,7 @@ export const AlgorithmManager = () => {
     try {
       const resp = await api.v1.algorithms.create({ name, emoji: newEmoji.trim() || undefined });
       if (resp?.algorithm) {
-        setAlgorithms((prev) => [...prev, resp.algorithm]);
+        setAlgorithms((prev) => [...prev.filter(item => item.id !== resp.algorithm.id), resp.algorithm]);
       }
       setNewName('');
       setCreatorOpen(false);
@@ -333,8 +356,8 @@ export const AlgorithmManager = () => {
   }
 
   return (
-    <Flex flexDirection="column" rowGap={2}>
-      {localOnly && <Text fontSize="sm">Saved and trained on this device. Nothing is uploaded.</Text>}
+    <Flex data-testid="algorithm-manager" flexDirection="column" rowGap={2}>
+      {localOnly ? <Text fontSize="sm">Saved and trained on this device. Nothing is uploaded.</Text> : <AlgorithmSyncStatus />}
       <Box><ThingTransferControls onImported={refresh} /></Box>
       <Text fontSize="xs" color="var(--tt-muted, #9a9aa6)">Downloaded or copied algorithms contain your private interest weights. Share these files only deliberately.</Text>
       {/* "Latest" pseudo-entry — chronological feed, no training */}
@@ -371,7 +394,7 @@ export const AlgorithmManager = () => {
       {algorithms.map((algorithm) => {
         const active = activeAlgorithmId === algorithm.id;
         return (
-          <Flex key={algorithm.id} {...rowShell(active)}>
+          <Flex key={algorithm.id} data-testid="algorithm-card" data-algorithm-id={algorithm.id} {...rowShell(active)}>
             <Flex alignItems="center" columnGap={3} rowGap={2} flexWrap="wrap">
               <Text fontSize="lg" flexShrink={0}>
                 {algorithm.emoji}
@@ -380,6 +403,7 @@ export const AlgorithmManager = () => {
                 {renamingId === algorithm.id ? (
                   <Input
                     size="sm"
+                    aria-label="Algorithm name"
                     autoFocus
                     value={renameValue}
                     maxWidth="240px"

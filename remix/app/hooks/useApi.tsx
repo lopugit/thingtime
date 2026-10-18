@@ -50,13 +50,13 @@ const refreshRootData = () => {
 // GET helper mirroring useAsyncFetcher semantics: parses JSON and throws the
 // parsed payload on !ok so callers catch { ok: false, error } shapes.
 // Every call is recorded in the DevKit request log (method/path/status/ms).
-const getJson = async (url: string, options?: { signal?: AbortSignal; expectedDataPlane?: string | null }) => {
+const getJson = async (url: string, options?: { signal?: AbortSignal; expectedDataPlane?: string | null; expectedActor?: string }) => {
   if (url.startsWith('/api/v1/things')) ensureFoundPostBrowserIdentity();
   const started = performance.now();
   let response: Response;
   try {
     response = await fetch(url, { credentials: 'include', signal: options?.signal,
-      ...(options?.expectedDataPlane ? { headers: { [EXPECTED_DATA_PLANE_HEADER]: options.expectedDataPlane } } : {}) });
+      ...((options?.expectedDataPlane || options?.expectedActor) ? { headers: { ...(options.expectedDataPlane ? { [EXPECTED_DATA_PLANE_HEADER]: options.expectedDataPlane } : {}), ...(options.expectedActor ? { 'X-Thingtime-Expected-Actor': options.expectedActor } : {}) } } : {}) });
   } catch (error) {
     const aborted = error instanceof Error && error.name === 'AbortError';
     recordApiCall({
@@ -1431,28 +1431,36 @@ export function useApi(explicitView?: AccountLocalView) {
       revoke: useCallback(async (args) => asyncFetcher.submit({ id: args?.id }, { action: '/api/v1/tokens/revoke' }), [asyncFetcher])
     },
     algorithms: {
-      search: useCallback(async (args = {}) => {
+      search: useCallback(async (args = {}, options?: { signal?: AbortSignal; expectedActor?: string; expectedDataPlane?: string }) => {
+        if (options?.expectedActor) await requireThingtimeCapability('api.algorithms-sync', '1.2.0');
         await requireThingtimeCapability('api.algorithms-search', '1.0.0');
-        return getJson(`/api/v1/algorithms/search${toQuery(args)}`);
+        return getJson(`/api/v1/algorithms/search${toQuery(args)}`, options);
       }, []),
       list: useCallback(async () => getJson('/api/v1/algorithms'), []),
       // share-link preview (identity + training size only, never weights)
       getShared: useCallback(
-        async (args) => getJson(`/api/v1/algorithms/shared?id=${encodeURIComponent(args?.id || '')}`),
+        async (args, options?: { signal?: AbortSignal; expectedActor?: string; expectedDataPlane?: string }) => {
+          if (options?.expectedActor) await requireThingtimeCapability('api.algorithms-sync', '1.2.0');
+          return getJson(`/api/v1/algorithms/shared?id=${encodeURIComponent(args?.id || '')}`, options);
+        },
         []
       ),
       create: useCallback(
-        async (args) => {
+        async (args, options?: { signal?: AbortSignal; expectedActor?: string; expectedDataPlane?: string }) => {
+          if (options?.expectedActor) await requireThingtimeCapability('api.algorithms-sync', '1.2.0');
           const { name, emoji, branchFrom, events, description } = args;
           if (description !== undefined) await requireThingtimeCapability('api.algorithms', '1.1.0');
-          return asyncFetcher.submit({ name, emoji, branchFrom, events, description }, { action: '/api/v1/algorithms' });
+          options?.signal?.throwIfAborted();
+          return asyncFetcher.submit({ name, emoji, branchFrom, events, description }, { action: '/api/v1/algorithms', signal: options?.signal, expectedActor: options?.expectedActor, expectedDataPlane: options?.expectedDataPlane });
         },
         [asyncFetcher]
       ),
       update: useCallback(
-        async (args) => {
+        async (args, options?: { signal?: AbortSignal; expectedActor?: string; expectedDataPlane?: string }) => {
+          if (options?.expectedActor) await requireThingtimeCapability('api.algorithms-sync', '1.2.0');
           if (args?.listed !== undefined || args?.description !== undefined) await requireThingtimeCapability('api.algorithms-update', '1.1.0');
-          return asyncFetcher.submit({ id: args?.id, name: args?.name, emoji: args?.emoji, shared: args?.shared, listed: args?.listed, description: args?.description }, { action: '/api/v1/algorithms/update' });
+          options?.signal?.throwIfAborted();
+          return asyncFetcher.submit({ id: args?.id, name: args?.name, emoji: args?.emoji, shared: args?.shared, listed: args?.listed, description: args?.description }, { action: '/api/v1/algorithms/update', signal: options?.signal, expectedActor: options?.expectedActor, expectedDataPlane: options?.expectedDataPlane });
         },
         [asyncFetcher]
       ),
