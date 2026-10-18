@@ -82,9 +82,11 @@ retain shared accounts; authenticated grants are separate Things per owner.
 OAuth uses a deployment env callback, session binding and one-use nonce; refresh
 is serialized with a home-database lease. `connections/request` exposes only
 fixed, scope-checked operations and never returns credential material.
-Its 1.1.0 contract preserves complete API payloads and forwards opaque
+Its 1.1.1 contract preserves complete API payloads and forwards opaque
 `pageToken`/`data.nextPageToken` cursors for Google lists. The bounded logging
-redactor is not an API serializer. Fixed-target requests reject cross-origin
+redactor is not an API serializer. Token redaction operates on string values
+and property names, preserves typed scalars and JSON syntax, and removes
+overlapping tokens in full without rewriting generated replacement markers. Fixed-target requests reject cross-origin
 redirects and propagate cancellation; ordinary key/value fields are data.
 OpenAI API/Claude Code OAuth cards reuse `lopu/vault`, keeping Lopu's selectable providers
 and Secure Vault as the same records. See README's third-party setup section

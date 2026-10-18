@@ -232,6 +232,46 @@ test('saved document results retain large nested content while redacting authent
   assert.equal(result.data.echo, '[redacted]');
 });
 
+for (const [kind, accessToken] of [
+  ['JSON keyword', 'true'],
+  ['numeric', '123'],
+  ['punctuation', ':'],
+  ['escaped', 'fixture-"\\-token']
+]) {
+  test(`opaque ${kind} credentials cannot corrupt provider JSON during redaction`, async (t) => {
+    const originalLookup = dns.lookup;
+    dns.lookup = (async () => [{ address: '1.1.1.1', family: 4 }]) as unknown as typeof dns.lookup;
+    syncBuiltinESMExports();
+    t.after(() => { dns.lookup = originalLookup; syncBuiltinESMExports(); });
+    const payload = { flag: true, count: 123, nothing: null, echo: `before ${accessToken} after`, [accessToken]: 'credential-named property' };
+    t.mock.method(globalThis, 'fetch', async () => Response.json(payload));
+    const linked = await upsertAccountAndLink(user, connectionProviderById('google-docs')!, account(), {
+      ...tokens, accessToken, scopes: ['https://www.googleapis.com/auth/documents.readonly']
+    });
+    assert.ok(linked.ok);
+    const result = await runConnectionRequest(user, { connectionId: linked.connection.id, operation: 'docs.get-document', resourceId: 'document-id' });
+    assert.ok(result.ok);
+    assert.deepEqual(result.data, { flag: true, count: 123, nothing: null, echo: 'before [redacted] after', '[redacted]': 'credential-named property' });
+  });
+}
+
+test('redaction removes complete overlapping credentials without rewriting replacement text', async (t) => {
+  const originalLookup = dns.lookup;
+  dns.lookup = (async () => [{ address: '1.1.1.1', family: 4 }]) as unknown as typeof dns.lookup;
+  syncBuiltinESMExports();
+  t.after(() => { dns.lookup = originalLookup; syncBuiltinESMExports(); });
+  const accessToken = 'fixture-grant', refreshToken = 'fixture-grant-longer', idToken = 'redacted';
+  t.mock.method(globalThis, 'fetch', async () => Response.json({ echo: [accessToken, refreshToken, idToken], access_token: 'provider-secret' }));
+  const linked = await upsertAccountAndLink(user, connectionProviderById('google-docs')!, account(), {
+    ...tokens, accessToken, refreshToken, idToken, scopes: ['https://www.googleapis.com/auth/documents.readonly']
+  });
+  assert.ok(linked.ok);
+  const result = await runConnectionRequest(user, { connectionId: linked.connection.id, operation: 'docs.get-document', resourceId: 'document-id' });
+  assert.ok(result.ok);
+  assert.deepEqual(result.data.echo, ['[redacted]', '[redacted]', '[redacted]']);
+  assert.equal(result.data.access_token, '[redacted]');
+});
+
 test('pagination refuses malformed cursors, missing scopes, foreign owners and non-list operations before provider access', async (t) => {
   const fetch = t.mock.method(globalThis, 'fetch', async () => { throw new Error('must not fetch'); });
   const linked = await upsertAccountAndLink(user, connectionProviderById('google-drive')!, account(), tokens);

@@ -7760,8 +7760,15 @@ checks; `TT_VERIFY_LIVE=1` adds a live Hacker News pull). Manual checklist:
       fields survive unchanged while credential fields/known tokens redact.
       Refuse cross-origin redirects before fetching the next hop, release
       abandoned response bodies and propagate cancellation. Both manifests
-      must advertise `api.connections-request` 1.1.0; distinguish mocked
+      must advertise `api.connections-request` 1.1.1; distinguish mocked
       provider coverage from real additional-scope consent and list acceptance.
+- [ ] Saved-response redaction regression: with synthetic grants, use tokens
+      matching a JSON keyword, number, delimiter, or escaped text and echo them
+      in string values and property names. Responses stay valid and preserve
+      typed scalars. Overlapping access/refresh tokens redact completely; a
+      token matching replacement text does not rewrite generated markers.
+      Known credential fields remain redacted, and pagination clients requiring
+      1.1.0 accept the 1.1.1 patch on both capability manifests.
 - [ ] Provider transport regression: an HTTP 200 with HTML, empty, or truncated
       JSON must fail rather than report a successful empty result. Non-JSON
       401/403 responses still request reconnect; valid empty JSON stays valid.

@@ -68,6 +68,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-18 — **Codex (AI)**: Fix saved-account response redaction so opaque
+  credentials cannot corrupt JSON syntax or leave suffixes of overlapping
+  tokens visible. Preserve typed data; publish `api.connections-request` 1.1.1
+  on both manifests. Regression coverage and acceptance boundaries:
+  [PR #992](../PRs/992-service-account-library-add-multi-account-third-party-service-library.md).
+
 - 2026-10-18 — **Codex (AI)**: Preserve complete saved-account API results and
   support opaque Google pagination cursors. Separate credential redaction from
   bounded log summaries, retain ordinary key/value data, and reject cross-origin

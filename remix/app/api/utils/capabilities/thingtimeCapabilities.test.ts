@@ -15,7 +15,7 @@ test('service-account clients negotiate owner-fenced writes and scoped credentia
     ['api.connections-feed', '1.1.0', '1.0.0'],
     ['api.connections-filters', '1.1.0', '1.0.0'],
     ['api.lopu-vault', '1.3.0', '1.2.0'],
-    ['api.connections-request', '1.1.0', '1.0.0'],
+    ['api.connections-request', '1.1.1', '1.0.0'],
   ]) {
     assert.equal(api.features[feature], required);
     assert.equal(origin.features[feature]?.version, required);
@@ -23,6 +23,17 @@ test('service-account clients negotiate owner-fenced writes and scoped credentia
     assert.equal(capabilitySatisfies(undefined, required), false);
     assert.equal(capabilitySatisfies('2.0.0', required), false);
   }
+});
+
+test('saved-account response redaction is a compatible patch for pagination clients', () => {
+  for (const version of [
+    createApiCapabilitiesManifest().features['api.connections-request'],
+    thingtimeCapabilityManifest('https://accounts.test').features['api.connections-request'].version,
+  ]) {
+    assert.equal(version, '1.1.1');
+    assert.equal(capabilitySatisfies(version, '1.1.0'), true);
+  }
+  for (const version of [undefined, '1.0.0', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.1.0'), false);
 });
 
 test('archive import clients reject missing, pre-archive and breaking contracts on both manifests', () => {

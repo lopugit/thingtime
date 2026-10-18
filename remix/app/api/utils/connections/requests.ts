@@ -89,10 +89,21 @@ export const runConnectionRequest = async (
   // record, property and string. A continuation token is provider data,
   // not an authentication credential; known credentials are still scrubbed
   // below even if a provider echoes one under an unexpected field name.
-  let encoded = JSON.stringify(data, (key, value) => CREDENTIAL_FIELD.test(key) ? '[redacted]' : value);
+  const secrets = [...new Set([tokens.accessToken, tokens.refreshToken, tokens.idToken].filter(Boolean) as string[])];
+  const secretPattern = secrets.length
+    ? new RegExp(secrets.sort((a, b) => b.length - a.length).map((secret) => secret.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|'), 'g')
+    : null;
+  const redactText = (value: string) => secretPattern ? value.replace(secretPattern, '[redacted]') : value;
+  let encoded = JSON.stringify(data, (key, value) =>
+    CREDENTIAL_FIELD.test(key) ? '[redacted]' : typeof value === 'string' ? redactText(value) : value
+  );
   if (encoded === undefined) return fail(502, 'The provider returned an invalid result.');
-  for (const secret of [tokens.accessToken, tokens.refreshToken, tokens.idToken].filter(Boolean) as string[]) {
-    encoded = encoded.split(JSON.stringify(secret).slice(1, -1)).join('[redacted]');
-  }
+  // Values are redacted structurally above, so opaque tokens cannot rewrite
+  // JSON punctuation, numbers or booleans. Scrub property names too, changing
+  // only complete quoted keys and re-escaping them before parsing. One literal
+  // match pass prefers whole longer tokens and never rewrites its own marker.
+  encoded = encoded.replace(/"(?:[^"\\]|\\.)*"/g, (quoted, offset, source: string) =>
+    source[offset + quoted.length] === ':' ? JSON.stringify(redactText(JSON.parse(quoted))) : quoted
+  );
   return { ok: true as const, connectionId: input.connectionId, provider: provider.id, operation, data: JSON.parse(encoded) };
 };

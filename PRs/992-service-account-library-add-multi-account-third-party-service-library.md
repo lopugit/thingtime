@@ -1,7 +1,39 @@
 # Multi-account third-party service library
 
-Status: draft implementation checkpoint. Google identity and refresh are verified
+Status: open, ready-for-review implementation checkpoint. Google identity and refresh are verified
 locally; production delivery and other providers' positive acceptance remain pending.
+
+## 18 October: opaque-token response correction
+
+Raw JSON replacement could turn a boolean, number or delimiter into invalid
+JSON when an opaque credential matched it. Replacing shorter credentials first
+could also leave the suffix of a longer credential. Redaction now works on
+string values and escaped property names, matches longer tokens first in one
+pass, and preserves numbers, booleans, null, arrays and complete payloads.
+Generated replacement markers are not processed a second time.
+
+Four failure modes were reproduced before the fix. All five new regression
+cases pass, including quote/backslash handling. The complete connections suite
+passes 151 tests and capability suite 97, with no failures/skips. Changed-file
+lint and the Nitro node-server build pass. An isolated built-server smoke used
+a fresh empty MongoDB replica set and an enforced outbound boundary: production
+hosts, direct public IPs, external redirects and unrelated local backends were
+blocked. Both live manifests publish `api.connections-request` 1.1.1; anonymous
+connections/passwords requests return 401. Task processes/database were cleaned
+up. This is backend acceptance; it does not establish rendered browser or
+real-provider consent acceptance.
+
+The preview at <https://pr-992.previews.dev.thingtime.com> was verified at
+`7506dcb31` before this patch: shell, API health and both manifests returned 200,
+with private endpoints returning 401 anonymously. That deployment reports
+Google, Facebook and hosted ChatGPT OAuth unconfigured. Recheck its revision and
+capability version after the patch is pushed; do not call the shared development
+preview an isolated test environment or put personal credentials into it.
+
+GitGuardian still reports three findings in PasswordManager.tsx and
+passwords.test.ts. Both files were byte-identical at `7506dcb31`, cached
+origin/develop and origin/main. The existing synthetic-fixture disposition is
+recorded below; no alert was suppressed or closed in this checkpoint.
 
 ## Behavior
 
@@ -19,7 +51,8 @@ Saved Google list operations support opaque continuation tokens across all
 pages. API results preserve complete strings, arrays, objects and ordinary
 key/value fields while redacting credential material. Logging summaries retain
 their separate bounded representation. Both capability manifests advertise
-`api.connections-request` 1.1.0 for this additive contract.
+`api.connections-request` 1.1.1, retaining the additive pagination contract
+and correcting opaque-token redaction without changing typed JSON data.
 
 ## Current security boundary
 
