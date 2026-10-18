@@ -5552,3 +5552,32 @@ the selected API origin before saving this layout. Existing account/data-plane
 fences and desktop authenticated proxy transport apply; no extra secret or
 settings-specific endpoint is required. See [mobile file sync](docs/mobile-file-sync.md#editable-paged-conflict-review--2026-10-19)
 for the isolated browser harness and remaining native acceptance gates.
+
+
+### Disposable Mac paged-sync acceptance
+
+Build the current server and non-shipping Swift fixture, then run:
+
+```sh
+swift build --package-path macos/ThingtimeNode --product MacFolderSyncFixture
+(cd remix && NITRO_PRESET=node-server pnpm exec nitro build)
+pnpm --dir remix run test:files:mac-paged
+```
+
+The runner needs local `mongod`, `mongosh` and an installed Apple Development
+signing identity (`THINGTIME_TEST_SIGNING_IDENTITY` can select it explicitly).
+It signs a temporary test executable with the app-scope bookmark entitlement;
+it never installs or replaces Thingtime. Ports 28311/28312 are reserved only for
+this disposable HTTP server and Mongo replica. A macOS OS network sandbox
+refuses other ports, direct IPs and outbound destinations. The runner generates
+a synthetic account through signup, restarts only its own server with that
+account's normal fixture upload approval, and removes its database, files and
+credentials when finished. No owner credentials or production data are used.
+
+`mac-file-sync.integration.mts --paged` drives the same paged foreground runner
+as Mac/iOS, sealed native inventories, streamed cloud inventories, single-path
+checks and durable reviews. It compares actual local/cloud byte hashes through
+accepted-reply loss, native restarts, convergence, saved-choice recovery and
+recoverable Trash. Its picker, consent and credential store are test adapters;
+its IndexedDB is an in-process fixture. Installed UI, physical providers, large
+root throughput and browser-process persistence require separate acceptance.

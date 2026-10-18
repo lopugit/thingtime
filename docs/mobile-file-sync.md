@@ -3144,3 +3144,35 @@ profiles, and refuses a permissive fallback. The built API smoke separately uses
 
 The combined 10,000-path cap, installed Mac/iOS acceptance, background workers,
 complete account backups and large exports remain open. Android stays deferred.
+
+
+## Real Mac paged-runner acceptance — 2026-10-19
+
+`test:files:mac-paged` now owns a disposable loopback Nitro server, Mongo replica,
+local attachment store and synthetic API-created account. Its temporary Swift
+fixture uses a stable Apple Development signature with the app-scope bookmark
+entitlement; OS network isolation is enforced for the runner and descendants.
+The installed app, user Keychain and personal files are untouched.
+
+The production paged foreground runner passed 15 native and 15 cloud inventory
+pages, 365 native calls and 732 live identity checks. Three real identity
+cooldowns totalled 159 seconds. Transfers included an 8 MiB + 17-byte upload
+and 2 MiB + 17-byte download; independent complete local/cloud hashes matched.
+Accepted cloud, native staging and publication replies were deliberately lost,
+then native processes and the journal were reopened. Original confirmed operation
+IDs and the published baseline matched, with no accepted byte work replayed.
+A conflicting local choice survived interruption and native/journal reopen, then
+resolved through the real Files API. Child-before-parent Trash, native restore,
+lost restore replies, occupied destinations and revoked-device refusal passed.
+
+The harness now verifies completed runs through their published checkpoint and
+confirmed receipt IDs, because successful publication releases the active root.
+It also bounds shutdown of its own built server and signs only its temporary
+fixture copy. The normal private-upload approval and API authorization paths
+remain active; no direct document writes or production credentials are used.
+
+Coverage boundaries: native picker/consent/credential storage are fixture adapters;
+IndexedDB uses the existing in-process test implementation. Separate Chromium
+proofs cover browser-process persistence and editable review UI. This does not
+prove installed Mac/iOS UI, physical providers, million-path throughput or full
+account backups. The 10,000 combined-path cap remains; Android stays deferred.

@@ -74,6 +74,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-19: Add reproducible isolated Mac paged-sync/API acceptance, including saved conflict choices, native restart recovery and exact byte verification. Installed UI and scale remain open; see [PR 1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
 - 2026-10-19 — **Codex (AI)**: Mac/iOS conflict reviews now use durable paged
   choices and individual editable Builder blocks, with private account layouts
   and the selected desktop API transport. Isolated UI restart/save/reload,

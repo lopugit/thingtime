@@ -9,9 +9,12 @@ import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { createInterface } from 'node:readline';
 import { createRequire } from 'node:module';
 import { generateKeyPairSync, randomBytes, randomUUID, sign, createHash } from 'node:crypto';
-import { IDBFactory } from 'fake-indexeddb';
+import { IDBFactory, IDBKeyRange } from 'fake-indexeddb';
 import { openSyncJournal } from '../app/fileSync/journal.client';
 import { runForegroundCloudSync } from '../app/fileSync/foregroundSync';
+import { runPagedForegroundCloudSync } from '../app/fileSync/pagedForegroundSync';
+import { readNativeInventory } from '../app/fileSync/nativeInventory';
+import { readCloudFolderInventoryPages } from '../app/fileSync/cloudInventoryPages.client';
 import { newFileSyncConfiguration } from '../app/fileSync/configuration';
 import { readOwnedFileSyncConfiguration } from '../app/fileSync/configuredPlan';
 import { parseCloudInventory, inventorySyncEntry } from '../app/fileSync/cloudInventory';
@@ -29,6 +32,8 @@ const { FolderStream } = createRequire(import.meta.url)('../../electron/lib/fold
 
 const [fixturePath] = process.argv.slice(2);
 const photoFixture = process.argv.includes('--photos');
+const pagedFixture = process.argv.includes('--paged');
+assert.ok(!pagedFixture || !photoFixture, 'Photos retain their separate bounded acceptance');
 const forcePreflightCooldown = process.argv.includes('--cooldown-before-upload');
 assert.ok(fixturePath);
 assert.equal((await stat(fixturePath)).mode & 0o077, 0);
@@ -87,7 +92,7 @@ async function startNative() {
 	lastVerifyCalls = 0;
 	priorCooldownCount = 0;
 	priorCooldownSeconds = 0;
-	native = spawn(path.resolve('../macos/ThingtimeNode/.build/debug/MacFolderSyncFixture'), [path.join(directory, 'native.json')]);
+	native = spawn(process.env.THINGTIME_MAC_SYNC_FIXTURE_BIN || path.resolve('../macos/ThingtimeNode/.build/debug/MacFolderSyncFixture'), [path.join(directory, 'native.json')]);
 	const current = native;
 	nativeExit = new Promise((resolve, reject) => {
 		current.on('error', reject);
@@ -179,11 +184,11 @@ async function send(payload: any) {
 	});
 }
 const signal = new AbortController().signal;
-const caps: FolderCapabilities = { platform: 'macos', fileAccessVersion: '1.3.0', fileStagingVersion: '1.1.0', filePublicationVersion: '1.1.0', fileTrashVersion: '1.2.0' };
+const caps: FolderCapabilities = { platform: 'macos', fileAccessVersion: pagedFixture ? '1.5.0' : '1.3.0', fileStagingVersion: '1.1.0', filePublicationVersion: '1.1.0', fileTrashVersion: '1.2.0' };
 let deviceId: string | undefined, remoteRoot: string | undefined, configurationId: string | undefined;
 const deviceName = 'Mac sync acceptance ' + randomUUID();
 const factory = new IDBFactory();
-let journal = await openSyncJournal(factory);
+let journal = await openSyncJournal(factory, 'thingtime-file-sync-v1', IDBKeyRange);
 const hash = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex');
 try {
 	await api('/api/v1/login', { username: fixture.username, password: fixture.password });
@@ -341,7 +346,7 @@ try {
         assert.equal(hash(await download(firstFile.content.attachmentId)), hash(original));
         await rm(path.join(directory, 'selected/original.png'));
         await writeFile(path.join(directory, 'selected/second.png'), original);
-        await stopNative(); journal.close(); journal = await openSyncJournal(factory); await startNative();
+        await stopNative(); journal.close(); journal = await openSyncJournal(factory, 'thingtime-file-sync-v1', IDBKeyRange); await startNative();
         await runPhotos();
         const after = (await inventory()).nodes;
         assert.equal(after.length, 2);
@@ -400,9 +405,30 @@ try {
 	await writeFile(path.join(directory, 'selected/local.bin'), localBytes);
 	await seed('remote.bin', remoteBytes);
 	primeCooldown = forcePreflightCooldown;
+	let nativePages = 0, cloudPages = 0, reviewInterrupt = false, reviewedChoices = 0;
+	const journalAccess = { scope, currentScope: () => scope };
+	const confirmedIds = new Map<string, Set<string>>();
+	const readRun = async () => {
+		if (!pagedFixture) return (await journal.read(scope))!;
+		const runs = journal.pagedRuns(journalAccess), active = await runs.active(); assert.ok(active);
+		const pending = await runs.read(active.spec);
+		assert.equal(pending.progress.confirmed, 0, 'Capture operation IDs at the first lost reply');
+		return { id: active.spec.id, operations: pending.operations };
+	};
+	const assertCompletedRun = async (id: string, ids: string[]) => {
+		if (pagedFixture) {
+			assert.equal(await journal.pagedRuns(journalAccess).active(), null);
+			assert.equal((await journal.pagedCheckpoints(journalAccess).current())?.runId, id);
+			assert.deepEqual([...(confirmedIds.get(id) ?? [])].sort(), [...ids].sort());
+		} else {
+			const run = (await journal.read(scope))!; assert.equal(run.id, id);
+			assert.deepEqual(run.operations.map(op => op.id).sort(), [...ids].sort());
+			assert.ok(run.operations.every(op => op.confirmed));
+		}
+	};
 	const run = async () => {
 		const localTarget = await approveMobileSyncTarget(saved, scope, signal, request, caps);
-		return runForegroundCloudSync(
+		const result = await (pagedFixture ? runPagedForegroundCloudSync : runForegroundCloudSync)(
 			saved,
 			scope,
 			{
@@ -413,44 +439,68 @@ try {
 				},
 				conditions: async () => (await request(fixture.userId, { action: 'conditions' }, signal)).conditions!,
 				scanLocal: async () => (await request(fixture.userId, { action: 'scan', rootId: nativeRoot }, signal)).entries!,
+				...(pagedFixture ? {
+					scanLocalPages: async function* () {
+						for await (const page of readNativeInventory({ ownerId: fixture.userId, deviceId: deviceId!, rootId: nativeRoot, signal, request })) {
+							nativePages++; yield page;
+						}
+					},
+					inspectLocal: async (path: string) => (await request(fixture.userId, { action: 'inspect', rootId: nativeRoot, path }, signal)).inspectedEntry!,
+					inventoryPages: async function* () {
+						for await (const page of readCloudFolderInventoryPages(scope, remoteRoot!, { ...runtime, signal })) {
+							cloudPages++; yield page;
+						}
+					},
+					reviewPagedConflicts: async (session: import('../app/fileSync/pagedForegroundReview').PagedConflictReviewSession) => {
+						const page = await session.read(); assert.equal(page.next, null); assert.equal(page.rows.length, 1);
+						const row = page.rows[0];
+						if (reviewInterrupt) {
+							await session.choose(row.conflict.path, 'local', row.revision); reviewInterrupt = false;
+							throw Error('Acceptance interrupted saved review');
+						}
+						assert.equal(row.from, 'local', 'Reopened review retains the actual saved choice'); reviewedChoices++;
+						return { action: 'resolve' as const, revision: page.progress.revision };
+					}
+				} : {}),
 				inventory,
 				source: async (entry) => mobileFolderSource(fixture.userId, nativeRoot, entry, signal, request, caps),
-				journal,
+				journal: pagedFixture ? { ...journal, pagedRuns: access => {
+					const runs = journal.pagedRuns(access); return { ...runs, confirm: async (spec, receipt) => {
+						const result = await runs.confirm(spec, receipt), ids = confirmedIds.get(spec.id) ?? new Set<string>();
+						ids.add(receipt.operationId); confirmedIds.set(spec.id, ids); return result;
+					} };
+				} } : journal,
 				runtime,
 				localTarget,
 				progress: () => {}
 			},
 			signal
 		);
+		return result;
 	};
 	loseCloud = true;
 	losePublication = true;
 	await assert.rejects(run(), /Lost accepted cloud commit/);
-	const original = (await journal.read(scope))!,
+	const original = await readRun(),
 		originalIds = original.operations.map((op) => op.id);
 	const afterCloud = counts.puts;
     loseStage = true;
     await assert.rejects(run(), /Lost accepted native stage/);
     const firstStagedBytes = counts.stagedBytes;
     assert.equal(firstStagedBytes, Math.min(2 * 1024 * 1024, remoteBytes.length));
-    await stopNative(); journal.close(); journal = await openSyncJournal(factory); await startNative();
+    await stopNative(); journal.close(); journal = await openSyncJournal(factory, 'thingtime-file-sync-v1', IDBKeyRange); await startNative();
 	await assert.rejects(run(), /Lost accepted native publication/);
     assert.equal(counts.stagedBytes, remoteBytes.length, 'Restart must resume after the accepted range without replay');
 	assert.equal(counts.puts, afterCloud);
 	await stopNative();
 	journal.close();
-	journal = await openSyncJournal(factory);
+	journal = await openSyncJournal(factory, 'thingtime-file-sync-v1', IDBKeyRange);
 	await startNative();
 	const beforeRecovery = { ...counts };
 	await run();
 	assert.equal(counts.puts, beforeRecovery.puts);
 	assert.equal(counts.publishes, beforeRecovery.publishes);
-	assert.equal((await journal.read(scope))!.id, original.id);
-	assert.deepEqual(
-		(await journal.read(scope))!.operations.map((op) => op.id),
-		originalIds
-	);
-	assert.ok((await journal.read(scope))!.operations.every((op) => op.confirmed));
+	await assertCompletedRun(original.id, originalIds);
 	const verifyBytes = async (expected: Record<string, Uint8Array>) => {
 		const inv = await inventory();
 		assert.equal(inv.nodes.length, Object.keys(expected).length);
@@ -492,6 +542,24 @@ try {
 			assert.equal(response.status, 200);
 			assert.equal(hash(new Uint8Array(await response.arrayBuffer())), hash(node.path === 'local.bin' ? localBytes : remoteBytes));
 		}
+	if (pagedFixture) {
+		const localWinner = new Uint8Array(277).fill(61), remoteAlternate = new Uint8Array(281).fill(71);
+		await writeFile(path.join(directory, 'selected/local.bin'), localWinner);
+		await seed('local.bin', remoteAlternate);
+		reviewInterrupt = true;
+		const before = { ...counts };
+		await assert.rejects(run(), /Acceptance interrupted saved review/);
+		assert.deepEqual(counts, before, 'Saving a review must not transfer or publish bytes');
+		const draft = (await journal.reviewDrafts(journalAccess).active())!;
+		assert.equal(draft.progress.selected, 1);
+		await stopNative(); journal.close(); journal = await openSyncJournal(factory, 'thingtime-file-sync-v1', IDBKeyRange); await startNative();
+		await run(); assert.equal(reviewedChoices, 1);
+		await verifyBytes({ 'local.bin': localWinner, 'remote.bin': editedRemote });
+		const head = await journal.pagedCheckpoints(journalAccess).current(); assert.ok(head);
+		assert.equal((await journal.inventory(journalAccess).read(head.baseline.local)).totalEntries, 2);
+		assert.equal(await journal.reviewDrafts(journalAccess).active(), null);
+		assert.ok(nativePages > 0 && cloudPages > 0);
+	}
 
     // Fresh path observations distinguish a missing name from an old object's
     // missing id. Recreate the same nested path with two new stable identities.
@@ -538,12 +606,11 @@ try {
     await api('/api/v1/things?id=' + cloudParent.id, undefined, 'DELETE');
     loseTrash = true;
     await assert.rejects(run(), /Lost accepted native Trash/);
-    const deletionIds = (await journal.read(scope))!.operations.map(op => op.id);
+    const deletionRun = await readRun(), deletionIds = deletionRun.operations.map(op => op.id);
     assert.equal(deletionIds.length, 3);
-    await stopNative(); journal.close(); journal = await openSyncJournal(factory); await startNative();
+    await stopNative(); journal.close(); journal = await openSyncJournal(factory, 'thingtime-file-sync-v1', IDBKeyRange); await startNative();
     await run();
-    assert.deepEqual((await journal.read(scope))!.operations.map(op => op.id), deletionIds);
-    assert.ok((await journal.read(scope))!.operations.every(op => op.confirmed));
+    await assertCompletedRun(deletionRun.id, deletionIds);
     await assert.rejects(stat(path.join(directory, 'selected/deleted-tree')), { code: 'ENOENT' });
     const recoveryPage = (await request(fixture.userId, { action: 'trash-list', rootId: nativeRoot }, signal)).trashPage!;
     const retainedTree = recoveryPage.items.filter(item => item.request.operation.mutation.path.startsWith('deleted-tree'));
@@ -597,6 +664,8 @@ try {
 	console.log(
 		JSON.stringify({
 			ok: true,
+			paged: pagedFixture,
+			...(pagedFixture ? { nativePages, cloudPages, reviewedChoices } : {}),
 			checks: [
 				'signed-pairing',
                 'native-trash-restart-recovery',

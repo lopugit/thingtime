@@ -11636,3 +11636,16 @@ resume unfinished Android gates only when requested.
 - In installed Mac/iOS, verify the selected origin/account layout and actual
   files/Timeline after Resolve and Ignore. This last native/data-path acceptance
   remains open; synthetic UI evidence does not substitute for it.
+
+
+### Mac paged foreground acceptance
+
+- Run `pnpm --dir remix run test:files:mac-paged` after building the current
+  Nitro server and `MacFolderSyncFixture` (README runbook). Require paged native
+  and cloud observations, exact byte hashes, original operation receipts after
+  lost cloud/staging/publication replies, and saved conflict choices surviving
+  native/journal reopen. Confirm the paged baseline is published only after all
+  receipts and fresh scans; completed runs are no longer the active journal head.
+- Verify the disposable runner releases its two ports and child processes,
+  keeps its generated credentials private, and never touches the installed app.
+  Do not treat this native/API proof as installed UI or large-volume acceptance.

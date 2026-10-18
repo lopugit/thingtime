@@ -529,3 +529,13 @@ this wider path-observation contract. Tests: `inventory.test.ts`,
 `inventoryUniqueness.test.ts`, `cloudPath.test.ts` and
 `test:files:inventory-pages`. See the dated mobile sync ledger for bounds and
 installed/large-production acceptance gaps.
+
+
+### Mac paged transfer acceptance
+
+`test:files:mac-paged` uses `scripts/test-mac-paged-sync.mjs` to own an isolated
+HTTP server, replica and synthetic identity. `mac-file-sync.integration.mts
+--paged` connects the real Swift folder adapter to `pagedForegroundSync`,
+`nativeInventory`, `cloudInventoryPages.client` and durable conflict choices.
+The README documents signing and network isolation. Installed-app/provider
+acceptance and the combined foreground path limit remain separate gates.
