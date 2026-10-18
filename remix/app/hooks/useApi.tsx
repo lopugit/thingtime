@@ -1,4 +1,4 @@
-import { withCharacterRequest } from '../local-workspace/characterRequest.client';
+import { characterApi, withCharacterRequest } from '../local-workspace/characterRequest.client';
 import { useLocalApiView } from '../local-workspace/LocalApiView';
 import { parseTimelineVersionExport } from '../timeline/exportVersion';
 import { startNotificationHistorySync } from '../local-workspace/notifications.client';
@@ -1656,7 +1656,7 @@ export function useApi(explicitView?: AccountLocalView) {
     actionUser?.id || null, actionUser?.temporary || false, dataPlane || null, view.localPlane || null,
     actionUser?.username, actionUser?.displayName, actionUser?.avatarUrl, delegated]);
   return { v1: workspaceApi.current.resolve(workspaceKey, v1, remote =>
-    delegated ? remote : offlineWorkspace ? accountApi(remote, { id: offlineWorkspace.ownerId, displayName: 'Offline workspace' }, offlineWorkspace.dataPlane, view)
+    delegated ? characterApi(remote) : offlineWorkspace ? accountApi(remote, { id: offlineWorkspace.ownerId, displayName: 'Offline workspace' }, offlineWorkspace.dataPlane, view)
     : actionUser && !actionUser.temporary && dataPlane ? accountApi(remote, { id: actionUser.id, username: actionUser.username, displayName: actionUser.displayName, avatarUrl: actionUser.avatarUrl }, dataPlane, view)
     : actionUser && !actionUser.temporary ? remote : anonymousApi(remote)) };
 }

@@ -5053,3 +5053,39 @@ Fresh full-app Chromium acceptance passes normal gallery installation while offl
 The opt-in `actionSearch.browser.test.ts` uses its adjacent read-only browser fixture. Set `TT_ACTION_SEARCH_ORIGIN`, `TT_ACTION_SEARCH_SESSION`, `TT_ACTION_SEARCH_ARTIFACTS`, `TT_ACTION_SEARCH_FIXTURE`, `TT_ACTION_SEARCH_PUPPETEER` and `TT_ACTION_SEARCH_CHROME` only inside a verified isolated browser-manager runtime. It refuses a mismatched runtime health/session. Bundle the fixture as browser IIFE `actionSearchFixture` and the test as Node ESM. Do not use a personal profile or production backend.
 
 Validation: 714 workspace tests pass, 76 opt-ins skipped in the ordinary run; four offline-shell tests pass. The new native scenario is run explicitly. Focused Action tests include 22-task pagination, child isolation, canonical exported Action re-import with fresh IDs, cross-account separation, unsupported meanings, cancellation and byte budgets. Capability checks, client/template/server builds and changed-file lint pass. TypeScript still reports the same 91 diagnostics outside changed files. This checkpoint does not establish full data-relationship transfer, signed-in reconnect/queue UI, installed-app acceptance, CI or current-head deployed behavior. The broader goal and target-host downloadable-artifact connection remain open.
+
+## Retained Character callback isolation — 2026-10-19
+
+The session-wide Character already selects its own root workspace. A composer's
+**Post as** remains server-authorized delegation, with recovery kept apart from
+the root-owner queue. That delegated offline workspace is still unfinished.
+
+The audit found a separate stale-callback problem: a retained delegated API or
+explicit-Character submit callback could resolve the currently active root when
+invoked after an account switch. `characterApi` and `createCharacterRequest` now
+capture the originating local lease at callback construction. They refuse before
+HTTP after account, database or identity-generation changes; each invocation
+still requires current remote confirmation, and an in-flight response retires
+when that confirmation is lost. The synchronous Timeline capability predicates
+remain false. No local Character partition, credential or server permission is
+introduced by this correction.
+
+Verification: 715 workspace tests and four offline-shell checks passed, plus the
+new real `useAsyncFetcher` callback regression. Four focused checks passed on the
+final source. Reintroducing dynamic request-time binding made the real-hook test
+fail before restoring the fix. Changed-file lint is clean. TypeScript reports
+91 diagnostics, identical normalized signatures to the prior checkpoint, none
+in changed files. Client and packaged Node builds pass with 252 offline assets;
+the canonical `sync:nitro-template` step is required between them. Native
+Character delegation and full offline Character acceptance remain separate gates.
+
+The packaged app also passes a clean, no-login native regression: save a draft,
+save the local post and cold-reload its permalink offline at 1440×1000, 390×844
+and 320×844. Full-page scrolling shows no horizontal overflow; no page errors or
+mutation requests occur, and the server returns 404 for the local post. Evidence:
+`tmp/character-callback-native/native/verification.json` and PNGs. The claimed
+runtime uses network-none, a read-only root, no host mounts/ports, one CPU and
+4 GiB; it reports no OOM and is released. This proves the anonymous path only,
+not native Character delegation. Initial harness assertions were corrected to
+follow canonical `auth/me` user-null, the observed **Save on this device** label
+and automatic navigation to the local permalink; their evidence is retained.

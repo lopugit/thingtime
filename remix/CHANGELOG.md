@@ -80,6 +80,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- **2026-10-19 — Character callback isolation:** bind delegated API and explicit
+  Character submission callbacks to their originating workspace. Retired
+  callbacks now refuse before HTTP instead of acquiring the next session.
+  Offline delegated workspaces remain pending; see [PR #1000 notes](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md). — Codex (AI)
+
 - **2026-10-19 — No-login draft host:** preserve the canonical sandbox/no-store
   headers in packaged Nitro builds and visibly disable unavailable JSON export.
   Fresh isolated MCP/native captures and normal private importer round-trip are

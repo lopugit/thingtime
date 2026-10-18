@@ -1,7 +1,8 @@
-import { withCharacterRequest } from '../local-workspace/characterRequest.client';
+import { createCharacterRequest } from '../local-workspace/characterRequest.client';
+import { workspaceIdentityKey } from '../local-workspace/runtime.client';
 import { useCharacterScope, CHARACTER_HEADER } from '~/components/Characters/CharacterScope';
 import { aiTaskFetch } from '~/components/Lopu/aiTasks.client';
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 
 import { createApiFailure, readApiResponsePayload } from './apiFailure';
 import { recordApiCall } from './apiRequestLog';
@@ -12,6 +13,11 @@ import { requireThingtimeCapability } from '../api/utils/capabilities/requireCap
 
 export function useAsyncFetcher() {
   const character = useCharacterScope();
+  const workspaceKey = workspaceIdentityKey();
+  // Retained submissions belong to the view that created them, including when
+  // characterId is supplied explicitly rather than through CharacterScope.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const characterRequest = useMemo(() => createCharacterRequest(), [workspaceKey]);
   const dataPlane = useDataPlane();
   const planeRef = useRef(dataPlane); planeRef.current = dataPlane;
   const [defaultOpts, setDefaultOpts] = useState({
@@ -112,9 +118,9 @@ export function useAsyncFetcher() {
       if (changesRootIdentity(nextOpts.action, payload, method)) rootIdentity.changed();
       return payload;
       };
-      return characterId ? withCharacterRequest(perform) : perform();
+      return characterId ? characterRequest(perform) : perform();
     },
-    [defaultOpts, character]
+    [defaultOpts, character, characterRequest]
   );
 
   return { submit, setDefaultOpts };

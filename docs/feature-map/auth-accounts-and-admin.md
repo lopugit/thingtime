@@ -105,6 +105,15 @@ newer pointer. `useWorkspaceUser` is content identity only. Legacy anonymous tre
 hydration does not silently claim data for an account. Test `test:root-data`,
 `test:local-workspace` and `test:autosave` for these boundaries.
 
+Delegated composer APIs and explicit Character submissions capture their local
+workspace lease when the callback is created (`characterRequest.client.ts`,
+`useApi.tsx`, `useAsyncFetcher.tsx`). A retained callback cannot acquire a later
+root account or database; remote confirmation is checked again for each request.
+`characterCallbacks.test.ts` exercises the real submission hook, while
+`characterDelegation.test.ts` covers the API facade, confirmation loss and
+same-account/new-generation retirement. This does not grant delegated offline
+workspace access or queue Character writes as the owner.
+
 
 The opt-in `drafts/workspaceSwitch.browser.test.ts` uses the actual account switcher
 and identity BroadcastChannel across three clean browser tabs. Held device reads

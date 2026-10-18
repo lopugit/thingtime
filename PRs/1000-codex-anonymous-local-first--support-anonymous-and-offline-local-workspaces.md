@@ -4653,3 +4653,27 @@ at startup, during rendering and after validation/render failure.
 The target agent-host tool connection remains unavailable. Current PR head/check
 visibility and preview freshness remain separate open gates. No main merge,
 deployment, publication or existing-account content change is included.
+
+## Retained Character callback isolation — 2026-10-19
+
+Capture the root workspace when constructing delegated API and explicit-Character
+submission callbacks. Previously a retained callback could acquire the next root
+at invocation time; it now rejects before HTTP on account/database/generation
+changes. Each new request still checks remote confirmation, and held responses
+retire when confirmation is lost. Timeline local capability predicates remain
+synchronous false values. No server contract or permission changes.
+
+Local checks: 715 workspace + four offline-shell passes; four focused tests
+include a real submit-hook regression. A negative control restoring dynamic
+binding fails that regression. Lint is clean. Typecheck retains exactly 91 prior
+normalized diagnostics, none in changed files. Client/Node builds pass with 252
+offline assets, using the canonical template-sync step. Full delegated offline
+workspaces remain unfinished; this security correction does not close that row.
+
+Packaged native anonymous regression passes: offline draft/local post save and
+cold permalink reload, all three required widths with full-page scrolling,
+zero page errors/mutation requests and server 404 for the local post.
+`tmp/character-callback-native/native/` retains PNGs and verification; the claimed
+network-none runtime is released with no OOM. This is anonymous-path evidence,
+not native Character delegation acceptance. Initial harness-only assertions
+were corrected to match the canonical response and observed native navigation.

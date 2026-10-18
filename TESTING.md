@@ -12476,6 +12476,7 @@ Local results do not establish current-head CI or deployed acceptance.
 
 - With an owner-selected composer, save a comment while offline; verify local completion and no HTTP request.
 - With a delegated Character, verify the exact actor/Character/database headers, separate recovery key, no writes to the root-owner queue and no access to root local media. Switch account or database during held requests; stale results must be rejected.
+- Retain a composer/API or explicit-Character submission callback, switch the root account or database, then invoke it. It must reject before HTTP (including capability discovery). Returning to the same account in a new identity generation must not revive it. Losing remote confirmation must stop a held request while allowing a fresh confirmed request from the unchanged local identity. Coverage: `characterDelegation.test.ts` and the real submit-hook regression in `characterCallbacks.test.ts`.
 - Submit despite draft-sync failure, reload the resulting post, and confirm no duplicate submission or loss of newer draft input.
 - Select nested text, controls, icons and repeated-card fields individually in Builder; edit, rearrange/style, save and reload. An outer selection or monolithic source editor does not establish individual-block acceptance.
 
