@@ -68,6 +68,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-18 — **Codex (AI)**: Add editable agent tasks, todos and progress,
+  a Mac browser manager with task claims/live viewing, verified Chrome/Chromium
+  copies, device/task network controls and a private full-app container runtime.
+  Isolated authentication/database configuration refuses production fallback.
+  Setup and acceptance are documented in [the agent browser runbook](../docs/agent-browsers.md).
+
 - 2026-10-17 — **Codex (AI)**: Stream complete 1PUX imports, preserve source data and rich fields, and add encrypted password attachments and file-inclusive backups. Remove arbitrary import/editor caps and document fork-safe storage setup. [PR #1015 validation](../PRs/1015-codex-password-import-fix-preserve-complete-1pux-imports-and-encrypted-password-attachments.md).
 
 

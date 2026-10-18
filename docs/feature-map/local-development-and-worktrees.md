@@ -1,5 +1,16 @@
 # Local development and worktrees
 
+## Agent browser runtime
+
+`electron/lib/agent-browsers/` owns device installations, exclusive leases,
+network policy, process ownership and the private Unix control socket. The
+shipped `runtime/` recipe bundles Chromium, MongoDB and the packaged app without
+worktree credentials. `agentTesting.ts` and `apiFallback.ts` fence the backend;
+`electron/scripts/agent-browser.mjs` is the token-file CLI. Setup and acceptance
+commands live in [agent-browsers.md](../agent-browsers.md). Run the
+`electron/test/agent-browser-*.test.cjs` tests and full-app two-agent acceptance
+when changing allocation, networking, startup or cleanup.
+
 ## First ten minutes in a fresh checkout or worktree
 
 ```sh

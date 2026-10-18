@@ -1,4 +1,5 @@
 import { definePlugin } from 'nitro';
+import { agentTestEnvironment } from '../../app/api/utils/agentTesting';
 
 import { ensureIndexes, warnIfTransactionsUnsupported } from '../../app/api/utils/mongodb/collections';
 
@@ -15,6 +16,8 @@ import { ensureIndexes, warnIfTransactionsUnsupported } from '../../app/api/util
 // not take the instance down. A failed run logs its broken index and clears its
 // memoized promise so the next awaited bootstrap call can retry immediately.
 export default definePlugin(() => {
+  // A malformed isolated test must never connect or adopt remote storage.
+  agentTestEnvironment();
   try {
     void ensureIndexes().catch(() => {});
     // One boot-time probe that names the standalone-mongod trap (transactions

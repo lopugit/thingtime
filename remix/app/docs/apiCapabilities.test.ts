@@ -32,7 +32,7 @@ test('JSON Action inputs and draft-saving suites negotiate both origin manifests
 	const wellKnown = thingtimeCapabilityManifest('https://thingtime.test').features;
 	for (const [feature, minimum, previous] of [
 		['api.things', '1.33.2', '1.32.0'], ['api.things-update', '1.10.0', '1.9.0'],
-		['api.actions-run', '1.37.0', '1.34.0'], ['api.webpages-suites-install', '1.3.0', '1.2.0']
+		['api.actions-run', '1.37.0', '1.34.0'], ['api.webpages-suites-install', '1.4.0', '1.3.0']
 	]) {
 		assert.equal(route[feature], minimum);
 		assert.equal(wellKnown[feature].version, minimum);
@@ -342,7 +342,7 @@ test('admin preview dispatch publishes its protected-controller contract version
 
 test('storage-aware health and the corrected email environment gate publish their contract updates', () => {
 	const manifest = createApiCapabilitiesManifest();
-	assert.equal(manifest.features['api.health-nitro'], '1.1.0');
+	assert.equal(manifest.features['api.health-nitro'], '1.2.0');
 	assert.equal(manifest.features['api.email-config'], '1.0.1');
 });
 
@@ -505,6 +505,21 @@ test('run chat advertises both origin-scoped contracts and rejects incompatible 
   }
   assert.equal(capabilitySatisfies('1.1.0', '1.0.0'), true);
   for (const version of ['', '0.9.0', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.0.0'), false);
+});
+
+test('agent testing and task installation negotiate their additive contracts', () => {
+  const legacy = createApiCapabilitiesManifest(), manifest = thingtimeCapabilityManifest('https://thingtime.test');
+  for (const [feature, minimum, previous] of [
+    ['api.health-nitro', '1.2.0', '1.1.0'],
+    ['api.webpages-suites-install', '1.4.0', '1.3.0']
+  ]) {
+    assert.equal(legacy.features[feature], minimum);
+    assert.equal(manifest.features[feature].version, minimum);
+    assert.equal(capabilitySatisfies(previous, minimum), false);
+    assert.equal(capabilitySatisfies('2.0.0', minimum), false);
+    assert.equal(capabilitySatisfies(undefined, minimum), false);
+    assert.equal(capabilitySatisfies(minimum, minimum), true);
+  }
 });
 
 test('subspace image clients negotiate both origin manifests and reject pre-upload contracts', () => {

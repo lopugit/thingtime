@@ -1,3 +1,5 @@
+import { agentTestEnvironment } from '../../app/api/utils/agentTesting';
+
 const THINGTIME_PRODUCTION_ORIGIN = 'https://thingtime.com';
 const MONGO_PASSWORD_PLACEHOLDER = '<db_password>';
 
@@ -22,7 +24,10 @@ const normaliseOrigin = (value?: string | null) => {
   }
 };
 
-export const getApiFallbackOrigin = () => normaliseOrigin(process.env.THINGTIME_API_FALLBACK_ORIGIN);
+export const getApiFallbackOrigin = () => {
+  if (process.env.THINGTIME_AGENT_TEST_MODE === '1') throw new Error('Isolated tests cannot use an API fallback.');
+  return normaliseOrigin(process.env.THINGTIME_API_FALLBACK_ORIGIN);
+};
 
 export const getMissingSelfHostedApiEnv = () => {
   const missing: string[] = [];
@@ -44,6 +49,7 @@ export const getMissingSelfHostedApiEnv = () => {
 export const hasSelfHostedApiEnv = () => getMissingSelfHostedApiEnv().length === 0;
 
 export const shouldProxyApiToFallback = (request: Request) => {
+  if (agentTestEnvironment()) return false;
   if (hasSelfHostedApiEnv()) return false;
 
   const requestUrl = new URL(request.url);
@@ -104,6 +110,7 @@ const cloneProxyRequestHeaders = (request: Request, fallbackUrl: URL) => {
 };
 
 export const proxyApiRequestToFallback = async (request: Request) => {
+  if (process.env.THINGTIME_AGENT_TEST_MODE === '1') return Response.json({ ok: false, error: 'Isolated tests cannot use an API fallback.' }, { status: 503 });
   const requestUrl = new URL(request.url);
   const fallbackUrl = new URL(requestUrl.pathname + requestUrl.search, getApiFallbackOrigin());
   const headers = cloneProxyRequestHeaders(request, fallbackUrl);

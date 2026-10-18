@@ -1,20 +1,22 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { getApiFallbackOrigin, shouldProxyApiToFallback } from './apiFallback';
+import { getApiFallbackOrigin, shouldProxyApiToFallback, proxyApiRequestToFallback } from './apiFallback';
 import handleApi from '../routes/api/[...]';
 import handleRootData from '../routes/api/root-data.get';
 import { enforceExpectedDataPlane, mongoDataPlane } from '../../app/api/utils/mongodb/dataPlane';
 import { getRequestMongoEndpoint } from '../../app/api/utils/mongodb/endpoint';
 import { EXPECTED_DATA_PLANE_HEADER } from '../../app/utils/dataPlane';
 
-const ENV_KEYS = ['JWT_PRIVATE_KEY', 'JWT_SECRET', 'MONGODB_CONNECTION_STRING', 'THINGTIME_API_FALLBACK_ORIGIN'] as const;
+const ENV_KEYS = ['JWT_PRIVATE_KEY', 'JWT_SECRET', 'MONGODB_CONNECTION_STRING', 'THINGTIME_API_FALLBACK_ORIGIN', 'THINGTIME_AGENT_TEST_MODE', 'THINGTIME_AGENT_TEST_SESSION'] as const;
 
 const withFallbackEnv = async (fallbackOrigin: string | undefined, run: () => Promise<void> | void) => {
 	const previous = Object.fromEntries(ENV_KEYS.map((key) => [key, process.env[key]]));
 	delete process.env.JWT_PRIVATE_KEY;
 	delete process.env.JWT_SECRET;
 	delete process.env.MONGODB_CONNECTION_STRING;
+	delete process.env.THINGTIME_AGENT_TEST_MODE;
+	delete process.env.THINGTIME_AGENT_TEST_SESSION;
 	if (fallbackOrigin === undefined) delete process.env.THINGTIME_API_FALLBACK_ORIGIN;
 	else process.env.THINGTIME_API_FALLBACK_ORIGIN = fallbackOrigin;
 
@@ -45,6 +47,25 @@ test('API fallback defaults to production and accepts only HTTPS or loopback HTT
 	await withFallbackEnv('https://user:secret@example.com/', () => {
 		assert.equal(getApiFallbackOrigin(), 'https://thingtime.com');
 	});
+});
+
+test('incomplete isolated backends refuse signup and root data without reading a body or contacting a fallback', async t => {
+  await withFallbackEnv('https://thingtime.com', async () => {
+    process.env.THINGTIME_AGENT_TEST_MODE = '1';
+    const fetch = t.mock.method(globalThis, 'fetch', async () => { assert.fail('Isolated tests must never contact a fallback'); });
+    try {
+      const request = new Request('http://127.0.0.1:18721/api/v1/auth/signup', { method: 'POST', body: '{"password":"test-only"}' });
+      const response = await (handleApi as any)({ req: request, context: { params: { path: 'v1/auth/signup' } } });
+      assert.equal(response.status, 503);
+      assert.equal(request.bodyUsed, false);
+      assert.equal((await response.json()).code, 'AGENT_TEST_CONFIGURATION_REQUIRED');
+      const root = await (handleRootData as any)({ req: new Request('http://127.0.0.1:18721/api/root-data') });
+      assert.equal(root.status, 503);
+      assert.equal((await proxyApiRequestToFallback(request)).status, 503);
+      assert.throws(() => getApiFallbackOrigin(), /cannot use an API fallback/);
+      assert.equal(fetch.mock.callCount(), 0);
+    } finally { fetch.mock.restore(); }
+  });
 });
 
 test('API fallback compares complete origins so two loopback ports do not bypass the proxy', async () => {

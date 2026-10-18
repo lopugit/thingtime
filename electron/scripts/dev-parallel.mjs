@@ -23,7 +23,7 @@ function runScript(name) {
 
 let profilePath;
 try {
-	runScript('build-web.mjs');
+	if (!process.argv.includes('--use-staged')) runScript('build-web.mjs');
 	runScript('verify-web-build.mjs');
 	profilePath = await mkdtemp(path.join(os.tmpdir(), 'thingtime-desktop-dev-'));
 	console.log(`Starting unsigned Thingtime Dev with isolated profile ${profilePath}`);
