@@ -68,6 +68,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-18 — **Codex (AI)**: Added resumable paged sync operation storage and
+  execution using shared ordering, receipt checks and root locks. Chromium
+  verified 10,001 generated operations across two restarts, including a lost
+  reply with no repeated accepted effect. Native/cloud paging and checkpoint
+  integration remain open; the live scan cap is unchanged. Details:
+  [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md#durable-paged-operation-recovery--2026-10-18).
+
 - 2026-10-18 — **Codex (AI)**: Add resumable paged sync planning to the existing journal, with pinned inventory inputs, whole-union validation, shared conflict/deletion policy, bounded decisions and a Unicode cursor correction. Browser proof survives two process restarts; native/cloud execution integration and Android remain open/deferred. See the [PR #1002 ledger](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md#resumable-paged-reconciliation--2026-10-18).
 
 

@@ -36,15 +36,41 @@ export type SyncExecutionPort = {
 	persist(run: SyncRun): Promise<void>;
 };
 
-const depth = (path: string) => path.split('/').length;
-const order = (a: SyncMutation, b: SyncMutation): number => {
-	if (a.kind !== b.kind) return a.kind === 'copy' ? -1 : 1;
-	// Build parents first; remove children before empty parents. No destructive
-	// work begins until every copy has a durable confirmation.
-	const difference = depth(a.path) - depth(b.path);
-	if (difference) return a.kind === 'copy' ? difference : -difference;
-	return a.path < b.path ? -1 : a.path > b.path ? 1 : 0;
+export type SyncMutationOrderKey = [number, number, string];
+/** IndexedDB and the in-memory runner share one global order: every copy
+ * before deletion, parents before copied children, children before trash. */
+export const syncMutationOrderKey = (m: SyncMutation): SyncMutationOrderKey =>
+	[m.kind === 'copy' ? 0 : 1, m.path.split('/').length * (m.kind === 'copy' ? 1 : -1), m.path];
+const orderSyncMutations = (a: SyncMutation, b: SyncMutation): number => {
+	const left = syncMutationOrderKey(a), right = syncMutationOrderKey(b);
+	return left[0] - right[0] || left[1] - right[1] || (left[2] < right[2] ? -1 : left[2] > right[2] ? 1 : 0);
 };
+
+/** The same operation contract is used by whole-tree and paged journals. */
+export function validateSyncOperation(operation: SyncOperation): void {
+	if (!operation || typeof operation.id !== 'string' || !operation.id || operation.id.length > 128 || typeof operation.confirmed !== 'boolean')
+		throw Error('Invalid persisted sync operation.');
+	const m = operation.mutation;
+	if (!m) throw Error('Invalid persisted sync mutation.');
+	if (m.kind === 'copy') {
+		if (
+			!['local', 'remote'].includes(m.from) ||
+			!validSyncEntry(m.source) ||
+			m.source.path !== m.path ||
+			(m.expectedTarget !== null && (!validSyncEntry(m.expectedTarget) || m.expectedTarget.path !== m.path))
+		)
+			throw new Error('Invalid persisted sync copy.');
+	} else if (m.kind !== 'trash' || !['local', 'remote'].includes(m.side) || !validSyncEntry(m.expected) || m.expected.path !== m.path)
+		throw new Error('Invalid persisted sync deletion.');
+}
+
+export function validateSyncReceipt(operation: SyncOperation, scope: SyncScope, receipt: SyncReceipt): void {
+	if (!receipt || !receipt.scope || receipt.operationId !== operation.id || !sameSyncScope(receipt.scope, scope)) throw new Error('Invalid sync receipt identity.');
+	const mutation = operation.mutation;
+	if (mutation.kind === 'trash' ? receipt.entry !== null :
+		!receipt.entry || !validSyncEntry(receipt.entry) || receipt.entry.path !== mutation.path || !sameSyncContent(receipt.entry, mutation.source))
+		throw new Error('Sync receipt does not confirm the requested content.');
+}
 
 /** Validate persisted state before trusting it after a restart or migration. */
 export const validateSyncRun = (run: SyncRun): void => {
@@ -69,17 +95,8 @@ export const validateSyncRun = (run: SyncRun): void => {
 		paths.add(m.path);
 		if (run.version === 2 && (m.kind !== 'copy' || m.from !== 'local' || m.source.kind !== 'file' || m.expectedTarget?.kind !== 'file'))
 			throw new Error('Retention requires two existing file versions.');
-		if (m.kind === 'copy') {
-			if (
-				!['local', 'remote'].includes(m.from) ||
-				!validSyncEntry(m.source) ||
-				m.source.path !== m.path ||
-				(m.expectedTarget !== null && (!validSyncEntry(m.expectedTarget) || m.expectedTarget.path !== m.path))
-			)
-				throw new Error('Invalid persisted sync copy.');
-		} else if (m.kind !== 'trash' || !['local', 'remote'].includes(m.side) || !validSyncEntry(m.expected) || m.expected.path !== m.path)
-			throw new Error('Invalid persisted sync deletion.');
-		if (i && (order(run.operations[i - 1].mutation, m) > 0 || (!run.operations[i - 1].confirmed && operation.confirmed)))
+		validateSyncOperation(operation);
+		if (i && (orderSyncMutations(run.operations[i - 1].mutation, m) > 0 || (!run.operations[i - 1].confirmed && operation.confirmed)))
 			throw new Error('Invalid persisted sync order.');
 	}
 };
@@ -99,7 +116,7 @@ export const createSyncRun = (plan: SyncPlan, uuid: () => string = () => crypto.
 		scope: { ...plan.scope },
 		operations: plan.decisions
 			.filter((decision): decision is SyncMutation => decision.kind === 'copy' || decision.kind === 'trash')
-			.sort(order)
+			.sort(orderSyncMutations)
 			.map((mutation) => ({ id: nextId(), mutation: structuredClone(mutation), confirmed: false }))
 	};
 	validateSyncRun(run);
@@ -128,45 +145,54 @@ const executeRun = async (saved: SyncRun, port: SyncExecutionPort, signal: Abort
 	for (const operation of run.operations) {
 		check();
 		if (operation.confirmed) continue;
-		const previous = await port.lookup(operation.id, run.scope);
-		check();
-		if (previous.status === 'pending') throw new Error('Sync operation is still pending; resume this run later.');
-		let receipt: SyncReceipt;
-		if (previous.status === 'complete') receipt = previous.receipt;
-		else {
-			const mutation = operation.mutation;
-			const expected =
-				mutation.kind === 'trash' ? (port.trashExpected ? await port.trashExpected(structuredClone(operation), run.scope) : mutation.expected) : null;
-			check();
-			if (expected) validateTrashExpected(operation, expected);
-			const local = await port.read('local', mutation.path);
-			check();
-			const remote = await port.read('remote', mutation.path);
-			check();
-			if (mutation.kind === 'copy') {
-				if (
-					!sameSyncStamp(mutation.source, mutation.from === 'local' ? local : remote) ||
-					!sameSyncStamp(mutation.expectedTarget, mutation.from === 'local' ? remote : local)
-				)
-					throw new Error('Sync file changed; preserve this run and reconcile before retrying.');
-			} else if (!sameSyncStamp(expected, mutation.side === 'local' ? local : remote) || (mutation.side === 'local' ? remote : local) !== null)
-				throw new Error('Sync deletion changed; preserve the file and reconcile before retrying.');
-			receipt = await port.apply(structuredClone(operation), run.scope);
-			check();
-		}
-		if (receipt.operationId !== operation.id || !sameSyncScope(receipt.scope, run.scope)) throw new Error('Invalid sync receipt identity.');
-		const mutation = operation.mutation;
-		if (
-			mutation.kind === 'trash'
-				? receipt.entry !== null
-				: !receipt.entry || !validSyncEntry(receipt.entry) || receipt.entry.path !== mutation.path || !sameSyncContent(receipt.entry, mutation.source)
-		)
-			throw new Error('Sync receipt does not confirm the requested content.');
+		await executeSyncOperation(operation, run.scope, port, signal);
 		operation.confirmed = true;
 		await durable();
 	}
 	return run;
 };
+
+/** Caller must durably store the immutable operation and serialize the root
+ * before calling. A missing response is resolved by the original receipt ID. */
+export async function executeSyncOperation(saved: SyncOperation, savedScope: SyncScope,
+	port: Omit<SyncExecutionPort, 'persist'>, signal?: AbortSignal): Promise<SyncReceipt> {
+	const operation = structuredClone(saved), scope = structuredClone(savedScope);
+	validateSyncOperation(operation); validateSyncScope(scope);
+	if (operation.confirmed) throw Error('Sync operation is already confirmed.');
+	const check = () => {
+		signal?.throwIfAborted();
+		if (!sameSyncScope(scope, port.currentScope())) throw Error('Sync context changed.');
+	};
+	check();
+	const previous = await port.lookup(operation.id, scope);
+	check();
+	if (previous.status === 'pending') throw new Error('Sync operation is still pending; resume this run later.');
+	let receipt: SyncReceipt;
+	if (previous.status === 'complete') receipt = previous.receipt;
+	else {
+		const mutation = operation.mutation;
+		const expected =
+			mutation.kind === 'trash' ? (port.trashExpected ? await port.trashExpected(structuredClone(operation), scope) : mutation.expected) : null;
+		check();
+		if (expected) validateTrashExpected(operation, expected);
+		const local = await port.read('local', mutation.path);
+		check();
+		const remote = await port.read('remote', mutation.path);
+		check();
+		if (mutation.kind === 'copy') {
+			if (
+				!sameSyncStamp(mutation.source, mutation.from === 'local' ? local : remote) ||
+				!sameSyncStamp(mutation.expectedTarget, mutation.from === 'local' ? remote : local)
+			)
+				throw new Error('Sync file changed; preserve this run and reconcile before retrying.');
+		} else if (!sameSyncStamp(expected, mutation.side === 'local' ? local : remote) || (mutation.side === 'local' ? remote : local) !== null)
+			throw new Error('Sync deletion changed; preserve the file and reconcile before retrying.');
+		receipt = await port.apply(structuredClone(operation), scope);
+		check();
+	}
+	validateSyncReceipt(operation, scope, receipt);
+	return receipt;
+}
 
 export const executeSyncRun = (saved: SyncRun, port: SyncExecutionPort, signal?: AbortSignal) => executeRun(saved, port, signal, false);
 export const executeRetentionRun = (saved: SyncRun, port: SyncExecutionPort, signal?: AbortSignal) => executeRun(saved, port, signal, true);

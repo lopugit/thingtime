@@ -403,3 +403,14 @@ and identity/capability checks live in `fileSync/cloudPath.ts` and
 before native download publication. Keep path absence distinct from HTTP 404
 or incomplete inventories. Regressions: `inventory.test.ts`, `cloudPath.test.ts`,
 `cloudDownloadPort.test.ts`, and `scripts/mac-file-sync.integration.mts`.
+
+
+`fileSync/pagedRunJournal.ts` prepares bounded durable operation rows from sealed
+paged plans, pins plan identity, and excludes legacy writers on the same root.
+`pagedExecute.ts` uses the existing Web Lock and shared per-operation execution,
+ordering and receipt policy in `execute.ts`. Journal version 5 preserves prior
+captures/plans/runs/checkpoints. Started runs remain retained until a future
+paged checkpoint handoff. `pagedRunJournal.test.ts` covers recovery, ordering,
+conflicts, concurrency, migration and baseline preservation. The isolated
+Chromium 10,001-operation proof uses generated metadata and independent receipts;
+native/cloud integration and the live 10,000-path limit remain open.

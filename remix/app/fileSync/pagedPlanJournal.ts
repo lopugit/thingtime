@@ -16,9 +16,12 @@ export type PagedPlanSpec = {
 export type PagedPlanProgress = { phase: 'indexing' | 'planning' | 'complete'; indexed: number; planned: number; decisions: number };
 export type PagedPlanCursor = { id: string; scope: SyncScope; after: string; read: number };
 type Position = { after: string | null; read: number };
-type Header = PagedPlanProgress & { scope: string; instance: string; spec: PagedPlanSpec; positions: Position[]; totals: number[]; revision: number };
-const STORES = ['sync-plans', 'sync-plan-ancestors', 'sync-plan-decisions'] as const;
-const ALL_STORES = [...STORES, INVENTORY_STORES[0], INVENTORY_PIN_STORE];
+export type PagedPlanHeader = PagedPlanProgress & { scope: string; instance: string; spec: PagedPlanSpec; positions: Position[]; totals: number[]; revision: number };
+export const PLAN_PIN_STORE = 'sync-plan-pins';
+export const PLAN_STORES = ['sync-plans', 'sync-plan-ancestors', 'sync-plan-decisions'] as const;
+const STORES = PLAN_STORES;
+type Header = PagedPlanHeader;
+const ALL_STORES = [...STORES, PLAN_PIN_STORE, INVENTORY_STORES[0], INVENTORY_PIN_STORE];
 const encoder = new TextEncoder();
 const bytes = (value: unknown) => encoder.encode(JSON.stringify(value)).length;
 const identifier = (value: unknown): value is string => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(value);
@@ -27,7 +30,7 @@ const initialPositions = (): Position[] => Array.from({ length: 4 }, () => ({ af
 const progress = ({ phase, indexed, planned, decisions }: Header): PagedPlanProgress => ({ phase, indexed, planned, decisions });
 const nonnegative = (n: number) => Number.isSafeInteger(n) && n >= 0;
 
-function specification(value: PagedPlanSpec): PagedPlanSpec {
+export function parsePagedPlanSpec(value: PagedPlanSpec): PagedPlanSpec {
 	if (!value || !identifier(value.id) || !value.baseline || !value.policy ||
 		!['two-way', 'upload', 'download', 'backup'].includes(value.policy.mode) || typeof value.policy.propagateDeletes !== 'boolean' ||
 		!Array.isArray(value.excludedPaths) || value.excludedPaths.length > MAX_SYNC_EXCLUSIONS || value.excludedPaths.some(p => !validSyncPath(p)) ||
@@ -40,8 +43,20 @@ function specification(value: PagedPlanSpec): PagedPlanSpec {
 		policy: { mode: value.policy.mode, propagateDeletes: value.policy.propagateDeletes }, excludedPaths: [...value.excludedPaths] };
 }
 
+export const validatePagedPlanHeader = (h: PagedPlanHeader, spec: PagedPlanSpec, key: string) => {
+	if (!h || !identifier(h.instance) || h.scope !== key || JSON.stringify(h.spec) !== JSON.stringify(spec) ||
+		!['indexing', 'planning', 'complete'].includes(h.phase) || !nonnegative(h.revision) ||
+		![h.indexed, h.planned, h.decisions].every(nonnegative) || h.decisions > h.planned || h.planned > h.indexed ||
+		!Array.isArray(h.totals) || h.totals.length !== 4 || !h.totals.every(nonnegative) ||
+		!Array.isArray(h.positions) || h.positions.length !== 4 || h.positions.some((p, i) => !p || !nonnegative(p.read) || p.read > h.totals[i] ||
+			(p.read === 0 ? p.after !== null : !validSyncPathKey(p.after))) ||
+		(h.phase === 'indexing' && (h.planned !== 0 || h.decisions !== 0)) ||
+		(h.phase === 'complete' && (h.planned !== h.indexed || h.positions.some((p, i) => p.read !== h.totals[i]))))
+		throw Error('Sync plan changed or is unavailable.');
+};
+
 export function upgradePagedPlanJournal(db: IDBDatabase) {
-	for (const store of STORES) if (!db.objectStoreNames.contains(store)) db.createObjectStore(store);
+	for (const store of [...STORES, PLAN_PIN_STORE]) if (!db.objectStoreNames.contains(store)) db.createObjectStore(store);
 }
 
 /** Two bounded passes over immutable observations. The first validates the
@@ -51,17 +66,7 @@ export function upgradePagedPlanJournal(db: IDBDatabase) {
 export function pagedPlanJournal(db: IDBDatabase, access: JournalAccess, keyRange?: typeof IDBKeyRange) {
 	const { scope, key, check, range, transaction } = journalScope(db, access, keyRange);
 	const inventory = inventoryJournal(db, access, keyRange);
-	const validate = (h: Header, spec: PagedPlanSpec) => {
-		if (!h || !identifier(h.instance) || h.scope !== key || JSON.stringify(h.spec) !== JSON.stringify(spec) ||
-			!['indexing', 'planning', 'complete'].includes(h.phase) || !nonnegative(h.revision) ||
-			![h.indexed, h.planned, h.decisions].every(nonnegative) || h.decisions > h.planned || h.planned > h.indexed ||
-			!Array.isArray(h.totals) || h.totals.length !== 4 || !h.totals.every(nonnegative) ||
-			!Array.isArray(h.positions) || h.positions.length !== 4 || h.positions.some((p, i) => !p || !nonnegative(p.read) || p.read > h.totals[i] ||
-				(p.read === 0 ? p.after !== null : !validSyncPathKey(p.after))) ||
-			(h.phase === 'indexing' && (h.planned !== 0 || h.decisions !== 0)) ||
-			(h.phase === 'complete' && (h.planned !== h.indexed || h.positions.some((p, i) => p.read !== h.totals[i]))))
-			throw Error('Sync plan changed or is unavailable.');
-	};
+	const validate = (h: Header, spec: PagedPlanSpec) => validatePagedPlanHeader(h, spec, key);
 	const withHeader = <T>(spec: PagedPlanSpec, mode: IDBTransactionMode,
 		work: (header: Header, tx: IDBTransaction, done: (result: T) => void, fail: (error: unknown) => void) => void) =>
 		transaction<T>(ALL_STORES, mode, (tx, done, fail) => {
@@ -72,7 +77,7 @@ export function pagedPlanJournal(db: IDBDatabase, access: JournalAccess, keyRang
 		for (const capture of captures(spec)) tx.objectStore(INVENTORY_PIN_STORE).delete([key, capture.id, spec.id]);
 	};
 	const begin = async (value: PagedPlanSpec): Promise<PagedPlanProgress> => {
-		const spec = specification(value);
+		const spec = parsePagedPlanSpec(value);
 		return transaction(ALL_STORES, 'readwrite', (tx, done, fail) => {
 			const store = tx.objectStore(STORES[0]), request = store.get([key, spec.id]);
 			request.onsuccess = () => { try {
@@ -98,7 +103,7 @@ export function pagedPlanJournal(db: IDBDatabase, access: JournalAccess, keyRang
 		});
 	};
 	const step = async (value: PagedPlanSpec): Promise<PagedPlanProgress> => {
-		const spec = specification(value), header = await withHeader<Header>(spec, 'readonly', (h, _tx, done) => done(h));
+		const spec = parsePagedPlanSpec(value), header = await withHeader<Header>(spec, 'readonly', (h, _tx, done) => done(h));
 		return advance(spec, header);
 	};
 	async function advance(spec: PagedPlanSpec, header: Header): Promise<PagedPlanProgress> {
@@ -190,12 +195,12 @@ export function pagedPlanJournal(db: IDBDatabase, access: JournalAccess, keyRang
 	return {
 		begin, step,
 		async build(value: PagedPlanSpec, changed?: (value: PagedPlanProgress) => void): Promise<PagedPlanProgress> {
-			const spec = specification(value); let state = await begin(spec);
+			const spec = parsePagedPlanSpec(value); let state = await begin(spec);
 			while (state.phase !== 'complete') { state = await step(spec); changed?.(state); }
 			return state;
 		},
 		async read(value: PagedPlanSpec, continuation?: PagedPlanCursor): Promise<{ decisions: SyncDecision[]; next: PagedPlanCursor | null; totalDecisions: number }> {
-			const spec = specification(value), token = continuation === undefined ? undefined : structuredClone(continuation);
+			const spec = parsePagedPlanSpec(value), token = continuation === undefined ? undefined : structuredClone(continuation);
 			if (continuation !== undefined && (!token || token.id !== spec.id || !token.scope || !sameSyncScope(token.scope, scope) || !validSyncPathKey(token.after) || !Number.isSafeInteger(token.read) || token.read <= 0)) throw Error('Invalid sync plan continuation.');
 			return withHeader(spec, 'readonly', (h, tx, done, fail) => {
 				if (h.phase !== 'complete') throw Error('Sync plan is incomplete.');
@@ -221,11 +226,15 @@ export function pagedPlanJournal(db: IDBDatabase, access: JournalAccess, keyRang
 			});
 		},
 		async discard(value: PagedPlanSpec): Promise<void> {
-			const spec = specification(value);
-			return withHeader(spec, 'readwrite', (_h, tx, done) => {
+			const spec = parsePagedPlanSpec(value);
+			return withHeader(spec, 'readwrite', (_h, tx, done, fail) => {
+				const pins = tx.objectStore(PLAN_PIN_STORE).count(range(spec.id));
+				pins.onsuccess = () => { try {
+				check(); if (pins.result) throw Error('Sync plan is pinned by a run.');
 				unpin(spec, tx); tx.objectStore(STORES[0]).delete([key, spec.id]);
 				for (const store of STORES.slice(1)) tx.objectStore(store).delete(range(spec.id));
 				done(undefined);
+				} catch (error) { fail(error); } };
 			});
 		}
 	};

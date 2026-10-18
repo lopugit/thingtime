@@ -11441,3 +11441,15 @@ resume unfinished Android gates only when requested.
 - [ ] Attempt capture discard while two plans pin it. Finish one, then discard the other; only the final pin removal may permit capture discard. An initialization failure must roll back every pin.
 - [ ] Verify version-3 capture migration, long-path byte bounds, and Unicode lowercasing that expands an otherwise valid filename segment. Folded cursor keys must not be validated as filesystem segments.
 - [ ] Repeat the generated 20,000-decision proof in OS-isolated Chromium with two process restarts, exact path/source comparisons, input-pin checks, traces and scoped cleanup. This does not prove native transfer or lift the live scan cap.
+
+
+### Paged file-sync operations (PR #1002, 2026-10-18)
+
+- [ ] Run the shared file-sync suite and `pagedRunJournal.test.ts`. Compare multi-page copy/trash ordering with the whole-tree runner, including shallow copied parents and deepest deleted children.
+- [ ] Interrupt preparation, reopen and discover the active run. Operation IDs must stay identical. Introduce a conflict beyond the first page and require all execution to remain refused.
+- [ ] Lose an accepted reply, fail confirmation storage and cancel after acceptance separately. Resume with the original receipt ID; count independent effects to prove no repeat.
+- [ ] Race paged preparation with legacy persistence, and two paged executors with the same Web Lock. Only one run may own a root; only the next pending operation may be confirmed.
+- [ ] Refuse altered receipts, changed scope/settings, pending outcomes, duplicate IDs and changed source/target stamps. Preserve the prior checkpoint; neither completed nor uncertain paged runs may release it prematurely.
+- [ ] Upgrade a version-4 database containing captures, a complete plan and a legacy run. Verify all old data before preparing the paged run.
+- [ ] Repeat the OS-isolated Chromium proof with 10,001 operations and two process restarts. Verify 257 accepted receipts versus 256 confirmations at interruption and exactly 9,744 new effects after resume. Keep source metadata and independent receipt readback separate from journal assertions.
+- [ ] Connect real paged native/cloud adapters and checkpoint publication, then exercise installed Mac/iOS transfers before lifting the live scan limit. Generated receipt tests alone do not satisfy this gate. Android is deferred.

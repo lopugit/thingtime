@@ -2609,3 +2609,54 @@ redirect denials were checked before running. No account credentials or real
 user files were used. Screenshots, three traces and the exact fixture source are
 retained with the HTML tracker. This is browser storage/planner acceptance,
 not native transfer or production throughput evidence.
+
+
+## Durable paged operation recovery — 2026-10-18
+
+Journal version 5 adds `pagedRuns(access)` beside existing inventories, plans,
+runs and checkpoints. It prepares bounded pages from a complete plan and stores
+immutable operation IDs before effects. A late conflict keeps the entire queue
+non-executable. Operations use the same ordering key and execution/receipt
+validators as the foreground runner: every copy before deletion, copied parents
+before children, deleted children before parents. Pending reads are bounded to
+128 operations or 1 MiB; preparation retains one bounded decision page.
+
+Preparation progress, operation rows and the active-root guard commit atomically.
+Competing preparations compare revisions and instance IDs; unique operation/path
+indexes reject duplicate identities. Complete plans stay pinned while a run owns
+them. `active()` discovers the original specification after restart, and indexed
+path lookup supplies stable parent operation IDs without a whole-run array.
+`executePagedSyncRun` holds the existing root Web Lock, records running state
+before the first effect, and recovers uncertain writes through their original
+receipt IDs. Confirmations advance only the next ordered operation and store a
+bounded, allowlisted receipt. Scope changes, pending receipts, changed source or
+destination stamps and altered receipt retries refuse continuation.
+
+Legacy run writes and checkpoint advancement are atomically excluded while a
+paged run owns the root. Preparation can be discarded before execution; a
+started run cannot be discarded even when zero receipts are confirmed. Completed
+runs retain the root/plan until the forthcoming paged checkpoint handoff. The
+previous baseline remains unchanged. This is recovery metadata, not a parallel
+Timeline history store or native authorization.
+
+Regression coverage includes migration from version 4, interrupted preparation,
+global ordering across pages, late conflicts, duplicate IDs, concurrent builders
+and executors, lost replies, failed confirmation storage, cancellation, changed
+scope/settings, empty plans and preservation of the prior checkpoint.
+
+Real Chrome for Testing verified 10,001 operations across two complete browser
+process restarts. Preparation stopped at 128; execution then stopped after 257
+independently stored destination receipts but only 256 journal confirmations.
+Resume recovered the uncertain receipt and applied exactly the remaining 9,744
+operations. Every destination path, ID and digest was compared with generated
+source metadata. The fixture and browser both ran under an OS network boundary
+allowing only loopback 28166; hostname, direct-IP and redirect refusal was
+preflighted. Screenshot, three traces and fixture source are retained beside the
+HTML tracker. The temporary profile/downloads and server were removed.
+
+Remaining before live rollout: consistent paged native/cloud scans, indexed
+cloud destination preparation and native trash receipt chains, paged baseline
+publication, and installed Mac/iOS transfer acceptance. The foreground path
+continues to enforce its 10,000-path bound. This proof transfers no real file
+bytes and makes no production throughput claim. Android remains deferred with
+its unfinished implementation preserved in PR #1002.
