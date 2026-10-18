@@ -1,7 +1,8 @@
 import type { JournalAccess } from './journalScope';
 
 export const JOURNAL_RETENTION_STORE = 'sync-managed-metadata';
-export const JOURNAL_KINDS = ['run', 'checkpoint', 'plan', 'inventory'] as const;
+// Append kinds: existing metadata keys persist these numeric positions.
+export const JOURNAL_KINDS = ['run', 'checkpoint', 'plan', 'inventory', 'review'] as const;
 export type JournalKind = typeof JOURNAL_KINDS[number];
 export type ManagedJournalMetadata = { scope: string; kind: JournalKind; id: string; instance: string; retiring: boolean; store: number };
 export const metadataKey = (scope: string, kind: JournalKind, id: string): IDBValidKey => [scope, JOURNAL_KINDS.indexOf(kind), id];

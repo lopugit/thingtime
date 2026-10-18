@@ -1,5 +1,13 @@
 # Attachments and media
 
+`fileSync/pagedReviewDraft.ts` adds bounded mutable conflict-review storage to
+the version-10 journal. It binds complete plans/captures, persists revision-checked
+choices, seals reviewed pages for fresh-plan run preparation and shares bounded
+maintenance. Run `pagedReviewDraft.test.ts` and `test:file-sync`; the generated-data
+`review-draft.browser.ts` fixture covers a real Chromium restart. The existing
+popup/foreground arrays still need replacement with these pages and editable
+Builder blocks; this storage checkpoint does not lift the live scan cap.
+
 Native folder captures now use `apple/FileSync/MobileFolderInventory.swift`
 (under `Sources/AppleFileSync`), negotiated by `fileSync/nativeInventory.ts`:
 Mac file-access 1.5.0 / iOS 1.3.0. A private SQLite capture supplies immutable

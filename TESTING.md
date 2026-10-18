@@ -11568,3 +11568,24 @@ resume unfinished Android gates only when requested.
   million-path throughput and complete large-root synchronization remain separate
   acceptance gates. Keep Android deferred and the combined foreground cap until
   bounded review and the remaining integration gates are ready.
+
+
+### Bounded conflict-review draft storage — 2026-10-19
+
+- [x] Run `pagedReviewDraft.test.ts`: interrupt indexing, reopen, save and clear
+  individual choices, reject stale row/header revisions, and prevent unsupported
+  source selections. Keep all unselectable conflicts visible.
+- [x] Preserve v9 run data on schema upgrade; reject reused capture instances and
+  foreign/stale cursors. Cancellation, account changes and quota failures must
+  stop/roll back writes without losing the prior draft.
+- [x] Verify long-path byte bounds, active-plan/input pins, independent root-head
+  protection with damaged pins, bounded release cleanup and legacy-write refusal.
+- [x] Import sealed pages into a fresh run. A changed final conflict must leave
+  every prepared operation unexecutable; unchanged pages must match all choices.
+- [x] Run `scripts/review-draft.browser.ts` in a task-owned Chromium profile under
+  the existing OS isolation fixture: close the whole browser after saving one
+  choice in 270 conflicts, relaunch, verify that exact choice, finish/seal/import
+  bounded pages, release/collect and prepare 270 operations with zero effects.
+- [ ] Connect the real foreground popup through editable Builder blocks, preserve
+  repeat-Ignore identity, and verify save/cancel/reopen on installed Mac/iOS.
+  Keep the live 10,000-path cap and Android deferral until their own gates pass.

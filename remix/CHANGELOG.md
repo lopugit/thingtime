@@ -68,6 +68,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-19 — **Codex (AI)**: Add bounded durable conflict-review drafts, per-row
+  revision checks, restart recovery, fresh-plan handoff and bounded cleanup.
+  Twelve focused regressions and a Chromium process-restart fixture cover the
+  storage contract; foreground/Builder integration and installed acceptance remain
+  open. See [PR 1002 notes](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
 - 2026-10-19 — **Codex (AI)**: `api.files` 1.6.0 streams wide-folder path
   observations through bounded anonymous scratch storage, preserving late
   ambiguity/private-access checks and reclaiming storage after process death.

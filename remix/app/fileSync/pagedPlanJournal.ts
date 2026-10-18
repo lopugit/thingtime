@@ -221,7 +221,7 @@ export function pagedPlanJournal(db: IDBDatabase, access: JournalAccess, keyRang
 						done({ decisions, next: null, totalDecisions: h.decisions }); return;
 					}
 					const d: SyncDecision = cursor.value;
-					if (!validDecision(d) || JSON.stringify(cursor.primaryKey) !== JSON.stringify([key, spec.id, syncPathKey(d.path)])) throw Error('Invalid saved sync decision.');
+					if (!validSyncDecision(d) || JSON.stringify(cursor.primaryKey) !== JSON.stringify([key, spec.id, syncPathKey(d.path)])) throw Error('Invalid saved sync decision.');
 					const length = bytes(d) + 1;
 					if (decisions.length === INVENTORY_PAGE_ENTRIES || size + length > INVENTORY_PAGE_BYTES) {
 						if (!decisions.length) throw Error('Sync decision exceeds its byte bound.');
@@ -247,7 +247,7 @@ export function pagedPlanJournal(db: IDBDatabase, access: JournalAccess, keyRang
 	};
 }
 
-function validDecision(d: SyncDecision): boolean {
+export function validSyncDecision(d: SyncDecision): boolean {
 	if (!d || !validSyncPath(d.path)) return false;
 	const entry = (e: unknown) => e !== null && typeof e === 'object' && validSyncEntry(e as any) && (e as any).path === d.path;
 	if (d.kind === 'copy') return ['local', 'remote'].includes(d.from) && entry(d.source) && (d.expectedTarget === null || entry(d.expectedTarget));

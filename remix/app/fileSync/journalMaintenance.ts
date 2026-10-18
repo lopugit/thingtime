@@ -5,14 +5,15 @@ import { PLAN_STORES, PLAN_PIN_STORE, parsePagedPlanSpec, validatePagedPlanHeade
 import { PAGED_RUN_STORES, PAGED_RUN_HEADS, RETAINED_HEADS, REVIEW_STORE, CLOUD_PARENTS, parsePagedRunSpec, validatePagedRunHeader, type PagedRunHeader } from './pagedRunJournal';
 import { PAGED_CHECKPOINT_DRAFTS, validatePagedCheckpointHeader, type PagedCheckpointHeader } from './pagedCheckpointJournal';
 import { PAGED_CHECKPOINT_HEADS, validatePagedCheckpointHead, type PagedCheckpointHead } from './checkpoint';
+import { REVIEW_DRAFT_HEADS, REVIEW_DRAFT_STORES, parseReviewDraftSpec, validateReviewDraftHeader, type ReviewDraftHeader } from './pagedReviewDraft';
 
-type Header = InventoryHeader | PagedPlanHeader | PagedRunHeader | PagedCheckpointHeader;
+type Header = InventoryHeader | PagedPlanHeader | PagedRunHeader | PagedCheckpointHeader | ReviewDraftHeader;
 export type MaintenanceCursor = { scope: string; kind: JournalKind; id: string; inclusive: boolean };
 export type MaintenanceProgress = { examined: number; deleted: number; retired: number; done: boolean; next: MaintenanceCursor | null };
-const headers = { inventory: INVENTORY_STORES[0], plan: PLAN_STORES[0], run: PAGED_RUN_STORES[0], checkpoint: PAGED_CHECKPOINT_DRAFTS };
-const children = { inventory: INVENTORY_STORES.slice(1), plan: PLAN_STORES.slice(1), run: [PAGED_RUN_STORES[1], REVIEW_STORE, CLOUD_PARENTS], checkpoint: [] };
+const headers = { inventory: INVENTORY_STORES[0], plan: PLAN_STORES[0], run: PAGED_RUN_STORES[0], checkpoint: PAGED_CHECKPOINT_DRAFTS, review: REVIEW_DRAFT_STORES[0] };
+const children = { inventory: INVENTORY_STORES.slice(1), plan: PLAN_STORES.slice(1), run: [PAGED_RUN_STORES[1], REVIEW_STORE, CLOUD_PARENTS], checkpoint: [], review: REVIEW_DRAFT_STORES.slice(1) };
 const stores = [...new Set([JOURNAL_RETENTION_STORE, ...Object.values(headers), ...Object.values(children).flat(), INVENTORY_PIN_STORE,
-	PLAN_PIN_STORE, PAGED_RUN_HEADS, RETAINED_HEADS, PAGED_CHECKPOINT_HEADS])];
+	PLAN_PIN_STORE, PAGED_RUN_HEADS, RETAINED_HEADS, PAGED_CHECKPOINT_HEADS, REVIEW_DRAFT_HEADS])];
 const identifier = (v: unknown): v is string => typeof v === 'string' && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(v);
 
 /** Called while the foreground owner holds its root lock. Only explicitly
@@ -33,14 +34,16 @@ export function journalMaintenance(db: IDBDatabase, access: JournalAccess, keyRa
 				if (r.spec.id !== row.id) throw Error('Managed run identity changed.'); break; }
 			case 'checkpoint': { const c = h as PagedCheckpointHeader; validatePagedCheckpointHeader(c, c.spec, key);
 				if (c.spec.run.id !== row.id) throw Error('Managed checkpoint identity changed.'); break; }
+			case 'review': { const d = h as ReviewDraftHeader; validateReviewDraftHeader(d, parseReviewDraftSpec(d.spec), key);
+				if (d.spec.id !== row.id) throw Error('Managed review identity changed.'); break; }
 		}
 	};
 	const step = async (after?: MaintenanceCursor): Promise<MaintenanceProgress> => {
 		if (after && (after.scope !== key || !JOURNAL_KINDS.includes(after.kind) || !identifier(after.id) || typeof after.inclusive !== 'boolean'))
 			throw Error('Invalid cleanup cursor.');
 		return transaction(stores, 'readwrite', (tx, done, fail) => {
-			let activePlan: string | undefined; const activeInputs = new Set<string>();
-			let active: string | undefined, retained: string | undefined, baseline: PagedCheckpointHead | undefined, ready = 3;
+			const activePlans = new Set<string>(), activeInputs = new Set<string>();
+			let active: string | undefined, retained: string | undefined, review: string | undefined, baseline: PagedCheckpointHead | undefined, ready = 4;
 			const result: MaintenanceProgress = { examined: 0, deleted: 0, retired: 0, done: false, next: after ?? null };
 			const get = <T>(store: string, id: IDBValidKey, next: (v: T) => void) => {
 				const request = tx.objectStore(store).get(id);
@@ -56,7 +59,8 @@ export function journalMaintenance(db: IDBDatabase, access: JournalAccess, keyRa
 						if (activeInputs.has(row.id)) { next(false); return; }
 						if (baseline && [baseline.baseline.local.id, baseline.baseline.remote.id].includes(row.id)) { next(false); return; }
 						count(INVENTORY_PIN_STORE, row.id, n => next(n === 0)); return;
-					case 'plan': if (row.id === activePlan) { next(false); return; } count(PLAN_PIN_STORE, row.id, n => next(n === 0)); return;
+					case 'plan': if (activePlans.has(row.id)) { next(false); return; } count(PLAN_PIN_STORE, row.id, n => next(n === 0)); return;
+					case 'review': next(row.id !== review && h.phase === 'released'); return;
 					case 'checkpoint': next(row.id !== active && row.id !== baseline?.runId && h.phase === 'published'); return;
 					case 'run': {
 						const run = h as PagedRunHeader;
@@ -127,14 +131,13 @@ export function journalMaintenance(db: IDBDatabase, access: JournalAccess, keyRa
 					});
 				} catch (e) { fail(e); } };
 			};
-			const scan = () => {
-				if (--ready) return;
+			const scanRun = () => {
 				if (!active) { scanRows(); return; }
 				// Root ownership protects recovery even if a pin index is damaged.
 				get<PagedRunHeader>(PAGED_RUN_STORES[0], [key, active], run => {
 					validatePagedRunHeader(run, parsePagedRunSpec(run?.spec), scope);
 					if (run.spec.id !== active) throw Error('Active sync run identity changed.');
-					const plan = run.spec.plan; activePlan = plan.id;
+					const plan = run.spec.plan; activePlans.add(plan.id);
 					for (const input of [plan.local, plan.remote, plan.baseline.local, plan.baseline.remote]) activeInputs.add(input.id);
 					get<PagedCheckpointHeader | undefined>(PAGED_CHECKPOINT_DRAFTS, [key, active], draft => {
 						if (draft) {
@@ -146,9 +149,21 @@ export function journalMaintenance(db: IDBDatabase, access: JournalAccess, keyRa
 					});
 				});
 			};
+			const scan = () => {
+				if (--ready) return;
+				if (!review) { scanRun(); return; }
+				get<ReviewDraftHeader>(REVIEW_DRAFT_STORES[0], [key, review], draft => {
+					validateReviewDraftHeader(draft, parseReviewDraftSpec(draft?.spec), key);
+					if (draft.spec.id !== review || draft.phase === 'released') throw Error('Active conflict review changed.');
+					const p = draft.spec.plan; activePlans.add(p.id);
+					for (const input of [p.local, p.remote, p.baseline.local, p.baseline.remote]) activeInputs.add(input.id);
+					scanRun();
+				});
+			};
 			get<string | undefined>(PAGED_RUN_HEADS, key, value => { if (value !== undefined && !identifier(value)) throw Error('Invalid active sync identity.'); active = value; scan(); });
 			get<string | undefined>(RETAINED_HEADS, key, value => { if (value !== undefined && !identifier(value)) throw Error('Invalid retained sync identity.'); retained = value; scan(); });
 			get<PagedCheckpointHead | undefined>(PAGED_CHECKPOINT_HEADS, key, value => { if (value) validatePagedCheckpointHead(value, key); baseline = value; scan(); });
+			get<string | undefined>(REVIEW_DRAFT_HEADS, key, value => { if (value !== undefined && !identifier(value)) throw Error('Invalid active review identity.'); review = value; scan(); });
 		});
 	};
 	return { step, async collect(changed?: (p: MaintenanceProgress) => void) {

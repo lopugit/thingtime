@@ -2892,3 +2892,41 @@ controls were exercised with generated native/cloud adapters; this does not
 establish installed-device acceptance. Focused lint passes. Full TypeScript still
 reports 91 diagnostics outside the changed files; whole-project typecheck is not
 green.
+
+
+### Durable bounded conflict-review drafts (2026-10-19)
+
+The version-10 sync journal adds `pagedReviewDraft.ts`. It indexes conflict rows
+from a complete immutable plan in bounded pages, saves each selection with a
+row revision, and exposes 20-row review pages (at most 128 rows / 512 KiB for
+import). Draft settings, scope, plan instance and capture instances are bound
+before indexing. An active draft pins the reviewed plan and inputs; the root
+head independently protects them during maintenance if pin indexes are damaged.
+Released drafts are collected in bounded transactions. Legacy journal mutations
+refuse an active review instead of replacing its recovery state.
+
+Sealing checks the complete count and current revision. Unsupported folder
+conflicts stay visible and prevent Apply/retention; a selected winner cannot
+authorize deletion or another sync direction. Sealed rows feed the existing
+`pagedRunJournal.appendReview` contract. Complete preparation against a fresh plan
+rejects changed versions before any operation can start. Review data is not a
+native grant, transfer receipt, Timeline event or common baseline.
+
+Validation covers 12 focused regressions: process-style reopen, partial indexing,
+stale concurrent choices, clearing selections, fresh-plan mismatch, folder
+conflicts, byte limits, cancellation/account changes, quota rollback, v9 migration,
+recreated capture IDs and cleanup with missing pins. A real OS-isolated Chromium
+process was closed and relaunched with 270 generated conflicts; the saved choice
+survived, review reads held 20 rows, imports held at most 128, and all 270 operations
+prepared with zero executed effects. Evidence is in the HTML plan's
+`review-draft-evidence-2026-10-19/` directory.
+
+**Still open:** connect these draft pages to the foreground runner and individually
+editable Builder conflict controls; preserve the existing repeat-Ignore content
+identity without whole-list hashing; complete installed Mac/iOS acceptance. The
+current popup still uses its existing arrays. The combined 10,000-path cap remains.
+No Android work or native installation is included in this checkpoint.
+
+Checkpoint checks: all 274 file-sync tests and focused lint pass. The full
+TypeScript check still reports 91 diagnostics, all outside changed files; this
+is not a clean whole-project typecheck.
