@@ -22,6 +22,10 @@
       a live controller cannot be replaced and old handles cannot claim a new lease.
 - [ ] Native publisher downloads retain signatures and hashes; duplicated
       unrestricted browsers start without personal cookies or saved storage.
+- [ ] The signed and unsigned packaged-module checks load the native driver
+      and Puppeteer from the app archive and verify the separate container
+      resources. Launch the installed app; a valid signature alone cannot catch
+      a runtime module accidentally excluded by `extraResources`.
 
 - [ ] A daemon disconnect during release reports failure and retains the claim;
       after recovery, release removes only the verified owned resources.

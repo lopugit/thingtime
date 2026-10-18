@@ -73,6 +73,9 @@ Markdown and other non-code semantic coverage is partial, not fully refreshed.
   renderer origin.
 - Routed the general-security link to the existing Things category and its
   auto-opening Agent browsers disclosure, rather than an unknown desktop tab.
+- Staged container resources separately so Electron packaging retains the shared
+  native browser driver in the app archive. Signed and unsigned verification now
+  exercise packaged imports with the actual Electron runtime before installation.
 
 ## Boundaries
 
