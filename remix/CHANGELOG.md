@@ -73,6 +73,15 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-18 — **Codex (AI)**: Add editable agent tasks, todos and progress,
+  a Mac browser manager with task claims/live viewing, verified Chrome/Chromium
+  copies, device/task network controls and a private full-app container runtime.
+  Isolated authentication/database configuration refuses production fallback.
+  Packaged-container builds replace Mac-native libraries with verified Linux
+  dependencies and fail installation on binary/version mismatches.
+  Setup is documented in [the agent browser runbook](../docs/agent-browsers.md);
+  verification and fixes are recorded in [PR #1033](../PRs/1033-agent-browser-space-isolated-agent-browsers-and-task-management.md).
+
 - 2026-10-18 — **Codex (AI)**: Restore the existing password-title search, pagination and api.passwords 1.2.0 contract accidentally removed by the menu-bar merge. Preserve all menu-bar and script functionality.
 
 - 2026-10-18 — **Codex (AI)**: Fix installed desktop browser Actions through the

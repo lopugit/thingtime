@@ -204,7 +204,7 @@ export const componentBlock = (ctx: DemoBlockCtx, refs: SuiteRefs, id: string, c
 // every app page: the nav component (an `active` arg) above the page body,
 // centred in a readable column
 export const appShell = (ctx: DemoBlockCtx, refs: SuiteRefs, navKey: string, active: string, body: DemoBlock[], options: { maxWidth?: number; gap?: number } = {}): DemoBlock[] => [
-	demoBlockKit.container(ctx, 'shell', 'column', [componentBlock(ctx, refs, 'nav', navKey, { active }), ...body], { gap: options.gap ?? 3, maxWidth: options.maxWidth ?? 820, css: { padding: '8px 0 40px' } })
+	demoBlockKit.container(ctx, 'shell', 'column', [componentBlock(ctx, refs, 'nav', navKey, { active }), ...body], { gap: options.gap ?? 3, maxWidth: options.maxWidth ?? 820, css: { width: '100%', 'margin-inline': 'auto', 'box-sizing': 'border-box', padding: '8px 16px 40px' } })
 ];
 
 // the nav bar shared by every app: brand link + one pill per page
