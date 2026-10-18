@@ -38,3 +38,22 @@ test('real persistence rejects forged, wrong-owner/provider and revoked proofs, 
   assert.equal((await updateLopuChat('owner', chat.shareId, { providerId: id }, proof)).ok, false);
   assert.equal((await updateLopuChat('owner', chat.shareId, { providerId: 'ordinary-owned' })).ok, true, 'ordinary vault ownership remains supported');
 });
+
+
+test('an unchanged explicit plan pin is idempotent, but still requires a live proof', async () => {
+  const controller = new AbortController();
+  const resolve = createOwnedPlanResolver({ sessionOwns: async () => true, resolve: async () => ({ id, authMode: 'chatgpt-plan' as const, authSignal: controller.signal }) });
+  const proof = (await resolve(new Request('http://127.0.0.1:28631'), 'owner', id)).admission;
+  chat.crystal.lopu = { providerId: id, model: null, effort: null, speed: null, management: 'client' };
+  const before = writes;
+  for (let turn = 0; turn < 2; turn++) {
+    const result = await updateLopuChat('owner', chat.shareId, { providerId: id, management: 'client' }, proof);
+    assert.equal(result.ok, true, 'a repeated turn can retain the same verified provider');
+  }
+  assert.equal(writes, before, 'unchanged settings do not write timestamps or history');
+  assert.equal((await updateLopuChat('owner', chat.shareId, {}, proof)).ok, false, 'empty updates remain invalid');
+  assert.equal((await updateLopuChat('other', chat.shareId, { providerId: id }, proof)).ok, false);
+  controller.abort();
+  assert.equal((await updateLopuChat('owner', chat.shareId, { providerId: id }, proof)).ok, false, 'a revoked proof cannot validate even the saved pin');
+  assert.equal(writes, before);
+});

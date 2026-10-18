@@ -10364,3 +10364,9 @@ separate from deterministic discovery/lease tests.
 - Run `npm --prefix remix run characters:preflight -- --origin https://thingtime.com` only on the separately authorized real-account coordination path. Confirm `CAPABILITY_READY`, selected origin, compatible version, and authentication/membership both `not_checked`. Then use the assigned Chrome session and task Character to verify private-subspace read/post/reload separately; do not treat public discovery as account acceptance.
 
 - Lopu page patches: insert, replace and setBlocks preserve a page beyond the former 120-block product cap; tests use a finite representative document rather than allocating from the unbounded compatibility constant. Existing operation validation and persistence guards remain separate.
+
+- ChatGPT plan acceptance regression (2026-10-19): keep the global Vercel-management preference enabled, select an owned plan, and send a fresh message plus a follow-up. Both must execute locally, preserve the plan pin, and never show “Nothing to update”. Repeat unchanged settings with a revoked proof and confirm refusal; ordinary providers must retain server management. The floating header must reflect the selected eligible plan while voice keeps its existing invitation gate.
+
+- Suite authority regression covers direct editable menu action/source references, not only component blocks.
+
+- Responses terminal-output regression: after response.output_item.done plus response.completed with empty output, execute the finalized read-only call once, replay encrypted reasoning and matching call_id, and show the final answer. Missing/incomplete terminal events, unfinished starts, duplicate done events and conflicting terminal arguments/namespaces must execute nothing. Synthetic real-SDK streaming suite passes; installed read-only round trip still pending.

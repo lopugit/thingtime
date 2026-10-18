@@ -664,7 +664,7 @@ export function useApi() {
         ),
         update: useCallback(
           async (args: { chatId: string; title?: string; model?: string; effort?: string; speed?: string; providerId?: string | null; accessMode?: 'ask' | 'full'; management?: 'client' | 'server'; archived?: boolean }) => {
-            if (typeof args.providerId === 'string' && args.providerId.startsWith('chatgpt-plan-')) await requireThingtimeCapability('api.lopu-chats-update', '1.6.0');
+            if (typeof args.providerId === 'string' && args.providerId.startsWith('chatgpt-plan-')) await requireThingtimeCapability('api.lopu-chats-update', '1.6.1');
             if (args.accessMode) await requireThingtimeCapability('api.lopu-chats-update', '1.5.0');
             if (args.management) {
               await requireThingtimeCapability('api.lopu-chats', '1.5.0');

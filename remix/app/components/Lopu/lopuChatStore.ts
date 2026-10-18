@@ -1,7 +1,7 @@
 import { withoutPlanAdmissionHints } from './lopuProviderCore';
 import { isRunningLopuChatTask } from '~/api/utils/lopu/backgroundTaskCore';
 import { lopuAccessMode, type LopuAccessMode } from '~/api/utils/lopu/accessMode';
-import { continuationContext, continuationRequestId, LOPU_MAX_RECOVERY_FAILURES, type LopuManagement } from '~/api/utils/lopu/continuationCore';
+import { continuationContext, continuationRequestId, lopuProviderManagement, LOPU_MAX_RECOVERY_FAILURES, type LopuManagement } from '~/api/utils/lopu/continuationCore';
 import { bindLopuQueue, pauseLopuQueue } from './lopuQueueStore';
 import { LOPU_CONTINUE_PROMPT, shouldAutoContinueLopuReply } from './lopuRecovery';
 import { bindAiTaskOwner, getAiTasks, refreshAiTasks, readAiTaskOutput, stopAiTaskRequest } from './aiTasks.client';
@@ -339,12 +339,13 @@ export const reconcileLopuSettings = (
 	vaultProviders: LopuVaultProvider[] | null = null
 ): LopuChatSettings => {
 	const providerId = reconcileProviderId(requested?.providerId, vaultProviders);
+	const management = requested?.management || providerId?.startsWith('chatgpt-plan-') ? { management: lopuProviderManagement(requested?.management, providerId) } : {};
 	if (!models.length) {
 		return {
 			model: requested?.model ?? defaults?.model ?? null,
 			effort: requested?.effort ?? defaults?.effort ?? null,
 			speed: requested?.speed ?? defaults?.speed ?? null,
-			providerId, ...(requested?.accessMode ? { accessMode: lopuAccessMode(requested.accessMode) } : {}), ...(requested?.management ? { management: requested.management } : {})
+			providerId, ...(requested?.accessMode ? { accessMode: lopuAccessMode(requested.accessMode) } : {}), ...management
 		};
 	}
 	const wanted = requested?.model ? models.find((model) => model.id === requested.model) : null;
@@ -352,14 +353,14 @@ export const reconcileLopuSettings = (
 	const model = isAvailable(wanted) ? wanted : isAvailable(fallback) ? fallback : models.find(isAvailable) || null;
 	// Execution management is independent of provider access (including new
  // invite-gated accounts whose catalog has no available model).
- if (!model) return { model: null, effort: null, speed: null, providerId, ...(requested?.accessMode ? { accessMode: lopuAccessMode(requested.accessMode) } : {}), ...(requested?.management ? { management: requested.management } : {}) };
+ if (!model) return { model: null, effort: null, speed: null, providerId, ...(requested?.accessMode ? { accessMode: lopuAccessMode(requested.accessMode) } : {}), ...management };
 	const efforts = Array.isArray(model.efforts) ? model.efforts : [];
 	const speeds = Array.isArray(model.speeds) ? model.speeds : [];
 	const effortCandidates = [requested?.effort, defaults?.effort, 'high'];
 	const effort = effortCandidates.find((candidate): candidate is string => !!candidate && efforts.includes(candidate)) ?? efforts[efforts.length - 1] ?? null;
 	const speedWanted = requested?.speed ?? defaults?.speed ?? 'normal';
 	const speed = speeds.includes(speedWanted) ? speedWanted : speeds.includes('normal') ? 'normal' : speeds[0] ?? null;
-	return { model: model.id, effort, speed, providerId, ...(requested?.accessMode ? { accessMode: lopuAccessMode(requested.accessMode) } : {}), ...(requested?.management ? { management: requested.management } : {}) };
+	return { model: model.id, effort, speed, providerId, ...(requested?.accessMode ? { accessMode: lopuAccessMode(requested.accessMode) } : {}), ...management };
 };
 
 export const sameLopuSettings = (a: LopuChatSettings, b: LopuChatSettings): boolean =>
@@ -411,7 +412,7 @@ const persistChatProvider = (chatId: string, providerId: string | null, previous
 const mergeSettingsPatch = (patch: Partial<LopuChatSettings>): LopuChatSettings => {
 	const merged = { ...state.settings, ...patch };
 	const vault = knownVaultProviders();
-	if (!(state.modelsLoaded || state.models.length)) return merged;
+	if (!(state.modelsLoaded || state.models.length)) return { ...merged, ...(merged.providerId?.startsWith('chatgpt-plan-') ? { management: 'client' as const } : {}) };
 	const reconciled = reconcileLopuSettings(merged, state.models, state.defaults, vault);
 	if (patch.providerId && !reconciled.providerId && vault) return { ...reconciled, providerId: state.settings.providerId };
 	return reconciled;
@@ -457,7 +458,7 @@ export const setLopuSettings = (patch: Partial<LopuChatSettings>) => {
 	persistSettings(state.userId, settings);
 	setState({ settings });
   if (patch.accessMode && state.activeChatId) persistChatAccess(state.activeChatId, patch.accessMode);
-	if (patch.management && state.activeChatId && client) void client.chats.update({ chatId: state.activeChatId, management: patch.management }).catch(() => {});
+	if (patch.management && state.activeChatId && client) void client.chats.update({ chatId: state.activeChatId, management: settings.management }).catch(() => {});
 	if (providerChanged && 'providerId' in patch && state.activeChatId) persistChatProvider(state.activeChatId, settings.providerId, previousProvider);
 };
 

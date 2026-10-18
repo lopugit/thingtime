@@ -13,6 +13,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 > When you make a manual change, add a bullet under `[Unreleased]` ending with
 
 
+- 2026-10-19: Keep personal-plan chats on local management, make repeated verified provider selections idempotent, and align the floating header with plan eligibility. Added regressions for first sends, follow-ups, old-client background admission and revoked proofs. Reconcile completed Responses output items before executing tools; incomplete/conflicting output remains fail-closed (installed tool acceptance pending). — Codex (AI)
+
 - 2026-10-18: Admit full-session owners to Lopu text chat through their live ChatGPT plan without an admin grant, preserve provider ownership on chat writes, and discard cached eligibility across identity changes. Catalog/API-key/voice invitation policy is unchanged. Live consent/model discovery/restart passed; rebuilt inference acceptance remains pending. See [PR 1034](../PRs/1034-chatgpt-plan-usage-local-runtime-and-encrypted-connection-moves.md). — Codex (AI)
 
 - 2026-10-18: Fix rejected Mac telemetry after menu bar/script support pushed the native capability list to 65 entries. Pairing, heartbeat and owner projections now share a bounded 128-entry contract, with native-vocabulary regression coverage. See [PR 1038](../PRs/1038-device-scripts-page-layout-restore-full-mac-telemetry.md) for acceptance findings and the installed page layout correction.
