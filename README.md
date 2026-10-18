@@ -4409,6 +4409,56 @@ configured. Local development without a configured secret uses an ephemeral
 key, so refreshing comments after a server restart starts a new cursor chain.
 
 
+### Reusable local video tools
+
+Install **Local video tools** (`media-tools`) from Builder's app suites on an
+origin advertising `api.webpages-suites-install >= 1.4.0`. The normal installation
+creates private, owned Page, Component and Action Things. Its `tt-web-platform`
+program stores the document, CSS, selectors and editable encoding settings;
+**Save edited component** persists the edited program and current defaults for
+reuse. Neither the selected file nor the output bytes are saved by this Action.
+See `/docs/builder#local-media` for the declarative contract and capability
+inspection guidance shared with Lopu.
+
+Encoding runs on the selected device through WebCodecs and the pinned
+[Mediabunny 1.61.6 source](https://github.com/Vanilagy/mediabunny/tree/v1.61.6).
+Its unmodified source is MPL-2.0; the shipped notice is at
+`/platform/mediabunny-LICENSE.txt`. No FFmpeg service, provider key, upload,
+external request or additional secret is required. Existing account/database
+configuration is only needed to install or save reusable Things. HTTPS (or
+localhost) and browser codec support are required. MP4 uses H.264/AAC; WebM uses
+VP9/Opus. Unsupported sources or codecs produce an error, including unsupported
+audio rather than silently dropping it. Only primary video/audio are retained;
+extra tracks, subtitles and metadata are omitted. Output can be larger than input;
+the receipt reports actual byte counts. Large files depend on available memory.
+
+The fixed encoding worker runs on the secure host because opaque iframes cannot
+access WebCodecs. The editable document remains in its opaque sandbox. The host
+validates file messages against that frame and run, resolves settings from its
+validated saved program, and terminates work on cancel, replacement or unmount.
+Custom hosts must serve `/assets/mediaWorker-*.js` with `mediaWorkerCsp` from
+`remix/scripts/csp.mjs` (no network or child workers). Vite and Vercel configure
+this automatically; `verify:vercel-output` asserts the worker and scoped header.
+
+Browser regression on macOS: install FFmpeg/ffprobe, a task-owned Chrome for
+Testing binary and Playwright outside the repository. Set `PLAYWRIGHT_MODULE`
+to its module and `CHROME_FOR_TESTING_PATH` to that binary, then run:
+
+```sh
+cd remix
+npm run build:platform
+node scripts/media-acceptance/build.mjs
+env -i HOME="$HOME" PATH="$PATH" TMPDIR="${TMPDIR:-/tmp}" PLAYWRIGHT_MODULE="$PLAYWRIGHT_MODULE" CHROME_FOR_TESTING_PATH="$CHROME_FOR_TESTING_PATH" /usr/bin/sandbox-exec -f scripts/media-acceptance/network.sb node scripts/media-acceptance/check.mjs
+```
+
+The test owns loopback port 18641 only for its duration and closes its server and
+fresh browser afterward. It has no API backend, account or database. OS egress
+is denied except that loopback port; direct-IP, redirect and browser probes
+must demonstrate the boundary before acceptance proceeds. There is no permissive
+fallback. Screenshots, trace and independently probed media stay in ignored
+`remix/tmp/media-acceptance/`. Other operating systems need an equivalent verified
+OS/container egress boundary before running this acceptance test.
+
 ### Web standards Builder app
 
 The worker-compatible Web API recipes include URL members, headers/query/form

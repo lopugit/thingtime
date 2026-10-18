@@ -13269,13 +13269,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'webpages-suites-install',
-    contractVersion: '1.3.0',
-    featureVersion: '1.3.0',
+    contractVersion: '1.4.0',
+    featureVersion: '1.4.0',
     group: 'webpages',
     title: 'Install a behaviour suite or app suite',
     endpoint: '/api/v1/webpages/suites/install',
     summary: 'Installs (or re-installs) one suite — schemas, components, actions, sample data, and every page — into the caller’s own things in one idempotent request.',
     detail:
+      '1.4.0 adds the media-tools suite: editable local WebCodecs conversion programs with selected-file input, resize, MP4/WebM encoding, progress/cancel, preview, host download and a saved-component Action. No video bytes are uploaded or persisted by conversion; device codec support is required. ' +
       'JSON Action inputs accept bounded JSON values; form controls decode their JSON text before transport. Literal strings are never reparsed by the API. JSON defaults preserve arrays, objects and null; input references remain inert data. Resolved defaults and nested calls obey the input byte budget. The Web standards workbench can save the edited program and current inputs as a private reusable Component through its authored browser Action. ' +
       'Web standards adds the web-standards installable suite, pure webstandards.browse/component expressions and the reusable tt-web-platform declarative document/CSS/JavaScript runtime. Runtime execution is isolated from account data; inventory provenance and incomplete-demo coverage are explicit. ' +
       'Version 1.1 adds site-forms and catalog-records suites, native form fields, and versioned interactive controls. ' +
