@@ -68,7 +68,9 @@ const sessionFetch: typeof fetch = async (url, init = {}) => {
 		headers.set('Origin', base.origin);
 	}
 	if (init.method === 'PUT') counts.puts++;
-	const response = await fetch(target, { ...init, headers, redirect: 'error', signal: init.signal ?? AbortSignal.timeout(30000) });
+	let response: Response;
+	try { response = await fetch(target, { ...init, headers, redirect: 'error', signal: init.signal ?? AbortSignal.timeout(30000) }); }
+	catch (cause) { throw Error(`Acceptance HTTP ${init.method ?? 'GET'} ${target.pathname} failed`, { cause }); }
 	if (target.origin === base.origin && init.credentials !== 'omit')
 		for (const value of response.headers.getSetCookie()) {
 			const pair = value.split(';')[0],
@@ -89,7 +91,8 @@ async function api(route: string, body?: unknown, method = body === undefined ? 
 		...(body === undefined ? {} : { body: JSON.stringify(body) })
 	});
 	assert.equal(response.status, 200, route.split('?')[0] + ' status');
-	return response.json();
+	try { return await response.json(); }
+	catch (cause) { throw Error(`Acceptance response ${method} ${new URL(route, base).pathname} failed`, { cause }); }
 }
 async function startNative() {
 	lastVerifyCalls = 0;
@@ -419,6 +422,7 @@ try {
 	await seed('remote.bin', remoteBytes);
 	if (wideFixture) {
 		assert.equal(base.origin, 'http://127.0.0.1:28311');
+		console.log('MAC_PAGED_STAGE wide-folder-setup');
 		for (let offset = 0; offset < wideFolders; offset += 1000) {
 			const things = Array.from({ length: Math.min(1000, wideFolders - offset) }, (_, i) => ({
 				id: 'folder-' + (offset + i), thingtime: ['folder'], crystal: { name: 'wide-' + String(offset + i).padStart(5, '0') }
@@ -430,6 +434,7 @@ try {
 		for (let offset = 0; offset < wideFolders; offset += 128)
 			await Promise.all(Array.from({ length: Math.min(128, wideFolders - offset) }, (_, i) =>
 				mkdir(path.join(directory, 'selected', 'wide-' + String(offset + i).padStart(5, '0')))));
+		console.log('MAC_PAGED_STAGE wide-folders-ready');
 	}
 	primeCooldown = forcePreflightCooldown;
 	let nativePages = 0, cloudPages = 0, reviewInterrupt = false, reviewedChoices = 0;
@@ -454,6 +459,7 @@ try {
 		}
 	};
 	const run = async () => {
+		let lastStage = '';
 		const localTarget = await approveMobileSyncTarget(saved, scope, signal, request, caps);
 		const result = await (pagedFixture ? runPagedForegroundCloudSync : runForegroundCloudSync)(
 			saved,
@@ -499,7 +505,9 @@ try {
 				} } : journal,
 				runtime,
 				localTarget,
-				progress: () => {}
+				progress: value => { if (wideFixture && value.stage !== lastStage) {
+					lastStage = value.stage; console.log('MAC_PAGED_STAGE sync-' + value.stage);
+				} }
 			},
 			signal
 		);
@@ -742,6 +750,7 @@ try {
     }
     }
 } finally {
+	if (wideFixture) console.log('MAC_PAGED_STAGE cleanup');
 	loseCloud = false;
 	losePublication = false;
 	let stopFailure: unknown;

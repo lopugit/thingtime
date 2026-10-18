@@ -137,9 +137,15 @@ if (!process.env.TT_MAC_PAGED_WORKER) {
 	};
 	process.once('SIGTERM', terminate);
 	process.once('SIGINT', terminate);
-	const collect = (c) => {
-		let text = '';
-		c.stdout.on('data', (b) => (text += b));
+	const collect = (c, stages = false) => {
+		let text = '', pendingStage = '';
+		c.stdout.on('data', (b) => {
+			text += b;
+			if (!stages) return;
+			pendingStage += b;
+			const lines = pendingStage.split('\n'); pendingStage = lines.pop() ?? '';
+			for (const line of lines) if (/^MAC_PAGED_STAGE [a-z-]+$/.test(line)) console.log(line);
+		});
 		c.stderr.on('data', (b) => (text += b));
 		return () => text;
 	};
@@ -231,7 +237,7 @@ if (!process.env.TT_MAC_PAGED_WORKER) {
 			['--import', 'tsx', 'scripts/mac-file-sync.integration.mts', fixturePath, '--paged', '--large-upload', '--large-download', ...(wide ? ['--wide'] : [])],
 			{ ...clean, THINGTIME_MAC_SYNC_FIXTURE_BIN: process.env.THINGTIME_MAC_SYNC_FIXTURE_BIN }
 		);
-		const output = collect(test);
+		const output = collect(test, true);
 		const [code] = await once(test, 'exit');
 		if (code !== 0) throw Error('Native transfer child failed: ' + output().replaceAll(password, '[secret]').replaceAll(secret, '[secret]'));
 		const result = output()
