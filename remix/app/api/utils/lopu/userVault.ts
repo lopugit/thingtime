@@ -7,7 +7,7 @@ import { getThingsCollection } from '../mongodb/collections';
 import { createThing, deletePost, isFail, updateThing } from '../things/things';
 import { ACL_OWNER } from '~/schemas/registry';
 import {
-	boundedVaultText,
+	vaultText,
 	LOPU_PROVIDER_TEMPLATES,
 	LOPU_USER_VAULT_SCHEMA_VERSION,
 	LOPU_USER_VAULT_SYSTEM_TYPE,
@@ -18,7 +18,6 @@ import {
 	type LopuProviderKind
 } from './userVaultCore';
 
-const VALUE_MAX_BYTES = 32 * 1024;
 const VAULT_AAD_PREFIX = 'thingtime-user-vault:v1:';
 
 type EncryptedValue = EncryptedVaultValue | VaultEnvelope;
@@ -148,7 +147,7 @@ const createVaultThing = async (ownerId: string, shareId: string, crystal: Store
 };
 
 export const createUserVaultGroup = async (ownerId: string, input: { name?: unknown }): Promise<PublicVaultGroup> => {
-	const name = boundedVaultText(input.name, 80);
+	const name = vaultText(input.name);
 	if (!name) throw new Error('Environment name is required.');
 	const now = new Date().toISOString();
 	const shareId = randomUUID();
@@ -164,7 +163,7 @@ export const createUserVaultGroup = async (ownerId: string, input: { name?: unkn
 };
 
 const validSecretValue = (value: unknown): string | null => {
-	if (typeof value !== 'string' || !value || Buffer.byteLength(value, 'utf8') > VALUE_MAX_BYTES) return null;
+	if (typeof value !== 'string' || !value) return null;
 	return value;
 };
 
@@ -172,10 +171,10 @@ export const saveUserVaultSecret = async (
 	ownerId: string,
 	input: { id?: unknown; name?: unknown; key?: unknown; value?: unknown; groupId?: unknown }
 ): Promise<PublicVaultEntry> => {
-	const name = boundedVaultText(input.name, 120);
-	const key = boundedVaultText(input.key, 120);
+	const name = vaultText(input.name);
+	const key = vaultText(input.key);
 	const value = validSecretValue(input.value);
-	if (!name || !key || !value) throw new Error('Secret name, key, and a non-empty bounded value are required.');
+	if (!name || !key || !value) throw new Error('Secret name, key, and a non-empty value are required.');
 	const groupId = await assertGroup(ownerId, input.groupId);
 	const existing = input.id ? await ownVaultDoc(ownerId, input.id) : null;
 	if (input.id && (!existing || existing.crystal.recordKind !== 'secret')) throw new Error('Vault secret was not found.');
@@ -205,7 +204,7 @@ export const saveUserVaultProvider = async (
 	ownerId: string,
 	input: { id?: unknown; name?: unknown; provider?: unknown; endpoint?: unknown; model?: unknown; token?: unknown; groupId?: unknown }
 ): Promise<PublicVaultEntry> => {
-	const name = boundedVaultText(input.name, 120);
+	const name = vaultText(input.name);
 	const provider = normalizeLopuProviderKind(input.provider);
 	const endpoint = normalizeLopuProviderEndpoint(input.endpoint);
 	const token = validSecretValue(input.token);
@@ -219,7 +218,7 @@ export const saveUserVaultProvider = async (
 	// model), but when given it must be a sane provider-native id
 	const modelGiven = typeof input.model === 'string' && input.model.trim() !== '';
 	const model = modelGiven ? safeVaultModelId(input.model) : null;
-	if (modelGiven && !model) throw new Error('Model id must be at most 200 characters of letters, digits, . _ : / @ or -.');
+	if (modelGiven && !model) throw new Error('Model id must contain letters, digits, . _ : / @ or -.');
 	const groupId = await assertGroup(ownerId, input.groupId);
 	const existing = input.id ? await ownVaultDoc(ownerId, input.id) : null;
 	if (input.id && (!existing || existing.crystal.recordKind !== 'provider')) throw new Error('AI provider was not found.');

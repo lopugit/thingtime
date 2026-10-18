@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { beforeEach, mock, test } from 'node:test';
 import { createVaultDataKey, openVaultValue, sealVaultValue } from '../auth/vaultEnvelope';
+import { validateThingtimeCrystal } from '../../../schemas/registry';
 
 // Exercise the real vault utility and HTTP action. Only persistence, session
 // lookup and rate limiting are replaced; encryption stays owner/record-bound.
@@ -22,10 +23,16 @@ mock.module(new URL('../auth/vaultKeys.ts', import.meta.url).href, {
 mock.module(new URL('../things/things.ts', import.meta.url).href, {
   namedExports: {
     isFail: (result: any) => result.ok === false,
-    createThing: async (ownerId: string, input: any) => { writes++; documents.push({ ...input, ownerId }); return { ok: true }; },
+    createThing: async (ownerId: string, input: any) => {
+      const validated = validateThingtimeCrystal(input.thingtime, input.crystal);
+      if (!validated.ok) return validated;
+      writes++; documents.push({ ...input, crystal: validated.crystal, ownerId }); return { ok: true };
+    },
     updateThing: async (_viewer: any, shareId: string, input: any) => {
+      const validated = validateThingtimeCrystal(['data'], input.crystal);
+      if (!validated.ok) return validated;
       writes++;
-      documents = documents.map(doc => doc.shareId === shareId ? { ...doc, crystal: structuredClone(input.crystal) } : doc);
+      documents = documents.map(doc => doc.shareId === shareId ? { ...doc, crystal: structuredClone(validated.crystal) } : doc);
       return { ok: true };
     },
     deletePost: async () => { throw new Error('Unexpected deletion'); },
@@ -49,7 +56,7 @@ beforeEach(() => { documents = []; writes = 0; });
 test('invalid replacement tokens reject the HTTP write without changing any stored field', async () => {
   const entry = await saveUserVaultProvider(ownerId, { ...input, token: original });
   const before = structuredClone(documents);
-  for (const token of [null, false, 42, {}, [], 'x'.repeat(32 * 1024 + 1), '🦊'.repeat(8193)]) {
+  for (const token of [null, false, 42, {}, []]) {
     const response = await post({ action: 'save-provider', ...input, id: entry.id, name: 'Must not be saved', token });
     assert.equal(response.status, 400);
     const body = await response.json();
@@ -93,4 +100,41 @@ test('new accounts still require credentials and foreign record IDs cannot be up
   await assert.rejects(saveUserVaultProvider('other-owner', { ...input, id: entry.id, token: 'replacement' }), /not found/);
   assert.equal(writes, 1);
   assert.equal(await revealUserVaultValue(ownerId, entry.id), original);
+});
+
+test('large credentials and metadata round-trip through HTTP, encryption and the shared Thing validator', async () => {
+  const name = 'Long account 🦊 '.repeat(600);
+  const token = ' exact synthetic credential 🦊\n'.repeat(12000);
+  const endpoint = 'https://api.example.com/' + 'model-api/'.repeat(700);
+  const model = 'organization/' + 'model-'.repeat(1200);
+  const response = await post({ action: 'save-provider', name: name.trim(), provider: 'compatible', endpoint, model, token });
+  assert.equal(response.status, 200);
+  const { entry } = await response.json();
+  assert.equal(entry.name, name.trim());
+  assert.equal(entry.endpoint, endpoint.replace(/\/$/, ''));
+  assert.equal(entry.model, model);
+  assert.equal(await revealUserVaultValue(ownerId, entry.id), token);
+  assert.equal(JSON.stringify(documents).includes(token), false);
+  assert.equal('token' in entry, false);
+  const replacement = ' replacement 🧭 '.repeat(16000);
+  const updated = await post({ action: 'save-provider', id: entry.id, name: name.trim(), provider: 'compatible', endpoint, model, token: replacement });
+  assert.equal(updated.status, 200);
+  assert.equal(await revealUserVaultValue(ownerId, entry.id), replacement);
+});
+
+test('long environment names, secret names, keys and values are stored without truncation', async () => {
+  const name = 'Environment '.repeat(800).trim();
+  const groupResponse = await post({ action: 'create-group', name });
+  assert.equal(groupResponse.status, 200);
+  const { group } = await groupResponse.json();
+  assert.equal(group.name, name);
+  const secret = { name: 'Secret name '.repeat(800).trim(), key: 'KEY_'.repeat(2000), value: ' secret 🌈 '.repeat(20000), groupId: group.id };
+  const response = await post({ action: 'save-secret', ...secret });
+  assert.equal(response.status, 200);
+  const { entry } = await response.json();
+  assert.equal(entry.name, secret.name);
+  assert.equal(entry.key, secret.key);
+  assert.equal(entry.groupId, group.id);
+  assert.equal(await revealUserVaultValue(ownerId, entry.id), secret.value);
+  assert.equal('value' in entry, false);
 });

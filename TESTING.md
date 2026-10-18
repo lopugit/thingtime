@@ -7785,14 +7785,30 @@ checks; `TT_VERIFY_LIVE=1` adds a live Hacker News pull). Manual checklist:
       and find the same entries in Secure Vault and Lopu's provider picker.
       No duplicate credential store; cancelled forms erase typed secrets.
       Subscription sign-in availability must remain explicit.
-- [ ] Provider credential replacement: a supplied null, non-string, or rejected
-      oversized token must return an error without changing the account name,
+- [ ] Provider credential replacement: a supplied null or non-string token must return an error without changing the account name,
       endpoint, group, model, timestamps or encrypted credential. A missing or
       empty token intentionally preserves the credential; a valid replacement
       must decrypt exactly, including whitespace and Unicode. Verify using the
       selected local test entry and fresh password confirmation, never logs.
-      Both manifests expose `api.lopu-vault` 1.3.1; provider-save clients reject
-      1.3.0 and accept compatible patch/minor versions.
+      Both manifests expose `api.lopu-vault` 1.4.0; save clients reject
+      older contracts and accept compatible patch/minor versions.
+
+- [ ] Saved credential sizes: save/reload/replace a synthetic credential over
+      768 KiB through local Thingtime Passwords-backed fixtures; reveal it with
+      fresh verification and compare the complete Unicode/whitespace value.
+      Names/keys over 5,000 characters, endpoints over 2,048 and model IDs over
+      200 must survive exactly. Confirm malformed-token requests make no writes.
+- [ ] At desktop and 390px mobile widths, scroll the account cards and Secure
+      Vault fully. Exercise long environment badges, unbroken entry names,
+      environment selectors and verification modals without horizontal overflow.
+      Modal headers and controls must remain above navigation and floating Lopu
+      controls; hit-test their visible edges after the opening animation.
+      Keep values masked in screenshots. Check independent account removal,
+      logout, second-owner denial and recovery after a fresh first-owner login.
+- [ ] Create and update a data Thing over 768 KiB, then compare an independent
+      authenticated read byte-for-byte. Both capability manifests must advertise
+      the new contracts; older selected origins must be refused before writes.
+      Physical host/database capacity is a separate constraint, not a product cap.
 
 ## Commander emoji paste recovery
 

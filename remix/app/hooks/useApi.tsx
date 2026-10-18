@@ -33,7 +33,7 @@ import { recordApiCall } from './apiRequestLog';
 import { useAsyncFetcher } from './useAsyncFetcher';
 import { clearLocalCachePrefix } from './localCache';
 import { createApiFailure, readApiResponsePayload } from './apiFailure';
-import { buildThingCommentRequestPayload, buildThingCreateRequestPayload } from './thingsRequestPayload';
+import { buildThingCommentRequestPayload, buildThingCreateRequestPayload, requiresUncappedDataStrings } from './thingsRequestPayload';
 import { withExportDeadline } from '~/utils/thingTransfer/exportDeadline';
 
 const refreshRootData = () => {
@@ -1037,7 +1037,7 @@ export function useApi() {
         }, options?.signal);
       }, [asyncFetcher]),
       import: useCallback(async (args: { manifest: unknown; files?: Record<string, string>; folderId?: string | null }, options?: { signal?: AbortSignal }) => {
-        await requireThingtimeCapability('api.things-import', '1.11.0');
+        await requireThingtimeCapability('api.things-import', requiresUncappedDataStrings(args.manifest) ? '1.12.0' : '1.11.0');
         return asyncFetcher.submit(args, { action: '/api/v1/things/import', signal: options?.signal, errorContext: 'import Things' });
       }, [asyncFetcher]),
       // scope: 'subspaces' narrows the page to posts from the viewer's ACTIVE
@@ -1119,6 +1119,7 @@ export function useApi() {
       }, []),
       update: useCallback(
         async (args) => {
+          if (requiresUncappedDataStrings(args?.crystal)) await requireThingtimeCapability('api.things', '1.34.0');
           if (args?.crystal?.title !== undefined || args?.crystal?.thing?.kind === 'thing-collection') await requireThingtimeCapability('api.things', '1.27.0');
           if (Array.isArray(args?.attachmentIds) && args.attachmentIds.length > 25) await requireThingtimeCapability('api.things', '1.19.0');
           else if (args?.geo !== undefined) await requireThingtimeCapability('api.things', '1.18.0');
@@ -1175,8 +1176,9 @@ export function useApi() {
         [asyncFetcher]
       ),
       upsert: useCallback(
-        async (args) =>
-          asyncFetcher.submit(
+        async (args) => {
+          if (requiresUncappedDataStrings(args?.crystal)) await requireThingtimeCapability('api.things', '1.34.0');
+          return asyncFetcher.submit(
             {
               id: args?.id,
               thingtime: args?.thingtime,
@@ -1188,12 +1190,14 @@ export function useApi() {
               tokenAcl: args?.tokenAcl
             },
             { action: '/api/v1/things', method: 'PUT' }
-          ),
+          );
+        },
         [asyncFetcher]
       ),
       reactionsRecent: useCallback(async () => getJson('/api/v1/things/reactions-recent'), []),
       create: useCallback(
         async (args) => {
+          if (requiresUncappedDataStrings(args?.crystal)) await requireThingtimeCapability('api.things', '1.34.0');
           if (args?.thing?.kind === 'thing-collection' || args?.crystal?.thing?.kind === 'thing-collection') await requireThingtimeCapability('api.things', '1.27.0');
 					if (Array.isArray(args?.attachmentIds) && args.attachmentIds.length > 25) await requireThingtimeCapability('api.things', '1.19.0');
           else if (args?.geo !== undefined) await requireThingtimeCapability('api.things', '1.18.0');
@@ -1585,7 +1589,7 @@ export function useApi() {
         const actor = actionActor.current;
         const expectedPlane = planeRef.current;
         const origin = window.location.origin;
-        await requireThingtimeCapability('api.actions-run', '1.37.0');
+        await requireThingtimeCapability('api.actions-run', requiresUncappedDataStrings(args) ? '1.38.0' : '1.37.0');
         if (actionActor.current !== actor) throw new Error('The active account changed. Run the action again.');
         const response = await asyncFetcher.submit(buildActionRunBody({ ...args, execution: 'browser' }), { action: '/api/v1/actions/run', expectedActor: actor, expectedDataPlane: expectedPlane });
         const retained = await retainActionOutcomeRecovery(response, actor, expectedPlane, recovery => enqueueActionOutcomeRecovery(origin, recovery));

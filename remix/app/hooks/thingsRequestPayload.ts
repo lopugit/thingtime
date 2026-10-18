@@ -1,5 +1,21 @@
 type ThingRequestArgs = Record<string, unknown> | null | undefined;
 
+// Capability selection only: 5,000 was the old data-string cap, not a new
+// validation limit. Walk iteratively and tolerate aliases/cycles so checking
+// an in-progress editor object cannot recurse forever or change its contents.
+export const requiresUncappedDataStrings = (input: unknown): boolean => {
+	const pending = [input];
+	const seen = new WeakSet<object>();
+	while (pending.length) {
+		const value = pending.pop();
+		if (typeof value === 'string' && value.length > 5000) return true;
+		if (!value || typeof value !== 'object' || seen.has(value)) continue;
+		seen.add(value);
+		for (const child of Object.values(value)) pending.push(child);
+	}
+	return false;
+};
+
 // Keep the browser's post vocabulary in one testable transport boundary.
 // Rebuilding these payloads field-by-field is intentional (unknown UI fields
 // must not reach the API), but every supported post field has to be listed or

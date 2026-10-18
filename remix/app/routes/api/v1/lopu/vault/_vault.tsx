@@ -1,4 +1,4 @@
-import { json, readJsonBody, requireJsonContentType } from '~/api/http';
+import { json, requireJsonContentType } from '~/api/http';
 import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
 import {
 	createUserVaultGroup,
@@ -31,7 +31,9 @@ export const action = async ({ request }: { request: Request }) => {
 		const responseInit = rateLimitedResponseInit(limit);
 		return json({ ok: false, error: 'Secure Vault is rate limited.' }, { ...responseInit, headers: { ...responseInit.headers, ...NO_STORE } });
 	}
-	const body = await readJsonBody(request, 40 * 1024);
+	// Credentials and their metadata are not artificially truncated or capped.
+	// Hosting/body transport and the storage backend still have physical limits.
+	const body = await request.json().catch(() => null);
   if (body?.expectedOwnerId !== undefined && body.expectedOwnerId !== user.id) return json({ ok: false, error: 'Your Thingtime account changed. Reload before saving.' }, { status: 409, headers: { 'Cache-Control': 'private, no-store' } });
 	try {
 		switch (body?.action) {

@@ -31,7 +31,7 @@ const fieldStyles = {
 const emptyVault: VaultPayload = { vaultConfigured: false, groups: [], entries: [], providerTemplates: [] };
 
 const postVault = async (body: Record<string, unknown>) => {
-	await requireThingtimeCapability('api.lopu-vault', body.action === 'save-provider' ? '1.3.1' : body.action === 'move-entry' ? '1.2.0' : '1.1.0');
+	await requireThingtimeCapability('api.lopu-vault', ['save-provider', 'save-secret', 'create-group'].includes(String(body.action)) ? '1.4.0' : body.action === 'move-entry' ? '1.2.0' : '1.1.0');
 	const response = await fetch('/api/v1/lopu/vault', {
 		method: 'POST',
 		credentials: 'include',
@@ -130,7 +130,7 @@ export const SecureVault = () => {
 					<Button isLoading={busy} onClick={() => run({ action: 'create-group', name: groupName }, 'Environment created', () => setGroupName(''))}>Add environment</Button>
 				</Flex>
 				<Flex gap={2} mt={2} flexWrap="wrap">
-					{vault.groups.map((group) => <Badge key={group.id} px={2} py={1}>{group.name} <Box as="button" ml={1} aria-label={`Delete ${group.name}`} onClick={() => deleteEntry(group)}>×</Box></Badge>)}
+					{vault.groups.map((group) => <Badge key={group.id} px={2} py={1} maxWidth="100%" whiteSpace="normal" overflowWrap="anywhere">{group.name} <Box as="button" ml={1} aria-label={`Delete ${group.name}`} onClick={() => deleteEntry(group)}>×</Box></Badge>)}
 				</Flex>
 			</Box>
 
@@ -190,7 +190,7 @@ export const SecureVault = () => {
 					{vault.entries.map((entry) => (
 						<Flex key={entry.id} alignItems="center" gap={2} border="1px solid var(--tt-border, #ececef)" borderRadius="10px" p={3} flexWrap="wrap">
 							<Box minWidth={0} flex={{ base: '1 1 100%', md: '1 1 200px' }}>
-								<Text fontSize="sm" fontWeight={700}>{entry.name}</Text>
+								<Text fontSize="sm" fontWeight={700} overflowWrap="anywhere">{entry.name}</Text>
 								<Text fontSize="xs" color="var(--tt-muted, #777783)" wordBreak="break-word">{entry.kind === 'provider' ? [entry.provider, entry.model, entry.endpoint].filter(Boolean).join(' · ') : entry.key}</Text>
 							</Box>
 							{editingEnvironment?.id === entry.id ? <Flex width="100%" gap={2} flexWrap="wrap" alignItems="center">
@@ -200,7 +200,7 @@ export const SecureVault = () => {
          </Select>
          <Button size="sm" isLoading={busy} onClick={() => run({ action: 'move-entry', id: entry.id, groupId: editingEnvironment.groupId }, 'Environment updated', () => setEditingEnvironment(null))}>Save environment</Button>
          <Button size="sm" variant="ghost" isDisabled={busy} onClick={() => setEditingEnvironment(null)}>Cancel</Button>
-        </Flex> : <Button size="sm" variant="outline" isDisabled={busy} aria-label={`Change environment for ${entry.name}`} onClick={() => setEditingEnvironment({ id: entry.id, groupId: entry.groupId || '' })}>{vault.groups.find((group) => group.id === entry.groupId)?.name || 'Ungrouped'} · Change</Button>}
+        </Flex> : <Button size="sm" variant="outline" maxWidth="100%" height="auto" minHeight={8} whiteSpace="normal" overflowWrap="anywhere" isDisabled={busy} aria-label={`Change environment for ${entry.name}`} onClick={() => setEditingEnvironment({ id: entry.id, groupId: entry.groupId || '' })}>{vault.groups.find((group) => group.id === entry.groupId)?.name || 'Ungrouped'} · Change</Button>}
 							<VaultReveal vault="personal" id={entry.id} label={entry.name} />
 							<Button size="xs" variant="ghost" isDisabled={busy} onClick={() => deleteEntry(entry)}>Delete</Button>
 						</Flex>

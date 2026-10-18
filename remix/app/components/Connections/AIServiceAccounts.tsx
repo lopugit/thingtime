@@ -79,7 +79,7 @@ export function AIServiceAccounts({ ownerId }: { ownerId: string | null }) {
     setBusy(true);
     generation.current++;
     try {
-      await requireThingtimeCapability('api.lopu-vault', '1.3.1');
+      await requireThingtimeCapability('api.lopu-vault', '1.4.0');
       if (service.id === 'anthropic' && !token.trim().startsWith('sk-ant-oat'))
         throw new Error('Enter a Claude Code OAuth token. This connection does not accept Anthropic API keys.');
       if (!live.current) return;
@@ -193,7 +193,6 @@ export function AIServiceAccounts({ ownerId }: { ownerId: string | null }) {
                     id={`ai-name-${service.id}`}
                     value={name}
                     onChange={(event) => setName(event.target.value)}
-                    maxLength={120}
                     placeholder="Personal, Work…"
                     required
                     isDisabled={busy}
@@ -207,7 +206,6 @@ export function AIServiceAccounts({ ownerId }: { ownerId: string | null }) {
                     autoComplete="new-password"
                     value={token}
                     onChange={(event) => setToken(event.target.value)}
-                    maxLength={32768}
                     required
                     isDisabled={busy}
                   />

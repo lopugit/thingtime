@@ -68,6 +68,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-18 — **Codex (AI)**: Remove arbitrary saved-credential field,
+  envelope, request-body and shared data-string caps; wrap long Secure Vault
+  metadata on mobile and keep credential verification above navigation/floating
+  controls. All 24 isolated browser/API checks pass. Negotiate `api.lopu-vault`
+  1.4.0 and the affected data
+  contracts before writes. Physical hosting/database capacity still applies.
+  [PR #992 evidence](../PRs/992-service-account-library-add-multi-account-third-party-service-library.md).
+
 - 2026-10-18 — **Codex (AI)**: Reject invalid provider-token replacements
   before any metadata or credential changes, preserving intentional blank-field
   retention. Publish and negotiate `api.lopu-vault` 1.3.1. All 253 focused tests

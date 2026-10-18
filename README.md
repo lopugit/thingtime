@@ -3047,6 +3047,17 @@ Loopback development may infer its origin; hosted deployments fail closed when
 the redirect env is absent. Use the same host for beginning and finishing OAuth
 so the initiating Thingtime session cookie reaches the callback.
 
+Saved credential names, keys, provider endpoint paths/model IDs and values have
+no arbitrary character or byte limits. The saved-value envelope and generic
+`data` strings preserve their complete contents; the vault and Things mutation
+routes do not impose their former request-body caps. Save clients negotiate
+`api.lopu-vault` 1.4.0, and large data writes negotiate the corresponding Things
+capability before sending. Host request capacity, available memory, account
+storage accounting and the database's physical document capacity still apply;
+this is not a promise of infinite storage. Deploy the compatible backend before
+using these clients. Protocol identifiers, URL safety checks and authorization
+validation remain in place.
+
 Credential storage uses **server-assisted account encryption**. Each user has a
 random data key in their private home-account secure record. New OAuth grants
 and Secure Vault secrets use owner/record/purpose-bound AES-256-GCM envelopes.

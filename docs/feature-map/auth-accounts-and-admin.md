@@ -58,7 +58,10 @@ proves the host connected.
 - Saved provider replacement: `connections/vaultTokenReplacement.test.mts`
   (included in `test:connections`) exercises the vault HTTP action, exact
   encrypted replacement, intentional blank retention, and no-write rejection.
-  Provider-save clients require `api.lopu-vault` 1.3.1.
+  Credential-save clients require `api.lopu-vault` 1.4.0. Long names, keys,
+  endpoints, model IDs and values round-trip without arbitrary field/envelope
+  caps. `schemas/dataStrings.test.ts` covers the shared validator, and capability
+  regressions cover the affected Things/copy/import/Action contracts.
 
 Lopu browser Actions bind a revalidated first-party user resolver to the exact
 synthetic Request through `internalRequestActor.ts`. `getCurrentUser` and

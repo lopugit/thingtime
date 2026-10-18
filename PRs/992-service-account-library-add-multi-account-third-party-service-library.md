@@ -3,6 +3,40 @@
 Status: open, ready-for-review implementation checkpoint. Google identity and refresh are verified
 locally; production delivery and other providers' positive acceptance remain pending.
 
+## 18 October: complete saved-credential values and metadata
+
+The form, vault validation, request body, encryption and shared data schema each
+had independent length limits. Those layers now preserve complete credential
+values and metadata. Generic Things create/update bodies also accept large data
+strings. Clients negotiate the new semantic versions before depending on the
+expanded contract; owner checks, encryption binding and URL validation remain.
+Long environment badges, account names and edit buttons wrap within their rows.
+Mobile acceptance also reproduced navigation and floating controls covering the
+credential-verification dialog. It now uses the shared blocking-modal layer;
+the regression hit-tests the header and control edges after the opening animation.
+
+Unit/regression verification: 157 connections, 272 schema, 99 capability,
+22 vault-core/voice and 13 focused client/copy tests pass. Client and Nitro
+node-server builds pass. Raw TypeScript has the same 91 diagnostics as the
+previous commit (baseline file: 89); none are introduced by this change.
+All 24 authenticated browser/API check records pass against the actual built
+server and a fresh MongoDB replica set: four provider accounts, exact large
+credential replacement/reveal, 1.3 MB data create/update, long provider metadata,
+long Secure Vault names/keys/environments, desktop/mobile full scrolling and modal
+control hit-tests, independent removal, logout, cross-owner denial and fresh login.
+A real database document-capacity failure returns 400 and leaves existing metadata
+and credentials unchanged. Both browser and backend share an enforced loopback-only
+network; synthetic test credentials are provisioned through local Thingtime Passwords.
+Screenshots and metadata-only action evidence are retained privately; the task
+container is released. Hosted checks/deployment remain a separate checkpoint.
+Graph maintenance: the semantic refresh was attempted through the local proxy,
+but its completeness guard rejected reduced coverage for three existing documents.
+Existing semantic evidence is preserved; a structural refresh is used instead.
+The latest documentation semantics remain unverified.
+
+Hosting/memory/database document capacity still applies. Other feature-specific
+limits are outside this change; no claim of infinite storage or live consent.
+
 ## 18 October: provider token replacement fails without partial changes
 
 A supplied invalid token was treated like an omitted token during provider
@@ -23,10 +57,10 @@ removal, logout, cross-owner denial, and fresh-login recovery. All credentials
 are synthetic and provisioned/retrieved through local Thingtime Passwords.
 The kernel boundary blocks browser/backend egress; the task container is removed.
 
-Remaining size-limit work is explicit: form name/token limits, vault field and
+At that checkpoint, remaining size-limit work was: form name/token limits, vault field and
 byte validation, the JSON request limit, encryption's default value budget, and
 the shared data-Thing string validator need a coordinated storage-path change.
-This correction does not remove those limits or establish real-provider consent.
+The newer section above supersedes that size-limit follow-up. This token correction alone did not establish real-provider consent.
 Hosted checks and deployment for the new commit must be verified separately.
 
 ## 18 October: authenticated browser acceptance and mobile account rows
