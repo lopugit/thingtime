@@ -24,3 +24,11 @@ Graph refresh uses the immutable repository wrapper. Structural extraction compl
 The first installed integration changed the Electron partition and required sign-in. The correction provides explicit recovery of an original API plus exact historical loopback renderer origin, reusing the complete prior session store in place and preserving the newer store. It never infers legacy ownership from the current API selection or copies cookies. API changes, database changes and workspace recovery are serialized through one transition guard. Future restarts retain the chosen partition and renderer origin; other historical renderer origins are preserved but not merged.
 
 A local restart also left the renderer window hidden while API and MongoDB were healthy. Window visibility now has independent load/failure/timeout paths and activation reveals an existing window. Synthetic Electron tests pass; the real two-launch Chromium storage check is blocked by macOS nested sandbox initialization and is not counted as acceptance. Signed installed recovery must verify the original API and observed old app URL before completion.
+
+## 2026-10-19 combined source and live connection checkpoint
+
+Integrated feature source `b06d834e8` (owned-plan admission, current main and individually editable settings) in merge `8de4fc7ff`, retaining native Passwords authority cleanup and its capability versions. Menu thumbnail source `76366e1bf` is included only in this assembly as `7da2b7424`; its promotion remains with the menu workstream. PR #1035 remains review-only and must not be merged into main.
+
+Merge validation passed all 169 Electron tests and 116 combined proxy/capability tests. The selected-endpoint proxy keeps the feature branch's options signature and the assembly's Passwords/mail manifest checks. The complete prior graph snapshot was retained during conflict resolution; the final integrated source will receive an incremental refresh.
+
+The previously installed `6de54fb70` completed user-approved real OpenAI consent, discovered a ChatGPT model, and preserved its local account and connection through normal Quit/reopen. Saved-credential model refresh passed. First live Lopu inference remains pending the next signed installed build containing the owned-plan admission correction. No administrative account grant was used.
