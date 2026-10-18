@@ -84,7 +84,7 @@ change this pointer; logout/account changes revoke it.
 | Posts, comments and saved items | Native local post create/edit, image attachments, comment/reply reads and writes pass offline browser checks. Saved items, emoji reactions and poll cast/change/removal now pass native offline browser checks; up/down votes and scoped relational storage pass adapter tests. Retained account posts now support offline bookmarks/reactions, Saved/permalink reload and cross-tab membership, with independent conditional sync and known-refusal eviction (checkpoint below). Generic account discussions and canonical comment-only permalinks now retain scoped offline reads with explicit partial coverage and atomic cross-projection refusal cleanup (checkpoint below). Account text/rich-text post and comment/reply authorship now commits locally with independent verified-account sync (checkpoint below). Account post/comment file admission, upload dependency tracking and canonical binding now use the device queue (checkpoint below). Device-authored bound-media removal now has offline/retry coverage (checkpoint below). Existing owned bound-file retention now has fresh-device offline edit/removal and reconnect evidence (checkpoint below). Offline parent/root navigation now has anonymous/account native-browser evidence, including generic Thing discussions (checkpoint below). Bound-file import and reconciliation, remaining linked-Thing surfaces, full edit/privacy/deletion browser coverage and broader cross-account/device acceptance remain. Public posting, remote reactions and recipient delivery remain authenticated operations. |
 | Themes, visual settings and algorithms | Anonymous saved-theme CRUD, active selection, quota and canonical transfer now work through Theme Studio and have offline browser evidence. Anonymous algorithms now support local CRUD/branching, active selection, bounded public-feed training, per-page ranking and canonical JSON round-trip. Account themes have independent device content/selection sync and canonical offline export/import; anonymous themes have canonical local History. Account theme organization now commits locally with independent conditional sync; anonymous folder deletion preserves children. Theme library display titles now rename locally and survive canonical transfer, with anonymous/account native browser and isolated real API verification (checkpoint below). Account algorithms now have native offline editor/selection/transfer and reviewed conflict-copy acceptance. Normal library display titles survive offline Rename, export/import and conditional sync, with real API and clean-browser evidence. Broader account source-plane and library-organization UI checks remain open. Account-authored theme History, other protected-kind titles and wider cross-tab acceptance remain outstanding. |
 | Passwords | Anonymous encrypted device storage/unlock now reuses the canonical vault envelopes and normal password editor/transfer UI. Offline clean-browser acceptance covers lock/reload, two-tab conflicts, normal CSV export/import and 1440/390/320px layouts with zero account/password API writes. Account encrypted device unlock/edit/export now has offline browser evidence, with separately fenced sync, immutable retries and reviewed conflict copies. The real fixture verifies reconnect and second-account isolation. Account attachment UI now commits files locally with independent push/pull, encrypted remote-only availability, complete-backup refusal and native offline/reconnect/fresh-device evidence (2026-10-18 checkpoint below). Wider native identity/plane transitions, large-entry/capacity parity and signed offline provider integration remain unfinished. See [password-manager.md](password-manager.md). |
-| Incoming mail | Anonymous Mail and Email settings now reuse the encrypted store; account mail is partitioned by selected origin and owner. Local reads/settings do not wait for cloud completion, and cloud/Gmail/relay requests require verified account authority. Crypto/transaction retirement, no-network refusal and 2,001-message retention have local tests (checkpoint below). Native reader/settings, cross-tab/origin transitions, account cloud-settings queues and real provider acceptance remain open. |
+| Incoming mail | Anonymous Mail and Email settings now reuse the encrypted store; account mail is partitioned by selected origin and owner. Local reads/settings do not wait for cloud completion, and cloud/Gmail/relay requests require verified account authority. Crypto/transaction retirement, no-network refusal and 2,001-message retention have local tests (checkpoint below). Independent account-settings queues now have local regression coverage (checkpoint below). Native reader/settings, cross-tab/origin transitions, real API queue and provider acceptance remain open. |
 | Apps, integrations and native/browser tools | Separate locally available adapters from paired remote devices, external services and their consent requirements. Verify each applicable local surface. |
 | Lopu and automation | Local documents, authored definitions and drafts should remain editable. Lopu toast/stream messages now persist locally and have a device-history view; verified account messages sync through the existing recorder. Remote social history caching, retry controls and cross-tab history refresh remain unfinished. Provider inference, external delivery and hosted scheduled execution still need their real services. |
 | Auth, social, remote devices, billing and admin | Remote authority is retained. Do not substitute a local actor for a signed-in account. |
@@ -4790,3 +4790,30 @@ its displayed private socket and registered task policy are still needed. No
 claim was taken and no permissive browser was launched. Account cloud-settings
 queues, broader mail lifecycle/capacity and actual Gmail/provider acceptance also
 remain open. The target agent-host artifact connection remains a separate gate.
+
+## Independent mail-settings saves — 2026-10-18
+
+Cloud-backed mail accounts and proxy inboxes previously waited for the server
+before committing device edits or removals. They now use the existing encrypted
+mail store first, with separate per-record sync rows and remote comparison tokens.
+Unsent edits can coalesce. Once sent, the exact request/writeId remains frozen
+until acknowledgement, even while later local edits finish independently. Durable
+claims prevent competing workers; lost responses, reloads and expired claims retry
+that same request. Canonical response validation and conditional server writes are
+unchanged. No new endpoint, schema envelope, Mongo collection or credential source.
+
+Both normal Mail surfaces show pending/refused settings. Account refresh preserves
+pending edits/deletions and rejects older snapshots after a receipt. Explicit
+conflict adoption is bound to the reviewed local intent; an uncertain request
+cannot be discarded. Gmail operations read the separate server revision and refuse
+unresolved settings; the queue never runs mailbox actions or sends messages.
+Anonymous workspaces never queue account writes or adopt account credentials.
+
+Local validation: **52 mail tests passed** (12 new queue/race cases), **39 Settings
+tests passed**, changed-file lint clean, client/offline build passed (250 verified
+assets), and TypeScript matches the existing **91 baseline diagnostics**. Tests use
+real WebCrypto and fake IndexedDB with a synthetic transport; they do not prove a
+live authenticated API round trip. No production/provider account was modified.
+Native 1440/390/320px editing, conflict controls, offline reopen/reconnect and real
+API acceptance remain open with the installed browser-manager socket/policy gate.
+The original target agent-host artifact connection remains separately unverified.

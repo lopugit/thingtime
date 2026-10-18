@@ -1,3 +1,4 @@
+import type { MailSettingsWrite } from './settingsSync';
 import { rootIdentity } from '../utils/rootIdentity';
 import type { WorkspaceLease, WorkspaceScope } from '../local-workspace/storage';
 import type { LocalGmailDraft } from './googleModel';
@@ -12,6 +13,8 @@ export type LocalMail = {
 	connectorToken: string;
 	composeDrafts: LocalGmailDraft[];
 	cursors: Record<string, string | null>;
+	settingsWrites: Record<string, MailSettingsWrite>;
+	settingsRemoteRevisions: Record<string, number>;
 };
 export const emptyLocalMail = (): LocalMail => ({
 	version: 1,
@@ -22,20 +25,36 @@ export const emptyLocalMail = (): LocalMail => ({
 	localInboxIds: [],
 	connectorToken: '',
 	composeDrafts: [],
-	cursors: {}
+	cursors: {},
+	settingsWrites: {},
+	settingsRemoteRevisions: {}
 });
 // Each account, folder, message and view is a separate encrypted IndexedDB row.
 // An owner-level CAS prevents stale tabs overwriting newer device settings.
 // The non-exportable device key is not an XSS or OS disk-encryption boundary.
+// Version 3 fences older writers that do not preserve pending settings rows.
+// Existing encrypted keys/records are retained by the normal upgrade.
 const database = () =>
 	new Promise<IDBDatabase>((resolve, reject) => {
-		const request = indexedDB.open('thingtime-mail-v1', 2);
+		const request = indexedDB.open('thingtime-mail-v1', 3);
+		let blocked = false;
+		request.onblocked = () => {
+			blocked = true;
+			reject(new Error('Reload older Thingtime tabs to finish upgrading device mail. Your saved mail is kept.'));
+		};
 		request.onupgradeneeded = () => {
 			for (const name of ['keys', 'mail', 'heads']) if (!request.result.objectStoreNames.contains(name)) request.result.createObjectStore(name);
 			if (!request.result.objectStoreNames.contains('records'))
 				request.result.createObjectStore('records', { keyPath: ['scope', 'key'] }).createIndex('scope', 'scope');
 		};
-		request.onsuccess = () => resolve(request.result);
+		request.onsuccess = () => {
+			if (blocked) {
+				request.result.close();
+				return;
+			}
+			request.result.onversionchange = () => request.result.close();
+			resolve(request.result);
+		};
 		request.onerror = () => reject(request.error);
 	});
 const result = <T>(request: IDBRequest<T>) =>
@@ -127,6 +146,8 @@ function rowsFor(value: LocalMail): Map<string, string> {
 		);
 	for (const message of value.state.messages) rows.set(`message:${message.id}`, JSON.stringify(message));
 	for (const draft of value.composeDrafts || []) rows.set(`compose:${draft.id}`, JSON.stringify(draft));
+	for (const [id, pending] of Object.entries(value.settingsWrites || {})) rows.set(`settings-write:${id}`, JSON.stringify(pending));
+	for (const [id, revision] of Object.entries(value.settingsRemoteRevisions || {})) rows.set(`settings-revision:${id}`, JSON.stringify(revision));
 	return rows;
 }
 export async function readMailLocal(scope: MailStorageScope, lease: WorkspaceLease): Promise<LocalMail> {
@@ -150,7 +171,7 @@ export async function readMailLocal(scope: MailStorageScope, lease: WorkspaceLea
 				legacy.bytes
 			);
 			lease.assertCurrent();
-			return { composeDrafts: [], ...JSON.parse(new TextDecoder().decode(bytes)), storageRevision: 0 };
+			return { ...emptyLocalMail(), ...JSON.parse(new TextDecoder().decode(bytes)), storageRevision: 0 };
 		}
 		const value = emptyLocalMail();
 		value.storageRevision = head?.revision || 0;
@@ -161,7 +182,9 @@ export async function readMailLocal(scope: MailStorageScope, lease: WorkspaceLea
 			const text = new TextDecoder().decode(bytes),
 				row = JSON.parse(text);
 			plain.set(record.key, text);
-			if (record.key === 'settings') value.connectorToken = row.connectorToken;
+			if (record.key.startsWith('settings-write:')) value.settingsWrites[record.key.slice('settings-write:'.length)] = row;
+			else if (record.key.startsWith('settings-revision:')) value.settingsRemoteRevisions[record.key.slice('settings-revision:'.length)] = row;
+			else if (record.key === 'settings') value.connectorToken = row.connectorToken;
 			else if (record.key.startsWith('account:')) {
 				value.state.accounts.push(row.account);
 				if (row.credentials) value.credentials[row.account.id] = row.credentials;
@@ -237,5 +260,35 @@ export async function clearMailLocal(scope: MailStorageScope, lease: WorkspaceLe
 		memo.delete(owner);
 	} finally {
 		db.close();
+	}
+}
+
+// Serialize device mutations without holding the lock during remote requests.
+// IndexedDB's head CAS remains the cross-tab fallback when Web Locks is absent.
+const updates = new Map<string, Promise<unknown>>();
+export async function updateMailLocal(scope: MailStorageScope, lease: WorkspaceLease, update: (value: LocalMail) => LocalMail): Promise<LocalMail> {
+	const key = mailStorageKey(scope);
+	const work = async () => {
+		for (let attempt = 0; ; attempt++) {
+			lease.assertCurrent();
+			const previous = await readMailLocal(scope, lease),
+				next = update(previous);
+			if (next === previous) return previous;
+			try {
+				return await writeMailLocal(scope, next, lease);
+			} catch (error) {
+				lease.assertCurrent();
+				if (attempt >= 2 || !(error instanceof Error) || !error.message.includes('another tab')) throw error;
+			}
+		}
+	};
+	const locks = typeof navigator !== 'undefined' ? navigator.locks : undefined;
+	if (locks) return locks.request(`thingtime-mail:${key}`, work);
+	const pending = (updates.get(key) ?? Promise.resolve()).catch(() => {}).then(work);
+	updates.set(key, pending);
+	try {
+		return await pending;
+	} finally {
+		if (updates.get(key) === pending) updates.delete(key);
 	}
 }

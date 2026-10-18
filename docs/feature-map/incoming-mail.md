@@ -76,8 +76,8 @@ transaction completion. No account API, new route or remote capability is added.
 `useMail` opens local state first; cloud refresh is independent and cannot replace
 newer device edits. Anonymous setup selects native sync or the existing fixed
 paired connector, never relay/cloud/Gmail. Existing device-only account settings
-remain locally editable while offline. Cloud-backed account settings still use
-remote writes and require a future durable local queue. No automatic anonymous
+remain locally editable while offline. Cloud-backed account and proxy settings now commit locally and queue independent
+account writes; see `mail/settingsSync.ts`. No automatic anonymous
 adoption is allowed. Same-origin old account keys remain readable; unproven
 legacy desktop-origin caches are not reassigned to a selected server.
 
@@ -86,3 +86,25 @@ account/origin partitions, more than 2,000 retained messages, crypto/transaction
 retirement and rejection before any fetch. The store processes encryption in
 batches without a retention count ceiling. Keep the native UI/provider checks in
 TESTING open until exercised in an isolated browser/native session.
+
+## Independent account-settings synchronization
+
+`mail/settingsSync.ts` retains a separate encrypted pending row and server revision
+for each account/proxy in the existing mail store. Device edits/removals complete
+before network work. Unsent intent may coalesce; a dispatched attempt keeps its
+original writeId/body until receipt, beside any newer edit. A durable claim fences
+competing workers, and canonical receipt validation advances only the server token.
+Refreshes cannot rewind acknowledged edits or restore pending removals. No mailbox
+operation or send enters this queue; Gmail actions obtain the current server token
+and refuse pending settings. Anonymous workspaces never acquire this queue.
+
+`MailSettingsStatus.tsx` exposes pending/refused state on both normal surfaces.
+Explicit adoption of account settings is bound to the reviewed local intent;
+uncertain attempts cannot be discarded. `settingsSync.test.ts` exercises encrypted
+reopen, lost receipts, concurrent edits/workers, monotonic versions, scoped retirement,
+conflict review and deletion sequencing. Native browser and real API queue acceptance
+remain separate checks in TESTING.md. No HTTP contract/version changes are introduced.
+
+Mail IndexedDB version 3 upgrades the existing encrypted rows in place and refuses
+version-2 writers, which cannot preserve the new queue metadata. The migration
+regression verifies retained ciphertext and the old-writer VersionError fence.

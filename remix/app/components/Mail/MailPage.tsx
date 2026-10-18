@@ -1,3 +1,4 @@
+import { MailSettingsStatus } from './MailSettingsStatus';
 import React from 'react';
 import { GmailWorkspace, GmailMessageActions } from './GmailActions';
 import { Box, Button, Checkbox, Flex, FormControl, FormLabel, Input, Text } from '@chakra-ui/react';
@@ -76,6 +77,7 @@ function MailScope({ workspace }: { workspace: MailWorkspace }) {
 					Mail stays in this browser’s anonymous workspace. Connect directly from the app or pair a local connector in Email settings.
 				</Text>
 			)}
+			<MailSettingsStatus mail={mail} />
 			<GmailWorkspace ownerId={ownerId} mail={mail} />
 			<Flex gap={4} direction={{ base: 'column', md: 'row' }} align="start" minW={0}>
 				<Flex as="nav" aria-label="Mail inboxes" direction="column" gap={2} width={{ base: '100%', md: '240px' }} flexShrink={0} minW={0}>

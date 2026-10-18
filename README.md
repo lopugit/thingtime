@@ -5056,6 +5056,13 @@ or a paired connector for mailbox access. Cloud storage, Gmail authorization and
 Thingtime API relay require a remotely confirmed Thingtime account; signing in
 does not adopt anonymous mail or credentials. Offline account reads remain local.
 Each account can independently enable **Cloud** and **Local** sync.
+Saved account/proxy settings can be edited or removed offline. Their encrypted
+device changes commit first; account synchronization runs separately while Mail
+or Email settings is open and the matching account is remotely confirmed. Pending
+requests survive reload, retry with the same operation identity, and display
+conflicts for review. A failed account save does not discard a device edit.
+Mail fetching, Gmail sending and mailbox actions still require explicit actions;
+this settings queue never sends mail. Anonymous settings never enter account sync.
 IMAP discovers selectable folders; POP3 exposes its single inbox. **All inboxes**
 combines inbox folders. A proxy inbox is a saved selection of folders from any
 connected accounts: it changes only the view and never copies, moves or deletes

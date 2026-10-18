@@ -73,6 +73,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- **Codex (AI), 2026-10-18:** Save/remove cloud-backed mail settings locally with
+  encrypted, independently retried account sync; preserve newer edits and show
+  reviewed conflicts. Native/API acceptance stays open. See the
+  [PR #1000 checkpoint](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md#independent-mail-settings-saves--2026-10-18).
+
 - 2026-10-18 — **Codex (AI)**: Open anonymous/offline Mail through the existing
   encrypted store, separate device work from cloud refresh, and fence account
   mail by API origin, verified authority and operation lifetime. Remove silent

@@ -72,6 +72,7 @@ export function GmailWorkspace({ ownerId, mail }: { ownerId: string; mail: Mail 
 					key={draft.id}
 					ownerId={ownerId}
 					account={account}
+					getRemoteAccount={mail.remoteAccount}
 					initial={draft}
 					saveLocal={mail.saveCompose}
 					onClose={(sent) => {

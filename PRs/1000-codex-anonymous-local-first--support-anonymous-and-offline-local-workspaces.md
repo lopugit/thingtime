@@ -4299,3 +4299,30 @@ its displayed private socket and registered task policy are still needed. No
 claim was taken and no permissive browser was launched. Account cloud-settings
 queues, broader mail lifecycle/capacity and actual Gmail/provider acceptance also
 remain open. The target agent-host artifact connection remains a separate gate.
+
+## Independent mail-settings saves — 2026-10-18
+
+Cloud-backed mail accounts and proxy inboxes previously waited for the server
+before committing device edits or removals. They now use the existing encrypted
+mail store first, with separate per-record sync rows and remote comparison tokens.
+Unsent edits can coalesce. Once sent, the exact request/writeId remains frozen
+until acknowledgement, even while later local edits finish independently. Durable
+claims prevent competing workers; lost responses, reloads and expired claims retry
+that same request. Canonical response validation and conditional server writes are
+unchanged. No new endpoint, schema envelope, Mongo collection or credential source.
+
+Both normal Mail surfaces show pending/refused settings. Account refresh preserves
+pending edits/deletions and rejects older snapshots after a receipt. Explicit
+conflict adoption is bound to the reviewed local intent; an uncertain request
+cannot be discarded. Gmail operations read the separate server revision and refuse
+unresolved settings; the queue never runs mailbox actions or sends messages.
+Anonymous workspaces never queue account writes or adopt account credentials.
+
+Local validation: **52 mail tests passed** (12 new queue/race cases), **39 Settings
+tests passed**, changed-file lint clean, client/offline build passed (250 verified
+assets), and TypeScript matches the existing **91 baseline diagnostics**. Tests use
+real WebCrypto and fake IndexedDB with a synthetic transport; they do not prove a
+live authenticated API round trip. No production/provider account was modified.
+Native 1440/390/320px editing, conflict controls, offline reopen/reconnect and real
+API acceptance remain open with the installed browser-manager socket/policy gate.
+The original target agent-host artifact connection remains separately unverified.

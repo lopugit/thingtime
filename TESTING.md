@@ -11525,8 +11525,17 @@ separate from deterministic discovery/lease tests.
   readable 1440/390/320px layouts including expanded controls and full scrolling.
 - [ ] Keep local edits usable during slow account cloud refresh; a stale response
   cannot overwrite edits. Offline account mail must never use cookies/relay until
-  root confirmation returns. Previously retained cloud-account settings still
-  need independent queued writes before full local-first acceptance.
+  root confirmation returns. Verify independent account/proxy edits and removals
+  in both normal surfaces at 1440/390/320px; disconnect/reload/reconnect, make a
+  newer edit during a slow save, and review a conflict without losing the editor.
+  Confirm Gmail send/actions use the server comparison token and refuse unresolved
+  settings. These native and actual-API checks remain open.
+- [x] Encrypted mail-settings queue regression: local commit without network,
+  immutable lost-response retries, coalesced edits with monotonic local revisions,
+  concurrent workers, sign-out/disconnect, invalid receipts, exact conflict review,
+  delete-after-create sequencing, and version-2 encrypted-store migration with an
+  old-writer refusal. Older refresh snapshots cannot rewind a
+  receipt; anonymous edits never queue account work. `test:mail` (52 passed).
 
 - [ ] Add more than one account in Settings → Email; configure IMAP, POP3 and both, TLS and required STARTTLS. Reload and edit without echoing saved passwords.
 - [ ] Toggle Cloud and Local independently, including both off. Cloud-off sync refuses on the server; local-only credentials never enter a Thingtime API request. Enabling cloud on a previously local account creates the remote revision correctly.

@@ -1,3 +1,4 @@
+import { MailSettingsStatus } from './MailSettingsStatus';
 import React from 'react';
 import { GoogleMailConnect } from './GoogleMailConnect';
 import { hasNativeMailSync } from '~/mail/native';
@@ -30,6 +31,7 @@ function EmailSettingsScope({ workspace }: { workspace: MailWorkspace }) {
 	}, [mail.error, lopu]);
 	return (
 		<Flex direction="column" gap={4} minW={0}>
+			<MailSettingsStatus mail={mail} />
 			<SettingsSection
 				eyebrow="Email accounts"
 				description={
