@@ -109,6 +109,7 @@ export const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/attachments/uploads/abort': () => import('../../../app/routes/api/v1/attachments/uploads/abort/_abort'),
   'v1/attachments/uploads/complete': () => import('../../../app/routes/api/v1/attachments/uploads/complete/_complete'),
   'v1/attachments/uploads/parts': () => import('../../../app/routes/api/v1/attachments/uploads/parts/_parts'),
+  'v1/auth/characters': () => import('../../../app/routes/api/v1/auth/characters/_characters'),
   'v1/auth/accounts': () => import('../../../app/routes/api/v1/auth/accounts/_accounts'),
   'v1/auth/accounts/assume': () => import('../../../app/routes/api/v1/auth/accounts/assume/_assume'),
   'v1/auth/accounts/owned': () => import('../../../app/routes/api/v1/auth/accounts/owned/_owned'),

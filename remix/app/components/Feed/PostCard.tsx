@@ -1,3 +1,4 @@
+import { PostAsSelect } from '~/components/Characters/PostAsSelect';
 import { PostLinkedThings } from './PostLinkedThings';
 import { CollectionList } from '~/components/Collections/CollectionList';
 import { createDiscussionCommentPager, mergeDiscussionComments, discussionCommentSearchText } from './discussionCommentPages';
@@ -902,7 +903,10 @@ const CommentRow = (props: {
   const [richReplyOpen, setRichReplyOpen] = React.useState(false);
   const [repliesLoading, setRepliesLoading] = React.useState(false);
   // reply text persists as a per-user draft — leave and pick it up later
-	const { value: replyText, setValue: setReplyText, clear: clearReplyDraft, hydrated: draftHydrated, flush: flushReplyDraft, begin: beginReply, end: endReply } = useCommentDraft(user?.id, comment.id, replyInputOpen);
+	const [replyAs, setReplyAs] = React.useState<typeof user>(null);
+	React.useEffect(() => setReplyAs(null), [user?.id]);
+	const replyActor = replyAs || user;
+	const { value: replyText, setValue: setReplyText, clear: clearReplyDraft, hydrated: draftHydrated, flush: flushReplyDraft, begin: beginReply, end: endReply } = useCommentDraft(replyActor?.id, comment.id, replyInputOpen);
   const pending = isPendingComment(comment);
 
   // ＋ in the quick row opens the full custom picker (same as posts)
@@ -1144,7 +1148,7 @@ const CommentRow = (props: {
     const text = replyText.trim();
     if (!text || !beginReply()) return;
 
-    const pendingReply = buildPendingComment(user, comment.id, text);
+    const pendingReply = buildPendingComment(replyActor, comment.id, text);
     freshReplies.note(pendingReply.id);
     setReplies((prev) => [...(prev || []), pendingReply]);
     onChanged(comment.id, (current) => ({ ...current, ...(current.commentCount === undefined ? {} : { commentCount: current.commentCount + 1 }) }));
@@ -1152,7 +1156,7 @@ const CommentRow = (props: {
 
     try {
       void flushReplyDraft().catch(() => {});
-      const resp = await api.v1.things.comment({ id: comment.id, text });
+      const resp = await api.v1.things.comment({ id: comment.id, text, characterId: replyActor?.id });
       await clearReplyDraft(text);
       freshReplies.swap(pendingReply.id, resp.comment.id);
       setReplies((prev) => {
@@ -1408,6 +1412,7 @@ const CommentRow = (props: {
             {replyInputOpen &&
               (user ? (
                 <Flex flexDirection="column" rowGap={2}>
+                  <PostAsSelect user={replyActor} onChange={setReplyAs} />
                   <Flex columnGap={2}>
                     <Input
                       size="xs"
@@ -1501,7 +1506,10 @@ function PostCardImpl(props: PostCardProps) {
   const navDirRef = React.useRef<'push' | 'pop'>('push');
   const focusedComment = focusStack.length ? focusStack[focusStack.length - 1] : null;
   // the comment text persists as a per-user draft — leave and pick it up later
-  const { value: commentText, setValue: setCommentText, clear: clearCommentDraft, flush: flushCommentDraft, begin: beginComment, end: endComment } = useCommentDraft(user?.id, post.id, commentsOpen);
+  const [commentAs, setCommentAs] = React.useState<typeof user>(null);
+  React.useEffect(() => setCommentAs(null), [user?.id]);
+  const commentActor = commentAs || user;
+  const { value: commentText, setValue: setCommentText, clear: clearCommentDraft, flush: flushCommentDraft, begin: beginComment, end: endComment } = useCommentDraft(commentActor?.id, post.id, commentsOpen);
   const [richCommentOpen, setRichCommentOpen] = React.useState(false);
   // one EMPTY reply input at a time across this card's comment tree
   const [openReplyId, setOpenReplyId] = React.useState<string | null>(null);
@@ -1698,8 +1706,11 @@ function PostCardImpl(props: PostCardProps) {
     }
   };
 	const effectiveAcl = post.audience?.acl || post.acl;
-	const circle = CIRCLE_META[audienceOfAcl(effectiveAcl)];
-	const audienceText = audienceDescription(effectiveAcl, mediaThing ? 'media' : 'post', !!post.audience && post.audience.sourceId !== post.id);
+	const privateSubspace = post.subspace?.access === 'private';
+	const circle = privateSubspace ? { emoji: '🔒', label: 'Private subspace', hint: 'Subspace membership is required' } : CIRCLE_META[audienceOfAcl(effectiveAcl)];
+	const audienceText = privateSubspace && audienceOfAcl(effectiveAcl) === 'public'
+		? 'private subspace members only'
+		: `${privateSubspace ? 'private subspace · ' : ''}${audienceDescription(effectiveAcl, mediaThing ? 'media' : 'post', !!post.audience && post.audience.sourceId !== post.id)}`;
 
   // Every reaction token on the post, most-used first — feeds the merged
   // react button (top emojis + total count).
@@ -2031,7 +2042,7 @@ function PostCardImpl(props: PostCardProps) {
     const text = commentText.trim();
     if (!text || !beginComment()) return;
 
-    const pendingComment = buildPendingComment(user, post.id, text);
+    const pendingComment = buildPendingComment(commentActor, post.id, text);
     freshComments.note(pendingComment.id);
     onChanged?.(post.id, (prev) => ({
       ...prev,
@@ -2042,7 +2053,7 @@ function PostCardImpl(props: PostCardProps) {
 
     try {
       void flushCommentDraft().catch(() => {});
-      const resp = await api.v1.things.comment({ id: post.id, text });
+      const resp = await api.v1.things.comment({ id: post.id, text, characterId: commentActor?.id });
       await clearCommentDraft(text);
       freshComments.swap(pendingComment.id, resp.comment.id);
       onChanged?.(post.id, (prev) => ({
@@ -2776,6 +2787,7 @@ function PostCardImpl(props: PostCardProps) {
 
             {user ? (
               <Flex flexDirection="column" rowGap={2}>
+                <PostAsSelect user={commentActor} onChange={setCommentAs} />
                 <Flex columnGap={2}>
                   <Input
                     size="sm"

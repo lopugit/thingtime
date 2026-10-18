@@ -72,3 +72,11 @@ projection or changes target permissions.
 
 See [account-drafts-and-templates.md](account-drafts-and-templates.md) for the
 private draft API, editor recovery, account isolation and independent media copies.
+
+## Post as a Character
+
+`components/Characters/CharacterComposer.tsx` supplies the selected account to
+the existing PostComposer, useApi and private drafts through a keyed context.
+Quick comments and nested replies use PostAsSelect with a captured actor header.
+See [Characters](../characters.md). Subspace permissions are checked as the
+selected Character; owning the Character does not inherit private membership.

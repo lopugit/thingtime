@@ -31,8 +31,8 @@ function harness(callback: () => void | Promise<unknown>) {
   let replies: any[] = [];
   const fresh = { note() {}, swap() {}, drop() { effects.dropped++; } };
   const bindings = {
-    api: { v1: { things: { comment: () => { effects.writes++; return response; } } } },
-    cursorReplies: false, post, comment: post, user: { id: 'viewer' }, commentText: 'New note', replyText: 'New note',
+    api: { v1: { things: { comment: (_input?: any) => { effects.writes++; return response; } } } },
+    cursorReplies: false, post, comment: post, user: { id: 'viewer' }, commentActor: { id: 'character' }, replyActor: { id: 'character' }, commentText: 'New note', replyText: 'New note',
     buildPendingComment: () => ({ id: 'pending', pending: true }),
     beginComment: () => true, beginReply: () => true, endComment() {}, endReply() {},
     flushCommentDraft: async () => {}, flushReplyDraft: async () => {},
@@ -164,3 +164,13 @@ test('opening cursor replies reads one authorized page and rejects stale or revo
     if (outcome === 'revoked') assert.equal(error, 'Revoked');
   }
 });
+
+for (const name of ['submitComment', 'submitReply']) {
+  test(`${name} sends the selected Character rather than the session principal`, async () => {
+    const h = harness(() => {});
+    let actor;
+    h.bindings.api.v1.things.comment = (input: any) => { actor = input.characterId; return Promise.resolve({ comment: {id:'accepted'}, commentCount:1 }); };
+    await closure(name, h.bindings)();
+    assert.equal(actor, 'character');
+  });
+}
