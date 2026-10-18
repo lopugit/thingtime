@@ -4569,3 +4569,20 @@ goal or authorize its main merge.
 Graph maintenance: a 90-second semantic update reached only part of its 177-chunk
 backlog. Existing semantic evidence is retained; the structural update and portable
 outputs are refreshed. Current documentation semantic coverage is not claimed.
+
+
+## Editable Builder integration and offline native acceptance — 2026-10-19
+
+Integrated main through `cc218ff3e` into the feature branch, including reusable editable blocks and the local ChatGPT runtime/settings. Local Builder saves use the bundled validator without waiting for a remote manifest; the account transport negotiates the editable-block contract before transmitting queued content. The combined Things capability is deliberately 1.36.0. Anonymous API facade construction now acquires Timeline storage lazily, so unbound native settings/recovery can render without IndexedDB. Actual local operations still report storage errors. Suite tests verify canonical reference closure instead of assuming every editable page contains an opaque Component ID.
+
+The clean Chromium acceptance passed normal Builder selection and independent edits of nested title, button, icon and repeated-row template text; CSS styling, reordering, duplication and deletion; save/cold offline reload; another offline edit/save/reload; local Component arguments and Action-fed row rendering; and canonical dependency-complete export. Inspector and unobstructed page captures at 1440×1000, 390×844 and 320×844 have no overflow. Full-page scrolling, zero page errors and zero account Things/drafts/Actions/temporary-account requests are verified. This local workspace Action fixture is separate from the stateless anonymous export preview, whose prohibition on Actions and new interactive block types has an added regression.
+
+Evidence is in `tmp/builder-main-integration/verified/`: JSON, PNGs, boundary/cleanup and zero-OOM records. Immutable app image: `sha256:340d487a99a34212ca3d8051276c8428cc12e604a4e3a4cf1eafc6d6cf1d4a26`. The real manager test host used a task-owned full-app browser/backend container with network=none, no host mounts or published ports, read-only root and unchanged 2 GiB limit. Its claim and container were released. This is not installed-app, CI or deployed acceptance.
+
+Validation: 710 workspace tests and four offline-shell tests pass; 74 browser/API opt-ins are skipped in the ordinary command, with the new native check run explicitly. Webpages: 166 pass/5 skip; capabilities: 116 pass; schemas: 271 pass; settings: 55 pass; focused local API/suite/transport: 25 pass; static draft previews: 5 pass. Client/template/server builds pass with 252 offline assets. TypeScript retains the 91 baseline diagnostics; one newly inherited menu-bar fixture narrowing error was repaired. Changed-file lint has zero errors.
+
+Coordination limitation: Mica remains a verified member and the standing global admin permission is present. A reply to Finch returned a saved ID but was missing after fresh thread readback; its direct link returned Thing not found. No successful delivery is claimed and no duplicate was sent. Broader account queue/reconnect, delegated Character offline workspaces, dedicated adapters and the target agent-host artifact connection remain open. No primary-branch merge or deployment is authorized by this checkpoint.
+
+Host connection discovery found no currently callable Thingtime artifact tool and no Thingtime match in the plugin search. More integrations may exist in the host directory; a connected downloadable-artifact path is still unverified. The file-panel open was queued, while the existing in-app file URL could not be inspected because its browser policy rejects file URLs; no alternate browser path was used to bypass that boundary.
+
+Graph refresh: the bounded semantic attempt returned repeated empty node/edge responses and was stopped after 90 seconds. Existing semantic evidence is preserved; the structural graph and portable report/HTML are refreshed. Current documentation semantics and two partially extracted Swift files are not claimed complete.

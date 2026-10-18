@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { IDBFactory } from 'fake-indexeddb';
 import { ALL_SUITES } from '../schemas/appSuites';
+import { webpageComponentRefs } from '../timeline/componentBindings';
 import { materializeSuite } from '../schemas/behaviourSuites';
 import { validateTransfer } from '../utils/thingTransfer/format';
 import { LocalThings } from './things';
@@ -32,7 +33,9 @@ test('every bundled suite installs editable definitions locally and repeats with
 			assert.equal((await things.snapshot()).length, first.created);
 			const page = await things.get(first.entryPageId);
 			assert.equal(page.crystal.pageKey, first.entryPageKey);
-			assert.ok(JSON.stringify(page.crystal).includes('local-'), suite.key);
+			assert.ok(Array.isArray(page.crystal.blocks) && page.crystal.blocks.length, suite.key);
+			for (const ref of webpageComponentRefs(page.crystal.blocks))
+				assert.ok(Object.values(first.componentIds).includes(ref), `${suite.key}: ${ref} must bind to its installed Component`);
 			for (const id of first.dataIds) {
 				const data = await things.get(id);
 				assert.ok(Object.values(first.schemaIds).includes(String(data.crystal.schemaId)), suite.key);

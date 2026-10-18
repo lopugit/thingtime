@@ -1,12 +1,7 @@
-// Client-side types + PURE tree operations for the block-based site builder.
-// The server-side write gate (sanitizeWebpageCrystal in schemas/registry.ts)
-// is the authority on shape and caps — everything here mirrors it for
-// optimistic editing and must stay within those bounds (120 blocks, depth 8,
-// 48KB serialized). Blocks never carry markup: component blocks reference
-// component things resolved through /api/v1/webpages/resolve and drawn by the
-// sanitising allowlist renderers, one budget per block.
+// Client types and pure block-tree operations. The server validates each block;
+// pages have no arbitrary block-count or nesting-depth product limit.
 
-export type WebpageBlockType = 'component' | 'container' | 'text' | 'native' | 'media' | 'html';
+export type WebpageBlockType = 'component' | 'container' | 'text' | 'native' | 'media' | 'html' | 'element' | 'collection' | 'condition';
 export type WebpageContainerDirection = 'column' | 'row' | 'grid';
 export type WebpageTextStyle = 'body' | 'heading' | 'eyebrow';
 export type WebpageBlockAlign = 'start' | 'center' | 'end' | 'stretch';
@@ -44,6 +39,9 @@ export interface WebpageBlock {
 	// text: rendered element override (h1…h6/p/span/…) + rich WYSIWYG HTML
 	// (render-side sanitised through the allowlist renderer — never trusted raw)
 	tag?: string;
+	props?: Record<string, unknown>;
+	condition?: Record<string, unknown>;
+	format?: Record<string, unknown>;
 	html?: string;
 	// text: optional link target (https / site-relative / mailto: / tel:) —
 	// the text renders as an anchor, so a styled text block IS a button
@@ -73,8 +71,8 @@ export interface WebpageCrystal {
 	blocks: WebpageBlock[];
 }
 
-export const MAX_BLOCKS = 120;
-export const MAX_BLOCK_DEPTH = 8;
+export const MAX_BLOCKS = Number.POSITIVE_INFINITY;
+export const MAX_BLOCK_DEPTH = Number.POSITIVE_INFINITY;
 
 // A tree address: the block id path from the root list to the block.
 export type BlockPath = string[];
@@ -170,7 +168,7 @@ export const moveBlock = (
 		if (containerId === id) return blocks;
 		if (moving.children && findBlock(moving.children, containerId)) return blocks;
 		const target = findBlock(blocks, containerId);
-		if (!target || target.type !== 'container') return blocks;
+		if (!target || !['container', 'element', 'collection', 'condition'].includes(target.type)) return blocks;
 	}
 	const sourceParent = findParentId(blocks, id, null);
 	let insertIndex = index;
@@ -305,6 +303,9 @@ export const defaultHtmlBlock = (existing: Set<string>): WebpageBlock => ({
 
 // Human label for the boundary chip / tree rows.
 export const blockLabel = (block: WebpageBlock): string => {
+	if (block.type === 'element') return `${block.tag || 'element'} · ${block.text || block.props?.alt || block.props?.name || ''}`.slice(0, 70);
+	if (block.type === 'collection') return `List · ${block.props?.label || 'Records'}`;
+	if (block.type === 'condition') return `${block.condition?.negate ? 'Otherwise' : 'When'} ${block.condition?.arg || ''}`;
 	if (block.type === 'component') return block.component || 'component';
 	if (block.type === 'container') return `${block.direction || 'column'}${block.type === 'container' && block.direction === 'grid' && block.columns ? ` ×${block.columns}` : ''}`;
 	if (block.type === 'text') return block.style === 'heading' ? 'heading' : block.style === 'eyebrow' ? 'eyebrow' : 'text';
@@ -312,3 +313,13 @@ export const blockLabel = (block: WebpageBlock): string => {
 	if (block.type === 'html') return 'html';
 	return `native · ${block.native || '?'}`;
 };
+
+export function requiresEditableBlockContract(blocks: WebpageBlock[]): boolean {
+ const pending = [...blocks];
+ while (pending.length) {
+  const block = pending.pop()!;
+  if (['element','collection','condition'].includes(block.type) || (block.source && block.type !== 'component')) return true;
+  if (block.children) pending.push(...block.children);
+ }
+ return false;
+}

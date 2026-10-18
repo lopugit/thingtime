@@ -1,3 +1,4 @@
+import { requiresEditableBlockContract, type WebpageBlock } from '../components/Builder/webpageBlocks';
 import type { AccountDraftTransport } from './accountDrafts';
 import type { DraftSummary } from '../drafts/draftCore';
 import type { AccountFileRetentionTransport, AccountFileTransport } from './accountFiles';
@@ -90,6 +91,8 @@ export function accountThingTransport(scope: Extract<WorkspaceScope, { kind: 'ac
 		await requireThingtimeCapability(capability[0], capability[1]);
 		if (endpoint === 'attachments/delete' && args.targetId !== undefined) await requireThingtimeCapability('api.attachment-delete', args.retainReceipt === true ? '1.7.0' : '1.6.0');
 		if (endpoint === 'things/export' && args.includeFiles !== false) await requireThingtimeCapability('api.attachment-content', '1.11.0');
+		const blocks = (args.crystal as { blocks?: unknown } | undefined)?.blocks;
+		if (endpoint === 'things' && ['POST', 'PATCH', 'PUT'].includes(method) && Array.isArray(blocks) && requiresEditableBlockContract(blocks as WebpageBlock[])) await requireThingtimeCapability('api.things', '1.35.0');
 		if (endpoint === 'things' && method === 'DELETE') await requireThingtimeCapability('api.things', '1.34.0');
 		if (method === 'PATCH') await requireThingtimeCapability('api.things-update', args.attachmentIds !== undefined ? '1.11.0' : '1.10.0');
 		await requireThingtimeCapability('api.mongodb-endpoint', '1.1.0');

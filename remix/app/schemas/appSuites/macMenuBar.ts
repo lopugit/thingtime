@@ -1,3 +1,4 @@
+import { templateToBlocks } from '../../components/Builder/templateBlocks';
 import type { BehaviourSuite } from '../behaviourSuites';
 import { el, ifTruthy, ifEquals, fmt, makeKit, makeTheme } from './kit';
 const k = makeKit(makeTheme());
@@ -13,6 +14,8 @@ const field = (label: string, key: string) =>
 	]);
 const row = k.card(
 	[
+		ifTruthy('item.iconDataUrl', el('img', { width: '32px', height: '32px', objectFit: 'contain' }, [], { src: '{item.iconDataUrl}', alt: '{item.program} icon', title: '{item.iconSource} icon' })),
+		ifEquals('item.iconSource', 'application', k.muted('Application icon · menu image unavailable')),
 		k.row([ifTruthy('item.label', k.strong('{item.label}'), k.strong('{item.program}')), k.pill('{item.source}')]),
 		k.muted('{item.program} · PID {item.processId}'),
 		el('details', {}, [
@@ -59,7 +62,7 @@ const device = k.stack(
 							itemsPath: 'item.state.menuBar.items',
 							label: 'Menu bar items',
 							empty: 'No menu bar items reported in this snapshot.',
-							size: 10,
+							size: 'all',
 							itemTemplate: { ttTemplate: row }
 						}
 					}
@@ -117,7 +120,7 @@ export const macMenuBarSuite: BehaviourSuite = {
 								label: 'Paired Macs',
 								empty: 'Pair Thingtime on your Mac to start syncing its menu bar.',
 								hideSearch: true,
-								size: 5,
+								size: 'all',
 								itemTemplate: { ttTemplate: device }
 							}
 						})
@@ -133,6 +136,8 @@ export const macMenuBarSuite: BehaviourSuite = {
 			description: 'Read-only owner-authenticated device snapshots. No commands run and no copy of the snapshot is saved.',
 			category: 'Devices',
 			runtime: 'browser',
+			// Device snapshots include bounded PNG icons and other native telemetry.
+			limits: { maxResultBytes: 8 * 1024 * 1024 },
 			inputs: [{ name: 'deviceId', type: 'string', label: 'Device ID', default: '' }],
 			steps: () => [
 				{
@@ -140,7 +145,7 @@ export const macMenuBarSuite: BehaviourSuite = {
 					method: 'GET',
 					path: '/api/v1/devices',
 					feature: 'api.devices',
-					minimumVersion: '1.10.0',
+					minimumVersion: '1.12.0',
 					query: { id: '$input.deviceId' }
 				},
 				{ op: 'return', value: '$step.1' }
@@ -152,25 +157,16 @@ export const macMenuBarSuite: BehaviourSuite = {
 		{
 			key: 'home',
 			name: 'Mac menu bar',
-			blocks: (ctx, refs) => [
-				{
-					id: ctx.id('shell'),
-					type: 'container',
-					direction: 'column',
-					align: 'center',
-					maxWidth: 1100,
-					gap: 8,
-					css: { width: '100%', 'min-width': '0', padding: '28px 18px 80px' },
-					children: [
-						{
-							id: ctx.id('inventory'),
-							type: 'component',
-							component: refs.component('inventory'),
-							source: { action: refs.actionKey('read'), inputs: { deviceId: '{query.deviceId}' }, refresh: 'interval', intervalMs: 30000 }
-						}
-					]
-				}
-			]
+			blocks: (ctx, refs) => {
+                let index = 0;
+                return [{
+                    id: ctx.id('shell'), type: 'container', direction: 'column', gap: 0,
+                    maxWidth: 1100, align: 'center',
+                    css: { width: '100%', 'min-width': '0', padding: '28px 18px 80px' },
+                    source: { action: refs.actionKey('read'), inputs: { deviceId: '{query.deviceId}' }, refresh: 'interval', intervalMs: 30000 },
+                    children: templateToBlocks(macMenuBarSuite.components[0].render(refs), kind => ctx.id(`${kind}-${++index}`))
+                }];
+            }
 		}
 	]
 };

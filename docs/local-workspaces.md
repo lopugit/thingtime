@@ -5018,3 +5018,12 @@ goal or authorize its main merge.
 Graph maintenance: a 90-second semantic update reached only part of its 177-chunk
 backlog. Existing semantic evidence is retained; the structural update and portable
 outputs are refreshed. Current documentation semantic coverage is not claimed.
+
+
+### Editable Builder checkpoint — 2026-10-19
+
+Main's editable element/collection/condition blocks now retain offline-first saves. The local validator handles device writes; account transmission negotiates `api.things` 1.35 or newer before sending those definitions. The combined server contract is 1.36.0. An absent remote manifest cannot block the local commit. Anonymous API creation also defers Timeline database acquisition until an actual History operation, preserving native recovery when IndexedDB is unavailable.
+
+A fresh isolated full-app browser verified individual nested title/button/icon/repeated-row edits, CSS, reorder, duplicate/delete, two offline reloads and dependency-complete canonical export. Actual inspector/page captures at 1440/390/320px, full scrolling, no overflow, zero page errors/account requests, and container cleanup are recorded in `tmp/builder-main-integration/verified/`. The opt-in `editableBlocks.browser.test.ts` requires its `TT_BLOCKS_TEST_*` origin/session/fixture/artifact settings and explicit Chromium/Puppeteer paths inside the verified isolated manager runtime; it checks runtime health and capability identity before use. Bundle its adjacent fixture for the browser and the test for Node. Do not point it at a personal account or permissive backend.
+
+This completes a representative individual-block checkpoint. Global/site editors, remaining dedicated consumers, account sync/reconnect and installed-app/agent-host acceptance remain open. The separate stateless draft-export surface still rejects Actions, external assets and interactive block types.

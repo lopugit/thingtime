@@ -1,5 +1,12 @@
 # API endpoints and capabilities
 
+Character agent discovery uses `remix/scripts/character-coordination-preflight.ts`
+and the shared `capabilityContract.ts` SemVer/origin contract. Run
+`npm --prefix remix run characters:preflight -- --origin <selected-origin>` and
+`test:characters-preflight`; see [the coordination runbook](../characters.md#agent-coordination).
+This read-only client adds no route, permission or server contract. Edge refusal
+must remain distinct from missing capabilities, authentication and membership.
+
 Paired Mac inventory uses `api.devices` 1.10.0 and `api.devices-node-state`
 1.11.0 (`deviceMenuBar.ts`, native `MenuBarTelemetry.swift`). Approved Bash uses
 `api.devices-commands` / `api.devices-node-commands` 1.10.0 (`deviceScript.ts`,
@@ -519,3 +526,4 @@ worker negotiate the combined contract; tests reject older/breaking versions.
 `installSuiteForWorkspace` keeps local anonymous installation while negotiating
 media-tools 1.4.0 for remote installation. The built-server fixture and isolated
 Nitro/Vite failure checks are recorded in the PR #1000 integration note.
+`api.ai-chatgpt-plan` 1.1.0 registers GET redacted account/attempt status, local authorization availability and storage mode; same-origin POST begin/cancel/select-model/refresh-models/disconnect/prepare-import/move-account/import-account. An optional `X-Thingtime-Expected-User` header rejects stale-account UI requests. `api.ai-models` 1.7.0 lists owner-scoped plan connections; `api.lopu-chats-reply` 1.20.0 resolves those IDs strictly even when saved and uses plan Responses without API billing fallback. Explicit desktop remote selections negotiate and pin the receiving API before proxying; local mode never falls back. `api.capabilities` 1.2.0 permits custom loopback data authorities for local runtimes. Both manifests derive these versions from the canonical docs registry; tests live in `ai/chatgpt-plan`, `apiCapabilities.test.ts` and the Lopu stream suite.

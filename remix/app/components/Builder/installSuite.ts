@@ -84,7 +84,7 @@ export const installSuiteForWorkspace = async (key: string, options: { onlyMissi
 	if (!account) throw new WorkspaceError('WORKSPACE_CHANGED', 'Reopen this workspace before installing a suite', 409);
 	const lease = accountRemoteWorkspaceLease(account);
 	lease.assertCurrent();
-	await requireThingtimeCapability('api.webpages-suites-install', key === 'agent-tasks' ? '1.5.0' : key === 'media-tools' ? '1.4.0' : key === 'web-standards' ? '1.3.0' : '1.1.0');
+	await requireThingtimeCapability('api.webpages-suites-install', key === 'mac-menu-bar' ? '1.6.0' : key === 'agent-tasks' ? '1.5.0' : key === 'media-tools' ? '1.4.0' : key === 'web-standards' ? '1.3.0' : '1.1.0');
 	lease.assertCurrent();
 	const retired = new AbortController();
 	const unsubscribe = lease.onInvalidate(() => retired.abort());

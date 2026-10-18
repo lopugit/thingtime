@@ -608,6 +608,7 @@ export default function SeamlessPageEditor({
 							onSaveAll={draft.branch ? async () => { flushSync(() => finishEdit.current?.()); return current.current.draft.save(); } : undefined}
 							selectedId={builder.selectedId}
 							onDeselect={builder.deselect}
+       onSelectBlock={id=>builder.chrome.onSelect(id)}
 							onClose={() => setDrawerOpen(false)}
 							mode="page"
 							pageName={displayedName}

@@ -5,6 +5,7 @@ import { rootIdentity } from '../../utils/rootIdentity';
 import { resolveAccountWebpage } from '../../local-workspace/accountApi.client';
 import { currentAccountWorkspace, isAnonymousWorkspace } from '../../local-workspace/runtime.client';
 import { resolveLocalWebpage } from '../../local-workspace/api.client';
+import { requiresEditableBlockContract } from './webpageBlocks';
 import { bindingsForBlocks } from '../../timeline/componentBindings';
 import React from 'react';
 import { requireThingtimeCapability } from '~/api/utils/capabilities/requireCapability.client';
@@ -407,6 +408,8 @@ export const useWebpageDraft = (target: WebpageTarget | null, options?: UseWebpa
 				blocks
 			};
 			try {
+				// Device saves use the bundled validator; negotiate only at remote transport.
+				if (!isAnonymousWorkspace() && !currentAccountWorkspace() && requiresEditableBlockContract(blocks)) await requireThingtimeCapability('api.things', '1.35.0');
 				const draftEventId = page && user?.id && historyEditable ? await draftHistory.flush() : null;
 				if (generation !== generationRef.current) return { ok: false, error: 'Page or account changed while preparing the save.' };
 				if (resolved?.source === 'user' && page) {

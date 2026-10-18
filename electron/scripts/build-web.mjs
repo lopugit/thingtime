@@ -100,6 +100,7 @@ function runRemixScript(script, options = {}) {
 // fresh worktree where MCP/node_modules is intentionally absent.
 run(npmCommand, ['ci', '--prefix', mcpDir, '--no-audit', '--no-fund']);
 run(process.execPath, [path.join(electronDir, 'scripts/build-mail.mjs')]);
+run(process.execPath, [path.join(electronDir, 'scripts/build-database.mjs')]);
 
 await rm(stagedWebDir, { force: true, recursive: true });
 await rm(stagedAiDir, { force: true, recursive: true });

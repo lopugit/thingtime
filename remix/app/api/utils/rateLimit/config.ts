@@ -265,6 +265,7 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   // token cap
   // Lopu model catalog (GET /api/v1/ai/models) — public read of a code-backed
   // list plus one indexed row scan; browse-shaped, anonymous callers key by IP
+  'ai.chatgpt-plan': { limit: 120, windowMs: 60_000, enabled: true },
   'ai.models': { limit: 120, windowMs: 60_000, enabled: true },
   'ai.complete': { limit: 20, windowMs: 600_000, enabled: true },
   // admin catalog toggles, on-demand re-seed and provider-key re-check

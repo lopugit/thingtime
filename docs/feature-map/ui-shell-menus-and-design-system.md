@@ -243,3 +243,17 @@ reporting local completion; account queues still run independently. The mobile
 History detail sheet retains bottom clearance so floating developer controls
 cannot cover its last export action. Native regressions:
 `anonymousThemeHistory.browser.test.ts`, `accountThemeConflict.browser.test.ts`.
+## Editable private settings
+
+`Settings/SettingsDocumentHost.tsx` composes the ordinary Builder drawer/chrome
+with authored `WebpageBlock[]`. Account layouts use private keyed webpages through
+`settingsDocument.client.ts` and existing Things revision fences. Device recovery
+uses the same document format with origin/authority scoped local storage and Web
+Locks. Neither adapter captures form DOM or runtime credential state.
+
+`desktopSettingsDocuments.ts` defines the runtime, endpoint and previous-workspace
+recovery controls as editable intrinsic blocks. `useDesktopSettingsAdapter.ts`
+provides public bindings and a bounded transient native-operation map. Sensitive
+hosts reject external sources, native/component blocks and persisted password/file
+values before rendering; normal Builder insertion and source editing follow the
+same restrictions. Scope changes abort transient controls and fence late results.

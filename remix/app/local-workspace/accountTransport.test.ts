@@ -35,6 +35,9 @@ test('transport pins account and database on reads and writes and retires mismat
   const beforeBinding=calls.length;
   await assert.rejects(transport.write({id:'thing',operationId:'binding',version:1,method:'update',body:{id:'thing',attachmentIds:['file']}},new AbortController().signal),/incompatible/);
   assert.equal(calls.length,beforeBinding,'do not send attachment edits to a server without atomic binding');
+  const beforeBlocks = calls.length;
+  await assert.rejects(transport.write({ id: 'page', operationId: 'editable-blocks', version: 1, method: 'update', body: { id: 'page', crystal: { blocks: [{ id: 'button', type: 'element', tag: 'button', children: [] }] } } }, new AbortController().signal), /incompatible/);
+  assert.equal(calls.length, beforeBlocks, 'keep a device edit queued instead of sending new block types to an older origin');
   await transport.write({ id: 'queued-comment', operationId: 'comment-write', version: 1, method: 'create', body: { shareId:'queued-comment', targetId:'parent', thingtime:['post','comment'], crystal:{type:'text',text:'Saved offline'},attachmentIds:['receipt-file'],tags:[],acl:['tt:inherit'] } }, new AbortController().signal);
   const submission=calls.at(-2);assert.equal(submission.url,'/api/v1/things/comment');
   assert.deepEqual(JSON.parse(submission.init.body),{id:'parent',shareId:'queued-comment',type:'text',text:'Saved offline',tags:[],attachmentIds:['receipt-file']});

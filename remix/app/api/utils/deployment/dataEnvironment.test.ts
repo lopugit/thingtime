@@ -45,3 +45,12 @@ test('data environment identifiers and origins fail closed', () => {
 	);
 	assert.equal(getDeploymentDataEnvironment({ THINGTIME_DATA_ENV: 'custom:../../escape' }), null);
 });
+
+test('only custom data authorities may use literal HTTP loopback', () => {
+  for (const authority of ['http://127.0.0.1:18731', 'http://localhost:18731', 'http://[::1]:18731']) {
+    assert.equal(getDeploymentDataEnvironment({ THINGTIME_DATA_ENV: 'custom:local', THINGTIME_DATA_AUTHORITY_ORIGIN: authority })?.authorityOrigin, authority);
+    assert.equal(getDeploymentDataEnvironment({ THINGTIME_DATA_ENV: 'production', THINGTIME_DATA_AUTHORITY_ORIGIN: authority })?.authorityOrigin, 'https://thingtime.com');
+  }
+  for (const authority of ['http://127.0.0.1.attacker.test', 'http://192.168.1.2', 'http://user:password@localhost', 'http://localhost/path', 'http://localhost?key=secret'])
+    assert.equal(getDeploymentDataEnvironment({ THINGTIME_DATA_ENV: 'custom:local', THINGTIME_DATA_AUTHORITY_ORIGIN: authority }), null);
+});

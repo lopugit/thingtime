@@ -38,26 +38,30 @@ export function anonymousApi<T extends Record<string, any>>(remote: T): T {
 		return changed({ ok: true, id: row.id, thing: { ...project(row), ...(projection ? { attachments: projection.attachments } : {}) }, ...(projection ? { post: projection } : {}) });
 	};
 	const local = blocked(remote);
-	const history = new LocalTimeline(anonymousWorkspaceDatabase(), lease, window.location?.origin || 'http://localhost');
-	const ownsTimeline = (scope: any): boolean => { try { history.assertScope(scope); return true; } catch { return false; } };
+	// Constructing an API facade must not require storage: native recovery and
+	// unbound collections also render when IndexedDB is unavailable. Real History
+	// operations still acquire the device database and report its normal failure.
+	let timeline: LocalTimeline | undefined;
+	const history = () => timeline ??= new LocalTimeline(anonymousWorkspaceDatabase(), lease, window.location?.origin || 'http://localhost');
+	const ownsTimeline = (scope: any): boolean => { try { history().assertScope(scope); return true; } catch { return false; } };
 	const timelineUnavailable = async () => { lease.assertCurrent(); throw new WorkspaceError('LOCAL_TIMELINE_UNAVAILABLE', 'This local History operation is not available yet. Your saved history remains on this device.', 422); };
 	local.timeline = { ...Object.fromEntries(Object.keys(remote.timeline || {}).map(key => [key, timelineUnavailable])),
-		discover: (ownerId: string) => history.discover(ownerId),
-		page: (scope: any, request: any, options?: { signal?: AbortSignal }) => { history.assertScope(scope); return history.page(request, options?.signal); },
-		push: (scope: any, event: any, options?: { signal?: AbortSignal }) => { history.assertScope(scope); return history.push(event, options?.signal); },
+		discover: (ownerId: string) => history().discover(ownerId),
+		page: (scope: any, request: any, options?: { signal?: AbortSignal }) => { history().assertScope(scope); return history().page(request, options?.signal); },
+		push: (scope: any, event: any, options?: { signal?: AbortSignal }) => { history().assertScope(scope); return history().push(event, options?.signal); },
 		canChangeLocally: ownsTimeline,
 		canExportLocally: ownsTimeline,
-		exportVersion: (scope: any, eventId: string, options?: { signal?: AbortSignal; adapter?: string }) => { history.assertScope(scope); return history.exportVersion(eventId, options?.signal); },
-		version: (scope: any, request: any, options?: { signal?: AbortSignal }) => { history.assertScope(scope); return new LocalTimelineVersions(anonymousWorkspaceDatabase(), lease, service()).request(request, options?.signal).then(result => request.command === 'apply-version' ? changed(result) : result); },
-		branchMerge: (scope: any, request: any, options?: { signal?: AbortSignal }) => { history.assertScope(scope); return history.branchMerge(request, options?.signal); },
-		branch: (scope: any, command: any, options?: { signal?: AbortSignal }) => { history.assertScope(scope); return history.branch(command, options?.signal).then(changed); },
-		branches: (scope: any, thingId: string, before?: number, options?: { signal?: AbortSignal }) => { history.assertScope(scope); return history.branches(thingId, before ?? null, 40, options?.signal); },
-		branchHead: (scope: any, branchId: string, thingId: string, options?: { signal?: AbortSignal }) => { history.assertScope(scope); return history.branchHead(branchId, thingId, options?.signal); },
-		checkoutBranch: (scope: any, command: any, options?: { signal?: AbortSignal }) => { history.assertScope(scope); return history.checkoutBranch(command, options?.signal); },
-		nameVersion: (scope: any, command: any, options?: { signal?: AbortSignal }) => { history.assertScope(scope); return history.nameVersion(command, options?.signal).then(changed); },
-		note: (scope: any, command: any, options?: { signal?: AbortSignal }) => { history.assertScope(scope); return history.note(command, options?.signal).then(changed); },
-		entry: (scope: any, id: string, options?: { signal?: AbortSignal }) => { history.assertScope(scope); return history.entry(id, options?.signal); },
-		componentBindings: (scope: any, id: string, options?: { signal?: AbortSignal }) => { history.assertScope(scope); return history.componentBindings(id, options?.signal); }
+		exportVersion: (scope: any, eventId: string, options?: { signal?: AbortSignal; adapter?: string }) => { history().assertScope(scope); return history().exportVersion(eventId, options?.signal); },
+		version: (scope: any, request: any, options?: { signal?: AbortSignal }) => { history().assertScope(scope); return new LocalTimelineVersions(anonymousWorkspaceDatabase(), lease, service()).request(request, options?.signal).then(result => request.command === 'apply-version' ? changed(result) : result); },
+		branchMerge: (scope: any, request: any, options?: { signal?: AbortSignal }) => { history().assertScope(scope); return history().branchMerge(request, options?.signal); },
+		branch: (scope: any, command: any, options?: { signal?: AbortSignal }) => { history().assertScope(scope); return history().branch(command, options?.signal).then(changed); },
+		branches: (scope: any, thingId: string, before?: number, options?: { signal?: AbortSignal }) => { history().assertScope(scope); return history().branches(thingId, before ?? null, 40, options?.signal); },
+		branchHead: (scope: any, branchId: string, thingId: string, options?: { signal?: AbortSignal }) => { history().assertScope(scope); return history().branchHead(branchId, thingId, options?.signal); },
+		checkoutBranch: (scope: any, command: any, options?: { signal?: AbortSignal }) => { history().assertScope(scope); return history().checkoutBranch(command, options?.signal); },
+		nameVersion: (scope: any, command: any, options?: { signal?: AbortSignal }) => { history().assertScope(scope); return history().nameVersion(command, options?.signal).then(changed); },
+		note: (scope: any, command: any, options?: { signal?: AbortSignal }) => { history().assertScope(scope); return history().note(command, options?.signal).then(changed); },
+		entry: (scope: any, id: string, options?: { signal?: AbortSignal }) => { history().assertScope(scope); return history().entry(id, options?.signal); },
+		componentBindings: (scope: any, id: string, options?: { signal?: AbortSignal }) => { history().assertScope(scope); return history().componentBindings(id, options?.signal); }
 	};
 	const interact = async (kind: Parameters<LocalInteractions['toggle']>[0], id: unknown, value?: unknown) => {
 		lease.assertCurrent();

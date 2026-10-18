@@ -21,7 +21,7 @@ const rowSearchText = new WeakMap<object, string>();
 const searchTextForRow = (item: Record<string, any>): string => {
 	const cached = rowSearchText.get(item);
 	if (cached !== undefined) return cached;
-	const text = JSON.stringify(item);
+	const text = JSON.stringify(item, (key, value) => key === 'iconDataUrl' ? undefined : value);
 	rowSearchText.set(item, text);
 	return text;
 };
@@ -38,12 +38,16 @@ export function ComponentCollection({
 	source,
 	filterPath,
 	filterValue,
-	countStateKey
+	countStateKey,
+	renderItem,
+	transparent
 }: Record<string, unknown>) {
 	const scope = React.useContext(ComponentDataScope),
 		budget = React.useContext(Nesting);
 	const paged = useCollectionSource(source);
 	const data = paged.bound ? paged.items : typeof itemsPath === 'string' ? componentScopeValue(scope, itemsPath) : undefined;
+	const [chosenSize, setChosenSize] = React.useState<CollectionSize | undefined>();
+	React.useEffect(() => setChosenSize(undefined), [size]);
 	const enabled = React.useContext(NativeControlsEnabled);
 	const local = React.useContext(ComponentLocalControl);
 	const localRef = React.useRef(local);
@@ -61,6 +65,12 @@ export function ComponentCollection({
 				.slice(0, 10)
 				.filter((filter) => filter && typeof filter === 'object' && typeof filter.path === 'string' && typeof filter.label === 'string')
 		: [];
+ if (transparent === true) return <>{items.map((item, index) => {
+  const rowScope = { ...scope, item, index, collection: { index, count: items.length } };
+  return <Nesting.Provider key={String(item.id ?? index)} value={{...budget, depth:budget.depth+1}}><ComponentDataScope.Provider value={rowScope}>
+   {typeof renderItem === 'function' ? renderItem(rowScope) : <HtmlThingRenderer node={createTemplateResolver()(itemTemplate, rowScope) as any} />}
+  </ComponentDataScope.Provider></Nesting.Provider>;
+ })}</>;
 	return (
 		<>
             <style>{collectionStyles}</style>
@@ -77,9 +87,10 @@ export function ComponentCollection({
 				empty={typeof empty === 'string' ? empty : 'Nothing here yet.'}
 				hideSearch={hideSearch === true}
 				hideSize={hideSize === true}
-				size={
-					size === 'infinite' ? 'infinite' : COLLECTION_SIZES.includes(Number(size) as CollectionSize) ? (Number(size) as CollectionSize) : undefined
-				}
+				onSizeChange={setChosenSize}
+				size={chosenSize ?? (
+					size === 'all' ? 'all' : size === 'infinite' ? 'infinite' : COLLECTION_SIZES.includes(Number(size) as CollectionSize) ? (Number(size) as CollectionSize) : undefined
+				)}
 				filters={specs
 					.filter((spec) => items.some((item) => componentScopeValue(item, spec.path)))
 					.map((spec) => ({
@@ -103,7 +114,6 @@ export function ComponentCollection({
 					}))}
 			>
 				{(visible) => {
-					if (visible.length > budget.rows) return <p role="alert">Reduce the page size to fit the nested rendering budget.</p>;
 					const resolveRow = createTemplateResolver();
 					const nextBudget = { depth: budget.depth + 1, rows: Math.floor((budget.rows - visible.length) / Math.max(1, visible.length)) };
 					return (
@@ -125,7 +135,7 @@ export function ComponentCollection({
 								return (
 									<Nesting.Provider key={String(item?.id ?? index)} value={nextBudget}>
 										<ComponentDataScope.Provider value={rowScope}>
-											<HtmlThingRenderer node={resolveRow(itemTemplate, rowScope) as any} />
+											{typeof renderItem === 'function' ? renderItem(rowScope) : <HtmlThingRenderer node={resolveRow(itemTemplate, rowScope) as any} />}
 										</ComponentDataScope.Provider>
 									</Nesting.Provider>
 								);

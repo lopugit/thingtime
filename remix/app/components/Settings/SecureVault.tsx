@@ -10,6 +10,7 @@ import { LOPU_PROVIDER_TEMPLATES } from '~/api/utils/lopu/userVaultModel';
 import { AccountProviderWorkspace } from './AccountProviderWorkspace';
 import { useLocation } from 'react-router';
 import { isAnonymousWorkspace, currentAccountWorkspace, subscribeWorkspaceIdentity, workspaceIdentityKey, announceLocalWorkspaceChange, LOCAL_WORKSPACE_CHANGED } from '~/local-workspace/runtime.client';
+import { ChatGPTPlanSettings } from './ChatGPTPlanSettings';
 
 type Group = { id: string; name: string; revision?: number };
 type Entry = {
@@ -191,6 +192,8 @@ export const SecureVaultScope = ({ localVault }: { localVault?: LocalProviderVau
 					{vault.groups.map((group) => <Badge key={group.id} px={2} py={1} maxWidth="100%" whiteSpace="normal" overflowWrap="anywhere">{group.name} <Box as="button" ml={1} aria-label={`Delete ${group.name}`} disabled={busy} onClick={() => deleteEntry(group)}>×</Box></Badge>)}
 				</Flex>
 			</Box>
+
+			<ChatGPTPlanSettings />
 
 			<Box borderTop="1px solid var(--tt-border, #ececef)" pt={4}>
 				<Text fontWeight={700} fontSize="sm">AI provider connection</Text>

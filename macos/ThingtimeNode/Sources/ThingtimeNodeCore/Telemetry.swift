@@ -486,7 +486,7 @@ public final class DeviceTelemetryCollector {
             // AX calls can time out in another process. Keep them off the node's
             // main actor so heartbeat, permission UI and commands stay responsive.
             menuBarRead = Task { [weak self] in
-                let snapshot = await Task.detached(priority: .utility) { SystemMenuBar.snapshot() }.value
+                let snapshot = await Task.detached(priority: .utility) { await SystemMenuBar.snapshotWithIcons() }.value
                 guard let self else { return }
                 self.menuBarRead = nil
                 guard self.menuBarGeneration == generation, !self.sessionTelemetry().isLocked else { return }
