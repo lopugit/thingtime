@@ -95,6 +95,10 @@ large backups split into individually restorable parts.
   internal brand. Real Nitro GET/POST regression coverage reproduces the
   failure and passes after copying only upstream headers. Origin checks remain
   enforced; shared password/mail bridge contracts receive PATCH versions.
+  The selected HTTPS server is now negotiated before private forwarding, so a
+  newer bundled UI cannot silently search against an older listing contract.
+  Nine proxy tests cover real Nitro requests, version rejection, wrong-origin
+  manifests and no credential/body forwarding before compatibility succeeds.
   The repaired bundle still needs rebuilding and installed verification.
 - Passwords was absent from sidebar and Commander navigation. Both existing
   catalogues now include the page; installed navigation acceptance is pending.

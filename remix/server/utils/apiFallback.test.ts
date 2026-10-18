@@ -12,6 +12,9 @@ import { getRequestMongoEndpoint } from '../../app/api/utils/mongodb/endpoint';
 import { EXPECTED_DATA_PLANE_HEADER } from '../../app/utils/dataPlane';
 
 const ENV_KEYS = ['JWT_PRIVATE_KEY', 'JWT_SECRET', 'MONGODB_CONNECTION_STRING', 'THINGTIME_API_FALLBACK_ORIGIN', 'THINGTIME_DESKTOP', 'NODE_ENV', 'MONGO_PASS'] as const;
+const desktopManifest = (origin: string) => Response.json({ schemaVersion: 1, origin, features: {
+  'api.passwords': { version: '1.2.1' }, 'api.mail': { version: '1.2.1' }, 'api.mail-sync': { version: '1.0.1' }
+} });
 
 const withFallbackEnv = async (fallbackOrigin: string | undefined, run: () => Promise<void> | void) => {
 	const previous = Object.fromEntries(ENV_KEYS.map((key) => [key, process.env[key]]));
@@ -139,6 +142,7 @@ test('desktop vault proxy requires the bundled origin and pinned HTTPS endpoint'
   const prior = process.env.THINGTIME_DESKTOP; process.env.THINGTIME_DESKTOP = '1';
   let calls = 0;
   const mock = t.mock.method(globalThis, 'fetch', async (url: URL, init: RequestInit) => {
+   if (url.pathname === '/.well-known/thingtime-capabilities.json') return desktopManifest(url.origin);
    calls++; assert.equal(url.origin, 'https://selected.test');
    const headers = new Headers(init.headers); assert.equal(headers.get('origin'), 'https://selected.test'); assert.equal(headers.has('x-forwarded-host'), false);
    return Response.json({ ok: true });
@@ -159,6 +163,7 @@ test('desktop private services accept real Nitro requests without native Request
     const forwarded: { method: string; body: string }[] = [];
     const upstream = t.mock.method(globalThis, 'fetch', async (url: URL, init: RequestInit) => {
       assert.equal(url.origin, 'https://selected.test');
+      if (url.pathname === '/.well-known/thingtime-capabilities.json') return desktopManifest(url.origin);
       const headers = new Headers(init.headers);
       assert.equal(headers.has('x-forwarded-host'), false);
       assert.equal(headers.has('x-forwarded-proto'), false);
@@ -188,6 +193,42 @@ test('desktop private services accept real Nitro requests without native Request
     } finally {
       upstream.mock.restore();
       await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+    }
+  });
+});
+
+test('desktop password search negotiates the selected server before forwarding private requests', async t => {
+  await withFallbackEnv('https://selected.test', async () => {
+    process.env.THINGTIME_DESKTOP = '1';
+    for (const [version, origin, accepted] of [
+      ['1.1.9', 'https://selected.test', false], ['1.2.0', 'https://selected.test', true],
+      ['1.2.1', 'https://selected.test', true], ['2.0.0', 'https://selected.test', false],
+      [undefined, 'https://selected.test', false], ['1.2.1', 'https://other.test', false]
+    ] as const) {
+      let forwarded = 0;
+      const upstream = t.mock.method(globalThis, 'fetch', async (url: URL, init: RequestInit) => {
+        if (url.pathname === '/.well-known/thingtime-capabilities.json') {
+          assert.equal(url.origin, 'https://selected.test');
+          assert.equal(new Headers(init.headers).has('cookie'), false);
+          assert.equal(new Headers(init.headers).has('authorization'), false);
+          assert.equal(init.body, undefined); assert.equal(init.redirect, 'error');
+          return Response.json({ schemaVersion: 1, origin, features: { 'api.passwords': { version } } });
+        }
+        forwarded++; assert.equal(url.searchParams.get('q'), 'facebook');
+        return Response.json({ ok: true });
+      });
+      try {
+        const request = new Request('http://127.0.0.1:17340/api/v1/passwords?q=facebook', {
+          method: 'POST', headers: { Origin: 'http://127.0.0.1:17340', Cookie: 'tt_auth=synthetic' }, body: '{"operation":"catalog"}'
+        });
+        const response = await (handleApi as any)({ req: request, context: { params: { path: 'v1/passwords' } } });
+        assert.equal(response.status, accepted ? 200 : 503);
+        assert.equal(forwarded, accepted ? 1 : 0);
+        if (!accepted) {
+          assert.equal(request.bodyUsed, false);
+          assert.equal((await response.json()).code, 'API_CAPABILITY_INCOMPATIBLE');
+        }
+      } finally { upstream.mock.restore(); }
     }
   });
 });

@@ -150,3 +150,5 @@ in an isolated localhost deployment, then configure the first username in
 It uses real session/admin/password/upload endpoints and creates a synthetic
 `/tmp/thingtime-password-import-qa/all-data.1pux` for browser round-trip checks.
 Never point this test at production or supply personal credentials.
+
+The installed desktop bridge checks the selected HTTPS server's capability manifest before forwarding private password requests. Full-vault title search requires `api.passwords` 1.2.0 or a compatible update there, even when the bundled UI is newer. Missing, wrong-origin, or breaking manifests produce an explicit compatibility error instead of silently using an older listing contract.
