@@ -669,10 +669,10 @@ test('range programs require the additive owned-boundary contract', () => {
 
  test('password manager registers its live route and version on both discovery manifests', () => {
   const doc = apiEndpointDocs.find(doc => doc.id === 'passwords');
-  assert.equal(doc?.featureVersion, '1.1.0');
+  assert.equal(doc?.featureVersion, '1.2.0');
   assert.deepEqual(doc?.methods, ['GET', 'POST']);
-  assert.equal(createApiCapabilitiesManifest().features['api.passwords'], '1.1.0');
-  assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.passwords'].version, '1.1.0');
+  assert.equal(createApiCapabilitiesManifest().features['api.passwords'], '1.2.0');
+  assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.passwords'].version, '1.2.0');
   assert.equal(typeof routeModules['v1/passwords'], 'function');
  });
 
@@ -686,6 +686,10 @@ test('Gmail OAuth and its one-use callback are advertised on both manifests and 
 	assert.equal(typeof routeModules['v1/mail/google/callback'], 'function');
 });
 
+ test('password title search requires the additive 1.2 contract', () => {
+  for (const version of ['1.2.0', '1.2.1', '1.3.0']) assert.equal(capabilitySatisfies(version, '1.2.0'), true);
+  for (const version of [undefined, '1.1.0', '1.1.9', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.2.0'), false);
+ });
  test('incident cleanup is versioned on both origin manifests and rejects older or breaking servers', () => {
   for (const id of ['api.admin-migrations', 'api.admin-migrations-run']) {
     assert.equal(createApiCapabilitiesManifest().features[id], '1.4.1');

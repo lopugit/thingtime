@@ -11,23 +11,23 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
   private var contentReady = false
   private var pendingTab: CommanderSettingsTab?
 
-  init(ready: DaemonReady, bridge: CommanderNativeBridge) {
-    let window = NSWindow(
+  init(ready: DaemonReady, bridge: CommanderNativeBridge, surface: String = "settings", title: String = "Commander Settings") {
+    let window = CommanderUtilityWindow(
       contentRect: NSRect(x: 0, y: 0, width: 960, height: 650),
       styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
       backing: .buffered,
       defer: false
     )
     self.window = window
-    self.webView = CommanderWebView(ready: ready, surface: "settings", bridge: bridge)
+    self.webView = CommanderWebView(ready: ready, surface: surface, bridge: bridge)
     super.init()
     window.delegate = self
-    window.title = "Commander Settings"
+    window.title = title
     window.titleVisibility = .hidden
     window.titlebarAppearsTransparent = true
     window.isMovableByWindowBackground = true
     window.isReleasedWhenClosed = false
-    window.minSize = NSSize(width: 760, height: 520)
+    window.minSize = surface == "processes" ? NSSize(width: 600, height: 360) : NSSize(width: 760, height: 520)
     window.contentView = webView
     window.center()
     webView.firstPresentationReady = { [weak self] in
@@ -45,7 +45,9 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
   }
 
   func windowWillClose(_ notification: Notification) {
-    NSApp.setActivationPolicy(.accessory)
+    if !NSApp.windows.contains(where: { $0 !== window && $0 is CommanderUtilityWindow && $0.isVisible }) {
+      NSApp.setActivationPolicy(.accessory)
+    }
   }
 
   func shutdown() {
