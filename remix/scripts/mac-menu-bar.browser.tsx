@@ -38,7 +38,7 @@ window.fetch = async (url, init) => {
 		const action = suite.actions.find((entry) => input.action === entry.crystal.actionKey);
 		if (!action) return Response.json({ error: 'Unknown fixture Action' }, { status: 400 });
 		const validated = validateRunInputs(action.crystal.inputs as Record<string, unknown>[], input.inputs);
-		if (!validated.ok) return Response.json({ error: validated.error }, { status: 400 });
+		if (validated.ok === false) return Response.json({ error: validated.error }, { status: 400 });
 		const result = await executeBrowserAction(
 			{
 				ok: true,
@@ -72,9 +72,9 @@ window.fetch = async (url, init) => {
 					if (step.path !== '/api/v1/things' || step.method !== 'POST') throw Error('Unexpected fixture request');
 					const body = step.body as any;
 					const checked = validateThingtimeCrystal(body.thingtime, body.crystal);
-					if (!checked.ok) throw Error(checked.error);
+					if (checked.ok === false) throw Error(checked.error);
 					const extended = sanitizeExtended(body.extended);
-					if (!extended.ok) throw Error(extended.error);
+					if (extended.ok === false) throw Error(extended.error);
 					return { thing: { id: 'saved-fixture' } };
 				}
 			}
