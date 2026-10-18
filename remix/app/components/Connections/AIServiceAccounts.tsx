@@ -146,7 +146,7 @@ export function AIServiceAccounts({ ownerId }: { ownerId: string | null }) {
                 .filter((entry) => entry.provider === service.id)
                 .map((entry) => (
                   <Flex key={entry.id} gap={2} align="center" wrap="wrap" borderTop="1px solid var(--tt-border)" mt={3} pt={3}>
-                    <Text fontSize="sm" flex="1" overflowWrap="anywhere">
+                    <Text fontSize="sm" flex={{ base: '1 0 100%', md: '1' }} minW={0} overflowWrap="anywhere">
                       {entry.name}
                     </Text>
                     <Badge>Saved privately</Badge>

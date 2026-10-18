@@ -7747,6 +7747,14 @@ checks; `TT_VERIFY_LIVE=1` adds a live Hacker News pull). Manual checklist:
       account-name wrapping, permission disclosures, inline forms and buttons
       stay inside their cards. Popup blocking gives an actionable message;
       returning focus refreshes the original tab without discarding old state.
+- [ ] Saved AI account mobile regression: add two OpenAI and two Claude
+      credentials through Thingtime Passwords-backed test fixtures. At 390px,
+      each account name gets the full row and its badge/actions sit below it;
+      desktop keeps the compact row. Open/cancel the Add account form, scroll
+      top to bottom, remove one account, log out, sign into a different user,
+      and sign back into the first user. Compare the visible three retained
+      accounts with the private API; reject foreign vault reads/stale-owner
+      writes. Use disposable accounts under enforced browser/backend isolation.
 - [ ] Google reuse API: exercise a permitted read, missing-scope denial,
       wrong-provider operation, another owner's link, and arbitrary-URL input.
       Result, error, logs, and client caches must not contain credentials.

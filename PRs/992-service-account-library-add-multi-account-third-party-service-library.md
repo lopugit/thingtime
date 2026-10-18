@@ -3,6 +3,37 @@
 Status: open, ready-for-review implementation checkpoint. Google identity and refresh are verified
 locally; production delivery and other providers' positive acceptance remain pending.
 
+## 18 October: authenticated browser acceptance and mobile account rows
+
+A disposable Linux app and normally sandboxed Chromium share a kernel-enforced
+loopback-only network. Browser and backend probes reject production hostnames,
+direct public IPs, external redirects and unrelated local backends. Fresh test
+accounts and synthetic provider credentials are provisioned and retrieved through
+Thingtime Passwords; no production credentials or personal browser state are used.
+
+At `8f0a9921c`, authenticated UI acceptance passes: two OpenAI and two Claude
+accounts save and survive reload, removing one retains three, logout clears
+private names, a second owner sees no accounts, a stale-owner write returns 409,
+a foreign password read returns 404, and a fresh first-owner login retains its
+three accounts. Rendered results agree with API metadata. Screenshots and a
+metadata-only action trace are retained privately; task containers are removed.
+Raw credential-bearing browser traffic is not traced.
+
+The mobile screenshots exposed account names squeezed beside badges/actions.
+Names now take the full row below the desktop breakpoint; controls wrap below
+without shortening names. The isolated browser regression checks both row bounds
+and the account lifecycle above. The authenticated fixture runner also scrolls
+buttons into view and hit-tests them to avoid a success notice obscuring a click,
+and logs out the second owner before exercising the final fresh login.
+
+Meta saved the existing transparent Thingtime logo and retained it after reload.
+Its validator accepts `https://thingtime.com/api/v1/connections/oauth/callback`;
+client/web OAuth, HTTPS enforcement and strict redirect matching are enabled.
+`public_profile` is ready for testing; `user_posts` has not been added. App-secret
+verification, real two-account authorization and optional posts review remain
+outstanding. The app remains unpublished. Shared preview configuration remains
+separate from this isolated browser acceptance.
+
 ## 18 October: opaque-token response correction
 
 Raw JSON replacement could turn a boolean, number or delimiter into invalid
