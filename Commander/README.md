@@ -28,6 +28,7 @@ portable from day one.
 - arrow-key selection, Return execution, Escape dismissal, and Command-K actions;
 - type-aware right-click menus, including Finder reveal, file copy, path/name copy, recoverable Trash, and confirmed
   permanent delete actions for filesystem-backed results;
+- a Settings gear in the launcher header, with mouse and keyboard access to the native Settings window;
 - searchable Commander Settings results with tab-aware deep links into the separate native settings window;
 - a dedicated Activity settings tab that samples Commander host/daemon CPU, memory, storage, process count, plus
   local Mac CPU, best-effort system GPU, memory, thermal state, and filesystem capacity without uploading metrics;
@@ -241,3 +242,40 @@ swift build --package-path hosts/macos
 
 Windows and Linux compile/runtime testing is deliberately deferred, as requested. Their shared layers are covered
 by the TypeScript and Rust checks; their native shells remain explicitly unverified.
+
+## Process monitor and utility windows
+
+Activity's Processes panel defaults to Name ascending, with PID as the final
+stable tie-breaker. CPU/memory/disk changes update readings without reordering
+rows unless you choose a usage sort. Sort by, Order, Average window, parent
+grouping and composable filters are saved locally and shared with the separate
+Processes window. Filters support text matching, numeric comparisons, binary
+memory/throughput units and explicit available/unavailable values.
+
+Average window offers Current, 5/10/30 minutes, 1/3/6/12 hours and 1 day. Usage
+columns, filters and sorting all use the selected sampled average. Native windows
+share one sampler and history; readings are duration-weighted in one-minute
+buckets. History is collected while a metrics view polls, stays in memory for the
+running app, expires after one day, and resets for exited/reused PIDs. Each row
+shows the actual observed minutes; sleep/closed-view gaps are excluded, and
+unavailable GPU/network readings never become zero. No past history is invented
+when selecting a longer window. This is a sampled monitor, not a historical
+recorder or a guarantee of continuous background collection.
+
+Use the pop-out icon beside Processes for its resizable native window. Keep above
+sets only that window's level; closing/reopening reuses the window during the
+current app session. Double-click the Settings or Processes title bar to maximize
+within the current screen's usable area, then again to restore its previous frame.
+This does not enter a fullscreen Space.
+
+### Isolated native window development
+
+Run `./script/window-preview.sh` from `Commander/` to build a fast unsigned
+window preview, then open the printed `.app` path. It uses the production
+`CommanderUtilityWindow` implementation and a worktree-specific bundle identity
+and cache directory. It has no daemon, ports, network, credentials, global
+hotkeys, or access to the installed Commander profile. Its duplicate-delivery
+button exercises native/web double-click coalescing; the titlebar and Keep above
+control exercise native window behavior. Run `./script/window-preview.sh --clean`
+to stop and remove this worktree's generated preview before final verification.
+The preview supplements the canonical signed installed-app acceptance checks.

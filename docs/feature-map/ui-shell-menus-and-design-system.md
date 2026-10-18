@@ -132,3 +132,17 @@ controls move to the next line. Admin categories live in `adminRoutesCore.ts`:
 AI Providers, Lopu, Platform, and Access & limits replace System; legacy System
 links resolve to AI Providers or to Lopu for Lopu anchors. Browser regression:
 `/scripts/settings-sections.browser.html`; route coverage: `test:admin-integrations`.
+
+## Native Commander controls
+
+The desktop launcher gear reuses `builtin:settings` / `open-settings` in
+`Commander/apps/desktop-ui/src/components/Launcher.tsx`. `ProcessesPanel.tsx`
+and `processModel.ts` share sorting, averaging, filters and local view preferences
+between Activity and `ProcessesWindow.tsx`. `useSystemMetrics.ts` polls the native
+bridge without overlapping requests. `SystemMetricsService` and
+`ProcessUsageHistory` share sampled history across native windows, with stable
+process identities and explicit coverage. `CommanderUtilityWindow` implements
+maximize/restore; `SettingsWindowController` hosts Settings and Processes, and the
+native bridge applies Keep above only to the requesting utility window. Checks:
+Commander TypeScript/Vitest and Swift tests, plus TESTING.md's native launcher
+checklist on the installed signed app.
