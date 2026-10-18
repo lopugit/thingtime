@@ -455,3 +455,16 @@ uncertain work completes before migration. `pagedForegroundSync.test.ts`,
 `pagedRunReview.test.ts` and desktop/iOS browser fixtures cover these paths.
 Native/cloud producers still supply complete bounded scans; the 10,000-path cap,
 installed-device acceptance, worker integration and journal cleanup remain open.
+
+
+### Bounded foreground metadata lifecycle (2026-10-18)
+
+`fileSync/journalRetention.ts` registers foreground-owned metadata in journal
+version 9. `journalMaintenance.ts` retires and deletes it in bounded transactions
+under the root lock; tombstones prevent ID reuse until child removal completes.
+Active roots/inputs, current baselines, retained receipts and other reader pins
+remain protected. `pagedForegroundSync.ts` runs maintenance before new work;
+`pagedCheckpointJournal.ts` queues replaced observations for the same cleanup.
+Unmanaged/legacy observations are preserved. Eight `journalMaintenance.test.ts`
+regressions and `scripts/journal-maintenance.browser.ts` cover interruption,
+transaction rollback, scope, stable storage counts and browser-process recovery.

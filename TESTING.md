@@ -11487,3 +11487,16 @@ resume unfinished Android gates only when requested.
 - [x] Retain trace/screenshots/source in `paged-foreground-evidence-2026-10-18` beside the HTML plan. Verify browser/backend OS boundary against hostname, direct-IP, alternate-port and redirect probes, then remove task-owned temporary resources.
 - [ ] Repeat real upload/download/two-way, permission loss, network interruption and provider acceptance in the intended installed Mac/iOS apps. Generated adapters and isolated browser fixtures do not complete this gate.
 - [ ] Complete stable paged producers, worker/relaunch integration and scoped orphan/retention cleanup before lifting the live 10,000-path bound. Android remains deferred.
+
+
+## Bounded foreground journal cleanup (2026-10-18)
+
+- [x] Stop cleanup after 128 child-row deletions, reopen the journal and finish. Refuse reads and public-ID reuse while the retired header still exists; allow a new generation only after complete removal.
+- [x] Keep another reader's pinned input, another account's records and unregistered captures. Late readers must not acquire a partially retired generation.
+- [x] Inject a deletion failure inside the transaction: the retirement flag, cursor and all child deletions roll back together. Change accounts after a committed page and refuse further cleanup until the original scope resumes.
+- [x] Repeat foreground sync seven times and compare all store counts after warmup. Preserve exact current baseline entries and avoid additional cloud effects.
+- [x] Preserve an uncertain 135-operation run, its original IDs and accepted receipts. Repeat Ignore without another upload; keep the latest retained run. Independently protect active inputs when pin indexes are missing.
+- [x] Retire a completed run, collect its old published checkpoint between cleanup pages, then finish the already-authorized cleanup without losing the current baseline.
+- [x] Run all 246 file-sync checks, focused lint and whole-project TypeScript comparison. The existing 91 diagnostics remain; no new diagnostics were introduced.
+- [x] Isolated Chromium: five Ignore repetitions on each Mac/iOS layout with stable store counts, rendered completion and independent receipt readback; a 270-entry cleanup interrupted after 128 rows and resumed after a full process restart. Scroll top to bottom and inspect the opened review and final status. Retain both traces and source hashes with the HTML plan.
+- [ ] Repeat on installed Mac/iOS devices/providers and integrate stable paged producers/workers before lifting the live scan cap. Inventory data without an explicit lifecycle owner is preserved, not automatically classified as garbage. Android is deferred.

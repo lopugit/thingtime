@@ -2680,3 +2680,45 @@ stable paged native/cloud producers, persistent workers, scoped journal retentio
 and orphan cleanup, full cross-device convergence, and measured large-volume
 sync/backups. Existing source captures and journals remain retained. Independent
 snapshot coverage and whole-account restore have their separate open gates.
+
+
+## Bounded foreground journal cleanup — 2026-10-18
+
+Repeated foreground runs previously retained their old inventory pages, plans,
+operation rows and checkpoint drafts indefinitely. Version 9 registers owned
+metadata at creation and performs bounded cleanup under the foreground root lock
+before planning the next run. Each transaction removes at most 128 child rows
+and 1 MiB of keys, with fixed header/catalogue/pin changes. Retirement and the
+first deletion page commit together. The retired header remains until every
+child is gone, preventing a stale cleanup job from deleting a recreated ID.
+
+Eligibility preserves active runs and their original/post-run inputs, any other
+reader's pins, the current published baseline, and the last retained-conflict
+receipts. Root ownership also protects active inputs if their pin indexes are
+damaged. A completed ordinary run requires published checkpoint proof; once
+retired, its remaining cleanup can resume even if that old checkpoint has been
+collected. Replacing interrupted post-run captures queues the obsolete generation
+instead of doing an unbounded range deletion. Unregistered/legacy captures are
+preserved because absence of a pin alone does not prove abandonment.
+
+Eight new regressions pass, and the full shared suite passes 246 checks including
+the scale cases. Focused lint passes. Whole-project TypeScript remains identical
+to the previous 91-diagnostic baseline. No remote API or Timeline format changed.
+
+Isolated Chromium exercised the production Mac/iOS connection controls at
+1440×1000 and 390×844. Five repeated Ignore actions on each layout held all store
+counts steady, reused the two retained receipts, uploaded no extra parts and
+preserved the current cloud revision. Independent IndexedDB readback observed a
+270-entry cleanup stop after 128 metadata rows, with ID reuse refused and an
+unmanaged capture preserved. A full browser-process restart retained that exact
+state; cleanup removed the remaining 145 original entries, then safely recreated
+the cleaned ID with one new entry. Trace, screenshots, source hashes and runner
+are retained in `journal-maintenance-evidence-2026-10-18` beside the HTML tracker.
+
+The fixture/backend and private browser were OS-restricted to loopback 28174.
+Hostname, direct-IP, alternate-port and redirect denial checks passed; the
+profile/download directories and listener were removed. The same explicitly
+isolated fallback was used while the installed browser manager's task controls
+remained unverified after native control timeouts. This is generated-adapter
+and IndexedDB evidence, not native or production acceptance. Android stays
+explicitly deferred; stable paged producers and worker/relaunch work remain open.

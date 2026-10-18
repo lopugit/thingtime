@@ -1,3 +1,4 @@
+import { JOURNAL_RETENTION_STORE, registerJournalMetadata, forgetJournalMetadata } from './journalRetention';
 import { inventorySyncEntry, parseCloudInventoryNode, parseCloudInventoryRoot, type CloudInventoryNode, type CloudInventoryRoot } from './cloudInventory';
 import { sameSyncStamp, validSyncPath, sameSyncScope, syncPathKey, validSyncEntry, validSyncPathKey, type SyncEntry, type SyncScope } from './reconcile';
 import { journalScope, type JournalAccess } from './journalScope';
@@ -9,7 +10,7 @@ export const INVENTORY_STORES = ['inventory-captures', 'inventory-pages', 'inven
 export type InventoryIdentity = { id: string; source: 'local' | 'remote'; generation: string };
 export type InventoryCursor = InventoryIdentity & { scope: SyncScope; after: string; read: number };
 export type InventoryProgress = { phase: 'collecting' | 'captured' | 'complete'; pages: number; entries: number; validatedEntries: number };
-export type InventoryHeader = InventoryIdentity & InventoryProgress & { scope: string; instance?: string; cloud?: CloudInventoryRoot; validatedThrough: string | null };
+export type InventoryHeader = InventoryIdentity & InventoryProgress & { scope: string; instance?: string; retired?: true; cloud?: CloudInventoryRoot; validatedThrough: string | null };
 type Row = { scope: string; capture: string; path: string; identity: string; entry: SyncEntry; cloud?: CloudInventoryNode };
 const encoder = new TextEncoder();
 const identifier = (value: unknown): value is string => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(value);
@@ -21,7 +22,7 @@ export const inventoryIdentity = (value: InventoryIdentity): InventoryIdentity =
 	return { id: value.id, source: value.source, generation: value.generation };
 };
 export const validateInventoryHeader = (header: InventoryHeader, expected: InventoryIdentity, key: string) => {
-	if (!header || header.scope !== key || header.id !== expected.id || header.source !== expected.source || header.generation !== expected.generation ||
+	if (!header || header.retired !== undefined || header.scope !== key || header.id !== expected.id || header.source !== expected.source || header.generation !== expected.generation ||
 		(header.instance !== undefined && !identifier(header.instance)) ||
 		!['collecting', 'captured', 'complete'].includes(header.phase) || !Number.isSafeInteger(header.pages) || header.pages < 0 ||
 		!Number.isSafeInteger(header.entries) || header.entries < 0 || (header.phase !== 'collecting' && header.pages === 0) ||
@@ -75,7 +76,7 @@ export function inventoryJournal(db: IDBDatabase, access: JournalAccess, keyRang
 		if (header.cloud && (row.cloud!.kind === 'file' ? row.cloud!.file.folderId : row.cloud!.folderId) !== parentId) throw Error('Cloud inventory ancestry changed.');
 	};
 	const transaction = <T>(mode: IDBTransactionMode, work: (tx: IDBTransaction, done: (value: T) => void, fail: (error: unknown) => void) => void) =>
-		scoped.transaction([...INVENTORY_STORES, INVENTORY_PIN_STORE], mode, work);
+		scoped.transaction([...INVENTORY_STORES, INVENTORY_PIN_STORE, JOURNAL_RETENTION_STORE], mode, work);
 	const withHeader = <T>(value: InventoryIdentity, mode: IDBTransactionMode,
 		work: (header: InventoryHeader, tx: IDBTransaction, done: (value: T) => void, fail: (error: unknown) => void) => void) => {
 		const expected = identity(value);
@@ -94,7 +95,7 @@ export function inventoryJournal(db: IDBDatabase, access: JournalAccess, keyRang
 				const header: InventoryHeader = request.result ?? { ...newInventoryHeader(expected, key), ...(cloud ? { cloud } : {}) };
 				validate(header, expected);
 				if (cloud && JSON.stringify(header.cloud) !== JSON.stringify(cloud)) throw Error('Cloud inventory root changed.');
-				if (!request.result) store.add(header, [key, expected.id]);
+				if (!request.result) { store.add(header, [key, expected.id]); registerJournalMetadata(tx, access, key, 'inventory', expected.id, header.instance); }
 				done(progress(header));
 			} catch (error) { fail(error); } };
 		});
@@ -230,7 +231,7 @@ export function inventoryJournal(db: IDBDatabase, access: JournalAccess, keyRang
 				request.onsuccess = () => { try {
 					check();
 					if (request.result) throw Error('Inventory is pinned by an unfinished sync plan.');
-					tx.objectStore(INVENTORY_STORES[0]).delete([key, header.id]);
+					tx.objectStore(INVENTORY_STORES[0]).delete([key, header.id]); forgetJournalMetadata(tx, key, 'inventory', header.id);
 					for (const store of INVENTORY_STORES.slice(1)) tx.objectStore(store).delete(range(header.id));
 					done(undefined);
 				} catch (error) { fail(error); } };

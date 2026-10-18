@@ -1,3 +1,4 @@
+import { JOURNAL_RETENTION_STORE, registerJournalMetadata, forgetJournalMetadata } from './journalRetention';
 import { parsePagedRunReview, parseReviewedConflict, resolveReviewedPage, type PagedRunReview, type PagedReviewProgress, type ReviewedSyncConflict } from './pagedRunReview';
 import { parseFileSyncConfiguration, type FileSyncConfiguration } from './configuration';
 import { parseCloudInventoryRoot, type CloudInventoryRoot } from './cloudInventory';
@@ -12,18 +13,18 @@ import { pagedPlanJournal, parsePagedPlanSpec, PLAN_PIN_STORE, PLAN_STORES, vali
 	type PagedPlanCursor, type PagedPlanHeader, type PagedPlanSpec } from './pagedPlanJournal';
 import { sameSyncScope, syncPathKey, validSyncPath, validSyncPathKey, syncScopeKey, type SyncEntry, type SyncScope } from './reconcile';
 
-const RETAINED_HEADS = 'sync-retained-run-heads';
-const REVIEW_STORE = 'sync-run-reviews';
-const CLOUD_PARENTS = 'sync-cloud-trash-parents';
+export const RETAINED_HEADS = 'sync-retained-run-heads';
+export const REVIEW_STORE = 'sync-run-reviews';
+export const CLOUD_PARENTS = 'sync-cloud-trash-parents';
 export const PAGED_RUN_HEADS = 'sync-paged-run-heads';
 export const PAGED_RUN_STORES = ['sync-paged-runs', 'sync-paged-operations'] as const;
-const stores = [RETAINED_HEADS, REVIEW_STORE, CLOUD_PARENTS, ...PAGED_RUN_STORES, PAGED_RUN_HEADS, PLAN_STORES[0], PLAN_PIN_STORE, INVENTORY_STORES[0], INVENTORY_PIN_STORE, PAGED_CHECKPOINT_HEADS, 'runs'];
+const stores = [JOURNAL_RETENTION_STORE, RETAINED_HEADS, REVIEW_STORE, CLOUD_PARENTS, ...PAGED_RUN_STORES, PAGED_RUN_HEADS, PLAN_STORES[0], PLAN_PIN_STORE, INVENTORY_STORES[0], INVENTORY_PIN_STORE, PAGED_CHECKPOINT_HEADS, 'runs'];
 export type PagedRunSpec = { id: string; plan: PagedPlanSpec; review?: PagedRunReview; configuration?: FileSyncConfiguration };
 export type PagedRunProgress = { phase: 'preparing' | 'ready' | 'running' | 'complete'; read: number; total: number; operations: number; confirmed: number };
 type SortKey = [number, number, string];
 export type CloudBindingProgress = { prepared: number; total: number; phase: 'preparing' | 'ready' };
 type CloudPreparation = { configuration: FileSyncConfiguration; root: CloudInventoryRoot; prepared: number; after: SortKey | null };
-export type PagedRunHeader = PagedRunProgress & { spec: PagedRunSpec; scope: string; instance: string; planInstance: string;
+export type PagedRunHeader = PagedRunProgress & { spec: PagedRunSpec; scope: string; instance: string; retired?: true; planInstance: string;
 	next: PagedPlanCursor | null; revision: number; confirmedThrough: SortKey | null; cloud?: CloudPreparation; review?: PagedReviewProgress; retained?: true };
 type Header = PagedRunHeader;
 export type ConfirmedSyncOperation = { operation: SyncOperation; receipt: SyncReceipt };
@@ -68,7 +69,7 @@ const validateCloudConfiguration = (value: FileSyncConfiguration, spec: PagedRun
 export const validatePagedRunHeader = (h: Header, spec: PagedRunSpec, scope: SyncScope) => {
 	const key = syncScopeKey(scope);
 	const after = h?.confirmedThrough;
-	if (!h || h.scope !== key || JSON.stringify(h.spec) !== JSON.stringify(spec) || !identifier(h.instance) || !identifier(h.planInstance) ||
+	if (!h || h.retired !== undefined || h.scope !== key || JSON.stringify(h.spec) !== JSON.stringify(spec) || !identifier(h.instance) || !identifier(h.planInstance) ||
 		!['preparing', 'ready', 'running', 'complete'].includes(h.phase) || ![h.read, h.total, h.operations, h.confirmed, h.revision].every(nonnegative) ||
 		h.read > h.total || h.operations > h.read || h.confirmed > h.operations ||
 		(h.phase === 'preparing' && (h.read === 0 ? h.next !== null : !h.next || h.next.id !== spec.plan.id ||
@@ -184,7 +185,7 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 											...(spec.review ? { review: { pages: 0, entries: 0, complete: false, matched: 0 } } : {}) };
 										tx.objectStore(PAGED_RUN_HEADS).add(spec.id, key);
 										tx.objectStore(PLAN_PIN_STORE).add(true, [key, spec.plan.id, spec.id]);
-										save(h, tx); done(progress(h));
+										registerJournalMetadata(tx, access, key, 'run', spec.id, h.instance); save(h, tx); done(progress(h));
 									} catch (e) { fail(e); } };
 								});
 							} catch (e) { fail(e); } };
@@ -513,7 +514,7 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 				tx.objectStore(PAGED_RUN_STORES[1]).delete(operationRange(spec.id));
 				tx.objectStore(CLOUD_PARENTS).delete(operationRange(spec.id));
 				tx.objectStore(REVIEW_STORE).delete(operationRange(spec.id));
-				tx.objectStore(PAGED_RUN_STORES[0]).delete([key, spec.id]);
+				tx.objectStore(PAGED_RUN_STORES[0]).delete([key, spec.id]); forgetJournalMetadata(tx, key, 'run', spec.id);
 				tx.objectStore(PAGED_RUN_HEADS).delete(key);
 				tx.objectStore(PLAN_PIN_STORE).delete([key, spec.plan.id, spec.id]);
 				for (const input of inputs(spec)) tx.objectStore(INVENTORY_PIN_STORE).delete([key, input.id, spec.id, 'run']);

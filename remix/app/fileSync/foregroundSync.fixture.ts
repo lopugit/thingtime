@@ -90,7 +90,7 @@ export async function foregroundFixture(count = 1) {
 	});
 	return {
 		input,
-		journal: () => journal,
+		journal: () => journal, factory,
 		rows, local,
 		creates: () => creates,
 		change: () => {

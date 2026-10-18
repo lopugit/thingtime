@@ -175,7 +175,7 @@ export async function retentionFixture() {
 		input,
 		original,
 		live: () => live,
-		journal: () => journal,
+		journal: () => journal, factory,
 		counts: () => ({ sourceReads, sourceOpens, uploads, puts, retained, publications, reviews }),
 		lose: () => {
 			lost = true;

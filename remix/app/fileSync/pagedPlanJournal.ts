@@ -1,3 +1,4 @@
+import { JOURNAL_RETENTION_STORE, registerJournalMetadata, forgetJournalMetadata } from './journalRetention';
 import { MAX_SYNC_EXCLUSIONS } from './configuration';
 import { inventoryIdentity, inventoryJournal, INVENTORY_PAGE_BYTES, INVENTORY_PAGE_ENTRIES, INVENTORY_PIN_STORE,
 	INVENTORY_STORES, validateInventoryHeader, type InventoryHeader, type InventoryIdentity } from './inventoryJournal';
@@ -16,12 +17,12 @@ export type PagedPlanSpec = {
 export type PagedPlanProgress = { phase: 'indexing' | 'planning' | 'complete'; indexed: number; planned: number; decisions: number };
 export type PagedPlanCursor = { id: string; scope: SyncScope; after: string; read: number };
 type Position = { after: string | null; read: number };
-export type PagedPlanHeader = PagedPlanProgress & { scope: string; instance: string; spec: PagedPlanSpec; positions: Position[]; totals: number[]; inputInstances?: string[]; revision: number };
+export type PagedPlanHeader = PagedPlanProgress & { scope: string; instance: string; retired?: true; spec: PagedPlanSpec; positions: Position[]; totals: number[]; inputInstances?: string[]; revision: number };
 export const PLAN_PIN_STORE = 'sync-plan-pins';
 export const PLAN_STORES = ['sync-plans', 'sync-plan-ancestors', 'sync-plan-decisions'] as const;
 const STORES = PLAN_STORES;
 type Header = PagedPlanHeader;
-const ALL_STORES = [...STORES, PLAN_PIN_STORE, INVENTORY_STORES[0], INVENTORY_PIN_STORE];
+const ALL_STORES = [JOURNAL_RETENTION_STORE, ...STORES, PLAN_PIN_STORE, INVENTORY_STORES[0], INVENTORY_PIN_STORE];
 const encoder = new TextEncoder();
 const bytes = (value: unknown) => encoder.encode(JSON.stringify(value)).length;
 const identifier = (value: unknown): value is string => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(value);
@@ -44,7 +45,7 @@ export function parsePagedPlanSpec(value: PagedPlanSpec): PagedPlanSpec {
 }
 
 export const validatePagedPlanHeader = (h: PagedPlanHeader, spec: PagedPlanSpec, key: string) => {
-	if (!h || !identifier(h.instance) || h.scope !== key || JSON.stringify(h.spec) !== JSON.stringify(spec) ||
+	if (!h || h.retired !== undefined || !identifier(h.instance) || h.scope !== key || JSON.stringify(h.spec) !== JSON.stringify(spec) ||
 		(h.inputInstances !== undefined && (!Array.isArray(h.inputInstances) || h.inputInstances.length !== 4 || h.inputInstances.some(id => !identifier(id)))) ||
 		!['indexing', 'planning', 'complete'].includes(h.phase) || !nonnegative(h.revision) ||
 		![h.indexed, h.planned, h.decisions].every(nonnegative) || h.decisions > h.planned || h.planned > h.indexed ||
@@ -102,7 +103,7 @@ export function pagedPlanJournal(db: IDBDatabase, access: JournalAccess, keyRang
 						if (!Number.isSafeInteger(totals.reduce((a, b) => a + b, 0))) throw Error('Sync inventory count exceeds its safe range.');
 						const h: Header = { scope: key, instance: crypto.randomUUID(), spec, totals, inputInstances, positions: initialPositions(), revision: 0,
 							phase: 'indexing', indexed: 0, planned: 0, decisions: 0 };
-						store.add(h, [key, spec.id]); done(progress(h));
+						store.add(h, [key, spec.id]); registerJournalMetadata(tx, access, key, 'plan', spec.id, h.instance); done(progress(h));
 					} catch (error) { fail(error); } };
 				});
 			} catch (error) { fail(error); } };
@@ -237,7 +238,7 @@ export function pagedPlanJournal(db: IDBDatabase, access: JournalAccess, keyRang
 				const pins = tx.objectStore(PLAN_PIN_STORE).count(range(spec.id));
 				pins.onsuccess = () => { try {
 				check(); if (pins.result) throw Error('Sync plan is pinned by a run.');
-				unpin(spec, tx); tx.objectStore(STORES[0]).delete([key, spec.id]);
+				unpin(spec, tx); tx.objectStore(STORES[0]).delete([key, spec.id]); forgetJournalMetadata(tx, key, 'plan', spec.id);
 				for (const store of STORES.slice(1)) tx.objectStore(store).delete(range(spec.id));
 				done(undefined);
 				} catch (error) { fail(error); } };

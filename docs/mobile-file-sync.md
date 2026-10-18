@@ -2824,3 +2824,37 @@ stable paged native/cloud producers, persistent workers, scoped journal retentio
 and orphan cleanup, full cross-device convergence, and measured large-volume
 sync/backups. Existing source captures and journals remain retained. Independent
 snapshot coverage and whole-account restore have their separate open gates.
+
+
+## Bounded foreground journal cleanup — 2026-10-18
+
+Version 9 registers foreground-owned scans, plans, runs and checkpoint drafts in
+`sync-managed-metadata`. At the next foreground start, while holding the existing
+root lock, cleanup retires obsolete records in transactions of at most 128 child
+rows and 1 MiB of keys, plus fixed header/pin updates. A retired header prevents
+new readers or ID reuse until all children and its catalogue row are removed.
+Cancellation, account changes and process exits can interrupt between pages.
+
+Active root ownership, input pins, the published baseline and the most recent
+retained-conflict run protect recovery data. Plans release only their own pins.
+A completed ordinary run requires a published checkpoint before retirement;
+retired cleanup no longer depends on keeping that old checkpoint around. The
+active root independently protects its original and checkpoint inputs if a pin
+index is damaged. Fresh post-run capture replacement queues the old generation
+for bounded cleanup instead of deleting an entire scan in one transaction.
+
+Only registered foreground metadata and explicitly replaced checkpoint captures
+are eligible. Unmanaged/older captures remain available; this does not infer
+that every unpinned observation is abandoned. File bytes, native receipts and
+canonical Timeline history use their existing stores and retention contracts.
+Stable scan producers, worker integration and installed acceptance remain open.
+
+All 246 shared checks pass (245 TypeScript tests plus one module-mock check).
+Eight cleanup regressions cover bounds, restart/ID reuse, other readers/scopes,
+transaction rollback, account changes, steady storage use, retained receipts,
+checkpoint retirement and damaged pins. Focused lint passes; TypeScript retains
+the same 91-diagnostic baseline. Isolated Chromium confirmed steady counts over
+five repeated Ignore actions at desktop/phone sizes and cleanup recovery after
+a full browser-process restart. This uses generated adapters and metadata, not
+installed-device or large-volume acceptance. Evidence:
+`journal-maintenance-evidence-2026-10-18` beside the HTML tracker.

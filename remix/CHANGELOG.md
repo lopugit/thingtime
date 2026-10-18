@@ -68,6 +68,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-18 — **Codex (AI)**: Bound foreground sync metadata growth with resumable
+  journal cleanup. Preserve active transfers, current baselines, reader pins and
+  retained conflict receipts; refuse identity reuse during partial deletion.
+  Repeated desktop/iOS fixture runs maintain steady storage counts and cleanup
+  survives a browser-process restart. Android remains deferred.
+  [Details](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md#bounded-foreground-journal-cleanup--2026-10-18).
+
 - 2026-10-18 — **Codex (AI)**: Connect Mac/iOS foreground controls to paged sync
   recovery, durable conflict choices and checkpoint publication. Repeated Ignore
   reuses retained-version receipts; interrupted post-run scans restart with fresh

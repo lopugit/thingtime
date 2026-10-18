@@ -1,3 +1,4 @@
+import { JOURNAL_RETENTION_STORE, registerJournalMetadata, retireJournalMetadata } from './journalRetention';
 import { advanceSyncBaselinePair, PAGED_CHECKPOINT_HEADS, validatePagedCheckpointHead, type PagedCheckpointHead } from './checkpoint';
 import { inventoryJournal, inventoryIdentity, newInventoryHeader, INVENTORY_PAGE_BYTES, INVENTORY_PAGE_ENTRIES, INVENTORY_PIN_STORE,
 	INVENTORY_STORES, validateInventoryHeader, type InventoryHeader, type InventoryIdentity } from './inventoryJournal';
@@ -11,10 +12,11 @@ export type PagedCheckpointSpec = { run: PagedRunSpec; localRootId: string; remo
 type Pair = { local: InventoryIdentity; remote: InventoryIdentity };
 type Position = { after: string | null; read: number };
 export type PagedCheckpointProgress = { phase: 'collecting' | 'building' | 'sealing' | 'published'; paths: number; entries: number; pages: number };
-type Header = PagedCheckpointProgress & { spec: PagedCheckpointSpec; scope: string; instance: string; runInstance: string;
+export type PagedCheckpointHeader = PagedCheckpointProgress & { spec: PagedCheckpointSpec; scope: string; instance: string; retired?: true; runInstance: string;
 	after: Pair; baseline: Pair; instances: string[]; previous: string | null; positions: Position[]; totals: number[]; revision: number };
+type Header = PagedCheckpointHeader;
 export type PagedCheckpointState = PagedCheckpointProgress & { after: Pair; baseline: Pair };
-const stores = [PAGED_CHECKPOINT_DRAFTS, PAGED_CHECKPOINT_HEADS, PAGED_RUN_HEADS, ...PAGED_RUN_STORES, PLAN_STORES[0], PLAN_PIN_STORE, ...INVENTORY_STORES, INVENTORY_PIN_STORE];
+const stores = [JOURNAL_RETENTION_STORE, PAGED_CHECKPOINT_DRAFTS, PAGED_CHECKPOINT_HEADS, PAGED_RUN_HEADS, ...PAGED_RUN_STORES, PLAN_STORES[0], PLAN_PIN_STORE, ...INVENTORY_STORES, INVENTORY_PIN_STORE];
 const identifier = (v: unknown): v is string => typeof v === 'string' && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(v);
 const nonnegative = (v: number) => Number.isSafeInteger(v) && v >= 0;
 const original = (s: PagedCheckpointSpec) => [s.run.plan.local, s.run.plan.remote, s.run.plan.baseline.local, s.run.plan.baseline.remote];
@@ -27,6 +29,22 @@ const specification = (s: PagedCheckpointSpec): PagedCheckpointSpec => {
 	return { run, localRootId: s.localRootId, remoteFolderId: s.remoteFolderId };
 };
 
+const headValue = (h: Header): PagedCheckpointHead => ({ version: 1, scope: h.scope, instance: h.instance, runId: h.spec.run.id,
+		localRootId: h.spec.localRootId, remoteFolderId: h.spec.remoteFolderId, baseline: h.baseline });
+export const validatePagedCheckpointHeader = (h: Header, spec: PagedCheckpointSpec, key: string) => {
+	if (!h || h.retired !== undefined || h.scope !== key || JSON.stringify(h.spec) !== JSON.stringify(spec) || !identifier(h.instance) || !identifier(h.runInstance) ||
+		!['collecting', 'building', 'sealing', 'published'].includes(h.phase) || ![h.paths, h.entries, h.pages, h.revision].every(nonnegative) ||
+		h.entries > h.paths || (h.previous !== null && !identifier(h.previous)) || !h.after || !h.baseline ||
+		!Array.isArray(h.instances) || h.instances.length !== 4 || !h.instances.every(identifier) ||
+		!Array.isArray(h.positions) || h.positions.length !== 5 || !Array.isArray(h.totals) || h.totals.length !== 5 || !h.totals.every(nonnegative) ||
+		h.positions.some((p, i) => !p || !nonnegative(p.read) || p.read > h.totals[i] || (p.read === 0 ? p.after !== null : !validSyncPathKey(p.after))) ||
+		(['sealing', 'published'].includes(h.phase) && h.positions.some((p, i) => p.read !== h.totals[i])) ||
+		(h.phase === 'collecting' && (h.paths || h.pages || h.entries || h.positions.some(p => p.read)))) throw Error('Checkpoint progress changed.');
+	const captures = owned(h).map(inventoryIdentity);
+	if (new Set(captures.map(c => c.id)).size !== 4 || captures.some((c, i) => c.source !== (i % 2 ? 'remote' : 'local'))) throw Error('Checkpoint capture identity changed.');
+	validatePagedCheckpointHead(headValue(h), key);
+};
+
 export function upgradePagedCheckpointJournal(db: IDBDatabase) {
 	for (const name of [PAGED_CHECKPOINT_DRAFTS, PAGED_CHECKPOINT_HEADS]) if (!db.objectStoreNames.contains(name)) db.createObjectStore(name);
 }
@@ -37,21 +55,7 @@ export function upgradePagedCheckpointJournal(db: IDBDatabase) {
 export function pagedCheckpointJournal(db: IDBDatabase, access: JournalAccess, keyRange?: typeof IDBKeyRange) {
 	const { scope, key, check, transaction, range } = journalScope(db, access, keyRange);
 	const inventory = inventoryJournal(db, access, keyRange), runs = pagedRunJournal(db, access, keyRange);
-	const headValue = (h: Header): PagedCheckpointHead => ({ version: 1, scope: key, instance: h.instance, runId: h.spec.run.id,
-		localRootId: h.spec.localRootId, remoteFolderId: h.spec.remoteFolderId, baseline: h.baseline });
-	const validate = (h: Header, spec: PagedCheckpointSpec) => {
-		if (!h || h.scope !== key || JSON.stringify(h.spec) !== JSON.stringify(spec) || !identifier(h.instance) || !identifier(h.runInstance) ||
-			!['collecting', 'building', 'sealing', 'published'].includes(h.phase) || ![h.paths, h.entries, h.pages, h.revision].every(nonnegative) ||
-			h.entries > h.paths || (h.previous !== null && !identifier(h.previous)) || !h.after || !h.baseline ||
-			!Array.isArray(h.instances) || h.instances.length !== 4 || !h.instances.every(identifier) ||
-			!Array.isArray(h.positions) || h.positions.length !== 5 || !Array.isArray(h.totals) || h.totals.length !== 5 || !h.totals.every(nonnegative) ||
-			h.positions.some((p, i) => !p || !nonnegative(p.read) || p.read > h.totals[i] || (p.read === 0 ? p.after !== null : !validSyncPathKey(p.after))) ||
-			(['sealing', 'published'].includes(h.phase) && h.positions.some((p, i) => p.read !== h.totals[i])) ||
-			(h.phase === 'collecting' && (h.paths || h.pages || h.entries || h.positions.some(p => p.read)))) throw Error('Checkpoint progress changed.');
-		const captures = owned(h).map(inventoryIdentity);
-		if (new Set(captures.map(c => c.id)).size !== 4 || captures.some((c, i) => c.source !== (i % 2 ? 'remote' : 'local'))) throw Error('Checkpoint capture identity changed.');
-		validatePagedCheckpointHead(headValue(h), key);
-	};
+	const validate = (h: Header, spec: PagedCheckpointSpec) => validatePagedCheckpointHeader(h, spec, key);
 	const get = <T>(tx: IDBTransaction, store: string, id: IDBValidKey, done: (value: T) => void, fail: (e: unknown) => void) => {
 		const request = tx.objectStore(store).get(id);
 		request.onsuccess = () => { try { check(); done(request.result); } catch (e) { fail(e); } };
@@ -108,9 +112,10 @@ export function pagedCheckpointJournal(db: IDBDatabase, access: JournalAccess, k
 					positions: Array.from({ length: 5 }, () => ({ after: null, read: 0 })), totals: [0, 0, inputs[2].entries, inputs[3].entries, run.operations], revision: 0 };
 				for (const capture of captures) {
 					tx.objectStore(INVENTORY_STORES[0]).add(capture, [key, capture.id]);
+					registerJournalMetadata(tx, access, key, 'inventory', capture.id, capture.instance);
 					tx.objectStore(INVENTORY_PIN_STORE).add(true, [key, capture.id, spec.run.id, 'checkpoint']);
 				}
-				save(h, tx); done(state(h));
+				registerJournalMetadata(tx, access, key, 'checkpoint', spec.run.id, h.instance); save(h, tx); done(state(h));
 			}, fail), fail);
 		}, fail));
 	};
@@ -215,10 +220,14 @@ export function pagedCheckpointJournal(db: IDBDatabase, access: JournalAccess, k
 
 						const captures = [h.after.local, h.after.remote].map(old => {
 							const next = newInventoryHeader({ id: crypto.randomUUID(), generation: crypto.randomUUID(), source: old.source }, key);
-							tx.objectStore(INVENTORY_STORES[0]).delete([key, old.id]);
-							for (const store of INVENTORY_STORES.slice(1)) tx.objectStore(store).delete(range(old.id));
+							const existing = tx.objectStore(INVENTORY_STORES[0]).get([key, old.id]);
+							existing.onsuccess = () => { try {
+								check(); validateInventoryHeader(existing.result, old, key);
+								retireJournalMetadata(tx, key, 'inventory', old.id, INVENTORY_STORES[0], existing.result);
+							} catch (e) { fail(e); } };
 							tx.objectStore(INVENTORY_PIN_STORE).delete([key, old.id, spec.run.id, 'checkpoint']);
 							tx.objectStore(INVENTORY_STORES[0]).add(next, [key, next.id]);
+							registerJournalMetadata(tx, access, key, 'inventory', next.id, next.instance);
 							tx.objectStore(INVENTORY_PIN_STORE).add(true, [key, next.id, spec.run.id, 'checkpoint']);
 							return next;
 						});

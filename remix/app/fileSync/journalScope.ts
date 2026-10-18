@@ -1,6 +1,6 @@
 import { sameSyncScope, syncScopeKey, validateSyncScope, type SyncScope } from './reconcile';
 
-export type JournalAccess = { scope: SyncScope; currentScope(): SyncScope; signal?: AbortSignal };
+export type JournalAccess = { scope: SyncScope; currentScope(): SyncScope; signal?: AbortSignal; cleanup?: 'foreground' };
 
 /** Fence each asynchronous page and transaction to the original connection. */
 export function journalScope(db: IDBDatabase, access: JournalAccess, keyRange?: typeof IDBKeyRange) {
