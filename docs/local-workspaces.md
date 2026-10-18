@@ -5,6 +5,31 @@ Thingtime application, separate from the stateless agent export sandbox in
 [no-login-draft-preview.md](no-login-draft-preview.md). The full local-first
 rollout is **not ready to merge** until the outstanding rows below are verified.
 
+## Character draft checkpoint — 2026-10-19
+
+Delegated composer drafts now use the existing account draft/catalog/file queues
+in a partition keyed by origin, principal, Character and data plane. Owner drafts,
+other Characters and direct Character sign-in remain separate. The roster keeps
+only selector labels on this device, with no retained credentials or management
+authority. Remote sync still requires current root confirmation, capability
+negotiation and server-checked delegation. The normal draft picker and shared
+sync review panel expose this work; posting does not wait for the draft queue.
+
+Local regression: 718 workspace tests and four offline-shell checks pass; 77
+opt-in checks are skipped in that command. Changed-file lint has no errors and
+one existing storage warning. The production client/server build passes and the
+TypeScript comparison retains 91 baseline diagnostics. Native Character draft
+acceptance passes offline cold reload, owner/two-actor isolation, automatic
+verified reconnect, 1440/390/320px layout and independent private posting while
+draft sync returns 503. The canonical post projection confirms author/text/ACL;
+anonymous reading returns 404. The isolated runtime was released with zero OOM.
+The test caught duplicate React keys leaving two composers; those keys are now
+distinct and each switch asserts exactly one editor. Background remote-only
+features can still show a reconnect toast; broader offline UI cleanup remains.
+Delegated offline posting, attachment-picker integration, storage management and
+the remaining Character feature matrix stay open. This is not final-head CI or
+deployed acceptance.
+
 ## Audit of existing support
 
 - `ThingtimeProvider` has serialized autosave and cross-tab updates. Its native

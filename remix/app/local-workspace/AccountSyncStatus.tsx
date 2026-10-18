@@ -1,4 +1,5 @@
 import type { AccountDraftSync } from './accountDrafts';
+import { characterDraftWorkspace } from './characterDrafts.client';
 import type { AccountFileSync } from './accountFiles';
 import type { AccountFileMetadata } from './accountFileMetadata';
 import { useOfflineWorkspace } from '../hooks/useWorkspaceUser';
@@ -327,19 +328,20 @@ function FileSyncStatus({ ownerId, dataPlane, unconfirmed }: { ownerId: string; 
 }
 
 
-function DraftSyncStatus({ownerId,dataPlane,unconfirmed}:{ownerId:string;dataPlane:string;unconfirmed:boolean}) {
+export function DraftSyncStatus({ownerId,dataPlane,unconfirmed,actorId}:{ownerId:string;dataPlane:string;unconfirmed:boolean;actorId?:string}) {
  const [rows,setRows]=React.useState<Awaited<ReturnType<AccountDraftSync['status']>>>([]),[review,setReview]=React.useState<Awaited<ReturnType<AccountDraftSync['inspect']>>|null>(null),[error,setError]=React.useState(''),[busy,setBusy]=React.useState(false),[online,setOnline]=React.useState(navigator.onLine);
- const service=React.useRef<ReturnType<typeof accountWorkspaceWorker>|null>(null),mounted=React.useRef(true);
+ const service=React.useRef<Pick<ReturnType<typeof accountWorkspaceWorker>,'drafts'|'transport'|'lease'|'wake'|'draftClient'>|null>(null),mounted=React.useRef(true);
  React.useEffect(()=>{
-  mounted.current=true;const current=accountWorkspaceWorker({kind:'account',ownerId,dataPlane,origin:location.origin});service.current=current;
+  mounted.current=true;const principal={kind:'account' as const,ownerId,dataPlane,origin:location.origin};
+  const current=actorId?characterDraftWorkspace(principal,actorId):accountWorkspaceWorker(principal);service.current=current;
   const update=()=>{setOnline(navigator.onLine);void current.drafts.status().then(value=>{current.lease.assertCurrent();if(mounted.current)setRows(value.filter(row=>row.state!=='synced'));}).catch(()=>{});};update();
   for(const event of [LOCAL_WORKSPACE_CHANGED,'online','offline'])window.addEventListener(event,update);
   return ()=>{mounted.current=false;for(const event of [LOCAL_WORKSPACE_CHANGED,'online','offline'])window.removeEventListener(event,update);};
- },[ownerId,dataPlane]);
+ },[ownerId,dataPlane,actorId]);
  const act=async(run:(current:NonNullable<typeof service.current>)=>Promise<unknown>)=>{const current=service.current;if(!current)return;setBusy(true);setError('');try{await run(current);current.lease.assertCurrent();if(mounted.current){announceLocalWorkspaceChange();current.wake();}}catch(failure){if(mounted.current)setError(failure instanceof Error?failure.message:'Draft sync needs attention.');}finally{if(mounted.current)setBusy(false);}};
  if(!rows.length&&!error)return null;
  const disabled=busy||!online||unconfirmed;
- return <Box as="section" aria-label="Account draft sync" maxW="900px" w="calc(100% - 32px)" mx="auto" my={4} p={4} borderWidth="1px" borderRadius="lg">
+ return <Box as="section" aria-label={actorId?'Character draft sync':'Account draft sync'} maxW="900px" w="calc(100% - 32px)" mx="auto" my={4} p={4} borderWidth="1px" borderRadius="lg">
   <Text role="status">{rows.length} draft change{rows.length===1?'':'s'} saved on this device. {unconfirmed||!online?'Waiting for verified account sync.':rows.some(row=>row.error||['conflict','error'].includes(row.state))?'Private account sync needs attention.':'Syncing drafts to your private account.'} Posting is independent.</Text>
   <details><summary>Review draft sync</summary>{rows.slice(0,20).map(row=><Flex key={row.id} gap={3} py={2} align="center" flexWrap="wrap"><Text flex="1" minW={0} overflowWrap="anywhere" fontSize="sm">{row.name}: {row.error||row.state}</Text>
    {row.state==='conflict'?<Button size="sm" isDisabled={disabled} onClick={()=>void act(async current=>{const value=await current.drafts.inspect(current.transport.drafts,row.id);if(mounted.current)setReview(value);})}>Compare draft versions</Button>:<Button size="sm" isDisabled={disabled||row.state==='syncing'} onClick={()=>void act(current=>current.drafts.retry(row.id))}>Retry draft sync</Button>}

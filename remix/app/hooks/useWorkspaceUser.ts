@@ -16,10 +16,14 @@ const anonymous: WorkspaceUser = {
 		status: 'unavailable', accountingVersion: null, reconciledAt: null }, activeThemeId: null, activeFeedAlgorithmId: null,
 	localOnly: true
 };
+/** Display identity for local editors; this projection carries no remote grants. */
+export const offlineWorkspaceUser = (user: Pick<WorkspaceUser,'id'> & Partial<Pick<WorkspaceUser,'username'|'displayName'|'isCharacter'>>): WorkspaceUser => ({
+ ...anonymous, ...user, ttid:user.id, username:user.username || 'offline', displayName:user.displayName || 'Offline account workspace', localOnly:undefined, offline:true
+});
 export function useWorkspaceUser(): WorkspaceUser | null {
 	const data = useRouteLoaderData('root') as ClientRootData | undefined; const user = useCurrentUser();
 	if (user && !user.temporary) return user;
-	if (data?.offlineWorkspace) return { ...anonymous, id: data.offlineWorkspace.ownerId, ttid: data.offlineWorkspace.ownerId, username: 'offline', displayName: 'Offline account workspace', localOnly: undefined, offline: true };
+	if (data?.offlineWorkspace) return offlineWorkspaceUser({id:data.offlineWorkspace.ownerId});
 	return data ? anonymous : null;
 }
 

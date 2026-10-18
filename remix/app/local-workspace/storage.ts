@@ -1,10 +1,16 @@
 import { TIMELINE_EVENT_MAX_BYTES } from '../timeline/contract';
 /** Browser persistence boundary for local content. Account scopes never confer
  * server authority and are never inferred from a record supplied by a caller. */
-export type WorkspaceScope = { kind: 'anonymous' } | { kind: 'account'; origin: string; ownerId: string; dataPlane: string };
+export type WorkspaceScope = { kind: 'anonymous' } | { kind: 'account'; origin: string; ownerId: string; dataPlane: string; delegatedBy?: string };
 export const workspaceScopeKey = (scope: WorkspaceScope): string => {
 	if (scope.kind === 'anonymous') return JSON.stringify(['anonymous', 1]);
 	if (!scope.ownerId || !scope.dataPlane || new URL(scope.origin).origin !== scope.origin) throw new Error('Invalid local workspace scope');
+	// A delegated editor belongs to both the signed-in principal and its actor.
+	// It must never open the actor's independently signed-in account partition.
+	if (scope.delegatedBy !== undefined) {
+		if (!scope.delegatedBy || scope.delegatedBy === scope.ownerId) throw new Error('Invalid delegated workspace scope');
+		return JSON.stringify(['delegated-account', scope.origin, scope.delegatedBy, scope.ownerId, scope.dataPlane]);
+	}
 	return JSON.stringify(['account', scope.origin, scope.ownerId, scope.dataPlane]);
 };
 
@@ -161,7 +167,8 @@ export class WorkspaceDatabase {
 			} catch {}
 		});
 		try {
-			const prefix = JSON.stringify(['account', scope.origin, scope.ownerId]).slice(0, -1) + ',';
+			const identity = scope.delegatedBy === undefined ? ['account', scope.origin, scope.ownerId] : ['delegated-account', scope.origin, scope.delegatedBy, scope.ownerId];
+			const prefix = JSON.stringify(identity).slice(0, -1) + ',';
 			const scopes: Extract<WorkspaceScope, { kind: 'account' }>[] = [];
 			// Walk keys incrementally, checking identity between cursor events. A
 			// processing batch must not become a maximum retained workspace count.
@@ -175,8 +182,8 @@ export class WorkspaceDatabase {
 						const key = cursor.result.key;
 						if (typeof key !== 'string') throw new WorkspaceError('INVALID_WORKSPACE', 'Invalid retained workspace key', 409);
 						const parts = JSON.parse(key);
-						const value = { kind: 'account' as const, origin: scope.origin, ownerId: scope.ownerId, dataPlane: parts?.[3] };
-						if (!Array.isArray(parts) || parts.length !== 4 || typeof value.dataPlane !== 'string' || workspaceScopeKey(value) !== key)
+						const value = { ...scope, dataPlane: parts?.[identity.length] };
+						if (!Array.isArray(parts) || parts.length !== identity.length + 1 || typeof value.dataPlane !== 'string' || workspaceScopeKey(value) !== key)
 							throw new WorkspaceError('INVALID_WORKSPACE', 'Invalid retained workspace key', 409);
 						scopes.push(value);
 						cursor.result.continue();

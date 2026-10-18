@@ -332,3 +332,13 @@ admin lookup, session selection, agent coordination and acceptance runbook.
 `resolveSessionUser` defaults to the authenticated principal for roster and
 credential callers; request authentication passes an explicit selection (or null
 for the session default). Never re-mint a principal session with an acting user ID.
+
+### Delegated editor draft storage
+
+`local-workspace/characterDrafts.client.ts` reuses the account draft/catalog/file
+services in a principal-and-actor partition. `drafts/draftClient.ts` routes a
+composer’s selected Character there without changing the root account binding.
+`characterRoster.client.ts` retains only selector labels; `useCharacters` keeps
+remote loading fenced and uses these labels offline. Neither retained labels nor
+local draft access grants remote Character authority. See `characterDrafts.test.ts`,
+`characterRoster.test.ts` and the opt-in `characterDrafts.browser.test.ts`.

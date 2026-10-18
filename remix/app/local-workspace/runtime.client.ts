@@ -36,6 +36,7 @@ const ensureChangeChannel = () => {
 /** Called only after the root loader's current-generation check. A caller's
  * Thing JSON cannot select this identity or open an account partition. */
 export function bindLocalWorkspace(anonymous: boolean, generation: number, account?: Extract<WorkspaceScope, { kind: 'account' }>, remoteConfirmed = true) {
+	if (account?.delegatedBy !== undefined) throw new WorkspaceError('INVALID_WORKSPACE', 'Root identity cannot be selected by a delegated editor.', 409);
 	const changed = binding?.remoteConfirmed !== remoteConfirmed || binding?.anonymous !== anonymous || binding.generation !== generation || JSON.stringify(binding?.account) !== JSON.stringify(account);
 	binding = { anonymous, generation, remoteConfirmed, ...(!anonymous && account ? { account } : {}) };
  ensureChangeChannel();
@@ -76,9 +77,11 @@ export function announceAccountHomeThemeChange() {
 }
 
 export function accountWorkspaceLease(scope: Extract<WorkspaceScope, { kind: 'account' }>): WorkspaceLease {
+	const authority = scope.delegatedBy === undefined ? scope : { kind: 'account' as const, origin: scope.origin, ownerId: scope.delegatedBy, dataPlane: scope.dataPlane };
+	workspaceScopeKey(scope);
 	const generation = rootIdentity.read().generation;
 	const assertCurrent = () => {
-		if (!binding?.account || binding.anonymous || binding.generation !== generation || rootIdentity.read().generation !== generation || rootIdentity.read().pending || workspaceScopeKey(binding.account) !== workspaceScopeKey(scope))
+		if (!binding?.account || binding.anonymous || binding.generation !== generation || rootIdentity.read().generation !== generation || rootIdentity.read().pending || workspaceScopeKey(binding.account) !== workspaceScopeKey(authority))
 			throw new WorkspaceError('WORKSPACE_CHANGED', 'Account workspace changed. Reopen this editor before continuing.', 409);
 	};
 	return { assertCurrent, onInvalidate: callback => {

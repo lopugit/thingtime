@@ -502,7 +502,7 @@ const AccountPostComposer = (props: PostComposerProps) => {
   // the viewer's joined subspaces for the destination picker — loaded once,
   // only for a top-level composer with no page-provided subspace
   React.useEffect(() => {
-    if (!expanded || isComment || subspace || mySubspaces || !user || user.localOnly) return;
+    if (!expanded || isComment || subspace || mySubspaces || !user || user.localOnly || user.offline || navigator.onLine === false) return;
     let cancelled = false;
     api.v1.subspaces
       .list({ mine: true, limit: 50 })
@@ -518,7 +518,7 @@ const AccountPostComposer = (props: PostComposerProps) => {
     };
     // api.v1.subspaces.list is a stable useCallback
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [expanded, isComment, subspace, mySubspaces, user?.id]);
+  }, [expanded, isComment, subspace, mySubspaces, user?.id, user?.offline]);
   const activeSubspace: SubspaceComposerContext | null =
     subspace || (subspaceId ? mySubspaces?.find((entry) => entry.id === subspaceId) || null : null);
   const flairOptions = (activeSubspace?.flairs || []).filter((flair) => !flair.modOnly || activeSubspace?.canModerate);

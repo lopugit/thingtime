@@ -32,6 +32,26 @@ Disable a Character to block future sign-ins, revoke its sessions and return
 owner sessions that were acting as it to the owner. Posts remain attributed to
 the Character. Re-enabling never resurrects revoked credentials.
 
+## Drafts on this device
+
+A composer's **Post as** selection saves text drafts to a private device workspace
+for the selected origin, signed-in principal, Character and data plane. Drafts
+for the owner, another Character, and an independently signed-in Character stay
+separate. The normal draft/template picker reads this workspace offline.
+
+After the owner-only roster has loaded, the device retains only Character IDs,
+names, login modes and disabled flags for these local editors. It does not retain
+passwords, session credentials, profile details or management privileges. An
+anonymous workspace cannot use an account's retained roster or draft partition.
+
+Draft sync uses the existing canonical draft/file queues and starts only after
+account confirmation. Every remote request still negotiates the Characters
+capability and reauthorizes the selected Character on the server. The Character
+draft sync panel exposes pending changes, retries and conflict review. A sync
+failure preserves the device draft, and posting remains an independent action.
+Delegated offline posting and general Character workspace coverage are still
+tracked in [the local-workspace matrix](local-workspaces.md).
+
 ## Agent coordination
 
 First run the supported, read-only discovery command (Node 20+ and the normal

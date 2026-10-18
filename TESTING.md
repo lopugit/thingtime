@@ -2,6 +2,12 @@
 
 ## Characters
 
+- [x] Switching a composer Character leaves exactly one editor and the matching sync panel; duplicate sibling React keys must not retain an old actor’s composer. The native check also verifies roster refresh when the same root workspace regains confirmation.
+
+- [x] Load the owner-only Character roster, go offline and cold reload. Save distinct drafts as the owner and two Characters; switch back, reload and open the normal draft picker. Each identity must retain only its own drafts, without HTTP writes. Check the picker and sync panel at 1440, 390 and 320px.
+- [x] Reconnect with confirmed authority while draft sync returns 503. Character posting must complete independently; verify the server author ID, private visibility and anonymous 404. Review/retry must leave saved draft content intact.
+- [x] Local regression: delegated draft partitions include principal, actor, origin and data plane. Direct Character sign-in cannot adopt a delegated partition; retired callbacks and anonymous scopes cannot reopen it. Retained selector labels contain no credentials/profile/admin grants.
+
 - [x] Isolated real API + desktop/390px browser acceptance (2026-10-18): create a separate-login Character, select/restore the session, post, comment, reply and post in a private subspace; compare persisted author IDs. API checks cover all login modes, membership denial, owner privacy, tier changes and revocation.
 - [x] Type immediately into a newly mounted editor after changing Character. Post must become enabled without another keystroke; initial editor setup must reconcile input made before listeners attach.
 

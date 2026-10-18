@@ -86,6 +86,7 @@ export function accountThingTransport(scope: Extract<WorkspaceScope, { kind: 'ac
 		const unsubscribeLocal = lease.onInvalidate(() => retired.abort());
 		try {
 		if (window.location.origin !== scope.origin) throw new WorkspaceError('WORKSPACE_CHANGED', 'Account origin changed', 409);
+		if (scope.delegatedBy !== undefined) await requireThingtimeCapability('api.auth-characters', '1.0.0');
 		const endpointCapability = ({ 'drafts': ['api.drafts', '1.1.0'], 'things/comment': ['api.things-comment', '1.8.0'], 'attachments/content': ['api.attachment-content', '1.16.0'], 'attachments/delete': ['api.attachment-delete', '1.5.0'], 'attachments/uploads/abort': ['api.attachment-upload-abort', '1.2.0'], 'attachments/uploads': ['api.attachment-uploads', '1.5.0'], 'attachments/uploads/parts': ['api.attachment-upload-parts', '1.1.0'], 'attachments/uploads/complete': ['api.attachment-upload-complete', '1.4.0'], 'attachments/annotate': ['api.attachment-annotate', '1.2.0'], 'things/bulk': ['api.things-bulk', '1.6.0'] } as Record<string, string[]>)[endpoint];
 		const capability = endpointCapability || (endpoint === 'things/interactions' ? ['api.things-interactions', '1.0.0'] : endpoint === 'components/browse' ? ['api.components-browse', '1.0.0'] : endpoint === 'schemas/browse' ? ['api.schemas-browse', '1.0.0'] : endpoint === 'things/fork' ? ['api.things-fork', '1.6.0'] : endpoint === 'things/export' ? ['api.things-export', '1.16.0'] : endpoint === 'things' ? ['api.things', '1.33.0'] : ['api.webpages-resolve', '1.3.0']);
 		await requireThingtimeCapability(capability[0], capability[1]);
@@ -101,7 +102,8 @@ export function accountThingTransport(scope: Extract<WorkspaceScope, { kind: 'ac
 		const requestSignal = AbortSignal.any([retired.signal, AbortSignal.timeout(20_000), ...(signal ? [signal] : [])]);
 		const response = await fetch(`/api/v1/${endpoint}${query}`, { method, credentials: 'same-origin', redirect: 'error',
 			signal: requestSignal,
-			headers: { 'Content-Type': 'application/json', [EXPECTED_ACTOR_HEADER]: scope.ownerId, [EXPECTED_DATA_PLANE_HEADER]: scope.dataPlane },
+			headers: { 'Content-Type': 'application/json', [EXPECTED_ACTOR_HEADER]: scope.ownerId, [EXPECTED_DATA_PLANE_HEADER]: scope.dataPlane,
+				...(scope.delegatedBy !== undefined ? { 'X-Thingtime-Character': scope.ownerId } : {}) },
 			...(method === 'GET' ? {} : { body: JSON.stringify(args) }) });
 		// An edge/WAF refusal answers a 4xx with an HTML body. Letting that parse
 		// error escape would drop the HTTP status, and the sync queue classifies

@@ -9,6 +9,23 @@ goal. Do not merge until the [coverage matrix](../docs/local-workspaces.md) is
 complete. It builds on main and includes the separate posting independence fix
 in [PR #999](https://github.com/lopugit/thingtime/pull/999).
 
+## Character draft checkpoint — 2026-10-19
+
+Delegated drafts use canonical local draft/file queues scoped to principal plus
+actor. Retained roster labels support offline selectors without session/admin
+authority. The shared draft sync panel preserves retry and review controls;
+posting remains independent. Root identity, plane and generation fences remain,
+and direct Character sign-in cannot read a delegated partition.
+
+Local suite: 718 workspace and four shell checks pass. Lint: zero errors, one
+existing warning. Client/server builds pass; TypeScript retains 91 baseline
+diagnostics. Native Character acceptance passes cold offline reload, identity isolation,
+automatic verified reconnect and private posting despite draft-sync 503s at
+1440/390/320px. Server author/text/ACL and anonymous 404 are verified; the
+network-none runtime is released with no OOM. Duplicate composer keys found in
+that check are fixed. Full delegated offline posting/attachments, background
+remote-only notices and the wider matrix remain merge gates.
+
 ## Implemented behavior
 
 Anonymous editors use an isolated browser workspace instead of automatically
