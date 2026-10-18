@@ -1,17 +1,19 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { getApiFallbackOrigin, shouldProxyApiToFallback } from './apiFallback';
+import { getApiFallbackOrigin, shouldProxyApiToFallback, proxyApiRequestToFallback } from './apiFallback';
 import handleApi from '../routes/api/[...]';
 import handleRootData from '../routes/api/root-data.get';
 import { enforceExpectedDataPlane, mongoDataPlane } from '../../app/api/utils/mongodb/dataPlane';
 import { getRequestMongoEndpoint } from '../../app/api/utils/mongodb/endpoint';
 import { EXPECTED_DATA_PLANE_HEADER } from '../../app/utils/dataPlane';
 
-const ENV_KEYS = ['JWT_PRIVATE_KEY', 'JWT_SECRET', 'MONGODB_CONNECTION_STRING', 'THINGTIME_API_FALLBACK_ORIGIN'] as const;
+const ENV_KEYS = ['JWT_PRIVATE_KEY', 'JWT_SECRET', 'MONGODB_CONNECTION_STRING', 'THINGTIME_API_FALLBACK_ORIGIN', 'THINGTIME_DESKTOP', 'NODE_ENV', 'MONGO_PASS'] as const;
 
 const withFallbackEnv = async (fallbackOrigin: string | undefined, run: () => Promise<void> | void) => {
 	const previous = Object.fromEntries(ENV_KEYS.map((key) => [key, process.env[key]]));
+	delete process.env.THINGTIME_DESKTOP;
+	process.env.NODE_ENV = 'production';
 	delete process.env.JWT_PRIVATE_KEY;
 	delete process.env.JWT_SECRET;
 	delete process.env.MONGODB_CONNECTION_STRING;
@@ -29,29 +31,41 @@ const withFallbackEnv = async (fallbackOrigin: string | undefined, run: () => Pr
 	}
 };
 
-test('API fallback defaults to production and accepts only HTTPS or loopback HTTP targets', async () => {
-	await withFallbackEnv(undefined, () => {
-		assert.equal(getApiFallbackOrigin(), 'https://thingtime.com');
-	});
-	await withFallbackEnv('https://pr-68.previews.dev.thingtime.com/path?ignored=true', () => {
-		assert.equal(getApiFallbackOrigin(), 'https://pr-68.previews.dev.thingtime.com');
-	});
-	await withFallbackEnv('http://127.0.0.1:18280/', () => {
-		assert.equal(getApiFallbackOrigin(), 'http://127.0.0.1:18280');
-	});
-	await withFallbackEnv('http://example.com/', () => {
-		assert.equal(getApiFallbackOrigin(), 'https://thingtime.com');
-	});
-	await withFallbackEnv('https://user:secret@example.com/', () => {
-		assert.equal(getApiFallbackOrigin(), 'https://thingtime.com');
-	});
+test('fallback has no default and rejects malformed, credential-bearing and insecure targets', async () => {
+  for (const target of [undefined, '', 'not a URL', 'thingtime.com', 'http://127.0.0.1:18280', 'http://example.com', 'https://user:secret@example.com']) {
+    await withFallbackEnv(target, () => assert.equal(getApiFallbackOrigin(), null));
+  }
+  await withFallbackEnv('https://selected.test/path', () => assert.equal(getApiFallbackOrigin(), 'https://selected.test'));
 });
 
-test('API fallback compares complete origins so two loopback ports do not bypass the proxy', async () => {
-	await withFallbackEnv('http://127.0.0.1:18280/', () => {
-		assert.equal(shouldProxyApiToFallback(new Request('http://127.0.0.1:59892/api/v1/devices')), true);
-		assert.equal(shouldProxyApiToFallback(new Request('http://127.0.0.1:18280/api/v1/devices')), false);
-	});
+test('incomplete local servers refuse every method, including registration, without network or body reads', async t => {
+  const upstream = t.mock.method(globalThis, 'fetch', async () => { throw new Error('Unexpected upstream request'); });
+  try {
+    for (const mode of ['production', 'development', 'test']) for (const target of [undefined, 'https://thingtime.com']) {
+      await withFallbackEnv(target, async () => {
+        process.env.NODE_ENV = mode;
+        for (const path of ['v1/auth/register', 'v1/things', 'v1/admin/migrations/run']) for (const method of ['GET', 'POST', 'PUT', 'PATCH', 'DELETE']) {
+          const request = new Request(`http://127.0.0.1:17340/api/${path}`, { method, ...(method === 'GET' ? {} : { body: '{"password":"synthetic"}' }) });
+          assert.equal(shouldProxyApiToFallback(request), false);
+          const response = await (handleApi as any)({ req: request, context: { params: { path } } });
+          assert.equal(response.status, 503);
+          assert.equal((await response.json()).code, 'LOCAL_API_NOT_CONFIGURED');
+          assert.equal(request.bodyUsed, false);
+          assert.equal((await proxyApiRequestToFallback(request)).status, 503);
+        }
+        assert.equal((await (handleRootData as any)({ req: new Request('http://127.0.0.1:17340/api/root-data') })).status, 503);
+      });
+    }
+    await withFallbackEnv('https://thingtime.com', async () => {
+      process.env.MONGODB_CONNECTION_STRING = 'mongodb://127.0.0.1:27017/test';
+      const request = new Request('http://127.0.0.1:17340/api/v1/auth/register', { method: 'POST', body: '{}' });
+      assert.equal((await (handleApi as any)({ req: request, context: { params: { path: 'v1/auth/register' } } })).status, 503);
+      assert.equal(request.bodyUsed, false);
+      process.env.NODE_ENV = 'test'; process.env.THINGTIME_DESKTOP = '1';
+      assert.equal(shouldProxyApiToFallback(request), false);
+    });
+    assert.equal(upstream.mock.callCount(), 0);
+  } finally { upstream.mock.restore(); }
 });
 
 test('vault verification refuses fallback without reading or forwarding credentials', async () => {
@@ -67,6 +81,7 @@ test('vault verification refuses fallback without reading or forwarding credenti
 
 test('fallback forwards the database identity, selection and cookie for upstream read/write enforcement', async (t) => {
 	await withFallbackEnv('https://fallback.test', async () => {
+		process.env.THINGTIME_DESKTOP = '1';
 		const location = 'mongodb://scope.test/example';
 		const plane = mongoDataPlane({ url: location, savedId: null });
 		const forwarded: Request[] = [];

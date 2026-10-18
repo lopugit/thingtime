@@ -406,3 +406,8 @@ Password migration coverage and encrypted file lifecycle: `passwords/onePassword
 `api/utils/passwords/files.ts`. Every original 1PUX member is retained as an
 encrypted attachment to a source archive entry; item editors preserve structured
 values, source context and password history. See [the password contract](../password-manager.md).
+
+The admin migration status/run contracts are `1.4.0` for guarded incident cleanup;
+the migration UI negotiates both before use. Missing local Mongo/JWT settings
+produce a no-store `503 LOCAL_API_NOT_CONFIGURED` before handler/body execution.
+Public docs and capability discovery remain local and available.
