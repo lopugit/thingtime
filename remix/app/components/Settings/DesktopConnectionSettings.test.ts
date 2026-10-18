@@ -23,6 +23,9 @@ test('unreachable account API leaves native connection controls usable without a
   const html = render(info);
   for (const text of ['Use a local API', 'Save runtime settings', 'Restart Thingtime', 'Choose mongod', 'API endpoint', 'Add endpoint'])
     assert.ok(html.includes(text), text);
+  assert.match(html, /<button[^>]*data-tt-action-inputs="[^"]*runtime.save[^"]*"[^>]*>Save runtime settings/);
+  const save = html.match(/<button[^>]*data-tt-action-inputs="[^"]*runtime.save[^"]*"[^>]*>/)?.[0];
+  assert.ok(save && !save.includes('disabled='), 'false disabled bindings leave Save usable');
   assert.match(html, /value="28641"/);
   assert.match(html, /value="28642"/);
   assert.doesNotMatch(html, /name="password"|accountId|session token/);

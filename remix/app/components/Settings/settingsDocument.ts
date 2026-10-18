@@ -1,6 +1,8 @@
 import { sanitizeWebpageBlocks } from '~/schemas/registry';
 import type { WebpageBlock } from '../Builder/webpageBlocks';
 
+export const SETTINGS_BLOCK_TYPES: readonly WebpageBlock['type'][] = ['element', 'container', 'text', 'media', 'condition', 'collection'];
+
 export type SettingsDocument = { blocks: WebpageBlock[]; name: string; revision: string | null; id?: string };
 export type SettingsDocumentScope = { origin: string; ownerId: string; dataPlane: string; documentKey: string };
 export interface SettingsDocumentAdapter {
@@ -23,7 +25,7 @@ export function settingsDocumentBlocks(value: unknown): WebpageBlock[] {
     for (const node of nodes) {
       if (!node || typeof node !== 'object' || Array.isArray(node)) throw new Error('Invalid settings block.');
       const block = node as Record<string, unknown>;
-      if (block.source !== undefined || !['element', 'container', 'text', 'media', 'condition', 'collection'].includes(String(block.type)))
+      if (block.source !== undefined || !SETTINGS_BLOCK_TYPES.includes(block.type as WebpageBlock['type']))
         throw new Error('Settings documents cannot mount external components, native slots or Action sources.');
       const props = block.props as Record<string, unknown> | undefined;
       if ((typeof block.tag === 'string' && !/^[a-z][a-z0-9]*$/.test(block.tag)) ||
