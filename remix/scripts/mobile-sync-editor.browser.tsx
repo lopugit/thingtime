@@ -10,12 +10,13 @@ import { createMemoryRouter, RouterProvider } from 'react-router';
 import { Box, Button, ChakraProvider, Flex, Text } from '@chakra-ui/react';
 import { SyncConflictReview } from '../app/components/Devices/SyncConflictReview';
 import { DesktopFolderAccess } from '../app/components/Devices/DesktopFolderAccess';
-import { DesktopSyncBootstrap } from '../app/fileSync/DesktopSyncBootstrap';
+import { nativeSyncTasks } from '../app/fileSync/nativeSyncTasks.client';
+import { NativeSyncBootstrap } from '../app/fileSync/NativeSyncBootstrap';
 import { MobileFolderAccess } from '../app/components/Devices/MobileFolderAccess';
 import { nativeBridgeMessageEvent } from '../app/utils/nativeBridge';
 const inspectionQA = new URLSearchParams(location.search).has('inspect');
 const inventoryQA = new URLSearchParams(location.search).has('inventory');
-const observations = { scans: 0, inspections: 0, captures: 0, pages: 0, discarded: 0 };
+const observations = { requests: 0, scans: 0, inspections: 0, captures: 0, pages: 0, discarded: 0 };
 const nativeCaptures = new Map<string, { capture: { id: string; generation: string; totalEntries: number }; entries: typeof localEntries }>();
 const inventoryReply = (request: any) => {
 	if (request.action === 'scan-capture') {
@@ -33,16 +34,18 @@ const inventoryReply = (request: any) => {
 	return {};
 };
 const observe = (request: any) => {
+	if (request.action !== 'suspend') observations.requests++;
 	if (request.action === 'scan') observations.scans++;
 	if (request.action === 'inspect') observations.inspections++;
 	if (request.action === 'scan-capture') observations.captures++;
 	if (request.action === 'scan-page') observations.pages++;
 	if (request.action === 'scan-discard') observations.discarded++;
 };
-Object.assign(window, { syncInspectionFixture: { observations } });
+Object.assign(window, { syncInspectionFixture: { observations, task: () => nativeSyncTasks.read(), pendingScans: () => heldScans.size } });
 const photoQA = new URLSearchParams(location.search).has('photos');
 const desktop = new URLSearchParams(location.search).get('platform') === 'desktop';
-const taskQA = desktop && new URLSearchParams(location.search).has('tasks');
+const iosTaskQA = new URLSearchParams(location.search).get('platform') === 'ios' && new URLSearchParams(location.search).has('tasks');
+const taskQA = (desktop || iosTaskQA) && new URLSearchParams(location.search).has('tasks');
 let taskHeld = false;
 const heldScans = new Map<string, () => void>();
 const captureQA = new URLSearchParams(location.search).has('capture');
@@ -144,7 +147,7 @@ window.fetch = async function (this: unknown, input, init) {
 	const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url, location.origin);
 	init?.signal?.throwIfAborted();
 	if (url.pathname === '/.well-known/thingtime-capabilities.json') return fixtureJson(thingtimeCapabilityManifest(url.origin));
-	if (taskQA && url.pathname === '/api/v1/webpages/resolve') {
+	if (desktop && taskQA && url.pathname === '/api/v1/webpages/resolve') {
 		const headers = new Headers(init?.headers);
 		if (url.origin !== location.origin || headers.get('X-Thingtime-Expected-Api-Origin') !== canonicalOrigin ||
 			headers.get('X-Thingtime-Expected-Actor') !== ownerId || headers.get('X-Thingtime-Expected-Data-Plane') !== 'home')
@@ -301,19 +304,17 @@ window.thingtimeNativeBridge = {
 	platform: new URLSearchParams(location.search).get('platform') === 'ios' ? 'ios' : 'android',
 	isNativeWebView: true,
 	devicePairingVersion: '1.0.0',
+	...(iosTaskQA ? { fileStagingVersion: '1.2.0', filePublicationVersion: '1.2.0' } : {}),
 	fileAccessVersion: inspectionQA && new URLSearchParams(location.search).get('platform') === 'ios' ? (inventoryQA ? '1.3.1' : '1.2.0') : '1.1.0',
 	postMessage(message) {
 		const request = message.payload as any;
 		observe(request);
-		if (request.action === 'suspend') return;
-		if (request.action === 'scan' && holdNextScan) {
-			holdNextScan = false;
-			return;
-		}
-		setTimeout(() => {
+		if (request.action === 'suspend') { heldScans.delete(request.requestId); return; }
+
+		const reply = () => {
 			if (message.type === 'mobile-device')
 				window.dispatchEvent(
-					new CustomEvent(nativeBridgeMessageEvent, { detail: { type: 'mobile-device-result', payload: { ...request, state: 'paired', deviceId } } })
+					new CustomEvent(nativeBridgeMessageEvent, { detail: { type: 'mobile-device-result', payload: { ...request, state: new URLSearchParams(location.search).has('revoked-device') ? 'revoked' : 'paired', deviceId } } })
 				);
 			else {
 				if (request.action === 'remove') roots = roots.filter((r) => r.id !== request.rootId);
@@ -335,7 +336,9 @@ window.thingtimeNativeBridge = {
 					})
 				);
 			}
-		}, 30);
+		};
+		if (request.action === 'scan' && holdNextScan) { holdNextScan = false; if (taskQA) heldScans.set(request.requestId, reply); return; }
+		setTimeout(reply, 30);
 	}
 };
 if (desktop) {
@@ -389,7 +392,7 @@ function Fixture() {
 	captureRedraw = () => redraw((n) => n + 1);
 	return (
 		<ChakraProvider>
-			{taskQA && <DesktopSyncBootstrap ownerId={ownerId} generation={0} />}
+			{taskQA && <NativeSyncBootstrap ownerId={ownerId} generation={0} />}
 			<Box maxWidth="760px" margin="auto" padding={4}>
 				<Text as="h1" fontSize="20px" fontWeight="bold">
 					{desktop ? 'Desktop sync editor regression' : 'Mobile sync editor regression'}

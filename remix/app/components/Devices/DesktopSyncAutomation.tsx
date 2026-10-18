@@ -1,6 +1,6 @@
 import React from 'react';
 import { openSyncJournal } from '~/fileSync/journal.client';
-import { desktopSyncTasks, pauseDesktopSyncJob, startDesktopSyncTask } from '~/fileSync/desktopSyncTasks.client';
+import { nativeSyncTasks, pauseNativeSyncJob, startNativeSyncTask } from '~/fileSync/nativeSyncTasks.client';
 import { SYNC_INTERVALS, SYNC_JOBS_CHANGED_EVENT, syncJobEnabled, type SyncJob } from '~/fileSync/syncJobJournal';
 import { syncScopeKey, type SyncScope } from '~/fileSync/reconcile';
 import type { SavedFileSyncConfiguration } from '~/fileSync/configuredPlan';
@@ -18,7 +18,7 @@ export function DesktopSyncAutomation({ saved, scope, generation, disabled, acco
 	const [ready, setReady] = React.useState(false), [error, setError] = React.useState('');
 	const [interval, setInterval] = React.useState(300_000);
 	const intervalEdited = React.useRef(false);
-	const task = React.useSyncExternalStore(desktopSyncTasks.subscribe, desktopSyncTasks.read, desktopSyncTasks.read);
+	const task = React.useSyncExternalStore(nativeSyncTasks.subscribe, nativeSyncTasks.read, nativeSyncTasks.read);
 	const active = !!task?.active && syncScopeKey(task.scope) === key;
 	const check = () => {
 		if (rootIdentity.read().pending || rootIdentity.read().generation !== generation) throw Error('The active account changed.');
@@ -56,9 +56,9 @@ export function DesktopSyncAutomation({ saved, scope, generation, disabled, acco
 				start: ({ readField }) => {
 					check(); if (startDisabled) return; const n = Number(readField('interval'));
 					if (!SYNC_INTERVALS.some(ms => ms === n)) throw Error('Choose a supported sync interval.');
-					setError(''); void startDesktopSyncTask(saved, scope, generation, undefined, n).catch(report);
+					setError(''); void startNativeSyncTask(saved, scope, generation, undefined, n).catch(report);
 				},
-				stop: () => { check(); if (stopDisabled) return; setError(''); return pauseDesktopSyncJob(scope, generation).catch(report); }
+				stop: () => { check(); if (stopDisabled) return; setError(''); return pauseNativeSyncJob(scope, generation).catch(report); }
 			}} onError={() => report(Error('Automatic sync action was not accepted.'))}>
 			<WebpageBlocksRenderer blocks={blocks} componentsByRef={{}} chrome={chrome} />
 		</TransientBlockHost>}

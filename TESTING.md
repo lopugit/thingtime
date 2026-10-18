@@ -11758,3 +11758,19 @@ resume unfinished Android gates only when requested.
 - Repeat with real pairing, picker grants and revocation on an installed iOS app
   before claiming provider or background-worker acceptance. Synthetic bridge
   authorization is not evidence of physical-device background execution.
+
+### App-owned iOS file sync recovery (2026-10-19)
+
+- Run `npm --prefix remix run test:files:ios-lifecycle` and the desktop lifecycle
+  regression. Navigate away during a native request, restart after an accepted
+  cloud write with an unobserved reply, and verify unchanged job/operation IDs.
+- Hide the iOS view with no native lease: no new native or API effects may start;
+  returning visible resumes the durable runnable job. End an accepted file lease
+  while still hidden and verify the next effect is fenced immediately.
+- Reopen Files during execution: progress/review/Stop reattach, while folder
+  selection and checks cannot compete for the native controller. Stop must remain
+  paused after restart. Changed account, origin, bridge, device or grant must not
+  borrow previous authority. Older iOS and deferred Android must not opt in.
+- Repeat on the intended signed physical iPhone using actual folder data and
+  independent byte hashes; simulator/browser fixtures alone do not close native
+  suspension, OS expiry or relaunch acceptance.

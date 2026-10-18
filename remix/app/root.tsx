@@ -1,5 +1,5 @@
 import { ThingDraftsProvider } from './drafts/ThingDrafts';
-import { DesktopSyncBootstrap } from './fileSync/DesktopSyncBootstrap';
+import { NativeSyncBootstrap } from './fileSync/NativeSyncBootstrap';
 import { PAGE_VIEWPORT_CSS } from './components/Layout/pageViewport';
 import { LOPU_WINDOW_Z } from './components/Nav/Drawer/useDrawer';
 import { useBackgroundRefresh } from '~/hooks/useBackgroundRefresh';
@@ -145,7 +145,7 @@ export default function App() {
         {mounted ? <ElectronBridgeHost /> : null}
         {mounted && !identity.pending && rootData.dataPlane === 'home' && rootData.user?.id &&
           rootData.user.accountKind === 'user' && !rootData.user.temporary ?
-          <DesktopSyncBootstrap ownerId={rootData.user.id} generation={identity.generation} /> : null}
+          <NativeSyncBootstrap ownerId={rootData.user.id} generation={identity.generation} /> : null}
         {mounted ? <NativeBridgeHost /> : null}
         {/* Invite signup and authorization/pairing use a focused auth
             surface with their own chrome, so the app shell (nav, drawer trigger,

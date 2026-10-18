@@ -3415,3 +3415,37 @@ This closes an authorization prerequisite. The iOS Files screen still owns its
 sync runner. App-owned durable execution, native background scheduling, physical
 suspend/relaunch acceptance and full independent backup/restore remain open.
 Android remains deferred with its code retained in PR 1002.
+
+## iOS app-owned recovery — 2026-10-19
+
+`nativeSyncTasks.client.ts` and `NativeSyncBootstrap.tsx` now own both Mac
+and capable iOS runs. They reuse the existing admitted-job journal, paged runner,
+receipts and conflict-review handoff. Leaving Files detaches its views without
+cancelling a transfer. Reopening the app discovers only previously admitted jobs,
+verifies the current account/device/origin and existing folder consent, then
+recovers the same job and operation identities. A saved connection alone does not
+start work. Android remains deferred; older iOS builds keep their foreground path.
+
+The iOS adapter requires native publication 1.2.0 and paired-device capability.
+Its authenticated transport is pinned to the WebView origin and expected actor;
+Mac retains its selected-origin proxy contract through the same fetch guard.
+Identity, bridge replacement, cancellation and server changes fence asynchronous
+work. Native progress and background-acceptance callbacks reach the shared runner.
+Folder access controls avoid a competing native request while a transfer owns it.
+
+Visibility suspension preserves runnable admission without recording a user Stop.
+Only an explicitly acknowledged native current-file lease may continue while
+hidden; ending that lease immediately prevents the next effect. Foreground,
+pageshow and online events wake bounded job discovery. Stop persists a pause and
+survives restart. Mac periodic automation remains Mac-only in the UI; this change
+does not claim an iOS OS scheduler or indefinite WebView background execution.
+
+Run `npm --prefix remix run test:files:ios-lifecycle` for the isolated production-UI
+regression: view detachment, real Chromium process restart after an accepted
+synthetic write loses its reply, unchanged job/destination identities, account and
+revocation refusal, hidden/foreground recovery, and reattached durable Stop.
+`test:files:desktop-lifecycle` protects the existing Mac lifecycle and automation.
+Unit coverage exercises native host identity/transport and background lease expiry.
+Browser account/native/HTTP/visibility fixtures are synthetic; physical iPhone
+suspension, installed relaunch, background task expiry and large real-file recovery
+remain required acceptance. Full independent backup/restore is still incomplete.

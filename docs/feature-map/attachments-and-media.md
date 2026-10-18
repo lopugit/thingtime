@@ -1,15 +1,23 @@
 # Attachments and media
 
+iOS publication 1.2 hosts now use the same app-owned runner and durable admissions
+as Mac. `nativeSyncHost.client.ts` binds the device/session; `folderHostFetch.client.ts`
+shares the strict account transport. `nativeSyncVisibility.ts` preserves runnable
+jobs on background interruption, permits only an accepted current-file lease,
+and fences new work at lease expiry. `test:files:ios-lifecycle` verifies the
+production UI with isolated synthetic native/HTTP grants and a real Chromium
+restart. Physical iOS background/relaunch and passive OS scheduling remain open.
+
 Mac publication 1.2.0 adds `write-check`: exact saved approval can be read
 without opening a dialog or saving consent. `mobileSyncTarget.client.ts` uses
 it before staging/publication/Trash on capable hosts and offers an explicit
 `existing` consent mode for resume. Legacy foreground behavior is unchanged;
 legacy hosts cannot use non-interactive resume. `MacFolderSyncTests`,
 `mobileSyncTarget.test.ts`, Electron folder-host checks and the disposable
-`test:files:mac-paged` acceptance cover the boundary. The Mac connection now delegates explicit runs to `desktopSyncTasks.client.ts`
+`test:files:mac-paged` acceptance cover the boundary. The Mac connection now delegates explicit runs to `nativeSyncTasks.client.ts`
 and `syncTaskRuntime.ts`; view detachment preserves execution and review. The
 Electron `SyncWindowLease` keeps an active window hidden on Close. Durable explicit job admission and root-app resume now live in
-`syncJobJournal.ts` and `DesktopSyncBootstrap.tsx` (journal v11). Automatic
+`syncJobJournal.ts` and `NativeSyncBootstrap.tsx` (journal v11). Automatic
 resume uses existing native consent only; Stop persists a pause. Explicit
 recurring admission adds due times and fresh cycle IDs. `DesktopSyncAutomation`
 and `syncAutomationBlocks` expose separate editable interval/Start/Stop blocks;

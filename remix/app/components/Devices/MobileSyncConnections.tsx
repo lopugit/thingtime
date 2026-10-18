@@ -1,5 +1,5 @@
 import { readNativeInventory } from '~/fileSync/nativeInventory';
-import { desktopSyncTasks, startDesktopSyncTask, supportsDesktopSyncTasks } from '~/fileSync/desktopSyncTasks.client';
+import { nativeSyncTasks, startNativeSyncTask, supportsNativeSyncTasks } from '~/fileSync/nativeSyncTasks.client';
 import { nativeUploadMayContinue } from '~/fileSync/nativeUploadBackground';
 import { assertPhotoSourcePolicy, photoAccessDescription } from '~/fileSync/photoSourcePolicy';
 import { NativeFileRecovery } from './NativeFileRecovery';
@@ -110,12 +110,12 @@ function Connections({
 	const [error, setError] = useState(''),
 		[viewBusy, setBusy] = useState(false),
 		[notice, setNotice] = useState('');
-	const desktopTask = useSyncExternalStore(desktopSyncTasks.subscribe, desktopSyncTasks.read, desktopSyncTasks.read);
-	const ownDesktopTask = host && desktopTask && desktopTask.scope.ownerId === scope.ownerId &&
-		desktopTask.scope.origin === scope.origin && desktopTask.scope.deviceId === scope.deviceId && desktopTask.scope.dataPlane === scope.dataPlane
-		? desktopTask : null;
-	const appOwned = !!host && supportsDesktopSyncTasks();
-	const busy = viewBusy || (appOwned && !!desktopTask?.active);
+	const nativeTask = useSyncExternalStore(nativeSyncTasks.subscribe, nativeSyncTasks.read, nativeSyncTasks.read);
+	const ownNativeTask = nativeTask && nativeTask.scope.ownerId === scope.ownerId &&
+		nativeTask.scope.origin === scope.origin && nativeTask.scope.deviceId === scope.deviceId && nativeTask.scope.dataPlane === scope.dataPlane
+		? nativeTask : null;
+	const appOwned = supportsNativeSyncTasks();
+	const busy = viewBusy || (appOwned && !!nativeTask?.active);
 	const [draft, setDraft] = useState<ConfigurationDraft | null>(initial.draft);
 	const [ready, setReady] = useState(!initial.error),
 		[conflict, setConflict] = useState<ConfigurationConflict | null>(null);
@@ -151,8 +151,8 @@ function Connections({
 		cancel(): void;
 	} | null>(null);
 	const [foregroundPagedReview, setPagedReview] = useState<{ id: string; controller: ReturnType<typeof createConflictReviewController> } | null>(null);
-	const pagedReview = ownDesktopTask?.pagedReview ? { id: ownDesktopTask.scope.rootId, controller: ownDesktopTask.pagedReview } : foregroundPagedReview;
-	const fileReview = ownDesktopTask?.legacyReview ? { id: ownDesktopTask.scope.rootId, ...ownDesktopTask.legacyReview } : foregroundFileReview;
+	const pagedReview = ownNativeTask?.pagedReview ? { id: ownNativeTask.scope.rootId, controller: ownNativeTask.pagedReview } : foregroundPagedReview;
+	const fileReview = ownNativeTask?.legacyReview ? { id: ownNativeTask.scope.rootId, ...ownNativeTask.legacyReview } : foregroundFileReview;
 	const reviewTransport = React.useMemo(() => host ? { origin: scope.origin, fetch: host.fetch, currentOrigin: host.origin } : undefined, [host, scope.origin]);
 	const [folders, setFolders] = useState<{ id: string; name: string }[]>([]);
 	const [connectionCursor, setConnectionCursor] = useState<string | null>(null),
@@ -282,7 +282,7 @@ function Connections({
 	const progressKey = (id: string) => 'tt:sync-progress:' + syncScopeKey({ ...scope, rootId: id });
 	const transfer = (saved: SavedFileSyncConfiguration) => {
 		if (appOwned) {
-			void startDesktopSyncTask(saved, { ...scope, rootId: saved.id }, generation).catch(cause => {
+			void startNativeSyncTask(saved, { ...scope, rootId: saved.id }, generation).catch(cause => {
 				if (mounted.current) setError(cause instanceof Error ? cause.message : 'Transfer could not start.');
 			});
 			return;
@@ -548,7 +548,7 @@ function Connections({
 				</Flex>
 			</Flex>
 			<Text fontSize="12px" color="var(--tt-muted, #71717a)">
-				{appOwned ? 'Started transfers continue when you leave this screen or close the Mac window. Reopen this connection to review conflicts or stop a transfer. Quitting interrupts transfers; unfinished jobs resume when you reopen Thingtime with the same account and access. Stop transfer keeps a job paused until you retry.' :
+				{appOwned && !host ? 'Started transfers continue when you leave this screen. Returning to Thingtime resumes saved work with the same account and folder access. iOS may finish an accepted file in the background; remaining work waits for the app to return. Stop transfer keeps a job paused until you retry.' : appOwned ? 'Started transfers continue when you leave this screen or close the Mac window. Reopen this connection to review conflicts or stop a transfer. Quitting interrupts transfers; unfinished jobs resume when you reopen Thingtime with the same account and access. Stop transfer keeps a job paused until you retry.' :
 					'Transfer selected folders in either direction while this app stays open. Background transfers are still being added.'}
 				{' '}Downloads and two-way sync require native folder approval and recoverable device Trash for deletion propagation. Conflicting changes preserve both copies for review.
 			</Text>
@@ -572,7 +572,7 @@ function Connections({
 				/>
 			)}
 			{connections.map((saved) => {
-				const task = ownDesktopTask?.scope.rootId === saved.id ? ownDesktopTask : null;
+				const task = ownNativeTask?.scope.rootId === saved.id ? ownNativeTask : null;
 				const progress = task?.progress ?? transfers[saved.id] ?? readStampedCache<ForegroundSyncProgress & { message?: string }>(progressKey(saved.id));
 				const running = !!task?.active || (viewBusy && activeTransfer === saved.id);
 				const downloading = saved.configuration.mode === 'download';
@@ -664,7 +664,7 @@ function Connections({
 							Edit
 						</Button>
 						{running ? (
-							<Button size="sm" minHeight="40px" onClick={() => task?.active ? void desktopSyncTasks.cancel(task.scope).catch(cause => setError(cause instanceof Error ? cause.message : 'Could not save the stopped transfer.')) : controller.current?.abort()}>
+							<Button size="sm" minHeight="40px" onClick={() => task?.active ? void nativeSyncTasks.cancel(task.scope).catch(cause => setError(cause instanceof Error ? cause.message : 'Could not save the stopped transfer.')) : controller.current?.abort()}>
 								Stop transfer
 							</Button>
 						) : (
@@ -678,7 +678,7 @@ function Connections({
 									: 'Upload now'}
 							</Button>
 						)}
-						{appOwned && <Box width="100%" minW={0}>
+						{appOwned && !!host && <Box width="100%" minW={0}>
 							<DesktopSyncAutomation saved={saved} scope={{ ...scope, rootId: saved.id }} generation={generation}
 								disabled={!allowed || !!draft || !ready} accountTransport={reviewTransport} />
 						</Box>}

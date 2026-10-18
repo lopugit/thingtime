@@ -1,7 +1,9 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { nativeSyncTasks } from '~/fileSync/nativeSyncTasks.client';
+import React, { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { Box, Button, Flex, Text } from '@chakra-ui/react';
 import { requestMobileFolders, supportsMobileFolders, type FolderRequest, type MobileFolder } from '~/fileSync/mobileFolders.client';
 import type { FolderHost } from '~/fileSync/desktopFolders.client';
+import { getNativeBridge } from '~/utils/nativeBridge';
 import { MobileSyncConnections } from './MobileSyncConnections';
 const cached = new Map<string, MobileFolder[]>();
 type FolderAccessProps = { ownerId: string; deviceId: string; host?: FolderHost };
@@ -24,9 +26,11 @@ function FolderAccess({ ownerId, deviceId, host }: FolderAccessProps) {
 		[error, setError] = useState('');
 	const [checked, setChecked] = useState<Record<string, string>>({});
 	const pending = useRef<AbortController | null>(null);
+	const task = useSyncExternalStore(nativeSyncTasks.subscribe, nativeSyncTasks.read, nativeSyncTasks.read);
+	const transferring = !!task?.active;
 	const run = useCallback(
 		async (request: FolderRequest) => {
-			if (pending.current) return;
+			if (pending.current || nativeSyncTasks.read()?.active || (getNativeBridge()?.platform === 'ios' && document.visibilityState === 'hidden')) return;
 			const controller = new AbortController();
 			pending.current = controller;
 			setBusy(true);
@@ -59,13 +63,14 @@ function FolderAccess({ ownerId, deviceId, host }: FolderAccessProps) {
 		[ownerId, key, requestFolders]
 	);
 	useEffect(() => {
-		void run({ action: 'list' });
+		setBusy(false);
+		if (!transferring) void run({ action: 'list' });
 		return () => {
 			const controller = pending.current;
 			pending.current = null;
 			controller?.abort();
 		};
-	}, [run]);
+	}, [run, transferring]);
 	return (
 		<Box borderTop="1px solid var(--tt-border, #ececef)" marginTop={3} paddingTop={3}>
 			<Flex align="center" justify="space-between" gap={2} wrap="wrap">
@@ -77,7 +82,7 @@ function FolderAccess({ ownerId, deviceId, host }: FolderAccessProps) {
 						Choose folders this account can use on this device. Selection alone does not start uploads.
 					</Text>
 				</Box>
-				<Button size="sm" minHeight="40px" variant="outline" isDisabled={busy} onClick={() => void run({ action: 'choose' })}>
+				<Button size="sm" minHeight="40px" variant="outline" isDisabled={busy || transferring} onClick={() => void run({ action: 'choose' })}>
 					Choose folder
 				</Button>
 			</Flex>
@@ -92,10 +97,10 @@ function FolderAccess({ ownerId, deviceId, host }: FolderAccessProps) {
 						) : null}
 					</Box>
 					<Flex gap={2}>
-						<Button size="xs" minHeight="40px" variant="outline" isDisabled={busy} onClick={() => void run({ action: 'scan', rootId: root.id })}>
+						<Button size="xs" minHeight="40px" variant="outline" isDisabled={busy || transferring} onClick={() => void run({ action: 'scan', rootId: root.id })}>
 							Check folder
 						</Button>
-						<Button size="xs" minHeight="40px" variant="ghost" isDisabled={busy} onClick={() => void run({ action: 'remove', rootId: root.id })}>
+						<Button size="xs" minHeight="40px" variant="ghost" isDisabled={busy || transferring} onClick={() => void run({ action: 'remove', rootId: root.id })}>
 							Remove access
 						</Button>
 					</Flex>

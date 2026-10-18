@@ -3252,3 +3252,15 @@ capability refusal. An older native Trash test expectation now matches the exist
 1.2.1 contract. This is a prerequisite for iOS durable execution, which remains
 incomplete; installed/physical-device acceptance is not claimed. See the
 [full checkpoint](../docs/mobile-file-sync.md#ios-saved-folder-approval--2026-10-19).
+
+## iOS app-owned recovery — 2026-10-19
+
+Mac and capable iOS clients now share app-owned execution and admitted-job
+recovery. iOS transfers survive Files navigation and recover runnable jobs when
+foregrounded or reopened. Lifecycle interruption preserves admission; explicit
+Stop stays paused. The native lease covers only its accepted file and blocks new
+work when it expires while hidden. Exact account/device/origin/bridge fences and
+folder-control serialization protect recovery. Mac scheduling remains unchanged;
+Android stays deferred. Physical iPhone and installed-device lifecycle acceptance,
+iOS OS scheduling and complete independent backups remain open. See the
+[implementation and acceptance boundary](../docs/mobile-file-sync.md#ios-app-owned-recovery--2026-10-19).

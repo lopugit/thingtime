@@ -6,7 +6,7 @@ import { rootIdentity } from '~/utils/rootIdentity';
 import { getElectronBridge } from '~/utils/electronBridge';
 import { createDesktopFolderHost, type FolderHost } from '~/fileSync/desktopFolders.client';
 import { MobileFolderAccess } from './MobileFolderAccess';
-import { desktopSyncTasks } from '~/fileSync/desktopSyncTasks.client';
+import { nativeSyncTasks } from '~/fileSync/nativeSyncTasks.client';
 
 /** Local status supplies candidates only. The signed host and paired node must
  * both verify the active account before these controls can access any folder. */
@@ -69,7 +69,7 @@ function DeviceFolders({ ownerId, candidates, generation }: { ownerId: string; c
 	);
 }
 function VerifiedFolders({ ownerId, deviceId, generation }: { ownerId: string; deviceId: string; generation: number }) {
-	const task = useSyncExternalStore(desktopSyncTasks.subscribe, desktopSyncTasks.read, desktopSyncTasks.read);
+	const task = useSyncExternalStore(nativeSyncTasks.subscribe, nativeSyncTasks.read, nativeSyncTasks.read);
 	let taskHost: FolderHost | undefined;
 	if (task?.scope.ownerId === ownerId && task.scope.deviceId === deviceId && task.scope.dataPlane === 'home') {
 		try { task.host?.assertCurrent(); taskHost = task.host; } catch { /* Reauthorize after stop or identity change. */ }

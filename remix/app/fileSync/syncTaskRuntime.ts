@@ -20,6 +20,7 @@ export function createSyncTaskRuntime() {
 	let snapshot: SyncTaskSnapshot | null = null;
 	let active: AbortController | undefined;
 	let saveStop: (() => Promise<void>) | undefined;
+	let suspensionMessage: string | undefined;
 	const listeners = new Set<() => void>();
 	const publish = (value: SyncTaskSnapshot | null) => {
 		snapshot = value;
@@ -31,13 +32,18 @@ export function createSyncTaskRuntime() {
 		async cancel(scope: SyncScope) {
 			if (!snapshot || syncScopeKey(scope) !== syncScopeKey(snapshot.scope) || !active) return;
 			const controller = active;
+			suspensionMessage = undefined;
 			try { await saveStop?.(); } finally { if (active === controller) controller.abort(); }
 		},
+		// Lifecycle interruption preserves runnable admission. Only cancel saves
+		// the user's durable Stop, so returning to the foreground can recover.
+		suspend(message: string) { if (active && !active.signal.aborted) { suspensionMessage = message; active.abort(); } },
 		invalidate() { active?.abort(); publish(null); },
 		async start(scope: SyncScope, run: (signal: AbortSignal, update: (patch: Partial<Pick<SyncTaskSnapshot, 'progress' | 'pagedReview' | 'legacyReview' | 'host'>>) => void) => Promise<void>, onStop?: () => Promise<void>) {
 			if (active) throw Error('A transfer is already running. Reopen its connection to review or stop it.');
 			syncScopeKey(scope);
 			const controller = new AbortController(); active = controller; saveStop = onStop;
+			suspensionMessage = undefined;
 			publish({ scope: structuredClone(scope), active: true, progress: { stage: 'checking', confirmed: 0, total: 0 } });
 			const update = (patch: Partial<Pick<SyncTaskSnapshot, 'progress' | 'pagedReview' | 'legacyReview' | 'host'>>) => {
 				controller.signal.throwIfAborted();
@@ -46,7 +52,7 @@ export function createSyncTaskRuntime() {
 			try { await run(controller.signal, update); }
 			catch (error) {
 				if (snapshot) publish({ ...snapshot, progress: { ...snapshot.progress,
-					message: controller.signal.aborted ? 'Transfer stopped. Retry to recover saved work.' :
+					message: controller.signal.aborted ? suspensionMessage ?? 'Transfer stopped. Retry to recover saved work.' :
 						error instanceof Error ? error.message : 'Transfer interrupted. Retry to recover saved work.' } });
 			} finally {
 				if (snapshot) publish({ ...snapshot, active: false, pagedReview: undefined, legacyReview: undefined });

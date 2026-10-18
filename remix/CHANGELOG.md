@@ -74,6 +74,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-19 — **Codex (AI):** Share app-owned file sync and durable recovery
+  between Mac and capable iOS hosts. Files navigation keeps runs alive; foreground
+  recovery preserves user Stop and fences hidden work at native lease expiry.
+  Physical iOS lifecycle acceptance remains open. See [PR 1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+
 - 2026-10-19 — **Codex (AI)**: iOS publication 1.2.0 adds saved-consent checks
   without prompting, per-folder publication capabilities and final device/grant
   revalidation. Added native and shared regressions; iOS durable execution remains
