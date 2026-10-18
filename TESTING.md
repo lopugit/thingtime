@@ -4920,6 +4920,8 @@ halves.
       Double-click each title bar twice: maximize inside the usable screen and
       restore the exact prior frame without entering fullscreen. Verify controls
       in the title bar do not drag/maximize the window.
+      The green button must be a zoom control; native fullscreen commands must
+      also maximize on the desktop without hiding the menu bar or Dock.
 
 - [ ] Run `corepack pnpm --dir Commander test:raycast-extension` and confirm
       regex replacement escapes are decoded once, unsupported escapes remain

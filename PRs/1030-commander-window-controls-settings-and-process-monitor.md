@@ -10,7 +10,7 @@
 
 ## Validation
 
-TypeScript checks and JavaScript suites pass. All 41 native Swift tests pass, including weighted sampling, missing history, gaps, expiry, PID reuse and window frame restoration. The optimized Rust indexer suite passes all 34 unit tests and its JSONL integration test. Installed-app acceptance results are recorded in the PR.
+TypeScript checks and JavaScript suites pass. Native Swift coverage includes weighted sampling, missing history, gaps, expiry, PID reuse, repeated zoom delivery, frame restoration and native fullscreen prevention. The optimized Rust indexer suite passes all 34 unit tests and its JSONL integration test. Installed-app acceptance results are recorded in the PR.
 
 The existing indexer catalogue test exceeded its 200 ms query deadline in debug builds under local host load. Optimized tests pass with `CARGO_PROFILE_TEST_OPT_LEVEL=1 RUST_TEST_THREADS=1`, without changing production deadlines. The full daemon trust-boundary integration test now has a 30-second test-only allowance for its server lifecycle and HTTP/security assertions; the default 5 seconds was flaky under concurrent native builds. Isolated Chrome could not start because Chromium's sandbox conflicts with the OS network boundary; the boundary was preserved. Native WKWebView acceptance is the primary rendering check for this macOS-only feature.
 
@@ -20,3 +20,14 @@ gesture and remember the actual AppKit frame; a native regression test and a
 disposable unsigned window preview cover the repeated-delivery case. Explicit
 column widths and one ordered stylesheet import keep headers aligned with data.
 The native preview was exercised and removed before the final signed build.
+
+Acceptance also exposed AppKit's independent fullscreen action. Utility windows
+now explicitly opt out of fullscreen, and native fullscreen requests route to
+desktop maximize. The green control is a zoom button; the isolated native preview
+verified maximize and exact restoration with that control.
+
+Installed WKWebView checks verified the launcher gear, live Activity metrics,
+Processes pop-out, Keep above, CPU sorting in both directions, five-minute
+averages, parent grouping, name filtering and a combined memory threshold in MiB.
+Representative PID, parent PID and resident memory matched macOS `ps`. Long
+average choices use the observations available this session, not invented history.

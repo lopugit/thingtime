@@ -8,6 +8,17 @@ final class CommanderUtilityWindow: NSWindow {
   private var maximizedFrame: NSRect?
   private var lastZoomTime = -Double.infinity
 
+  override init(contentRect: NSRect, styleMask style: NSWindow.StyleMask, backing backingStoreType: NSWindow.BackingStoreType, defer flag: Bool) {
+    super.init(contentRect: contentRect, styleMask: style, backing: backingStoreType, defer: flag)
+    collectionBehavior.insert(.fullScreenNone)
+  }
+
+  // The green traffic-light button and macOS keyboard/menu commands must use
+  // the same desktop maximize behavior as our web titlebar.
+  override func toggleFullScreen(_ sender: Any?) {
+    zoom(sender)
+  }
+
   override func zoom(_ sender: Any?) {
     guard let screen = screen ?? NSScreen.main else { return }
     requestZoom(in: screen.visibleFrame, at: ProcessInfo.processInfo.systemUptime)
