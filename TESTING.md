@@ -10189,3 +10189,4 @@ separate from deterministic discovery/lease tests.
 
 - Commander daemon trust-boundary integration: complete every HTTP/security assertion and cleanup within the 30-second suite allowance under concurrent native builds; do not treat the default five-second unit-test timeout as a server latency contract.
 - Commander Settings titlebar: repeat maximize/restore on the real screen, including native and web double-click deliveries; verify the previous frame is restored and process headers remain aligned with values after resizing.
+- Incident account cleanup: use real signup and logout notification constructors; accept only system history tied to the exact revoked fixture session. Reject unrelated content, actors and timestamps before writes.

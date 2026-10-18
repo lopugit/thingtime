@@ -74,6 +74,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 ## [Unreleased]
 
 - 2026-10-18 — **Codex (AI)**: Commander launcher Settings gear, stable process ordering, typed filters and sampled averaging windows, a resizable Processes pop-out with Keep above, and Settings maximize/restore. [PR #1030](../PRs/1030-commander-window-controls-settings-and-process-monitor.md).
+- 2026-10-18 — **Codex (AI)**: Document the reusable video compressor as a
+  Builder use case, including editable definitions, local encoding, saved
+  presets and verified output. Record the completed media workflow separately
+  from the still-paused standards catalogue backlog.
+
+
+- 2026-10-18: Fix incident cleanup to recognize the automatic logout history entry, bound to the revoked test session; retain strict content and actor checks. Production dry-run caught this mismatch before any deletion.
+
 
 - 2026-10-18 — **Codex (AI)**: Remove implicit production API forwarding from
   Vite and Nitro; missing local database/signing settings now fail closed before
