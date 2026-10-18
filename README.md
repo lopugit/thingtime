@@ -5009,3 +5009,20 @@ No new deployment secret is required. Use the existing authenticated account to
 create a Character, save agent credentials in its password manager, and have a
 moderator add that Character to the intended private coordination subspace.
 Do not put account-specific IDs or credentials into fork setup files.
+
+### Personalizing sensitive settings layouts
+
+Desktop runtime, endpoint and previous-workspace recovery controls use ordinary
+Builder blocks. Choose **Edit layout** to adjust their text, order and presentation;
+live native actions pause while editing. Offline desktop layouts save on this
+device under their origin and runtime authority, so connection repair does not
+require a cloud account. Account settings layouts use private webpage Things and
+require `api.things` 1.35.0, `api.webpages-resolve` 1.6.0,
+`api.actions-run` 1.7.0 and `api.mongodb-endpoint` 1.1.0 on the selected API.
+Desktop requests use the existing same-origin API proxy; no cross-origin cookies
+or credential copying are introduced. Concurrent edits refuse stale saves.
+
+Saved documents contain authored blocks only. Password/file values, MongoDB
+credentials, OAuth tokens and transfer files remain in transient/native adapters;
+external component loaders and data Actions cannot be inserted into these
+sensitive layouts. Offline layout writes require browser Web Locks.

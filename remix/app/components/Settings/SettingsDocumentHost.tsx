@@ -10,7 +10,7 @@ import type { UseWebpageDraft } from '../Builder/useWebpage';
 import { useBuilderChrome } from '../Builder/useBuilderChrome';
 import { BuilderDrawer } from '../Builder/BuilderDrawer';
 import { accountSettingsDocumentAdapter } from './settingsDocument.client';
-import { localSettingsDocumentAdapter, parseSettingsDocument, settingsDocumentBlocks, settingsDocumentKey, type SettingsDocument } from './settingsDocument';
+import { SETTINGS_BLOCK_TYPES, localSettingsDocumentAdapter, parseSettingsDocument, settingsDocumentBlocks, settingsDocumentKey, type SettingsDocument } from './settingsDocument';
 
 export type SettingsDocumentHostProps = {
   documentKey: string;
@@ -146,13 +146,13 @@ function SettingsDocumentSession({ defaultDocument, title = 'Settings layout', p
 }
 
 function SettingsEditor({ draft, name, onName, children }: { draft: UseWebpageDraft; name: string; onName: (name: string) => void; children: (chrome: BuilderChrome) => React.ReactNode }) {
-  const builder = useBuilderChrome(draft);
+  const builder = useBuilderChrome(draft, { allowedBlockTypes: SETTINGS_BLOCK_TYPES });
   const [open, setOpen] = React.useState(false);
   React.useEffect(() => { if (builder.selectedId) setOpen(true); }, [builder.selectedId]);
   return <>
     <Button size="xs" mb={2} onClick={() => setOpen(true)}>Open Builder inspector</Button>
     {children(builder.chrome)}{builder.insertMenu}
-    {open && <BuilderDrawer title="Settings layout" mode="site" hideTransfer draft={draft} selectedId={builder.selectedId}
+    {open && <BuilderDrawer allowedBlockTypes={SETTINGS_BLOCK_TYPES} allowDataSources={false} title="Settings layout" mode="site" hideTransfer draft={draft} selectedId={builder.selectedId}
       onDeselect={builder.deselect} onClose={() => setOpen(false)} pageName={name} onPageName={onName}
       audienceAcl={['tt:user']} onAudienceAcl={() => {}} helpText="Edit this layout with normal Builder blocks. Live credential operations pause while editing. Save stores only the authored layout." />}
   </>;
