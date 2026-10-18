@@ -7,6 +7,9 @@ import { WebpageBlocksRenderer } from '../app/components/Builder/WebpageBlocksRe
 import { WebpageRuntimeProvider } from '../app/components/Builder/webpageRuntime';
 import { materializeSuite } from '../app/schemas/behaviourSuites';
 import { deviceScriptsSuite } from '../app/schemas/appSuites/deviceScripts';
+import { executeBrowserAction } from '../app/components/Actions/browserActionRuntime';
+import { validateRunInputs } from '../app/api/utils/actions/actionInputs';
+import { validateThingtimeCrystal, sanitizeExtended } from '../app/schemas/registry';
 import { macMenuBarSuite } from '../app/schemas/appSuites/macMenuBar';
 let scenario = 'available';
 const scripts = new URLSearchParams(location.search).has('scripts');
@@ -32,18 +35,50 @@ window.fetch = async (url, init) => {
 	const path = String(url);
 	const input = init?.body ? JSON.parse(String(init.body)) : {};
 	if (scripts && path.includes('/actions/run') && !input.action?.endsWith('-devices')) {
-		const result = input.action?.includes('save-')
-			? { id: 'saved-fixture', silent: true }
-			: {
-					command: {
-						id: 'fixture-command',
-						deviceId: 'fixture-mac',
-						status: input.action?.endsWith('-run') ? 'needs-approval' : 'succeeded',
-						...(input.action?.endsWith('-read-result')
-							? { result: { stdout: 'Hello fixture', stderr: '', exitCode: 0, signal: null, timedOut: false, truncated: false } }
-							: {})
-					}
-			  };
+		const action = suite.actions.find((entry) => input.action === entry.crystal.actionKey);
+		if (!action) return Response.json({ error: 'Unknown fixture Action' }, { status: 400 });
+		const validated = validateRunInputs(action.crystal.inputs as Record<string, unknown>[], input.inputs);
+		if (!validated.ok) return Response.json({ error: validated.error }, { status: 400 });
+		const result = await executeBrowserAction(
+			{
+				ok: true,
+				status: 'prepared',
+				execution: 'browser',
+				actionId: action.key,
+				viewer: { id: 'synthetic-menu-bar' },
+				program: action.crystal,
+				inputs: validated.inputs
+			},
+			{
+				assertIdentity: (id) => {
+					if (id !== 'synthetic-menu-bar') throw Error('Wrong fixture actor');
+				},
+				prepare: async () => {
+					throw Error('Unexpected child Action');
+				},
+				request: async (step) => {
+					if (step.path === '/api/v1/devices/commands')
+						return {
+							command: {
+								id: 'fixture-command',
+								deviceId: 'fixture-mac',
+								kind: 'script.run',
+								status: step.method === 'POST' ? 'needs-approval' : 'succeeded',
+								...(step.method === 'GET'
+									? { result: { stdout: 'Hello fixture', stderr: '', exitCode: 0, signal: null, timedOut: false, truncated: false } }
+									: {})
+							}
+						};
+					if (step.path !== '/api/v1/things' || step.method !== 'POST') throw Error('Unexpected fixture request');
+					const body = step.body as any;
+					const checked = validateThingtimeCrystal(body.thingtime, body.crystal);
+					if (!checked.ok) throw Error(checked.error);
+					const extended = sanitizeExtended(body.extended);
+					if (!extended.ok) throw Error(extended.error);
+					return { thing: { id: 'saved-fixture' } };
+				}
+			}
+		);
 		return Response.json({ status: 'ok', cache: 'no-store', result });
 	}
 	if (path.includes('/actions/run'))

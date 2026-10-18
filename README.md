@@ -4965,7 +4965,9 @@ retry an uncertain submission with the same ID and identical input.
 The receipt is not execution success: read stdout, stderr, exit code, signal,
 timeout and truncation after approval. Exact command results are owner-only and
 expire after ten minutes. **Save result as a private Thing** explicitly retains
-the output. **Save reusable Action** creates an editable recipe; bind the result
+the full output in `extended.result`, with searchable metadata in `crystal`.
+**Save reusable Action** creates an editable recipe with literal source in its
+JSON string input default (up to the device’s 16 KiB limit); bind the result
 Action as a component source to reuse the data in other Builder pages. Never
 place secrets directly in saved script source or output.
 

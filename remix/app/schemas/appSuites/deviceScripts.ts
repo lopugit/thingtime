@@ -15,7 +15,8 @@ const deviceInput = { name: 'deviceId', type: 'string' as const, label: 'Paired 
 const commandInput = { name: 'commandId', type: 'string' as const, label: 'Command ID', required: true };
 const scriptInput = {
 	name: 'script',
-	type: 'text' as const,
+	// JSON string inputs preserve full-sized source literally, including leading $ refs.
+	type: 'json' as const,
 	label: 'Bash script',
 	required: true,
 	default: "printf 'Hello from '; /usr/sbin/scutil --get ComputerName"
@@ -65,13 +66,12 @@ export const deviceScriptsSuite: BehaviourSuite = {
 											labelPath: 'name',
 											valuePath: 'id',
 											filterPath: 'platform',
-											filterValue: 'macos',
-											required: true
+											filterValue: 'macos'
 										}
 									}),
 									k.field(
 										'Run ID',
-										k.input('requestId', { placeholder: 'example-1', required: true }),
+										k.input('requestId', { placeholder: 'example-1' }),
 										'Choose a new ID for a new run. Retry an uncertain submission with the same ID and unchanged script.'
 									),
 									k.field('Bash', {
@@ -174,7 +174,14 @@ export const deviceScriptsSuite: BehaviourSuite = {
 			name: 'Run Bash on a paired Mac',
 			description: 'Queues an idempotent script for fresh approval; returns a command receipt, not execution success.',
 			runtime: 'browser',
-			inputs: [deviceInput, { name: 'requestId', type: 'string', label: 'Run ID', required: true }, scriptInput, timeoutInput],
+			limits: { maxInputBytes: 65536 },
+			inputs: [
+				deviceInput,
+				{ name: 'requestId', type: 'string', label: 'Run ID', required: true },
+				scriptInput,
+				timeoutInput,
+				{ name: 'recipeName', type: 'string', label: 'Recipe name' }
+			],
 			steps: () => [
 				request('POST', {
 					deviceId: '$input.deviceId',
@@ -226,8 +233,11 @@ export const deviceScriptsSuite: BehaviourSuite = {
 							deviceId: '$input.deviceId',
 							commandId: '$input.commandId',
 							savedAt: '$now',
-							result: '$step.1.command.result'
-						}
+							exitCode: '$step.1.command.result.exitCode',
+							timedOut: '$step.1.command.result.timedOut',
+							truncated: '$step.1.command.result.truncated'
+						},
+						extended: { result: '$step.1.command.result' }
 					}
 				},
 				{ op: 'return', value: { id: '$step.3.thing.id', silent: true } }
@@ -240,7 +250,15 @@ export const deviceScriptsSuite: BehaviourSuite = {
 			category: 'Devices',
 			name: 'Save reusable device script Action',
 			runtime: 'browser',
-			inputs: [{ name: 'recipeName', type: 'string', label: 'Recipe name', required: true }, scriptInput, timeoutInput],
+			limits: { maxInputBytes: 65536 },
+			// Both buttons share the editable source form; pairing fields are optional when saving.
+			inputs: [
+				{ name: 'recipeName', type: 'string', label: 'Recipe name', required: true },
+				scriptInput,
+				timeoutInput,
+				{ ...deviceInput, required: false },
+				{ name: 'requestId', type: 'string', label: 'Run ID' }
+			],
 			steps: () => [
 				{
 					op: 'http.request',
@@ -255,15 +273,20 @@ export const deviceScriptsSuite: BehaviourSuite = {
 						crystal: {
 							name: '$input.recipeName',
 							runtime: 'browser',
+							limits: { maxInputBytes: 65536 },
 							description: 'An approved Bash recipe for a paired Mac. Each new run requires a new requestId and fresh script approval.',
-							inputs: [deviceInput, { name: 'requestId', type: 'string', label: 'Run ID', required: true }],
+							inputs: [
+								deviceInput,
+								{ name: 'requestId', type: 'string', label: 'Run ID', required: true },
+								{ ...scriptInput, default: '$input.script' }
+							],
 							capabilities: endpoints(`POST ${commandPath}`),
 							steps: [
 								request('POST', {
 									deviceId: '$$input.deviceId',
 									requestId: '$$input.requestId',
 									kind: 'script.run',
-									input: { script: '$input.script', timeoutSeconds: '$input.timeoutSeconds' }
+									input: { script: '$$input.script', timeoutSeconds: '$input.timeoutSeconds' }
 								}),
 								{ op: 'return', value: '$$step.1' }
 							]

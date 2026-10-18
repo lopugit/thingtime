@@ -69,12 +69,14 @@ try {
 		await page.setViewportSize({ width, height: 900 });
 		await page.goto(`${origin}/scripts/mac-menu-bar.browser.html?scripts`, { waitUntil: 'domcontentloaded', timeout: 120000 });
 		await page.getByRole('button', { name: 'Request run', exact: true }).waitFor({ timeout: 120000 });
+		await page.getByRole('button', { name: 'Save reusable Action', exact: true }).click();
+		await page.getByRole('link', { name: 'Open saved Thing', exact: true }).waitFor();
 		await page.getByRole('combobox', { name: 'Choose a record', exact: true }).selectOption('fixture-mac');
 		await page.getByPlaceholder('example-1').fill('acceptance-1');
 		await page.getByRole('button', { name: 'Request run', exact: true }).click();
 		await page
 			.getByText('needs-approval', { exact: true })
-			.waitFor()
+			.waitFor({ timeout: 15000 })
 			.catch(async (e) => {
 				console.log(await page.locator('body').innerText());
 				console.log(errors);
@@ -102,7 +104,15 @@ try {
 	assert.deepEqual(errors, []);
 	await context.tracing.stop({ path: `${evidence}/trace.zip` });
 	console.log(
-		JSON.stringify({ ok: true, widths: [1440, 390], searchLastOf10001: true, details: true, zeroAndUnavailable: true, states: 7, evidence })
+		JSON.stringify({
+			ok: true,
+			widths: [1440, 390],
+			searchLastOf10001: !process.env.TT_SCRIPTS_ONLY,
+			details: !process.env.TT_SCRIPTS_ONLY,
+			zeroAndUnavailable: !process.env.TT_SCRIPTS_ONLY,
+			states: process.env.TT_SCRIPTS_ONLY ? 0 : 7,
+			evidence
+		})
 	);
 } finally {
 	await browser?.close();

@@ -3,7 +3,8 @@ import test from 'node:test';
 import { materializeSuite } from '../behaviourSuites';
 import { deviceScriptsSuite } from './deviceScripts';
 import { executeBrowserAction, type BrowserActionHost } from '../../components/Actions/browserActionRuntime';
-import { sanitizeActionCrystal } from '../registry';
+import { sanitizeActionCrystal, sanitizeExtended, validateThingtimeCrystal } from '../registry';
+import { validateRunInputs } from '../../api/utils/actions/actionInputs';
 const parts = materializeSuite(deviceScriptsSuite, 'own');
 const run = (key: string, inputs: Record<string, unknown>, request: BrowserActionHost['request']) =>
 	executeBrowserAction(
@@ -13,7 +14,12 @@ const run = (key: string, inputs: Record<string, unknown>, request: BrowserActio
 			execution: 'browser',
 			actionId: key,
 			viewer: { id: 'fixture' },
-			inputs,
+			inputs: (() => {
+				const checked = validateRunInputs(parts.actions.find((a) => a.key === key)!.crystal.inputs as Record<string, unknown>[], inputs);
+				assert.equal(checked.ok, true);
+				if (!checked.ok) throw Error(checked.error);
+				return checked.inputs;
+			})(),
 			program: parts.actions.find((a) => a.key === key)!.crystal
 		},
 		{
@@ -25,7 +31,7 @@ const run = (key: string, inputs: Record<string, unknown>, request: BrowserActio
 		}
 	);
 test('saved recipes preserve Bash literally and defer device/run inputs until execution', async () => {
-	const script = "printf '%s' '$input.secret $(not executed by the builder)'";
+	const script = '$input.secret\n#' + 'x'.repeat(16384 - '$input.secret\n#'.length);
 	let saved: any;
 	await run('save-recipe', { script, recipeName: 'My recipe', timeoutSeconds: 3 }, async (step) => {
 		saved = step.body;
@@ -36,6 +42,9 @@ test('saved recipes preserve Bash literally and defer device/run inputs until ex
 	const checked = sanitizeActionCrystal(saved.crystal);
 	assert.equal(checked.ok, true);
 	if (!checked.ok) throw Error('Invalid saved recipe');
+	const prepared = validateRunInputs(checked.crystal.inputs as Record<string, unknown>[], { deviceId: 'mac', requestId: 'run-1' });
+	assert.equal(prepared.ok, true);
+	if (!prepared.ok) throw Error(prepared.error);
 	let submitted: any;
 	await executeBrowserAction(
 		{
@@ -44,7 +53,7 @@ test('saved recipes preserve Bash literally and defer device/run inputs until ex
 			execution: 'browser',
 			actionId: 'saved',
 			viewer: { id: 'fixture' },
-			inputs: { deviceId: 'mac', requestId: 'run-1' },
+			inputs: prepared.inputs,
 			program: checked.crystal
 		},
 		{
@@ -71,7 +80,7 @@ test('saving a result re-reads the exact owner command and refuses pending/expir
 	);
 	assert.equal(writes, 0);
 	let saved: any;
-	const result = { stdout: 'ok', stderr: '', exitCode: 0, signal: null, timedOut: false, truncated: false };
+	const result = { stdout: '\ufffd'.repeat(16384), stderr: '', exitCode: 0, signal: null, timedOut: false, truncated: false };
 	await run('save-result', { deviceId: 'mac', commandId: 'job' }, async (step) => {
 		if (step.method === 'GET') {
 			assert.deepEqual(step.query, { deviceId: 'mac', commandId: 'job' });
@@ -81,5 +90,9 @@ test('saving a result re-reads the exact owner command and refuses pending/expir
 		return { thing: { id: 'saved' } };
 	});
 	assert.deepEqual(saved.acl, ['tt:user']);
-	assert.deepEqual(saved.crystal.result, result);
+	assert.equal(validateThingtimeCrystal(saved.thingtime, saved.crystal).ok, true);
+	assert.equal(sanitizeExtended(saved.extended).ok, true);
+	assert.deepEqual(saved.extended.result, result);
+	assert.equal(saved.crystal.exitCode, 0);
+	assert.equal(saved.crystal.result, undefined);
 });

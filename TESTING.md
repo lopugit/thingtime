@@ -10200,8 +10200,12 @@ separate from deterministic discovery/lease tests.
   unpaired, locked, incompatible or unapproved envelopes must fail closed.
 - Verify time/output limits, retry identity, expiry, owner isolation and no
   result bytes in device event history. Save output only on explicit request.
-- Save a recipe containing literal `$input` text; execute the saved Action and
-  confirm only its declared runtime inputs are interpolated.
+- Save a recipe before selecting a device or entering a Run ID; then run the
+  same form with both filled. Each Action must accept exactly its declared fields.
+- Save a full 16 KiB recipe beginning with literal `$input` text; execute the
+  saved Action and verify the exact source survives input defaults and validation.
+- Save full-sized output (including UTF-8 replacement characters) and verify
+  `extended.result` retains every character while searchable metadata validates.
 - Regression: inline collection pagination/search must retain items beyond
   10,000 while rendering only the current page and including default styles.
 - Run the isolated browser fixture and focused native/backend/capability suites;

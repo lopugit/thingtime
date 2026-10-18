@@ -20,7 +20,10 @@ group, a 1–30 second monotonic deadline and a combined 16 KiB output limit. Th
 is approved user code, not a sandbox. Ordinary child processes are cleaned up;
 intentionally detached daemons are outside the contract. Exact owner reads
 retain result bytes for ten minutes; list/event projections omit output. Saving
-to a private Thing is a separate explicit Action. Saved recipes remain editable.
+to a private Thing is a separate explicit Action. Full output lives in
+`extended.result`; searchable metadata stays in `crystal`. Saved recipes use
+literal JSON string defaults so 16 KiB source and leading `$input` survive
+validation. Shared form fields are declared explicitly; saving requires no pairing.
 
 The API manifest versions and optional native negotiation move together. An old
 origin receives the old heartbeat shape and cannot dispatch scripts to the new
@@ -50,9 +53,13 @@ node. The server rejects malformed snapshots/results and locked inventory.
 
 Signed build, installed-copy verification, deployed manifest negotiation and
 real-account page installation must be verified before declaring the feature
-complete. Browser extension control currently times out and native Chrome
-control loses its selected window, so real-account acceptance remains pending.
+complete. See the PR delivery record for the live acceptance and installation checkpoint.
 
 The installed app currently includes unmerged Password AutoFill PR #996 at
-`0cbb5254a8`. Local installation must preserve that implementation in a separate
+`1851b2e7c1`. Local installation must preserve that implementation in a separate
 integration build; it must not add those unrelated changes to this PR or main.
+
+Graph refresh: the local semantic proxy completed extraction but Graphify
+rejected unverified changelog shrink (13 to 8 nodes). The prior semantic graph
+is retained and the structural graph is refreshed; changed documentation is not
+claimed semantically current.
