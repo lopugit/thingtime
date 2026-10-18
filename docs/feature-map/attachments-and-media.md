@@ -10,8 +10,12 @@ legacy hosts cannot use non-interactive resume. `MacFolderSyncTests`,
 and `syncTaskRuntime.ts`; view detachment preserves execution and review. The
 Electron `SyncWindowLease` keeps an active window hidden on Close. Durable explicit job admission and root-app resume now live in
 `syncJobJournal.ts` and `DesktopSyncBootstrap.tsx` (journal v11). Automatic
-resume uses existing native consent only; Stop persists a pause. Installed
-relaunch/reboot, continuous scheduling and iOS workers remain open. Run
+resume uses existing native consent only; Stop persists a pause. Explicit
+recurring admission adds due times and fresh cycle IDs. `DesktopSyncAutomation`
+and `syncAutomationBlocks` expose separate editable interval/Start/Stop blocks;
+`syncWindowRetention` composes active and scheduled window holders. Root discovery
+checks selected origin before retaining an idle schedule. Installed relaunch/reboot
+and iOS workers remain open. Run
 `test:files:desktop-lifecycle` for the isolated production-UI regression.
 
 `fileSync/pagedReviewDraft.ts` adds bounded mutable conflict-review storage to

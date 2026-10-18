@@ -11723,3 +11723,21 @@ resume unfinished Android gates only when requested.
   offline-to-online and power changes, native approval revocation, real Files
   targets, and independent exact bytes/Timeline receipts. The isolated UI
   fixture cannot establish these installed/physical-provider behaviors.
+
+
+### Automatic Mac sync schedules
+
+- In the isolated lifecycle fixture, edit heading, help, interval option and
+  button separately in Builder, save/reload, then exercise the edited controls.
+- Start a one-minute schedule, leave Files, add a local folder, and verify no
+  copy before due time. Verify the next cycle copies it once, retains the
+  interval and rotates only the cycle ID. Restart the entire Chromium process
+  and verify a future cycle is not replayed early; advance to its due time.
+- Install the test clock before app timers are created. Read the scheduled job
+  as one exact IndexedDB snapshot, and fail if the next cycle never finishes.
+- Switch selected server: no scan and no idle window retention. Stop between
+  cycles, advance time, restart and verify no scans. Test completion racing
+  Stop, stale callbacks, quota failure and bounded competing revisions.
+- Repeat native installed Close/Quit/reopen, sleep/wake, offline/online and
+  permission loss with independent byte/Timeline checks before marking worker
+  acceptance complete. Android remains deferred.

@@ -69,7 +69,7 @@ let transferFolders: any[] = JSON.parse(localStorage.getItem('tt:fixture:sync-tr
 let holdNextScan = false, holdTransferReply = false;
 let loseTransferReply = false,
 	network = 'wifi';
-const localEntries = conflictQA
+const localEntries: any[] = conflictQA
 	? Array.from({ length: captureQA ? 2 : 22 }, (_, i) => ({
 			path: `Report-${String(i + 1).padStart(2, '0')}${i === 0 ? '-a-long-filename-for-review-on-a-small-phone-screen' : ''}.txt`,
 			id: `native-${i}`,
@@ -79,7 +79,7 @@ const localEntries = conflictQA
 			sha256: null,
 			fingerprint: captureQA ? captureFingerprint : { algorithm: 'sha256-parts-v1', partSizeBytes: 8388608, partCount: 1, sha256: 'a'.repeat(64) }
 	  }))
-	: [{ path: 'Upload sample', id: 'native-sample-folder', version: 'native-v1', kind: 'folder', size: 0, sha256: null }];
+	: JSON.parse(localStorage.getItem('tt:fixture:sync-local-folders') || 'null') ?? [{ path: 'Upload sample', id: 'native-sample-folder', version: 'native-v1', kind: 'folder', size: 0, sha256: null }];
 let conflictRevision = 'cloud-1';
 if ((conflictQA || taskQA) && !rows.some((row) => row.thingtime.includes('file-sync')))
 	rows.push({
@@ -398,7 +398,11 @@ function Fixture() {
 				{taskQA && <><Text role="status">App transfer lease: {taskHeld ? 'active' : 'idle'}</Text>
 					<Button onClick={() => setShowFolders(value => !value)}>{showFolders ? 'Leave Files screen' : 'Reopen Files screen'}</Button>
 					<Button onClick={() => { for (const release of heldScans.values()) release(); }}>Release scan</Button>
-					<Button onClick={() => { holdTransferReply = true; }}>Hold accepted upload reply</Button></>}
+					<Button onClick={() => { holdTransferReply = true; }}>Hold accepted upload reply</Button>
+					<Button onClick={() => {
+						localEntries.push({ path: 'Later folder ' + localEntries.length, id: 'later-' + localEntries.length, version: 'native-v1', kind: 'folder', size: 0, sha256: null });
+						localStorage.setItem('tt:fixture:sync-local-folders', JSON.stringify(localEntries));
+					}}>Add another local folder</Button></>}
 				{captureQA && (
 					<Text role="status">
 						Captured versions: {captureReceipts.size}. Upload parts this page: {capturePuts}. Cloud revision: {conflictRevision}.

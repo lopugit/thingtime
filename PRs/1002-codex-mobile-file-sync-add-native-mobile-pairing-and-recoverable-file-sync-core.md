@@ -3222,3 +3222,20 @@ full scrolling have no overflow. Native and HTTP grants in this UI fixture are
 synthetic; installed Mac Quit/relaunch, OS reboot and physical providers remain
 unverified. iOS persistent workers, continuous change scheduling and complete
 independent account snapshots/restore remain open. Android is deferred.
+
+
+## Automatic Mac sync cycles — 2026-10-19
+
+Mac connections now expose editable interval/Start/Stop blocks. Explicit device
+admission preserves a 1/5/15/60-minute schedule across process restart; one-shot
+work stays one-shot. Each completed cycle gets a future due time and the next
+cycle gets a fresh admission ID. Stop persists between cycles and safely races
+completion. Composed native window holders prevent a finishing transfer from
+releasing an enabled schedule; another selected server does not retain it.
+
+Shared journal/window checks and the isolated production-UI fixture cover
+recurring change pickup, no early run, persistent process restart, unchanged
+no-replay, idle Stop, origin mismatch, and individual Builder edit/save/reload.
+The browser uses synthetic native/HTTP grants, so installed Mac Close/Quit,
+reboot and real providers remain open. See the [full checkpoint](../docs/mobile-file-sync.md#automatic-mac-sync-cycles--2026-10-19).
+Android stays deferred; the full sync and backup goal remains incomplete.

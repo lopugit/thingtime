@@ -74,6 +74,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-19 — **Codex (AI)**: Mac connections gain editable automatic-sync
+  interval/Start/Stop blocks, durable recurring admissions and composed window
+  retention. Stop also fences completion races. Shared and isolated browser
+  regressions cover scheduling, process restart and Builder save/reload;
+  installed acceptance remains open. See [PR 1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
 - 2026-10-19 — **Codex (AI)**: Mac sync now persists explicit job admission,
   resumes unfinished work from the app shell with existing native consent, and
   retains Stop across relaunch. Isolated Chromium process-restart acceptance

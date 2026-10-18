@@ -3341,3 +3341,47 @@ full scrolling have no overflow. Native and HTTP grants in this UI fixture are
 synthetic; installed Mac Quit/relaunch, OS reboot and physical providers remain
 unverified. iOS persistent workers, continuous change scheduling and complete
 independent account snapshots/restore remain open. Android is deferred.
+
+
+## Automatic Mac sync cycles — 2026-10-19
+
+Each Mac connection now offers individually editable Builder blocks for its
+interval, status, Start and Stop controls. Start explicitly admits recurring
+work at one minute, five minutes, fifteen minutes or one hour. Existing one-shot
+jobs stay one-shot. The interval belongs to the device-local admission in the
+existing journal; changing an editable connection Thing cannot silently start
+work or grant native permission. SettingsDocumentHost persists layout edits.
+
+The root app discovers due work every 30 seconds and on online/job-change events.
+It keeps at most 256 job records, with 32-record reads, and serializes execution.
+Each completed cycle schedules its next check from completion time; a new cycle
+gets a new admission ID, while an interrupted cycle retains its original ID and
+operation receipts. A selected-server mismatch neither runs an automatic job nor
+retains the window for it. Every actual run still checks the live account,
+paired device, private configuration, folder grants and network/power policy.
+Failures requiring review park the job; condition waits remain eligible.
+
+Reference-counted window leases compose active transfers with idle schedules.
+Stop persists a pause during a run or between runs. Its bounded compare-and-swap
+retry covers a completion racing Stop, without stopping a different cycle.
+Quitting exits execution; reopening discovers eligible admitted jobs. There is
+no login daemon and no work while the application is fully quit.
+
+Validation covers automatic-cycle timing and ID rotation, restart, invalid
+intervals, one-shot compatibility, stale Stop/completion and overlapping window
+holders. The isolated production-UI regression edits separate heading, help,
+option and button blocks in the actual Builder, saves and reloads, then starts
+recurring sync. A newly added synthetic native folder is copied only when due;
+a real persistent Chromium restart recovers scheduling without replay. A wrong
+selected server causes no scan or window retention. Idle Stop survives another
+restart. Desktop and phone views, conflict choices and retained versions remain
+covered. The fixture now installs its clock before application timers, and polls
+exact IndexedDB snapshots rather than assuming an async handle contains a job.
+Earlier failed harness attempts remain in the evidence record.
+
+These are production renderer/IndexedDB paths with synthetic native/HTTP grants
+under OS network isolation. Installed signed-Mac Close/Quit/reboot, physical
+providers, sleep/wake and sustained real-byte acceptance remain open. iOS passive
+workers, full independent account backups/restore, large exports and physical
+media delivery remain in the full ledger. Android is deferred, with code kept
+in this PR. No remote API or native permission contract changed here.

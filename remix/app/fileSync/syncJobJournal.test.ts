@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { IDBFactory, IDBKeyRange } from 'fake-indexeddb';
 import { openSyncJournal } from './journal.client';
-import { MAX_SYNC_JOBS_PER_ACCOUNT, SYNC_JOB_PAGE_SIZE } from './syncJobJournal';
+import { MAX_SYNC_JOBS_PER_ACCOUNT, SYNC_JOB_PAGE_SIZE, pauseSyncJobAdmission } from './syncJobJournal';
 import { newFileSyncConfiguration } from './configuration';
 import type { SyncScope } from './reconcile';
 const scope: SyncScope = { origin: 'https://sync.example', ownerId: 'owner', dataPlane: 'home', deviceId: 'device', rootId: 'connection' };
@@ -90,4 +90,67 @@ test('version-10 upgrade preserves existing records and admits no jobs', async (
  const db = await new Promise<IDBDatabase>(resolve => { const request = factory.open('jobs'); request.onsuccess = () => resolve(request.result); });
  const marker = await new Promise(resolve => { const request = db.transaction('checkpoints').objectStore('checkpoints').get('marker'); request.onsuccess = () => resolve(request.result); });
  assert.equal(marker, 'retained'); db.close();
+});
+
+test('automatic cycles keep their interval across restart and rotate identity only when due', async () => {
+ const factory = new IDBFactory(); let journal = await open(factory), jobs = jobsFor(journal);
+ const first = await jobs.admit(saved(), 'cycle-1', 60_000);
+ const scheduled = await jobs.finish(first, 100_000); assert.equal(scheduled?.nextRunAt, 160_000);
+ journal.close(); journal = await open(factory); jobs = jobsFor(journal);
+ assert.deepEqual(await jobs.read(), scheduled);
+ assert.equal(await jobs.begin(scheduled!, 159_999, 'too-early'), null);
+ const second = await jobs.begin(scheduled!, 160_000, 'cycle-2'); assert.equal(second?.id, 'cycle-2'); assert.equal(second?.nextRunAt, undefined);
+ assert.equal(await jobs.begin(scheduled!, 999_999, 'duplicate'), null);
+ const recovered = await jobs.begin(second!, 160_001, 'ignored'); assert.equal(recovered?.id, second?.id);
+ const next = await jobs.finish(recovered!, 500_000); assert.equal(next?.nextRunAt, 560_000); journal.close();
+});
+
+test('idle Stop fences due discovery; explicit start after a completed cycle may review new settings', async () => {
+ const journal = await open(), jobs = jobsFor(journal), first = await jobs.admit(saved(), 'cycle-1', 300_000);
+ const due = await jobs.finish(first, 0), paused = await jobs.pause(due!);
+ assert.equal(paused?.state, 'paused'); assert.equal(await jobs.begin(due!, 400_000, 'no'), null);
+ assert.equal(await jobs.begin(paused!, 400_000, 'no'), null);
+ const changed = { ...saved(), configuration: { ...saved().configuration, name: 'Updated' } };
+ const next = await jobs.admit(changed, 'cycle-2', 900_000); assert.equal(next.id, 'cycle-2'); assert.equal(next.intervalMs, 900_000);
+ assert.equal(await jobs.finish(first, 500_000), null); journal.close();
+});
+
+test('one-shot work never opts into recurring scans and invalid intervals fail before admission', async () => {
+ const journal = await open(), jobs = jobsFor(journal);
+ for (const interval of [0, -1, 1, 59_999, NaN, Infinity, 86_400_001]) await assert.rejects(jobs.admit(saved(), 'bad', interval), /Invalid saved sync job/);
+ assert.equal(await jobs.read(), null);
+ const once = await jobs.admit(saved(), 'once'), completed = await jobs.finish(once, 100);
+ assert.equal(completed?.state, 'complete'); assert.equal(await jobs.begin(completed!, 1_000_000, 'no'), null);
+ const auto = await jobs.admit(saved(), 'auto', 60_000), scheduled = await jobs.finish(auto, 200);
+ const manual = await jobs.admit(saved(), 'manual'); assert.equal(manual.intervalMs, 60_000); assert.notEqual(manual.id, scheduled?.id);
+ const stopped = await jobs.pause(manual); assert.ok(stopped);
+ const retry = await jobs.admit(saved(), 'retry'); assert.equal(retry.intervalMs, undefined); journal.close();
+});
+
+test('failed automatic approval parks the schedule without losing its completed-cycle marker', async () => {
+ const journal = await open(), jobs = jobsFor(journal), first = await jobs.admit(saved(), 'cycle', 60_000);
+ const due = await jobs.finish(first, 0), attention = await jobs.attention(due!);
+ assert.equal(attention?.state, 'attention'); assert.equal(attention?.nextRunAt, due?.nextRunAt);
+ assert.equal(await jobs.begin(attention!, 100_000, 'no'), null);
+ assert.equal((await jobs.admit(saved(), 'explicit', 60_000)).id, 'explicit'); journal.close();
+});
+
+test('Stop racing completion also pauses the newly scheduled run without stopping a newer cycle', async () => {
+ const journal = await open(), jobs = jobsFor(journal), first = await jobs.admit(saved(), 'cycle-1', 60_000);
+ let race = true;
+ await pauseSyncJobAdmission({ read: jobs.read, pause: async current => {
+  if (race) { race = false; await jobs.finish(current, 100); }
+  return jobs.pause(current);
+ } }, first.id);
+ const paused = await jobs.read(); assert.equal(paused?.state, 'paused'); assert.equal(paused?.nextRunAt, 60_100);
+ const next = await jobs.admit(saved(), 'cycle-2', 60_000);
+ await pauseSyncJobAdmission(jobs, first.id); assert.deepEqual(await jobs.read(), next); journal.close();
+});
+
+test('Stop reports persistence failure and bounds competing revisions', async () => {
+ const journal = await open(), jobs = jobsFor(journal), first = await jobs.admit(saved(), 'cycle', 60_000);
+ await assert.rejects(pauseSyncJobAdmission({ read: jobs.read, pause: async () => { throw Error('quota'); } }, first.id), /quota/);
+ let attempts = 0;
+ await assert.rejects(pauseSyncJobAdmission({ read: jobs.read, pause: async () => { attempts++; return null; } }, first.id), /changed while stopping/);
+ assert.equal(attempts, 3); assert.deepEqual(await jobs.read(), first); journal.close();
 });

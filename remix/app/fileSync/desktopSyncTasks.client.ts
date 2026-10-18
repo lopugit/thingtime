@@ -1,5 +1,6 @@
 import { SyncConditionsWait } from './foregroundSyncContext';
-import type { SyncJob } from './syncJobJournal';
+import { pauseSyncJobAdmission, type SyncJob } from './syncJobJournal';
+import { holdDesktopSyncWindow, setDesktopSyncScheduled } from './desktopSyncWindow.client';
 import { createDesktopFolderHost } from './desktopFolders.client';
 import { getElectronBridge } from '../utils/electronBridge';
 import { rootIdentity } from '../utils/rootIdentity';
@@ -28,7 +29,7 @@ export function supportsDesktopSyncTasks() {
 
 /** Explicit runs persist admission separately from editable connection Things.
  * Relaunch resumes only that admitted job, using existing native consent. */
-export async function startDesktopSyncTask(saved: SavedFileSyncConfiguration, scope: SyncScope, generation: number, resume?: SyncJob) {
+export async function startDesktopSyncTask(saved: SavedFileSyncConfiguration, scope: SyncScope, generation: number, resume?: SyncJob, intervalMs?: number) {
 	if (!supportsDesktopSyncTasks()) throw Error('Update Thingtime Desktop to continue sync outside this screen.');
 	const bridge = getElectronBridge()!, reviewed = structuredClone(saved), binding = structuredClone(scope);
 	if (binding.dataPlane !== 'home' || binding.rootId !== reviewed.id || binding.deviceId !== reviewed.configuration.deviceId)
@@ -45,11 +46,14 @@ export async function startDesktopSyncTask(saved: SavedFileSyncConfiguration, sc
 		const leave = () => desktopSyncTasks.invalidate();
 		window.addEventListener('pagehide', leave);
 		let journal: Awaited<ReturnType<typeof openSyncJournal>> | undefined;
-		let held = false, job: SyncJob | null = null;
+		let releaseWindow: (() => Promise<void>) | undefined, job: SyncJob | null = null;
 		let jobs: ReturnType<Awaited<ReturnType<typeof openSyncJournal>>['jobs']> | undefined;
 		try {
 			check();
-			await bridge.setFolderSyncActive!({ active: true }); held = true; check();
+			journal = await openSyncJournal(); check();
+			jobs = journal.jobs({ scope: binding, currentScope: () => { checkIdentity(); return binding; } });
+			saveStop = async () => { const stopping = job ?? resume; if (stopping) await pauseSyncJobAdmission(jobs!, stopping.id); };
+			releaseWindow = await holdDesktopSyncWindow(bridge); check();
 			const host = await createDesktopFolderHost({ ownerId: binding.ownerId, deviceId: binding.deviceId, bridge, signal,
 				rendererOrigin: () => window.location.origin, assertCurrent: check });
 			if (host.origin() !== binding.origin) throw Error('The selected sync server changed.');
@@ -59,9 +63,6 @@ export async function startDesktopSyncTask(saved: SavedFileSyncConfiguration, sc
 			// explicit assertCurrent still use the live, abortable host checks.
 			update({ host: { ...host, origin: () => binding.origin } });
 			const request = host.request, capabilities = host.capabilities;
-			journal = await openSyncJournal(); check();
-			jobs = journal.jobs({ scope: binding, currentScope: () => { checkIdentity(); return binding; } });
-			saveStop = async () => { if (job) await jobs!.transition(job, 'paused'); };
 			const currentScope = () => { check(); host.assertCurrent(); return binding; };
 			const runtime = { currentScope, origin: host.origin, fetch: host.fetch, requireCapability: host.requireCapability };
 			const publish = (progress: Parameters<typeof update>[0]['progress']) => {
@@ -76,7 +77,7 @@ export async function startDesktopSyncTask(saved: SavedFileSyncConfiguration, sc
 				const inspect = supportsNativePathInspection(capabilities) && roots.some(root => root.id === reviewed.configuration.localRootId && root.sourceKind !== 'photos');
 				const localTarget = ['download', 'two-way'].includes(reviewed.configuration.mode)
 					? await approveMobileSyncTarget(reviewed, binding, signal, request, capabilities, resume ? 'existing' : 'request') : undefined;
-				job = resume ? await jobs!.transition(resume, 'runnable') : await jobs!.admit(reviewed, crypto.randomUUID());
+				job = resume ? await jobs!.begin(resume, Date.now(), crypto.randomUUID()) : await jobs!.admit(reviewed, crypto.randomUUID(), intervalMs);
 				if (!job) return; // A stopped/completed/replaced discovery is never replayed.
 				if (stopRequested) await jobs!.transition(job, 'paused');
 				check();
@@ -131,17 +132,40 @@ export async function startDesktopSyncTask(saved: SavedFileSyncConfiguration, sc
 						update({ legacyReview: { conflicts, apply: finish, retain: () => finish({ action: 'retain' }), cancel: () => finish() } });
 					})
 				}, signal);
-				check(); await jobs!.transition(job, 'complete');
+				check(); const finished = await jobs!.finish(job, Date.now()); check();
+				if (finished?.state === 'scheduled') await setDesktopSyncScheduled(true, bridge);
 			}, undefined, signal);
 		} catch (error) {
-			if (job && !signal.aborted && !(error instanceof SyncConditionsWait)) await jobs!.transition(job, 'attention');
+			const failed = job ?? (resume?.intervalMs !== undefined ? resume : null);
+			if (failed && jobs && !signal.aborted && !(error instanceof SyncConditionsWait)) await jobs.attention(failed);
 			throw error;
 		} finally {
 			journal?.close(); unsubscribe(); window.removeEventListener('pagehide', leave);
-			if (held) await bridge.setFolderSyncActive!({ active: false });
+			await releaseWindow?.();
 		}
 	}, async () => {
 		stopRequested = true;
 		try { await saveStop?.(); } catch { throw Error('Transfer stopped, but its pause could not be saved. It may resume when Thingtime reopens.'); }
 	});
+}
+
+/** Stop works while the scheduler is idle as well as during a transfer. CAS
+ * fences a concurrent discovery, and cancellation only targets this root. */
+export async function pauseDesktopSyncJob(scope: SyncScope, generation: number) {
+	const check = () => {
+		if (rootIdentity.read().pending || rootIdentity.read().generation !== generation) throw Error('The active account changed.');
+		return scope;
+	};
+	check(); const journal = await openSyncJournal();
+	try {
+		const jobs = journal.jobs({ scope, currentScope: check });
+		for (let attempt = 0; attempt < 3; attempt++) {
+			await desktopSyncTasks.cancel(scope); check();
+			const job = await jobs.read();
+			if (!job || ['paused', 'complete'].includes(job.state) || await jobs.pause(job)) {
+				await desktopSyncTasks.cancel(scope); return;
+			}
+		}
+		throw Error('The sync job changed while stopping. Please retry.');
+	} finally { journal.close(); }
 }

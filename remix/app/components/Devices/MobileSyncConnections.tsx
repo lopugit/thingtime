@@ -7,6 +7,7 @@ import { TIMELINE_CHANGED_EVENT } from '~/timeline/clientEvents';
 import React, { useEffect, useId, useRef, useState, useSyncExternalStore } from 'react';
 import { SyncConflictReview } from './SyncConflictReview';
 import { PagedSyncConflictReview } from './PagedSyncConflictReview';
+import { DesktopSyncAutomation } from './DesktopSyncAutomation';
 import { createConflictReviewController } from '~/fileSync/conflictReviewController';
 import type { PagedConflictReviewResult, PagedConflictReviewSession } from '~/fileSync/pagedForegroundReview';
 import type { SyncConflict, SyncConflictChoice, SyncConflictReviewResult } from '~/fileSync/conflictResolution';
@@ -677,6 +678,10 @@ function Connections({
 									: 'Upload now'}
 							</Button>
 						)}
+						{appOwned && <Box width="100%" minW={0}>
+							<DesktopSyncAutomation saved={saved} scope={{ ...scope, rootId: saved.id }} generation={generation}
+								disabled={!allowed || !!draft || !ready} accountTransport={reviewTransport} />
+						</Box>}
 						{pagedReview?.id === saved.id && <Box width="100%" minW={0}>
 							<PagedSyncConflictReview controller={pagedReview.controller} mode={saved.configuration.mode}
 								scopeKey={`${key}:${generation}:${saved.id}`} accountTransport={reviewTransport} />
