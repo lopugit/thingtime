@@ -65,14 +65,14 @@ const endpoint = (doc: Omit<ApiEndpointDoc, 'docsEndpoint' | 'contractVersion'> 
 const deviceEndpointDocs: ApiEndpointDoc[] = [
 	endpoint({
 		id: 'devices',
-		contractVersion: '1.11.0',
-		featureVersion: '1.11.0',
+		contractVersion: '1.12.0',
+		featureVersion: '1.12.0',
 		group: 'devices',
 		title: 'Paired devices',
 		endpoint: '/api/v1/devices',
 		summary: 'Lists safe paired-device summaries or one detailed computer mirror.',
 		detail:
-			'Returns protected dedicated projections for the caller’s computers and Apple Watches. Watch summaries include bounded last-sync health, the number of Things created by that Watch, and up to ten recent created Things. Version 1.11 preserves up to 128 device capability identifiers in owner projections. Version 1.10 includes optional owner-only state.menuBar inventory: status, collection time, permission coverage, items, owning app/executable paths, PID, bundle ID, geometry, resident memory bytes and cumulative process CPU seconds. Memory and CPU belong to the whole process, not an individual icon. Generic /things never exposes protected device state or credentials. Responses are private/no-store.',
+			'Version 1.12 adds optional iconDataUrl (64px PNG thumbnail) and iconSource (menu-bar or application fallback) on each menu item. Returns protected dedicated projections for the caller’s computers and Apple Watches. Watch summaries include bounded last-sync health, the number of Things created by that Watch, and up to ten recent created Things. Version 1.11 preserves up to 128 device capability identifiers in owner projections. Version 1.10 includes optional owner-only state.menuBar inventory: status, collection time, permission coverage, items, owning app/executable paths, PID, bundle ID, geometry, resident memory bytes and cumulative process CPU seconds. Memory and CPU belong to the whole process, not an individual icon. Generic /things never exposes protected device state or credentials. Responses are private/no-store.',
 		auth: { mode: 'session-or-bearer', description: 'Full Thingtime user session.' },
 		methods: ['GET'],
 		steps: ['GET to list devices.', 'Pass id to retrieve one device detail.'],
@@ -245,14 +245,14 @@ const deviceEndpointDocs: ApiEndpointDoc[] = [
 	}),
 	endpoint({
 		id: 'devices-node-state',
-    featureVersion: '1.12.0',
-		contractVersion: '1.12.0',
+    featureVersion: '1.13.0',
+		contractVersion: '1.13.0',
 		group: 'devices',
 		title: 'Publish device state',
 		endpoint: '/api/v1/devices/node/state',
 		summary: 'Applies one quota-accounted, monotonic state and connector snapshot.',
 		detail:
-			'Optional capabilities replaces the paired device capability list atomically with a newer state revision. Version 1.12 accepts up to 128 identifiers, preserving fully equipped Macs that exceed the former 64-entry limit. Omission preserves older node capabilities; the full snapshot hash includes supplied capabilities. ' +
+			'Version 1.13 adds optional 64px PNG menu-item thumbnails with explicit menu-bar/application provenance. Remote image URLs and SVG are rejected; old nodes may omit both fields. Optional capabilities replaces the paired device capability list atomically with a newer state revision. Version 1.12 accepts up to 128 identifiers, preserving fully equipped Macs that exceed the former 64-entry limit. Omission preserves older node capabilities; the full snapshot hash includes supplied capabilities. ' +
 			'The credential fixes owner and device; request ids cannot override either. Equal revision/equal hash is a no-op, equal revision/different hash is 409, and older revisions are ignored. Version 1.11 adds optional menuBar telemetry with owning application/executable paths only; arbitrary process arguments and window titles remain forbidden. A locked inventory must be empty. Omission supports older nodes; unsupported origins receive no menuBar field. Version 1.10 accepts optional, bounded read-only battery measurements: charge cycles, design cycles, capacities in mAh, signed battery current in mA, voltage in mV, temperature in Celsius, time estimates in minutes, and attached adapter rated watts, voltage and current. Missing measurements are null; battery serial numbers and raw registry dictionaries are never accepted.',
 		auth: { mode: 'bearer', description: 'Scoped ttnode_ Bearer credential only.' },
 		methods: ['POST'],
@@ -9255,8 +9255,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // owner-library files. The combined 1.27.0 contract adds shared
     // Thing discussions, linked references, display-metadata renames and
     // optional cursor-backed rich comment projections.
-    featureVersion: '1.34.0',
-    contractVersion: '1.34.0',
+    featureVersion: '1.35.0',
+    contractVersion: '1.35.0',
     group: 'things',
     // 1.33.1: placement and folder deletion share transactional ancestry fences.
     // 1.33.2: protected library display-title renames commit title-only history.
@@ -13089,14 +13089,15 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'webpages-resolve',
-    contractVersion: '1.5.0',
-    featureVersion: '1.5.0',
+    contractVersion: '1.6.0',
+    featureVersion: '1.6.0',
     group: 'webpages',
     title: 'Resolve a webpage',
     endpoint: '/api/v1/webpages/resolve',
     summary: 'Resolve one block-based webpage plus every component thing its blocks reference — the read model behind /p/ pages, the builder, and site pages.',
     detail:
-      'In 1.5.0, authenticated POST with ownerId and dataPlane in the query and {blocks} in the body resolves current components for an unsaved or branch draft. It uses the ordinary 120-block/8-level/48-KiB sanitized block limits, a 192-KiB request cap and 4-MiB response cap. Returns {ok,components,refs}; it reads no live page, grants no inherited audience from caller-supplied blocks and writes nothing. Recheck the scope before adopting results. These are current component definitions, not a historical dependency checkout. All POST replies are private/no-store. ' +
+      'Version 1.6 adds individually editable element, collection and condition blocks, any-block Action sources, transparent option repetition and Show all pagination. Element props/text and child templates use the existing safe binding language. Authored trees no longer have product block-count/depth limits; transport and storage constraints still apply. ' +
+      'In 1.5.0, authenticated POST with ownerId and dataPlane in the query and {blocks} in the body resolves current components for an unsaved or branch draft. It sanitizes block trees and uses a 192-KiB request cap and 4-MiB response cap. Returns {ok,components,refs}; it reads no live page, grants no inherited audience from caller-supplied blocks and writes nothing. Recheck the scope before adopting results. These are current component definitions, not a historical dependency checkout. All POST replies are private/no-store. ' +
       'Owner-created service workspaces add live membership-based read/comment access to enrolled records and the bound webpage; customer and B2B users are limited to their linked customer and properties. Inherited comments/media recheck membership on every request; app/PAT scopes, custom endpoints, explicit private ACL changes and moderation remain enforced. Webpage things (thingtime ["webpage"]) hold a bounded ordered block tree: component blocks reference ' +
       'component things by componentKey or shareId, container blocks lay children out, text blocks carry short ' +
       'copy, and native blocks mark where a built-in Thingtime screen sits on a site page. This endpoint resolves ' +
@@ -13286,8 +13287,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'webpages-suites-install',
-    contractVersion: '1.5.0',
-    featureVersion: '1.5.0',
+    contractVersion: '1.6.0',
+    featureVersion: '1.6.0',
     group: 'webpages',
     title: 'Install a behaviour suite or app suite',
     endpoint: '/api/v1/webpages/suites/install',

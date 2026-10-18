@@ -10256,6 +10256,9 @@ separate from deterministic discovery/lease tests.
 
 ## Mac menu bar and reusable device scripts
 
+- Editable-block regression: expand a saved HTML-template Component into blocks; select the title, input, button, image and a nested repeated-card field separately. Change text/style, duplicate/reorder/delete a child, save and reload. Verify Action references and source refresh still work. Exact boolean props must preserve false; details/dialog are open in edit mode and respect their binding in view mode. Restricted editor hosts must hide disallowed block types and data sources.
+- Menu list: Show all is the default, every snapshot row appears, changing to 5 and back works, search reaches the last item, and desktop/mobile full-page scrolling has no overflow. Compare a rendered icon with its actual menu-bar item; application fallback is explicitly labelled. Missing Screen Recording never prompts from telemetry; locked snapshots contain no icons/items.
+
 - Device and approval links must open `/things`, where paired devices live.
 - Installed browser Actions must reach the selected HTTPS account API with actor
   and database preconditions intact; changed actors and cross-origin mutations
@@ -10303,3 +10306,7 @@ separate from deterministic discovery/lease tests.
 
 - Run `npm --prefix remix run test:characters-preflight`: real loopback HTTP must reject incompatible/missing capabilities, wrong origins, redirects, HTML/malformed manifests, application errors and timeouts; classify Cloudflare 403 separately and permit a fresh successful retry. Requests carry no credentials.
 - Run `npm --prefix remix run characters:preflight -- --origin https://thingtime.com` only on the separately authorized real-account coordination path. Confirm `CAPABILITY_READY`, selected origin, compatible version, and authentication/membership both `not_checked`. Then use the assigned Chrome session and task Character to verify private-subspace read/post/reload separately; do not treat public discovery as account acceptance.
+
+- Lopu page patches: insert, replace and setBlocks preserve a page beyond the former 120-block product cap; tests use a finite representative document rather than allocating from the unbounded compatibility constant. Existing operation validation and persistence guards remain separate.
+
+- Editable app suites: page-level element controls and subtree source bindings reference only Actions declared by that suite; expanding a page into individual blocks must not require an opaque Component wrapper.

@@ -16,6 +16,7 @@ import {
 } from './behaviourSuites.ts';
 import { countDemoBlocks, type DemoBlock } from './webpageDemos.ts';
 import { ALL_SUITES } from './appSuites/index.ts';
+import { compositionReferences } from '../api/utils/actions/sharedCompositionCore.ts';
 
 // Controls may also name the page runtime's pseudo-actions (a refresh, an
 // install) — those never reach the run endpoint.
@@ -71,14 +72,18 @@ test('every control binds an action the same suite declares, by actionKey', () =
 		const keys = new Set(suite.actions.map((action) => suiteSlug(suite.key, action.key)));
 		const refs = suiteRefsFor(suite, 'own');
 		const bound = new Set<string>();
+		let controlCount = 0;
 		const walk = (node: unknown) => {
 			if (!node || typeof node !== 'object') return;
 			if (Array.isArray(node)) return node.forEach(walk);
 			const record = node as Record<string, unknown>;
-			if (typeof record.ttAction === 'string' && !PSEUDO_ACTIONS.has(record.ttAction)) {
-				assert.ok(keys.has(record.ttAction), `${suite.key}: control binds unknown action ${record.ttAction}`);
-				bound.add(record.ttAction);
-				assert.ok(record.ttActionInputs && typeof record.ttActionInputs === 'object', `${suite.key}: ${record.ttAction} control has no inputs object`);
+			const action = record.ttAction ?? record['data-tt-action'];
+			const inputs = record.ttActionInputs ?? record['data-tt-action-inputs'];
+			if (typeof action === 'string' && !PSEUDO_ACTIONS.has(action)) {
+				assert.ok(keys.has(action), `${suite.key}: control binds unknown action ${action}`);
+				bound.add(action);
+				controlCount += 1;
+				assert.ok(inputs && typeof inputs === 'object', `${suite.key}: ${action} control has no inputs object`);
 			}
 			for (const value of Object.values(record)) walk(value);
 		};
@@ -95,7 +100,15 @@ test('every control binds an action the same suite declares, by actionKey', () =
 			}
 		};
 		collect(page);
-		assert.ok(componentBlocks.length > 0, `${suite.key}: page has no component blocks`);
+		if (suite.key === 'mac-menu-bar') {
+			const before = controlCount;
+			walk(page);
+			assert.equal(componentBlocks.length, 0, 'menu controls remain individually editable blocks');
+			assert.ok(controlCount > before, 'menu page contains direct editable action controls');
+			for (const ref of compositionReferences(['webpage'], { blocks: page })) {
+				if (ref.kind === 'action') assert.ok(keys.has(ref.ref), `menu page binds foreign source/control action ${ref.ref}`);
+			}
+		} else assert.ok(componentBlocks.length > 0, `${suite.key}: page has no component blocks`);
 		for (const ref of componentBlocks) assert.ok(componentKeys.has(ref), `${suite.key}: page references foreign component ${ref}`);
 	}
 });

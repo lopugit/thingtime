@@ -40,6 +40,9 @@ try {
 				await page.screenshot({ path: `${evidence}/failure.png`, fullPage: true });
 				throw e;
 			});
+  assert.equal(await page.getByText('Menu item 46', {exact:true}).count(), 1, 'Show all is the default');
+  assert.equal(await page.getByRole('img',{name:'Sample program icon'}).count(),47);
+  assert.equal(await page.getByRole('img',{name:'Sample program icon'}).first().evaluate(e=>e.complete && e.naturalWidth>0),true);
 		await page.locator('summary').first().click();
 		await page.getByText('/Applications/Sample.app/Contents/MacOS/Sample', { exact: true }).first().waitFor();
 		assert.equal(await page.locator('details[open]').getByText('Unavailable', { exact: true }).count(), 0, 'zero/false are real readings');
@@ -48,8 +51,8 @@ try {
 			await page.evaluate((y) => window.scrollTo(0, y), y);
 			assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true, `${width}: overflow`);
 		}
-		await page.getByPlaceholder(/Search Menu bar items/i).fill('Menu item 10000');
-		await page.getByText('Menu item 10000', { exact: true }).waitFor();
+		await page.getByPlaceholder(/Search Menu bar items/i).fill('Menu item 46');
+		await page.getByText('Menu item 46', { exact: true }).waitFor();
 		await page.locator('summary').first().click();
 		assert.ok((await page.locator('details[open]').getByText('Unavailable', { exact: true }).count()) >= 2);
 		for (const [state, text] of [
@@ -65,6 +68,52 @@ try {
 			assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true, `${width}/${state}: overflow`);
 		}
 	}
+
+ for (const width of [1440,390]) {
+  await page.setViewportSize({width,height:900});
+  await page.goto(`${origin}/scripts/mac-menu-bar.browser.html?editor`,{waitUntil:'domcontentloaded',timeout:120000});
+  if(width<768) await page.getByRole('button',{name:'Inspector',exact:true}).click();
+  const picker=page.getByLabel('Select block',{exact:true});
+  await picker.waitFor({timeout:120000});
+  const options=await picker.locator('option').evaluateAll(es=>es.map(e=>({value:e.value,label:e.textContent})));
+  assert.ok(options.length>100,'Every nested field appears as an authored block');
+  const choose=async(pattern)=>{const item=options.find(e=>pattern.test(e.label));assert.ok(item,`Block ${pattern} exists`);await picker.selectOption(item.value);};
+  await choose(/div · Mac menu bar$/);
+  await page.getByLabel('Block text',{exact:true}).fill(`My menu bar ${width}`);
+  await choose(/button · Refresh/);
+  await page.getByLabel('Block text',{exact:true}).fill(`Refresh icons ${width}`);
+  await choose(/img ·/);
+  await page.getByLabel('Element alt',{exact:true}).fill('Icon for {item.program}');
+  await choose(/summary ·/);
+  await page.getByLabel('Block text',{exact:true}).fill('Inspect program and stats');
+  await choose(/When item.state.menuBar.accessibility$/);
+  await page.getByLabel('Condition equals',{exact:true}).selectOption('true');
+  await page.getByLabel('Condition equals',{exact:true}).selectOption('false');
+  await choose(/List · Menu bar items/);
+  assert.equal(await page.getByLabel('Default page size').inputValue(),'all');
+  await page.getByTestId('builder-save').click();
+  await page.getByTestId('saved').filter({hasText:'Saved and validated'}).waitFor();
+  await page.screenshot({path:`${evidence}/${width}-editor.png`,fullPage:true});
+  await page.reload();
+  if(width<768) await page.getByRole('button',{name:'Inspector',exact:true}).click();
+  await page.getByLabel('Select block').waitFor();
+  await page.getByLabel('Select block').selectOption(options.find(e=>/div · Mac menu bar$/.test(e.label)).value);
+  assert.equal(await page.getByLabel('Block text',{exact:true}).inputValue(),`My menu bar ${width}`);
+  if(await page.getByRole('button',{name:'View',exact:true}).isVisible()) await page.getByRole('button',{name:'View',exact:true}).click();
+  else { await page.getByRole('button',{name:'Page mode: Builder',exact:true}).click(); await page.getByRole('menuitemradio',{name:'View',exact:true}).click(); }
+  await page.getByTestId('builder-close').click();
+  await page.getByText(`My menu bar ${width}`,{exact:true}).waitFor();
+  await page.getByRole('img',{name:'Icon for Sample program',exact:true}).first().waitFor();
+  assert.equal(await page.getByRole('img',{name:'Icon for Sample program',exact:true}).count(),47);
+  await page.getByText('Inspect program and stats',{exact:true}).first().click();
+  await page.getByText('/Applications/Sample.app/Contents/MacOS/Sample',{exact:true}).first().waitFor();
+  for(let y=0;y<await page.evaluate(()=>document.body.scrollHeight);y+=600) {
+   await page.evaluate(y=>scrollTo(0,y),y);
+   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),`${width}: edited page overflow`);
+  }
+  // Test identities persist only in this synthetic browser context.
+  await page.evaluate(()=>sessionStorage.removeItem('menu-blocks'));
+ }
 	for (const width of [1440, 390]) {
 		await page.setViewportSize({ width, height: 900 });
 		await page.goto(`${origin}/scripts/mac-menu-bar.browser.html?scripts`, { waitUntil: 'domcontentloaded', timeout: 120000 });
@@ -110,7 +159,7 @@ try {
 		JSON.stringify({
 			ok: true,
 			widths: [1440, 390],
-			searchLastOf10001: !process.env.TT_SCRIPTS_ONLY,
+			searchLastOf47: !process.env.TT_SCRIPTS_ONLY,
 			details: !process.env.TT_SCRIPTS_ONLY,
 			zeroAndUnavailable: !process.env.TT_SCRIPTS_ONLY,
 			states: process.env.TT_SCRIPTS_ONLY ? 0 : 7,
