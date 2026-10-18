@@ -73,6 +73,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-18 — **Codex (AI)**: Document the reusable video compressor as a
+  Builder use case, including editable definitions, local encoding, saved
+  presets and verified output. Record the completed media workflow separately
+  from the still-paused standards catalogue backlog.
+
+
 - 2026-10-18: Fix incident cleanup to recognize the automatic logout history entry, bound to the revoked test session; retain strict content and actor checks. Production dry-run caught this mismatch before any deletion.
 
 
