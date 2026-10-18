@@ -3,11 +3,18 @@ import { settingsDocumentBlocks, settingsDocumentKey, type SettingsDocument, typ
 
 /** Uses the existing private webpage/Thing contract and its ordinary Builder
  * revision fence. No settings-specific HTTP endpoint or credential store. */
-export function accountSettingsDocumentAdapter(scope: SettingsDocumentScope, dependencies = { fetch: globalThis.fetch.bind(globalThis) }): SettingsDocumentAdapter {
+export function accountSettingsDocumentAdapter(scope: SettingsDocumentScope, dependencies: { fetch: typeof fetch; currentOrigin?: () => string } = { fetch: globalThis.fetch.bind(globalThis) }): SettingsDocumentAdapter {
   settingsDocumentKey(scope);
+  const assertOrigin = () => {
+    const current = dependencies.currentOrigin?.() ?? (typeof window === 'undefined' ? scope.origin : window.location.origin);
+    if (current !== scope.origin) throw new Error('The settings origin changed. Reopen Settings before saving.');
+  };
+  assertOrigin();
   const requireCapabilities = async (signal: AbortSignal, features: Record<string, string>) => {
+    assertOrigin();
     const response = await dependencies.fetch(`${scope.origin}${THINGTIME_CAPABILITY_MANIFEST_PATH}`, { headers: { Accept: 'application/json' }, signal, credentials: 'omit', cache: 'no-store', redirect: 'error' });
     const manifest = await response.json();
+    assertOrigin();
     if (!response.ok || manifest.schemaVersion !== 1 || manifest.origin !== scope.origin ||
       Object.entries(features).some(([feature, minimum]) => !capabilitySatisfies(manifest.features?.[feature]?.version || '', minimum)))
       throw new Error('This API does not support safe editable settings documents yet.');
@@ -16,6 +23,7 @@ export function accountSettingsDocumentAdapter(scope: SettingsDocumentScope, dep
   const headers = { Accept: 'application/json', 'Content-Type': 'application/json',
     'X-Thingtime-Expected-Actor': scope.ownerId, 'X-Thingtime-Expected-Data-Plane': scope.dataPlane };
   const request = async (path: string, signal: AbortSignal, init: RequestInit = {}) => {
+    assertOrigin();
     signal.throwIfAborted();
     const response = await dependencies.fetch(`${scope.origin}${path}`, { ...init, headers, signal, credentials: 'same-origin', cache: 'no-store', redirect: 'error' });
     const data = await response.json();
@@ -30,7 +38,8 @@ export function accountSettingsDocumentAdapter(scope: SettingsDocumentScope, dep
   return {
     async load(signal) {
       await requireCapabilities(signal, { 'api.webpages-resolve': '1.6.0', 'api.actions-run': '1.7.0', 'api.mongodb-endpoint': '1.1.0' });
-      signal.throwIfAborted();
+      assertOrigin();
+    signal.throwIfAborted();
       const response = await dependencies.fetch(`${scope.origin}/api/v1/webpages/resolve?id=${encodeURIComponent(pageKey)}`, {
         headers, signal, credentials: 'same-origin', cache: 'no-store', redirect: 'error'
       });
@@ -55,11 +64,13 @@ export function accountSettingsDocumentAdapter(scope: SettingsDocumentScope, dep
       });
       return project(result.thing);
       } catch (error) {
-        signal.throwIfAborted();
+        assertOrigin();
+    signal.throwIfAborted();
         // Recover only an exact committed result after a duplicate or lost
         // response. A competing edit remains a conflict, never an overwrite.
         const existing = await accountSettingsDocumentAdapter(scope, dependencies).load(signal).catch(() => null);
-        signal.throwIfAborted();
+        assertOrigin();
+    signal.throwIfAborted();
         if (existing?.id === (document.id || shareId) && existing.name === document.name &&
           JSON.stringify(existing.blocks) === JSON.stringify(crystal.blocks)) return existing;
         throw error;

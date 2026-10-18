@@ -1,4 +1,5 @@
 import React from 'react';
+import { createDesktopOperationGate } from './desktopOperationGate';
 import { getElectronBridge, type ThingtimeDesktopInfo } from '~/utils/electronBridge';
 import type { TransientBlockActions, TransientBlockInvocation } from '../Builder/transientBlockActions';
 
@@ -12,8 +13,10 @@ export function useDesktopSettingsAdapter(desktopInfo: ThingtimeDesktopInfo, onI
   const currentAuthority = React.useRef(authority); currentAuthority.current = authority;
   const alive = React.useRef(true);
   React.useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
-  const [busy, setBusy] = React.useState(false);
-  const busyRef = React.useRef(false);
+  const gate = React.useRef(createDesktopOperationGate()).current;
+  gate.setScope(authority);
+  const [, renderGate] = React.useReducer(value => value + 1, 0);
+  const busy = gate.busy;
   const [notice, setNotice] = React.useState('');
   const [epoch, resetFields] = React.useReducer(value => value + 1, 0);
   const [enabled, setEnabled] = React.useState(runtime?.enabled ?? false);
@@ -23,10 +26,12 @@ export function useDesktopSettingsAdapter(desktopInfo: ThingtimeDesktopInfo, onI
     setNotice(''); resetFields();
   }, [authority, runtime?.enabled, runtime?.databaseMode, runtime?.apiPort, runtime?.databasePort]);
   const run = async (invocation: TransientBlockInvocation, operation: () => Promise<ThingtimeDesktopInfo | void>, success = '') => {
-    if (busyRef.current || invocation.signal.aborted) return;
+    if (invocation.signal.aborted) return;
+    const token = gate.begin(authority);
+    if (!token) return;
     const selected = authority;
     const active = () => alive.current && !invocation.signal.aborted && currentAuthority.current === selected;
-    busyRef.current = true; setBusy(true); setNotice('');
+    renderGate(); setNotice('');
     try {
       if (!active()) return;
       const next = await operation();
@@ -36,8 +41,7 @@ export function useDesktopSettingsAdapter(desktopInfo: ThingtimeDesktopInfo, onI
     } catch {
       if (active()) setNotice('The desktop operation could not be completed. Check the selected API and settings, then try again.');
     } finally {
-      busyRef.current = false;
-      if (alive.current && currentAuthority.current === selected) setBusy(false);
+      if (gate.finish(token) && alive.current) renderGate();
     }
   };
   const field = (invocation: TransientBlockInvocation, name: string) => {
@@ -47,8 +51,8 @@ export function useDesktopSettingsAdapter(desktopInfo: ThingtimeDesktopInfo, onI
   };
   const recoveryAvailable = !!storage?.recoveryAvailable && !runtime?.active;
   const actions: TransientBlockActions = {
-    'runtime.enabled': ({ value }) => { if (!busyRef.current && typeof value === 'boolean') setEnabled(value); },
-    'runtime.database-mode': ({ value }) => { if (!busyRef.current && (value === 'managed' || value === 'external')) setDatabaseMode(value); },
+    'runtime.enabled': ({ value }) => { if (!gate.busy && typeof value === 'boolean') setEnabled(value); },
+    'runtime.database-mode': ({ value }) => { if (!gate.busy && (value === 'managed' || value === 'external')) setDatabaseMode(value); },
     'runtime.save': invocation => {
       const bridge = getElectronBridge();
       if (!bridge?.configureLocalRuntime || !runtime?.encryptionAvailable) return;

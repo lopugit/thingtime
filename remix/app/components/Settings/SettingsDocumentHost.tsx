@@ -44,7 +44,8 @@ function ScopedSettingsDocument(props: SettingsDocumentHostProps) {
   const dataPlane = useDataPlane();
   const origin = typeof window === 'undefined' ? 'http://localhost' : window.location.origin;
   const ownerId = props.persistence === 'device' ? 'device' : user?.id || 'anonymous';
-  const scope = { origin, ownerId, dataPlane: props.persistence === 'device' ? props.scopeKey : dataPlane || 'unavailable', documentKey: props.documentKey };
+  const plane = props.persistence === 'device' ? props.scopeKey : dataPlane || 'unavailable';
+  const scope = React.useMemo(() => ({ origin, ownerId, dataPlane: plane, documentKey: props.documentKey }), [origin, ownerId, plane, props.documentKey]);
   const key = settingsDocumentKey(scope);
   return <SettingsDocumentSession key={`${key}:${props.scopeKey}`} {...props} documentScope={scope}
     writable={props.persistence === 'device' || (!!user?.id && !!dataPlane && !user.temporary)} />;
@@ -54,10 +55,11 @@ function SettingsDocumentSession({ defaultDocument, title = 'Settings layout', p
   documentScope: Parameters<typeof settingsDocumentKey>[0]; writable: boolean;
 }) {
   const key = settingsDocumentKey(documentScope);
+  const [defaults] = React.useState(() => settingsDocumentBlocks(defaultDocument));
   const cacheKey = `tt-settings-preview:${key}`;
   const initial = (): SettingsDocument => {
     try { const cached = readLocalCache<unknown>(persistence === 'device' ? key : cacheKey); if (cached) return parseSettingsDocument(cached); } catch { /* load reports invalid durable data */ }
-    return { blocks: settingsDocumentBlocks(defaultDocument), name: title, revision: null };
+    return { blocks: defaults, name: title, revision: null };
   };
   const [document, setDocument] = React.useState<SettingsDocument>(initial);
   const [saved, setSaved] = React.useState(document);
@@ -73,7 +75,7 @@ function SettingsDocumentSession({ defaultDocument, title = 'Settings layout', p
   const dirtyRef = React.useRef(dirty); dirtyRef.current = dirty;
   const adapter = React.useMemo(() => typeof window === 'undefined' ? null : persistence === 'device'
     ? localSettingsDocumentAdapter(documentScope, window.localStorage, navigator.locks)
-    : accountSettingsDocumentAdapter(documentScope), [key, persistence]);
+    : accountSettingsDocumentAdapter(documentScope), [documentScope, persistence]);
   React.useEffect(() => {
     if (controller.current.signal.aborted) controller.current = new AbortController();
     return () => controller.current.abort();
@@ -81,18 +83,19 @@ function SettingsDocumentSession({ defaultDocument, title = 'Settings layout', p
   React.useEffect(() => {
     if (!writable || !adapter) return;
     const signal = controller.current.signal;
+    let active = true;
     const load = ++loadingRevision.current;
     const edit = revision.current;
     void adapter.load(signal).then(value => {
-      if (signal.aborted || load !== loadingRevision.current) return;
+      if (!active || signal.aborted || load !== loadingRevision.current) return;
       setReady(true); setError('');
       if (revision.current !== edit || dirtyRef.current) return;
-      const next = value || { blocks: settingsDocumentBlocks(defaultDocument), name: title, revision: null };
+      const next = value || { blocks: defaults, name: title, revision: null };
       setDocument(next); setSaved(next);
       if (persistence === 'account' && value) writeLocalCache(cacheKey, value);
-    }).catch(() => { if (!signal.aborted && load === loadingRevision.current) { setReady(false); setError('Could not load your layout. The current view is preserved; retry before saving.'); } });
-    return () => { loadingRevision.current++; };
-  }, [adapter, reload, writable]);
+    }).catch(() => { if (active && !signal.aborted && load === loadingRevision.current) { setReady(false); setError('Could not load your layout. The current view is preserved; retry before saving.'); } });
+    return () => { active = false; };
+  }, [adapter, reload, writable, cacheKey, defaults, persistence, title]);
   const update = (blocks: WebpageBlock[]) => {
     try { const safe = settingsDocumentBlocks(blocks); revision.current++; setDocument(previous => ({ ...previous, blocks: safe })); }
     catch (cause) { setError(cause instanceof Error ? cause.message : 'This layout change is unavailable.'); }
@@ -125,7 +128,7 @@ function SettingsDocumentSession({ defaultDocument, title = 'Settings layout', p
     resolved: { page: { id: document.id || `local-${documentScope.documentKey}`, crystal: { name: document.name, blocks: document.blocks }, author: { id: documentScope.ownerId }, acl: ['tt:user'] }, source: 'user', componentsByRef: {} },
     componentsByRef: {}, addComponent: () => setError('External component sources cannot run inside credential settings.'),
     ensureComponent: async () => { throw new Error('Use intrinsic blocks in credential settings.'); }, markSaved: () => {},
-    save, resetToDefault: async () => { update(settingsDocumentBlocks(defaultDocument)); return { ok: true }; },
+    save, resetToDefault: async () => { update(defaults); return { ok: true }; },
     discardDraft: () => { revision.current++; setDocument(saved); }, refresh: () => setReload(value => value + 1)
   };
   return <Box minW={0} data-settings-document={documentScope.documentKey}>
