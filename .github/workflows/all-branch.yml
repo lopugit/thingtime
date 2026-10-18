@@ -69,10 +69,6 @@ jobs:
       group: lopu-agent-fleet-${{ github.repository }}
       queue: max
       cancel-in-progress: false
-    env:
-      LOPU_AGENT_BACKEND: ${{ vars.LOPU_AGENT_BACKEND || vars.LOPU_REVIEW_BACKEND || 'claude' }}
-      LOPU_CODEX_MODEL: ${{ env.LOPU_SELECTED_MODEL || steps.models.outputs.codex_model }}
-      LOPU_CODEX_REASONING_EFFORT: ${{ vars.LOPU_CODEX_REASONING_EFFORT || 'xhigh' }}
     steps:
       - name: Check out develop working tree
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -161,8 +157,8 @@ jobs:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
           github-token: ${{ github.token }}
           allowed-bots: "github-actions"
-          codex-model: ${{ env.LOPU_CODEX_MODEL }}
-          codex-reasoning-effort: ${{ env.LOPU_CODEX_REASONING_EFFORT }}
+          codex-model: ${{ steps.models.outputs.codex_model }}
+          codex-reasoning-effort: ${{ steps.models.outputs.codex_reasoning_effort }}
           working-directory: .
           sandbox: danger-full-access
           safety-strategy: drop-sudo
@@ -251,8 +247,8 @@ jobs:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
           github-token: ${{ github.token }}
           allowed-bots: "github-actions"
-          codex-model: ${{ env.LOPU_CODEX_MODEL }}
-          codex-reasoning-effort: ${{ env.LOPU_CODEX_REASONING_EFFORT }}
+          codex-model: ${{ steps.models.outputs.codex_model }}
+          codex-reasoning-effort: ${{ steps.models.outputs.codex_reasoning_effort }}
           working-directory: .
           sandbox: danger-full-access
           safety-strategy: drop-sudo
@@ -319,8 +315,8 @@ jobs:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
           github-token: ${{ github.token }}
           allowed-bots: "github-actions"
-          codex-model: ${{ env.LOPU_CODEX_MODEL }}
-          codex-reasoning-effort: ${{ env.LOPU_CODEX_REASONING_EFFORT }}
+          codex-model: ${{ steps.models.outputs.codex_model }}
+          codex-reasoning-effort: ${{ steps.models.outputs.codex_reasoning_effort }}
           working-directory: .
           sandbox: danger-full-access
           safety-strategy: drop-sudo

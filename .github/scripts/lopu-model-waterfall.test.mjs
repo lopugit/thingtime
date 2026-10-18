@@ -52,3 +52,12 @@ test('quota wording in user, tool, or ordinary assistant text never triggers ano
  task.push({type:'result',is_error:true,error:'authentication_error: invalid OAuth token'});
  assert.equal(classifyClaudeCredentialFailure(claudeProviderErrors(task)).retryable,true);
 });
+
+// Job environments are evaluated before step outputs and runtime env exist.
+test('model consumers use runtime context only inside steps', () => {
+ for (const file of ['all-branch.yml','rebase-pr-stacks.yml','resolve-pr-conflicts.yml']) {
+  const source=readFileSync(join('.github/workflows',file),'utf8');
+  for(const block of source.matchAll(/^    env:\n((?:^      .*\n)*)/gm))
+   assert.doesNotMatch(block[1], /\b(?:env|steps)\./, `${file} job env cannot reference runtime context`);
+ }
+});
