@@ -1,10 +1,5 @@
-// Client-side types + PURE tree operations for the block-based site builder.
-// The server-side write gate (sanitizeWebpageCrystal in schemas/registry.ts)
-// is the authority on shape and caps — everything here mirrors it for
-// optimistic editing and must stay within those bounds (120 blocks, depth 8,
-// 48KB serialized). Blocks never carry markup: component blocks reference
-// component things resolved through /api/v1/webpages/resolve and drawn by the
-// sanitising allowlist renderers, one budget per block.
+// Client types and pure block-tree operations. The server validates each block;
+// pages have no arbitrary block-count or nesting-depth product limit.
 
 export type WebpageBlockType = 'component' | 'container' | 'text' | 'native' | 'media' | 'html' | 'element' | 'collection' | 'condition';
 export type WebpageContainerDirection = 'column' | 'row' | 'grid';

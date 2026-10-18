@@ -364,6 +364,13 @@ const RichTextEditorButton = ({
 	);
 };
 
+const StructuredValue = ({value,onChange}:{value:unknown;onChange:(value:unknown)=>void}) => {
+ const encoded=value === undefined ? '' : JSON.stringify(value,null,2);
+ const [draft,setDraft]=React.useState(encoded),[error,setError]=React.useState('');
+ React.useEffect(()=>{setDraft(encoded);setError('');},[encoded]);
+ return <><Textarea aria-label="Action inputs" value={draft} onChange={e=>{const text=e.target.value;setDraft(text);try { const parsed=text.trim() ? JSON.parse(text) : undefined;onChange(parsed);setError(''); } catch {setError('Enter valid JSON; the saved inputs stay unchanged until it is valid.');}}}/>{error && <Text role="alert" fontSize="xs">{error}</Text>}</>;
+};
+
 const BlockInspector = ({
 	draft,
 	block,
@@ -451,9 +458,10 @@ const BlockInspector = ({
     {block.type === 'element' ? <>
      <FieldRow label="Element"><Input {...inputStyles} aria-label="Element tag" value={block.tag || 'div'} onChange={e => patch({ tag: e.target.value })} /></FieldRow>
      <FieldRow label="Text"><Textarea {...inputStyles} aria-label="Block text" value={block.text || ''} onChange={e => patch({ text: e.target.value })} /></FieldRow>
-     {['name', 'placeholder', 'defaultValue', 'href', 'src', 'alt', 'title', 'type', 'data-tt-action', 'data-tt-action-inputs'].map(key => <FieldRow key={key} label={key}>
+     {['name', 'placeholder', 'defaultValue', 'href', 'src', 'alt', 'title', 'type', 'data-tt-action'].map(key => <FieldRow key={key} label={key}>
       <Input {...inputStyles} aria-label={`Element ${key}`} value={String(block.props?.[key] ?? '')} onChange={e => patch({ props: { ...block.props, [key]: e.target.value } })} />
      </FieldRow>)}
+     <FieldRow label="Action inputs"><StructuredValue key={block.id} value={block.props?.['data-tt-action-inputs']} onChange={value=>patch({props:{...block.props,'data-tt-action-inputs':value}})} /></FieldRow>
     </> : null}
     {block.type === 'element' && ['img','video','audio'].includes(block.tag || '') ? <FieldRow label="Upload media">
      <Button size="sm" isDisabled={!onUploadToBlock} onClick={() => uploadInputRef.current?.click()}>Upload file</Button>
@@ -748,6 +756,7 @@ const BlockInspector = ({
 };
 
 export const BuilderDrawer = (props: {
+ onSelectBlock?: (id: string) => void;
  allowedBlockTypes?: readonly WebpageBlock['type'][];
  allowDataSources?: boolean;
 	helpText?: string;
@@ -917,7 +926,11 @@ export const BuilderDrawer = (props: {
 			</Flex>
 
 			<Flex flexDirection="column" rowGap={4} padding={4} flex="1" minHeight={0} overflowY="auto" paddingBottom={props.footerSpace}>
-				{props.helpText ? <Text fontSize="xs" color="var(--tt-muted, #9a9aa6)">{props.helpText}</Text> : null}
+				{props.onSelectBlock ? <FieldRow label="Blocks"><Select aria-label="Select block" value={props.selectedId || ''} onChange={e=>props.onSelectBlock?.(e.target.value)}>
+     <option value="">Select a block…</option>
+     {(() => { const rows:React.ReactNode[]=[]; const queue=draft.blocks.map(block=>({block,depth:0})).reverse(); while(queue.length) { const {block,depth}=queue.pop()!; rows.push(<option key={block.id} value={block.id}>{'· '.repeat(depth)}{blockLabel(block)}</option>); if(block.children) for(const child of [...block.children].reverse()) queue.push({block:child,depth:depth+1}); } return rows; })()}
+    </Select></FieldRow> : null}
+    {props.helpText ? <Text fontSize="xs" color="var(--tt-muted, #9a9aa6)">{props.helpText}</Text> : null}
 				{selected ? (
 					<>
 						{regionLabel ? (
