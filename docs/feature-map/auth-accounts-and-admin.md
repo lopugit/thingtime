@@ -123,3 +123,21 @@ Password migration coverage and encrypted file lifecycle: `passwords/onePassword
 `api/utils/passwords/files.ts`. Every original 1PUX member is retained as an
 encrypted attachment to a source archive entry; item editors preserve structured
 values, source context and password history. See [the password contract](../password-manager.md).
+
+Claude keyless discovery reads the official public lifecycle table through
+`modelDiscovery.ts`. `modelSync.ts` stores public provenance separately from
+credential availability, preserving admission and absent rows. The workflow
+editor opts into live server model lists through `waterfallCatalog.ts` and awaits
+its settings write through `AiWaterfallSelector.onSaveApply`. Regression coverage:
+`modelSync.test.ts`, `waterfallCatalog.test.ts`, and the Claude public catalogue /
+workflow save checklist in TESTING.
+
+## Incident cleanup
+
+`api/utils/migrations/accidentalCatalogAccount.ts` registers the destructive,
+incident-specific catalog fixture cleanup. The existing admin migration API
+requires dry-run/confirmation, checks exact identity and idle account state, and
+deletes account/bootstrap/auth records atomically in the home DB. It cannot
+accept arbitrary target accounts. Delivery and migration audit records remain.
+
+OpenAI environment-to-vault import uses `credentialVault.ts::importConfiguredOpenAiCredential` through the existing admin credentials route and `PlatformCredentials.tsx`. It is same-origin, admin-only and create-only; `api.admin-ci-credentials` 3.1.0 is negotiated before use. The sole source is server `OPENAI_API_KEY`, and the destination is `OpenAI` / `OPENAI_THINGTIME_API_KEY`.

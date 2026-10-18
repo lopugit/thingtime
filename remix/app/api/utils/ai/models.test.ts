@@ -322,3 +322,20 @@ test('setAiModelEnabled flips only crystal.enabled on the genuine row and report
   assert.equal(enabled.ok && enabled.model.available, true);
   assert.equal(enabled.ok && enabled.defaults.model, 'claude-opus-5');
 });
+
+
+test('public lifecycle metadata is projected without asserting account access and retired models stay unavailable', async () => {
+  const { fake, service } = createService();
+  await service.ensureAiModelCatalog();
+  const opus = fake.docs.find((doc) => doc.shareId === aiModelShareId('claude-opus-5'));
+  Object.assign(opus.crystal, { publicCatalogAvailable: true, catalogSource: 'public-docs', catalogCheckedAt: NOW });
+  let model = (await service.listAiModels()).models.find((item) => item.id === 'claude-opus-5')!;
+  assert.equal(model.catalogSource, 'public-docs');
+  assert.equal(model.catalogCheckedAt, NOW.toISOString());
+  assert.equal(model.providerAvailable, null);
+  assert.equal(model.available, true);
+  opus.crystal.publicCatalogAvailable = false;
+  model = (await service.listAiModels()).models.find((item) => item.id === 'claude-opus-5')!;
+  assert.equal(model.enabled, true);
+  assert.equal(model.available, false);
+});

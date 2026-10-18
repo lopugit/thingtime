@@ -31,7 +31,8 @@ export type AiWaterfallSelectorProps = {
 	isOpen: boolean;
 	value: AiWaterfallConfig | null;
 	endpoints: readonly AiWaterfallEndpoint[];
-	onApply: (config: AiWaterfallConfig | null) => void;
+	onApply: (config: AiWaterfallConfig | null) => void | Promise<void>;
+	onSaveApply?: (config: AiWaterfallConfig) => Promise<void>;
 	onClose: () => void;
 	allowInherit?: boolean;
 	title?: string;
@@ -52,6 +53,7 @@ const WaterfallDialog = ({
 	value,
 	endpoints,
 	onApply,
+	onSaveApply,
 	onClose,
 	allowInherit = true,
 	maxEntries = AI_WATERFALL_MAX_ENTRIES,
@@ -86,7 +88,8 @@ const WaterfallDialog = ({
 			setSelected(row);
 			setName(row.name);
 			if (apply) {
-				onApply(config);
+				if (onSaveApply) await onSaveApply(config);
+				else await onApply(config);
 				onClose();
 			}
 		} catch (cause) {
@@ -335,19 +338,22 @@ const WaterfallDialog = ({
 						<Button
 							size="sm"
 							isDisabled={saving}
-							onClick={() => {
+							onClick={async () => {
+								if (saving) return;
 								if (applyLabel !== 'Apply waterfall') {
 									onClose();
 									return;
 								}
+								setSaving(true);
+								setError('');
 								try {
 									if (!inherit && entries.length > maxEntries) throw new TypeError(`Choose up to ${maxEntries} AI attempts.`);
 									const config = inherit ? null : validateAiWaterfallSelection({ version: 1, entries }, endpoints);
-									onApply(config);
+									await onApply(config);
 									onClose();
 								} catch (cause) {
 									setError(cause instanceof Error ? cause.message : 'Check your selection.');
-								}
+								} finally { setSaving(false); }
 							}}
 						>
 							{applyLabel}

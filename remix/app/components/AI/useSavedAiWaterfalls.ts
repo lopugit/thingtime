@@ -46,7 +46,7 @@ export const useSavedAiWaterfalls = (userId: string, active = true) => {
 		})();
 		void (async () => {
 			try {
-				await requireThingtimeCapability('api.ai-models', '1.4.0');
+				await requireThingtimeCapability('api.ai-models', '1.6.0');
 				const response = await fetch('/api/v1/ai/models', { signal: controller.signal, credentials: 'same-origin' });
 				const data = await response.json();
 				if (!response.ok) throw new Error('Endpoint list unavailable.');

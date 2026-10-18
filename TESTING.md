@@ -31,6 +31,34 @@
       the previous database's native registration, claim or live view.
 
 See [the runbook](docs/agent-browsers.md) for commands and evidence boundaries.
+## Reusable local video compression
+
+- [ ] Install `media-tools` as the intended account; inspect the returned owned
+      Page, Component and Action. An origin with suite capability 1.3.0 refuses
+      this install before mutation; 1.4.0 accepts it.
+- [ ] Run the isolated browser flow documented in README: actual WebCodecs
+      conversion, MP4 H.264/AAC, WebM VP9/Opus and explicit audio removal. Compare
+      downloaded bytes, codecs, dimensions, duration and tracks using ffprobe.
+- [ ] The opaque preview frame still has no same-origin permission. Its fixed
+      secure-host worker can encode and has a network-denying response CSP.
+      An iframe-local worker must not regress into a false unsupported browser.
+- [ ] Invalid files and unsupported codecs show a useful error and clear old
+      downloads. Cancel, Stop / clear, replacing the selected file and replacing
+      a run terminate work; delayed worker output never recreates a download.
+- [ ] Change settings and document labels/styles; save an edited Component,
+      reopen it through Builder and run it with those saved defaults. Reloading
+      never retains local selected video bytes. Check access as the owner.
+- [ ] On the intended deployed origin, encode a synthetic local clip, preview
+      it and download it. Compare the result with the independent source.
+- [ ] At desktop and 390px widths scroll the complete page and preview; open
+      the JSON editor and saved Component controls. No clipping, overlap or
+      horizontal overflow, including progress, errors, video and download.
+- [ ] Shared documentation examples still validate through saved-Thing grammar
+      after adding guide sections; locate examples by section ID, not position.
+- [ ] Lopu's default and custom base prompt paths retain framework-discovery
+      guidance for `/docs/builder`, components, demos and Action inspection.
+      Missing tools or short Action budgets never imply encoding is impossible.
+
 
 ## History timeline design concept (`docs/design/thingtime-history-timeline/`, `/docs/design`)
 
@@ -10136,3 +10164,38 @@ separate from deterministic discovery/lease tests.
   require checking Gmail, without automatically creating/sending another copy.
   Known failures before dispatch leave the composer editable. Use synthetic
   transport for sending unless the user authorizes specific real recipients.
+
+
+### Claude public catalogue and workflow save regression — 2026-10-18
+
+- With no Anthropic API key and no inference credentials, run admin sync or the
+  authenticated cron. Compare new Claude IDs and lifecycle states with Anthropic's
+  public model status table. Verify public provenance, unknown account access,
+  preserved admission toggles, and no retirement based only on an omitted ID.
+- Exercise denied API catalogue access, malformed/empty public docs, network
+  failure and explicit retired rows. Failures retain the last good catalogue.
+- Enable a newly discovered compatible model, open AI workflow model order, and
+  verify it appears without editing the compiled base list. Disabled models stay
+  absent; conservative unknown effort/speed/pricing remain unknown/default-only.
+- Save & apply a named order, reload, and independently GET the shared order.
+  Verify the same ordered IDs persist without pressing Save model order. Force
+  the shared-settings save to fail: dialog stays open, error is visible, retry
+  updates the saved template without duplication. Cancel and Save waterfall do
+  not apply shared settings; Apply waterfall stages edits as before.
+- On desktop and 390px mobile, scroll the admin page and expanded dialog fully;
+  inspect model menus, long source labels, errors, and all footer controls.
+
+- Before isolated compiled-server acceptance, supply a local JWT secret and Mongo replica set; assert responses have no `x-thingtime-api-fallback` header before creating fixtures or changing settings.
+
+## Local API fallback safety and incident cleanup (2026-10-18)
+
+- [ ] Run `test:root-data`, `test:migrations`, `test:api-capabilities`, and the seed-fixture script tests.
+- [ ] Build Nitro with `NITRO_PRESET=node-server npm --prefix remix run build:server`; run `node remix/scripts/local-api-isolation-smoke.mjs`. Require enforced OS denial for direct IP and redirected outbound traffic before launching either server. Verify both Nitro and Vite reject registration/write/root-data requests with 503, no cookies and no fallback headers. Do not use personal credentials or production Mongo configuration.
+- [ ] On the deployed admin UI, dry-run only `cleanup-accidental-catalog-account-2026-10-18`; verify exact incident identity and idle-account counts before confirming. Check the account is absent afterward, neighboring users remain, and a second dry-run reports zero. Retain delivery/audit records.
+- [ ] Missing/invalid fallback origins, normal web servers, and NODE_ENV=test must never proxy; explicit installed-desktop HTTPS bridges retain database preconditions.
+
+- OpenAI vault import: anonymous/non-admin and cross-origin requests must fail; missing server key must create nothing. Import from AI Providers, verify the redacted OpenAI entry named `OPENAI_THINGTIME_API_KEY`, reload, retry and confirm one unchanged entry. No secret may appear in browser responses. Existing chat and credential order must remain intact.
+
+- Incident account cleanup: use real signup and logout notification constructors; accept only system history tied to the exact revoked fixture session. Reject unrelated content, actors and timestamps before writes.
+
+- Agent task pages: verify desktop centering and mobile gutters; mark a todo complete with a nonempty neighboring add-todo form, reload, and confirm only that todo changed.

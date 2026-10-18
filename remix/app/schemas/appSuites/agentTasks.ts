@@ -87,7 +87,7 @@ export const agentTasksSuite: BehaviourSuite = {
 		render: refs => kit.stack([
 			kit.title('Todos'), kit.link('Browser controls', '/agent-browsers/{query.taskId}'),
 			kit.group([kit.field('Todo', kit.input('title')), kit.button('Add todo', refs.actionKey('add-todo'), { taskId: '{query.taskId}' })]),
-			each('result.records', kit.card([kit.strong('{item.crystal.title}'), ifTruthy('item.crystal.done', kit.pill('Complete'), kit.button('Mark complete', refs.actionKey('complete-todo'), { todoId: '{item.id}' }))]), { empty: kit.muted('No todos on this page.') }),
+			each('result.records', kit.card([kit.strong('{item.crystal.title}'), ifTruthy('item.crystal.done', kit.pill('Complete'), kit.group([kit.button('Mark complete', refs.actionKey('complete-todo'), { todoId: '{item.id}' })]))]), { empty: kit.muted('No todos on this page.') }),
 			kit.row([kit.link('First page', '/p/agent-tasks-detail?taskId={query.taskId}'), ifTruthy('result.nextCursor', kit.button('Next todos', '$ui', { op: 'query', params: { taskId: '{query.taskId}', todoCursor: '{result.nextCursor}' } }))])
 		])
 	}, {

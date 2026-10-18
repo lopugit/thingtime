@@ -214,8 +214,8 @@ in root data and supports `X-Thingtime-Expected-Data-Plane` as an optional reque
 precondition. It refuses stale selections with 409 and invalid keys with 400;
 it never selects a database or grants access. Updated clients negotiate this
 capability before scoped reads/writes. When this deployment uses its configured
-API fallback, root identity and ordinary source-fenced requests use that same
-fallback; the selection and precondition are forwarded for upstream enforcement.
+explicit installed-desktop API bridge, root identity and ordinary source-fenced requests use that same
+selected endpoint; the selection and precondition are forwarded for upstream enforcement.
 Existing actor-fenced commands and vault verification retain their local-origin
 requirements. No new secret or environment variable is required; use the
 existing MongoDB or fallback setup.
@@ -1136,11 +1136,24 @@ private environment variables in local development or on Vercel.
 The web app lives in `remix/` for historical path compatibility, but it now
 runs as a React Router non-framework Vite client with Nitro API/server routes.
 Vite serves the browser app on port `9999` and proxies `/api` to the Nitro dev
-server on port `10000` when local backend env is configured. If the local
-MongoDB/auth env is absent, the dev proxy sends `/api` requests to
-`https://thingtime.com` instead so a fresh clone can still log in, create
-service-account tokens, and use the production-backed API without copying any
-private `.env` files.
+server on port `10000`. Both Vite and built Nitro servers fail closed when
+MongoDB or JWT signing configuration is missing: API requests return `503`
+with `LOCAL_API_NOT_CONFIGURED`, without forwarding bodies or cookies.
+Configure a dedicated local Mongo replica set and an explicit local `JWT_SECRET`
+(or signing key); never reuse production database credentials for tests.
+`THINGTIME_API_FALLBACK_ORIGIN` has no default and is ignored by Vite and ordinary
+web servers. Only the installed desktop shell (`THINGTIME_DESKTOP=1`, loopback
+origin, explicit HTTPS endpoint) can deliberately bridge to its selected API;
+`NODE_ENV=test` disables that bridge as well. Public docs/capability discovery
+remain available without database configuration.
+
+The fixture runner accepts only literal loopback HTTP URLs, refuses redirects
+and requires attachment upload URLs on the same local origin. These application
+guards complement the mandatory browser **and backend** network isolation for
+acceptance tests; a local URL alone does not prove the configured DB is local.
+For the compiled-server regression, build with `NITRO_PRESET=node-server npm
+--prefix remix run build:server`, then run the isolated smoke described in
+`remix/scripts/local-api-isolation-smoke.mjs`.
 
 Local development URLs on Lopu's Mac:
 
@@ -1183,9 +1196,9 @@ the `VERCEL_GIT_COMMIT_REF` system env var at build and runtime.
 The local dev launcher loads `remix/.env`, `remix/.env.local`, and
 `remix/.env.auto` before spawning Nitro and Vite, so ignored private values like
 MongoDB credentials are available to local API status checks without committing
-secrets. These files are optional for normal app usage; set them only when you
-want to override the default production-backed API fallback or run the backend
-self-sufficiently against your own services.
+secrets. Static pages can render without these files, but local API requests
+require explicit database and signing configuration; there is no automatic
+production-backed fallback.
 
 Build and verify the repository-root Vercel output with:
 
@@ -1767,9 +1780,9 @@ temporarily as a legacy HS256 verifier while older browser cookies expire:
 JWT_SECRET="<legacy-long-random-secret>"
 ```
 
-If neither asymmetric key material nor `JWT_SECRET` is set, preview and
-production auth fail closed. Local development can still run without keys using
-an insecure dev-only fallback.
+If neither asymmetric key material nor `JWT_SECRET` is set, the web API fails
+closed in development, preview, and production. Local API tests must provide
+their own explicit signing key.
 
 The JWKS endpoint supports offline signature, issuer, and expiry verification.
 It does not tell external platforms whether the backing Mongo session has been
@@ -4418,6 +4431,56 @@ configured. Local development without a configured secret uses an ephemeral
 key, so refreshing comments after a server restart starts a new cursor chain.
 
 
+### Reusable local video tools
+
+Install **Local video tools** (`media-tools`) from Builder's app suites on an
+origin advertising `api.webpages-suites-install >= 1.4.0`. The normal installation
+creates private, owned Page, Component and Action Things. Its `tt-web-platform`
+program stores the document, CSS, selectors and editable encoding settings;
+**Save edited component** persists the edited program and current defaults for
+reuse. Neither the selected file nor the output bytes are saved by this Action.
+See `/docs/builder#local-media` for the declarative contract and capability
+inspection guidance shared with Lopu.
+
+Encoding runs on the selected device through WebCodecs and the pinned
+[Mediabunny 1.61.6 source](https://github.com/Vanilagy/mediabunny/tree/v1.61.6).
+Its unmodified source is MPL-2.0; the shipped notice is at
+`/platform/mediabunny-LICENSE.txt`. No FFmpeg service, provider key, upload,
+external request or additional secret is required. Existing account/database
+configuration is only needed to install or save reusable Things. HTTPS (or
+localhost) and browser codec support are required. MP4 uses H.264/AAC; WebM uses
+VP9/Opus. Unsupported sources or codecs produce an error, including unsupported
+audio rather than silently dropping it. Only primary video/audio are retained;
+extra tracks, subtitles and metadata are omitted. Output can be larger than input;
+the receipt reports actual byte counts. Large files depend on available memory.
+
+The fixed encoding worker runs on the secure host because opaque iframes cannot
+access WebCodecs. The editable document remains in its opaque sandbox. The host
+validates file messages against that frame and run, resolves settings from its
+validated saved program, and terminates work on cancel, replacement or unmount.
+Custom hosts must serve `/assets/mediaWorker-*.js` with `mediaWorkerCsp` from
+`remix/scripts/csp.mjs` (no network or child workers). Vite and Vercel configure
+this automatically; `verify:vercel-output` asserts the worker and scoped header.
+
+Browser regression on macOS: install FFmpeg/ffprobe, a task-owned Chrome for
+Testing binary and Playwright outside the repository. Set `PLAYWRIGHT_MODULE`
+to its module and `CHROME_FOR_TESTING_PATH` to that binary, then run:
+
+```sh
+cd remix
+npm run build:platform
+node scripts/media-acceptance/build.mjs
+env -i HOME="$HOME" PATH="$PATH" TMPDIR="${TMPDIR:-/tmp}" PLAYWRIGHT_MODULE="$PLAYWRIGHT_MODULE" CHROME_FOR_TESTING_PATH="$CHROME_FOR_TESTING_PATH" /usr/bin/sandbox-exec -f scripts/media-acceptance/network.sb node scripts/media-acceptance/check.mjs
+```
+
+The test owns loopback port 18641 only for its duration and closes its server and
+fresh browser afterward. It has no API backend, account or database. OS egress
+is denied except that loopback port; direct-IP, redirect and browser probes
+must demonstrate the boundary before acceptance proceeds. There is no permissive
+fallback. Screenshots, trace and independently probed media stay in ignored
+`remix/tmp/media-acceptance/`. Other operating systems need an equivalent verified
+OS/container egress boundary before running this acceptance test.
+
 ### Web standards Builder app
 
 The worker-compatible Web API recipes include URL members, headers/query/form
@@ -4580,18 +4643,23 @@ If absent, an existing `ANTHROPIC_API_KEY` is used for catalogue reads only. The
 keys are never passed to Claude inference, which continues using the isolated
 Claude Code runtime and its admin-vault OAuth credential.
 
-Without either discovery key, Thingtime attempts the model-list endpoint with
-Claude OAuth from the admin credential vault or `CLAUDE_CODE_OAUTH_TOKEN_THINGTIME`
-/ `CLAUDE_CODE_OAUTH_TOKEN`. Subscription OAuth may not grant Models API access;
-HTTP 401/403 is reported with a discovery-credential hint. A denied scope,
-timeout, malformed/empty list or incomplete pagination preserves the previous
-inventory and reports failure; it is not treated as a provider-wide retirement.
-Claude Code's initialization model list is not an authoritative replacement:
-it can return built-in models even with invalid credentials.
+Without either discovery key, or when the Models API denies catalogue access
+(401/403), Thingtime reads Anthropic's public [model lifecycle table](https://platform.claude.com/docs/en/about-claude/model-deprecations).
+This works without an API key or paid Claude subscription, even when inference
+is not configured. Public records carry `catalogSource: "public-docs"`,
+`catalogCheckedAt`, and `publicCatalogAvailable`; they do not set or overwrite
+credential-scoped `providerAvailable` / `lastSyncedAt`. Only an explicit Retired
+row hides a public model; omission from a documentation page never retires it.
+The admin UI labels public metadata as account-access unverified. A free Claude
+account does not gain inference access merely because a model is listed.
+
+Malformed, empty, redirected, oversized or timed-out documentation responses
+preserve the prior catalogue. API network/server failures also preserve it.
+Claude Code's initialization list is not authoritative discovery.
 Personal Secure Vault endpoints have their own configuration and do not alter
 the shared catalogue.
 
-Admin → Lopu models → **Sync available models** runs a manual refresh. Provider
+Admin → AI Providers → **Sync model catalog** runs a manual refresh. Provider
 model-not-available errors also request a refresh, without replaying the failed
 turn or silently changing its model. A shared five-minute cooldown and two-minute
 lease prevent concurrent requests from hammering providers. Inspect the per-provider
@@ -4606,9 +4674,15 @@ pricing and context limits remain unknown until explicitly supported. Unknown
 pricing remains `priced: false` in usage accounting; it is never presented as a
 provider price of zero. Admins should consider this before enabling auto-allow.
 
-A complete provider snapshot atomically marks absent models unavailable, retaining
+A complete authenticated provider snapshot atomically marks absent models unavailable, retaining
 their records and admin choices. The public catalogue and shared model selectors
 only offer enabled, available models. Admin retains all compatible rows for audit.
+The workflow order selector uses those live models, including discovered versions.
+From AI workflow model order, **Save & apply** saves the named waterfall and then
+persists the shared model order before closing. If either save fails, the dialog
+stays open with an error; retry updates an already-created waterfall rather than
+creating another copy. **Apply waterfall** still stages the order for the separate
+**Save model order** button; **Save waterfall** only saves the personal template.
 
 ### Incoming mail (Gmail, IMAP, POP3 and offline inboxes)
 
@@ -4830,3 +4904,7 @@ created by `test:mail:integration`, then run
 `MAIL_TEST_BASE=http://127.0.0.1:<worktree-port> npm --prefix remix run test:mail:relay`.
 It checks the real session, endpoint, explicit mode and absence of cloud writes
 using DNS-only POP3 discovery; it never attempts a provider login.
+
+### Import an existing OpenAI deployment key
+
+An admin can use **AI Providers → AI platform credentials → Import configured OpenAI key** to copy the current server’s `OPENAI_API_KEY` into the encrypted shared vault as `OPENAI_THINGTIME_API_KEY` (platform `OpenAI`). The value never travels through the browser. The operation requires capability `api.admin-ci-credentials` 3.1.0, a same-origin admin session and an already configured vault. Repeating it preserves existing entries, including disabled entries. Configure your own provider key on your own deployment; no account-specific value is bundled. The environment variable remains available to existing chat consumers; this import does not remove or rotate it.

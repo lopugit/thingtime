@@ -12,6 +12,7 @@ import { thingmonSuite } from './thingmon.ts';
 import { snapquestSuite } from './snapquest.ts';
 import { branchwoodSuite } from './branchwood.ts';
 import { webStandardsSuite } from './webStandards';
+import { mediaToolsSuite } from './mediaTools';
 import { gardenSuite } from './garden.ts';
 import { agentTasksSuite } from './agentTasks';
 
@@ -24,8 +25,9 @@ registerAppSuite(branchwoodSuite);
 registerAppSuite(gardenSuite);
 registerAppSuite(webStandardsSuite);
 registerAppSuite(agentTasksSuite);
+registerAppSuite(mediaToolsSuite);
 
-export const APP_SUITE_LIST: BehaviourSuite[] = [pokeworldSuite, starsalignSuite, dustedSuite, thingmonSuite, snapquestSuite, branchwoodSuite, gardenSuite, webStandardsSuite, agentTasksSuite];
+export const APP_SUITE_LIST: BehaviourSuite[] = [pokeworldSuite, starsalignSuite, dustedSuite, thingmonSuite, snapquestSuite, branchwoodSuite, gardenSuite, webStandardsSuite, agentTasksSuite, mediaToolsSuite];
 
 export const ALL_SUITES: BehaviourSuite[] = [...BEHAVIOUR_SUITES, ...APP_SUITE_LIST];
 
