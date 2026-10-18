@@ -1,0 +1,39 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const vm = require('node:vm');
+const source = fs.readFileSync(path.join(__dirname, '../main.cjs'), 'utf8');
+const closeServices = source.match(/async function closeDesktopServices\(\) \{[\s\S]*?\n\}/)[0];
+const gate = () => { let finish; const promise = new Promise(resolve => { finish=resolve; }); return {promise, finish}; };
+
+test('quit waits for browser cleanup, OAuth shutdown and Mongo shutdown as one barrier', async () => {
+ const browser = gate(), oauth = gate(), database = gate();
+ const calls=[];
+ const pending=vm.runInNewContext(closeServices+'; closeDesktopServices()', {
+  agentBrowsersPromise: Promise.resolve({close:async()=>{calls.push('browser'); await browser.promise;}}),
+  globalThis:{[Symbol.for('thingtime.chatgpt-plan.close')]:async()=>{calls.push('oauth'); await oauth.promise;}},
+  localRuntime:{stop:async()=>{calls.push('database'); await database.promise;}},
+  console, Symbol
+ });
+ let done=false; pending.then(()=>{done=true;});
+ await new Promise(resolve=>setImmediate(resolve));
+ assert.deepEqual(calls.sort(),['browser','oauth']);
+ browser.finish(); await new Promise(resolve=>setImmediate(resolve)); assert.equal(done,false);
+ oauth.finish(); await new Promise(resolve=>setImmediate(resolve)); assert.equal(done,false);
+ assert.ok(calls.includes('database'));
+ database.finish(); await pending; assert.equal(done,true);
+ assert.doesNotMatch(source,/closingAgentBrowsers/);
+ assert.match(source,/if \(desktopServicesClosing\) throw new Error\('Thingtime is closing/);
+});
+
+test('browser cleanup failure still waits for local database cleanup', async () => {
+ const database=gate(); let warned=false;
+ const pending=vm.runInNewContext(closeServices+'; closeDesktopServices()', {
+  agentBrowsersPromise:Promise.resolve({close:async()=>{throw new Error('fixture');}}),
+  globalThis:{},Symbol,localRuntime:{stop:()=>database.promise},console:{warn:()=>{warned=true;}}
+ });
+ let done=false; pending.then(()=>{done=true;});
+ await new Promise(resolve=>setImmediate(resolve)); assert.equal(done,false);
+ database.finish(); await pending; assert.equal(warned,true);
+});

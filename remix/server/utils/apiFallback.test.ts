@@ -11,10 +11,10 @@ import { enforceExpectedDataPlane, mongoDataPlane } from '../../app/api/utils/mo
 import { getRequestMongoEndpoint } from '../../app/api/utils/mongodb/endpoint';
 import { EXPECTED_DATA_PLANE_HEADER } from '../../app/utils/dataPlane';
 
-const ENV_KEYS = ['JWT_PRIVATE_KEY', 'JWT_SECRET', 'MONGODB_CONNECTION_STRING', 'THINGTIME_API_FALLBACK_ORIGIN', 'THINGTIME_DESKTOP', 'THINGTIME_DESKTOP_API_MODE', 'NODE_ENV', 'MONGO_PASS'] as const;
 const desktopManifest = (origin: string) => Response.json({ schemaVersion: 1, origin, features: {
   'api.passwords': { version: '1.2.1' }, 'api.mail': { version: '1.2.1' }, 'api.mail-sync': { version: '1.0.1' }, 'api.ai-chatgpt-plan': { version: '1.1.0' }
 } });
+const ENV_KEYS = ['JWT_PRIVATE_KEY', 'JWT_SECRET', 'MONGODB_CONNECTION_STRING', 'THINGTIME_API_FALLBACK_ORIGIN', 'THINGTIME_DESKTOP', 'THINGTIME_DESKTOP_API_MODE', 'NODE_ENV', 'MONGO_PASS', 'THINGTIME_AGENT_TEST_MODE', 'THINGTIME_AGENT_TEST_SESSION'] as const;
 
 const withFallbackEnv = async (fallbackOrigin: string | undefined, run: () => Promise<void> | void) => {
 	const previous = Object.fromEntries(ENV_KEYS.map((key) => [key, process.env[key]]));
@@ -429,5 +429,24 @@ test('desktop proxy discards a response and its cookies if the selected endpoint
       assert.equal(response.headers.get('set-cookie'), null);
       assert.equal(cancelled, true);
     } finally { mock.mock.restore(); }
+  });
+});
+
+test('incomplete isolated backends refuse signup and root data without reading a body or contacting a fallback', async t => {
+  await withFallbackEnv('https://thingtime.com', async () => {
+    process.env.THINGTIME_AGENT_TEST_MODE = '1';
+    const fetch = t.mock.method(globalThis, 'fetch', async () => { assert.fail('Isolated tests must never contact a fallback'); });
+    try {
+      const request = new Request('http://127.0.0.1:18721/api/v1/auth/signup', { method: 'POST', body: '{"password":"test-only"}' });
+      const response = await (handleApi as any)({ req: request, context: { params: { path: 'v1/auth/signup' } } });
+      assert.equal(response.status, 503);
+      assert.equal(request.bodyUsed, false);
+      assert.equal((await response.json()).code, 'AGENT_TEST_CONFIGURATION_REQUIRED');
+      const root = await (handleRootData as any)({ req: new Request('http://127.0.0.1:18721/api/root-data') });
+      assert.equal(root.status, 503);
+      assert.equal((await proxyApiRequestToFallback(request)).status, 503);
+      assert.throws(() => getApiFallbackOrigin(), /cannot use an API fallback/);
+      assert.equal(fetch.mock.callCount(), 0);
+    } finally { fetch.mock.restore(); }
   });
 });

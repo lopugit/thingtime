@@ -43,6 +43,15 @@ components; reuse them instead of adding parallel versions.
 
 ## Shared navigation and Builder controls
 
+Agent browsers are linked from Lopu's drawer group to `/agent-browsers` and
+`/agent-browsers/:taskId`. `AgentTasks/AgentNetworkSettings.tsx` shares the device
+default and task checkbox controls; `AgentBrowserViewer.tsx` observes or controls
+the current claim. The task board and detail pages come from the editable
+`schemas/appSuites/agentTasks.ts` suite, using normal Things and Actions for
+tasks, todos and progress. See [the runtime contract](../agent-browsers.md) and
+the Agent browsers section of `TESTING.md` for real data, responsive layout and
+live-viewer acceptance. Device-only operations use the trusted desktop bridge.
+
 Owned Things inherit `history` from `THING_ACTIONS`. `TimelineHost` opens the
 same History modal from Things, persisted entity menus and Builder definitions;
 `TimelineLibrary` renders the managed Timeline folder through PageShell.

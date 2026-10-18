@@ -2,6 +2,15 @@
 
 https://thingtime.com
 
+### Agent browsers and tasks
+
+Thingtime for Mac includes task-owned browser installs, claims and a live
+viewer, with isolated, IP-restricted and unrestricted network settings. The
+editable task space uses normal private Things for tasks, todos and updates.
+See [setup, agent CLI and security boundaries](docs/agent-browsers.md). Local
+container setup uses Colima and the Docker CLI; no production secrets or copied
+personal browser profiles are required for isolated acceptance tests.
+
 ### Password manager setup
 
 The private `/passwords` library uses the [Thingtime password manager contract](docs/password-manager.md).

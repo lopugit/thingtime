@@ -1,0 +1,10 @@
+*
+!Dockerfile
+!package.json
+!package-lock.json
+!install.mjs
+!runtime.cjs
+!application.cjs
+!browser-driver.cjs
+!app/
+!app/**

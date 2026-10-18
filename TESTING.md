@@ -1,5 +1,36 @@
 # TESTING.md — per-area manual test checklists
 
+## Agent browsers and editable tasks
+
+- [ ] Install the task suite, create a task, add/complete todos and append progress;
+      compare the rendered records with API readback and reload both pages.
+- [ ] Exercise browser install, cancellation, duplication, exclusive claims,
+      launch, live view, mobile/desktop sizes, scrolling and release in the
+      installed Mac app; scroll the controls and task pages from top to bottom.
+- [ ] Device defaults and the per-task checkbox persist. Existing claims keep
+      their effective policy after defaults or task preferences change.
+- [ ] Two agents run the full app concurrently with separate MongoDB records,
+      cookies, storage and profiles; crossed lease IDs/tokens are refused.
+- [ ] Isolated IPv4/IPv6, direct-IP and redirected external requests fail from
+      browser and backend. Restricted rules permit only the selected IP/ports.
+- [ ] Missing test auth/database configuration fails closed. The bundled app is
+      readable by the actual non-root container UID, and Mongo startup retries
+      recover from an initial connection refusal using a fresh client.
+- [ ] `/index.html` and a deep route such as `/login` reference the same client
+      module, and that module returns JavaScript rather than fallback HTML.
+- [ ] Expiry, release, failed launch and app restart clean only owned sessions;
+      a live controller cannot be replaced and old handles cannot claim a new lease.
+- [ ] Native publisher downloads retain signatures and hashes; duplicated
+      unrestricted browsers start without personal cookies or saved storage.
+
+- [ ] A daemon disconnect during release reports failure and retains the claim;
+      after recovery, release removes only the verified owned resources.
+- [ ] Quit during container/native preparation and native duplication: no
+      background install or copy persists after shutdown completes.
+- [ ] Switching database identity with the same owner/task IDs never reuses
+      the previous database's native registration, claim or live view.
+
+See [the runbook](docs/agent-browsers.md) for commands and evidence boundaries.
 ## Reusable local video compression
 
 - [ ] Install `media-tools` as the intended account; inspect the returned owned
@@ -10265,3 +10296,8 @@ separate from deterministic discovery/lease tests.
 - Refuse an encrypted connection move that exceeds the transfer transport envelope before cancelling reconnects, aborting inference or deleting source credentials; verify the original connection remains usable.
 
 - Installed ChatGPT integration: when enabling the local API, changing its database or switching remote APIs, native Passwords must disconnect before saving the authority change and before restart. A failed native clear must leave saved settings unchanged; ordinary Quit/reopen and force-quit after saving must not retain the old OS connection. Local runtime sessions must never be read for a saved remote AutoFill endpoint; local HTTP AutoFill remains unavailable. Verify real Nitro GET/POST forwarding for Passwords, mail and ChatGPT plan alongside pinned endpoint streaming.
+- Agent task pages: verify desktop centering and mobile gutters; mark a todo complete with a nonempty neighboring add-todo form, reload, and confirm only that todo changed.
+- Desktop agent task identity: switch API endpoints with matching owner/task IDs and default database identity; the second endpoint must not expose or reuse the first endpoint’s browser claim.
+- Agent general security link: open it from a task; the Things settings category and Agent browsers disclosure must open and scroll to the default policy controls. Save, reload and verify the policy; restore isolated testing after acceptance.
+
+- Installed browser/runtime integration: quitting or restarting must await agent-browser cleanup, OAuth authority release and MongoDB shutdown together. Delay either cleanup and verify the process remains alive; a browser cleanup error must not skip database shutdown. Isolated-test mode must reject direct fallback calls before evaluating a configured remote authority.

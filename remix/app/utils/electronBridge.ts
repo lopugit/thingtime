@@ -47,6 +47,7 @@ export type ThingtimeDesktopInfo = {
 	appVersion?: string;
 	buildIdentity?: { gitBranch?: string | null; gitCommit?: string | null };
 	contentOrigin?: string | null;
+	apiOrigin?: string | null;
 	currentUrl?: string | null;
 	desktopSettings?: ThingtimeDesktopSettings | null;
 	desktopSettingsLastError?: string | null;
@@ -273,6 +274,8 @@ export type DesktopSpeechEvent = {
 };
 
 export type ThingtimeDesktopBridge = {
+	agentBrowserVersion?: string;
+	agentBrowsers?: (request: { method: string; params?: Record<string, unknown> }) => Promise<unknown>;
 	speechRecognitionVersion?: string;
 	startSpeechRecognition?: (request: { sessionId: string; lang: string; continuous?: boolean }) => Promise<{ ok: true }>;
 	stopSpeechRecognition?: (request: { sessionId: string }) => Promise<{ ok: true }>;
