@@ -6197,6 +6197,12 @@ default` unsets it, and runtime usage reports the effective cap. A custom
 
 ## Thingtime desktop mesh packaging (`electron/`, `MCP/`, `macos/ThingtimeNode/`)
 
+- [ ] Run the lease-heartbeat failure regression on the release runner. Dispatch
+      waits for cancellation from the failed renewal, and exactly one failed
+      renewal produces exactly one `uncertain` / `command_outcome_uncertain`
+      report even when dispatch returns success. A missed cancellation fails
+      within the watchdog timeout instead of relying on a 35 ms scheduling race.
+
 - [ ] Mac Lopu voice input: in the installed signed app, press the microphone,
       allow Speech Recognition and Microphone, and speak a synthetic test phrase.
       The live transcript fills the message field without Chromium's `network`

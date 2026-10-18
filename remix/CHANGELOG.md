@@ -73,6 +73,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-18 — **Codex (AI)**: Make the macOS lease-heartbeat failure test wait
+  for renewal cancellation instead of a fixed 35 ms delay, resolving the
+  unsigned-source test failure that blocked the Gmail desktop release.
+
 - Claude catalogue/workflow persistence validation: [PR #1016 notes](../PRs/1016-claude-catalog-workflow-keyless-claude-model-sync.md).
 
 - 2026-10-18: Add a create-only admin import of the configured OpenAI key into the shared AI credential vault without exposing the value.
