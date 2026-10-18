@@ -26,7 +26,7 @@ export const assertCatalogFixtureIdentity = (user: any) => {
       user.crystal?.username !== CATALOG_FIXTURE.username || user.crystal?.displayName !== CATALOG_FIXTURE.displayName ||
       secure.email !== CATALOG_FIXTURE.email || secure.emailVerified !== false ||
       user.secureAdmin || secure.meta?.admin || isEnvAdmin(CATALOG_FIXTURE.username) ||
-      secure.accountKind !== 'user' || secure.meta?.uploadsApproved ||
+      secure.accountKind !== 'user' || secure.meta?.publicUploads !== false || secure.meta?.privateUploads !== false ||
       user.ownerId !== user.shareId || typeof user.shareId !== 'string' ||
       user.crystal?.avatarUrl || user.crystal?.bannerUrl || user.crystal?.bio ||
       !Array.isArray(user.thingtime) || user.thingtime.length !== 1 || user.thingtime[0] !== 'user') refuse();

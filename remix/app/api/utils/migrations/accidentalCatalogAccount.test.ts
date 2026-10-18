@@ -10,7 +10,7 @@ const fixture = () => {
   const now = CATALOG_FIXTURE.createdAt;
   const user = { _id: 'fixture-root', shareId: 'fixture-user', ownerId: 'fixture-user', thingtime: ['user'], createdAt: now,
     crystal: { username: CATALOG_FIXTURE.username, displayName: CATALOG_FIXTURE.displayName },
-    secure: packSecure({ email: CATALOG_FIXTURE.email, emailVerified: false, accountKind: 'user', meta: { uploadsApproved: false } }) };
+    secure: packSecure({ email: CATALOG_FIXTURE.email, emailVerified: false, accountKind: 'user', meta: { publicUploads: false, privateUploads: false } }) };
   const ledger = { _id: 'fixture-ledger', shareId: subscriptionShareId('user', user.shareId), schemaVersion: COLLECTION_SCHEMA_VERSIONS.things,
     thingtime: ['subscription'], ownerId: user.shareId, acl: [ACL_OWNER], targetId: null, tags: [], storageLedgerEnvelopeVersion: USER_STORAGE_LEDGER_ENVELOPE_VERSION,
     createdAt: now, updatedAt: now, crystal: { quotaKind: 'subscription', subjectType: 'user', subjectId: user.shareId, tier: 'free', tierVersionId: 'free-v1', tierVersion: 1,
@@ -78,6 +78,7 @@ test('changed identity, elevated permissions, content, storage, verification or 
   for (const alter of [
     (f: any) => { f.user.createdAt = new Date(); },
     (f: any) => { f.user.secureAdmin = true; },
+    (f: any) => { f.user.secure = packSecure({ email: CATALOG_FIXTURE.email, emailVerified: false, accountKind: 'user', meta: { publicUploads: true, privateUploads: false } }); },
     (f: any) => { f.user.secure = packSecure({ email: 'different@example.invalid', emailVerified: false, accountKind: 'user' }); },
     (f: any) => { f.user.secure = packSecure({ email: CATALOG_FIXTURE.email, emailVerified: true, accountKind: 'user' }); },
     (f: any) => { f.ledger.crystal.storageUsedBytes = 1; },
