@@ -73,6 +73,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-18: Password title search now filters the whole private vault before pagination (`api.passwords` 1.2.0), cancels stale searches, and distinguishes no matches from request failure. Added HTTP pagination/owner-isolation and capability regressions.
+
 - Claude catalogue/workflow persistence validation: [PR #1016 notes](../PRs/1016-claude-catalog-workflow-keyless-claude-model-sync.md).
 
 - 2026-10-18: Add a create-only admin import of the configured OpenAI key into the shared AI credential vault without exposing the value.
