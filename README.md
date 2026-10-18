@@ -4909,6 +4909,51 @@ using DNS-only POP3 discovery; it never attempts a provider login.
 
 An admin can use **AI Providers → AI platform credentials → Import configured OpenAI key** to copy the current server’s `OPENAI_API_KEY` into the encrypted shared vault as `OPENAI_THINGTIME_API_KEY` (platform `OpenAI`). The value never travels through the browser. The operation requires capability `api.admin-ci-credentials` 3.1.0, a same-origin admin session and an already configured vault. Repeating it preserves existing entries, including disabled entries. Configure your own provider key on your own deployment; no account-specific value is bundled. The environment variable remains available to existing chat consumers; this import does not remove or rotate it.
 
+
+## ChatGPT plan usage on a local or self-hosted runtime
+
+Thingtime implements the public [Sign in with ChatGPT flow](https://developers.openai.com/siwc/token-sharing-open-source). Each user grants plan access; availability and limits remain controlled by OpenAI. This implementation does not claim partner status or approval for an arbitrary hosted service. OpenAI explicitly documents [self-hosted remote VMs](https://developers.openai.com/siwc/token-sharing-open-source/self-hosted-vms); consult the hosted integration process for a separately operated hosted offering.
+
+### Electron local setup
+
+Desktop rebuilds preserve the selected session store and content origin. When recovering from an older build that used random loopback ports, **Desktop session storage** accepts the verified original HTTPS API origin and exact historical loopback content URL. Native confirmation binds those origins and reopens the old cookie/localStorage/IndexedDB store in place after restart. It retains the newer isolated workspace separately with an explicit switch-back control. It does not guess the prior backend, copy credentials, merge historical ports, or fall back to another port if the selected port is occupied. Recovery is available through the logged-out/offline connection controls.
+
+In **Settings → Things → Thingtime desktop**, enable the optional local API. If the account session cannot load, open the desktop connection controls on the recovery screen; local setup does not require a working cloud account. macOS builds include MongoDB Community Server 8.0.34 for Apple Silicon or Intel. Fresh installations select the bundled server automatically; no Homebrew or separate MongoDB installation is needed. Existing saved executable selections and database files are preserved. You can still choose another compatible `mongod` executable or supply your own MongoDB replica-set connection. The bundled server requires macOS 14 or later; remote API mode remains available on macOS 13. Restart to apply the choice.
+
+The managed database is a child process of Thingtime: it starts only with the enabled local runtime and shuts down with the app. No system-wide MongoDB daemon is installed. Data and encrypted runtime settings live outside the application bundle in the per-user Thingtime application data directory, so replacing the app preserves them. Replacing or downgrading an existing database server requires an explicit compatible migration; never delete the data directory to resolve a startup error.
+
+Builds download checksum-pinned official MongoDB archives into `~/Library/Caches/com.thingtime.desktop/mongodb/<version>` and stage the server under `Contents/Resources/database/mongodb`. The same directory includes the upstream source archive, SSPL license and third-party notices. No MongoDB download occurs at app startup. Release verification checks the database resources and executable before installation. To update the pin, update both architecture digests and the source digest in `electron/lib/bundled-mongodb.cjs`, then rebuild and verify both architectures; do not substitute an arbitrary local binary.
+
+Managed MongoDB runs as an app-owned, authenticated single-node replica set bound to loopback. Its files are separate from any existing database. Electron keeps generated database, signing and vault secrets encrypted using the operating-system credential protection. The local API uses a stable port (default 28631, database 28632; parallel development 28641/28642). Port conflicts fail closed. Local mode never falls back to a cloud account backend.
+
+A local account backend has its own accounts and sessions. Sign in or create a local Thingtime account there; selecting it does not copy a cloud identity or its data. **Settings → AI Providers → ChatGPT plan** starts consent on this computer. Choose a discovered model, then select the account in **Lopu → Your providers**. A full account session can use its available, selected ChatGPT plan for Lopu text chat without an admin invitation. This does not verify the Thingtime account or unlock hosted catalog/API-key providers or voice. Scoped app/PAT credentials and Character override headers cannot claim this exception; ordinary requests use the current session identity, while already-authorized durable continuations retain their saved owner-bound full-session authority. Plan failures never switch to API-credit billing. Usage links to ChatGPT Settings → Usage; Thingtime does not guess a remaining percentage from token counts.
+
+### API, database and GUI placement
+
+- **API:** Desktop endpoint profiles select the runtime that owns accounts and executes requests. Switching requires restart and keeps browser sessions in separate endpoint partitions. A selected remote API must advertise compatible capabilities before a ChatGPT operation is forwarded. HTTPS is required except for explicit loopback endpoints.
+- **Account database:** Local-runtime settings can use managed local MongoDB or an explicitly configured remote replica set. Connection details remain encrypted. For a self-hosted server, configure `MONGODB_CONNECTION_STRING` and its normal signing environment. Changing an account database is not a data migration: preserve its matching vault key, accounts and encrypted records, or explicitly move a connection.
+- **Content database:** The existing MongoDB data selector controls ordinary Things only. It never moves identity records or OAuth credentials to a browser-selected database.
+- **Web GUI:** A self-hosted Thingtime deployment serves the same GUI alongside its API. A remote GUI can manage and use an imported connection; initial loopback consent happens on the local runtime computer. No browser reads plaintext OAuth tokens, and no database contains a copied runtime host identity.
+
+### Move a connection
+
+Open **ChatGPT plan → Move between runtimes** while signed in to the destination API and create a destination code. On the source, paste that code, choose the connection and review the receiving API/account. Confirming the move stops source inference/refresh before releasing a package encrypted for the destination. Download that package and import it at the destination. Only ciphertext travels through the GUI; the receiving private key stays on its runtime. Codes expire and are session-bound. A lost move response can be retried with the same connection and destination code; it must not start a second refresh owner. Keep the encrypted package until import succeeds. Complete the import before the destination code expires (15 minutes). If it expires after the source has stopped, reconnect locally and create a new move; credentials are not automatically restored on the source.
+
+Do not copy live credential records between running databases. Each runtime keeps its own stable host identity. Mongo storage uses an exclusive runtime authority with transaction/revision fencing; after a crash, confirm the old process has stopped before removing its stale authority lock. Never clear a lock simply to start a second process. Remote GUI imports do not enable a callback listener on the remote server; reconnect locally and move a replacement when needed.
+
+For a persistent self-hosted runtime configure these placeholders in its private environment:
+
+```dotenv
+THINGTIME_CHATGPT_PLAN_DIR=/absolute/private/runtime-identity-directory
+THINGTIME_CHATGPT_PLAN_STORAGE=mongodb
+THINGTIME_USER_VAULT_KEY=<your-own-32-byte-vault-key>
+```
+
+The directory must be private (0700), outside the repository and web root, and belongs to one runtime. MongoDB storage uses the configured account backend and vault encryption; never commit keys or copy a source runtime identity directory to another host. Enable `THINGTIME_CHATGPT_PLAN_ALLOW_LOOPBACK_AUTHORIZATION=1` only on the local runtime where the consent browser runs, or with an intentionally configured loopback tunnel. Electron configures this itself. Legacy explicit filesystem storage remains available when the storage option is omitted; its 0600 credential files rely on filesystem protection, not database vault encryption. Ephemeral serverless runtimes remain unsupported by this persistent single-owner implementation.
+
+After an unclean shutdown, stop every process using that runtime directory and confirm its API listener and child processes are gone. Read the stable `hostId` from its private `identity.json` (Mongo mode) or `accounts.json` (file mode), then remove only that directory’s stale `.runtime.lock`. In Mongo mode, use the canonical `getSettingsCollection()` on the configured home database to inspect the exact key `Thingtime.ChatGPTPlan.<hostId>.authority`. Clear only `lockOwner` to `null` with a compare-and-set filter containing that exact key, the observed `lockOwner` and observed `fence`. Do not upsert, delete the row or alter `fence`/`revision`. Restart one runtime; its claim advances the fence. Never recover while the previous process might still run. A crash between OpenAI refresh and saving the rotated token may require reconnecting that account; restoring an old token is not a recovery strategy.
+
+Validation: `corepack pnpm --dir remix run test:chatgpt-plan`, `test:api-capabilities`, `test:lopu-chat-streaming`, and `corepack pnpm --dir electron test`. Live consent, an account-specific model list and a completed provider response are separate acceptance requirements; mocked OAuth tests do not establish those outcomes.
 ### Paired Mac menu bar and reusable scripts
 
 Install **Mac menu bar** or **Device scripts** from the Builder app catalogue.
@@ -4964,3 +5009,20 @@ No new deployment secret is required. Use the existing authenticated account to
 create a Character, save agent credentials in its password manager, and have a
 moderator add that Character to the intended private coordination subspace.
 Do not put account-specific IDs or credentials into fork setup files.
+
+### Personalizing sensitive settings layouts
+
+Desktop runtime, endpoint and previous-workspace recovery controls use ordinary
+Builder blocks. Choose **Edit layout** to adjust their text, order and presentation;
+live native actions pause while editing. Offline desktop layouts save on this
+device under their origin and runtime authority, so connection repair does not
+require a cloud account. Account settings layouts use private webpage Things and
+require `api.things` 1.35.0, `api.webpages-resolve` 1.6.0,
+`api.actions-run` 1.7.0 and `api.mongodb-endpoint` 1.1.0 on the selected API.
+Desktop requests use the existing same-origin API proxy; no cross-origin cookies
+or credential copying are introduced. Concurrent edits refuse stale saves.
+
+Saved documents contain authored blocks only. Password/file values, MongoDB
+credentials, OAuth tokens and transfer files remain in transient/native adapters;
+external component loaders and data Actions cannot be inserted into these
+sensitive layouts. Offline layout writes require browser Web Locks.

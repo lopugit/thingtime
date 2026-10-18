@@ -27,7 +27,32 @@ export type ThingtimeDesktopEndpointCompatibility = {
 	status: 'checking' | 'compatible' | 'incompatible' | 'unreachable';
 };
 
+export type ThingtimeLocalRuntime = {
+	enabled: boolean;
+	active: boolean;
+	restartRequired: boolean;
+	databaseMode: 'managed' | 'external';
+	apiPort: number;
+	databasePort: number;
+	mongodPath: string | null;
+	bundledMongoSelected?: boolean;
+	bundledMongoSupported?: boolean;
+	externalDatabaseConfigured: boolean;
+	encryptionAvailable: boolean;
+	origin: string;
+	error: string | null;
+	downloadUrl: string;
+};
+
 export type ThingtimeDesktopInfo = {
+ sessionStorage?: {
+  mode: 'partitioned' | 'legacy';
+  legacyApiOrigin: string | null;
+  legacyContentOrigin: string | null;
+  recoveryAvailable: boolean;
+  restartRequired?: boolean;
+ };
+	localRuntime?: ThingtimeLocalRuntime | null;
 	appVersion?: string;
 	buildIdentity?: { gitBranch?: string | null; gitCommit?: string | null };
 	contentOrigin?: string | null;
@@ -286,6 +311,17 @@ export type ThingtimeDesktopBridge = {
 	getInfo?: () => Promise<ThingtimeDesktopInfo>;
 	getNodePanelPreference?: (request: { accountId: string }) => Promise<{ scope: string; dismissed: boolean }>;
 	setNodePanelPreference?: (request: { accountId: string; scope: string; dismissed: boolean }) => Promise<{ scope: string; dismissed: boolean }>;
+	configureLocalRuntime?: (request: {
+		enabled: boolean;
+		databaseMode: 'managed' | 'external';
+		apiPort: number;
+		databasePort: number;
+		mongoUri?: string;
+	}) => Promise<ThingtimeDesktopInfo>;
+	chooseLocalMongod?: () => Promise<ThingtimeDesktopInfo>;
+	restartRuntime?: () => Promise<void>;
+ recoverDesktopSession?: (request: { apiOrigin: string; contentOrigin: string }) => Promise<ThingtimeDesktopInfo>;
+ useCurrentDesktopSession?: (request: { apiOrigin: string }) => Promise<ThingtimeDesktopInfo>;
 	getDesktopSettings?: () => Promise<ThingtimeDesktopSettings>;
 	addEndpoint?: (request: { label: string; url: string }) => Promise<ThingtimeDesktopSettings>;
 	removeEndpoint?: (request: { endpointId: string }) => Promise<ThingtimeDesktopSettings>;
