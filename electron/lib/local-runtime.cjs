@@ -122,7 +122,7 @@ class LocalRuntime {
 			await fs.rm(temporary, { force: true });
 		}
 	}
-	configure(request) {
+	configure(request, beforeCommit) {
 		const next = this.pending.then(async () => {
 			if (!request || typeof request.enabled !== 'boolean' || !['managed', 'external'].includes(request.databaseMode))
 				throw new Error('Choose a local runtime and database mode.');
@@ -147,6 +147,7 @@ class LocalRuntime {
 					if (error.code !== 'ENOENT') throw error;
 				}
 			}
+			await beforeCommit?.();
 			await this.persist(state);
 			this.state = state;
 			this.restartRequired = true;

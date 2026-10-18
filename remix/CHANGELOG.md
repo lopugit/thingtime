@@ -75,7 +75,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
-- 2026-10-18 — **Codex (AI), local installed integration:** Preserve native Passwords and menu/device features alongside ChatGPT local runtime setup. Bind native AutoFill to the running account authority and retire its connection before API/database restarts; retain Nitro private-service forwarding and streaming endpoint fencing.
+- 2026-10-18 — **Codex (AI), local installed integration:** Preserve native Passwords and menu/device features alongside ChatGPT local runtime setup. Bind native AutoFill to the running account authority and retire its connection before saving API/database changes and restarting; retain Nitro private-service forwarding and streaming endpoint fencing. [Integration details](../PRs/1035-chatgpt-plan-installed-local-native-account-compatibility.md).
 
 - 2026-10-18 — **Codex (AI)**: Add editable Mac menu bar and Device scripts
   Builder suites, private menu telemetry, freshly approved paired-Mac Bash

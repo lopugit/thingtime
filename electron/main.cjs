@@ -990,6 +990,7 @@ async function initializeDesktopSettings() {
   }
  });
  await localRuntime.initialize();
+ if (localRuntime.snapshot().enabled) await passwordProvider.disconnect();
 	desktopSettings = new DesktopSettingsStore({
 		filePath: path.join(app.getPath('userData'), 'desktop-settings.json'),
 		metadata: readWebBuildMetadata()
@@ -1397,6 +1398,7 @@ async function switchDesktopEndpoint(endpointId, { confirm = true } = {}) {
  // Keep the running server pinned to its old endpoint until it exits.
  // Changing global proxy state in-place could redirect queued old-account
  // requests into the new API even after stopping the renderer.
+ await passwordProvider.disconnect();
  await settings.selectEndpoint(target.id);
  mainWindow?.webContents.stop();
  desktopSpeech.stop(); desktopMail.stop();
@@ -1529,7 +1531,7 @@ function requireLocalRuntimeSender(event) {
 }
 async function configureLocalRuntime(event, request) {
  requireLocalRuntimeSender(event);
- await localRuntime.configure(request);
+ await localRuntime.configure(request, () => passwordProvider.disconnect());
  return getDesktopInfo();
 }
 async function chooseLocalMongod(event) {
