@@ -164,7 +164,13 @@ final class FolderBridge {
                     }
                 } else if(!request.action.equals("list")) {
                     String rootId=request.payload.getString("rootId");if(!UUID.fromString(rootId).toString().equalsIgnoreCase(rootId)) throw new FolderReader.Failure("Invalid folder selection.");
-                    if(request.action.equals("remove")) { store.remove(request.scope,rootId);proofs.clear(); }
+                    if(request.action.equals("remove")) {
+                        // Revoke first; retained bytes never keep a revoked grant alive.
+                        store.remove(request.scope,rootId);proofs.clear();
+                        try(NativeUploadPartStore parts=new NativeUploadPartStore(new java.io.File(activity.getNoBackupFilesDir(),"NativeUploadParts-v1").toPath(),check,NativeUploadPartStore.ANDROID)) {
+                            parts.remove(request.scope,rootId);
+                        }
+                    }
                     else if(PhotoLibrary.owns(activity,store.snapshot(request.scope,rootId).uri) && !java.util.Arrays.asList("scan","read","read-range","upload-part","upload-file").contains(request.action)) {
                         throw new FolderReader.Failure("Photo libraries are read-only backup sources.");
                     }
@@ -315,7 +321,8 @@ final class FolderBridge {
                                     transport.check();
                                 };
                                 NativeUploadSource.Reader source=managed?offline.uploadSource(request.scope,grant,first.source):reader.uploadSource(first.source);
-                                try(NativeUploadJob job=new NativeUploadJob(new java.io.File(activity.getNoBackupFilesDir(),"NativeUploadParts-v1").toPath(),transport::check)) {
+                                try(NativeUploadJob job=new NativeUploadJob(new java.io.File(activity.getNoBackupFilesDir(),"NativeUploadParts-v1").toPath(),
+                                    new NativeUploadPartStore.Binding(request.scope,rootId,FolderReader.hash(grant.uri.toString()+"\0"+grant.generation)),transport::check)) {
                                     if(file!=null) {
                                         job.run(file,source,transport,authorize,received->{
                                             transport.check();request.deadline=android.os.SystemClock.elapsedRealtime()+900000;

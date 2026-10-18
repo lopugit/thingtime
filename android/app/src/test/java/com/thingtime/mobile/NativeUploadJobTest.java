@@ -8,6 +8,15 @@ import java.security.MessageDigest;
 import java.util.*;
 
 public class NativeUploadJobTest {
+    static final NativeUploadPartStore.Disk DISK=new NativeUploadPartStore.Disk() {
+        public void sync(Path path) throws Exception {try(java.nio.channels.FileChannel channel=java.nio.channels.FileChannel.open(path,StandardOpenOption.READ)){channel.force(true);}}
+        public void regular(Path path) throws Exception {
+            if(!Files.isRegularFile(path,LinkOption.NOFOLLOW_LINKS)||((Number)Files.getAttribute(path,"unix:nlink",LinkOption.NOFOLLOW_LINKS)).intValue()!=1)throw NativeUploadRequest.invalid();
+        }
+    };
+    static NativeUploadPartStore.Binding binding() throws Exception {return new NativeUploadPartStore.Binding(new DeviceScope("owner","https://sync.test",false),"11111111-1111-4111-8111-111111111111","a".repeat(64));}
+    static NativeUploadJob job(Path path,PairingEngine.Check check) throws Exception {return new NativeUploadJob(path,binding(),check,DISK);}
+
     static void remove(Path root) throws Exception {try(java.util.stream.Stream<Path> paths=Files.walk(root)){for(Path p:paths.sorted(Comparator.reverseOrder()).toList())Files.delete(p);}}
     static final class Cloud implements NativeUploadJob.Transport {
         final NativeUploadRequest request;
@@ -38,14 +47,14 @@ public class NativeUploadJobTest {
         Path root=Files.createTempDirectory("native-upload-job-");
         try {
             cloud.losePart=true;
-            try(NativeUploadJob job=new NativeUploadJob(root.resolve("parts"),()->{})) {
+            try(NativeUploadJob job=job(root.resolve("parts"),()->{})) {
                 assertThrows(IOException.class,()->job.run(r,f.reader.uploadSource(r.source),cloud,()->{},n->{}));
             }
             assertEquals(0,cloud.completions);assertEquals(1,cloud.puts);
             List<Long> progress=new ArrayList<>();f.readBytes=0;
-            try(NativeUploadJob job=new NativeUploadJob(root.resolve("parts"),()->{})) {job.run(r,f.reader.uploadSource(r.source),cloud,()->r.authorize(f.row(),"wifi",false,"device"),progress::add);}
+            try(NativeUploadJob job=job(root.resolve("parts"),()->{})) {job.run(r,f.reader.uploadSource(r.source),cloud,()->r.authorize(f.row(),"wifi",false,"device"),progress::add);}
             assertEquals(1,cloud.completions);assertEquals(3,cloud.puts);assertEquals(2,cloud.reservations);
-            assertEquals(List.of(r.partSize,r.size),progress);assertEquals(3*r.size,f.readBytes);assertTrue(f.maxRead<=65536);
+            assertEquals(List.of(r.partSize,r.size),progress);assertEquals(3*r.size-r.partSize,f.readBytes);assertTrue(f.maxRead<=65536);
             ByteArrayOutputStream restored=new ByteArrayOutputStream();for(int i=1;i<=r.partCount;i++)restored.write(cloud.parts.get(i));assertArrayEquals(f.bytes,restored.toByteArray());
             try(java.util.stream.Stream<Path> files=Files.list(root.resolve("parts"))){assertEquals(List.of(".lock"),files.map(p->p.getFileName().toString()).toList());}
         } finally {remove(root);}
@@ -54,8 +63,8 @@ public class NativeUploadJobTest {
         NativeUploadFixture f=new NativeUploadFixture(1031);NativeUploadRequest r=f.request();Cloud cloud=new Cloud(r);cloud.loseCompletion=true;
         Path root=Files.createTempDirectory("native-upload-complete-");
         try {
-            try(NativeUploadJob job=new NativeUploadJob(root.resolve("parts"),()->{})){assertThrows(IOException.class,()->job.run(r,f.reader.uploadSource(r.source),cloud,()->{},n->{}));}
-            try(NativeUploadJob job=new NativeUploadJob(root.resolve("parts"),()->{})){job.run(r,work->{throw new AssertionError("Already completed bytes must not be read again");},cloud,()->{},n->assertEquals(r.size,n));}
+            try(NativeUploadJob job=job(root.resolve("parts"),()->{})){assertThrows(IOException.class,()->job.run(r,f.reader.uploadSource(r.source),cloud,()->{},n->{}));}
+            try(NativeUploadJob job=job(root.resolve("parts"),()->{})){job.run(r,work->{throw new AssertionError("Already completed bytes must not be read again");},cloud,()->{},n->assertEquals(r.size,n));}
             assertEquals(1,cloud.puts);assertEquals(1,cloud.completions);
         }finally{remove(root);}
     }
@@ -63,12 +72,12 @@ public class NativeUploadJobTest {
         NativeUploadFixture f=new NativeUploadFixture(70000);NativeUploadRequest r=f.request();Cloud cloud=new Cloud(r);
         cloud.afterPut=()->f.bytes[0]^=1;Path root=Files.createTempDirectory("native-upload-changed-");
         try {
-            try(NativeUploadJob job=new NativeUploadJob(root.resolve("parts"),()->{})){assertThrows(Exception.class,()->job.run(r,f.reader.uploadSource(r.source),cloud,()->{},n->{}));}
+            try(NativeUploadJob job=job(root.resolve("parts"),()->{})){assertThrows(Exception.class,()->job.run(r,f.reader.uploadSource(r.source),cloud,()->{},n->{}));}
             assertEquals(0,cloud.completions);f.bytes[0]^=1;
             NativeUploadSource source=NativeUploadSource.verify(r.source,f.reader.uploadSource(r.source),()->{});f.bytes[1]^=1;
             assertThrows(Exception.class,()->source.capture(1,new ByteArrayOutputStream()));
             boolean[] stopped={false};PairingEngine.Check check=()->{if(stopped[0])throw new java.util.concurrent.CancellationException();};
-            try(NativeUploadJob job=new NativeUploadJob(root.resolve("parts"),check)) {
+            try(NativeUploadJob job=job(root.resolve("parts"),check)) {
                 stopped[0]=true;assertThrows(java.util.concurrent.CancellationException.class,()->job.run(r,f.reader.uploadSource(r.source),cloud,()->{},n->{}));
             }
             try(java.util.stream.Stream<Path> files=Files.list(root.resolve("parts"))){assertEquals(1,files.count());}
@@ -96,11 +105,11 @@ public class NativeUploadJobTest {
         Path root=Files.createTempDirectory("native-upload-lock-");
         try {
             Path parts=root.resolve("parts");Files.createDirectory(parts);Files.write(parts.resolve("part-old.bin"),"orphan".getBytes(java.nio.charset.StandardCharsets.UTF_8));
-            try(NativeUploadJob job=new NativeUploadJob(parts,()->{})) {
+            try(NativeUploadJob job=job(parts,()->{})) {
                 assertFalse(Files.exists(parts.resolve("part-old.bin")));
-                assertThrows(Exception.class,()->{try(NativeUploadJob ignored=new NativeUploadJob(parts,()->{})){fail("Concurrent writer");}});
+                assertThrows(Exception.class,()->{try(NativeUploadJob ignored=job(parts,()->{})){fail("Concurrent writer");}});
             }
-            Path link=root.resolve("alias");Files.createSymbolicLink(link,parts);assertThrows(Exception.class,()->new NativeUploadJob(link,()->{}));Files.delete(link);
+            Path link=root.resolve("alias");Files.createSymbolicLink(link,parts);assertThrows(Exception.class,()->job(link,()->{}));Files.delete(link);
         } finally {remove(root);}
     }
 }

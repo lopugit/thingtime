@@ -79,7 +79,7 @@ public class ManagedFileStoreTest {
                 assertEquals(2,number);assertEquals(17,length);assertArrayEquals(Arrays.copyOfRange(bytes,8*1024*1024,bytes.length),Files.readAllBytes(file));
             }
         };
-        try(NativeUploadJob job=new NativeUploadJob(new File(directory,"upload-parts").toPath(),()->{})){job.upload(part,source,cloud,()->{},false);}
+        try(NativeUploadJob job=new NativeUploadJob(new File(directory,"upload-parts").toPath(),new NativeUploadPartStore.Binding(fixture.owner,root,"a".repeat(64)),()->{})){job.upload(part,source,cloud,()->{},false);}
 
         byte[] replacement={1,2,3};JSONObject update=request("upload.bin",replacement,false);
         update.getJSONObject("operation").getJSONObject("mutation").put("expectedTarget",first);publish(update,replacement);

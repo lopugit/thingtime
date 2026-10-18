@@ -502,7 +502,9 @@ authentication and an isolated storage client without cookies, authenticators or
 redirects. No new secrets or environment variables are required. A normal job
 reads the source three times; provider seek efficiency and large-file throughput
 remain to be measured. Disk space must accommodate one canonical multipart part
-plus 16 MiB. Unfinished parts are deleted on failure or the next locked job.
+plus 16 MiB, in addition to retained recovery parts. The private cache reserves
+at most 32 parts / 5 GiB across accounts. Uncertain upload replies retain verified
+parts under their original IDs; success releases them. There is no silent eviction.
 
 API 35 installed folder acceptance verifies an 8,388,625-byte, two-part upload
 and matching cloud download hash with zero bulk WebView frames. Installed photo
@@ -511,9 +513,37 @@ bytes after local deletion. Small synthetic photo fixtures do not establish
 large-library throughput.
 
 This capability is foreground-only: leaving the app cancels its request. Retry
-reuses the original server IDs and recaptures interrupted parts; an already-ready
-upload needs no source read. Durable part caching, WorkManager/service scheduling
-and process-death/background acceptance remain separate work.
+reuses the original server IDs and hash-verified cached parts; an incomplete
+capture is recaptured, and an already-ready upload needs no source read.
+The native cache binds owner/origin, root, grant generation, source, upload,
+operation and part. Every retry still verifies the current full source, account,
+permissions and connection policy. Removing the folder selection revokes access
+and removes only that account/root's cached parts. It saves no cookies, signed
+URLs or connection authority and is excluded from Android system backups.
+WorkManager/service scheduling, autonomous relaunch, real interrupted network
+acceptance and physical-device background behavior remain separate work.
+
+The opt-in `NativeUploadRecoveryTest` uses an 8 MiB + 17 byte synthetic source and
+transport to prove private-filesystem recovery across two Android processes. With
+the debug and androidTest APKs installed on a disposable test device:
+
+```sh
+adb -s <test-device-id> shell am instrument -w \
+  -e class com.thingtime.mobile.NativeUploadRecoveryTest \
+  -e nativeUploadRecovery capture \
+  com.thingtime.mobile.dev.test/androidx.test.runner.AndroidJUnitRunner
+adb -s <test-device-id> shell am force-stop com.thingtime.mobile.dev
+adb -s <test-device-id> shell am instrument -w \
+  -e class com.thingtime.mobile.NativeUploadRecoveryTest \
+  -e nativeUploadRecovery recover \
+  com.thingtime.mobile.dev.test/androidx.test.runner.AndroidJUnitRunner
+```
+
+Both phases must report `OK (1 test)`. Capture refuses to overwrite an existing
+fixture. Recovery requires a different PID, checks original IDs and every byte,
+proves the retained part was not reread from the source, and removes its fixture.
+This is deterministic disk recovery after a simulated lost reply, not a claim of
+OS-managed background transfer or real network interruption.
 
 ### Binary upload fallback (native access 1.4)
 

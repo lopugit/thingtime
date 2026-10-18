@@ -155,7 +155,7 @@ final class SyncStaging {
             return fd;
         } catch(Exception error) { Os.close(fd);throw error; }
     }
-    private static void syncDirectory(File file) throws Exception {
+    static void syncDirectory(File file) throws Exception {
         FileDescriptor fd=open(file,OsConstants.O_RDONLY,true);
         try { Os.fsync(fd); } finally { Os.close(fd); }
     }

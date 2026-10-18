@@ -68,6 +68,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-18 — **Codex (AI)**: Android retains bounded, verified native upload
+  parts across uncertain replies and process restart, while rechecking current
+  authorization/source and preserving canonical sync/Timeline identities.
+  Added installed two-process recovery acceptance; background scheduling remains
+  pending. [PR #1002 evidence](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
 - 2026-10-18 — **Codex (AI)**: Android native multipart uploads now use the
   existing sync identities, reviewed connection and Timeline handoff with bounded
   private part staging and no bulk bytes in the WebView. Foreground only;

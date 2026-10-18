@@ -2478,12 +2478,12 @@ selected `tt_auth`; storage has no ambient cookies/authentication or redirects.
 The app serializes native jobs and takes a native file lock before deleting
 orphan temporary parts. No credentials or signed URLs persist.
 
-This is foreground transport, not a background scheduler. Cancellation removes
-private temporary parts; retry recaptures them under the original IDs. An
+This is foreground transport, not a background scheduler. The original transport checkpoint removed private temporary parts on cancellation;
+this is superseded by the durable cache checkpoint below. An
 already-completed reservation skips rereading/uploading bytes. The normal native
 job reads the source three times; provider skipping can add work, and physical
-100 GB–100 TB throughput has not been established. Android durable part caching,
-OS scheduling/relaunch and large-root paging remain open.
+100 GB–100 TB throughput has not been established. OS scheduling/relaunch and large-root paging remain open. Durable caching is
+covered by the following checkpoint.
 
 Validation: 48 JVM tests, 164 shared sync tests, debug/release builds and Android
 lint pass. The installed API 35 SAF acceptance and 72-test runner pass: 8,388,625
@@ -2500,3 +2500,37 @@ Installed Android photo acceptance also passes: two native whole-file jobs, zero
 bulk WebView reads, exact downloaded original-image hashes, newly added photo
 discovery, unchanged cloud revision after device deletion and repeat convergence.
 These small synthetic originals do not establish large-library/media throughput.
+
+
+## Android upload cache recovery — 2026-10-18
+
+The native multipart adapter now retains uncertain parts in the existing private
+upload directory under a native file lock. Reservation identity commits before
+capture; payload fsync precedes its ready digest. Retries verify both cached bytes
+and the current complete source before upload. Owner/origin, root, grant generation,
+original upload/operation, part and source are immutable cache bindings. A cache
+entry carries no auth credentials, signed URL or saved permission to upload.
+Current account, device, connection, network and power checks still apply.
+
+The cache reserves at most 32 parts / 5 GiB, refuses capacity rather than evicting
+uncertain data, and removes confirmed parts through an atomic discard. Incomplete
+captures may be retried; unknown state, links, corruption and changed identities
+fail closed. Removing a folder selection revokes it first, then removes only its
+account/root's cache. This is transport recovery, never a second Timeline/history
+store: canonical publication remains in the existing shared sync journal.
+
+Validation: 55 JVM tests, debug/minified release builds and Android lint pass.
+The installed API 35 two-phase recovery test passed before and after force-stop,
+requiring different process IDs. It retained an 8 MiB part after a simulated lost
+PUT reply, reused it with the same IDs, verified the full 8 MiB + 17 byte source,
+completed both parts and removed its private fixture. This test uses a synthetic
+transport; real interrupted networking, power loss and OS scheduling are unproven.
+Background acknowledgement stays unavailable (upload capability remains 1.2).
+Full-account backup coverage, large-root paging and physical 100 GB–100 TB
+throughput remain incomplete in the broader requirement audit.
+
+The normal installed SAF upload acceptance also passes with the cache enabled:
+73-test runner, real picker/API, 8,388,625-byte multipart file, one native job,
+zero bulk WebView reads, independent downloaded SHA-256 and scoped cleanup.
+Other opt-in process tests in that runner were not enabled; the two explicit
+recovery phases above supply the fresh-process cache evidence.

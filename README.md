@@ -4761,7 +4761,10 @@ picker/upload acceptance and its synthetic-file requirements, see
 Android upload capability 1.2 performs whole-file multipart uploads in the native
 host, with no bulk WebView bytes. It needs the existing selected-folder/photo
 grant and account upload API setup, plus private disk space for one multipart
-part. No new secrets are required. It remains foreground-only; see
+part and any uncertain parts retained for retry (bounded to 32 parts / 5 GiB).
+Retries reauthorize and hash-check retained bytes under the original upload IDs;
+removing a folder selection clears its cache. No new secrets are required.
+It remains foreground-only; see
 [native upload limits and acceptance](android/README.md#native-whole-file-uploads-upload-capability-12).
 The optional `THINGTIME_FOLDER_UPLOAD_TEST=1` run uses the same disposable
 localhost account and normal upload-approval/storage setup; it needs no new

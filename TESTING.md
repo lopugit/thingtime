@@ -11309,3 +11309,25 @@ protection values as strings, as specified by
   deletion and repeat without another publication.
 - [ ] Physical devices, long jobs, low disk, interrupted actual PUT, background
   policy, OS process death/relaunch and sustained large-data throughput.
+
+
+### Android durable native upload parts — 2026-10-18
+
+- [x] Bug class: a lost PUT reply or process restart must retain the original
+  verified part, not delete it or invent a new upload. Reopen the cache and check
+  exact IDs, bytes, source-read counts and release after a confirmed handoff.
+- [x] Kill-point regression: interruption after payload fsync but before the ready
+  record must recapture; an uncommitted directory and atomic discard may be
+  cleaned, while unknown files, symlinks and hardlinks must fail closed.
+- [x] Refuse changed grant/source identity and corrupt payloads before disclosure.
+  Retry rechecks current authorization and source even when cached bytes exist.
+  Wrong-owner removal must retain the part; exact account/root removal clears it.
+- [x] Enforce bounded reservations without evicting uncertain uploads; verify
+  private file/directory modes, native file locking and no credential persistence.
+- [x] Run both explicit `NativeUploadRecoveryTest` phases from android/README.md,
+  with force-stop between them. Assert different process IDs, original operation
+  and upload IDs, exact two-part bytes, cached first-part reuse and cleanup.
+- [x] Repeat installed SAF picker/API upload with the cache enabled: one native
+  whole-file job, zero bulk WebView reads, complete downloaded hash and cleanup.
+- [ ] OS-scheduled background work, autonomous relaunch, physical devices,
+  power loss during fsync, interrupted actual network PUT and sustained large data.

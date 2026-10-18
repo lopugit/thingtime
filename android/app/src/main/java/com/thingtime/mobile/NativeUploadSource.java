@@ -40,6 +40,12 @@ final class NativeUploadSource {
             !FolderReader.hex(composite.digest()).equals(source.getJSONObject("fingerprint").getString("sha256")))throw NativeUploadRequest.invalid();
         return new NativeUploadSource(reader,check,size,partSize,digests,source);
     }
+    void matches(JSONObject source) throws Exception {
+        if(!SyncStaging.canonical(entry).equals(SyncStaging.canonical(source)))throw NativeUploadRequest.invalid();
+    }
+    String digest(int number) throws Exception {
+        if(number<1||number>digests.size())throw NativeUploadRequest.invalid();return FolderReader.hex(digests.get(number-1));
+    }
     void revalidate() throws Exception {verify(entry,reader,check);}
     String capture(int number,OutputStream output) throws Exception {
         if(number<1||number>digests.size())throw NativeUploadRequest.invalid();

@@ -2254,3 +2254,28 @@ Installed Android photo acceptance also passes: two native whole-file jobs, zero
 bulk WebView reads, exact downloaded original-image hashes, newly added photo
 discovery, unchanged cloud revision after device deletion and repeat convergence.
 These small synthetic originals do not establish large-library/media throughput.
+
+
+## Android durable native upload parts — 2026-10-18
+
+Lost PUT replies now retain verified private parts under the original upload and
+operation IDs. The bounded cache commits reservation identity before capture,
+flushes bytes before its ready record, verifies cached hashes on retry, and fences
+owner/origin, root/grant generation and source identity. Current source, account,
+device and editable connection policy are still rechecked. Confirmed parts use
+atomic discard; exact folder removal clears only its scoped cache. No credentials
+or URLs persist, and the existing shared journal owns Timeline publication.
+
+Validation: 55 JVM tests; debug/androidTest/minified release builds and lint pass.
+Installed API 35 capture/recover phases pass across force-stop with different
+process IDs: the 8 MiB retained part is reused, all 8 MiB + 17 bytes match, original
+IDs remain unchanged, and the fixture is removed. Transport is synthetic in this
+process test. The app remains foreground-only with capability 1.2; actual network
+interruption, OS scheduling/relaunch, physical background devices and large-data
+throughput are still open. See the requirement audit in docs/mobile-file-sync.md.
+
+The real SAF picker/API acceptance also passed with the cache enabled (73-test
+runner): an 8,388,625-byte upload uses one native job and zero bulk WebView reads,
+then an independent download matches SHA-256 and synthetic state is cleaned.
+Other opt-in process tests in this runner remain skipped; only the separately
+invoked capture/recover phases establish fresh-process cache recovery here.
