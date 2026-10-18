@@ -44,7 +44,7 @@ test('JSON Action inputs and draft-saving suites negotiate both origin manifests
 	const wellKnown = thingtimeCapabilityManifest('https://thingtime.test').features;
 	for (const [feature, minimum, previous] of [
 		['api.things', '1.34.1', '1.32.0'], ['api.things-update', '1.11.0', '1.9.0'],
-		['api.actions-run', '1.37.0', '1.34.0'], ['api.webpages-suites-install', '1.4.0', '1.3.0']
+		['api.actions-run', '1.37.1', '1.34.0'], ['api.webpages-suites-install', '1.5.0', '1.3.0']
 	]) {
 		assert.equal(route[feature], minimum);
 		assert.equal(wellKnown[feature].version, minimum);
@@ -130,8 +130,8 @@ test('standalone Thing copying negotiates the additive copy contract on both man
 });
 
 test('Data Thing controls negotiate the shared-content action contract', () => {
-	assert.equal(createApiCapabilitiesManifest().features['api.actions-run'], '1.37.0');
-	assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.actions-run'].version, '1.37.0');
+	assert.equal(createApiCapabilitiesManifest().features['api.actions-run'], '1.37.1');
+	assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.actions-run'].version, '1.37.1');
 	for (const unsupported of ['', '1.1.0', '1.2.0', '1.2.1', '2.0.0']) assert.equal(capabilitySatisfies(unsupported, '1.3.0'), false);
 	assert.equal(capabilitySatisfies('1.3.1', '1.3.0'), true);
 });
@@ -221,7 +221,7 @@ test('capabilities publish the native Apple notification device contract', () =>
 	assert.equal(manifest.features['api.watch-pairing'], '1.2.0');
 	assert.equal(manifest.features['api.watch-sync'], '1.1.0');
 	assert.equal(manifest.features['api.watch-things'], '1.1.0');
-	assert.equal(manifest.features['api.devices'], '1.9.0');
+	assert.equal(manifest.features['api.devices'], '1.11.0');
 	assert.equal(manifest.features['api.attachment-uploads'], '1.5.0');
 	assert.equal(manifest.features['api.attachment-upload-parts'], '1.1.0');
 	assert.equal(manifest.features['api.attachment-upload-complete'], '1.4.0');
@@ -355,7 +355,7 @@ test('admin preview dispatch publishes its protected-controller contract version
 
 test('storage-aware health and the corrected email environment gate publish their contract updates', () => {
 	const manifest = createApiCapabilitiesManifest();
-	assert.equal(manifest.features['api.health-nitro'], '1.1.0');
+	assert.equal(manifest.features['api.health-nitro'], '1.2.0');
 	assert.equal(manifest.features['api.email-config'], '1.0.1');
 });
 
@@ -419,7 +419,7 @@ test('subspace user flairs publish their contract versions', () => {
 	// subspaceMod.reportCount for the post's moderators; S6 moved the feed on
 	// to 1.4.0 — scope=all|subspaces)
 	for (const feature of ['api.things-comment', 'api.things-user']) {
-		assert.equal(manifest.features[feature], feature === 'api.things-comment' ? '1.8.0' : '1.7.0', feature);
+		assert.equal(manifest.features[feature], feature === 'api.things-comment' ? '1.9.0' : '1.7.0', feature);
 	}
 	// (S7 moved the single read on to 1.4.0 — commentSort=top|new|old; the
 	// shared projection's other three ids are untouched)
@@ -468,7 +468,7 @@ test('subspace reports publish their contract versions', () => {
 	assert.equal(manifest.features['api.subspaces-moderate'], '1.4.0');
 	assert.equal(manifest.features['api.subspaces-feed'], '1.3.0');
 	for (const feature of ['api.things-comment', 'api.things-user']) {
-		assert.equal(manifest.features[feature], feature === 'api.things-comment' ? '1.8.0' : '1.7.0', feature);
+		assert.equal(manifest.features[feature], feature === 'api.things-comment' ? '1.9.0' : '1.7.0', feature);
 	}
 	// (S7 moved the single read on to 1.4.0 — commentSort=top|new|old; the
 	// shared projection's other three ids are untouched)
@@ -492,7 +492,7 @@ test('subspace discovery publishes its contract versions', () => {
 	assert.equal(manifest.features['api.subspaces'], '1.5.1');
 	assert.equal(manifest.features['api.things-feed'], '1.8.0');
 	for (const feature of ['api.things-comment', 'api.things-user']) {
-		assert.equal(manifest.features[feature], feature === 'api.things-comment' ? '1.8.0' : '1.7.0', feature);
+		assert.equal(manifest.features[feature], feature === 'api.things-comment' ? '1.9.0' : '1.7.0', feature);
 	}
 	// (S7 moved the single read on to 1.4.0 — commentSort=top|new|old; the
 	// shared projection's other three ids are untouched)
@@ -518,6 +518,21 @@ test('run chat advertises both origin-scoped contracts and rejects incompatible 
   }
   assert.equal(capabilitySatisfies('1.1.0', '1.0.0'), true);
   for (const version of ['', '0.9.0', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.0.0'), false);
+});
+
+test('agent testing and task installation negotiate their additive contracts', () => {
+  const legacy = createApiCapabilitiesManifest(), manifest = thingtimeCapabilityManifest('https://thingtime.test');
+  for (const [feature, minimum, previous] of [
+    ['api.health-nitro', '1.2.0', '1.1.0'],
+    ['api.webpages-suites-install', '1.5.0', '1.4.0']
+  ]) {
+    assert.equal(legacy.features[feature], minimum);
+    assert.equal(manifest.features[feature].version, minimum);
+    assert.equal(capabilitySatisfies(previous, minimum), false);
+    assert.equal(capabilitySatisfies('2.0.0', minimum), false);
+    assert.equal(capabilitySatisfies(undefined, minimum), false);
+    assert.equal(capabilitySatisfies(minimum, minimum), true);
+  }
 });
 
 test('subspace image clients negotiate both origin manifests and reject pre-upload contracts', () => {
@@ -776,3 +791,8 @@ test('Gmail OAuth and its one-use callback are advertised on both manifests and 
   for (const version of [undefined, '1.3.0', '1.4.0', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.4.1'), false);
   for (const version of ['1.4.1', '1.4.2', '1.5.0']) assert.equal(capabilitySatisfies(version, '1.4.1'), true);
 });
+
+ test('password title search requires the additive 1.2 contract', () => {
+  for (const version of ['1.2.0', '1.2.1', '1.3.0']) assert.equal(capabilitySatisfies(version, '1.2.0'), true);
+  for (const version of [undefined, '1.1.0', '1.1.9', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.2.0'), false);
+ });

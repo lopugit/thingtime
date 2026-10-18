@@ -1,3 +1,4 @@
+import { CharactersSettings } from '~/components/Characters/CharactersSettings';
 import { EmailSettings } from '~/components/Mail/EmailSettings';
 import { LopuPromptSettings } from './LopuPromptSettings';
 import { InvitePanel } from '~/components/Invites/InvitePanel';
@@ -866,6 +867,7 @@ export const SettingsContent = ({
 						)}
 					</Flex>
 				)}
+				{tab === 'characters' && user && <SettingsSection open eyebrow="Characters" description="Private identities for you and your agents."><CharactersSettings key={user.id} /></SettingsSection>}
 				{tab === 'lopu' && (
 					<Flex direction="column" gap={4} minW={0}>
 						{/* 6 · Lopu — local-first,

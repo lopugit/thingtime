@@ -1,3 +1,5 @@
+import { withCharacterRequest } from '../local-workspace/characterRequest.client';
+import { useCharacterScope, CHARACTER_HEADER } from '~/components/Characters/CharacterScope';
 import { aiTaskFetch } from '~/components/Lopu/aiTasks.client';
 import { useCallback, useRef, useState } from 'react';
 
@@ -9,6 +11,7 @@ import { EXPECTED_DATA_PLANE_HEADER } from '../utils/dataPlane';
 import { requireThingtimeCapability } from '../api/utils/capabilities/requireCapability.client';
 
 export function useAsyncFetcher() {
+  const character = useCharacterScope();
   const dataPlane = useDataPlane();
   const planeRef = useRef(dataPlane); planeRef.current = dataPlane;
   const [defaultOpts, setDefaultOpts] = useState({
@@ -19,18 +22,21 @@ export function useAsyncFetcher() {
   const submit = useCallback(
     async (
       data,
-      opts: { action: string; method?: string; encType?: string; signal?: AbortSignal; errorContext?: string; expectedActor?: string; expectedDataPlane?: string | null }
+      opts: { action: string; method?: string; encType?: string; signal?: AbortSignal; errorContext?: string; expectedActor?: string; characterId?: string; expectedDataPlane?: string | null }
     ) => {
       const nextOpts = { ...defaultOpts, ...opts };
       const headers = new Headers();
+      const characterId = opts.characterId ?? character?.id;
+      const perform = async (characterSignal?: AbortSignal) => {
       // Capture before capability negotiation: a delayed action from a retired
       // view must never be retargeted to a newly selected database.
       const expectedPlane = nextOpts.expectedDataPlane === undefined ? planeRef.current : nextOpts.expectedDataPlane;
+      if (characterId) { await requireThingtimeCapability('api.auth-characters', '1.0.0'); headers.set(CHARACTER_HEADER, characterId); }
       if (expectedPlane) {
         await requireThingtimeCapability('api.mongodb-endpoint', '1.1.0');
         headers.set(EXPECTED_DATA_PLANE_HEADER, expectedPlane);
       }
-      if (nextOpts.expectedActor) headers.set('X-Thingtime-Expected-Actor', nextOpts.expectedActor);
+      if (nextOpts.expectedActor || characterId) headers.set('X-Thingtime-Expected-Actor', nextOpts.expectedActor || characterId!);
       let body: BodyInit | undefined;
 
       if (nextOpts.encType === 'application/json') {
@@ -53,12 +59,13 @@ export function useAsyncFetcher() {
       const started = performance.now();
       let response: Response;
       try {
+        characterSignal?.throwIfAborted();
         response = await aiTaskFetch(nextOpts.action, {
           method,
           credentials: 'include',
           headers,
           body,
-          signal: nextOpts.signal
+          signal: characterSignal ? (nextOpts.signal ? AbortSignal.any([characterSignal, nextOpts.signal]) : characterSignal) : nextOpts.signal
         });
       } catch (error) {
         const aborted = error instanceof Error && error.name === 'AbortError';
@@ -104,8 +111,10 @@ export function useAsyncFetcher() {
 
       if (changesRootIdentity(nextOpts.action, payload, method)) rootIdentity.changed();
       return payload;
+      };
+      return characterId ? withCharacterRequest(perform) : perform();
     },
-    [defaultOpts]
+    [defaultOpts, character]
   );
 
   return { submit, setDefaultOpts };

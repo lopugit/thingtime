@@ -398,6 +398,22 @@ or authorization for new work.
   fails, record that limitation, and never claim missing semantic coverage was
   indexed. Use the immutable snapshot/cache policy below.
 
+## Agent browsers and editable tasks
+
+- Follow [the agent-browser runbook](docs/agent-browsers.md) for task-owned
+  testing in the Thingtime Mac app, installation, CLI claims and live viewing.
+  Keep tasks, todos and progress as editable Things; the native adapter owns
+  device browser installations, claims and enforced network boundaries.
+- Scope a native task to its origin, database identity, owner and Thing ID.
+  Claim separately for each concurrent agent; never reuse another claim's
+  handle or mutable browser profile. Read and preserve the effective policy.
+- Full-app acceptance must cover independent data and authentication, rendered
+  desktop/mobile task controls, live viewing, cleanup and enforced browser plus
+  backend network restrictions. A fixture, healthy API or build alone is not
+  evidence that the installed feature works.
+- The live global credential policy remains authoritative: use the Thingtime
+  password manager on the executing device through its supported interfaces.
+
 ## Fundamentals (read first)
 
 Read `FUNDAMENTALS.md` before adding features. Non-negotiables:

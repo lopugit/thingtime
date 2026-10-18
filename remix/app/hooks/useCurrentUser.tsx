@@ -1,3 +1,4 @@
+import { useCharacterScope } from '~/components/Characters/CharacterScope';
 import { useRouteLoaderData } from 'react-router';
 
 export type CurrentUser = {
@@ -26,6 +27,7 @@ export type CurrentUser = {
   accountKind: 'user' | 'service';
   emailVerificationRequiredBy: string | null;
   temporary?: boolean;
+  isCharacter?: boolean;
 	// Flat aliases are retained for older consumers, but all new UI should read
 	// the canonical nested projection so unavailable/reconciling accounting is
 	// never mistaken for zero usage or an unlimited allowance.
@@ -52,6 +54,14 @@ export type CurrentUser = {
 // Reads the authenticated user resolved by the root loader (getCurrentUser).
 // Revalidates automatically after login/logout/navigation.
 export const useCurrentUser = (): CurrentUser => {
+  const character = useCharacterScope();
+  const data = useRouteLoaderData('root') as { user?: CurrentUser } | undefined;
+  return character === undefined ? data?.user ?? null : character;
+};
+
+/** Read the confirmed root-loader identity without a composer override.
+ * It may itself be a Character; the workspace binding follows this identity. */
+export const useRootUser = (): CurrentUser => {
   const data = useRouteLoaderData('root') as { user?: CurrentUser } | undefined;
   return data?.user ?? null;
 };

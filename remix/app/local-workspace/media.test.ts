@@ -34,7 +34,7 @@ test('more than 64 active references use bounded concurrent reads', async () => 
 });
 
 test('shared access and caller-selected scope never select device bytes', () => {
- for (const suffix of ['&key=secret','&sharedRoot=page','&ownerId=someone','&origin=https://other.test','&dataPlane=other']) {
+ for (const suffix of ['&key=secret','&sharedRoot=page','&ownerId=someone','&origin=https://other.test','&dataPlane=other','&character=other']) {
   assert.equal(localMediaId('/api/v1/attachments/content?id=local-file-123' + suffix), null);
  }
  assert.equal(localMediaId('/api/v1/attachments/content?id=local-file-123&download=1'), 'local-file-123');

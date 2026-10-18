@@ -308,3 +308,13 @@ deletes account/bootstrap/auth records atomically in the home DB. It cannot
 accept arbitrary target accounts. Delivery and migration audit records remain.
 
 OpenAI environment-to-vault import uses `credentialVault.ts::importConfiguredOpenAiCredential` through the existing admin credentials route and `PlatformCredentials.tsx`. It is same-origin, admin-only and create-only; `api.admin-ci-credentials` 3.1.0 is negotiated before use. The sole source is server `OPENAI_API_KEY`, and the destination is `OpenAI` / `OPENAI_THINGTIME_API_KEY`.
+
+## Characters
+
+See [Characters](../characters.md) for the settings, login modes, private ownership,
+admin lookup, session selection, agent coordination and acceptance runbook.
+`characterCore.ts`, `characterSession.ts`, `characters.ts` and
+`characterEntitlements.ts` extend the existing home-plane user/session/ledger paths.
+`resolveSessionUser` defaults to the authenticated principal for roster and
+credential callers; request authentication passes an explicit selection (or null
+for the session default). Never re-mint a principal session with an acting user ID.

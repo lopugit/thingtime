@@ -4881,3 +4881,37 @@ separate sync result and does not revoke a completed local save. Remote
 pagination/capacity, observation/training buffers, and native large-catalogue
 acceptance remain open in the full capability matrix. No HTTP feature or
 capability version changes in this increment.
+
+
+## Character and main integration — 2026-10-18
+
+Integrated main through `bf9ae4d7` into the feature work while retaining device
+workspaces, independent post/draft completion and local suite installation.
+The root-loader identity owns the local partition; a composer Character is
+server-verified delegation. Delegated reads, writes and drafts capture the root
+workspace lease before asynchronous work, refuse offline/unconfirmed authority,
+and discard results after identity/database changes. They never queue content
+as the root owner. Owner comments still save locally when the selector matches
+the owner. Shared/delegated media cannot borrow a viewer’s local bytes.
+
+The merged manifest retains the branch’s higher versions for local sync/export
+contracts and the incoming Characters, browser-task, comment and device
+contracts. No new endpoint or permission is introduced by this reconciliation.
+Full delegated Character offline workspaces are still required before the broad
+local-first goal can be considered complete.
+
+Local verification: 698 workspace tests and four offline-shell checks pass
+(72 opt-in native/API tests skipped); the capability/draft batch passes 158
+tests with nine opt-in skips, and the Character suite passes 13 tests. The
+new delegation regression covers offline owner replies, no root-queue pollution,
+exact Character/actor/plane headers and stale-result cancellation. Changed-file
+lint has no errors or warnings. The client/platform/library/embed/draft/offline
+build passes with 253 verified assets (22,829,053 bytes). Typecheck has the same
+91 normalized diagnostics as the preceding checkpoint; it is not clean.
+
+Current-head native verification and individual nested Builder block editing
+remain open. Browser control recovered, and the browser-setup task released its
+claims. The installed window now contains another task’s OAuth flow; it is
+preserved. The previously negotiated socket is currently unavailable. No test
+claim or permissive fallback was launched. Private Character coordination is
+initialized; no public publication or production deployment is claimed.

@@ -2,6 +2,15 @@
 
 https://thingtime.com
 
+### Agent browsers and tasks
+
+Thingtime for Mac includes task-owned browser installs, claims and a live
+viewer, with isolated, IP-restricted and unrestricted network settings. The
+editable task space uses normal private Things for tasks, todos and updates.
+See [setup, agent CLI and security boundaries](docs/agent-browsers.md). Local
+container setup uses Colima and the Docker CLI; no production secrets or copied
+personal browser profiles are required for isolated acceptance tests.
+
 ### Password manager setup
 
 Anonymous `/passwords` uses an encrypted device vault with a separate passphrase;
@@ -5417,3 +5426,52 @@ fixture file and must never be copied into documentation or output.
 ### Import an existing OpenAI deployment key
 
 An admin can use **AI Providers → AI platform credentials → Import configured OpenAI key** to copy the current server’s `OPENAI_API_KEY` into the encrypted shared vault as `OPENAI_THINGTIME_API_KEY` (platform `OpenAI`). The value never travels through the browser. The operation requires capability `api.admin-ci-credentials` 3.1.0, a same-origin admin session and an already configured vault. Repeating it preserves existing entries, including disabled entries. Configure your own provider key on your own deployment; no account-specific value is bundled. The environment variable remains available to existing chat consumers; this import does not remove or rotate it.
+
+### Paired Mac menu bar and reusable scripts
+
+Install **Mac menu bar** or **Device scripts** from the Builder app catalogue.
+Installation creates private, editable Components, Actions and a page. Pair the
+Mac with the same account and API origin in the installed Thingtime app.
+No extra server secret or collection is required; forks use the ordinary device
+pairing setup and their own API origin.
+
+Menu inventory needs node-state capability 1.11.0 and a current macOS node. It
+refreshes in the background every 30 seconds. Accessibility improves coverage;
+the page distinguishes partial, collecting, locked, offline and unavailable data.
+Some macOS items are not exposed by public APIs. Memory and cumulative CPU time
+are whole-process readings, not individual-icon usage. Locked snapshots contain
+no inventory. Application paths are private device data.
+
+Device scripts reuse the paired-device command queue (`script.run`), negotiated
+with command capability 1.10.0 and native `script.bash.v1`. Each execution needs
+fresh approval of the exact Bash source, even under an always-allow policy.
+Scripts run as the Mac user, without a shell profile or inherited credentials;
+they are **not sandboxed** and can access that user's files and network. The
+source limit is 16 KiB, timeout 1–30 seconds, and combined output limit 16 KiB.
+Ordinary child processes are terminated with the run; intentionally detached
+daemons are outside this contract. Use a fresh Run ID for each intentional run;
+retry an uncertain submission with the same ID and identical input.
+
+The receipt is not execution success: read stdout, stderr, exit code, signal,
+timeout and truncation after approval. Exact command results are owner-only and
+expire after ten minutes. **Save result as a private Thing** explicitly retains
+the full output in `extended.result`, with searchable metadata in `crystal`.
+**Save reusable Action** creates an editable recipe with literal source in its
+JSON string input default (up to the device’s 16 KiB limit); bind the result
+Action as a component source to reuse the data in other Builder pages. Never
+place secrets directly in saved script source or output.
+
+Synthetic UI acceptance: run `node remix/scripts/run-mac-menu-bar-browser.mjs`
+with `TT_PLAYWRIGHT_MODULE` pointing to the installed Playwright module. On macOS
+it applies a process-tree OS network boundary allowing only loopback port 13820,
+uses no real credentials/backend, and writes screenshots/traces to
+`remix/tmp/menu-bar-qa/`. It fails closed if the boundary cannot be established.
+
+### Characters and private agent coordination
+
+[Characters](docs/characters.md) documents setup, password modes, API capability
+negotiation, owner privacy, independent subspace membership and isolated acceptance.
+No new deployment secret is required. Use the existing authenticated account to
+create a Character, save agent credentials in its password manager, and have a
+moderator add that Character to the intended private coordination subspace.
+Do not put account-specific IDs or credentials into fork setup files.

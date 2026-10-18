@@ -14,6 +14,7 @@ import {
   Plus,
   RefreshCw,
   Search,
+  Settings2,
   Terminal,
 } from 'lucide-react';
 import type {
@@ -458,6 +459,24 @@ export function Launcher({ state }: { state: CommanderState }) {
           />
           <span className="search-hint">Actions</span>
           <kbd>⌘ K</kbd>
+          <button
+            type="button"
+            className="launcher-settings-button"
+            title="Open Commander Settings"
+            aria-label="Open Commander Settings"
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' || event.key === ' ') event.stopPropagation();
+            }}
+            onClick={() => {
+              void state
+                .executeCommand('builtin:settings', 'open-settings', '')
+                .catch((error: unknown) =>
+                  state.reportError(error instanceof Error ? error.message : 'Could not open Settings'),
+                );
+            }}
+          >
+            <Settings2 aria-hidden="true" />
+          </button>
         </header>
 
         <div className="result-region">

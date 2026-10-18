@@ -11,7 +11,7 @@ export const useCommentDraft = (userId: string | null | undefined, targetId: str
  const identity = React.useSyncExternalStore(subscribeWorkspaceStorage, workspaceStorageIdentity, () => '');
  // eslint-disable-next-line react-hooks/exhaustive-deps
  const binding = React.useMemo(() => workspaceStorageBinding(), [identity]);
- const enabled = !!binding && !!userId && (binding.scope.kind === 'account' ? binding.scope.ownerId === userId : userId === LOCAL_WORKSPACE_OWNER);
+ const enabled = !!binding && !!userId && (binding.scope.kind === 'account' ? userId !== LOCAL_WORKSPACE_OWNER : userId === LOCAL_WORKSPACE_OWNER);
  const scope = JSON.stringify([identity, userId, targetId]);
  const active = React.useRef(scope); active.current = scope;
  const mounted = React.useRef(true);
@@ -24,7 +24,7 @@ export const useCommentDraft = (userId: string | null | undefined, targetId: str
   binding.lease.assertCurrent();
  } }), [binding, scope, enabled]);
  const isCurrent = () => { try { lease.assertCurrent(); return true; } catch { return false; } };
- const accountRecovery = enabled && binding?.scope.kind === 'account';
+ const accountRecovery = enabled && binding?.scope.kind === 'account' && binding.scope.ownerId === userId;
  const readSource = async (source: PlainCommentLegacySource) => {
   lease.assertCurrent();
   if (source.store !== 'account') return readLegacy(source);
@@ -33,7 +33,7 @@ export const useCommentDraft = (userId: string | null | undefined, targetId: str
  };
  const update = (next: typeof state) => { live.current = next; setState(next); };
  const value = state.scope === scope ? state.value : '';
- const draft = useWorkspaceDraft({ enabled, surface: 'comment', resumeRemote: isOpen, context: plainCommentContext(targetId), validateSnapshot: restorePlainComment,
+ const draft = useWorkspaceDraft({ enabled, actor: userId, surface: 'comment', resumeRemote: isOpen, context: plainCommentContext(targetId), validateSnapshot: restorePlainComment,
   onRestore: saved => {
    if (isCurrent() && !(live.current.scope === scope && live.current.touched)) update({ scope, value: restorePlainComment(saved.snapshot), touched: false, restored: true });
   }

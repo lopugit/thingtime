@@ -56,6 +56,7 @@ public actor ThingtimeNodeController {
     private static let maximumPairingAttempts = 3
     private static let basePairingCapabilities = [
         "filesystem.v1",
+        "script.bash.v1",
         "ai.session.create",
         "ai.session.interrupt",
         "ai.session.list",
@@ -424,6 +425,7 @@ public actor ThingtimeNodeController {
 
     public static func runtimeCapabilities(for device: DeviceTelemetry) -> [String] {
         var pairingCapabilities = Self.basePairingCapabilities
+        if device.menuBar != nil { pairingCapabilities.append("system.menu-bar.read.v1") }
         if let mainDisplay = device.displays.first(where: { $0.isMain }), mainDisplay.brightness != nil {
             pairingCapabilities.append("system.brightness.read")
             if mainDisplay.brightnessControlSupported {
@@ -555,6 +557,9 @@ public actor ThingtimeNodeController {
         let action: SafeActionRequest
         let input = try requireObject(command.parameters)
         switch command.method {
+        case "script.run":
+            guard command.approvedForExecution else { throw ThingtimeNodeError.approvalRequired("Approve this exact script before execution.") }
+            action = SafeActionRequest(kind: .runScript, parameters: input)
         case "filesystem":
             action = SafeActionRequest(kind: .filesystem, parameters: input)
         case "system.volume.set":

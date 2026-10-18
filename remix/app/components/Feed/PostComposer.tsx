@@ -1,5 +1,6 @@
 import { useWorkspaceDraft } from '~/drafts/useWorkspaceDraft';
 import { subscribeWorkspaceStorage, workspaceStorageIdentity } from '~/local-workspace/storageStatus.client';
+import { CharacterComposer } from '~/components/Characters/CharacterComposer';
 import { DraftPicker, DraftSaveStatus } from '~/drafts/DraftPicker';
 import { PostThingPicker } from './PostThingPicker';
 import { composePostThing, postThingDraft, postThingReferences, type PostThingReference } from './postThingReferences';
@@ -165,7 +166,8 @@ const Eyebrow = ({ children }: { children: React.ReactNode }) => (
 export const PostComposer = (props: PostComposerProps) => {
   const user = useWorkspaceUser();
   const identity = React.useSyncExternalStore(subscribeWorkspaceStorage, workspaceStorageIdentity, () => '');
-  return <AccountPostComposer key={`${identity}:${user?.id || 'guest'}:${props.editPost?.id || props.parentId || 'new'}:${props.subspace?.id || ''}`} {...props} />;
+  const composer = <AccountPostComposer key={`${identity}:${user?.id || 'guest'}:${props.editPost?.id || props.parentId || 'new'}:${props.subspace?.id || ''}`} {...props} />;
+  return props.editPost ? composer : <CharacterComposer key={`${identity}:${user?.id || 'guest'}`}>{composer}</CharacterComposer>;
 };
 const AccountPostComposer = (props: PostComposerProps) => {
   const { onPosted, parentId, onClose, editPost, subspace } = props;

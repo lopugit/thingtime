@@ -9,9 +9,9 @@ import { workspaceDraftContextSync, workspaceDraftRequest } from './workspaceDra
 
 /** Reuse the existing draft session, local recovery, retry and retirement.
  * Offline account transport may fail; content creation never awaits that queue. */
-export function useWorkspaceDraft(input: Omit<Parameters<typeof useAccountDraft>[0], 'actor' | 'request'> & { enabled?: boolean }) {
+export function useWorkspaceDraft(input: Omit<Parameters<typeof useAccountDraft>[0], 'actor' | 'request'> & { enabled?: boolean; actor?: string | null }) {
  const user = useWorkspaceUser();
- const { enabled = true, ...draftInput } = input;
+ const { enabled = true, actor = user?.id, ...draftInput } = input;
  const identity = React.useSyncExternalStore(subscribeWorkspaceStorage, workspaceStorageIdentity, () => '');
  // Recreate the captured lease on identity changes even when the scope is the same.
  // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -22,8 +22,8 @@ export function useWorkspaceDraft(input: Omit<Parameters<typeof useAccountDraft>
  }, [binding, input.context]);
  const context = resolved.context;
  const request = React.useMemo(() => binding ? workspaceDraftRequest(binding.lease) : undefined, [binding]);
- const draft = useAccountDraft({ ...draftInput, context, actor: enabled && context ? user?.id : null, request });
- const legacyKey = typeof location === 'undefined' || !user || !enabled ? null : `tt-account-draft:${location.origin}:${user.id}:${input.context}`;
+ const draft = useAccountDraft({ ...draftInput, context, actor: enabled && context ? actor : null, request });
+ const legacyKey = typeof location === 'undefined' || !actor || !enabled ? null : `tt-account-draft:${location.origin}:${actor}:${input.context}`;
  const legacy = legacyKey && context ? readLocalCache<LocalDraft>(legacyKey) : null;
  const copyIntoEditor = async (saved: AccountDraft) => {
   binding?.lease.assertCurrent();

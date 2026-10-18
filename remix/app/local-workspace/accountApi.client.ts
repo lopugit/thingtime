@@ -885,8 +885,15 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 			});
 			return { ...local, refreshing: true };
 		},
-		comment: async ({ id, ...input }: { id: string } & Record<string, unknown>) => {
+		comment: async ({ id, characterId, ...input }: { id: string } & Record<string, unknown>) => {
 			facadeLease.assertCurrent();
+			// A delegated actor must use server authorization, never the principal's
+			// local queue. Selecting the principal preserves ordinary offline replies.
+			if (characterId && characterId !== owner.id) {
+				assertAccountSyncAllowed(scope);
+				if (navigator.onLine === false) throw new WorkspaceError('CHARACTER_OFFLINE', 'Reconnect to post as this Character.', 503);
+				return online.things.comment({ id, ...input, characterId });
+			}
 			const mapped = await mapPostInput({ type: 'text', ...input, thingtime: undefined });
 			if (!mapped || scope.dataPlane !== 'home') return online.things.comment({ id, ...input });
 			const service = worker();

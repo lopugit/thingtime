@@ -77,6 +77,14 @@ projection or changes target permissions.
 See [account-drafts-and-templates.md](account-drafts-and-templates.md) for the
 private draft API, editor recovery, account isolation and independent media copies.
 
+## Post as a Character
+
+`components/Characters/CharacterComposer.tsx` supplies the selected account to
+the existing PostComposer, useApi and private drafts through a keyed context.
+Quick comments and nested replies use PostAsSelect with a captured actor header.
+See [Characters](../characters.md). Subspace permissions are checked as the
+selected Character; owning the Character does not inherit private membership.
+
 ## Device-only algorithms (rollout in progress)
 
 The workspace adapter stores protected algorithm Things locally, trains only on
@@ -244,3 +252,12 @@ account authority. `AlgorithmSyncStatus.tsx` exposes fresh conflict review.
 normal transfers and independent pumps; `accountAlgorithms.browser.test.ts`
 covers the native manager round-trip on the built Nitro app. The broader feed
 and account/plane browser gates remain in the coverage matrix.
+
+
+Character delegation and device scopes: `useRootUser` reads the root-loader
+identity; `CharacterScope` changes only the composer actor. `characterRequest.client.ts`
+fences delegated requests with the current root workspace, while `draftClient.ts`
+uses server-checked Character drafts and separate recovery keys. Matching owner
+selectors keep the ordinary offline comment path. `characterDelegation.test.ts`
+covers offline refusal, queue isolation and stale responses; native acceptance
+and full delegated offline workspace coverage remain open.

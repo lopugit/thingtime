@@ -1,3 +1,5 @@
+import { agentTestEnvironment } from '../../app/api/utils/agentTesting';
+
 const MONGO_PASSWORD_PLACEHOLDER = '<db_password>';
 
 const normaliseOrigin = (value?: string | null) => {
@@ -16,7 +18,10 @@ const normaliseOrigin = (value?: string | null) => {
   }
 };
 
-export const getApiFallbackOrigin = () => normaliseOrigin(process.env.THINGTIME_API_FALLBACK_ORIGIN);
+export const getApiFallbackOrigin = () => {
+  if (process.env.THINGTIME_AGENT_TEST_MODE === '1') throw new Error('Isolated tests cannot use an API fallback.');
+  return normaliseOrigin(process.env.THINGTIME_API_FALLBACK_ORIGIN);
+};
 
 export const getMissingSelfHostedApiEnv = () => {
   const missing: string[] = [];
@@ -40,6 +45,7 @@ export const hasSelfHostedApiEnv = () => getMissingSelfHostedApiEnv().length ===
 // Only the installed desktop shell may deliberately bridge to a selected API.
 // Incomplete development/preview servers must never become production clients.
 export const shouldProxyApiToFallback = (request: Request) => {
+  if (agentTestEnvironment()) return false;
   if (hasSelfHostedApiEnv() || process.env.NODE_ENV === 'test') return false;
   if (process.env.THINGTIME_DESKTOP !== '1') return false;
   const requestUrl = new URL(request.url);
@@ -104,12 +110,17 @@ const cloneProxyRequestHeaders = (request: Request, fallbackUrl: URL) => {
   return headers;
 };
 
-export const proxyApiRequestToFallback = async (request: Request) => {
+export const proxyApiRequestToFallback = async (request: Request, options: { stripForwardedOrigin?: boolean } = {}) => {
+  if (process.env.THINGTIME_AGENT_TEST_MODE === '1') return Response.json({ ok: false, error: 'Isolated tests cannot use an API fallback.' }, { status: 503 });
   const requestUrl = new URL(request.url);
   // Direct callers cannot bypass the dispatcher's policy.
   if (!shouldProxyApiToFallback(request)) return unavailableLocalApiResponse();
   const fallbackUrl = new URL(requestUrl.pathname + requestUrl.search, getApiFallbackOrigin()!);
   const headers = cloneProxyRequestHeaders(request, fallbackUrl);
+  if (options.stripForwardedOrigin) {
+    headers.delete('x-forwarded-host');
+    headers.delete('x-forwarded-proto');
+  }
   const init: RequestInit & { duplex?: 'half' } = {
     method: request.method,
     headers,

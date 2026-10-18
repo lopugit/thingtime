@@ -1,5 +1,65 @@
 # TESTING.md — per-area manual test checklists
 
+## Characters
+
+- [x] Isolated real API + desktop/390px browser acceptance (2026-10-18): create a separate-login Character, select/restore the session, post, comment, reply and post in a private subspace; compare persisted author IDs. API checks cover all login modes, membership denial, owner privacy, tier changes and revocation.
+- [x] Type immediately into a newly mounted editor after changing Character. Post must become enabled without another keystroke; initial editor setup must reconcile input made before listeners attach.
+
+- [ ] Create switch-only, inherited-password and separate-password Characters through Settings. Reload and verify their generated IDs, names and modes against the owner-only API roster.
+- [ ] Inherited login follows the owner's current password and email second factor. Separate login rejects the owner's password; switch-only rejects password login.
+- [ ] Post, comment and reply as each identity. Public profiles/posts never reveal the private owner ID; direct Character sessions cannot list siblings, select the owner or become admins.
+- [ ] Lock one session to a Character; another session remains unchanged. The account roster continues to represent the authenticated principal. Return to the owner and verify its session still works.
+- [ ] After Character writes, verify both its ledger and the owner's ledger remain valid. Change the owner's tier/overrides and verify Character reads and write admission agree without copying owner audit fields or usage.
+- [ ] Private-subspace post cards describe their membership restriction rather than claiming anyone can see them.
+- [ ] A Character cannot read or post in a private subspace before explicit membership; after admission it can coordinate through posts/comments, while a stranger remains blocked.
+- [ ] Disable a Character after login and while selected; revoke direct sessions and reject further login/posts. Re-enable without restoring revoked credentials. Unavailable selections never fall back to anonymous authorship.
+- [ ] Switch composer identities with unsaved drafts/media; drafts remain account-specific, delayed requests retain their actor, and a restored media preview reauthorizes the selected Character.
+- [ ] Inspect settings, post/comment composers, selectors and session controls at desktop and 390px widths. Scroll top to bottom and open dynamic controls; no horizontal overflow, clipping or overlapping text.
+- [ ] Confirm admin ownership lookup works and non-admin/Character sessions cannot use it. Verify scoped app/PAT tokens cannot adopt another identity.
+
+
+## Agent browsers and editable tasks
+
+- [ ] Install the task suite, create a task, add/complete todos and append progress;
+      compare the rendered records with API readback and reload both pages.
+- [ ] Exercise browser install, cancellation, duplication, exclusive claims,
+      launch, live view, mobile/desktop sizes, scrolling and release in the
+      installed Mac app; scroll the controls and task pages from top to bottom.
+- [ ] Device defaults and the per-task checkbox persist. Existing claims keep
+      their effective policy after defaults or task preferences change.
+- [ ] Two agents run the full app concurrently with separate MongoDB records,
+      cookies, storage and profiles; crossed lease IDs/tokens are refused.
+- [ ] Isolated IPv4/IPv6, direct-IP and redirected external requests fail from
+      browser and backend. Restricted rules permit only the selected IP/ports.
+- [ ] Missing test auth/database configuration fails closed. The bundled app is
+      readable by the actual non-root container UID, and Mongo startup retries
+      recover from an initial connection refusal using a fresh client.
+- [ ] `/index.html` and a deep route such as `/login` reference the same client
+      module, and that module returns JavaScript rather than fallback HTML.
+- [ ] Expiry, release, failed launch and app restart clean only owned sessions;
+      a live controller cannot be replaced and old handles cannot claim a new lease.
+- [ ] Native publisher downloads retain signatures and hashes; duplicated
+      unrestricted browsers start without personal cookies or saved storage.
+- [ ] The signed and unsigned packaged-module checks load the native driver
+      and Puppeteer from the app archive and verify the separate container
+      resources. Launch the installed app; a valid signature alone cannot catch
+      a runtime module accidentally excluded by `extraResources`.
+- [ ] Build and launch the full container from the packaged Mac app. Its traced
+      bcrypt, Sharp/libvips, resvg and cbor-extract dependencies must load their
+      locked Linux builds through the app resolver. A version mismatch or missing
+      native binary fails image installation before it can be claimed.
+
+- [ ] A daemon disconnect during release reports failure and retains the claim;
+      after recovery, release removes only the verified owned resources.
+- [ ] Quit during container/native preparation and native duplication: no
+      background install or copy persists after shutdown completes.
+- [ ] Switching database identity with the same owner/task IDs never reuses
+      the previous database's native registration, claim or live view.
+
+See [the runbook](docs/agent-browsers.md) for commands and evidence boundaries.
+
+- [ ] After merging another feature, password title search still filters before pagination, preserves q across pages, and both manifests advertise api.passwords 1.2.0; client and route search tests remain present.
+
 ## Local workspaces and account sync (in-progress rollout)
 
 - [x] Retained account discussions: create a private Thing and comment through
@@ -5382,6 +5442,28 @@ halves.
       issuance and exchange; exchange must fail closed.
 
 ## Commander desktop launcher
+
+- [ ] Click the launcher Settings gear with an empty query and with search results.
+      Tab to it and activate with Return/Space: only Settings opens; the selected
+      search result must not run, and the current query must not be rewritten.
+- [ ] In Activity, confirm Name/PID order remains steady across usage refreshes.
+      Exercise every Sort by/Order option, parent grouping and multiple text,
+      numeric, memory-unit and throughput-unit filters. Missing GPU/network
+      values stay unavailable; a filter with no matches shows its empty state.
+- [ ] Switch Average window through Current, 5/10/30 minutes, 1/3/6/12 hours and
+      1 day. Confirm sorting, filters and displayed usage use the same window,
+      observed history is stated honestly, and reopening/popping out shares
+      the native sample history. Validate a representative PID/name/memory
+      reading against macOS ps/Activity Monitor; do not call newly collected
+      samples a verified full-day history. Run ProcessUsageHistoryTests for
+      weighted averages, expiry, gaps and PID reuse.
+- [ ] Pop Processes out, resize it, scroll to the bottom, and toggle Keep above
+      while focusing another app. Close/reopen it and Settings in both orders.
+      Double-click each title bar twice: maximize inside the usable screen and
+      restore the exact prior frame without entering fullscreen. Verify controls
+      in the title bar do not drag/maximize the window.
+      The green button must be a zoom control; native fullscreen commands must
+      also maximize on the desktop without hiding the menu bar or Dock.
 
 - [ ] Run `corepack pnpm --dir Commander test:raycast-extension` and confirm
       regex replacement escapes are decoded once, unsupported escapes remain
@@ -12242,7 +12324,48 @@ Local results do not establish current-head CI or deployed acceptance.
 
 - OpenAI vault import: anonymous/non-admin and cross-origin requests must fail; missing server key must create nothing. Import from AI Providers, verify the redacted OpenAI entry named `OPENAI_THINGTIME_API_KEY`, reload, retry and confirm one unchanged entry. No secret may appear in browser responses. Existing chat and credential order must remain intact.
 
+## Mac menu bar and reusable device scripts
+
+- Device and approval links must open `/things`, where paired devices live.
+- Installed browser Actions must reach the selected HTTPS account API with actor
+  and database preconditions intact; changed actors and cross-origin mutations
+  fail before execution. Unconfigured web servers and vault reveal still refuse.
+
+- Install both suites privately; edit the saved Component and Action source in
+  Builder, and verify page refresh retains last-known readings.
+- On the signed installed Mac app, compare inventory program/path/PID with
+  NSRunningApplication; distinguish missing readings from zero and false.
+- Check partial/collecting/locked/offline/no-node/empty states, select a Mac,
+  search and paginate every item; locked snapshots must contain no inventory.
+- At desktop and 390px widths expand details, long paths, output and earlier-run
+  controls, then scroll to the bottom with no clipping or horizontal overflow.
+- Render each installed suite without a fixture-supplied page container; verify
+  the suite itself centers its content and preserves mobile side padding.
+- Run harmless printf via a paired Mac. Inspect the complete source in approval;
+  deny one request, approve another, and verify exact stdout/exit status.
+- Script runs must require fresh approval regardless of always-allow policy;
+  unpaired, locked, incompatible or unapproved envelopes must fail closed.
+- Verify time/output limits, retry identity, expiry, owner isolation and no
+  result bytes in device event history. Save output only on explicit request.
+- Save a recipe before selecting a device or entering a Run ID; then run the
+  same form with both filled. Each Action must accept exactly its declared fields.
+- Save a full 16 KiB recipe beginning with literal `$input` text; execute the
+  saved Action and verify the exact source survives input defaults and validation.
+- Save full-sized output (including UTF-8 replacement characters) and verify
+  `extended.result` retains every character while searchable metadata validates.
+- Regression: inline collection pagination/search must retain items beyond
+  10,000 while rendering only the current page and including default styles.
+- Run the isolated browser fixture and focused native/backend/capability suites;
+  smoke the built manifest before deploying and repeat the real installed path.
+- Commander daemon trust-boundary integration: complete every HTTP/security assertion and cleanup within the 30-second suite allowance under concurrent native builds; do not treat the default five-second unit-test timeout as a server latency contract.
+- Commander Settings titlebar: repeat maximize/restore on the real screen, including native and web double-click deliveries; verify the previous frame is restored and process headers remain aligned with values after resizing.
 - Incident account cleanup: use real signup and logout notification constructors; accept only system history tied to the exact revoked fixture session. Reject unrelated content, actors and timestamps before writes.
+
+- Agent task pages: verify desktop centering and mobile gutters; mark a todo complete with a nonempty neighboring add-todo form, reload, and confirm only that todo changed.
+- Desktop agent task identity: switch API endpoints with matching owner/task IDs and default database identity; the second endpoint must not expose or reuse the first endpoint’s browser claim.
+- Agent general security link: open it from a task; the Things settings category and Agent browsers disclosure must open and scroll to the default policy controls. Save, reload and verify the policy; restore isolated testing after acceptance.
+
+- Device capability growth: a fully equipped Mac (65 current capability identifiers) must publish fresh state, retain every identifier in the owner device response, and populate the menu bar Builder page. Pairing and heartbeat admission share the 128-entry bound; reject 129 entries and invalid identifiers.
 
 
 ### Main integration and complete local vault search — 2026-10-18
@@ -12276,3 +12399,11 @@ Local results do not establish current-head CI or deployed acceptance.
 - [x] Inject browser `QuotaExceededError` after partial import writes and during home migration; verify status 507, exact rollback of content/selection/intents/usage and retry or continued independent editing.
 - [ ] Repeat these save/import/copy/migration paths in this branch's isolated native browser at desktop, 390px and 320px, scrolling the whole catalogue and opening the relevant editor/review controls.
 - [ ] Audit remote catalogue pagination/capacity and its semantic API contracts separately; this increment does not remove server limits or mark the full capacity matrix complete.
+
+
+### Character delegation with local workspaces
+
+- With an owner-selected composer, save a comment while offline; verify local completion and no HTTP request.
+- With a delegated Character, verify the exact actor/Character/database headers, separate recovery key, no writes to the root-owner queue and no access to root local media. Switch account or database during held requests; stale results must be rejected.
+- Submit despite draft-sync failure, reload the resulting post, and confirm no duplicate submission or loss of newer draft input.
+- Select nested text, controls, icons and repeated-card fields individually in Builder; edit, rearrange/style, save and reload. An outer selection or monolithic source editor does not establish individual-block acceptance.

@@ -3,6 +3,7 @@ import React from 'react';
 import { Box, Button, Flex, Input, Select, Switch, Text } from '@chakra-ui/react';
 import { DesktopNodeControls } from '~/components/Nav/Drawer/DesktopNodeControls';
 import { ElectronUpdateManager } from '~/components/Nav/Drawer/ElectronUpdateManager';
+import { AgentBrowserDefaults } from '~/components/AgentTasks/AgentBrowserDefaults';
 import { useThingtime } from '~/components/Thingtime/useThingtime';
 import { useLopu } from '~/components/Lopu/useLopu';
 import {
@@ -389,6 +390,7 @@ export function DesktopSettings() {
 					</Flex>
 				</SettingsSection>
 			)}
+			{getElectronBridge()?.agentBrowserVersion && <SettingsSection eyebrow="Agent browsers" description="Default security for new task sessions on this device."><AgentBrowserDefaults /></SettingsSection>}
 		</>
 	);
 }

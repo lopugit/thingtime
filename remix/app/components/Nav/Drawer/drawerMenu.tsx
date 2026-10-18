@@ -113,6 +113,7 @@ export const drawerMenuItems: DrawerTopItem[] = [
 			{ id: 'lopu-chat', label: 'Chat', icon: '💬', to: '/lopu' },
 			{ id: 'lopu-voice', label: 'Voice', icon: '🎙️', to: '/lopu/voice', authOnly: true },
 			{ id: 'lopu-tasks', label: 'Background tasks', icon: '🕒', to: '/lopu/tasks', authOnly: true },
+			{ id: 'lopu-agent-browsers', label: 'Agent browsers and tasks', icon: '🧭', to: '/agent-browsers', authOnly: true },
 			{ id: 'lopu-conversations', label: 'Conversations', icon: '🗂️', to: '/messages', authOnly: true },
 			{ id: 'lopu-vault', label: 'Secure Vault', icon: '🔐', to: '/settings#secure-vault', authOnly: true },
 			{ id: 'lopu-settings', label: 'Settings', icon: '⚙️', to: '/settings#lopu' }

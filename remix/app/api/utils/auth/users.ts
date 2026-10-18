@@ -1,3 +1,4 @@
+import { characterIdentity, type CharacterIdentity } from './characterCore';
 import type { UserVaultKeyRegistry } from './vaultKeys';
 import { randomUUID as lopuSettingsRevision } from 'node:crypto';
 import { LopuPromptConflictError, validateLopuInstructions, type LopuInstructionSettings } from '../lopu/promptSettingsCore';
@@ -79,6 +80,7 @@ export const profileAttachmentRefsForUserRoot = (
 
 // Safe shape returned to clients — never includes passwordHash.
 export type PublicUser = {
+  isCharacter?: boolean;
 	id: string;
 	ttid: string;
 	username: string;
@@ -184,6 +186,7 @@ export const toPublicUser = (user: any, subscription?: SubscriptionInfo | null):
 		reconciledAt: source?.reconciledAt ? source.reconciledAt.toISOString() : null
 	};
 	return {
+		isCharacter: !!characterIdentity(user),
 		id: String(user._id),
 		ttid: user.ttid,
 		username: user.username,
@@ -2228,4 +2231,14 @@ export const setUserLopuInstructions = async (userId: string, instructions: unkn
   );
   if (!legacy.matchedCount) throw new LopuPromptConflictError();
   return settings;
+};
+
+// Character policy is private, home-plane state; only the owner management
+// service calls this CAS writer. Generic profile edits never accept it.
+export const setCharacterIdentity = async (userId: string, expectedOwner: string, next: CharacterIdentity) => {
+  const result = await mutateUserThingSecure(userId, secure => {
+    if (secure.meta?.character?.ownerId !== expectedOwner || next.ownerId !== expectedOwner) throw new Error('Character not found');
+    secure.meta!.character = next;
+  });
+  if (result !== 'mutated') throw new Error('Character update did not complete');
 };
