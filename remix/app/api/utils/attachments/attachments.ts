@@ -1461,7 +1461,6 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 			if (retainOwnedFile && (viewer?.id !== doc.ownerId || viewer.sharedRoot || !(isStandaloneAttachmentPurpose(doc.attachmentPurpose) ? !doc.targetId : ['post','comment'].includes(doc.attachmentPurpose) && !!doc.targetId) ||
 				doc.attachmentExpiresAt || doc.attachmentImportDraft || doc.attachmentProfileSlot || doc.attachmentLinked || doc.moderation?.status === 'blocked'))
 				return fail(404, 'Saved owned file not found');
-			if (retainOwnedFile && doc.objectSizeBytes > 16 * 1024 * 1024) return fail(413, 'This file exceeds the device retention limit');
 			const retainedMetadata = retainOwnedFile ? toAttachmentPublicMetadata(doc.shareId, doc.crystal, doc.moderation, { ownerView: true }) : null;
 			if (retainOwnedFile && !retainedMetadata) return fail(404, 'Saved owned file metadata is unavailable');
 			const s3 = dependencies.getS3();

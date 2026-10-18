@@ -8,7 +8,7 @@ import { compositionAttachmentIds } from '../api/utils/actions/compositionMediaC
 import { rewriteTransferMedia } from '../api/utils/things/transferMediaCore';
 import { LocalThings, type LocalThing } from './things';
 import { createLocalAttachment, isLocalAttachment, type LocalAttachment } from './attachments';
-import { LEGACY_FILE_BUFFER_LIMITS, WorkspaceError, type WorkspaceDatabase, type WorkspaceLease, type WorkspaceScope, type WorkspaceTransaction } from './storage';
+import { WorkspaceError, type WorkspaceDatabase, type WorkspaceLease, type WorkspaceScope, type WorkspaceTransaction } from './storage';
 import { accountReadRefusals, forgetAccountConversation } from './accountReadRevocation';
 import { remapPostDraftAttachments } from '../drafts/postDraft';
 import { validateDraftContent, type AccountDraft, type DraftContent } from '../drafts/draftCore';
@@ -60,7 +60,7 @@ type FileRecord = {
 const libraryFileVisible = (row: LocalAttachment | null, record: FileRecord | undefined | null): boolean => !!row && isLocalAttachment(row) && isStandaloneAttachmentPurpose(row.localAttachment.purpose) && !row.targetId && !row.localAttachment.draftId && !row.localAttachment.expiresAt && !!record && !record.cancelled && !record.cancelRequested && !record.deleteRequested;
 export type AccountFileRetentionTransport = {
 	retention(id: string, signal: AbortSignal, bound?: boolean): Promise<unknown>;
-	bytes(id: string, cacheKey: string, size: number, signal: AbortSignal): Promise<Uint8Array>;
+	bytes(id: string, cacheKey: string, size: number, signal: AbortSignal): Promise<Blob | Uint8Array>;
 };
 export type AccountFileTransport = {
 	remove?(input: { id: string; expectedUpdatedAt: string } & ({ requestId: string; targetId?: string; retainReceipt?: never } | { retainReceipt: true; targetId?: string; requestId?: never }), signal: AbortSignal): Promise<{ deleted: true; deferred: boolean; retryAt?: string }>;
@@ -202,7 +202,7 @@ export class AccountFileSync {
 		const file = raw?.file, attachment = normalizePublicAttachment(file?.attachment);
 		const purpose = file?.purpose;
 		if (!(binding ? purpose === binding.purpose && file?.targetId === binding.targetId : isStandaloneAttachmentPurpose(purpose) && !file?.targetId) || !attachment || attachment.id !== id || file?.ownerId !== this.scope.ownerId || 'url' in file.attachment ||
-			!Number.isSafeInteger(raw.size) || raw.size < 1 || raw.size !== attachment.size || raw.size > LEGACY_FILE_BUFFER_LIMITS.binaryBytes ||
+			!Number.isSafeInteger(raw.size) || raw.size < 1 || raw.size !== attachment.size ||
 			!(/^[a-f0-9]{64}:original$/).test(raw.cacheKey || ''))
 			throw new WorkspaceError('INVALID_FILE_RETENTION', 'The account returned an invalid owned file descriptor.', 502);
 		const metadata = this.metadata.checked({ id, author: { id: file.ownerId }, thingtime: ['attachment'], crystal: attachment, updatedAt: file.updatedAt, folderId: file.folderId }, id);
@@ -233,9 +233,9 @@ export class AccountFileSync {
 		if (known?.deleteRequested || known?.cancelled || known?.cancelRequested) throw new WorkspaceError('FILE_DELETED', 'This file was deleted in this workspace.', 404);
 		// Fresh descriptors reauthorize reuse of immutable stored bytes. The final
 		// transaction rejects newer refusals before these bytes become readable.
-		const bytes = known?.retainedKey === snapshot.cacheKey ? (await this.things.readFile(known.id, signal)).bytes : await transport.bytes(id, snapshot.cacheKey, snapshot.attachment.size, signal);
-		if (!(bytes instanceof Uint8Array) || bytes.length !== snapshot.attachment.size) throw new WorkspaceError('INVALID_FILE_BYTES', 'File bytes were incomplete. Retry while online.', 502);
-		const copy = Uint8Array.from(bytes), sha256 = await transferChecksum(copy);
+		const bytes = known?.retainedKey === snapshot.cacheKey ? (await this.things.readFileBlob(known.id, signal)).blob : await transport.bytes(id, snapshot.cacheKey, snapshot.attachment.size, signal);
+		if (!(bytes instanceof Blob || bytes instanceof Uint8Array) || binarySize(bytes) !== snapshot.attachment.size) throw new WorkspaceError('INVALID_FILE_BYTES', 'File bytes were incomplete. Retry while online.', 502);
+		const copy = binaryBlob(bytes), sha256 = await blobChecksum(copy, () => { this.lease.assertCurrent(); signal.throwIfAborted(); });
 		const final = this.checkedRetention(await descriptor(), id, binding);
 		if (JSON.stringify(final) !== JSON.stringify(snapshot)) throw new WorkspaceError('FILE_CHANGED', 'The account file changed while being retained. Retry while online.', 409);
 		this.lease.assertCurrent(); signal.throwIfAborted();
@@ -255,14 +255,14 @@ export class AccountFileSync {
 		if (prior && (!local || prior.remote?.id !== id || prior.request.purpose !== snapshot.purpose || local.localAttachment.purpose !== snapshot.purpose || prior.sha256 !== sha256 || (binding?.draft ? local.localAttachment.draftId : local.targetId || undefined) !== binding?.targetId || (prior.retainedKey && prior.retainedKey !== snapshot.cacheKey)))
 			throw new WorkspaceError('FILE_CHANGED', 'Retained file bytes or identity changed. The device copy has been preserved.', 409);
 		if (prior && local && ((prior.retainedObservedAt ?? -1) >= observedAt || (prior.retainedVersion && Date.parse(prior.retainedVersion) > Date.parse(snapshot.metadata.updatedAt)))) return { row: local, changed: false };
-		let row = local || createLocalAttachment(localId, { id: 'bytes', targetId: localId, path: 'files/000000', name: snapshot.attachment.name, mime: snapshot.attachment.contentType, bytes: copy.length, sha256 }, new Date(this.now()).toISOString(), snapshot.purpose, binding?.order || 0, binding ? binding.draft ? {} : { targetId: binding.targetId } : snapshot.metadata.metadata.folderId ? { folderId: snapshot.metadata.metadata.folderId } : {});
+		let row = local || createLocalAttachment(localId, { id: 'bytes', targetId: localId, path: 'files/000000', name: snapshot.attachment.name, mime: snapshot.attachment.contentType, bytes: copy.size, sha256 }, new Date(this.now()).toISOString(), snapshot.purpose, binding?.order || 0, binding ? binding.draft ? {} : { targetId: binding.targetId } : snapshot.metadata.metadata.folderId ? { folderId: snapshot.metadata.metadata.folderId } : {});
 		if (!local) row = { ...row, crystal: { ...snapshot.crystal } };
 		const flagsChanged = (binding && row.localAttachment.order !== binding.order) || row.localAttachment.nsfw !== snapshot.attachment.nsfw || row.localAttachment.pending !== snapshot.attachment.pending;
 		row = { ...row, localAttachment: { ...row.localAttachment, accountFileId: id, ...(binding ? { order: binding.order, ...(binding.draft ? { draftId: binding.targetId } : {}) } : {}), nsfw: snapshot.attachment.nsfw ? true : undefined, pending: snapshot.attachment.pending }, ...(flagsChanged && local ? { revision: row.revision + 1, updatedAt: new Date(Math.max(this.now(), Date.parse(row.updatedAt) + 1)).toISOString() } : {}) };
 		if (!local || flagsChanged || local.localAttachment.accountFileId !== id) await tx.put('things', row.id, row);
-		if (!local) await tx.putBytes(row.id, copy);
+		if (!local) await tx.putBlob(row.id, copy);
 		await this.metadata.remember(tx, row, snapshot.metadata);
-		await this.putRecord(tx, { ...(prior || { id: row.id, source: 'account' as const, request: { filename: snapshot.attachment.name, contentType: snapshot.attachment.contentType, sizeBytes: copy.length, purpose: snapshot.purpose }, sha256, state: 'synced' as const, phase: 'complete' as const, uploaded: [], attempts: 0, retryAt: 0 }), remote: snapshot.attachment, retainedKey: snapshot.cacheKey, retainedVersion: snapshot.metadata.updatedAt, retainedObservedAt: observedAt, retainedTargetId: binding?.targetId });
+		await this.putRecord(tx, { ...(prior || { id: row.id, source: 'account' as const, request: { filename: snapshot.attachment.name, contentType: snapshot.attachment.contentType, sizeBytes: copy.size, purpose: snapshot.purpose }, sha256, state: 'synced' as const, phase: 'complete' as const, uploaded: [], attempts: 0, retryAt: 0 }), remote: snapshot.attachment, retainedKey: snapshot.cacheKey, retainedVersion: snapshot.metadata.updatedAt, retainedObservedAt: observedAt, retainedTargetId: binding?.targetId });
 		const next = (await tx.get<LocalAttachment>('things', row.id))!;
 		return { row: next, changed: !local || next.revision !== local.revision || [id, binding?.targetId].some(target => !!target && (refusals.get(target)?.at ?? -1) >= (prior?.retainedObservedAt ?? 0)) };
 	}
@@ -304,11 +304,8 @@ export class AccountFileSync {
 		commit: (content: DraftContent, admit: (tx: WorkspaceTransaction) => Promise<void>) => Promise<T>, signal = new AbortController().signal) {
 		return accountSyncDeadline(async child => {
 			const prepared: Awaited<ReturnType<AccountFileSync['loadRetention']>>[] = [];
-			let total = 0;
 			for (const [order, id] of draft.attachmentIds.entries()) {
 				const file = await this.loadRetention(transport, id, child, { targetId: draft.id, purpose: draft.surface === 'comment' ? 'comment' : 'post', order, draft: true });
-				total += file.copy.byteLength;
-				if (total > LEGACY_FILE_BUFFER_LIMITS.bytes) throw new WorkspaceError('DRAFT_FILES_LIMIT', 'Draft originals exceed this device workspace limit.', 413);
 				prepared.push(file);
 			}
 			const aliases = new Map(prepared.map(file => [file.id, file.fallbackId]));
@@ -329,17 +326,14 @@ export class AccountFileSync {
 	async retainPost<T>(transport: AccountFileRetentionTransport, input: { id: string; thingtime: string[]; attachments?: unknown[] }, commitParent: (admit: (tx: WorkspaceTransaction) => Promise<void>) => Promise<T>, signal = new AbortController().signal) {
 		if (this.retainingPost) throw new WorkspaceError('FILE_RETENTION_BUSY', 'Another post is being saved on this device. Retry shortly.', 503);
 		const attachments = input.attachments?.map(normalizePublicAttachment);
-		if (!input.thingtime.some(kind => ['post','comment'].includes(kind)) || !attachments || attachments.length > 200 || attachments.some(file => !file || file.url) || new Set(attachments.map(file => file?.id)).size !== attachments.length || attachments.reduce((sum, file) => sum + (file?.size || 0), 0) > LEGACY_FILE_BUFFER_LIMITS.bytes)
+		if (!input.thingtime.some(kind => ['post','comment'].includes(kind)) || !attachments || attachments.some(file => !file || file.url) || new Set(attachments.map(file => file?.id)).size !== attachments.length)
 			throw new WorkspaceError('INVALID_POST_RETENTION', 'This post needs its complete stored-file binding.', 409);
 		this.retainingPost = true;
 		try {
 			const prepared = await accountSyncDeadline(async child => {
 				const result: Awaited<ReturnType<AccountFileSync['loadRetention']>>[] = [];
-				let total = 0;
 				for (const [order, file] of attachments.entries()) {
 					const retained = await this.loadRetention(transport, file!.id, child, { targetId: input.id, purpose: input.thingtime.includes('comment') ? 'comment' : 'post', order });
-					total += retained.copy.length;
-					if (total > LEGACY_FILE_BUFFER_LIMITS.bytes) throw new WorkspaceError('LOCAL_QUOTA', 'The post files exceed this device workspace limit.', 413);
 					result.push(retained);
 				}
 				return result;

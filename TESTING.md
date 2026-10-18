@@ -12138,3 +12138,15 @@ Local results do not establish current-head CI or deployed acceptance.
 - [x] Retire or cancel an anonymous export after preparation, including a no-file bundle; JSON, clipboard and ZIP must retain the original scope fence.
 - [ ] Run the complete native Import/Export/Copy UI matrix in the isolated browser at 1440×1000, 390×844 and 320px, including top-to-bottom scroll, opened dialogs, cold offline reopen and cancelled/refused states. The recorded Chrome sandbox failure still prevents current native acceptance.
 - [ ] Complete remote retention, paired-device and remaining capacity/traversal work; clipboard text and explicit byte exports still need a final serialized buffer.
+
+
+### Owned-original streaming retention — 2026-10-18
+
+- [x] Negotiate `api.attachment-content` 1.16.0 before descriptor/byte requests. Reject older/breaking origins without fetching files; accept compatible patch/minor versions. Assert both manifests and the complete runtime route map.
+- [x] Stream a 70 MiB original through scoped Blob storage, reopen, reauthorization and canonical export; compare independent SHA-256 while refusing Blob reads above 1 MiB.
+- [x] Retain post and private-draft originals above 64 MiB in aggregate. Browser quota failure leaves no partial parent, bytes, aliases or upload intent; retry succeeds when capacity is available.
+- [x] Reject wrong owner/target/version/length, malformed descriptors, truncated/oversized streams and newer canonical refusals. Preserve device edits and exact pending upload identity.
+- [x] Cancel stalled bytes on caller cancellation or local/remote scope retirement; release readers without waiting for stalled producer cleanup. Abort chunk hashing and final storage admission without partial persistence.
+- [x] Keep full-user/same-origin, exact-owner, moderation/expiry/object-version and rate gates on `cache=retain-bytes`; preserve generic media-cache behavior. Verify backpressure, disconnect signal and no signed URL exposure.
+- [x] Smoke both manifests and anonymous 401/no-store through the built server in a network-restricted, credential-free local fixture; stop its listener afterwards.
+- [ ] Run authenticated normal-file, post and draft retention through the isolated native browser at 1440×1000, 390×844 and 320px; cold reload offline, download exact bytes and inspect top-to-bottom layout and cancellation/refusal states. The existing sandbox/credential-interface blockers remain open; mock transports and public manifest smoke are not this acceptance.

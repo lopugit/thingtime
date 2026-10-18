@@ -1,7 +1,7 @@
 import { bindLocalWorkspace } from './runtime.client';
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { accountThingTransport, readBoundedBytes, readBoundedJson } from './accountTransport.client';
+import { accountThingTransport, readBoundedFileBlob, readBoundedJson } from './accountTransport.client';
 import { accountWriteSupported } from './accountSync';
 import { rootIdentity } from '../utils/rootIdentity';
 
@@ -154,20 +154,22 @@ test('owned file transport binds metadata and exact bytes to one account, plane 
  const saved={window:globalThis.window,fetch:globalThis.fetch};
  const origin='https://retention.test',scope={kind:'account' as const,origin,ownerId:'owner',dataPlane:'home'};
  const calls:any[]=[],bytes=new Uint8Array([1,2,3]),key='a'.repeat(64)+':original';
- let etag='"'+key+':v1"', body=bytes;
+ let etag='"'+key+':v1"', body=bytes, declaredSize='3';
  Object.assign(globalThis,{window:{location:{origin},dispatchEvent(){}},fetch:async(url:string,init:RequestInit)=>{
-  if(url.includes('capabilities'))return Response.json({schemaVersion:1,origin,features:{'api.attachment-content':{version:'1.14.0'},'api.attachment-delete':{version:'1.5.0'},'api.mongodb-endpoint':{version:'1.1.0'}}});
+  if(url.includes('capabilities'))return Response.json({schemaVersion:1,origin,features:{'api.attachment-content':{version:'1.16.0'},'api.attachment-delete':{version:'1.5.0'},'api.mongodb-endpoint':{version:'1.1.0'}}});
   calls.push({url,init});
-  return url.includes('cache=bytes')?new Response(body,{headers:{ETag:etag,'Content-Length':'3'}}):Response.json({ok:true});
+  return url.includes('cache=retain-bytes')?new Response(body,{headers:{ETag:etag,'Content-Length':declaredSize}}):Response.json({ok:true});
  }});
  try{
   rootIdentity.confirm(rootIdentity.read().generation);bindLocalWorkspace(false,rootIdentity.read().generation,scope);
   const transport=accountThingTransport(scope,{assertCurrent(){},onInvalidate:()=>()=>{}}).files,signal=new AbortController().signal;
   await assert.rejects(transport.retention('file',signal),/incompatible/); // Prior test's other-origin manifest must be rejected and evicted.
   await transport.retention('file',signal);assert.equal(calls.at(-1).url,'/api/v1/attachments/content?id=file&cache=retain&download=1');
-  assert.deepEqual(await transport.bytes('file',key,3,signal),bytes);
+  const retained = await transport.bytes('file',key,3,signal); assert.ok(retained instanceof Blob);
+  assert.deepEqual(new Uint8Array(await retained.arrayBuffer()),bytes);
   for(const {init} of calls){assert.equal(init.credentials,'same-origin');assert.equal(init.redirect,'error');assert.equal(init.headers['X-Thingtime-Expected-Actor'],'owner');assert.equal(init.headers['X-Thingtime-Expected-Data-Plane'],'home');}
   etag='"another-version"';await assert.rejects(transport.bytes('file',key,3,signal),/version changed/);
+  etag='"'+key+':v1"';declaredSize='4';await assert.rejects(transport.bytes('file',key,3,signal),/version changed/);declaredSize='3';
   etag='"'+key+':v1"';body=bytes.slice(1);await assert.rejects(transport.bytes('file',key,3,signal),/incomplete/);
   body=new Uint8Array([1,2,3,4]);await assert.rejects(transport.bytes('file',key,3,signal),/exceeds/);
   await transport.remove!({id:'file',expectedUpdatedAt:'2026-10-17T00:00:00.000Z',retainReceipt:true},signal);
@@ -175,11 +177,74 @@ test('owned file transport binds metadata and exact bytes to one account, plane 
  }finally{Object.assign(globalThis,saved);}
 });
 
+test('owned file transport rejects a changed version without waiting for refused-body cleanup', {timeout: 2000}, async () => {
+ const saved = {window: globalThis.window, fetch: globalThis.fetch};
+ const origin = 'https://retention.test', scope = {kind: 'account' as const, origin, ownerId: 'owner', dataPlane: 'home'};
+ let cancelled = 0, pulled = 0;
+ const body = new ReadableStream({pull() {pulled++;}, cancel() {cancelled++; return new Promise<void>(() => {});}}, {highWaterMark: 0});
+ Object.assign(globalThis, {window: {location: {origin}, dispatchEvent() {}}, fetch: async (url: string) => {
+  if (url.includes('capabilities')) return Response.json({schemaVersion: 1, origin, features: {'api.attachment-content': {version: '1.16.0'}, 'api.mongodb-endpoint': {version: '1.1.0'}}});
+  return new Response(body, {headers: {ETag: '"different"', 'Content-Length': '1'}});
+ }});
+ try {
+  rootIdentity.confirm(rootIdentity.read().generation); bindLocalWorkspace(false, rootIdentity.read().generation, scope);
+  const transport = accountThingTransport(scope, {assertCurrent() {}, onInvalidate: () => () => {}}).files;
+  await assert.rejects(transport.bytes('file', 'a'.repeat(64) + ':original', 1, new AbortController().signal), /version changed/);
+  assert.equal(cancelled, 1); assert.equal(pulled, 0);
+ } finally { Object.assign(globalThis, saved); }
+});
+
 test('bounded file reader refuses missing, oversized and truncated bodies',async()=>{
- await assert.rejects(readBoundedBytes(new Response(null),3),/missing/);
- await assert.rejects(readBoundedBytes(new Response(new Uint8Array(2)),3),/incomplete/);
- await assert.rejects(readBoundedBytes(new Response(new Uint8Array(4)),3),/exceeds/);
- await assert.rejects(readBoundedBytes(new Response(new Uint8Array(3)),17*1024*1024),/Invalid file size/);
+ await assert.rejects(readBoundedFileBlob(new Response(null),3),/missing/);
+ await assert.rejects(readBoundedFileBlob(new Response(new Uint8Array(2)),3),/incomplete/);
+ await assert.rejects(readBoundedFileBlob(new Response(new Uint8Array(4)),3),/exceeds/);
+ await assert.rejects(readBoundedFileBlob(new Response(new Uint8Array(3)),Number.MAX_SAFE_INTEGER + 1),/Invalid file size/);
+});
+
+test('bounded Blob reader captures exact immutable chunks and releases its stream', async () => {
+ const first = new Uint8Array([1, 2]), second = new Uint8Array([3, 4]);
+ const body = new ReadableStream({start(controller) {controller.enqueue(first); controller.enqueue(second); controller.close();}});
+ const blob = await readBoundedFileBlob(new Response(body), 4);
+ first.fill(0); second.fill(0);
+ assert.ok(blob instanceof Blob); assert.equal(body.locked, false);
+ assert.deepEqual(new Uint8Array(await blob.arrayBuffer()), new Uint8Array([1, 2, 3, 4]));
+});
+
+test('bounded Blob reader refuses an invalid declared size before reading or waiting for cleanup', {timeout: 2000}, async () => {
+ let cancelled = 0, pulled = 0;
+ const body = new ReadableStream({pull() {pulled++;}, cancel() {cancelled++; return new Promise<void>(() => {});}}, {highWaterMark: 0});
+ await assert.rejects(readBoundedFileBlob(new Response(body), Number.MAX_SAFE_INTEGER + 1), /Invalid file size/);
+ assert.equal(pulled, 0); assert.equal(cancelled, 1); assert.equal(body.locked, false);
+});
+
+for (const early of [false, true]) test(`bounded Blob reader cancels a ${early ? 'pre-aborted' : 'stalled'} response without waiting for producer cleanup`, {timeout: 2000}, async () => {
+ const controller = new AbortController(); let cancelled = 0;
+ const body = new ReadableStream({cancel() {cancelled++; return new Promise<void>(() => {});}});
+ if (early) controller.abort();
+ const result = assert.rejects(readBoundedFileBlob(new Response(body), 1, controller.signal), {name: 'AbortError'});
+ controller.abort(); await result;
+ assert.equal(cancelled, 1); assert.equal(body.locked, false);
+});
+
+for (const mode of ['caller', 'local-scope', 'remote-scope'] as const) test(`owned file transport cancels stalled bytes after ${mode} retirement`, {timeout: 2000}, async () => {
+ const saved = {window: globalThis.window, fetch: globalThis.fetch};
+ const origin = 'https://retention.test', scope = {kind: 'account' as const, origin, ownerId: 'owner', dataPlane: 'home'};
+ const key = 'a'.repeat(64) + ':original', controller = new AbortController();
+ let entered!: () => void, invalidate!: () => void, removed = 0, cancelled = 0;
+ const ready = new Promise<void>(resolve => {entered = resolve;});
+ const body = new ReadableStream({pull() {entered();}, cancel() {cancelled++;}}, {highWaterMark: 0});
+ Object.assign(globalThis, {window: {location: {origin}, dispatchEvent() {}}, fetch: async (url: string) => {
+  if (url.includes('capabilities')) return Response.json({schemaVersion: 1, origin, features: {'api.attachment-content': {version: '1.16.0'}, 'api.mongodb-endpoint': {version: '1.1.0'}}});
+  return new Response(body, {headers: {ETag: `"${key}:v1"`, 'Content-Length': '1'}});
+ }});
+ try {
+  rootIdentity.confirm(rootIdentity.read().generation); bindLocalWorkspace(false, rootIdentity.read().generation, scope);
+  const transport = accountThingTransport(scope, {assertCurrent() {}, onInvalidate(callback) {invalidate = callback; return () => {removed++;};}}).files;
+  const result = assert.rejects(transport.bytes('file', key, 1, controller.signal), {name: 'AbortError'});
+  await ready;
+  if (mode === 'caller') controller.abort(); else if (mode === 'local-scope') invalidate(); else rootIdentity.changed();
+  await result; assert.equal(cancelled, 1); assert.equal(body.locked, false); assert.equal(removed, 1);
+ } finally { Object.assign(globalThis, saved); }
 });
 
 test('parent deletion refuses an origin without durable cascade receipts and permits a compatible retry',async()=>{
@@ -200,4 +265,30 @@ test('parent deletion refuses an origin without durable cascade receipts and per
   version='1.34.0';await transport.remove!(op,new AbortController().signal);
   assert.deepEqual(JSON.parse(mutations[0].body),{...op.body,retainAttachmentReceipts:true});
  }finally{Object.assign(globalThis,saved);}
+});
+
+test('owned-original transport negotiates before fetching and accepts streamed files above the old byte budget', async () => {
+ const saved = {window: globalThis.window, fetch: globalThis.fetch};
+ const origin = 'https://retention-streams.test', scope = {kind: 'account' as const, origin, ownerId: 'owner', dataPlane: 'home'};
+ const key = 'a'.repeat(64) + ':original', size = 17 * 1024 * 1024 + 5;
+ let version = '1.15.9', requests = 0, consumed = 0;
+ Object.assign(globalThis, {window: {location: {origin}, dispatchEvent() {}}, fetch: async (url: string, init: RequestInit) => {
+  if (url.includes('capabilities')) return Response.json({schemaVersion: 1, origin, features: {'api.attachment-content': {version}, 'api.mongodb-endpoint': {version: '1.1.0'}}});
+  requests++; assert.ok(url.includes('cache=retain-bytes')); assert.equal(init.credentials, 'same-origin'); assert.equal(init.redirect, 'error');
+  return new Response(new ReadableStream({pull(controller) {
+   const count = Math.min(1024 * 1024, size - consumed);
+   if (!count) {controller.close(); return;}
+   consumed += count; controller.enqueue(new Uint8Array(count).fill(137));
+  }}, {highWaterMark: 0}), {headers: {ETag: `"${key}:v1"`, 'Content-Length': String(size)}});
+ }});
+ try {
+  rootIdentity.confirm(rootIdentity.read().generation); bindLocalWorkspace(false, rootIdentity.read().generation, scope);
+  const transport = accountThingTransport(scope, {assertCurrent() {}, onInvalidate: () => () => {}}).files, signal = new AbortController().signal;
+  await assert.rejects(transport.bytes('file', key, size, signal), /incompatible/); // Evicts the preceding test's other origin.
+  for (const unsupported of ['1.15.9', '2.0.0']) {version = unsupported; await assert.rejects(transport.bytes('file', key, size, signal), /incompatible/);}
+  assert.equal(requests, 0);
+  version = '1.16.1'; const blob = await transport.bytes('file', key, size, signal);
+  assert.ok(blob instanceof Blob); assert.equal(blob.size, size); assert.equal(consumed, size); assert.equal(requests, 1);
+  assert.deepEqual(new Uint8Array(await blob.slice(-5).arrayBuffer()), new Uint8Array(5).fill(137));
+ } finally {Object.assign(globalThis, saved);}
 });

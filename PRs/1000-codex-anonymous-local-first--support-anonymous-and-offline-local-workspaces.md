@@ -4175,3 +4175,25 @@ Remote retention, paired-device transport, clipboard capacity and the wider matr
 remain open. GitHub still returned PR head `14f1e765` while the pre-checkpoint remote
 branch was `23b6b53d`; no current-head preview or CI pass is inferred from older checks.
 See [the workspace checkpoint](../docs/local-workspaces.md#blob-export-collection--2026-10-18).
+
+
+## Owned-original streaming retention — 2026-10-18
+
+The existing content route now advertises 1.16.0 and offers private
+`cache=retain-bytes` to the same full-user, same-origin exact-owner principals as
+the retention descriptor. Account originals remain Blobs through scoped storage
+and export. Per-file/aggregate preparation caps and the client-only binding cap
+are removed; actual quota, identity, refusal, cancellation and atomic admission
+checks remain. Ordinary media caching and anonymous preview bounds are unchanged.
+
+681 workspace + 4 offline-shell, 320 attachment and 108 capability tests pass;
+72 opt-in workspace cases are skipped. The 70 MiB original and 66 MiB post/draft
+fixtures verify exact hashes, bounded reads, reopen and rollback. Client/template
+and server builds pass; lint is clean and TypeScript matches 91 baseline errors.
+Both built manifests publish 1.16.0; an isolated credential-free server returns
+401/no-store to anonymous retention and is now stopped. Detailed evidence and
+preflight recovery are in the [workspace checkpoint](../docs/local-workspaces.md#owned-originals-stream-into-blob-storage--2026-10-18).
+
+Native account acceptance, the larger local-feature matrix, current-main
+integration and exact-commit deployment checks remain open. No merge, deployment,
+publication or existing-account mutation was performed for this checkpoint.

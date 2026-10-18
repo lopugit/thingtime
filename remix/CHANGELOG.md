@@ -68,6 +68,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-18 — **Codex (AI)**: Stream authorized owned originals into scoped Blob storage and export with capability 1.16.0, removing retention preparation caps while preserving private authorization, atomic quota/refusal handling and cancellation. Large-file fixtures, manifest smoke and builds pass; native acceptance remains pending. [PR #1000 checkpoint](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md#owned-original-streaming-retention--2026-10-18).
+
 - 2026-10-18 — **Codex (AI)**: Keep local/account export files as native Blobs
   through canonical collection and ZIP downloads; preserve prepared anonymous
   scope fences and cancel stalled file streams. A 66 MiB import/export/import

@@ -1,5 +1,12 @@
 # Attachments and media
 
+Owned-original retention negotiates `api.attachment-content` 1.16.0 and streams
+`cache=retain-bytes&download=1` through the existing full-user/owned-file gates.
+`accountTransport.client.ts` and `accountFiles.ts` carry Blobs with chunk hashing
+and atomic quota/refusal checks. Run account retention/transport, attachment route
+and both manifest suites; native account acceptance remains pending. See the
+[streaming checkpoint](../local-workspaces.md#owned-originals-stream-into-blob-storage--2026-10-18).
+
 Native transfer export carries Blob handles through `collectTransfer`,
 `exportLocalThingSnapshot`, `accountExport.ts` and `bundleFromPlan`. Downloads use
 the chunked Blob ZIP encoder; byte/clipboard compatibility callers materialize only

@@ -1,5 +1,13 @@
 # API endpoints and capabilities
 
+Attachment content 1.16.0 adds private `cache=retain-bytes&download=1` for owned
+originals, reusing descriptor authorization and the existing route/import entry.
+`apiDocs.ts` versions both manifests; account retention negotiates 1.16.0 before
+fetching. The byte body streams with exact descriptor ETag/length and private
+no-store headers; generic media-cache policy is unchanged. Run `test:attachments`,
+`test:api-capabilities`, `test:local-workspace` and the isolated built-manifest smoke.
+See the [streaming checkpoint](../local-workspaces.md#owned-originals-stream-into-blob-storage--2026-10-18).
+
 Conditional file sync prerequisites reuse `attachmentStore.annotateOwnedAttachment`
 and `managedPlacement.moveManagedContent`. Annotation 1.2.0 accepts optional
 `expectedUpdatedAt` and returns the committed timestamp; bulk 1.6.0 accepts it

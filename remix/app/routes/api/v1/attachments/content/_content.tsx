@@ -13,13 +13,15 @@ type ContentDependencies = {
 	enforceLimit: typeof enforceRateLimit;
 	download: typeof getAttachmentDownload;
 	enrichViewer: typeof withFriendIds;
+	fetchObject: typeof fetchStoredObject;
 };
 
 const defaultDependencies: ContentDependencies = {
 	getUser: getCurrentUser,
 	enforceLimit: enforceRateLimit,
 	download: getAttachmentDownload,
-	enrichViewer: withFriendIds
+	enrichViewer: withFriendIds,
+	fetchObject: fetchStoredObject
 };
 
 export const createAttachmentContentLoader = (overrides: Partial<ContentDependencies> = {}) => {
@@ -35,7 +37,8 @@ export const createAttachmentContentLoader = (overrides: Partial<ContentDependen
 			// Service credentials are not first-party attachment principals. Treat
 			// them exactly like an anonymous caller for public-post authorization.
 			const user = resolvedUser?.accountKind === 'user' ? resolvedUser : null;
-			const retainOwnedFile = url.searchParams.get('cache') === 'retain';
+			const retainBytes = url.searchParams.get('cache') === 'retain-bytes';
+			const retainOwnedFile = retainBytes || url.searchParams.get('cache') === 'retain';
 			if (retainOwnedFile && (!user || !isSameOriginAttachmentRequest(request))) return json({ ok: false, error: 'A same-origin full user session is required' }, { status: user ? 403 : 401 });
 			if (retainOwnedFile && (sharedRoot || url.searchParams.has('key') || url.searchParams.has('width') || url.searchParams.get('download') !== '1'))
 				return json({ ok: false, error: 'File retention requires an unscoped original download' }, { status: 400 });
@@ -61,7 +64,7 @@ export const createAttachmentContentLoader = (overrides: Partial<ContentDependen
 			if (result.ok === false) return json({ ok: false, error: result.error }, { status: result.status });
 			if (retainOwnedFile) {
 				if (!result.retention || result.retention.ownerId !== user!.id) return json({ ok: false, error: 'Saved owned file not found' }, { status: 404 });
-				return json({ ok: true, cacheKey: `${result.cacheKey}:original`, size: result.size, file: result.retention });
+				if (!retainBytes) return json({ ok: true, cacheKey: `${result.cacheKey}:original`, size: result.size, file: result.retention });
 			}
 			if (width && (!result.image || result.size > 20 * 1024 * 1024)) {
 				return json({ ok: false, error: 'Image preview unavailable; use the original' }, { status: 415 });
@@ -80,10 +83,10 @@ export const createAttachmentContentLoader = (overrides: Partial<ContentDependen
 				if (response.ok) response.headers.set('ETag', etag);
 				return response;
 			}
-			if (url.searchParams.get('cache') === 'bytes') {
-				if (result.size > 16 * 1024 * 1024) return json({ ok: false, error: 'Use native streaming for large files' }, { status: 413 });
-				const upstream = await fetchStoredObject(result.url, { redirect: 'error', signal: AbortSignal.timeout(25_000) });
-				if (!upstream.ok || !upstream.body) return new Response(null, { status: 502 });
+			if (retainBytes || url.searchParams.get('cache') === 'bytes') {
+				if (!retainBytes && result.size > 16 * 1024 * 1024) return json({ ok: false, error: 'Use native streaming for large files' }, { status: 413 });
+				const upstream = await dependencies.fetchObject(result.url, { redirect: 'error', signal: AbortSignal.any([request.signal, AbortSignal.timeout(25_000)]) });
+				if (!upstream.ok || !upstream.body) { void upstream.body?.cancel().catch(() => {}); return new Response(null, { status: 502 }); }
 				return new Response(upstream.body, {
 					headers: {
 						ETag: etag,
@@ -104,10 +107,10 @@ export const createAttachmentContentLoader = (overrides: Partial<ContentDependen
 		}).then((response) => {
 			// Bytes may be retained, but the browser must reauthorize before reuse.
 			if (
-				response.status === 304 ||
+				(new URL(request.url).searchParams.get('cache') !== 'retain-bytes') && (response.status === 304 ||
 				(response.status === 200 &&
 					response.headers.get('Content-Type') !== 'application/json; charset=utf-8' &&
-					!response.headers.get('Content-Type')?.includes('application/json'))
+					!response.headers.get('Content-Type')?.includes('application/json')))
 			) {
 				response.headers.set('Cache-Control', 'private, no-cache');
 				response.headers.delete('Pragma');

@@ -1,6 +1,7 @@
 import { createQuotaFactory, TEST_STORAGE_CAPACITY } from './storageTestFixture';
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { createHash } from 'node:crypto';
 import { IDBKeyRange } from 'fake-indexeddb';
 import { AccountFileSync, type AccountFileRetentionTransport } from './accountFiles';
 import { AccountThingSync } from './accountSync';
@@ -12,7 +13,8 @@ import { LocalThings } from './things';
 import { serializeTransfer } from '../utils/thingTransfer/format';
 
 function fixture(comment = false) {
- const db = new WorkspaceDatabase(createQuotaFactory(), undefined, undefined, IDBKeyRange);
+ const factory = createQuotaFactory();
+ const db = new WorkspaceDatabase(factory, undefined, undefined, IDBKeyRange);
  const scope = { kind: 'account', origin: 'https://retention.test', ownerId: 'owner', dataPlane: 'home' } as const;
  let now = Date.now(); const lease = { assertCurrent() {}, onInvalidate: () => () => {} };
  const files = new AccountFileSync(db, scope, lease, () => now), sync = new AccountThingSync(db, scope, lease, () => now, undefined, files.contentHooks);
@@ -24,8 +26,31 @@ function fixture(comment = false) {
   bytes: async () => bytes
  };
  const retain = (source = parent, remote: AccountFileRetentionTransport = transport) => files.retainPost(remote, source, admit => sync.remember(source, now, admit));
- return {db,scope,lease,files,sync,bytes,attachments,parent,transport,retain,tick(updateParent=true){now+=1000;if(updateParent)parent.updatedAt=new Date(now).toISOString();}};
+ return {db,factory,scope,lease,files,sync,bytes,attachments,parent,transport,retain,tick(updateParent=true){now+=1000;if(updateParent)parent.updatedAt=new Date(now).toISOString();}};
 }
+
+test('complete post originals above 64 MiB use browser capacity and roll back atomically on quota refusal', async context => {
+ const f = fixture(), block = new Uint8Array(1024 * 1024).fill(57), hash = createHash('sha256');
+ const blob = new Blob(Array.from({length: 33}, () => {hash.update(block); return block;})), expected = hash.digest('hex');
+ const original = Blob.prototype.arrayBuffer;
+ context.mock.method(Blob.prototype, 'arrayBuffer', function(this: Blob) {assert.ok(this.size <= 1024 * 1024); return original.call(this);});
+ f.attachments.forEach(file => {file.size = blob.size;});
+ const transport = {...f.transport, retention: async (...args: Parameters<typeof f.transport.retention>) => ({...await f.transport.retention(...args), size: blob.size}), bytes: async () => blob};
+ try {
+  await assert.rejects(f.retain(f.parent, transport), {code: 'LOCAL_QUOTA'});
+  assert.equal(await f.sync.view('post'), null);
+  assert.deepEqual(await f.db.transaction(f.scope, 'readonly', f.lease, tx => tx.usage()), {records: 0, bytes: 0});
+  f.factory.capacity.bytes = 128 * 1024 * 1024;
+  await f.retain(f.parent, transport); await f.db.close();
+  const files = (await f.files.library(true)).things;
+  assert.equal(files.length, 2);
+  for (const row of files) {
+   const file = await f.files.readFileBlob(row.id);
+   assert.equal(file.blob.size, blob.size); assert.ok(file.snapshot.value instanceof Blob);
+   assert.equal(file.row.localAttachment.sha256, expected); assert.equal(file.row.localAttachment.requestId, undefined);
+  }
+ } finally {await f.db.close();}
+});
 
 test('owned bound originals and parent commit atomically, export exact bytes and never invent an upload request',async()=>{
  for(const comment of [false,true]){

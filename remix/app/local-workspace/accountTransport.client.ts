@@ -12,17 +12,35 @@ import { EXPECTED_DATA_PLANE_HEADER } from '../utils/dataPlane';
 import { WorkspaceError, type WorkspaceLease, type WorkspaceScope } from './storage';
 import type { AccountSyncTransport, AccountThing } from './accountSync';
 
-export const readBoundedBytes = async (response: Response, expectedSize: number) => {
-	if (!Number.isSafeInteger(expectedSize) || expectedSize < 1 || expectedSize > 16 * 1024 * 1024) throw new WorkspaceError('INVALID_FILE_BYTES', 'Invalid file size.', 502);
+/** Keep the verified original as immutable Blob parts with exact size checks.
+ * Cancellation must also wake a stalled stream read. */
+export const readBoundedFileBlob = async (response: Response, expectedSize: number, signal?: AbortSignal): Promise<Blob> => {
+	if (!Number.isSafeInteger(expectedSize) || expectedSize < 1) {
+		void response.body?.cancel().catch(() => {});
+		throw new WorkspaceError('INVALID_FILE_BYTES', 'Invalid file size.', 502);
+	}
 	const reader = response.body?.getReader();
 	if (!reader) throw new WorkspaceError('INVALID_FILE_BYTES', 'File bytes are missing.', 502);
-	const chunks: Uint8Array[] = []; let size = 0;
+	const abort = () => { void reader.cancel().catch(() => {}); };
+	signal?.addEventListener('abort', abort, { once: true });
+	const chunks: Blob[] = []; let size = 0;
 	try {
-		for (;;) { const part = await reader.read(); if (part.done) break; size += part.value.length; if (size > expectedSize) throw new WorkspaceError('INVALID_FILE_BYTES', 'File exceeds its verified size.', 502); chunks.push(part.value); }
+		signal?.throwIfAborted();
+		for (;;) {
+			const part = await reader.read();
+			signal?.throwIfAborted();
+			if (part.done) break;
+			size += part.value.byteLength;
+			if (size > expectedSize) throw new WorkspaceError('INVALID_FILE_BYTES', 'File exceeds its verified size.', 502);
+			chunks.push(new Blob([part.value]));
+		}
 		if (size !== expectedSize) throw new WorkspaceError('INVALID_FILE_BYTES', 'File bytes are incomplete.', 502);
-		const bytes = new Uint8Array(size); let offset = 0;
-		for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.length; } return bytes;
-	} finally { await reader.cancel().catch(() => {}); }
+		return new Blob(chunks);
+	} finally {
+		signal?.removeEventListener('abort', abort);
+		void reader.cancel().catch(() => {});
+		reader.releaseLock();
+	}
 };
 export const readBoundedJson = async (response: Response) => {
 	const reader = response.body?.getReader();
@@ -64,9 +82,10 @@ export function accountThingTransport(scope: Extract<WorkspaceScope, { kind: 'ac
 		const remoteLease = accountRemoteWorkspaceLease(scope); remoteLease.assertCurrent();
 		const retired = new AbortController();
 		const unsubscribe = remoteLease.onInvalidate(() => retired.abort());
+		const unsubscribeLocal = lease.onInvalidate(() => retired.abort());
 		try {
 		if (window.location.origin !== scope.origin) throw new WorkspaceError('WORKSPACE_CHANGED', 'Account origin changed', 409);
-		const endpointCapability = ({ 'drafts': ['api.drafts', '1.1.0'], 'things/comment': ['api.things-comment', '1.8.0'], 'attachments/content': ['api.attachment-content', '1.14.0'], 'attachments/delete': ['api.attachment-delete', '1.5.0'], 'attachments/uploads/abort': ['api.attachment-upload-abort', '1.2.0'], 'attachments/uploads': ['api.attachment-uploads', '1.5.0'], 'attachments/uploads/parts': ['api.attachment-upload-parts', '1.1.0'], 'attachments/uploads/complete': ['api.attachment-upload-complete', '1.4.0'], 'attachments/annotate': ['api.attachment-annotate', '1.2.0'], 'things/bulk': ['api.things-bulk', '1.6.0'] } as Record<string, string[]>)[endpoint];
+		const endpointCapability = ({ 'drafts': ['api.drafts', '1.1.0'], 'things/comment': ['api.things-comment', '1.8.0'], 'attachments/content': ['api.attachment-content', '1.16.0'], 'attachments/delete': ['api.attachment-delete', '1.5.0'], 'attachments/uploads/abort': ['api.attachment-upload-abort', '1.2.0'], 'attachments/uploads': ['api.attachment-uploads', '1.5.0'], 'attachments/uploads/parts': ['api.attachment-upload-parts', '1.1.0'], 'attachments/uploads/complete': ['api.attachment-upload-complete', '1.4.0'], 'attachments/annotate': ['api.attachment-annotate', '1.2.0'], 'things/bulk': ['api.things-bulk', '1.6.0'] } as Record<string, string[]>)[endpoint];
 		const capability = endpointCapability || (endpoint === 'things/interactions' ? ['api.things-interactions', '1.0.0'] : endpoint === 'components/browse' ? ['api.components-browse', '1.0.0'] : endpoint === 'schemas/browse' ? ['api.schemas-browse', '1.0.0'] : endpoint === 'things/fork' ? ['api.things-fork', '1.6.0'] : endpoint === 'things/export' ? ['api.things-export', '1.16.0'] : endpoint === 'things' ? ['api.things', '1.33.0'] : ['api.webpages-resolve', '1.3.0']);
 		await requireThingtimeCapability(capability[0], capability[1]);
 		if (endpoint === 'attachments/delete' && args.targetId !== undefined) await requireThingtimeCapability('api.attachment-delete', args.retainReceipt === true ? '1.7.0' : '1.6.0');
@@ -76,8 +95,9 @@ export function accountThingTransport(scope: Extract<WorkspaceScope, { kind: 'ac
 		await requireThingtimeCapability('api.mongodb-endpoint', '1.1.0');
 		lease.assertCurrent(); remoteLease.assertCurrent(); retired.signal.throwIfAborted(); signal?.throwIfAborted();
 		const query = method === 'GET' ? `?${new URLSearchParams(Object.entries(args).filter(([, value]) => value !== undefined && value !== null).map(([key, value]) => [key, Array.isArray(value) ? value.join(',') : String(value)]))}` : '';
+		const requestSignal = AbortSignal.any([retired.signal, AbortSignal.timeout(20_000), ...(signal ? [signal] : [])]);
 		const response = await fetch(`/api/v1/${endpoint}${query}`, { method, credentials: 'same-origin', redirect: 'error',
-			signal: AbortSignal.any([retired.signal, AbortSignal.timeout(20_000), ...(signal ? [signal] : [])]),
+			signal: requestSignal,
 			headers: { 'Content-Type': 'application/json', [EXPECTED_ACTOR_HEADER]: scope.ownerId, [EXPECTED_DATA_PLANE_HEADER]: scope.dataPlane },
 			...(method === 'GET' ? {} : { body: JSON.stringify(args) }) });
 		// An edge/WAF refusal answers a 4xx with an HTML body. Letting that parse
@@ -89,10 +109,10 @@ export function accountThingTransport(scope: Extract<WorkspaceScope, { kind: 'ac
 			if (response.ok && binary) {
 				if (response.headers.get('ETag') !== `"${binary.cacheKey}:v1"` || Number(response.headers.get('Content-Length')) !== binary.size)
 					throw new WorkspaceError('FILE_CHANGED', 'The file version changed before its bytes arrived.', 409);
-				result = { ok: true, bytes: await readBoundedBytes(response, binary.size) };
+				result = { ok: true, bytes: await readBoundedFileBlob(response, binary.size, requestSignal) };
 			} else result = await readBoundedJson(response);
-		} catch (error) { if (response.ok) { await response.body?.cancel().catch(() => {}); throw error; } }
-		lease.assertCurrent(); remoteLease.assertCurrent(); retired.signal.throwIfAborted();
+		} catch (error) { if (response.ok) { void response.body?.cancel().catch(() => {}); throw error; } }
+		lease.assertCurrent(); remoteLease.assertCurrent(); requestSignal.throwIfAborted();
 		if (response.status === 401 || (response.status === 409 && (['ACTOR_CHANGED', 'DATA_PLANE_CHANGED'].includes(result?.code) || result?.error === 'The active account changed. Run the action again.'))) {
 			rootIdentity.changed();
 			window.dispatchEvent(new Event('thingtime:root-data-refresh'));
@@ -104,7 +124,7 @@ export function accountThingTransport(scope: Extract<WorkspaceScope, { kind: 'ac
 			throw Object.assign(error, { retryable: result?.retryable === true, retryAfterMs: Number.isFinite(seconds) && seconds > 0 ? Math.min(86400,seconds)*1000 : 0 });
 		}
 		return result;
-		} finally { unsubscribe(); }
+		} finally { unsubscribe(); unsubscribeLocal(); }
 	};
 	return {
 		drafts: {
@@ -116,8 +136,8 @@ export function accountThingTransport(scope: Extract<WorkspaceScope, { kind: 'ac
 		files: {
 			retention: async (id, signal, bound) => { if (bound) await requireThingtimeCapability('api.attachment-content', '1.15.0'); return request('GET', { id, cache: 'retain', download: 1 }, signal, 'attachments/content'); },
 			bytes: async (id, cacheKey, size, signal) => {
-				if (!/^[a-f0-9]{64}:original$/.test(cacheKey) || !Number.isSafeInteger(size) || size < 1 || size > 16 * 1024 * 1024) throw new WorkspaceError('INVALID_FILE_BYTES', 'Invalid file descriptor.', 502);
-				return (await request('GET', { id, cache: 'bytes', download: 1 }, signal, 'attachments/content', { cacheKey, size })).bytes;
+				if (!/^[a-f0-9]{64}:original$/.test(cacheKey) || !Number.isSafeInteger(size) || size < 1) throw new WorkspaceError('INVALID_FILE_BYTES', 'Invalid file descriptor.', 502);
+				return (await request('GET', { id, cache: 'retain-bytes', download: 1 }, signal, 'attachments/content', { cacheKey, size })).bytes;
 			},
 			remove: (input, signal) => request('POST', input, signal, 'attachments/delete'),
 			cancel: (requestId, signal) => request('POST', { requestId }, signal, 'attachments/uploads/abort'),

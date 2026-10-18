@@ -4640,3 +4640,51 @@ in `tmp/blob-export-*.log`; the PR checkpoint records their final outcomes.
 The existing isolated Chrome sandbox-startup blocker remains open. No current-head
 native screenshots, UI acceptance or deployment proof is claimed by this checkpoint.
 The transfer and account browser matrix in `TESTING.md` remains required.
+
+
+## Owned originals stream into Blob storage — 2026-10-18
+
+`api.attachment-content` 1.16.0 adds `cache=retain-bytes&download=1` on the
+existing content route. It reuses the owned-file descriptor authorization,
+including full-user/same-origin, exact owner, durable target, moderation, expiry
+and storage-version checks. The server pipes the stored original with
+backpressure, cancellation, exact length and the descriptor ETag; its response
+is private/no-store. The general media-cache mode keeps its existing policy.
+Both manifests and the client requirement change together.
+
+Account retention now carries immutable Blobs through download, chunked SHA-256,
+IndexedDB admission, reopen, fresh-descriptor reuse and export. The old 16 MiB
+retention-file, 64 MiB draft/post preparation and 200-file client binding caps
+are removed. Admission uses the browser's actual capacity and atomically rolls
+back parent, metadata, aliases and bytes on quota refusal. Canonical descriptor
+rechecks, known access refusals, original upload identities, three-file admission,
+per-operation deadlines and post serialization remain. No upload or publication
+intent is invented for retained account originals. Caller, local-scope and
+remote-scope cancellation wake stalled reads and release the reader even when
+producer cleanup stalls. Unsafe integer sizes and incomplete responses fail.
+
+Local verification: **681 workspace tests passed, 72 opt-in tests skipped**, plus
+**4 offline-shell checks**; **320 attachment** and **108 capability** checks passed.
+A 70 MiB original retains/reopens/exports with independent SHA-256. Post and
+private-draft fixtures each retain two 33 MiB originals without whole-file reads;
+the post fixture first proves atomic browser-quota rollback. Hash reads are at
+most 1 MiB. Production client/template/server builds passed (249 offline assets,
+22,258,858 bytes). Changed-file lint has zero errors/warnings; TypeScript retains
+the same 91 baseline diagnostics. Logs: `tmp/retention-blob-*.log`.
+
+The built production server exposed both 1.16.0 manifests and rejected an
+anonymous owned-original request with 401/no-store. Its one-shot process had no
+account session or credentials; macOS sandbox policy denied non-fixture network
+and dotenv reads. Redirect/direct-IP/mapped-IPv6 preflight passed. The initial
+filesystem-pattern preflight failed before app launch, then was corrected; a
+subsequent legacy-manifest request hit a network-blocked default fallback, then
+the fixture pinned the existing fallback setting to its own loopback origin.
+No production request succeeded. The final listener is closed. Evidence:
+`tmp/retention-blob-built-verification.json` and the claim pointer in
+`tmp/retention-blob-manifest-claim.json`. This smoke is not authenticated upload,
+UI or deployed acceptance.
+
+Native browser acceptance remains pending under the recorded Chrome sandbox
+startup blocker. The opt-in truncated-byte fixture now targets the new streaming
+mode. Paired-device transports, remaining catalogue/traversal/clipboard limits,
+full local-feature acceptance and integration with current main remain open.

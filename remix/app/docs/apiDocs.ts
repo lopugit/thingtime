@@ -6054,17 +6054,18 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 	}),
 	endpoint({
 		id: 'attachment-content',
-		// 1.15.0: owner retention includes exact post/comment target bindings.
-		contractVersion: '1.15.0',
-		featureVersion: '1.15.0',
+		// 1.16.0: owned originals stream into scoped device storage without buffer caps.
+		contractVersion: '1.16.0',
+		featureVersion: '1.16.0',
 		group: 'attachments',
 		title: 'Read attachment content',
 		endpoint: '/api/v1/attachments/content',
 		summary: 'Authorizes a stable same-origin attachment URL and redirects to short-lived private S3 content.',
 		detail:
+			'Version 1.16.0 adds cache=retain-bytes&download=1 for streamed owned originals, with the same full-user, same-origin, exact-owner and durable-binding gates as cache=retain. Both retention modes admit valid stored originals without the former 16 MiB ceiling. Bytes carry the descriptor ETag and exact Content-Length; responses are private/no-store, use backpressure and propagate disconnect cancellation. Clients negotiate 1.16.0 before retention, validate exact bytes and recheck the descriptor before atomic scoped storage. Existing generic cache=bytes keeps its media-cache budget. ' +
 			'Version 1.15.0: cache=retain also admits owned, durably bound post/comment originals and returns file.targetId. Revalidate the parent and atomically admit its complete binding before enabling local editing. Other bound purposes remain excluded. ' +
-			'Version 1.14.0: cache=retain also admits owned durable standalone recordings and returns file.purpose (file or recording). Purpose is preserved in local exports, uploads and deletion receipts. Existing moderation, scope, expiry, object-version and 16 MiB gates still apply. ' +
-			'Same-origin full users can request cache=retain&download=1 for an owned saved standalone file up to 16 MiB. This returns only public metadata, owner identity, observed version, folder placement and an opaque byte cache key for an explicit account-scoped device copy. Shared roots/keys, import drafts, linked files, unsupported bound purposes and blocked media never grant retention. No signed URL or storage key is returned. Ordinary media cache validation still reauthorizes every read. ' +
+			'Version 1.14.0: cache=retain also admits owned durable standalone recordings and returns file.purpose (file or recording). Purpose is preserved in local exports, uploads and deletion receipts. Existing moderation, scope, expiry and object-version gates still apply. ' +
+			'Same-origin full users can request cache=retain&download=1 for an owned saved standalone file. This returns only public metadata, owner identity, observed version, folder placement and an opaque byte cache key for an explicit account-scoped device copy. Shared roots/keys, import drafts, linked files, unsupported bound purposes and blocked media never grant retention. No signed URL or storage key is returned. Ordinary media cache validation still reauthorizes every read. ' +
 			'Standalone file-purpose attachments use the same exact-owner access checks as saved recordings, including moderation, object-version and storage gates. ' +
 			'Owner-created service workspaces add live membership-based read/comment access to enrolled records and the bound webpage; customer and B2B users are limited to their linked customer and properties. Inherited comments/media recheck membership on every request; app/PAT scopes, custom endpoints, explicit private ACL changes and moderation remain enforced. Inherited comment media also enforce moderation on every intervening ancestor, including comments on media. ' +
 			'Unlisted post/page/comment media opens by canonical attachment id without a secret key. Current parent ACL, moderation and storage gates are rechecked on every request. Saved profile discoveries remain tied to the account or anonymous browser identity; IP metadata never grants access. ' +
@@ -6087,6 +6088,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		steps: [
 			'GET with id; optionally add download=1. width=64,320,640,1280,1920 returns a bounded WebP preview for verified raster images up to 20 MiB; unsupported images return 415 so clients can use the original.',
 			'cache=bytes returns at most 16 MiB of authorized original content through the same origin, without S3 CORS. Larger files return 413; omit cache to use native range streaming.',
+			'cache=retain-bytes&download=1 streams an authorized owned original without redirecting or exposing storage credentials. Require api.attachment-content 1.16.0 and the cache=retain descriptor; reject changed ETag/size, truncated streams and stale ownership before retaining locally.',
 			'cache=validate performs the same live authorization and returns {ok,cacheKey,size} without file bytes. Cache keys are opaque, viewer/version scoped and include the requested width. Revalidate before EVERY local cache read; never serve cached private bytes after a failed check or offline. Never persist signed URLs.',
 			'Follow the 302 to the short-lived private object URL.',
 			'Use the same stable endpoint again after expiry; never persist the presigned target.',
@@ -6104,6 +6106,12 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 				description: 'Download any file as opaque bytes.',
 				method: 'GET',
 				query: { id: '3bda8208-625c-4f5d-941f-348020021848', download: 1 }
+			},
+			{
+				name: 'Retain an owned original',
+				description: 'Negotiate content 1.16.0 and fetch cache=retain first. Validate ETag and size, then recheck the descriptor before atomic device admission.',
+				method: 'GET',
+				query: { id: '3bda8208-625c-4f5d-941f-348020021848', cache: 'retain-bytes', download: 1 }
 			}
 		],
 		responseExamples: [

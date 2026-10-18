@@ -2740,8 +2740,8 @@ test('owned file retention descriptors reuse content gates and disclose no stora
  assert.equal((await service.download(null,doc.shareId,true,true)).ok,false);
  const custom = createAttachmentService({ customMongoActive: () => true, store: {getById:async()=>doc} as any });
  assert.equal((await custom.download({id:'user-1'},doc.shareId,true,true)).ok,false);
- doc.objectSizeBytes=17*1024*1024;
- const large=await service.download({id:'user-1'},doc.shareId,true,true);assert.equal(large.ok,false);if(!large.ok)assert.equal(large.status,413);
+ doc.objectSizeBytes=doc.crystal.size=70*1024*1024;
+ const large=await service.download({id:'user-1'},doc.shareId,true,true);assert.equal(large.ok,true);if(large.ok){assert.equal(large.size,70*1024*1024);assert.equal(large.retention?.attachment.size,large.size);}
 });
 
 

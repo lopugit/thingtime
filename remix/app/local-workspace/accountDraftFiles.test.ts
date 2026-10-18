@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { createHash } from 'node:crypto';
 import { IDBFactory, IDBKeyRange } from 'fake-indexeddb';
 import { AccountDraftSync, type AccountDraftTransport } from './accountDrafts';
 import { AccountFileSync, type AccountFileTransport } from './accountFiles';
@@ -27,6 +28,31 @@ const setup = () => {
  };
  return { db, files, drafts, bytes, calls, requests, writes, fileTransport, transport };
 };
+
+test('private draft originals above 64 MiB retain as exact native Blobs without upload intent', async context => {
+ const f = setup(), block = new Uint8Array(1024 * 1024).fill(53), hash = createHash('sha256');
+ const blob = new Blob(Array.from({length: 33}, () => {hash.update(block); return block;})), expected = hash.digest('hex');
+ const original = Blob.prototype.arrayBuffer;
+ context.mock.method(Blob.prototype, 'arrayBuffer', function(this: Blob) {assert.ok(this.size <= 1024 * 1024); return original.call(this);});
+ const remote: AccountDraft = {...content('one'), attachmentIds: ['one','two'], id: 'large-draft', mode: 'draft', revision: 7, createdAt: '2026-10-17T00:00:00Z', updatedAt: '2026-10-17T00:00:00Z'};
+ const transport = {retention: async (id: string) => ({size: blob.size, cacheKey: 'a'.repeat(64) + ':original', file: {
+  purpose: 'post', targetId: remote.id, ownerId: scope.ownerId, updatedAt: remote.updatedAt, folderId: null,
+  attachment: {id, name: id + '.bin', contentType: 'application/octet-stream', size: blob.size, mediaKind: 'file'}
+ }}), bytes: async () => blob};
+ try {
+  await f.files.retainDraft(transport, remote, (content, admit) => f.drafts.remember(remote, Date.now(), content, admit));
+  await f.db.close();
+  const local = await f.drafts.drafts.request(undefined, {id: remote.id});
+  assert.equal(local.draft.attachmentIds.length, 2);
+  for (const id of local.draft.attachmentIds) {
+   const file = await f.files.readFileBlob(id);
+   assert.ok(file.snapshot.value instanceof Blob); assert.equal(file.blob.size, blob.size);
+   assert.equal(file.row.localAttachment.sha256, expected); assert.equal(file.row.localAttachment.requestId, undefined);
+  }
+  assert.deepEqual((await f.files.library(true)).things, []);
+  assert.equal((await f.files.sync(f.fileTransport)).completed, 0);
+ } finally {await f.db.close();}
+});
 
 test('private draft media commits locally, then synchronizes only confirmed originals without changing editor references', async () => {
  const f = setup(); try {
@@ -106,10 +132,12 @@ test('draft media refuses late copying and sync after canonical access refusal, 
   // Releasing the local binding must not erase the original access boundary.
   await f.drafts.drafts.request({ operation: 'delete', id: remote.id, revision: local.draft.revision });
   await assert.rejects(f.files.readFile(id), /access to this retained file/);
-  await f.db.transaction(scope, 'readonly', lease, async tx => {
-   assert.deepEqual(await tx.getBytes(id), f.bytes, 'Recovery bytes remain intact');
+  const recovery = await f.db.transaction(scope, 'readonly', lease, async tx => {
    assert.equal((await tx.list('things')).length, 1, 'No independent copy escaped the refusal');
    assert.ok((await tx.usage()).bytes < before.bytes + 4096);
+   return (await tx.getBinary(id))?.value;
   });
+  assert.ok(recovery instanceof Blob);
+  assert.deepEqual(new Uint8Array(await recovery.arrayBuffer()), f.bytes, 'Recovery bytes remain intact');
  } finally { await f.db.close(); }
 });

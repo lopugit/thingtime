@@ -55,7 +55,7 @@ test('existing account file retention renders and edits offline through the nati
 			assert.ok(!JSON.stringify(receipt).includes('objects/')); assert.ok(!JSON.stringify(receipt).includes('signature'));
 			// Truncated bytes must leave the ordinary online preview available and
 			// report failed retention instead of saving a broken offline file.
-			const damaged = '**/api/v1/attachments/content?*cache=bytes*';
+			const damaged = '**/api/v1/attachments/content?*cache=retain-bytes*';
 			await owner.route(damaged, async route => { if (new URL(route.request().url()).searchParams.get('download') !== '1') return route.continue(); await route.fulfill({ status: 200, body: bytes.subarray(0, 16), headers: { 'Content-Type': 'application/octet-stream', ETag: `"${receipt.cacheKey}:v1"`, 'Content-Length': String(bytes.length) } }); });
 			await navigate('/media/' + fileId);
 			await page.getByText(/could not be refreshed on this device/).waitFor();
