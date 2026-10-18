@@ -27,10 +27,14 @@ const pageMatch = (cursor?: string | null) => {
     return { $or: [{ createdAt: { $lt: createdAt } }, { createdAt, shareId: { $gt: id } }] };
   } catch { throw new PasswordManagerError(400, 'Invalid cursor.'); }
 };
-export async function listPasswords(ownerId: string, cursor?: string | null) {
+export async function listPasswords(ownerId: string, cursor?: string | null, query = '') {
+  // Search private title metadata before the page limit. Never decrypt fields
+  // for discovery, and treat regex punctuation as literal user input.
+  const title = query.trim();
+  const titleMatch = title ? { 'crystal.title': { $regex: title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' } } : {};
   // Reuse the existing schema/owner/createdAt/shareId index: things_v2 is
   // already at Mongo's index budget. Immutable creation time keeps page order.
-  const docs = await (await getHomeThingsCollection()).find({ ...match(ownerId), passwordDeleted: { $ne: true }, ...pageMatch(cursor) },
+  const docs = await (await getHomeThingsCollection()).find({ ...match(ownerId), passwordDeleted: { $ne: true }, ...pageMatch(cursor), ...titleMatch },
     { projection: { shareId: 1, 'crystal.title': 1, 'crystal.passwordType': 1, passwordRevision: 1, updatedAt: 1, createdAt: 1 } }).sort({ createdAt: -1, shareId: 1 }).limit(51).toArray();
   return { entries: docs.slice(0, 50).map(project), nextCursor: docs.length > 50 ? pageCursor(docs[49]) : null };
 }

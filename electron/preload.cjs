@@ -1,6 +1,8 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('thingtimeDesktop', {
+	agentBrowserVersion: process.platform === 'darwin' ? '1.0.0' : undefined,
+	agentBrowsers: request => ipcRenderer.invoke('thingtime-desktop:agent-browsers', request),
 	mailSyncVersion: '1.0.0',
 	syncMail: (request) => ipcRenderer.invoke('thingtime-desktop:mail-sync', request),
 	cancelMailSync: (request) => ipcRenderer.invoke('thingtime-desktop:mail-cancel', request),
@@ -27,6 +29,11 @@ contextBridge.exposeInMainWorld('thingtimeDesktop', {
 	getInfo: () => ipcRenderer.invoke('thingtime-desktop:get-info'),
 	getNodePanelPreference: (request) => ipcRenderer.invoke('thingtime-desktop:get-node-panel-preference', request),
 	setNodePanelPreference: (request) => ipcRenderer.invoke('thingtime-desktop:set-node-panel-preference', request),
+	configureLocalRuntime: (request) => ipcRenderer.invoke('thingtime-desktop:configure-local-runtime', request),
+	chooseLocalMongod: () => ipcRenderer.invoke('thingtime-desktop:choose-local-mongod'),
+	restartRuntime: () => ipcRenderer.invoke('thingtime-desktop:restart-runtime'),
+	recoverDesktopSession: request => ipcRenderer.invoke('thingtime-desktop:recover-session', request),
+	useCurrentDesktopSession: request => ipcRenderer.invoke('thingtime-desktop:use-current-session', request),
 	getDesktopSettings: () => ipcRenderer.invoke('thingtime-desktop:get-settings'),
 	addEndpoint: (request) => ipcRenderer.invoke('thingtime-desktop:add-endpoint', request),
 	removeEndpoint: (request) => ipcRenderer.invoke('thingtime-desktop:remove-endpoint', request),

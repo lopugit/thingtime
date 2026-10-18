@@ -97,6 +97,28 @@ describe('Launcher keyboard navigation', () => {
     resetNativeFileIconSchedulerForTests();
   });
 
+  it('opens Settings without changing the query or running the selected result from keyboard focus', async () => {
+    const commander = state({ query: 'notes', selectedIndex: 1 });
+    render(<Launcher state={commander} />);
+    const button = screen.getByRole('button', { name: 'Open Commander Settings' });
+    button.focus();
+    fireEvent.keyDown(button, { key: 'Enter' });
+    expect(commander.executeCommand).not.toHaveBeenCalled();
+    fireEvent.click(button);
+    await waitFor(() =>
+      expect(commander.executeCommand).toHaveBeenCalledWith('builtin:settings', 'open-settings', ''),
+    );
+    expect(commander.setQuery).not.toHaveBeenCalled();
+    expect(commander.rememberRecentSearch).not.toHaveBeenCalled();
+  });
+
+  it('reports Settings failures through the existing error surface', async () => {
+    const commander = state({ executeCommand: vi.fn().mockRejectedValue(new Error('Settings unavailable')) });
+    render(<Launcher state={commander} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Open Commander Settings' }));
+    await waitFor(() => expect(commander.reportError).toHaveBeenCalledWith('Settings unavailable'));
+  });
+
   it('returns focus to the previous app when Escape dismisses the launcher', async () => {
     const commander = state();
     render(<Launcher state={commander} />);

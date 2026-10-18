@@ -4,6 +4,7 @@ const rows: any[] = [],
 	pending: Promise<unknown>[] = [];
 let beforeUpdate: ((update:any)=>Promise<void>) | null = null;
 let chatAccessible = true;
+let savedProviderId: string | null = null;
 let admissionMode: 'okay' | 'throw' | 'claimed-throw' = 'okay';
 let user: any = { id: 'owner', accountKind: 'user', temporary: false };
 const match = (row: any, filter: any) =>
@@ -55,7 +56,7 @@ mock.module('../mongodb/endpoint', {
 });
 mock.module('../auth/getCurrentUser', { namedExports: { getCurrentUser: async () => user } });
 mock.module('../messenger/lopuChats', {
-	namedExports: { persistLopuUserTurn: async (_owner: string, input: any) => chatAccessible ? { ok: true, messages: [input] } : { ok: false, status: 404, error: 'Not found' }, getLopuChat: async () => (chatAccessible ? { ok: true } : { ok: false, status: 404, error: 'Not found' }) }
+	namedExports: { persistLopuUserTurn: async (_owner: string, input: any) => chatAccessible ? { ok: true, messages: [input] } : { ok: false, status: 404, error: 'Not found' }, getLopuChat: async () => (chatAccessible ? { ok: true, settings: { providerId: savedProviderId } } : { ok: false, status: 404, error: 'Not found' }) }
 });
 mock.module('../rateLimit/enforce', {
 	namedExports: { enforceRateLimit: async () => ({ allowed: true }), rateLimitedResponseInit: () => ({ status: 429 }) }
@@ -68,7 +69,7 @@ mock.module('./continuationAdmission.server', {namedExports: {admitLopuWorkflow:
 }}});
 const { startBackgroundTask, executeBackgroundTask, readBackgroundTasks, stopBackgroundTask, readCheckpointToolResults } = await import('./backgroundTasks');
 beforeEach(() => {
-	chatAccessible = true; admissionMode='okay'; beforeUpdate=null;
+	chatAccessible = true; savedProviderId = null; admissionMode='okay'; beforeUpdate=null;
 	rows.length = 0;
 	pending.length = 0;
 	user = { id: 'owner', accountKind: 'user', temporary: false };
@@ -452,4 +453,25 @@ test('continuation tool output stays bound to the exact account, chat, request a
  assert.deepEqual(await readResults(), []);
  chatAccessible = true; rows[0].outputExpiresAt = new Date(0);
  assert.deepEqual(await readResults(), []);
+});
+
+
+test('personal-plan background admission never invokes Vercel Workflow for explicit or saved pins', async () => {
+  admissionMode = 'throw'; // Any attempted Workflow admission would fail the send.
+  for (const [index, body] of [
+    { providerId: 'chatgpt-plan-test' },
+    { chatId: 'saved-plan' }
+  ].entries()) {
+    savedProviderId = 'chatgpt-plan-test';
+    let executed = 0;
+    const response = await startBackgroundTask(request(`plan-${index}`, { text: 'Hi', requestId: `plan-${index}`, management: 'server', ...body }), async () => {
+      executed++;
+      return new Response('{"type":"done"}\n', { headers: { 'Content-Type': 'application/x-ndjson' } });
+    });
+    assert.equal(response.status, 202);
+    await Promise.all(pending);
+    assert.equal(executed, 1);
+    assert.equal(rows[index].crystal.management, 'client');
+    assert.equal(rows[index].workflowInput, undefined);
+  }
 });

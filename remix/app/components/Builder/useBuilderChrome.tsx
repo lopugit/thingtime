@@ -46,7 +46,7 @@ type UploadTarget =
 	| { kind: 'insert'; containerId: string | null; index: number }
 	| { kind: 'replace'; blockId: string };
 
-export const useBuilderChrome = (draft: UseWebpageDraft, options?: { enabled?: boolean }): UseBuilderChrome => {
+export const useBuilderChrome = (draft: UseWebpageDraft, options?: { enabled?: boolean; allowedBlockTypes?: readonly WebpageBlock['type'][] }): UseBuilderChrome => {
 	const [hoverId, setHoverId] = React.useState<string | null>(null);
 	const [selectedId, setSelectedId] = React.useState<string | null>(null);
 	const [insertAt, setInsertAt] = React.useState<{ containerId: string | null; index: number; anchor: HTMLElement } | null>(null);
@@ -105,7 +105,7 @@ export const useBuilderChrome = (draft: UseWebpageDraft, options?: { enabled?: b
 				uploadToPosition(files, null, blocks.length);
 				return;
 			}
-			if (block.type === 'media') {
+			if (block.type === 'media' || (block.type === 'element' && ['img', 'video', 'audio'].includes(block.tag || ''))) {
 				// first file replaces the media block's source, extras land after it
 				const parentId = findParentId(blocks, blockId);
 				const siblings = parentId === null ? blocks : findBlock(blocks, parentId as string)?.children || [];
@@ -152,7 +152,11 @@ export const useBuilderChrome = (draft: UseWebpageDraft, options?: { enabled?: b
 			const media: WebpageBlock['media'] =
 				attachment.contentType.startsWith('video/') ? 'video' : attachment.contentType.startsWith('audio/') ? 'audio' : 'image';
 			const src = `/api/v1/attachments/content?id=${encodeURIComponent(attachment.id)}`;
-			if (target?.kind === 'replace' && findBlock(current.blocks, target.blockId)?.type === 'media') {
+   const replacement = target?.kind === 'replace' ? findBlock(current.blocks, target.blockId) : null;
+   if (target?.kind === 'replace' && replacement?.type === 'element') {
+    current.setBlocks(updateBlock(current.blocks, target.blockId, { tag: media === 'image' ? 'img' : media, props: { ...replacement.props, src, alt: attachment.name || '' } }));
+    setSelectedId(target.blockId);
+   } else if (target?.kind === 'replace' && replacement?.type === 'media') {
 				current.setBlocks(
 					updateBlock(current.blocks, target.blockId, {
 						media,
@@ -260,7 +264,7 @@ export const useBuilderChrome = (draft: UseWebpageDraft, options?: { enabled?: b
 	const handlePick = React.useCallback((pick: InsertPick) => {
 		const target = insertAt;
 		setInsertAt(null);
-		if (!target) return;
+		if (!target || (options?.allowedBlockTypes && !options.allowedBlockTypes.includes(pick.block.type))) return;
 		const current = draftRef.current;
 		current.setBlocks(insertBlock(current.blocks, target.containerId, target.index, pick.block));
 		if (pick.block.type === 'component' && pick.block.component) {
@@ -269,7 +273,7 @@ export const useBuilderChrome = (draft: UseWebpageDraft, options?: { enabled?: b
 		}
 		setSelectedId(pick.block.id);
 		// eslint-disable-next-line react-hooks/exhaustive-deps -- insertAt is read via closure at call time
-	}, [insertAt]);
+	}, [insertAt, options?.allowedBlockTypes]);
 
 	const contextBlock = contextMenu ? findBlock(draft.blocks, contextMenu.blockId) : null;
 	const richEditorBlock = richEditorBlockId ? findBlock(draft.blocks, richEditorBlockId) : null;
@@ -281,6 +285,7 @@ export const useBuilderChrome = (draft: UseWebpageDraft, options?: { enabled?: b
 		<>
 			{insertAt ? (
 				<BlockInsertMenu
+     allowedBlockTypes={options?.allowedBlockTypes}
 					anchor={insertAt.anchor}
 					existingIds={collectBlockIds(draft.blocks)}
 					onPick={handlePick}

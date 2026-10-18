@@ -305,6 +305,7 @@ export const router = createBrowserRouter([
       // the unified Things browser claims EXACTLY /things; deeper /things/*
       // paths still reach the ThingtimeUrl tree viewer via the catch-all
       { path: 'things', lazy: lazyRoute(() => import('./routes/things')) },
+      { path: 'agent-browsers/:taskId?', lazy: lazyRoute(() => import('./routes/agent-browsers')) },
       { path: 'welcome', element: <Welcome />, loader: requireUser('/register') },
       { path: '*', element: <ThingtimeUrl /> }
     ]

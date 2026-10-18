@@ -43,6 +43,15 @@ components; reuse them instead of adding parallel versions.
 
 ## Shared navigation and Builder controls
 
+Agent browsers are linked from Lopu's drawer group to `/agent-browsers` and
+`/agent-browsers/:taskId`. `AgentTasks/AgentNetworkSettings.tsx` shares the device
+default and task checkbox controls; `AgentBrowserViewer.tsx` observes or controls
+the current claim. The task board and detail pages come from the editable
+`schemas/appSuites/agentTasks.ts` suite, using normal Things and Actions for
+tasks, todos and progress. See [the runtime contract](../agent-browsers.md) and
+the Agent browsers section of `TESTING.md` for real data, responsive layout and
+live-viewer acceptance. Device-only operations use the trusted desktop bridge.
+
 Owned Things inherit `history` from `THING_ACTIONS`. `TimelineHost` opens the
 same History modal from Things, persisted entity menus and Builder definitions;
 `TimelineLibrary` renders the managed Timeline folder through PageShell.
@@ -132,3 +141,32 @@ controls move to the next line. Admin categories live in `adminRoutesCore.ts`:
 AI Providers, Lopu, Platform, and Access & limits replace System; legacy System
 links resolve to AI Providers or to Lopu for Lopu anchors. Browser regression:
 `/scripts/settings-sections.browser.html`; route coverage: `test:admin-integrations`.
+
+## Native Commander controls
+
+The desktop launcher gear reuses `builtin:settings` / `open-settings` in
+`Commander/apps/desktop-ui/src/components/Launcher.tsx`. `ProcessesPanel.tsx`
+and `processModel.ts` share sorting, averaging, filters and local view preferences
+between Activity and `ProcessesWindow.tsx`. `useSystemMetrics.ts` polls the native
+bridge without overlapping requests. `SystemMetricsService` and
+`ProcessUsageHistory` share sampled history across native windows, with stable
+process identities and explicit coverage. `CommanderUtilityWindow` implements
+maximize/restore; `SettingsWindowController` hosts Settings and Processes, and the
+native bridge applies Keep above only to the requesting utility window. Checks:
+Commander TypeScript/Vitest and Swift tests, plus TESTING.md's native launcher
+checklist on the installed signed app.
+
+## Editable private settings
+
+`Settings/SettingsDocumentHost.tsx` composes the ordinary Builder drawer/chrome
+with authored `WebpageBlock[]`. Account layouts use private keyed webpages through
+`settingsDocument.client.ts` and existing Things revision fences. Device recovery
+uses the same document format with origin/authority scoped local storage and Web
+Locks. Neither adapter captures form DOM or runtime credential state.
+
+`desktopSettingsDocuments.ts` defines the runtime, endpoint and previous-workspace
+recovery controls as editable intrinsic blocks. `useDesktopSettingsAdapter.ts`
+provides public bindings and a bounded transient native-operation map. Sensitive
+hosts reject external sources, native/component blocks and persisted password/file
+values before rendering; normal Builder insertion and source editing follow the
+same restrictions. Scope changes abort transient controls and fence late results.

@@ -1,3 +1,4 @@
+import { normalizeDeviceScriptResult, type DeviceScriptResult } from './deviceScript';
 import { normalizeFilesystemInput, normalizeFilesystemResult, type FilesystemResult } from './deviceFilesystemCore';
 import { randomBytes } from 'node:crypto';
 
@@ -91,7 +92,7 @@ const commandOutputReference = (value: unknown): string | null => {
 };
 
 export type PublicDeviceCommand = {
-	result?: FilesystemResult;
+	result?: FilesystemResult | DeviceScriptResult;
 	id: string;
 	requestId: string;
 	deviceId: string;
@@ -125,7 +126,7 @@ export const publicDeviceCommand = (doc: any, includeResult = false): PublicDevi
 		deviceId: String(doc.targetId),
 		kind: String(doc.crystal?.kind || ''),
 		status: commandStatus(doc.crystal?.status),
-		...(includeResult && doc.crystal?.kind === 'filesystem' && doc.crystal?.result && new Date(doc.crystal.resultExpiresAt).getTime() > Date.now() ? { result: doc.crystal.result } : {}),
+		...(includeResult && ['filesystem', 'script.run'].includes(doc.crystal?.kind) && doc.crystal?.result && new Date(doc.crystal.resultExpiresAt).getTime() > Date.now() ? { result: doc.crystal.result } : {}),
 		input: doc.crystal?.input && typeof doc.crystal.input === 'object' ? (doc.crystal.kind === 'filesystem' ? Object.fromEntries(Object.entries(doc.crystal.input).filter(([key]) => key !== 'data')) : doc.crystal.input) : {},
 		requiresApproval,
 		approvalState: commandApprovalState(doc.crystal?.approvalState, requiresApproval),
@@ -276,7 +277,7 @@ export const createDeviceCommand = async (
 					commandId,
 					requestId: String(prepared.doc.crystal.requestId),
 					kind: 'command-dispatch',
-					prompt: `Allow ${String(prepared.doc.crystal.kind)} on this device?`,
+					prompt: prepared.doc.crystal.kind === 'script.run' ? `Run this Bash script on ${String(device.crystal?.name || 'this Mac')}? It runs with your Mac user access. Timeout: ${prepared.doc.crystal.input.timeoutSeconds}s.\n\n${prepared.doc.crystal.input.script}` : `Allow ${String(prepared.doc.crystal.kind)} on this device?`,
 					status: 'pending',
 					expiresAt: approvalExpiresAt,
 					deviceTtlAt: new Date(approvalExpiresAt.getTime() + DEVICE_APPROVAL_RETENTION_MS),
@@ -641,8 +642,9 @@ export const reportDeviceCommand = async (
 	}
 
 	const filesystemInput = current.crystal?.kind === 'filesystem' ? normalizeFilesystemInput(current.crystal.input) : null;
-	const result = input.result === undefined ? undefined : (filesystemInput && nextStatus === 'succeeded' ? normalizeFilesystemResult(filesystemInput, input.result) : null);
-	if (result === null || (filesystemInput && nextStatus === 'succeeded' && !result)) return deviceFail(400, 'Invalid filesystem command result');
+	const scriptCommand = current.crystal?.kind === 'script.run';
+	const result = input.result === undefined ? undefined : (nextStatus !== 'succeeded' ? null : scriptCommand ? normalizeDeviceScriptResult(input.result) : filesystemInput ? normalizeFilesystemResult(filesystemInput, input.result) : null);
+	if (result === null || ((filesystemInput || scriptCommand) && nextStatus === 'succeeded' && !result)) return deviceFail(400, 'Invalid device command result');
 	const from = commandStatus(current.crystal?.status);
 	if (!canTransitionDeviceCommand(from, nextStatus)) return deviceFail(409, `Command cannot move from ${from} to ${nextStatus}`);
 	const terminal = nextStatus === 'succeeded' || nextStatus === 'failed' || nextStatus === 'cancelled' || nextStatus === 'needs-review';
@@ -667,8 +669,8 @@ export const reportDeviceCommand = async (
 					...(terminal
 						? {
 								'crystal.completedAt': now,
-								'crystal.expiresAt': new Date(now.getTime() + (current.crystal?.kind === 'filesystem' ? 10 * 60_000 : DEVICE_COMMAND_TERMINAL_RETENTION_MS)),
-								'crystal.deviceTtlAt': new Date(now.getTime() + (current.crystal?.kind === 'filesystem' ? 10 * 60_000 : DEVICE_COMMAND_TERMINAL_RETENTION_MS)),
+								'crystal.expiresAt': new Date(now.getTime() + (['filesystem', 'script.run'].includes(current.crystal?.kind) ? 10 * 60_000 : DEVICE_COMMAND_TERMINAL_RETENTION_MS)),
+								'crystal.deviceTtlAt': new Date(now.getTime() + (['filesystem', 'script.run'].includes(current.crystal?.kind) ? 10 * 60_000 : DEVICE_COMMAND_TERMINAL_RETENTION_MS)),
 								...deviceSessionSendRedactionFields(current, now)
 						  }
 						: {}),

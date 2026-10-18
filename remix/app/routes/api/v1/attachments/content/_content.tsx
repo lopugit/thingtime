@@ -1,3 +1,4 @@
+import { CHARACTER_HEADER } from '~/api/utils/auth/characterSession';
 import { withFoundPostBrowser } from '~/api/utils/things/foundPostRequest';
 import { attachmentImageResponse, parseImageWidth } from '~/api/utils/attachments/imageVariants';
 import { json, redirect } from '~/api/http';
@@ -31,7 +32,14 @@ export const createAttachmentContentLoader = (overrides: Partial<ContentDependen
 			if (sharedRoot !== null && !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(sharedRoot)) return json({ ok: false, error: 'Invalid shared root' }, { status: 400 });
 			const width = parseImageWidth(url.searchParams.get('width'));
 			if (width === null) return json({ ok: false, error: 'Unsupported image width' }, { status: 400 });
-			const resolvedUser = await dependencies.getUser(request);
+			// Media elements cannot attach an identity header. This optional selector
+            // is authorized by the same full-session ownership check as a composer.
+            const character = url.searchParams.get('character');
+            if (character !== null && !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(character)) return json({ ok: false, error: 'Invalid Character' }, { status: 400 });
+            const actorRequest = character === null ? request : new Request(request, { headers: new Headers(request.headers) });
+            if (character !== null) actorRequest.headers.set(CHARACTER_HEADER, character);
+            const resolvedUser = await dependencies.getUser(actorRequest);
+            if (character !== null && !resolvedUser) return json({ ok: false, error: 'Character unavailable' }, { status: 401 });
 			// Service credentials are not first-party attachment principals. Treat
 			// them exactly like an anonymous caller for public-post authorization.
 			const user = resolvedUser?.accountKind === 'user' ? resolvedUser : null;

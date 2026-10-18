@@ -1,4 +1,5 @@
 import { json } from '~/api/http';
+import { agentTestEnvironment } from '~/api/utils/agentTesting';
 import { safeErrorText } from '~/api/utils/errors/safeError';
 import {
   type BasicServiceHealthStatus,
@@ -53,7 +54,8 @@ export const loader = async ({ request }: { request: Request }) => {
   const target = resolveStatusTarget(request);
 
   if (!target.isRemote) {
-    return json(await getLocalNitroStatus(target.requestOrigin));
+    const testEnvironment = agentTestEnvironment();
+    return json({ ...(await getLocalNitroStatus(target.requestOrigin)), ...(testEnvironment ? { testEnvironment } : {}) });
   }
 
   try {

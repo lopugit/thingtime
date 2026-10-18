@@ -64,6 +64,18 @@ export const builderGuideSections = [
 		example: { media: {file: '#file', start: '#start', cancel: '#cancel', status: '#status', progress: '#progress', preview: '#preview', output: {format: 'webm', maxWidth: 1280, maxHeight: 720, videoBitrate: 1500000, frameRate: 30, audio: 'keep', audioBitrate: 96000}} }
 	},
 	{
+		id: 'video-compressor-use-case',
+		title: 'Use case: a reusable video compressor',
+		paragraphs: [
+			'A local video compressor demonstrates how Builder combines editable application data with registered browser capabilities. Install Local video tools from Builder demos (suite: media-tools), open /p/media-tools, choose output settings and Run example, select a local video, then Start. Preview the completed video and choose Download output. No server processing service, upload or FFmpeg installation is required.',
+			'The Page arranges an ordinary saved Component. Its render tree contains a fieldset, headings, navigation, a tt-web-platform control and a ttAction save button. Inside tt-web-platform, program.document describes the file input, buttons, progress, status and video preview; program.styles describes the layout. program.parameters supplies editable defaults for format, dimensions, frame rate, video bitrate and audio. program.media connects those controls by selector and binds output settings with {op: "input", name: "maxWidth"}, for example. These definitions can be edited, saved and reused on another Builder page.',
+			'The reusable media adapter is the processing bridge. It validates the selected Blob and settings, then starts a fixed worker on the secure host. Mediabunny reads the media container and writes the output container; browser WebCodecs decodes and re-encodes the primary tracks, with resizing and the requested bitrate/frame-rate targets. The editable document keeps its opaque sandbox because WebCodecs is unavailable inside that context. The worker cannot fetch remote files or run user-supplied source. Progress and completion return to the bound controls, Cancel terminates the job, and the host exposes the completed Blob for download.',
+			'The existing Save edited component Action stores the full program and the current parameter defaults through the normal Thing API. It saves reusable configuration, never the selected video or encoded bytes. A smaller-video preset, a muted-export preset or a different layout is therefore another editable Component using the same adapter. Reopen the saved Component, reload it, and run it with another selected file to verify that the saved definition is reusable.',
+			'Acceptance on 18 October 2026 used a four-second synthetic source of 3,910,557 bytes. The saved production Component produced a 198,455-byte MP4 at 640 × 360 with H.264 video and AAC audio; playback, download and saved-default reload were verified, and an independent media probe confirmed the file. Isolated browser checks also covered WebM VP9/Opus, explicit audio removal, cancellation and desktop/mobile layouts. These are example results, not a promised compression ratio.',
+			'This completes the local compressor workflow, not every WebCodecs or media API member. Codec availability and memory depend on the device/browser; output can be larger than the source. Only primary video/audio tracks are kept; subtitles, extra tracks and metadata are omitted. Unsupported encoding fails explicitly. The remaining standards work stays paused until requested. See Local video compression and encoding for the reusable adapter contract.'
+		]
+	},
+	{
 		id: 'start',
 		title: 'Build a working component',
 		paragraphs: [

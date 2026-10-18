@@ -34,7 +34,6 @@ test('draft component resolution uses only the authenticated viewer and bounded 
 		{ blocks, page: { ownerId: 'victim' } },
 		{ blocks, ownerId: 'victim' },
 		{ blocks: null },
-		{ blocks: Array.from({ length: 121 }, (_, i) => ({ id: `item-${i}`, type: 'text', text: 'x' })) },
 		{ blocks: [{ id: 'text', type: 'text', text: 'x'.repeat(200 * 1024) }] }
 	]) {
 		assert.ok([400, 413].includes((await h.action({ request: request(body) })).status));

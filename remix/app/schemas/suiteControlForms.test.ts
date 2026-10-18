@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { getBehaviourSuite, materializeSuite } from './behaviourSuites';
+import { agentTasksSuite } from './appSuites/agentTasks';
 import { resolveTemplate } from '../components/ComponentsLibrary/componentTemplate';
 
 const nodes = (value: unknown): any[] =>
@@ -39,4 +40,16 @@ test('video controls appear only after a nonempty URL is provided', () => {
   const video = nodes(resolveTemplate(component.crystal.render, { mediaUrl: 'https://example.test/video.mp4' })).find(node => node.tag === 'video');
   assert.equal(video.props.src, 'https://example.test/video.mp4');
   assert.equal(video.props.controls, true);
+});
+
+
+test('agent todo completion collects no fields from its adjacent creation form', () => {
+  const component = materializeSuite(agentTasksSuite, 'own').components.find(part => part.key === 'task-todos')!;
+  const tree = component.crystal.render;
+  const groups = nodes(tree).filter(node => node.tag === 'fieldset');
+  const completion = groups.find(group => nodes(group).some(node => node.ttAction?.endsWith('-complete-todo')));
+  assert.ok(completion, 'Completion has its own field boundary');
+  assert.deepEqual(nodes(completion).filter(node => ['input', 'select', 'textarea'].includes(node.tag)), []);
+  assert.deepEqual(nodes(completion).find(node => node.ttAction)?.ttActionInputs, { todoId: '{item.id}' });
+  assert.ok(groups.some(group => nodes(group).some(node => node.props?.name === 'title')), 'The adjacent editable creation form remains present');
 });

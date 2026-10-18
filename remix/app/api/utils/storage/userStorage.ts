@@ -1,3 +1,4 @@
+import { synchronizeCharacterStorageTier, characterEntitlementSource, characterEntitlementSources, withCharacterEntitlement } from '../auth/characterEntitlements';
 // The user subscription ledger is an identity/billing object: HOME-pinned like
 // users/sessions, whatever data-plane override the request carries. Reads (a
 // user's quota) and reconciliation must always answer from the home ledger,
@@ -135,7 +136,7 @@ const unavailableUserStorageUsage = (): UserStorageUsage =>
 export const getUserStorageUsage = async (ownerId: string): Promise<UserStorageUsage> => {
   const doc = await (await getThingsCollection()).findOne(subscriptionThingMatch('user', ownerId));
   if (!doc || !userSubscriptionLedgerEnvelopeIsTrusted(doc, ownerId)) return unavailableUserStorageUsage();
-  return usageFromSubscriptionDoc(doc);
+  return usageFromSubscriptionDoc(withCharacterEntitlement(doc, await characterEntitlementSource(ownerId)));
 };
 
 export const getUserStorageUsages = async (ownerIds: readonly string[]): Promise<Map<string, UserStorageUsage>> => {
@@ -149,13 +150,14 @@ export const getUserStorageUsages = async (ownerIds: readonly string[]): Promise
       shareId: { $in: ids.map((id) => subscriptionThingMatch('user', id).shareId) }
     })
     .toArray();
+  const inheritances = await characterEntitlementSources(ids);
   const ownerByShareId = new Map(ids.map((id) => [subscriptionThingMatch('user', id).shareId, id]));
   const usages = new Map<string, UserStorageUsage>();
   for (const ownerId of ids) usages.set(ownerId, unavailableUserStorageUsage());
   for (const doc of docs) {
     const ownerId = ownerByShareId.get(String(doc.shareId));
     if (ownerId && userSubscriptionLedgerEnvelopeIsTrusted(doc, ownerId)) {
-      usages.set(ownerId, usageFromSubscriptionDoc(doc));
+      usages.set(ownerId, usageFromSubscriptionDoc(withCharacterEntitlement(doc, inheritances.get(ownerId))));
     }
   }
   return usages;
@@ -289,6 +291,7 @@ export const applyUserStorageDelta = async (ownerId: string, deltaBytes: number,
   const things = await getThingsCollection();
   const now = new Date();
   if (deltaBytes > 0) {
+    await synchronizeCharacterStorageTier(ownerId, session);
     const reserve = () =>
       things.findOneAndUpdate(
         {
