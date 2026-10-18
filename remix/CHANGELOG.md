@@ -68,6 +68,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-18 — **Codex (AI)**: Android native multipart uploads now use the
+  existing sync identities, reviewed connection and Timeline handoff with bounded
+  private part staging and no bulk bytes in the WebView. Foreground only;
+  scheduling and durable native resume remain open. Details: [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
 - 2026-10-18 — **Codex (AI)**: Extend internal account snapshots to saved drafts,
   templates, deletion tombstones and large canonical Thing content, with exact
   owned-media checks, bounded chunk retention and independent offline recovery.

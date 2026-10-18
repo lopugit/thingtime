@@ -43,7 +43,10 @@ test('native upload capability is explicit and the descriptor stays bound to the
 	let sent: FolderRequest | undefined;
 	assert.equal(supportsNativePartUploads(host), true);
 	assert.equal(supportsNativePartUploads({ ...host, fileUploadVersion: undefined }), false);
-	assert.equal(supportsNativePartUploads({ ...host, platform: 'android' }), false);
+	assert.equal(supportsNativePartUploads({ ...host, platform: 'android' }), true);
+	assert.equal(supportsNativePartUploads({ ...host, platform: 'android', fileUploadVersion: undefined }), false);
+	assert.equal(supportsNativeFileUploads({ ...host, platform: 'android', fileUploadVersion: '1.2.0' }), true);
+	assert.equal(supportsNativeBackgroundUploads({ ...host, platform: 'android', fileUploadVersion: '1.2.0' }), false);
 	const native = mobileFolderSource(
 		'owner',
 		rootId,
@@ -94,31 +97,32 @@ const approval = {
 		paused: false
 	}
 };
-test('whole-file capability binds the original operation and reviewed configuration without moving bytes through JS', async () => {
-	const f = await fixture(),
-		controller = new AbortController();
-	const bridge = { ...host, fileUploadVersion: '1.2.0' };
-	assert.equal(supportsNativeFileUploads(host), false);
-	assert.equal(supportsNativeFileUploads(bridge), true);
-	let sent: FolderRequest | undefined;
-	const source = mobileFolderSource(
-		'owner',
-		rootId,
-		f.entry,
-		controller.signal,
-		async (_owner, request) => {
-			sent = request;
-			return { roots: [], uploadedFile: { fingerprint: f.entry.fingerprint! } };
-		},
-		bridge
-	);
-	const request = { uploadId: 'upload', requestId: 'operation', authorization: approval };
-	assert.deepEqual(await source.uploadFile!(request), { fingerprint: f.entry.fingerprint });
-	assert.equal(sent?.action, 'upload-file');
-	assert.deepEqual((sent as Extract<FolderRequest, { action: 'upload-file' }>).upload, { ...request, source: f.entry });
-	controller.abort();
-	await assert.rejects(source.uploadFile!(request), { name: 'AbortError' });
-});
+for (const platform of ['ios', 'android'] as const)
+	test(`${platform} whole-file capability binds the original operation and reviewed configuration without moving bytes through JS`, async () => {
+		const f = await fixture(),
+			controller = new AbortController();
+		const bridge = { ...host, platform, fileUploadVersion: '1.2.0' };
+		assert.equal(supportsNativeFileUploads(host), false);
+		assert.equal(supportsNativeFileUploads(bridge), true);
+		let sent: FolderRequest | undefined;
+		const source = mobileFolderSource(
+			'owner',
+			rootId,
+			f.entry,
+			controller.signal,
+			async (_owner, request) => {
+				sent = request;
+				return { roots: [], uploadedFile: { fingerprint: f.entry.fingerprint! } };
+			},
+			bridge
+		);
+		const request = { uploadId: 'upload', requestId: 'operation', authorization: approval };
+		assert.deepEqual(await source.uploadFile!(request), { fingerprint: f.entry.fingerprint });
+		assert.equal(sent?.action, 'upload-file');
+		assert.deepEqual((sent as Extract<FolderRequest, { action: 'upload-file' }>).upload, { ...request, source: f.entry });
+		controller.abort();
+		await assert.rejects(source.uploadFile!(request), { name: 'AbortError' });
+	});
 test('whole-file receipts and progress are fenced to identity, canonical boundaries and monotonic progress', async () => {
 	const f = await fixture();
 	const request: Extract<FolderRequest, { action: 'upload-file' }> = {

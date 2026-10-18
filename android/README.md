@@ -488,7 +488,34 @@ it. The native adapter rechecks the current owner and exact attachment after the
 picker before copying. API 35 installed acceptance and independent Downloads
 byte checks passed; physical devices and other document providers remain open.
 
-### Binary upload transport (native access 1.4)
+### Native whole-file uploads (upload capability 1.2)
+
+Android runs whole-file and per-part multipart uploads in the native host. The
+shared sync journal keeps the original upload/operation identities and publishes
+verified results into Timeline. Native code rechecks the current pairing, exact
+private connection revision, folder/photo grant, network and charging policy.
+
+The host verifies each source with 64 KiB reads and bounded part digests, then
+stages one verified part in private `noBackupFilesDir/NativeUploadParts-v1`.
+Only progress and receipts cross the WebView. OkHttp uses explicit account API
+authentication and an isolated storage client without cookies, authenticators or
+redirects. No new secrets or environment variables are required. A normal job
+reads the source three times; provider seek efficiency and large-file throughput
+remain to be measured. Disk space must accommodate one canonical multipart part
+plus 16 MiB. Unfinished parts are deleted on failure or the next locked job.
+
+API 35 installed folder acceptance verifies an 8,388,625-byte, two-part upload
+and matching cloud download hash with zero bulk WebView frames. Installed photo
+acceptance verifies two native jobs, added-photo discovery and retained cloud
+bytes after local deletion. Small synthetic photo fixtures do not establish
+large-library throughput.
+
+This capability is foreground-only: leaving the app cancels its request. Retry
+reuses the original server IDs and recaptures interrupted parts; an already-ready
+upload needs no source read. Durable part caching, WorkManager/service scheduling
+and process-death/background acceptance remain separate work.
+
+### Binary upload fallback (native access 1.4)
 
 Updated WebViews negotiate acknowledged binary upload ranges. This uses the
 existing selected-folder grant, account, upload APIs and cloud quota flow; no
@@ -504,8 +531,9 @@ THINGTIME_FOLDER_UPLOAD_TEST=1 ANDROID_SERIAL=<test-device-id> \
 ```
 
 Choose only that synthetic folder in the system picker. The test checks the
-cloud file's complete SHA-256 and, on binary-capable WebViews, requires binary
-upload frames with no legacy multi-byte reads. The native range limit is 32 MiB;
+cloud file's complete SHA-256 and requires one native whole-file job with zero
+binary upload frames or legacy multi-byte reads on current hosts. Older hosts
+without upload capability retain the binary-range fallback. The native range limit is 32 MiB;
 frames are 64 KiB with one outstanding acknowledgement. Managed offline reads
 verify the full immutable blob for each range; background workers and iOS binary
 transport remain separate work in the acceptance ledger.

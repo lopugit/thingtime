@@ -119,6 +119,11 @@ final class SyncStaging {
             for(String key:keys) { if(result.length()>1)result.append(',');result.append(JSONObject.quote(key)).append(':').append(canonical(object.get(key))); }
             return result.append('}').toString();
         }
+        if(value instanceof JSONArray) {
+            JSONArray array=(JSONArray)value;StringBuilder result=new StringBuilder("[");
+            for(int i=0;i<array.length();i++){if(i>0)result.append(',');result.append(canonical(array.get(i)));}
+            return result.append(']').toString();
+        }
         if(value instanceof String) return JSONObject.quote((String)value);
         if(value instanceof Boolean) return value.toString();
         if(value instanceof Number) { double n=((Number)value).doubleValue();if(!Double.isFinite(n) || Math.abs(n)>MAX_SAFE || n!=Math.rint(n)) throw invalid();return Long.toString((long)n); }

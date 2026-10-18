@@ -88,7 +88,7 @@ this test environment. The runtime remains fail-closed on secure-storage errors.
 | Safe native credentials and recovery | Keychain/Keystore storage; restart during prepare/complete; exact recovery without duplicate devices | iOS Keychain and Android Keystore-encrypted pending claims preserve exact completion replay; native recovery tests pass |
 | Folder sync across Mac, iOS, Android and cloud | Create/edit/rename/move/delete real byte fixtures in each direction; independent hash verification and convergence | Reconciler/executor, verified fingerprints and atomic stable-file replacement; cloud upload adapter and complete private cloud inventory verified; iOS and Android folder grants/scans/reads implemented; foreground upload/backup controls and recoverable progress implemented; bounded cloud downloads and executor staging/receipt adapter verified; iOS native staging, approval and same-volume publication implemented and tested; Android private staging, native write approval, durable offline-folder publication, explicit native creation and read-only Android Files access verified; Android foreground offline-root cloud downloads, mixed two-way creates/independent replacements and actual Files acceptance verified; shared Apple publication core and process-exit recovery verified on macOS; Mac local adapter/identity/disconnect implemented; Electron host/shared controls, synthetic browser foreground acceptance and real Mac adapter/cloud mixed-transfer acceptance implemented; iOS mixed-direction simulator acceptance verified; iOS external Files edits, Mac installed transfers, workers and full cross-device transfer acceptance pending |
 | Persistent offline and background sync | Kill/relaunch, reboot, network loss, sleep/wake, quota errors, paused jobs; durable retries with original IDs | Browser journal, Desktop full-process journal/draft restart recovery and real cloud upload recovery verified; iOS publication and Android staging process-exit recovery verified; iOS durable upload-part cache and fresh-process capture recovery verified; iOS user-started continued-task lifecycle implemented with simulator refusal and physical-device acceptance pending; actual interrupted PUT, passive schedulers and reboot acceptance pending |
-| Large resumable transfers | Chunk interruption/resume, hash mismatch, cancellation, stale upload/finalization race; streaming memory bounds | Real executor multipart interruption and exact-identity retry verified; Mac upload/download ranges and Android binary download ranges verified; iOS file-backed native multipart uploads are implemented and installed multipart photo acceptance verifies byte hashes without bulk WebView reads; background transfer, physical-device acceptance and sustained throughput remain pending |
+| Large resumable transfers | Chunk interruption/resume, hash mismatch, cancellation, stale upload/finalization race; streaming memory bounds | Real executor multipart interruption and exact-identity retry verified; Mac upload/download ranges and Android binary download ranges verified; Android foreground file-backed native multipart uploads and iOS file-backed native multipart uploads are implemented and installed multipart photo acceptance verifies byte hashes without bulk WebView reads; background transfer, physical-device acceptance and sustained throughput remain pending |
 | Photos backup | Explicit selection/permission, incremental discovery, original photo/video bytes and metadata, duplicates, limited library changes, background completion | Android 11+ MediaStore and iOS PhotoKit read-only sources use the shared backup-only connection. Installed API 35 and iOS 26.5 simulator acceptance verified original PNG bytes, new-photo discovery and cloud retention after device deletion. Mac 1.3.0 adds a native PhotoKit source adapter; real API acceptance uses synthetic photo resources. Shared Apple reader passes 57 tests; actual Mac installed PhotoKit acceptance, real limited-selection changes, Live Photo/video/EXIF formats, physical devices, large-library paging and background completion remain open |
 | Sync settings | Folder selection, direction, pause/resume, Wi-Fi/cellular and charging policy, exclusions, retention, selective/offline availability | Editable file-sync Things persist device/root/destination, direction, pause, network/power and exclusions; shared configured planner verified. Mobile folder and connection editors exist with durable local drafts and guarded API saves; foreground upload/backup checks live native network/power signals; iOS scoped Keychain and Android native/OS write approvals implemented; Mac native approvals/shared controls implemented with installed acceptance pending; retention/selective settings and background workers remain pending |
 | Conflict and deletion recovery | Concurrent edits and delete/edit preserve both versions; conflict resolution UI, retained versions/trash restore | API preserves versions and supports Trash/restore; iOS preserves displaced versions and uncertain conflicts in the transfer journal; file conflict review now offers guarded version choices; Android file-conflict review and native recovery acceptance verified; shared native recovery browsing and reviewed restore implemented on Mac/iOS/Android offline folders; broader installed conflict review, folder conflicts, recovery after grant replacement and retention policy remain pending |
@@ -2461,3 +2461,42 @@ Remaining managed data/settings/device coverage, retention leases, restore
 writers, backup jobs/UI, independent cloud replication, encryption, physical-media
 preparation and measured 100 GB–100 TB transfers remain open. No production
 promotion is included.
+
+## Android native whole-file transport — 2026-10-18
+
+Upload capability 1.2 runs the shared whole-file job in Android native code for
+selected SAF folders, managed offline files and original photo sources. It binds
+the original operation/upload IDs, source fingerprint and reviewed editable
+connection. Fresh owner, pairing, grant, private connection revision, network and
+power checks surround each part and completion. The existing shared runner
+verifies cloud bytes and publishes canonical Timeline history afterward.
+
+Source proof and part staging use 64 KiB reads and at most 10,000 part digests.
+Each private part is hash-verified before signed PUT; changed content, path
+replacement and changed metadata refuse completion. API requests pin only the
+selected `tt_auth`; storage has no ambient cookies/authentication or redirects.
+The app serializes native jobs and takes a native file lock before deleting
+orphan temporary parts. No credentials or signed URLs persist.
+
+This is foreground transport, not a background scheduler. Cancellation removes
+private temporary parts; retry recaptures them under the original IDs. An
+already-completed reservation skips rereading/uploading bytes. The normal native
+job reads the source three times; provider skipping can add work, and physical
+100 GB–100 TB throughput has not been established. Android durable part caching,
+OS scheduling/relaunch and large-root paging remain open.
+
+Validation: 48 JVM tests, 164 shared sync tests, debug/release builds and Android
+lint pass. The installed API 35 SAF acceptance and 72-test runner pass: 8,388,625
+bytes span two parts, one native whole-file request, zero bulk WebView reads or
+frames, and an independent downloaded SHA-256 match. Managed offline capture
+also checks real private files, exact tail bytes and refusal after replacement.
+The installed check caught Android's `Files.getFileStore` SecurityException; the
+space guard now uses its supported File free-space query. The initial emulator
+stalled and was restarted; the picker harness now waits on the native grant
+while the WebView is paused. These failed attempts are not counted as passes.
+Raw TypeScript retains the identical 91 pre-existing diagnostics.
+
+Installed Android photo acceptance also passes: two native whole-file jobs, zero
+bulk WebView reads, exact downloaded original-image hashes, newly added photo
+discovery, unchanged cloud revision after device deletion and repeat convergence.
+These small synthetic originals do not establish large-library/media throughput.

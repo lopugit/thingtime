@@ -2219,3 +2219,38 @@ Remaining managed data/settings/device coverage, retention leases, restore
 writers, backup jobs/UI, independent cloud replication, encryption, physical-media
 preparation and measured 100 GB–100 TB transfers remain open. No production
 promotion is included.
+
+## Android native whole-file uploads — 2026-10-18
+
+Android upload capability 1.2 supports both the shared whole-file job and bounded
+per-part fallback. It preserves the original journal/upload identities and
+canonical Timeline handoff. Native source proof, 64 KiB reads, private single-part
+staging and isolated signed HTTP PUTs remove bulk bytes from the WebView. Fresh
+owner/pairing/grant/connection, network and charging checks remain required. The
+canonical JSON comparator now handles arrays in reviewed connection policies.
+
+Replay tests preserve exact identities after lost part/completion replies.
+Changed bytes, replaced paths/metadata, foreign policies, cancellation, cookie
+changes, ambient authentication, redirects, oversized replies and unbounded
+rate-limit delays refuse. Native file locks guard orphan cleanup. Temporary
+parts are not a durable resume cache: retries recapture them, while already-ready
+reservations skip the source entirely. Normal jobs read the source three times.
+
+Validation passes 48 JVM and 164 shared sync tests, debug/release builds, Android
+lint and targeted web lint. TypeScript matches the existing 91 diagnostics.
+Installed API 35 selected-SAF acceptance and the 72-test runner pass: 8,388,625
+bytes, two native parts, one whole-file bridge request, zero bulk WebView frames
+or reads, and matching independent cloud download SHA-256. A real managed-store
+tail capture also preserves exact bytes and refuses replaced source revisions.
+The installed regression exposed Android's `Files.getFileStore` rejection; the
+space check now uses the supported File API. One emulator stall required a restart,
+and the picker harness now waits on native grants instead of paused WebView callbacks.
+
+This is foreground transport. Durable Android part caching, WorkManager/service
+scheduling, actual process death during PUT, physical devices, large-root paging
+and 100 GB–100 TB sustained transfer acceptance remain open.
+
+Installed Android photo acceptance also passes: two native whole-file jobs, zero
+bulk WebView reads, exact downloaded original-image hashes, newly added photo
+discovery, unchanged cloud revision after device deletion and repeat convergence.
+These small synthetic originals do not establish large-library/media throughput.

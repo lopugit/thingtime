@@ -11286,3 +11286,26 @@ protection values as strings, as specified by
   exact media from the independent vault (357 records, 22,064,370 payload bytes).
 - [ ] Complete other protected families/settings/device coverage and reviewed
   account restore/jobs/UI. Offline content readers do not restore live state.
+
+### Android native whole-file uploads — 2026-10-18
+
+- [x] Replay lost part/completion replies under the original immutable operation;
+  completed reservations perform no new source reads or PUTs. Verify bounded
+  reads, exact reconstructed bytes and cleanup of transient part files.
+- [x] Same-timestamp source edits, replaced provider identity, changed metadata,
+  foreign owner/device/ACL/revision, unknown configuration policy and disallowed
+  network/power must refuse. Canonical connection comparison includes arrays.
+- [x] HTTP regressions: storage must receive no ambient cookie, Origin or auth;
+  refuse redirects/auth challenges, changed credentials, extra signed headers,
+  foreign HTTP targets, oversized replies and cancellation during an active call.
+- [x] Android filesystem regression: use the supported free-space query;
+  `Files.getFileStore` throws SecurityException in the sandbox. Capture a real
+  managed-blob part, verify its bytes and reject a replaced source afterward.
+- [x] Installed API 35: choose the synthetic SAF fixture through the real picker,
+  upload two parts with one native job and zero bulk WebView frames, independently
+  hash downloaded bytes, then run managed-blob replacement/source checks.
+- [x] Installed photo backup: two native jobs and zero bulk reads; independently
+  hash originals, discover a new photo, preserve the cloud revision after local
+  deletion and repeat without another publication.
+- [ ] Physical devices, long jobs, low disk, interrupted actual PUT, background
+  policy, OS process death/relaunch and sustained large-data throughput.

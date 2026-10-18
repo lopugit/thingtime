@@ -97,7 +97,7 @@ export type FolderCapabilities = Pick<
 	| 'fileVersionsVersion'
 >;
 export const supportsNativePartUploads = (bridge: FolderCapabilities | undefined = getNativeBridge()) =>
-	bridge?.platform === 'ios' && /^1\.\d+\.\d+$/.test(bridge.fileUploadVersion ?? '');
+	(bridge?.platform === 'ios' || bridge?.platform === 'android') && /^1\.\d+\.\d+$/.test(bridge.fileUploadVersion ?? '');
 export const supportsNativeFileUploads = (bridge: FolderCapabilities | undefined = getNativeBridge()) =>
 	supportsNativePartUploads(bridge) && Number(bridge!.fileUploadVersion!.split('.')[1]) >= 2;
 export const supportsNativeBackgroundUploads = (bridge: FolderCapabilities | undefined = getNativeBridge()) =>

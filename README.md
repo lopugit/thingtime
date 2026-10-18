@@ -4757,6 +4757,12 @@ Android builds with file access 1.2.0 support verified native chunk ranges while
 retaining a full pre-publication source check. For the optional installed-app
 picker/upload acceptance and its synthetic-file requirements, see
 [Android foreground upload acceptance](android/README.md#verified-reads-and-foreground-upload-acceptance).
+
+Android upload capability 1.2 performs whole-file multipart uploads in the native
+host, with no bulk WebView bytes. It needs the existing selected-folder/photo
+grant and account upload API setup, plus private disk space for one multipart
+part. No new secrets are required. It remains foreground-only; see
+[native upload limits and acceptance](android/README.md#native-whole-file-uploads-upload-capability-12).
 The optional `THINGTIME_FOLDER_UPLOAD_TEST=1` run uses the same disposable
 localhost account and normal upload-approval/storage setup; it needs no new
 service credentials. It remains separate from the passing provider/bridge tests.

@@ -14,6 +14,7 @@ final class PhotoBackupAcceptance {
         PhotoLibraryTest fixture=new PhotoLibraryTest();fixture.before();Uri original=fixture.create("live",false);
         InstrumentationRegistry.getInstrumentation().getUiAutomation().dropShellPermissionIdentity();
         String grant=null,cloud=null,connection=null;String name="Photo backup acceptance "+UUID.randomUUID();
+        DeviceLiveTest.evaluate(web,"window.__photoUploadQA={jobs:0,bulk:0};window.__photoUploadPost=window.thingtimeNativeBridge.postMessage;window.thingtimeNativeBridge.postMessage=m=>{if(m.type==='mobile-files'){if(m.payload.action==='upload-file')window.__photoUploadQA.jobs++;if(m.payload.action==='read-range'||m.payload.action==='read'&&m.payload.length>1)window.__photoUploadQA.bulk++}return window.__photoUploadPost(m)};");
         try {
             DeviceLiveTest.progress("PHOTO_BACKUP_QA_READY: Choose folder > Photo library (backup), cancel the explanation once, then choose photo access and select Photo library in Files. Only the owned test image will upload.");
             FolderStore folders=new FolderStore(context);long deadline=System.currentTimeMillis()+300000;
@@ -53,9 +54,12 @@ final class PhotoBackupAcceptance {
             for(int i=0;i<cloudNodes.length();i++){JSONObject n=cloudNodes.getJSONObject(i);if(n.getString("path").contains(android.content.ContentUris.parseId(second)+"-"))added=n.getJSONObject("file");}
             assertNotNull(added);verifyBytes(web,added,fixture.bytes);
             upload(web,card);assertEquals(cloudNodes.toString(),inventory(web,cloud).toString());
+            assertEquals("true",DeviceLiveTest.evaluate(web,"window.__photoUploadQA.jobs===2 && window.__photoUploadQA.bulk===0"));
+            DeviceLiveTest.progress("PHOTO_NATIVE_UPLOAD_PASS: "+DeviceLiveTest.evaluate(web,"JSON.stringify(window.__photoUploadQA)"));
             NativeTrashAcceptance.screenshot(context,"photo-backup-complete.png");
             DeviceLiveTest.progress("PHOTO_BACKUP_PASS: real permission and tree selection, backup-only editor, original cloud SHA-256, added photo, retained cloud copy after device deletion, repeat without duplicate publication.");
         } finally {
+            DeviceLiveTest.evaluate(web,"window.thingtimeNativeBridge.postMessage=window.__photoUploadPost;delete window.__photoUploadPost;");
             if(cloud!=null){JSONArray nodes=inventory(web,cloud);for(int i=nodes.length()-1;i>=0;i--){JSONObject n=nodes.getJSONObject(i);if(n.getString("kind").equals("file")){JSONObject f=n.getJSONObject("file"),c=f.getJSONObject("content");DeviceLiveTest.webApi(web,"/api/v1/files","POST",new JSONObject().put("id",f.getString("id")).put("operationId",UUID.randomUUID().toString()).put("expectedRevision",f.getString("revision")).put("name",f.getString("name")).put("folderId",f.get("folderId")).put("attachmentId",c.getString("attachmentId")).put("contentVersion",c.getString("version")).put("trashed",true));}}}
             if(connection!=null)DeviceLiveTest.webApi(web,"/api/v1/things?id="+connection,"DELETE",null);
             if(cloud!=null)DeviceLiveTest.webApi(web,"/api/v1/things?id="+cloud,"DELETE",null);

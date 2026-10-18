@@ -158,6 +158,16 @@ final class FolderReader {
         JSONObject metadata() throws Exception {return new JSONObject().put("version",version).put("size",size).put("offset",offset).put("length",bytes.length);}
         JSONObject chunk() throws Exception {return metadata().put("data",java.util.Base64.getEncoder().encodeToString(bytes));}
     }
+    NativeUploadSource.Reader uploadSource(JSONObject requested) throws Exception {
+        JSONObject expected=SyncStaging.entry(requested);String path=expected.getString("path");
+        return work->{
+            check.run();Doc doc=resolve(path);valid(doc);
+            if(doc.directory || doc.size!=expected.getLong("size") || !hash(doc.id).equals(expected.getString("id")) ||
+                !version(doc,expected.getJSONObject("fingerprint").getString("sha256")).equals(expected.getString("version")))throw unavailable();
+            try(InputStream input=provider.open(doc.id)) {if(input==null)throw unavailable();work.run(input);}
+            check.run();if(!doc.metadata().equals(provider.stat(doc.id).metadata()) || !doc.metadata().equals(resolve(path).metadata()))throw unavailable();
+        };
+    }
     private Range readBytes(String path,String expected,long offset,int length,boolean verifiedChunks) throws Exception {
         if(length<=0 || length>MAX_RANGE || expected.length()>512)throw unavailable();
         Doc doc=resolve(path);byte[] proof=verifiedChunks?proofs.get(proofKey(doc,expected),proofGeneration):null;

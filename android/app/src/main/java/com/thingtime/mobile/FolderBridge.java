@@ -23,6 +23,14 @@ final class FolderBridge {
     private final AtomicLong generation=new AtomicLong();
     private final FolderReader.ProofCache proofs=new FolderReader.ProofCache();
     private volatile String networkKind="unknown";
+    private volatile Boolean batteryCharging;
+    private final android.content.BroadcastReceiver batteryReceiver=new android.content.BroadcastReceiver() {
+        @Override public void onReceive(android.content.Context context,Intent intent) {
+            int status=intent==null?-1:intent.getIntExtra(android.os.BatteryManager.EXTRA_STATUS,-1);
+            batteryCharging=status<0||status==android.os.BatteryManager.BATTERY_STATUS_UNKNOWN?null:
+                status==android.os.BatteryManager.BATTERY_STATUS_CHARGING||status==android.os.BatteryManager.BATTERY_STATUS_FULL;
+        }
+    };
     private android.net.Network observedNetwork;
     private final android.net.ConnectivityManager connectivity;
     private final android.net.ConnectivityManager.NetworkCallback networkCallback=new android.net.ConnectivityManager.NetworkCallback() {
@@ -38,25 +46,27 @@ final class FolderBridge {
     private Request pending; private boolean permissionResult; private boolean selecting; private Intent selectedResult; private boolean resultArrived;
     private CancellationSignal cancellation=new CancellationSignal();
     private static final class Request {
-        volatile FolderRangeSource range; volatile FolderRangeSink sink;
+        volatile FolderRangeSource range; volatile FolderRangeSink sink; volatile NativeUploadHttp upload;
         FolderStore.Grant approvalGrant,restoreGrant; JSONObject reviewedRestore; boolean restoreConsent; WriteApproval approval; boolean choosePhotos,photoPermissionsRequested,chooseExisting,offlineConsent; String offlineName;
-        final String id,action;final DeviceScope scope;final JSONObject payload,base;final JavaScriptReplyProxy reply;final long generation;final long deadline;
+        final String id,action;final DeviceScope scope;final JSONObject payload,base;final JavaScriptReplyProxy reply;final long generation;volatile long deadline;
         Request(JSONObject payload,DeviceScope scope,JavaScriptReplyProxy reply,long generation) throws Exception {
-            this.payload=payload;this.scope=scope;this.reply=reply;this.generation=generation;id=payload.getString("requestId");action=payload.getString("action");deadline=android.os.SystemClock.elapsedRealtime()+((action.equals("choose") || action.startsWith("trash") || action.startsWith("version-") || action.equals("write-approve") || action.equals("scan") || action.equals("read-range") || action.equals("stage-begin") || action.equals("stage-range") || action.equals("stage-finish") || action.equals("publish") || action.equals("publication-lookup"))?300000:30000);
+            this.payload=payload;this.scope=scope;this.reply=reply;this.generation=generation;id=payload.getString("requestId");action=payload.getString("action");deadline=android.os.SystemClock.elapsedRealtime()+((action.equals("upload-file") || action.equals("upload-part"))?900000:((action.equals("choose") || action.startsWith("trash") || action.startsWith("version-") || action.equals("write-approve") || action.equals("scan") || action.equals("read-range") || action.equals("stage-begin") || action.equals("stage-range") || action.equals("stage-finish") || action.equals("publish") || action.equals("publication-lookup"))?300000:30000));
             base=new JSONObject().put("requestId",id).put("ownerId",scope.owner).put("origin",scope.origin);
         }
     }
     FolderBridge(Activity activity,String origin,Active active) {
         this.activity=activity;this.origin=origin;this.active=active;
+        Intent battery=activity.registerReceiver(batteryReceiver,new android.content.IntentFilter(Intent.ACTION_BATTERY_CHANGED));
+        if(battery!=null)batteryReceiver.onReceive(activity,battery);
         connectivity=(android.net.ConnectivityManager)activity.getSystemService(android.content.Context.CONNECTIVITY_SERVICE);
         try { if(connectivity!=null)connectivity.registerDefaultNetworkCallback(networkCallback); }catch(Exception unavailable){ networkKind="unknown"; }
     }
-    void close() { suspend();try { if(connectivity!=null)connectivity.unregisterNetworkCallback(networkCallback); }catch(Exception ignored){} }
+    void close() { suspend();try{activity.unregisterReceiver(batteryReceiver);}catch(Exception ignored){}try { if(connectivity!=null)connectivity.unregisterNetworkCallback(networkCallback); }catch(Exception ignored){} }
     void suspend() {
         proofs.clear();
         if(approvalDialog!=null) { approvalDialog.dismiss();approvalDialog=null; }
         Request old=pending;pending=null;selecting=false;selectedResult=null;resultArrived=false;permissionResult=false;generation.incrementAndGet();cancellation.cancel();cancellation=new CancellationSignal();
-        if(old!=null) { if(old.range!=null)old.range.close();if(old.sink!=null)old.sink.close();reply(old,new JSONObject(),"Folder access paused. Try again when the app is active."); }
+        if(old!=null) { if(old.range!=null)old.range.close();if(old.sink!=null)old.sink.close();if(old.upload!=null)old.upload.close();reply(old,new JSONObject(),"Folder access paused. Try again when the app is active."); }
     }
     void pause() { if(!selecting) suspend(); }
     void activityResult(int code,int result,Intent data) {
@@ -81,7 +91,7 @@ final class FolderBridge {
         if(!UUID.fromString(id).toString().equalsIgnoreCase(id)) return;
         DeviceScope scope=new DeviceScope(payload.getString("ownerId"),origin,BuildConfig.DEBUG);
         if(action.equals("suspend")) { if(pending!=null && pending.id.equals(id)) suspend();return; }
-        if(!java.util.Arrays.asList("list","choose","remove","scan","read","read-range","conditions","stage-begin","stage-append","stage-range","stage-finish","write-approve","publication-lookup","publish","trash","trash-lookup","trash-expected","trash-inspect","trash-list","trash-restore","trash-restore-reviewed","version-list","version-inspect","version-restore-reviewed","version-restore-status").contains(action)) return;
+        if(!java.util.Arrays.asList("list","choose","remove","scan","read","read-range","upload-part","upload-file","conditions","stage-begin","stage-append","stage-range","stage-finish","write-approve","publication-lookup","publish","trash","trash-lookup","trash-expected","trash-inspect","trash-list","trash-restore","trash-restore-reviewed","version-list","version-inspect","version-restore-reviewed","version-restore-status").contains(action)) return;
         if((action.equals("stage-range") || action.equals("read-range")) && !WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_ARRAY_BUFFER))return;
         if(pending!=null) { reply(new Request(payload,scope,reply,generation.get()),new JSONObject(),"Another folder request is running.");return; }
         Request request=new Request(payload,scope,reply,generation.incrementAndGet());pending=request;execute(request,null,false);
@@ -97,6 +107,7 @@ final class FolderBridge {
         Object value=payload.get(key);if(!(value instanceof Number)) throw new FolderReader.Failure("Invalid file read range.");
         double number=((Number)value).doubleValue();if(!Double.isFinite(number) || number<0 || number>maximum || number!=Math.rint(number)) throw new FolderReader.Failure("Invalid file read range.");return (long)number;
     }
+    private Boolean charging() {return batteryCharging;}
     private void execute(Request request,Intent selected,boolean pickerFinished) {
         CancellationSignal signal=cancellation;
         PairingEngine.Check check=()-> { if(generation.get()!=request.generation || !active.get() || android.os.SystemClock.elapsedRealtime()>request.deadline) throw new java.util.concurrent.CancellationException();signal.throwIfCanceled(); };
@@ -154,7 +165,7 @@ final class FolderBridge {
                 } else if(!request.action.equals("list")) {
                     String rootId=request.payload.getString("rootId");if(!UUID.fromString(rootId).toString().equalsIgnoreCase(rootId)) throw new FolderReader.Failure("Invalid folder selection.");
                     if(request.action.equals("remove")) { store.remove(request.scope,rootId);proofs.clear(); }
-                    else if(PhotoLibrary.owns(activity,store.snapshot(request.scope,rootId).uri) && !java.util.Arrays.asList("scan","read","read-range").contains(request.action)) {
+                    else if(PhotoLibrary.owns(activity,store.snapshot(request.scope,rootId).uri) && !java.util.Arrays.asList("scan","read","read-range","upload-part","upload-file").contains(request.action)) {
                         throw new FolderReader.Failure("Photo libraries are read-only backup sources.");
                     }
                     else if(request.action.equals("write-approve")) {
@@ -286,7 +297,44 @@ final class FolderBridge {
                         FolderStore.Grant grant=store.snapshot(request.scope,rootId);store.requireRead(request.scope,grant);boolean managed=offline.owns(grant.uri);
                         FolderReader reader=managed?null:new FolderReader(PhotoLibrary.owns(activity,grant.uri)?new PhotoLibrary(activity,android.provider.DocumentsContract.getTreeDocumentId(grant.uri),check,signal):new SafFolderProvider(activity.getContentResolver(),grant.uri,signal),check,proofs,request.scope.origin+"\0"+request.scope.owner+"\0"+rootId);
                         result.put("rootId",rootId);
-                        if(request.action.equals("scan")) result.put("complete",true).put("entries",managed?offline.scan(request.scope,grant):reader.scan());
+                        if(request.action.equals("upload-file") || request.action.equals("upload-part")) {
+                            boolean photos=PhotoLibrary.owns(activity,grant.uri);
+                            NativeUploadRequest file=request.action.equals("upload-file")?new NativeUploadRequest(request.payload.getJSONObject("upload"),request.scope,rootId,photos):null;
+                            NativeUploadRequest.Part first=file==null?new NativeUploadRequest.Part(request.payload.getJSONObject("upload")):file.part(1);
+                            PairingEngine.Check current=()->{check.run();store.requireRead(request.scope,grant);if(file!=null)file.conditions(networkKind,charging());};
+                            try(NativeUploadHttp transport=new NativeUploadHttp(request.scope,url->CookieManager.getInstance().getCookie(url),current)) {
+                                request.upload=transport;transport.require();
+                                PairingEngine.Check authorize=()->{
+                                    transport.check();
+                                    if(file!=null) {
+                                        JSONObject status=auth.status(request.scope);
+                                        if(!"paired".equals(status.optString("state")))throw NativeUploadRequest.invalid();
+                                        JSONObject saved=transport.json("/api/v1/things?id="+java.net.URLEncoder.encode(file.connectionId,"UTF-8"),null);
+                                        file.authorize(saved,networkKind,charging(),status.getString("deviceId"));
+                                    } else auth.identity(request.scope);
+                                    transport.check();
+                                };
+                                NativeUploadSource.Reader source=managed?offline.uploadSource(request.scope,grant,first.source):reader.uploadSource(first.source);
+                                try(NativeUploadJob job=new NativeUploadJob(new java.io.File(activity.getNoBackupFilesDir(),"NativeUploadParts-v1").toPath(),transport::check)) {
+                                    if(file!=null) {
+                                        job.run(file,source,transport,authorize,received->{
+                                            transport.check();request.deadline=android.os.SystemClock.elapsedRealtime()+900000;
+                                            JSONObject progress=new JSONObject(request.base.toString()).put("rootId",rootId).put("uploadId",file.uploadId)
+                                                .put("operationId",file.operationId).put("version",file.source.getString("version")).put("size",file.size).put("received",received);
+                                            activity.runOnUiThread(()->{
+                                                try {current.run();if(pending==request)request.reply.postMessage(new JSONObject().put("type","mobile-files-progress").put("payload",progress).toString());}
+                                                catch(Exception invalid) {transport.close();}
+                                            });
+                                        });
+                                        result.put("uploadedFile",file.result());
+                                    } else {
+                                        authorize.run();NativeUploadSource verified=NativeUploadSource.verify(first.source,source,transport::check);
+                                        String digest=job.upload(first,verified,transport,authorize,true);result.put("uploadedPart",first.result(digest));
+                                    }
+                                }
+                            } finally {request.upload=null;}
+                        }
+                        else if(request.action.equals("scan")) result.put("complete",true).put("entries",managed?offline.scan(request.scope,grant):reader.scan());
                         else {
                             String path=request.payload.getString("path"),version=request.payload.getString("version");
                             long offset=integer(request.payload,"offset",9007199254740991L),length=integer(request.payload,"length",request.action.equals("read-range")?FolderReader.MAX_RANGE:FolderReader.MAX_READ);
@@ -315,7 +363,14 @@ final class FolderBridge {
                 }
                 check.run();auth.identity(request.scope);check.run();result.put("roots",offline.capabilities(request.scope));finish(request,result,null);
             } catch(java.util.concurrent.CancellationException | android.os.OperationCanceledException cancelled) { finish(request,new JSONObject(),"Folder access paused. Try again when the app is active."); }
-            catch(Exception failure) { finish(request,new JSONObject(),failure instanceof FolderReader.Failure || failure instanceof PairingEngine.Failure?failure.getMessage():"Folder access is unavailable. Check Files permissions or choose it again."); }
+            catch(Exception failure) {
+                if(BuildConfig.DEBUG && (request.action.equals("upload-file")||request.action.equals("upload-part"))) {
+                    // Class and code locations only: messages can contain URLs or credentials.
+                    StringBuilder diagnostic=new StringBuilder(failure.getClass().getName());
+                    StackTraceElement[] trace=failure.getStackTrace();for(int i=0;i<Math.min(8,trace.length);i++)diagnostic.append("\n").append(trace[i]);
+                    android.util.Log.w("NativeUpload",diagnostic.toString());
+                }
+                finish(request,new JSONObject(),failure instanceof FolderReader.Failure || failure instanceof PairingEngine.Failure?failure.getMessage():"Folder access is unavailable. Check Files permissions or choose it again."); }
         });
     }
     private void choose(Request request,PairingEngine.Check check) {

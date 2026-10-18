@@ -64,6 +64,31 @@ public class ManagedFileStoreTest {
             assertEquals(SyncStaging.canonical(receipt),SyncStaging.canonical(store.lookup(fixture.owner,root,fixture.grant,request).getJSONObject("receipt")));
         }
     }
+    @Test public void nativeUploadReadsImmutableManagedBlobAndRejectsReplacedVersion() throws Exception {
+        byte[] bytes=new byte[8*1024*1024+17];Arrays.fill(bytes,(byte)13);
+        JSONObject first=publish(request("upload.bin",bytes,true),bytes).getJSONObject("entry");
+        NativeUploadSource.Reader reader=work->{try(ManagedFileStore store=store()){store.readUploadSource(fixture.owner,root,first,work);}};
+        NativeUploadSource source=NativeUploadSource.verify(first,reader,()->{});
+        java.io.ByteArrayOutputStream restored=new java.io.ByteArrayOutputStream();source.capture(1,restored);source.capture(2,restored);
+        assertArrayEquals(bytes,restored.toByteArray());source.revalidate();
+        NativeUploadRequest.Part part=new NativeUploadRequest.Part(new JSONObject().put("source",first).put("uploadId","upload")
+            .put("requestId","operation").put("partNumber",2).put("offset",8*1024*1024).put("length",17));
+        NativeUploadJob.Transport cloud=new NativeUploadJob.Transport() {
+            public JSONObject json(String path,JSONObject body) throws Exception {return new JSONObject().put("ok",true);}
+            public void put(JSONObject signed,java.nio.file.Path file,String checksum,long length,int number) throws Exception {
+                assertEquals(2,number);assertEquals(17,length);assertArrayEquals(Arrays.copyOfRange(bytes,8*1024*1024,bytes.length),Files.readAllBytes(file));
+            }
+        };
+        try(NativeUploadJob job=new NativeUploadJob(new File(directory,"upload-parts").toPath(),()->{})){job.upload(part,source,cloud,()->{},false);}
+
+        byte[] replacement={1,2,3};JSONObject update=request("upload.bin",replacement,false);
+        update.getJSONObject("operation").getJSONObject("mutation").put("expectedTarget",first);publish(update,replacement);
+        assertThrows(Exception.class,source::revalidate);
+        assertThrows(Exception.class,()->source.capture(1,new java.io.ByteArrayOutputStream()));
+        try(ManagedFileStore store=store()) {
+            assertThrows(Exception.class,()->store.readUploadSource(new DeviceScope("foreign",fixture.owner.origin,false),root,first,input->fail("Foreign source")));
+        }
+    }
     @Test public void replacementRetainsPriorBytesAndHistoricalReceiptDoesNotOverwriteLaterChanges() throws Exception {
         byte[] original={1,2,3},replacement={4,5,6};JSONObject firstRequest=request("file.bin",original,false),first=publish(firstRequest,original);
         JSONObject secondRequest=request("file.bin",replacement,false);secondRequest.getJSONObject("operation").getJSONObject("mutation").put("expectedTarget",first.getJSONObject("entry"));

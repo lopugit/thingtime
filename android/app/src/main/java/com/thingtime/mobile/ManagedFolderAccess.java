@@ -103,6 +103,13 @@ final class ManagedFolderAccess {
             JSONObject result=store.restoreVersion(scope,root(scope,grant,store),grant.id,request,approved);active.run();grants.requireRead(scope,grant);return result;
         }
     }
+    NativeUploadSource.Reader uploadSource(DeviceScope scope,FolderStore.Grant grant,JSONObject source) throws Exception {
+        JSONObject expected=SyncStaging.entry(source);
+        return work->{
+            try(ManagedFileStore store=store(()->{})) {store.readUploadSource(scope,root(scope,grant,store),expected,work);}
+            active.run();grants.requireRead(scope,grant);
+        };
+    }
     JSONArray scan(DeviceScope scope,FolderStore.Grant grant) throws Exception {
         try(ManagedFileStore store=store(()->{})){return store.scan(scope,root(scope,grant,store));}
     }

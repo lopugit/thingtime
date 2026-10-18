@@ -460,6 +460,19 @@ final class ManagedFileStore implements AutoCloseable {
             return new FolderReader.Range(version,selected.json.getLong("size"),offset,bytes);
         } finally {Os.close(fd);}
     }
+    void readUploadSource(DeviceScope owner,String root,JSONObject requested,NativeUploadSource.Read work) throws Exception {
+        JSONObject expected=SyncStaging.entry(requested);root(owner,root);String path=expected.getString("path");
+        Entry selected=entry(root,path);
+        if(selected==null || selected.blob==null || !SyncStaging.canonical(selected.json).equals(SyncStaging.canonical(expected)))throw changed();
+        FileDescriptor fd=open(new File(blobs,uuid(selected.blob)),OsConstants.O_RDONLY);
+        try {
+            StructStat before=Os.fstat(fd);regular(before);if(before.st_size!=expected.getLong("size"))throw changed();
+            try(java.io.FileInputStream input=new java.io.FileInputStream(Os.dup(fd))) {work.run(input);}
+            check.run();root(owner,root);Entry current=entry(root,path);
+            if(current==null || !selected.blob.equals(current.blob) || !SyncStaging.canonical(current.json).equals(SyncStaging.canonical(expected)) ||
+                !stamp(before).equals(stamp(Os.fstat(fd))))throw changed();
+        } finally {Os.close(fd);}
+    }
     private static ContentValues documentColumns(JSONObject entry) throws Exception {
         String path=entry.getString("path");int slash=path.lastIndexOf('/');ContentValues values=new ContentValues();
         values.put("document",uuid(entry.getString("id")));values.put("parent",slash<0?"":path.substring(0,slash));return values;
