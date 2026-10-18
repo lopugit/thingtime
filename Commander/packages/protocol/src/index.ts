@@ -1114,6 +1114,10 @@ export interface NativeRequest<T = unknown> {
     | 'application.quit'
     | 'application.control'
     | 'window.beginDrag'
+    | 'window.toggleMaximize'
+    | 'window.state'
+    | 'window.keepAbove'
+    | 'processes.open'
     | 'filesystem.beginDrag'
     | 'filesystem.icon'
     | 'filesystem.copy'
@@ -1185,7 +1189,19 @@ export interface SystemMetrics {
   };
 }
 
+export interface SystemProcessAverage {
+  cpuPercent: number;
+  residentMemoryBytes: number;
+  diskReadBytesPerSecond: number;
+  diskWriteBytesPerSecond: number;
+  gpuPercent?: number;
+  networkBytesPerSecond?: number;
+  observedSeconds: number;
+}
+
 export interface SystemProcessMetric {
+  startedAtMs?: number;
+  average?: SystemProcessAverage;
   pid: number;
   parentPid: number;
   name: string;

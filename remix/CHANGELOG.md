@@ -73,6 +73,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-18 — **Codex (AI)**: Commander launcher Settings gear, stable process ordering, typed filters and sampled averaging windows, a resizable Processes pop-out with Keep above, and Settings maximize/restore. [PR #1030](../PRs/1030-commander-window-controls-settings-and-process-monitor.md).
 - 2026-10-18: Password title search now filters the whole private vault before pagination (`api.passwords` 1.2.0), cancels stale searches, and distinguishes no matches from request failure. Added HTTP pagination/owner-isolation and capability regressions.
 - 2026-10-18 — **Codex (AI)**: Document the reusable video compressor as a
   Builder use case, including editable definitions, local encoding, saved
