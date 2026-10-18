@@ -4,7 +4,7 @@ import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 
-import { draftPreviewCsp, platformRuntimeCsp, authorizeCsp, librarySdkCsp, librarySandboxCsp, designBundlesCsp, mcpLabCsp, mcpLabScriptHash, prodCsp } from './csp.mjs';
+import { mediaWorkerCsp, draftPreviewCsp, platformRuntimeCsp, authorizeCsp, librarySdkCsp, librarySandboxCsp, designBundlesCsp, mcpLabCsp, mcpLabScriptHash, prodCsp } from './csp.mjs';
 import { findSourceMapAnnotation } from './embed-bundle-source-map.mjs';
 import { verifyClaudeOAuthArtifacts } from './claude-oauth-artifacts.mjs';
 
@@ -385,3 +385,8 @@ for (const extension of ['html', 'js']) {
 }
 const runtimeDigest = createHash('sha256').update(readFileSync('.vercel/output/static/platform/runtime.js')).digest('hex');
 if (!readFileSync('.vercel/output/static/platform/runtime.html', 'utf8').includes(`src="/platform/runtime.js?v=${runtimeDigest}"`)) throw new Error('Web Platform document must reference its exact runtime digest to bypass previously cached compiler code.');
+
+const mediaHeaders = routes.find(route => route.src === '^/assets/mediaWorker-[A-Za-z0-9_-]+\\.js$');
+if (!mediaHeaders?.continue || mediaHeaders.headers?.['Content-Security-Policy'] !== mediaWorkerCsp || routes.indexOf(mediaHeaders) < cspHeadersIndex || routes.indexOf(mediaHeaders) > filesystemIndex)
+ throw new Error('Media worker must deny network through its own CSP before filesystem routing.');
+if (!readdirSync('.vercel/output/static/assets').some(name => /^mediaWorker-[A-Za-z0-9_-]+\.js$/.test(name))) throw new Error('Missing secure-context media worker bundle.');

@@ -1,5 +1,34 @@
 # TESTING.md — per-area manual test checklists
 
+## Reusable local video compression
+
+- [ ] Install `media-tools` as the intended account; inspect the returned owned
+      Page, Component and Action. An origin with suite capability 1.3.0 refuses
+      this install before mutation; 1.4.0 accepts it.
+- [ ] Run the isolated browser flow documented in README: actual WebCodecs
+      conversion, MP4 H.264/AAC, WebM VP9/Opus and explicit audio removal. Compare
+      downloaded bytes, codecs, dimensions, duration and tracks using ffprobe.
+- [ ] The opaque preview frame still has no same-origin permission. Its fixed
+      secure-host worker can encode and has a network-denying response CSP.
+      An iframe-local worker must not regress into a false unsupported browser.
+- [ ] Invalid files and unsupported codecs show a useful error and clear old
+      downloads. Cancel, Stop / clear, replacing the selected file and replacing
+      a run terminate work; delayed worker output never recreates a download.
+- [ ] Change settings and document labels/styles; save an edited Component,
+      reopen it through Builder and run it with those saved defaults. Reloading
+      never retains local selected video bytes. Check access as the owner.
+- [ ] On the intended deployed origin, encode a synthetic local clip, preview
+      it and download it. Compare the result with the independent source.
+- [ ] At desktop and 390px widths scroll the complete page and preview; open
+      the JSON editor and saved Component controls. No clipping, overlap or
+      horizontal overflow, including progress, errors, video and download.
+- [ ] Shared documentation examples still validate through saved-Thing grammar
+      after adding guide sections; locate examples by section ID, not position.
+- [ ] Lopu's default and custom base prompt paths retain framework-discovery
+      guidance for `/docs/builder`, components, demos and Action inspection.
+      Missing tools or short Action budgets never imply encoding is impossible.
+
+
 ## History timeline design concept (`docs/design/thingtime-history-timeline/`, `/docs/design`)
 
 Fictional-data design concept for unified Thing history (TODO 56). Nothing is
