@@ -310,12 +310,12 @@ function assertAdminModelRouting(resolver, rebase, allBranch) {
 
   assert.ok(
     resolver.includes(
-      "PREFERRED_MODEL: ${{ needs.model_config.outputs.primary_model }}",
+      "PREFERRED_MODEL: ${{ env.LOPU_SELECTED_MODEL || needs.model_config.outputs.primary_model }}",
     ),
     "resolver Graphify: receives the validated Admin primary model",
   );
   assert.ok(
-    rebase.includes("PREFERRED_MODEL: ${{ steps.models.outputs.primary_model }}"),
+    rebase.includes("PREFERRED_MODEL: ${{ env.LOPU_SELECTED_MODEL || steps.models.outputs.primary_model }}"),
     "rebase Graphify: receives the validated Admin primary model",
   );
 

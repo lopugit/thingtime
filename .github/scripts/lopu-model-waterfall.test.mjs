@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, writeFileSync, rmSync, mkdirSync, statSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync, rmSync, mkdirSync, statSync, realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -20,7 +20,7 @@ test('CLI compiles the saved order, keeps keys private, and detects modified hel
   const env = { ...process.env, GITHUB_WORKSPACE:dir, RUNNER_TEMP:temp, GITHUB_OUTPUT:join(dir,'out'),GITHUB_ENV:join(dir,'env'), GITHUB_RUN_ID:'123', GITHUB_RUN_ATTEMPT:'1',GITHUB_REPOSITORY:'example/project',GITHUB_WORKFLOW_REF:'example/project/.github/workflows/resolve-pr-conflicts.yml@refs/heads/github-actions',THINGTIME_CI_ROUTER_SECRET:'fixture-router',THINGTIME_CREDENTIAL_VAULT_ORIGIN:'https://example.test',LOPU_SANDBOX:'workspace-write',LOPU_SAFETY_STRATEGY:'drop-sudo' };
   const result = spawnSync(process.execPath,['--import',fixture,script,'prepare'],{env,encoding:'utf8'});
   assert.equal(result.status,0,result.stderr);
-  const root = join(dir,'.lopu-waterfall-action');
+  const root = realpathSync(join(dir,'.lopu-waterfall-action'));
   const action = JSON.parse(readFileSync(join(root,'action.yml')));
   const plan = JSON.parse(readFileSync(join(root,'plan.json')));
   assert.deepEqual(plan.map(x=>x.id),['gpt-6-astra:medium','claude-opus-5:high']);
@@ -28,6 +28,11 @@ test('CLI compiles the saved order, keeps keys private, and detects modified hel
   assert.match(readFileSync(join(dir,'env'),'utf8'), /LOPU_OPENAI_TOKEN_1=sk-fixture-openai/);
   assert.equal(statSync(join(temp,'lopu-openai-vault.json')).mode & 0o777, 0o600);
   const calls = action.runs.steps.filter(s=>s.uses); assert.equal(calls[0].with.model,'gpt-6-astra');assert.equal(calls[0].with.effort,'medium');
+  const finish = spawnSync(process.execPath,[join(root,'lopu-model-waterfall.mjs'),'finish'],{
+    env:{...env,OUTCOMES:'["success","skipped"]',LOPU_OPENAI_TOKEN_1:'sk-fixture-openai'},encoding:'utf8'
+  });
+  assert.equal(finish.status,0,finish.stderr);
+  assert.match(readFileSync(join(dir,'env'),'utf8'), /LOPU_SELECTED_BACKEND=codex\nLOPU_SELECTED_MODEL=gpt-6-astra\nLOPU_SELECTED_OPENAI_API_KEY=sk-fixture-openai/);
   // A prepared action may not execute a helper modified by a prior model.
   writeFileSync(join(root,'lopu-model-waterfall.mjs'),'throw new Error("tampered helper executed")');
   const check = spawnSync('bash',['-e','-o','pipefail','-c',action.runs.steps[0].run],{env:{...env,GITHUB_ACTION_PATH:root},encoding:'utf8'});

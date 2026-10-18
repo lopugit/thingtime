@@ -1984,10 +1984,10 @@ jobs:
           PRIMARY_CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           FALLBACK_ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY_FALLBACK }}
           FALLBACK_CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_FALLBACK }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          AGENT_BACKEND: ${{ vars.LOPU_AGENT_BACKEND || vars.LOPU_REVIEW_BACKEND || 'claude' }}
-          CODEX_MODEL: ${{ vars.LOPU_CODEX_MODEL || 'gpt-5.6-terra' }}
-          PREFERRED_MODEL: ${{ steps.models.outputs.primary_model }}
+          OPENAI_API_KEY: ${{ env.LOPU_SELECTED_OPENAI_API_KEY || secrets.OPENAI_API_KEY }}
+          AGENT_BACKEND: ${{ env.LOPU_SELECTED_BACKEND || steps.models.outputs.agent_backend }}
+          CODEX_MODEL: ${{ env.LOPU_SELECTED_MODEL || steps.models.outputs.codex_model }}
+          PREFERRED_MODEL: ${{ env.LOPU_SELECTED_MODEL || steps.models.outputs.primary_model }}
           PIP_CONFIG_FILE: /dev/null
           PIP_INDEX_URL: https://pypi.org/simple
           PIP_EXTRA_INDEX_URL: ""
@@ -2081,13 +2081,13 @@ jobs:
           fi
           if [ "$backend" = openai ]; then
             unset GRAPHIFY_CLAUDE_CLI_MODEL
-            case "${CODEX_MODEL:-gpt-5.6-terra}" in
-              gpt-5.6-terra|gpt-5.6-sol)
-                graphify_model_args=(--model "$CODEX_MODEL")
-                export GRAPHIFY_OPENAI_MODEL="$CODEX_MODEL"
-                ;;
-              *) echo "::warning::Unexpected Lopu Codex model; Graphify will use its OpenAI default."; unset GRAPHIFY_OPENAI_MODEL ;;
-            esac
+            if [[ "${CODEX_MODEL:-}" =~ ^[a-z0-9][a-z0-9.-]{0,100}$ ]]; then
+              graphify_model_args=(--model "$CODEX_MODEL")
+              export GRAPHIFY_OPENAI_MODEL="$CODEX_MODEL"
+            else
+              echo "::error::No valid administrator-selected OpenAI model for Graphify."
+              exit 1
+            fi
           fi
 
           graph_not_collapsed() {

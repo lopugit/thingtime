@@ -6,7 +6,7 @@ The production setting observed on 2026-10-18 is `gpt-6-astra:medium` followed b
 
 Validation: 196 script tests and both controller contract self-tests pass. Actionlint syntax diagnostics match the base branch. Live production manifest and settings reads passed. GitHub execution is not verified until this controller is deployed and the OpenAI credential is imported in production.
 
-Security: masks and private files protect credential delivery; generated helpers and plan are hash checked before later attempts; publication scans include both provider caches. Claude continuation uses the selected account. Task/tool text quoting authentication or quota errors cannot cause failover.
+Security: masks and private files protect credential delivery; generated helpers and plan are hash checked before later attempts; publication scans include both provider caches. Claude continuation uses the selected account. Post-agent semantic Graphify refreshes inherit the successful model and vault OpenAI key; they do not require a duplicate GitHub key or substitute a hardcoded model. Task/tool text quoting authentication or quota errors cannot cause failover.
 
 Graphify: code outputs refreshed. Semantic documentation extraction was interrupted after the local proxy health request timed out; retained semantic material may be stale.
 

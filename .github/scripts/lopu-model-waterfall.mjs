@@ -126,7 +126,7 @@ async function prepare() {
   if (!['read-only','workspace-write','danger-full-access'].includes(req('LOPU_SANDBOX')) || req('LOPU_SAFETY_STRATEGY') !== 'drop-sudo') throw new Error('Invalid Lopu sandbox/hardening strategy.');
   const plan = await configuredPlan();
   const bundles = {};
-  const lines = [];
+  const lines = ['LOPU_SELECTED_OPENAI_API_KEY=', 'LOPU_SELECTED_BACKEND=', 'LOPU_SELECTED_MODEL='];
   for (const platform of [...new Set(plan.map(entry => entry.platform))]) {
     let rows;
     try { rows = await fetchBundle(platform); }
@@ -254,6 +254,10 @@ async function finish() {
       await writeFile(path.join(req('RUNNER_TEMP'), 'lopu-claude-credential-token'), req(`LOPU_CLAUDE_TOKEN_${entry.slot}`), { mode: 0o600 });
       await chmod(path.join(req('RUNNER_TEMP'), 'lopu-claude-credential-token'), 0o600);
     }
+    if (selected >= 0) await writeFile(req('GITHUB_ENV'), [
+      `LOPU_SELECTED_BACKEND=${entry.backend}`, `LOPU_SELECTED_MODEL=${entry.model}`,
+      `LOPU_SELECTED_OPENAI_API_KEY=${entry.backend === 'codex' ? req(`LOPU_OPENAI_TOKEN_${entry.slot}`) : ''}`
+    ].join('\n') + '\n', { flag: 'a' });
     await output(values); console.log(`Lopu actual backend: ${entry.label}`);
   }
   if (selected < 0) throw new Error('The configured AI waterfall did not complete. No unconfigured model was attempted.');

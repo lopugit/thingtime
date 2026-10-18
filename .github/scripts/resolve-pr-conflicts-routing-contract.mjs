@@ -1791,8 +1791,8 @@ function assertAdminModelRouting(
     !rebaseModelBlock.includes("steps.start.outputs.complete != 'true'"),
     "rebase model loader must also run for clean rebases whose Graphify refresh uses AI",
   );
-  assert.ok(source.includes('PREFERRED_MODEL: ${{ needs.model_config.outputs.primary_model }}'));
-  assert.ok(rebaseSource.includes('PREFERRED_MODEL: ${{ steps.models.outputs.primary_model }}'));
+  assert.ok(source.includes('PREFERRED_MODEL: ${{ env.LOPU_SELECTED_MODEL || needs.model_config.outputs.primary_model }}'));
+  assert.ok(rebaseSource.includes('PREFERRED_MODEL: ${{ env.LOPU_SELECTED_MODEL || steps.models.outputs.primary_model }}'));
   for (const [label, yaml] of [["merge resolver", source], ["rebase resolver", rebaseSource]]) {
     assert.ok(yaml.includes('case "${PREFERRED_MODEL:-default}"'), `${label}: validated primary mapping`);
     assert.ok(yaml.includes('graphify_model_args=(--model "$PREFERRED_MODEL")'), `${label}: API model override`);
@@ -2011,8 +2011,8 @@ function assertAdminModelRouting(
     [".github/actions/rebase-conflict-round/action.yml", "${{ inputs.model-args }}"],
     [".github/scripts/rebase-stack/refresh-promotion-graphify.sh", 'case "${PREFERRED_MODEL:-default}"'],
     [".github/workflows/all-branch.yml", "${{ steps.models.outputs.model_args }}"],
-    [".github/workflows/rebase-pr-stacks.yml", 'PREFERRED_MODEL: ${{ steps.models.outputs.primary_model }}'],
-    [".github/workflows/resolve-pr-conflicts.yml", 'PREFERRED_MODEL: ${{ needs.model_config.outputs.primary_model }}'],
+    [".github/workflows/rebase-pr-stacks.yml", 'PREFERRED_MODEL: ${{ env.LOPU_SELECTED_MODEL || steps.models.outputs.primary_model }}'],
+    [".github/workflows/resolve-pr-conflicts.yml", 'PREFERRED_MODEL: ${{ env.LOPU_SELECTED_MODEL || needs.model_config.outputs.primary_model }}'],
   ]);
 
   for (const path of actualRuntimeFiles) {

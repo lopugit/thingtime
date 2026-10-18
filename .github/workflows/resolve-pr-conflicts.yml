@@ -3605,7 +3605,7 @@ jobs:
       - name: Require an AI credential
         if: needs.feature_stack_plan.outputs.custom_models != 'true'
         env:
-          AGENT_BACKEND: ${{ needs.model_config.outputs.agent_backend }}
+          AGENT_BACKEND: ${{ env.LOPU_SELECTED_BACKEND || needs.model_config.outputs.agent_backend }}
           HAS_CLAUDE_CREDENTIAL: ${{ secrets.THINGTIME_CI_ROUTER_SECRET != '' || secrets.CLAUDE_CODE_OAUTH_TOKEN_THINGTIME != '' || secrets.ANTHROPIC_API_KEY != '' || secrets.CLAUDE_CODE_OAUTH_TOKEN != '' || secrets.ANTHROPIC_API_KEY_FALLBACK != '' || secrets.CLAUDE_CODE_OAUTH_TOKEN_FALLBACK != '' }}
           HAS_OPENAI_CREDENTIAL: ${{ secrets.THINGTIME_CI_ROUTER_SECRET != '' }}
         run: |
@@ -3748,7 +3748,7 @@ jobs:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           ANTHROPIC_API_KEY_FALLBACK: ${{ secrets.ANTHROPIC_API_KEY_FALLBACK }}
           CLAUDE_CODE_OAUTH_TOKEN_FALLBACK: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_FALLBACK }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_API_KEY: ${{ env.LOPU_SELECTED_OPENAI_API_KEY || secrets.OPENAI_API_KEY }}
         run: |
           set -euo pipefail
           test -z "$(git status --porcelain --untracked-files=all)" || {
@@ -4395,7 +4395,7 @@ jobs:
       - name: Require an AI credential
         if: steps.prepare.outputs.any == 'true'
         env:
-          AGENT_BACKEND: ${{ needs.model_config.outputs.agent_backend }}
+          AGENT_BACKEND: ${{ env.LOPU_SELECTED_BACKEND || needs.model_config.outputs.agent_backend }}
           HAS_CLAUDE_CREDENTIAL: ${{ secrets.THINGTIME_CI_ROUTER_SECRET != '' || secrets.CLAUDE_CODE_OAUTH_TOKEN_THINGTIME != '' || secrets.ANTHROPIC_API_KEY != '' || secrets.CLAUDE_CODE_OAUTH_TOKEN != '' || secrets.ANTHROPIC_API_KEY_FALLBACK != '' || secrets.CLAUDE_CODE_OAUTH_TOKEN_FALLBACK != '' }}
           HAS_OPENAI_CREDENTIAL: ${{ secrets.THINGTIME_CI_ROUTER_SECRET != '' }}
         run: |
@@ -6198,15 +6198,15 @@ jobs:
         shell: bash
         env:
           GRAPHIFY_VERSION: "0.9.4"
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_API_KEY: ${{ env.LOPU_SELECTED_OPENAI_API_KEY || secrets.OPENAI_API_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           CLAUDE_CODE_OAUTH_TOKEN_PREFERRED: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_THINGTIME }}
           ANTHROPIC_API_KEY_FALLBACK: ${{ secrets.ANTHROPIC_API_KEY_FALLBACK }}
           CLAUDE_CODE_OAUTH_TOKEN_FALLBACK: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_FALLBACK }}
-          GRAPHIFY_BACKEND_PREFERENCE: ${{ needs.model_config.outputs.agent_backend }}
-          LOPU_OPENAI_MODEL: ${{ needs.model_config.outputs.codex_model }}
-          PREFERRED_MODEL: ${{ needs.model_config.outputs.primary_model }}
+          GRAPHIFY_BACKEND_PREFERENCE: ${{ env.LOPU_SELECTED_BACKEND || needs.model_config.outputs.agent_backend }}
+          LOPU_OPENAI_MODEL: ${{ env.LOPU_SELECTED_MODEL || needs.model_config.outputs.codex_model }}
+          PREFERRED_MODEL: ${{ env.LOPU_SELECTED_MODEL || needs.model_config.outputs.primary_model }}
         run: |
           set -euo pipefail
           bash "$GITHUB_WORKSPACE/trusted/.github/scripts/rebase-stack/refresh-promotion-graphify.sh" \
@@ -6704,7 +6704,7 @@ jobs:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           ANTHROPIC_API_KEY_FALLBACK: ${{ secrets.ANTHROPIC_API_KEY_FALLBACK }}
           CLAUDE_CODE_OAUTH_TOKEN_FALLBACK: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_FALLBACK }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_API_KEY: ${{ env.LOPU_SELECTED_OPENAI_API_KEY || secrets.OPENAI_API_KEY }}
         run: |
           set -euo pipefail
           analysis="$ANALYSIS_DIR/out/analysis.md"
@@ -7964,7 +7964,7 @@ jobs:
           && steps.admission.outputs.current == 'true'
           && steps.merge.outputs.conflicted == 'true'
         env:
-          AGENT_BACKEND: ${{ needs.model_config.outputs.agent_backend }}
+          AGENT_BACKEND: ${{ env.LOPU_SELECTED_BACKEND || needs.model_config.outputs.agent_backend }}
           HAS_CLAUDE_CREDENTIAL: ${{ secrets.THINGTIME_CI_ROUTER_SECRET != '' || secrets.CLAUDE_CODE_OAUTH_TOKEN_THINGTIME != '' || secrets.ANTHROPIC_API_KEY != '' || secrets.CLAUDE_CODE_OAUTH_TOKEN != '' || secrets.ANTHROPIC_API_KEY_FALLBACK != '' || secrets.CLAUDE_CODE_OAUTH_TOKEN_FALLBACK != '' }}
           HAS_OPENAI_CREDENTIAL: ${{ secrets.THINGTIME_CI_ROUTER_SECRET != '' }}
         run: |
@@ -8392,7 +8392,7 @@ jobs:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           ANTHROPIC_API_KEY_FALLBACK: ${{ secrets.ANTHROPIC_API_KEY_FALLBACK }}
           CLAUDE_CODE_OAUTH_TOKEN_FALLBACK: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_FALLBACK }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_API_KEY: ${{ env.LOPU_SELECTED_OPENAI_API_KEY || secrets.OPENAI_API_KEY }}
           GRAPHIFY_RESET: ${{ steps.merge.outputs.graphify_reset }}
         run: |
           set -euo pipefail
@@ -8615,12 +8615,12 @@ jobs:
           PRIMARY_CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           FALLBACK_ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY_FALLBACK }}
           FALLBACK_CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_FALLBACK }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          AGENT_BACKEND: ${{ needs.model_config.outputs.agent_backend }}
-          CODEX_MODEL: ${{ needs.model_config.outputs.codex_model || 'gpt-5.6-terra' }}
+          OPENAI_API_KEY: ${{ env.LOPU_SELECTED_OPENAI_API_KEY || secrets.OPENAI_API_KEY }}
+          AGENT_BACKEND: ${{ env.LOPU_SELECTED_BACKEND || needs.model_config.outputs.agent_backend }}
+          CODEX_MODEL: ${{ env.LOPU_SELECTED_MODEL || needs.model_config.outputs.codex_model }}
           # Keep the post-resolution semantic refresh on the same trusted,
           # administrator-selected primary model as the conflict edit itself.
-          PREFERRED_MODEL: ${{ needs.model_config.outputs.primary_model }}
+          PREFERRED_MODEL: ${{ env.LOPU_SELECTED_MODEL || needs.model_config.outputs.primary_model }}
         run: |
           set -euo pipefail
           unset ANTHROPIC_API_KEY
@@ -8732,13 +8732,13 @@ jobs:
           fi
           if [ "$backend" = openai ]; then
             unset GRAPHIFY_CLAUDE_CLI_MODEL
-            case "${CODEX_MODEL:-gpt-5.6-terra}" in
-              gpt-5.6-terra|gpt-5.6-sol)
-                graphify_model_args=(--model "$CODEX_MODEL")
-                export GRAPHIFY_OPENAI_MODEL="$CODEX_MODEL"
-                ;;
-              *) echo "::warning::Unexpected Lopu Codex model; Graphify will use its OpenAI default."; unset GRAPHIFY_OPENAI_MODEL ;;
-            esac
+            if [[ "${CODEX_MODEL:-}" =~ ^[a-z0-9][a-z0-9.-]{0,100}$ ]]; then
+              graphify_model_args=(--model "$CODEX_MODEL")
+              export GRAPHIFY_OPENAI_MODEL="$CODEX_MODEL"
+            else
+              echo "::error::No valid administrator-selected OpenAI model for Graphify."
+              exit 1
+            fi
           fi
 
           # Mechanical guard for graph collapse. `graphify update` has its own
