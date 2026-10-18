@@ -22,8 +22,8 @@ test('the desktop window always opens the packaged renderer while the selected e
 	assert.doesNotMatch(mainSource, /createWindow\(settings\.selectedEndpoint\.url\)/u);
 	assert.doesNotMatch(mainSource, /mainWindow\.loadURL\(target\.url\)/u);
 	assert.match(mainSource, /process\.env\.THINGTIME_API_FALLBACK_ORIGIN = new URL\(endpointUrl\)\.origin/u);
-	assert.match(mainSource, /await session\.defaultSession\.clearCache\(\)/u);
-	assert.ok(startup.indexOf('session.defaultSession.clearCache()') < startup.indexOf('initializeDesktopSettings()'));
+	assert.match(mainSource, /await session\.fromPartition\(rendererPartition\(\)\)\.clearCache\(\)/u);
+	assert.ok(startup.indexOf('startNitroServer()') < startup.indexOf('session.fromPartition(rendererPartition()).clearCache()'));
 	assert.ok(startup.indexOf('initializeDesktopSettings()') < startup.indexOf('startNitroServer()'));
 	assert.match(routesSource, /cache: init\.cache \|\| 'no-store'/u);
 	assert.match(lopuSource, /as=\{RouterLink\} to=\{link\.href\}/u);
