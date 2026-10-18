@@ -25,7 +25,7 @@ The final documentation semantic-index refresh returned incomplete output and wa
 
 ## Public contracts
 
-`api.capabilities` 1.2.0; `api.ai-chatgpt-plan` 1.1.0; `api.ai-models` 1.7.0; `api.lopu-chats-reply` 1.20.0. Setup and key ownership are documented in README and acceptance cases in TESTING.
+`api.capabilities` 1.2.0; `api.ai-chatgpt-plan` 1.1.1; `api.ai-models` 1.7.0; `api.lopu-chats-reply` 1.20.0. Setup and key ownership are documented in README and acceptance cases in TESTING.
 
 ## References
 
@@ -55,3 +55,12 @@ Merged validation: Electron 163/163, selected API proxy 19/19, capability contra
 The current GitGuardian check remains red. Its detailed finding identifies existing incident `38239271`, commit `04deb95c85991f78513c28ebf7459c9aa39bcb83`, `remix/scripts/verify-password-manager.mjs:17`, matching the synthetic fixture already present on main. No credential value is reproduced here. The check has not been dismissed or marked successful.
 
 Independent merge review found and resolved two integration regressions: all asynchronous desktop services now share one quit barrier, and desktop account information uses the running local API or pinned remote authority instead of pending saved settings. These implementations match the already verified integration build; regression tests cover shutdown ordering/failure and pending endpoint changes.
+
+
+## 2026-10-18 Characters and CPU telemetry integration
+
+Merged main `31b51e153` (Characters PR #1039 and CPU telemetry PR #1040), retaining the ChatGPT route, runtime, streaming proxy, session partitions, HMAC identity and bundled database work. Source conflicts were limited to the auth feature map, release notes and `test:unit`; both Character and ChatGPT suites remain included. Generated graph conflicts use one consistent prior snapshot followed by the canonical incremental refresh.
+
+Independent auth review identified a request-override edge: a captured `X-Thingtime-Character` could pin credential management after the session selected another identity. The plan-management route now refuses that override before identity resolution or storage. Ordinary current-session authentication remains the authority for pending-operation revalidation. This compatible correction is published as `api.ai-chatgpt-plan` 1.1.1 with a regression covering begin, move, import and status requests.
+
+Focused validation: Electron 163/163; capability contracts 101/101; ChatGPT plan 40 passed with one opt-in Mongo integration test skipped (no test Mongo binary/port supplied); Characters 13/13; auth introspection 10/10; streaming proxy 19/19; native MenuBarTelemetry 4/4. The first parallel Electron run hit `kill EPERM` in its unchanged process-group cleanup fixture; no fixture processes remained, its isolated retry passed, and the full retry passed. No Electron source changed in this merge. These checks do not substitute for the ongoing real ChatGPT consent/inference acceptance or a final installed rebuild.

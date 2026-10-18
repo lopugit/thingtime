@@ -12,6 +12,10 @@ export const createChatGPTPlanHandlers = (dependencies = defaults) => {
 		if (request.headers.get('Sec-Fetch-Site') === 'cross-site' ||
 			(mutation && request.headers.get('Origin') !== new URL(request.url).origin))
 			return json({ ok: false, error: 'Use the same Thingtime origin.' }, { status: 403, headers: PRIVATE });
+		// Revalidation must observe the session's current identity rather than a
+		// request override captured before an OAuth callback or connection move.
+		if (request.headers.has('X-Thingtime-Character'))
+			return json({ ok: false, error: 'Manage ChatGPT connections using the current session identity.' }, { status: 409, headers: PRIVATE });
 		const user = await dependencies.getCurrentUser(request);
 		if (!user) return json({ ok: false, error: 'Sign in to Thingtime first.' }, { status: 401, headers: PRIVATE });
 		const expectedUser = request.headers.get('X-Thingtime-Expected-User');

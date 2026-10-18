@@ -683,6 +683,15 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     responseExamples: [{ status: 403, description: 'Wrong identity.', body: { ok: false, error: 'This workflow is not authorized for iOS releases.' } }]
   }),
   endpoint({
+    id: 'auth-characters', contractVersion: '1.0.0', featureVersion: '1.0.0', group: 'auth', title: 'Characters', endpoint: '/api/v1/auth/characters',
+    summary: 'Create private proxy identities and select a session Character.',
+    detail: 'GET pages owner-only Characters with cursor; direct Character sessions see only their own principal. GET inspect=<characterId> discloses the owner only to administrators. POST create requires a stable UUID requestId, displayName and loginMode (switch, inherit, password). POST select sets the session default; characterId:null restores the authenticated principal. Rename and disable/enable require the owner. X-Thingtime-Character selects an owned identity per request for full sessions only. Character logins cannot become their owner. Public profiles never include ownership. Tier entitlements follow the owner; content and storage usage remain individually accounted. Subspace membership is independent.',
+    methods: ['GET', 'POST'], auth: { mode: 'session-or-bearer', description: 'Full account session; scoped credentials cannot manage Characters.' },
+    steps: ['Open Settings → Characters and choose a display name and login method.', 'Create with a stable requestId, then select a session identity or use Post as.', 'Owners manage their roster; administrators can inspect a Character ID.'],
+    requestExamples: [{ name: 'Session identity', description: 'Select an owned Character.', method: 'POST', body: { operation: 'select', characterId: '<character-id>' } }],
+    responseExamples: [{ status: 401, description: 'Authentication required.', body: { ok: false, error: 'Sign in to use Characters' } }]
+  }),
+  endpoint({
     id: 'passwords', contractVersion: '1.2.0', featureVersion: '1.2.0', group: 'auth', title: 'Private password manager', endpoint: '/api/v1/passwords',
     summary: 'Manage encrypted credentials using the current full account session.',
     detail: 'GET pages metadata with an opaque cursor. Optional q performs a case-insensitive literal substring search of all owned titles before pagination; trim surrounding whitespace, keep q on every page, and reset the cursor when q changes. Search never decrypts field values. POST export returns up to 50 decrypted entries per page for an explicit backup. POST catalog pages native AutoFill names, exact HTTPS domains and public passkey identifiers without secret values. POST read unlocks one owned entry through the live session; save uses a stable id, writeId and revision; delete leaves a value-free tombstone. All POST requests require expectedOwnerId. Values never enter generic Thing APIs or history. Server-assisted recovery preserves entries after password reset. Version 1.1 removes arbitrary editor/import size and count caps and preserves extended 1PUX data. Full-session file-start, file-parts, file-complete, file-list, file-download, file-delete and file-abort manage encrypted attachment Things by entryId. Metadata and file keys are account-vault encrypted; object storage receives authenticated ciphertext frames. Generic attachment routes refuse password-purpose objects. Private upload permission and storage accounting still apply.',
@@ -692,7 +701,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     responseExamples: [{ status: 200, description: 'Private metadata.', body: { ok: true, entries: [], nextCursor: null, configured: true } }]
   }),
   endpoint({
-    id: 'drafts', contractVersion: '1.0.0', featureVersion: '1.0.0', group: 'things', title: 'Private drafts and templates', endpoint: '/api/v1/drafts',
+    id: 'drafts', contractVersion: '1.1.0', featureVersion: '1.1.0', group: 'things', title: 'Private drafts and templates', endpoint: '/api/v1/drafts',
     summary: 'Autosave unfinished Things and posts to the current account; reuse post templates.',
     detail: 'Owner-only, quota-accounted snapshots. Writes use an expected actor, revision and stable write id. Files stay private and durable until the draft is discarded or published. Templates are copied into fresh working drafts and never consumed. Generic Thing CRUD cannot access this protected kind.',
     auth: { mode: 'session-or-bearer', description: 'Full account session; app tokens and personal access tokens are refused.' },
@@ -3012,10 +3021,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     responseExamples: [{ status: 200, description: 'Provider sync statuses; never credentials or provider error bodies.', body: { ok: true, report: [] } }]
   }),
   endpoint({
-    id: 'ai-chatgpt-plan', contractVersion: '1.1.0', featureVersion: '1.1.0',
+    id: 'ai-chatgpt-plan', contractVersion: '1.1.1', featureVersion: '1.1.1',
     group: 'lopu', title: 'ChatGPT plan connections', endpoint: '/api/v1/ai/chatgpt-plan',
     summary: 'Connects the current account to ChatGPT plan usage on an explicitly configured local or self-hosted runtime.',
-    detail: 'Version 1.1.0 adds explicit encrypted moves between configured runtimes. GET returns redacted accounts, models, session-bound attempts, canAuthorize and storageMode. POST begin starts PKCE loopback authorization when enabled; cancel stops it; select-model chooses a discovered model; refresh-models retries model discovery after import or a provider outage; disconnect revokes and clears credentials. prepare-import issues an expiring owner/origin/session-bound recipient code. move-account seals one connection to that recipient and durably stops source use before returning ciphertext; retrying the same move recovers its receipt. import-account consumes the package once using the destination host identity. Tokens never appear in plaintext responses. MongoDB storage is encrypted and bound to the account backend; generic data-plane selection never relocates credentials. Remote GUI users connect locally then move to their self-hosted runtime. Personal account/session checks, same-origin JSON and selected-origin capability negotiation apply; failures never switch to API billing.',
+    detail: 'Version 1.1.1 refuses X-Thingtime-Character overrides so pending credential operations revalidate the current session identity. Version 1.1.0 adds explicit encrypted moves between configured runtimes. GET returns redacted accounts, models, session-bound attempts, canAuthorize and storageMode. POST begin starts PKCE loopback authorization when enabled; cancel stops it; select-model chooses a discovered model; refresh-models retries model discovery after import or a provider outage; disconnect revokes and clears credentials. prepare-import issues an expiring owner/origin/session-bound recipient code. move-account seals one connection to that recipient and durably stops source use before returning ciphertext; retrying the same move recovers its receipt. import-account consumes the package once using the destination host identity. Tokens never appear in plaintext responses. MongoDB storage is encrypted and bound to the account backend; generic data-plane selection never relocates credentials. Remote GUI users connect locally then move to their self-hosted runtime. Personal account/session checks, same-origin JSON and selected-origin capability negotiation apply; failures never switch to API billing.',
     auth: { mode: 'session', description: 'Personal, non-temporary Thingtime account; same-origin JSON mutations.' },
     methods: ['GET', 'POST'],
     steps: ['Negotiate api.ai-chatgpt-plan 1.1.0.', 'POST begin and open the returned authorization URL on the runtime computer.', 'Poll GET for verified completion, then choose the account model in settings and its provider in Lopu.'],
@@ -3335,7 +3344,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'root-data',
-    featureVersion: '1.0.1', contractVersion: '1.0.1',
+    featureVersion: '1.1.0', contractVersion: '1.1.0',
     group: 'root',
     title: 'Root data',
     endpoint: '/api/root-data',
@@ -3659,11 +3668,13 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'auth-me',
+    contractVersion: '1.1.0',
+    featureVersion: '1.1.0',
     group: 'auth',
     title: 'Current user',
     endpoint: '/api/v1/auth/me',
     summary: 'Returns the authenticated public user or null.',
-    detail: 'Use this route for lightweight auth checks. It supports the same httpOnly cookie and bearer token model as the rest of the API.',
+    detail: 'Use this route for lightweight auth checks. It supports the same httpOnly cookie and bearer token model as the rest of the API. Returns the selected session Character when present; full sessions may choose an owned identity with X-Thingtime-Character after negotiating api.auth-characters 1.0.0.',
     auth: {
       mode: 'optional',
       description: 'Cookie or Authorization: Bearer token optional. Anonymous callers receive user: null.'
@@ -4465,8 +4476,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'login',
-    featureVersion: '1.1.0',
-    contractVersion: '1.1.0',
+    featureVersion: '1.2.0',
+    contractVersion: '1.2.0',
     group: 'auth',
     title: 'Login',
     endpoint: '/api/v1/login',
@@ -6050,14 +6061,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 	}),
 	endpoint({
 		id: 'attachment-content',
-		contractVersion: '1.12.0',
-		featureVersion: '1.12.0',
+		contractVersion: '1.13.0',
+		featureVersion: '1.13.0',
 		group: 'attachments',
 		title: 'Read attachment content',
 		endpoint: '/api/v1/attachments/content',
 		summary: 'Authorizes a stable same-origin attachment URL and redirects to short-lived private S3 content.',
 		detail:
-			'Standalone file-purpose attachments use the same exact-owner access checks as saved recordings, including moderation, object-version and storage gates. ' +
+			'Optional character=<id> selects an owned Character for media elements; unauthorized identities return 401. Standalone file-purpose attachments use the same exact-owner access checks as saved recordings, including moderation, object-version and storage gates. ' +
 			'Owner-created service workspaces add live membership-based read/comment access to enrolled records and the bound webpage; customer and B2B users are limited to their linked customer and properties. Inherited comments/media recheck membership on every request; app/PAT scopes, custom endpoints, explicit private ACL changes and moderation remain enforced. Inherited comment media also enforce moderation on every intervening ancestor, including comments on media. ' +
 			'Unlisted post/page/comment media opens by canonical attachment id without a secret key. Current parent ACL, moderation and storage gates are rechecked on every request. Saved profile discoveries remain tied to the account or anonymous browser identity; IP metadata never grants access. ' +
 			'Comment galleries follow canonical visibility inheritance through parent comments and media items, including after copying. ' +
@@ -9255,8 +9266,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // owner-library files. The combined 1.27.0 contract adds shared
     // Thing discussions, linked references, display-metadata renames and
     // optional cursor-backed rich comment projections.
-    featureVersion: '1.33.2',
-    contractVersion: '1.33.2',
+    featureVersion: '1.34.0',
+    contractVersion: '1.34.0',
     group: 'things',
     // 1.33.1: placement and folder deletion share transactional ancestry fences.
     // 1.33.2: protected library display-title renames commit title-only history.
@@ -9807,8 +9818,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // the author's USER flair in the post's subspace (additive)
     // 1.4.0 / contract 1.3.0: subspaceMod.reportCount — open reports against a
     // subspace post, for that subspace's moderators only (S5, additive)
-    featureVersion: '1.8.0',
-    contractVersion: '1.8.0',
+    featureVersion: '1.9.0',
+    contractVersion: '1.9.0',
     group: 'things',
     title: 'Comment on post',
     endpoint: '/api/v1/things/comment',

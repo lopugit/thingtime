@@ -104,3 +104,19 @@ test('transfer requests reject oversized packages before invoking runtime storag
   const response = await fixture.handlers.action({ request: req });
   assert.ok(response.status >= 400); assert.equal(fixture.count(), 0);
 });
+
+
+test('Character overrides cannot pin credential management across session selection changes', async () => {
+  const fixture = setup();
+  fixture.dependencies.getCurrentUser = async () => { throw new Error('Override must be refused before identity resolution'); };
+  fixture.dependencies.getRuntime = () => { throw new Error('Override must not reach account storage'); };
+  for (const action of ['begin', 'move-account', 'import-account']) {
+    const response = await fixture.handlers.action({ request: request(action, { 'X-Thingtime-Character': 'owner' }) });
+    assert.equal(response.status, 409);
+    assert.match(response.headers.get('Cache-Control')!, /no-store/);
+  }
+  const response = await fixture.handlers.loader({ request: new Request('https://runtime.test/api/v1/ai/chatgpt-plan', {
+    headers: { 'X-Thingtime-Character': '' }
+  }) });
+  assert.equal(response.status, 409);
+});

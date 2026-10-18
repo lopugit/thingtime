@@ -76,6 +76,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-18 — Integrate Characters and CPU telemetry main updates; fence ChatGPT credential management to the current session identity so request overrides cannot survive a later Character switch. Publish the compatible `api.ai-chatgpt-plan` 1.1.1 correction.
+
 - 2026-10-18 — Integrate the merged agent-browser manager with ChatGPT runtime packaging, isolated proxy guards and supervised desktop restart. Both MongoDB and browser resources remain required in new builds. [PR #1034 validation](../PRs/1034-chatgpt-plan-usage-local-runtime-and-encrypted-connection-moves.md).
 
 - 2026-10-18 — Replace public desktop database connection-string hashes with keyed identifiers while preserving pre-upgrade renderer sessions through an encrypted migration alias.
@@ -83,6 +85,9 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 - 2026-10-18 — Desktop builds now include pinned MongoDB Community Server, source and notices for optional local execution; fresh profiles need no separate database install, while existing selections/data are preserved. Session recovery and installed acceptance remain in progress in [PR #1034](../PRs/1034-chatgpt-plan-usage-local-runtime-and-encrypted-connection-moves.md).
 
 - 2026-10-18 — **Codex (AI)**: Add ChatGPT plan consent and Lopu execution, optional Electron local API/authenticated MongoDB setup, encrypted connection moves between self-hosted runtimes, and isolated endpoint sessions with pinned streaming proxy requests. [Scope and validation](../PRs/1034-chatgpt-plan-usage-local-runtime-and-encrypted-connection-moves.md).
+- 2026-10-18 — **Codex (AI)**: Convert Mac menu bar process CPU counters with the host Mach timebase. Apple Silicon readings now agree with macOS CPU seconds; regression coverage compares the collector conversion with independent `getrusage` readings.
+- 2026-10-18 — **Codex (AI)**: Add privately owned Characters with independent logins, inherited tier entitlements, session identity selection and Post as controls for posts/comments. Preserve principal account switching and independent private-subspace membership; add isolated real-API/browser acceptance. Capture early editor input during initialization. See [PR 1039 verification](../PRs/1039-characters-private-proxy-accounts.md).
+
 - 2026-10-18 — **Codex (AI)**: Give installed Device scripts pages a centered, padded Builder container. Remove fixture-provided layout so browser acceptance catches missing page spacing.
 
 - 2026-10-18 — **Codex (AI)**: Add editable agent tasks, todos and progress,
