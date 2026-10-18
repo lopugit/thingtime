@@ -80,7 +80,10 @@
   background: var(--surface-solid);
 }
 .processes-window .settings-titlebar {
+  min-height: 44px;
+  padding: 0 18px 0 80px;
   gap: 12px;
+  justify-content: space-between;
 }
 .processes-window .settings-titlebar .process-checkbox {
   margin-left: auto;
@@ -99,6 +102,9 @@
   top: 0;
   background: var(--surface-solid);
   z-index: 1;
+}
+.activity-process-table {
+  min-width: 0;
 }
 .activity-process-table td:first-child {
   overflow-wrap: anywhere;
