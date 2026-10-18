@@ -10,6 +10,10 @@ worktree credentials. `agentTesting.ts` and `apiFallback.ts` fence the backend;
 commands live in [agent-browsers.md](../agent-browsers.md). Run the
 `electron/test/agent-browser-*.test.cjs` tests and full-app two-agent acceptance
 when changing allocation, networking, startup or cleanup.
+`runtime/prepare-native.cjs` replaces Mac-traced native packages with locked
+Linux package trees and loads them during image construction. Keep its runtime
+lock synchronized with app native dependency upgrades and exercise a packaged
+full-app launch, not only host-side module checks.
 
 ## First ten minutes in a fresh checkout or worktree
 

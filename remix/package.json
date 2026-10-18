@@ -236,7 +236,7 @@
     "react-sticky-el": "^2.1.0",
     "react-visibility-sensor": "^5.1.1",
     "rxjs": "^7.8.1",
-    "sharp": "^0.35.4",
+    "sharp": "^0.35.5",
     "sshpk": "^1.18.0",
     "tinygradient": "^1.1.5",
     "tldts": "^7.4.10",

@@ -19,7 +19,11 @@ The initial download and image build need internet access on the host.
 **Install Chromium runtime** builds the shipped pinned Playwright Chromium,
 MongoDB and packaged Thingtime client/server. Only those packaged build outputs
 enter the image; worktrees, `.env` files, device settings and credentials do not.
-The MongoDB server and Linux bcrypt addon run as the image's non-root task user.
+The MongoDB server and Linux native addons run as the image's non-root task user.
+Image construction replaces the Mac-traced bcrypt, Sharp/libvips, resvg and
+cbor-extract packages with the same locked versions installed for Linux, then
+loads them through the app resolver. Keep the runtime lock in sync when updating
+these app dependencies; version drift or an unloadable binary fails the build.
 Internal dependency links are copied; links escaping the build are refused.
 
 Each claim starts a separate container with a read-only root, no capabilities,

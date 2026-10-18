@@ -9,11 +9,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends nftables libcur
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev --ignore-scripts && npm rebuild bcrypt --build-from-source && npm cache clean --force
 COPY --from=database /usr/bin/mongod /usr/local/bin/mongod
-COPY install.mjs runtime.cjs application.cjs browser-driver.cjs ./
+COPY install.mjs runtime.cjs application.cjs browser-driver.cjs prepare-native.cjs ./
 COPY --chown=pwuser:pwuser app /opt/thingtime-app
-# Nitro traces the host's native bcrypt binary. Use the Linux binary built from
-# the same pinned package instead; no host-native addon executes in the task.
-RUN if test -f /opt/thingtime-app/server/index.mjs; then cp node_modules/bcrypt/lib/binding/napi-v3/bcrypt_lib.node /opt/thingtime-app/server/node_modules/bcrypt/lib/binding/napi-v3/bcrypt_lib.node; fi
+# Repair and load native packages using the app's actual module resolver.
+RUN node prepare-native.cjs
 ARG BROWSER=chromium
 ARG BUILD_ID=playwright-1.64.0
 RUN node install.mjs "$BROWSER" "$BUILD_ID"

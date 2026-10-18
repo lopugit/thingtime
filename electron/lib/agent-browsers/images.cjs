@@ -5,7 +5,7 @@ const { randomUUID } = require('node:crypto');
 const { EventEmitter } = require('node:events');
 
 const ID = /^[a-f0-9-]{36}$/;
-const FILES = ['Dockerfile', '.dockerignore', 'package.json', 'package-lock.json', 'install.mjs', 'runtime.cjs', 'application.cjs', 'browser-driver.cjs', 'seccomp.json'];
+const FILES = ['Dockerfile', '.dockerignore', 'package.json', 'package-lock.json', 'install.mjs', 'runtime.cjs', 'application.cjs', 'browser-driver.cjs', 'prepare-native.cjs', 'seccomp.json'];
 
 async function copyApplication(source, destination, { signal } = {}) {
   signal?.throwIfAborted();

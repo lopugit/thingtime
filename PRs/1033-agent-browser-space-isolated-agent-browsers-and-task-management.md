@@ -47,8 +47,9 @@ use supported sign-in/user-presence flows; private keys are never exported.
 - Restricted device defaults persisted through reload. Task overrides persisted
   through the normal API with owner/update CAS. Acceptance restored isolated
   defaults and released all owned claims/sessions and the native test copy.
-- 124 Electron tests, 108 focused backend/capability/suite tests and 40 Settings
-  tests pass. Lint passes. Full TypeScript checking reports 91 existing errors
+- 129 Electron tests, 108 focused backend/capability/suite tests and 40 Settings
+  tests pass. The main password-search merge also passes 79 focused password,
+  capability and fallback tests. Lint passes. Full TypeScript checking reports 91 existing errors
   outside changed files; it is not a clean typecheck.
 - Independent source review found no additional actionable issues after fixes
   for cleanup failure handling, selected API origin scoping and ownership.
@@ -86,6 +87,11 @@ Markdown and other non-code semantic coverage is partial, not fully refreshed.
 - Staged container resources separately so Electron packaging retains the shared
   native browser driver in the app archive. Signed and unsigned verification now
   exercise packaged imports with the actual Electron runtime before installation.
+- Replaced all four Mac-traced native package families with locked Linux trees
+  during image construction. The packaged server eagerly imports Sharp, so a
+  macOS-only trace otherwise exits at startup. Image construction now checks
+  exact versions and loads packages from the app resolver. Sharp is updated to
+  0.35.5 and the runtime tar override to 7.5.22; the runtime audit is clean.
 
 ## Boundaries
 

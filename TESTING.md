@@ -26,6 +26,10 @@
       and Puppeteer from the app archive and verify the separate container
       resources. Launch the installed app; a valid signature alone cannot catch
       a runtime module accidentally excluded by `extraResources`.
+- [ ] Build and launch the full container from the packaged Mac app. Its traced
+      bcrypt, Sharp/libvips, resvg and cbor-extract dependencies must load their
+      locked Linux builds through the app resolver. A version mismatch or missing
+      native binary fails image installation before it can be claimed.
 
 - [ ] A daemon disconnect during release reports failure and retains the claim;
       after recovery, release removes only the verified owned resources.

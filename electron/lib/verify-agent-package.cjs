@@ -20,7 +20,7 @@ function verifyAgentPackage(appPath, run = spawnSync, { required = false } = {})
       load('./lib/agent-browsers/runtime/browser-driver.cjs');
       await import(load.resolve('puppeteer-core'));
       await import(load.resolve('@puppeteer/browsers'));
-      for (const file of ['Dockerfile', 'runtime.cjs', 'application.cjs', 'browser-driver.cjs', 'package.json', 'package-lock.json', 'seccomp.json', 'install.mjs']) {
+      for (const file of ['Dockerfile', 'runtime.cjs', 'application.cjs', 'browser-driver.cjs', 'prepare-native.cjs', 'package.json', 'package-lock.json', 'seccomp.json', 'install.mjs']) {
         accessSync(${JSON.stringify(path.join(resources, 'agent-browser-runtime'))} + '/' + file);
       }
       accessSync(${JSON.stringify(path.join(resources, 'agent-browser.mjs'))});

@@ -77,6 +77,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   a Mac browser manager with task claims/live viewing, verified Chrome/Chromium
   copies, device/task network controls and a private full-app container runtime.
   Isolated authentication/database configuration refuses production fallback.
+  Packaged-container builds replace Mac-native libraries with verified Linux
+  dependencies and fail installation on binary/version mismatches.
   Setup is documented in [the agent browser runbook](../docs/agent-browsers.md);
   verification and fixes are recorded in [PR #1033](../PRs/1033-agent-browser-space-isolated-agent-browsers-and-task-management.md).
 
