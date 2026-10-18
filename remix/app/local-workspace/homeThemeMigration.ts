@@ -1,4 +1,3 @@
-import { MAX_SAVED_THEMES } from '../theme/savedTheme';
 import { isDataPlane } from '../utils/dataPlane';
 import { parseThemeWrite } from '../api/utils/themes/themeSyncContract';
 import { parseThemeSelectionWrite } from '../api/utils/themes/themeSelectionContract';
@@ -183,8 +182,6 @@ export async function migrateSelectedThemesHome(
 			}
 			if (reason) result.issues.push({ kind: 'selection', id: ACCOUNT_THEME_SELECTION, reason });
 		}
-		if ((await home.list<LocalThing>('things')).filter((row) => isTheme(row.value)).length > MAX_SAVED_THEMES)
-			throw new WorkspaceError('LOCAL_QUOTA', 'Moving themes would exceed the home workspace theme limit. All source records were preserved.', 413);
 		if (result.moved.length || result.deduplicated.length || result.selectionMoved) {
 			await invalidateCatalogue(home);
 			await invalidateCatalogue(selected);

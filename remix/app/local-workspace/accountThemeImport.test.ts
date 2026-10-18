@@ -8,7 +8,6 @@ import { WorkspaceDatabase } from './storage';
 import { accountImportSupported } from './accountImport';
 import { exportAccountThings } from './accountExport';
 import { parseTransfer, serializeTransfer, type ThingTransfer } from '../utils/thingTransfer/format';
-import { MAX_SAVED_THEMES } from '../theme/savedTheme';
 const home = { kind: 'account', ownerId: 'owner', origin: 'https://theme-import.test', dataPlane: 'home' } as const;
 const lease = { assertCurrent() {}, onInvalidate: () => () => {} };
 const bundle = (folder = true): ThingTransfer => ({
@@ -143,16 +142,27 @@ test('only background sync waits for the imported folder and lost creates replay
 		await f.db.close();
 	}
 });
-test('invalid themes, quota and home/custom placement conflicts roll back the whole import without generic protected queues', async () => {
+test('account imports retain more than 100 themes with only dedicated private sync intents', async (t) => {
+	const f = fixture();
+	t.after(() => f.db.close());
+	const input = bundle(false);
+	input.things = Array.from({ length: 101 }, (_, i) => ({ ...input.things[0], id: 'theme-' + i }));
+	input.roots = input.things.map(row => row.id);
+	const result = await f.sync.things.import(input);
+	assert.equal(result.roots.length, 101);
+	const list = await f.themes.list();
+	assert.equal(list.themes.length, 101);
+	assert.ok(list.themes.every(row => row.visibility === 'private' && row.syncState === 'pending'));
+	assert.equal((await f.themes.status()).length, 101);
+	assert.deepEqual(await f.sync.status(), [], 'protected content never enters the generic sender');
+});
+
+test('invalid themes and home/custom placement conflicts roll back the whole import without generic protected queues', async () => {
 	const f = fixture();
 	try {
 		const invalid = bundle();
 		invalid.things[0].crystal.ownerId = 'forged';
 		await assert.rejects(f.sync.things.import(invalid), /only a name/);
-		const tooMany = bundle(false);
-		tooMany.things = Array.from({ length: MAX_SAVED_THEMES + 1 }, (_, i) => ({ ...tooMany.things[0], id: 'theme-' + i }));
-		tooMany.roots = tooMany.things.map((row) => row.id);
-		await assert.rejects(f.sync.things.import(tooMany), /saved-theme limit/);
 		assert.deepEqual(await f.sync.things.snapshot(), []);
 		assert.deepEqual(await f.sync.status(), []);
 		assert.deepEqual(await f.themes.status(), []);

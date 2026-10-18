@@ -1,6 +1,6 @@
 import { captureThingChanges } from './thingChanges';
 import { recordLocalThingChanges } from './timeline';
-import { normalizeSavedTheme, MAX_SAVED_THEMES } from '../theme/savedTheme';
+import { normalizeSavedTheme } from '../theme/savedTheme';
 import { snapshotTransferValue } from '../utils/thingTransfer/value';
 import { isTransferTheme } from '../utils/thingTransfer/theme';
 import type { LocalThing } from './things';
@@ -71,8 +71,6 @@ export class LocalThemes {
 			const previous = input.id ? await this.read(tx, input.id) : null;
 			if (previous && input.expectedUpdatedAt && previous.updatedAt !== input.expectedUpdatedAt)
 				throw new WorkspaceError('WRITE_CONFLICT', 'This theme changed in another editor. Reload it before saving.', 409);
-			if (!previous && (await tx.list<LocalThing>('things')).filter((row) => isTransferTheme(row.value)).length >= MAX_SAVED_THEMES)
-				throw new WorkspaceError('LOCAL_QUOTA', 'This workspace has reached its saved-theme limit', 413);
 			const now = new Date(Math.max(this.options.now?.() ?? Date.now(), previous ? Date.parse(previous.updatedAt) + 1 : 0)).toISOString();
 			const row: LocalThing = {
 				...previous,

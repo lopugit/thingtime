@@ -396,9 +396,10 @@ from `remix/` alongside the existing Things suites.
 Anonymous themes use the dedicated `app/local-workspace/themes.ts` writer, with
 shared `app/theme/savedTheme.ts` normalization and portable theme validation.
 The generic local writer still rejects protected kinds. Local transfer imports
-validate and normalize themes, remap IDs and enforce the shared theme quota in
-one transaction; imports never select or publish a theme. Account theme sync and
-local Timeline integration remain outstanding (see `docs/local-workspaces.md`).
+validate and normalize themes and remap IDs in one atomic transaction; imports
+never select or publish a theme. Device admission uses browser storage capacity,
+without a fixed theme count. Dedicated account sync and device History are
+covered below; native/API acceptance remains open (see `docs/local-workspaces.md`).
 
 
 ## Anonymous Action execution
@@ -845,3 +846,16 @@ Normal ZIP file selection uses `decodeTransferArchiveBlob` in
 Download uses `encodeTransferArchiveBlob` and freezes caller-owned input before
 async work. Run transfer/archive regressions, `transferBlobs.test.ts`, Things and
 local-workspace suites. See [coverage and remaining buffers](../local-workspaces.md#blob-zip-import-and-download-assembly--2026-10-18).
+
+
+## Device catalogue admission
+
+`local-workspace/themes.ts`, `algorithms.ts` and `things.ts` no longer couple
+local save/import admission to server catalogue counts. `accountThemes.ts` and
+`accountAlgorithms.ts` retain all pending local content alongside validated
+remote snapshots and permit reviewed private conflict copies beyond the former
+counts. `homeThemeMigration.ts` uses the same native IndexedDB capacity and
+multi-scope atomic rollback boundary. Tests in those local-workspace families
+cover 101+ themes, 51+ profiles, reload/export, protected intents and real-class
+browser quota failure. Remote response parsing/server limits are unchanged and
+remain a separate capacity-contract audit.

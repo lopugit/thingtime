@@ -4392,3 +4392,36 @@ Fresh checks at the implementation checkpoint: **4 draft-validator tests passed*
 replace final-head screenshots or normal-import acceptance. Exact-commit CodeQL
 is running; GitHub still exposes the older PR head and preview. No merge, manual
 deployment or content publication was performed.
+
+
+## Device catalogue capacity checkpoint — 2026-10-18
+
+Valid local saves, imports, retained account snapshots and reviewed copies could
+fail solely because the device already held 100 themes or 50 algorithms. These
+local count checks are removed, including the home-theme migration check. The
+normal validator, private defaults, scoped dedicated writers, selection and sync
+fences remain. Platform storage exhaustion still rolls back the full transaction
+with a clear 507 failure. No remote contract, endpoint or authorization changes.
+
+Regression coverage exceeds both former thresholds through canonical import,
+save/edit, reopen/export, hydration and private conflict-copy paths. Account
+imports queue only dedicated theme intent. Migration transfers the theme and its
+selection after the old threshold; injected native-class storage failures retain
+both ledgers and source content. Remote catalogue contracts and native acceptance
+remain open; this is device-capacity progress, not full goal completion.
+
+The browser-manager acceptance chat has completed and released its test sessions.
+The installed native app remains in use by the menu-bar component work, so this
+task has not taken over its window or claimed another task's browser. The socket
+connection is recovered; a separate task registration/claim and current-branch
+native screenshots still need acceptance. No permissive fallback was launched.
+
+
+Local verification: **55 focused tests passed**, including partial-import storage
+failure and retry. The broader run passed **696 workspace tests and 4 offline-shell
+checks**, with **72 opt-in native/API tests skipped**; the final additional quota
+case passed in the focused run. The client/platform/embed/draft/offline build
+passed with 250 verified assets (22,768,623 bytes). Changed TypeScript lint has no
+errors and two existing warnings. The typecheck ratchet reports 91 diagnostics
+against its older 89-error baseline; comparison with the prior implementation is
+recorded separately. No native or deployed acceptance is claimed for this change.

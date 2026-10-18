@@ -12265,3 +12265,14 @@ Local results do not establish current-head CI or deployed acceptance.
       conversion offline, check progress/cancel/output and reopen the saved
       Component. Verify opaque-origin message refusals, worker CSP and complete
       offline assets alongside the final no-login render/export/import fixture.
+
+
+### Device theme and algorithm catalogue capacity — 2026-10-18
+
+- [x] Import more than 100 themes and 50 algorithms, save/edit another item and cold reopen; retain canonical exports and the active/built-in selection.
+- [x] Hydrate a validated remote catalogue alongside 100 pending device themes or 50 pending profiles without losing local changes. Preserve private conflict copies beyond those counts and do not send them implicitly.
+- [x] Import 101 account themes through their dedicated private intent adapter; protected content never enters the generic sender.
+- [x] Move a selected-plane theme into a home catalogue already containing 100 themes; preserve selection and source cleanup atomically.
+- [x] Inject browser `QuotaExceededError` after partial import writes and during home migration; verify status 507, exact rollback of content/selection/intents/usage and retry or continued independent editing.
+- [ ] Repeat these save/import/copy/migration paths in this branch's isolated native browser at desktop, 390px and 320px, scrolling the whole catalogue and opening the relevant editor/review controls.
+- [ ] Audit remote catalogue pagination/capacity and its semantic API contracts separately; this increment does not remove server limits or mark the full capacity matrix complete.

@@ -22,9 +22,8 @@ import { serializeTransfer, parseTransfer, validateTransfer, transferAnnotations
 import { snapshotTransferValue } from '../utils/thingTransfer/value';
 import { importedThingCrystal, orderTransferImports } from '../utils/thingTransfer/importContent';
 import { algorithmTransferContent, isTransferAlgorithm, validateTransferAlgorithm } from '../utils/thingTransfer/algorithm';
-import { MAX_SAVED_ALGORITHMS } from '../api/utils/algorithms/algorithmContent';
 import { isTransferTheme, validateTransferTheme } from '../utils/thingTransfer/theme';
-import { normalizeSavedTheme, MAX_SAVED_THEMES } from '../theme/savedTheme';
+import { normalizeSavedTheme } from '../theme/savedTheme';
 import { type WorkspaceDatabase, WorkspaceError, type WorkspaceLease, type WorkspaceScope, type WorkspaceTransaction } from './storage';
 
 export type LocalThing = TransferThing & { createdAt: string; updatedAt: string; revision: number; localSubmission?: string };
@@ -501,8 +500,6 @@ export class LocalThings {
 		signal?.throwIfAborted();
 		await this.transaction('readwrite', async tx => {
 			signal?.throwIfAborted();
-			if (importedAlgorithms.length && importedAlgorithms.length + (await tx.list<LocalThing>('things')).filter(row => isTransferAlgorithm(row.value)).length > MAX_SAVED_ALGORITHMS) fail('LOCAL_QUOTA', 'This import exceeds the algorithm limit', 413);
-			if (importedThemes.length && importedThemes.length + (await tx.list<LocalThing>('things')).filter(row => isTransferTheme(row.value)).length > MAX_SAVED_THEMES) fail('LOCAL_QUOTA', 'This import exceeds the saved-theme limit', 413);
 			// All IDs exist before relationship checks, including forward refs.
 			for (const row of rows) await tx.put('things', row.id, row);
 			for (const row of rows) {

@@ -7,7 +7,6 @@ import { WorkspaceDatabase } from './storage';
 import { applyEventsToWeights, emptyWeights } from '../api/utils/things/feedRanking';
 import { validateTransfer } from '../utils/thingTransfer/format';
 import { algorithmTransferContent, validateTransferAlgorithm } from '../utils/thingTransfer/algorithm';
-import { MAX_SAVED_ALGORITHMS } from '../api/utils/algorithms/algorithmContent';
 
 const fixture = () => {
 	const db = new WorkspaceDatabase(new IDBFactory()); const lease = { assertCurrent() {}, onInvalidate: () => () => {} };
@@ -63,19 +62,22 @@ test('local algorithms reject publication, foreign branching and malicious trans
 	} finally { await db.close(); }
 });
 
-test('algorithm imports enforce the shared quota atomically and preserve built-in selection', async () => {
+test('algorithm imports and branching exceed the former 50-item device limit without changing selection', async () => {
 	const { db, algorithms, things } = fixture();
 	try {
 		const created = (await algorithms.create({ name: 'Original' })).algorithm;
 		const bundle = (await things.export([created.id])).manifest;
-		const rows = Array.from({ length: MAX_SAVED_ALGORITHMS }, (_, i) => ({ ...bundle.things[0], id: `copy-${i}` }));
-		await assert.rejects(things.import({ ...bundle, roots: rows.map(row => row.id), things: rows }), /algorithm limit/);
-		assert.equal((await algorithms.list()).algorithms.length, 1);
-		await algorithms.setActive('new'); assert.equal((await algorithms.list()).activeAlgorithmId, 'new');
-		await things.import({ ...bundle, roots: rows.slice(1).map(row => row.id), things: rows.slice(1) });
-		await assert.rejects(algorithms.create({ name: 'Full' }), /algorithm limit/);
-		await algorithms.remove(created.id); await algorithms.create({ name: 'Room again' });
-		assert.equal((await algorithms.list()).algorithms.length, MAX_SAVED_ALGORITHMS);
+		const rows = Array.from({ length: 51 }, (_, i) => ({ ...bundle.things[0], id: `copy-${i}` }));
+		await algorithms.setActive('new');
+		await things.import({ ...bundle, roots: rows.map(row => row.id), things: rows });
+		const branch = (await algorithms.create({ name: 'Another branch', branchFrom: created.id })).algorithm;
+		await algorithms.update({ id: branch.id, name: 'Still editable' });
+		const exported = (await things.export([branch.id])).manifest;
+		validateTransfer(exported);
+		assert.deepEqual(exported.things[0].crystal.weights, bundle.things[0].crystal.weights);
+		await db.close();
+		assert.equal((await algorithms.list()).algorithms.length, 53);
+		assert.equal((await algorithms.list()).activeAlgorithmId, 'new');
 	} finally { await db.close(); }
 });
 

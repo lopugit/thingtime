@@ -237,12 +237,9 @@ export class AccountThemeSync {
 	}
 	/** Shared private-copy writer for remote conflict review and retained device
 	 * variants. Call within the transaction that verifies the reviewed source. */
-	async copyIn(tx: WorkspaceTransaction, local: LocalThing, options: { folderId?: string | null; replaceSource?: boolean } = {}) {
+	async copyIn(tx: WorkspaceTransaction, local: LocalThing, options: { folderId?: string | null } = {}) {
 		this.lease.assertCurrent();
 		validateTransferTheme(local);
-		const count = (await tx.list<LocalThing>('things')).filter(({ value }) => isTransferTheme(value)).length;
-		const replacing = options.replaceSource && !!await tx.get('things', local.id);
-		if (count - (replacing ? 1 : 0) + 1 > MAX_SAVED_THEMES) return fail('This workspace has reached its saved-theme limit.', 'LOCAL_QUOTA', 413);
 		const id = this.uuid();
 		if ((await tx.get('things', id)) || (await tx.get(collection, id)) || (await tx.get('thing-sync', id)))
 			return fail('A new theme identity collided. Retry the copy.');
@@ -460,8 +457,6 @@ export class AccountThemeSync {
 						await tx.delete(collection, id);
 						if ((await tx.get('settings', 'active-theme')) === id) await tx.delete('settings', 'active-theme');
 					}
-				if ((await tx.list<LocalThing>('things')).filter(({ value }) => isTransferTheme(value)).length > MAX_SAVED_THEMES)
-					return fail('Retaining this catalogue exceeds the device theme limit. Device changes are preserved.', 'LOCAL_QUOTA', 413);
 				await tx.put('settings', catalogKey, { ...catalog, complete: true, epoch: catalog.epoch + 1 });
 				return true;
 			},
@@ -656,7 +651,7 @@ export class AccountThemeSync {
 				const independent = keep === 'copy' || (keep === 'local' && !remote && !!local);
 				if (independent) {
 					if (!local || !isTransferTheme(local)) return fail('There is no device theme to copy.');
-					copyId = (await this.copyIn(tx, local, { replaceSource: !remote })).id;
+					copyId = (await this.copyIn(tx, local)).id;
 					if ((await tx.get('settings', 'active-theme')) === row.id) {
 						await tx.put('settings', 'active-theme', copyId);
 						await this.selection.setIn(tx, copyId);

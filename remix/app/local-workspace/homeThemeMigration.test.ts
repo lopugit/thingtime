@@ -6,11 +6,11 @@ import { AccountThemeSync, ACCOUNT_THEME_SYNC, ACCOUNT_THEME_CATALOG, type Accou
 import { ACCOUNT_THEME_SELECTION, type AccountThemeSelectionState } from './themeSelection';
 import { migrateSelectedThemesHome, migrateAccountThemesHome } from './homeThemeMigration';
 import { WorkspaceDatabase, type WorkspaceScope, type WorkspaceTransaction } from './storage';
-import { MAX_SAVED_THEMES } from '../theme/savedTheme';
+import { createQuotaFactory } from './storageTestFixture';
 const selected = { kind: 'account', origin: 'https://home-migration.example', ownerId: 'owner', dataPlane: 'custom-' + 'a'.repeat(64) } as const;
 const home = { ...selected, dataPlane: 'home' };
 const lease = { assertCurrent() {}, onInvalidate: () => () => {} };
-const fixture = () => new WorkspaceDatabase(new IDBFactory(), 'migration', 1000, IDBKeyRange);
+const fixture = (factory = new IDBFactory()) => new WorkspaceDatabase(factory, 'migration', 1000, IDBKeyRange);
 const tx = <T>(db: WorkspaceDatabase, scope: WorkspaceScope, run: (transaction: WorkspaceTransaction) => Promise<T>) =>
 	db.transaction(scope, 'readwrite', lease, run);
 const read = (db: WorkspaceDatabase, scope: WorkspaceScope, collection: string, id: string) =>
@@ -165,22 +165,40 @@ test('expired claims preserve their token, command and explicit receipt identity
 	}
 });
 
-test('home theme quota failure rolls back source removal, selection and both accounting ledgers', async () => {
-	const db = fixture(),
+test('browser storage failure rolls back source removal, selection and both accounting ledgers', async () => {
+	const factory = createQuotaFactory();
+	const db = fixture(factory),
 		source = new AccountThemeSync(db, selected, lease, () => 1000, randomUUID),
 		target = new AccountThemeSync(db, home, lease, () => 1000, randomUUID);
 	try {
-		for (let i = 0; i < MAX_SAVED_THEMES; i++) await target.save({ name: 'Home ' + i, theme: {} });
+		await target.save({ name: 'Home', theme: {} });
 		const item = (await source.save({ name: 'Source', theme: {} })).theme;
 		await source.setActive(item.id);
 		const a = await snapshot(db, selected),
 			b = await snapshot(db, home);
-		await assert.rejects(migrateSelectedThemesHome(db, selected, lease, 2000), /theme limit/);
+		factory.capacity.records = b.usage.records;
+		await assert.rejects(migrateSelectedThemesHome(db, selected, lease, 2000), { code: 'LOCAL_QUOTA', status: 507 });
 		assert.deepEqual(await snapshot(db, selected), a);
 		assert.deepEqual(await snapshot(db, home), b);
 	} finally {
 		await db.close();
 	}
+});
+
+test('home migration accepts a catalogue larger than the former 100-theme limit', async (t) => {
+	const db = fixture();
+	t.after(() => db.close());
+	const source = new AccountThemeSync(db, selected, lease, () => 1000, randomUUID);
+	const target = new AccountThemeSync(db, home, lease, () => 1000, randomUUID);
+	for (let i = 0; i < 100; i++) await target.save({ name: 'Home ' + i, theme: {} });
+	const item = (await source.save({ name: 'Source', theme: {} })).theme;
+	await source.setActive(item.id);
+	const result = await migrateSelectedThemesHome(db, selected, lease, 2000);
+	assert.deepEqual(result.moved, [item.id]);
+	assert.deepEqual(result.issues, []);
+	assert.equal((await target.list()).themes.length, 101);
+	assert.equal((await target.list()).activeThemeId, item.id);
+	assert.equal((await source.list()).themes.length, 0);
 });
 
 test('concurrent selected-plane migrations serialize home writes without dropping either copy', async () => {

@@ -1,6 +1,5 @@
 import { applyEventsToWeights, emptyWeights, scorePost, topInterests, type PostFeatures } from '../api/utils/things/feedRanking';
 import {
-	MAX_SAVED_ALGORITHMS,
 	normalizeAlgorithmName,
 	sanitizeAlgorithmEmoji,
 	sanitizeAlgorithmEvents
@@ -124,8 +123,6 @@ export class LocalAlgorithms {
 		const name = normalizeAlgorithmName(input.name);
 		if (!name) throw new WorkspaceError('INVALID_ALGORITHM', 'Algorithm name is required');
 		return this.transaction('readwrite', async (tx) => {
-			if ((await tx.list<LocalThing>('things')).filter((row) => isTransferAlgorithm(row.value)).length >= MAX_SAVED_ALGORITHMS)
-				throw new WorkspaceError('LOCAL_QUOTA', 'This workspace has reached its algorithm limit', 413);
 			const parent = input.branchFrom ? await this.read(tx, input.branchFrom) : null;
 			const base = {
 				name,

@@ -8,12 +8,12 @@ import { LocalThemes } from './themes';
 import { LocalThings } from './things';
 import { WorkspaceDatabase } from './storage';
 import { parseTransfer, serializeTransfer } from '../utils/thingTransfer/format';
-import { MAX_SAVED_THEMES } from '../theme/savedTheme';
+import { createQuotaFactory } from './storageTestFixture';
 import { transferChecksum } from '../utils/thingTransfer/archive';
 const selected = { kind: 'account', origin: 'https://home-local.example', ownerId: 'owner', dataPlane: 'custom-' + 'a'.repeat(64) } as const;
 const home = { ...selected, dataPlane: 'home' },
 	lease = { assertCurrent() {}, onInvalidate: () => () => {} };
-const database = () => new WorkspaceDatabase(new IDBFactory(), 'home-local', 1000, IDBKeyRange);
+const database = (factory = new IDBFactory()) => new WorkspaceDatabase(factory, 'home-local', 1000, IDBKeyRange);
 
 test('different selected databases use one local home theme and selection while other identities remain isolated', async () => {
 	const db = database(),
@@ -138,17 +138,19 @@ test('unresolved legacy edits are reported without blocking independent home edi
 	}
 });
 
-test('a migration quota failure keeps existing home editors usable and source data intact', async () => {
-	const db = database(),
+test('a browser storage failure during migration keeps existing home editors usable and source data intact', async () => {
+	const factory = createQuotaFactory();
+	const db = database(factory),
 		workspace = new LocalAccountHomeThemes(db, selected, lease),
 		old = new AccountThemeSync(db, selected, lease);
 	try {
-		let id = '';
-		for (let n = 0; n < MAX_SAVED_THEMES; n++) id = (await workspace.themes.save({ name: 'Home ' + n, theme: {} })).theme.id;
+		const id = (await workspace.themes.save({ name: 'Home', theme: {} })).theme.id;
 		const source = (await old.save({ name: 'Retained old edit', theme: {} })).theme;
+		factory.capacity.records = (await db.transaction(home, 'readonly', lease, t => t.usage())).records;
 		const list = await workspace.list();
 		assert.equal(list.migration.error?.code, 'LOCAL_QUOTA');
-		assert.equal(list.themes.length, MAX_SAVED_THEMES);
+		assert.equal(list.themes.length, 1);
+		factory.capacity.records = Infinity;
 		await workspace.themes.save({ id, name: 'Still editable offline', theme: {} });
 		assert.equal((await workspace.themes.list()).themes.find((row) => row.id === id)!.name, 'Still editable offline');
 		assert.equal((await old.list()).themes[0].id, source.id);

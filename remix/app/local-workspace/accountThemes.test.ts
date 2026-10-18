@@ -84,6 +84,41 @@ function server(initial: AccountThemeSnapshot[] = []) {
 	return { rows, calls, transport };
 }
 
+test('account hydration can add remote themes alongside 100 pending device themes', async (t) => {
+	const f = fixture();
+	t.after(() => f.db.close());
+	for (let i = 0; i < 100; i++) await f.sync.save({ name: 'Device ' + i, theme: {} });
+	const remote = saved();
+	await f.sync.refresh(server([remote]).transport);
+	const rows = (await f.sync.list()).themes;
+	assert.equal(rows.length, 101);
+	assert.equal(rows.find(row => row.id === remote.id)!.syncState, 'synced');
+	assert.equal(rows.filter(row => row.syncState === 'pending').length, 100);
+});
+
+test('reviewed theme conflict copies work when the device already holds 100 themes', async (t) => {
+	const f = fixture(), remote = saved(), s = server([remote]);
+	t.after(() => f.db.close());
+	await f.sync.refresh(s.transport);
+	await f.sync.save({ id: remote.id, name: 'Device variant', theme: {} });
+	s.rows.set(remote.id, { ...remote, name: 'Remote variant', version: version(20) });
+	await f.sync.sync(s.transport);
+	for (let i = 0; i < 99; i++) await f.sync.save({ name: 'Other ' + i, theme: {} });
+	await f.sync.setActive(remote.id);
+	const review = await f.sync.inspect(remote.id, s.transport);
+	const { copyId } = await f.sync.resolve(review, 'copy', s.transport);
+	assert.ok(copyId);
+	const list = await f.sync.list();
+	assert.equal(list.themes.length, 101);
+	assert.equal(list.activeThemeId, copyId);
+	assert.equal(list.themes.find(row => row.id === remote.id)!.name, 'Remote variant');
+	const copy = list.themes.find(row => row.id === copyId)!;
+	assert.equal(copy.name, 'Device variant (device copy)');
+	assert.equal(copy.visibility, 'private');
+	assert.equal(copy.syncState, 'pending');
+	assert.equal(s.rows.size, 1, 'a device copy does not publish or send itself');
+});
+
 test('account themes reuse local validation and export without remote authority or anonymous adoption', async () => {
 	const f = fixture();
 	try {

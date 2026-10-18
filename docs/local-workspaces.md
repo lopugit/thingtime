@@ -244,8 +244,8 @@ upgrade/success callbacks. Focused regression tests cover these failure paths.
 
 `LocalAlgorithms` uses the existing canonical profile parser and feed scoring /
 training functions. Named profiles are protected `feed-algorithm` Things; generic
-Thing updates cannot bypass their writer. The shared limit is 50 profiles, with
-atomic import quota checks. Portable exports contain only the canonical name,
+Thing updates cannot bypass their writer. Device catalogues have no fixed profile
+count; imports remain atomic and use actual browser storage capacity. Portable exports contain only the canonical name,
 emoji, weights and training statistics; imports get fresh IDs, no sharing or
 lineage, and never change the active selection.
 
@@ -4862,3 +4862,22 @@ TypeScript lint has zero errors and one existing constructor warning. The client
 platform, embed, draft and offline build passed with 250 verified assets
 (22,769,952 bytes). TypeScript retains exactly the same 91 baseline diagnostics.
 These automated checks do not establish native UI or real account-sync acceptance.
+
+
+## Device theme and algorithm catalogue capacity — 2026-10-18
+
+The dedicated local writers, canonical imports, account-cache hydration,
+reviewed conflict copies and selected-plane theme migration no longer impose
+100-theme or 50-algorithm device limits. Existing records and selection survive
+reopening. These operations keep canonical validation, fresh import/copy IDs,
+private defaults, protected-kind dispatch, account scopes and transaction fences.
+A browser `QuotaExceededError` still returns `LOCAL_QUOTA` / 507 and rolls back
+content, selection, queued intent and usage accounting atomically; a retry can
+complete when storage becomes available.
+
+This change concerns device admission. The existing remote catalogue parsers
+and server capacity contracts remain unchanged. A server refusal is still a
+separate sync result and does not revoke a completed local save. Remote
+pagination/capacity, observation/training buffers, and native large-catalogue
+acceptance remain open in the full capability matrix. No HTTP feature or
+capability version changes in this increment.

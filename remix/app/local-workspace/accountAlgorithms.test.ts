@@ -241,6 +241,41 @@ test('two tabs cannot send the same live claim and deletion during creation is p
 	await second.remember([saved(row.id)], await second.beginRead());
 	assert.equal((await second.list()).algorithms.length, 0);
 });
+test('account hydration can add remote algorithms alongside 50 pending device profiles', async (t) => {
+	const f = fixture();
+	t.after(() => f.db.close());
+	for (let i = 0; i < 50; i++) await f.sync.algorithms.create({ name: 'Device ' + i });
+	const remote = saved();
+	await f.sync.refresh(server([remote]).transport);
+	const rows = (await f.sync.list()).algorithms;
+	assert.equal(rows.length, 51);
+	assert.equal(rows.find(row => row.id === remote.id)!.syncState, 'synced');
+	assert.equal(rows.filter(row => row.syncState === 'pending').length, 50);
+});
+
+test('reviewed algorithm conflict copies work when the device already holds 50 profiles', async (t) => {
+	const f = fixture(), remote = saved(), s = server([remote]);
+	t.after(() => f.db.close());
+	await f.sync.refresh(s.transport);
+	await f.sync.algorithms.update({ id: remote.id, name: 'Device variant' });
+	s.rows.set(remote.id, { ...remote, version: version(2), content: { ...remote.content, name: 'Remote variant' } });
+	await f.sync.sync(s.transport);
+	for (let i = 0; i < 49; i++) await f.sync.algorithms.create({ name: 'Other ' + i });
+	await f.sync.algorithms.setActive(remote.id);
+	const review = await f.sync.inspect(remote.id, s.transport);
+	const { copyId } = await f.sync.resolve(review, 'copy', s.transport);
+	assert.ok(copyId);
+	const list = await f.sync.list();
+	assert.equal(list.algorithms.length, 51);
+	assert.equal(list.activeAlgorithmId, copyId);
+	assert.equal(list.algorithms.find(row => row.id === remote.id)!.name, 'Remote variant');
+	const copy = list.algorithms.find(row => row.id === copyId)!;
+	assert.equal(copy.name, 'Device variant (device copy)');
+	assert.equal(copy.shared, false);
+	assert.equal(copy.syncState, 'pending');
+	assert.equal(s.rows.size, 1, 'a device copy does not publish or send itself');
+});
+
 test('stale-profile conflict requires fresh review and can preserve an independent private copy', async (t) => {
 	const f = fixture();
 	t.after(() => f.db.close());

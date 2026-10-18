@@ -370,8 +370,6 @@ export class AccountAlgorithmSync {
 						await tx.delete(collection, id);
 						// Reconcile the account pointer through the independent selection reader.
 					}
-				if ((await tx.list<LocalThing>('things')).filter((row) => isTransferAlgorithm(row.value)).length > MAX_SAVED_ALGORITHMS)
-					return fail('Retaining this catalogue exceeds the device algorithm limit.', 'LOCAL_QUOTA', 413);
 				await tx.put('settings', catalogKey, { ...catalog, complete: true, epoch: catalog.epoch + 1 });
 				return true;
 			},
@@ -591,8 +589,6 @@ export class AccountAlgorithmSync {
 				const independent = keep === 'copy' || (keep === 'local' && !remote && !!local);
 				if (independent) {
 					if (!local || !isTransferAlgorithm(local)) return fail('There is no device profile to copy.');
-					const count = (await tx.list<LocalThing>('things')).filter((row) => isTransferAlgorithm(row.value)).length;
-					if (count - (remote ? 0 : 1) + 1 > MAX_SAVED_ALGORITHMS) return fail('This workspace has reached its algorithm limit.', 'LOCAL_QUOTA', 413);
 					copyId = this.uuid();
 					if ((await tx.get('things', copyId)) || (await tx.get(collection, copyId)) || (await tx.get('thing-sync', copyId)))
 						return fail('A new profile identity collided. Retry the copy.');

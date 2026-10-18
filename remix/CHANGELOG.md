@@ -73,6 +73,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- **Codex (AI), 2026-10-18:** Remove device-only theme and algorithm item counts from saves, imports, hydration, reviewed copies and home migration. Preserve canonical validation, private sync intent and browser-quota rollback. Remote capacity and native acceptance remain open. See the [capacity checkpoint](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md#device-catalogue-capacity-checkpoint--2026-10-18).
+
 - **Codex (AI), 2026-10-18:** Verify the installed browser-manager connection and isolated default through its supported app controls and CLI. Update the local-first progress plan; native claim and artifact acceptance remain open. See the [recovery checkpoint](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md#installed-manager-connection-recovery--2026-10-18).
 
 - **Codex (AI), 2026-10-18:** Retain account theme edits, imports, moves, titles
