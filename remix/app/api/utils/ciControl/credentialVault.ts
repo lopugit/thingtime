@@ -151,6 +151,35 @@ export const createLopuCredential = async (input: { name?: unknown; platform?: u
   return publicCredential(record);
 };
 
+// Explicit admin migration: the source and destination are fixed; callers cannot
+// select arbitrary environment variables. Existing entries are never overwritten.
+export const importConfiguredOpenAiCredential = async (
+  actorId: string,
+  deps = {
+    collection: getLopuCredentialsCollection,
+    create: createLopuCredential,
+    value: () => process.env.OPENAI_API_KEY
+  }
+) => {
+  const name = 'OPENAI_THINGTIME_API_KEY';
+  const collection = await deps.collection();
+  const existing = await collection.findOne({ name });
+  if (existing) {
+    if (existing.platform !== 'OpenAI') throw new Error('That credential name is already used by another platform.');
+    return publicCredential(existing as StoredLopuCredential);
+  }
+  const value = deps.value()?.trim();
+  if (!value) throw new Error('This deployment has no configured OpenAI API key to import.');
+  try {
+    return await deps.create({ name, platform: 'OpenAI', value, enabled: true }, actorId);
+  } catch (error) {
+    // The unique name index makes concurrent imports create-only and retry-safe.
+    const concurrent = await collection.findOne({ name });
+    if (concurrent?.platform === 'OpenAI') return publicCredential(concurrent as StoredLopuCredential);
+    throw error;
+  }
+};
+
 export const rotateLopuCredential = async (id: unknown, value: unknown) => {
   if (typeof id !== 'string' || !id) throw new Error('Choose a credential to rotate.');
   const current = await (await getLopuCredentialsCollection()).findOne({ id });

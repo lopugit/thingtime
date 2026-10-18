@@ -98,7 +98,7 @@ export const PlatformCredentials = ({
 		setBusy(key);
 		setError(null);
 		try {
-			await requireThingtimeCapability('api.admin-ci-credentials', '3.0.0');
+			await requireThingtimeCapability('api.admin-ci-credentials', action.action === 'import-configured-openai' ? '3.1.0' : '3.0.0');
 			const result = await fetch('/api/v1/admin/ci/credentials', {
 				method: 'POST',
 				credentials: 'same-origin',
@@ -260,6 +260,26 @@ export const PlatformCredentials = ({
 					) : null}
 				</Stack>
 
+				{!readOnly ? (
+					<Box mt={4}>
+						<Button
+							size="sm"
+							variant="outline"
+							whiteSpace="normal"
+							height="auto"
+							minH="32px"
+							py={2}
+							isLoading={busy === 'import-openai'}
+							isDisabled={Boolean(busy) || !response?.vaultConfigured || credentials.some((entry) => entry.name === 'OPENAI_THINGTIME_API_KEY')}
+							onClick={() => mutate({ action: 'import-configured-openai' }, 'import-openai')}
+						>
+							Import configured OpenAI key
+						</Button>
+						<Text fontSize="xs" mt={2} opacity={0.65}>
+							Saves this server’s OpenAI key as OPENAI_THINGTIME_API_KEY without revealing it. Existing credentials are preserved.
+						</Text>
+					</Box>
+				) : null}
 				{readOnly ? (
 					<Button as={RouterLink} to="/admin/ai-providers#secure-vault" mt={4}>
 						Manage in AI Providers

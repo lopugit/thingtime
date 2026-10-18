@@ -104,7 +104,7 @@ test('Thingtime capability manifest is origin scoped and covers the generated AP
   assert.equal(manifest.features['api.admin-subscriptions']?.version, '1.1.1');
 	assert.equal(manifest.features['api.admin-ci-dispatch']?.version, '2.2.0');
   assert.equal(manifest.features['api.admin-ci-control']?.version, '1.0.2');
-  assert.equal(manifest.features['api.admin-ci-credentials']?.version, '3.0.0');
+  assert.equal(manifest.features['api.admin-ci-credentials']?.version, '3.1.0');
   assert.equal(manifest.features['api.admin-ci-feature-stacks']?.version, '1.4.0');
   assert.equal(manifest.features['api.admin-ci-previews']?.version, '2.0.0');
   assert.equal(manifest.features['api.auth-passkeys-register-options']?.version, '1.1.0');
@@ -329,7 +329,7 @@ test('System vault and deployment reveal contracts are registered and negotiated
   const manifest = thingtimeCapabilityManifest('https://preview.example.test');
   assert.ok(apiV1RouteKeys.includes('v1/admin/system/environment'));
   assert.equal(manifest.features['api.admin-system-environment'].version, '1.0.0');
-  assert.equal(manifest.features['api.admin-ci-credentials'].version, '3.0.0');
+  assert.equal(manifest.features['api.admin-ci-credentials'].version, '3.1.0');
   assert.equal(manifest.features['api.vault-reveal'].version, '1.1.0');
   assert.equal(capabilitySatisfies('1.0.0', '1.1.0'), false);
   assert.equal(capabilitySatisfies('1.1.1', '1.1.0'), true);
