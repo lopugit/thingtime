@@ -1,4 +1,5 @@
 import type { LocalInventoryPage } from './nativeInventory';
+import type { CloudInventoryPage } from './cloudInventoryPages';
 import { foregroundSyncContext } from './foregroundSyncContext';
 import { localTrashContexts } from './localTrash';
 import type { LocalSyncTarget } from './localSyncTarget';
@@ -32,6 +33,7 @@ export type ForegroundSyncInput = {
 	scanLocalPages?(): AsyncIterable<LocalInventoryPage>;
 	inspectLocal?(path: string): Promise<SyncEntry | null>;
 	inventory(): Promise<CloudInventory>;
+	inventoryPages?(): AsyncIterable<CloudInventoryPage>;
 	source(entry: SyncEntry): Promise<FingerprintSource>;
 	localTarget?: LocalSyncTarget;
 	journal: Awaited<ReturnType<typeof openSyncJournal>>;

@@ -57,8 +57,8 @@ test('file routes use private full-account access, bounded same-origin JSON and 
 
 test('file capability registers the real read and commit route', () => {
 	const manifest = thingtimeCapabilityManifest('https://example.test');
-	assert.equal(manifest.features['api.files'].version, '1.4.0');
-	assert.equal(createApiCapabilitiesManifest().features['api.files'], '1.4.0');
+	assert.equal(manifest.features['api.files'].version, '1.5.0');
+	assert.equal(createApiCapabilitiesManifest().features['api.files'], '1.5.0');
 	assert.ok(manifest.operations.some((op) => op.path === '/api/v1/files' && op.methods.includes('GET') && op.methods.includes('POST')));
 });
 
@@ -173,4 +173,22 @@ test('path observations require explicit selectors and preserve unavailable-path
  user.accountKind = 'service'; assert.equal((await handlers.loader(req())).status, 401);
  user.accountKind = 'user'; allowed = false; assert.equal((await handlers.loader(req())).status, 503);
  assert.equal(calls, 1);
+});
+
+test('paged inventories retain private authentication/rate guards and strict selectors', async () => {
+	let calls = 0, user: any = { id: 'owner', accountKind: 'user' }, allowed = true;
+	const handlers = createFilesHandlers({ getUser: async () => user, limit: async () => ({ allowed, unavailable: !allowed } as any),
+		folders: {} as any, service: {} as any, inventory: async () => { throw Error('wrong transport'); },
+		pages: async (owner, root, emit) => { assert.equal(owner, 'owner'); assert.equal(root, 'root'); calls++;
+			await emit({ version: 1, rootId: 'root', rootRevision: 'r1', generation: 'g1', ordinal: 0, nodes: [], totalEntries: 0 }); } });
+	const request = (query = 'rootId=root&pages=1') => new Request('https://example.test/api/v1/files?' + query);
+	const response = await handlers.loader({ request: request() });
+	assert.equal(response.status, 200); assert.match(response.headers.get('content-type')!, /x-ndjson/);
+	assert.match(response.headers.get('cache-control')!, /private.*no-store/); assert.equal(JSON.parse(await response.text()).totalEntries, 0);
+	for (const query of ['pages=1', 'rootId=root&pages=0', 'rootId=root&pages=1&pages=1', 'rootId=root&pages=1&path=file', 'rootId=root&rootId=other&pages=1'])
+		assert.equal((await handlers.loader({ request: request(query) })).status, 400);
+	for (const identity of [null, { id: 'service', accountKind: 'service' }]) { user = identity;
+		assert.equal((await handlers.loader({ request: request() })).status, 401); }
+	user = { id: 'owner', accountKind: 'user' }; allowed = false;
+	assert.equal((await handlers.loader({ request: request() })).status, 503); assert.equal(calls, 1);
 });

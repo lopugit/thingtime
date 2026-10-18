@@ -188,3 +188,46 @@ test('an accepted retained version recovers without the now-missing device sourc
 	const done = await runPagedForegroundCloudSync(f.saved, retentionScope, f.input(), signal()); assert.ok('spec' in done);
 	assert.equal(done.progress.phase, 'complete'); assert.deepEqual(f.counts(), before); f.journal().close();
 });
+
+test('cloud pages drive planning and validated checkpoint publication without complete-array transport', async () => {
+	const f = await foregroundFixture(135), input: ForegroundSyncInput = f.input(), read = input.inventory; let captures = 0;
+	input.inventory = async () => { throw Error('legacy cloud root scan must not run'); };
+	input.inventoryPages = async function* () {
+		captures++; const snapshot = await read(), generation = crypto.randomUUID();
+		for (let offset = 0;; offset += 128) {
+			const nodes = snapshot.nodes.slice(offset, offset + 128), last = offset + 128 >= snapshot.nodes.length;
+			yield { ...snapshot, generation, ordinal: offset / 128, nodes, ...(last ? { totalEntries: snapshot.nodes.length } : {}) };
+			if (last) return;
+		}
+	};
+	await runPagedForegroundCloudSync(saved, scope, input, signal());
+	assert.equal(captures, 2); assert.equal(f.creates(), 135);
+	const head = (await f.journal().pagedCheckpoints(access(input)).current())!;
+	assert.equal((await f.journal().inventory(access(input)).read(head.baseline.remote)).totalEntries, 135);
+	await runPagedForegroundCloudSync(saved, scope, input, signal());
+	assert.equal(captures, 4); assert.equal(f.creates(), 135); f.journal().close();
+});
+
+test('cloud page failures preserve the baseline before writes and during checkpoint verification', async () => {
+	for (const phase of ['planning', 'checkpoint'] as const) for (const failure of ['missing', 'generation', 'ordinal', 'extra', 'duplicate', 'count', 'parent', 'empty'] as const) {
+		const f = await foregroundFixture(), input: ForegroundSyncInput = f.input(), read = input.inventory;
+		await runPagedForegroundCloudSync(saved, scope, input, signal());
+		const checkpoints = f.journal().pagedCheckpoints(access(input)), head = await checkpoints.current(), creates = f.creates();
+		let captures = 0;
+		input.inventoryPages = async function* () {
+			const snapshot = await read(), generation = crypto.randomUUID(); captures++;
+			if (phase === 'checkpoint' && captures === 1) { yield { ...snapshot, generation, ordinal: 0, totalEntries: snapshot.nodes.length }; return; }
+			if (failure === 'empty') return;
+			const nodes = failure === 'parent' ? snapshot.nodes.map(n => ({ ...n, folderId: 'unrelated' })) : snapshot.nodes;
+			yield { ...snapshot, nodes, generation, ordinal: 0, ...(failure === 'extra' || failure === 'parent' ? { totalEntries: 1 } : {}) };
+			if (failure === 'missing' || failure === 'parent') return;
+			yield { ...snapshot, generation: failure === 'generation' ? crypto.randomUUID() : generation, ordinal: failure === 'ordinal' ? 2 : 1,
+				nodes: failure === 'duplicate' ? nodes : [], totalEntries: failure === 'count' || failure === 'duplicate' ? 2 : 1 };
+		};
+		await assert.rejects(runPagedForegroundCloudSync(saved, scope, input, signal()), phase + ' ' + failure);
+		assert.equal(f.creates(), creates); assert.deepEqual(await checkpoints.current(), head);
+		input.inventoryPages = async function* () { const snapshot = await read(); yield { ...snapshot, generation: crypto.randomUUID(), ordinal: 0, totalEntries: snapshot.nodes.length }; };
+		await runPagedForegroundCloudSync(saved, scope, input, signal()); assert.equal(f.creates(), creates);
+		assert.equal(await f.journal().pagedRuns(access(input)).active(), null); f.journal().close();
+	}
+});

@@ -11531,3 +11531,20 @@ resume unfinished Android gates only when requested.
 - [x] Regression: checkpoint captures retain their existing plain observation schema; cloud destination metadata is attached only to planning captures. Repeated runs and interrupted checkpoint imports recover normally.
 - [x] Inspect real controls with generated adapters in OS-isolated Chromium at desktop/390px through the bottom and open conflict review. Confirm captures/pages/discards and retained-version receipt reuse after reload, with zero legacy root scans.
 - [ ] Repeat capture/page/recovery through installed Mac/iOS picker grants and real providers. Complete stable cloud producers and worker integration before lifting the combined 10,000-path cap. Android remains deferred.
+
+
+### Streamed cloud sync inventory
+
+- Run `npm --prefix remix run test:files`, `test:file-sync`, and
+  `test:files:inventory-pages`. The last command owns a disposable isolated
+  replica and uses actual signup/Things/Files handlers; see README prerequisites.
+- Verify missing, repeated, out-of-order, mixed-generation and trailing-error
+  pages never seal or replace a complete baseline. Include incorrect physical
+  `folderId` links during the post-transfer checkpoint, then recover with a
+  fresh generation without duplicating writes.
+- Verify the built origin advertises `api.files` 1.5.0. In Mac and iOS controls,
+  exercise conflict review/retention and reload recovery; scroll the open popup
+  and full page at desktop/phone widths. The Mac proxy origin response marker is
+  mandatory for NDJSON as well as JSON. Refuse missing markers; never bypass it.
+- Installed-device and deployed streaming acceptance remain required. A 10,001
+  producer test is not proof that the live 10,000-path planner cap is removed.

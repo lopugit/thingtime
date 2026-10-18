@@ -5510,3 +5510,22 @@ and `$(PRODUCT_BUNDLE_IDENTIFIER).file-upload` permitted identifier in
 The simulator declined the background acceptance request; physical-iPhone proof
 and OS relaunch remain open. See
 [iOS upload-job details](iOS/README.md#native-multipart-jobs).
+
+
+### Cloud inventory paging acceptance
+
+`npm --prefix remix run test:files:inventory-pages` runs production signup,
+Things and Files Request handlers against its own disposable Mongo replica on
+loopback **28241**. It requires macOS `sandbox-exec`, `mongod` and `mongosh`;
+`THINGTIME_TEST_MONGOD` can select another installed mongod binary. It refuses
+occupied ports, verifies OS denial using forbidden port **28243** (including
+hostname/direct-IP/redirect checks), and applies that boundary to the database,
+bootstrap shell and test worker. There is no permissive fallback or app `.env`.
+It generates one disposable identity in memory, uses console-only email, honors
+normal rate limits while creating 135 folders, and removes its owned processes
+and temporary database after the run. No real account credential is used.
+The proof covers two NDJSON pages, a concurrent API rename, journal sealing and
+logout refusal. It is a handler/database check, not HTTP/browser or installed
+app acceptance. Production needs Mongo snapshot-session support (5+) and enough
+snapshot history for a capture; expiry fails the scan instead of mixing dates.
+The 10,000-path live planner cap and installed/large-volume acceptance remain open.

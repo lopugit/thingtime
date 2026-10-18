@@ -2943,3 +2943,38 @@ still enforced. Capture hashes file contents in the foreground and retains the
 existing request deadline; this is not a sustained large-data benchmark or a
 persistent background scanner. The installed Mac app is another task's branch
 and sign-in environment; it has not been overwritten for this check.
+
+
+### Cloud inventory pages (2026-10-19)
+
+`api.files` 1.5.0 adds `GET rootId&pages=1`: bounded NDJSON pages from one
+read-only Mongo snapshot. The private disk queue holds wide folder frontiers;
+backpressure limits retained rows to one page and one parent batch. Pages carry
+one generation, root revision, ordinal and an exact terminal count. The client
+withholds completion until clean EOF, then the existing journal verifies unique
+identities, paths and physical ancestry. Checkpoint observations undergo the same
+cloud-tree validation before copying content stamps into their plain captures.
+
+Mac/iOS foreground controls use this transport. Legacy JSON inventory/path
+reads and deferred Android remain unchanged. Limits are 128 entries / 384 KiB
+per page, 128 MiB scratch per capture, two concurrent captures per server process,
+64 levels and 240 seconds. Snapshot expiry, cancellation and process loss require
+a fresh scan. The scratch queue is request-owned, not a persistent recovery job.
+
+Validation: 261 shared sync checks (260 TS + one module-mock check), 40 Files
+checks and 35 capability checks pass. The 10,001-file producer test returns
+79 pages; 4,096 folders use 33 bounded parent queries. The disposable production
+handler test creates 135 folders through real signup/Things writers, preserves
+one snapshot during a concurrent rename, seals two pages and rejects reads after
+logout. Its OS network boundary denies other ports, hostnames, redirects and
+external direct IPs. It does not inject authentication or seed database documents.
+The built Nitro manifest advertises 1.5.0 and anonymous Files access returns 401.
+Desktop and 390px iOS Chromium fixtures pass conflict retention, reload recovery,
+full-page scrolling and overflow checks with generated native/cloud adapters.
+Full TypeScript still reports 91 diagnostics outside this increment's files.
+
+Installed Mac/iOS acceptance and deployed streaming remain open. The combined
+foreground planner/review cap is still 10,000 paths; this increment does not
+claim unrestricted root sizes, durable workers, byte backups or 100 GB–100 TB
+throughput. Android stays deferred. Next: exercise installed/HTTP proxy streaming,
+then remove the remaining bounded review/path-observation bottlenecks.

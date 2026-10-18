@@ -493,3 +493,15 @@ The existing complete scans/10,000-path cap remain until paged producers ship.
 Native reader/adapter tests, shared runner tests and the `?capture&inspect`
 browser fixture cover the path. Installed acceptance remains open; Android is
 deferred. See the dated section in `docs/mobile-file-sync.md` for evidence.
+
+
+### Cloud inventory stream
+
+`api.files` 1.5.0 routes `rootId&pages=1` to `files/inventoryPages.ts` and
+`inventoryStream.ts`, using the shared root authorization and a request-owned
+`inventoryQueue.ts`. `fileSync/cloudInventoryPages.client.ts` decodes bounded
+NDJSON; `pagedForegroundSync.ts` seals cloud metadata before planning or
+checkpoint stamp import. The registry supplies both manifest generators.
+Tests: `inventoryPages.test.ts`, `cloudInventoryPages.test.ts`, paged foreground
+and Files route tests; `test:files:inventory-pages` uses actual API handlers and
+an isolated replica. See the dated sync ledger for acceptance boundaries.

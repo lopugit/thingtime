@@ -81,23 +81,7 @@ export function createCloudInventoryService(
 					if (remaining <= 0) fail(503, 'Cloud inventory timed out; keep the last complete scan.');
 					return Math.min(remaining, 5000);
 				};
-				let ancestorId: string | null = rootId,
-					root: any = null;
-				const ancestors = new Set<string>();
-				while (ancestorId) {
-					if (ancestors.has(ancestorId) || ancestors.size >= MAX_FOLDER_DEPTH || ancestorId.startsWith('timeline-'))
-						fail(409, 'Cloud folder ancestry is invalid.');
-					ancestors.add(ancestorId);
-					const doc = await things.findOne({ shareId: ancestorId, ownerId, ...folderThingMatch() }, { session, projection, maxTimeMS: budget() });
-					if (!owned(doc, ownerId) || !isFolderThing(doc) || doc.thingtime?.includes('file') || doc.crystal?.trashed === true)
-						fail(404, 'Cloud folder not found');
-					if (!root) {
-						if (!privateAudience(doc, false)) fail(409, 'Choose a private cloud folder.');
-						root = doc;
-					}
-					if (doc.folderId != null && !identity(doc.folderId)) fail(409, 'Cloud folder ancestry is invalid.');
-					ancestorId = doc.folderId ?? null;
-				}
+				const root = await readCloudInventoryRoot(things, session, ownerId, rootId, budget);
 				const paths = new Map<string, string>([[rootId, '']]),
 					seen = new Set<string>([rootId]),
 					nodes: CloudInventoryNode[] = [];
@@ -198,3 +182,27 @@ export function createCloudPathService(overrides: Parameters<typeof createCloudI
 		typeof path === 'string' ? read(ownerId, rootId, path) : Promise.resolve({ ok: false as const, status: 400, error: 'Choose a relative cloud path' });
 }
 export const readCloudPath = createCloudPathService();
+
+/** Shared authorization for complete and streamed cloud observations. */
+export async function readCloudInventoryRoot(things: any, session: any, ownerId: string, rootId: string, budget: () => number, signal?: AbortSignal) {
+	let ancestorId: string | null = rootId,
+		root: any = null;
+	const ancestors = new Set<string>();
+	while (ancestorId) {
+		if (ancestors.has(ancestorId) || ancestors.size >= MAX_FOLDER_DEPTH || ancestorId.startsWith('timeline-'))
+			fail(409, 'Cloud folder ancestry is invalid.');
+		ancestors.add(ancestorId);
+		const doc = await things.findOne({ shareId: ancestorId, ownerId, ...folderThingMatch() }, { session, projection, maxTimeMS: budget(), signal, readPreference: 'primary' });
+		if (!owned(doc, ownerId) || !isFolderThing(doc) || doc.thingtime?.includes('file') || doc.crystal?.trashed === true)
+			fail(404, 'Cloud folder not found');
+		if (!root) {
+			if (!privateAudience(doc, false)) fail(409, 'Choose a private cloud folder.');
+			root = doc;
+		}
+		if (doc.folderId != null && !identity(doc.folderId)) fail(409, 'Cloud folder ancestry is invalid.');
+		ancestorId = doc.folderId ?? null;
+	}
+	return root;
+}
+
+export const cloudInventoryAccess = { projection, identity, owned, privateAudience, folderRevision };

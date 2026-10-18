@@ -3,12 +3,14 @@ import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
 import { isSameOriginAttachmentRequest, withAttachmentPrivateResponse } from '~/api/utils/attachments/attachmentResponses';
 import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
 import { readCloudInventory, readCloudPath } from '~/api/utils/files/inventory';
+import { streamCloudInventoryPages } from '~/api/utils/files/inventoryPages';
+import { cloudInventoryResponse } from '~/api/utils/files/inventoryStream';
 import { cloudFolders } from '~/api/utils/files/folders';
 import { cloudFiles } from '~/api/utils/files/files';
 
 export const createFilesHandlers = (
 	deps: { getUser: typeof getCurrentUser; limit: typeof enforceRateLimit; service: typeof cloudFiles; inventory: typeof readCloudInventory;
-		folders: typeof cloudFolders; path?: typeof readCloudPath } =
+		folders: typeof cloudFolders; path?: typeof readCloudPath; pages?: typeof streamCloudInventoryPages } =
 		{ getUser: getCurrentUser, limit: enforceRateLimit, service: cloudFiles, inventory: readCloudInventory, folders: cloudFolders, path: readCloudPath }
 ) => {
 	const handle =
@@ -30,6 +32,12 @@ export const createFilesHandlers = (
 					);
 				const url = new URL(request.url);
 				if (!mutation && url.searchParams.has('rootId')) {
+					if (url.searchParams.has('pages')) {
+						if (url.searchParams.getAll('rootId').length !== 1 || url.searchParams.getAll('pages').length !== 1 ||
+							url.searchParams.get('pages') !== '1' || [...url.searchParams.keys()].some(key => !['rootId', 'pages'].includes(key)))
+							return json({ ok: false, error: 'Use one rootId and pages=1 for streamed inventory' }, { status: 400 });
+						return cloudInventoryResponse(user.id, url.searchParams.get('rootId'), request, deps.pages ?? streamCloudInventoryPages);
+					}
 					if (url.searchParams.getAll('rootId').length !== 1 || url.searchParams.getAll('path').length > 1 ||
 						[...url.searchParams.keys()].some((key) => !['rootId', 'path'].includes(key)))
 						return json({ ok: false, error: 'Use one rootId alone for inventory, or with one relative path' }, { status: 400 });

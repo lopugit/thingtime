@@ -217,19 +217,17 @@ window.fetch = async function (this: unknown, input, init) {
 			}
 			return fixtureJson({ ok: true, folder, replayed: false });
 		}
-		if (url.searchParams.has('rootId'))
-			return fixtureJson({
-				ok: true,
-				inventory: {
-					version: 1,
-					complete: true,
-					rootId: url.searchParams.get('rootId'),
-					rootRevision: 'fixture-root-v1',
-					nodes: conflictQA
-						? conflictFiles().map((file) => ({ kind: 'file', path: file.name, file }))
-						: transferFolders.map((row) => ({ kind: 'folder', path: row.name, id: row.id, folderId: row.folderId, revision: row.revision }))
-				}
-			});
+		if (url.searchParams.has('rootId')) {
+			const inventory = {
+				version: 1, complete: true, rootId: url.searchParams.get('rootId'), rootRevision: 'fixture-root-v1',
+				nodes: conflictQA ? conflictFiles().map(file => ({ kind: 'file', path: file.name, file }))
+					: transferFolders.map(row => ({ kind: 'folder', path: row.name, id: row.id, folderId: row.folderId, revision: row.revision }))
+			};
+			if (url.searchParams.get('pages') === '1') return new Response(JSON.stringify({ ...inventory,
+				generation: crypto.randomUUID(), ordinal: 0, totalEntries: inventory.nodes.length }) + '\n',
+				{ headers: { 'Content-Type': 'application/x-ndjson', ...(desktop ? { 'x-thingtime-api-fallback': canonicalOrigin } : {}) } });
+			return fixtureJson({ ok: true, inventory });
+		}
 		if (captureQA && url.searchParams.has('id')) {
 			if (url.searchParams.has('operationId'))
 				return fixtureJson({

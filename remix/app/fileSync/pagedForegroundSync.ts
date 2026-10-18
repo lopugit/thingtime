@@ -4,12 +4,13 @@ import type { SavedFileSyncConfiguration } from './configuredPlan';
 import { resolveFileSyncConflicts, planConflictRetention, type SyncConflict } from './conflictResolution';
 import { createPagedCloudSyncPort } from './cloudSyncPort.client';
 import { executePreparedPagedSyncRun } from './pagedExecute';
-import { INVENTORY_PAGE_BYTES, INVENTORY_PAGE_ENTRIES, type InventoryIdentity } from './inventoryJournal';
+import { INVENTORY_PAGE_BYTES, INVENTORY_PAGE_ENTRIES, type InventoryIdentity, type InventoryCursor } from './inventoryJournal';
 import type { PagedPlanSpec, PagedPlanCursor } from './pagedPlanJournal';
 import type { PagedRunSpec, PagedRunProgress } from './pagedRunJournal';
 import { parseReviewedConflict, type ReviewedSyncConflict } from './pagedRunReview';
 import { MAX_SYNC_SCAN_ENTRIES, planFileSync, syncPathKey, type SyncScope, type SyncEntry } from './reconcile';
 import { inventorySyncEntry, type CloudInventoryNode } from './cloudInventory';
+import { parseCloudInventoryPage } from './cloudInventoryPages';
 
 /** Import one already complete bounded scan. Native/cloud producers still use
  * their existing limits; pages here do not turn a partial scan into a full one. */
@@ -79,6 +80,38 @@ export async function runPagedForegroundCloudSync(reviewed: SavedFileSyncConfigu
 	};
 	const importObservations = async (local: InventoryIdentity, remote: InventoryIdentity, checkpoint = false) => {
 		await importLocal(local);
+		if (input.inventoryPages) {
+			// A checkpoint stores stamps, but must first validate the complete physical tree.
+			const observed = checkpoint ? identity('remote') : remote;
+			let generation: string | undefined, revision: string | undefined, ordinal = 0, count = 0, terminal = false;
+			for await (const value of input.inventoryPages()) {
+				check(); const page = parseCloudInventoryPage(value, configuration.remoteFolderId);
+				if (terminal || page.ordinal !== ordinal || (generation !== undefined && page.generation !== generation) ||
+					(revision !== undefined && page.rootRevision !== revision)) throw Error('Cloud inventory generation or page order changed.');
+				generation = page.generation; revision = page.rootRevision;
+				if (!ordinal) await inventory.beginCloud(observed, page);
+				ordinal++; count += page.nodes.length;
+				if (!Number.isSafeInteger(count) || (page.totalEntries !== undefined && page.totalEntries !== count))
+					throw Error('Cloud inventory completion count changed.');
+				const metadata = { ordinal: page.ordinal, ...(page.totalEntries === undefined ? {} : { totalEntries: page.totalEntries }) };
+				await inventory.appendCloud(observed, { ...metadata, nodes: page.nodes });
+				terminal = page.totalEntries !== undefined;
+			}
+			check(); if (!terminal) throw Error('Cloud inventory has no final page. Keep the last complete scan.');
+			await inventory.seal(observed); check();
+			if (checkpoint) {
+				await inventory.begin(remote);
+				let next: InventoryCursor | null = null, pageOrdinal = 0;
+				do {
+					const page = await inventory.read(observed, next ?? undefined); check();
+					await inventory.append(remote, { ordinal: pageOrdinal++, entries: page.entries,
+						...(page.next ? {} : { totalEntries: page.totalEntries }) });
+					next = page.next;
+				} while (next);
+				await inventory.seal(remote); check(); await inventory.discard(observed);
+			}
+			return;
+		}
 		const observed = await scanCloud(); check();
 		// Checkpoints own pre-created plain observation captures. Destination
 		// metadata belongs to planning captures; a baseline stores content stamps.

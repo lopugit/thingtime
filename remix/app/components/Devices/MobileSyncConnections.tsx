@@ -27,6 +27,7 @@ import {
 	supportsNativeBackgroundUploads
 } from '~/fileSync/mobileFolders.client';
 import { openSyncJournal, withSyncRootLock, syncScopeKey } from '~/fileSync/journal.client';
+import { readCloudFolderInventoryPages } from '~/fileSync/cloudInventoryPages.client';
 import { readCloudFolderInventory } from '~/fileSync/cloudInventory.client';
 import { approveMobileSyncTarget } from '~/fileSync/mobileSyncTarget.client';
 import { runForegroundCloudSync, type ForegroundSyncProgress } from '~/fileSync/foregroundSync';
@@ -336,6 +337,11 @@ function Connections({
 								} : {}),
 								...(inspectPaths ? { inspectLocal: async (path: string) => (await requestFolders(scope.ownerId,
 									{ action: 'inspect', rootId: saved.configuration.localRootId, path }, active.signal)).inspectedEntry! } : {}),
+								...(host || getNativeBridge()?.platform === 'ios' ? {
+									inventoryPages: () => readCloudFolderInventoryPages(syncScope, saved.configuration.remoteFolderId, {
+										currentScope, signal: active.signal, origin: runtimeOrigin, fetch: runtimeFetch, requireCapability
+									})
+								} : {}),
 								inventory: () =>
 									readCloudFolderInventory(syncScope, saved.configuration.remoteFolderId, {
 										currentScope,

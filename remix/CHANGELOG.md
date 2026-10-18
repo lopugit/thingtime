@@ -68,6 +68,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-19 — **Codex (AI)**: Mac/iOS cloud inventories stream bounded pages from
+  one Mongo snapshot (`api.files` 1.5.0). Incomplete streams and invalid ancestry
+  cannot publish checkpoints. Added isolated real-handler and browser checks;
+  installed acceptance and the live 10,000-path cap remain open. Details:
+  [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
 - 2026-10-18 — **Codex (AI)**: Mac/iOS foreground sync imports sealed native
   folder observations in bounded pages, retaining source/device/grant checks
   and complete checkpoint publication. Large-root cloud paging and installed
