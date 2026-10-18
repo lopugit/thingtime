@@ -68,6 +68,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-18 — **Codex (AI)**: Keep local/account export files as native Blobs
+  through canonical collection and ZIP downloads; preserve prepared anonymous
+  scope fences and cancel stalled file streams. A 66 MiB import/export/import
+  fixture verifies exact bytes with bounded reads. Native browser acceptance and
+  remaining retention/capacity work stay open. [PR #1000 checkpoint](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md#blob-export-collectors--2026-10-18).
+
+
 - 2026-10-18 — **Codex (AI)**: Read selected ZIP transfers as Blob chunks, remove
   the smaller local import buffer ceilings, and assemble ZIP downloads without a
   whole-archive JS buffer. Preserve checksum/entry validation and atomic account

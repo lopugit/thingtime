@@ -50,7 +50,7 @@ test('standalone files round-trip canonical ZIP bytes and metadata with fresh ID
   const input = await bundle(); const created = await things.import(input.manifest, null, input.files);
   const exported = await things.export(created.roots); validateTransfer(exported.manifest);
   const file = recordingTransferFile(exported.manifest.things[0], exported.manifest);
-  assert.deepEqual(exported.files.get(file.id), bytes);
+  assert.deepEqual(new Uint8Array(await exported.files.get(file.id)!.arrayBuffer()), bytes);
   assert.notEqual(created.roots[0], 'root'); assert.equal(exported.manifest.things[0].crystal.filePurpose, 'file');
   assert.equal(JSON.stringify(exported.manifest).includes('localAttachment'), false);
   const decoded = await decodeTransferArchive(await encodeTransferArchive(exported));
@@ -58,7 +58,7 @@ test('standalone files round-trip canonical ZIP bytes and metadata with fresh ID
   assert.notEqual(copied.roots[0], created.roots[0]);
   await things.remove(created.roots);
   const second = await things.export(copied.roots);
-  assert.deepEqual([...second.files.values()][0], bytes);
+  assert.deepEqual(new Uint8Array(await [...second.files.values()][0].arrayBuffer()), bytes);
   await assert.rejects(things.export(copied.roots, { includeFiles:false }), /include file bytes/);
   await assert.rejects(things.update({ id:copied.roots[0], crystal:{ name:'generic bypass' } }), /dedicated/);
   await things.remove(copied.roots);
@@ -73,11 +73,11 @@ test('component media is rebound to copied local bytes and missing bytes never p
   const root = await things.get(created.roots[0]);
   const ids = compositionAttachmentIds(root.thingtime,root.crystal); assert.equal(ids.size,1); assert.equal(ids.has('bytes'),false);
   const exported = await things.export(created.roots);
-  assert.deepEqual([...exported.files.values()][0],bytes);
+  assert.deepEqual(new Uint8Array(await [...exported.files.values()][0].arrayBuffer()),bytes);
   assert.deepEqual([...compositionAttachmentIds(exported.manifest.things[0].thingtime,exported.manifest.things[0].crystal)], [exported.manifest.files[0].id]);
   const copied = await things.import(exported.manifest,null,exported.files);
   await things.remove(created.roots); // owned file children cascade with bytes
-  assert.deepEqual([...((await things.export(copied.roots)).files.values())][0],bytes);
+  assert.deepEqual(new Uint8Array(await [...((await things.export(copied.roots)).files.values())][0].arrayBuffer()),bytes);
   const copiedFile = [...compositionAttachmentIds((await things.get(copied.roots[0])).thingtime,(await things.get(copied.roots[0])).crystal)][0];
   await db.transaction(scope,'readwrite',lease,tx=>tx.deleteBytes(copiedFile));
   await assert.rejects(things.export(copied.roots),/missing or changed/);
@@ -102,7 +102,7 @@ test('in-process transfer readers supply bytes without a remote fetch and remain
  const input=await bundle(); let network=0;
  const plan={roots:input.manifest.roots,things:input.manifest.things,files:input.manifest.files,readLocalFile:async()=>bytes};
  const result=await bundleFromPlan(plan,{fetch:async()=>{network++;throw new Error('must not fetch')}});
- assert.equal(network,0); assert.deepEqual(result.files.get('bytes'),bytes);
+ assert.equal(network,0); assert.deepEqual(new Uint8Array(await result.files.get('bytes')!.arrayBuffer()),bytes);
  const controller=new AbortController();controller.abort();
  await assert.rejects(bundleFromPlan(plan,{signal:controller.signal}),/abort/i);
 });
@@ -115,7 +115,7 @@ test('ordinary folder deletion preserves standalone file bytes and recursive del
   const input = await bundle(); const created = await things.import(input.manifest, folder.id, input.files);
   await things.remove([folder.id]);
   assert.equal((await things.get(created.roots[0])).folderId,null);
-  assert.deepEqual([...((await things.export(created.roots)).files.values())][0], bytes);
+  assert.deepEqual(new Uint8Array(await [...((await things.export(created.roots)).files.values())][0].arrayBuffer()), bytes);
   const replacement=await things.create({thingtime:['folder'],crystal:{name:'Delete files'}});
   await things.move(created.roots,replacement.id);
   await things.remove([replacement.id], true);

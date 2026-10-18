@@ -171,9 +171,10 @@ export function anonymousApi<T extends Record<string, any>>(remote: T): T {
 			return changed({ ...result, id: result.idMap[id] });
 		},
 		export: async ({ ids, ...options }: { ids: string[] }, request?: { signal?: AbortSignal }) => {
-			const { manifest, files } = await service().export(ids, { ...options, signal: request?.signal });
-			return { ok: true, plan: { roots: manifest.roots, things: manifest.things, files: manifest.files,
-				readLocalFile: async (id: string, signal?: AbortSignal) => { lease.assertCurrent(); signal?.throwIfAborted(); const bytes = files.get(id); if (!bytes) throw new WorkspaceError('MISSING_LOCAL_FILE', 'File is not in this export'); return Uint8Array.from(bytes); } } };
+			const { manifest, files, assertCurrent } = await service().export(ids, { ...options, signal: request?.signal });
+			return { ok: true, plan: { assertCurrent, roots: manifest.roots, things: manifest.things, files: manifest.files,
+				...(manifest.links ? { links: manifest.links } : {}), ...(manifest.attachmentOrder ? { attachmentOrder: manifest.attachmentOrder } : {}),
+				readLocalFile: async (id: string, signal?: AbortSignal) => { await assertCurrent(signal); const bytes = files.get(id); if (!bytes) throw new WorkspaceError('MISSING_LOCAL_FILE', 'File is not in this export'); return bytes; } } };
 		},
 		import: async ({ manifest, folderId, localFiles }: { manifest: unknown; folderId?: string | null; localFiles?: Map<string, Uint8Array | Blob> }, request?: { signal?: AbortSignal }) => changed(await service().import(manifest, folderId, localFiles, request?.signal)),
 		bulk: async ({ op, ids, recursive, folderId = null }: { op: string; ids: string[]; recursive?: boolean; folderId?: string | null }) => {

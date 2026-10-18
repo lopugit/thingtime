@@ -36,7 +36,7 @@ test('post commits independently of draft saving and retains files after draft r
   assert.notEqual(imported.roots[0], saved.id);
   await things.remove([saved.id]);
   const roundTrip = await things.export(imported.roots);
-  assert.deepEqual([...roundTrip.files.values()][0], new Uint8Array([1,2,3]));
+  assert.deepEqual(new Uint8Array(await [...roundTrip.files.values()][0].arrayBuffer()), new Uint8Array([1,2,3]));
   assert.equal(roundTrip.manifest.things[0].crystal.text, 'My local card');
  } finally { await db.close(); }
 });

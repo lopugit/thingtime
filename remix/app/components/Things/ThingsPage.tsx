@@ -161,7 +161,7 @@ const ThingsLibraryPage = () => {
   const user = useWorkspaceUser();
   const authenticatedUser = useCurrentUser();
   const [importOpen, setImportOpen] = useState(false);
-  const [importBundle, setImportBundle] = useState<TransferBundle | null>(null);
+  const [importBundle, setImportBundle] = useState<TransferBundle<Uint8Array | Blob> | null>(null);
   const [importDestination, setImportDestination] = useState<string | null>(null);
   const [exportIds, setExportIds] = useState<string[]>([]);
   const transferOperation = useRef<AbortController | null>(null);

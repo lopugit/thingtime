@@ -1,4 +1,5 @@
-import { decodeTransferArchive, encodeTransferArchive, encodeTransferArchiveBlob, transferChecksum, type TransferBundle } from './archive';
+import { binaryBlob, type TransferBinary } from './binary';
+import { decodeTransferArchiveBlob, encodeTransferArchive, encodeTransferArchiveBlob, transferChecksum, type TransferBundle } from './archive';
 import { parseTransfer, serializeTransfer, transferAnnotations, TRANSFER_FORMAT, TRANSFER_LIMITS, TransferFormatError, validateTransfer } from './format';
 import type { TransferPlan } from './plan';
 
@@ -6,38 +7,41 @@ const ZIP_TEXT_PREFIX = 'thingtime:zip:v1:';
 export const MAX_CLIPBOARD_BYTES = 32 * 1024 * 1024;
 const invalid = (message: string): never => { throw new TransferFormatError(message); };
 
-export const bundleFromPlan = async (plan: TransferPlan, options: { key?: string; signal?: AbortSignal; fetch?: typeof fetch } = {}): Promise<TransferBundle> => {
-  if (typeof plan.assertCurrent === 'function') await plan.assertCurrent(options.signal);
-  const manifest = validateTransfer({ format: TRANSFER_FORMAT, version: 1, roots: plan.roots, things: plan.things,
+export const bundleFromPlan = async (plan: TransferPlan, options: { key?: string; signal?: AbortSignal; fetch?: typeof fetch } = {}): Promise<TransferBundle<Blob>> => {
+  options.signal?.throwIfAborted();
+  const assertCurrent = typeof plan.assertCurrent === 'function' ? plan.assertCurrent : undefined;
+  const readLocalFile = typeof plan.readLocalFile === 'function' ? plan.readLocalFile : undefined;
+  const sources = structuredClone(plan.files);
+  const manifest = parseTransfer(serializeTransfer(validateTransfer({ format: TRANSFER_FORMAT, version: 1, roots: plan.roots, things: plan.things,
     ...(plan.links ? { links: plan.links } : {}), ...(plan.attachmentOrder ? { attachmentOrder: plan.attachmentOrder } : {}),
     files: plan.files.map((file, index) => ({ id: file.id, targetId: file.targetId, name: file.name, mime: file.mime, bytes: file.bytes, ...transferAnnotations(file),
-      path: `files/${index.toString().padStart(6, '0')}`, sha256: '0'.repeat(64) })) });
-  serializeTransfer(manifest);
-  const files = new Map<string, Uint8Array>();
-  for (const [index, entry] of plan.files.entries()) {
+      path: `files/${index.toString().padStart(6, '0')}`, sha256: '0'.repeat(64) })) })));
+  await assertCurrent?.(options.signal);
+  const files = new Map<string, Blob>();
+  for (const [index, entry] of sources.entries()) {
     options.signal?.throwIfAborted();
-    if (typeof plan.readLocalFile === 'function') {
-      const bytes = Uint8Array.from(await plan.readLocalFile(entry.id, options.signal));
+    if (readLocalFile) {
+      const bytes = binaryBlob(await readLocalFile(entry.id, options.signal));
       options.signal?.throwIfAborted();
-      if (bytes.byteLength !== entry.bytes || bytes.byteLength > TRANSFER_LIMITS.fileBytes) invalid('A local file changed size during export');
-      manifest.files[index].sha256 = await transferChecksum(bytes);
+      if (bytes.size !== entry.bytes || bytes.size > TRANSFER_LIMITS.fileBytes) invalid('A local file changed size during export');
+      manifest.files[index].sha256 = await transferChecksum(bytes, options.signal);
       files.set(entry.id, bytes);
       continue;
     }
     if (entry.inlineBase64 !== undefined) {
-      const avatar = plan.things.some(thing => thing.id === entry.targetId && thing.thingtime.length === 1 &&
+      const avatar = manifest.things.some(thing => thing.id === entry.targetId && thing.thingtime.length === 1 &&
         thing.thingtime[0] === 'chat-archive-participant' && thing.crystal.avatarFileId === entry.id);
       const limit = avatar ? 2 * 1024 * 1024 : 512 * 1024;
       if (typeof entry.inlineBase64 !== 'string' || entry.inlineBase64.length > Math.ceil(limit / 3) * 4 ||
         entry.sourceId !== undefined || entry.sharedRoot !== undefined || entry.bytes > limit ||
         !['image/png', 'image/jpeg', 'image/gif', 'image/webp'].includes(entry.mime) ||
-        (!avatar && !plan.things.some(thing => thing.id === entry.targetId && thing.thingtime.length === 1 &&
+        (!avatar && !manifest.things.some(thing => thing.id === entry.targetId && thing.thingtime.length === 1 &&
           thing.thingtime[0] === 'custom-emoji' && thing.crystal.emojiFileId === entry.id))) invalid('Invalid inline image');
       let binary: string;
       try { binary = atob(entry.inlineBase64); } catch { return invalid('Invalid inline emoji encoding'); }
       if (binary.length !== entry.bytes || !binary.length || btoa(binary) !== entry.inlineBase64) invalid('Inline emoji image changed size or encoding');
-      const bytes = Uint8Array.from(binary, char => char.charCodeAt(0));
-      manifest.files[index].sha256 = await transferChecksum(bytes);
+      const bytes = new Blob([Uint8Array.from(binary, char => char.charCodeAt(0))]);
+      manifest.files[index].sha256 = await transferChecksum(bytes, options.signal);
       files.set(entry.id, bytes);
       continue;
     }
@@ -49,33 +53,40 @@ export const bundleFromPlan = async (plan: TransferPlan, options: { key?: string
     if (entry.sharedRoot) query.set('sharedRoot', entry.sharedRoot);
     if (options.key) query.set('key', options.key);
     const response = await (options.fetch || fetch)(`/api/v1/attachments/content?${query}`, { signal: options.signal, credentials: 'same-origin', cache: 'no-store', referrerPolicy: 'no-referrer' });
-    if (!response.ok || !response.body) invalid('A file is no longer readable; no partial export was created');
+    if (!response.ok || !response.body) {
+      await response.body?.cancel().catch(() => {});
+      invalid('A file is no longer readable; no partial export was created');
+    }
     const reader = response.body!.getReader();
-    const chunks: Uint8Array[] = [];
+    const chunks: Blob[] = [];
     let size = 0;
+    const cancel = () => { void reader.cancel().catch(() => {}); };
+    options.signal?.addEventListener('abort', cancel, { once: true });
     try {
       while (true) {
         options.signal?.throwIfAborted();
         const part = await reader.read();
+        options.signal?.throwIfAborted();
         if (part.done) break;
         size += part.value.byteLength;
         if (size > entry.bytes || size > TRANSFER_LIMITS.fileBytes) invalid('A file grew beyond its export limit');
-        chunks.push(part.value);
+        chunks.push(new Blob([Uint8Array.from(part.value)]));
       }
       if (size !== entry.bytes) invalid('A file changed size during export');
-    } finally { await reader.cancel().catch(() => {}); reader.releaseLock(); }
-    const bytes = new Uint8Array(size);
-    let offset = 0;
-    for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
-    manifest.files[index].sha256 = await transferChecksum(bytes);
+    } finally {
+      options.signal?.removeEventListener('abort', cancel);
+      await reader.cancel().catch(() => {}); reader.releaseLock();
+    }
+    const bytes = new Blob(chunks);
+    manifest.files[index].sha256 = await transferChecksum(bytes, options.signal);
     files.set(entry.id, bytes);
   }
   options.signal?.throwIfAborted();
-  if (typeof plan.assertCurrent === 'function') await plan.assertCurrent(options.signal);
-  return { manifest, files, ...(typeof plan.assertCurrent === 'function' ? {assertCurrent:plan.assertCurrent} : {}) };
+  await assertCurrent?.(options.signal);
+  return { manifest, files, ...(assertCurrent ? { assertCurrent } : {}) };
 };
 
-export const transferClipboardText = async (bundle: TransferBundle, signal?: AbortSignal): Promise<string> => {
+export const transferClipboardText = async (bundle: TransferBundle<TransferBinary>, signal?: AbortSignal): Promise<string> => {
   signal?.throwIfAborted();
   if (typeof bundle.assertCurrent === 'function') await bundle.assertCurrent(signal);
   if (!bundle.manifest.files.length) {
@@ -92,7 +103,7 @@ export const transferClipboardText = async (bundle: TransferBundle, signal?: Abo
   return ZIP_TEXT_PREFIX + btoa(binary);
 };
 
-export const readTransferClipboard = async (text: string, signal?: AbortSignal): Promise<TransferBundle> => {
+export const readTransferClipboard = async (text: string, signal?: AbortSignal): Promise<TransferBundle<Blob>> => {
   signal?.throwIfAborted();
   if (text.length > MAX_CLIPBOARD_BYTES) invalid('The clipboard transfer is too large');
   if (!text.startsWith(ZIP_TEXT_PREFIX)) {
@@ -102,13 +113,13 @@ export const readTransferClipboard = async (text: string, signal?: AbortSignal):
   }
   let binary: string;
   try { binary = atob(text.slice(ZIP_TEXT_PREFIX.length)); } catch { return invalid('Invalid clipboard ZIP encoding'); }
-  return decodeTransferArchive(Uint8Array.from(binary, (character) => character.charCodeAt(0)), signal);
+  return decodeTransferArchiveBlob(new Blob([Uint8Array.from(binary, (character) => character.charCodeAt(0))]), signal);
 };
 
 /** Call directly in the user's click/key handler. ClipboardItem receives a
  * promise immediately, preserving Safari's transient user activation while
  * authorized content and files are still loading. */
-export const writeTransferClipboard = (bundle: Promise<TransferBundle>, signal?: AbortSignal): Promise<string> => {
+export const writeTransferClipboard = (bundle: Promise<TransferBundle<TransferBinary>>, signal?: AbortSignal): Promise<string> => {
   const text = bundle.then((value) => transferClipboardText(value, signal));
   // A denied permission can settle before the export promise. Observe both.
   void text.catch(() => {});
@@ -130,7 +141,7 @@ export const writeTransferClipboard = (bundle: Promise<TransferBundle>, signal?:
   } catch (error) { return Promise.reject(error); }
 };
 
-export const downloadTransfer = async (bundle: TransferBundle, format: 'json' | 'zip' = 'zip', name = 'thingtime', signal?: AbortSignal) => {
+export const downloadTransfer = async (bundle: TransferBundle<TransferBinary>, format: 'json' | 'zip' = 'zip', name = 'thingtime', signal?: AbortSignal) => {
   if (typeof bundle.assertCurrent === 'function') await bundle.assertCurrent(signal);
   if (format === 'json' && bundle.manifest.files.length) invalid('Use ZIP to include the file bytes');
   const blob = format === 'json' ? new Blob([serializeTransfer(bundle.manifest)], { type: 'application/json' })

@@ -12128,3 +12128,13 @@ Local results do not establish current-head CI or deployed acceptance.
 - [x] ZIP download snapshots mutable arrays/map/metadata before async preparation, rejects lost availability and builds Blob output without a whole-archive JS allocation.
 - [ ] In the isolated native browser, select the same ZIP through the Import dialog, confirm it, cold reload offline and download exact bytes; check cancellation/refusal messaging and top-to-bottom desktop/390/320px layout. Existing sandbox-startup blocker remains open.
 - [ ] Finish remaining buffered export collection/clipboard, remote retention and paired-device paths; existing canonical transfer budgets remain unchanged in this checkpoint.
+
+### Blob export collection and scoped cancellation — 2026-10-18
+
+- [x] Carry a 66 MiB ZIP through the normal selected-file reader, local import, storage reopen, canonical export collector, Blob ZIP and second normal import. Compare independent SHA-256 digests and fresh identities; refuse Blob reads above 1 MiB throughout.
+- [x] Export account-native Blobs without waiting for upload; verify scoped data, pending intent, checksum failures, deletion/refusal and retirement. Compare actual Blob contents in regression assertions, not opaque object equality.
+- [x] Capture metadata, file IDs, bytes and callbacks before async hashing/checks. Mutating caller input must not alter the prepared snapshot or its checksum bindings.
+- [x] Cancel a stalled file response and release the reader; reject short/long/forbidden content without a partial bundle. Keep exact attachment source and audience parameters.
+- [x] Retire or cancel an anonymous export after preparation, including a no-file bundle; JSON, clipboard and ZIP must retain the original scope fence.
+- [ ] Run the complete native Import/Export/Copy UI matrix in the isolated browser at 1440×1000, 390×844 and 320px, including top-to-bottom scroll, opened dialogs, cold offline reopen and cancelled/refused states. The recorded Chrome sandbox failure still prevents current native acceptance.
+- [ ] Complete remote retention, paired-device and remaining capacity/traversal work; clipboard text and explicit byte exports still need a final serialized buffer.

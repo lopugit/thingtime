@@ -209,7 +209,7 @@ test('a home theme bundle retains exact file bytes and independent upload intent
 		assert.equal(exported.plan.things.length, 3);
 		assert.equal(exported.plan.files.length, 1);
 		assert.equal(exported.plan.files[0].title, 'Editable original');
-		assert.deepEqual(await exported.plan.readLocalFile(exported.plan.files[0].id), bytes);
+		assert.deepEqual(new Uint8Array(await (await exported.plan.readLocalFile(exported.plan.files[0].id)).arrayBuffer()), bytes);
 		assert.deepEqual(await db.transaction(selected, 'readonly', lease, (t) => t.list('account-files')), []);
 		assert.equal((await db.transaction(home, 'readonly', lease, (t) => t.list('account-files'))).length, 1);
 	} finally {

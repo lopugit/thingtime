@@ -38,7 +38,7 @@ test('owned bound originals and parent commit atomically, export exact bytes and
    await f.db.transaction(f.scope,'readonly',f.lease,async tx=>{for(const {value} of await tx.list<any>('account-files')){assert.equal(value.source,'account');assert.equal(value.request.requestId,undefined);assert.equal(value.state,'synced');}});
    const exported=await exportAccountThings({ids:['post']},{...f,canRefresh:()=>false,remote:async()=>{throw Error('Unexpected remote export');}});
    const result=await bundleFromPlan(exported.plan);
-   assert.equal(result.manifest.files.length,2);for(const file of result.manifest.files)assert.deepEqual(result.files.get(file.id),f.bytes);
+   assert.equal(result.manifest.files.length,2);for(const file of result.manifest.files)assert.deepEqual(new Uint8Array(await result.files.get(file.id)!.arrayBuffer()),f.bytes);
   }finally{await f.db.close();}
  }
 });
@@ -54,7 +54,7 @@ test('retained post exports use pending edits and intentional removals without w
   for(const target of [new LocalThings(f.db,{kind:'anonymous'},f.lease),f.sync.things]){
    const imported=await target.import(bundle.manifest,null,bundle.files);assert.notEqual(imported.roots[0],'post');
    const again=await target.export(imported.roots);assert.equal(again.manifest.things[0].crystal.text,'Latest offline text');
-   assert.equal(again.files.size,1);for(const bytes of again.files.values())assert.deepEqual(bytes,f.bytes);
+   assert.equal(again.files.size,1);for(const bytes of again.files.values())assert.deepEqual(new Uint8Array(await bytes.arrayBuffer()),f.bytes);
   }
   assert.equal((await f.sync.view('post'))!.syncState,'pending');
  }finally{await f.db.close();}
@@ -83,7 +83,7 @@ test('reviewing a conflict preserves the complete local binding for export when 
   await f.sync.resolveConflict(transport,{id:'post',keep:'local',localRevision:review.localRevision,remoteUpdatedAt:review.remote.updatedAt});
   const exported=await exportAccountThings({ids:['post']},{...f,canRefresh:()=>false,remote:async()=>{throw Error('Unexpected network');}});
   const bundle=await bundleFromPlan(exported.plan);assert.equal(bundle.manifest.things[0].crystal.text,'Keep device edit');assert.equal(bundle.files.size,2);
-  for(const bytes of bundle.files.values())assert.deepEqual(bytes,f.bytes);
+  for(const bytes of bundle.files.values())assert.deepEqual(new Uint8Array(await bytes.arrayBuffer()),f.bytes);
  }finally{await f.db.close();}
 });
 

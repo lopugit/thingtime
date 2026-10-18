@@ -55,7 +55,7 @@ test('post and comment files bind atomically locally and wait for verified recei
   assert.equal((await f.sync.sync(f.content)).completed,0);assert.deepEqual(f.writes,[]);
   const replyFile=await f.select('comment'),reply=await f.sync.things.savePost({thingtime:['post','comment'],targetId:root.id,crystal:{type:'text',text:'Reply with a file'},attachmentIds:[replyFile.id]});
   const exported=await exportAccountThings({ids:[root.id,reply.id]}, {sync:f.sync,files:f.files,db:f.db,lease:f.lease,canRefresh:()=>false,remote:async()=>{throw Error('Unexpected network');}});
-  assert.equal(exported.plan.files.length,2);for(const item of exported.plan.files)assert.deepEqual(await exported.plan.readLocalFile(item.id),f.bytes);
+  assert.equal(exported.plan.files.length,2);for(const item of exported.plan.files)assert.deepEqual(new Uint8Array(await (await exported.plan.readLocalFile(item.id)).arrayBuffer()),f.bytes);
   await f.files.sync(f.upload);await f.sync.sync(f.content);
   assert.equal(f.uploads.length,2);assert.deepEqual(new Set(f.uploads.map(row=>row.purpose)),new Set(['post','comment']));
   assert.equal(f.writes.length,2);assert.equal(f.writes[0].id,root.id);assert.equal(f.writes[1].id,reply.id);

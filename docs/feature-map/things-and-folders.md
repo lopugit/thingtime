@@ -1,5 +1,16 @@
 # Things and folders
 
+Native transfer export carries Blob handles through `collectTransfer`,
+`exportLocalThingSnapshot`, `accountExport.ts` and `bundleFromPlan`. Downloads use
+the chunked Blob ZIP encoder; byte/clipboard compatibility callers materialize only
+their final serialized output. Prepared anonymous bundles preserve identity and
+cancellation fences; account file availability remains scoped. Regressions:
+`transferBlobs.test.ts`, `accountFileExport.test.ts`, `api.client.test.ts` and
+`thingTransfer/{browser,collect}.test.ts`. See the
+[export checkpoint](../local-workspaces.md#blob-export-collection--2026-10-18) for
+native acceptance and remaining retention/transport work.
+
+
 Normal account ZIP import uses `local-workspace/accountImport.ts` for shared
 UI/facade routing, and `AccountThingSync` plus `AccountFileSync.contentHooks`
 for atomic local admission and receipt-dependent media remapping. Regressions:

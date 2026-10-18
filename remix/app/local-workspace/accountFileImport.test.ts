@@ -51,7 +51,7 @@ test('account imports commit files, content and both queues atomically before an
   const exported = await exportAccountThings({ ids: imported.roots }, { sync: f.sync, files: f.files, db: f.db, lease: f.lease, canRefresh: () => false, remote: async () => { throw Error('Unexpected remote export'); } });
   recordingTransferFile(exported.plan.things.find((row: any) => row.id === fileId), { format: 'thingtime.transfer', version: 1, ...exported.plan });
   assert.equal(accountImportSupported({ format: 'thingtime.transfer', version: 1, ...exported.plan }), true);
-  assert.equal(exported.plan.files[0].title, 'Portable title'); assert.deepEqual(await exported.plan.readLocalFile(exported.plan.files[0].id), f.bytes);
+  assert.equal(exported.plan.files[0].title, 'Portable title'); assert.deepEqual(new Uint8Array(await (await exported.plan.readLocalFile(exported.plan.files[0].id)).arrayBuffer()), f.bytes);
   const again = await f.importing(); assert.notEqual(again.idMap.file, fileId); assert.notEqual((await f.files.readFile(again.idMap.file)).row.localAttachment.requestId, file.localAttachment.requestId);
  } finally { await f.db.close(); }
 });

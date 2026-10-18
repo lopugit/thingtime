@@ -3,8 +3,8 @@ import { test } from 'node:test';
 import { IDBFactory } from 'fake-indexeddb';
 import { anonymousApi, resolveLocalWebpage } from './api.client';
 import { anonymousWorkspaceDatabase, bindLocalWorkspace } from './runtime.client';
-import { transferChecksum } from '../utils/thingTransfer/archive';
-import { bundleFromPlan } from '../utils/thingTransfer/browser';
+import { encodeTransferArchiveBlob, transferChecksum } from '../utils/thingTransfer/archive';
+import { bundleFromPlan, transferClipboardText } from '../utils/thingTransfer/browser';
 import { rootIdentity } from '../utils/rootIdentity';
 
 test('anonymous API writes and exports use no network and a retired facade cannot switch to an account', async () => {
@@ -58,7 +58,12 @@ test('anonymous API writes and exports use no network and a retired facade canno
 			things: [{ id: 'file', thingtime: ['attachment'], crystal: { recordingFileId: 'bytes', filePurpose: 'file' } }],
 			files: [{ id: 'bytes', targetId: 'file', path: 'files/000000', name: 'local.txt', mime: 'text/plain', bytes: fileBytes.length, sha256: await transferChecksum(fileBytes) }] }, localFiles: new Map([['bytes', fileBytes]]) });
 		const filePlan = (await api.things.export({ ids: fileImport.roots })).plan;
-		assert.deepEqual([...((await bundleFromPlan(filePlan, { fetch: remote })).files.values())][0], fileBytes);
+		const cancelledExport = new AbortController();
+		const cancelledPlan = (await api.things.export({ ids: fileImport.roots }, { signal: cancelledExport.signal })).plan;
+		cancelledExport.abort();
+		await assert.rejects(cancelledPlan.readLocalFile(cancelledPlan.files[0].id), { name: 'AbortError' });
+		await assert.rejects(bundleFromPlan(cancelledPlan), { name: 'AbortError' });
+		assert.deepEqual(new Uint8Array(await [...((await bundleFromPlan(filePlan, { fetch: remote })).files.values())][0].arrayBuffer()), fileBytes);
 		// Renaming an owned local file is a local write, not a cloud account call.
 		const annotated = await api.attachments.annotate({ id: fileImport.roots[0], title: 'Renamed offline file' });
 		assert.equal(annotated.attachment.title, 'Renamed offline file');
@@ -71,7 +76,7 @@ test('anonymous API writes and exports use no network and a retired facade canno
 		const deleted = await api.things.bulk({ op: 'delete', ids: fileImport.roots });
 		assert.equal(deleted.succeeded, 1); assert.equal(deleted.results[0].ok, true);
 		assert.equal(fileCopy.succeeded, 1); assert.equal(fileCopy.results[0].newId, fileCopy.roots[0]);
-		assert.deepEqual([...((await bundleFromPlan((await api.things.export({ ids: fileCopy.roots })).plan, { fetch: remote })).files.values())][0], fileBytes);
+		assert.deepEqual(new Uint8Array(await [...((await bundleFromPlan((await api.things.export({ ids: fileCopy.roots })).plan, { fetch: remote })).files.values())][0].arrayBuffer()), fileBytes);
 		assert.equal(remoteCalls, 0);
 		const poll = await api.things.create({ thingtime: ['post'], crystal: { type: 'thingtime', thing: { question: 'Offline API poll', options: ['Gold', 'Peach'] } } });
 		await api.things.react({ id: poll.id, emoji: '🥰' });
@@ -84,12 +89,16 @@ test('anonymous API writes and exports use no network and a retired facade canno
 		assert.equal((await api.things.get({ id: poll.id })).post.votes.score, 1);
 		await assert.rejects(api.things.save({ id: 'private-remote-id' }), /not available for local interactions/);
 		assert.equal(remoteCalls, 0);
+		const prepared = await bundleFromPlan(exported);
 		rootIdentity.changed(); bindLocalWorkspace(false, rootIdentity.read().generation); rootIdentity.confirm(rootIdentity.read().generation);
 		await assert.rejects(api.things.create({ crystal: { name: 'Late callback' } }), /Workspace changed/);
 		await assert.rejects(api.things.save({ id: poll.id }), /Workspace changed/);
 		await assert.rejects(api.things.saved(), /Workspace changed/);
 		await assert.rejects(api.things.search({ workspace: true, device: true }), /Workspace changed/);
 		await assert.rejects(filePlan.readLocalFile(filePlan.files[0].id), /Workspace changed/);
+		await assert.rejects(bundleFromPlan(exported), /Workspace changed/);
+		await assert.rejects(encodeTransferArchiveBlob(prepared), /Workspace changed/);
+		await assert.rejects(transferClipboardText(prepared), /Workspace changed/);
 		assert.equal(remoteCalls, 0);
 	} finally {
 		await anonymousWorkspaceDatabase().close();

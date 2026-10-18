@@ -1,3 +1,4 @@
+import type { TransferBinary } from '../utils/thingTransfer/binary';
 import { binaryBlob, binarySize, blobChecksum, checkedBinary, sameBinary } from './binary';
 import { normalizeLibraryTitle } from '../utils/libraryTitle';
 import { LOCAL_TIMELINE_FOLDER, localTimelineFolder, recordLocalThingChanges, type LocalMutationCapture } from './timeline';
@@ -432,7 +433,7 @@ export class LocalThings {
 	}
 	async export(ids: string[], options: CollectTransferOptions = {}) {
 		return exportLocalThingSnapshot(await this.snapshot(), this.builtins, ids, this.lease,
-			async id => (await this.readFile(id, options.signal)).bytes, options);
+			async id => (await this.readFileBlob(id, options.signal)).blob, options);
 	}
 	async import(input: unknown, folderId?: string | null, fileBytes = new Map<string, Uint8Array | Blob>(), signal?: AbortSignal) {
 		this.lease.assertCurrent(); signal?.throwIfAborted();
@@ -528,8 +529,8 @@ export class LocalThings {
 
 /** Collect one immutable device snapshot through the canonical transfer pipeline.
  * Account adapters must prove cache completeness before each selected read. */
-export async function exportLocalThingSnapshot(saved: LocalThing[], builtins: readonly TransferThing[], ids: string[],
- lease: WorkspaceLease, readBytes: (id: string) => Promise<Uint8Array | undefined>, options: CollectTransferOptions = {},
+export async function exportLocalThingSnapshot<T extends TransferBinary = Uint8Array>(saved: LocalThing[], builtins: readonly TransferThing[], ids: string[],
+ lease: WorkspaceLease, readBytes: (id: string) => Promise<T | undefined>, options: CollectTransferOptions = {},
  assertAvailable?: (thing: TransferThing) => void, aliasIds?: ReadonlySet<string>) {
 	if (ids.includes(LOCAL_TIMELINE_FOLDER)) fail('MANAGED_KIND', 'Open History to export a saved version.');
 	if (saved.some(row => ids.includes(row.id) && isLocalActivity(row))) fail('MANAGED_KIND', 'Export the content Thing; local interaction and run state is not portable account authority');
@@ -565,7 +566,7 @@ export async function exportLocalThingSnapshot(saved: LocalThing[], builtins: re
 				const row = attachments.find(row => row.id === id);
 				if (!row) fail('MISSING_LOCAL_FILE', `File ${id} is not stored in this workspace`, 404);
 				const data = await readBytes(id);
-				if (!data || data.byteLength !== row!.crystal.size || await transferChecksum(data) !== row!.localAttachment.sha256) fail('MISSING_LOCAL_FILE', 'Local file bytes are missing or changed; no partial export was created');
+				if (!data || binarySize(data) !== row!.crystal.size || await transferChecksum(data, options.signal) !== row!.localAttachment.sha256) fail('MISSING_LOCAL_FILE', 'Local file bytes are missing or changed; no partial export was created');
 				lease.assertCurrent();
 				yield { id: localAttachmentFileId(id), name: String(row!.crystal.name), mime: String(row!.crystal.contentType), data: data!, ...transferAnnotations(row!.crystal as any) };
 			}
@@ -583,5 +584,6 @@ export async function exportLocalThingSnapshot(saved: LocalThing[], builtins: re
 	const crystals = rewriteTransferMedia(bundle.manifest.things, includedCopies);
 	for (const row of bundle.manifest.things) row.crystal = crystals.get(row.id)!;
 	serializeTransfer(bundle.manifest);
-	lease.assertCurrent(); return bundle;
+	const assertCurrent = async (signal?: AbortSignal) => { lease.assertCurrent(); options.signal?.throwIfAborted(); signal?.throwIfAborted(); };
+	await assertCurrent(); return { ...bundle, assertCurrent };
 }

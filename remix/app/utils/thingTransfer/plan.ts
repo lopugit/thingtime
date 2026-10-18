@@ -1,3 +1,4 @@
+import type { TransferBinary } from './binary';
 import type { TransferThing, TransferLink, TransferAnnotations } from './format';
 
 /** Short-lived authorized download plan, never the portable archive itself.
@@ -9,7 +10,7 @@ export type TransferPlan = {
   assertCurrent?: (signal?: AbortSignal) => Promise<void>;
   /** In-process local adapter only. JSON from a remote server cannot supply a
    * callable reader. This capability is scoped and excluded from the bundle. */
-  readLocalFile?: (id: string, signal?: AbortSignal) => Promise<Uint8Array>;
+  readLocalFile?: (id: string, signal?: AbortSignal) => Promise<TransferBinary>;
   roots: string[];
   things: TransferThing[];
   files: (TransferAnnotations & { id: string; sourceId?: string; inlineBase64?: string; targetId: string; name: string; mime: string; bytes: number; sharedRoot?: string })[];

@@ -1,4 +1,4 @@
-import { Unzip, UnzipInflate, Zip, ZipPassThrough, zip } from 'fflate';
+import { Unzip, UnzipInflate, Zip, ZipPassThrough } from 'fflate';
 import { parseTransfer, serializeTransfer, TRANSFER_LIMITS, TransferFormatError, type ThingTransfer } from './format';
 import { binaryBlob, binarySize, blobChecksum, type TransferBinary } from './binary';
 
@@ -30,28 +30,15 @@ export const verifyTransferFiles = async (bundle: TransferBundle<TransferBinary>
   abort(signal);
 };
 
-export const encodeTransferArchive = async (bundle: TransferBundle, signal?: AbortSignal): Promise<Uint8Array> => {
-  if (typeof bundle.assertCurrent === 'function') await bundle.assertCurrent(signal);
-  const manifest = new TextEncoder().encode(serializeTransfer(bundle.manifest));
-  await verifyTransferFiles(bundle, signal);
-  const entries: Record<string, Uint8Array> = { [TRANSFER_MANIFEST_PATH]: manifest };
-  for (const file of bundle.manifest.files) entries[file.path] = bundle.files.get(file.id)!;
-  // Files are commonly already-compressed media. Store them without another
-  // compression pass; the resulting ZIP is readable by ordinary ZIP tools.
-  const archive = await new Promise<Uint8Array>((resolve, reject) => {
-    abort(signal);
-    let cancel: (() => void) | undefined;
-    const stopped = () => { cancel?.(); reject(signal?.reason || new DOMException('Aborted', 'AbortError')); };
-    signal?.addEventListener('abort', stopped, { once: true });
-    cancel = zip(entries, { level: 0 }, (error, bytes) => {
-      signal?.removeEventListener('abort', stopped);
-      if (error) reject(error);
-      else if (bytes.byteLength > MAX_ARCHIVE_BYTES) reject(new TransferFormatError('Transfer archive is too large'));
-      else resolve(bytes);
-    });
-  });
-  if (typeof bundle.assertCurrent === 'function') await bundle.assertCurrent(signal);
-  return archive;
+/** Buffered compatibility for clipboard and byte-oriented consumers. Native
+ * downloads call encodeTransferArchiveBlob directly. */
+export const encodeTransferArchive = async (bundle: TransferBundle<TransferBinary>, signal?: AbortSignal): Promise<Uint8Array> => {
+  const assertCurrent = bundle.assertCurrent;
+  const blob = await encodeTransferArchiveBlob(bundle, signal);
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  abort(signal);
+  await assertCurrent?.(signal);
+  return bytes;
 };
 
 /** Downloadable archive without joining files or the ZIP into one JS buffer. */

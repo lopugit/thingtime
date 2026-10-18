@@ -223,7 +223,7 @@ export async function exportAccountThings(
 			[],
 			ids,
 			lease,
-			async (id) => (await deps.files!.readFile(id, signal)).bytes,
+			async (id) => (await deps.files!.readFileBlob(id, signal)).blob,
 			{ ...args, signal },
 			(row) => {
 				if (files.has(row.id)) return;
@@ -336,7 +336,7 @@ export async function exportAccountThings(
 									await assertCurrent(requestSignal);
 									const bytes = bundle.files.get(id);
 									if (!bytes) throw new WorkspaceError('MISSING_LOCAL_FILE', 'File is not in this export.', 404);
-									return Uint8Array.from(bytes);
+									return bytes;
 								}
 						  }
 						: {})

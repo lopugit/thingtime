@@ -38,7 +38,7 @@ test('account folder ZIP uses saved annotated files and round-trips exact bytes 
   assert.deepEqual(new Set(bundle.manifest.things.map(row => row.id)), new Set([folder.id, note.id, file.id]));
   assert.equal(bundle.manifest.files.length, 1); assert.equal(bundle.manifest.files[0].title, 'Offline file title');
   assert.equal(bundle.manifest.files[0].description, 'Portable description'); assert.equal(bundle.manifest.files[0].filenamePreview, 'Display name');
-  assert.deepEqual(bundle.files.get(bundle.manifest.files[0].id), f.bytes);
+  assert.deepEqual(new Uint8Array(await bundle.files.get(bundle.manifest.files[0].id)!.arrayBuffer()), f.bytes);
   assert.doesNotMatch(serializeTransfer(bundle.manifest), /"author"|"acl"|"localAttachment"|"requestId"|"accountFileId"|"revision"/);
   const copies = new LocalThings(f.db, { kind: 'anonymous' }, f.lease);
   const imported = await copies.import(bundle.manifest, null, bundle.files);
@@ -56,7 +56,7 @@ test('canonical retained file aliases export the current local metadata once wit
   const result = await exportAccountThings({ ids: ['canonical-file', file.id] }, f.deps);
   const bundle = await bundleFromPlan(result.plan);
   assert.deepEqual(bundle.manifest.roots, [file.id]); assert.equal(bundle.manifest.files.length, 1);
-  assert.equal(bundle.manifest.files[0].title, 'Edited before sync'); assert.deepEqual(bundle.files.get(bundle.manifest.files[0].id), f.bytes);
+  assert.equal(bundle.manifest.files[0].title, 'Edited before sync'); assert.deepEqual(new Uint8Array(await bundle.files.get(bundle.manifest.files[0].id)!.arrayBuffer()), f.bytes);
   assert.equal((await f.files.views([file.id]))[0].localAttachment.requestId, undefined);
   assert.equal((await f.sync.status()).length, 0);
   await assert.rejects(exportAccountThings({ ids: ['canonical-file'], includeFiles: false }, f.deps), /include file bytes/);
@@ -73,7 +73,7 @@ test('local page media references to retained account aliases become independent
   assert.equal(bundle.manifest.files.length, 1);
   assert.equal(bundle.manifest.files[0].id, file.id + ':bytes');
   assert.doesNotMatch(serializeTransfer(bundle.manifest), /canonical-file/);
-  assert.deepEqual(bundle.files.get(bundle.manifest.files[0].id), f.bytes);
+  assert.deepEqual(new Uint8Array(await bundle.files.get(bundle.manifest.files[0].id)!.arrayBuffer()), f.bytes);
   await f.sync.sync({ get: async () => { throw { status: 404 }; }, write: async op => ({ id: op.id, thingtime: op.body.thingtime as string[], crystal: op.body.crystal as any, createdAt: '2026-10-17T00:00:00Z', updatedAt: '2026-10-17T00:00:01Z', revision: 1, author: { id: f.scope.ownerId }, acl: ['tt:user'], visibility: 'private' }) });
   const after = await bundleFromPlan((await exportAccountThings({ ids: [page.id] }, f.deps)).plan);
   assert.equal(serializeTransfer(after.manifest), serializeTransfer(bundle.manifest));
@@ -110,8 +110,9 @@ test('file downloads reject damaged bytes and missing workspace data without ret
 test('export readers return immutable copies and fence cancellation and a retired account', async () => {
  const f = setup(); try {
   const file = await f.save(), result = await exportAccountThings({ ids: [file.id] }, f.deps), fileId = result.plan.files[0].id;
-  const first = await result.plan.readLocalFile(fileId); first.fill(0);
-  assert.deepEqual(await result.plan.readLocalFile(fileId), f.bytes);
+  const first = await result.plan.readLocalFile(fileId);
+  assert.ok(first instanceof Blob); new Uint8Array(await first.arrayBuffer()).fill(0);
+  assert.deepEqual(new Uint8Array(await (await result.plan.readLocalFile(fileId)).arrayBuffer()), f.bytes);
   await assert.rejects(result.plan.readLocalFile('unrelated'), /not in this export/);
   const controller = new AbortController(); controller.abort(); await assert.rejects(result.plan.readLocalFile(fileId, controller.signal));
   await f.files.things.annotateFile({ id: file.id, title: 'Later metadata' });
@@ -181,6 +182,6 @@ test('canonical account refusal does not remove independent device-authored orig
   await new AccountDiscussionCache(f.db, f.scope, f.lease).forget('canonical-file');
   assert.deepEqual((await f.files.readFile(file.id)).bytes, f.bytes);
   const bundle = await bundleFromPlan((await exportAccountThings({ ids: [file.id] }, f.deps)).plan);
-  assert.deepEqual(bundle.files.get(bundle.manifest.files[0].id), f.bytes);
+  assert.deepEqual(new Uint8Array(await bundle.files.get(bundle.manifest.files[0].id)!.arrayBuffer()), f.bytes);
  } finally { await f.db.close(); }
 });

@@ -4607,3 +4607,36 @@ run failed to initialize its nested sandbox before reaching the app; no boundary
 was broadened and no new browser run is claimed here. The native matrix must cover
 normal ZIP selection, confirmation, cold offline reopen, exact download and
 failure/cancel states at 1440/390/320px. CI and deployed verification are separate.
+
+## Blob export collection — 2026-10-18
+
+Native file handles now survive `LocalThings.export`, `exportAccountThings`, the
+shared `collectTransfer` collector, `bundleFromPlan` and ZIP assembly. Saved
+anonymous/account files use `readFileBlob`; authenticated content responses are
+collected into immutable Blob parts instead of a joined whole-file byte array.
+Metadata, reader identity and mutable input bytes are captured before asynchronous
+checks. Anonymous prepared exports retain their workspace and cancellation fence,
+including bundles with no files. Account deletion/refusal checks remain in place.
+A cancelled stalled response releases its reader without waiting for more data.
+
+The canonical `thingtime.transfer` v1 validator, serializer, dependency traversal,
+checksums and wire budgets are unchanged. Normal selected ZIPs and clipboard ZIP
+readers return Blob files. Clipboard text and explicitly byte-oriented archive
+callers still materialize their final serialized value; native downloads use the
+Blob encoder directly. Remote retention, paired-device transport, catalogue and
+remaining traversal/capacity work are separate unfinished paths.
+
+Local evidence: 39 focused export checks and 20 collector/stream checks passed
+(overlapping coverage); the final anonymous-fence suite passed six checks. The
+66 MiB two-file fixture now completes normal ZIP selection, local import, reopen,
+export collection, ZIP download assembly and a second normal import with fresh
+identities and independent SHA-256 comparisons. Instrumentation refuses Blob
+`arrayBuffer` reads above 1 MiB throughout that native-data path. Account export
+also keeps scoped Blob handles while its upload intents remain pending. These are
+in-process IndexedDB fixtures, not native browser acceptance. Things suites passed
+326 + 18 checks. Broader regression, build, lint and typecheck results are retained
+in `tmp/blob-export-*.log`; the PR checkpoint records their final outcomes.
+
+The existing isolated Chrome sandbox-startup blocker remains open. No current-head
+native screenshots, UI acceptance or deployment proof is claimed by this checkpoint.
+The transfer and account browser matrix in `TESTING.md` remains required.

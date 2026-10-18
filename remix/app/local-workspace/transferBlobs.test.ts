@@ -5,6 +5,9 @@ import { IDBFactory, IDBKeyRange } from 'fake-indexeddb';
 import { WorkspaceDatabase, type WorkspaceLease } from './storage';
 import { LocalThings } from './things';
 import { AccountFileSync } from './accountFiles';
+import { AccountThingSync } from './accountSync';
+import { exportAccountThings } from './accountExport';
+import { bundleFromPlan } from '../utils/thingTransfer/browser';
 import { createQuotaFactory } from './storageTestFixture';
 import { encodeTransferArchiveBlob, transferChecksum, type TransferBundle } from '../utils/thingTransfer/archive';
 import { readTransferFile } from '../utils/thingTransfer/readFile';
@@ -48,6 +51,16 @@ test('normal ZIP selection imports over 64 MiB as Blobs with bounded reads and f
    assert.equal(stored.blob.size,33*1024*1024);
    assert.equal(await transferChecksum(stored.blob),input.manifest.files[index].sha256);
   }
+  const exported = await things.export(result.roots);
+  assert.ok([...exported.files.values()].every(file => file instanceof Blob));
+  const plan = { ...exported.manifest, assertCurrent: exported.assertCurrent,
+   readLocalFile: async (id: string) => exported.files.get(id)! };
+  const collected = await bundleFromPlan(plan, {fetch: async () => {throw Error('Anonymous export must not fetch');}});
+  const reselected = await readTransferFile(await encodeTransferArchiveBlob(collected));
+  assert.deepEqual(reselected.manifest, collected.manifest);
+  const copy = await things.import(reselected.manifest,null,reselected.files);
+  assert.ok(copy.roots.every(id => !result.roots.includes(id)));
+  for (const id of copy.roots) assert.equal(await transferChecksum((await things.readFileBlob(id)).blob),input.manifest.files[0].sha256);
   assert.ok(largestRead <= 1024 * 1024);
  } finally { await db.close(); }
 });
@@ -119,5 +132,29 @@ test('account Blob import finishes locally with scoped upload intent and atomic 
   assert.deepEqual(new Set(queued.map(row=>row.id)),new Set(imported.roots));
   for(const id of imported.roots)assert.equal((await files.readFileBlob(id)).blob.size,4096);
   assert.deepEqual(await db.transaction(scope,'readonly',lease,tx=>tx.list('things')),[]);
+ }finally{await db.close();}
+});
+
+test('account export keeps scoped Blobs through collector and ZIP while upload stays pending', async context => {
+ const input=await fixture(4*1024*1024), original=Blob.prototype.arrayBuffer;
+ context.mock.method(Blob.prototype,'arrayBuffer',function(this:Blob){
+  assert.ok(this.size<=1024*1024,'Account export must not buffer complete files');return original.call(this);
+ });
+ const db=new WorkspaceDatabase(new IDBFactory(),crypto.randomUUID(),undefined,IDBKeyRange);
+ const account={kind:'account',ownerId:'fixture-owner',origin:'https://fixture.invalid',dataPlane:'home'} as const;
+ let active=true;
+ const scoped:WorkspaceLease={assertCurrent(){if(!active)throw Error('retired');},onInvalidate:()=>()=>{}};
+ const files=new AccountFileSync(db,account,scoped),sync=new AccountThingSync(db,account,scoped);
+ try {
+  const imported=await files.things.import(input.manifest,null,input.files);
+  const result=await exportAccountThings({ids:imported.roots},{db,lease:scoped,files,sync,canRefresh:()=>false,remote:async()=>{throw Error('No network');}});
+  for(const file of result.plan.files)assert.ok(await result.plan.readLocalFile(file.id) instanceof Blob);
+  const bundle=await bundleFromPlan(result.plan), archive=await encodeTransferArchiveBlob(bundle);
+  const decoded=await readTransferFile(archive);
+  assert.deepEqual(decoded.manifest,bundle.manifest);
+  for(const file of decoded.manifest.files)assert.equal(file.sha256,input.manifest.files[0].sha256);
+  assert.ok((await files.status()).every(row=>row.state==='pending'));
+  assert.deepEqual(await db.transaction(scope,'readonly',lease,tx=>tx.list('things')),[]);
+  active=false;await assert.rejects(encodeTransferArchiveBlob(bundle),/retired/);
  }finally{await db.close();}
 });

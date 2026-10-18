@@ -192,7 +192,7 @@ const FilesystemThingsContent = ({ deviceId, initialPath = '', initialFolderId =
     const size = Number(item.crystal.size);
     if (!Number.isSafeInteger(size) || size < 0 || size > FILESYSTEM_MAX_BYTES) throw new Error('Choose a file up to 32 MiB.');
     const bundle = await withRemote(signal, remoteSignal => bundleFromPlan({ roots: [item.id], things: [{ id: item.id, thingtime: ['attachment'], crystal: { recordingFileId: 'bytes', filePurpose: 'file' } }], files: [{ id: 'bytes', sourceId: item.id, targetId: item.id, name: filesystemName(item), mime: String(item.crystal.contentType || 'application/octet-stream'), bytes: size }] }, { signal: remoteSignal }));
-    return new File([Uint8Array.from(bundle.files.get('bytes')!)], filesystemName(item), { type: String(item.crystal.contentType || 'application/octet-stream') });
+    return new File([bundle.files.get('bytes')!], filesystemName(item), { type: String(item.crystal.contentType || 'application/octet-stream') });
   };
   const bulk = async (op: string, chosen: ThingsThing[], target: FileLocation, signal: AbortSignal) => {
     if (target.deviceId) throw new Error('Choose a Thingtime folder.');

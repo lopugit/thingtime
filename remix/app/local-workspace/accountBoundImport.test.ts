@@ -70,7 +70,7 @@ test('bound-media exports round-trip through anonymous and account import with i
    assert.equal((await target.get(copied.idMap[imported.idMap.reply])).targetId,copied.idMap[imported.idMap.post]);
    const again=await target.export(copied.roots);assert.equal(again.manifest.files.length,3);
    assert.deepEqual((again.manifest.attachmentOrder || again.manifest.files.map(file=>file.id)).map(id=>again.manifest.files.find(file=>file.id===id)!.name),['second.png','first.png','reply-image.png']);
-   for(const bytes of again.files.values())assert.deepEqual(bytes,f.bytes);
+   for(const bytes of again.files.values())assert.deepEqual(new Uint8Array(await bytes.arrayBuffer()),f.bytes);
   }
  }finally{await f.db.close();}
 });

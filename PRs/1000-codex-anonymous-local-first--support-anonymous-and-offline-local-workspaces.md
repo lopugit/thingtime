@@ -4153,3 +4153,25 @@ recorded macOS/Chrome nested-sandbox failure. No weaker browser or network polic
 was used. Export collection/clipboard buffering, remote retention and the wider
 acceptance matrix remain open. No current-head deployment acceptance or merge is
 claimed; PR/branch visibility and CI must be rechecked independently.
+
+## Blob export collectors — 2026-10-18
+
+Local and account export now keep native Blob handles through the shared canonical
+collector and ZIP download path. Remote authorized file streams accumulate Blob
+parts; clipboard and explicit byte callers retain their final buffered compatibility
+interface. Prepared anonymous bundles preserve cancellation/workspace fencing, even
+without files. Metadata and reader callbacks are captured before async checks;
+stalled streams cancel cleanly. No HTTP contract or portable schema changed.
+
+Recorded focused evidence: 39 export cases, 20 collector/stream cases and six final
+anonymous-fence cases (overlap), plus 326 + 18 Things tests. The 66 MiB fixture now
+round-trips import → export → ZIP → normal import with bounded reads, fresh IDs and
+independent hashes. Account Blob export preserves pending upload intent and rejects
+retired scope. Broader regression/build/typecheck logs are `tmp/blob-export-*.log`;
+final delivery/PR status records their completion separately.
+
+Native browser acceptance remains pending under the recorded isolation blocker.
+Remote retention, paired-device transport, clipboard capacity and the wider matrix
+remain open. GitHub still returned PR head `14f1e765` while the pre-checkpoint remote
+branch was `23b6b53d`; no current-head preview or CI pass is inferred from older checks.
+See [the workspace checkpoint](../docs/local-workspaces.md#blob-export-collection--2026-10-18).
