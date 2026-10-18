@@ -12,6 +12,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 > When you make a manual change, add a bullet under `[Unreleased]` ending with
 
+- 2026-10-18: Fix rejected Mac telemetry after menu bar/script support pushed the native capability list to 65 entries. Pairing, heartbeat and owner projections now share a bounded 128-entry contract, with native-vocabulary regression coverage. See [PR 1038](../PRs/1038-device-scripts-page-layout-restore-full-mac-telemetry.md) for acceptance findings and the installed page layout correction.
+
 - 2026-10-18: Refresh Claude public lifecycle metadata without an API key, preserve
   account-access uncertainty and admin admission, include discovered models in
   workflow settings, and persist the shared order when Save & apply is used.
@@ -72,6 +74,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 ---
 
 ## [Unreleased]
+
+- 2026-10-18 — **Codex (AI)**: Give installed Device scripts pages a centered, padded Builder container. Remove fixture-provided layout so browser acceptance catches missing page spacing.
 
 - 2026-10-18 — **Codex (AI)**: Add editable agent tasks, todos and progress,
   a Mac browser manager with task claims/live viewing, verified Chrome/Chromium
