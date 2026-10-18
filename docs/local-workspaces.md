@@ -43,7 +43,7 @@ Identity changes invalidate outstanding local operations and abort transactions.
 Anonymous work is never implicitly adopted by or uploaded to a later login.
 
 Writes and quota accounting are transactional across tabs. Current bounds are
-10,000 records, 1 MiB per ordinary JSON record, 16 MiB per file and 64 MiB per workspace (metadata and bytes together). Canonical Timeline event records alone allow the shared 4 MiB event ceiling plus receipt overhead; their relational links and headers count toward the same workspace quota. Failed saves report an
+10,000 records, 1 MiB per ordinary JSON record, 16 MiB per file and 64 MiB per workspace (metadata and bytes together). Canonical Timeline records allow the shared 4 MiB event ceiling plus receipt overhead, and encrypted password records allow the canonical password codec capacity plus base64/receipt overhead; their relational links and headers count toward the same workspace quota. Failed saves report an
 error; failed imports roll back. Optimistic concurrency checks retain an editor's
 base timestamp. Files require the dedicated local attachment adapter rather than
 reusing account attachment IDs.
@@ -4348,3 +4348,45 @@ remain open. GitHub still reports the older PR head while the branch ref advance
 checks on that old head are not proof for this checkpoint. No merge, deployment
 or public exposure was performed. The HTML progress view is
 [anonymous-local-first.html](progress/anonymous-local-first.html).
+
+
+## Large password value codec parity — 2026-10-18
+
+The browser password codec no longer applies the provider vault's 64 KiB
+value limit to password entries or file metadata. Both password adapters use
+`passwords/capacity.ts` for the account writer's existing 16 MiB codec ceiling.
+The local record layer admits the resulting base64 envelope and retry metadata
+instead of rejecting it at the ordinary 1 MiB JSON budget. No envelope version,
+authenticated context, encryption, KDF, permission or account API contract changes.
+Actual server admission continues to check the complete encrypted BSON document.
+
+New regression checks cover large Unicode values in both codec directions,
+anonymous/account save, cold reopen, canonical export, account replay/pull and
+reviewed conflict copies, plus large file metadata through push and catalogue
+retention. Wrong owner/record, tampering and provider-default checks remain
+negative cases. Source strings are compared exactly; no truncation is allowed.
+
+This is a codec/storage-record correction, not completion of the capacity-policy
+row. The 64 MiB aggregate workspace limit, 10,000-record budget and password
+pull's 200-page guard still need replacement with actual browser quota handling,
+pagination/backpressure and cancellation. Native connected-Chrome acceptance
+also remains open: native inspection times out internally despite a 60-second
+outer timeout; earlier extension retries failed too. No browser profiles,
+permissions or user tabs were changed to work around the failure.
+
+
+Local validation for this codec checkpoint: workspace suite **635 passed / 70
+opt-in skipped**; password suite **54 passed**; focused file sync suite **20
+passed** including the later large-metadata case. The 33 focused codec/entry
+checks overlap those suites. Production client build and Nitro template sync
+passed (249 offline assets); TypeScript remains at 91 baseline diagnostics with
+no new signatures. These are local checks, not connected-Chrome, CI or deployed
+acceptance. Logs: `tmp/password-capacity-{workspace,passwords,metadata,focused,
+build,typecheck,lint}.log`.
+
+A separate opt-in real loopback API check also passed: an independently encrypted
+anonymous device value exported to the canonical account save/read path, an exact
+write retry, re-encryption back to the device, and anonymous read refusal. The
+single newly minted entry was deleted through the normal API; normal protected
+receipts/session expiry remain. Device storage in this test is fake IndexedDB,
+not browser acceptance. Evidence: `tmp/password-capacity-api-verification.json`.

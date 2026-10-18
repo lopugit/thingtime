@@ -3971,3 +3971,33 @@ remain open. GitHub still reports the older PR head while the branch ref advance
 checks on that old head are not proof for this checkpoint. No merge, deployment
 or public exposure was performed. The HTML progress view is
 [anonymous-local-first.html](../docs/progress/anonymous-local-first.html).
+
+
+## Large password codec checkpoint — 2026-10-18
+
+Password entries and file metadata now share the account writer's codec ceiling
+and receive enough local record capacity for their encrypted base64 envelope.
+The former 64 KiB generic-vault and 1 MiB ordinary-record mismatch is covered by
+exact Unicode save/reopen/export, replay/pull/conflict-copy and metadata tests.
+Provider and wrapper defaults, authenticated contexts and server BSON admission
+are unchanged. Remaining 64 MiB workspace, record-count and traversal caps are
+explicitly unfinished, as is native large-value acceptance in connected Chrome.
+The account attachment UI checkpoint was pushed as `3db9b4c39`; the PR API still
+reports `14f1e765d` and cannot establish current-head CI/deployment acceptance.
+
+
+Local validation for this codec checkpoint: workspace suite **635 passed / 70
+opt-in skipped**; password suite **54 passed**; focused file sync suite **20
+passed** including the later large-metadata case. The 33 focused codec/entry
+checks overlap those suites. Production client build and Nitro template sync
+passed (249 offline assets); TypeScript remains at 91 baseline diagnostics with
+no new signatures. These are local checks, not connected-Chrome, CI or deployed
+acceptance. Logs: `tmp/password-capacity-{workspace,passwords,metadata,focused,
+build,typecheck,lint}.log`.
+
+A separate opt-in real loopback API check also passed: an independently encrypted
+anonymous device value exported to the canonical account save/read path, an exact
+write retry, re-encryption back to the device, and anonymous read refusal. The
+single newly minted entry was deleted through the normal API; normal protected
+receipts/session expiry remain. Device storage in this test is fake IndexedDB,
+not browser acceptance. Evidence: `tmp/password-capacity-api-verification.json`.

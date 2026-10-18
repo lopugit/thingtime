@@ -5297,3 +5297,21 @@ This harness launches isolated automation browsers; use it only in environments
 where that browser workflow is authorized. For connected-Chrome-only sessions,
 exercise the same checklist in connected Chrome instead of silently running it.
 See the [native file checkpoint](docs/local-workspaces.md#native-account-password-files--2026-10-18).
+
+
+Large-password API parity can also be checked without launching a browser. Use
+only the disposable loopback password-file fixture described above; the test
+creates and deletes one new entry through normal authenticated APIs and never
+reads other entries. It preserves exact Unicode values above the former device
+codec/record limits and verifies anonymous read refusal. From `remix/`:
+
+```bash
+TT_PASSWORD_CAPACITY_URL=http://127.0.0.1:<isolated-api-port> \
+TT_PASSWORD_CAPACITY_FIXTURE=/absolute/path/to/disposable-fixture.json \
+TT_PASSWORD_CAPACITY_EVIDENCE=/absolute/path/to/verification.json \
+node --import tsx --test app/local-workspace/passwordCapacity.integration.test.ts
+```
+
+This test uses fake IndexedDB for device storage plus the real running account
+API; it is not native browser acceptance. Fixture credentials stay in the ignored
+fixture file and must never be copied into documentation or output.

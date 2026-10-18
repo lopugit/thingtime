@@ -1,4 +1,5 @@
-import { deviceVaultWriteDigest, sealDeviceVaultValue } from '../passwords/vaultCrypto';
+import { deviceVaultWriteDigest } from '../passwords/vaultCrypto';
+import { sealDevicePasswordValue } from '../passwords/passwordValueCrypto';
 import { validatePasswordFile } from '../passwords/fileCrypto';
 import { forgetRetainedPasswordFile, retainDevicePasswordFile, PASSWORD_FILES, PASSWORD_FILE_COMMANDS, PASSWORD_FILE_CATALOG, type PasswordFileCatalog, type FileRecord, type PasswordFileHost, type StoredFile } from './passwordFiles';
 import type { PasswordFileTransport } from './passwordFileTransport.client';
@@ -52,7 +53,7 @@ export async function reconcilePasswordFiles(host: PasswordFileHost, transport: 
           const metadata = validatePasswordFile(file.metadata), id = `${file.entryId}:${metadata.token}`;
           if (seen.has(id)) fail('Repeated account file identity.'); seen.add(id);
           const digest = await deviceVaultWriteDigest(op.key, id, JSON.stringify(metadata));
-          const encryptedValue = await sealDeviceVaultValue(await host.context, op.key, `file:${id}`, JSON.stringify(metadata));
+          const encryptedValue = await sealDevicePasswordValue(await host.context, op.key, `file:${id}`, JSON.stringify(metadata));
           const needsBytes = await host.db.transaction(host.scope, 'readwrite', op.lease, async tx => {
             const parent = await tx.get<DevicePasswordRecord>(RECORDS, file.entryId!);
             if (parent?.deleted || parent?.revision !== batch.get(file.entryId!)!.revision || parent.filePullToken !== pullToken || await tx.get(PASSWORD_FILE_COMMANDS, id)) return false;

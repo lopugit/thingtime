@@ -37,3 +37,24 @@ test('device unlock uses exact passwords, fixed KDF bounds and cancellation whil
  await assert.rejects(unwrapDeviceVaultKey(owner, passphrase, wrapped, () => { if (++calls > 2) throw Error('Retired workspace'); }), /Retired workspace/);
  assert.ok(calls > 2); key.bytes.fill(0);
 });
+
+test('password values use canonical account capacity without expanding provider or wrapping defaults', async () => {
+ const { sealDevicePasswordValue, openDevicePasswordValue } = await import('./passwordValueCrypto');
+ const { PASSWORD_STORAGE_DOCUMENT_BYTES } = await import('./capacity');
+ const key = createDeviceVaultKey(), server = { id: key.id, bytes: Buffer.from(key.bytes) };
+ const value = JSON.stringify({ fields: [{ value: 'exact 🦄\n'.repeat(150_000) }] });
+ assert.ok(Buffer.byteLength(value) > 1024 * 1024);
+ try {
+  const fromDevice = await sealDevicePasswordValue(owner, key, 'large-entry', value);
+  assert.equal(openVaultValue(owner, server, 'large-entry', 'secret', fromDevice, PASSWORD_STORAGE_DOCUMENT_BYTES), value);
+  const fromServer = sealVaultValue(owner, server, 'large-entry', 'secret', value, PASSWORD_STORAGE_DOCUMENT_BYTES);
+  assert.equal(await openDevicePasswordValue(owner, key, 'large-entry', fromServer), value);
+  await assert.rejects(sealDeviceVaultValue(owner, key, 'large-entry', value), /could not be unlocked/);
+  await assert.rejects(openDeviceVaultValue(owner, key, 'large-entry', fromServer), /could not be unlocked/);
+  await assert.rejects(openDevicePasswordValue(owner + '-other', key, 'large-entry', fromServer), /could not be unlocked/);
+  await assert.rejects(openDevicePasswordValue(owner, key, 'another-entry', fromServer), /could not be unlocked/);
+  await assert.rejects(openDevicePasswordValue(owner, key, 'large-entry', { ...fromServer, tag: 'A'.repeat(22) }), /could not be unlocked/);
+  // UTF-8 bytes, not code units, determine the existing account codec boundary.
+  await assert.rejects(sealDevicePasswordValue(owner, key, 'oversize', '🦄'.repeat(PASSWORD_STORAGE_DOCUMENT_BYTES / 4 + 1)), /document capacity.*not been truncated/);
+ } finally { key.bytes.fill(0); server.bytes.fill(0); }
+});

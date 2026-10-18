@@ -1,4 +1,4 @@
-import { openDeviceVaultValue } from '../passwords/vaultCrypto';
+import { openDevicePasswordValue } from '../passwords/passwordValueCrypto';
 import { validatePasswordFile } from '../passwords/fileCrypto';
 import { devicePasswordStorage, PASSWORD_FILES, PASSWORD_FILE_COMMANDS, type PasswordFileCommand, type PasswordFileHost, type StoredFile } from './passwordFiles';
 import type { PasswordFileTransport } from './passwordFileTransport.client';
@@ -72,7 +72,7 @@ export async function synchronizePasswordFiles(host: PasswordFileHost, transport
         });
       };
       try {
-        const plain = await openDeviceVaultValue(await host.context, op.key, `file:${item.id}`, item.encryptedValue);
+        const plain = await openDevicePasswordValue(await host.context, op.key, `file:${item.id}`, item.encryptedValue);
         const metadata = validatePasswordFile(JSON.parse(plain));
         if (metadata.token !== item.fileId) fail('Encrypted file metadata is damaged.', 422);
         op.lease.assertCurrent(); active.throwIfAborted();

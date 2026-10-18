@@ -264,3 +264,11 @@ opt-in `local-workspace/passwordFileLifecycle.api.test.ts` cover replay and owne
 isolation. `passwordSync.test.ts` verifies atomic file/source-archive copies and
 pending-file review after remote parent removal. Account UI activation and native
 file acceptance remain open; see the [checkpoint](../local-workspaces.md#password-file-deletion-replay-and-conflict-preservation--2026-10-18).
+
+
+Password entry/file-metadata device codecs use `passwords/passwordValueCrypto.ts`
+and the account writer's shared `passwords/capacity.ts` ceiling. Generic provider
+credential defaults remain separate. `vaultCrypto.test.ts`, `passwordVault.test.ts`,
+`passwordSync.test.ts` and `passwordFileSync.test.ts` cover large-value parity,
+exact export/replay and conflict copies. Aggregate workspace capacity policy and
+native large-value acceptance remain open; this is not an unlimited-storage claim.

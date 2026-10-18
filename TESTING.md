@@ -12082,3 +12082,13 @@ account attachment browser/deployed acceptance.
 Evidence and test commands: README password-file fixtures and
 `docs/local-workspaces.md#native-account-password-files--2026-10-18`.
 Local results do not establish current-head CI or deployed acceptance.
+
+
+### Local password codec capacity — 2026-10-18
+
+- [x] Preserve exact Unicode password values above the old 64 KiB codec and 1 MiB record bounds through device save/reopen/export and account replay/pull/conflict copy.
+- [x] Interoperate with the server envelope in both directions; retain wrong-owner/record/tampering refusal and the separate provider credential limits.
+- [x] Preserve large file metadata through encrypted local save, account push, catalogue retention and exact-byte download.
+- [x] Round-trip a synthetic large Unicode entry through the real private loopback API; verify exact replay/read, anonymous refusal and cleanup of only the new entry.
+- [ ] Complete connected-Chrome native large-value import/edit/export acceptance.
+- [ ] Replace arbitrary aggregate workspace/traversal caps with actual browser quota handling and resumable/backpressured work; verify atomic failure/cleanup at real capacity.

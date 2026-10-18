@@ -1,3 +1,4 @@
+import { PASSWORD_DEVICE_COLLECTIONS, PASSWORD_DEVICE_RECORD_BYTES } from '../passwords/capacity';
 import { TIMELINE_EVENT_MAX_BYTES } from '../timeline/contract';
 /** Browser persistence boundary for local content. Account scopes never confer
  * server authority and are never inferred from a record supplied by a caller. */
@@ -298,11 +299,12 @@ export class WorkspaceDatabase {
 					const encoded = JSON.stringify(value);
 					if (encoded === undefined) throw new WorkspaceError('INVALID_RECORD', 'Local records must contain JSON');
 					const bytes = new TextEncoder().encode(encoded).byteLength;
-					const limit = collection === 'timeline-events' ? TIMELINE_EVENT_MAX_BYTES + 2048 : WORKSPACE_LIMITS.recordBytes;
+					const passwordRecord = PASSWORD_DEVICE_COLLECTIONS.has(collection);
+					const limit = collection === 'timeline-events' ? TIMELINE_EVENT_MAX_BYTES + 2048 : passwordRecord ? PASSWORD_DEVICE_RECORD_BYTES : WORKSPACE_LIMITS.recordBytes;
 					if (bytes > limit)
 						throw new WorkspaceError(
 							'LOCAL_QUOTA',
-							collection === 'timeline-events' ? 'This Timeline record exceeds 4 MiB' : 'This local record exceeds 1 MB',
+							collection === 'timeline-events' ? 'This Timeline record exceeds 4 MiB' : passwordRecord ? 'This encrypted password record exceeds the account document capacity.' : 'This local record exceeds 1 MB',
 							413
 						);
 					await persist(collection, id, JSON.parse(encoded), bytes);

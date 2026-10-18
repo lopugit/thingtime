@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { IDBFactory, IDBKeyRange } from 'fake-indexeddb';
-import { LocalPasswordVault } from './passwordVault';
+import { LocalPasswordVault, type PasswordVaultTransport } from './passwordVault';
 import { WorkspaceDatabase, WORKSPACE_LIMITS, type WorkspaceLease, type WorkspaceScope } from './storage';
 import { emptyPasswordEntry } from '../passwords/model';
 const origin = 'https://device.example', passphrase = 'A separate device passphrase 🦄';
@@ -116,4 +116,33 @@ test('copying both wrapped key and ciphertext into a different account, origin o
    await assert.rejects(copy.unlock(passphrase), /could not be unlocked/); assert.equal(copy.isUnlocked(), false);
   }
  } finally { original.dispose(); copies.forEach(copy => copy.dispose()); await db.close(); }
+});
+
+for (const scope of [anonymous, account]) test(`${scope.kind} large password entries survive encrypted save, cold reopen and canonical export`, async () => {
+ const db = database(), gate = guard(), vault = new LocalPasswordVault(db, scope, gate.lease, origin);
+ let reopened: LocalPasswordVault | undefined;
+ const input = { ...save(), entry: { ...entry, passwordType: 'secure-note' as const,
+  fields: [{ id: 'notes', label: 'Exact notes', type: 'notes' as const, value: 'exact 🦄\n'.repeat(150_000) }] } };
+ try {
+  await vault.unlock(passphrase, true);
+  await vault.save(input);
+  const stored = await rows(db, scope, gate.lease);
+  assert.ok(JSON.stringify(stored.records[0]).length > WORKSPACE_LIMITS.recordBytes);
+  assert.ok(!JSON.stringify(stored).includes('exact 🦄'));
+  assert.equal(stored.commands.length, scope.kind === 'account' ? 1 : 0);
+  vault.dispose(); await db.close();
+  reopened = new LocalPasswordVault(db, scope, gate.lease, origin); await reopened.unlock(passphrase);
+  assert.deepEqual((await reopened.read(input.id)).entry, input.entry);
+  const exported = await reopened.fileStorage().exportPage(undefined, new AbortController().signal);
+  assert.deepEqual(exported.entries.map(row => row.entry), [input.entry]);
+  assert.equal(exported.nextCursor, null);
+  if (scope.kind === 'account') {
+   const written: unknown[] = [];
+   const result = await reopened.synchronize({ async write(command: Parameters<PasswordVaultTransport['write']>[0]) {
+    written.push(command.entry); return { record: { id: input.id, revision: 1, title: input.entry.title, passwordType: input.entry.passwordType, updatedAt: new Date().toISOString() } };
+   } } as any);
+   assert.equal(result.completed, 1); assert.deepEqual(written, [input.entry]);
+   assert.deepEqual(await reopened.syncStatus(), []);
+  }
+ } finally { reopened?.dispose(); vault.dispose(); await db.close(); }
 });

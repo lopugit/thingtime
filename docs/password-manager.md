@@ -23,9 +23,16 @@ tested. Device authenticated data binds the browser origin and complete workspac
 scope, plus key, record and purpose. Titles, categories, field definitions and
 values are encrypted together; only record IDs, revisions, timestamps and retry
 metadata remain visible in device storage. Retry identities are keyed HMACs.
-Values are limited to 64 KiB, passphrases to 4,096 UTF-8 bytes, listing/export to
-50 entries per page and storage to the shared workspace quota. One password KDF
-runs at a time per JavaScript realm.
+Password entries and encrypted file metadata use the same 16 MiB codec ceiling
+as the account writer. MongoDB measures the complete encrypted BSON document,
+so its actual admissible plaintext is smaller; a device save does not promise
+remote admission. Device storage accommodates the base64 envelope and fixed
+retry metadata rather than applying the ordinary 1 MiB record budget. Provider
+credentials and key wrappers retain their separate defaults. Passphrases remain
+limited to 4,096 UTF-8 bytes, listing/export uses 50-entry pages, and storage still
+uses the shared workspace quota. One password KDF runs at a time per JavaScript
+realm. Removing the remaining arbitrary total-workspace and traversal caps is
+still an open local-first task; this codec fix does not claim unlimited storage.
 
 The unwrapped key stays in tab memory. Manual lock, page teardown, workspace
 invalidation or five minutes without use clear it and unmount the editor. Each

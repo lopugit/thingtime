@@ -19,29 +19,30 @@ const importKey = (key: Uint8Array) => {
   if (!(key instanceof Uint8Array) || key.length !== 32) throw vaultFailure();
   return crypto.subtle.importKey('raw', bytes(key), 'AES-GCM', false, ['encrypt', 'decrypt']);
 };
-const seal = async (key: Uint8Array, context: string[], value: Uint8Array): Promise<VaultSealed> => {
-  if (value.length > VAULT_MAX_VALUE_BYTES) throw vaultFailure();
+const seal = async (key: Uint8Array, context: string[], value: Uint8Array, maxBytes = VAULT_MAX_VALUE_BYTES): Promise<VaultSealed> => {
+  if (!Number.isSafeInteger(maxBytes) || maxBytes < 0 || value.length > maxBytes) throw vaultFailure();
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const output = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv, additionalData: encoder.encode(JSON.stringify(context)), tagLength: 128 }, await importKey(key), bytes(value)));
   return { cipherText: base64(output.subarray(0, -16)), tag: base64(output.subarray(-16)), iv: base64(iv) };
 };
-const open = async (key: Uint8Array, context: string[], envelope: VaultSealed) => {
+const open = async (key: Uint8Array, context: string[], envelope: VaultSealed, maxBytes = VAULT_MAX_VALUE_BYTES) => {
   try {
-    const iv = decode(envelope.iv, 12, 12), tag = decode(envelope.tag, 16, 16), cipherText = decode(envelope.cipherText, VAULT_MAX_VALUE_BYTES);
+    if (!Number.isSafeInteger(maxBytes) || maxBytes < 0) throw vaultFailure();
+    const iv = decode(envelope.iv, 12, 12), tag = decode(envelope.tag, 16, 16), cipherText = decode(envelope.cipherText, maxBytes);
     const combined = new Uint8Array(cipherText.length + tag.length); combined.set(cipherText); combined.set(tag, cipherText.length);
     return new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: bytes(iv), additionalData: encoder.encode(JSON.stringify(context)), tagLength: 128 }, await importKey(key), combined));
   } catch { throw vaultFailure(); }
 };
 export const createDeviceVaultKey = (): DeviceVaultKey => ({ id: `vault-key-${crypto.randomUUID()}`, bytes: crypto.getRandomValues(new Uint8Array(32)) });
-export async function sealDeviceVaultValue(ownerId: string, key: DeviceVaultKey, recordId: string, value: string): Promise<VaultEnvelope> {
-  if (typeof value !== 'string' || value.length > VAULT_MAX_VALUE_BYTES) throw vaultFailure();
+export async function sealDeviceVaultValue(ownerId: string, key: DeviceVaultKey, recordId: string, value: string, maxBytes = VAULT_MAX_VALUE_BYTES): Promise<VaultEnvelope> {
+  if (typeof value !== 'string' || value.length > maxBytes) throw vaultFailure();
   const plain = encoder.encode(value);
-  try { return { version: 2, keyId: key.id, ...await seal(key.bytes, vaultValueContext(ownerId, key.id, recordId, 'secret'), plain) }; }
+  try { return { version: 2, keyId: key.id, ...await seal(key.bytes, vaultValueContext(ownerId, key.id, recordId, 'secret'), plain, maxBytes) }; }
   finally { plain.fill(0); }
 }
-export async function openDeviceVaultValue(ownerId: string, key: DeviceVaultKey, recordId: string, envelope: VaultEnvelope): Promise<string> {
+export async function openDeviceVaultValue(ownerId: string, key: DeviceVaultKey, recordId: string, envelope: VaultEnvelope, maxBytes = VAULT_MAX_VALUE_BYTES): Promise<string> {
   if (envelope?.version !== 2 || envelope.keyId !== key.id) throw vaultFailure();
-  const plain = await open(key.bytes, vaultValueContext(ownerId, key.id, recordId, 'secret'), envelope);
+  const plain = await open(key.bytes, vaultValueContext(ownerId, key.id, recordId, 'secret'), envelope, maxBytes);
   try { return new TextDecoder('utf-8', { fatal: true }).decode(plain); } finally { plain.fill(0); }
 }
 let deriving = false;

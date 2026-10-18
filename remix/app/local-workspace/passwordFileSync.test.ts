@@ -47,6 +47,24 @@ async function fixture(kind: 'account' | 'anonymous' = 'account') {
   };
 }
 
+test('large canonical file metadata survives local encryption, account push and catalogue retention', async () => {
+  const f = await fixture();
+  try {
+    f.metadata.name = 'exact metadata 🦄 '.repeat(60_000);
+    await f.save(); await f.admit();
+    assert.equal((await f.vault.synchronizeFiles(f.transport)).completed, 1);
+    await f.vault.reconcileFiles({ ...f.transport, async page() {
+      return { files: [{ id: remoteId, entryId: f.id, metadata: f.metadata }], nextCursor: null };
+    } });
+    const listed = await f.storage.listFiles([f.id]);
+    assert.equal(listed.length, 1);
+    assert.deepEqual(listed[0].metadata, f.metadata);
+    assert.deepEqual(await read((await f.storage.openFile(f.id, f.metadata.token)).stream), f.bytes);
+    const encrypted = await f.db.transaction(scope, 'readonly', lease, tx => tx.list('password-vault-file-catalog'));
+    assert.ok(!JSON.stringify(encrypted).includes('exact metadata'));
+  } finally { await f.close(); }
+});
+
 test('account file visibility and encrypted intent commit locally; parent admission is a background dependency', async () => {
   const f = await fixture();
   try {

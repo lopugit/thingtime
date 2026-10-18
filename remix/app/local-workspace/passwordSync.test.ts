@@ -37,6 +37,27 @@ function remote() {
 }
 const stored = (db: WorkspaceDatabase) => db.transaction(scope, 'readonly', gate(), tx => tx.list('password-vault-commands'));
 
+test('large account entries retain, edit, replay and resolve a conflict without truncation', async () => {
+ const f = await fixture(), r = remote();
+ const one = command(), large = { ...one.entry, fields: [{ id: 'notes', label: 'Notes', type: 'notes' as const, value: 'large 🦄\n'.repeat(150_000) }] };
+ try {
+  await r.transport.write({ ...one, entry: large, operation: 'save' }, new AbortController().signal);
+  await f.vault.reconcile(r.transport);
+  assert.deepEqual((await f.vault.read(one.id)).entry, large);
+  await f.vault.reconcileFiles({ async page() { return { files: [], nextCursor: null }; } } as any);
+  const local = { ...large, title: 'Local large version' }, other = { ...large, title: 'Remote large version' };
+  await f.vault.save({ ...command(one.id, 1), entry: local });
+  await r.transport.write({ ...command(one.id, 1), entry: other, operation: 'save' }, new AbortController().signal);
+  await f.vault.synchronize(r.transport);
+  const { copiedId } = await f.vault.resolveRefused(one.id, 2, 'copy', r.transport);
+  assert.ok(copiedId);
+  assert.deepEqual((await f.vault.read(one.id)).entry, other);
+  assert.deepEqual((await f.vault.read(copiedId)).entry, local);
+  assert.equal((await f.vault.synchronize(r.transport)).completed, 1);
+  assert.deepEqual(r.values.get(copiedId)?.entry, local);
+ } finally { await f.close(); }
+});
+
 test('account edits commit encrypted intents independently and replay in revision order', async () => {
  const f = await fixture(), r = remote();
  try {

@@ -1,6 +1,7 @@
 import { sha256 } from '@noble/hashes/sha2.js';
 import { decryptPasswordFile, encryptPasswordFile, iterableStream, newPasswordFile, validatePasswordFile } from '../passwords/fileCrypto';
-import { deviceVaultWriteDigest, openDeviceVaultValue, sealDeviceVaultValue, type DeviceVaultKey } from '../passwords/vaultCrypto';
+import { deviceVaultWriteDigest, type DeviceVaultKey } from '../passwords/vaultCrypto';
+import { openDevicePasswordValue, sealDevicePasswordValue } from '../passwords/passwordValueCrypto';
 import type { VaultEnvelope } from '../passwords/vaultEnvelopeContract';
 import type { PasswordStorage, SavedPasswordFile } from '../passwords/storage';
 import { validPasswordId } from '../passwords/model';
@@ -132,7 +133,7 @@ type PreparedFileTarget = { sourceEntryId: string; accept(file: FileRecord): voi
 function passwordStorage(host: PasswordFileHost, retention?: { remoteId: string; parentRevision: number; pullToken?: string }, preparation?: PreparedFileTarget): PasswordStorage {
   const { db, scope } = host;
   const decode = async (row: Pick<FileRecord, 'entryId' | 'id' | 'encryptedValue'>, key: DeviceVaultKey, lease: WorkspaceLease): Promise<SavedPasswordFile> => {
-    const plain = await openDeviceVaultValue(await host.context, key, `file:${fileKey(row.entryId, row.id)}`, row.encryptedValue);
+    const plain = await openDevicePasswordValue(await host.context, key, `file:${fileKey(row.entryId, row.id)}`, row.encryptedValue);
     lease.assertCurrent(); const metadata = validatePasswordFile(JSON.parse(plain));
     if (metadata.token !== row.id) fail('Encrypted file metadata is damaged.', 422);
     return { id: row.id, entryId: row.entryId, metadata };
@@ -169,7 +170,7 @@ function passwordStorage(host: PasswordFileHost, retention?: { remoteId: string;
     async uploadFile(entryId, input, open, signal) {
       const metadata = validatePasswordFile(input), id = fileKey(entryId, metadata.token), op = host.operation(signal, !retention && !preparation);
       const generation = crypto.randomUUID(), owner = await host.context, plain = JSON.stringify(metadata);
-      const encryptedValue = await sealDeviceVaultValue(owner, op.key, `file:${id}`, plain);
+      const encryptedValue = await sealDevicePasswordValue(owner, op.key, `file:${id}`, plain);
       const metadataDigest = await deviceVaultWriteDigest(op.key, id, plain);
       const controller = new AbortController(), off = op.lease.onInvalidate(() => controller.abort());
       const combined = AbortSignal.any([controller.signal, ...(signal ? [signal] : [])]);

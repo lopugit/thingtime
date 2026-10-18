@@ -1,6 +1,7 @@
 import { validatePasswordEntry, validPasswordId, type PasswordEntry, type PasswordMetadata } from '../passwords/model';
 import { parseTotp } from '../passwords/totp';
-import { sealDeviceVaultValue, openDeviceVaultValue, deviceVaultWriteDigest } from '../passwords/vaultCrypto';
+import { deviceVaultWriteDigest } from '../passwords/vaultCrypto';
+import { sealDevicePasswordValue, openDevicePasswordValue } from '../passwords/passwordValueCrypto';
 import type { VaultEnvelope } from '../passwords/vaultEnvelopeContract';
 import { WorkspaceError, type WorkspaceDatabase, type WorkspaceLease, type WorkspaceScope, type WorkspaceTransaction } from './storage';
 
@@ -55,7 +56,7 @@ export class LocalPasswordVault extends DeviceVaultSession {
  }
  private async value(record: DevicePasswordRecord, op: ReturnType<LocalPasswordVault['operation']>) {
   if (record.deleted || !record.encryptedValue) return refuse('PASSWORD_MISSING', 'Password entry not found.', 404);
-  const plain = await openDeviceVaultValue(await this.context, op.key, record.id, record.encryptedValue); op.lease.assertCurrent();
+  const plain = await openDevicePasswordValue(await this.context, op.key, record.id, record.encryptedValue); op.lease.assertCurrent();
   try { return validatePasswordEntry(JSON.parse(plain)); } catch { return refuse('VAULT_DAMAGED', 'This encrypted entry is invalid. Its saved data has been kept.', 422); }
  }
  private metadata(record: DevicePasswordRecord, entry: PasswordEntry): PasswordMetadata {
@@ -86,9 +87,9 @@ export class LocalPasswordVault extends DeviceVaultSession {
   if (!validPasswordId(input.id) || !validPasswordId(input.writeId) || !validRevision(input.revision)) refuse('PASSWORD_INPUT', 'A valid entry id, write id and revision are required.', 400);
   const op = this.operation(signal), entry = validatePasswordEntry(input.entry);
   for (const field of entry.fields) if (field.type === 'totp' && field.value) parseTotp(field.value);
-  const owner = await this.context, plain = JSON.stringify(entry), encryptedValue = await sealDeviceVaultValue(owner, op.key, input.id, plain);
+  const owner = await this.context, plain = JSON.stringify(entry), encryptedValue = await sealDevicePasswordValue(owner, op.key, input.id, plain);
   const digest = await deviceVaultWriteDigest(op.key, input.id, plain);
-  const commandValue = this.scope.kind === 'account' ? await sealDeviceVaultValue(owner, op.key, `command:${input.id}:${input.writeId}`, JSON.stringify({ entry })) : null;
+  const commandValue = this.scope.kind === 'account' ? await sealDevicePasswordValue(owner, op.key, `command:${input.id}:${input.writeId}`, JSON.stringify({ entry })) : null;
   op.lease.assertCurrent();
   const record = await this.db.transaction(this.scope, 'readwrite', op.lease, async tx => {
    const previous = await tx.get<DevicePasswordRecord>(RECORDS, input.id);
@@ -110,7 +111,7 @@ export class LocalPasswordVault extends DeviceVaultSession {
  async remove(id: string, revision: number, signal?: AbortSignal) {
   if (!validPasswordId(id) || !validRevision(revision)) refuse('PASSWORD_INPUT', 'Select an entry and its current revision.', 400);
   const op = this.operation(signal), writeId = crypto.randomUUID();
-  const commandValue = this.scope.kind === 'account' ? await sealDeviceVaultValue(await this.context, op.key, `command:${id}:${writeId}`, '{}') : null;
+  const commandValue = this.scope.kind === 'account' ? await sealDevicePasswordValue(await this.context, op.key, `command:${id}:${writeId}`, '{}') : null;
   op.lease.assertCurrent();
   await this.db.transaction(this.scope, 'readwrite', op.lease, async tx => {
    const previous = await tx.get<DevicePasswordRecord>(RECORDS, id);
@@ -168,7 +169,7 @@ export class LocalPasswordVault extends DeviceVaultSession {
     if (!claim) break;
     const item = claim.command; let dispatched = false;
     try {
-     const plain = await openDeviceVaultValue(await this.context, op.key, `command:${item.recordId}:${item.id}`, item.encryptedValue);
+     const plain = await openDevicePasswordValue(await this.context, op.key, `command:${item.recordId}:${item.id}`, item.encryptedValue);
      const payload = JSON.parse(plain), entry = item.operation === 'save' ? validatePasswordEntry(payload.entry) : undefined;
      op.lease.assertCurrent(); combined.throwIfAborted();
      dispatched = true;
@@ -219,8 +220,8 @@ export class LocalPasswordVault extends DeviceVaultSession {
   for (const source of sources.values()) {
    const entry = { ...source.entry, ...(source.entry.importArchiveId ? { importArchiveId: mapping.get(source.entry.importArchiveId)! } : {}) };
    const plain = JSON.stringify(entry), id = source.id, writeId = crypto.randomUUID();
-   copies.push({ id, writeId, value: await sealDeviceVaultValue(owner, op.key, id, plain),
-    command: await sealDeviceVaultValue(owner, op.key, `command:${id}:${writeId}`, JSON.stringify({ entry })), digest: await deviceVaultWriteDigest(op.key, id, plain) });
+   copies.push({ id, writeId, value: await sealDevicePasswordValue(owner, op.key, id, plain),
+    command: await sealDevicePasswordValue(owner, op.key, `command:${id}:${writeId}`, JSON.stringify({ entry })), digest: await deviceVaultWriteDigest(op.key, id, plain) });
   }
   const files = await prepareDevicePasswordFileCopies(this.fileStorageHost(), mapping, signal);
   return { copiedId: mapping.get(before.id)!, discard: files.discard, commit: async (tx: WorkspaceTransaction) => {
@@ -253,9 +254,9 @@ export class LocalPasswordVault extends DeviceVaultSession {
    const remote = await transport.read(recordId, combined); op.lease.assertCurrent(); combined.throwIfAborted();
    if (remote && (remote.id !== recordId || !validRevision(remote.revision) || remote.revision < 1 || new Date(remote.updatedAt).toISOString() !== remote.updatedAt))
     return refuse('VAULT_RESPONSE', 'The account returned an invalid password entry.', 502);
-   const owner = await this.context, remoteValue = remote ? await sealDeviceVaultValue(owner, op.key, recordId, JSON.stringify(validatePasswordEntry(remote.entry))) : undefined;
+   const owner = await this.context, remoteValue = remote ? await sealDevicePasswordValue(owner, op.key, recordId, JSON.stringify(validatePasswordEntry(remote.entry))) : undefined;
    const stamp = new Date().toISOString(), cleanupWriteId = crypto.randomUUID();
-   const cleanup = !remote && before.record.remoteRevision > 0 ? await sealDeviceVaultValue(owner, op.key, `command:${recordId}:${cleanupWriteId}`, '{}') : null;
+   const cleanup = !remote && before.record.remoteRevision > 0 ? await sealDevicePasswordValue(owner, op.key, `command:${recordId}:${cleanupWriteId}`, '{}') : null;
    if (choice === 'copy') copy = await this.prepareCopies(before.record, op, combined);
    await this.db.transaction(this.scope, 'readwrite', op.lease, async tx => {
     const record = await tx.get<DevicePasswordRecord>(RECORDS, recordId), commands = (await tx.list<DevicePasswordCommand>(COMMANDS)).filter(row => row.value.recordId === recordId).sort((a,b) => a.value.localRevision - b.value.localRevision);
@@ -292,7 +293,7 @@ export class LocalPasswordVault extends DeviceVaultSession {
      if (!validPasswordId(remote.id) || !validRevision(remote.revision) || remote.revision < 1 || seen.has(remote.id) || new Date(remote.updatedAt).toISOString() !== remote.updatedAt)
       return refuse('VAULT_RESPONSE', 'The account returned an invalid password entry.', 502);
      seen.add(remote.id); const entry = validatePasswordEntry(remote.entry);
-     const encryptedValue = await sealDeviceVaultValue(await this.context, op.key, remote.id, JSON.stringify(entry));
+     const encryptedValue = await sealDevicePasswordValue(await this.context, op.key, remote.id, JSON.stringify(entry));
      retained.push({ remote, encryptedValue });
     }
     await this.db.transaction(this.scope, 'readwrite', op.lease, async tx => {
@@ -316,7 +317,7 @@ export class LocalPasswordVault extends DeviceVaultSession {
     if (seen.has(before.id) || before.deleted || !before.remoteRevision) continue;
     const id = crypto.randomUUID(), entry = await this.value(before, op);
     missing.set(before.id, { id, recordId: before.id, localRevision: before.revision, operation: 'save',
-     encryptedValue: await sealDeviceVaultValue(await this.context, op.key, `command:${before.id}:${id}`, JSON.stringify({ entry })),
+     encryptedValue: await sealDevicePasswordValue(await this.context, op.key, `command:${before.id}:${id}`, JSON.stringify({ entry })),
      expectedRevision: before.remoteRevision, state: 'refused', status: 404 });
    }
    await this.db.transaction(this.scope, 'readwrite', op.lease, async tx => {
