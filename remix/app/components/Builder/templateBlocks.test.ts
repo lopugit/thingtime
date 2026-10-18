@@ -54,7 +54,7 @@ test('deep editable trees retain inherited stored media and remap nested Action 
  const leaf:any={id:'leaf',type:'element',tag:'button',props:{'data-tt-action':'do-{target}'}};
  let child:any=leaf;
  for(let i=0;i<24;i++) child={id:`nested-${i}`,type:'element',tag:'div',children:[child]};
- const root:any={id:'root',type:'container',args:{target:'saved',image:'/api/v1/attachments/content?id=att_source',item:'private'},children:[...Array.from({length:1800},(_,i)=>({id:`p-${i}`,type:'element',tag:'p'})),child,{id:'image',type:'element',tag:'img',props:{src:'{image}'}},{id:'runtime',type:'element',tag:'img',props:{src:'/api/v1/attachments/content?id={item}'}}]};
+ const root:any={id:'root',type:'container',args:{target:'saved',image:'/api/v1/attachments/content?id=att_source',item:'private',pendingAction:'private'},children:[...Array.from({length:1800},(_,i)=>({id:`p-${i}`,type:'element',tag:'p'})),child,{id:'image',type:'element',tag:'img',props:{src:'{image}'}},{id:'runtime',type:'element',tag:'img',props:{src:'/api/v1/attachments/content?id={item}'}},{id:'pending',type:'element',tag:'img',props:{src:'/api/v1/attachments/content?id={pendingAction}'}}]};
  const crystal={blocks:[root]};
  assert.deepEqual([...compositionAttachmentIds(['webpage'],crystal)],['att_source']);
  assert.deepEqual(compositionReferences(['webpage'],crystal).map(x=>x.ref),['do-saved']);
