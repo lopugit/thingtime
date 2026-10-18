@@ -1,5 +1,7 @@
 # TESTING.md — per-area manual test checklists
 
+- [ ] After merging another feature, password title search still filters before pagination, preserves q across pages, and both manifests advertise api.passwords 1.2.0; client and route search tests remain present.
+
 ## Reusable local video compression
 
 - [ ] Install `media-tools` as the intended account; inspect the returned owned
