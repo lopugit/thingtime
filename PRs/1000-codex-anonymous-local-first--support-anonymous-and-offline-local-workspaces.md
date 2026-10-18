@@ -9,6 +9,41 @@ goal. Do not merge until the [coverage matrix](../docs/local-workspaces.md) is
 complete. It builds on main and includes the separate posting independence fix
 in [PR #999](https://github.com/lopugit/thingtime/pull/999).
 
+## Character navigation and media checkpoint — 2026-10-19
+
+The Things workspace selector opens retained Character content through the same
+validated roster gate as post permalinks. Library, inspector, post/reply/parent
+and History links retain the editor selection. Account controls, copied share
+links and external destinations do not inherit it. View caches include the
+principal/actor partition, and changing the selection retires the old view.
+
+Quick comments use the selected actor's existing account facade. Selecting the
+principal clears an inherited Character scope; anonymous display identities
+remain on the anonymous facade. A target unavailable in that actor's partition
+still requires an authorized online read. No private parent is copied between
+actors to make an offline comment succeed.
+
+Local image registries now share the validated editor's principal/actor scope,
+retain the normal file-read lease, and revoke object URLs when their last view
+leaves. Shared links and URL-supplied ownership parameters cannot select device
+bytes. Remote media continues through the existing authorization path.
+
+Validation: 12 focused navigation/API tests and 730 workspace tests plus four
+offline-shell checks pass (79 opt-in fixtures skipped). Client/server builds pass;
+changed-file lint has no errors and four existing warnings. Typecheck retains the
+same 91 baseline diagnostics. Explicit isolated native acceptance verifies image
+decoding, cold reload, library selection, quick comments, reply/parent links,
+History-to-inspector navigation, revoked image URLs and private reconnect at
+1440/390/320px. Separate draft-save failures do not block posts or files.
+Evidence: `tmp/character-navigation-native/native/verification.json` and PNGs.
+This is a local packaged-app checkpoint; final-head CI/deployed acceptance,
+remaining feature-specific Character routes, and the target-host MCP artifact
+connection stay open. No merge or deployment is included.
+
+Graph refresh: the local-proxy semantic attempt rejected at least one hollow
+chunk, so full documentation freshness is not claimed. The structural graph
+and portable visualization are refreshed independently.
+
 ## Character profile sync checkpoint — 2026-10-19
 
 Theme and feed-algorithm synchronization now resolves the requested or

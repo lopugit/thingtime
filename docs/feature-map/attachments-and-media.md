@@ -286,7 +286,9 @@ project standalone device files and their owned server aliases; `readFile`
 excludes cancellation/deletion recovery data. `accountApi.client.ts` exposes them
 through normal get/list, and the Files browser combines bounded device pages
 with authorized account discovery without blocking local completion.
-`media.client.tsx` scopes URL registries to `workspaceIdentityKey`; shared media
+`media.client.tsx` scopes URL registries to `workspaceIdentityKey` plus the
+validated principal/Character partition. Last-view cleanup revokes object URLs;
+the existing file lease checks both reads and returned URLs. Shared media
 contexts remain on their server authorization path. Tests: workspace, Things,
 attachments, `accountFileUi.browser.test.ts` and `accountFiles.browser.test.ts`.
 Existing owned-file retention is implemented below; managed imports/exports remain completion gates.

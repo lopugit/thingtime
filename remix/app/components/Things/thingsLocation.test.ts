@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readThingsLocation, writeThingsLocation, thingBrowseHref, readLibraryDestination, homeLibraryHref, thingInspectHref } from './thingsLocation';
 import { isPlainLinkClick, safeMenuHref } from '~/utils/linkNavigation';
+import { characterContentPath } from '../Characters/characterContentPath';
 
 test('Things location round-trips searches and every view preference', () => {
   const original = new URLSearchParams('q=audio+%26+notes&view=list&display=preview&sort=name-desc&group=kind&kind=post&folder=parent&device=mac&preview=item&extra=keep');
@@ -39,6 +40,23 @@ test('folder links carry view rules into a new tab without overwriting the searc
 
 test('archive links retain their dedicated read-only mode and the Things referrer', () => {
   assert.equal(thingBrowseHref({ id: 'archive', thingtime: ['chat-archive'] }), '/thing/archive?archive=true&from=things');
+});
+
+test('Character navigation retains scope and URL state without qualifying account or external links', () => {
+  assert.equal(characterContentPath('/post/id?key=read#comment','actor/a'),'/post/id?key=read&character=actor%2Fa#comment');
+  assert.equal(characterContentPath('/history?character=old&character=older','actor'),'/history?character=actor');
+  for(const href of ['/settings','/login','/api/v1/things','https://example.test/post/id','//example.test/post/id','/\\example.test/post/id','#reply','/posters'])
+    assert.equal(characterContentPath(href,'actor'),href);
+  assert.equal(characterContentPath('/things',null),'/things');
+  for(const kind of ['post','data','folder','attachment']) {
+    const href=new URL(thingBrowseHref({id:'item',thingtime:[kind]},'?character=actor&view=list'),'https://thingtime.test');
+    assert.equal(href.searchParams.get('character'),'actor');
+  }
+  const home=homeLibraryHref('actor')+'&character=actor';
+  const inspected=new URL(thingInspectHref('item',home.split('?')[1]),'https://thingtime.test');
+  assert.equal(inspected.searchParams.get('historyOwner'),'actor');
+  assert.equal(inspected.searchParams.get('dataPlane'),'home');
+  assert.equal(inspected.searchParams.get('character'),'actor');
 });
 
 test('native link modifiers, middle clicks and prevented events are never hijacked', () => {

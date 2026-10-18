@@ -1,5 +1,5 @@
 import { useWorkspaceScope } from '~/hooks/useWorkspaceScope';
-import { CharacterContentScope } from '~/components/Characters/CharacterContentScope';
+import { useCharacterContentPath } from '~/components/Characters/CharacterScope';
 import { LOCAL_WORKSPACE_CHANGED } from '~/local-workspace/runtime.client';
 import { sharePathForThing } from '~/components/Sharing/audienceCore';
 import { sharedThingPath } from '~/components/Sharing/sharedMediaCore';
@@ -33,7 +33,7 @@ type ThingResponse = {
 
 export const PostPage = () => {
   const scope = useWorkspaceScope(), { id } = useParams(), [query] = useSearchParams();
-  return <CharacterContentScope actorId={query.get('character')} showSync><WorkspacePostPage key={JSON.stringify([scope,id,query.get('key'),query.get('sharedRoot'),query.get('character')])} /></CharacterContentScope>;
+  return <WorkspacePostPage key={JSON.stringify([scope,id,query.get('key'),query.get('sharedRoot'),query.get('character')])} />;
 };
 const WorkspacePostPage = () => {
   const { id } = useParams();
@@ -42,7 +42,8 @@ const WorkspacePostPage = () => {
   const [searchParams] = useSearchParams();
   const linkKey = (searchParams.get('key') || '').trim();
   const sharedRoot = searchParams.get('sharedRoot') || '';
-  const parentPath = (thing: PublicPost) => sharedThingPath(sharePathForThing(thing), linkKey, sharedRoot);
+  const contentPath = useCharacterContentPath();
+  const parentPath = (thing: PublicPost) => contentPath(sharedThingPath(sharePathForThing(thing), linkKey, sharedRoot));
   const api = useApi();
   const user = useCurrentUser();
   const navigate = useNavigate();
@@ -101,7 +102,8 @@ const WorkspacePostPage = () => {
       const next = typeof change === 'function' ? change(prev.post) : change;
       if (!next) {
         // the thing was deleted from its own page — go somewhere sensible
-        navigate(rootId ? `/post/${rootId}` : '/feed');
+        const libraryPath = contentPath('/things');
+        navigate(rootId ? contentPath(`/post/${rootId}`) : libraryPath === '/things' ? '/feed' : libraryPath);
         return prev;
       }
       return { ...prev, post: next };

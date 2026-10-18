@@ -1,4 +1,5 @@
 import { useWorkspaceRefresh } from '~/local-workspace/useWorkspaceRefresh';
+import { useCharacterContentPath } from '~/components/Characters/CharacterScope';
 import { useWorkspaceUser } from '~/hooks/useWorkspaceUser';
 import { audienceDescription, audienceOfAcl, THING_AUDIENCE_META } from '~/components/Sharing/audienceCore';
 import React from 'react';
@@ -283,6 +284,7 @@ export default function ThingPage() {
 }
 
 function GenericThingPage() {
+	const contentPath = useCharacterContentPath();
 	const { id = '' } = useParams();
 	const [searchParams] = useSearchParams();
 	const linkKey = (searchParams.get('key') || '').trim();
@@ -304,7 +306,8 @@ function GenericThingPage() {
 	const { observeView } = useViewTracking();
 	const diagnosticRoute = DIAGNOSTIC_ID_PATTERN.test(id);
 	const requestKey = `${dataPlane ?? 'unknown'}\u0000${id}\u0000${currentUser?.id || 'anonymous'}\u0000${currentUser?.isAdmin ? 'admin' : 'user'}\u0000${linkKey}`;
-	const back = REFERRERS[parseThingsReferrer(searchParams.get('from'))];
+	const referrer = REFERRERS[parseThingsReferrer(searchParams.get('from'))];
+	const back = {...referrer,to:contentPath(referrer.to)};
 
 	// Optimistic-render house rule: the last-known projection of this thing
 	// paints on the very first render (per viewer, per id — never another
@@ -677,7 +680,7 @@ function GenericThingPage() {
 	const sections = thingDetailSections({ hasThing: !!thing, showPreview, showData });
 	const primaryKind = kinds[0] || 'thing';
 	const displayName = thing ? thingDisplayName({ thingtime: kinds, crystal: thing.crystal || {} }) : '';
-	const ownPage = thing ? thingLink({ id: thing.id, thingtime: kinds }) : null;
+	const ownPage = thing ? contentPath(thingLink({ id: thing.id, thingtime: kinds })) : null;
 	const actionCrystal = isAction ? ((thing?.crystal || {}) as ActionCrystal) : null;
 	const actionEffects = actionCrystal ? actionEffectsOf(actionCrystal) : null;
 	const actionLimits = actionCrystal ? actionLimitsOf(actionCrystal) : null;
@@ -728,7 +731,7 @@ function GenericThingPage() {
 						Open {ownPage}
 					</Button>
 					{isThingOwner ? (
-						<Button as={Link} to={`/builder?page=${encodeURIComponent(thing.id)}`} size="sm" variant="outline">
+						<Button as={Link} to={contentPath(`/builder?page=${encodeURIComponent(thing.id)}`)} size="sm" variant="outline">
 							✏️ Edit in builder
 						</Button>
 					) : null}
@@ -1006,7 +1009,7 @@ function GenericThingPage() {
 									</Heading>
 									<Button
 										as={Link}
-										to={`/post/${encodeURIComponent(post.id)}`}
+										to={contentPath(`/post/${encodeURIComponent(post.id)}`)}
 										size="xs"
 										variant="ghost"
 										rightIcon={<ExternalLink size={13} />}

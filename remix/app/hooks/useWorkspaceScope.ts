@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from 'react';
+import { useCharacterScope } from '../components/Characters/CharacterScope';
 import { currentAccountWorkspace, isAnonymousWorkspace, subscribeWorkspaceBinding } from '../local-workspace/runtime.client';
 import { workspaceScopeKey } from '../local-workspace/storage';
 import { rootIdentity } from '../utils/rootIdentity';
@@ -15,4 +16,8 @@ const subscribe = (notify: () => void) => {
 	};
 };
 /** Key local-capable views and caches by the full partition, including data plane. */
-export const useWorkspaceScope = () => useSyncExternalStore(subscribe, snapshot, () => 'pending');
+export const useWorkspaceScope = () => {
+ const root = useSyncExternalStore(subscribe, snapshot, () => 'pending'), actor = useCharacterScope(), account = currentAccountWorkspace();
+ return root !== 'pending' && account && actor && actor.id !== account.ownerId
+  ? workspaceScopeKey({...account,ownerId:actor.id,delegatedBy:account.ownerId}) : root;
+};

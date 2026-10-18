@@ -10,9 +10,11 @@ import { changesRootIdentity, rootIdentity } from '../utils/rootIdentity';
 import { useDataPlane } from './useDataPlane';
 import { EXPECTED_DATA_PLANE_HEADER } from '../utils/dataPlane';
 import { requireThingtimeCapability } from '../api/utils/capabilities/requireCapability.client';
+import type { CurrentUser } from './useCurrentUser';
 
-export function useAsyncFetcher() {
-  const character = useCharacterScope();
+export function useAsyncFetcher(actorOverride?: CurrentUser) {
+  const inheritedCharacter = useCharacterScope();
+  const character = actorOverride === undefined ? inheritedCharacter : actorOverride;
   const workspaceKey = workspaceIdentityKey();
   // Retained submissions belong to the view that created them, including when
   // characterId is supplied explicitly rather than through CharacterScope.

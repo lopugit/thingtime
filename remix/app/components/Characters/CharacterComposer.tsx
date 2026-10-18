@@ -1,6 +1,8 @@
 import React from 'react';
 import { Box, Flex, Select, Text } from '@chakra-ui/react';
 import { useWorkspaceUser } from '~/hooks/useWorkspaceUser';
+import { useOfflineWorkspace } from '~/hooks/useWorkspaceUser';
+import { useRootUser } from '~/hooks/useCurrentUser';
 import { useDataPlane } from '~/hooks/useDataPlane';
 import { DraftSyncStatus } from '~/local-workspace/AccountSyncStatus';
 import { CharacterScope } from './CharacterScope';
@@ -8,6 +10,7 @@ import { useCharacters } from './useCharacters';
 export function CharacterComposer({ children }: { children: React.ReactNode }) {
   const selectId = React.useId();
   const current = useWorkspaceUser();
+  const root = useRootUser(), offline = useOfflineWorkspace(), principalId = root?.id || offline?.ownerId;
   const dataPlane = useDataPlane();
   const { roster, error } = useCharacters();
   const [selected, setSelected] = React.useState(current?.id || '');
@@ -23,7 +26,7 @@ export function CharacterComposer({ children }: { children: React.ReactNode }) {
       </Select>
       {error && <Text fontSize="xs">{error}</Text>}
     </Flex>
-    {actor ? <CharacterScope.Provider key={actor.id} value={actor.id === current.id ? undefined : actor}>{children}</CharacterScope.Provider> : <Text>That Character is unavailable. Choose another identity.</Text>}
-    {actor && actor.id !== current.id && dataPlane ? <DraftSyncStatus key={`draft-sync:${actor.id}`} ownerId={current.id} actorId={actor.id} dataPlane={dataPlane} unconfirmed={!!current.offline}/> : null}
+    {actor ? <CharacterScope.Provider key={actor.id} value={actor.id === principalId ? undefined : actor}>{children}</CharacterScope.Provider> : <Text>That Character is unavailable. Choose another identity.</Text>}
+    {actor && principalId && actor.id !== principalId && dataPlane ? <DraftSyncStatus key={`draft-sync:${actor.id}`} ownerId={principalId} actorId={actor.id} dataPlane={dataPlane} unconfirmed={!!offline}/> : null}
   </Box>;
 }

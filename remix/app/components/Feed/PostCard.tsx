@@ -1,5 +1,6 @@
 import { useWorkspaceUser } from '~/hooks/useWorkspaceUser';
-import { PostAsSelect } from '~/components/Characters/PostAsSelect';
+import { PostAsSelect, usePostAsUser } from '~/components/Characters/PostAsSelect';
+import { useCharacterContentPath } from '~/components/Characters/CharacterScope';
 import { PostLinkedThings } from './PostLinkedThings';
 import { CollectionList } from '~/components/Collections/CollectionList';
 import { createDiscussionCommentPager, mergeDiscussionComments, discussionCommentSearchText } from './discussionCommentPages';
@@ -303,8 +304,9 @@ const formatDwell = (ms: number): string => {
 // timestamps work on every major platform.
 const TimestampLink = ({ id, createdAt, fontSize = 'xs', to }: { id: string; createdAt: string; fontSize?: string; to?: string }) => {
   const sharedPath = useSharedThingPath();
+  const contentPath = useCharacterContentPath();
   return (
-  <Link to={sharedPath(to || `/post/${id}`)} title={new Date(createdAt).toLocaleString()}>
+  <Link to={contentPath(sharedPath(to || `/post/${id}`))} title={new Date(createdAt).toLocaleString()}>
     <Text as="span" fontSize={fontSize} color={MUTED} _hover={{ textDecoration: 'underline', color: INK }}>
       {timeAgo(createdAt)}
     </Text>
@@ -908,9 +910,8 @@ const CommentRow = (props: {
   const [richReplyOpen, setRichReplyOpen] = React.useState(false);
   const [repliesLoading, setRepliesLoading] = React.useState(false);
   // reply text persists as a per-user draft — leave and pick it up later
-	const [replyAs, setReplyAs] = React.useState<typeof user>(null);
-	React.useEffect(() => setReplyAs(null), [user?.id]);
-	const replyActor = replyAs || user;
+	const [replyActor, setReplyAs] = usePostAsUser(user);
+  const replyApi = useApi(undefined, replyActor);
   const replyDraft = useCommentDraft(replyActor?.id, comment.id, replyInputOpen);
 	const { value: replyText, setValue: setReplyText, clear: clearReplyDraft, hydrated: draftHydrated, flush: flushReplyDraft, begin: beginReply, end: endReply } = replyDraft;
   const pending = isPendingComment(comment);
@@ -1163,7 +1164,7 @@ const CommentRow = (props: {
 
     try {
       void flushReplyDraft().catch(() => {});
-      const resp = await api.v1.things.comment({ id: comment.id, text, characterId: replyActor?.id });
+      const resp = await replyApi.v1.things.comment({ id: comment.id, text, characterId: replyActor?.id });
       await clearReplyDraft(text);
       freshReplies.swap(pendingReply.id, resp.comment.id);
       setReplies((prev) => {
@@ -1485,6 +1486,7 @@ export const PostCard = React.memo(function PostCard(props: PostCardProps) {
 });
 
 function PostCardImpl(props: PostCardProps) {
+  const contentPath = useCharacterContentPath();
   const { post, onChanged, onEngagement, onCommentAdded, defaultCommentsOpen, mediaThing, gallery, discussionOnly, commentCollection } = props;
 	const sharedPath = useSharedThingPath();
   const sharedAccess = useSharedAccess();
@@ -1519,9 +1521,8 @@ function PostCardImpl(props: PostCardProps) {
   const navDirRef = React.useRef<'push' | 'pop'>('push');
   const focusedComment = focusStack.length ? focusStack[focusStack.length - 1] : null;
   // the comment text persists as a per-user draft — leave and pick it up later
-  const [commentAs, setCommentAs] = React.useState<typeof user>(null);
-  React.useEffect(() => setCommentAs(null), [user?.id]);
-  const commentActor = commentAs || user;
+  const [commentActor, setCommentAs] = usePostAsUser(user);
+  const commentApi = useApi(undefined, commentActor);
   const commentDraft = useCommentDraft(commentActor?.id, post.id, commentsOpen);
   const { value: commentText, setValue: setCommentText, clear: clearCommentDraft, flush: flushCommentDraft, begin: beginComment, end: endComment } = commentDraft;
   const [richCommentOpen, setRichCommentOpen] = React.useState(false);
@@ -2067,7 +2068,7 @@ function PostCardImpl(props: PostCardProps) {
 
     try {
       void flushCommentDraft().catch(() => {});
-      const resp = await api.v1.things.comment({ id: post.id, text, characterId: commentActor?.id });
+      const resp = await commentApi.v1.things.comment({ id: post.id, text, characterId: commentActor?.id });
       await clearCommentDraft(text);
       freshComments.swap(pendingComment.id, resp.comment.id);
       onChanged?.(post.id, (prev) => ({
@@ -2304,7 +2305,7 @@ function PostCardImpl(props: PostCardProps) {
             </Flex>
           </Box>
           <PostThingMenu post={post} mediaThing={mediaThing} isOwner={isOwner} canModerate={canModerate}
-            canReport={canReport} guestReport={guestReport} flairs={modFlairs} openHref={permalinkPath}
+            canReport={canReport} guestReport={guestReport} flairs={modFlairs} openHref={contentPath(permalinkPath)}
             archive={archiveTarget}
             onOpen={() => { if (isOwner || canModerate) void loadFlairs(); }}
             handlers={{

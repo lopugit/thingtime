@@ -12610,4 +12610,6 @@ Local results do not establish current-head CI or deployed acceptance.
 - [x] A late Action outcome stays in the originating principal/actor cache.
 - [x] Theme/algorithm transport refuses offline entry and a disconnect during capability negotiation, then resumes with unchanged authorization checks.
 - [x] Native delegated post, attachment, cold reload, History, reconnect and draft-failure checks pass. Exact downloaded attachment bytes, guest and principal-only denial, zero offline writes, centered sync panels and 1440/390/320px scrolling are asserted. See `characterWorkspace.browser.test.ts` and the progress plan.
-- [ ] Complete delegated library discovery, nested links and quick-comment actor-selection acceptance.
+- [x] Character library selection, reply/parent links, History-to-inspector links and quick-comment completion retain their actor through native cold reload. The principal library remains separate; leaving the actor revokes its image URL.
+- [x] Explicit API actor selection saves in the actor queue; selecting the principal clears inherited delegation. A private target in another partition is refused. Anonymous quick comments keep the anonymous facade and make no account requests.
+- [ ] Complete remaining feature-specific Character routes and the full account/offline acceptance matrix.

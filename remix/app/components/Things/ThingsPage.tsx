@@ -1,3 +1,5 @@
+import { CharacterWorkspacePicker } from '../Characters/CharacterContentScope';
+import { useCharacterContentPath } from '../Characters/CharacterScope';
 import { useDataPlane } from '~/hooks/useDataPlane';
 import { LocalApiView, useLocalApiView } from '~/local-workspace/LocalApiView';
 import { useWorkspaceScope } from '~/hooks/useWorkspaceScope';
@@ -153,6 +155,7 @@ const ThingsPageContents = () => {
 };
 
 const ThingsLibraryPage = () => {
+  const contentPath = useCharacterContentPath();
   const scope = useWorkspaceScope();
   const localView = useLocalApiView();
   const homeView = localView.localPlane === "home";
@@ -1605,12 +1608,13 @@ const ThingsLibraryPage = () => {
     >
       <Flex direction="column" gap={4} maxWidth="100%" paddingTop={[4, 6]} paddingX={4} width={['100%', '100%', '1100px']}
         style={{ boxSizing: 'border-box', minWidth: 0, paddingInline: 16 }}>
+        <CharacterWorkspacePicker />
         <Flex alignItems="baseline" gap={3} wrap="wrap">
           <Text {...monoLabel}>Thingtime · Things</Text>
-          <Button as={RouterLink} to="/things?files=thingtime" size="sm" variant="ghost">Browse files</Button>
+          <Button as={RouterLink} to={contentPath("/things?files=thingtime")} size="sm" variant="ghost">Browse files</Button>
           {user && !user.localOnly ? <Flex gap={2} wrap="wrap" aria-label="Library storage">
-            <Button as={RouterLink} to="/things" size="sm" variant={homeView ? 'outline' : 'solid'} aria-pressed={!homeView}>Selected library</Button>
-            <Button as={RouterLink} to={homeLibraryHref(user.id)} size="sm" variant={homeView ? 'solid' : 'outline'} aria-pressed={homeView}>Home library</Button>
+            <Button as={RouterLink} to={contentPath("/things")} size="sm" variant={homeView ? 'outline' : 'solid'} aria-pressed={!homeView}>Selected library</Button>
+            <Button as={RouterLink} to={contentPath(homeLibraryHref(user.id))} size="sm" variant={homeView ? 'solid' : 'outline'} aria-pressed={homeView}>Home library</Button>
           </Flex> : null}
         </Flex>
 				{devicesEnabled && !folderId && !searchMode && !shouldHideLocalNodePanel(localNode, nodePanelDismissed) ? (
@@ -1662,7 +1666,7 @@ const ThingsLibraryPage = () => {
                 <MenuItem as={RouterLink} to="/feed">
                   📝 {homeView && selectedPlane !== 'home' ? 'New post in selected library' : 'New post'}
                 </MenuItem>
-                <MenuItem as={RouterLink} to="/schemas">
+                <MenuItem as={RouterLink} to={contentPath("/schemas")}>
                   💎 {homeView && selectedPlane !== 'home' ? 'New data in selected library' : 'New data thing'}
                 </MenuItem>
               </MenuList>

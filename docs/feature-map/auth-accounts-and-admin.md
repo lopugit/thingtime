@@ -357,3 +357,13 @@ canonical History export and stale-principal refusal. The opt-in browser test
 uses disposable accounts and the normal upload approval API. Remote-operation
 connectivity is checked by `assertAccountSyncAllowed`; the profile transport
 regression covers a disconnect during capability discovery.
+
+### Character content navigation and selectors
+
+`CharacterContentRoute` gates content routes against the current principal's
+retained roster; `CharacterWorkspacePicker` exposes that selection in Things.
+`characterContentPath` retains it only on internal content navigation.
+`useApi` accepts an explicit editor actor for quick comments, preserving local
+completion and the existing remote delegation checks. Anonymous display users
+stay anonymous. Regressions: `characterWorkspace.test.ts`,
+`thingsLocation.test.ts` and opt-in `characterWorkspace.browser.test.ts`.

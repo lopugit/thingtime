@@ -1,3 +1,4 @@
+import { useCharacterContentPath } from '../Characters/CharacterScope';
 import { readActionOutcome, actionOutcomeDescription } from '../../timeline/actionOutcome';
 import { CharacterContentScope } from '../Characters/CharacterContentScope';
 import { TimelineProvider } from '../../timeline/TimelineProvider';
@@ -48,6 +49,7 @@ const preview = (snapshot: TimelineSnapshot | null) => {
 const sourceLabel = (event: TimelineEvent) => ({ client: 'Editor', api: 'API', ai: 'Lopu', action: 'Action', system: 'Thingtime' }[event.source]);
 
 function TimelinePanel({ thingId, folderId, urlState = false }: { thingId: string | null; folderId?: string; urlState?: boolean }) {
+	const contentPath = useCharacterContentPath();
 	const [params, setParams] = useSearchParams();
 	const [filters, setFilters] = React.useState(() => readHistoryFilters(urlState ? params : new URLSearchParams(), thingId ?? ''));
 	React.useEffect(() => {
@@ -274,7 +276,7 @@ function TimelinePanel({ thingId, folderId, urlState = false }: { thingId: strin
 									setOpenError('');
 									try {
 										if (differentSource) await api.v1.mongodb.endpoint.set({ reset: true });
-										navigate(thingHistoryHref(selected.thingId, scope.dataPlane, scope.ownerId));
+										navigate(contentPath(thingHistoryHref(selected.thingId, scope.dataPlane, scope.ownerId)));
 									} catch (error) {
 										setOpenError(apiErrorMessage(error, 'Could not open this Thing. Your history is still here.'));
 									} finally {
@@ -386,7 +388,7 @@ function TimelinePanel({ thingId, folderId, urlState = false }: { thingId: strin
 					<Button
 						size="sm"
 						variant="ghost"
-						onClick={() => navigate(`/history?${writeHistoryFilters(new URLSearchParams({ storage: homeHistory ? 'home' : 'selected' }), filters)}`)}
+						onClick={() => navigate(contentPath(`/history?${writeHistoryFilters(new URLSearchParams({ storage: homeHistory ? 'home' : 'selected' }), filters)}`))}
 					>
 						Open History browser
 					</Button>
@@ -479,12 +481,13 @@ function HistoryDetails({ children, onClose, activity }: { children: React.React
 }
 
 export function TimelineLibrary({ folderId, storage = 'selected' }: { folderId: string; storage?: TimelineStorage }) {
+	const contentPath = useCharacterContentPath();
 	const navigate = useNavigate();
 	const user = useCurrentUser();
 	const selected = useSelectedTimelineSession();
 	return (
 		<PageShell width={1100} columnProps={{ pt: 4 }}>
-			<Button alignSelf="flex-start" variant="ghost" size="sm" onClick={() => navigate('/things')}>
+			<Button alignSelf="flex-start" variant="ghost" size="sm" onClick={() => navigate(contentPath('/things'))}>
 				← Things
 			</Button>
 			<PageHeader eyebrow="Thingtime · Things" title="Timeline" variant="ink" subtitle="Your changes across Thingtime, saved in one place." />
@@ -494,7 +497,7 @@ export function TimelineLibrary({ folderId, storage = 'selected' }: { folderId: 
 						size="sm"
 						variant={storage === 'home' ? 'solid' : 'outline'}
 						aria-pressed={storage === 'home'}
-						onClick={() => navigate(timelineFolderHref(folderId, 'home'))}
+						onClick={() => navigate(contentPath(timelineFolderHref(folderId, 'home')))}
 					>
 						Home account
 					</Button>
@@ -502,7 +505,7 @@ export function TimelineLibrary({ folderId, storage = 'selected' }: { folderId: 
 						size="sm"
 						variant={storage === 'selected' ? 'solid' : 'outline'}
 						aria-pressed={storage === 'selected'}
-						onClick={() => navigate(timelineFolderHref(folderId, 'selected'))}
+						onClick={() => navigate(contentPath(timelineFolderHref(folderId, 'selected')))}
 					>
 						Selected database
 					</Button>

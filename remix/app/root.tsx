@@ -1,4 +1,5 @@
 import { LopuInstructionsSync } from './local-workspace/lopuInstructions.client';
+import { CharacterContentRoute } from './components/Characters/CharacterContentScope';
 import { LocalMediaDiagnostics } from './local-workspace/media.client';
 import { AccountSyncStatus } from './local-workspace/AccountSyncStatus';
 import { ThingDraftsProvider } from './drafts/ThingDrafts';
@@ -165,7 +166,7 @@ export default function App() {
             {/* every page is a block-based site: per-route + global blocks
                 render around the native screen; the ✏️ pill enters edit mode */}
             <SiteBlocksHost>
-              <Outlet />
+              <CharacterContentRoute><Outlet /></CharacterContentRoute>
             </SiteBlocksHost>
           </Main>
         )}

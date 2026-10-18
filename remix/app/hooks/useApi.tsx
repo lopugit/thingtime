@@ -3,7 +3,7 @@ import { useLocalApiView } from '../local-workspace/LocalApiView';
 import { parseTimelineVersionExport } from '../timeline/exportVersion';
 import { startNotificationHistorySync } from '../local-workspace/notifications.client';
 import { WorkspaceApiIdentity } from '../local-workspace/apiIdentity';
-import { useOfflineWorkspace } from './useWorkspaceUser';
+import { useOfflineWorkspace, type WorkspaceUser } from './useWorkspaceUser';
 import { accountApi, startAccountWorkspaceSync, type AccountLocalView } from '../local-workspace/accountApi.client';
 import { anonymousApi } from '../local-workspace/api.client';
 import { useCharacterScope, CHARACTER_HEADER } from '~/components/Characters/CharacterScope';
@@ -110,10 +110,17 @@ const toQuery = (args?: Record<string, unknown>) => {
   return qs ? `?${qs}` : '';
 };
 
-export function useApi(explicitView?: AccountLocalView) {
+/** An explicit actor selects the same fenced workspace used by CharacterScope;
+ * null selects the principal. It never supplies server delegation authority. */
+export function useApi(explicitView?: AccountLocalView, actorOverride?: WorkspaceUser | null) {
   const inheritedView = useLocalApiView();
   const view = explicitView ?? inheritedView;
-  const character = useCharacterScope();
+  const inheritedCharacter = useCharacterScope(), rootUser = useRootUser(), offlineWorkspace = useOfflineWorkspace();
+  const principalId = rootUser?.id || offlineWorkspace?.ownerId;
+  // The anonymous editor's display identity is not a delegated account.
+  const explicitActor = actorOverride?.localOnly ? null : actorOverride;
+  const selectedCharacter = explicitActor === undefined ? inheritedCharacter : explicitActor;
+  const character = selectedCharacter?.id === principalId ? undefined : selectedCharacter;
   const getJson = useCallback(async (url: string, options?: { signal?: AbortSignal; expectedDataPlane?: string | null; expectedActor?: string }) => {
     if (!character) return getJsonRequest(url, options);
     return withCharacterRequest(async (signal, scope) => {
@@ -124,12 +131,10 @@ export function useApi(explicitView?: AccountLocalView) {
   }, [character]);
   const dataPlane = useDataPlane();
   const planeRef = useRef(dataPlane); planeRef.current = dataPlane;
-  const asyncFetcher = useAsyncFetcher();
-  const actionUser = useCurrentUser();
-  const rootUser = useRootUser();
+  const asyncFetcher = useAsyncFetcher(character ?? null);
+  const inheritedUser = useCurrentUser();
+  const actionUser = explicitActor === undefined ? inheritedUser : explicitActor || rootUser;
   const delegated = !!character && character.id !== rootUser?.id;
-  const offlineWorkspace = useOfflineWorkspace();
-  const principalId = rootUser?.id || offlineWorkspace?.ownerId;
   const actionPrincipal = useRef(principalId); actionPrincipal.current = principalId;
   const actionActor = useRef(actionUser?.id);
   actionActor.current = actionUser?.id;

@@ -1,4 +1,5 @@
 import { thingHistoryHref } from '../../utils/dataPlane';
+import { characterContentPath } from '../Characters/characterContentPath';
 import { THINGS_KIND_FILTERS, THINGS_SORT_OPTIONS, THINGS_GROUP_OPTIONS, isFolder, thingOpenHref, type ThingsThing, type ThingsCache, type ThingsView, type ThingsDisplayMode, type ThingsSort, type ThingsGroupBy, type ThingsKindFilter } from './thingsCore';
 
 export type ThingsLocationState = { q: string; view: ThingsView; display: ThingsDisplayMode; sort: ThingsSort; group: ThingsGroupBy; kind: ThingsKindFilter };
@@ -28,9 +29,9 @@ export const writeThingsLocation = (params: URLSearchParams, state: ThingsLocati
 export const thingBrowseHref = (thing: Pick<ThingsThing, 'id' | 'thingtime'> & Partial<Pick<ThingsThing, 'crystal'>>, search = '') => {
   if (!isFolder(thing)) {
     const params = new URLSearchParams(search);
-    return params.get('localPlane') === 'home' && params.get('workspaceOwner')
+    return characterContentPath(params.get('localPlane') === 'home' && params.get('workspaceOwner')
       ? thingHistoryHref(thing.id, 'home', params.get('workspaceOwner')!)
-      : thingOpenHref(thing, 'things');
+      : thingOpenHref(thing, 'things'), params.get('character'));
   }
   const next = new URLSearchParams(search);
   next.set('folder', thing.id);
@@ -51,7 +52,7 @@ export const homeLibraryHref = (ownerId: string) => `/things?${new URLSearchPara
 
 export const thingInspectHref = (thingId: string, search = '') => {
   const params = new URLSearchParams(search);
-  return params.get('localPlane') === 'home' && params.get('workspaceOwner')
+  return characterContentPath(params.get('localPlane') === 'home' && params.get('workspaceOwner')
     ? thingHistoryHref(thingId, 'home', params.get('workspaceOwner')!)
-    : `/thing/${encodeURIComponent(thingId)}?from=things`;
+    : `/thing/${encodeURIComponent(thingId)}?from=things`, params.get('character'));
 };

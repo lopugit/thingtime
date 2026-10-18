@@ -1,27 +1,34 @@
 import React from 'react';
+import { useCharacterScope } from '../components/Characters/CharacterScope';
 import { anonymousWorkspaceLease, accountWorkspaceLease, currentAccountWorkspace, isAnonymousWorkspace, subscribeWorkspaceIdentity, workspaceIdentityKey, workspaceDatabase, LOCAL_WORKSPACE_CHANGED } from './runtime.client';
-import type { WorkspaceScope } from './storage';
+import { workspaceScopeKey, type WorkspaceScope } from './storage';
 import { LocalThings } from './things';
 import { AccountFileSync } from './accountFiles';
 import { LocalMediaRegistry, localMediaId } from './media';
 
 const listeners = new Set<() => void>();
-const scopeNow = (): WorkspaceScope | null => isAnonymousWorkspace() ? { kind: 'anonymous' } : currentAccountWorkspace();
+const scopeNow = (actorId?:string): WorkspaceScope | null => {
+ const account=currentAccountWorkspace();
+ if(account)return actorId && actorId!==account.ownerId ? {...account,ownerId:actorId,delegatedBy:account.ownerId} : account;
+ return !actorId && isAnonymousWorkspace() ? {kind:'anonymous'} : null;
+};
 const contextKey = workspaceIdentityKey;
-let context: { key: string; registry: LocalMediaRegistry } | undefined;
+type MediaContext = {key:string;identity:string;registry:LocalMediaRegistry;users:number};
+const contexts = new Map<string,MediaContext>();
 const retireContext = () => {
- if (context?.key === contextKey()) return;
- const retired = context; context = undefined; retired?.registry.dispose();
+ const identity=contextKey();
+ for(const [key,context] of contexts)if(context.identity!==identity){contexts.delete(key);context.registry.dispose();}
  listeners.forEach(listener => listener());
 };
 subscribeWorkspaceIdentity(retireContext);
 const subscribeContext = (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; };
 const subscribeEmpty = () => () => {};
 const emptySnapshot = () => 0;
-function currentRegistry() {
- const scope = scopeNow(), key = contextKey();
- if (!scope || !key) return null;
- if (context?.key === key) return context.registry;
+function currentContext(actorId?:string) {
+ const scope = scopeNow(actorId), identity = contextKey();
+ if (!scope || !identity) return null;
+ const key=JSON.stringify([identity,workspaceScopeKey(scope)]), existing=contexts.get(key);
+ if(existing)return existing;
  const lease = scope.kind === 'anonymous' ? anonymousWorkspaceLease() : accountWorkspaceLease(scope);
  const registry = new LocalMediaRegistry({
   lease: () => lease,
@@ -29,21 +36,31 @@ function currentRegistry() {
   create: (bytes, type) => URL.createObjectURL(new Blob([bytes instanceof Blob ? bytes : Uint8Array.from(bytes)], { type })),
   revoke: url => URL.revokeObjectURL(url)
  });
- context = { key, registry }; return registry;
+ const context={key,identity,registry,users:0};contexts.set(key,context);return context;
 }
 if (typeof window !== 'undefined') window.addEventListener(LOCAL_WORKSPACE_CHANGED, event => {
  const ids = (event as Event & { removedIds?: string[] }).removedIds;
- if (ids) context?.registry.removed(ids);
- context?.registry.refresh();
+ for(const context of contexts.values()){
+  if(ids)context.registry.removed(ids);
+  context.registry.refresh();
+ }
 });
 function useRegistry() {
+ const actor=useCharacterScope();
  React.useSyncExternalStore(subscribeContext, contextKey, contextKey);
- const registry = currentRegistry();
+ const context=currentContext(actor?.id), registry=context?.registry;
+ React.useEffect(()=>{
+  if(!context)return;
+  context.users++;
+  return ()=>{context.users--;queueMicrotask(()=>{
+   if(!context.users && contexts.get(context.key)===context){contexts.delete(context.key);context.registry.dispose();}
+  });};
+ },[context]);
  React.useSyncExternalStore(registry?.subscribe || subscribeEmpty, registry?.snapshot || emptySnapshot, emptySnapshot);
  return registry;
 }
-/** Capture the active local identity; a remote URL, shared link, or imported
- * owner ID cannot select a device partition or reuse a retired object URL. */
+/** The validated editor context selects the local partition; a remote URL,
+ * shared link or imported owner ID cannot select it or reuse a retired URL. */
 export function useLocalMediaUrl(remote: (url: string) => string, allowLocal = true) {
  const registry = useRegistry();
  const held = React.useRef(new Map<string, () => void>());

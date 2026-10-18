@@ -190,12 +190,18 @@ an explicit gate in [the workspace matrix](local-workspaces.md).
 ### Device content after closing the composer
 
 `CharacterContentScope` resolves `?character=<id>` against the current workspace's
-retained roster for post permalinks and History. `useApi` uses the same
+retained roster for content routes. The Things library's **Workspace** selector
+opens an available Character, and ordinary library, inspector, post, reply,
+parent and History links preserve that selection. `useApi` uses the same
 principal/actor account worker for local posts, attachments and editable Things
 as `characterDraftWorkspace`. Remote requests still reauthorize delegation.
 A guest or unavailable actor receives an explicit status, without falling back
-to another account's local content. Broader library and nested-link selection
-remain tracked in [local workspaces](local-workspaces.md).
+to another account's local content. Quick comments use the selected actor's
+local facade; anonymous editor identities remain anonymous. An offline reply
+requires its target in the selected actor's retained partition. Local images use
+the same partition and release object URLs on leaving; shared links cannot borrow
+device bytes. Remaining feature-specific routes and full acceptance remain
+tracked in [local workspaces](local-workspaces.md).
 
 Opt-in native coverage: `app/local-workspace/characterWorkspace.browser.test.ts`.
 Run only in a verified isolated runtime with `TT_RENDER_ORIGIN`,
