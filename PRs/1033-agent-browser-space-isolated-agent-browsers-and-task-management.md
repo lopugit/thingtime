@@ -53,9 +53,15 @@ use supported sign-in/user-presence flows; private keys are never exported.
 - Independent source review found no additional actionable issues after fixes
   for cleanup failure handling, selected API origin scoping and ownership.
 
-The final general-settings deep-link check, signed installed-app acceptance and
-PR deployment verification are pending at this checkpoint. Build success alone
-does not establish those results.
+Final signed-app, settings-link and deployment results are recorded on
+[PR #1033](https://github.com/lopugit/thingtime/pull/1033). The local app assembly
+also preserves the password-provider and menu-bar branches already installed on
+the device; those features are outside this PR’s changes to main. Build success
+alone does not establish installed-app acceptance.
+
+The graph refresh retained portable outputs and structural indexing. Some
+semantic extraction chunks returned empty responses after three attempts, so
+Markdown and other non-code semantic coverage is partial, not fully refreshed.
 
 ## Acceptance fixes
 
