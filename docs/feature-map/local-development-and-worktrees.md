@@ -95,3 +95,12 @@ normal client builds and PM2 development include it. The generated policy is
 shared by Vite/Vercel headers and the offline MCP capture process. See
 [no-login draft setup](../no-login-draft-preview.md); its QA uses a uniquely
 named canonical PM2 app on ports 22460–22462 and a new disposable replica.
+
+## Local API isolation
+
+Vite always forwards to this checkout’s Nitro port. Missing Mongo/signing settings
+return `503 LOCAL_API_NOT_CONFIGURED`; neither server selects production implicitly.
+`remix/scripts/local-api-isolation-smoke.mjs` exercises built Nitro and Vite under
+a macOS OS network sandbox, including direct-IP and redirect denial. Fixture
+requests accept only a literal loopback HTTP origin and same-origin uploads.
+Keep backend/browser network isolation and dedicated test credentials in place.
