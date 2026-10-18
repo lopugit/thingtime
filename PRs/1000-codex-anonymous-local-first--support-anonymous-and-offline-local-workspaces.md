@@ -4459,3 +4459,34 @@ claims. The installed window now contains another task’s OAuth flow; it is
 preserved. The previously negotiated socket is currently unavailable. No test
 claim or permissive fallback was launched. Private Character coordination is
 initialized; no public publication or production deployment is claimed.
+
+
+### Native export acceptance — 2026-10-19
+
+Pushed integration `ec7234870` runs in the packaged full-app isolated Linux
+Chromium runtime. The browser and backend have loopback only, no host mounts
+or published ports, and task-owned temporary data. The clean draft UI preserves
+exact affirmation text at 1440x1000, 390x844 and 320x844, with no horizontal
+overflow and 24px phone margins. Invalid JSON keeps the last valid preview.
+
+The real stdio MCP acceptance passes, including invisible/overflow input,
+missing dependencies/crops, concurrency refusal and canonical repeat export.
+The example client returns actual PNG/JSON files, including a 400x560 card.
+The SDK filters inherited environment variables; example/test clients now pass
+only the optional `PLAYWRIGHT_BROWSERS_PATH` explicitly. The ordinary MCP
+suite passes 37 tests with two opt-in cases skipped; the native stdio case
+was then run explicitly inside the isolated image.
+
+Normal authenticated import in a disposable container account creates two
+private Things with fresh IDs and remaps the component dependency. Anonymous
+reads return 404. Canonical re-export matches the supplied content after
+normal importer ID/key remapping and empty metadata defaults. Text, styling,
+arguments and dependencies are unchanged. The artifact content hash remains
+`a251642fe58ef5b1a2f32f8414591e02d6d52ebd2a50293f6b14c12464d4a06c`.
+Evidence is in task-local `tmp/native-artifacts-ec7234870/`,
+`tmp/anonymous-current-draft-ui-proof.json` and native MCP test logs.
+
+This establishes local native/MCP proof, not the installed desktop manager,
+a connected tool in this ChatGPT host, or deployed acceptance. Individual
+Builder block editing, delegated Character offline workspaces and the wider
+local capability matrix still prevent goal completion and main merge.

@@ -63,6 +63,14 @@ API token or arbitrary HTTP access in the agent host. It launches a fresh
 Chromium context and fulfills only the two shipped preview files in memory.
 Nothing is fetched from the apparent loopback URL.
 
+If Chromium is installed in a shared cache (for example `/ms-playwright` in an
+isolated container), set `PLAYWRIGHT_BROWSERS_PATH` to that directory in the
+MCP server's explicit `env` configuration. The MCP SDK filters inherited
+environment variables, so setting it only on the parent process is insufficient.
+The example client and integration test forward this one non-secret path when
+set. Keep the browser version matched to `MCP/package-lock.json`; do not forward
+account credentials or the complete host environment.
+
 Call `thingtime_capabilities`, then `thingtime_render_and_export`:
 
 ```json

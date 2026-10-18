@@ -12407,3 +12407,7 @@ Local results do not establish current-head CI or deployed acceptance.
 - With a delegated Character, verify the exact actor/Character/database headers, separate recovery key, no writes to the root-owner queue and no access to root local media. Switch account or database during held requests; stale results must be rejected.
 - Submit despite draft-sync failure, reload the resulting post, and confirm no duplicate submission or loss of newer draft input.
 - Select nested text, controls, icons and repeated-card fields individually in Builder; edit, rearrange/style, save and reload. An outer selection or monolithic source editor does not establish individual-block acceptance.
+
+## MCP browser cache and isolated export
+
+- [x] 2026-10-19 local isolated Chromium: run the stdio example and native acceptance with Chromium installed outside the default home cache. Pass only `PLAYWRIGHT_BROWSERS_PATH` explicitly through the MCP client; verify JSON/PNG resources, viewport metadata, invalid/blank/overflow failures and no host credentials. Reimport canonical JSON through the normal API in a disposable private account, permit legitimate ID remapping, and validate equivalent re-export.

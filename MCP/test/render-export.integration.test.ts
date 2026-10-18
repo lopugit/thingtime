@@ -6,7 +6,10 @@ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 
 const enabled = process.env.TT_DRAFT_BROWSER_TEST === '1';
 test('stdio agent: no-login native PNGs, canonical dependencies and failures', { skip: !enabled, timeout: 120000 }, async () => {
-  const transport = new StdioClientTransport({ command: process.execPath, args: ['dist/index.js'], stderr: 'pipe' });
+  const transport = new StdioClientTransport({
+    command: process.execPath, args: ['dist/index.js'], stderr: 'pipe',
+    env: process.env.PLAYWRIGHT_BROWSERS_PATH ? { PLAYWRIGHT_BROWSERS_PATH: process.env.PLAYWRIGHT_BROWSERS_PATH } : undefined
+  });
   const client = new Client({ name: 'thingtime-draft-acceptance', version: '1.0.0' });
   await client.connect(transport);
   try {
