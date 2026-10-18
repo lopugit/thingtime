@@ -12060,3 +12060,25 @@ never point it at an existing account or deployment.
 Evidence: `tmp/password-file-replay-api/` and `tmp/password-replay-*.log`.
 These are local unit/API checks; they do not establish current-head CI or
 account attachment browser/deployed acceptance.
+
+### Device-backed account password attachment UI — 2026-10-18
+
+- [x] Disposable normal-API browser fixture: save an entry and file offline,
+  cold reload at 1440/390/320px, download exact bytes, export/import normal 1PUX,
+  and reconnect with fresh independently remapped entry/file identities.
+- [x] Fresh device: fail one file download, retain its visible encrypted catalogue
+  metadata, refuse incomplete 1PUX backup without closing Export, repair the
+  transport and cold-reload/export exact bytes offline. No offline HTTP writes.
+- [x] Unit regressions: independent files continue after another download fails;
+  remote-only removal queues offline; complete lists gate source-archive copies;
+  file retention works during entry conflicts; older traversals cannot prune
+  newer-confirmed bytes; explicit retry keeps immutable payload and identity.
+- [x] Existing anonymous-vault and account-entry/conflict browser regressions pass.
+- [ ] Repeat inspection in connected Chrome after control reconnects; Page.enable
+  timed out during this checkpoint. Do not substitute that attempt for acceptance.
+- [ ] Complete native identity/origin/plane transitions and attachment conflict/
+  deletion race acceptance; verify large-entry parity and capacity policy.
+
+Evidence and test commands: README password-file fixtures and
+`docs/local-workspaces.md#native-account-password-files--2026-10-18`.
+Local results do not establish current-head CI or deployed acceptance.

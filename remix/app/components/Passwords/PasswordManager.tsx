@@ -31,7 +31,14 @@ export function PasswordManager() {
 }
 export function PasswordManagerScope({ ownerId, localVault }: { ownerId: string; localVault?: LocalPasswordVault }) {
   const lopu = useLopu();
-  const storage = React.useMemo(() => localVault?.scope.kind === 'anonymous' ? localVault.anonymousStorage() : accountPasswordStorage(ownerId), [ownerId, localVault]);
+  const storage = React.useMemo(() => {
+    if (!localVault) return accountPasswordStorage(ownerId);
+    const device = localVault.fileStorage();
+    return { ...device,
+      uploadFile: async (...args: Parameters<typeof device.uploadFile>) => { const file = await device.uploadFile(...args); announceLocalWorkspaceChange(); return file; },
+      removeFile: async (...args: Parameters<typeof device.removeFile>) => { await device.removeFile(...args); announceLocalWorkspaceChange(); }
+    };
+  }, [ownerId, localVault]);
   const [records, setRecords] = React.useState<PasswordMetadata[]>([]), [cursor, setCursor] = React.useState<string | null>(null);
   const [configured, setConfigured] = React.useState<boolean | null>(null), [busy, setBusy] = React.useState(false), [error, setError] = React.useState('');
   const [draft, setDraft] = React.useState<Draft | null>(null), [customLabel, setCustomLabel] = React.useState(''), [customType, setCustomType] = React.useState<FieldType>('text');
@@ -80,7 +87,7 @@ export function PasswordManagerScope({ ownerId, localVault }: { ownerId: string;
     const sequence = ++refreshSequence.current;
     const result = await request(undefined, next); if (sequence !== refreshSequence.current) return; setRecords(prev => next ? [...prev.filter(item => !result.entries.some((entry: PasswordMetadata) => entry.id === item.id)), ...result.entries] : result.entries); setCursor(result.nextCursor); setConfigured(result.configured);
   }, [request]);
-  const showError = React.useCallback((reason: any) => { if (reason?.name === 'AbortError' || !active.current) return; if (reason?.status === 401 || (reason?.status === 409 && /account/.test(reason.message))) { clear(); setRecords([]); } setError(reason instanceof Error ? reason.message : 'Please try again.'); }, [clear]);
+  const showError = React.useCallback((reason: any) => { if (reason?.name === 'AbortError' || !active.current) return; if (reason?.status === 401 || reason?.code === 'WORKSPACE_CHANGED' || (!localVault && reason?.status === 409 && /account/.test(reason.message))) { clear(); setRecords([]); } setError(reason instanceof Error ? reason.message : 'Please try again.'); }, [clear, localVault]);
   React.useEffect(() => { refresh().catch(showError); const check = () => refresh().catch(showError); window.addEventListener('focus', check); if (localVault) window.addEventListener(LOCAL_WORKSPACE_CHANGED, check); return () => { window.removeEventListener('focus', check); window.removeEventListener(LOCAL_WORKSPACE_CHANGED, check); }; }, [refresh, showError, localVault]);
   const run = async (work: () => Promise<void>) => { if (busy) return; const version = generation.current; setBusy(true); setError(''); try { await work(); } catch (reason) { if (version === generation.current) showError(reason); } finally { if (active.current && version === generation.current) setBusy(false); } };
   const updateEntry = (entry: PasswordEntry) => setDraft(prev => prev ? { ...prev, entry } : prev);

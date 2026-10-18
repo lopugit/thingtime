@@ -407,3 +407,10 @@ receipts (`api.passwords` 1.2.0); the dedicated adapter can acknowledge retries
 without retaining names or keys. Ordinary request-ID cancellation refuses that
 purpose. Run `passwords/fileLifecycle.test.ts`, attachment tests and the opt-in
 `passwordFileLifecycle.api.test.ts`; README documents disposable loopback setup.
+
+Account password files now use `local-workspace/passwordFiles.ts` in the native
+UI. `passwordFileReconcile.ts` retains encrypted metadata separately from bytes;
+missing objects cannot produce a successful incomplete archive. Independent file
+workers and retry review live in `AccountPasswordWorkspace.tsx`. Tests and the
+new opt-in `accountPasswordFiles.browser.test.ts` are documented in the
+[native account-file checkpoint](../local-workspaces.md#native-account-password-files--2026-10-18).

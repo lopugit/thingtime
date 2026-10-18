@@ -18,6 +18,7 @@ export async function createPasswordBackup(storage: PasswordStorage, signal?: Ab
       signal?.throwIfAborted();
       const page = await storage.exportPage(cursor, signal);
       const records = page.entries;
+      await storage.assertFilesAvailable?.([...new Set(records.flatMap(record => [record.id, ...(record.entry.importArchiveId ? [record.entry.importArchiveId] : [])]))], signal);
       const attached = records.length ? await storage.listFiles(records.map(record => record.id), signal, records.flatMap(record => record.entry.importArchiveId ? [record.entry.importArchiveId] : [])) : [];
       for (const record of records) {
         signal?.throwIfAborted(); const item = exportOnePasswordItem(record.entry);

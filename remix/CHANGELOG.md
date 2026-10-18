@@ -68,6 +68,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-18 — **Codex (AI)**: Activate encrypted device-backed account password
+  attachments with independent sync, visible unavailable files, complete-backup
+  checks and stale-pull fencing. Native offline/reconnect/retention and regression
+  tests passed locally; connected-Chrome recheck, full-suite coverage and
+  current-head CI/deployment remain open. Added the HTML progress tracker. Details:
+  [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
 - 2026-10-18 — **Codex (AI)**: Preserve canonical password-file deletion receipts
   and independent encrypted files/source archives through entry conflict review.
   Local API checks cover real upload/download, replay and owner isolation;

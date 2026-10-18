@@ -10,10 +10,12 @@ import { WorkspaceError, type WorkspaceDatabase, type WorkspaceLease, type Works
 export const PASSWORD_FILES = 'password-vault-files';
 const FILES = PASSWORD_FILES, STAGING = 'password-vault-file-staging';
 export const PASSWORD_FILE_COMMANDS = 'password-vault-file-commands';
+export const PASSWORD_FILE_CATALOG = 'password-vault-file-catalog';
 const RECORDS = 'password-vault-records';
 const STAGING_TTL = 24 * 60 * 60_000;
 export type FileRecord = { entryId: string; id: string; generation: string; parts: number; encryptedValue: VaultEnvelope; metadataDigest: string; contentDigest: string; remoteId?: string; deleted?: false };
 export type StoredFile = FileRecord | { entryId: string; id: string; remoteId?: string; deleted: true };
+export type PasswordFileCatalog = Pick<FileRecord, 'entryId' | 'id' | 'encryptedValue' | 'metadataDigest'> & { remoteId: string };
 export type PasswordFileCommand = {
   id: string; entryId: string; fileId: string; operation: 'upload' | 'delete';
   encryptedValue: VaultEnvelope; remoteId?: string; state: 'pending' | 'frozen' | 'refused';
@@ -22,8 +24,31 @@ export type PasswordFileCommand = {
 const isFile = (row: StoredFile): row is FileRecord => row.deleted !== true;
 /** User-visible file state; acknowledgements do not invalidate a review. */
 export async function passwordFileSnapshot(tx: WorkspaceTransaction, entryIds: ReadonlySet<string>) {
-  return JSON.stringify((await tx.list<StoredFile>(FILES)).filter(row => entryIds.has(row.value.entryId))
-    .map(row => [row.id, row.value.deleted === true ? 'deleted' : row.value.generation]).sort((a, b) => a[0].localeCompare(b[0])));
+  return JSON.stringify([
+    (await tx.list<StoredFile>(FILES)).filter(row => entryIds.has(row.value.entryId))
+      .map(row => [row.id, row.value.deleted === true ? 'deleted' : row.value.generation]).sort((a, b) => a[0].localeCompare(b[0])),
+    (await tx.list<PasswordFileCatalog>(PASSWORD_FILE_CATALOG)).filter(row => entryIds.has(row.value.entryId))
+      .map(row => [row.id, row.value.remoteId, row.value.metadataDigest]).sort((a, b) => a[0].localeCompare(b[0]))
+  ]);
+}
+async function filesStatus(tx: WorkspaceTransaction, scope: WorkspaceScope, entryId: string) {
+  await parent(tx, entryId);
+  const entry = (await tx.get<DevicePasswordRecord>(RECORDS, entryId))!;
+  let unavailable = 0;
+  for (const { id, value } of await tx.list<PasswordFileCatalog>(PASSWORD_FILE_CATALOG)) {
+    if (value.entryId === entryId && !await tx.get(FILES, id)) unavailable++;
+  }
+  return { listed: scope.kind === 'anonymous' || !entry.remoteRevision || entry.filesListed === true, unavailable };
+}
+export async function assertPasswordFilesAvailable(tx: WorkspaceTransaction, scope: WorkspaceScope, entryIds: Iterable<string>) {
+  const wanted = new Set(entryIds);
+  const unavailable = () => { throw new WorkspaceError('PASSWORD_FILES_UNAVAILABLE', 'Some account attachments are not available on this device. Refresh account files before exporting or copying this entry.', 409); };
+  for (const id of wanted) {
+    await parent(tx, id); const entry = (await tx.get<DevicePasswordRecord>(RECORDS, id))!;
+    if (scope.kind === 'account' && entry.remoteRevision && !entry.filesListed) unavailable();
+  }
+  for (const { id, value } of await tx.list<PasswordFileCatalog>(PASSWORD_FILE_CATALOG))
+    if (wanted.has(value.entryId) && !await tx.get(FILES, id)) unavailable();
 }
 type Stage = { entryId: string; id: string; parts: number; expires: number };
 export type PasswordFileHost = { db: WorkspaceDatabase; scope: WorkspaceScope; lease: WorkspaceLease; context: Promise<string>;
@@ -52,6 +77,7 @@ export async function forgetRetainedPasswordFile(tx: WorkspaceTransaction, befor
 /** Called in the same transaction as an entry tombstone. No file keys or names
  * are needed to remove its ciphertext. In-flight upload commits check parent. */
 export async function removeDevicePasswordFiles(tx: WorkspaceTransaction, entryId: string) {
+  for (const row of await tx.list<PasswordFileCatalog>(PASSWORD_FILE_CATALOG)) if (row.value.entryId === entryId) await tx.delete(PASSWORD_FILE_CATALOG, row.id);
   for (const row of await tx.list<StoredFile>(FILES)) if (row.value.entryId === entryId) {
     if (isFile(row.value)) await removeChunks(tx, row.value.generation, row.value.parts);
     await tx.delete(FILES, row.id);
@@ -97,15 +123,15 @@ export function devicePasswordStorage(host: PasswordFileHost): PasswordStorage {
 
 /** Only the fenced account downloader can supply remote provenance. The same
  * canonical chunk writer commits retained bytes without an upload intent. */
-export function retainDevicePasswordFile(host: PasswordFileHost, file: SavedPasswordFile, parentRevision: number, stream: ReadableStream<Uint8Array>, signal: AbortSignal) {
+export function retainDevicePasswordFile(host: PasswordFileHost, file: SavedPasswordFile, parentRevision: number, stream: ReadableStream<Uint8Array>, signal: AbortSignal, pullToken?: string) {
   if (host.scope.kind !== 'account' || !file.entryId || !/^att_[a-f0-9]{64}$/.test(file.id)) return fail('Invalid account file reference.', 400);
-  return passwordStorage(host, { remoteId: file.id, parentRevision }).uploadFile(file.entryId, file.metadata, () => stream, signal);
+  return passwordStorage(host, { remoteId: file.id, parentRevision, pullToken }).uploadFile(file.entryId, file.metadata, () => stream, signal);
 }
 
 type PreparedFileTarget = { sourceEntryId: string; accept(file: FileRecord): void };
-function passwordStorage(host: PasswordFileHost, retention?: { remoteId: string; parentRevision: number }, preparation?: PreparedFileTarget): PasswordStorage {
+function passwordStorage(host: PasswordFileHost, retention?: { remoteId: string; parentRevision: number; pullToken?: string }, preparation?: PreparedFileTarget): PasswordStorage {
   const { db, scope } = host;
-  const decode = async (row: FileRecord, key: DeviceVaultKey, lease: WorkspaceLease): Promise<SavedPasswordFile> => {
+  const decode = async (row: Pick<FileRecord, 'entryId' | 'id' | 'encryptedValue'>, key: DeviceVaultKey, lease: WorkspaceLease): Promise<SavedPasswordFile> => {
     const plain = await openDeviceVaultValue(await host.context, key, `file:${fileKey(row.entryId, row.id)}`, row.encryptedValue);
     lease.assertCurrent(); const metadata = validatePasswordFile(JSON.parse(plain));
     if (metadata.token !== row.id) fail('Encrypted file metadata is damaged.', 422);
@@ -117,15 +143,27 @@ function passwordStorage(host: PasswordFileHost, retention?: { remoteId: string;
   });
   return {
     exportPage: host.exportPage,
+    filesStatus(entryId, signal) {
+      const op = host.operation(signal, false);
+      return db.transaction(scope, 'readonly', op.lease, tx => filesStatus(tx, scope, entryId));
+    },
+    assertFilesAvailable(entryIds, signal) {
+      const op = host.operation(signal, false);
+      return db.transaction(scope, 'readonly', op.lease, tx => assertPasswordFilesAvailable(tx, scope, entryIds));
+    },
     async listFiles(entryIds, signal, sourceIds = []) {
       const op = host.operation(signal, false), wanted = new Set([...entryIds, ...sourceIds]);
       for (const id of wanted) if (!validPasswordId(id)) fail('Invalid password entry.', 400);
       const rows = await db.transaction(scope, 'readonly', op.lease, async tx => {
         for (const id of wanted) await parent(tx, id);
-        return (await tx.list<StoredFile>(FILES)).map(row => row.value).filter((row): row is FileRecord => isFile(row) && wanted.has(row.entryId));
+        const local = new Map((await tx.list<StoredFile>(FILES)).map(row => [row.id, row.value]));
+        const saved = [...local.values()].filter((row): row is FileRecord => isFile(row) && wanted.has(row.entryId));
+        const missing = (await tx.list<PasswordFileCatalog>(PASSWORD_FILE_CATALOG)).filter(row => wanted.has(row.value.entryId) && !local.has(row.id)).map(row => row.value);
+        return { saved, missing };
       });
       const files = [];
-      for (const row of rows) files.push(await decode(row, op.key, op.lease));
+      for (const row of rows.saved) files.push(await decode(row, op.key, op.lease));
+      for (const row of rows.missing) files.push({ ...await decode(row, op.key, op.lease), available: false });
       return files;
     },
     async uploadFile(entryId, input, open, signal) {
@@ -167,8 +205,7 @@ function passwordStorage(host: PasswordFileHost, retention?: { remoteId: string;
           }
           if (retention) {
             const entry = await tx.get<DevicePasswordRecord>(RECORDS, entryId);
-            if (entry?.revision !== retention.parentRevision || await tx.get(PASSWORD_FILE_COMMANDS, id) ||
-              (await tx.list<{ recordId: string }>('password-vault-commands')).some(row => row.value.recordId === entryId)) fail('The device entry changed while retaining its file.');
+            if (entry?.revision !== retention.parentRevision || (retention.pullToken && entry.filePullToken !== retention.pullToken) || await tx.get(PASSWORD_FILE_COMMANDS, id)) fail('The device entry changed while retaining its file.');
             if (existing && !existing.deleted && existing.remoteId !== retention.remoteId) fail('The device file changed while retaining its account copy.');
           }
           if (existing) {
@@ -197,6 +234,10 @@ function passwordStorage(host: PasswordFileHost, retention?: { remoteId: string;
     async openFile(entryId, fileId, signal) {
       const id = fileKey(entryId, fileId), op = host.operation(signal, false);
       const row = await db.transaction(scope, 'readonly', op.lease, async tx => { await parent(tx, entryId); return tx.get<StoredFile>(FILES, id); });
+      if (!row) {
+        const known = await db.transaction(scope, 'readonly', op.lease, tx => tx.get(PASSWORD_FILE_CATALOG, id));
+        if (known) return fail('This account attachment is not available offline yet. Refresh account files to download it.', 409);
+      }
       if (!row || !isFile(row)) return fail('Password file not found.', 404);
       const file: FileRecord = row;
       const { metadata } = await decode(file, op.key, op.lease);
@@ -228,9 +269,10 @@ function passwordStorage(host: PasswordFileHost, retention?: { remoteId: string;
           if (pending) {
             if (!pending.attempts && !pending.remoteId && !pending.claim) await tx.delete(PASSWORD_FILE_COMMANDS, id);
             else await tx.put(PASSWORD_FILE_COMMANDS, id, { ...pending, operation: 'delete' } satisfies PasswordFileCommand);
-          } else if (row && isFile(row) && row.remoteId) {
-            await tx.put(PASSWORD_FILE_COMMANDS, id, { id, entryId, fileId, operation: 'delete', encryptedValue: row.encryptedValue,
-              remoteId: row.remoteId, state: 'pending', attempts: 0, retryAt: 0 } satisfies PasswordFileCommand);
+          } else {
+            const remote = row && isFile(row) && row.remoteId ? row : await tx.get<PasswordFileCatalog>(PASSWORD_FILE_CATALOG, id);
+            if (remote?.remoteId) await tx.put(PASSWORD_FILE_COMMANDS, id, { id, entryId, fileId, operation: 'delete', encryptedValue: remote.encryptedValue,
+              remoteId: remote.remoteId, state: 'pending', attempts: 0, retryAt: 0 } satisfies PasswordFileCommand);
           }
         }
         // A delayed upload/retry must not resurrect a user's removal.
@@ -250,6 +292,7 @@ export async function prepareDevicePasswordFileCopies(host: PasswordFileHost, ma
   const snapshot = (rows: { id: string; value: StoredFile }[]) => rows.filter(row => mapping.has(row.value.entryId))
     .map(row => [row.id, row.value.deleted === true ? 'deleted' : row.value.generation]).sort((a, b) => a[0].localeCompare(b[0]));
   const baseline = await host.db.transaction(host.scope, 'readonly', op.lease, tx => tx.list<StoredFile>(FILES));
+  await host.db.transaction(host.scope, 'readonly', op.lease, tx => assertPasswordFilesAvailable(tx, host.scope, mapping.keys()));
   const expected = JSON.stringify(snapshot(baseline));
   const discard = () => host.db.transaction(host.scope, 'readwrite', host.lease, async tx => {
     for (const row of prepared) {
@@ -270,6 +313,7 @@ export async function prepareDevicePasswordFileCopies(host: PasswordFileHost, ma
     return {
       async commit(tx: WorkspaceTransaction) {
         op.lease.assertCurrent();
+        await assertPasswordFilesAvailable(tx, host.scope, mapping.keys());
         if (JSON.stringify(snapshot(await tx.list<StoredFile>(FILES))) !== expected) fail('Password attachments changed while copying. Review the entry again.');
         for (const row of prepared) {
           await parent(tx, row.entryId); const id = fileKey(row.entryId, row.id);

@@ -76,7 +76,7 @@ private draft API, editor recovery, account isolation and independent media copi
 
 ## Password manager
 
-See [password-manager.md](../password-manager.md). `api.passwords` 1.1.0 is a
+See [password-manager.md](../password-manager.md). `api.passwords` 1.2.0 is a
 private, session-bound home-plane API over protected `password-manager-entry`
 Things. `api/utils/passwords/passwords.ts` owns accounted mutations, revision
 fences and secret-free native catalog projections; `auth/vaultEnvelope.ts` and
@@ -152,9 +152,15 @@ credentials and signed native offline integration are still outstanding.
 
 File sync groundwork: `local-workspace/passwordFileSync.ts`,
 `passwordFileReconcile.ts` and `passwordFileTransport.client.ts` expose separate
-account queue/retention methods with whole-transfer authority fences. The account
-UI still uses its remote file backend pending conflict-copy, server delete replay
-and native acceptance. `passwordFileSync.test.ts` and
+account queue/retention methods with whole-transfer authority fences. The normal account UI now uses the encrypted device backend and activates
+independent entry/file push/pull pumps. Encrypted remote-only metadata keeps failed
+downloads visible; complete file-list/byte availability gates 1PUX backup and
+conflict copies. Per-parent traversal tokens fence older-tab pruning. Explicit
+file retry preserves operation identity; availability 409s keep Export open.
+The opt-in `accountPasswordFiles.browser.test.ts` covers native offline save,
+transfer, reconnect and fresh-device retention through disposable normal APIs.
+See the [native file checkpoint](../local-workspaces.md#native-account-password-files--2026-10-18)
+for local evidence and remaining acceptance. `passwordFileSync.test.ts` and
 `passwordFileTransport.test.ts` are included in `test:local-workspace`.
 `passwords/vaultCrypto.test.ts` verifies server interoperability;
 `local-workspace/passwordVault.test.ts` and the opt-in browser fixture cover

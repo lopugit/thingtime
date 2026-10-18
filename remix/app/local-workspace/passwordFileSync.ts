@@ -143,3 +143,16 @@ export async function passwordFileSyncStatus(host: PasswordFileHost) {
     id: value.id, entryId: value.entryId, fileId: value.fileId, operation: value.operation, state: value.state, status: value.status, retryAt: value.retryAt
   })));
 }
+
+/** Explicit retry changes scheduling only, never the immutable upload identity
+ * or cleanup receipt. It cannot acquire account authority or replace bytes. */
+export async function retryPasswordFileSync(host: PasswordFileHost, id: string) {
+  if (host.scope.kind !== 'account') return fail('Anonymous password files never synchronize.', 403);
+  const op = host.operation();
+  await host.db.transaction(host.scope, 'readwrite', op.lease, async tx => {
+    const current = await tx.get<PasswordFileCommand>(PASSWORD_FILE_COMMANDS, id);
+    if (!current) return;
+    if ((current.claim?.until ?? 0) > Date.now()) return;
+    await tx.put(PASSWORD_FILE_COMMANDS, id, { ...current, state: current.attempts ? 'frozen' : 'pending', retryAt: 0, status: undefined } satisfies PasswordFileCommand);
+  });
+}

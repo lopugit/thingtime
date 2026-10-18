@@ -5274,3 +5274,26 @@ Vercel Analytics is mounted only when the server supplies Vercel deployment
 metadata (`VERCEL_URL` and a non-development environment); ordinary local and
 self-hosted forks need no Vercel credentials or Analytics setup. Do not copy
 production environment values merely to enable local verification.
+
+### Account password-file UI acceptance fixture
+
+Reuse the isolated `password-file-sync-qa` account file described in Password
+manager setup, with the same stable server vault key, local object adapter and
+production client shell. From `remix/`, the opt-in fixture is:
+
+```sh
+TT_ACCOUNT_PASSWORD_FILES_FIXTURE=<ignored-fixture.json> \
+TT_ACCOUNT_PASSWORD_FILES_URL=http://127.0.0.1:<port> \
+TT_ACCOUNT_PASSWORD_FILES_ARTIFACTS=<ignored-output-directory> \
+TT_SHARED_PLAYWRIGHT_PATH=<playwright-module> \
+node --import tsx --test app/local-workspace/accountPasswordFiles.browser.test.ts
+```
+
+It creates synthetic entries/files through the native UI and normal API, checks
+cold offline retention and normal 1PUX transfer, and removes its own new entries
+through the normal API. Its PNGs, plaintext synthetic exports and credentials
+must stay untracked. No additional secret or production account is required.
+This harness launches isolated automation browsers; use it only in environments
+where that browser workflow is authorized. For connected-Chrome-only sessions,
+exercise the same checklist in connected Chrome instead of silently running it.
+See the [native file checkpoint](docs/local-workspaces.md#native-account-password-files--2026-10-18).

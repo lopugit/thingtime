@@ -78,7 +78,7 @@ change this pointer; logout/account changes revoke it.
 | Attachments and media | Anonymous canonical ZIP import/export/copy/delete now stores metadata and bytes atomically with shared quota accounting; normal UI offline round-trip verified. Normal file-picker save, download, copy/move and native image preview now pass offline browser checks. Native composer file selection and draft/template copies now pass offline browser checks. Account upload and metadata queues now have local service/browser acceptance, including reviewed conflicts and folder dependencies. Completed standalone-file deletion has a durable scoped queue, native review and replay fencing. Ordinary account picker/list/media integration, existing-file retention and file ZIP transfer have browser evidence in the checkpoints below. Standalone recording import/retention and independent offline edit/delete use the shared path (checkpoint below). Finish bound/linked/managed media, native microphone capture, audio cache identity/revocation and remaining audio/video acceptance. Never treat a cached cloud attachment as locally authorized bytes. |
 | Posts, comments and saved items | Native local post create/edit, image attachments, comment/reply reads and writes pass offline browser checks. Saved items, emoji reactions and poll cast/change/removal now pass native offline browser checks; up/down votes and scoped relational storage pass adapter tests. Retained account posts now support offline bookmarks/reactions, Saved/permalink reload and cross-tab membership, with independent conditional sync and known-refusal eviction (checkpoint below). Generic account discussions and canonical comment-only permalinks now retain scoped offline reads with explicit partial coverage and atomic cross-projection refusal cleanup (checkpoint below). Account text/rich-text post and comment/reply authorship now commits locally with independent verified-account sync (checkpoint below). Account post/comment file admission, upload dependency tracking and canonical binding now use the device queue (checkpoint below). Device-authored bound-media removal now has offline/retry coverage (checkpoint below). Existing owned bound-file retention now has fresh-device offline edit/removal and reconnect evidence (checkpoint below). Offline parent/root navigation now has anonymous/account native-browser evidence, including generic Thing discussions (checkpoint below). Bound-file import and reconciliation, remaining linked-Thing surfaces, full edit/privacy/deletion browser coverage and broader cross-account/device acceptance remain. Public posting, remote reactions and recipient delivery remain authenticated operations. |
 | Themes, visual settings and algorithms | Anonymous saved-theme CRUD, active selection, quota and canonical transfer now work through Theme Studio and have offline browser evidence. Anonymous algorithms now support local CRUD/branching, active selection, bounded public-feed training, per-page ranking and canonical JSON round-trip. Account themes have independent device content/selection sync and canonical offline export/import; anonymous themes have canonical local History. Account theme organization now commits locally with independent conditional sync; anonymous folder deletion preserves children. Theme library display titles now rename locally and survive canonical transfer, with anonymous/account native browser and isolated real API verification (checkpoint below). Account algorithms now have native offline editor/selection/transfer and reviewed conflict-copy acceptance. Normal library display titles survive offline Rename, export/import and conditional sync, with real API and clean-browser evidence. Broader account source-plane and library-organization UI checks remain open. Account-authored theme History, other protected-kind titles and wider cross-tab acceptance remain outstanding. |
-| Passwords | Anonymous encrypted device storage/unlock now reuses the canonical vault envelopes and normal password editor/transfer UI. Offline clean-browser acceptance covers lock/reload, two-tab conflicts, normal CSV export/import and 1440/390/320px layouts with zero account/password API writes. Account encrypted device unlock/edit/export now has offline browser evidence, with separately fenced sync, immutable retries and reviewed conflict copies. The real fixture verifies reconnect and second-account isolation. Provider/environment credentials, wider native identity/plane transitions and signed offline provider integration remain unfinished. See [password-manager.md](password-manager.md). |
+| Passwords | Anonymous encrypted device storage/unlock now reuses the canonical vault envelopes and normal password editor/transfer UI. Offline clean-browser acceptance covers lock/reload, two-tab conflicts, normal CSV export/import and 1440/390/320px layouts with zero account/password API writes. Account encrypted device unlock/edit/export now has offline browser evidence, with separately fenced sync, immutable retries and reviewed conflict copies. The real fixture verifies reconnect and second-account isolation. Account attachment UI now commits files locally with independent push/pull, encrypted remote-only availability, complete-backup refusal and native offline/reconnect/fresh-device evidence (2026-10-18 checkpoint below). Wider native identity/plane transitions, large-entry/capacity parity and signed offline provider integration remain unfinished. See [password-manager.md](password-manager.md). |
 | Incoming mail | Latest-main integration brings the existing encrypted offline mail store and explicit desktop/loopback/relay transports. Audit anonymous local setup, account/origin partitions and offline reader behavior before rollout; remote mailbox access still requires its own credentials and explicit transport selection. No mail acceptance is claimed by the Vault checks below. |
 | Apps, integrations and native/browser tools | Separate locally available adapters from paired remote devices, external services and their consent requirements. Verify each applicable local surface. |
 | Lopu and automation | Local documents, authored definitions and drafts should remain editable. Lopu toast/stream messages now persist locally and have a device-history view; verified account messages sync through the existing recorder. Remote social history caching, retry controls and cross-tab history refresh remain unfinished. Provider inference, external delivery and hosted scheduled execution still need their real services. |
@@ -4295,3 +4295,56 @@ offline/reconnect/retention acceptance remain open. This increment has local uni
 and API proof only; current-head CI and deployed acceptance remain unverified.
 Large local-entry/storage parity and the full-suite matrix are still completion
 gates. No merge or deployment was performed.
+
+## Native account password files — 2026-10-18
+
+The normal password UI now uses the encrypted device file backend for both
+anonymous and account workspaces. Local upload/removal completes independently
+of remote work. Account entry push/pull and file push/pull have separate pumps;
+each requires the current unlocked vault, account, origin and selected-plane
+lease. Parent admission still orders uploads without delaying the local save.
+File retry/review status is visible, and retry preserves immutable operation
+identity, payload and cleanup provenance.
+
+Remote file metadata is retained encrypted before downloading bytes. Failed
+objects remain visible as unavailable while other files continue to retain.
+Downloads are disabled for missing bytes. Unknown or incomplete file lists block
+normal 1PUX backup and reviewed copies, including source archives, rather than
+silently dropping files. CSV remains explicitly lossy. Remote-only files can be
+removed offline through the canonical deletion queue. Per-parent traversal tokens
+prevent an older tab from pruning files confirmed by a newer traversal. Pending
+entry conflicts do not prevent retaining the files needed to resolve them.
+
+The real browser fixture caught an additional error path: a file-availability 409
+containing the word “account” was treated as identity loss and closed Export.
+Device workspaces now clear only for the explicit identity code or a 401; ordinary
+availability errors keep the dialog and saved editor state open.
+
+Local production-client acceptance passed in clean contexts against the disposable
+loopback replica and normal APIs: offline save, exact-byte download, cold reload,
+1PUX export/import, independent reconnect, fresh-device retention, unavailable
+objects, incomplete-export refusal and recovery. Layout bounds passed at
+1440×1000, 390×844 and 320×844 with no horizontal overflow. The fixture deleted
+its three created entries through normal APIs (no pending cleanup); synthetic
+accounts and canonical minimal receipts remain. Both the existing anonymous-vault
+and account-entry/conflict regressions also passed. Their fixtures have their own
+cleanup scope; the account-entry fixture does not remove its first test account's
+entry data. No existing user data or public content was changed.
+
+Evidence: `tmp/account-password-files-native-final/{verification,cleanup}.json`,
+`account-files-{1440,390,320}.png`, exact-byte download and both 1PUX exports;
+`tmp/password-file-ui-{anonymous,entry}-browser.log` hold the regressions.
+Workspace tests: 632 passed, 70 opt-in skips. Password tests: 53 passed.
+Focused file tests: 45 passed (overlap with workspace coverage); offline policy:
+four passed. Lint: no errors, two existing hook cleanup warnings. TypeScript:
+the same 91 baseline diagnostics, no new signatures. Client build and Nitro
+template synchronization passed with 249 verified offline assets.
+
+These are local results. Following the updated connected-Chrome requirement,
+additional Chrome inspection was attempted but its Page.enable attachment timed
+out; reconnection was requested. Do not count that attempt as a successful check.
+Current-head CI/deployment and the broader identity/plane/native/full-suite matrix
+remain open. GitHub still reports the older PR head while the branch ref advances;
+checks on that old head are not proof for this checkpoint. No merge, deployment
+or public exposure was performed. The HTML progress view is
+[anonymous-local-first.html](progress/anonymous-local-first.html).

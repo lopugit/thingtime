@@ -6,13 +6,13 @@ import { WorkspaceError, type WorkspaceDatabase, type WorkspaceLease, type Works
 
 import { DeviceVaultSession, deviceVaultCollections } from './deviceVaultSession';
 import { anonymousPasswordStorage, devicePasswordStorage, removeDevicePasswordFiles, prepareDevicePasswordFileCopies, discardDevicePasswordFileEdits, passwordFileSnapshot, PASSWORD_FILE_COMMANDS, type PasswordFileCommand, type PasswordFileHost } from './passwordFiles';
-import { passwordFileSyncStatus, synchronizePasswordFiles } from './passwordFileSync';
+import { passwordFileSyncStatus, synchronizePasswordFiles, retryPasswordFileSync } from './passwordFileSync';
 import type { PasswordFileTransport } from './passwordFileTransport.client';
 import { reconcilePasswordFiles } from './passwordFileReconcile';
 
 const { records: RECORDS, commands: COMMANDS } = deviceVaultCollections('passwords');
 export type DevicePasswordRecord = { id: string; revision: number; remoteRevision: number; createdAt: string; updatedAt: string;
-  encryptedValue?: VaultEnvelope; deleted?: true; remoteDeleted?: true; writeId?: string; writeDigest?: string };
+  encryptedValue?: VaultEnvelope; deleted?: true; remoteDeleted?: true; filesListed?: true; filePullToken?: string; writeId?: string; writeDigest?: string };
 export type DevicePasswordCommand = { id: string; recordId: string; localRevision: number; operation: 'save' | 'delete';
   encryptedValue: VaultEnvelope; state: 'pending' | 'frozen' | 'refused'; expectedRevision?: number;
   claim?: { token: string; until: number }; attempts?: number; retryAt?: number; status?: number };
@@ -46,6 +46,7 @@ export class LocalPasswordVault extends DeviceVaultSession {
  anonymousStorage() { return anonymousPasswordStorage(this.fileStorageHost()); }
  fileStorage() { return devicePasswordStorage(this.fileStorageHost()); }
  fileSyncStatus() { return passwordFileSyncStatus(this.fileStorageHost()); }
+ retryFileSync(id: string) { return retryPasswordFileSync(this.fileStorageHost(), id); }
  synchronizeFiles(transport: PasswordFileTransport, signal?: AbortSignal, now?: () => number) {
   return synchronizePasswordFiles(this.fileStorageHost(), transport, signal, now);
  }
@@ -98,7 +99,8 @@ export class LocalPasswordVault extends DeviceVaultSession {
    }
    if ((previous?.revision ?? 0) !== input.revision) return refuse('PASSWORD_CONFLICT', 'This entry changed elsewhere. Reopen it before saving.');
    const now = new Date().toISOString(), next: DevicePasswordRecord = { id: input.id, revision: input.revision + 1, remoteRevision: previous?.remoteRevision ?? 0,
-    createdAt: previous?.createdAt ?? now, updatedAt: now, encryptedValue, writeId: input.writeId, writeDigest: digest };
+    createdAt: previous?.createdAt ?? now, updatedAt: now, encryptedValue, writeId: input.writeId, writeDigest: digest,
+    ...(!previous || previous.filesListed ? { filesListed: true as const } : {}) };
    await tx.put(RECORDS, input.id, next);
    if (commandValue) await tx.put(COMMANDS, `${input.id}:${input.writeId}`, { id: input.writeId, recordId: input.id, localRevision: next.revision, operation: 'save', encryptedValue: commandValue, state: 'pending' } satisfies DevicePasswordCommand);
    return next;
@@ -228,7 +230,7 @@ export class LocalPasswordVault extends DeviceVaultSession {
    }
    for (const copy of copies) {
     if (await tx.get(RECORDS, copy.id)) return refuse('PASSWORD_CONFLICT', 'A copy identity changed. Review the entry again.');
-    await tx.put(RECORDS, copy.id, { id: copy.id, revision: 1, remoteRevision: 0, createdAt: stamp, updatedAt: stamp, encryptedValue: copy.value, writeId: copy.writeId, writeDigest: copy.digest } satisfies DevicePasswordRecord);
+    await tx.put(RECORDS, copy.id, { id: copy.id, revision: 1, remoteRevision: 0, filesListed: true, createdAt: stamp, updatedAt: stamp, encryptedValue: copy.value, writeId: copy.writeId, writeDigest: copy.digest } satisfies DevicePasswordRecord);
     await tx.put(COMMANDS, `${copy.id}:${copy.writeId}`, { id: copy.writeId, recordId: copy.id, localRevision: 1, operation: 'save', encryptedValue: copy.command, state: 'pending' } satisfies DevicePasswordCommand);
    }
    await files.commit(tx);

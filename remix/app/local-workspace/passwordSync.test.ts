@@ -77,6 +77,7 @@ test('reviewed conflict copies preserve both account and device versions atomica
  const f = await fixture(), r = remote();
  try {
   const one = command(); await r.transport.write({ ...one, operation: 'save' }, new AbortController().signal); await f.vault.reconcile(r.transport);
+  await f.vault.reconcileFiles({ async page() { return { files: [], nextCursor: null }; } } as any);
   await f.vault.save(command(one.id, 1, 'Keep my device edit'));
   await r.transport.write({ ...command(one.id, 1, 'Other device edit'), operation: 'save' }, new AbortController().signal);
   await f.vault.synchronize(r.transport); const status = await f.vault.syncStatus(); assert.equal(status[0].state, 'refused'); assert.equal(status[0].status, 409);

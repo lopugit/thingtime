@@ -6,6 +6,7 @@ import type { PasswordFileTransport } from './passwordFileTransport.client';
 import { PASSWORD_FILE_COMMANDS, type PasswordFileCommand } from './passwordFiles';
 import { WorkspaceDatabase, type WorkspaceLease } from './storage';
 import { emptyPasswordEntry } from '../passwords/model';
+import { createPasswordBackup } from '../passwords/backup.client';
 import { newPasswordFile } from '../passwords/fileCrypto';
 
 const scope = { kind: 'account', ownerId: 'fixture', origin: 'https://account.example', dataPlane: 'home' } as const;
@@ -204,7 +205,7 @@ test('a local entry edit or removal during download prevents stale retention wit
       await started.promise;
       if (remove) await f.vault.remove(f.id, 1);
       else await f.vault.save({ id: f.id, revision: 1, writeId: crypto.randomUUID(), entry: { ...emptyPasswordEntry(), title: 'Newer local version' } });
-      release.resolve(); await assert.rejects(pending, /changed|not found/); assert.equal((await f.vault.syncStatus()).length, 1); assert.deepEqual(await f.commands(), []);
+      release.resolve(); assert.equal((await pending).unavailable, 1); assert.equal((await f.vault.syncStatus()).length, 1); assert.deepEqual(await f.commands(), []);
     } finally { release.resolve(); await f.close(); }
   }
 });
@@ -215,11 +216,13 @@ test('retention rejects foreign parents, changed metadata, and incomplete bytes 
     await f.admit();
     await assert.rejects(f.vault.reconcileFiles({ ...f.transport, async page() { return { files: [{ id: remoteId, entryId: crypto.randomUUID(), metadata: f.metadata }], nextCursor: null }; } }), /reference/);
     for (const changeMetadata of [false, true]) {
-      await assert.rejects(f.vault.reconcileFiles({ ...f.transport,
+      const result = await f.vault.reconcileFiles({ ...f.transport,
         async page() { return { files: [{ id: remoteId, entryId: f.id, metadata: f.metadata }], nextCursor: null }; },
         async download(_entryId, _fileId, consume, signal) { await consume({ metadata: changeMetadata ? { ...f.metadata, name: 'Changed' } : f.metadata, stream: new Blob([]).stream() }, signal); }
-      }), /metadata changed|incomplete/);
-      assert.deepEqual(await f.storage.listFiles([f.id]), []); assert.deepEqual(await f.commands(), []);
+      });
+      assert.equal(result.unavailable, 1);
+      assert.deepEqual(await f.storage.listFiles([f.id]), [{ id: f.metadata.token, entryId: f.id, metadata: f.metadata, available: false }]); assert.deepEqual(await f.commands(), []);
+      await assert.rejects(f.storage.openFile(f.id, f.metadata.token), /not available offline/);
     }
   } finally { await f.close(); }
 });
@@ -256,4 +259,103 @@ test('a long upload renews its cross-tab claim and parent deletion clears a prev
     await f.vault.remove(f.id, 1); await f.admit(); await f.vault.synchronizeFiles(f.transport);
     assert.deepEqual(await f.commands(), []);
   } finally { release.resolve(); context.mock.timers.reset(); other.dispose(); await f.close(); }
+});
+
+
+test('remote-only files stay visible across failed downloads and incomplete backups are refused', async () => {
+ const f = await fixture();
+ try {
+  await f.admit(); const id = crypto.randomUUID(), remoteEntry = { id, revision: 1, updatedAt: new Date().toISOString(), title: 'Account-only entry', passwordType: 'login' as const, entry: { ...emptyPasswordEntry(), title: 'Account-only entry' } };
+  await f.vault.reconcile({ ...entryTransport, async page() { return { entries: [remoteEntry], nextCursor: null }; } });
+  assert.deepEqual(await f.storage.filesStatus!(id), { listed: false, unavailable: 0 });
+  await assert.rejects(createPasswordBackup(f.storage), /not available on this device/);
+  const other = newPasswordFile('Other good account file', 3), otherId = `att_${'b'.repeat(64)}`;
+  let unavailable = true;
+  const transport: PasswordFileTransport = { ...f.transport,
+   async page() { return { files: [{ id: remoteId, entryId: id, metadata: f.metadata }, { id: otherId, entryId: id, metadata: other }], nextCursor: null }; },
+   async download(_entryId, fileId, consume, signal) {
+    if (fileId === remoteId && unavailable) throw Error('temporarily offline');
+    await consume({ metadata: fileId === remoteId ? f.metadata : other, stream: f.open() }, signal);
+   }
+  };
+  assert.deepEqual(await f.vault.reconcileFiles(transport), { retained: 1, unavailable: 1 });
+  assert.deepEqual(await f.storage.filesStatus!(id), { listed: true, unavailable: 1 });
+  const rows = await f.storage.listFiles([id]); assert.equal(rows.length, 2); assert.equal(rows.find(row => row.id === f.metadata.token)?.available, false);
+  assert.deepEqual(await read((await f.storage.openFile(id, other.token)).stream), f.bytes);
+  await assert.rejects(createPasswordBackup(f.storage), /not available on this device/);
+  const raw = await f.db.transaction(scope, 'readonly', lease, tx => tx.list('password-vault-file-catalog'));
+  assert.ok(!JSON.stringify(raw).includes(f.metadata.name)); assert.ok(!JSON.stringify(raw).includes(f.metadata.key));
+  // Local file completion remains independent of an unavailable remote original.
+  const local = newPasswordFile('Local during failed pull', 3); await f.storage.uploadFile(id, local, f.open);
+  assert.deepEqual(await read((await f.storage.openFile(id, local.token)).stream), f.bytes);
+  unavailable = false; assert.equal((await f.vault.reconcileFiles(transport)).retained, 1);
+  assert.deepEqual(await f.storage.filesStatus!(id), { listed: true, unavailable: 0 });
+  assert.ok((await createPasswordBackup(f.storage)).size > 0);
+  assert.equal((await f.commands()).length, 1, 'retained account files create no upload intents');
+ } finally { await f.close(); }
+});
+
+test('remote-only removals commit offline and complete account absence clears only unchanged metadata', async () => {
+ const f = await fixture();
+ try {
+  await f.admit();
+  await f.vault.reconcileFiles({ ...f.transport, async page() { return { files: [{ id: remoteId, entryId: f.id, metadata: f.metadata }], nextCursor: null }; }, async download() { throw Error('offline'); } });
+  await f.storage.removeFile(f.id, f.metadata.token);
+  assert.deepEqual(await f.storage.listFiles([f.id]), []);
+  assert.equal((await f.commands())[0].value.remoteId, remoteId);
+  await f.vault.synchronizeFiles(f.transport); assert.deepEqual(f.calls, ['remove']);
+  await f.vault.reconcileFiles(f.transport);
+  assert.deepEqual(await f.db.transaction(scope, 'readonly', lease, tx => tx.list('password-vault-file-catalog')), []);
+ } finally { await f.close(); }
+});
+
+test('explicit file retry preserves immutable identity and bytes after permission refusal', async () => {
+ const f = await fixture();
+ try {
+  await f.save(); await f.admit();
+  await f.vault.synchronizeFiles({ ...f.transport, async upload() { throw Object.assign(Error('private-upload denied'), { status: 403 }); } });
+  const before = (await f.commands())[0].value; assert.equal(before.state, 'refused');
+  await f.vault.retryFileSync(before.id); const after = (await f.commands())[0].value;
+  assert.deepEqual(after.encryptedValue, before.encryptedValue); assert.equal(after.fileId, before.fileId); assert.equal(after.attempts, before.attempts); assert.equal(after.retryAt, 0);
+  assert.equal((await f.vault.synchronizeFiles(f.transport)).completed, 1);
+  assert.deepEqual(await read((await f.storage.openFile(f.id, f.metadata.token)).stream), f.bytes);
+ } finally { await f.close(); }
+});
+
+test('file retention remains independent while an entry conflict waits for review', async () => {
+ const f = await fixture();
+ try {
+  await f.admit(); const id = crypto.randomUUID(), entry = { ...emptyPasswordEntry(), title: 'Remote source for review' };
+  const remote = { id, revision: 1, updatedAt: new Date().toISOString(), title: entry.title, passwordType: entry.passwordType, entry };
+  const entries: PasswordVaultTransport = { ...entryTransport, async page() { return { entries: [remote], nextCursor: null }; }, async read() { return remote; }, async write() { throw Object.assign(Error('conflict'), { status: 409 }); } };
+  await f.vault.reconcile(entries); await f.vault.save({ id, writeId: crypto.randomUUID(), revision: 1, entry: { ...entry, title: 'Local review version' } });
+  await f.vault.synchronize(entries);
+  await assert.rejects(f.vault.resolveRefused(id, 2, 'copy', entries), /not available on this device/);
+  const files: PasswordFileTransport = { ...f.transport,
+   async page() { return { files: [{ id: remoteId, entryId: id, metadata: f.metadata }], nextCursor: null }; },
+   async download(_parent, _file, consume, signal) { await consume({ metadata: f.metadata, stream: f.open() }, signal); }
+  };
+  assert.equal((await f.vault.reconcileFiles(files)).retained, 1);
+  assert.equal((await f.vault.syncStatus())[0].state, 'refused');
+  const result = await f.vault.resolveRefused(id, 2, 'copy', entries);
+  const copied = (await f.storage.listFiles([result.copiedId!]))[0]; assert.notEqual(copied.metadata.key, f.metadata.key);
+  assert.deepEqual(await read((await f.storage.openFile(result.copiedId!, copied.id)).stream), f.bytes);
+ } finally { await f.close(); }
+});
+
+test('an older complete traversal cannot erase files confirmed by a newer tab', async () => {
+ const f = await fixture(), started = deferred(), release = deferred();
+ const other = new LocalPasswordVault(f.db, scope, lease, scope.origin);
+ try {
+  await f.admit(); await other.unlock(phrase);
+  const present: PasswordFileTransport = { ...f.transport,
+   async page() { return { files: [{ id: remoteId, entryId: f.id, metadata: f.metadata }], nextCursor: null }; },
+   async download(_entryId, _fileId, consume, signal) { await consume({ metadata: f.metadata, stream: f.open() }, signal); }
+  };
+  await f.vault.reconcileFiles(present);
+  const old = f.vault.reconcileFiles({ ...present, async page() { started.resolve(); await release.promise; return { files: [], nextCursor: null }; } });
+  await started.promise; await other.reconcileFiles(present); release.resolve(); await old;
+  assert.deepEqual(await read((await f.storage.openFile(f.id, f.metadata.token)).stream), f.bytes);
+  assert.equal((await f.db.transaction(scope, 'readonly', lease, tx => tx.list('password-vault-file-catalog'))).length, 1);
+ } finally { release.resolve(); other.dispose(); await f.close(); }
 });

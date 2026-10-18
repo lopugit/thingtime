@@ -3918,3 +3918,56 @@ Account file UI/pump activation, failed-pull availability, native offline/reconn
 acceptance, large local entry/storage parity and the full matrix remain pending.
 No merge or manual deployment. The hosted PR head still differs from the real
 branch ref, so old preview/checks are not current-head verification.
+
+## Native account password files — 2026-10-18
+
+The normal password UI now uses the encrypted device file backend for both
+anonymous and account workspaces. Local upload/removal completes independently
+of remote work. Account entry push/pull and file push/pull have separate pumps;
+each requires the current unlocked vault, account, origin and selected-plane
+lease. Parent admission still orders uploads without delaying the local save.
+File retry/review status is visible, and retry preserves immutable operation
+identity, payload and cleanup provenance.
+
+Remote file metadata is retained encrypted before downloading bytes. Failed
+objects remain visible as unavailable while other files continue to retain.
+Downloads are disabled for missing bytes. Unknown or incomplete file lists block
+normal 1PUX backup and reviewed copies, including source archives, rather than
+silently dropping files. CSV remains explicitly lossy. Remote-only files can be
+removed offline through the canonical deletion queue. Per-parent traversal tokens
+prevent an older tab from pruning files confirmed by a newer traversal. Pending
+entry conflicts do not prevent retaining the files needed to resolve them.
+
+The real browser fixture caught an additional error path: a file-availability 409
+containing the word “account” was treated as identity loss and closed Export.
+Device workspaces now clear only for the explicit identity code or a 401; ordinary
+availability errors keep the dialog and saved editor state open.
+
+Local production-client acceptance passed in clean contexts against the disposable
+loopback replica and normal APIs: offline save, exact-byte download, cold reload,
+1PUX export/import, independent reconnect, fresh-device retention, unavailable
+objects, incomplete-export refusal and recovery. Layout bounds passed at
+1440×1000, 390×844 and 320×844 with no horizontal overflow. The fixture deleted
+its three created entries through normal APIs (no pending cleanup); synthetic
+accounts and canonical minimal receipts remain. Both the existing anonymous-vault
+and account-entry/conflict regressions also passed. Their fixtures have their own
+cleanup scope; the account-entry fixture does not remove its first test account's
+entry data. No existing user data or public content was changed.
+
+Evidence: `tmp/account-password-files-native-final/{verification,cleanup}.json`,
+`account-files-{1440,390,320}.png`, exact-byte download and both 1PUX exports;
+`tmp/password-file-ui-{anonymous,entry}-browser.log` hold the regressions.
+Workspace tests: 632 passed, 70 opt-in skips. Password tests: 53 passed.
+Focused file tests: 45 passed (overlap with workspace coverage); offline policy:
+four passed. Lint: no errors, two existing hook cleanup warnings. TypeScript:
+the same 91 baseline diagnostics, no new signatures. Client build and Nitro
+template synchronization passed with 249 verified offline assets.
+
+These are local results. Following the updated connected-Chrome requirement,
+additional Chrome inspection was attempted but its Page.enable attachment timed
+out; reconnection was requested. Do not count that attempt as a successful check.
+Current-head CI/deployment and the broader identity/plane/native/full-suite matrix
+remain open. GitHub still reports the older PR head while the branch ref advances;
+checks on that old head are not proof for this checkpoint. No merge, deployment
+or public exposure was performed. The HTML progress view is
+[anonymous-local-first.html](../docs/progress/anonymous-local-first.html).
