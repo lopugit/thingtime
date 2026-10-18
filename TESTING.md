@@ -1,5 +1,7 @@
 # TESTING.md — per-area manual test checklists
 
+- [ ] After merging another feature, password title search still filters before pagination, preserves q across pages, and both manifests advertise api.passwords 1.2.0; client and route search tests remain present.
+
 ## Reusable local video compression
 
 - [ ] Install `media-tools` as the intended account; inspect the returned owned
@@ -9958,6 +9960,13 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
 
 
 ## Password manager and native AutoFill
+
+- [ ] Search regression: create a title match older than 50 nonmatching entries.
+  Search must find it without Load more; case and literal regex punctuation work.
+  With more than 50 matches, pagination contains only matches, once each. Clear
+  and rapidly replace the query during a delayed page/focus refresh; stale replies
+  cannot append to or replace the new search. Check no-match, failed request/retry,
+  account isolation, and desktop/390px scrolling with the real private API.
 
 - Password archive regression: in React StrictMode, open an imported entry and
   verify related source documents/icons populate after effects replay. Export,
