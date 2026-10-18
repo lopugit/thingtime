@@ -21,13 +21,18 @@ function runScript(name) {
 	if (result.status !== 0) throw new Error(`${name} failed with exit code ${result.status ?? 'unknown'}`);
 }
 
+const inspectorArg = process.argv.find(value => value.startsWith('--inspect-ui='));
+const inspectorPort = inspectorArg ? Number(inspectorArg.slice('--inspect-ui='.length)) : null;
+if (inspectorArg && (!Number.isSafeInteger(inspectorPort) || inspectorPort < 1024 || inspectorPort > 65535)) throw new Error('Choose an unused nonprivileged UI inspection port.');
+const launchArgs = ['.', ...(inspectorPort ? [`--remote-debugging-port=${inspectorPort}`, '--remote-debugging-address=127.0.0.1'] : [])];
+
 let profilePath;
 try {
-	runScript('build-web.mjs');
+	if (!process.argv.includes('--use-staged')) runScript('build-web.mjs');
 	runScript('verify-web-build.mjs');
 	profilePath = await mkdtemp(path.join(os.tmpdir(), 'thingtime-desktop-dev-'));
 	console.log(`Starting unsigned Thingtime Dev with isolated profile ${profilePath}`);
-	const child = spawn(electronExecutable, ['.'], {
+	const child = spawn(electronExecutable, launchArgs, {
 		cwd: electronDir,
 		env: {
 			...process.env,
