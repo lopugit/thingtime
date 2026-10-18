@@ -47,6 +47,18 @@ const {
 } = require('./lib/thingtime-node-bridge.cjs');
 
 const { DesktopSpeechRecognition, requireSpeechSender } = require('./lib/speech-recognition.cjs');
+const { createDesktopAgentBrowsers } = require('./lib/agent-browsers/desktop.cjs');
+let agentBrowsersPromise;
+const agentBrowsers = () => {
+ if (desktopServicesClosing) throw new Error('Thingtime is closing.');
+	if (!agentBrowsersPromise) {
+		agentBrowsersPromise = createDesktopAgentBrowsers({ userData: app.getPath('userData'), resourcesRoot: app.isPackaged
+			? path.join(process.resourcesPath, 'agent-browser-runtime') : path.join(__dirname, 'lib/agent-browsers/runtime'),
+			applicationRoot: app.isPackaged ? path.join(process.resourcesPath, 'web/.output') : path.join(__dirname, 'dist/web/.output') });
+		agentBrowsersPromise.catch(() => { agentBrowsersPromise = undefined; });
+	}
+	return agentBrowsersPromise;
+};
 const desktopSpeech = new DesktopSpeechRecognition({ executable: app.isPackaged
 	? path.join(process.resourcesPath, '..', 'Helpers', 'Thingtime Node.app', 'Contents', 'MacOS', 'ThingtimeSpeech')
 	: path.join(__dirname, 'dist', 'native', 'Thingtime Node.app', 'Contents', 'MacOS', 'ThingtimeSpeech') });
@@ -73,18 +85,25 @@ let aiConnectorsPromise = null;
 let desktopSettings = null;
 let localRuntime = null;
 let sessionAuthority = null;
-let stoppingLocalRuntime = false;
-let localRuntimeClosed = false;
-attachQuitSignals(app);
-app.on('before-quit', (event) => {
- if (!localRuntime || localRuntimeClosed) return;
- event.preventDefault();
- if (stoppingLocalRuntime) return;
- stoppingLocalRuntime = true;
- void (async () => {
+let desktopServicesClosing = false;
+let desktopServicesClosed = false;
+async function closeDesktopServices() {
+ const tasks = [];
+ if (agentBrowsersPromise) tasks.push(agentBrowsersPromise.then(controller => controller.close()));
+ if (localRuntime) tasks.push((async () => {
   try { await globalThis[Symbol.for('thingtime.chatgpt-plan.close')]?.(); }
   finally { await localRuntime.stop(); }
- })().catch(() => console.warn('The local runtime did not close cleanly.')).finally(() => { localRuntimeClosed = true; app.quit(); });
+ })());
+ const results = await Promise.allSettled(tasks);
+ if (results.some(result => result.status === 'rejected')) console.warn('A desktop service did not close cleanly.');
+}
+attachQuitSignals(app);
+app.on('before-quit', (event) => {
+ if (desktopServicesClosed || (!localRuntime && !agentBrowsersPromise)) return;
+ event.preventDefault();
+ if (desktopServicesClosing) return;
+ desktopServicesClosing = true;
+ void closeDesktopServices().finally(() => { desktopServicesClosed = true; app.quit(); });
 });
 let desktopSettingsLastError = null;
 let endpointCompatibility = null;
@@ -240,6 +259,15 @@ function waitForHttp(url, attempts = 80) {
 }
 
 async function startNitroServer() {
+  if (parallelDevMode && process.env.THINGTIME_DESKTOP_DEV_TEST_ORIGIN) {
+    const origin = new URL(process.env.THINGTIME_DESKTOP_DEV_TEST_ORIGIN);
+    if (origin.protocol !== 'http:' || origin.hostname !== '127.0.0.1' || origin.username || origin.password || origin.pathname !== '/') throw new Error('The development test app must use a private loopback origin.');
+    const response = await fetch(new URL('/api/v1/health/nitro', origin), { redirect: 'error', signal: AbortSignal.timeout(10000) });
+    const health = await response.json();
+    if (!response.ok || health.testEnvironment?.mode !== 'isolated-agent-test') throw new Error('The development app requires the isolated test backend.');
+    appOrigin = origin.origin;
+    return appOrigin;
+  }
   const outputDir = getWebOutputDir();
   const serverEntry = path.join(outputDir, 'server', 'index.mjs');
 
@@ -1557,7 +1585,7 @@ async function changeDesktopSessionGuarded(event, request, legacy) {
  const previousContent = legacy ? contentOrigin(request?.contentOrigin) : null;
  const validateAuthority = () => {
   requireLocalRuntimeSender(event);
-  if (event.senderFrame !== frame || parallelDevMode || stoppingLocalRuntime || localRuntime?.runningEnabled || localRuntime?.state.enabled ||
+  if (event.senderFrame !== frame || parallelDevMode || desktopServicesClosing || localRuntime?.runningEnabled || localRuntime?.state.enabled ||
    new URL(activeApiEndpoint).origin !== apiOrigin || new URL(requireDesktopSettings().snapshot().selectedEndpoint.url).origin !== apiOrigin)
    throw new Error('Choose the original remote API and keep this settings page open before recovering its workspace.');
  };
@@ -1594,10 +1622,11 @@ function getDesktopInfo() {
         : null
     },
     contentOrigin: activeContentOrigin || appOrigin,
+    apiOrigin: parallelDevMode && process.env.THINGTIME_DESKTOP_DEV_TEST_ORIGIN ? appOrigin : activeAccountEndpoint(),
     currentUrl: mainWindow?.webContents.getURL() || appOrigin,
 		desktopSettings: effectiveDesktopSettings(),
 		localRuntime: localRuntime?.snapshot() || null,
-    sessionStorage: sessionAuthority?.snapshot((localRuntime?.runningEnabled ? appOrigin : activeApiEndpoint), Boolean(localRuntime?.runningEnabled || localRuntime?.state.enabled)) || null,
+    sessionStorage: sessionAuthority?.snapshot(activeAccountEndpoint(), Boolean(localRuntime?.runningEnabled || localRuntime?.state.enabled)) || null,
 		desktopSettingsLastError,
 		endpointCompatibility,
     isPackaged: app.isPackaged,
@@ -1693,8 +1722,11 @@ function createApplicationMenu() {
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
 
+function activeAccountEndpoint() {
+ return localRuntime?.runningEnabled ? appOrigin : activeApiEndpoint;
+}
 function rendererPartition() {
- const target = localRuntime?.runningEnabled ? appOrigin : activeApiEndpoint;
+ const target = activeAccountEndpoint();
  return sessionAuthority.partition(target, { local: Boolean(localRuntime?.runningEnabled), databaseIdentity: localRuntime?.runningEnabled ? localRuntime.runningDatabaseIdentity : '' });
 }
 function createWindow() {
@@ -1767,6 +1799,17 @@ ipcMain.handle('thingtime-desktop:speech-start', (event, request) => {
 	return desktopSpeech.start(request, payload => {
 		try { frame.send('thingtime-desktop:speech-event', payload); } catch { desktopSpeech.stop(request.sessionId); }
 	});
+});
+ipcMain.handle('thingtime-desktop:agent-browsers', async (event, request) => {
+	requireSpeechSender(event, mainWindow, appOrigin);
+	if (process.platform !== 'darwin') throw new Error('The agent browser manager currently requires macOS.');
+	const frame = event.senderFrame;
+	const controller = await agentBrowsers();
+	// Recheck after async initialization so a replaced page cannot inherit the
+	// previous document's native request.
+	requireSpeechSender(event, mainWindow, appOrigin);
+	if (event.senderFrame !== frame || desktopServicesClosing) throw new Error('The desktop document changed or is closing.');
+	return controller.request(request);
 });
 ipcMain.handle('thingtime-desktop:speech-stop', (event, request) => {
 	requireSpeechSender(event, mainWindow, appOrigin);
@@ -1886,7 +1929,7 @@ if (!singleInstanceLock) {
    await (partition ? session.fromPartition(partition) : session.defaultSession).clearCache();
 			createWindow();
       createApplicationMenu();
-      void checkSelectedEndpointCompatibility({ syncNode: true }).catch((error) => {
+      if (!(parallelDevMode && process.env.THINGTIME_DESKTOP_DEV_TEST_ORIGIN)) void checkSelectedEndpointCompatibility({ syncNode: true }).catch((error) => {
         desktopSettingsLastError = error instanceof Error ? error.message : String(error);
         console.warn('Unable to check Thingtime API endpoint compatibility', error);
       });

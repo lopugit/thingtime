@@ -48,6 +48,12 @@
 			"package.json"
 		],
 		"extraResources": [
+			{ "from": "scripts/agent-browser.mjs", "to": "agent-browser.mjs" },
+			{
+				"from": "dist/agent-browser-runtime",
+				"to": "agent-browser-runtime",
+				"filter": ["Dockerfile", ".dockerignore", "*.json", "*.mjs", "*.cjs"]
+			},
 			{
 				"from": "dist/web",
 				"to": "web",
@@ -110,5 +116,9 @@
 	"devDependencies": {
 		"electron": "^43.1.0",
 		"electron-builder": "^26.15.3"
+	},
+	"dependencies": {
+		"@puppeteer/browsers": "3.2.5",
+		"puppeteer-core": "25.14.0"
 	}
 }

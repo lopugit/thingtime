@@ -1,5 +1,45 @@
 # TESTING.md — per-area manual test checklists
 
+## Agent browsers and editable tasks
+
+- [ ] Install the task suite, create a task, add/complete todos and append progress;
+      compare the rendered records with API readback and reload both pages.
+- [ ] Exercise browser install, cancellation, duplication, exclusive claims,
+      launch, live view, mobile/desktop sizes, scrolling and release in the
+      installed Mac app; scroll the controls and task pages from top to bottom.
+- [ ] Device defaults and the per-task checkbox persist. Existing claims keep
+      their effective policy after defaults or task preferences change.
+- [ ] Two agents run the full app concurrently with separate MongoDB records,
+      cookies, storage and profiles; crossed lease IDs/tokens are refused.
+- [ ] Isolated IPv4/IPv6, direct-IP and redirected external requests fail from
+      browser and backend. Restricted rules permit only the selected IP/ports.
+- [ ] Missing test auth/database configuration fails closed. The bundled app is
+      readable by the actual non-root container UID, and Mongo startup retries
+      recover from an initial connection refusal using a fresh client.
+- [ ] `/index.html` and a deep route such as `/login` reference the same client
+      module, and that module returns JavaScript rather than fallback HTML.
+- [ ] Expiry, release, failed launch and app restart clean only owned sessions;
+      a live controller cannot be replaced and old handles cannot claim a new lease.
+- [ ] Native publisher downloads retain signatures and hashes; duplicated
+      unrestricted browsers start without personal cookies or saved storage.
+- [ ] The signed and unsigned packaged-module checks load the native driver
+      and Puppeteer from the app archive and verify the separate container
+      resources. Launch the installed app; a valid signature alone cannot catch
+      a runtime module accidentally excluded by `extraResources`.
+- [ ] Build and launch the full container from the packaged Mac app. Its traced
+      bcrypt, Sharp/libvips, resvg and cbor-extract dependencies must load their
+      locked Linux builds through the app resolver. A version mismatch or missing
+      native binary fails image installation before it can be claimed.
+
+- [ ] A daemon disconnect during release reports failure and retains the claim;
+      after recovery, release removes only the verified owned resources.
+- [ ] Quit during container/native preparation and native duplication: no
+      background install or copy persists after shutdown completes.
+- [ ] Switching database identity with the same owner/task IDs never reuses
+      the previous database's native registration, claim or live view.
+
+See [the runbook](docs/agent-browsers.md) for commands and evidence boundaries.
+
 - [ ] After merging another feature, password title search still filters before pagination, preserves q across pages, and both manifests advertise api.passwords 1.2.0; client and route search tests remain present.
 
 ## Reusable local video compression
@@ -10260,3 +10300,8 @@ separate from deterministic discovery/lease tests.
 - [ ] Corrupt cached download, missing bundled binary/source/license, wrong release and unsupported architecture fail packaging verification.
 
 - [ ] Desktop public data/federation identifiers use a per-profile keyed HMAC, never an unkeyed connection-string digest. Migrating pre-upgrade encrypted settings preserves the exact existing renderer partition, including after switching databases and returning; failure to persist the alias blocks startup.
+- Agent task pages: verify desktop centering and mobile gutters; mark a todo complete with a nonempty neighboring add-todo form, reload, and confirm only that todo changed.
+- Desktop agent task identity: switch API endpoints with matching owner/task IDs and default database identity; the second endpoint must not expose or reuse the first endpoint’s browser claim.
+- Agent general security link: open it from a task; the Things settings category and Agent browsers disclosure must open and scroll to the default policy controls. Save, reload and verify the policy; restore isolated testing after acceptance.
+
+- Desktop browser/local-runtime integration: quitting waits for browser cleanup and OAuth authority release before managed Mongo shutdown completes; repeated quits and late browser IPC cannot bypass the shared barrier. Pending saved API/database settings must not change the reported running account authority before restart.

@@ -1,3 +1,4 @@
+import { agentTestRefusal } from '../../../app/api/utils/agentTesting';
 import { actionDataRoutes } from '../../utils/actionDataRoutes';
 import { defineHandler } from 'nitro/h3';
 import { enforceExpectedActor } from '../../../app/api/utils/auth/expectedActor';
@@ -348,6 +349,8 @@ const normalizeResponse = (value: unknown) => {
 };
 
 export default defineHandler(async (event) => {
+  const refusedTest = agentTestRefusal();
+  if (refusedTest) return refusedTest;
   const path = normalizePath(event.context.params?.path, event.req.url);
   const method = event.req.method.toUpperCase();
 

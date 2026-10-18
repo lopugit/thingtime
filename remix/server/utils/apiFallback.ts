@@ -1,4 +1,5 @@
 import { capabilitySatisfies, THINGTIME_CAPABILITY_MANIFEST_PATH } from '../../app/api/utils/capabilities/capabilityContract';
+import { agentTestEnvironment } from '../../app/api/utils/agentTesting';
 
 const MONGO_PASSWORD_PLACEHOLDER = '<db_password>';
 
@@ -21,7 +22,10 @@ const normaliseOrigin = (value?: string | null) => {
   }
 };
 
-export const getApiFallbackOrigin = () => normaliseOrigin(process.env.THINGTIME_API_FALLBACK_ORIGIN);
+export const getApiFallbackOrigin = () => {
+  if (process.env.THINGTIME_AGENT_TEST_MODE === '1') throw new Error('Isolated tests cannot use an API fallback.');
+  return normaliseOrigin(process.env.THINGTIME_API_FALLBACK_ORIGIN);
+};
 
 export const getMissingSelfHostedApiEnv = () => {
   const missing: string[] = [];
@@ -49,6 +53,7 @@ export const hasSelfHostedApiEnv = () =>
 // Only the installed desktop shell may deliberately bridge to a selected API.
 // Incomplete development/preview servers must never become production clients.
 export const shouldProxyApiToFallback = (request: Request) => {
+  if (agentTestEnvironment()) return false;
   if (hasSelfHostedApiEnv() || process.env.NODE_ENV === 'test') return false;
   if (process.env.THINGTIME_DESKTOP !== '1') return false;
   if (process.env.THINGTIME_DESKTOP_API_MODE && process.env.THINGTIME_DESKTOP_API_MODE !== 'remote') return false;
@@ -148,6 +153,7 @@ const endpointChangedResponse = () => Response.json({
 }, { status: 409, headers: { 'Cache-Control': 'private, no-store' } });
 
 export const proxyApiRequestToFallback = async (request: Request, options: { stripForwardedOrigin?: boolean; expectedOrigin?: string | null } = {}) => {
+  if (process.env.THINGTIME_AGENT_TEST_MODE === '1') return Response.json({ ok: false, error: 'Isolated tests cannot use an API fallback.' }, { status: 503 });
   const expectedOrigin = options.expectedOrigin === undefined ? getApiFallbackOrigin() : options.expectedOrigin;
   const requestUrl = new URL(request.url);
   // Pin authority before any async work. A completed negotiation for a previous

@@ -1,6 +1,8 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('thingtimeDesktop', {
+	agentBrowserVersion: process.platform === 'darwin' ? '1.0.0' : undefined,
+	agentBrowsers: request => ipcRenderer.invoke('thingtime-desktop:agent-browsers', request),
 	mailSyncVersion: '1.0.0',
 	syncMail: (request) => ipcRenderer.invoke('thingtime-desktop:mail-sync', request),
 	cancelMailSync: (request) => ipcRenderer.invoke('thingtime-desktop:mail-cancel', request),
