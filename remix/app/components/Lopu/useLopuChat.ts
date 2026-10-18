@@ -52,6 +52,7 @@ import {
 	selectLopuTurnsForChat,
 	sendLopuMessage,
 	setLopuSettings,
+  setLopuAiDefaults,
 	subscribeLopuStore,
 	takeLopuNavigation,
 	takeLopuNotices,
@@ -189,7 +190,7 @@ export const useLopuChat = (options: UseLopuChatOptions = {}): UseLopuChat => {
 	const messenger = useMessengerApi();
 	const lopu = useLopu();
 	const navigate = useNavigate();
-	const { settings: prefs, setModelChoice, setEnterSends, setApplyPatches, setConfirmDeletes, setManagement, setHearMeOut } = useLopuSettings();
+	const { settings: prefs, setEnterSends, setApplyPatches, setConfirmDeletes, setHearMeOut } = useLopuSettings();
 	const defaultContext = useLopuContextProvider();
 	const contextProvider = options.context ?? defaultContext;
 	const activeLabel = useActiveDraftLabel();
@@ -248,17 +249,19 @@ export const useLopuChat = (options: UseLopuChatOptions = {}): UseLopuChat => {
 		void loadLopuMessages(activeChatId);
 	}, [userId, activeChatId, loadedForChat]);
 
-	// the viewer's preference (settings.lopu.*) feeds the store; a chat's own
-	// settings can still override it while that chat is selected
-	React.useEffect(() => {
-		const patch: Partial<LopuChatSettings> = { management: prefs.management };
-		if (prefs.model) patch.model = prefs.model;
-		if (prefs.effort) patch.effort = prefs.effort;
-		if (prefs.speed) patch.speed = prefs.speed;
-		if (Object.keys(patch).length) setLopuSettings(patch);
-	}, [prefs.model, prefs.effort, prefs.speed, prefs.management]);
+	// Migrate legacy device preferences once per account. New defaults never
+  // overwrite a selected conversation or follow that conversation's edits.
+  React.useEffect(() => {
+    setLopuAiDefaults({ model: prefs.model, effort: prefs.effort, speed: prefs.speed, providerId: null }, { initialize: true });
+  }, [userId, prefs.model, prefs.effort, prefs.speed]);
 
-	// notices → the Lopu toast (the first mounted hook drains them)
+  // Keep the existing execution default for new chats without rewriting an
+  // existing conversation. A personal plan is still forced to local execution.
+  React.useEffect(() => {
+    if (!snapshot.activeChatId) setLopuSettings({ management: prefs.management });
+  }, [userId, prefs.management, snapshot.activeChatId, snapshot.settings.providerId]);
+
+  // notices → the Lopu toast (the first mounted hook drains them)
 	const noticeCount = snapshot.notices.length;
 	React.useEffect(() => {
 		if (!noticeCount) return;
@@ -330,18 +333,7 @@ export const useLopuChat = (options: UseLopuChatOptions = {}): UseLopuChat => {
 		[contextProvider, applyPatches]
 	);
 
-	const setSettings = React.useCallback(
-		(patch: Partial<LopuChatSettings>) => {
-			setLopuSettings(patch);
-   if (patch.management) setManagement(patch.management);
-			// the catalog choice is also the viewer's preference (settings.lopu.*);
-			// a provider-only change is per chat and leaves the preference alone
-			if (!('model' in patch || 'effort' in patch || 'speed' in patch)) return;
-			const next = getLopuStoreSnapshot().settings;
-			setModelChoice({ model: next.model, effort: next.effort, speed: next.speed === 'fast' || next.speed === 'normal' ? next.speed : null });
-		},
-		[setModelChoice, setManagement]
-	);
+	const setSettings = React.useCallback((patch: Partial<LopuChatSettings>) => setLopuSettings(patch), []);
 
 	const setPreferences = React.useCallback(
 		(patch: Partial<{ applyPatches: boolean; enterSends: boolean; confirmDeletes: boolean; hearMeOut: boolean }>) => {
