@@ -251,8 +251,8 @@ test('AI archive clients require the presentation contract before import, export
 test('the Lopu catalog family publishes its verified-provider-key minor updates', () => {
   const manifest = thingtimeCapabilityManifest('https://thingtime.test');
   // 1.4.0: models[].pricing (verified-access design note §2)
-  assert.equal(manifest.features['api.ai-models']?.version, '1.5.1');
-  assert.equal(manifest.features['api.admin-ai-models']?.version, '1.3.0');
+  assert.equal(manifest.features['api.ai-models']?.version, '1.6.0');
+  assert.equal(manifest.features['api.admin-ai-models']?.version, '1.4.0');
   assert.equal(manifest.features['api.settings-lopu-chat-defaults']?.version, '1.1.0');
   // own providers (design note §1.3): providerId on create / update / reply;
   // 1.1.1 = the write buckets fail closed, 1.2.0 = server-verified confirmations;

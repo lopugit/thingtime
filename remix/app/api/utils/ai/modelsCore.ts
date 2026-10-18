@@ -195,6 +195,9 @@ export type AiModelPublic = {
   verified: boolean | null;
   providerAvailable?: boolean | null; // latest complete provider catalogue
   lastSyncedAt?: string | null;
+  publicCatalogAvailable?: boolean | null;
+  catalogSource?: 'public-docs' | 'authenticated' | null;
+  catalogCheckedAt?: string | null;
   isDefault: boolean; // the resolved Lopu default model
 };
 
@@ -406,7 +409,7 @@ export const resolveLopuModelChoice = (
     } else if (!candidate.available) {
       if (!lenient) {
         return choiceFail(
-          candidate.providerAvailable === false
+          candidate.providerAvailable === false || candidate.publicCatalogAvailable === false
             ? `${candidate.label} is no longer available from its provider. Choose a current model.`
             : candidate.verified === false
             ? `${candidate.label} is unavailable — the provider rejected the server's ${AI_PROVIDER_ENV_HINTS[candidate.provider]} (key invalid)`

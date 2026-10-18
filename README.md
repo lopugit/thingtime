@@ -4571,18 +4571,23 @@ If absent, an existing `ANTHROPIC_API_KEY` is used for catalogue reads only. The
 keys are never passed to Claude inference, which continues using the isolated
 Claude Code runtime and its admin-vault OAuth credential.
 
-Without either discovery key, Thingtime attempts the model-list endpoint with
-Claude OAuth from the admin credential vault or `CLAUDE_CODE_OAUTH_TOKEN_THINGTIME`
-/ `CLAUDE_CODE_OAUTH_TOKEN`. Subscription OAuth may not grant Models API access;
-HTTP 401/403 is reported with a discovery-credential hint. A denied scope,
-timeout, malformed/empty list or incomplete pagination preserves the previous
-inventory and reports failure; it is not treated as a provider-wide retirement.
-Claude Code's initialization model list is not an authoritative replacement:
-it can return built-in models even with invalid credentials.
+Without either discovery key, or when the Models API denies catalogue access
+(401/403), Thingtime reads Anthropic's public [model lifecycle table](https://platform.claude.com/docs/en/about-claude/model-deprecations).
+This works without an API key or paid Claude subscription, even when inference
+is not configured. Public records carry `catalogSource: "public-docs"`,
+`catalogCheckedAt`, and `publicCatalogAvailable`; they do not set or overwrite
+credential-scoped `providerAvailable` / `lastSyncedAt`. Only an explicit Retired
+row hides a public model; omission from a documentation page never retires it.
+The admin UI labels public metadata as account-access unverified. A free Claude
+account does not gain inference access merely because a model is listed.
+
+Malformed, empty, redirected, oversized or timed-out documentation responses
+preserve the prior catalogue. API network/server failures also preserve it.
+Claude Code's initialization list is not authoritative discovery.
 Personal Secure Vault endpoints have their own configuration and do not alter
 the shared catalogue.
 
-Admin → Lopu models → **Sync available models** runs a manual refresh. Provider
+Admin → AI Providers → **Sync model catalog** runs a manual refresh. Provider
 model-not-available errors also request a refresh, without replaying the failed
 turn or silently changing its model. A shared five-minute cooldown and two-minute
 lease prevent concurrent requests from hammering providers. Inspect the per-provider
@@ -4597,9 +4602,15 @@ pricing and context limits remain unknown until explicitly supported. Unknown
 pricing remains `priced: false` in usage accounting; it is never presented as a
 provider price of zero. Admins should consider this before enabling auto-allow.
 
-A complete provider snapshot atomically marks absent models unavailable, retaining
+A complete authenticated provider snapshot atomically marks absent models unavailable, retaining
 their records and admin choices. The public catalogue and shared model selectors
 only offer enabled, available models. Admin retains all compatible rows for audit.
+The workflow order selector uses those live models, including discovered versions.
+From AI workflow model order, **Save & apply** saves the named waterfall and then
+persists the shared model order before closing. If either save fails, the dialog
+stays open with an error; retry updates an already-created waterfall rather than
+creating another copy. **Apply waterfall** still stages the order for the separate
+**Save model order** button; **Save waterfall** only saves the personal template.
 
 ### Incoming mail (Gmail, IMAP, POP3 and offline inboxes)
 
