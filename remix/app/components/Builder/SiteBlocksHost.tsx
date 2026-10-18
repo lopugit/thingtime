@@ -49,11 +49,13 @@ const GlobalBlocks = React.memo(function GlobalBlocks({
 	blocks,
 	componentsByRef,
 	interactive,
+	navCleared = false,
  resolved
 }: {
 	blocks: WebpageBlock[];
 	componentsByRef: ComponentsByRef;
 	interactive: boolean;
+	navCleared?: boolean;
  resolved: ResolvedWebpage | null;
 }) {
 	if (!blocks.length) return null;
@@ -63,7 +65,7 @@ const GlobalBlocks = React.memo(function GlobalBlocks({
 			width="100%"
 			// the nav clearance alone puts content flush against the navbar —
 			// global blocks get an extra breath of air below it
-			paddingTop={`calc(${PAGE_TOP_CLEARANCE} + 14px)`}
+			paddingTop={navCleared ? 4 : `calc(${PAGE_TOP_CLEARANCE} + 14px)`}
 			paddingX={4}
 			background="var(--tt-surface, #fafafb)"
 		>
@@ -95,7 +97,14 @@ const SiteBlocksView = ({ path, children, cache, binding, revision, refresh }: {
  const route = useSiteResource(cache, binding, path, { kind: 'path', path }, revision, path);
  const global = useSiteResource(cache, binding, 'global', { kind: 'global' }, revision, path);
  const resolved = route.data, globalResolved = global.data;
- const failure = route.error || global.error ? <Flex role="alert" gap={2} wrap="wrap" align="center" padding={4}><Text>Could not refresh your page blocks. Your last loaded version is still available.</Text><Button size="sm" onClick={refresh}>Retry page blocks</Button></Flex> : null;
+ const failure = route.error || global.error ? (
+  <Box width="100%" paddingTop={PAGE_TOP_CLEARANCE} paddingX={4} background="var(--tt-surface, #fafafb)" whiteSpace="normal">
+   <Flex role="alert" gap={2} wrap="wrap" align="center" maxWidth="960px" marginX="auto" paddingY={4}>
+    <Text>Could not refresh your page blocks. Your last loaded version is still available.</Text>
+    <Button size="sm" onClick={refresh}>Retry page blocks</Button>
+   </Flex>
+  </Box>
+ ) : null;
 	const globalBlocks = (globalResolved?.page?.crystal?.blocks as WebpageBlock[]) || [];
 	const globalComponents = globalResolved?.componentsByRef || {};
 
@@ -110,7 +119,7 @@ const SiteBlocksView = ({ path, children, cache, binding, revision, refresh }: {
 	const blocks = (resolved?.source === 'user' ? (resolved?.page?.crystal?.blocks as WebpageBlock[]) : null) || [];
 	const { before, after } = splitAroundNative(blocks);
 	const componentsByRef = resolved?.componentsByRef || {};
-	const hasInjectedAbove = globalBlocks.length > 0 || before.length > 0;
+	const hasInjectedAbove = Boolean(failure) || globalBlocks.length > 0 || before.length > 0;
 
 	if (sectioned && sectionedPage) {
 		const shellWidth = sectionedPage.shellWidth;
@@ -127,8 +136,8 @@ const SiteBlocksView = ({ path, children, cache, binding, revision, refresh }: {
 		return (
 			<SitePageRuntime resolved={resolved}>
 				{failure}
-				<GlobalBlocks resolved={globalResolved} blocks={globalBlocks} componentsByRef={globalComponents} interactive={globalResolved?.source === 'user'} />
-				<Box width="100%" whiteSpace="normal" sx={globalBlocks.length ? { '--tt-nav-clearance': '12px' } : undefined}>
+				<GlobalBlocks resolved={globalResolved} blocks={globalBlocks} componentsByRef={globalComponents} interactive={globalResolved?.source === 'user'} navCleared={Boolean(failure)} />
+				<Box width="100%" whiteSpace="normal" sx={failure || globalBlocks.length ? { '--tt-nav-clearance': '12px' } : undefined}>
 					{shellWidth === 'full' ? (
 						PageOwnShell ? (
 							// full-bleed pages keep their page-owned chrome (background,
@@ -150,9 +159,9 @@ const SiteBlocksView = ({ path, children, cache, binding, revision, refresh }: {
 	return (
 		<SitePageRuntime resolved={resolved}>
 			{failure}
-				<GlobalBlocks resolved={globalResolved} blocks={globalBlocks} componentsByRef={globalComponents} interactive={globalResolved?.source === 'user'} />
+				<GlobalBlocks resolved={globalResolved} blocks={globalBlocks} componentsByRef={globalComponents} interactive={globalResolved?.source === 'user'} navCleared={Boolean(failure)} />
 			{before.length ? (
-				<Box width="100%" paddingTop={globalBlocks.length ? 4 : PAGE_TOP_CLEARANCE} paddingX={4} background="var(--tt-surface, #fafafb)">
+				<Box width="100%" paddingTop={failure || globalBlocks.length ? 4 : PAGE_TOP_CLEARANCE} paddingX={4} background="var(--tt-surface, #fafafb)">
 					<Box maxWidth="960px" marginX="auto" whiteSpace="normal">
 						<WebpageBlocksRenderer blocks={before} componentsByRef={componentsByRef} interactive />
 					</Box>

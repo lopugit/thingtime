@@ -2,6 +2,68 @@
 
 Branch: `codex/anonymous-local-first`. PR: https://github.com/lopugit/thingtime/pull/1000
 
+## Visible page-block recovery — 2026-10-19
+
+Native visual review found the page-block refresh notice beneath the fixed
+navigation. A forced resolver failure reproduced the overlap before the fix.
+`SiteBlocksHost` now applies the shared safe-area/nav clearance to the notice,
+centers its contents, and avoids duplicating that clearance in following global,
+route and native content. Cached content and Retry remain available.
+
+A fresh packaged-app run verifies forced 503, failed Retry, removal of the fault
+and real API recovery at 1440×1000, 390×844 and 320px. Notice text starts at y=74
+on desktop and y=70 on phones. The same run passes all 36 repeated audience views,
+private guest/foreign refusals, scrolling and width checks. Zero page errors,
+crashes or OOM; peak sampled namespace memory 2,645 MiB; runtime released.
+The stress phase encounters genuine 429 responses; rate limits remain intact,
+and these captures prove retained-content behavior, not all-success networking.
+Evidence: `tmp/site-blocks-recovery-native/native/verification.json`, the three
+`blocks-failure-*.png` files and audience screenshots. The baseline failure is
+in `tmp/site-blocks-banner-baseline/`.
+
+Eighteen focused tests, changed-file lint, client/template/server builds pass;
+TypeScript retains exactly the same 91 baseline diagnostics. Visual review also
+records an existing narrow-screen floating-assistant/composer overlap as a
+separate open P1 check. Full local-first acceptance, protected version changes,
+target-host MCP artifacts and exact-head CI/deployed verification remain open.
+No account/public data, authentication, permissions or rate-limit changes.
+
+## Bounded native navigation diagnostics — 2026-10-19
+
+Repeated full-document navigation reproduced a renderer crash twice after 18
+completed views. Both runtimes recorded an OOM kill. Per-navigation measurements
+showed collectible documents accumulating (up to 18), with V8 heap growth from
+55 MB to 594 MB and renderer RSS near 1.7 GB. A separate diagnostic probe reduced
+six documents to one and heap from 196 MB to 40 MB by collecting garbage;
+discarding console entries made no further difference. This identifies deferred
+collection under the test VM's memory pressure, not a demonstrated application
+reference leak.
+
+The native fixture now bounds V8 old space to 256 MiB while retaining Chromium's
+sandbox and the browser/backend network boundary. The actual acceptance run does
+not force garbage collection. Three complete cycles (36 views at 1440, 390 and
+320px) pass with no page errors, crashes or OOM. Peak sampled namespace usage was
+2,560 MiB. Private guest/foreign refusals, public control, native labels, scrolling
+and widths pass, and the runtime is released. Evidence is in
+`tmp/inherited-audience-bounded/native/verification.json` and its twelve PNGs.
+
+Diagnostics now record navigation responses, lifecycle and memory metrics;
+failure JSON/PNG use unique run IDs and hashes. A failed capture is explicit.
+The older `tmp/inherited-audience-navigation-failure/failure.png` is unpaired
+legacy evidence, not proof of a blank page. Preserve the original failures in
+`tmp/inherited-audience-diagnostics/` and `tmp/inherited-audience-memory/`.
+The forced-GC probe in `tmp/inherited-audience-memory-probe/` is diagnosis only.
+A separate single-app image build could not finish because the shared Docker VM
+was out of disk space; no other task's images or installed app were removed.
+
+The memory budget and diagnostic changes affect the acceptance fixture. The
+separate retry-notice layout correction is recorded above. No API contract changes.
+Changed-file lint and the native run pass. Earlier 732
+workspace + four shell / 44 focused passes and 91 baseline TypeScript diagnostics
+remain the prior product-code checkpoint. Full local-first, protected version
+changes, target-host MCP artifacts and exact-head CI/deployed acceptance remain
+open. No merge, deployment or public test exposure is included.
+
 ## Inherited audience labels and retained subspace context — 2026-10-19
 
 A live private coordination comment incorrectly displayed “anyone can see this

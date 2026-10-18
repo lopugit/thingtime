@@ -80,6 +80,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-19: Keep page-block failure notices and Retry below the fixed navigation, without duplicating content clearance. Native forced-failure/recovery at 1440/390/320px and 36 repeated views pass; narrow composer/floating-assistant overlap remains tracked. See [PR #1000 notes](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md). — Codex (AI)
+
+
+- 2026-10-19: Bound the repeated-navigation native fixture's V8 heap after two renderer OOM reproductions; 36 views now pass through normal GC with zero crashes/OOM. Record per-navigation memory and uniquely paired failure artifacts. Product code and security boundaries are unchanged. See [PR #1000 notes](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md). — Codex (AI)
+
+
 - 2026-10-19: Describe inherited audiences honestly and retain matching subspace context in owned offline projections. Native parent/comment/nested-reply and guest/foreign refusal checks pass at 1440/390/320px; intermittent earlier blank navigation remains tracked. See the [PR #1000 checkpoint](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
 
 - 2026-10-19: Verify native account-theme offline History, canonical version downloads and independent content/History retry in both failure directions on the isolated packaged app. Protected version changes remain open. See [PR 1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md). — Codex (AI)

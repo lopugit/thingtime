@@ -5366,6 +5366,17 @@ The test compares the real API's guest/foreign refusals with native parent,
 comment and nested-reply badges, including repeated navigation at three widths.
 Build the client, run `npm run sync:nitro-template`, then build the server before
 packaging, so the served HTML references the current assets.
+Set `TT_INHERITED_AUDIENCE_REPETITIONS=3` for the bounded 36-navigation check
+(default one cycle; maximum three). Chromium keeps its sandbox and uses a
+256 MiB V8 old-space limit so normal collection happens within the runtime's
+memory budget. The fixture records per-navigation responses, lifecycle events,
+renderer/namespace memory and OOM counters. Failure JSON and any successfully
+captured PNG share a unique run ID and image hash; a failed capture is reported
+explicitly and cannot be mistaken for an older PNG. It also injects resolver 503s
+to check notice clearance, failed Retry and real recovery at all three widths.
+The repeated-navigation stress phase can encounter genuine 429 responses; these
+are recorded without disabling rate limits. Do not treat the diagnostic
+forced-GC probe as native acceptance or discard a failed runtime's evidence.
 
 ### Disposable offline Action verification
 
