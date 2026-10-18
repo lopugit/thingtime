@@ -217,6 +217,7 @@
     "lodash-es": "^4.17.21",
     "lucide-react": "^1.21.0",
     "mailparser": "3.9.40",
+    "mediabunny": "1.61.6",
     "mongodb": "^6.5.0",
     "nitro": "^3.0.260610-beta",
     "openai": "^6.44.0",
