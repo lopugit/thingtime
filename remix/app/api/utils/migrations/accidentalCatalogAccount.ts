@@ -7,6 +7,7 @@ import { collectionVersion } from '../mongodb/collectionNames';
 import { subscriptionShareId, userSubscriptionLedgerEnvelopeIsTrusted } from '../subscriptions/subscriptionIdentity';
 import { exactDocumentSnapshotMatch } from './migrationCore';
 import type { Migration, MigrationReport } from './migrations';
+import { ACL_OWNER, SYSTEM_NOTIFICATION_ACTOR_ID } from '../../../schemas/registry';
 
 // An incident-specific cleanup, never an arbitrary account deletion endpoint.
 // Timestamp + identity + empty-account checks prevent a later signup reusing
@@ -32,18 +33,26 @@ export const assertCatalogFixtureIdentity = (user: any) => {
       !Array.isArray(user.thingtime) || user.thingtime.length !== 1 || user.thingtime[0] !== 'user') refuse();
 };
 
-export const assertCatalogFixtureThings = (user: any, owned: any[]) => {
+export const assertCatalogFixtureThings = (user: any, owned: any[], sessions: any[]) => {
   const ledger = owned.find(doc => doc.shareId === subscriptionShareId('user', user.shareId));
   if (!ledger || !userSubscriptionLedgerEnvelopeIsTrusted(ledger, user.shareId) ||
       ledger.crystal.storageUsedBytes !== 0 || ledger.crystal.isDefaultAssignment !== true ||
       ledger.crystal.updatedBy !== 'system' || ledger.crystal.tier !== 'free') refuse();
   for (const doc of owned) {
     if (String(doc._id) === String(user._id) || doc === ledger) continue;
-    // Only the automatic signup history entry is disposable alongside this fixture.
+    // Logout revokes the session, then emits a second history entry. Bind that
+    // entry to an actual revoked incident session rather than accepting arbitrary
+    // system notifications or extending the signup time window.
+    const signup = doc.crystal?.title === 'Account created successfully ✨' && initialTime(doc.createdAt);
+    const logout = doc.crystal?.title === 'Signed out successfully' && doc.createdAt instanceof Date &&
+      sessions.some(row => row.revokedAt instanceof Date && doc.createdAt >= row.revokedAt &&
+        doc.createdAt.getTime() - row.revokedAt.getTime() <= 30_000);
     if (doc.thingtime?.length !== 1 || doc.thingtime[0] !== 'notification' || doc.ownerId !== user.shareId ||
         doc.historyOnly !== true || doc.crystal?.type !== 'system-message' ||
-        doc.crystal?.title !== 'Account created successfully ✨' || doc.crystal?.outcome !== 'ok' ||
-        !initialTime(doc.createdAt) || doc.targetId != null) refuse();
+        doc.crystal?.actorId !== SYSTEM_NOTIFICATION_ACTOR_ID || doc.crystal?.actorName !== 'Lopu' ||
+        doc.crystal?.outcome !== 'ok' || (!signup && !logout) || doc.targetId !== null ||
+        doc.acl?.length !== 1 || doc.acl[0] !== ACL_OWNER || doc.tags?.length !== 0 ||
+        Object.keys(doc.crystal).some(key => !['type', 'actorId', 'actorName', 'title', 'outcome'].includes(key))) refuse();
   }
 };
 
@@ -65,12 +74,12 @@ export const cleanupAccidentalCatalogAccount = async (
   assertCatalogFixtureIdentity(user);
   const userId = user.shareId;
   const owned = await things.find({ ownerId: userId }, options).toArray();
-  assertCatalogFixtureThings(user, owned);
   // A live session, reset/OTP, legacy account or external relationship means
   // this is no longer the idle fixture that was approved for removal.
   const sessions = await deps.collection('sessions');
   const sessionRows = await sessions.find({ userId }, options).toArray();
   if (sessionRows.some(row => !row.revokedAt || !initialTime(row.createdAt) || (row.purpose && row.purpose !== 'browser'))) refuse();
+  assertCatalogFixtureThings(user, owned, sessionRows);
   for (const logical of ['users', 'passwordResets', 'authOtps', 'lopuCredentials']) {
     const collection = await deps.collection(logical);
     if (await collection.findOne({ $or: [{ userId }, { ownerId: userId }, { _id: userId }, ...(logical === 'users' ? [{ username: CATALOG_FIXTURE.username }] : [])] }, options)) refuse();

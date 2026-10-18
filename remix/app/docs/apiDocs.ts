@@ -13272,13 +13272,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'webpages-suites-install',
-    contractVersion: '1.3.0',
-    featureVersion: '1.3.0',
+    contractVersion: '1.4.0',
+    featureVersion: '1.4.0',
     group: 'webpages',
     title: 'Install a behaviour suite or app suite',
     endpoint: '/api/v1/webpages/suites/install',
     summary: 'Installs (or re-installs) one suite — schemas, components, actions, sample data, and every page — into the caller’s own things in one idempotent request.',
     detail:
+      '1.4.0 adds the media-tools suite: editable local WebCodecs conversion programs with selected-file input, resize, MP4/WebM encoding, progress/cancel, preview, host download and a saved-component Action. No video bytes are uploaded or persisted by conversion; device codec support is required. ' +
       'JSON Action inputs accept bounded JSON values; form controls decode their JSON text before transport. Literal strings are never reparsed by the API. JSON defaults preserve arrays, objects and null; input references remain inert data. Resolved defaults and nested calls obey the input byte budget. The Web standards workbench can save the edited program and current inputs as a private reusable Component through its authored browser Action. ' +
       'Web standards adds the web-standards installable suite, pure webstandards.browse/component expressions and the reusable tt-web-platform declarative document/CSS/JavaScript runtime. Runtime execution is isolated from account data; inventory provenance and incomplete-demo coverage are explicit. ' +
       'Version 1.1 adds site-forms and catalog-records suites, native form fields, and versioned interactive controls. ' +
@@ -13503,8 +13504,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // 1.1.0: every generation row carries its storage census (dataBytes,
     // storageBytes, indexBytes, indexes) — additive. contractVersion is what
     // the capabilities manifest publishes.
-    contractVersion: '1.4.0',
-    featureVersion: '1.4.0',
+    contractVersion: '1.4.1',
+    featureVersion: '1.4.1',
     summary: 'Per-collection schema-version census, storage generations, and registered migrations with pending counts.',
     detail:
       'Every doc stores the root-level schemaVersion it was written at (docs without one count as version 1), and every ' +
@@ -13747,14 +13748,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 	}),
   endpoint({
     id: 'admin-migrations-run',
-    contractVersion: '1.4.0',
-    featureVersion: '1.4.0',
+    contractVersion: '1.4.1',
+    featureVersion: '1.4.1',
     group: 'admin',
     title: 'Run migration',
     endpoint: '/api/v1/admin/migrations/run',
     summary: 'Runs (or dry-runs) a registered schema-version migration.',
     detail:
-      'cleanup-accidental-catalog-account-2026-10-18 removes only the exact idle incident fixture and its bootstrap/auth records in a home-database transaction. Identity, empty storage, revoked sessions and complete document preimages are checked; unexpected activity aborts cleanup. Dry-run first, then confirm: true. Email delivery and migration audit records remain. ' +
+      'cleanup-accidental-catalog-account-2026-10-18 removes only the exact idle incident fixture and its bootstrap/auth records in a home-database transaction. Identity, empty storage, revoked sessions and complete document preimages are checked; the automatic logout history entry must match a revoked incident session within 30 seconds; unexpected activity aborts cleanup. Dry-run first, then confirm: true. Email delivery and migration audit records remain. ' +
       'Migrations are idempotent, so re-running after a partial failure only touches what is left. The things v1→v2 ' +
       'migration explodes embedded comments/reactions into standalone things, converts share posts to thingtime ' +
       '["post","share"], moves post payloads under crystal, and stamps schemaVersion; the other collections stamp the ' +
