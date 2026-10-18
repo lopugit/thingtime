@@ -1,3 +1,5 @@
+import { compositionAttachmentIds } from '../../api/utils/actions/compositionMediaCore';
+import { rewriteComposition } from '../../api/utils/actions/forkCompositionCore';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { templateToBlocks, resolveBlockProps } from './templateBlocks';
@@ -46,4 +48,22 @@ test('intrinsic exact bindings preserve false, zero and true DOM property types'
  const props=resolveBlockProps({disabled:'{result.busy}',checked:'{result.checked}',open:'{result.busy}',value:'{result.count}',title:'Count: {result.count}'},{result:{busy:false,checked:true,count:0}});
  assert.deepEqual(props,{disabled:false,checked:true,open:false,value:0,title:'Count: 0'});
  assert.equal(resolveBlockProps({disabled:'{result.busy}'},{result:{busy:true}}).disabled,true);
+});
+
+test('deep editable trees retain inherited stored media and remap nested Action bindings',()=>{
+ const leaf:any={id:'leaf',type:'element',tag:'button',props:{'data-tt-action':'do-{target}'}};
+ let child:any=leaf;
+ for(let i=0;i<24;i++) child={id:`nested-${i}`,type:'element',tag:'div',children:[child]};
+ const root:any={id:'root',type:'container',args:{target:'saved',image:'/api/v1/attachments/content?id=att_source',item:'private'},children:[...Array.from({length:1800},(_,i)=>({id:`p-${i}`,type:'element',tag:'p'})),child,{id:'image',type:'element',tag:'img',props:{src:'{image}'}},{id:'runtime',type:'element',tag:'img',props:{src:'/api/v1/attachments/content?id={item}'}}]};
+ const crystal={blocks:[root]};
+ assert.deepEqual([...compositionAttachmentIds(['webpage'],crystal)],['att_source']);
+ assert.deepEqual(compositionReferences(['webpage'],crystal).map(x=>x.ref),['do-saved']);
+ const copied=rewriteComposition(['webpage'],crystal,(_kind,ref)=>`copy-${ref}`);
+ assert.deepEqual(compositionReferences(['webpage'],copied).map(x=>x.ref),['copy-do-saved']);
+ let current=copied.blocks[0].children[1800];
+ while(current.children) current=current.children[0];
+ assert.equal(resolveBlockProps(current.props,{target:'saved'})['data-tt-action'],'copy-do-saved');
+ assert.equal(current.props['data-tt-action'],'do-{target}');
+ const twice=rewriteComposition(['webpage'],copied,(_kind,ref)=>`second-${ref}`);
+ assert.deepEqual(compositionReferences(['webpage'],twice).map(x=>x.ref),['second-copy-do-saved']);
 });
