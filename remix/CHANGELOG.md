@@ -73,6 +73,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-18 — **Codex (AI)**: Restore the existing password-title search, pagination and api.passwords 1.2.0 contract accidentally removed by the menu-bar merge. Preserve all menu-bar and script functionality.
+
 - 2026-10-18 — **Codex (AI)**: Fix installed desktop browser Actions through the
   selected account endpoint while retaining actor, database and origin checks;
   correct paired-device Builder links to Things. [PR 1031 notes](../PRs/1031-mac-menu-bar-paired-device-builder-tools.md).
