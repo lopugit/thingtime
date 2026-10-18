@@ -74,6 +74,9 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 ## [Unreleased]
 
 - 2026-10-18: Password title search now filters the whole private vault before pagination (`api.passwords` 1.2.0), cancels stale searches, and distinguishes no matches from request failure. Added HTTP pagination/owner-isolation and capability regressions.
+- 2026-10-18: Fix incident cleanup to recognize the automatic logout history entry, bound to the revoked test session; retain strict content and actor checks. Production dry-run caught this mismatch before any deletion.
+
+
 - 2026-10-18 — **Codex (AI)**: Remove implicit production API forwarding from
   Vite and Nitro; missing local database/signing settings now fail closed before
   handlers or DB warmup. Restrict fixture destinations and redirects, add an OS

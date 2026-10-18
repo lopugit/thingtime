@@ -62,7 +62,7 @@ try {
   for (const port of [ports.api, ports.web]) {
     const origin = `http://127.0.0.1:${port}`;
     const manifest = await (await fetch(`${origin}/.well-known/thingtime-capabilities.json`)).json();
-    assert.equal(manifest.origin, origin); assert.equal(manifest.features['api.admin-migrations-run'].version, '1.4.0');
+    assert.equal(manifest.origin, origin); assert.equal(manifest.features['api.admin-migrations-run'].version, '1.4.1');
     for (const [path, method] of [['v1/auth/register', 'POST'], ['v1/things', 'POST'], ['v1/admin/migrations/run', 'POST'], ['root-data', 'GET']]) {
       const response = await fetch(`${origin}/api/${path}`, { method, redirect: 'error', ...(method === 'POST' ? { headers: { 'Content-Type': 'application/json' }, body: '{"username":"isolated-no-create","password":"synthetic-not-a-real-credential"}' } : {}) });
       assert.equal(response.status, 503, `${port} ${path}`); assert.equal((await response.json()).code, 'LOCAL_API_NOT_CONFIGURED');

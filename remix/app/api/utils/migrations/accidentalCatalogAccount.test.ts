@@ -5,6 +5,7 @@ import { packSecure } from '../auth/users';
 import { ACL_OWNER, COLLECTION_SCHEMA_VERSIONS, USER_STORAGE_LEDGER_ENVELOPE_VERSION } from '../../../schemas/registry';
 import { subscriptionShareId } from '../subscriptions/subscriptionIdentity';
 import { CATALOG_FIXTURE, cleanupAccidentalCatalogAccount } from './accidentalCatalogAccount';
+import { notificationDoc, SYSTEM_NOTIFICATION_ACTOR } from '../notifications/notifications';
 
 const fixture = () => {
   const now = CATALOG_FIXTURE.createdAt;
@@ -17,7 +18,11 @@ const fixture = () => {
       tierName: 'Free', tierMetered: true, tierQuotas: { appStorageBytes: 1024, userStorageBytes: 1024, maxApps: 2, maxPats: 2 }, overrides: null, note: null,
       updatedBy: 'system', isDefaultAssignment: true, storageUsedBytes: 0, storageAccountingVersion: 1, storageLedgerStatus: 'ready', storageReconciledAt: now, storageUpdatedAt: now } };
   const neighbor = { _id: 'neighbor-root', shareId: 'neighbor', ownerId: 'neighbor', thingtime: ['user'], crystal: { username: 'real-user' } };
-  const rows: Record<string, any[]> = { things: [user, ledger, neighbor], sessions: [{ _id: 'session', userId: user.shareId, createdAt: now, revokedAt: now }],
+  const revokedAt = new Date(now.getTime() + 20 * 60_000);
+  const notice = (title: string, at: Date, id: string) => ({ _id: id, ...notificationDoc({ recipientId: user.shareId, type: 'system-message', title, historyOnly: true, outcome: 'ok', actor: SYSTEM_NOTIFICATION_ACTOR }, at) });
+  const signup = notice('Account created successfully ✨', now, 'signup');
+  const logout = notice('Signed out successfully', new Date(revokedAt.getTime() + 100), 'logout');
+  const rows: Record<string, any[]> = { things: [user, ledger, neighbor, signup, logout], sessions: [{ _id: 'session', userId: user.shareId, createdAt: now, revokedAt }],
     emailVerifications: [{ _id: 'verification', userId: user.shareId, email: CATALOG_FIXTURE.email, createdAt: now, consumedAt: null }],
     rosters: [{ _id: 'shared-roster', entries: [{ userId: user.shareId }, { userId: 'neighbor' }] }, { _id: 'fixture-roster', entries: [{ userId: user.shareId }] }] };
   let writes = 0, failDelete = false;
@@ -58,7 +63,7 @@ const fixture = () => {
       catch (error) { for (const key of Object.keys(rows)) rows[key] = before[key] || []; throw error; }
     }
   };
-  return { user, ledger, neighbor, rows, deps, writes: () => writes, failDelete: () => { failDelete = true; } };
+  return { user, ledger, neighbor, signup, logout, rows, deps, writes: () => writes, failDelete: () => { failDelete = true; } };
 };
 
 test('dry-run is read-only; real cleanup preserves neighbors and shared roster entries, then no-ops', async () => {
@@ -84,6 +89,11 @@ test('changed identity, elevated permissions, content, storage, verification or 
     (f: any) => { f.ledger.crystal.storageUsedBytes = 1; },
     (f: any) => { f.rows.things.push({ _id: 'post', ownerId: f.user.shareId, thingtime: ['post'] }); },
     (f: any) => { f.rows.sessions[0].revokedAt = null; },
+    (f: any) => { f.logout.createdAt = new Date(f.rows.sessions[0].revokedAt.getTime() + 31_000); },
+    (f: any) => { f.logout.createdAt = new Date(f.rows.sessions[0].revokedAt.getTime() - 1); },
+    (f: any) => { f.logout.crystal.actorId = 'another-user'; },
+    (f: any) => { f.logout.crystal.richText = 'Retain this content'; },
+    (f: any) => { f.logout.crystal.title = 'Unrelated system message'; },
     (f: any) => { f.rows.emailVerifications[0].consumedAt = new Date(); }
   ]) {
     const f = fixture(); alter(f);
@@ -95,7 +105,7 @@ test('changed identity, elevated permissions, content, storage, verification or 
 test('conflicting preimage or lost migration lease aborts the whole transaction', async () => {
   const f = fixture(); f.failDelete();
   await assert.rejects(cleanupAccidentalCatalogAccount({ dryRun: false }, f.deps), /cleanup refused/);
-  assert.equal(f.rows.things.length, 3); assert.equal(f.rows.sessions.length, 1);
+  assert.equal(f.rows.things.length, 5); assert.equal(f.rows.sessions.length, 1);
   const g = fixture();
   await assert.rejects(cleanupAccidentalCatalogAccount({ dryRun: false, assertLease: async () => { throw new Error('lease lost'); } }, g.deps), /lease lost/);
   assert.equal(g.writes(), 0);
