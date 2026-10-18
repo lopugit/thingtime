@@ -131,3 +131,5 @@ editor opts into live server model lists through `waterfallCatalog.ts` and await
 its settings write through `AiWaterfallSelector.onSaveApply`. Regression coverage:
 `modelSync.test.ts`, `waterfallCatalog.test.ts`, and the Claude public catalogue /
 workflow save checklist in TESTING.
+
+OpenAI environment-to-vault import uses `credentialVault.ts::importConfiguredOpenAiCredential` through the existing admin credentials route and `PlatformCredentials.tsx`. It is same-origin, admin-only and create-only; `api.admin-ci-credentials` 3.1.0 is negotiated before use. The sole source is server `OPENAI_API_KEY`, and the destination is `OpenAI` / `OPENAI_THINGTIME_API_KEY`.
