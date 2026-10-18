@@ -407,6 +407,13 @@ or authorization for new work.
 
 ## Agent browsers and editable tasks
 
+- For Character coordination, follow [the Characters runbook](docs/characters.md#agent-coordination)
+  and run `npm --prefix remix run characters:preflight -- --origin <selected-origin>`.
+  A Cloudflare 403 from an ad hoc Python probe does not prove Characters are
+  unavailable. Use the supported origin-scoped discovery path, distinguish edge
+  refusal from capability/authentication/membership failures, and continue
+  independent work. Never spoof clients, copy browser credentials, change origins
+  or weaken network isolation to recover coordination.
 - Follow [the agent-browser runbook](docs/agent-browsers.md) for task-owned
   testing in the Thingtime Mac app, installation, CLI claims and live viewing.
   Keep tasks, todos and progress as editable Things; the native adapter owns

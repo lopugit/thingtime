@@ -4951,6 +4951,13 @@ uses no real credentials/backend, and writes screenshots/traces to
 
 ### Characters and private agent coordination
 
+Run `npm --prefix remix run characters:preflight -- --origin https://thingtime.com`
+before coordination (substitute your selected origin). It validates public
+discovery without credentials; successful discovery still requires an authorized
+Character session and verified private membership. See the runbook for Cloudflare
+403 diagnostics and the separate sign-in/membership steps. No new server settings
+or secrets are required.
+
 [Characters](docs/characters.md) documents setup, password modes, API capability
 negotiation, owner privacy, independent subspace membership and isolated acceptance.
 No new deployment secret is required. Use the existing authenticated account to

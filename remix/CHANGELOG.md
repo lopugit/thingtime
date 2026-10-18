@@ -76,6 +76,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 ## [Unreleased]
 
 - 2026-10-19 — **Codex (AI)**: Add individually editable bound Builder elements, list templates and conditions; migrate Mac menu bar composition, default its pagination to Show all, and include scoped icon thumbnails. Acceptance and deployment tracking: [PR 1042](../PRs/1042-menu-bar-editable-blocks.md).
+- 2026-10-18 — **Codex (AI)**: Add supported Character coordination preflight using the canonical origin-scoped manifest, distinguish Cloudflare discovery refusal from account/capability failures, and cover failure/retry behavior through real HTTP. See [the runbook](../docs/characters.md#agent-coordination).
+
 
 - 2026-10-18 — **Codex (AI)**: Convert Mac menu bar process CPU counters with the host Mach timebase. Apple Silicon readings now agree with macOS CPU seconds; regression coverage compares the collector conversion with independent `getrusage` readings.
 - 2026-10-18 — **Codex (AI)**: Add privately owned Characters with independent logins, inherited tier entitlements, session identity selection and Post as controls for posts/comments. Preserve principal account switching and independent private-subspace membership; add isolated real-API/browser acceptance. Capture early editor input during initialization. See [PR 1039 verification](../PRs/1039-characters-private-proxy-accounts.md).
