@@ -12,6 +12,7 @@ import type { PasswordFileTransport } from './passwordFileTransport.client';
 import { reconcilePasswordFiles } from './passwordFileReconcile';
 
 const { records: RECORDS, commands: COMMANDS } = deviceVaultCollections('passwords');
+const PULLS = 'password-vault-pulls';
 export type DevicePasswordRecord = { id: string; revision: number; remoteRevision: number; createdAt: string; updatedAt: string;
   encryptedValue?: VaultEnvelope; deleted?: true; remoteDeleted?: true; filesListed?: true; filePullToken?: string; writeId?: string; writeDigest?: string };
 export type DevicePasswordCommand = { id: string; recordId: string; localRevision: number; operation: 'save' | 'delete';
@@ -279,24 +280,39 @@ export class LocalPasswordVault extends DeviceVaultSession {
  async reconcile(transport: PasswordVaultTransport, signal?: AbortSignal) {
   const op = this.accountOperation(signal), controller = new AbortController(), off = op.lease.onInvalidate(() => controller.abort());
   const combined = AbortSignal.any([controller.signal, ...(signal ? [signal] : [])]);
-  const baseline = await this.db.transaction(this.scope, 'readonly', op.lease, tx => tx.list<DevicePasswordRecord>(RECORDS));
+  const pullToken = crypto.randomUUID();
+  const assertPullCurrent = async (tx: WorkspaceTransaction) => {
+   if (await tx.get(PULLS, 'entries') !== pullToken)
+    refuse('VAULT_PULL_SUPERSEDED', 'A newer password sync replaced this traversal. Retry sync.');
+  };
   const seen = new Set<string>(), cursors = new Set<string>(); let cursor: string | undefined;
   try {
-   for (let pages = 0; ; pages++) {
-    if (pages >= 200) return refuse('VAULT_LIMIT', 'The account vault exceeds this device workspace limit.', 413);
+   // One scoped token fences older traversals across tabs, even when a newer
+   // pull confirms an unchanged revision. Retain it after failure as well: an
+   // interrupted newer traversal must never reauthorize older cleanup.
+   const baseline = await this.db.transaction(this.scope, 'readwrite', op.lease, async tx => {
+    const rows = await tx.list<DevicePasswordRecord>(RECORDS);
+    await tx.put(PULLS, 'entries', pullToken);
+    return rows;
+   });
+   for (;;) {
     op.lease.assertCurrent(); combined.throwIfAborted();
+    await this.db.transaction(this.scope, 'readonly', op.lease, assertPullCurrent);
     const page = await transport.page(cursor, combined); op.lease.assertCurrent(); combined.throwIfAborted();
-    if (!Array.isArray(page.entries) || page.entries.length > 50 || (page.nextCursor !== null && (typeof page.nextCursor !== 'string' || !page.nextCursor || page.nextCursor.length > 200 || cursors.has(page.nextCursor))))
+    await this.db.transaction(this.scope, 'readonly', op.lease, assertPullCurrent);
+    if (!page || !Array.isArray(page.entries) || page.entries.length > 50 || (page.nextCursor !== null && (!page.entries.length || typeof page.nextCursor !== 'string' || !page.nextCursor || page.nextCursor.length > 200 || cursors.has(page.nextCursor))))
      return refuse('VAULT_RESPONSE', 'The account returned an invalid password page.', 502);
     const retained = [];
     for (const remote of page.entries) {
-     if (!validPasswordId(remote.id) || !validRevision(remote.revision) || remote.revision < 1 || seen.has(remote.id) || new Date(remote.updatedAt).toISOString() !== remote.updatedAt)
+     op.lease.assertCurrent(); combined.throwIfAborted();
+     if (!remote || !validPasswordId(remote.id) || !validRevision(remote.revision) || remote.revision < 1 || seen.has(remote.id) || typeof remote.updatedAt !== 'string' || !Number.isFinite(Date.parse(remote.updatedAt)) || new Date(remote.updatedAt).toISOString() !== remote.updatedAt)
       return refuse('VAULT_RESPONSE', 'The account returned an invalid password entry.', 502);
      seen.add(remote.id); const entry = validatePasswordEntry(remote.entry);
      const encryptedValue = await sealDevicePasswordValue(await this.context, op.key, remote.id, JSON.stringify(entry));
      retained.push({ remote, encryptedValue });
     }
     await this.db.transaction(this.scope, 'readwrite', op.lease, async tx => {
+     await assertPullCurrent(tx);
      const pending = new Set((await tx.list<DevicePasswordCommand>(COMMANDS)).map(row => row.value.recordId));
      for (const { remote, encryptedValue } of retained) {
       const old = await tx.get<DevicePasswordRecord>(RECORDS, remote.id);
@@ -309,11 +325,12 @@ export class LocalPasswordVault extends DeviceVaultSession {
     cursors.add(page.nextCursor); cursor = page.nextCursor;
    }
    // Only a complete traversal can remove vanished account entries. Concurrent
-   // local writes or newer pulls are protected by the captured revision pair.
+   // local writes and newer pulls are protected by revisions and the pull token.
    // Prepare encrypted review commands outside IDB. File-only edits do not
    // advance the entry revision, so check their presence again at commit.
    const missing = new Map<string, DevicePasswordCommand>();
    for (const { value: before } of baseline) {
+    op.lease.assertCurrent(); combined.throwIfAborted();
     if (seen.has(before.id) || before.deleted || !before.remoteRevision) continue;
     const id = crypto.randomUUID(), entry = await this.value(before, op);
     missing.set(before.id, { id, recordId: before.id, localRevision: before.revision, operation: 'save',
@@ -321,6 +338,7 @@ export class LocalPasswordVault extends DeviceVaultSession {
      expectedRevision: before.remoteRevision, state: 'refused', status: 404 });
    }
    await this.db.transaction(this.scope, 'readwrite', op.lease, async tx => {
+    await assertPullCurrent(tx);
     const pending = new Set((await tx.list<DevicePasswordCommand>(COMMANDS)).map(row => row.value.recordId));
     const pendingFiles = new Set((await tx.list<PasswordFileCommand>(PASSWORD_FILE_COMMANDS)).map(row => row.value.entryId));
     for (const { value: before } of baseline) {
@@ -337,7 +355,12 @@ export class LocalPasswordVault extends DeviceVaultSession {
     }
    });
    return { retained: seen.size };
-  } finally { off(); }
+  } catch (error) {
+   // A newer tab owns completion/retry. Treat its takeover as a normal handoff,
+   // so the UI's failure retry cannot repeatedly supersede a long traversal.
+   if (error instanceof WorkspaceError && error.code === 'VAULT_PULL_SUPERSEDED') return { retained: seen.size, superseded: true };
+   throw error;
+  } finally { controller.abort(); off(); }
  }
  async request(body?: Record<string, unknown>, cursor?: string, signal?: AbortSignal) {
   const ownerId = this.scope.kind === 'anonymous' ? 'local-workspace' : this.scope.ownerId;

@@ -4035,3 +4035,78 @@ Graph refresh limitation: the local semantic proxy health request timed out
 at both 5 and 15 seconds; a read-only PM2 listing also stalled. This checkpoint
 uses the structural code refresh fallback. Changed documentation is not claimed
 as newly semantically indexed. No shared service was restarted.
+
+
+## Password and workspace traversal — 2026-10-18
+
+Password reconciliation now follows the canonical 50-entry pages without a total
+200-page cutoff. It rejects empty continuing pages, repeated cursors, duplicate
+entry identities and invalid metadata. Per-request timeouts, cancellation,
+account/origin/data-plane leases and device locking remain in force. Already
+validated pages remain available after interruption; retry starts from the
+beginning, and only a complete traversal can prune missing entries.
+
+The old revision-pair check did not protect against a newer pull confirming an
+unchanged entry: the older pull could still delete it. One account-scoped,
+value-free pull token now fences both page retention and final cleanup across
+separate database connections. The token persists after success or failure so an
+interrupted newer pull cannot reauthorize old cleanup. Superseded pulls return a
+normal handoff result so the UI does not schedule an error retry that could
+repeatedly interrupt a long traversal in another tab. Local edits and pending
+file operations keep their existing revision and review protections. The baseline
+transaction is inside the operation cleanup block, preventing a listener leak on
+storage failure.
+
+Retained account partition discovery uses a key cursor with an identity check on
+every cursor event. It no longer refuses more than 128 partitions. Only matching
+account/origin keys are read; content and other identities remain inaccessible.
+
+Local verification: **650 workspace tests passed, 71 opt-in tests skipped** and
+**four offline-shell checks passed**. The new regression file covers 205 pages,
+unchanged-revision cross-tab races (including failed newer pulls and final-cleanup
+interleavings), partial retry, malformed pages, cancellation, locking, identity
+retirement and listener cleanup. Partition tests cover 257 scopes, cold reopen,
+mid-cursor retirement, full retry and unchanged saved items. Production client
+build and Nitro template synchronization passed: **249 verified offline assets,
+22,255,931 bytes**. Focused lint: zero errors, one existing storage-constructor
+warning. TypeScript matches the previous 91 diagnostics with no new signatures.
+Evidence: `tmp/local-traversal-{workspace-final,build-final,lint-final}.log`.
+
+These unit checks use isolated IndexedDB/transport fixtures. The updated global
+browser rule now permits task-owned isolated Chrome testing. A separate macOS
+sandbox preflight allows the fixture loopback destination and refuses redirects
+to an unpermitted canary, direct external IPs and mapped IPv6. The built test
+backend has explicit synthetic auth keys, a loopback test database and an inherited
+network policy; it refuses direct outbound connections before startup. No personal
+profile, cookies or credentials are copied. The plan passed 1440/390/320px scrolling
+and overflow checks in isolated Chrome; screenshots and traces are retained in
+`tmp/traversal-browser-32d4b1ad-3f2a-487d-a902-74c70da735f0/`.
+Remaining buffered adapters, catalogue caps and final native/agent-host checks
+are still open. No main merge, deployment, publication or existing-account
+mutation was performed. Graph refresh uses structural fallback because the local
+semantic proxy health request timed out; changed Markdown is not newly
+semantically indexed.
+
+
+Updated isolated-browser checkpoint: the anonymous native password test passed
+against the freshly built loopback server under the network policy. It covers
+1440/390/320px layouts, fully offline editing/reload, independent tab unlock,
+revision conflicts, normal CSV and 1PUX import/export and exact restored attachment
+bytes. There were no account/password API requests, mutations or page errors.
+Evidence: `tmp/local-traversal-anonymous-browser-final.log` and the claim's
+`anonymous/verification.json`. The initial isolated-server attempt failed because
+its shell template referenced old assets; running the canonical
+`build:client` → `sync:nitro-template` → `build:server` sequence corrected the
+fixture. Asset MIME/content checks now pass. The long-page and partition tests
+remain unit-level evidence, not a 10,000-entry real-account acceptance claim.
+
+
+Credential-source policy update: after the anonymous test completed, the new
+global instruction required test authentication credentials to be provisioned or
+retrieved through the device Thingtime password manager. The account browser test
+was interrupted and is not counted as passed. No supported credential handle or
+provisioning interface is currently verified in this task; no real-account
+credential or private browser profile was used. The task's isolated browser and
+backend are stopped, temporary profile/key material is removed, and account
+acceptance remains open. See the claim's `credential-boundary.json` and
+`cleanup.json`. Existing unrelated local services and test data are preserved.

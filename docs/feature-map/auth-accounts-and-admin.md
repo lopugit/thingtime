@@ -150,6 +150,14 @@ network sync, and conflict choices preserve independent copies.
 `accountPasswords.browser.test.ts` cover the new boundary. Settings provider
 credentials and signed native offline integration are still outstanding.
 
+`passwordReconcile.test.ts` covers traversal past 200 pages, partial retry,
+cancel/lock/account retirement, malformed pages and cross-connection stale-pull
+fencing, including a newer pull that fails or races final cleanup. One scoped
+token in `password-vault-pulls` prevents stale retention/pruning; no secret data
+or remote authority is added. `storage.ts` discovers retained account partitions
+through an identity-checked key cursor; `accountHomeStorage.test.ts` verifies 257
+partitions, interruption, unchanged data and exact account/origin boundaries.
+
 File sync groundwork: `local-workspace/passwordFileSync.ts`,
 `passwordFileReconcile.ts` and `passwordFileTransport.client.ts` expose separate
 account queue/retention methods with whole-transfer authority fences. The normal account UI now uses the encrypted device backend and activates

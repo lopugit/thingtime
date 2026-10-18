@@ -137,7 +137,7 @@ test('failed pages retain entries and pulls cannot overwrite concurrent local ed
   const pulling = f.vault.reconcile({ ...r.transport, page: async () => { started.resolve(); await release.promise; return { entries: [], nextCursor: null }; } });
   await started.promise; await f.vault.save(command(one.id, 1, 'Edit during pull')); release.resolve(); await pulling;
   assert.equal((await f.vault.read(one.id)).entry.title, 'Edit during pull');
-  let page = 0; await assert.rejects(f.vault.reconcile({ ...r.transport, page: async () => { if (page++) throw Error('offline'); return { entries: [], nextCursor: 'next' }; } }), /offline/);
+  let page = 0; await assert.rejects(f.vault.reconcile({ ...r.transport, page: async () => { if (page++) throw Error('offline'); return { entries: [...r.values.values()], nextCursor: 'next' }; } }), /offline/);
   assert.equal((await f.vault.read(one.id)).entry.title, 'Edit during pull');
   await assert.rejects(f.vault.reconcile({ ...r.transport, page: async () => ({ entries: [], nextCursor: 'loop' }) }), /invalid password page/);
  } finally { release.resolve(); await f.close(); }

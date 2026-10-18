@@ -39,20 +39,26 @@ test('account partition discovery returns only exact current account and origin 
 		await db.close();
 	}
 });
-test('account discovery bounds retained partition counts without deleting any data', async () => {
+test('account discovery walks every retained partition beyond the former count limit', async () => {
 	const db = database();
 	try {
-		for (let n = 0; n < 129; n++)
-			await db.transaction({ ...selected, dataPlane: 'custom-' + n.toString(16).padStart(64, '0') }, 'readwrite', lease, (tx) =>
+		const planes = Array.from({ length: 257 }, (_, n) => 'custom-' + n.toString(16).padStart(64, '0'));
+		for (let n = 0; n < planes.length; n++)
+			await db.transaction({ ...selected, dataPlane: planes[n] }, 'readwrite', lease, (tx) =>
 				tx.put('things', 'item', { n })
 			);
-		await assert.rejects(db.accountScopes(selected, lease), /Too many/);
-		assert.deepEqual(
-			await db.transaction({ ...selected, dataPlane: 'custom-' + (128).toString(16).padStart(64, '0') }, 'readonly', lease, (tx) =>
-				tx.get('things', 'item')
-			),
-			{ n: 128 }
-		);
+		await db.close();
+		assert.deepEqual((await db.accountScopes(selected, lease)).map(scope => scope.dataPlane), planes);
+		let checks = 0;
+		const retired: WorkspaceLease = {
+			assertCurrent() { if (++checks === 150) throw Error('Identity retired during cursor traversal'); },
+			onInvalidate: () => () => {}
+		};
+		await assert.rejects(db.accountScopes(selected, retired), /Identity retired during cursor traversal/);
+		assert.equal(checks, 150);
+		assert.deepEqual((await db.accountScopes(selected, lease)).map(scope => scope.dataPlane), planes);
+		for (let n = 0; n < planes.length; n++)
+			assert.deepEqual(await db.transaction({ ...selected, dataPlane: planes[n] }, 'readonly', lease, tx => tx.get('things', 'item')), { n });
 	} finally {
 		await db.close();
 	}

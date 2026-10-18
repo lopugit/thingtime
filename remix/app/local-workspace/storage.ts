@@ -159,16 +159,28 @@ export class WorkspaceDatabase {
 		});
 		try {
 			const prefix = JSON.stringify(['account', scope.origin, scope.ownerId]).slice(0, -1) + ',';
-			const keys = await request(native.objectStore('usage').getAllKeys(this.keyRanges.bound(prefix, prefix + '\uffff'), 129));
-			if (keys.length > 128)
-				throw new WorkspaceError('LOCAL_SCOPE_LIMIT', 'Too many retained account workspaces to migrate together. Saved content is unchanged.', 413);
-			const scopes = keys.map((key) => {
-				if (typeof key !== 'string') throw new WorkspaceError('INVALID_WORKSPACE', 'Invalid retained workspace key', 409);
-				const parts = JSON.parse(key);
-				const value = { kind: 'account' as const, origin: scope.origin, ownerId: scope.ownerId, dataPlane: parts[3] };
-				if (!Array.isArray(parts) || parts.length !== 4 || typeof value.dataPlane !== 'string' || workspaceScopeKey(value) !== key)
-					throw new WorkspaceError('INVALID_WORKSPACE', 'Invalid retained workspace key', 409);
-				return value;
+			const scopes: Extract<WorkspaceScope, { kind: 'account' }>[] = [];
+			// Walk keys incrementally, checking identity between cursor events. A
+			// processing batch must not become a maximum retained workspace count.
+			await new Promise<void>((resolve, reject) => {
+				const cursor = native.objectStore('usage').openKeyCursor(this.keyRanges.bound(prefix, prefix + '\uffff'));
+				cursor.onerror = () => reject(cursor.error);
+				cursor.onsuccess = () => {
+					try {
+						lease.assertCurrent();
+						if (!cursor.result) return resolve();
+						const key = cursor.result.key;
+						if (typeof key !== 'string') throw new WorkspaceError('INVALID_WORKSPACE', 'Invalid retained workspace key', 409);
+						const parts = JSON.parse(key);
+						const value = { kind: 'account' as const, origin: scope.origin, ownerId: scope.ownerId, dataPlane: parts?.[3] };
+						if (!Array.isArray(parts) || parts.length !== 4 || typeof value.dataPlane !== 'string' || workspaceScopeKey(value) !== key)
+							throw new WorkspaceError('INVALID_WORKSPACE', 'Invalid retained workspace key', 409);
+						scopes.push(value);
+						cursor.result.continue();
+					} catch (error) {
+						reject(error);
+					}
+				};
 			});
 			lease.assertCurrent();
 			await done;

@@ -68,6 +68,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-18 — **Codex (AI)**: Remove total password-refresh and retained-workspace
+  discovery cutoffs. Fence older password pulls across tabs, preserve partial
+  refreshes and cancel key traversal on identity change. Local regression evidence
+  and remaining native checks are tracked in [PR #1000 details](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
 - 2026-10-18 — **Codex (AI)**: Remove fixed IndexedDB workspace/record budgets;
   use browser quota errors with atomic rollback, preserve refusal-marker cleanup
   and show stored usage without a fixed quota meter. Larger encrypted streams and

@@ -12101,3 +12101,11 @@ Local results do not establish current-head CI or deployed acceptance.
 - [x] Inject native-class `QuotaExceededError` in isolated storage fixtures; verify atomic rollback and retry, shared home/selected-plane transactions, cache/export fallback, revocation markers and authored-content preservation. Test-only fixture limits must never become production admission policy.
 - [ ] In assigned Chrome, repeat larger-data save/reopen/export and actual storage-failure recovery; inspect Settings → Things at desktop, 390px and 320px, including scroll and protection controls.
 - [ ] Finish remaining buffered-file, import/preview, catalogue and traversal caps using streaming/pagination/cancellation. This storage-admission checkpoint does not complete that matrix.
+
+### Local workspace traversal — 2026-10-18
+
+- [x] In isolated IndexedDB tests, discover all 257 retained partitions after reopening; cancel midway on identity retirement, retry completely and verify every saved item remains unchanged. Keep other accounts/origins and anonymous content excluded.
+- [x] Follow more than 200 password pages, preserving exact values and creating no upload commands. Failed/incomplete pages preserve earlier entries; a complete retry may retire entries absent from the account.
+- [x] Race pulls through separate database connections: an older traversal cannot prune an unchanged entry confirmed by a newer pull, even if the newer pull fails or arrives just before final cleanup; stale pages cannot recreate omitted entries.
+- [x] Reject empty continuing pages, repeated cursors, duplicate identities and invalid metadata without pruning. Locking, cancellation and account retirement stop late response adoption and subsequent requests; baseline failures release listeners.
+- [ ] Repeat long refresh, two-tab cleanup races and account changes in a task-owned isolated browser through the real account transport. Unit fixtures and existing native checkpoints do not satisfy this check.

@@ -4626,6 +4626,10 @@ Thingtime-wide 64 MiB or 10,000-record quota. Failed native storage writes repor
 `LOCAL_QUOTA` and roll back atomically. Some buffered file/import/preview paths
 retain separate limits while their streaming migration is unfinished; consult
 the coverage matrix before assuming every feature handles large files.
+Retained account partition discovery walks only the current account/origin's
+storage keys, without a partition-count cutoff. Password refresh follows all
+canonical pages with cancellation and stale-pull protection; failed traversals
+preserve previously retained entries until a complete retry.
 
 
 For offline shell checks, run `npm --prefix remix run build:client`; this generates

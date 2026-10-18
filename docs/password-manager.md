@@ -27,12 +27,12 @@ Password entries and encrypted file metadata use the same 16 MiB codec ceiling
 as the account writer. MongoDB measures the complete encrypted BSON document,
 so its actual admissible plaintext is smaller; a device save does not promise
 remote admission. Device storage accommodates the base64 envelope and fixed
-retry metadata rather than applying the ordinary 1 MiB record budget. Provider
+retry metadata using actual browser capacity. Provider
 credentials and key wrappers retain their separate defaults. Passphrases remain
-limited to 4,096 UTF-8 bytes, listing/export uses 50-entry pages, and storage still
-uses the shared workspace quota. One password KDF runs at a time per JavaScript
-realm. Removing the remaining arbitrary total-workspace and traversal caps is
-still an open local-first task; this codec fix does not claim unlimited storage.
+limited to 4,096 UTF-8 bytes and listing/export uses 50-entry pages. Native storage
+quota failures roll back the workspace transaction. One password KDF runs at a
+time per JavaScript realm. Remaining buffered import/preview paths and native
+large-data acceptance are still open; this does not claim unlimited storage.
 
 The unwrapped key stays in tab memory. Manual lock, page teardown, workspace
 invalidation or five minutes without use clear it and unmount the editor. Each
@@ -82,9 +82,17 @@ copy and replacing the original projection are atomic, including quota failures.
 An uncertain write cannot be discarded through this conflict UI. Other unsaved
 editor fields are preserved; reopen the entry to load the resolved saved version.
 
-Refresh pages contain at most 50 entries, with a maximum of 200 pages. Partial
-refreshes retain existing entries; only a complete traversal can retire missing
-account entries, and concurrent local edits/pending commands are protected.
+Refresh processes the canonical 50-entry pages until completion, without a total
+page-count cutoff. Empty continuing pages, repeated cursors and duplicate entry
+identities fail visibly. Cancellation, locking and identity changes stop response
+adoption. Partial refreshes retain existing entries and validated pages; retry
+starts from the beginning and only a complete traversal can retire missing account
+entries. Concurrent local edits/pending commands are protected. A single scoped
+pull token also fences older tabs, including when the newer pull confirms the
+same revision or fails midway. The token contains no entry values or credentials
+and is retained after completion/failure so an old pull cannot resume cleanup.
+An older superseded pull returns that outcome normally; it must not start an
+error-retry timer that could repeatedly interrupt the newer long traversal.
 Remote or storage failures remain visible while previously saved entries stay
 available. The existing account native-provider controls remain available only
 with a confirmed account; signed-device/offline provider behavior is not verified
