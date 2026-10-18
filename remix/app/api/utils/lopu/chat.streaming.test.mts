@@ -153,7 +153,7 @@ const server = createServer(async (request, response) => {
   response.writeHead(404).end('unexpected test route');
 });
 
-await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+await new Promise<void>((resolve) => server.listen(Number(process.env.THINGTIME_STREAM_TEST_PORT) || 0, '127.0.0.1', resolve));
 const origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
 const envNames = [
   'CLAUDE_CODE_OAUTH_TOKEN',
@@ -997,6 +997,58 @@ test('ChatGPT plan forces Responses, namespaces local tools and preserves namesp
   assert.equal(openAiRequests.length + anthropicRequests.length, 0);
   assert.equal(waterfallReads, 0);
 });
+
+test('ChatGPT plan completes a read-only tool round trip when terminal output is omitted from the envelope', async () => {
+  const call = { ...responseFunction('plan_list', 'list_my_things', '{"kind":"data","limit":1}'), namespace: 'thingtime' };
+  const reasoning = { type: 'reasoning', id: 'plan_reasoning', summary: [], encrypted_content: 'private-replay-state' };
+  responsesPlans.push({ events: [
+    { type: 'response.output_item.done', output_index: 0, item: reasoning },
+    ...responseCallEvents(call, 1), responseTerminal([])
+  ] }, { events: responseTextEvents('Found your things.') });
+  const { events, outcome } = await collect(chatGPTPlanTurn());
+  assert.equal(outcome.stopReason, 'end_turn');
+  assert.equal(outcome.text, 'Found your things.');
+  assert.deepEqual(toolCalls.map(({ id, name, input }) => ({ id, name, input })), [{ id: 'plan_list', name: 'list_my_things', input: { kind: 'data', limit: 1 } }]);
+  assert.equal(events.filter(event => event.type === 'tool_result').length, 1);
+  assert.deepEqual(responsesRequests[1].body.input.filter((item: any) => ['reasoning', 'function_call'].includes(item.type)), [reasoning, call]);
+  assert.equal(responsesRequests[1].body.input.find((item: any) => item.type === 'function_call_output').call_id, call.call_id);
+  assert.doesNotMatch(JSON.stringify({ events, outcome }), /private-replay-state/);
+});
+
+for (const omittedFrom of ['done', 'terminal'] as const) {
+  test(`ChatGPT plan accepts optional completed status omitted from ${omittedFrom}`, async () => {
+    const call = { ...responseFunction('plan_list', 'list_my_things'), namespace: 'thingtime' };
+    const withoutStatus = { ...call };
+    delete withoutStatus.status;
+    responsesPlans.push({ events: [
+      ...responseCallEvents(omittedFrom === 'done' ? withoutStatus : call),
+      responseTerminal([omittedFrom === 'terminal' ? withoutStatus : call])
+    ] }, { events: responseTextEvents('Done.') });
+    const { outcome } = await collect(chatGPTPlanTurn());
+    assert.equal(outcome.stopReason, 'end_turn');
+    assert.equal(outcome.text, 'Done.');
+    assert.equal(toolCalls.length, 1);
+  });
+}
+
+for (const failure of ['unfinished', 'conflicting-arguments', 'conflicting-namespace', 'duplicate-done', 'incomplete', 'dropped'] as const) {
+  test(`ChatGPT plan refuses ${failure} streamed items without executing tools`, async () => {
+    const call = { ...responseFunction('plan_list', 'list_my_things', '{"kind":"data","limit":1}'), namespace: 'thingtime' };
+    const streamEvents = responseCallEvents(call);
+    if (failure === 'unfinished') streamEvents.pop();
+    if (failure === 'duplicate-done') streamEvents.push(streamEvents.at(-1)!);
+    const terminalCall = failure === 'conflicting-arguments' ? { ...call, arguments: '{"kind":"data","limit":2}' }
+      : { ...call, namespace: 'elsewhere' };
+    responsesPlans.push({ events: [...streamEvents, ...(failure === 'dropped' ? [] : [responseTerminal(
+      failure.startsWith('conflicting') ? [terminalCall] : [], failure === 'incomplete' ? 'incomplete' : 'completed', 'max_output_tokens'
+    )])] });
+    const { events, outcome } = await collect(chatGPTPlanTurn());
+    assert.equal(outcome.stopReason, 'error');
+    assert.ok(events.some(event => event.type === 'error'));
+    assert.equal(toolCalls.length, 0);
+    assert.equal(responsesRequests.length, 1);
+  });
+}
 
 for (const failure of ['incomplete', 'dropped', 'usage-limit'] as const) {
   test(`ChatGPT plan ${failure} after partial text never becomes a successful fallback`, async () => {
