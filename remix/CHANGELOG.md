@@ -68,6 +68,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-18 — **Codex (AI)**: Retain canonical Timeline history, including large
+  snapshots, in the existing portable backup chunks at the account inventory's
+  database timestamp. Verified independent-copy reads after source and first-vault
+  removal; full account restore remains in progress. Setup and evidence:
+  [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
 - 2026-10-18 — **Codex (AI)**: Add iOS 26+ continued-processing lifecycle for
   user-started file uploads, exact native acknowledgement and foreground Timeline
   handoff. Refused OS tasks retain foreground behavior. Simulator background

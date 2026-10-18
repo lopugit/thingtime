@@ -10908,7 +10908,8 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
   database removal (`scripts/account-snapshot.integration.mts`, disposable local
   replica only). Also verify an empty collection supplies a server timestamp.
 - [x] Refuse unsupported managed families before payload access; never export
-  root credentials, link keys or private binary envelopes. Do not seal a partial
+  root credentials, link keys or authentication envelopes. Dedicated Timeline
+  exporters may decode only validated history envelopes. Do not seal a partial
   inventory. Preserve canonical Timeline metadata and exact file references.
 - [x] Regression: expired snapshots, missing/malformed timestamps, transaction
   sessions, changed account during authorization, revoked access, cancellation,
@@ -11216,3 +11217,21 @@ protection values as strings, as specified by
 - [ ] On physical iOS, cancel using system progress UI and test expiry, lock,
   network/power changes, grant/device revocation, force quit and relaunch. Do not
   infer these from simulator lifecycle mocks or foreground success.
+
+
+### Timeline history inside account snapshots — 2026-10-18
+
+- [x] Freeze all seven Timeline record families, including legacy events, active
+  and cleared names and Unicode snapshot parts larger than manifest metadata.
+  Rejoin normalized events/links and reconstruct the original large snapshot.
+- [x] Interleave real database changes after the snapshot census, including
+  deletion of a Timeline part and damage to a live event. Export must retain the
+  original records; after source database and first vault removal, every record
+  must read identically from the independent vault (334 records, 34 history).
+- [x] Regression: missing/corrupt chunks, lost accepted range replies, revoked
+  ownership, wrong scope and an unsupported family on a later census page cannot
+  certify a partial snapshot. An interrupted enumeration needs a new identity.
+  Reads must detect corruption introduced after sealing.
+- [ ] Complete remaining protected-family/settings/device exporters, historical
+  attachment-byte closure, authorized restore writers and full product backup
+  jobs/UI. Archived Timeline receipts never authorize replay on their own.

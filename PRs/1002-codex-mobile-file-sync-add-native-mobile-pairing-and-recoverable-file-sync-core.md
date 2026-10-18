@@ -2129,3 +2129,28 @@ cloud/configuration/grant cleanup completed. Both jobs reported the scheduler
 unavailable; this is foreground fallback evidence only. The earlier opt-in
 background assertion failed, and its Xcode harness was terminated after stalling
 in result finalization; that run is not a successful acceptance result.
+
+
+## Timeline records retained in account snapshots — 2026-10-18
+
+The account inventory now captures canonical events, links, branches, heads,
+snapshot parts, notes and version names. Large records use existing verified
+chunk/range storage while the database snapshot is open; bounded eight-record
+queries avoid an unbounded history payload. Cleared names retain their revision
+tombstones. The offline reader verifies canonical content and identity without
+replaying server receipts.
+
+Validation: 42 backup tests and 239 Timeline tests pass; the 25 inventory tests
+were rerun after compatibility fixes. Targeted lint and diff checks pass. Raw
+TypeScript reports the identical 91 existing diagnostics outside changed files;
+the project-wide typecheck is not clean. The disposable real
+replica retained 334 records, including 34 Timeline records / 3,208,814 history
+bytes, despite concurrent edits and deletions. All history read identically from
+a second vault after the database and first vault were deleted. Failures in
+writes, scope, access, payload integrity or later family coverage leave no
+complete partial snapshot. [Contract and setup](../docs/portable-backups.md#canonical-timeline-history-in-the-vault).
+
+Remaining protected families, historical attachment bytes, complete graph
+coverage, account restore, scheduled independent cloud copies and the native
+backup/export UI remain open. This checkpoint does not demonstrate 100 GB–100 TB
+transfer, physical-media fulfillment or a production deployment.

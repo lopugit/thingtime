@@ -5122,7 +5122,14 @@ existing budget. Snapshot expiry or a missing index refuses the operation.
 Do not increase a production history window blindly: measure enumeration time
 and the database storage cost first. No new credentials or app environment
 variables are needed. This producer is internal and refuses unsupported managed
-families; it does not yet supply a whole-account backup API.
+families; it does not yet supply a whole-account backup API. Ordinary Things,
+file references and canonical Timeline record families are covered. Timeline
+payloads are frozen into private chunk storage during the database snapshot,
+including records too large for manifest metadata. Keep that destination local
+and durable enough to finish within the database history window; failure does
+not permit switching timestamps. Archived receipts are read-only history, not
+server restore authority. The consistency check below also deletes its source
+and first vault, then verifies all history in an independent copy.
 
 For its isolated consistency check, start a disposable local MongoDB 5+ replica
 set and explicitly provide its loopback port and replica name. This script does

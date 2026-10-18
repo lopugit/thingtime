@@ -14,21 +14,26 @@ families and is not exposed as a whole-account backup feature.
 
 `api/utils/backups/accountInventory.ts` freezes owner metadata through one
 read-only MongoDB snapshot session. Census pages contain at most 128 IDs/kinds;
-each supported family uses one projected payload query per page. Every query
+ordinary/file families use one projected payload query per page. Timeline
+records use eight-row batches to bound large payloads. Every query
 uses the first server-selected cluster timestamp. Ordinary Things use the
 canonical `thing-content` Timeline snapshot; files use `file-content` with their
 exact retained content version and fingerprint. Root credentials, token grants,
-link keys and private binary envelopes are not projected into the vault.
+link keys and authentication envelopes are not projected into the vault.
+Dedicated Timeline exporters decode their private storage envelopes into the
+existing canonical records before retaining them.
 
 The census covers every owned row in the home Things collection. A managed kind
 without an approved exporter, missing payload, expired database snapshot,
 oversized metadata, changed account or revoked access refuses the plan. It never
-skips an unsupported row and then reports complete coverage. Existing Timeline,
-attachment, account and other protected families still need dedicated adapters;
+skips an unsupported row and then reports complete coverage. Attachment, account and other non-Timeline protected families still need
+dedicated adapters;
 ordinary real accounts therefore cannot yet complete this producer. Settings in
 other collections and device-local data also need separate coverage contracts.
 
-Successful enumeration seals the durable metadata plan before byte capture.
+Successful enumeration seals the durable metadata plan before live file byte
+capture. Canonical Timeline payloads are already frozen into verified chunks
+while the same database snapshot session is open.
 It uses a server `mongo:<seconds>:<increment>` boundary rather than a client clock.
 Interrupted enumeration requires a **new snapshot ID**: it cannot restart with
 live data under the old timestamp. After the plan is durable, independent file
@@ -46,17 +51,42 @@ The modern default plan uses 52 slots; the full legacy-compatible plan uses 64.
 No worker endpoints, scheduling, quota admission, encryption or Timeline backup
 lifecycle receipts are introduced by this internal producer.
 
-Validation: `accountInventory.test.ts` exercises 300-item paging, immutable file
-references, secret exclusion, failures and retained metadata after source loss.
-`scripts/account-snapshot.integration.mts` uses a fresh disposable database on an
-explicit loopback replica. With 6,000 rows across owners, concurrent majority
-writes changed, deleted and inserted source records between reads; the saved
-300-item inventory retained its original values. It was sealed and read after
-dropping the source database. Empty inventories and missing-index refusal are
-also checked. The index experiment examined 2,560 keys for a 128-row page using
-the global ID index versus 128 using owner/ID. This synthetic storage proof does
-not establish authenticated account export, protected family coverage or large
-transfer throughput. Run instructions are in the root README.
+### Canonical Timeline history in the vault
+
+`timelineRecords.ts` exports events, relational links, branches, branch heads,
+snapshot parts, notes and version names. It validates each existing envelope,
+owner and deterministic Thing identity. V3 event records retain their separate
+links; legacy aggregates retain their existing canonical shape. Cleared version
+names retain a bounded revision tombstone. No second history database or new
+Timeline content format is introduced.
+
+History payloads may exceed the manifest's 128 KiB metadata limit. The internal
+`retainBackupPayload` writer stores a bounded canonical record in the existing
+8 MiB chunk/range format before enumeration can finish; the manifest holds its
+adapter/version, kind, digest and canonical multipart fingerprint. Timeline
+records are bounded at 4 MiB plus 16 KiB overhead. Lost writes, revocation or a
+later unsupported family cannot publish a complete plan. Enumeration cannot
+resume against newer database content under an old snapshot identity.
+
+`openBackupTimelineRecord` reads and validates the sealed offline copy, including
+its canonical payload digest and owner/Thing identity. Archived receipts are
+historical data, not authority to replay server mutations. This is not yet an
+account restore writer. File-version references inside history do not themselves
+copy retained attachment bytes; historical attachment retention and complete
+reference closure still need coverage before whole-account recovery is offered.
+
+Validation: 42 backup tests include canonical history reconstruction, large
+Unicode snapshot parts, source and first-vault loss, legacy events, version-name
+tombstones, corruption, interrupted persistence and authorization refusal.
+The disposable `scripts/account-snapshot.integration.mts` replica proof retains
+300 ordinary Things and 34 Timeline records (3,208,814 history bytes) at one server
+timestamp despite concurrent majority updates/deletions/inserts. All history is
+read back from a second private vault after removal of the source database and
+first vault. Empty inventories and missing-index refusal also pass. The owner/ID
+index examines 128 keys versus 2,560 with the global ID index for a 128-row page.
+This synthetic storage proof does not establish authenticated whole-account
+export, restore, historical attachment-byte coverage or large transfer throughput.
+Run instructions are in the root README.
 
 ## Format and invariants
 

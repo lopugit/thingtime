@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { fingerprintSource } from '../../../fileSync/contentFingerprint';
 import { timelineScopeKey, type TimelineScope } from '../../../timeline/contract';
 import {
 	BACKUP_FORMAT,
@@ -113,6 +114,47 @@ export async function prepareBackup(
 	// The plan seal is written last. A partial enumeration can never be captured.
 	await putJson(store, `${root}/plan.json`, plan, access, header);
 	return plan;
+}
+
+/** Freeze a bounded canonical record while its source snapshot is still open.
+ * Uses ordinary chunk/range receipts, so later capture/copy/seal needs no live
+ * database. The producer supplies its final ordinal; an incomplete inventory
+ * still has no plan seal. This is for internal producers, never a public write. */
+export async function retainBackupPayload(
+	store: BackupObjectStore,
+	id: string,
+	descriptor: Omit<BackupItem, 'content'>,
+	input: Uint8Array,
+	access: BackupAccess
+): Promise<BackupItem> {
+	await check(access);
+	const root = prefix(id);
+	const header = parseBackupHeader(await readJson(store, `${root}/header.json`, BACKUP_METADATA_BYTES));
+	if (header.snapshotId !== id) throw Error('Backup payload header changed');
+	await check(access, header);
+	if (await readJson(store, `${root}/plan.json`, BACKUP_METADATA_BYTES)) throw Error('Backup inventory is already sealed');
+	if (!(input instanceof Uint8Array) || input.length < 1 || input.length > BACKUP_CHUNK_BYTES) throw Error('Backup record exceeds its byte bound');
+	const bytes = input.slice();
+	const fingerprint = await fingerprintSource({
+		size: bytes.length,
+		check: () => access.signal?.throwIfAborted(),
+		read: async (offset, length) => bytes.subarray(offset, offset + length)
+	});
+	const item = parseBackupItem({ ...descriptor, content: { size: bytes.length, fingerprint } });
+	const sha256 = digest(bytes),
+		range = { offset: 0, length: bytes.length, sha256 };
+	await check(access, header);
+	await store.put(`chunks/${sha256}`, bytes);
+	await check(access, header);
+	await retainedChunk(store, range);
+	await putJson(
+		store,
+		`${root}/ranges/${item.ordinal}/0.json`,
+		parseBackupRangePage({ format: BACKUP_FORMAT, snapshotId: id, item: item.ordinal, ordinal: 0, ranges: [range] }),
+		access,
+		header
+	);
+	return item;
 }
 
 async function openPlan(store: BackupObjectStore, id: string, access: BackupAccess) {

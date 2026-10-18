@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { isAccountTimelineKind, timelineBackupProjection, timelineBackupRecordFromDoc, retainTimelineBackupRecord } from './timelineRecords';
 import { getHomeThingsCollection, withHomeMongoSnapshot, THINGS_OWNER_IDENTITY_INDEX } from '../mongodb/collections';
 import { isCustomMongoEndpointActive } from '../mongodb/endpoint';
 import { isProtectedThingtime, MESSENGER_THINGTIME } from '../../../schemas/registry';
@@ -11,6 +12,7 @@ import { prepareBackup, type BackupAccess, type BackupObjectStore } from './port
 export const ACCOUNT_INVENTORY_PAGE_SIZE = 128;
 const id = (value: unknown): value is string => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(value);
 // Census reads never fetch crystal, secure, tokens, grants or private envelopes.
+// Only the dedicated Timeline family decodes its canonical history envelope.
 const censusProjection = { _id: 0, shareId: 1, ownerId: 1, thingtime: 1 };
 const contentProjection = {
 	...censusProjection,
@@ -32,7 +34,7 @@ const fileProjection = {
 	'crystal.content': 1
 };
 type Census = { shareId: string; ownerId: string; thingtime: string[] };
-type Family = 'content' | 'file';
+type Family = 'content' | 'file' | 'timeline';
 function family(doc: Census): Family {
 	if (
 		!Array.isArray(doc.thingtime) ||
@@ -42,11 +44,12 @@ function family(doc: Census): Family {
 	)
 		throw Error('Invalid account inventory kind');
 	if (doc.thingtime.length === 1 && doc.thingtime[0] === 'file') return 'file';
+	if (doc.thingtime.length === 1 && isAccountTimelineKind(doc.thingtime[0])) return 'timeline';
 	if (isProtectedThingtime(doc.thingtime) || doc.thingtime.some((kind) => (MESSENGER_THINGTIME as readonly string[]).includes(kind)))
 		throw Error('Account snapshot needs a dedicated adapter for a managed Thing; no complete inventory was published');
 	return 'content';
 }
-function item(doc: any, ordinal: number, kind: Family): BackupItem {
+function item(doc: any, ordinal: number, kind: Exclude<Family, 'timeline'>): BackupItem {
 	if (kind === 'file') {
 		const file = parseCloudFile({
 			id: doc.shareId,
@@ -102,7 +105,12 @@ export function createAccountInventoryProducer(
 		const collection = await deps.collection();
 		return deps.snapshot(async (session) => {
 			if (!session?.snapshotEnabled || session.inTransaction()) throw Error('Account inventory requires a read-only snapshot session');
-			const query = async (filter: Record<string, unknown>, projection: Record<string, number>) => {
+			const query = async (
+				filter: Record<string, unknown>,
+				projection: Record<string, number>,
+				limit = ACCOUNT_INVENTORY_PAGE_SIZE,
+				timeline = false
+			) => {
 				await check();
 				const cursor = collection
 					.find(
@@ -119,16 +127,17 @@ export function createAccountInventoryProducer(
 						}
 					)
 					.sort({ shareId: 1 })
-					.limit(ACCOUNT_INVENTORY_PAGE_SIZE)
-					.batchSize(ACCOUNT_INVENTORY_PAGE_SIZE);
+					.limit(limit)
+					.batchSize(limit);
 				const rows: any[] = [];
 				try {
 					for await (const row of cursor) {
 						access.signal?.throwIfAborted();
-						if (rows.length >= ACCOUNT_INVENTORY_PAGE_SIZE) throw Error('Account inventory page exceeds its bound');
+						if (rows.length >= limit) throw Error('Account inventory page exceeds its bound');
 						// Bound projected metadata before retaining an entire page. The driver
 						// still owns its bounded wire batch; no oversized row reaches the plan.
-						backupJson(row, BACKUP_METADATA_BYTES + 8192);
+						if (timeline) timelineBackupRecordFromDoc(row);
+						else backupJson(row, BACKUP_METADATA_BYTES + 8192);
 						rows.push(row);
 					}
 				} finally {
@@ -166,22 +175,39 @@ export function createAccountInventoryProducer(
 						groups.set(kind, group);
 					}
 					const projected = new Map<string, BackupItem>();
-					// One bounded payload query per supported family, never per Thing.
-					for (const [kind, expected] of groups) {
-						const found = await query({ shareId: { $in: expected.map((row) => row.shareId) } }, kind === 'file' ? fileProjection : contentProjection);
-						boundary();
-						if (found.length !== expected.length) throw Error('Account snapshot content is incomplete');
-						for (let index = 0; index < found.length; index++) {
-							const doc = found[index],
-								head = expected[index];
-							if (
-								doc.ownerId !== scope.ownerId ||
-								doc.shareId !== head.shareId ||
-								JSON.stringify(doc.thingtime) !== JSON.stringify(head.thingtime) ||
-								family(doc) !== kind
-							)
-								throw Error('Account snapshot content changed');
-							projected.set(doc.shareId, item(doc, 0, kind));
+					const pageOrdinal = ordinal;
+					const ordinals = new Map(page.map((row, index) => [row.shareId, pageOrdinal + index]));
+					// Bounded family batches, never a payload query per Thing. Large
+					// Timeline envelopes use eight rows (at most ~32 MiB of content).
+					for (const [kind, group] of groups) {
+						const batchSize = kind === 'timeline' ? 8 : ACCOUNT_INVENTORY_PAGE_SIZE;
+						for (let offset = 0; offset < group.length; offset += batchSize) {
+							const expected = group.slice(offset, offset + batchSize);
+							const found = await query(
+								{ shareId: { $in: expected.map((row) => row.shareId) } },
+								kind === 'timeline' ? timelineBackupProjection : kind === 'file' ? fileProjection : contentProjection,
+								batchSize,
+								kind === 'timeline'
+							);
+							boundary();
+							if (found.length !== expected.length) throw Error('Account snapshot content is incomplete');
+							for (let index = 0; index < found.length; index++) {
+								const doc = found[index],
+									head = expected[index];
+								if (
+									doc.ownerId !== scope.ownerId ||
+									doc.shareId !== head.shareId ||
+									JSON.stringify(doc.thingtime) !== JSON.stringify(head.thingtime) ||
+									family(doc) !== kind
+								)
+									throw Error('Account snapshot content changed');
+								const entry =
+									kind === 'timeline'
+										? await retainTimelineBackupRecord(store, snapshotId, ordinals.get(doc.shareId)!, doc, { ...access, scope, authorize: check })
+										: item(doc, 0, kind);
+								boundary();
+								projected.set(doc.shareId, entry);
+							}
 						}
 					}
 					for (const row of page) {
