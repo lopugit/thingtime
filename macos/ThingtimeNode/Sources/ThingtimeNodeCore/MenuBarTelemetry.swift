@@ -3,9 +3,10 @@ import ApplicationServices
 import CoreGraphics
 import Darwin
 import Foundation
+import ScreenCaptureKit
 
-/// Read-only status-item inventory. No menus are opened, images captured, or
-/// commands/arguments inspected. Paths identify only the owning executable/app.
+/// Read-only status-item inventory. No menus are opened or commands/arguments inspected.
+/// Optional thumbnails capture only verified status windows, with app-icon fallback. Paths identify only the owning executable/app.
 public struct MenuBarItemTelemetry: Codable, Equatable, Sendable {
     public let id: String
     public let label: String?
@@ -22,6 +23,8 @@ public struct MenuBarItemTelemetry: Codable, Equatable, Sendable {
     public let height: Double?
     public let residentBytes: UInt64?
     public let cpuTimeSeconds: Double?
+    public var iconDataUrl: String? = nil
+    public var iconSource: String? = nil
 }
 
 public struct MenuBarTelemetry: Codable, Equatable, Sendable {
@@ -33,6 +36,64 @@ public struct MenuBarTelemetry: Codable, Equatable, Sendable {
 }
 
 public enum SystemMenuBar {
+    /// Pixel data stays in the owner-only device snapshot. Never capture a display
+    /// or an arbitrary application window, and never prompt from telemetry.
+    public static func snapshotWithIcons() async -> MenuBarTelemetry {
+        let snapshot = snapshot()
+        var items = snapshot.items
+        let fallback = await MainActor.run { () -> [Int32: String] in
+            var icons: [Int32: String] = [:]
+            for pid in Set(snapshot.items.map(\.processId)) {
+                guard let image = NSRunningApplication(processIdentifier: pid)?.icon,
+                      let cg = image.cgImage(forProposedRect: nil, context: nil, hints: nil),
+                      let data = thumbnail(cg) else { continue }
+                icons[pid] = data
+            }
+            return icons
+        }
+        for index in items.indices {
+            items[index].iconDataUrl = fallback[items[index].processId]
+            items[index].iconSource = items[index].iconDataUrl == nil ? nil : "application"
+        }
+        if #available(macOS 14.0, *), CGPreflightScreenCaptureAccess(), let content = try? await SCShareableContent.excludingDesktopWindows(true, onScreenWindowsOnly: true) {
+            let windows = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] ?? []
+            let statusIDs = Set(windows.filter { ($0[kCGWindowLayer as String] as? Int) == Int(CGWindowLevelForKey(.statusWindow)) }
+                .compactMap { $0[kCGWindowNumber as String] as? UInt32 })
+            for index in items.indices where items[index].visible == true {
+                let item = items[index]
+                guard let x = item.x, let y = item.y, let width = item.width, let height = item.height,
+                      height > 0, height <= 64, width > 0,
+                      let window = content.windows.first(where: {
+                        statusIDs.contains($0.windowID) && $0.owningApplication?.processID == item.processId
+                        && abs($0.frame.minX - x) < 2 && abs($0.frame.minY - y) < 2
+                        && abs($0.frame.width - width) < 2 && abs($0.frame.height - height) < 2
+                      }) else { continue }
+                let configuration = SCStreamConfiguration()
+                configuration.width = max(1, min(128, Int(width * 2)))
+                configuration.height = max(1, min(128, Int(height * 2)))
+                configuration.showsCursor = false
+                configuration.ignoreShadowsSingleWindow = true
+                guard let image = try? await SCScreenshotManager.captureImage(contentFilter: SCContentFilter(desktopIndependentWindow: window), configuration: configuration),
+                      let icon = thumbnail(image) else { continue }
+                items[index].iconDataUrl = icon
+                items[index].iconSource = "menu-bar"
+            }
+        }
+        return .init(status: snapshot.status, collectedAt: snapshot.collectedAt, accessibility: snapshot.accessibility,
+                     unreadableApplications: snapshot.unreadableApplications, items: items)
+    }
+
+    static func thumbnail(_ image: CGImage) -> String? {
+        let scale = min(1, 64 / Double(max(image.width, image.height)))
+        let width = max(1, Int(Double(image.width) * scale)), height = max(1, Int(Double(image.height) * scale))
+        guard let context = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width * 4,
+                                      space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
+        context.interpolationQuality = .high
+        context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+        guard let resized = context.makeImage(), let data = NSBitmapImageRep(cgImage: resized).representation(using: .png, properties: [:]) else { return nil }
+        return "data:image/png;base64," + data.base64EncodedString()
+    }
+
     private static let timebase: mach_timebase_info_data_t = {
         var value = mach_timebase_info_data_t()
         mach_timebase_info(&value)

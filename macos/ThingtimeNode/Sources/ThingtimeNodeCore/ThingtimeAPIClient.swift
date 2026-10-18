@@ -91,7 +91,7 @@ public final class ThingtimeAPIClient: ControlPlaneClient, @unchecked Sendable {
               let features = json["features"] as? [String: [String: Any]],
               let version = features["api.devices-node-state"]?["version"] as? String else { return false }
         let parts = version.split(separator: ".").compactMap { Int($0) }
-        return parts.count == 3 && parts[0] == 1 && parts[1] >= 11
+        return parts.count == 3 && parts[0] == 1 && parts[1] >= 13
     }
     static func supportsScripts(_ data: Data, origin: URL) -> Bool {
         guard compatibleManifest(data, origin: origin),

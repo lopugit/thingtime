@@ -14,6 +14,8 @@ const field = (label: string, key: string) =>
 	]);
 const row = k.card(
 	[
+		ifTruthy('item.iconDataUrl', el('img', { width: '32px', height: '32px', objectFit: 'contain' }, [], { src: '{item.iconDataUrl}', alt: '{item.program} icon', title: '{item.iconSource} icon' })),
+		ifEquals('item.iconSource', 'application', k.muted('Application icon · menu image unavailable')),
 		k.row([ifTruthy('item.label', k.strong('{item.label}'), k.strong('{item.program}')), k.pill('{item.source}')]),
 		k.muted('{item.program} · PID {item.processId}'),
 		el('details', {}, [
@@ -141,7 +143,7 @@ export const macMenuBarSuite: BehaviourSuite = {
 					method: 'GET',
 					path: '/api/v1/devices',
 					feature: 'api.devices',
-					minimumVersion: '1.10.0',
+					minimumVersion: '1.12.0',
 					query: { id: '$input.deviceId' }
 				},
 				{ op: 'return', value: '$step.1' }
