@@ -59,7 +59,7 @@ export type FolderRequest =
 	| { action: 'stage-download'; rootId: string; transfer: MobileStageRequest; offset: number; length: number; cloudFile: CloudFile }
 	| { action: 'stage-range'; rootId: string; transfer: MobileStageRequest; offset: number; bytes: Uint8Array<ArrayBuffer> }
 	| { action: 'stage-append'; rootId: string; transfer: MobileStageRequest; offset: number; data: string }
-	| { action: 'write-approve'; rootId: string; approval: MobileWriteApproval }
+	| { action: 'write-approve' | 'write-check'; rootId: string; approval: MobileWriteApproval }
 	| { action: 'publication-lookup'; rootId: string; transfer: MobileStageRequest }
 	| { action: 'publish'; rootId: string; transfer: MobileStageRequest; stage: LocalStagedCopy; approval: MobileWriteApproval }
 	| { action: 'trash-lookup' | 'trash-expected' | 'trash-inspect'; rootId: string; trash: MobileTrashRequest }
@@ -328,7 +328,7 @@ export function parseMobileFolderResult(
 	} else if (request.action === 'trash-list') {
 		if (payload.rootId !== request.rootId) throw Error('Native recovery folder changed.');
 		result.trashPage = parseNativeRecoveryPage(payload.trashPage, expected, request.rootId);
-	} else if (request.action === 'write-approve') {
+	} else if (request.action === 'write-approve' || request.action === 'write-check') {
 		const approved = payload.writeApproval;
 		if (
 			payload.rootId !== request.rootId ||
@@ -530,6 +530,10 @@ export const supportsNativeCloudStaging = (bridge: FolderCapabilities | undefine
 	bridge?.platform === 'ios' && supportsMobileStaging(bridge) && Number(bridge.fileStagingVersion!.split('.')[1]) >= 2;
 export const supportsMobilePublication = (bridge: FolderCapabilities | undefined = getNativeBridge()) =>
 	supportsMobileStaging(bridge) && /^1\.\d+\.\d+$/.test(bridge?.filePublicationVersion ?? '');
+/** Publication 1.2 can verify saved consent without displaying a native dialog. */
+export const supportsNativeWriteApprovalCheck = (bridge: FolderCapabilities | undefined = getNativeBridge()) =>
+	supportsMobilePublication(bridge) && /^1\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(bridge!.filePublicationVersion!) &&
+	Number(bridge!.filePublicationVersion!.split('.')[1]) >= 2;
 export const supportsMobileTrash = (bridge: FolderCapabilities | undefined = getNativeBridge()) =>
 	supportsMobilePublication(bridge) && /^1\.\d+\.\d+$/.test(bridge?.fileTrashVersion ?? '');
 export const supportsMobileTrashTransitions = (bridge: FolderCapabilities | undefined = getNativeBridge()) =>
@@ -606,10 +610,12 @@ export function requestMobileFolders(
 		return Promise.reject(Error('Update the mobile app to receive staged files.'));
 	if (['write-approve', 'publication-lookup', 'publish'].includes(request.action) && !supportsMobilePublication(bridge))
 		return Promise.reject(Error('Update the mobile app to download into selected folders.'));
+	if (request.action === 'write-check' && !supportsNativeWriteApprovalCheck(bridge))
+		return Promise.reject(Error('Update the app to check saved folder approval without a dialog.'));
 	if (
 		(request.action === 'trash' ||
 			request.action.startsWith('trash-') ||
-			(request.action === 'write-approve' && request.approval.allowTrash === true)) &&
+			((request.action === 'write-approve' || request.action === 'write-check') && request.approval.allowTrash === true)) &&
 		!supportsMobileTrash(bridge)
 	)
 		return Promise.reject(Error('Update the app to use recoverable native trash.'));

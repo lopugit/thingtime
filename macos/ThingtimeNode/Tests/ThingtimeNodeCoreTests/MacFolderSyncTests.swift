@@ -42,9 +42,76 @@ final class MacFolderSyncTests: XCTestCase {
         let context = try await service.handle(request("context")).decode([String: JSONValue].self)
         XCTAssertEqual(context["deviceId"], .string("device"))
         let capabilities = try XCTUnwrap(context["capabilities"]).decode([String: String].self)
-        XCTAssertEqual(capabilities, ["fileAccessVersion": "1.5.1", "fileStagingVersion": "1.1.0", "filePublicationVersion": "1.1.1"])
+        XCTAssertEqual(capabilities, ["fileAccessVersion": "1.5.1", "fileStagingVersion": "1.1.0", "filePublicationVersion": "1.2.0"])
         let result = try await service.handle(request("conditions")).decode([String: JSONValue].self)
         XCTAssertEqual(result["conditions"], .object(["network": .string("unknown"), "charging": .null]))
+    }
+
+    func testSavedWriteApprovalCheckNeverPromptsAndSurvivesAdapterRestart() async throws {
+        var saved: [String: Data] = [:], prompts = 0, writes = 0
+        let store = MobileFolderStore(load: { saved[$0.key] }, save: { saved[$0.key] = $1; writes += 1 })
+        let selected = folder.appendingPathComponent("selected")
+        func makeService() throws -> MacFolderSync {
+            try MacFolderSync(origin: origin, store: store,
+                staging: MobileSyncStaging(directory: folder.appendingPathComponent("private")),
+                verify: { owner, device in
+                    guard owner == "owner", device == "device" else { throw MobileFolderStore.Failure.unavailable }
+                }, choose: { selected }, approve: { _ in prompts += 1; return true })
+        }
+        let service = try makeService(), id = try await root(service)
+        let scope = MobileSyncStaging.Scope(origin: origin.absoluteString, ownerId: "owner", dataPlane: "home", rootId: "connection", deviceId: "device")
+        let approval = MobileFolderStore.WriteApproval(scope: scope, configurationRevision: "1", configurationHash: String(repeating: "a", count: 64))
+        let fields: [String: JSONValue] = ["rootId": .string(id), "approval": try .from(approval)]
+        let before = writes
+        await rejects { try await service.handle(self.request("write-check", fields)) }
+        XCTAssertEqual(prompts, 0); XCTAssertEqual(writes, before)
+        _ = try await service.handle(request("write-approve", fields))
+        XCTAssertEqual(prompts, 1)
+        let approvedWrites = writes, restarted = try makeService()
+        let result = try await restarted.handle(request("write-check", fields)).decode([String: JSONValue].self)
+        XCTAssertEqual(result["writeApproval"], try .from(approval))
+        for replacement in [
+            MobileFolderStore.WriteApproval(scope: scope, configurationRevision: "2", configurationHash: approval.configurationHash),
+            MobileFolderStore.WriteApproval(scope: scope, configurationRevision: "1", configurationHash: String(repeating: "b", count: 64)),
+            MobileFolderStore.WriteApproval(scope: scope, configurationRevision: "1", configurationHash: approval.configurationHash, allowTrash: true)
+        ] {
+            await rejects { try await restarted.handle(self.request("write-check", ["rootId": .string(id), "approval": try .from(replacement)])) }
+        }
+        for patch: [String: JSONValue] in [["ownerId": .string("other")], ["deviceId": .string("other")], ["origin": .string("https://other.test")]] {
+            await rejects { try await restarted.handle(self.request("write-check", fields.merging(patch) { _, v in v })) }
+        }
+        XCTAssertEqual(prompts, 1); XCTAssertEqual(writes, approvedWrites)
+        _ = try await restarted.handle(request("remove", ["rootId": .string(id)]))
+        await rejects { try await restarted.handle(self.request("write-check", fields)) }
+        XCTAssertEqual(prompts, 1)
+    }
+
+    func testApprovalRepliesRejectRevocationDuringFinalIdentityVerification() async throws {
+        for action in ["write-check", "write-approve"] {
+            for revoked in ["identity", "grant", "approval"] {
+                var saved: [String: Data] = [:], calls = 0, prompts = 0
+                let store = MobileFolderStore(load: { saved[$0.key] }, save: { saved[$0.key] = $1 })
+                let owner = try FileSyncOwnerScope(ownerId: "owner", url: origin)
+                let grant = try store.add(owner, selected: folder.appendingPathComponent("selected"))
+                let scope = MobileSyncStaging.Scope(origin: origin.absoluteString, ownerId: "owner", dataPlane: "home", rootId: "connection", deviceId: "device")
+                let approval = MobileFolderStore.WriteApproval(scope: scope, configurationRevision: "1", configurationHash: String(repeating: "a", count: 64))
+                try store.approveWrite(owner, grant: grant, approval: approval)
+                let service = try MacFolderSync(origin: origin, store: store,
+                    staging: MobileSyncStaging(directory: folder.appendingPathComponent(UUID().uuidString)),
+                    verify: { _, _ in
+                        calls += 1
+                        if calls == 2 {
+                            if revoked == "identity" { throw MobileFolderStore.Failure.unavailable }
+                            if revoked == "grant" { try store.remove(owner, id: grant.id) }
+                            if revoked == "approval" {
+                                try store.approveWrite(owner, grant: grant, approval: .init(scope: scope, configurationRevision: "2", configurationHash: approval.configurationHash))
+                            }
+                        }
+                    }, choose: { nil }, approve: { _ in prompts += 1; return true })
+                await rejects { try await service.handle(self.request(action, ["rootId": .string(grant.id), "approval": try .from(approval)])) }
+                XCTAssertEqual(calls, 2); XCTAssertEqual(prompts, 0)
+            }
+        }
     }
 
     func testInventoryCapturePagesAreScopedImmutableAndDiscardable() async throws {

@@ -74,6 +74,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-19 — **Codex (AI)**: Mac sync can check exact saved folder approval
+  without prompting, including after native restart; capable clients recheck
+  before new writes. Whole-folder workers remain in progress. See
+  [PR 1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
 - 2026-10-19 — **Codex (AI)**: Verified paged Mac sync and reply-loss recovery with 10,003 real native/cloud paths, full upload/download hashes and an unchanged repeat. Shared file-sync checks pass 291 tests; installed providers, persistent workers and million-file acceptance remain open. See [PR 1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
 
 - 2026-10-19 — Seek the remaining retired sync metadata before each bounded cleanup page, avoiding repeated deleted-prefix traversal on large reruns; retain transaction rollback and active-baseline guards.

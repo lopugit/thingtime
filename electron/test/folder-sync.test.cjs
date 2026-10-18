@@ -41,6 +41,19 @@ function fixture() {
     const input = (changes = {}) => ({ requestId: randomUUID(), ownerId: 'owner', deviceId: 'device', origin: context.apiOrigin, action: 'list', ...changes });
     return { host, context, frame, event, calls, input, account: value => { account = value; }, run: value => { run = value; } };
 }
+test('non-interactive approval checks cannot escape host identity and endpoint fences', async () => {
+    const f = fixture(), approval = { scope: { origin: f.context.apiOrigin, ownerId: 'owner', deviceId: 'device', dataPlane: 'home', rootId: 'connection' },
+        configurationRevision: '1', configurationHash: 'a'.repeat(64) };
+    const input = f.input({ action: 'write-check', rootId: randomUUID(), approval });
+    f.run(async (_method, request) => ({ ...request, roots: [], writeApproval: approval }));
+    assert.deepEqual((await f.host.request(f.event, input)).writeApproval, approval);
+    f.run(async (_method, request) => { f.account('other'); return { ...request, roots: [], writeApproval: approval }; });
+    await assert.rejects(f.host.request(f.event, input));
+    const dispatched = f.calls.length;
+    await assert.rejects(f.host.request(f.event, input));
+    assert.equal(f.calls.length, dispatched);
+    assert.ok(f.calls.every(call => call.action === 'write-check'));
+});
 test('only the bundled main frame and exact configured origin can dispatch folder requests', async () => {
     const f = fixture();
     for (const event of [{ ...f.event, sender: {} }, { ...f.event, senderFrame: { ...f.frame } }]) await assert.rejects(f.host.request(event, f.input()));

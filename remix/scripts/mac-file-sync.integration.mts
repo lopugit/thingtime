@@ -190,7 +190,7 @@ async function send(payload: any) {
 	});
 }
 const signal = new AbortController().signal;
-const caps: FolderCapabilities = { platform: 'macos', fileAccessVersion: pagedFixture ? '1.5.1' : '1.3.0', fileStagingVersion: '1.1.0', filePublicationVersion: '1.1.1', fileTrashVersion: '1.2.0' };
+const caps: FolderCapabilities = { platform: 'macos', fileAccessVersion: pagedFixture ? '1.5.1' : '1.3.0', fileStagingVersion: '1.1.0', filePublicationVersion: '1.2.0', fileTrashVersion: '1.2.0' };
 let deviceId: string | undefined, remoteRoot: string | undefined, configurationId: string | undefined;
 const deviceName = 'Mac sync acceptance ' + randomUUID();
 const factory = new IDBFactory();
@@ -247,6 +247,8 @@ try {
 		{ mode: 0o600 }
 	);
 	await startNative();
+	const nativeContext = await send({ requestId: randomUUID(), ownerId: fixture.userId, deviceId, origin: base.origin, action: 'context' });
+	assert.equal(nativeContext.capabilities.filePublicationVersion, '1.2.0');
 	let loseTrash = false, loseRestore = false;
 	const request = async (ownerId: string, input: FolderRequest, abort: AbortSignal) => {
 		abort.throwIfAborted();
@@ -460,7 +462,7 @@ try {
 	};
 	const run = async () => {
 		let lastStage = '';
-		const localTarget = await approveMobileSyncTarget(saved, scope, signal, request, caps);
+		const localTarget = await approveMobileSyncTarget(saved, scope, signal, request, caps, 'existing');
 		const result = await (pagedFixture ? runPagedForegroundCloudSync : runForegroundCloudSync)(
 			saved,
 			scope,
@@ -513,6 +515,10 @@ try {
 		);
 		return result;
 	};
+	// No consent exists yet: a resumed worker must stop without prompting.
+	await assert.rejects(approveMobileSyncTarget(saved, scope, signal, request, caps, 'existing'));
+	await approveMobileSyncTarget(saved, scope, signal, request, caps);
+	// All retries below, including process restarts, can only reuse that grant.
 	loseCloud = true;
 	losePublication = true;
 	await assert.rejects(run(), /Lost accepted cloud commit/);
@@ -690,7 +696,7 @@ try {
     assert.equal(recoveryReceipt.entry, null);
     await assert.rejects(readFile(path.join(directory, 'selected/recover-only.bin')), { code: 'ENOENT' });
     await stopNative(); await startNative();
-    deletionTarget = await approveMobileSyncTarget(deletionConfig, scope, signal, request, caps);
+    deletionTarget = await approveMobileSyncTarget(deletionConfig, scope, signal, request, caps, 'existing');
     assert.deepEqual(await deletionTarget.lookup(recoverOperation, scope), { status: 'complete', receipt: recoveryReceipt });
     const retained = (await request(fixture.userId, { action: 'trash-inspect', rootId: nativeRoot, trash: recoverRequest }, signal)).retainedEntry!;
     assert.equal(retained.id, recoverEntry.id);
@@ -716,6 +722,7 @@ try {
 			...(pagedFixture ? { nativePages, cloudPages, reviewedChoices } : {}),
 			checks: [
 				'signed-pairing',
+                'existing-approval-restart-without-prompt',
                 'native-trash-restart-recovery',
                 'planner-child-parent-deletion',
                 'native-recovery-list-and-approved-restore',

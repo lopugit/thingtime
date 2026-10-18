@@ -3246,3 +3246,26 @@ generated adapters. Project TypeScript still reports 91 diagnostics outside
 changed files. The earlier HTTP timeout remains recorded as a failed attempt;
 the diagnostic rerun passed without increasing the request timeout, reducing
 the path count or changing the workload.
+
+
+## Non-interactive native consent checkpoint — 2026-10-19
+
+Mac publication 1.2.0 adds `write-check` through the existing local-only signed
+host adapter. It validates the exact stored write approval and folder access,
+rechecks account/device identity, grant and approval before returning, and never
+opens a native dialog or persists consent. The final check also closes an
+existing `write-approve` race when its saved approval is replaced during the
+last identity verification.
+
+The shared native target accepts explicit `existing` consent mode. Unsupported
+versions fail before dispatch; there is no fallback to prompting. Capable
+foreground targets also recheck saved approval immediately before staging,
+publication and Trash. Read-only receipt lookup remains available through the
+existing account/root gates. No history, operation IDs, grant format or remote
+HTTP endpoint changed. iOS/Android native contracts are unchanged.
+
+This checkpoint is a worker prerequisite, not persistent sync delivery. The
+runner still belongs to the connection screen. Next work is an app-owned
+executor with durable explicit job admission, exact configuration reauthorization,
+serialized native access, conflict handoff and relaunch recovery. Installed
+acceptance remains coordinated separately; Android remains deferred.

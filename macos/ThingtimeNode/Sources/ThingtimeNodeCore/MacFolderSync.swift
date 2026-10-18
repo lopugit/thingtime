@@ -75,7 +75,7 @@ public final class MacFolderSync {
             return .object([:])
         }
         guard active == nil else { throw ThingtimeNodeError.invalidRequest("Another folder request is running.") }
-        guard ["context", "conditions", "list", "choose", "remove", "scan", "scan-capture", "scan-page", "scan-discard", "inspect", "read", "read-range", "stage-begin", "stage-append", "stage-range", "stage-finish", "write-approve", "publication-lookup", "publish", "trash", "trash-lookup", "trash-expected", "trash-inspect", "trash-restore", "trash-restore-reviewed", "trash-list"].contains(r.action) else { throw MobileFolderStore.Failure.invalid }
+        guard ["context", "conditions", "list", "choose", "remove", "scan", "scan-capture", "scan-page", "scan-discard", "inspect", "read", "read-range", "stage-begin", "stage-append", "stage-range", "stage-finish", "write-approve", "write-check", "publication-lookup", "publish", "trash", "trash-lookup", "trash-expected", "trash-inspect", "trash-restore", "trash-restore-reviewed", "trash-list"].contains(r.action) else { throw MobileFolderStore.Failure.invalid }
         guard (r.action == "read-range") == (stream != nil), (r.action == "stage-range") == (receive != nil) else { throw MobileFolderStore.Failure.invalid }
         let task = Task { try await self.execute(r, owner: owner, stream: stream, receive: receive) }
         active = (r.requestId, r.ownerId, r.deviceId, task)
@@ -105,8 +105,9 @@ public final class MacFolderSync {
         try await authorized(r)
         var result: [String: JSONValue] = ["requestId": .string(r.requestId), "ownerId": .string(r.ownerId), "deviceId": .string(r.deviceId), "origin": .string(r.origin)]
         var inspectedGrant: MobileFolderStore.Grant?
+        var checkedApproval: MobileFolderStore.WriteApproval?
         if r.action == "context" {
-            var capabilities: [String: JSONValue] = ["fileAccessVersion": .string(Self.version), "fileStagingVersion": .string("1.1.0"), "filePublicationVersion": .string("1.1.1")]
+            var capabilities: [String: JSONValue] = ["fileAccessVersion": .string(Self.version), "fileStagingVersion": .string("1.1.0"), "filePublicationVersion": .string("1.2.0")]
             if trash != nil, approveTrash != nil { capabilities["fileTrashVersion"] = .string(approveRestore == nil ? "1.1.1" : "1.2.1") }
             result["capabilities"] = .object(capabilities)
         } else if r.action == "conditions" {
@@ -137,10 +138,13 @@ public final class MacFolderSync {
                 if r.action == "trash-list" {
                     guard let trash, approveRestore != nil else { throw MobileFolderStore.Failure.unavailable }
                     result["trashPage"] = try value(await worker { try trash.list(owner: owner, rootId: root, bookmark: grant.bookmark, cursor: r.cursor) })
-                } else if r.action == "write-approve" {
+                } else if r.action == "write-approve" || r.action == "write-check" {
                     guard let approval = r.approval, approval.scope.deviceId == r.deviceId else { throw MobileFolderStore.Failure.invalid }
                     try approval.validate(owner: owner)
                     if try !store.isWriteApproved(owner, id: root, approval: approval) {
+                        // A resumed/background run may only reuse existing consent.
+                        // Never open a dialog or persist approval from this action.
+                        guard r.action == "write-approve" else { throw MobileFolderStore.Failure.unavailable }
                         let accepted: Bool
                         if approval.allowTrash == true {
                             guard trash != nil, let approveTrash else { throw MobileFolderStore.Failure.unavailable }
@@ -151,6 +155,7 @@ public final class MacFolderSync {
                         try store.approveWrite(owner, grant: grant, approval: approval)
                     }
                     try await worker { try MobileFolderReader.checkAccess(bookmark: grant.bookmark) }
+                    inspectedGrant = grant; checkedApproval = approval
                     result["writeApproval"] = try value(approval)
                 } else if ["trash", "trash-lookup", "trash-expected", "trash-inspect", "trash-restore", "trash-restore-reviewed", "trash-list"].contains(r.action) {
                     guard let trash, let request = r.trash, request.rootId == root, (["trash-inspect", "trash-restore-reviewed"].contains(r.action) || request.scope.deviceId == r.deviceId) else { throw MobileFolderStore.Failure.invalid }
@@ -286,6 +291,9 @@ public final class MacFolderSync {
         if let inspectedGrant {
             let current = try store.grant(owner, id: inspectedGrant.id)
             guard current.bookmark == inspectedGrant.bookmark, current.sourceKind == nil else { throw MobileFolderStore.Failure.changed }
+            if let checkedApproval {
+                guard try store.isWriteApproved(owner, id: inspectedGrant.id, approval: checkedApproval) else { throw MobileFolderStore.Failure.changed }
+            }
         }
         result["roots"] = .array(try store.list(owner).map { grant in
             var row: [String: JSONValue] = ["id": .string(grant.id), "name": .string(grant.name)]

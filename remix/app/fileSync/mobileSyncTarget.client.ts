@@ -9,6 +9,7 @@ import {
 	supportsMobileFolderPublication,
 	supportsMobileTrash,
 	supportsMobileTrashTransitions,
+	supportsNativeWriteApprovalCheck,
 	type FolderCapabilities,
 	type MobileWriteApproval
 } from './mobileFolders.client';
@@ -21,9 +22,12 @@ export async function approveMobileSyncTarget(
 	scope: SyncScope,
 	signal: AbortSignal,
 	request = requestMobileFolders,
-	bridge: FolderCapabilities | undefined = getNativeBridge()
+	bridge: FolderCapabilities | undefined = getNativeBridge(),
+	consent: 'request' | 'existing' = 'request'
 ): Promise<LocalSyncTarget> {
 	validateSyncScope(scope);
+	if (consent === 'existing' && !supportsNativeWriteApprovalCheck(bridge))
+		throw Error('Update the app to resume with saved folder approval without a dialog.');
 	const configuration = parseFileSyncConfiguration(saved.configuration),
 		rootId = configuration.localRootId;
 	if (saved.id !== scope.rootId || configuration.deviceId !== scope.deviceId) throw Error('Sync approval scope changed.');
@@ -45,9 +49,17 @@ export async function approveMobileSyncTarget(
 		...(configuration.propagateDeletes ? { allowTrash: true } : {})
 	};
 	signal.throwIfAborted();
-	const approved = await request(scope.ownerId, { action: 'write-approve', rootId, approval }, signal);
-	if (!approved.writeApproval || JSON.stringify(approved.writeApproval) !== JSON.stringify(approval))
-		throw Error('Native folder write approval is unavailable.');
+	const checkApproval = async (action: 'write-approve' | 'write-check') => {
+		signal.throwIfAborted();
+		const approved = await request(scope.ownerId, { action, rootId, approval }, signal);
+		signal.throwIfAborted();
+		if (!approved.writeApproval || JSON.stringify(approved.writeApproval) !== JSON.stringify(approval))
+			throw Error('Native folder write approval is unavailable.');
+	};
+	await checkApproval(consent === 'existing' ? 'write-check' : 'write-approve');
+	const recheckApproval = async () => {
+		if (supportsNativeWriteApprovalCheck(bridge)) await checkApproval('write-check');
+	};
 	const transfer = (operation: Parameters<LocalSyncTarget['lookup']>[0], current: SyncScope, context?: LocalTrashContext) => {
 		signal.throwIfAborted();
 		if (!sameSyncScope(scope, current)) throw Error('Native download scope changed.');
@@ -59,7 +71,9 @@ export async function approveMobileSyncTarget(
 		...(configuration.propagateDeletes
 			? {
 					trash: async (operation: Parameters<LocalSyncTarget['lookup']>[0], current: SyncScope, context?: LocalTrashContext) => {
-						const result = await request(scope.ownerId, { action: 'trash', rootId, trash: transfer(operation, current, context), approval }, signal);
+						const input = transfer(operation, current, context);
+						await recheckApproval();
+						const result = await request(scope.ownerId, { action: 'trash', rootId, trash: input, approval }, signal);
 						if (result.trash?.status !== 'complete') throw Error('Native trash is not confirmed.');
 						return result.trash.receipt;
 					}
@@ -85,12 +99,15 @@ export async function approveMobileSyncTarget(
 			if (!result.publication) throw Error('Native publication lookup is unavailable.');
 			return result.publication;
 		},
-		stage: (operation, current, source) => {
+		stage: async (operation, current, source) => {
 			const input = transfer(operation, current);
+			await recheckApproval();
 			return stageMobileCopy(input.scope, rootId, input.operation, source, signal, request, bridge);
 		},
 		publish: async (operation, current, stage) => {
-			const result = await request(scope.ownerId, { action: 'publish', rootId, transfer: transfer(operation, current), stage, approval }, signal);
+			const input = transfer(operation, current);
+			await recheckApproval();
+			const result = await request(scope.ownerId, { action: 'publish', rootId, transfer: input, stage, approval }, signal);
 			if (result.publication?.status !== 'complete') throw Error('Native download is not confirmed.');
 			return result.publication.receipt;
 		}

@@ -1,26 +1,36 @@
 # Attachments and media
 
+Mac publication 1.2.0 adds `write-check`: exact saved approval can be read
+without opening a dialog or saving consent. `mobileSyncTarget.client.ts` uses
+it before staging/publication/Trash on capable hosts and offers an explicit
+`existing` consent mode for resume. Legacy foreground behavior is unchanged;
+legacy hosts cannot use non-interactive resume. `MacFolderSyncTests`,
+`mobileSyncTarget.test.ts`, Electron folder-host checks and the disposable
+`test:files:mac-paged` acceptance cover the boundary. This is a prerequisite for
+persistent workers; it does not yet move transfers out of the connection screen.
+
 `fileSync/pagedReviewDraft.ts` adds bounded mutable conflict-review storage to
 the version-10 journal. It binds complete plans/captures, persists revision-checked
 choices, seals reviewed pages for fresh-plan run preparation and shares bounded
 maintenance. Run `pagedReviewDraft.test.ts` and `test:file-sync`; the generated-data
 `review-draft.browser.ts` fixture covers a real Chromium restart. `pagedForegroundSync.ts` now consumes sealed drafts through fresh-plan checks
 and resumable run import. `pagedForegroundReview.ts` exposes bounded reads and
-revisioned choices for the upcoming editable Builder adapter, plus a streaming
+revisioned choices for the editable Builder adapter, plus a streaming
 SHA-256 that preserves existing repeat-Ignore identities. The new `conflictReviewController.ts` retains one page, persists revisioned
 choices and fences stale completion; the journal now supports byte-bounded
-Previous/Next navigation without a cursor-history array. The current popup
-still uses the bounded legacy array callback; replacing it with editable Builder
-blocks and installed acceptance remain open. The live scan cap is unchanged.
+Previous/Next navigation without a cursor-history array. Mac/iOS popups now use
+`PagedSyncConflictReview`, editable Builder blocks and the shared transient/settings
+hosts. Isolated desktop/phone editing and restart checks pass; installed acceptance
+remains open. Legacy clients retain the bounded array path.
 
 Native folder captures now use `apple/FileSync/MobileFolderInventory.swift`
 (under `Sources/AppleFileSync`), negotiated by `fileSync/nativeInventory.ts`:
-Mac file-access 1.5.0 / iOS 1.3.0. A private SQLite capture supplies immutable
+Mac file-access 1.5.1 / iOS 1.3.1. A private SQLite capture supplies immutable
 128-entry / 512-KiB pages; `pagedForegroundSync.ts` imports complete generations
 before planning and checkpoints. Run `MobileFolderInventoryTests`,
 `MacFolderSyncTests`, `nativeInventory.test.ts`, `pagedForegroundSync.test.ts`
 and `test:file-sync`. Photos/older clients retain bounded legacy scans; cloud
-paging, persistent workers and installed large-root acceptance remain open.
+paging is integrated; persistent workers and installed large-root acceptance remain open.
 See [native paged captures](../mobile-file-sync.md#native-paged-folder-captures--2026-10-18).
 
 Attachment-content 1.14.0 also serves bounded exact-version byte ranges through
@@ -68,8 +78,8 @@ roots. The version-4 journal adds `pagedPlanJournal.ts`: four pinned sealed
 captures, a resumable cross-capture validation/changed-ancestor pass, then bounded
 decisions using the shared `decideSyncPath` policy. `journalScope.ts` fences both
 namespaces. Plans stay unreadable until complete; pins prevent source replacement
-and are released per plan. Foreground/native/cloud integration still uses the
-10,000-path cap. Run `pagedPlanJournal.test.ts` for parity, late deletion conflicts,
+and are released per plan. The complete paged native/cloud/review path has passed a real 10,003-path
+Swift/API run; legacy or incomplete adapters retain the 10,000-path cap. Run `pagedPlanJournal.test.ts` for parity, late deletion conflicts,
 exclusions, restart/concurrency, Unicode folded cursors, byte bounds and migration.
 Run `test:file-sync` for the 100,000-path reopen/readback and partial-scan guards.
 The content endpoint also serves exact-version `sha256-parts-v1` fingerprints
@@ -99,8 +109,8 @@ origin and home storage while reading it. Run `test:files`, `test:file-sync`
 and `scripts/file-versions.integration.mts`. Files 1.2.0 additionally supplies immutable folder-creation receipts through
 `api/utils/files/folders.ts`, composing the ordinary Things writer and Timeline.
 `prepareCloudInventoryRun` pins new parent IDs for nested uploads, and the cloud
-port resumes them through the same journal. Directory deletion, Android/Mac local writes and
-background workers remain pending.
+port resumes them through the same journal. Mac/iOS local publication and directory Trash are integrated. Android is
+deferred; background workers remain pending.
 
 Stable file roots are protected `file` Things written by `api/utils/files/files.ts`
 through `/api/v1/files`. The shared `fileSync/cloudFile.ts` contract maps a file
@@ -125,8 +135,9 @@ transfers. Bookmarks remain native. Android's equivalent adapters live in
 `android/app/src/main/java/com/thingtime/mobile/FolderBridge.java`, `FolderStore.java`,
 `FolderReader.java` and `SafFolderProvider.java`. The shared controls negotiate
 both native platforms. Android keeps read-only tree URIs in encrypted native
-storage and verifies content despite unreliable provider timestamps. Native
-destination writes and persistent schedulers remain pending.
+storage and verifies content despite unreliable provider timestamps. Mac/iOS native
+destination writes are integrated; persistent schedulers remain pending and
+unfinished Android work is explicitly deferred.
 
 Stored files are `attachment` Things (`thingtime: ['attachment']`) whose bytes
 live in a private, versioned S3 bucket (or the local filesystem stand-in).

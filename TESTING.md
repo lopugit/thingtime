@@ -11670,3 +11670,22 @@ resume unfinished Android gates only when requested.
 - [ ] Large-root cleanup: confirm each page starts at its first remaining key,
   preserves the 128-key/byte bounds and active recovery, and finishes after
   restart without repeatedly traversing the deleted prefix.
+
+
+### Saved native approval checks for background recovery
+
+- On Mac publication 1.2.0, `write-check` must never open a consent dialog or
+  write a new approval. Approve explicitly once, recreate the adapter, and
+  verify the exact account/origin/device/connection/revision/settings/Trash
+  binding survives. Missing or changed approval must refuse without fallback.
+- Revoke the account, selected grant or exact approval during the final native
+  identity verification. Both approval replies must fail rather than expose a
+  stale success. Retained bytes and other approvals must remain intact.
+- Revoke saved approval between target creation and staging, publication or
+  Trash. The shared target must stop before new effects; read-only receipt
+  recovery must continue through its normal authorization checks.
+- Run `mobileSyncTarget.test.ts`, `MacFolderSyncTests`, Electron folder-sync
+  tests and `test:files:mac-paged`. The HTTP fixture now explicitly grants once,
+  then uses only saved-consent checks across all lost-reply/process restarts.
+- Installed app/dialog acceptance and closing the connection screen while a
+  durable whole-folder worker runs remain separate, incomplete checks.

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { approveMobileSyncTarget } from './mobileSyncTarget.client';
-import { parseMobileFolderResult, supportsMobilePublication, type FolderRequest, type FolderResult } from './mobileFolders.client';
+import { parseMobileFolderResult, supportsMobilePublication, supportsNativeWriteApprovalCheck, type FolderRequest, type FolderResult } from './mobileFolders.client';
 import { newFileSyncConfiguration } from './configuration';
 import type { SyncOperation } from './execute';
 const bridge = {
@@ -197,4 +197,75 @@ test('native trash replies require null receipts and restore the reviewed inode 
 	assert.deepEqual(parse(restore, { restoredEntry: restored }).restoredEntry, restored);
 	for (const patch of [{ path: 'other' }, { id: 'other' }, { sha256: 'b'.repeat(64) }, { size: 4 }])
 		assert.throws(() => parse(restore, { restoredEntry: { ...restored, ...patch } }));
+});
+
+
+test('resuming with existing consent requires negotiated non-interactive checks and never falls back to a prompt', async () => {
+ const capable = { ...bridge, platform: 'macos', filePublicationVersion: '1.2.0' };
+ for (const version of [undefined, '1.1.99', '2.0.0', '1.02.0', '1.2.bad']) {
+  const legacy = { ...capable, filePublicationVersion: version };
+  assert.equal(supportsNativeWriteApprovalCheck(legacy), false);
+  let calls = 0;
+  await assert.rejects(approveMobileSyncTarget(saved, scope, new AbortController().signal,
+   async () => { calls++; throw Error('must not dispatch'); }, legacy, 'existing'), /without a dialog/);
+  assert.equal(calls, 0);
+ }
+ for (const version of ['1.2.0', '1.2.1', '1.3.0'])
+  assert.equal(supportsNativeWriteApprovalCheck({ ...capable, filePublicationVersion: version }), true);
+ const calls: FolderRequest[] = [];
+ const request = async (_owner: string, input: FolderRequest): Promise<FolderResult> => {
+  calls.push(input);
+  if (input.action === 'write-check') throw Error('Native approval was removed');
+  return parse(input, {});
+ };
+ await assert.rejects(approveMobileSyncTarget(saved, scope, new AbortController().signal, request, capable, 'existing'), /approval was removed/);
+ assert.deepEqual(calls.map(c => c.action), ['list', 'write-check']);
+});
+
+test('saved consent is checked before new staging, publication or Trash effects while receipt recovery stays read-only', async () => {
+ const capable = { ...bridge, platform: 'macos', filePublicationVersion: '1.2.0', fileTrashVersion: '1.2.1' };
+ const configured = { ...saved, configuration: { ...saved.configuration, propagateDeletes: true } };
+ const calls: FolderRequest[] = [];
+ let approved = true;
+ const request = async (_owner: string, input: FolderRequest): Promise<FolderResult> => {
+  calls.push(input);
+  if (input.action === 'write-check') {
+   if (!approved) throw Error('Native approval was removed');
+   return parse(input, { writeApproval: input.approval });
+  }
+  if (input.action === 'publication-lookup') return parse(input, { publication: { status: 'missing' } });
+  if (input.action === 'publish') return parse(input, { publication: { status: 'complete', receipt: { scope, operationId: operation.id, entry: stage.entry } } });
+  if (input.action.startsWith('stage-')) return parse(input, { staging: { received: 0, stage } });
+  return parse(input, {});
+ };
+ const target = await approveMobileSyncTarget(configured, scope, new AbortController().signal, request, capable, 'existing');
+ assert.deepEqual(await target.stage(operation, scope), stage);
+ assert.equal((await target.publish(operation, scope, stage)).entry?.id, 'native');
+ assert.ok(!calls.some(c => c.action === 'write-approve'));
+ for (const effect of ['stage-begin', 'publish']) {
+  const index = calls.findIndex(c => c.action === effect);
+  assert.ok(index > 0); assert.equal(calls[index - 1].action, 'write-check');
+ }
+ approved = false; calls.length = 0;
+ await assert.rejects(target.stage(operation, scope), /approval was removed/);
+ await assert.rejects(target.publish(operation, scope, stage), /approval was removed/);
+ const trash: SyncOperation = { ...operation, mutation: { kind: 'trash', side: 'local', path: 'folder', expected: stage.entry } };
+ await assert.rejects(target.trash!(trash, scope), /approval was removed/);
+ assert.deepEqual(calls.map(c => c.action), ['write-check', 'write-check', 'write-check']);
+ assert.equal((await target.lookup(operation, scope)).status, 'missing');
+ assert.equal(calls.at(-1)?.action, 'publication-lookup');
+ const before = calls.length;
+ await assert.rejects(target.stage(operation, { ...scope, ownerId: 'foreign' }), /scope changed/);
+ assert.equal(calls.length, before);
+});
+
+test('non-interactive approval replies are bound to the exact settings, Trash consent and scope', () => {
+ const approval = { scope, configurationRevision: saved.updatedAt, configurationHash: 'a'.repeat(64), allowTrash: true as const };
+ const request: FolderRequest = { action: 'write-check', rootId, approval };
+ assert.deepEqual(parse(request, { writeApproval: approval }).writeApproval, approval);
+ for (const patch of [
+  { scope: { ...scope, deviceId: 'other' } }, { scope: { ...scope, origin: 'https://other.test' } },
+  { configurationRevision: 'changed' }, { configurationHash: 'b'.repeat(64) }, { allowTrash: undefined }
+ ]) assert.throws(() => parse(request, { writeApproval: { ...approval, ...patch } }), /approval changed/);
+ for (const writeApproval of [null, undefined, false]) assert.throws(() => parse(request, { writeApproval }));
 });
