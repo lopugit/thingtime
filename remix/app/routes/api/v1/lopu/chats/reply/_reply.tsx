@@ -4,7 +4,7 @@ import { chatGPTPlanFailure, isChatGPTPlanProvider } from '~/api/utils/ai/chatgp
 import { isLopuAccessActor, lopuAccessMode } from '~/api/utils/lopu/accessMode';
 import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
 import type { ResolveActionActor } from '~/api/utils/actions/firstPartyActionHost';
-import { LOPU_CONTINUE_PROMPT, continuationRequestId, LOPU_RECOVERABLE_STOPS, lopuRecoveryFailures } from '~/api/utils/lopu/continuationCore';
+import { LOPU_CONTINUE_PROMPT, continuationRequestId, lopuProviderManagement, LOPU_RECOVERABLE_STOPS, lopuRecoveryFailures } from '~/api/utils/lopu/continuationCore';
 import { lopuPageReference, lopuPageReferences, LOPU_MAX_PAGE_REFERENCES } from '~/utils/lopuPageContext';
 import { resolveLopuMedia } from '~/api/utils/lopu/chatMedia.server';
 import { json, readJsonBody, requireJsonContentType } from '~/api/http';
@@ -305,6 +305,7 @@ export const replyAsUser = async (request: Request, user: Awaited<ReturnType<typ
       try {
         const resolved = await resolveOwnedChatGPTPlan(request, user.id, wantedProviderId, execution.resolveActionActor);
         ownedPlan = resolved.admission;
+        input.management = lopuProviderManagement(input.management, resolved.provider.id);
         vaultProvider = { ...resolved.provider, effort: null, requestedModel: null };
       } catch (error) {
         // A saved plan pin is strict too: losing a runtime must never spend API credits.

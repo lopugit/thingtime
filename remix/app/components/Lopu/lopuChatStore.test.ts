@@ -841,3 +841,21 @@ test('hydration never restores plan admission hints and never shares provider me
     hydrateLopuStore('other'); assert.deepEqual(getLopuStoreSnapshot().vaultProviders, []);
   } finally { (globalThis as any).window = previous; resetLopuStoreForTests(); }
 });
+
+
+test('personal-plan sends use local management even with a server default or per-turn override', async () => {
+  resetLopuStoreForTests(); hydrateLopuStore('plan-owner');
+  const fixture = fakeClient(); bindLopuApi(fixture.client);
+  setLopuSettings({ providerId: 'chatgpt-plan-test', management: 'server' });
+  assert.equal(getLopuStoreSnapshot().settings.management, 'client');
+  await sendLopuMessage('First', { settings: { management: 'server' } });
+  await sendLopuMessage('Follow up');
+  const replies = fixture.calls.filter(call => call.name === 'reply').map(call => call.args as any);
+  assert.equal(replies.length, 2);
+  assert.ok(replies.every(body => body.management === 'client' && body.providerId === 'chatgpt-plan-test'));
+  for (const models of [[], MODELS]) {
+    assert.equal(reconcileLopuSettings({ providerId: 'chatgpt-plan-test', management: 'server' }, models, DEFAULTS).management, 'client');
+    assert.equal(reconcileLopuSettings({ providerId: 'vp-1', management: 'server' }, models, DEFAULTS).management, 'server');
+    assert.equal(reconcileLopuSettings({ management: 'server' }, models, DEFAULTS).management, 'server');
+  }
+});

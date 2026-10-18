@@ -589,6 +589,7 @@ async function* openAiResponsesProvider(options: OpenAiProviderOptions): LopuPro
       signal ? { signal } : {}
     );
     let completed: OpenAI.Responses.Response | null = null;
+    const finishedItems = new Map<number, OpenAI.Responses.ResponseOutputItem>();
     const started = new Map<string, { id: string; name: string }>();
     const startedCallItems = new Map<string, string>();
     for await (const event of stream) {
@@ -615,6 +616,11 @@ async function* openAiResponsesProvider(options: OpenAiProviderOptions): LopuPro
       } else if (event.type === 'response.function_call_arguments.delta') {
         const call = started.get(event.item_id);
         if (call && event.delta) yield { type: 'tool_input_delta', ...call, partial: event.delta };
+      } else if (event.type === 'response.output_item.done') {
+        if (!Number.isInteger(event.output_index) || event.output_index < 0 || finishedItems.has(event.output_index)) {
+          throw new Error('The selected model returned inconsistent completed response items.');
+        }
+        finishedItems.set(event.output_index, event.item);
       } else if (event.type === 'response.completed' || event.type === 'response.incomplete') {
         completed = event.response;
       } else if (event.type === 'response.failed' || event.type === 'error') {
@@ -643,7 +649,28 @@ async function* openAiResponsesProvider(options: OpenAiProviderOptions): LopuPro
       yield { type: 'hop_end', stopReason: 'max_tokens', usage: { ...usage } };
       return;
     }
-    const calls = completed.output.filter((item): item is OpenAI.Responses.ResponseFunctionToolCall => item.type === 'function_call');
+    // Some streamed responses complete without repeating their output items in
+    // the terminal envelope. Only finalized items may fill that empty envelope,
+    // and only after the successful terminal event above. Argument deltas alone
+    // never authorize execution. Preserve reasoning and item order for replay.
+    const streamedOutput = [...finishedItems.entries()].sort(([a], [b]) => a - b).map(([, item]) => item);
+    const output = completed.output.length ? completed.output : streamedOutput;
+    if (completed.output.length) {
+      for (const item of finishedItems.values()) {
+        const terminal = completed.output.find(candidate => candidate.id === item.id);
+        if (!terminal || terminal.type !== item.type || terminal.id !== item.id ||
+          (item.type === 'function_call' && (terminal.type !== 'function_call' ||
+            terminal.call_id !== item.call_id || terminal.name !== item.name || terminal.arguments !== item.arguments ||
+            (terminal.status ?? 'completed') !== (item.status ?? 'completed') ||
+            (terminal as { namespace?: unknown }).namespace !== (item as { namespace?: unknown }).namespace))) {
+          throw new Error('The selected model returned conflicting completed response items.');
+        }
+      }
+    }
+    const calls = output.filter((item): item is OpenAI.Responses.ResponseFunctionToolCall => item.type === 'function_call');
+    if ([...started.keys()].some(id => !calls.some(call => call.id === id))) {
+      throw new Error('The selected model response ended before a streamed tool call completed.');
+    }
     if (options.authMode === 'chatgpt-plan' && calls.some(call => (call as { namespace?: unknown }).namespace !== 'thingtime')) throw new ChatGPTPlanError('invalid_request');
     if (calls.some((call) => !call.id || !call.call_id || !call.name || (call.status && call.status !== 'completed'))) {
       throw new Error('The selected model returned an unfinished tool call.');
@@ -668,7 +695,7 @@ async function* openAiResponsesProvider(options: OpenAiProviderOptions): LopuPro
         throw new Error('The selected model returned invalid tool arguments.');
       }
     });
-    for (const item of completed.output) {
+    for (const item of output) {
       // Only custom function tools are offered. Refuse an unexpected hosted
       // tool surface rather than silently discarding its continuation state.
       if (item.type !== 'message' && item.type !== 'reasoning' && item.type !== 'function_call') {

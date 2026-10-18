@@ -550,20 +550,24 @@ export const updateLopuChat = async (
 	// Explicit permission writes must commit even if a concurrent read saw
 	// the same mode; an unrelated settings update never writes this field.
 	if (input.accessMode !== undefined) patch['crystal.lopu.accessMode'] = normalized.settings.accessMode;
+	// Repeated explicit pins still require live ownership, including no-op updates.
+	if (input.providerId !== undefined || normalized.settings.providerId !== current.providerId) {
+		const foreignProvider = await assertOwnVaultProvider(viewerId, normalized.settings.providerId, ownedPlan);
+		if (foreignProvider) return foreignProvider;
+	}
 	if (normalized.changed) {
-		if (normalized.settings.providerId !== current.providerId) {
-			const foreignProvider = await assertOwnVaultProvider(viewerId, normalized.settings.providerId, ownedPlan);
-			if (foreignProvider) return foreignProvider;
-		}
 		patch['crystal.lopu.model'] = normalized.settings.model;
 		patch['crystal.lopu.effort'] = normalized.settings.effort;
 		patch['crystal.lopu.speed'] = normalized.settings.speed;
 		patch['crystal.lopu.providerId'] = normalized.settings.providerId;
   if (normalized.settings.management) patch['crystal.lopu.management'] = normalized.settings.management;
 	}
-	if (!Object.keys(patch).length) return fail(400, 'Nothing to update');
-	const things = await getThingsCollection();
-	await updateMessengerThing(things, { shareId: chat.shareId, thingtime: 'chat' } as any, { $set: { ...patch, updatedAt: new Date() } });
+	const explicitSetting = ['title', 'model', 'effort', 'speed', 'providerId', 'management', 'accessMode', 'archived'].some(key => (input as Record<string, unknown>)[key] !== undefined);
+	if (!Object.keys(patch).length && !explicitSetting) return fail(400, 'Nothing to update');
+	if (Object.keys(patch).length) {
+		const things = await getThingsCollection();
+		await updateMessengerThing(things, { shareId: chat.shareId, thingtime: 'chat' } as any, { $set: { ...patch, updatedAt: new Date() } });
+	}
 	const entry = await chatListEntryFor(viewerId, chat.shareId);
 	if (entry.ok === false) return entry;
 	return { ok: true, chat: withLopuState(entry.chat, { ...(chat.crystal?.lopu || {}), ...(normalized.changed ? normalized.settings : {}), ...(input.archived !== undefined ? { archived: input.archived } : {}) }) };

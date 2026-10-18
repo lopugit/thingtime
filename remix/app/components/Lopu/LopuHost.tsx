@@ -1,3 +1,4 @@
+import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { useLopuVisualViewport } from './useLopuVisualViewport';
 import { LopuDictationSettings } from './LopuDictationSettings';
 import React from 'react';
@@ -12,7 +13,7 @@ import { LopuWindowConversations } from './LopuWindowConversations';
 import { getLopuStoreServerSnapshot, getLopuStoreSnapshot, selectLopuProviderNames, setLopuSettings, subscribeLopuStore, type LopuVaultProvider } from './lopuChatStore';
 import { useLopuAccount } from './useLopuAccount';
 import { handlesLopuLinkInApp } from './lopuLinkActivation';
-import { vaultProviderUnavailableReason } from './lopuProviderCore';
+import { selectedPlanChatEligible, vaultProviderUnavailableReason } from './lopuProviderCore';
 import { LopuVoiceSurface, lopuVoicePhaseLabel, type LopuVoicePhase } from './LopuVoiceControls';
 import { LOPU_UI, lopuIconButtonSx, lopuRainbowRing } from './lopuTheme';
 import {
@@ -498,7 +499,9 @@ export const LopuHost = () => {
 	// body draws LopuLockedState through LopuChatView / LopuVoiceSurface; the
 	// header's status line and chip follow (the cache seeds it, no fetch here
 	// until the window opens)
-	const account = useLopuAccount({ byo: !!chatProviderId, active: showWindow });
+	const currentUser = useCurrentUser();
+	const planChatEligible = !voiceMode && chatStore.userId === currentUser?.id && selectedPlanChatEligible(chatStore.vaultProviders, chatProviderId);
+	const account = useLopuAccount({ byo: !!chatProviderId, planChatEligible, active: showWindow });
 	const locked = account.access.locked && account.access.reason === 'unverified';
 
 	// keep both surfaces on screen when the viewport changes

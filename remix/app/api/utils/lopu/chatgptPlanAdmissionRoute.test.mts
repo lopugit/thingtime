@@ -4,6 +4,7 @@ import { ownsPlanAdmission } from '../ai/chatgptPlanAdmissionCore';
 const owner = { id: 'plan-owner', username: 'synthetic', accountKind: 'user', temporary: false };
 let session: any = owner, runtimeAvailable = true, connected = true, savedProvider: string | null = null;
 let refuseUpdate = false;
+let persistedManagement: unknown;
 let writes = 0, resolutions = 0, streams = 0, persistenceProof = false;
 const id = 'chatgpt-plan-test';
 const ok = async () => ({ ok: true });
@@ -33,8 +34,8 @@ mock.module('./chat', { namedExports: {
 } });
 mock.module('../messenger/lopuChats', { namedExports: {
   listLopuChats: async () => ({ ok: true, chats: [] }), readLopuContinuation: ok, createLopuNoteReader: () => async () => [], deleteLopuChat: ok,
-  createLopuChat: async (ownerId: string, input: any, _identity: any, proof: any) => { writes++; persistenceProof = ownsPlanAdmission(proof, ownerId, input.providerId); return { ok: true, chat: { id: 'chat-test' } }; },
-  updateLopuChat: async (ownerId: string, _chatId: any, input: any, proof: any) => { if (refuseUpdate) return { ok: false, status: 409, error: 'Provider changed' }; writes++; persistenceProof = ownsPlanAdmission(proof, ownerId, input.providerId); return { ok: true }; },
+  createLopuChat: async (ownerId: string, input: any, _identity: any, proof: any) => { writes++; persistedManagement = input.management; persistenceProof = ownsPlanAdmission(proof, ownerId, input.providerId); return { ok: true, chat: { id: 'chat-test' } }; },
+  updateLopuChat: async (ownerId: string, _chatId: any, input: any, proof: any) => { if (refuseUpdate) return { ok: false, status: 409, error: 'Provider changed' }; writes++; persistedManagement = input.management; persistenceProof = ownsPlanAdmission(proof, ownerId, input.providerId); return { ok: true }; },
   getLopuChat: async () => ({ ok: true, settings: { providerId: savedProvider } }), loadLopuHistory: async () => ({ ok: true, history: [] }),
   persistLopuUserTurn: async () => { writes++; return { ok: true, message: { id: 'user-message' } }; },
   persistLopuAssistantTurn: async () => ({ ok: true, messages: [{ id: 'assistant-message' }] })
@@ -94,4 +95,12 @@ test('a rejected plan pin update stops the turn before user writes or provider c
   refuseUpdate = true;
   const response = await reply({ request: request({ chatId: 'existing' }) });
   assert.equal(response.status, 409); assert.equal(writes, 0); assert.equal(streams, 0);
+});
+
+
+test('older clients requesting server management persist local management for an owned plan', async () => {
+  const response = await reply({ request: request({ management: 'server' }) });
+  assert.equal(response.status, 200); await response.text();
+  assert.equal(persistedManagement, 'client');
+  assert.equal(streams, 1);
 });
