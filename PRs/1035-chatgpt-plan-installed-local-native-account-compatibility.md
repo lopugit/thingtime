@@ -18,3 +18,9 @@ The combined integration passed 145 Electron tests, 21 proxy tests and 99 capabi
 The canonical signed build is `THINGTIME_NODE_CACHE_ROOT="$HOME/Library/Caches/com.thingtime.desktop.node/chatgpt-installed" npm --prefix electron run build`; its verifier checks both native helpers and the outer bundle. Final build/installation status is recorded on PR #1035. No installation is implied by source tests. Preserve the existing app until the exact final signed bundle verifies. Live ChatGPT consent/model discovery/provider execution and installed native acceptance are separate requirements.
 
 Graph refresh uses the immutable repository wrapper. Structural extraction completed; semantic freshness remains unverified following the guarded semantic failure. Existing Swift graph-parser warnings are not compiler diagnoses.
+
+## Session continuity follow-up
+
+The first installed integration changed the Electron partition and required sign-in. The correction provides explicit recovery of an original API plus exact historical loopback renderer origin, reusing the complete prior session store in place and preserving the newer store. It never infers legacy ownership from the current API selection or copies cookies. API changes, database changes and workspace recovery are serialized through one transition guard. Future restarts retain the chosen partition and renderer origin; other historical renderer origins are preserved but not merged.
+
+A local restart also left the renderer window hidden while API and MongoDB were healthy. Window visibility now has independent load/failure/timeout paths and activation reveals an existing window. Synthetic Electron tests pass; the real two-launch Chromium storage check is blocked by macOS nested sandbox initialization and is not counted as acceptance. Signed installed recovery must verify the original API and observed old app URL before completion.

@@ -107,7 +107,7 @@ try {
 
 const appPath = await findBuiltApp();
 if (!appPath) throw new Error('electron-builder did not retain an unpacked Thingtime.app for verification.');
-run(process.execPath, [path.join(electronDir, 'scripts', 'verify-signed-app.mjs'), '--mode', 'production', '--require-agent-browser', appPath], {
+run(process.execPath, [path.join(electronDir, 'scripts', 'verify-signed-app.mjs'), '--require-bundled-mongo', '--mode', 'production', '--require-agent-browser', appPath], {
 	env: releaseEnvironment
 });
 const archives = await findReleaseArchives();

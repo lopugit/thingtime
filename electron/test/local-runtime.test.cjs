@@ -181,3 +181,133 @@ test('authority transition clears native credentials before durable settings and
   await assert.rejects(runtime.configure({...request,mongoUri:'https://invalid.test'},async()=>{invalidCallback=true;}));
   assert.equal(invalidCallback,false);
  }));
+
+test('fresh local setup prefers bundled MongoDB while saved executable and database are preserved', () =>
+ fixture(async (_runtime, root) => {
+  const bundled = path.join(root, 'bundled', 'mongod');
+  const selected = path.join(root, 'existing', 'mongod');
+  for (const file of [bundled, selected]) { await fs.mkdir(path.dirname(file), { recursive: true }); await fs.writeFile(file, '#!/bin/sh\nexit 0\n', { mode: 0o700 }); }
+  const fresh = new LocalRuntime({ userData: root, safeStorage: storage, bundledMongodPath: bundled });
+  await fresh.initialize();
+  assert.equal(fresh.snapshot().mongodPath, bundled);
+  assert.equal(fresh.snapshot().bundledMongoSelected, true);
+  await fresh.chooseMongod(selected);
+  await fs.mkdir(path.join(fresh.root, 'database'), { recursive: true });
+  await fs.writeFile(path.join(fresh.root, 'database', 'WiredTiger'), 'existing database');
+  const reopened = new LocalRuntime({ userData: root, safeStorage: storage, bundledMongodPath: bundled });
+  await reopened.initialize();
+  assert.equal(reopened.snapshot().mongodPath, selected);
+  assert.equal(reopened.snapshot().bundledMongoSelected, false);
+  assert.equal(await fs.readFile(path.join(fresh.root, 'database', 'WiredTiger'), 'utf8'), 'existing database');
+ }));
+
+test('bundled MongoDB cannot silently adopt a database whose executable selection is missing', () =>
+ fixture(async (runtime, root) => {
+  const bundled = path.join(root, 'mongod');
+  await fs.writeFile(bundled, '#!/bin/sh\nexit 0\n', { mode: 0o700 });
+  await fs.mkdir(path.join(runtime.root, 'database'), { recursive: true });
+  await fs.writeFile(path.join(runtime.root, 'database', 'WiredTiger'), 'existing database');
+  const reopened = new LocalRuntime({ userData: root, safeStorage: storage, bundledMongodPath: bundled });
+  await reopened.initialize();
+  assert.notEqual(reopened.snapshot().mongodPath, bundled);
+ }));
+
+test('macOS 13 remote mode remains available while bundled local MongoDB requires macOS 14', () =>
+ fixture(async (_runtime, root) => {
+  const bundled = path.join(root, 'mongod');
+  await fs.writeFile(bundled, '#!/bin/sh\nexit 0\n', { mode: 0o700 });
+  const runtime = new LocalRuntime({ userData: root, safeStorage: storage, bundledMongodPath: bundled, platform: 'darwin', hostRelease: '22.6.0' });
+  await runtime.initialize();
+  assert.equal(runtime.snapshot().enabled, false);
+  assert.equal(runtime.snapshot().bundledMongoSupported, false);
+  await runtime.start();
+  await assert.rejects(runtime.configure({ enabled: true, databaseMode: 'managed' }), /macOS 14/);
+  assert.equal(runtime.snapshot().enabled, false);
+  await runtime.configure({ enabled: true, databaseMode: 'external', mongoUri: 'mongodb://fixture.test/thingtime' });
+  assert.equal(runtime.snapshot().enabled, true);
+  assert.equal(new LocalRuntime({ userData: root, safeStorage: storage, bundledMongodPath: bundled, platform: 'darwin', hostRelease: '23.0.0' }).bundledMongoSupported, true);
+ }));
+
+
+test('new database identities are keyed, stable and never publish a password digest', () =>
+ fixture(async (runtime, root) => {
+  await runtime.initialize();
+  const uri = 'mongodb://fixture:password123@database.example/thingtime';
+  await runtime.configure({ enabled: true, databaseMode: 'external', mongoUri: uri });
+  const env = {};
+  runtime.applyEnvironment(env);
+  const expected = crypto.createHmac('sha256', runtime.state.vaultKey)
+   .update('thingtime-desktop-database-identity-v1\0').update(uri).digest('hex');
+  const unkeyed = crypto.createHash('sha256').update(uri).digest('hex');
+  assert.equal(runtime.runningDatabaseIdentity, expected);
+  assert.equal(env.THINGTIME_FEDERATION_ID, 'desktop-' + expected.slice(0, 24));
+  assert.equal(env.THINGTIME_DATA_ENV, 'custom:' + env.THINGTIME_FEDERATION_ID);
+  assert.notEqual(env.THINGTIME_FEDERATION_ID, 'desktop-' + unkeyed.slice(0, 24));
+  assert.equal(runtime.state.legacyRendererIdentity, null);
+  const restarted = new LocalRuntime({ userData: root, safeStorage: storage });
+  await restarted.initialize(); const again = {}; restarted.applyEnvironment(again);
+  assert.equal(restarted.runningDatabaseIdentity, expected);
+  assert.equal(again.THINGTIME_FEDERATION_ID, env.THINGTIME_FEDERATION_ID);
+  const otherProfile = new LocalRuntime({ userData: path.join(root, 'other'), safeStorage: storage });
+  await otherProfile.initialize();
+  await otherProfile.configure({ enabled: true, databaseMode: 'external', mongoUri: uri });
+  const other = {}; otherProfile.applyEnvironment(other);
+  assert.notEqual(other.THINGTIME_FEDERATION_ID, env.THINGTIME_FEDERATION_ID);
+ }));
+
+test('pre-upgrade database retains only its encrypted renderer alias across switch and return', () =>
+ fixture(async (runtime, root) => {
+  const { endpointPartition } = require('../lib/local-runtime.cjs');
+  const originalUri = 'mongodb://fixture:password123@original.example/thingtime';
+  const nextUri = 'mongodb://fixture:password123@next.example/thingtime';
+  const oldState = { ...runtime.state, enabled: true, databaseMode: 'external', mongoUri: originalUri };
+  delete oldState.databaseIdentityVersion; delete oldState.legacyRendererIdentity;
+  await runtime.persist(oldState);
+  const originalIdentity = crypto.createHash('sha256').update(originalUri).digest('hex');
+  const originalPartition = endpointPartition(runtime.snapshot().origin, originalIdentity);
+  const migrated = new LocalRuntime({ userData: root, safeStorage: storage });
+  await migrated.initialize(); const env = {}; migrated.applyEnvironment(env);
+  assert.equal(migrated.state.databaseIdentityVersion, 1);
+  assert.equal(migrated.runningDatabaseIdentity, originalIdentity);
+  assert.equal(endpointPartition(migrated.snapshot().origin, migrated.runningDatabaseIdentity), originalPartition);
+  assert.notEqual(env.THINGTIME_FEDERATION_ID, 'desktop-' + originalIdentity.slice(0, 24));
+  const alias = structuredClone(migrated.state.legacyRendererIdentity);
+  const stored = await fs.readFile(migrated.file);
+  assert.ok(!stored.includes(Buffer.from(originalIdentity)));
+  assert.ok(!JSON.stringify(migrated.snapshot()).includes(originalIdentity));
+  assert.deepEqual(JSON.parse(storage.decryptString(stored)).legacyRendererIdentity, alias);
+  await migrated.configure({ enabled: true, databaseMode: 'external', mongoUri: nextUri });
+  assert.equal(migrated.runningDatabaseIdentity, originalIdentity, 'running renderer remains pinned before restart');
+  const switched = new LocalRuntime({ userData: root, safeStorage: storage });
+  await switched.initialize(); switched.applyEnvironment({});
+  assert.equal(switched.runningDatabaseIdentity, switched.databaseIdentity());
+  assert.notEqual(switched.runningDatabaseIdentity, crypto.createHash('sha256').update(nextUri).digest('hex'));
+  assert.deepEqual(switched.state.legacyRendererIdentity, alias, 'no aliases for arbitrary new database passwords');
+  await switched.configure({ enabled: true, databaseMode: 'external', mongoUri: originalUri });
+  const returned = new LocalRuntime({ userData: root, safeStorage: storage });
+  await returned.initialize(); const returnedEnv = {}; returned.applyEnvironment(returnedEnv);
+  assert.equal(endpointPartition(returned.snapshot().origin, returned.runningDatabaseIdentity), originalPartition);
+  assert.equal(returnedEnv.THINGTIME_FEDERATION_ID, env.THINGTIME_FEDERATION_ID);
+  assert.deepEqual(returned.state.legacyRendererIdentity, alias);
+ }));
+
+test('identity migration persists before use and rejects corrupt identity metadata', () =>
+ fixture(async (runtime, root) => {
+  const legacy = { ...runtime.state };
+  delete legacy.databaseIdentityVersion; delete legacy.legacyRendererIdentity;
+  await runtime.persist(legacy);
+  const previous = await fs.readFile(runtime.file);
+  const failed = new LocalRuntime({ userData: root, safeStorage: storage });
+  failed.persist = async () => { throw new Error('synthetic persistence failure'); };
+  await assert.rejects(failed.initialize(), /persistence failure/);
+  assert.deepEqual(await fs.readFile(runtime.file), previous);
+  for (const metadata of [
+   { databaseIdentityVersion: 2, legacyRendererIdentity: null },
+   { databaseIdentityVersion: 1, legacyRendererIdentity: { keyedIdentity: 'bad', rendererIdentity: 'bad' } },
+   { databaseIdentityVersion: 1 },
+   { legacyRendererIdentity: { keyedIdentity: 'a'.repeat(64), rendererIdentity: 'b'.repeat(64) } }
+  ]) {
+   await runtime.persist({ ...legacy, ...metadata });
+   await assert.rejects(new LocalRuntime({ userData: root, safeStorage: storage }).initialize(), /No remote fallback/);
+  }
+ }));

@@ -10303,3 +10303,18 @@ separate from deterministic discovery/lease tests.
 - Installed browser/runtime integration: quitting or restarting must await agent-browser cleanup, OAuth authority release and MongoDB shutdown together. Delay either cleanup and verify the process remains alive; a browser cleanup error must not skip database shutdown. Isolated-test mode must reject direct fallback calls before evaluating a configured remote authority.
 
 - Installed ChatGPT/menu/browser integration: verify expected-actor browser Actions preserve the live Nitro body and reject changed actors/cross-site requests; vault reveal stays local. Verify the packaged agent browser driver loads Puppeteer from app.asar as well as retaining separate container resources.
+
+- Upgrade session continuity: recovery must require an explicit original HTTPS API and exact previous loopback app URL. Reopen defaultSession at that same renderer origin; verify cookies, drafts/localStorage and IndexedDB independently. Preserve the newer partition; switching API or local database must never reuse legacy storage. Test cancelled/failed recovery, occupied port, immutable origin binding, concurrent endpoint/runtime changes, logout without automatic store changes, and restart/rebuild retention. `electron/scripts/test-session-continuity.cjs` uses only synthetic stores under an OS network boundary; this host currently rejects nested Chromium sandbox initialization, so its real-store acceptance remains unavailable (no permissive fallback).
+- Local-runtime restart visibility: when `ready-to-show` never arrives, completed load, renderer failure and the bounded fallback must reveal the existing window; closing a window must cancel the fallback, and app activation must reveal an existing hidden window.
+
+
+### Bundled desktop MongoDB
+
+- [ ] On a fresh macOS 14+ profile without Homebrew MongoDB, enable the local API and start the included server. Verify authenticated loopback-only MongoDB and a successful API write/read, then restart and confirm the record persists.
+- [ ] Reinstall the signed app and verify local data, encrypted runtime settings and selected session survive; quit and confirm only this app-owned MongoDB child stops.
+- [ ] Existing executable selections remain selected. On macOS 13, the included server gives an actionable compatibility message while remote API mode works.
+- [ ] Corrupt cached download, missing bundled binary/source/license, wrong release and unsupported architecture fail packaging verification.
+
+- Bundled MongoDB acceptance: after staging resources and building Nitro, run `node electron/scripts/test-bundled-local-runtime.cjs`. It uses a fresh encrypted synthetic profile and OS sandbox on ports19881/19882, selects the bundled executable without discovery/installation, creates an account through the normal API, verifies its authenticated session after API/database restart, rejects anonymous database reads, and blocks direct-IP/other-loopback/redirect escape. The fixture never seeds app records directly or uses personal credentials.
+
+- [ ] Desktop public data/federation identifiers use a per-profile keyed HMAC, never an unkeyed connection-string digest. Migrating pre-upgrade encrypted settings preserves the exact existing renderer partition, including after switching databases and returning; failure to persist the alias blocks startup.

@@ -57,8 +57,8 @@ test('native provider uses the running authority and restarts await disconnect',
  assert.match(source,/await passwordProvider\.disconnect\(\);\n await settings\.selectEndpoint\(target\.id\)/);
  const restart = source.match(/async function restartDesktopRuntime\(\) \{[\s\S]*?\n\}/)[0];
  const calls=[]; let finish;
- const running=vm.runInNewContext(restart+'; restartDesktopRuntime()', {mainWindow:{webContents:{stop(){calls.push('stop');}}},passwordProvider:{disconnect(){calls.push('disconnect');return new Promise(resolve=>{finish=resolve;});}},parallelDevMode:false,app:{relaunch(){calls.push('relaunch');},quit(){calls.push('quit');}}});
+ const running=vm.runInNewContext(restart+'; restartDesktopRuntime()', {authorityTransition:{retainUntilRestart(){calls.push('retain');}},mainWindow:{webContents:{stop(){calls.push('stop');}}},passwordProvider:{disconnect(){calls.push('disconnect');return new Promise(resolve=>{finish=resolve;});}},parallelDevMode:false,app:{relaunch(){calls.push('relaunch');},quit(){calls.push('quit');}}});
  assert.deepEqual(calls,['stop','disconnect']); finish(); await running;
- assert.deepEqual(calls,['stop','disconnect','relaunch','quit']);
+ assert.deepEqual(calls,['stop','disconnect','retain','relaunch','quit']);
  assert.match(source,/restart-runtime', async \(event\) => \{[^\n]*await restartDesktopRuntime\(\)/);
 });

@@ -4,6 +4,7 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const net = require('node:net');
+const os = require('node:os');
 const { spawn } = require('node:child_process');
 const DOWNLOAD_URL = 'https://www.mongodb.com/try/download/community';
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -40,6 +41,8 @@ async function discoverMongod() {
 function defaultState(parallelDev) {
 	return {
 		version: 1,
+		databaseIdentityVersion: 1,
+		legacyRendererIdentity: null,
 		enabled: false,
 		databaseMode: 'managed',
 		apiPort: parallelDev ? 28641 : 28631,
@@ -57,6 +60,13 @@ function validateState(value) {
 		throw new Error('Local runtime settings are invalid.');
 	for (const key of ['jwtSecret', 'vaultKey', 'mongoPassword', 'replicaKey'])
 		if (typeof value[key] !== 'string' || value[key].length < 32) throw new Error('Local runtime secrets are invalid.');
+	if (value.databaseIdentityVersion !== undefined && value.databaseIdentityVersion !== 1)
+		throw new Error('Local database identity settings are invalid.');
+	const legacy = value.legacyRendererIdentity;
+	if (value.databaseIdentityVersion === undefined ? legacy !== undefined :
+		legacy !== null && (!legacy || typeof legacy !== 'object' || Array.isArray(legacy) ||
+			!['keyedIdentity', 'rendererIdentity'].every(key => typeof legacy[key] === 'string' && /^[a-f0-9]{64}$/.test(legacy[key]))))
+		throw new Error('Local database identity settings are invalid.');
 	value.apiPort = port(value.apiPort);
 	value.databasePort = port(value.databasePort);
 	if (value.apiPort === value.databasePort) throw new Error('The API and database must use different ports.');
@@ -66,11 +76,13 @@ function validateState(value) {
 	return value;
 }
 class LocalRuntime {
-	constructor({ userData, safeStorage, parallelDev = false, createMongoClient, spawnProcess = spawn }) {
+	constructor({ userData, safeStorage, parallelDev = false, createMongoClient, spawnProcess = spawn, bundledMongodPath = null, platform = process.platform, hostRelease = os.release() }) {
 		if (!path.isAbsolute(userData)) throw new Error('Local runtime requires an absolute app data directory.');
 		this.root = path.join(userData, 'local-runtime');
 		this.file = path.join(this.root, 'settings.enc');
 		this.safeStorage = safeStorage;
+		this.bundledMongodPath = bundledMongodPath;
+		this.bundledMongoSupported = platform !== 'darwin' || Number(hostRelease.split('.')[0]) >= 23;
 		this.createMongoClient = createMongoClient;
 		this.spawnProcess = spawnProcess;
 		this.state = defaultState(parallelDev);
@@ -84,15 +96,39 @@ class LocalRuntime {
 		return this.safeStorage.isEncryptionAvailable() && this.safeStorage.getSelectedStorageBackend?.() !== 'basic_text';
 	}
 	async initialize() {
+		let existingSettings = false;
 		try {
 			const stat = await fs.lstat(this.file);
 			if (!stat.isFile() || stat.isSymbolicLink() || stat.size > 16384) throw new Error('Invalid local runtime settings file.');
 			if (!this.encryptionReady()) throw new Error('Unlock the system credential store to read local runtime settings.');
 			this.state = validateState(JSON.parse(this.safeStorage.decryptString(await fs.readFile(this.file))));
+			existingSettings = true;
 		} catch (error) {
 			if (error.code !== 'ENOENT') throw new Error('Local runtime settings could not be unlocked. No remote fallback was enabled.');
 		}
-		if (!this.state.mongodPath) this.state.mongodPath = await discoverMongod();
+		if (existingSettings && this.state.databaseIdentityVersion === undefined) {
+			const uri = this.mongoUri();
+			const migrated = { ...this.state, databaseIdentityVersion: 1, legacyRendererIdentity: null };
+			if (typeof uri === 'string' && uri) {
+				// Compatibility only: derive the already-existing renderer directory once
+				// from this pre-upgrade database. This is not password verification. Keep
+				// the alias encrypted, never publish it, and never derive it for new URIs.
+				migrated.legacyRendererIdentity = {
+					keyedIdentity: this.databaseIdentity(uri),
+					rendererIdentity: crypto.createHash('sha256').update(uri).digest('hex')
+				};
+			}
+			await this.persist(migrated);
+			this.state = migrated;
+		}
+		if (!this.state.mongodPath) {
+			// Only fresh installations adopt the bundled version automatically. Existing
+			// installations keep their chosen executable and database compatibility.
+			let existingDatabase = false;
+			try { await fs.access(path.join(this.root, 'database', 'WiredTiger')); existingDatabase = true; } catch (error) { if (error.code !== 'ENOENT') throw error; }
+			this.state.mongodPath = !existingSettings && !existingDatabase && await executable(this.bundledMongodPath)
+				? this.bundledMongodPath : await discoverMongod();
+		}
 		return this.snapshot();
 	}
 	snapshot() {
@@ -104,12 +140,18 @@ class LocalRuntime {
 			apiPort: this.state.apiPort,
 			databasePort: this.state.databasePort,
 			mongodPath: this.state.mongodPath,
+			bundledMongoSelected: Boolean(this.bundledMongodPath && this.state.mongodPath === this.bundledMongodPath),
+			bundledMongoSupported: this.bundledMongoSupported,
 			externalDatabaseConfigured: Boolean(this.state.mongoUri),
 			encryptionAvailable: this.encryptionReady(),
 			origin: `http://127.0.0.1:${this.state.apiPort}`,
 			error: this.error,
 			downloadUrl: DOWNLOAD_URL
 		};
+	}
+	assertManagedBinarySupported(state = this.state) {
+		if (state.mongodPath === this.bundledMongodPath && this.bundledMongodPath && !this.bundledMongoSupported)
+			throw new Error('The included MongoDB requires macOS 14 or later. Upgrade macOS, choose a compatible MongoDB executable, or use an existing MongoDB connection.');
 	}
 	async persist(state) {
 		if (!this.encryptionReady()) throw new Error('Unlock the system credential store before configuring the local runtime.');
@@ -135,8 +177,9 @@ class LocalRuntime {
 				...(request.mongoUri ? { mongoUri: validateMongoUri(request.mongoUri) } : {})
 			});
 			if (state.enabled && state.databaseMode === 'external' && !state.mongoUri) throw new Error('Enter the MongoDB URI for this local API.');
+			if (state.enabled && state.databaseMode === 'managed') this.assertManagedBinarySupported(state);
 			if (state.enabled && state.databaseMode === 'managed' && !(await executable(state.mongodPath)))
-				throw new Error('Install MongoDB Community Server and choose its mongod executable first.');
+				throw new Error('MongoDB is unavailable in this build. Choose a MongoDB Community Server executable or use an existing MongoDB connection.');
 			// A replica-set member address is persisted in MongoDB. Changing its port
 			// needs an explicit database migration rather than silently creating a new DB.
 			if (state.databasePort !== this.state.databasePort) {
@@ -169,6 +212,12 @@ class LocalRuntime {
 			? this.state.mongoUri
 			: `mongodb://thingtime:${this.state.mongoPassword}@127.0.0.1:${this.state.databasePort}/thingtime?authSource=admin&replicaSet=thingtime-local`;
 	}
+	databaseIdentity(uri = this.mongoUri()) {
+		// This public identifier must not provide an offline guess oracle for a
+		// user-chosen MongoDB password. The domain separates it from vault uses.
+		return crypto.createHmac('sha256', this.state.vaultKey)
+			.update('thingtime-desktop-database-identity-v1\0').update(uri).digest('hex');
+	}
 	applyEnvironment(env) {
 		// Never inherit development/production credentials into the desktop runtime.
 		for (const name of [
@@ -189,7 +238,10 @@ class LocalRuntime {
 			delete env[name];
 		env.THINGTIME_DESKTOP_API_MODE = this.state.enabled ? 'local' : 'remote';
 		this.runningEnabled = this.state.enabled;
-		this.runningDatabaseIdentity = this.state.enabled ? crypto.createHash('sha256').update(this.mongoUri()).digest('hex') : '';
+		const databaseIdentity = this.state.enabled ? this.databaseIdentity() : '';
+		const legacy = this.state.legacyRendererIdentity;
+		this.runningDatabaseIdentity = this.state.enabled && legacy?.keyedIdentity === databaseIdentity
+			? legacy.rendererIdentity : databaseIdentity;
 		if (!this.state.enabled) return;
 		delete env.THINGTIME_API_FALLBACK_ORIGIN;
 		env.MONGODB_CONNECTION_STRING = this.mongoUri();
@@ -198,7 +250,7 @@ class LocalRuntime {
 		env.THINGTIME_CHATGPT_PLAN_DIR = path.join(this.root, 'chatgpt-plan');
 		env.THINGTIME_CHATGPT_PLAN_STORAGE = 'mongodb';
 		env.THINGTIME_CHATGPT_PLAN_ALLOW_LOOPBACK_AUTHORIZATION = '1';
-		const identity = 'desktop-' + crypto.createHash('sha256').update(this.mongoUri()).digest('hex').slice(0, 24);
+		const identity = 'desktop-' + databaseIdentity.slice(0, 24);
 		env.THINGTIME_DATA_ENV = 'custom:' + identity;
 		env.THINGTIME_FEDERATION_ID = identity;
 		env.THINGTIME_DATA_AUTHORITY_ORIGIN = this.snapshot().origin;
@@ -208,6 +260,7 @@ class LocalRuntime {
 		await this.persist(this.state);
 		await assertFreePort(this.state.apiPort);
 		if (this.state.databaseMode === 'external') return;
+		this.assertManagedBinarySupported();
 		if (!(await executable(this.state.mongodPath)))
 			throw new Error('The selected mongod executable is unavailable. Choose it again in desktop settings.');
 		await assertFreePort(this.state.databasePort);
