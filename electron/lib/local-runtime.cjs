@@ -41,6 +41,8 @@ async function discoverMongod() {
 function defaultState(parallelDev) {
 	return {
 		version: 1,
+		databaseIdentityVersion: 1,
+		legacyRendererIdentity: null,
 		enabled: false,
 		databaseMode: 'managed',
 		apiPort: parallelDev ? 28641 : 28631,
@@ -58,6 +60,13 @@ function validateState(value) {
 		throw new Error('Local runtime settings are invalid.');
 	for (const key of ['jwtSecret', 'vaultKey', 'mongoPassword', 'replicaKey'])
 		if (typeof value[key] !== 'string' || value[key].length < 32) throw new Error('Local runtime secrets are invalid.');
+	if (value.databaseIdentityVersion !== undefined && value.databaseIdentityVersion !== 1)
+		throw new Error('Local database identity settings are invalid.');
+	const legacy = value.legacyRendererIdentity;
+	if (value.databaseIdentityVersion === undefined ? legacy !== undefined :
+		legacy !== null && (!legacy || typeof legacy !== 'object' || Array.isArray(legacy) ||
+			!['keyedIdentity', 'rendererIdentity'].every(key => typeof legacy[key] === 'string' && /^[a-f0-9]{64}$/.test(legacy[key]))))
+		throw new Error('Local database identity settings are invalid.');
 	value.apiPort = port(value.apiPort);
 	value.databasePort = port(value.databasePort);
 	if (value.apiPort === value.databasePort) throw new Error('The API and database must use different ports.');
@@ -96,6 +105,21 @@ class LocalRuntime {
 			existingSettings = true;
 		} catch (error) {
 			if (error.code !== 'ENOENT') throw new Error('Local runtime settings could not be unlocked. No remote fallback was enabled.');
+		}
+		if (existingSettings && this.state.databaseIdentityVersion === undefined) {
+			const uri = this.mongoUri();
+			const migrated = { ...this.state, databaseIdentityVersion: 1, legacyRendererIdentity: null };
+			if (typeof uri === 'string' && uri) {
+				// Compatibility only: derive the already-existing renderer directory once
+				// from this pre-upgrade database. This is not password verification. Keep
+				// the alias encrypted, never publish it, and never derive it for new URIs.
+				migrated.legacyRendererIdentity = {
+					keyedIdentity: this.databaseIdentity(uri),
+					rendererIdentity: crypto.createHash('sha256').update(uri).digest('hex')
+				};
+			}
+			await this.persist(migrated);
+			this.state = migrated;
 		}
 		if (!this.state.mongodPath) {
 			// Only fresh installations adopt the bundled version automatically. Existing
@@ -187,6 +211,12 @@ class LocalRuntime {
 			? this.state.mongoUri
 			: `mongodb://thingtime:${this.state.mongoPassword}@127.0.0.1:${this.state.databasePort}/thingtime?authSource=admin&replicaSet=thingtime-local`;
 	}
+	databaseIdentity(uri = this.mongoUri()) {
+		// This public identifier must not provide an offline guess oracle for a
+		// user-chosen MongoDB password. The domain separates it from vault uses.
+		return crypto.createHmac('sha256', this.state.vaultKey)
+			.update('thingtime-desktop-database-identity-v1\0').update(uri).digest('hex');
+	}
 	applyEnvironment(env) {
 		// Never inherit development/production credentials into the desktop runtime.
 		for (const name of [
@@ -207,7 +237,10 @@ class LocalRuntime {
 			delete env[name];
 		env.THINGTIME_DESKTOP_API_MODE = this.state.enabled ? 'local' : 'remote';
 		this.runningEnabled = this.state.enabled;
-		this.runningDatabaseIdentity = this.state.enabled ? crypto.createHash('sha256').update(this.mongoUri()).digest('hex') : '';
+		const databaseIdentity = this.state.enabled ? this.databaseIdentity() : '';
+		const legacy = this.state.legacyRendererIdentity;
+		this.runningDatabaseIdentity = this.state.enabled && legacy?.keyedIdentity === databaseIdentity
+			? legacy.rendererIdentity : databaseIdentity;
 		if (!this.state.enabled) return;
 		delete env.THINGTIME_API_FALLBACK_ORIGIN;
 		env.MONGODB_CONNECTION_STRING = this.mongoUri();
@@ -216,7 +249,7 @@ class LocalRuntime {
 		env.THINGTIME_CHATGPT_PLAN_DIR = path.join(this.root, 'chatgpt-plan');
 		env.THINGTIME_CHATGPT_PLAN_STORAGE = 'mongodb';
 		env.THINGTIME_CHATGPT_PLAN_ALLOW_LOOPBACK_AUTHORIZATION = '1';
-		const identity = 'desktop-' + crypto.createHash('sha256').update(this.mongoUri()).digest('hex').slice(0, 24);
+		const identity = 'desktop-' + databaseIdentity.slice(0, 24);
 		env.THINGTIME_DATA_ENV = 'custom:' + identity;
 		env.THINGTIME_FEDERATION_ID = identity;
 		env.THINGTIME_DATA_AUTHORITY_ORIGIN = this.snapshot().origin;

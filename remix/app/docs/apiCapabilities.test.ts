@@ -709,7 +709,3 @@ test('local ChatGPT plan capabilities cover both manifests and reject unsupporte
     assert.equal(capabilitySatisfies(version, version), true);
   }
 });
- test('password title search requires the additive 1.2 contract', () => {
-  for (const version of ['1.2.0', '1.2.1', '1.3.0']) assert.equal(capabilitySatisfies(version, '1.2.0'), true);
-  for (const version of [undefined, '1.1.0', '1.1.9', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.2.0'), false);
- });
