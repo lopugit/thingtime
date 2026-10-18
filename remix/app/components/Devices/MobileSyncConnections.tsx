@@ -547,7 +547,7 @@ function Connections({
 				</Flex>
 			</Flex>
 			<Text fontSize="12px" color="var(--tt-muted, #71717a)">
-				{appOwned ? 'Started transfers continue when you leave this screen or close the Mac window. Reopen this connection to review conflicts or stop a transfer. Quitting the app stops transfers; retry to recover saved work.' :
+				{appOwned ? 'Started transfers continue when you leave this screen or close the Mac window. Reopen this connection to review conflicts or stop a transfer. Quitting interrupts transfers; unfinished jobs resume when you reopen Thingtime with the same account and access. Stop transfer keeps a job paused until you retry.' :
 					'Transfer selected folders in either direction while this app stays open. Background transfers are still being added.'}
 				{' '}Downloads and two-way sync require native folder approval and recoverable device Trash for deletion propagation. Conflicting changes preserve both copies for review.
 			</Text>
@@ -663,7 +663,7 @@ function Connections({
 							Edit
 						</Button>
 						{running ? (
-							<Button size="sm" minHeight="40px" onClick={() => task?.active ? desktopSyncTasks.cancel(task.scope) : controller.current?.abort()}>
+							<Button size="sm" minHeight="40px" onClick={() => task?.active ? void desktopSyncTasks.cancel(task.scope).catch(cause => setError(cause instanceof Error ? cause.message : 'Could not save the stopped transfer.')) : controller.current?.abort()}>
 								Stop transfer
 							</Button>
 						) : (

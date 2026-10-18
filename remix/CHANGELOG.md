@@ -74,6 +74,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-19 — **Codex (AI)**: Mac sync now persists explicit job admission,
+  resumes unfinished work from the app shell with existing native consent, and
+  retains Stop across relaunch. Isolated Chromium process-restart acceptance
+  recovers an accepted write without replay; installed/reboot checks remain open.
+  See [PR 1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+
 - 2026-10-19 — **Codex (AI)**: Move explicit Mac sync runs out of the Files
   screen, reconnect live progress/review on return, and keep an active window
   hidden on Close. Fix reattachment behind long scans and cancellation render

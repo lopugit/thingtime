@@ -11708,3 +11708,18 @@ resume unfinished Android gates only when requested.
   fixture to loopback 28421/28422. Fail closed if nested Chromium sandbox setup
   fails; never use a permissive fallback. Unit window-lease tests do not prove
   native Close/Quit acceptance. Full-quit automatic resume remains unimplemented.
+
+### Durable Mac sync admission and relaunch
+
+- Run `npm --prefix remix run test:file-sync` for admission migration, bounded
+  per-account discovery, stale-state refusal and durable Stop coverage.
+- Run `npm --prefix remix run test:files:desktop-lifecycle -- <evidence-dir>`.
+  Terminate the isolated browser after the synthetic cloud commit but before
+  the reply; reopen with Files absent and verify identical job/destination IDs.
+  Wrong account, changed origin and revoked grant must cause no scan or write.
+  A stopped job must remain paused on restart. Open conflict controls and scroll
+  desktop and phone views fully; preserve saved choices and both versions.
+- Installed acceptance remains required: signed Mac Close/Quit/relaunch/reboot,
+  offline-to-online and power changes, native approval revocation, real Files
+  targets, and independent exact bytes/Timeline receipts. The isolated UI
+  fixture cannot establish these installed/physical-provider behaviors.

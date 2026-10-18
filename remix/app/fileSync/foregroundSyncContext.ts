@@ -5,6 +5,13 @@ import { sameSyncScope, validSyncEntry, validSyncPath, type SyncScope } from './
 import type { CloudTransportRuntime } from './cloudTransport';
 import type { ForegroundSyncInput } from './foregroundSync';
 
+export class SyncConditionsWait extends Error {
+	constructor(readonly reason: 'paused' | 'offline' | 'network' | 'charging') {
+		super({ paused: 'This connection is paused.', offline: 'Waiting for an internet connection.',
+			network: 'Waiting for the selected network.', charging: 'Waiting for this device to charge.' }[reason]);
+	}
+}
+
 /** One live authorization policy shared by both journal formats. Saved pages,
  * reviews and receipts never replace current native/account/device approval. */
 export function foregroundSyncContext(reviewed: SavedFileSyncConfiguration, scope: SyncScope, input: ForegroundSyncInput, signal: AbortSignal) {
@@ -38,15 +45,7 @@ export function foregroundSyncContext(reviewed: SavedFileSyncConfiguration, scop
 			remoteFolderId: configuration.remoteFolderId,
 			conditions
 		});
-		if (result.status === 'waiting')
-			throw Error(
-				{
-					paused: 'This connection is paused.',
-					offline: 'Waiting for an internet connection.',
-					network: 'Waiting for the selected network.',
-					charging: 'Waiting for this device to charge.'
-				}[result.reason]
-			);
+		if (result.status === 'waiting') throw new SyncConditionsWait(result.reason);
 		return conditions;
 	};
 	const scanCloud = async () => {

@@ -10,6 +10,7 @@ import { createMemoryRouter, RouterProvider } from 'react-router';
 import { Box, Button, ChakraProvider, Flex, Text } from '@chakra-ui/react';
 import { SyncConflictReview } from '../app/components/Devices/SyncConflictReview';
 import { DesktopFolderAccess } from '../app/components/Devices/DesktopFolderAccess';
+import { DesktopSyncBootstrap } from '../app/fileSync/DesktopSyncBootstrap';
 import { MobileFolderAccess } from '../app/components/Devices/MobileFolderAccess';
 import { nativeBridgeMessageEvent } from '../app/utils/nativeBridge';
 const inspectionQA = new URLSearchParams(location.search).has('inspect');
@@ -57,15 +58,15 @@ const captureReceipts = new Map<string, any>(JSON.parse(localStorage.getItem(cap
 let capturePuts = 0,
 	captureRedraw = () => {};
 const captureReady = new Set<string>();
-const canonicalOrigin = 'https://desktop-sync.invalid';
-const ownerId = photoQA ? 'sync-ui-photo-fixture' : 'sync-ui-fixture',
+const canonicalOrigin = new URLSearchParams(location.search).has('other-origin') ? 'https://other-sync.invalid' : 'https://desktop-sync.invalid';
+const ownerId = new URLSearchParams(location.search).has('other-account') ? 'other-sync-ui-fixture' : photoQA ? 'sync-ui-photo-fixture' : 'sync-ui-fixture',
 	deviceId = 'sync-ui-device',
 	databaseKey = 'tt:fixture:sync-editor-database' + (photoQA ? ':photos' : captureQA ? ':capture' : conflictQA ? ':conflicts' : '');
 let rows: any[] = JSON.parse(localStorage.getItem(databaseKey) || 'null') ?? [
 	{ id: 'cloud-documents', thingtime: ['folder'], author: { id: ownerId }, acl: ['tt:user'], crystal: { name: 'Cloud documents' } }
 ];
 let transferFolders: any[] = JSON.parse(localStorage.getItem('tt:fixture:sync-transfer-folders') || '[]');
-let holdNextScan = false;
+let holdNextScan = false, holdTransferReply = false;
 let loseTransferReply = false,
 	network = 'wifi';
 const localEntries = conflictQA
@@ -130,7 +131,7 @@ const initialRoots: MobileFolder[] = [
 		...(photoQA ? { sourceKind: 'photos' as const, photoAccess: 'limited' as const } : {})
 	}
 ];
-let roots = structuredClone(initialRoots),
+let roots = new URLSearchParams(location.search).has('revoked-root') ? [] : structuredClone(initialRoots),
 	loseReply = false,
 	unavailable = false;
 const persist = () => localStorage.setItem(databaseKey, JSON.stringify(rows));
@@ -222,6 +223,7 @@ window.fetch = async function (this: unknown, input, init) {
 			const folder = { id: body.id, folderId: body.folderId, name: body.name, revision: 'fixture-' + body.id };
 			transferFolders.push(folder);
 			localStorage.setItem('tt:fixture:sync-transfer-folders', JSON.stringify(transferFolders));
+			if (holdTransferReply) await new Promise(() => {});
 			if (loseTransferReply) {
 				loseTransferReply = false;
 				throw Error('Fixture lost accepted folder creation');
@@ -383,10 +385,11 @@ if (desktop) {
 }
 function Fixture() {
 	const [, redraw] = useState(0);
-	const [showFolders, setShowFolders] = useState(true);
+	const [showFolders, setShowFolders] = useState(!new URLSearchParams(location.search).has('away'));
 	captureRedraw = () => redraw((n) => n + 1);
 	return (
 		<ChakraProvider>
+			{taskQA && <DesktopSyncBootstrap ownerId={ownerId} generation={0} />}
 			<Box maxWidth="760px" margin="auto" padding={4}>
 				<Text as="h1" fontSize="20px" fontWeight="bold">
 					{desktop ? 'Desktop sync editor regression' : 'Mobile sync editor regression'}
@@ -394,7 +397,8 @@ function Fixture() {
 				<Text fontSize="12px">Synthetic API and native grants. No real files are accessed or uploaded.</Text>
 				{taskQA && <><Text role="status">App transfer lease: {taskHeld ? 'active' : 'idle'}</Text>
 					<Button onClick={() => setShowFolders(value => !value)}>{showFolders ? 'Leave Files screen' : 'Reopen Files screen'}</Button>
-					<Button onClick={() => { for (const release of heldScans.values()) release(); }}>Release scan</Button></>}
+					<Button onClick={() => { for (const release of heldScans.values()) release(); }}>Release scan</Button>
+					<Button onClick={() => { holdTransferReply = true; }}>Hold accepted upload reply</Button></>}
 				{captureQA && (
 					<Text role="status">
 						Captured versions: {captureReceipts.size}. Upload parts this page: {capturePuts}. Cloud revision: {conflictRevision}.

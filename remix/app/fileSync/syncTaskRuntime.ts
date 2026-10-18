@@ -19,6 +19,7 @@ export type SyncTaskSnapshot = {
 export function createSyncTaskRuntime() {
 	let snapshot: SyncTaskSnapshot | null = null;
 	let active: AbortController | undefined;
+	let saveStop: (() => Promise<void>) | undefined;
 	const listeners = new Set<() => void>();
 	const publish = (value: SyncTaskSnapshot | null) => {
 		snapshot = value;
@@ -27,12 +28,16 @@ export function createSyncTaskRuntime() {
 	return {
 		read: () => snapshot,
 		subscribe(listener: () => void) { listeners.add(listener); return () => { listeners.delete(listener); }; },
-		cancel(scope: SyncScope) { if (snapshot && syncScopeKey(scope) === syncScopeKey(snapshot.scope)) active?.abort(); },
+		async cancel(scope: SyncScope) {
+			if (!snapshot || syncScopeKey(scope) !== syncScopeKey(snapshot.scope) || !active) return;
+			const controller = active;
+			try { await saveStop?.(); } finally { if (active === controller) controller.abort(); }
+		},
 		invalidate() { active?.abort(); publish(null); },
-		async start(scope: SyncScope, run: (signal: AbortSignal, update: (patch: Partial<Pick<SyncTaskSnapshot, 'progress' | 'pagedReview' | 'legacyReview' | 'host'>>) => void) => Promise<void>) {
+		async start(scope: SyncScope, run: (signal: AbortSignal, update: (patch: Partial<Pick<SyncTaskSnapshot, 'progress' | 'pagedReview' | 'legacyReview' | 'host'>>) => void) => Promise<void>, onStop?: () => Promise<void>) {
 			if (active) throw Error('A transfer is already running. Reopen its connection to review or stop it.');
 			syncScopeKey(scope);
-			const controller = new AbortController(); active = controller;
+			const controller = new AbortController(); active = controller; saveStop = onStop;
 			publish({ scope: structuredClone(scope), active: true, progress: { stage: 'checking', confirmed: 0, total: 0 } });
 			const update = (patch: Partial<Pick<SyncTaskSnapshot, 'progress' | 'pagedReview' | 'legacyReview' | 'host'>>) => {
 				controller.signal.throwIfAborted();
@@ -45,7 +50,7 @@ export function createSyncTaskRuntime() {
 						error instanceof Error ? error.message : 'Transfer interrupted. Retry to recover saved work.' } });
 			} finally {
 				if (snapshot) publish({ ...snapshot, active: false, pagedReview: undefined, legacyReview: undefined });
-				if (active === controller) active = undefined;
+				if (active === controller) { active = undefined; saveStop = undefined; }
 			}
 		}
 	};

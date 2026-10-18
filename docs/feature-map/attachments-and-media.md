@@ -8,8 +8,10 @@ legacy hosts cannot use non-interactive resume. `MacFolderSyncTests`,
 `mobileSyncTarget.test.ts`, Electron folder-host checks and the disposable
 `test:files:mac-paged` acceptance cover the boundary. The Mac connection now delegates explicit runs to `desktopSyncTasks.client.ts`
 and `syncTaskRuntime.ts`; view detachment preserves execution and review. The
-Electron `SyncWindowLease` keeps an active window hidden on Close. Automatic
-restart scheduling and installed acceptance remain open. Run
+Electron `SyncWindowLease` keeps an active window hidden on Close. Durable explicit job admission and root-app resume now live in
+`syncJobJournal.ts` and `DesktopSyncBootstrap.tsx` (journal v11). Automatic
+resume uses existing native consent only; Stop persists a pause. Installed
+relaunch/reboot, continuous scheduling and iOS workers remain open. Run
 `test:files:desktop-lifecycle` for the isolated production-UI regression.
 
 `fileSync/pagedReviewDraft.ts` adds bounded mutable conflict-review storage to

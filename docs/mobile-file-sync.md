@@ -3309,3 +3309,35 @@ TypeScript reports 91 baseline diagnostics, none in changed files. Two actual
 UI defects found during acceptance were fixed: native context re-negotiation
 blocking the returning screen behind a scan, and cancelled host metadata
 throwing during the view's final render. Initial failed attempts remain evidence.
+
+## Durable Mac job resume — 2026-10-19
+
+Explicit Mac starts now admit a bounded, revision-guarded job into version 11
+of the existing sync journal. The root app discovers only these admissions,
+including while Files is unmounted, and resumes them using saved native write
+approval (`existing` / `write-check`) only. Saved connection Things alone do
+not schedule transfers. Account, selected origin, paired device, root grant,
+private configuration/revision and live conditions are rechecked by the shared
+runner. Discovery is serialized, paginated at 32 jobs and capped at 256 records
+per account, with a bounded 60-second retry cadence for eligible work.
+
+Stop saves a paused job before aborting; stale discoveries and late completion
+cannot revive it. Identity changes and page exit cancel live work without
+turning an interrupted job into a user pause. Explicit retry keeps the original
+unfinished job ID and existing operation journal. Completed admissions are not
+automatically scheduled. Configuration changes require explicit review; no
+native approval dialog is opened by automatic resume.
+
+Verification: eight new journal regressions cover reopen, Stop/attention,
+completion, settings, account/device/origin/root boundaries, bounded pagination,
+concurrent limits and version-10 migration. Two runtime regressions cover
+persist-before-stop, identity cancellation and failed pause persistence.
+The isolated production-UI fixture terminates a real persistent Chromium process
+after a synthetic cloud write is accepted but before its reply arrives, then
+restarts it with Files unmounted. The same job and destination recover without
+a duplicate. Wrong account/origin and revoked root refuse scans; Stop survives
+restart; conflict choices and retained versions still work. Desktop and phone
+full scrolling have no overflow. Native and HTTP grants in this UI fixture are
+synthetic; installed Mac Quit/relaunch, OS reboot and physical providers remain
+unverified. iOS persistent workers, continuous change scheduling and complete
+independent account snapshots/restore remain open. Android is deferred.

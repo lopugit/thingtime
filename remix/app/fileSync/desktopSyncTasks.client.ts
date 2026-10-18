@@ -1,3 +1,5 @@
+import { SyncConditionsWait } from './foregroundSyncContext';
+import type { SyncJob } from './syncJobJournal';
 import { createDesktopFolderHost } from './desktopFolders.client';
 import { getElectronBridge } from '../utils/electronBridge';
 import { rootIdentity } from '../utils/rootIdentity';
@@ -24,25 +26,27 @@ export function supportsDesktopSyncTasks() {
 	return bridge?.platform === 'darwin' && bridge.folderSyncTaskVersion === '1.0.0' && !!bridge.setFolderSyncActive && !!bridge.folderSyncRequest;
 }
 
-/** Explicit user-started runs outlive the connection view. This does not infer
- * execution consent from saved Things, nor schedule new runs after quitting. */
-export async function startDesktopSyncTask(saved: SavedFileSyncConfiguration, scope: SyncScope, generation: number) {
+/** Explicit runs persist admission separately from editable connection Things.
+ * Relaunch resumes only that admitted job, using existing native consent. */
+export async function startDesktopSyncTask(saved: SavedFileSyncConfiguration, scope: SyncScope, generation: number, resume?: SyncJob) {
 	if (!supportsDesktopSyncTasks()) throw Error('Update Thingtime Desktop to continue sync outside this screen.');
 	const bridge = getElectronBridge()!, reviewed = structuredClone(saved), binding = structuredClone(scope);
 	if (binding.dataPlane !== 'home' || binding.rootId !== reviewed.id || binding.deviceId !== reviewed.configuration.deviceId)
 		throw Error('The file sync connection changed.');
+	let stopRequested = false, saveStop: (() => Promise<void>) | undefined;
 	await desktopSyncTasks.start(binding, async (signal, update) => {
-		const check = () => {
-			signal.throwIfAborted();
+		const checkIdentity = () => {
 			if (rootIdentity.read().pending || rootIdentity.read().generation !== generation || getElectronBridge() !== bridge)
 				throw Error('The active account changed. Reopen folder access.');
 		};
+		const check = () => { signal.throwIfAborted(); checkIdentity(); };
 		const changed = () => { if (rootIdentity.read().pending || rootIdentity.read().generation !== generation) desktopSyncTasks.invalidate(); };
 		const unsubscribe = rootIdentity.subscribe(changed);
 		const leave = () => desktopSyncTasks.invalidate();
 		window.addEventListener('pagehide', leave);
 		let journal: Awaited<ReturnType<typeof openSyncJournal>> | undefined;
-		let held = false;
+		let held = false, job: SyncJob | null = null;
+		let jobs: ReturnType<Awaited<ReturnType<typeof openSyncJournal>>['jobs']> | undefined;
 		try {
 			check();
 			await bridge.setFolderSyncActive!({ active: true }); held = true; check();
@@ -56,6 +60,8 @@ export async function startDesktopSyncTask(saved: SavedFileSyncConfiguration, sc
 			update({ host: { ...host, origin: () => binding.origin } });
 			const request = host.request, capabilities = host.capabilities;
 			journal = await openSyncJournal(); check();
+			jobs = journal.jobs({ scope: binding, currentScope: () => { checkIdentity(); return binding; } });
+			saveStop = async () => { if (job) await jobs!.transition(job, 'paused'); };
 			const currentScope = () => { check(); host.assertCurrent(); return binding; };
 			const runtime = { currentScope, origin: host.origin, fetch: host.fetch, requireCapability: host.requireCapability };
 			const publish = (progress: Parameters<typeof update>[0]['progress']) => {
@@ -69,7 +75,11 @@ export async function startDesktopSyncTask(saved: SavedFileSyncConfiguration, sc
 				assertPhotoSourcePolicy(reviewed.configuration, roots); check();
 				const inspect = supportsNativePathInspection(capabilities) && roots.some(root => root.id === reviewed.configuration.localRootId && root.sourceKind !== 'photos');
 				const localTarget = ['download', 'two-way'].includes(reviewed.configuration.mode)
-					? await approveMobileSyncTarget(reviewed, binding, signal, request, capabilities) : undefined;
+					? await approveMobileSyncTarget(reviewed, binding, signal, request, capabilities, resume ? 'existing' : 'request') : undefined;
+				job = resume ? await jobs!.transition(resume, 'runnable') : await jobs!.admit(reviewed, crypto.randomUUID());
+				if (!job) return; // A stopped/completed/replaced discovery is never replayed.
+				if (stopRequested) await jobs!.transition(job, 'paused');
+				check();
 				await runPagedForegroundCloudSync(reviewed, binding, {
 					currentScope, localTarget, journal: journal!, runtime, progress: publish,
 					readConfiguration: async () => {
@@ -121,10 +131,17 @@ export async function startDesktopSyncTask(saved: SavedFileSyncConfiguration, sc
 						update({ legacyReview: { conflicts, apply: finish, retain: () => finish({ action: 'retain' }), cancel: () => finish() } });
 					})
 				}, signal);
+				check(); await jobs!.transition(job, 'complete');
 			}, undefined, signal);
+		} catch (error) {
+			if (job && !signal.aborted && !(error instanceof SyncConditionsWait)) await jobs!.transition(job, 'attention');
+			throw error;
 		} finally {
 			journal?.close(); unsubscribe(); window.removeEventListener('pagehide', leave);
 			if (held) await bridge.setFolderSyncActive!({ active: false });
 		}
+	}, async () => {
+		stopRequested = true;
+		try { await saveStop?.(); } catch { throw Error('Transfer stopped, but its pause could not be saved. It may resume when Thingtime reopens.'); }
 	});
 }

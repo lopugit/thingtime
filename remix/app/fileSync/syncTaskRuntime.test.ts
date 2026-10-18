@@ -70,3 +70,25 @@ test('a failed run releases execution for retry without claiming completion', as
 	await tasks.start(scope, async (_signal, update) => update({ progress: { stage: 'complete', total: 1, confirmed: 1 } }));
 	assert.equal(tasks.read()?.progress.stage, 'complete');
 });
+
+test('user Stop persists before aborting while identity invalidation never saves a user pause', async () => {
+ const tasks = createSyncTaskRuntime(), held = gate(); let signal!: AbortSignal, saves = 0;
+ const running = tasks.start(scope, async current => {
+  signal = current; await new Promise((_, reject) => current.addEventListener('abort', () => reject(current.reason), { once: true }));
+ }, async () => { saves++; await held.promise; });
+ const stopped = tasks.cancel(scope); assert.equal(saves, 1); assert.equal(signal.aborted, false);
+ held.resolve(); await stopped; await running; assert.equal(signal.aborted, true);
+ const next = tasks.start(scope, async current => {
+  await new Promise((_, reject) => current.addEventListener('abort', () => reject(current.reason), { once: true }));
+ }, async () => { saves++; });
+ tasks.invalidate(); await next; assert.equal(saves, 1);
+});
+
+test('failed pause persistence still stops live work and is surfaced to the caller', async () => {
+ const tasks = createSyncTaskRuntime();
+ const running = tasks.start(scope, async current => {
+  await new Promise((_, reject) => current.addEventListener('abort', () => reject(current.reason), { once: true }));
+ }, async () => { throw Error('Disk unavailable'); });
+ await assert.rejects(tasks.cancel(scope), /Disk unavailable/); await running;
+ assert.equal(tasks.read()?.active, false);
+});

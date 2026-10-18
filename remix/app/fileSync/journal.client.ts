@@ -1,4 +1,5 @@
 import { upgradeJournalRetention } from './journalRetention';
+import { syncJobJournal, upgradeSyncJobJournal } from './syncJobJournal';
 import { journalMaintenance } from './journalMaintenance';
 import { PAGED_CHECKPOINT_HEADS, validateSyncCheckpoint, type SyncCheckpoint } from './checkpoint';
 import { validateSyncRun, type SyncRun } from './execute';
@@ -16,7 +17,7 @@ export { syncScopeKey } from './reconcile';
  * history remains in Timeline. IDB errors are fatal before any new mutation. */
 export const openSyncJournal = async (factory: IDBFactory = indexedDB, name = 'thingtime-file-sync-v1', keyRange?: typeof IDBKeyRange) => {
 	const db = await new Promise<IDBDatabase>((resolve, reject) => {
-		const request = factory.open(name, 10);
+		const request = factory.open(name, 11);
 		request.onupgradeneeded = () => {
 			for (const store of ['runs', 'checkpoints']) if (!request.result.objectStoreNames.contains(store)) request.result.createObjectStore(store);
 			upgradeJournalRetention(request.result);
@@ -25,6 +26,7 @@ export const openSyncJournal = async (factory: IDBFactory = indexedDB, name = 't
 			upgradePagedRunJournal(request.result);
 			upgradePagedCheckpointJournal(request.result);
 			upgradeReviewDraftJournal(request.result);
+			upgradeSyncJobJournal(request.result);
 		};
 		request.onsuccess = () => resolve(request.result);
 		request.onerror = () => reject(request.error);
@@ -128,7 +130,7 @@ export const openSyncJournal = async (factory: IDBFactory = indexedDB, name = 't
 			tx.onabort = tx.onerror = () => reject(tx.error ?? Error('Could not save sync completion.'));
 		});
 	};
-	return { read, persist, checkpoint, complete, reviewDrafts: (access: Parameters<typeof reviewDraftJournal>[1]) => reviewDraftJournal(db, access, keyRange), maintenance: (access: Parameters<typeof journalMaintenance>[1]) => journalMaintenance(db, access, keyRange), pagedCheckpoints: (access: Parameters<typeof pagedCheckpointJournal>[1]) => pagedCheckpointJournal(db, access, keyRange), pagedRuns: (access: Parameters<typeof pagedRunJournal>[1]) => pagedRunJournal(db, access, keyRange), plans: (access: Parameters<typeof pagedPlanJournal>[1]) => pagedPlanJournal(db, access, keyRange), inventory: (access: Parameters<typeof inventoryJournal>[1]) => inventoryJournal(db, access, keyRange), close: () => db.close() };
+	return { read, persist, checkpoint, complete, jobs: (access: Parameters<typeof syncJobJournal>[1]) => syncJobJournal(db, access, keyRange), reviewDrafts: (access: Parameters<typeof reviewDraftJournal>[1]) => reviewDraftJournal(db, access, keyRange), maintenance: (access: Parameters<typeof journalMaintenance>[1]) => journalMaintenance(db, access, keyRange), pagedCheckpoints: (access: Parameters<typeof pagedCheckpointJournal>[1]) => pagedCheckpointJournal(db, access, keyRange), pagedRuns: (access: Parameters<typeof pagedRunJournal>[1]) => pagedRunJournal(db, access, keyRange), plans: (access: Parameters<typeof pagedPlanJournal>[1]) => pagedPlanJournal(db, access, keyRange), inventory: (access: Parameters<typeof inventoryJournal>[1]) => inventoryJournal(db, access, keyRange), close: () => db.close() };
 };
 
 function refusePagedRun(tx: IDBTransaction, key: string, reject: (error: Error) => void) {
