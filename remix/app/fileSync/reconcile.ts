@@ -25,12 +25,15 @@ export type SyncDecision =
 	| { kind: 'settled'; path: string; local: SyncEntry | null; remote: SyncEntry | null };
 export type SyncPlan = { scope: SyncScope; decisions: SyncDecision[] };
 
-// Bound each scan window. Adapters paginate large roots and use disjoint,
-// explicit partitions; an incomplete listing can never mean deletion.
+// Legacy whole-tree bound. Individual inventory pages are not independent
+// partitions: cross-page ancestry and deletion safety must be checked first.
 export const MAX_SYNC_SCAN_ENTRIES = 10_000;
 const digestPattern = /^[a-f0-9]{64}$/;
 const compare = (a: string, b: string) => a < b ? -1 : a > b ? 1 : 0;
 export const syncPathKey = (path: string): string => path.normalize('NFC').toLowerCase();
+/** A folded index key is not a filesystem path: Unicode lowercasing can expand
+ * a valid 255-character segment (for example capital dotted I). */
+export const validSyncPathKey = (key: unknown): key is string => typeof key === 'string' && key.length > 0 && key.length <= 8192 && syncPathKey(key) === key;
 
 export const validSyncPath = (path: unknown): path is string => {
 	if (typeof path !== 'string' || !path || path.length > 4096 || /[\\\p{Cc}\p{Cf}]/u.test(path)) return false;
@@ -119,40 +122,39 @@ export const planFileSync = (local: SyncScan, remote: SyncScan, baseline: SyncBa
 		return changed;
 	};
 	const leftChangedBelow = changedAncestors(left, oldLeft), rightChangedBelow = changedAncestors(right, oldRight);
-	const decisions: SyncDecision[] = [];
-	for (const path of paths) {
-		const l = left.get(path) ?? null, r = right.get(path) ?? null;
-		const bl = oldLeft.get(path) ?? null, br = oldRight.get(path) ?? null;
-		const settled = () => decisions.push({ kind: 'settled', path, local: l, remote: r });
-		const conflict = (reason: Extract<SyncDecision, { kind: 'conflict' }>['reason']) => decisions.push({ kind: 'conflict', path, reason, local: l, remote: r });
-		if (sameSyncContent(l, r)) { settled(); continue; }
-		if (l && r && l.kind !== r.kind) { conflict('type-changed'); continue; }
-		// Cloud folder revisions need not change when a child is created. A
-		// deleted directory therefore conflicts with edits anywhere below it,
-		// even when the remaining folder's own stamp still equals the baseline.
-		if ((!l && r?.kind === 'folder' && bl) || (!r && l?.kind === 'folder' && br)) {
-			if ((l ? leftChangedBelow : rightChangedBelow).has(path)) {
-				conflict('delete-edit'); continue;
-			}
-		}
-		const localChanged = !sameSyncStamp(l, bl), remoteChanged = !sameSyncStamp(r, br);
-		let from: SyncSide;
-		if (policy.mode === 'two-way') {
-			if (localChanged && remoteChanged) { conflict(!l || !r ? 'delete-edit' : 'both-changed'); continue; }
-			from = localChanged ? 'local' : 'remote';
-		} else {
-			from = policy.mode === 'download' ? 'remote' : 'local';
-			const source = from === 'local' ? l : r;
-			const target = from === 'local' ? r : l;
-			const targetChanged = from === 'local' ? remoteChanged : localChanged;
-			if (policy.mode === 'backup' && !source) { settled(); continue; }
-			if (target && targetChanged) { conflict('destination-changed'); continue; }
-		}
-		const source = from === 'local' ? l : r, target = from === 'local' ? r : l;
-		if (source) { decisions.push({ kind: 'copy', path, from, source, expectedTarget: target }); continue; }
-		if (!target) { settled(); continue; }
-		if (!policy.propagateDeletes || policy.mode === 'backup') { conflict('deletion-disabled'); continue; }
-		decisions.push({ kind: 'trash', path, side: from === 'local' ? 'remote' : 'local', expected: target });
-	}
+	const decisions = paths.map(path => decideSyncPath({ path,
+		local: left.get(path) ?? null, remote: right.get(path) ?? null,
+		beforeLocal: oldLeft.get(path) ?? null, beforeRemote: oldRight.get(path) ?? null
+	}, policy, leftChangedBelow.has(path), rightChangedBelow.has(path)));
 	return { scope: { ...local.scope }, decisions };
 };
+
+export type SyncPathObservation = { path: string; local: SyncEntry | null; remote: SyncEntry | null; beforeLocal: SyncEntry | null; beforeRemote: SyncEntry | null };
+/** Shared decision policy after whole-inventory validation. The paged planner
+ * computes descendant flags durably before calling the same policy as above. */
+export function decideSyncPath(row: SyncPathObservation, policy: SyncPolicy, localChangedBelow: boolean, remoteChangedBelow: boolean): SyncDecision {
+	const { path, local: l, remote: r, beforeLocal: bl, beforeRemote: br } = row;
+	const settled = (): SyncDecision => ({ kind: 'settled', path, local: l, remote: r });
+	const conflict = (reason: Extract<SyncDecision, { kind: 'conflict' }>['reason']): SyncDecision => ({ kind: 'conflict', path, reason, local: l, remote: r });
+	if (sameSyncContent(l, r)) return settled();
+	if (l && r && l.kind !== r.kind) return conflict('type-changed');
+	// Folder revisions need not change when a child changes on a replica.
+	if (((!l && r?.kind === 'folder' && bl) || (!r && l?.kind === 'folder' && br)) && (l ? localChangedBelow : remoteChangedBelow)) return conflict('delete-edit');
+	const localChanged = !sameSyncStamp(l, bl), remoteChanged = !sameSyncStamp(r, br);
+	let from: SyncSide;
+	if (policy.mode === 'two-way') {
+		if (localChanged && remoteChanged) return conflict(!l || !r ? 'delete-edit' : 'both-changed');
+		from = localChanged ? 'local' : 'remote';
+	} else {
+		from = policy.mode === 'download' ? 'remote' : 'local';
+		const source = from === 'local' ? l : r, target = from === 'local' ? r : l;
+		const targetChanged = from === 'local' ? remoteChanged : localChanged;
+		if (policy.mode === 'backup' && !source) return settled();
+		if (target && targetChanged) return conflict('destination-changed');
+	}
+	const source = from === 'local' ? l : r, target = from === 'local' ? r : l;
+	if (source) return { kind: 'copy', path, from, source, expectedTarget: target };
+	if (!target) return settled();
+	if (!policy.propagateDeletes || policy.mode === 'backup') return conflict('deletion-disabled');
+	return { kind: 'trash', path, side: from === 'local' ? 'remote' : 'local', expected: target };
+}

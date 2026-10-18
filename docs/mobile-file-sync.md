@@ -2565,3 +2565,47 @@ Remaining: connect consistent native/cloud paged sources, bounded reconciliation
 operation runs and baseline checkpoints; then test real browser/installed Mac/iOS
 and million-path workloads. Foreground sync still uses the 10,000 combined-path
 limit. No API contract or Android code changed; Android remains deferred.
+
+
+## Resumable paged reconciliation — 2026-10-18
+
+The sync journal now upgrades to version 4, preserving existing runs, checkpoints
+and version-3 captures. `plans(access)` takes four sealed capture identities
+(current local/remote and confirmed baseline local/remote), a fixed policy and
+bounded exclusions. It pins those captures atomically so they cannot be discarded
+and recreated while an incomplete plan is reading them.
+
+The first bounded pass validates case/Unicode aliases and matching baseline
+content across the entire union, including excluded paths. It records changed
+ancestors in relational journal rows. The second pass uses the same per-path
+policy as the existing foreground planner; late descendant edits still protect
+an earlier folder deletion. Exclusions protect parent deletion without allowing
+invalid observations to disappear. Each pass saves its positions and results in
+one transaction and resumes after cancellation or a process restart. Concurrent
+attempts compare durable progress before committing. Reads expose decisions only
+after the complete second pass; completing/discarding a plan releases only its
+own capture pins. Decisions are paged by canonical path key, at most 128 entries
+or 1 MiB; working memory holds at most four input pages plus one bounded batch.
+
+This is operation planning, not a parallel file-history store, native permission,
+mutation receipt or baseline advancement. Timeline and guarded canonical file
+writers remain the source of history and publication. The live 10,000-path limit
+remains until consistent native/cloud sources, paged execution and checkpoint
+advancement are connected and accepted together. Android remains deferred.
+
+Validation covers parity with the existing planner in all four modes with both
+deletion policies, restart in both passes, late aliases/baseline failures,
+excluded descendants, concurrent attempts, input pins, scope/settings changes,
+long-path byte bounds and version-3 migration. A reproduced Unicode cursor bug
+is fixed: lowercasing a valid filesystem segment can expand its index key, so
+cursor validation must not apply filesystem-segment limits to that folded key.
+
+The real Chrome for Testing proof planned and independently checked 20,000
+copy decisions across two browser-process restarts (indexing at 128, planning at
+128), rejected partial reads, proved input pinning, then released and discarded
+its generated data. OS-level network isolation restricted both the static
+fixture server and browser to loopback port 28162; hostname, direct-IP and
+redirect denials were checked before running. No account credentials or real
+user files were used. Screenshots, three traces and the exact fixture source are
+retained with the HTML tracker. This is browser storage/planner acceptance,
+not native transfer or production throughput evidence.

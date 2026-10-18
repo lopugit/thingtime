@@ -68,6 +68,9 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-18 — **Codex (AI)**: Add resumable paged sync planning to the existing journal, with pinned inventory inputs, whole-union validation, shared conflict/deletion policy, bounded decisions and a Unicode cursor correction. Browser proof survives two process restarts; native/cloud execution integration and Android remain open/deferred. See the [PR #1002 ledger](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md#resumable-paged-reconciliation--2026-10-18).
+
+
 - 2026-10-18 — **Codex (AI)**: Add durable paged inventory observations to the
   existing sync journal, with atomic retry/collision checks and restartable
   validation before reads. The 100,000-path storage regression passes; native

@@ -1,18 +1,36 @@
-import { sameSyncScope, syncPathKey, syncScopeKey, validSyncEntry, validateSyncScope, type SyncEntry, type SyncScope } from './reconcile';
+import { sameSyncScope, syncPathKey, validSyncEntry, validSyncPathKey, type SyncEntry, type SyncScope } from './reconcile';
+import { journalScope, type JournalAccess } from './journalScope';
 
 export const INVENTORY_PAGE_ENTRIES = 128;
 export const INVENTORY_PAGE_BYTES = 1024 * 1024;
+export const INVENTORY_PIN_STORE = 'inventory-capture-pins';
 export const INVENTORY_STORES = ['inventory-captures', 'inventory-pages', 'inventory-entries'] as const;
 export type InventoryIdentity = { id: string; source: 'local' | 'remote'; generation: string };
 export type InventoryCursor = InventoryIdentity & { scope: SyncScope; after: string; read: number };
 export type InventoryProgress = { phase: 'collecting' | 'captured' | 'complete'; pages: number; entries: number; validatedEntries: number };
-type Header = InventoryIdentity & InventoryProgress & { scope: string; validatedThrough: string | null };
+export type InventoryHeader = InventoryIdentity & InventoryProgress & { scope: string; validatedThrough: string | null };
 type Row = { scope: string; capture: string; path: string; identity: string; entry: SyncEntry };
 const encoder = new TextEncoder();
 const identifier = (value: unknown): value is string => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(value);
-const progress = ({ phase, pages, entries, validatedEntries }: Header): InventoryProgress => ({ phase, pages, entries, validatedEntries });
+const progress = ({ phase, pages, entries, validatedEntries }: InventoryHeader): InventoryProgress => ({ phase, pages, entries, validatedEntries });
+
+export const inventoryIdentity = (value: InventoryIdentity): InventoryIdentity => {
+	if (!value || !identifier(value.id) || !identifier(value.generation) || !['local', 'remote'].includes(value.source))
+		throw Error('Invalid inventory generation.');
+	return { id: value.id, source: value.source, generation: value.generation };
+};
+export const validateInventoryHeader = (header: InventoryHeader, expected: InventoryIdentity, key: string) => {
+	if (!header || header.scope !== key || header.id !== expected.id || header.source !== expected.source || header.generation !== expected.generation ||
+		!['collecting', 'captured', 'complete'].includes(header.phase) || !Number.isSafeInteger(header.pages) || header.pages < 0 ||
+		!Number.isSafeInteger(header.entries) || header.entries < 0 || (header.phase !== 'collecting' && header.pages === 0) ||
+		!Number.isSafeInteger(header.validatedEntries) || header.validatedEntries < 0 || header.validatedEntries > header.entries ||
+		(header.validatedEntries === 0 ? header.validatedThrough !== null : !validSyncPathKey(header.validatedThrough)) ||
+		(header.phase === 'collecting' && header.validatedEntries !== 0) || (header.phase === 'complete' && header.validatedEntries !== header.entries))
+		throw Error('Inventory generation changed or is unavailable.');
+};
 
 export function upgradeInventoryJournal(db: IDBDatabase) {
+	if (!db.objectStoreNames.contains(INVENTORY_PIN_STORE)) db.createObjectStore(INVENTORY_PIN_STORE);
 	for (const name of INVENTORY_STORES) if (!db.objectStoreNames.contains(name)) {
 		const store = db.createObjectStore(name);
 		if (name === 'inventory-entries') store.createIndex('identity', ['scope', 'capture', 'identity'], { unique: true });
@@ -22,51 +40,20 @@ export function upgradeInventoryJournal(db: IDBDatabase) {
 /** Durable observations only. A sealed capture grants no write authority and is
  * not a Timeline version. Adapters must supply one immutable source generation;
  * consumers still reauthorize and compare exact stamps before each mutation. */
-export function inventoryJournal(db: IDBDatabase, access: { scope: SyncScope; currentScope(): SyncScope; signal?: AbortSignal }, keyRange?: typeof IDBKeyRange) {
-	const scope = structuredClone(access.scope);
-	validateSyncScope(scope);
-	const key = syncScopeKey(scope);
-	const check = () => {
-		access.signal?.throwIfAborted();
-		if (!sameSyncScope(scope, access.scope) || !sameSyncScope(scope, access.currentScope())) throw Error('Inventory account or root changed.');
-	};
-	const range = (id: string, after?: string) => (keyRange ?? globalThis.IDBKeyRange).bound(
-		after === undefined ? [key, id] : [key, id, after], [key, id, []], after !== undefined, false
-	);
-	const identity = (value: InventoryIdentity): InventoryIdentity => {
-		if (!value || !identifier(value.id) || !identifier(value.generation) || !['local', 'remote'].includes(value.source))
-			throw Error('Invalid inventory generation.');
-		return { id: value.id, source: value.source, generation: value.generation };
-	};
-	const validate = (header: Header, expected: InventoryIdentity) => {
-		if (!header || header.scope !== key || header.id !== expected.id || header.source !== expected.source || header.generation !== expected.generation ||
-			!['collecting', 'captured', 'complete'].includes(header.phase) || !Number.isSafeInteger(header.pages) || header.pages < 0 ||
-			!Number.isSafeInteger(header.entries) || header.entries < 0 || (header.phase !== 'collecting' && header.pages === 0) ||
-			!Number.isSafeInteger(header.validatedEntries) || header.validatedEntries < 0 || header.validatedEntries > header.entries ||
-			(header.validatedEntries === 0 ? header.validatedThrough !== null : typeof header.validatedThrough !== 'string' ||
-				!header.validatedThrough || header.validatedThrough.length > 4096 || syncPathKey(header.validatedThrough) !== header.validatedThrough) ||
-			(header.phase === 'collecting' && header.validatedEntries !== 0) || (header.phase === 'complete' && header.validatedEntries !== header.entries))
-			throw Error('Inventory generation changed or is unavailable.');
-	};
+export function inventoryJournal(db: IDBDatabase, access: JournalAccess, keyRange?: typeof IDBKeyRange) {
+	const scoped = journalScope(db, access, keyRange), { scope, key, check, range } = scoped;
+	const identity = inventoryIdentity;
+	const validate = (header: InventoryHeader, expected: InventoryIdentity) => validateInventoryHeader(header, expected, key);
 	const entry = (value: SyncEntry): SyncEntry => {
 		if (!validSyncEntry(value)) throw Error('Invalid inventory entry.');
 		return { path: value.path, id: value.id, version: value.version, kind: value.kind, size: value.size, sha256: value.sha256,
 			...(value.fingerprint ? { fingerprint: { algorithm: value.fingerprint.algorithm, partSizeBytes: value.fingerprint.partSizeBytes,
 				partCount: value.fingerprint.partCount, sha256: value.fingerprint.sha256 } } : {}) };
 	};
-	const transaction = <T>(mode: IDBTransactionMode, work: (tx: IDBTransaction, done: (value: T) => void, fail: (error: unknown) => void) => void): Promise<T> => {
-		check();
-		return new Promise((resolve, reject) => {
-			const tx = db.transaction([...INVENTORY_STORES], mode, mode === 'readwrite' ? { durability: 'strict' } : undefined);
-			let result: T, failure: unknown;
-			const fail = (error: unknown) => { failure = error; tx.abort(); };
-			tx.oncomplete = () => { try { check(); resolve(result); } catch (error) { reject(error); } };
-			tx.onabort = tx.onerror = () => reject(failure ?? tx.error ?? Error('Inventory journal transaction failed.'));
-			try { work(tx, value => { result = value; }, fail); } catch (error) { fail(error); }
-		});
-	};
+	const transaction = <T>(mode: IDBTransactionMode, work: (tx: IDBTransaction, done: (value: T) => void, fail: (error: unknown) => void) => void) =>
+		scoped.transaction([...INVENTORY_STORES, INVENTORY_PIN_STORE], mode, work);
 	const withHeader = <T>(value: InventoryIdentity, mode: IDBTransactionMode,
-		work: (header: Header, tx: IDBTransaction, done: (value: T) => void, fail: (error: unknown) => void) => void) => {
+		work: (header: InventoryHeader, tx: IDBTransaction, done: (value: T) => void, fail: (error: unknown) => void) => void) => {
 		const expected = identity(value);
 		return transaction<T>(mode, (tx, done, fail) => {
 			const request = tx.objectStore(INVENTORY_STORES[0]).get([key, expected.id]);
@@ -80,7 +67,7 @@ export function inventoryJournal(db: IDBDatabase, access: { scope: SyncScope; cu
 				const store = tx.objectStore(INVENTORY_STORES[0]), request = store.get([key, expected.id]);
 				request.onsuccess = () => { try {
 					check();
-					const header: Header = request.result ?? { ...expected, scope: key, phase: 'collecting', pages: 0, entries: 0, validatedEntries: 0, validatedThrough: null };
+					const header: InventoryHeader = request.result ?? { ...expected, scope: key, phase: 'collecting', pages: 0, entries: 0, validatedEntries: 0, validatedThrough: null };
 					validate(header, expected);
 					if (!request.result) store.add(header, [key, expected.id]);
 					done(progress(header));
@@ -110,7 +97,7 @@ export function inventoryJournal(db: IDBDatabase, access: { scope: SyncScope; cu
 					const entries = tx.objectStore(INVENTORY_STORES[2]);
 					for (const row of rows) entries.add({ scope: key, capture: expected.id, path: syncPathKey(row.path), identity: row.id, entry: row }, [key, expected.id, syncPathKey(row.path)]);
 					pages.add({ digest }, [key, expected.id, ordinal]);
-					const next: Header = { ...header, entries: count, pages: header.pages + 1, phase: total === undefined ? 'collecting' : 'captured' };
+					const next: InventoryHeader = { ...header, entries: count, pages: header.pages + 1, phase: total === undefined ? 'collecting' : 'captured' };
 					tx.objectStore(INVENTORY_STORES[0]).put(next, [key, expected.id]);
 					done(progress(next));
 				} catch (error) { fail(error); } };
@@ -129,7 +116,7 @@ export function inventoryJournal(db: IDBDatabase, access: { scope: SyncScope; cu
 					let count = header.validatedEntries, through = header.validatedThrough, processed = 0;
 					const save = (complete: boolean) => {
 						if (complete && count !== header.entries) throw Error('Inventory entry count changed.');
-						const next: Header = { ...header, phase: complete ? 'complete' : 'captured', validatedEntries: count, validatedThrough: through };
+						const next: InventoryHeader = { ...header, phase: complete ? 'complete' : 'captured', validatedEntries: count, validatedThrough: through };
 						tx.objectStore(INVENTORY_STORES[0]).put(next, [key, header.id]); done(progress(next));
 					};
 					request.onsuccess = () => { try {
@@ -160,8 +147,7 @@ export function inventoryJournal(db: IDBDatabase, access: { scope: SyncScope; cu
 		async read(value: InventoryIdentity, continuation?: InventoryCursor): Promise<{ entries: SyncEntry[]; next: InventoryCursor | null; totalEntries: number }> {
 			const expected = identity(value), token = continuation === undefined ? undefined : structuredClone(continuation);
 			if (token !== undefined && (!token || !sameSyncScope(token.scope, scope) || token.id !== expected.id || token.source !== expected.source ||
-				token.generation !== expected.generation || typeof token.after !== 'string' || !token.after || token.after.length > 4096 ||
-				syncPathKey(token.after) !== token.after || !Number.isSafeInteger(token.read) || token.read <= 0)) throw Error('Invalid inventory continuation.');
+				token.generation !== expected.generation || !validSyncPathKey(token.after) || !Number.isSafeInteger(token.read) || token.read <= 0)) throw Error('Invalid inventory continuation.');
 			return withHeader(expected, 'readonly', (header, tx, done, fail) => {
 				if (header.phase !== 'complete') throw Error('Inventory is incomplete; keep the last complete scan.');
 				if (token && token.read >= header.entries) throw Error('Invalid inventory continuation count.');
@@ -188,10 +174,15 @@ export function inventoryJournal(db: IDBDatabase, access: { scope: SyncScope; cu
 			});
 		},
 		async discard(value: InventoryIdentity): Promise<void> {
-			return withHeader(value, 'readwrite', (header, tx, done) => {
-				tx.objectStore(INVENTORY_STORES[0]).delete([key, header.id]);
-				for (const store of INVENTORY_STORES.slice(1)) tx.objectStore(store).delete(range(header.id));
-				done(undefined);
+			return withHeader(value, 'readwrite', (header, tx, done, fail) => {
+				const request = tx.objectStore(INVENTORY_PIN_STORE).count(range(header.id));
+				request.onsuccess = () => { try {
+					check();
+					if (request.result) throw Error('Inventory is pinned by an unfinished sync plan.');
+					tx.objectStore(INVENTORY_STORES[0]).delete([key, header.id]);
+					for (const store of INVENTORY_STORES.slice(1)) tx.objectStore(store).delete(range(header.id));
+					done(undefined);
+				} catch (error) { fail(error); } };
 			});
 		}
 	};

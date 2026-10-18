@@ -11429,3 +11429,15 @@ resume unfinished Android gates only when requested.
   weakening the separate owner/ID requirement for whole-account census paging.
 - Keep HTTP/browser, managed image restoration, whole-account families and the
   product review/restore UI open; handler-level proof does not complete them.
+
+
+### Paged file-sync reconciliation (PR #1002, 2026-10-18)
+
+- [ ] Run `npm --prefix remix run test:file-sync`; include the 100,000-entry inventory and 20,000-path planner cases. Compare all four modes and both deletion policies with the whole-tree planner.
+- [ ] Interrupt indexing and planning separately after a committed page, reopen the journal and verify exact ordered decisions. Partial plans must refuse reads and must not advance the live baseline.
+- [ ] Place an edited descendant beyond the first page while deleting its unchanged parent on the other replica. Require a delete/edit conflict; excluded children must protect parent deletion.
+- [ ] Introduce a late cross-replica case/Unicode alias or mismatched baseline, including an excluded path. Require failure with no readable partial decisions.
+- [ ] Try changing scope, captures, policy, exclusions and read cursors. Run competing builders; require immutable settings, no duplicate decisions and no foreign-scope access.
+- [ ] Attempt capture discard while two plans pin it. Finish one, then discard the other; only the final pin removal may permit capture discard. An initialization failure must roll back every pin.
+- [ ] Verify version-3 capture migration, long-path byte bounds, and Unicode lowercasing that expands an otherwise valid filename segment. Folded cursor keys must not be validated as filesystem segments.
+- [ ] Repeat the generated 20,000-decision proof in OS-isolated Chromium with two process restarts, exact path/source comparisons, input-pin checks, traces and scoped cleanup. This does not prove native transfer or lift the live scan cap.
