@@ -104,12 +104,16 @@ const cloneProxyRequestHeaders = (request: Request, fallbackUrl: URL) => {
   return headers;
 };
 
-export const proxyApiRequestToFallback = async (request: Request) => {
+export const proxyApiRequestToFallback = async (request: Request, options: { stripForwardedOrigin?: boolean } = {}) => {
   const requestUrl = new URL(request.url);
   // Direct callers cannot bypass the dispatcher's policy.
   if (!shouldProxyApiToFallback(request)) return unavailableLocalApiResponse();
   const fallbackUrl = new URL(requestUrl.pathname + requestUrl.search, getApiFallbackOrigin()!);
   const headers = cloneProxyRequestHeaders(request, fallbackUrl);
+  if (options.stripForwardedOrigin) {
+    headers.delete('x-forwarded-host');
+    headers.delete('x-forwarded-proto');
+  }
   const init: RequestInit & { duplex?: 'half' } = {
     method: request.method,
     headers,

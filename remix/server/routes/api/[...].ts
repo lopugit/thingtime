@@ -405,9 +405,9 @@ export default defineHandler(async (event) => {
         return jsonResponse({ ok: false, error: 'Configure private account services on this deployment.' }, { status: 503, headers: { 'Cache-Control': 'private, no-store' } });
       if (event.req.headers.get('Sec-Fetch-Site') === 'cross-site' || (method !== 'GET' && event.req.headers.get('Origin') !== resolvePublicOrigin(event.req).origin))
         return jsonResponse({ ok: false, error: 'Use the same Thingtime origin.' }, { status: 403, headers: { 'Cache-Control': 'private, no-store' } });
-      const headers = new Headers(event.req.headers);
-      headers.delete('x-forwarded-host'); headers.delete('x-forwarded-proto');
-      return proxyApiRequestToFallback(new Request(event.req, { headers }));
+      // Nitro's lazy server request is not a native Undici Request. Preserve
+      // its public body interface and sanitize the copied upstream headers.
+      return proxyApiRequestToFallback(event.req, { stripForwardedOrigin: true });
     }
     // Root data uses this same fallback. Forward its public database
     // precondition and selection unchanged for the upstream to enforce.

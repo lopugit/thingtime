@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { createServer, request as httpRequest } from 'node:http';
+import { once } from 'node:events';
+import { H3, toNodeListener } from 'nitro/h3';
 
 import { getApiFallbackOrigin, shouldProxyApiToFallback, proxyApiRequestToFallback } from './apiFallback';
 import handleApi from '../routes/api/[...]';
@@ -148,6 +151,45 @@ test('desktop vault proxy requires the bundled origin and pinned HTTPS endpoint'
    assert.equal(calls, 3);
   } finally { mock.mock.restore(); if (prior === undefined) delete process.env.THINGTIME_DESKTOP; else process.env.THINGTIME_DESKTOP = prior; }
  });
+});
+
+test('desktop private services accept real Nitro requests without native Request cloning', async t => {
+  await withFallbackEnv('https://selected.test', async () => {
+    process.env.THINGTIME_DESKTOP = '1';
+    const forwarded: { method: string; body: string }[] = [];
+    const upstream = t.mock.method(globalThis, 'fetch', async (url: URL, init: RequestInit) => {
+      assert.equal(url.origin, 'https://selected.test');
+      const headers = new Headers(init.headers);
+      assert.equal(headers.has('x-forwarded-host'), false);
+      assert.equal(headers.has('x-forwarded-proto'), false);
+      forwarded.push({ method: init.method!, body: init.body ? Buffer.from(init.body as ArrayBuffer).toString() : '' });
+      return Response.json({ ok: true });
+    });
+    const app = new H3(); app.use(handleApi);
+    const server = createServer(toNodeListener(app));
+    server.listen(0, '127.0.0.1'); await once(server, 'listening');
+    const origin = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
+    try {
+      for (const path of ['passwords', 'mail', 'mail/sync']) for (const method of ['GET', 'POST']) {
+        const result = await new Promise<{ status: number; body: string }>((resolve, reject) => {
+          const request = httpRequest(`${origin}/api/v1/${path}`, {
+            method, headers: { Origin: origin, 'Content-Type': 'application/json', ...(method === 'GET' ? { 'X-Forwarded-Host': 'attacker.test', 'X-Forwarded-Proto': 'https' } : {}) }
+          }, response => {
+            let body = ''; response.on('data', chunk => { body += chunk; });
+            response.on('end', () => resolve({ status: response.statusCode!, body }));
+          });
+          request.on('error', reject); request.end(method === 'POST' ? '{"operation":"catalog"}' : undefined);
+        });
+        assert.equal(result.status, 200, `${method} ${path}: ${result.body}`);
+        assert.equal(forwarded.at(-1)?.method, method);
+        assert.equal(forwarded.at(-1)?.body, method === 'POST' ? '{"operation":"catalog"}' : '');
+      }
+      assert.equal(forwarded.length, 6);
+    } finally {
+      upstream.mock.restore();
+      await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+    }
+  });
 });
 
 

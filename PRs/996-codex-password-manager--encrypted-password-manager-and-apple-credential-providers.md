@@ -70,15 +70,37 @@ large backups split into individually restorable parts.
 - The verified helper is installed at `~/Applications/Thingtime Passwords.app`.
   Its installed signature and executable pass; it launches, and macOS lists
   Thingtime Passwords for passkeys, passwords and codes in AutoFill settings.
-  Provider enablement is awaiting the user's permission; no OS credential
-  ceremony is claimed yet. Visual inspection found clipped setup text, fixed
-  with multiline intrinsic sizing and included in the next signed rebuild.
+  The user approved enablement, and the macOS AutoFill switch is on for
+  passkeys, passwords and codes. The actual extension configuration sheet opens
+  successfully. The installed multiline setup text is visually verified after
+  rebuilding and relaunching; enablement survives that signed update.
+  Password/code fill and passkey ceremonies remain unverified.
 - Six Swift tests pass with the independent WebAuthn fixture enabled; the
   HTTPS client integration remains explicitly skipped in this fresh run.
   Independent registration/assertion verification and wrong-RP rejection pass,
   as do both desktop bridge origin/ordering tests.
 - Current main is integrated, preserving native mail IPC and iOS widget signing
-  alongside the password provider. Full desktop/iOS rebuilds are in progress.
+  alongside the password provider. The full iOS/Watch/widget/provider simulator
+  build passes with the built HTTPS endpoint verified. All 109 Electron tests
+  pass, including helper packaging and selected-origin isolation. The full
+  desktop resources build and final signed packaging pass. The staged and
+  installed app signatures verify, and its running executable is the installed
+  `~/Applications/Thingtime.app` copy.
+- The user explicitly approved replacing the running `codex/mobile-file-sync`
+  app for acceptance. Its verified bundle was backed up before replacement;
+  application data was preserved. The installed password build connected the
+  provider through its supported current-session handoff.
+- Installed acceptance then caught a desktop-only HTTP 500: cloning Nitro
+  server requests with `new Request(event.req)` violates the native Request
+  internal brand. Real Nitro GET/POST regression coverage reproduces the
+  failure and passes after copying only upstream headers. Origin checks remain
+  enforced; shared password/mail bridge contracts receive PATCH versions.
+  The repaired bundle still needs rebuilding and installed verification.
+- Passwords was absent from sidebar and Commander navigation. Both existing
+  catalogues now include the page; installed navigation acceptance is pending.
+- Live passkey registration on WebAuthn.io is awaiting user-controlled new
+  credential creation and device verification. No private keys or real-account
+  sessions were copied into test tools.
 
 The entries below are historical evidence from October 15; their agreement and
 profile failures are superseded by the current recheck above.
