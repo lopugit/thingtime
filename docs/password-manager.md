@@ -9,8 +9,12 @@ through global Thing state, local caches, editor history or request diagnostics.
 
 ## Storage and access
 
-`api.passwords` 1.1.0 uses the home data plane. GET returns 50 metadata records
-at a time. POST requires a full, live user session and `expectedOwnerId`:
+`api.passwords` 1.2.0 uses the home data plane. GET returns 50 metadata records
+at a time. Optional `q` searches all owned title metadata before pagination using
+a case-insensitive literal substring (outer whitespace is ignored). Keep the same
+query on subsequent pages; restart without a cursor when it changes. Field values
+remain encrypted and are never searched. The UI cancels obsolete list requests
+and keeps prior matches visible while a new search is pending. POST requires a full, live user session and `expectedOwnerId`:
 `read`, `save`, `delete`, `export`, `catalog`, and the `file-*` lifecycle operations. Export pages decrypt at most
 50 entries using one bounded query and one account-key load. Scoped tokens, service accounts,
 temporary accounts and internal Action identities are not vault sessions.
@@ -146,3 +150,5 @@ in an isolated localhost deployment, then configure the first username in
 It uses real session/admin/password/upload endpoints and creates a synthetic
 `/tmp/thingtime-password-import-qa/all-data.1pux` for browser round-trip checks.
 Never point this test at production or supply personal credentials.
+
+The installed desktop bridge checks the selected HTTPS server's capability manifest before forwarding private password requests. Full-vault title search requires `api.passwords` 1.2.0 or a compatible update there, even when the bundled UI is newer. Missing, wrong-origin, or breaking manifests produce an explicit compatibility error instead of silently using an older listing contract.

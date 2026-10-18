@@ -9937,6 +9937,13 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
 
 ## Password manager and native AutoFill
 
+- [ ] Search regression: create a title match older than 50 nonmatching entries.
+  Search must find it without Load more; case and literal regex punctuation work.
+  With more than 50 matches, pagination contains only matches, once each. Clear
+  and rapidly replace the query during a delayed page/focus refresh; stale replies
+  cannot append to or replace the new search. Check no-match, failed request/retry,
+  account isolation, and desktop/390px scrolling with the real private API.
+
 - Password archive regression: in React StrictMode, open an imported entry and
   verify related source documents/icons populate after effects replay. Export,
   reimport, and verify the remapped source entry still owns byte-identical files;
@@ -10210,4 +10217,5 @@ separate from deterministic discovery/lease tests.
   10,000 while rendering only the current page and including default styles.
 - Run the isolated browser fixture and focused native/backend/capability suites;
   smoke the built manifest before deploying and repeat the real installed path.
+- Password AutoFill desktop regression (2026-10-18): from a signed installed app, open Passwords via the sidebar and Commander search, connect AutoFill, and confirm real vault metadata loads. Exercise GET and POST private-service proxy routes through a real Nitro HTTP server; preserve query/body and reject cross-origin writes without cloning the server request as a native Request. A selected server older than api.passwords 1.2.0 must reject q search clearly before forwarding credentials/body; matching-major compatible patches must pass.
 - Incident account cleanup: use real signup and logout notification constructors; accept only system history tied to the exact revoked fixture session. Reject unrelated content, actors and timestamps before writes.
