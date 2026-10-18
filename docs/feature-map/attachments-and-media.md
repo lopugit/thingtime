@@ -427,3 +427,16 @@ Old retries cannot release a newer run or replace its head; legacy writers canno
 downgrade a published paged baseline. `pagedCheckpointJournal.test.ts` and the
 400-operation isolated browser proof cover these boundaries. Native/cloud adapter
 integration and installed Mac/iOS acceptance are still open; Android is deferred.
+
+
+### Paged cloud bindings (2026-10-18)
+
+Version-7 inventory pages retain canonical cloud metadata and verify physical
+ancestry. `fileSync/cloudBinding.ts` and `pagedRunJournal.ts` prepare bounded
+immutable destinations and native Trash receipt links before effects; interrupted
+pages and binding configuration changes fail closed. `createPagedCloudSyncPort`
+uses the same transport as legacy foreground sync, with indexed binding lookup.
+`cloudInventoryJournal.test.ts`, `pagedCloudBindings.test.ts` and a 270-download,
+two-browser-restart proof cover storage/transport recovery with generated data.
+Stable scan producers, live foreground/worker integration and installed Mac/iOS
+acceptance remain open. Android is deferred.

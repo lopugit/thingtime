@@ -68,6 +68,15 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-18 — **Codex (AI)**: PR #1002 retains cloud metadata with paged
+  inventories and prepares immutable cloud destinations/native Trash receipt
+  links before execution. Indexed bindings reuse the existing guarded transport;
+  interrupted preparation and lost publication replies resume with original IDs.
+  Isolated Chromium verified 270 generated downloads across two process restarts.
+  Live scan/lifecycle integration and installed Mac/iOS acceptance remain open;
+  Android stays deferred. [Details](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md#paged-cloud-operation-bindings--2026-10-18).
+
+
 - 2026-10-18 — **Codex (AI)**: Add resumable paged sync checkpoint publication,
   exact inventory-instance retention and post-copy edit preservation. Bounded
   merges survive interruption between baseline copies and browser restarts;

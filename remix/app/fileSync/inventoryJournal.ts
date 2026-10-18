@@ -1,4 +1,5 @@
-import { sameSyncScope, syncPathKey, validSyncEntry, validSyncPathKey, type SyncEntry, type SyncScope } from './reconcile';
+import { inventorySyncEntry, parseCloudInventoryNode, parseCloudInventoryRoot, type CloudInventoryNode, type CloudInventoryRoot } from './cloudInventory';
+import { sameSyncStamp, validSyncPath, sameSyncScope, syncPathKey, validSyncEntry, validSyncPathKey, type SyncEntry, type SyncScope } from './reconcile';
 import { journalScope, type JournalAccess } from './journalScope';
 
 export const INVENTORY_PAGE_ENTRIES = 128;
@@ -8,8 +9,8 @@ export const INVENTORY_STORES = ['inventory-captures', 'inventory-pages', 'inven
 export type InventoryIdentity = { id: string; source: 'local' | 'remote'; generation: string };
 export type InventoryCursor = InventoryIdentity & { scope: SyncScope; after: string; read: number };
 export type InventoryProgress = { phase: 'collecting' | 'captured' | 'complete'; pages: number; entries: number; validatedEntries: number };
-export type InventoryHeader = InventoryIdentity & InventoryProgress & { scope: string; instance?: string; validatedThrough: string | null };
-type Row = { scope: string; capture: string; path: string; identity: string; entry: SyncEntry };
+export type InventoryHeader = InventoryIdentity & InventoryProgress & { scope: string; instance?: string; cloud?: CloudInventoryRoot; validatedThrough: string | null };
+type Row = { scope: string; capture: string; path: string; identity: string; entry: SyncEntry; cloud?: CloudInventoryNode };
 const encoder = new TextEncoder();
 const identifier = (value: unknown): value is string => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(value);
 const progress = ({ phase, pages, entries, validatedEntries }: InventoryHeader): InventoryProgress => ({ phase, pages, entries, validatedEntries });
@@ -28,6 +29,10 @@ export const validateInventoryHeader = (header: InventoryHeader, expected: Inven
 		(header.validatedEntries === 0 ? header.validatedThrough !== null : !validSyncPathKey(header.validatedThrough)) ||
 		(header.phase === 'collecting' && header.validatedEntries !== 0) || (header.phase === 'complete' && header.validatedEntries !== header.entries))
 		throw Error('Inventory generation changed or is unavailable.');
+	if (header.cloud !== undefined) {
+		if (header.source !== 'remote') throw Error('Cloud metadata requires a remote inventory.');
+		parseCloudInventoryRoot(header.cloud);
+	}
 };
 
 export const newInventoryHeader = (identity: InventoryIdentity, scope: string): InventoryHeader => ({
@@ -55,6 +60,20 @@ export function inventoryJournal(db: IDBDatabase, access: JournalAccess, keyRang
 			...(value.fingerprint ? { fingerprint: { algorithm: value.fingerprint.algorithm, partSizeBytes: value.fingerprint.partSizeBytes,
 				partCount: value.fingerprint.partCount, sha256: value.fingerprint.sha256 } } : {}) };
 	};
+	const validateRow = (row: Row, header: InventoryHeader, primaryKey?: IDBValidKey): SyncEntry => {
+		if (!row) throw Error('Inventory entry is unavailable.');
+		const item = entry(row.entry);
+		if (row.scope !== key || row.capture !== header.id || row.identity !== item.id || row.path !== syncPathKey(item.path) ||
+			(primaryKey !== undefined && JSON.stringify(primaryKey) !== JSON.stringify([key, header.id, row.path]))) throw Error('Inventory entry identity changed.');
+		if (header.cloud) {
+			const node = parseCloudInventoryNode(row.cloud!);
+			if (!sameSyncStamp(item, inventorySyncEntry(node)) || item.id === header.cloud.rootId) throw Error('Cloud inventory metadata changed.');
+		} else if (row.cloud !== undefined) throw Error('Unexpected cloud inventory metadata.');
+		return item;
+	};
+	const validateCloudParent = (row: Row, header: InventoryHeader, parentId: string) => {
+		if (header.cloud && (row.cloud!.kind === 'file' ? row.cloud!.file.folderId : row.cloud!.folderId) !== parentId) throw Error('Cloud inventory ancestry changed.');
+	};
 	const transaction = <T>(mode: IDBTransactionMode, work: (tx: IDBTransaction, done: (value: T) => void, fail: (error: unknown) => void) => void) =>
 		scoped.transaction([...INVENTORY_STORES, INVENTORY_PIN_STORE], mode, work);
 	const withHeader = <T>(value: InventoryIdentity, mode: IDBTransactionMode,
@@ -65,48 +84,59 @@ export function inventoryJournal(db: IDBDatabase, access: JournalAccess, keyRang
 			request.onsuccess = () => { try { check(); validate(request.result, expected); work(request.result, tx, done, fail); } catch (error) { fail(error); } };
 		});
 	};
+	const begin = async (value: InventoryIdentity, cloud?: CloudInventoryRoot): Promise<InventoryProgress> => {
+		const expected = identity(value);
+		if (cloud && expected.source !== 'remote') throw Error('Cloud metadata requires a remote inventory.');
+		return transaction('readwrite', (tx, done, fail) => {
+			const store = tx.objectStore(INVENTORY_STORES[0]), request = store.get([key, expected.id]);
+			request.onsuccess = () => { try {
+				check();
+				const header: InventoryHeader = request.result ?? { ...newInventoryHeader(expected, key), ...(cloud ? { cloud } : {}) };
+				validate(header, expected);
+				if (cloud && JSON.stringify(header.cloud) !== JSON.stringify(cloud)) throw Error('Cloud inventory root changed.');
+				if (!request.result) store.add(header, [key, expected.id]);
+				done(progress(header));
+			} catch (error) { fail(error); } };
+		});
+	};
+	const append = async (value: InventoryIdentity, page: { ordinal: number; entries: readonly SyncEntry[]; totalEntries?: number }, cloud?: CloudInventoryNode[]): Promise<InventoryProgress> => {
+		const expected = identity(value);
+		if (!page || !Number.isSafeInteger(page.ordinal) || page.ordinal < 0 || !Array.isArray(page.entries) || page.entries.length > INVENTORY_PAGE_ENTRIES ||
+			(page.totalEntries !== undefined && (!Number.isSafeInteger(page.totalEntries) || page.totalEntries < 0)) ||
+			(!page.entries.length && page.totalEntries === undefined)) throw Error('Invalid inventory page.');
+		const rows = page.entries.map(entry), ordinal = page.ordinal, total = page.totalEntries;
+		const bytes = encoder.encode(JSON.stringify({ ordinal, entries: rows, ...(cloud ? { cloud } : {}), ...(total === undefined ? {} : { totalEntries: total }) }));
+		if (bytes.length > INVENTORY_PAGE_BYTES) throw Error('Inventory page exceeds its byte bound.');
+		const digest = [...new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))].map(byte => byte.toString(16).padStart(2, '0')).join('');
+		return withHeader(expected, 'readwrite', (header, tx, done, fail) => {
+			if (!!header.cloud !== !!cloud) throw Error('Cloud inventory pages must retain their original metadata.');
+			const pages = tx.objectStore(INVENTORY_STORES[1]), request = pages.get([key, expected.id, ordinal]);
+			request.onsuccess = () => { try {
+				check();
+				if (request.result) {
+					if (request.result.digest !== digest || ordinal >= header.pages) throw Error('Inventory page retry changed.');
+					done(progress(header)); return;
+				}
+				if (header.phase !== 'collecting' || header.pages !== ordinal) throw Error('Inventory page is missing or out of order.');
+				const count = header.entries + rows.length;
+				if (!Number.isSafeInteger(count) || !Number.isSafeInteger(header.pages + 1) || (total !== undefined && total !== count)) throw Error('Inventory completion count changed.');
+				const entries = tx.objectStore(INVENTORY_STORES[2]);
+				for (const [i, row] of rows.entries()) entries.add({ scope: key, capture: expected.id, path: syncPathKey(row.path), identity: row.id, entry: row, ...(cloud ? { cloud: cloud[i] } : {}) }, [key, expected.id, syncPathKey(row.path)]);
+				pages.add({ digest }, [key, expected.id, ordinal]);
+				const next: InventoryHeader = { ...header, entries: count, pages: header.pages + 1, phase: total === undefined ? 'collecting' : 'captured' };
+				tx.objectStore(INVENTORY_STORES[0]).put(next, [key, expected.id]);
+				done(progress(next));
+			} catch (error) { fail(error); } };
+		});
+	};
 	return {
-		async begin(value: InventoryIdentity): Promise<InventoryProgress> {
-			const expected = identity(value);
-			return transaction('readwrite', (tx, done, fail) => {
-				const store = tx.objectStore(INVENTORY_STORES[0]), request = store.get([key, expected.id]);
-				request.onsuccess = () => { try {
-					check();
-					const header: InventoryHeader = request.result ?? newInventoryHeader(expected, key);
-					validate(header, expected);
-					if (!request.result) store.add(header, [key, expected.id]);
-					done(progress(header));
-				} catch (error) { fail(error); } };
-			});
-		},
-		async append(value: InventoryIdentity, page: { ordinal: number; entries: readonly SyncEntry[]; totalEntries?: number }): Promise<InventoryProgress> {
-			const expected = identity(value);
-			if (!page || !Number.isSafeInteger(page.ordinal) || page.ordinal < 0 || !Array.isArray(page.entries) || page.entries.length > INVENTORY_PAGE_ENTRIES ||
-				(page.totalEntries !== undefined && (!Number.isSafeInteger(page.totalEntries) || page.totalEntries < 0)) ||
-				(!page.entries.length && page.totalEntries === undefined)) throw Error('Invalid inventory page.');
-			const rows = page.entries.map(entry), ordinal = page.ordinal, total = page.totalEntries;
-			const bytes = encoder.encode(JSON.stringify({ ordinal, entries: rows, ...(total === undefined ? {} : { totalEntries: total }) }));
-			if (bytes.length > INVENTORY_PAGE_BYTES) throw Error('Inventory page exceeds its byte bound.');
-			const digest = [...new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))].map(byte => byte.toString(16).padStart(2, '0')).join('');
-			return withHeader(expected, 'readwrite', (header, tx, done, fail) => {
-				const pages = tx.objectStore(INVENTORY_STORES[1]), request = pages.get([key, expected.id, ordinal]);
-				request.onsuccess = () => { try {
-					check();
-					if (request.result) {
-						if (request.result.digest !== digest || ordinal >= header.pages) throw Error('Inventory page retry changed.');
-						done(progress(header)); return;
-					}
-					if (header.phase !== 'collecting' || header.pages !== ordinal) throw Error('Inventory page is missing or out of order.');
-					const count = header.entries + rows.length;
-					if (!Number.isSafeInteger(count) || !Number.isSafeInteger(header.pages + 1) || (total !== undefined && total !== count)) throw Error('Inventory completion count changed.');
-					const entries = tx.objectStore(INVENTORY_STORES[2]);
-					for (const row of rows) entries.add({ scope: key, capture: expected.id, path: syncPathKey(row.path), identity: row.id, entry: row }, [key, expected.id, syncPathKey(row.path)]);
-					pages.add({ digest }, [key, expected.id, ordinal]);
-					const next: InventoryHeader = { ...header, entries: count, pages: header.pages + 1, phase: total === undefined ? 'collecting' : 'captured' };
-					tx.objectStore(INVENTORY_STORES[0]).put(next, [key, expected.id]);
-					done(progress(next));
-				} catch (error) { fail(error); } };
-			});
+		begin: (value: InventoryIdentity) => begin(value),
+		beginCloud: (value: InventoryIdentity, root: CloudInventoryRoot) => begin(value, parseCloudInventoryRoot(root)),
+		append: (value: InventoryIdentity, page: { ordinal: number; entries: readonly SyncEntry[]; totalEntries?: number }) => append(value, page),
+		async appendCloud(value: InventoryIdentity, page: { ordinal: number; nodes: readonly CloudInventoryNode[]; totalEntries?: number }): Promise<InventoryProgress> {
+			if (!page || !Array.isArray(page.nodes) || page.nodes.length > INVENTORY_PAGE_ENTRIES) throw Error('Invalid cloud inventory page.');
+			const nodes = page.nodes.map(parseCloudInventoryNode);
+			return append(value, { ordinal: page.ordinal, entries: nodes.map(inventorySyncEntry), ...(page.totalEntries === undefined ? {} : { totalEntries: page.totalEntries }) }, nodes);
 		},
 		/** Captured entries are immutable. Validate at most one page per transaction
 		 * and persist its cursor atomically, so closing or cancelling can resume
@@ -129,18 +159,17 @@ export function inventoryJournal(db: IDBDatabase, access: JournalAccess, keyRang
 						const cursor = request.result;
 						if (!cursor) { save(true); return; }
 						if (processed === INVENTORY_PAGE_ENTRIES) { save(false); return; }
-						const row: Row = cursor.value, item = entry(row.entry);
-						if (row.scope !== key || row.capture !== header.id || row.identity !== item.id || row.path !== syncPathKey(item.path) ||
-							JSON.stringify(cursor.primaryKey) !== JSON.stringify([key, header.id, row.path])) throw Error('Inventory entry identity changed.');
+						const row: Row = cursor.value, item = validateRow(row, header, cursor.primaryKey);
 						if (count >= header.entries) throw Error('Inventory entry count changed.');
 						count++; processed++; through = row.path;
 						const parent = item.path.split('/').slice(0, -1).join('/');
-						if (!parent) { cursor.continue(); return; }
+						if (!parent) { if (header.cloud) validateCloudParent(row, header, header.cloud.rootId); cursor.continue(); return; }
 						const ancestor = entries.get([key, header.id, syncPathKey(parent)]);
 						ancestor.onsuccess = () => { try {
 							check();
 							const folder = ancestor.result?.entry;
 							if (!folder || !validSyncEntry(folder) || folder.path !== parent || folder.kind !== 'folder') throw Error('Inventory has a missing, aliased or non-folder ancestor.');
+							validateCloudParent(row, header, folder.id);
 							cursor.continue();
 						} catch (error) { fail(error); } };
 					} catch (error) { fail(error); } };
@@ -166,15 +195,32 @@ export function inventoryJournal(db: IDBDatabase, access: JournalAccess, keyRang
 						if ((token?.read ?? 0) + result.length !== header.entries) throw Error('Inventory ended before its declared entry count.');
 						done({ entries: result, next: null, totalEntries: header.entries }); return;
 					}
-					const row: Row = cursor.value, item = entry(row.entry), size = encoder.encode(JSON.stringify(item)).length + 1;
-					if (row.scope !== key || row.capture !== header.id || row.identity !== item.id || row.path !== syncPathKey(item.path) ||
-						JSON.stringify(cursor.primaryKey) !== JSON.stringify([key, header.id, row.path])) throw Error('Inventory entry identity changed.');
+					const row: Row = cursor.value, item = validateRow(row, header, cursor.primaryKey), size = encoder.encode(JSON.stringify(item)).length + 1;
 					if (bytes + size > INVENTORY_PAGE_BYTES || result.length === INVENTORY_PAGE_ENTRIES) {
 						if (!result.length) throw Error('Inventory entry exceeds its byte bound.');
 						done({ entries: result, next: { ...expected, scope: structuredClone(scope), after: syncPathKey(result.at(-1)!.path),
 							read: (token?.read ?? 0) + result.length }, totalEntries: header.entries }); return;
 					}
 					result.push(item); bytes += size; cursor.continue();
+				} catch (error) { fail(error); } };
+			});
+		},
+		async cloudRoot(value: InventoryIdentity): Promise<CloudInventoryRoot> {
+			return withHeader(value, 'readonly', (header, _tx, done) => {
+				if (!header.cloud || header.phase !== 'complete') throw Error('A complete cloud metadata capture is required.');
+				done(parseCloudInventoryRoot(header.cloud));
+			});
+		},
+		async cloudNode(value: InventoryIdentity, path: string): Promise<CloudInventoryNode | null> {
+			if (!validSyncPath(path)) throw Error('Invalid cloud inventory path.');
+			return withHeader(value, 'readonly', (header, tx, done, fail) => {
+				if (!header.cloud || header.phase !== 'complete') throw Error('A complete cloud metadata capture is required.');
+				const id = [key, header.id, syncPathKey(path)], get = tx.objectStore(INVENTORY_STORES[2]).get(id);
+				get.onsuccess = () => { try {
+					check(); if (get.result === undefined) { done(null); return; }
+					const item = validateRow(get.result, header, id);
+					if (item.path !== path) throw Error('Case or Unicode filename collision requires review.');
+					done(parseCloudInventoryNode(get.result.cloud));
 				} catch (error) { fail(error); } };
 			});
 		},

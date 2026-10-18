@@ -1,11 +1,26 @@
 import { validateSyncRun, type SyncOperation, type SyncRun } from './execute';
-import type { SyncEntry } from './reconcile';
+import { validSyncEntry, type SyncEntry } from './reconcile';
 
 export type LocalTrashContext = {
 	parent?: { expected: SyncEntry; previousOperationId?: string };
 	childrenOperationId?: string;
 };
 const parentPath = (path: string) => path.split('/').slice(0, -1).join('/');
+
+/** Validate a retained receipt chain before passing it to a native adapter. */
+export function parseLocalTrashContext(operation: SyncOperation, value?: LocalTrashContext): LocalTrashContext | undefined {
+	if (value === undefined) return undefined;
+	const m = operation.mutation, context = structuredClone(value);
+	if (!context || typeof context !== 'object' || Array.isArray(context) || m.kind !== 'trash' || m.side !== 'local') throw Error('Invalid local Trash context.');
+	const link = (id: unknown) => typeof id === 'string' && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(id) && id !== operation.id;
+	if (context.parent && (!validSyncEntry(context.parent.expected) || context.parent.expected.kind !== 'folder' ||
+		context.parent.expected.path !== parentPath(m.path) || (context.parent.previousOperationId !== undefined && !link(context.parent.previousOperationId)))) throw Error('Invalid local Trash parent receipt.');
+	if (context.childrenOperationId !== undefined && (m.expected.kind !== 'folder' || !link(context.childrenOperationId) ||
+		context.childrenOperationId === context.parent?.previousOperationId)) throw Error('Invalid local Trash child receipt.');
+	return { ...(context.parent ? { parent: { expected: { path: context.parent.expected.path, id: context.parent.expected.id, version: context.parent.expected.version, kind: 'folder', size: 0, sha256: null },
+		...(context.parent.previousOperationId ? { previousOperationId: context.parent.previousOperationId } : {}) } } : {}),
+		...(context.childrenOperationId ? { childrenOperationId: context.childrenOperationId } : {}) };
+}
 
 /** Derived only from the immutable run, never a later scan. Each operation
  * carries at most two receipt links, including for wide or deeply nested trees. */

@@ -2566,3 +2566,54 @@ indexed destination preparation and native Trash receipt chains, then verify
 real file transfers in installed Mac/iOS apps. The foreground 10,000-path limit
 remains. This is a storage/recovery proof using generated metadata, not native
 transfer or 100 GB–100 TB throughput acceptance. Android stays deferred.
+
+
+## Paged cloud operation bindings — 2026-10-18
+
+Journal version 7 retains canonical cloud nodes alongside reconciliation entries
+in the existing inventory pages. Both payloads share the 128-entry/1 MiB bound
+and exact retry digest. Sealing checks physical parent IDs across pages before
+exposing metadata. A generic capture cannot later acquire cloud metadata, and
+original capture instances stay pinned by the plan and run.
+
+The paged operation journal now prepares cloud bindings before execution. Each
+binding retains the original attachment, destination revision and parent ID;
+new folder parents use already allocated operation IDs. The exact parsed
+configuration and cloud root are immutable across retries. Local Trash keeps at
+most two receipt links per operation, with durable per-parent progress across
+pages. Binding rows, receipt links and their cursor commit together. Partial,
+invalid or quota-refused preparation cannot start any operation. A started run
+cannot acquire fresh bindings from a later scan.
+
+`createPagedCloudSyncPort` joins those indexed rows to the same cloud upload,
+range-download, native staged-publication, recoverable Trash and capability
+checks used by the existing foreground adapter. Preparation metadata does not
+authorize effects. The whole-run compatibility adapter delegates to this shared
+transport; Timeline history and remote API contracts remain unchanged.
+
+Fourteen new regressions cover retained cloud metadata, ancestry, migration,
+immutable settings, deep/wide native Trash receipt chains, page byte bounds,
+transaction rollback and recovery after an accepted download loses its reply.
+An OS-isolated Chrome for Testing proof prepared 270 bindings, restarted after
+128, then restarted after 129 accepted downloads and 128 confirmations. Resume
+performed exactly 141 new downloads. All 270 independent target receipts and
+original attachment bindings matched; no accepted effect repeated. The fixture
+used generated three-byte content and simulated cloud/native adapters around
+the real shared transport and IndexedDB, not an account or installed device.
+Browser and fixture server were restricted to loopback 28174; hostname,
+direct-IP and redirect refusal were verified. Screenshot, three traces and
+fixture source are retained beside the HTML plan. The installed Thingtime
+agent-browser CLI was absent, so the explicitly isolated runner was used.
+Temporary profile/downloads and listeners were removed after the proof.
+
+Still open: stable paged native/cloud scan producers, foreground/worker lifecycle
+integration including conflict review and checkpoint publication, and installed
+Mac/iOS acceptance. The live 10,000-path bound remains. This increment does not
+establish large-volume throughput, persistent background sync or independent
+backups. Android remains deferred with its unfinished code preserved in PR #1002.
+
+Validation for this increment: 221 shared `.test.ts` checks plus the separate
+module-mock `.test.mts` check pass (222 total). The unchanged 100,000-entry
+inventory and 20,000-path planner benchmarks were not repeated. Focused lint
+passes. Whole-project TypeScript output is byte-identical to the prior
+91-diagnostic baseline.

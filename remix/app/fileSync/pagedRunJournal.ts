@@ -1,23 +1,31 @@
+import { parseFileSyncConfiguration, type FileSyncConfiguration } from './configuration';
+import { parseCloudInventoryRoot, type CloudInventoryRoot } from './cloudInventory';
+import { parseCloudWrite } from './cloudWrite';
+import { prepareCloudOperationBinding, type CloudOperationBinding } from './cloudBinding';
+import { parseLocalTrashContext } from './localTrash';
 import { PAGED_CHECKPOINT_HEADS, validatePagedCheckpointHead } from './checkpoint';
 import { syncMutationOrderKey, validateSyncOperation, validateSyncReceipt, validateSyncRun, type SyncOperation, type SyncReceipt } from './execute';
-import { INVENTORY_PAGE_BYTES, INVENTORY_PAGE_ENTRIES, INVENTORY_PIN_STORE, INVENTORY_STORES, validateInventoryHeader, type InventoryHeader } from './inventoryJournal';
+import { INVENTORY_PAGE_BYTES, INVENTORY_PAGE_ENTRIES, INVENTORY_PIN_STORE, INVENTORY_STORES, inventoryJournal, validateInventoryHeader, type InventoryHeader } from './inventoryJournal';
 import { journalScope, type JournalAccess } from './journalScope';
 import { pagedPlanJournal, parsePagedPlanSpec, PLAN_PIN_STORE, PLAN_STORES, validatePagedPlanHeader,
 	type PagedPlanCursor, type PagedPlanHeader, type PagedPlanSpec } from './pagedPlanJournal';
 import { sameSyncScope, syncPathKey, validSyncPath, validSyncPathKey, syncScopeKey, type SyncEntry, type SyncScope } from './reconcile';
 
+const CLOUD_PARENTS = 'sync-cloud-trash-parents';
 export const PAGED_RUN_HEADS = 'sync-paged-run-heads';
 export const PAGED_RUN_STORES = ['sync-paged-runs', 'sync-paged-operations'] as const;
-const stores = [...PAGED_RUN_STORES, PAGED_RUN_HEADS, PLAN_STORES[0], PLAN_PIN_STORE, INVENTORY_STORES[0], INVENTORY_PIN_STORE, PAGED_CHECKPOINT_HEADS, 'runs'];
+const stores = [CLOUD_PARENTS, ...PAGED_RUN_STORES, PAGED_RUN_HEADS, PLAN_STORES[0], PLAN_PIN_STORE, INVENTORY_STORES[0], INVENTORY_PIN_STORE, PAGED_CHECKPOINT_HEADS, 'runs'];
 export type PagedRunSpec = { id: string; plan: PagedPlanSpec };
 export type PagedRunProgress = { phase: 'preparing' | 'ready' | 'running' | 'complete'; read: number; total: number; operations: number; confirmed: number };
 type SortKey = [number, number, string];
+export type CloudBindingProgress = { prepared: number; total: number; phase: 'preparing' | 'ready' };
+type CloudPreparation = { configuration: FileSyncConfiguration; root: CloudInventoryRoot; prepared: number; after: SortKey | null };
 export type PagedRunHeader = PagedRunProgress & { spec: PagedRunSpec; scope: string; instance: string; planInstance: string;
-	next: PagedPlanCursor | null; revision: number; confirmedThrough: SortKey | null };
+	next: PagedPlanCursor | null; revision: number; confirmedThrough: SortKey | null; cloud?: CloudPreparation };
 type Header = PagedRunHeader;
 export type ConfirmedSyncOperation = { operation: SyncOperation; receipt: SyncReceipt };
 export type ConfirmedSyncCursor = { id: string; instance: string; scope: SyncScope; after: string; read: number };
-type Row = { scope: string; run: string; path: string; operation: SyncOperation; receipt: SyncReceipt | null };
+type Row = { scope: string; run: string; path: string; operation: SyncOperation; receipt: SyncReceipt | null; cloud?: CloudOperationBinding };
 const nonnegative = (n: number) => Number.isSafeInteger(n) && n >= 0;
 const bytes = (value: unknown) => new TextEncoder().encode(JSON.stringify(value)).length;
 const identifier = (value: unknown): value is string => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(value);
@@ -35,6 +43,21 @@ const receiptValue = (r: SyncReceipt): SyncReceipt => ({ operationId: r.operatio
 	scope: { origin: r.scope.origin, ownerId: r.scope.ownerId, dataPlane: r.scope.dataPlane, rootId: r.scope.rootId, deviceId: r.scope.deviceId },
 	entry: r.entry === null ? null : entry(r.entry) });
 
+const validOrder = (value: unknown): value is SortKey => Array.isArray(value) && value.length === 3 && [0, 1].includes(value[0]) &&
+	Number.isInteger(value[1]) && validSyncPath(value[2]) && value[1] === value[2].split('/').length * (value[0] === 0 ? 1 : -1);
+const cloudProgress = (h: Header): CloudBindingProgress => {
+	if (!h.cloud) throw Error('Prepare cloud bindings before using this run.');
+	return { prepared: h.cloud.prepared, total: h.operations, phase: h.cloud.prepared === h.operations ? 'ready' : 'preparing' };
+};
+const validateCloudConfiguration = (value: FileSyncConfiguration, spec: PagedRunSpec, scope: SyncScope, root: CloudInventoryRoot) => {
+	const c = parseFileSyncConfiguration(value);
+	if (scope.dataPlane !== 'home' || c.deviceId !== scope.deviceId || c.remoteFolderId !== root.rootId ||
+		c.mode !== spec.plan.policy.mode || c.propagateDeletes !== spec.plan.policy.propagateDeletes ||
+		JSON.stringify(c.excludedPaths.map(syncPathKey).sort()) !== JSON.stringify(spec.plan.excludedPaths.map(syncPathKey).sort()))
+		throw Error('Cloud configuration does not match the prepared sync plan.');
+	return c;
+};
+
 export const validatePagedRunHeader = (h: Header, spec: PagedRunSpec, scope: SyncScope) => {
 	const key = syncScopeKey(scope);
 	const after = h?.confirmedThrough;
@@ -48,10 +71,17 @@ export const validatePagedRunHeader = (h: Header, spec: PagedRunSpec, scope: Syn
 		(h.confirmed === 0 ? after !== null : !Array.isArray(after) || after.length !== 3 || ![0, 1].includes(after[0]) ||
 			!Number.isInteger(after[1]) || !validSyncPath(after[2]) || after[1] !== after[2].split('/').length * (after[0] === 0 ? 1 : -1)))
 		throw Error('Paged sync run changed or is unavailable.');
+	if (h.cloud !== undefined) {
+		const c = h.cloud;
+		if (!c || h.phase === 'preparing' || !nonnegative(c.prepared) || c.prepared > h.operations ||
+			(c.prepared === 0 ? c.after !== null : !validOrder(c.after)) ||
+			(h.phase !== 'ready' && c.prepared !== h.operations)) throw Error('Invalid cloud binding progress.');
+		parseCloudInventoryRoot(c.root); validateCloudConfiguration(c.configuration, spec, scope, c.root);
+	}
 };
 
 export function upgradePagedRunJournal(db: IDBDatabase) {
-	for (const name of [PAGED_RUN_HEADS, ...PAGED_RUN_STORES]) if (!db.objectStoreNames.contains(name)) {
+	for (const name of [CLOUD_PARENTS, PAGED_RUN_HEADS, ...PAGED_RUN_STORES]) if (!db.objectStoreNames.contains(name)) {
 		const store = db.createObjectStore(name);
 		if (name === PAGED_RUN_STORES[1]) {
 			store.createIndex('operation', ['scope', 'operation.id'], { unique: true });
@@ -65,7 +95,7 @@ export function upgradePagedRunJournal(db: IDBDatabase) {
  * checkpoint handoff verifies fresh observations. Never discard uncertain work. */
 export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange?: typeof IDBKeyRange) {
 	const { scope, key, check, transaction } = journalScope(db, access, keyRange);
-	const plans = pagedPlanJournal(db, access, keyRange);
+	const plans = pagedPlanJournal(db, access, keyRange), inventory = inventoryJournal(db, access, keyRange);
 	const operationRange = (id: string, after: SortKey | null = null) => (keyRange ?? globalThis.IDBKeyRange).bound(
 		after ? [key, id, ...after] : [key, id], [key, id, []], after !== null, false);
 	const validate = (h: Header, spec: PagedRunSpec) => validatePagedRunHeader(h, spec, scope);
@@ -187,9 +217,113 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 			} catch (e) { fail(e); } };
 		});
 	};
+	const find = async (spec: PagedRunSpec, path: string): Promise<SyncOperation | null> => {
+		if (!validSyncPath(path)) throw Error('Invalid sync path.');
+		return withHeader(spec, 'readonly', (h, tx, done, fail) => {
+			if (h.phase === 'preparing') throw Error('Paged sync run is incomplete.');
+			const get = tx.objectStore(PAGED_RUN_STORES[1]).index('path').get([key, spec.id, syncPathKey(path)]);
+			get.onsuccess = () => { try {
+				check(); const op = get.result === undefined ? null : row(get.result, spec).operation;
+				if (op && op.mutation.path !== path) throw Error('Sync operation path collision.'); done(op);
+			} catch (e) { fail(e); } };
+		});
+	};
+	const beginCloud = async (value: PagedRunSpec, supplied: FileSyncConfiguration): Promise<CloudBindingProgress> => {
+		const spec = parsePagedRunSpec(value), root = await inventory.cloudRoot(spec.plan.remote);
+		const configuration = validateCloudConfiguration(supplied, spec, scope, root);
+		return withHeader(spec, 'readwrite', (h, tx, done) => {
+			if (h.cloud) {
+				if (JSON.stringify(h.cloud.configuration) !== JSON.stringify(configuration) || JSON.stringify(h.cloud.root) !== JSON.stringify(root))
+					throw Error('Saved cloud binding configuration changed.');
+			} else {
+				if (h.phase !== 'ready') throw Error('Bind cloud operations before starting the run.');
+				h.cloud = { configuration, root, prepared: 0, after: null }; h.revision++; save(h, tx);
+			}
+			done(cloudProgress(h));
+		});
+	};
+	const stepCloud = async (value: PagedRunSpec): Promise<CloudBindingProgress> => {
+		const spec = parsePagedRunSpec(value);
+		const snapshot = await withHeader<{ header: Header; rows: Row[] }>(spec, 'readonly', (h, tx, done, fail) => {
+			cloudProgress(h);
+			if (h.cloud!.prepared === h.operations) { done({ header: h, rows: [] }); return; }
+			const request = tx.objectStore(PAGED_RUN_STORES[1]).openCursor(operationRange(spec.id, h.cloud!.after));
+			const rows: Row[] = []; let size = 2;
+			request.onsuccess = () => { try {
+				check(); const cursor = request.result;
+				if (!cursor) {
+					if (h.cloud!.prepared + rows.length !== h.operations) throw Error('Cloud operations ended early.');
+					done({ header: h, rows }); return;
+				}
+				const r = row(cursor.value, spec, cursor.primaryKey), length = bytes(r) + 1;
+				if (r.operation.confirmed || r.cloud || h.cloud!.prepared + rows.length >= h.operations) throw Error('Cloud preparation order changed.');
+				if (rows.length === INVENTORY_PAGE_ENTRIES || size + length > INVENTORY_PAGE_BYTES) {
+					if (!rows.length) throw Error('Cloud operation exceeds its byte bound.');
+					done({ header: h, rows }); return;
+				}
+				rows.push(r); size += length; cursor.continue();
+			} catch (e) { fail(e); } };
+		});
+		const h = snapshot.header;
+		if (h.cloud!.prepared === h.operations) return cloudProgress(h);
+		const previous = new Map<string, string | undefined>(), changes = new Map<string, string>();
+		const previousTrash = async (path: string): Promise<string | undefined> => {
+			if (changes.has(path)) return changes.get(path);
+			if (!previous.has(path)) previous.set(path, await withHeader<string | undefined>(spec, 'readonly', (current, tx, done, fail) => {
+				if (current.instance !== h.instance || current.revision !== h.revision) throw Error('Cloud preparation changed; retry this page.');
+				const get = tx.objectStore(CLOUD_PARENTS).get([key, spec.id, path]);
+				get.onsuccess = () => { try { check(); if (get.result !== undefined && !identifier(get.result)) throw Error('Invalid cloud Trash receipt link.'); done(get.result); } catch (e) { fail(e); } };
+			}));
+			return previous.get(path);
+		};
+		const prepared: Row[] = []; let size = 2;
+		for (const r of snapshot.rows) {
+			const cloud = await prepareCloudOperationBinding(r.operation, scope, h.cloud!.root.rootId, {
+				node: path => inventory.cloudNode(spec.plan.remote, path), operation: path => find(spec, path), previousTrash
+			}); check();
+			const bound = { ...r, cloud }, length = bytes(bound) + 1;
+			if (size + length > INVENTORY_PAGE_BYTES) {
+				if (!prepared.length) throw Error('Cloud binding exceeds its byte bound.'); break;
+			}
+			prepared.push(bound); size += length;
+			const m = r.operation.mutation;
+			if (m.kind === 'trash' && m.side === 'local') changes.set(m.path.split('/').slice(0, -1).join('/'), r.operation.id);
+		}
+		return withHeader(spec, 'readwrite', (current, tx, done) => {
+			if (current.instance !== h.instance) throw Error('Paged sync run was replaced.');
+			if (current.revision !== h.revision) { done(cloudProgress(current)); return; }
+			if (JSON.stringify(current) !== JSON.stringify(h)) throw Error('Cloud preparation changed.');
+			for (const r of prepared) tx.objectStore(PAGED_RUN_STORES[1]).put(r, [key, spec.id, ...orderKey(r.operation)]);
+			for (const [path, id] of changes) tx.objectStore(CLOUD_PARENTS).put(id, [key, spec.id, path]);
+			h.cloud!.prepared += prepared.length; h.cloud!.after = orderKey(prepared.at(-1)!.operation); h.revision++;
+			save(h, tx); done(cloudProgress(h));
+		});
+	};
 	return {
 		get scope() { return structuredClone(scope); },
-		begin, step, read,
+		begin, step, read, beginCloud, stepCloud,
+		async prepareCloud(value: PagedRunSpec, configuration: FileSyncConfiguration, changed?: (p: CloudBindingProgress) => void) {
+			const spec = parsePagedRunSpec(value); let state = await beginCloud(spec, configuration);
+			while (state.phase !== 'ready') { state = await stepCloud(spec); changed?.(state); } return state;
+		},
+		async cloudBinding(value: PagedRunSpec, configuration: FileSyncConfiguration, selector: { id: string } | { path: string }): Promise<CloudOperationBinding | null> {
+			const spec = parsePagedRunSpec(value), supplied = parseFileSyncConfiguration(configuration);
+			if ('id' in selector ? !identifier(selector.id) : !validSyncPath(selector.path)) throw Error('Invalid cloud binding selector.');
+			return withHeader(spec, 'readonly', (h, tx, done, fail) => {
+				if (cloudProgress(h).phase !== 'ready') throw Error('Complete cloud bindings before executing.');
+				if (JSON.stringify(h.cloud!.configuration) !== JSON.stringify(supplied)) throw Error('Saved cloud binding configuration changed.');
+				const ops = tx.objectStore(PAGED_RUN_STORES[1]), get = 'id' in selector ? ops.index('operation').get([key, selector.id]) : ops.index('path').get([key, spec.id, syncPathKey(selector.path)]);
+				get.onsuccess = () => { try {
+					check(); if (get.result === undefined) { done(null); return; }
+					const r = row(get.result, spec); if (!r.cloud) throw Error('Cloud binding is missing.');
+					const write = parseCloudWrite(r.cloud.write);
+					if (!sameSyncScope(write.scope, scope) || write.cloudRootId !== h.cloud!.root.rootId ||
+						JSON.stringify({ ...r.operation, confirmed: false }) !== JSON.stringify({ ...write.operation, confirmed: false }) ||
+						('id' in selector ? write.operation.id !== selector.id : write.operation.mutation.path !== selector.path)) throw Error('Cloud binding identity changed.');
+					done({ write, ...(r.cloud.trashContext !== undefined ? { trashContext: parseLocalTrashContext(write.operation, r.cloud.trashContext) } : {}) });
+				} catch (e) { fail(e); } };
+			});
+		},
 		/** Canonical path order for the checkpoint merge, independent of effect order. */
 		async readConfirmed(value: PagedRunSpec, continuation?: ConfirmedSyncCursor): Promise<{ rows: ConfirmedSyncOperation[]; next: ConfirmedSyncCursor | null; total: number }> {
 			const spec = parsePagedRunSpec(value), token = continuation && structuredClone(continuation);
@@ -243,6 +377,7 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 			const spec = parsePagedRunSpec(value);
 			return withHeader(spec, 'readwrite', (h, tx, done) => {
 				if (h.phase === 'preparing') throw Error('Paged sync run is incomplete.');
+				if (h.cloud && cloudProgress(h).phase !== 'ready') throw Error('Complete cloud bindings before starting the run.');
 				if (h.phase === 'ready') { h.phase = h.operations ? 'running' : 'complete'; h.revision++; save(h, tx); }
 				done(progress(h));
 			});
@@ -272,19 +407,13 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 				} catch (e) { fail(e); } };
 			});
 		},
-		async find(value: PagedRunSpec, path: string): Promise<SyncOperation | null> {
-			const spec = parsePagedRunSpec(value); if (!validSyncPath(path)) throw Error('Invalid sync path.');
-			return withHeader(spec, 'readonly', (h, tx, done, fail) => {
-				if (h.phase === 'preparing') throw Error('Paged sync run is incomplete.');
-				const get = tx.objectStore(PAGED_RUN_STORES[1]).index('path').get([key, spec.id, syncPathKey(path)]);
-				get.onsuccess = () => { try { check(); done(get.result === undefined ? null : row(get.result, spec).operation); } catch (e) { fail(e); } };
-			});
-		},
+		find: (value: PagedRunSpec, path: string) => find(parsePagedRunSpec(value), path),
 		async discard(value: PagedRunSpec): Promise<void> {
 			const spec = parsePagedRunSpec(value);
 			return withHeader(spec, 'readwrite', (h, tx, done) => {
 				if (!['preparing', 'ready'].includes(h.phase)) throw Error('A started sync run must retain its receipts and checkpoint boundary.');
 				tx.objectStore(PAGED_RUN_STORES[1]).delete(operationRange(spec.id));
+				tx.objectStore(CLOUD_PARENTS).delete(operationRange(spec.id));
 				tx.objectStore(PAGED_RUN_STORES[0]).delete([key, spec.id]);
 				tx.objectStore(PAGED_RUN_HEADS).delete(key);
 				tx.objectStore(PLAN_PIN_STORE).delete([key, spec.plan.id, spec.id]);

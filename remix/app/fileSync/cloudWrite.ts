@@ -1,8 +1,8 @@
 import { parseCloudFolder, parseCloudFolderCreate } from './cloudFolder';
-import { parseCloudInventory, type CloudInventory } from './cloudInventory';
+import { parseCloudInventory, inventorySyncEntry, type CloudInventoryNode, type CloudInventory } from './cloudInventory';
 import { cloudFileSyncEntry, parseCloudFile, parseCloudFileCommit, type CloudFile, type CloudFileCommit } from './cloudFile';
 import { sameSyncScope, sameSyncStamp, validateSyncScope, type SyncScope } from './reconcile';
-import { validateSyncRun, type SyncOperation, type SyncRun } from './execute';
+import { validateSyncOperation, validateSyncRun, type SyncOperation, type SyncRun } from './execute';
 
 /** Queue metadata only. File bytes remain attachments; history stays in Timeline. */
 export type CloudWrite = { operation: SyncOperation; scope: SyncScope; folderId: string | null; before: CloudFile | null; cloudRootId?: string };
@@ -112,45 +112,42 @@ export function cloudWriteCommit(write: CloudWrite, content: CloudFile['content'
 export const isCloudFolderWrite = (write: CloudWrite): boolean =>
 	write.operation.mutation.kind === 'copy' && write.operation.mutation.source.kind === 'folder';
 
+/** Bind one operation to its original cloud observation and explicit parent.
+ * The caller supplies a parent from the sealed inventory or a prepared folder
+ * operation, never a later live scan. Both journal paths use this same policy. */
+export function prepareCloudInventoryWrite(operation: SyncOperation, scope: SyncScope, rootId: string,
+	before: CloudInventoryNode | null, folderId: string | null): CloudWrite {
+	validateSyncOperation(operation);
+	const m = operation.mutation;
+	if (before && before.path !== m.path) throw Error('Cloud operation path changed.');
+	if (m.kind === 'trash' && m.side === 'local') {
+		if (before) throw Error('A local Trash path is still present in the cloud inventory.');
+		return parseCloudWrite({ operation, scope, folderId: null, before: null, cloudRootId: rootId });
+	}
+	if (!folderId) throw Error('A cloud parent is missing from the complete inventory and prepared run.');
+	if (before && (before.kind === 'file' ? before.file.folderId : before.folderId) !== folderId) throw Error('Cloud inventory parent changed.');
+	if (m.kind === 'copy' && m.from === 'remote') {
+		if (!before || before.kind !== m.source.kind) throw Error('Cloud download source is missing from the complete inventory.');
+		if (!sameSyncStamp(m.source, inventorySyncEntry(before))) throw Error('Cloud download source changed.');
+	} else if (m.kind === 'copy' && m.source.kind === 'folder') {
+		if (before || m.expectedTarget !== null || m.from !== 'local') throw Error('Cloud folder destination already exists or requires another adapter.');
+	} else if (before && before.kind !== 'file') throw Error('Cloud file destination changed kind.');
+	return parseCloudWrite({ operation, scope, folderId, before: before?.kind === 'file' ? before.file : null, cloudRootId: rootId });
+}
+
 /** Bind every path to the complete observation and preallocate parent IDs from
  * the immutable run. A restart never generates a second folder tree. */
 export function prepareCloudInventoryRun(run: SyncRun, value: CloudInventory): CloudSyncRun {
 	validateSyncRun(run);
 	const inventory = parseCloudInventory(value, value.rootId);
-	const nodes = new Map(inventory.nodes.map((node) => [node.path, node]));
+	const nodes = new Map(inventory.nodes.map(node => [node.path, node]));
 	const parents = new Map<string, string>([['', inventory.rootId]]);
 	for (const node of inventory.nodes) if (node.kind === 'folder') parents.set(node.path, node.id);
-	const targets = run.operations.map((operation) => {
-		const m = operation.mutation,
-			parentPath = m.path.split('/').slice(0, -1).join('/'),
-			folderId = parents.get(parentPath);
-		if (m.kind === 'trash' && m.side === 'local') {
-			if (nodes.has(m.path)) throw Error('A local Trash path is still present in the cloud inventory.');
-			return { folderId: null, before: null };
-		}
-		if (!folderId) throw Error('A cloud parent is missing from the complete inventory and prepared run.');
-		const before = nodes.get(m.path);
-		if (m.kind === 'copy' && m.from === 'remote') {
-			if (!before || (m.source.kind === 'file' ? before.kind !== 'file' : before.kind !== 'folder'))
-				throw Error('Cloud download source is missing from the complete inventory.');
-			const observed =
-				before.kind === 'file'
-					? cloudFileSyncEntry(before.file, m.path)
-					: { path: before.path, id: before.id, version: before.revision, kind: 'folder' as const, size: 0, sha256: null };
-			if (!sameSyncStamp(m.source, observed)) throw Error('Cloud download source changed.');
-			return { folderId, before: before.kind === 'file' ? before.file : null };
-		}
-		if (m.kind === 'copy' && m.source.kind === 'folder') {
-			if (before || m.expectedTarget !== null || m.from !== 'local')
-				throw Error('Cloud folder destination already exists or requires another adapter.');
-			parents.set(m.path, operation.id);
-			return { folderId, before: null };
-		}
-		if (before && before.kind !== 'file') throw Error('Cloud file destination changed kind.');
-		return { folderId, before: before?.kind === 'file' ? before.file : null };
+	const cloudWrites = run.operations.map(operation => {
+		const m = operation.mutation, parent = m.path.split('/').slice(0, -1).join('/');
+		const write = prepareCloudInventoryWrite(operation, run.scope, inventory.rootId, nodes.get(m.path) ?? null, parents.get(parent) ?? null);
+		if (m.kind === 'copy' && m.from === 'local' && m.source.kind === 'folder') parents.set(m.path, operation.id);
+		return write;
 	});
-	return prepareCloudSyncRun(
-		run,
-		targets.map((target) => ({ ...target, cloudRootId: inventory.rootId }))
-	);
+	return parseCloudSyncRun({ ...run, cloudWrites });
 }
