@@ -65,7 +65,7 @@ export const el = (tag: string, style: Style = {}, children: unknown[] = [], pro
 
 export const whenState = (state: string, then: unknown, otherwise?: unknown): Node => ({ ttIf: { arg: 'state', equals: state, then, ...(otherwise !== undefined ? { else: otherwise } : {}) } });
 export const ifTruthy = (arg: string, then: unknown, otherwise?: unknown): Node => ({ ttIf: { arg, then, ...(otherwise !== undefined ? { else: otherwise } : {}) } });
-export const ifEquals = (arg: string, value: string | number | boolean, then: unknown, otherwise?: unknown): Node => ({ ttIf: { arg, equals: value, then, ...(otherwise !== undefined ? { else: otherwise } : {}) } });
+export const ifEquals = (arg: string, value: string | number | boolean | null, then: unknown, otherwise?: unknown): Node => ({ ttIf: { arg, equals: value, then, ...(otherwise !== undefined ? { else: otherwise } : {}) } });
 export const ifOp = (arg: string, op: 'eq' | 'ne' | 'gt' | 'gte' | 'lt' | 'lte' | 'in' | 'includes' | 'empty' | 'notEmpty', value: unknown, then: unknown, otherwise?: unknown): Node => ({
 	ttIf: { arg, op, value, then, ...(otherwise !== undefined ? { else: otherwise } : {}) }
 });

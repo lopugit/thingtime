@@ -1,5 +1,14 @@
 # API endpoints and capabilities
 
+Paired Mac inventory uses `api.devices` 1.10.0 and `api.devices-node-state`
+1.11.0 (`deviceMenuBar.ts`, native `MenuBarTelemetry.swift`). Approved Bash uses
+`api.devices-commands` / `api.devices-node-commands` 1.10.0 (`deviceScript.ts`,
+native `DeviceScript.swift`). Both extend existing routes. Optional native
+negotiation preserves compatibility with older origins; script leases require
+explicit approved envelopes. Editable suites live in `appSuites/macMenuBar.ts`
+and `appSuites/deviceScripts.ts`; scripts retain results only on explicit
+private-Thing creation. See README and TESTING for limits and acceptance.
+
 Timeline 1.18.0 adds named versions, undo and version export on the existing
 route: the POST command `name-version` (`api/utils/timeline/versionNames.ts`,
 shared `timeline/versionNames.ts`, protected kind `timeline-version-name`),
@@ -376,7 +385,7 @@ both manifests and conditional client negotiation use the canonical docs entry.
 
 ## Password manager
 
-See [password-manager.md](../password-manager.md). `api.passwords` 1.2.0 is a
+See [password-manager.md](../password-manager.md). `api.passwords` 1.1.0 is a
 private, session-bound home-plane API over protected `password-manager-entry`
 Things. `api/utils/passwords/passwords.ts` owns accounted mutations, revision
 fences and secret-free native catalog projections; `auth/vaultEnvelope.ts` and

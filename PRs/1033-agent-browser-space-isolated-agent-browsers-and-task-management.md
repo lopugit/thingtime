@@ -53,7 +53,14 @@ use supported sign-in/user-presence flows; private keys are never exported.
 - Independent source review found no additional actionable issues after fixes
   for cleanup failure handling, selected API origin scoping and ownership.
 
-Final signed-app, settings-link and deployment results are recorded on
+The repaired Developer ID signed app was installed and launched from
+`~/Applications/Thingtime.app`. Its packaged driver/dependencies load in the
+actual Electron runtime. Lopu navigation opens Agent browsers; the general
+security link opens Things settings and expands the correct disclosure with
+Isolated testing selected. All three security options render. The installed CLI
+negotiated both browser/network-policy capabilities at 1.0.0 and independently
+confirmed the isolated default and zero active claims/sessions. Combined-app
+acceptance and deployment results are recorded on
 [PR #1033](https://github.com/lopugit/thingtime/pull/1033). The local app assembly
 also preserves the password-provider and menu-bar branches already installed on
 the device; those features are outside this PR’s changes to main. Build success
@@ -69,6 +76,9 @@ Markdown and other non-code semantic coverage is partial, not fully refreshed.
 - Centered the shared app shell using supported kebab-case CSS properties.
 - Recognized both capitalizations of Docker's explicit missing-object errors,
   while keeping daemon errors fatal and cleanup retryable.
+- Kept isolated-test refusal ahead of desktop expected-actor forwarding after
+  merging main; regression coverage combines both modes and asserts no fallback
+  request or body consumption.
 - Scoped claims to the selected API endpoint, rather than the fixed bundled
   renderer origin.
 - Routed the general-security link to the existing Things category and its

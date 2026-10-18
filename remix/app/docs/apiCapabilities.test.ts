@@ -32,7 +32,7 @@ test('JSON Action inputs and draft-saving suites negotiate both origin manifests
 	const wellKnown = thingtimeCapabilityManifest('https://thingtime.test').features;
 	for (const [feature, minimum, previous] of [
 		['api.things', '1.33.2', '1.32.0'], ['api.things-update', '1.10.0', '1.9.0'],
-		['api.actions-run', '1.37.0', '1.34.0'], ['api.webpages-suites-install', '1.5.0', '1.4.0']
+		['api.actions-run', '1.37.1', '1.34.0'], ['api.webpages-suites-install', '1.5.0', '1.4.0']
 	]) {
 		assert.equal(route[feature], minimum);
 		assert.equal(wellKnown[feature].version, minimum);
@@ -118,8 +118,8 @@ test('standalone Thing copying negotiates the additive copy contract on both man
 });
 
 test('Data Thing controls negotiate the shared-content action contract', () => {
-	assert.equal(createApiCapabilitiesManifest().features['api.actions-run'], '1.37.0');
-	assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.actions-run'].version, '1.37.0');
+	assert.equal(createApiCapabilitiesManifest().features['api.actions-run'], '1.37.1');
+	assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.actions-run'].version, '1.37.1');
 	for (const unsupported of ['', '1.1.0', '1.2.0', '1.2.1', '2.0.0']) assert.equal(capabilitySatisfies(unsupported, '1.3.0'), false);
 	assert.equal(capabilitySatisfies('1.3.1', '1.3.0'), true);
 });
@@ -209,7 +209,7 @@ test('capabilities publish the native Apple notification device contract', () =>
 	assert.equal(manifest.features['api.watch-pairing'], '1.2.0');
 	assert.equal(manifest.features['api.watch-sync'], '1.1.0');
 	assert.equal(manifest.features['api.watch-things'], '1.1.0');
-	assert.equal(manifest.features['api.devices'], '1.9.0');
+	assert.equal(manifest.features['api.devices'], '1.10.0');
 	assert.equal(manifest.features['api.attachment-uploads'], '1.5.0');
 	assert.equal(manifest.features['api.attachment-upload-parts'], '1.1.0');
 	assert.equal(manifest.features['api.attachment-upload-complete'], '1.4.0');
@@ -684,10 +684,10 @@ test('range programs require the additive owned-boundary contract', () => {
 
  test('password manager registers its live route and version on both discovery manifests', () => {
   const doc = apiEndpointDocs.find(doc => doc.id === 'passwords');
-  assert.equal(doc?.featureVersion, '1.2.0');
+  assert.equal(doc?.featureVersion, '1.1.0');
   assert.deepEqual(doc?.methods, ['GET', 'POST']);
-  assert.equal(createApiCapabilitiesManifest().features['api.passwords'], '1.2.0');
-  assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.passwords'].version, '1.2.0');
+  assert.equal(createApiCapabilitiesManifest().features['api.passwords'], '1.1.0');
+  assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.passwords'].version, '1.1.0');
   assert.equal(typeof routeModules['v1/passwords'], 'function');
  });
 
@@ -701,10 +701,6 @@ test('Gmail OAuth and its one-use callback are advertised on both manifests and 
 	assert.equal(typeof routeModules['v1/mail/google/callback'], 'function');
 });
 
- test('password title search requires the additive 1.2 contract', () => {
-  for (const version of ['1.2.0', '1.2.1', '1.3.0']) assert.equal(capabilitySatisfies(version, '1.2.0'), true);
-  for (const version of [undefined, '1.1.0', '1.1.9', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.2.0'), false);
- });
  test('incident cleanup is versioned on both origin manifests and rejects older or breaking servers', () => {
   for (const id of ['api.admin-migrations', 'api.admin-migrations-run']) {
     assert.equal(createApiCapabilitiesManifest().features[id], '1.4.1');

@@ -1,3 +1,4 @@
+import { collectionStyles } from '../Collections/collectionStyles';
 import React from 'react';
 import { COLLECTION_SIZES, type CollectionSize } from '../Collections/collectionWindow';
 import { CollectionList } from '../Collections/CollectionList';
@@ -51,7 +52,6 @@ export function ComponentCollection({
 	React.useEffect(() => {
 		if (enabled && typeof countStateKey === 'string') localRef.current?.({ op: 'set', key: countStateKey, value: count });
 	}, [enabled, countStateKey, count]);
-	if (Array.isArray(data) && data.length > 10000) return <p role="alert">Filter or page the source to at most 10,000 records.</p>;
 	const items: Record<string, any>[] = Array.isArray(data) ? data.filter((item) => item && typeof item === 'object' && !Array.isArray(item) &&
 		(typeof filterPath !== 'string' || String(componentScopeValue(item, filterPath) ?? '') === String(filterValue ?? ''))) : [];
 	const positions = new Map(items.map((item, index) => [item, index]));
@@ -63,6 +63,7 @@ export function ComponentCollection({
 		: [];
 	return (
 		<>
+            <style>{collectionStyles}</style>
 			{paged.error && <p role="alert">{paged.error}</p>}
 			<CollectionList<Record<string, any>>
 				hasMore={paged.hasMore}
