@@ -42,6 +42,7 @@ const {
 } = require('./lib/thingtime-node-bridge.cjs');
 
 const { DesktopFolderSync } = require('./lib/folder-sync.cjs');
+const { SyncWindowLease } = require('./lib/sync-window.cjs');
 const { DesktopFileExport } = require('./lib/file-export.cjs');
 const { DesktopSpeechRecognition, requireSpeechSender } = require('./lib/speech-recognition.cjs');
 const desktopSpeech = new DesktopSpeechRecognition({ executable: app.isPackaged
@@ -72,6 +73,8 @@ let desktopSettingsLastError = null;
 let endpointCompatibility = null;
 const aiSyncSessions = new Map();
 const thingtimeNode = new ThingtimeNodeIntegration({ app, electronDir: __dirname });
+const syncWindowLease = new SyncWindowLease(() => ({ window: mainWindow, origin: appOrigin,
+    enabled: process.platform === 'darwin' && !parallelDevMode }));
 const desktopFolderSync = new DesktopFolderSync({
     context: () => ({ enabled: process.platform === 'darwin' && !parallelDevMode, window: mainWindow, appOrigin,
         apiOrigin: desktopSettings?.snapshot().selectedEndpoint.url }),
@@ -82,7 +85,7 @@ const desktopFileExport = new DesktopFileExport({
         apiOrigin: desktopSettings?.snapshot().selectedEndpoint.url }),
     choose: (window, options) => dialog.showSaveDialog(window, options)
 });
-app.on('before-quit', () => { desktopFolderSync.invalidate(); desktopFileExport.invalidate(); });
+app.on('before-quit', () => { syncWindowLease.quit(); desktopFolderSync.invalidate(); desktopFileExport.invalidate(); });
 
 
 function getSessionHash() {
@@ -1582,17 +1585,20 @@ function createWindow() {
   });
 
   mainWindow.webContents.on('did-start-navigation', (_event, _url, isInPlace, isMainFrame) => {
-    if (isMainFrame && !isInPlace) { desktopSpeech.stop(); desktopFolderSync.invalidate(); desktopFileExport.invalidate(); }
+    if (isMainFrame && !isInPlace) { syncWindowLease.invalidate(); desktopSpeech.stop(); desktopFolderSync.invalidate(); desktopFileExport.invalidate(); }
   });
-  mainWindow.webContents.on('render-process-gone', () => { desktopSpeech.stop(); desktopFolderSync.invalidate(); desktopFileExport.invalidate(); });
+  mainWindow.webContents.on('render-process-gone', () => { syncWindowLease.invalidate(); desktopSpeech.stop(); desktopFolderSync.invalidate(); desktopFileExport.invalidate(); });
   const folderCookies = mainWindow.webContents.session.cookies;
   const folderAccountChanged = (_event, cookie) => {
     if (cookie.name === 'tt_auth' || cookie.name === 'tt_accounts') { desktopFolderSync.invalidate(); desktopFileExport.invalidate(); }
   };
   folderCookies.on('changed', folderAccountChanged);
   mainWindow.on('closed', () => {
-    desktopSpeech.stop(); desktopFolderSync.invalidate(); desktopFileExport.invalidate(); folderCookies.removeListener('changed', folderAccountChanged);
+    syncWindowLease.invalidate(); desktopSpeech.stop(); desktopFolderSync.invalidate(); desktopFileExport.invalidate(); folderCookies.removeListener('changed', folderAccountChanged);
+    mainWindow = null;
   });
+  const syncWindow = mainWindow;
+  mainWindow.on('close', (event) => syncWindowLease.close(event, syncWindow));
 
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
@@ -1625,6 +1631,7 @@ function createWindow() {
 
 ipcMain.handle('thingtime-desktop:file-export', (event, request) => desktopFileExport.request(event, request));
 ipcMain.handle('thingtime-desktop:folder-sync', (event, request) => desktopFolderSync.request(event, request));
+ipcMain.handle('thingtime-desktop:folder-sync-active', (event, request) => syncWindowLease.set(event, request));
 
 ipcMain.handle('thingtime-desktop:speech-start', (event, request) => {
 	requireSpeechSender(event, mainWindow, appOrigin);
@@ -1724,6 +1731,7 @@ if (!singleInstanceLock) {
 } else {
   app.on('second-instance', () => {
     if (!mainWindow) {
+      if (appOrigin) createWindow();
       return;
     }
 
@@ -1731,7 +1739,7 @@ if (!singleInstanceLock) {
       mainWindow.restore();
     }
 
-    mainWindow.focus();
+    mainWindow.show(); mainWindow.focus();
   });
 
 	app
@@ -1761,8 +1769,10 @@ if (!singleInstanceLock) {
 }
 
 app.on('activate', () => {
-  if (BrowserWindow.getAllWindows().length === 0 && appOrigin) {
+  if ((!mainWindow || mainWindow.isDestroyed()) && appOrigin) {
 		createWindow();
+  } else if (mainWindow) {
+    mainWindow.show(); mainWindow.focus();
   }
 });
 

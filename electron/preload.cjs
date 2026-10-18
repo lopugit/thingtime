@@ -4,6 +4,8 @@ contextBridge.exposeInMainWorld('thingtimeDesktop', {
 	fileExportVersion: process.platform === 'darwin' ? '1.0.0' : undefined,
 	fileExportRequest: (request) => ipcRenderer.invoke('thingtime-desktop:file-export', request),
 	folderSyncRequest: (request) => ipcRenderer.invoke('thingtime-desktop:folder-sync', request),
+	folderSyncTaskVersion: process.platform === 'darwin' ? '1.0.0' : undefined,
+	setFolderSyncActive: (request) => ipcRenderer.invoke('thingtime-desktop:folder-sync-active', request),
 	speechRecognitionVersion: process.platform === 'darwin' ? '1.1.0' : undefined,
 	startSpeechRecognition: (request) => ipcRenderer.invoke('thingtime-desktop:speech-start', request),
 	stopSpeechRecognition: (request) => ipcRenderer.invoke('thingtime-desktop:speech-stop', request),

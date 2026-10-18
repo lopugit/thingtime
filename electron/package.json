@@ -22,7 +22,7 @@
 		"install:local": "node scripts/install-local-app.mjs",
 		"start": "electron .",
 		"test": "node --test test/**/*.test.cjs",
-		"verify:folder-sync-host": "electron test/fixtures/folder-sync-host.cjs",
+		"verify:folder-sync-host": "node scripts/test-folder-sync-host.mjs",
 		"verify:native": "node scripts/verify-native-node.mjs",
 		"verify:release-shim": "node scripts/release-workflow-contract.cjs shim ../.github/workflows/electron-release.yml",
 		"verify:signed": "node scripts/verify-signed-app.mjs",

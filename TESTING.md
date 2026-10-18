@@ -11689,3 +11689,22 @@ resume unfinished Android gates only when requested.
   then uses only saved-consent checks across all lost-reply/process restarts.
 - Installed app/dialog acceptance and closing the connection screen while a
   durable whole-folder worker runs remain separate, incomplete checks.
+
+
+### App-owned Mac sync lifecycle
+
+- Start a long transfer, leave Files, and reopen while a native scan is still
+  pending. Progress, Stop transfer and saved conflict choices must be available
+  immediately; host re-negotiation must not queue ahead of the controls.
+- Stop after reattaching: no aborted-host render exception or error-boundary
+  screen. Retry uses the existing operation IDs and unchanged data is not copied.
+- Close the Mac window during transfer, reopen from Dock, then Quit. Close keeps
+  the same live renderer; Quit stops it. Account/endpoint changes must cancel and
+  clear private task state. Verify in the installed signed app before acceptance.
+- `npm --prefix remix run test:files:desktop-lifecycle -- <evidence-directory>`
+  covers production views, task handoff and IndexedDB with synthetic API/native
+  adapters on isolated loopback 28188. Check desktop/phone and full-page scroll.
+- `npm --prefix electron run verify:folder-sync-host` restricts the real Electron
+  fixture to loopback 28421/28422. Fail closed if nested Chromium sandbox setup
+  fails; never use a permissive fallback. Unit window-lease tests do not prove
+  native Close/Quit acceptance. Full-quit automatic resume remains unimplemented.

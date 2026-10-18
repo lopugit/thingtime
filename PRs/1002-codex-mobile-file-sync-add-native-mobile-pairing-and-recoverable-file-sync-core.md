@@ -3150,3 +3150,43 @@ runner still belongs to the connection screen. Next work is an app-owned
 executor with durable explicit job admission, exact configuration reauthorization,
 serialized native access, conflict handoff and relaunch recovery. Installed
 acceptance remains coordinated separately; Android remains deferred.
+
+
+## App-owned Mac transfer lifecycle — 2026-10-19
+
+The Mac connection controls now start a live app-owned task through
+`desktopSyncTasks.client.ts`, retaining the existing paged runner, IndexedDB
+operation journal, native approvals and editable conflict review. Detaching the
+Files screen only detaches its observer; reopening attaches to the task's
+verified host without waiting behind a long scan. Stop, account changes,
+page navigation/reload and Quit cancel execution while preserving its journal.
+The renderer lease (`folderSyncTaskVersion` 1.0.0) hides an active Mac window on
+Close and disables background timer throttling until the run ends. Only the
+bundled main frame may acquire that lease; it grants no file access.
+
+This is an explicit user-started run, not the completed persistent scheduler.
+Durable job admission, automatic restart/login scheduling, iOS scheduling and
+installed/reboot acceptance remain open. Android stays deferred.
+
+Validation commands: `npm --prefix remix run test:file-sync`,
+`npm --prefix remix run test:files:desktop-lifecycle -- <evidence-directory>`,
+`node --test electron/test/sync-window.test.cjs electron/test/folder-sync.test.cjs`,
+and `npm --prefix electron run verify:folder-sync-host`. Browser fixtures use
+production UI/runner/IndexedDB with synthetic native/HTTP data and an OS network
+boundary. The Electron fixture now fails closed under that boundary: this
+machine's nested Chromium sandbox cannot initialize (`Operation not permitted`).
+No sandbox was disabled, and native window-close acceptance is not claimed.
+The installed app's CLI is present, but native UI reports no available window
+and no running Thingtime Unix socket was found; its browser allocator could not
+be negotiated. The independently isolated Chromium fixture remains available.
+
+Current checkpoint: 299 shared sync tests pass (298 TypeScript and one module-mock
+test); 18 focused Electron host/window-lease tests pass. Isolated Chromium
+production-UI checks pass view detachment during scanning, completion without a
+view, reattachment, unchanged no-replay, Stop after reattachment, retained review
+choices and saving both conflicting versions. Desktop 1440×1000 and phone
+390×844 were scrolled end to end without horizontal overflow or page errors.
+TypeScript reports 91 baseline diagnostics, none in changed files. Two actual
+UI defects found during acceptance were fixed: native context re-negotiation
+blocking the returning screen behind a scan, and cancelled host metadata
+throwing during the view's final render. Initial failed attempts remain evidence.

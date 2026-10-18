@@ -1,4 +1,5 @@
 import { readNativeInventory } from '~/fileSync/nativeInventory';
+import { desktopSyncTasks, startDesktopSyncTask, supportsDesktopSyncTasks } from '~/fileSync/desktopSyncTasks.client';
 import { nativeUploadMayContinue } from '~/fileSync/nativeUploadBackground';
 import { assertPhotoSourcePolicy, photoAccessDescription } from '~/fileSync/photoSourcePolicy';
 import { NativeFileRecovery } from './NativeFileRecovery';
@@ -106,8 +107,14 @@ function Connections({
 	const raw = useRef<string | null>(initial.raw);
 	const [storageError, setStorageError] = useState(initial.error);
 	const [error, setError] = useState(''),
-		[busy, setBusy] = useState(false),
+		[viewBusy, setBusy] = useState(false),
 		[notice, setNotice] = useState('');
+	const desktopTask = useSyncExternalStore(desktopSyncTasks.subscribe, desktopSyncTasks.read, desktopSyncTasks.read);
+	const ownDesktopTask = host && desktopTask && desktopTask.scope.ownerId === scope.ownerId &&
+		desktopTask.scope.origin === scope.origin && desktopTask.scope.deviceId === scope.deviceId && desktopTask.scope.dataPlane === scope.dataPlane
+		? desktopTask : null;
+	const appOwned = !!host && supportsDesktopSyncTasks();
+	const busy = viewBusy || (appOwned && !!desktopTask?.active);
 	const [draft, setDraft] = useState<ConfigurationDraft | null>(initial.draft);
 	const [ready, setReady] = useState(!initial.error),
 		[conflict, setConflict] = useState<ConfigurationConflict | null>(null);
@@ -135,14 +142,16 @@ function Connections({
 	});
 	const [transfers, setTransfers] = useState<Record<string, ForegroundSyncProgress & { message?: string }>>({});
 	const [activeTransfer, setActiveTransfer] = useState<string | null>(null);
-	const [fileReview, setFileReview] = useState<{
+	const [foregroundFileReview, setFileReview] = useState<{
 		id: string;
 		conflicts: SyncConflict[];
 		apply(choices: SyncConflictChoice[]): void;
 		retain(): void;
 		cancel(): void;
 	} | null>(null);
-	const [pagedReview, setPagedReview] = useState<{ id: string; controller: ReturnType<typeof createConflictReviewController> } | null>(null);
+	const [foregroundPagedReview, setPagedReview] = useState<{ id: string; controller: ReturnType<typeof createConflictReviewController> } | null>(null);
+	const pagedReview = ownDesktopTask?.pagedReview ? { id: ownDesktopTask.scope.rootId, controller: ownDesktopTask.pagedReview } : foregroundPagedReview;
+	const fileReview = ownDesktopTask?.legacyReview ? { id: ownDesktopTask.scope.rootId, ...ownDesktopTask.legacyReview } : foregroundFileReview;
 	const reviewTransport = React.useMemo(() => host ? { origin: scope.origin, fetch: host.fetch, currentOrigin: host.origin } : undefined, [host, scope.origin]);
 	const [folders, setFolders] = useState<{ id: string; name: string }[]>([]);
 	const [connectionCursor, setConnectionCursor] = useState<string | null>(null),
@@ -270,7 +279,13 @@ function Connections({
 		}
 	};
 	const progressKey = (id: string) => 'tt:sync-progress:' + syncScopeKey({ ...scope, rootId: id });
-	const transfer = (saved: SavedFileSyncConfiguration) =>
+	const transfer = (saved: SavedFileSyncConfiguration) => {
+		if (appOwned) {
+			void startDesktopSyncTask(saved, { ...scope, rootId: saved.id }, generation).catch(cause => {
+				if (mounted.current) setError(cause instanceof Error ? cause.message : 'Transfer could not start.');
+			});
+			return;
+		}
 		void run(async (assertActive) => {
 			const active = controller.current!,
 				syncScope = { ...scope, rootId: saved.id };
@@ -428,6 +443,7 @@ function Connections({
 				if (mounted.current) setActiveTransfer(null);
 			}
 		});
+	};
 	const start = () =>
 		edit({
 			version: 1,
@@ -531,9 +547,9 @@ function Connections({
 				</Flex>
 			</Flex>
 			<Text fontSize="12px" color="var(--tt-muted, #71717a)">
-				Transfer selected folders in either direction while this app stays open. Downloads and two-way sync require native folder approval and
-				recoverable device Trash for deletion propagation. Conflicting changes preserve both copies for review. Background transfers are still being
-				added.
+				{appOwned ? 'Started transfers continue when you leave this screen or close the Mac window. Reopen this connection to review conflicts or stop a transfer. Quitting the app stops transfers; retry to recover saved work.' :
+					'Transfer selected folders in either direction while this app stays open. Background transfers are still being added.'}
+				{' '}Downloads and two-way sync require native folder approval and recoverable device Trash for deletion propagation. Conflicting changes preserve both copies for review.
 			</Text>
 			{scope.dataPlane === 'home' && supportsMobileTrashRecovery(capabilities) && (
 				<NativeFileRecovery
@@ -555,8 +571,9 @@ function Connections({
 				/>
 			)}
 			{connections.map((saved) => {
-				const progress = transfers[saved.id] ?? readStampedCache<ForegroundSyncProgress & { message?: string }>(progressKey(saved.id));
-				const running = busy && activeTransfer === saved.id;
+				const task = ownDesktopTask?.scope.rootId === saved.id ? ownDesktopTask : null;
+				const progress = task?.progress ?? transfers[saved.id] ?? readStampedCache<ForegroundSyncProgress & { message?: string }>(progressKey(saved.id));
+				const running = !!task?.active || (viewBusy && activeTransfer === saved.id);
 				const downloading = saved.configuration.mode === 'download';
 				const twoWay = saved.configuration.mode === 'two-way';
 				const nativeRoot = roots.find((root) => root.id === saved.configuration.localRootId);
@@ -607,7 +624,7 @@ function Connections({
 									? 'Ready for two-way sync with folder approval'
 									: downloading
 									? 'Ready to download with folder approval'
-									: 'Ready for a foreground upload'}
+										: appOwned ? 'Ready to upload' : 'Ready for a foreground upload'}
 								{!roots.some((root) => root.id === saved.configuration.localRootId) ? ' · Folder access missing' : ''}
 							</Text>
 							{progress && (
@@ -646,7 +663,7 @@ function Connections({
 							Edit
 						</Button>
 						{running ? (
-							<Button size="sm" minHeight="40px" onClick={() => controller.current?.abort()}>
+							<Button size="sm" minHeight="40px" onClick={() => task?.active ? desktopSyncTasks.cancel(task.scope) : controller.current?.abort()}>
 								Stop transfer
 							</Button>
 						) : (

@@ -10,11 +10,14 @@ const http = require('node:http');
 const { randomUUID } = require('node:crypto');
 const { app, BrowserWindow, ipcMain } = require('electron');
 const { DesktopFolderSync } = require('../../lib/folder-sync.cjs');
+const { SyncWindowLease } = require('../../lib/sync-window.cjs');
 const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'thingtime-folder-host-'));
 app.setName('Thingtime Folder Host Verification'); app.setPath('userData', profile);
 let window, server, upstream, origin, apiOrigin, host;
 let account = 'owner', proxyHeader = true, authRequests = 0, nativeRequests = 0, publicRequests = 0, hold;
-const listen = value => new Promise(resolve => value.listen(0, '127.0.0.1', () => resolve(`http://127.0.0.1:${value.address().port}`)));
+let listenerOrdinal = 0;
+const listen = value => new Promise(resolve => value.listen(process.env.TT_FOLDER_HOST_PORT ? Number(process.env.TT_FOLDER_HOST_PORT) + listenerOrdinal++ : 0,
+    '127.0.0.1', () => resolve(`http://127.0.0.1:${value.address().port}`)));
 const timer = setTimeout(() => { console.error('Host verification timed out'); app.exit(1); }, 45000);
 app.whenReady().then(async () => {
     upstream = http.createServer((req, res) => {
@@ -61,6 +64,17 @@ app.whenReady().then(async () => {
         } });
     ipcMain.handle('fixture:folder-sync', (event, input) => host.request(event, input));
     await window.loadURL(origin);
+    const lease = new SyncWindowLease(() => ({ window, origin, enabled: true }));
+    const sender = { sender: window.webContents, senderFrame: window.webContents.mainFrame };
+    const onClose = event => lease.close(event, window);
+    window.on('close', onClose);
+    lease.set(sender, { active: true }); window.close();
+    assert.equal(window.isDestroyed(), false); assert.equal(window.isVisible(), false);
+    assert.equal(window.webContents.getBackgroundThrottling(), false);
+    assert.equal(await window.webContents.executeJavaScript('new Promise(resolve => setTimeout(() => resolve(42), 30))'), 42);
+    window.show(); assert.equal(window.isVisible(), true);
+    lease.set(sender, { active: false }); assert.equal(window.webContents.getBackgroundThrottling(), true);
+    window.removeListener('close', onClose);
     const input = (action = 'list') => ({ action, requestId: randomUUID(), ownerId: 'owner', deviceId: 'device', ...(action !== 'context' ? { origin: apiOrigin } : {}) });
     const request = value => window.webContents.executeJavaScript(`window.folderFixture.request(${JSON.stringify(value)})`);
     const context = await request(input('context'));
@@ -91,7 +105,7 @@ app.whenReady().then(async () => {
     await window.webContents.session.cookies.remove(origin, 'fixture_session');
     await failed; window.webContents.session.cookies.removeListener('changed', changed);
     assert.equal(host.active, null);
-    console.log(JSON.stringify({ ok: true, checks: ['real-session-cookie-auth', 'anonymous-server-capabilities', 'account-switch', 'proxy-destination', 'subframe-denial', 'cookie-change-cancellation', 'binary-range-IPC', 'stream-account-revocation', 'binary-stage-IPC'], nativeDispatch: 'fixture-only' }));
+    console.log(JSON.stringify({ ok: true, checks: ['active-window-close-hides', 'hidden-renderer-continues', 'reopen-same-renderer', 'idle-restores-throttling', 'real-session-cookie-auth', 'anonymous-server-capabilities', 'account-switch', 'proxy-destination', 'subframe-denial', 'cookie-change-cancellation', 'binary-range-IPC', 'stream-account-revocation', 'binary-stage-IPC'], nativeDispatch: 'fixture-only' }));
 }).catch(error => { process.exitCode = 1; console.error(error); }).finally(async () => {
     clearTimeout(timer); ipcMain.removeHandler('fixture:folder-sync'); host?.invalidate(); window?.destroy();
     await Promise.all([server, upstream].filter(Boolean).map(value => new Promise(resolve => value.close(resolve))));

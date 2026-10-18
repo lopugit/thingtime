@@ -6,6 +6,7 @@ import { rootIdentity } from '~/utils/rootIdentity';
 import { getElectronBridge } from '~/utils/electronBridge';
 import { createDesktopFolderHost, type FolderHost } from '~/fileSync/desktopFolders.client';
 import { MobileFolderAccess } from './MobileFolderAccess';
+import { desktopSyncTasks } from '~/fileSync/desktopSyncTasks.client';
 
 /** Local status supplies candidates only. The signed host and paired node must
  * both verify the active account before these controls can access any folder. */
@@ -68,10 +69,16 @@ function DeviceFolders({ ownerId, candidates, generation }: { ownerId: string; c
 	);
 }
 function VerifiedFolders({ ownerId, deviceId, generation }: { ownerId: string; deviceId: string; generation: number }) {
+	const task = useSyncExternalStore(desktopSyncTasks.subscribe, desktopSyncTasks.read, desktopSyncTasks.read);
+	let taskHost: FolderHost | undefined;
+	if (task?.scope.ownerId === ownerId && task.scope.deviceId === deviceId && task.scope.dataPlane === 'home') {
+		try { task.host?.assertCurrent(); taskHost = task.host; } catch { /* Reauthorize after stop or identity change. */ }
+	}
 	const [host, setHost] = useState<FolderHost>(),
 		[error, setError] = useState(''),
 		[attempt, setAttempt] = useState(0);
 	useEffect(() => {
+		if (taskHost) { setHost(undefined); return; }
 		const controller = new AbortController(),
 			bridge = getElectronBridge();
 		setError('');
@@ -95,8 +102,8 @@ function VerifiedFolders({ ownerId, deviceId, generation }: { ownerId: string; d
 				if (!controller.signal.aborted) setError(cause instanceof Error ? cause.message : 'Folder access is unavailable.');
 			});
 		return () => controller.abort();
-	}, [ownerId, deviceId, generation, attempt]);
-	if (host) return <MobileFolderAccess ownerId={ownerId} deviceId={deviceId} host={host} />;
+	}, [ownerId, deviceId, generation, attempt, taskHost]);
+	if (taskHost || host) return <MobileFolderAccess ownerId={ownerId} deviceId={deviceId} host={taskHost ?? host} />;
 	return (
 		<Box marginTop={2}>
 			<Text fontSize="12px" role={error ? 'alert' : undefined}>

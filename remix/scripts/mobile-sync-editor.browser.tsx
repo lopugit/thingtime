@@ -41,6 +41,9 @@ const observe = (request: any) => {
 Object.assign(window, { syncInspectionFixture: { observations } });
 const photoQA = new URLSearchParams(location.search).has('photos');
 const desktop = new URLSearchParams(location.search).get('platform') === 'desktop';
+const taskQA = desktop && new URLSearchParams(location.search).has('tasks');
+let taskHeld = false;
+const heldScans = new Map<string, () => void>();
 const captureQA = new URLSearchParams(location.search).has('capture');
 const conflictQA = captureQA || new URLSearchParams(location.search).has('conflicts');
 const captureBytes = new Uint8Array([1, 2, 3]);
@@ -77,7 +80,7 @@ const localEntries = conflictQA
 	  }))
 	: [{ path: 'Upload sample', id: 'native-sample-folder', version: 'native-v1', kind: 'folder', size: 0, sha256: null }];
 let conflictRevision = 'cloud-1';
-if (conflictQA && !rows.some((row) => row.thingtime.includes('file-sync')))
+if ((conflictQA || taskQA) && !rows.some((row) => row.thingtime.includes('file-sync')))
 	rows.push({
 		id: captureQA ? 'capture-connection' : 'conflict-connection',
 		updatedAt: '2026-10-17T00:00:00.000Z',
@@ -140,6 +143,14 @@ window.fetch = async function (this: unknown, input, init) {
 	const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url, location.origin);
 	init?.signal?.throwIfAborted();
 	if (url.pathname === '/.well-known/thingtime-capabilities.json') return fixtureJson(thingtimeCapabilityManifest(url.origin));
+	if (taskQA && url.pathname === '/api/v1/webpages/resolve') {
+		const headers = new Headers(init?.headers);
+		if (url.origin !== location.origin || headers.get('X-Thingtime-Expected-Api-Origin') !== canonicalOrigin ||
+			headers.get('X-Thingtime-Expected-Actor') !== ownerId || headers.get('X-Thingtime-Expected-Data-Plane') !== 'home')
+			return fixtureJson({ ok: false }, { status: 409 });
+		const page = rows.find(row => row.thingtime.includes('webpage') && row.crystal.pageKey === url.searchParams.get('id'));
+		return page ? fixtureJson({ ok: true, page, source: 'user' }) : fixtureJson({ ok: false }, { status: 404 });
+	}
 	if (
 		desktop &&
 		['/api/v1/files', '/api/v1/things'].includes(url.pathname) &&
@@ -330,6 +341,9 @@ if (desktop) {
 	window.thingtimeNativeBridge = undefined;
 	window.thingtimeDesktop = {
 		platform: 'darwin',
+		...(taskQA ? { folderSyncTaskVersion: '1.0.0', setFolderSyncActive: async ({ active }: { active: boolean }) => {
+			taskHeld = active; captureRedraw(); return { ok: true as const, version: '1.0.0' as const };
+		} } : {}),
 		folderSyncRequest: async (request: any) => {
 			observe(request);
 			if (request.action === 'suspend') {
@@ -341,6 +355,10 @@ if (desktop) {
 				throw Error('Desktop fixture identity changed');
 			if (request.action === 'scan' && holdNextScan) {
 				holdNextScan = false;
+				if (taskQA) {
+					await new Promise<void>(resolve => { heldScans.set(request.requestId, resolve); pending.set(request.requestId, resolve as any); });
+					heldScans.delete(request.requestId); pending.delete(request.requestId);
+				} else
 				return await new Promise((resolve) => pending.set(request.requestId, resolve));
 			}
 			if (request.action === 'remove') roots = roots.filter((root) => root.id !== request.rootId);
@@ -365,6 +383,7 @@ if (desktop) {
 }
 function Fixture() {
 	const [, redraw] = useState(0);
+	const [showFolders, setShowFolders] = useState(true);
 	captureRedraw = () => redraw((n) => n + 1);
 	return (
 		<ChakraProvider>
@@ -373,6 +392,9 @@ function Fixture() {
 					{desktop ? 'Desktop sync editor regression' : 'Mobile sync editor regression'}
 				</Text>
 				<Text fontSize="12px">Synthetic API and native grants. No real files are accessed or uploaded.</Text>
+				{taskQA && <><Text role="status">App transfer lease: {taskHeld ? 'active' : 'idle'}</Text>
+					<Button onClick={() => setShowFolders(value => !value)}>{showFolders ? 'Leave Files screen' : 'Reopen Files screen'}</Button>
+					<Button onClick={() => { for (const release of heldScans.values()) release(); }}>Release scan</Button></>}
 				{captureQA && (
 					<Text role="status">
 						Captured versions: {captureReceipts.size}. Upload parts this page: {capturePuts}. Cloud revision: {conflictRevision}.
@@ -459,7 +481,7 @@ function Fixture() {
 						Change saved version elsewhere
 					</Button>
 				</Flex>
-				<Box border="1px solid #ddd" borderRadius="12px" padding={4}>
+				{showFolders && <Box border="1px solid #ddd" borderRadius="12px" padding={4}>
 					<Text fontWeight="bold">This device is added</Text>
 					{captureQA && new URLSearchParams(location.search).get('view') === 'review' ? (
 						<SyncConflictReview
@@ -480,7 +502,7 @@ function Fixture() {
 					) : (
 						<MobileFolderAccess ownerId={ownerId} deviceId={deviceId} />
 					)}
-				</Box>
+				</Box>}
 			</Box>
 		</ChakraProvider>
 	);

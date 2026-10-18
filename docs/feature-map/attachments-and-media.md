@@ -6,8 +6,11 @@ it before staging/publication/Trash on capable hosts and offers an explicit
 `existing` consent mode for resume. Legacy foreground behavior is unchanged;
 legacy hosts cannot use non-interactive resume. `MacFolderSyncTests`,
 `mobileSyncTarget.test.ts`, Electron folder-host checks and the disposable
-`test:files:mac-paged` acceptance cover the boundary. This is a prerequisite for
-persistent workers; it does not yet move transfers out of the connection screen.
+`test:files:mac-paged` acceptance cover the boundary. The Mac connection now delegates explicit runs to `desktopSyncTasks.client.ts`
+and `syncTaskRuntime.ts`; view detachment preserves execution and review. The
+Electron `SyncWindowLease` keeps an active window hidden on Close. Automatic
+restart scheduling and installed acceptance remain open. Run
+`test:files:desktop-lifecycle` for the isolated production-UI regression.
 
 `fileSync/pagedReviewDraft.ts` adds bounded mutable conflict-review storage to
 the version-10 journal. It binds complete plans/captures, persists revision-checked

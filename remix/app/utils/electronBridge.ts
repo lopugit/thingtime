@@ -260,6 +260,8 @@ export type ThingtimeDesktopBridge = {
 	fileExportVersion?: string;
 	fileExportRequest?: (request: Record<string, unknown>) => Promise<unknown>;
 	folderSyncRequest?: (request: Record<string, unknown>) => Promise<unknown>;
+	folderSyncTaskVersion?: string;
+	setFolderSyncActive?: (request: { active: boolean }) => Promise<{ ok: true; version: '1.0.0' }>;
 	speechRecognitionVersion?: string;
 	startSpeechRecognition?: (request: { sessionId: string; lang: string; continuous?: boolean }) => Promise<{ ok: true }>;
 	stopSpeechRecognition?: (request: { sessionId: string }) => Promise<{ ok: true }>;

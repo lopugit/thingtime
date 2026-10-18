@@ -5588,3 +5588,18 @@ directories and verifies two byte transfers and complete 10,003-path checkpoints
 through reply loss and restart. Allow up to 20 minutes. Mac access 1.5.1 or iOS
 access 1.3.1 is required for the paged native path: earlier builds retain the
 10,000-path bound because their publication alias check used a whole listing.
+
+
+### Mac file-sync lifecycle checks
+
+Explicit Mac transfers use an app-owned runner and reconnectable Files controls.
+Automatic scheduling after full Quit/relaunch is still in progress. The portable
+UI regression is `npm --prefix remix run test:files:desktop-lifecycle --
+<absolute-evidence-directory>` and uses a disposable profile and synthetic data
+on OS-restricted loopback 28188. It requires the existing MCP esbuild/Playwright
+tooling. `npm --prefix electron run verify:folder-sync-host` uses a temporary
+Electron profile on loopback 28421/28422 with an enforced network boundary; a
+Chromium nested-sandbox initialization failure is an unavailable native test,
+not permission to disable a sandbox. Neither command uses a personal account,
+installed app data or a production backend. See the
+[acceptance ledger](docs/mobile-file-sync.md#app-owned-mac-transfer-lifecycle--2026-10-19).

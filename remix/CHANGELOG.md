@@ -74,6 +74,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-19 — **Codex (AI)**: Move explicit Mac sync runs out of the Files
+  screen, reconnect live progress/review on return, and keep an active window
+  hidden on Close. Fix reattachment behind long scans and cancellation render
+  errors; automatic relaunch scheduling and installed acceptance remain open.
+  See [PR 1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
 - 2026-10-19 — **Codex (AI)**: Mac sync can check exact saved folder approval
   without prompting, including after native restart; capable clients recheck
   before new writes. Whole-folder workers remain in progress. See
