@@ -55,7 +55,7 @@ export type BuilderChrome = {
 	hoverId: string | null;
 	selectedId: string | null;
 	onHover: (id: string | null) => void;
-	onSelect: (id: string, element: HTMLElement) => void;
+	onSelect: (id: string, element?: HTMLElement) => void;
 	// open the inline "+ add new block" menu for (containerId, index)
 	onInsert: (containerId: string | null, index: number, anchor: HTMLElement) => void;
 	// drag/drop reorder — move block `id` to (containerId, index)
@@ -977,7 +977,7 @@ const SourceBlock = (props: WebpageBlocksRendererProps & { block: WebpageBlock }
  return <LiveTemplate render={{ tag: 'span' }} scope={{ ...props.block.args, ...source.scope }}
   interactive={!!props.interactive && (!props.chrome || props.chrome.seamlessMode === 'view')}
   confirm={props.confirm} onUnowned={props.onTtActionUnowned}>
-  <BlockView {...props} block={{ ...props.block, source: undefined }} />
+  <BlockView {...props} block={{ ...props.block, source: undefined, args: undefined }} />
  </LiveTemplate>;
 };
 
@@ -1070,7 +1070,7 @@ const BlockView = (
 		[cssTypo]
 	);
 
-	if (block.source && block.type !== 'component') return <SourceBlock {...props} />;
+	if ((block.source || block.args) && block.type !== 'component') return <SourceBlock {...props} />;
 	if (['element', 'collection', 'condition'].includes(block.type)) return <AuthoredBlock {...props} />;
 	let body: React.ReactNode = null;
 	if (block.type === 'text') {

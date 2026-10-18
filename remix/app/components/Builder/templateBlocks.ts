@@ -33,8 +33,13 @@ export function templateToBlocks(template: unknown, id: (kind: string) => string
 /** DOM properties preserve scalar types for exact bindings; interpolated text stays text. */
 export function resolveBlockProps(props: Record<string, unknown>, scope: Record<string, unknown>): Record<string, unknown> {
  const resolved = resolveTemplate(props, scope) as Record<string, unknown>;
+ if (props['data-tt-action-refs']) {
+  const node = resolveTemplate({ tag:'button', ttAction:props['data-tt-action'], ttActionRefs:props['data-tt-action-refs'] },scope) as any;
+  resolved['data-tt-action'] = node?.props?.['data-tt-action'];
+  delete resolved['data-tt-action-refs'];
+ }
  for (const [key, value] of Object.entries(props)) {
-  if (typeof value !== 'string') continue;
+  if (typeof value !== 'string' || (key === 'data-tt-action' && props['data-tt-action-refs'])) continue;
   const match = value.match(/^\{([^{}]+)\}$/);
   if (match) resolved[key] = componentScopeValue(scope, match[1]);
  }
