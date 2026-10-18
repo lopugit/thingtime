@@ -74,3 +74,10 @@ test('account roster resolution retains the principal after Character selection'
   assert.equal((await resolveSessionUser('live', 'owner'))?.id, 'owner');
   assert.equal((await getCurrentUser(new Request('https://test.invalid')))?.id, 'character');
 });
+
+test('Character management rejects temporary and service principals, including admin-marked service accounts', async () => {
+  for (const patch of [{ accountKind: 'service' }, { meta: { admin: true, temporary: true } }]) {
+    users.owner = { _id: 'owner', accountKind: 'user', meta: { admin: true }, ...patch };
+    assert.equal(await characterPrincipal(new Request('https://test.invalid')), null);
+  }
+});

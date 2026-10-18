@@ -406,7 +406,9 @@ export const resolveGetBridgeSelf = async (rawToken: unknown): Promise<PatIntros
 // tabs with stale cookies keep their logged-out UX; PAT-specific failures the
 // caller can act on (missing scope, uses exhausted) return explicit errors.
 export const resolveThingsActor = async (request: Request, scope: string | string[]): Promise<ThingsActorResult> => {
-  const anonymous: ThingsActorResult = { ok: true, actor: { user: null, pat: null } };
+  const anonymous: ThingsActorResult = request.headers.has(CHARACTER_HEADER)
+    ? { ok: false, status: 401, error: 'Session or Character unavailable' }
+    : { ok: true, actor: { user: null, pat: null } };
   const internal = internalRequestActor(request);
   if (internal) return { ok: true, actor: { user: await internal(), pat: null } };
 

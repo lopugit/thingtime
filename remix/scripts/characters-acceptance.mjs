@@ -139,6 +139,8 @@ try {
   }
   await api('/api/v1/auth/characters',{cookie:owner.cookie,body:{operation:'disable',characterId:separate.id}});
   assert.equal((await api('/api/v1/auth/me',{cookie:ownLogin.cookie})).data.user,null);
+  await api('/api/v1/things',{as:separate.id,body:{type:'text',text:'Must not post anonymously'},status:401});
+  await api('/api/v1/things',{cookie:ownLogin.cookie,as:separate.id,body:{type:'text',text:'Must not post after revocation'},status:401});
   await api('/api/v1/login',{body:{username:separate.username,password:characterPassword},status:401});
   assert.equal((await api('/api/v1/auth/me',{cookie:owner.cookie})).data.user.id,ownerId);
   console.log(JSON.stringify({ok:true,checks:['OS network isolation and redirect denial','disposable replica set','capability manifest','all three login modes','private owner link','no privilege inheritance','owner selection and override','Character-authored public posts','independent private subspace membership','private coordination posts','admin-only owner inspection','disable and session revocation'],productionAccess:false}));

@@ -1709,7 +1709,7 @@ function PostCardImpl(props: PostCardProps) {
 	const privateSubspace = post.subspace?.access === 'private';
 	const circle = privateSubspace ? { emoji: '🔒', label: 'Private subspace', hint: 'Subspace membership is required' } : CIRCLE_META[audienceOfAcl(effectiveAcl)];
 	const audienceText = privateSubspace && audienceOfAcl(effectiveAcl) === 'public'
-		? 'only members of this private subspace can see this post'
+		? 'private subspace members only'
 		: `${privateSubspace ? 'private subspace · ' : ''}${audienceDescription(effectiveAcl, mediaThing ? 'media' : 'post', !!post.audience && post.audience.sourceId !== post.id)}`;
 
   // Every reaction token on the post, most-used first — feeds the merged

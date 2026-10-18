@@ -139,5 +139,6 @@ export const resolveActor = async (
 
   const user = await getCurrentUser(request);
   if (user) return { kind: 'user', user };
+  if (request.headers.has('X-Thingtime-Character')) return json({ ok: false, error: 'Session or Character unavailable' }, { status: 401 });
   return { kind: 'anonymous' };
 };

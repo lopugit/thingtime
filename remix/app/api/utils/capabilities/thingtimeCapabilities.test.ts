@@ -84,7 +84,7 @@ test('Thingtime capability manifest is origin scoped and covers the generated AP
 	assert.equal(manifest.features['api.things-fork']?.version, '1.7.0');
 	assert.equal(manifest.features['api.things-import']?.version, '1.11.0');
 	assert.equal(manifest.features['api.things-export']?.version, '1.15.0');
-	assert.equal(manifest.features['api.devices-node-state']?.version, '1.11.0');
+	assert.equal(manifest.features['api.devices-node-state']?.version, '1.12.0');
 	assert.equal(capabilitySatisfies('1.9.0', '1.10.0'), false);
 	assert.equal(capabilitySatisfies('1.11.0', '1.10.0'), true);
   for (const [feature, required, previous] of [['api.things-export', '1.15.0', '1.13.0'], ['api.attachment-content', '1.13.0', '1.6.4']]) {
@@ -110,7 +110,7 @@ test('Thingtime capability manifest is origin scoped and covers the generated AP
   assert.equal(manifest.features['api.auth-passkeys-register-options']?.version, '1.1.0');
   assert.equal(manifest.features['api.auth-passkeys-login-options']?.version, '1.1.0');
   assert.equal(manifest.features['api.email-config']?.version, '1.0.1');
-  assert.equal(manifest.features['api.health-nitro']?.version, '1.1.0');
+  assert.equal(manifest.features['api.health-nitro']?.version, '1.2.0');
   assert.equal(manifest.features['api.integration-ci-credentials']?.version, '1.1.1');
   assert.equal(manifest.features['api.integration-ci-progress']?.version, '1.0.0');
   assert.equal(manifest.features['api.things-search']?.version, '1.3.0');
@@ -397,7 +397,7 @@ test('Thing discussions and linked post references negotiate additive contracts 
 test('functional demo capabilities advertise compatible catalog and install contracts', () => {
   const manifest = thingtimeCapabilityManifest('https://thingtime.com');
   for (const feature of ['api.webpages-demos', 'api.webpages-suites-install', 'api.admin-webpages-seed-demos']) {
-    assert.equal(manifest.features[feature]?.version, feature === 'api.webpages-demos' ? '1.1.0' : feature === 'api.webpages-suites-install' ? '1.4.0' : '1.2.0');
+    assert.equal(manifest.features[feature]?.version, feature === 'api.webpages-demos' ? '1.1.0' : feature === 'api.webpages-suites-install' ? '1.5.0' : '1.2.0');
     assert.ok(capabilitySatisfies(manifest.features[feature].version, '1.1.0'));
   }
   assert.equal(capabilitySatisfies('1.0.0', '1.1.0'), false);
@@ -457,4 +457,18 @@ test('Characters negotiate management and acting identities on both manifests', 
   assert(apiV1RouteKeys.includes('v1/auth/characters'));
   for (const version of ['1.0.0', '1.0.1', '1.1.0']) assert(capabilitySatisfies(version, '1.0.0'));
   for (const version of ['', '0.9.0', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.0.0'), false);
+});
+
+test('full Mac capability lists negotiate additive device contracts', () => {
+  const manifest = thingtimeCapabilityManifest('https://preview.example.test');
+  for (const [feature, current, minimum] of [
+    ['api.devices', '1.11.0', '1.10.0'],
+    ['api.devices-node-state', '1.12.0', '1.11.0'],
+    ['api.devices-pairing-claim', '1.1.0', '1.0.0']
+  ]) {
+    assert.equal(manifest.features[feature]?.version, current);
+    assert.equal(capabilitySatisfies(current, minimum), true);
+    assert.equal(capabilitySatisfies(undefined, minimum), false);
+    assert.equal(capabilitySatisfies('2.0.0', minimum), false);
+  }
 });

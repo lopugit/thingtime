@@ -32,4 +32,10 @@ See [the contract and agent workflow](../docs/characters.md).
 - Browser acceptance found early editor input could occur before change
   listeners attached. Initialization now captures that input before settling.
 
-Production acceptance and final deployment evidence will be recorded after merge.
+- Canonical Vercel build and output verifier pass. Changed-file lint has no errors.
+- Graphify semantic refresh refused to replace richer existing data after a
+  partial extraction of TESTING.md; structural refresh preserves the prior
+  semantic graph. Documentation semantic freshness is therefore incomplete.
+
+Production acceptance and final deployment evidence will be recorded on the PR
+after merge.

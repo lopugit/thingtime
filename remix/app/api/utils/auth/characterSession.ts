@@ -17,7 +17,7 @@ export async function characterPrincipal(request: Request) {
   const session = await getLiveSession(claims.jti);
   if (!session || String(session.userId) !== claims.sub || !sessionPurposeCanActAsAccount(session.purpose)) return null;
   const user = await findUserById(claims.sub);
-  if (!user || !(await characterAccountLive(user))) return null;
+  if (!user || user.accountKind === 'service' || user.meta?.temporary === true || !(await characterAccountLive(user))) return null;
   return { user, session, claims };
 }
 
