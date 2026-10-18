@@ -73,6 +73,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- **Codex (AI), 2026-10-18:** Verify the installed browser-manager connection and isolated default through its supported app controls and CLI. Update the local-first progress plan; native claim and artifact acceptance remain open. See the [recovery checkpoint](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md#installed-manager-connection-recovery--2026-10-18).
+
 - **Codex (AI), 2026-10-18:** Retain account theme edits, imports, moves, titles
   and deletions in canonical device History atomically with local content and
   sync intent. Home History can read/export these versions with a custom database

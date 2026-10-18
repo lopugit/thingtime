@@ -4371,3 +4371,24 @@ TypeScript lint has zero errors and one existing constructor warning. The client
 platform, embed, draft and offline build passed with 250 verified assets
 (22,769,952 bytes). TypeScript retains exactly the same 91 baseline diagnostics.
 These automated checks do not establish native UI or real account-sync acceptance.
+
+## Installed manager connection recovery — 2026-10-18
+
+Implementation checkpoint `11e035b8f` is pushed. Computer Use found the browser
+manager under **Lopu → Agent browsers and tasks** in the installed app. The
+app-displayed private socket responds through its shipped CLI: `agent.browsers`
+and `agent.network-policy` both negotiate at 1.0.0, with an isolated default.
+The earlier missing-socket blocker is resolved without changing account settings,
+credentials or network protections. No claim was taken.
+
+Another active chat is using the same native window for the manager's installed
+acceptance; its in-progress form was preserved once this overlap was identified.
+This task still needs its own registered task and separate browser claim. Manager
+connectivity is not proof of this branch's native render or account-sync behavior.
+The target agent host's artifact connection remains a separate acceptance gate.
+
+Fresh checks at the implementation checkpoint: **4 draft-validator tests passed**,
+**37 MCP tests passed**, and **2 opt-in native browser tests skipped**. These do not
+replace final-head screenshots or normal-import acceptance. Exact-commit CodeQL
+is running; GitHub still exposes the older PR head and preview. No merge, manual
+deployment or content publication was performed.
