@@ -36,13 +36,13 @@ function TransientBlockSession({ scope, actions, enabled = true, onError, childr
 		if (!enabled) return;
 		for (const dialog of host.current?.querySelectorAll<HTMLDialogElement>('dialog[data-tt-action="$transient"]') || []) {
 			const binding = parseTransientBinding(dialog.getAttribute('data-tt-action-inputs'));
-			const desired = binding?.inputs.open === true;
+			const desired = binding?.inputs.open === true || binding?.inputs.open === 'true';
 			if (desired && !dialog.open) dialog.showModal();
 			else if (!desired && dialog.open) dialog.close();
 		}
 	});
-	const activate = (event: React.SyntheticEvent<HTMLDivElement>, change: boolean) => {
-		const root = event.currentTarget;
+	const activate = (event: React.SyntheticEvent<HTMLDivElement> | Event, change: boolean) => {
+		const root = event.currentTarget as HTMLDivElement;
 		const lifetime = lifetimeRef.current;
 		const target = event.target as Element;
 		// Capture every live click/change before it can bubble into outer Action
@@ -84,8 +84,14 @@ function TransientBlockSession({ scope, actions, enabled = true, onError, childr
 			Promise.resolve(result).catch(() => { if (!lifetime.signal.aborted) current.current.onError?.(); });
 		} catch { if (!lifetime.signal.aborted) current.current.onError?.(); }
 	};
+	React.useLayoutEffect(() => {
+		const root = host.current;
+		const cancel = (event: Event) => activate(event, false);
+		root?.addEventListener('cancel', cancel, true);
+		return () => root?.removeEventListener('cancel', cancel, true);
+	});
 	return <ComponentDataScope.Provider value={scope}><NativeControlsEnabled.Provider value={enabled}>
-		<div ref={host} data-tt-transient-boundary="" onClickCapture={event => activate(event, false)} onChangeCapture={event => activate(event, true)} onCancelCapture={event => activate(event, false)}
+		<div ref={host} data-tt-transient-boundary="" onClickCapture={event => activate(event, false)} onChangeCapture={event => activate(event, true)}
 			onSubmitCapture={event => { event.preventDefault(); event.stopPropagation(); }}>
 			{children}
 		</div>

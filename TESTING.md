@@ -10303,6 +10303,16 @@ separate from deterministic discovery/lease tests.
 
 ## ChatGPT plan connections (local/self-hosted)
 
+- [ ] In the editable ChatGPT settings layout, select and edit a nested button label,
+      repeated model option and transfer-dialog text through Builder; save and reload.
+      Verify the layout persists while private fields, OAuth URLs and transfer files
+      never enter the document, generic Action inputs or source caches. Surround the
+      host with an ordinary Action and attempt a forged nested action; both must
+      leave private fields unread. Change account/database during a pending operation:
+      fields clear, the operation signal aborts and late callbacks cannot update the
+      new scope. A rejected model change restores the saved selected option.
+
+
 - On a configured local account backend, connect a real ChatGPT account through the loopback callback, verify the account against ChatGPT, choose its discovered model, and complete a Lopu response plus one read-only tool call. Compare plan usage with ChatGPT Settings → Usage; do not infer a percentage from token counts.
 - Exercise cancellation, refusal, expired/replayed callback, account switching during exchange, same-email registrations, expired tokens, rotated refresh, missing plan consent, usage limit, unavailable model, signout and remote revocation failure. Confirm stale completions cannot save under a new owner; no tokens appear in browser storage, diagnostics, responses or normal Things exports.
 - Disconnect while a response is active; verify inference and subsequent tool calls stop. Remove or disable the selected runtime, including with a saved chat pin; verify no fallback spends API credits.
