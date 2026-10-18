@@ -1,5 +1,11 @@
 # TESTING.md — per-area manual test checklists
 
+## Account large files
+
+- [x] Save a 70 MiB file offline through the normal file browser; cold reload and download exact bytes before upload. Reconnect and verify the real private upload.
+- [x] In a fresh browser context without paired-device capabilities, download that account file; the paired-device 32 MiB limit must not block it. Open the normal inspector to retain the original, cold reload offline and verify the independent SHA-256 again. Guest and foreign-owner retention reads remain refused.
+- [x] Scroll the file browser top to bottom at 1440×1000, 390×844 and 320px; no overflow, page errors, whole-file reads or offline mutation requests.
+
 ## Characters
 
 - [x] Switching a composer Character leaves exactly one editor and the matching sync panel; duplicate sibling React keys must not retain an old actor’s composer. The native check also verifies roster refresh when the same root workspace regains confirmation.

@@ -80,6 +80,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-19: Account file downloads use canonical export plans independently of paired-device capabilities and their 32 MiB cap. Native 70 MiB offline save, private reconnect, clean-context download and retained offline reuse pass with exact hashes; existing authorization and transfer bounds remain. See [PR 1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md). — Codex (AI)
+
 - 2026-10-19: Bound native ZIP Blob-handle creation and verify the anonymous 70 MiB file/copy/offline/import/export flow in isolated Chromium, including cancellation and invalid input. Update the progress plan and distinguish remaining account/transport coverage. See [PR 1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md). — Codex (AI)
 
 - 2026-10-19: Preserve Character workspace selection through Things, nested posts and History; use the selected actor for quick comments and scoped local image previews. Anonymous comments remain local. Native desktop/mobile checks, isolation and draft-failure coverage are recorded in [PR 1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md). — Codex (AI)

@@ -6,14 +6,18 @@ at 1440/390/320px. Invalid input and cancelled parsing are covered, with zero
 account writes. `archive.ts` coalesces small inflater results into bounded 256 KiB
 Blob parts; `transferBlobs.test.ts` checks handle count and exact bytes. See the
 [native checkpoint](../local-workspaces.md#native-large-file-and-zip-checkpoint--2026-10-19).
-Account retention, the remote file browser's 32 MiB read limit and paired-device
-capacity remain separate work.
+The account file browser now obtains canonical export plans independently of
+paired-device capability negotiation. Native 70 MiB offline save, private upload,
+clean-context download and owned-original retention/cold offline reuse pass,
+including guest/foreign-owner refusal. Paired-device and broader transfer capacity
+remain separate work. See the [account checkpoint](../local-workspaces.md#account-large-file-download-and-retention--2026-10-19).
 
 Owned-original retention negotiates `api.attachment-content` 1.16.0 and streams
 `cache=retain-bytes&download=1` through the existing full-user/owned-file gates.
 `accountTransport.client.ts` and `accountFiles.ts` carry Blobs with chunk hashing
 and atomic quota/refusal checks. Run account retention/transport, attachment route
-and both manifest suites; native account acceptance remains pending. See the
+and both manifest suites; `accountLargeFiles.browser.test.ts` now supplies native
+ordinary-account acceptance at 1440/390/320px. See the
 [streaming checkpoint](../local-workspaces.md#owned-originals-stream-into-blob-storage--2026-10-18).
 
 Native transfer export carries Blob handles through `collectTransfer`,

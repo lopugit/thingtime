@@ -57,7 +57,7 @@ const FilesystemThingsContent = ({ deviceId, initialPath = '', initialFolderId =
   const [contextItem, setContextItem] = useState<ThingsThing | null>(null);
   const active = useRef(false), refreshVersion = useRef(0);
   const operation = useRef<AbortController | null>(null), picker = useRef<HTMLInputElement>(null), mounted = useRef(true);
-  const withRemote = useCallback(async <T,>(signal: AbortSignal, work: (signal: AbortSignal) => Promise<T>): Promise<T> => {
+  const withRemote = useCallback(async <T,>(signal: AbortSignal, work: (signal: AbortSignal) => Promise<T>, pairedDevice = true): Promise<T> => {
     const scope = currentAccountWorkspace();
     if (!scope || workspaceIdentityKey() !== identity) throw new Error('Reconnect and verify your account before using remote files.');
     const lease = accountRemoteWorkspaceLease(scope), controller = new AbortController();
@@ -65,7 +65,8 @@ const FilesystemThingsContent = ({ deviceId, initialPath = '', initialFolderId =
     const abort = () => controller.abort();
     const unsubscribe = lease.onInvalidate(abort); signal.addEventListener('abort', abort, { once: true });
     try {
-      await requireFilesystemCapabilities(); lease.assertCurrent(); controller.signal.throwIfAborted();
+      if (pairedDevice) await requireFilesystemCapabilities();
+      lease.assertCurrent(); controller.signal.throwIfAborted();
       const result = await work(controller.signal); lease.assertCurrent(); controller.signal.throwIfAborted(); return result;
     } finally { unsubscribe(); signal.removeEventListener('abort', abort); }
   }, [identity]);
@@ -189,10 +190,17 @@ const FilesystemThingsContent = ({ deviceId, initialPath = '', initialFolderId =
       signal.throwIfAborted();
       return new File([result.blob], filesystemName(item), { type: String(result.attachment.contentType) });
     }
-    const size = Number(item.crystal.size);
-    if (!Number.isSafeInteger(size) || size < 0 || size > FILESYSTEM_MAX_BYTES) throw new Error('Choose a file up to 32 MiB.');
-    const bundle = await withRemote(signal, remoteSignal => bundleFromPlan({ roots: [item.id], things: [{ id: item.id, thingtime: ['attachment'], crystal: { recordingFileId: 'bytes', filePurpose: 'file' } }], files: [{ id: 'bytes', sourceId: item.id, targetId: item.id, name: filesystemName(item), mime: String(item.crystal.contentType || 'application/octet-stream'), bytes: size }] }, { signal: remoteSignal }));
-    return new File([bundle.files.get('bytes')!], filesystemName(item), { type: String(item.crystal.contentType || 'application/octet-stream') });
+    // Account files use the canonical scoped export adapter. Device command
+    // buffers/capabilities do not govern an ordinary Thingtime file download.
+    return withRemote(signal, async remoteSignal => {
+      const result = await apiRef.current.v1.things.export({ ids: [item.id], includeChildren: false, includeDependencies: false, includeLinks: false }, { signal: remoteSignal });
+      if (!result?.ok) throw new Error(result?.error || 'The file could not be downloaded.');
+      const bundle = await bundleFromPlan(result.plan, { signal: remoteSignal });
+      const file = bundle.manifest.files[0];
+      if (bundle.manifest.roots.length !== 1 || bundle.manifest.files.length !== 1 || file.targetId !== bundle.manifest.roots[0] || file.bytes !== Number(item.crystal.size))
+        throw new Error('The file changed while downloading. Refresh and try again.');
+      return new File([bundle.files.get(file.id)!], filesystemName(item), { type: file.mime });
+    }, false);
   };
   const bulk = async (op: string, chosen: ThingsThing[], target: FileLocation, signal: AbortSignal) => {
     if (target.deviceId) throw new Error('Choose a Thingtime folder.');

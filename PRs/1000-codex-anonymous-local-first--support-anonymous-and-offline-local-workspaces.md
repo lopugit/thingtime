@@ -9,6 +9,41 @@ goal. Do not merge until the [coverage matrix](../docs/local-workspaces.md) is
 complete. It builds on main and includes the separate posting independence fix
 in [PR #999](https://github.com/lopugit/thingtime/pull/999).
 
+## Account large-file download and retention — 2026-10-19
+
+Ordinary account-file downloads now obtain the canonical scoped export plan instead
+of constructing a synthetic plan and inheriting the paired-device 32 MiB cap.
+They negotiate the export/content contracts they use; missing paired-device
+capabilities do not prevent a download. Account, Character, data-plane and abort
+leases remain enforced. Paired-device limits and the canonical transfer format's
+512 MiB per-file bound remain unchanged.
+
+The new opt-in `accountLargeFiles.browser.test.ts` reproduces the previous failure:
+a 70 MiB file completes locally and uploads, but a clean browser displays
+“Choose a file up to 32 MiB.” With the fix, the same native flow passes offline
+save/cold reload/exact download, real private upload on reconnect, clean-context
+download without device capabilities, owned-original retention through the normal
+inspector, and another offline cold reload/download. All bytes match independent
+SHA-256 `fa2217c74958e707a26a89aacdbc0392dffcbfc5836276659e09fe7b5a18d5f3`.
+Guest and foreign-owner reads are refused. Desktop 1440×1000, mobile 390×844 and
+320px layouts pass top-to-bottom scrolling with zero overflow, page errors,
+whole-file Blob reads or offline mutation requests.
+
+Validation: 731 workspace + four offline-shell checks, 23 focused transfer checks,
+client/server builds and changed-file lint pass. TypeScript retains the same 91
+baseline diagnostics. The native fixture ran explicitly (default suite skips 80
+opt-in cases). Evidence: `tmp/account-large-files-native/native/verification.json`
+and PNGs; baseline refusal: `tmp/account-large-files-baseline/native/failure.json`.
+The task-owned runtime enforced network:none, no host mounts/published ports,
+read-only root and disposable data; zero OOM and empty cleanup were verified.
+The fixture uses browser authentication on loopback without changing Secure-cookie
+policy. No existing account data, production settings or installed app was changed.
+
+This closes native ordinary-account retention/download acceptance for this size.
+Larger transfer limits, clipboard buffering, paired-device transport, catalogue
+and traversal capacity, the full local-first matrix, final-head CI/deployment and
+target-host MCP artifact delivery remain open. No merge or deployment is included.
+
 ## Native large-file and ZIP checkpoint — 2026-10-19
 
 The ordinary anonymous file browser now has real packaged-app acceptance for a
@@ -40,8 +75,8 @@ failures remain recorded separately.
 This supersedes the historical nested macOS sandbox blocker for these anonymous
 checks. Account large-file retention/download, paired-device transports, clipboard
 serialization, actual browser quota exhaustion and remaining feature/capacity
-coverage are still open. In particular, the remote account file browser retains a
-32 MiB reader limit that needs separate review; this test exercises local files.
+coverage are still open. The account download and retention checkpoint above now covers the former
+32 MiB reader limit; this earlier fixture exercises anonymous local files.
 The target-host MCP artifact connection and final-head CI/deployed acceptance
 remain separate gates. No merge or deployment is included.
 
