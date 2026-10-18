@@ -13,8 +13,8 @@ const button = (id: string, text: string, operation: string, props: Record<strin
   { type: 'button', disabled: '{result.busy}', ...action(operation), ...props }, undefined,
   { padding: '8px 12px', border: '1px solid var(--tt-border, #ddd)', 'border-radius': '8px', 'background-color': 'var(--tt-card, white)', color: 'inherit', cursor: 'pointer', 'white-space': 'normal' });
 const paragraph = (id: string, text: string, props: Record<string, unknown> = {}) => element(id, 'p', text, props, undefined, { margin: '8px 0', 'font-size': '13px', 'line-height': '1.6', 'overflow-wrap': 'anywhere' });
-const field = (id: string, label: string, props: Record<string, unknown> = {}) => element(`${id}-label`, 'label', '', { htmlFor: id }, [
-  paragraph(`${id}-caption`, label), element(id, 'input', '', { id, name: id, disabled: '{result.busy}', autoComplete: 'off', ...props }, undefined,
+const field = (id: string, label: string, props: Record<string, unknown> = {}) => element(`${id}-label`, 'label', '', {}, [
+  paragraph(`${id}-caption`, label), element(id, 'input', '', { id, name: id, 'aria-label': label, disabled: '{result.busy}', autoComplete: 'off', ...props }, undefined,
     { width: '100%', 'min-width': '0', padding: '9px', border: '1px solid var(--tt-border, #ddd)', 'border-radius': '8px', color: 'inherit', background: 'var(--tt-card, white)' })
 ]);
 const section = (id: string, title: string, children: WebpageBlock[]) => element(id, 'fieldset', '', {}, [element(`${id}-title`, 'legend', title), ...children],
@@ -35,11 +35,11 @@ export const DESKTOP_SESSION_BLOCKS: WebpageBlock[] = [condition('session-presen
 
 export const DESKTOP_RUNTIME_BLOCKS: WebpageBlock[] = [condition('runtime-present', 'result.runtimePresent', [section('desktop-runtime', 'Local API and database', [
   paragraph('runtime-explanation', 'Run Thingtime and connect your ChatGPT plan on this computer. Local accounts and data are separate from your cloud account; enabling this does not copy cloud data.'),
-  row('runtime-enabled-row', [element('desktop-local-api', 'input', '', { id: 'desktop-local-api', name: 'runtime-enabled', type: 'checkbox', checked: '{result.runtimeEnabled}', disabled: '{result.busy}', ...action('runtime.enabled') }), element('runtime-enabled-label', 'label', 'Use a local API', { htmlFor: 'desktop-local-api' })]),
+  row('runtime-enabled-row', [element('runtime-enabled-label', 'label', '', {}, [element('desktop-local-api', 'input', '', { name: 'runtime-enabled', 'aria-label': 'Use a local API', type: 'checkbox', checked: '{result.runtimeEnabled}', disabled: '{result.busy}', ...action('runtime.enabled') }), element('runtime-enabled-text', 'span', 'Use a local API')], { display: 'flex', gap: '8px', 'align-items': 'center' })]),
   paragraph('runtime-current', 'Currently using: {result.runtimeMode}. Changes apply after restart. Local mode never falls back to the cloud.'),
   condition('runtime-options', 'result.runtimeEnabled', [
-    element('database-mode-label', 'label', 'Database for the local API', { htmlFor: 'desktop-database-mode' }),
-    element('desktop-database-mode', 'select', '', { id: 'desktop-database-mode', name: 'database-mode', value: '{result.databaseMode}', disabled: '{result.busy}', ...action('runtime.database-mode') }, [
+    element('database-mode-label', 'label', 'Database for the local API', {}),
+    element('desktop-database-mode', 'select', '', { id: 'desktop-database-mode', name: 'database-mode', 'aria-label': 'Database for the local API', value: '{result.databaseMode}', disabled: '{result.busy}', ...action('runtime.database-mode') }, [
       element('managed-option', 'option', 'MongoDB on this computer', { value: 'managed' }), element('external-option', 'option', 'Existing MongoDB connection', { value: 'external' })]),
     condition('runtime-managed', 'result.databaseMode', [paragraph('mongod-label', '{result.mongoLabel}'), row('mongod-actions', [button('choose-mongod', 'Choose mongod', 'runtime.choose-mongod'), element('download-mongod', 'a', 'Download MongoDB Community', { href: 'https://www.mongodb.com/try/download/community', target: '_blank', rel: 'noopener noreferrer' })]),
       paragraph('managed-explanation', 'Thingtime includes MongoDB Community Server for a new local setup. You can also choose an existing mongod executable. Thingtime manages an authenticated database in its own app data folder while the app runs. No system service is installed.')], 'managed'),
@@ -67,7 +67,7 @@ export const DESKTOP_ENDPOINT_BLOCKS: WebpageBlock[] = [section('desktop-endpoin
     button('remove-endpoint', 'Remove', 'endpoint.remove', { ...action('endpoint.remove', { id: '{item.id}' }), disabled: '{item.disabled}' })])]),
   field('endpoint-name', 'Endpoint name', { placeholder: 'Endpoint name' }),
   field('endpoint-url-input', 'Endpoint URL', { type: 'url', placeholder: 'https://your-thingtime.example/' }),
-  button('add-endpoint', 'Add endpoint', 'endpoint.add')
+  row('endpoint-add-actions', [button('add-endpoint', 'Add endpoint', 'endpoint.add')])
 ])];
 export const DESKTOP_NOTICE_BLOCKS: WebpageBlock[] = [condition('desktop-notice', 'result.noticePresent', [paragraph('desktop-notice-message', '{result.notice}', { role: 'status' })])];
 export const DESKTOP_CONNECTION_BLOCKS = [...DESKTOP_SESSION_BLOCKS, ...DESKTOP_RUNTIME_BLOCKS, ...DESKTOP_ENDPOINT_BLOCKS, ...DESKTOP_NOTICE_BLOCKS];
