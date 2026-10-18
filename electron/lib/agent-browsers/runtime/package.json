@@ -1,0 +1,12 @@
+{
+  "name": "thingtime-isolated-browser-runtime",
+  "private": true,
+  "version": "1.0.0",
+  "dependencies": {
+    "@puppeteer/browsers": "3.2.5",
+    "puppeteer-core": "25.14.0",
+    "playwright-core": "1.64.0",
+    "mongodb": "6.21.0",
+    "bcrypt": "5.1.1"
+  }
+}
