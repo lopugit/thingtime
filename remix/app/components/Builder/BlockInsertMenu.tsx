@@ -113,7 +113,7 @@ export const BlockInsertMenu = (props: {
 
 	// debounced component search — empty query shows the newest catalog page
 	React.useEffect(() => {
-		if (!allowed('component')) { setEntries([]); return; }
+		if (allowedBlockTypes && !allowedBlockTypes.includes('component')) { setEntries([]); setSearching(false); return; }
 		let cancelled = false;
 		setSearching(true);
 		const timer = setTimeout(async () => {
