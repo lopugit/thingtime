@@ -565,7 +565,7 @@ export function useApi() {
         [asyncFetcher]
       ),
       migrations: useCallback(async () => {
-        await requireThingtimeCapability('api.admin-migrations', '1.4.0');
+        await requireThingtimeCapability('api.admin-migrations', '1.4.1');
         return getJson('/api/v1/admin/migrations');
       }, []),
 			migrationDiagnostic: useCallback(
@@ -574,7 +574,7 @@ export function useApi() {
 			),
       migrationsRun: useCallback(
         async (args) => {
-          await requireThingtimeCapability('api.admin-migrations-run', '1.4.0');
+          await requireThingtimeCapability('api.admin-migrations-run', '1.4.1');
           return asyncFetcher.submit(
             { migration: args?.migration, dryRun: args?.dryRun, confirm: args?.confirm },
             {
