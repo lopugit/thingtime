@@ -166,3 +166,10 @@ export const platformRuntimeCsp = serialize({
 // Drafts have an opaque origin: even an already signed-in browser cannot read
 // account cookies/storage. Only the shipped classic script loads; no data egress.
 export const draftPreviewCsp = "default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; connect-src 'none'; img-src 'none'; font-src 'none'; media-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; sandbox allow-scripts allow-downloads";
+
+// Trusted secure-context WebCodecs worker. No authored scripts, child workers,
+// remote codec imports or network requests are permitted in this worker.
+export const mediaWorkerCsp = serialize({
+ 'default-src': ["'none'"], 'script-src': ["'self'"],
+ 'connect-src': ["'none'"], 'worker-src': ["'none'"]
+});

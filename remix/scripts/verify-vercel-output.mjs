@@ -5,7 +5,7 @@ import { join, resolve } from 'node:path';
 import { createHash } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 
-import { draftPreviewCsp, platformRuntimeCsp, authorizeCsp, librarySdkCsp, librarySandboxCsp, designBundlesCsp, mcpLabCsp, mcpLabScriptHash, prodCsp } from './csp.mjs';
+import { mediaWorkerCsp, draftPreviewCsp, platformRuntimeCsp, authorizeCsp, librarySdkCsp, librarySandboxCsp, designBundlesCsp, mcpLabCsp, mcpLabScriptHash, prodCsp } from './csp.mjs';
 import { findSourceMapAnnotation } from './embed-bundle-source-map.mjs';
 import { platformScriptHash } from './platform-runtime.mjs';
 import { validateOfflineManifest } from '../public/offline-shell.mjs';
@@ -407,3 +407,8 @@ for (const asset of offlineShellManifest.assets) {
 	const bytes = readFileSync(file);
 	if (bytes.length !== asset.bytes || createHash('sha256').update(bytes).digest('hex') !== asset.sha256) throw new Error(`Offline shell manifest is stale for ${asset.path}; the shell would never finish installing.`);
 }
+
+const mediaHeaders = routes.find(route => route.src === '^/assets/mediaWorker-[A-Za-z0-9_-]+\\.js$');
+if (!mediaHeaders?.continue || mediaHeaders.headers?.['Content-Security-Policy'] !== mediaWorkerCsp || routes.indexOf(mediaHeaders) < cspHeadersIndex || routes.indexOf(mediaHeaders) > filesystemIndex)
+ throw new Error('Media worker must deny network through its own CSP before filesystem routing.');
+if (!readdirSync('.vercel/output/static/assets').some(name => /^mediaWorker-[A-Za-z0-9_-]+\.js$/.test(name))) throw new Error('Missing secure-context media worker bundle.');

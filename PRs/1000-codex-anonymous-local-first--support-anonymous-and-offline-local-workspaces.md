@@ -4197,3 +4197,54 @@ preflight recovery are in the [workspace checkpoint](../docs/local-workspaces.md
 Native account acceptance, the larger local-feature matrix, current-main
 integration and exact-commit deployment checks remain open. No merge, deployment,
 publication or existing-account mutation was performed for this checkpoint.
+
+
+## Current-main integration and local password search — 2026-10-18
+
+Integrated main `1756a8e53` (38 commits since the branch's previous base) into the
+feature branch. No PR merge, manual deployment, publication or account mutation
+was performed. Later main commits still require an explicit integration check.
+
+The resolved PasswordManager refresh keeps its local-vault adapter, workspace
+retirement and local-change subscription while adopting complete title search,
+query cancellation and distinct empty/error states. Local encrypted titles are
+matched before pagination, including matches beyond the first 50 records; a
+search never falls back to the account API. Lock, cancellation or retirement
+rejects an in-flight scan without returning partial results. The combined
+`api.passwords` 1.3.0 contract covers title search and durable attachment
+cancellation receipts; file workers and search clients refuse older/breaking
+contracts before making dependent requests. No persisted schema changed.
+
+Main's editable media-tools suite, media worker and downloads coexist with the
+workspace-specific runtime keys, opaque frame origin/source checks, offline
+srcdoc/hash and offline-asset verification. Suite installation negotiates 1.4.0
+for media-tools while preserving anonymous local installation and account leases.
+Local API configuration failures retain main's fail-closed behavior.
+
+Local verification:
+
+- 684 workspace tests passed, 72 opt-in skipped; four offline-shell checks pass.
+  Eighteen focused search/retention transport checks overlap the broader suites.
+- 56 password, 110 capability, 168 Web Platform (one opt-in skipped), 21 Vercel
+  configuration, 40 root-data, 62 migration and five seed-fixture checks pass.
+- Production client/template and Node server builds pass; the offline manifest
+  contains 250 assets (22,756,936 bytes). TypeScript has the same 91 baseline
+  diagnostics, with no added or removed signatures. Resolved TypeScript files
+  have zero lint errors and two pre-existing PasswordManager cleanup warnings.
+- The actual Nitro and Vite isolation smoke passes OS direct-IP/redirect denial,
+  missing-configuration 503 responses, no cookies and no production access.
+- A separate task-owned built-server fixture advertises attachment-content 1.16.0,
+  passwords 1.3.0 and suites-install 1.4.0. Both discovery manifests agree;
+  anonymous owned-original access returns 401/private/no-store. An ephemeral
+  signing key remained only in process memory; no account credentials/session
+  were used. Dotenv reads and non-fixture network were denied. The fixture on
+  `http://localhost:22497` is stopped; no listener remains. Tailscale/Funnel is
+  unavailable because the installed wrapper points to a missing executable.
+
+The installed `~/Applications/Thingtime.app/Contents/Resources/agent-browser.mjs`
+path is absent. No browser-manager claim or permissive fallback was launched.
+The prior isolated Chrome sandbox startup failure and supported password-manager
+credential interface remain separate acceptance blockers. Current native
+search/media/layout, final renderer artifacts, importer and host connection checks
+remain open; earlier PNGs are historical. Current CI/deployment evidence is
+recorded on PR #1000, separately from these local checks.

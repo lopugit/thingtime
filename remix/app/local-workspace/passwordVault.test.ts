@@ -147,3 +147,49 @@ for (const scope of [anonymous, account]) test(`${scope.kind} large password ent
   }
  } finally { reopened?.dispose(); vault.dispose(); await db.close(); }
 });
+
+for (const scope of [anonymous, account]) test(`${scope.kind} title search traverses before paging without account access or plaintext metadata`, async t => {
+ const db = database(), gate = guard(), vault = new LocalPasswordVault(db, scope, gate.lease, origin);
+ let networkCalls = 0; t.mock.method(globalThis, 'fetch', async () => { networkCalls++; throw Error('No remote vault access'); });
+ try {
+  await vault.unlock(passphrase, true);
+  const page = async (query: string, cursor?: string) => {
+   const result = await vault.request(undefined, cursor, undefined, query);
+   assert.ok('entries' in result && 'nextCursor' in result); return result;
+  };
+  const ids = new Set<string>();
+  for (let i = 0; i < 55; i++) { const input = save(0, crypto.randomUUID(), `Found [.*] ${i}`); await vault.save(input); ids.add(input.id); }
+  for (let i = 0; i < 60; i++) await vault.save(save(0, crypto.randomUUID(), `Unrelated ${i}`));
+  const first = await page('  fOuNd [.*]  ');
+  assert.equal(first.entries.length, 50); assert.ok(first.nextCursor);
+  const second = await page('found [.*]', first.nextCursor);
+  assert.equal(second.entries.length, 5); assert.equal(second.nextCursor, null);
+  const found = [...first.entries, ...second.entries]; assert.deepEqual(new Set(found.map((row: any) => row.id)), ids);
+  assert.ok(found.every((row: any) => !('entry' in row)));
+  assert.equal((await page(entry.fields[0].value)).entries.length, 0, 'search only titles');
+  assert.equal((await page('missing')).entries.length, 0);
+  assert.equal((await page('')).entries.length, 50);
+  const text = JSON.stringify(await rows(db, scope, gate.lease)); assert.ok(!text.includes('Found [.*]'));
+  assert.equal(networkCalls, 0);
+ } finally { vault.dispose(); await db.close(); }
+});
+
+test('a title scan refuses partial results when aborted, locked or retired during decryption', async t => {
+ const db = database(), gate = guard(), vault = new LocalPasswordVault(db, anonymous, gate.lease, origin);
+ try {
+  await vault.unlock(passphrase, true);
+  for (let i = 0; i < 4; i++) await vault.save(save(0, crypto.randomUUID(), `Scan ${i}`));
+  const decrypt = crypto.subtle.decrypt.bind(crypto.subtle);
+  for (const mode of ['abort', 'lock', 'retire']) {
+   if (!vault.isUnlocked()) await vault.unlock(passphrase);
+   const controller = new AbortController(); let reads = 0;
+   const mocked = t.mock.method(crypto.subtle, 'decrypt', async (...args: Parameters<typeof decrypt>) => {
+    const value = await decrypt(...args);
+    if (++reads === 2) { if (mode === 'abort') controller.abort(); else if (mode === 'lock') vault.lock(); else gate.retire(); }
+    return value;
+   });
+   await assert.rejects(vault.request(undefined, undefined, controller.signal, 'Scan'), /Cancelled|locked|retired/);
+   mocked.mock.restore(); assert.equal(reads, 2);
+  }
+ } finally { vault.dispose(); await db.close(); }
+});

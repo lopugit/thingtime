@@ -100,8 +100,12 @@ by these web fixtures.
 
 ## Account storage and access
 
-`api.passwords` 1.1.0 uses the home data plane. GET returns 50 metadata records
-at a time. POST requires a full, live user session and `expectedOwnerId`:
+`api.passwords` 1.2.0 uses the home data plane. GET returns 50 metadata records
+at a time. Optional `q` searches all owned title metadata before pagination using
+a case-insensitive literal substring (outer whitespace is ignored). Keep the same
+query on subsequent pages; restart without a cursor when it changes. Field values
+remain encrypted and are never searched. The UI cancels obsolete list requests
+and keeps prior matches visible while a new search is pending. POST requires a full, live user session and `expectedOwnerId`:
 `read`, `save`, `delete`, `export`, `catalog`, and the `file-*` lifecycle operations. Export pages decrypt at most
 50 entries using one bounded query and one account-key load. Scoped tokens, service accounts,
 temporary accounts and internal Action identities are not vault sessions.
@@ -245,3 +249,14 @@ in an isolated localhost deployment, then configure the first username in
 It uses real session/admin/password/upload endpoints and creates a synthetic
 `/tmp/thingtime-password-import-qa/all-data.1pux` for browser round-trip checks.
 Never point this test at production or supply personal credentials.
+
+
+### Local search and combined contract
+
+The device workspace searches unlocked, encrypted-on-disk titles before paging;
+matching entries beyond the first page remain discoverable without remote access.
+Changing the query resets its cursor and cancels the prior refresh. Account-local
+listing uses the same device adapter; background synchronization is independent.
+`api.passwords` 1.3.0 combines whole-vault title search with durable encrypted-file
+cancellation receipts. Search and receipt-dependent workers negotiate this version
+before remote operations; anonymous device search does not negotiate or fetch.

@@ -71,18 +71,28 @@ export class LocalPasswordVault extends DeviceVaultSession {
   if (!record) return refuse('PASSWORD_MISSING', 'Password entry not found.', 404);
   const entry = await this.value(record, op); return { ...this.metadata(record, entry), entry };
  }
- async page(cursor?: string, includeValues = false, signal?: AbortSignal) {
+ async page(cursor?: string, includeValues = false, signal?: AbortSignal, query = '') {
   const op = this.operation(signal, false); let after: { id: string; createdAt: string } | null = null;
+  if (typeof query !== 'string') return refuse('PASSWORD_QUERY', 'Invalid password search.', 400);
+  const search = query.trim().toLowerCase();
   if (cursor) {
    try { if (cursor.length > 200) throw Error(); after = JSON.parse(cursor); if (!after || !validPasswordId(after.id) || new Date(after.createdAt).toISOString() !== after.createdAt) throw Error(); }
    catch { return refuse('PASSWORD_CURSOR', 'Invalid password cursor.', 400); }
   }
   const rows = (await this.db.transaction(this.scope, 'readonly', op.lease, tx => tx.list<DevicePasswordRecord>(RECORDS)))
-   .map(row => row.value).filter(row => !row.deleted && (!after || ordered(row, after as DevicePasswordRecord) > 0)).sort(ordered).slice(0, 51);
-  const entries = [];
-  for (const row of rows.slice(0, 50)) { const entry = await this.value(row, op); entries.push({ ...this.metadata(row, entry), ...(includeValues ? { entry } : {}) }); }
-  op.lease.assertCurrent(); const last = rows[49];
-  return { entries, nextCursor: rows.length > 50 ? JSON.stringify({ createdAt: last.createdAt, id: last.id }) : null };
+   .map(row => row.value).filter(row => !row.deleted && (!after || ordered(row, after as DevicePasswordRecord) > 0)).sort(ordered);
+  const entries: (PasswordMetadata & { entry?: PasswordEntry })[] = [];
+  let last: DevicePasswordRecord | undefined, hasMore = false;
+  // Titles remain encrypted at rest. Search the unlocked metadata before
+  // pagination so a match beyond the first 50 rows is still discoverable.
+  for (const row of rows) {
+   const entry = await this.value(row, op);
+   if (search && !entry.title.toLowerCase().includes(search)) continue;
+   if (entries.length === 50) { hasMore = true; break; }
+   entries.push({ ...this.metadata(row, entry), ...(includeValues ? { entry } : {}) }); last = row;
+  }
+  op.lease.assertCurrent();
+  return { entries, nextCursor: hasMore && last ? JSON.stringify({ createdAt: last.createdAt, id: last.id }) : null };
  }
  async save(input: Save, signal?: AbortSignal) {
   if (!validPasswordId(input.id) || !validPasswordId(input.writeId) || !validRevision(input.revision)) refuse('PASSWORD_INPUT', 'A valid entry id, write id and revision are required.', 400);
@@ -362,9 +372,9 @@ export class LocalPasswordVault extends DeviceVaultSession {
    throw error;
   } finally { controller.abort(); off(); }
  }
- async request(body?: Record<string, unknown>, cursor?: string, signal?: AbortSignal) {
+ async request(body?: Record<string, unknown>, cursor?: string, signal?: AbortSignal, query?: string) {
   const ownerId = this.scope.kind === 'anonymous' ? 'local-workspace' : this.scope.ownerId;
-  if (!body) return { ok: true, ownerId, configured: true, ...await this.page(cursor, false, signal) };
+  if (!body) return { ok: true, ownerId, configured: true, ...await this.page(cursor, false, signal, query) };
   if (body.operation === 'read') return { ok: true, ownerId, ...await this.read(body.id as string, signal) };
   if (body.operation === 'save') return { ok: true, ownerId, record: await this.save(body as Save, signal) };
   if (body.operation === 'delete') { await this.remove(body.id as string, body.revision as number, signal); return { ok: true, ownerId }; }

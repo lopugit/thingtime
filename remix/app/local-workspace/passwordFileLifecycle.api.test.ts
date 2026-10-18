@@ -65,8 +65,8 @@ test('real password file API retains deletion receipts, fences replays and prese
     assert.equal(login.status, 200); cookie = cookies(login); assert.ok(cookie);
     const me = await (await api('/api/v1/auth/me')).json(); assert.equal(me.user.id, fixture.ownerId);
     assert.equal(me.user.isAdmin, true, 'only the newly registered fixture is bootstrapped as local admin');
-    const capabilities = await (await api('/api/v1/capabilities')).json(); assert.equal(capabilities.features['api.passwords'], '1.2.0');
-    const manifest = await (await api(THINGTIME_CAPABILITY_MANIFEST_PATH)).json(); assert.equal(manifest.features['api.passwords'].version, '1.2.0');
+    const capabilities = await (await api('/api/v1/capabilities')).json(); assert.equal(capabilities.features['api.passwords'], '1.3.0');
+    const manifest = await (await api(THINGTIME_CAPABILITY_MANIFEST_PATH)).json(); assert.equal(manifest.features['api.passwords'].version, '1.3.0');
     const entryId = await parent(), wrongParent = await parent(), file = await upload(entryId);
     const listed = await request({ operation: 'file-list', entryIds: [entryId] }); assert.equal(listed.files.length, 1); assert.equal(listed.files[0].entryId, entryId);
     const download = await request({ operation: 'file-download', entryId, fileId: file.id });
@@ -91,7 +91,7 @@ test('real password file API retains deletion receipts, fences replays and prese
     for (let attempt = 0; attempt < 2; attempt++) await request({ operation: 'delete', id: entryId, revision: 1 }); parents.delete(entryId);
     await request({ operation: 'file-download', entryId, fileId: child.id }, 404);
     await mkdir(artifacts!, { recursive: true }); await writeFile(resolve(artifacts!, 'downloaded-fixture.bin'), plain);
-    await writeFile(resolve(artifacts!, 'verification.json'), JSON.stringify({ local: true, account: fixture.ownerId, apiVersion: '1.2.0', byteIdentical: true, calls, publicContentCreated: false, existingAccountModified: false }, null, 2));
+    await writeFile(resolve(artifacts!, 'verification.json'), JSON.stringify({ local: true, account: fixture.ownerId, apiVersion: '1.3.0', byteIdentical: true, calls, publicContentCreated: false, existingAccountModified: false }, null, 2));
     completed = true;
   } finally {
     const pendingCleanup: string[] = [];

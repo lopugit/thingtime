@@ -401,7 +401,7 @@ both manifests and conditional client negotiation use the canonical docs entry.
 
 ## Password manager
 
-See [password-manager.md](../password-manager.md). `api.passwords` 1.1.0 is a
+See [password-manager.md](../password-manager.md). `api.passwords` 1.2.0 is a
 private, session-bound home-plane API over protected `password-manager-entry`
 Things. `api/utils/passwords/passwords.ts` owns accounted mutations, revision
 fences and secret-free native catalog projections; `auth/vaultEnvelope.ts` and
@@ -495,3 +495,18 @@ Password migration coverage and encrypted file lifecycle: `passwords/onePassword
 `api/utils/passwords/files.ts`. Every original 1PUX member is retained as an
 encrypted attachment to a source archive entry; item editors preserve structured
 values, source context and password history. See [the password contract](../password-manager.md).
+
+The admin migration status/run contracts are `1.4.0` for guarded incident cleanup;
+the migration UI negotiates both before use. Missing local Mongo/JWT settings
+produce a no-store `503 LOCAL_API_NOT_CONFIGURED` before handler/body execution.
+Public docs and capability discovery remain local and available.
+
+
+### Combined password contract after main integration
+
+`api.passwords` 1.3.0 combines main's title search with PR #1000's durable encrypted
+file deletion/abort receipts. The registry, both manifests, search client and file
+worker negotiate the combined contract; tests reject older/breaking versions.
+`installSuiteForWorkspace` keeps local anonymous installation while negotiating
+media-tools 1.4.0 for remote installation. The built-server fixture and isolated
+Nitro/Vite failure checks are recorded in the PR #1000 integration note.

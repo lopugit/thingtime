@@ -535,6 +535,8 @@ export type UseLopuSettings = ReturnType<typeof useLopuSettings>;
 // Public projection of an `ai-model` thing (design note §1.1).
 export interface LopuCatalogModel {
   providerAvailable?: boolean | null;
+  publicCatalogAvailable?: boolean | null;
+  catalogSource?: 'public-docs' | 'authenticated' | null;
 	id: string;
 	label: string;
 	provider: string;
@@ -564,7 +566,7 @@ export interface LopuCatalogDefaults {
 }
 
 export interface LopuCatalog {
-  policies?: Record<string, { autoAllowNewModels: boolean; lastSyncedAt?: string | null; status?: string | null }>;
+  policies?: Record<string, { autoAllowNewModels: boolean; lastSyncedAt?: string | null; status?: string | null; source?: string | null }>;
 	models: LopuCatalogModel[];
 	defaults: LopuCatalogDefaults;
 	providers: Record<string, LopuCatalogProvider>;
@@ -607,6 +609,8 @@ export const normalizeLopuCatalogModel = (raw: unknown): LopuCatalogModel | null
 		family: typeof source.family === 'string' ? source.family : null,
 		enabled,
     providerAvailable: typeof source.providerAvailable === 'boolean' ? source.providerAvailable : null,
+    publicCatalogAvailable: typeof source.publicCatalogAvailable === 'boolean' ? source.publicCatalogAvailable : null,
+    catalogSource: source.catalogSource === 'public-docs' || source.catalogSource === 'authenticated' ? source.catalogSource : null,
 		available: typeof source.available === 'boolean' ? source.available : enabled,
 		verified: source.verified === true ? true : source.verified === false ? false : null,
 		isDefault: source.isDefault === true
@@ -643,7 +647,7 @@ export const normalizeLopuCatalog = (raw: unknown): LopuCatalog => {
 		providers,
     ...(source.policies && typeof source.policies === 'object' ? { policies: Object.fromEntries(['anthropic', 'openai'].map((id) => {
       const policy = (source.policies as any)[id];
-      return [id, { autoAllowNewModels: policy?.autoAllowNewModels === true, lastSyncedAt: typeof policy?.lastSyncedAt === 'string' ? policy.lastSyncedAt : null, status: typeof policy?.status === 'string' ? policy.status : null }];
+      return [id, { source: policy?.source === 'public-docs' || policy?.source === 'authenticated' ? policy.source : null, autoAllowNewModels: policy?.autoAllowNewModels === true, lastSyncedAt: typeof policy?.lastSyncedAt === 'string' ? policy.lastSyncedAt : null, status: typeof policy?.status === 'string' ? policy.status : null }];
     })) } : {})
 	};
 };

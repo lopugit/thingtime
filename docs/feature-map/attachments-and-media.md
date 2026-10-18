@@ -449,3 +449,17 @@ missing objects cannot produce a successful incomplete archive. Independent file
 workers and retry review live in `AccountPasswordWorkspace.tsx`. Tests and the
 new opt-in `accountPasswordFiles.browser.test.ts` are documented in the
 [native account-file checkpoint](../local-workspaces.md#native-account-password-files--2026-10-18).
+
+## Local media processing in reusable Components
+
+`app/webPlatform/mediaPipeline.ts` validates the saved `program.media` contract.
+`liveMediaPipeline.ts` binds declarative controls inside the opaque frame;
+`hostMediaPipeline.ts` fences requests and owns a terminable secure-context
+`mediaWorker.ts`. Mediabunny/WebCodecs decode, scale, encode and mux a selected
+local Blob. `mediaOutput.ts` handles random-access mux writes; `mediaExport.ts`
+validates the host download. No attachment upload or remote fetch is involved.
+`schemas/appSuites/mediaTools.ts` composes ordinary saved Page/Component/Action
+Things, with the existing save-draft Action preserving settings as data.
+Canonical docs and Lopu discovery guidance live in `docs/builderGuide.ts`.
+Run `test:web-platform`, `test:api-capabilities`, `test:vercel-config` and the
+isolated real-browser flow in README; see TESTING's local video checklist.

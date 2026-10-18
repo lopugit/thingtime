@@ -10,14 +10,12 @@ import { THINGTIME_CAPABILITY_MANIFEST_PATH } from './app/api/utils/capabilities
 import { APPLE_APP_ASSOCIATION_PATH } from './app/api/utils/auth/appleAppAssociation';
 import { ROBOTS_PATH, SITEMAP_PATH } from './app/api/utils/seo/sitemapCore';
 import { installPreviewBuildFreshness } from './app/utils/previewBuildFreshness';
-import { draftPreviewCsp, platformRuntimeCsp, designBundlesCsp, librarySandboxCsp, librarySdkCsp, devCsp, prodCsp } from './scripts/csp.mjs';
+import { mediaWorkerCsp, draftPreviewCsp, platformRuntimeCsp, designBundlesCsp, librarySandboxCsp, librarySdkCsp, devCsp, prodCsp } from './scripts/csp.mjs';
 import { platformRuntimePlugin } from './scripts/platform-runtime-plugin.mjs';
 
 const designDocsBase = '/docs/design-bundles';
 const designDocsDir = fileURLToPath(new URL('../docs/design', import.meta.url));
 const embedBundlePath = fileURLToPath(new URL('./dist/embed/thingtime.min.js', import.meta.url));
-const thingtimeProductionOrigin = 'https://thingtime.com';
-const mongoPasswordPlaceholder = '<db_password>';
 
 const require = createRequire(import.meta.url);
 const { resolveDevContext } = require('./scripts/worktree-ports.cjs');
@@ -39,57 +37,9 @@ const isPathInside = (parent: string, child: string) => {
   return relativePath === '' || (!relativePath.startsWith('..') && !isAbsolute(relativePath));
 };
 
-const hasUsableLocalApiEnv = () => {
-  const connectionString = process.env.MONGODB_CONNECTION_STRING?.trim();
-
-  if (!connectionString) return false;
-  if (connectionString.includes(mongoPasswordPlaceholder) && !process.env.MONGO_PASS?.trim()) {
-    return false;
-  }
-
-  if (
-    process.env.NODE_ENV === 'production' &&
-    !process.env.JWT_PRIVATE_KEY?.trim() &&
-    !process.env.JWT_SECRET?.trim()
-  ) {
-    return false;
-  }
-
-  return true;
-};
-
-const rewriteProxyCookieForLocalDev = (cookie: string) => {
-  return cookie
-    .split(';')
-    .map((part) => part.trim())
-    .filter((part, index) => {
-      if (index === 0) return true;
-
-      const lower = part.toLowerCase();
-      return !lower.startsWith('domain=') && lower !== 'secure';
-    })
-    .join('; ');
-};
-
+// Development requests always stay on this checkout's Nitro server. Missing
+// database/auth configuration is a local 503, never a remote API selection.
 const localApiTarget = `http://127.0.0.1:${devPorts.api}`;
-const shouldUseProductionApiProxy = !hasUsableLocalApiEnv();
-const configuredApiFallback = (() => {
-  const value = process.env.THINGTIME_API_FALLBACK_ORIGIN?.trim();
-  if (!value) return thingtimeProductionOrigin;
-
-  try {
-    const url = new URL(value);
-    const hostname = url.hostname.toLowerCase().replace(/^\[|\]$/g, '');
-    const loopback = hostname === 'localhost' || hostname.endsWith('.localhost') || hostname === '127.0.0.1' || hostname === '::1';
-    if (url.username || url.password || (url.protocol !== 'https:' && !(url.protocol === 'http:' && loopback))) {
-      return thingtimeProductionOrigin;
-    }
-    return url.origin;
-  } catch {
-    return thingtimeProductionOrigin;
-  }
-})();
-const apiProxyTarget = shouldUseProductionApiProxy ? configuredApiFallback : localApiTarget;
 const previewFreshnessPath = '/tt-preview-freshness.js';
 const previewFreshnessScript = '(' + installPreviewBuildFreshness.toString() + ')();\n';
 
@@ -250,6 +200,10 @@ const configureIsolatedRuntimes = (server: { middlewares: ViteDevServer['middlew
         res.setHeader('Content-Type', 'text/javascript'); res.setHeader('Cache-Control', 'no-store');
         createReadStream(file).pipe(res); return;
       }
+      if (path === '/app/webPlatform/mediaWorker.ts' || /^\/assets\/mediaWorker-[A-Za-z0-9_-]+\.js$/.test(path)) {
+        res.setHeader('Content-Security-Policy', mediaWorkerCsp);
+        res.setHeader('Cross-Origin-Resource-Policy', 'same-origin');
+      }
       if (path === '/platform/runtime.html' || path === '/platform/runtime.js') {
         const file = fileURLToPath(new URL(`./dist${path}`, import.meta.url));
         if (!existsSync(file)) { res.statusCode=503;res.end('Run npm run build:platform');return; }
@@ -331,43 +285,7 @@ export default defineConfig({
           });
         }
       },
-      '/api': {
-        target: apiProxyTarget,
-        changeOrigin: true,
-        configure(proxy) {
-          if (!shouldUseProductionApiProxy) {
-            // changeOrigin rewrites Host to the nitro API port, hiding the
-            // origin the browser is actually on. Forward the real host the way
-            // Vercel's edge does (x-forwarded-*): statusTarget's
-            // getRequestOrigin() honours these, which keeps "Current Tab"
-            // health checks classified LOCAL — answered in the request's own
-            // cookie/session context (the footer's "MongoDB (custom)"
-            // indicator depends on this) instead of re-fetched cookielessly.
-            // An upstream proxy's x-forwarded-* (e.g. Tailscale funnel) wins.
-            proxy.on('proxyReq', (proxyReq, req) => {
-              const host = req.headers.host;
-              if (!host || proxyReq.getHeader('x-forwarded-host')) return;
-              proxyReq.setHeader('x-forwarded-host', host);
-              const proto = String(req.headers['x-forwarded-proto'] || '').split(',')[0]?.trim();
-              proxyReq.setHeader('x-forwarded-proto', proto || 'http');
-            });
-            return;
-          }
-
-          proxy.on('proxyReq', (proxyReq) => {
-            proxyReq.setHeader('x-thingtime-api-fallback', 'vite-dev');
-          });
-
-          proxy.on('proxyRes', (proxyRes) => {
-            const setCookie = proxyRes.headers['set-cookie'];
-            if (!setCookie) return;
-
-            proxyRes.headers['set-cookie'] = Array.isArray(setCookie)
-              ? setCookie.map(rewriteProxyCookieForLocalDev)
-              : [rewriteProxyCookieForLocalDev(setCookie)];
-          });
-        }
-      }
+      '/api': forwardHostProxy(localApiTarget)
     }
   },
   plugins: [platformRuntimePlugin(),librarySandboxPlugin(),previewFreshnessHtmlPlugin(), react(), designDocsStaticPlugin(), embedBundleDevPlugin()]

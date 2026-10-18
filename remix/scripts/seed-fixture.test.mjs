@@ -44,3 +44,29 @@ test('fixture file sets mix PNG images with one text note and never repeat names
 	assert.deepEqual(fixtureFiles(1).map((file) => file.contentType), ['image/png']);
 	assert.deepEqual(fixtureFiles(0), []);
 });
+
+import { localFixtureUrl, Session } from './seed-fixture.mjs';
+test('fixture requests reject production, DNS names, credentials, cross-origin uploads', () => {
+  const base = 'http://127.0.0.1:17340';
+  assert.equal(localFixtureUrl('/api/v1/auth/register', base).origin, base);
+  for (const target of ['https://thingtime.com', 'http://thingtime.com', 'http://localhost:17340', 'http://127.0.0.1.attacker.test', 'http://user:pass@127.0.0.1:17340', '//thingtime.com/upload', 'http://127.0.0.1:9999/upload']) {
+    assert.throws(() => localFixtureUrl(target, base), /loopback/);
+  }
+});
+
+import { createServer } from 'node:http';
+test('fixture POST and upload clients refuse redirects before replaying bodies', async () => {
+  let calls = 0;
+  const server = createServer((request, response) => {
+    calls++;
+    response.writeHead(307, { Location: '/redirected' }); response.end();
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  try {
+    const session = new Session(`http://127.0.0.1:${server.address().port}`);
+    await assert.rejects(session.json('POST', '/register', { password: 'synthetic' }));
+    assert.equal(calls, 1);
+    await assert.rejects(session.put('/upload', Buffer.from('synthetic'), {}));
+    assert.equal(calls, 2);
+  } finally { await new Promise(resolve => server.close(resolve)); }
+});
