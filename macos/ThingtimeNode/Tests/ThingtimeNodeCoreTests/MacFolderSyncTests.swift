@@ -22,8 +22,9 @@ final class MacFolderSyncTests: XCTestCase {
         var saved: [String: Data] = [:]
         let selected = folder.appendingPathComponent("selected")
         return try MacFolderSync(origin: origin, store: MobileFolderStore(load: { saved[$0.key] }, save: { saved[$0.key] = $1 }),
-            staging: MobileSyncStaging(directory: folder.appendingPathComponent("private")), verify: verify,
-            choose: { selected }, approve: approve, chooseSource: { .folder(selected) })
+            staging: MobileSyncStaging(directory: folder.appendingPathComponent("private")),
+            verify: verify, choose: { selected }, approve: approve, chooseSource: { .folder(selected) },
+            inventories: MobileFolderInventory(directory: folder.appendingPathComponent("inventories")))
     }
     private func root(_ service: MacFolderSync) async throws -> String {
         let result = try await service.handle(request("choose"))
@@ -41,9 +42,57 @@ final class MacFolderSyncTests: XCTestCase {
         let context = try await service.handle(request("context")).decode([String: JSONValue].self)
         XCTAssertEqual(context["deviceId"], .string("device"))
         let capabilities = try XCTUnwrap(context["capabilities"]).decode([String: String].self)
-        XCTAssertEqual(capabilities, ["fileAccessVersion": "1.4.0", "fileStagingVersion": "1.1.0", "filePublicationVersion": "1.1.0"])
+        XCTAssertEqual(capabilities, ["fileAccessVersion": "1.5.0", "fileStagingVersion": "1.1.0", "filePublicationVersion": "1.1.0"])
         let result = try await service.handle(request("conditions")).decode([String: JSONValue].self)
         XCTAssertEqual(result["conditions"], .object(["network": .string("unknown"), "charging": .null]))
+    }
+
+    func testInventoryCapturePagesAreScopedImmutableAndDiscardable() async throws {
+        let service = try service(), id = try await root(service)
+        let source = folder.appendingPathComponent("selected")
+        for i in 0..<129 { try Data().write(to: source.appendingPathComponent("file-\(i)")) }
+        let fields: [String: JSONValue] = ["rootId": .string(id), "inventoryDeviceId": .string("device")]
+        let captureID = UUID().uuidString.lowercased()
+        let begin = request("scan-capture", fields.merging(["captureId": .string(captureID)]) { _, v in v })
+        let first = try await service.handle(begin).decode([String: JSONValue].self)
+        let capture = try XCTUnwrap(first["capture"])
+        XCTAssertEqual(try capture.decode(MobileFolderInventory.Capture.self).totalEntries, 129)
+        let repeated = try await service.handle(begin).decode([String: JSONValue].self)
+        XCTAssertEqual(repeated["capture"], capture)
+        try Data("later".utf8).write(to: source.appendingPathComponent("file-0"))
+        let pageFields = fields.merging(["capture": capture, "offset": .number(0)]) { _, v in v }
+        let firstPage = try await service.handle(request("scan-page", pageFields)).decode([String: JSONValue].self)
+        let page = try XCTUnwrap(firstPage["inventoryPage"]).decode(MobileFolderInventory.Page.self)
+        XCTAssertEqual(page.entries.count, 128); XCTAssertEqual(page.nextOffset, 128)
+        XCTAssertTrue(page.entries.allSatisfy { $0.size == 0 })
+        let last = try await service.handle(request("scan-page", pageFields.merging(["offset": .number(128)]) { _, v in v })).decode([String: JSONValue].self)
+        let lastPage = try XCTUnwrap(last["inventoryPage"]).decode(MobileFolderInventory.Page.self)
+        XCTAssertEqual(lastPage.entries.count, 1); XCTAssertNil(lastPage.nextOffset)
+        for patch: [String: JSONValue] in [["inventoryDeviceId": .string("other")], ["rootId": .string(UUID().uuidString)], ["offset": .number(-1)]] {
+            await rejects { try await service.handle(self.request("scan-page", pageFields.merging(patch) { _, v in v })) }
+        }
+        _ = try await service.handle(request("scan-discard", pageFields))
+        await rejects { try await service.handle(self.request("scan-page", pageFields)) }
+        XCTAssertEqual(try Data(contentsOf: source.appendingPathComponent("file-0")), Data("later".utf8))
+    }
+
+    func testInventoryReauthorizesEveryCaptureAndPageBeforeReply() async throws {
+        var calls = 0, refuse = false
+        let service = try service(verify: { _, _ in
+            calls += 1
+            if refuse && calls == 2 { throw MobileFolderStore.Failure.unavailable }
+        })
+        let id = try await root(service), captureID = UUID().uuidString.lowercased()
+        let fields: [String: JSONValue] = ["rootId": .string(id), "inventoryDeviceId": .string("device"), "captureId": .string(captureID)]
+        calls = 0; refuse = true
+        await rejects { try await service.handle(self.request("scan-capture", fields)) }
+        XCTAssertEqual(calls, 2)
+        calls = 0; refuse = false
+        let result = try await service.handle(request("scan-capture", fields)).decode([String: JSONValue].self)
+        let capture = try XCTUnwrap(result["capture"])
+        calls = 0; refuse = true
+        await rejects { try await service.handle(self.request("scan-page", fields.merging(["capture": capture, "offset": .number(0)]) { _, v in v })) }
+        XCTAssertEqual(calls, 2)
     }
 
     func testSinglePathInspectionIsScopedAndReauthorizesBeforeReply() async throws {

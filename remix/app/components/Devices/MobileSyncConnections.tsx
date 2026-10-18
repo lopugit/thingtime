@@ -1,3 +1,4 @@
+import { readNativeInventory } from '~/fileSync/nativeInventory';
 import { nativeUploadMayContinue } from '~/fileSync/nativeUploadBackground';
 import { assertPhotoSourcePolicy, photoAccessDescription } from '~/fileSync/photoSourcePolicy';
 import { NativeFileRecovery } from './NativeFileRecovery';
@@ -22,6 +23,7 @@ import {
 	supportsMobileTrashRecovery,
 	supportsNativeFileVersions,
 	supportsNativePathInspection,
+	supportsNativeInventoryPages,
 	supportsNativeBackgroundUploads
 } from '~/fileSync/mobileFolders.client';
 import { openSyncJournal, withSyncRootLock, syncScopeKey } from '~/fileSync/journal.client';
@@ -328,6 +330,10 @@ function Connections({
 									(
 										await requestFolders(scope.ownerId, { action: 'scan', rootId: saved.configuration.localRootId }, active.signal)
 									).entries!,
+								...(inspectPaths && supportsNativeInventoryPages(capabilities) ? {
+									scanLocalPages: () => readNativeInventory({ ownerId: scope.ownerId, deviceId: scope.deviceId,
+										rootId: saved.configuration.localRootId, signal: active.signal, request: requestFolders })
+								} : {}),
 								...(inspectPaths ? { inspectLocal: async (path: string) => (await requestFolders(scope.ownerId,
 									{ action: 'inspect', rootId: saved.configuration.localRootId, path }, active.signal)).inspectedEntry! } : {}),
 								inventory: () =>

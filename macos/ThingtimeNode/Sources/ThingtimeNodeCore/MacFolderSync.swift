@@ -5,7 +5,7 @@ import Foundation
 /// commands. The desktop host must also verify its active browser account.
 @MainActor
 public final class MacFolderSync {
-    public static let version = "1.4.0"
+    public static let version = "1.5.0"
     public enum SourceSelection { case folder(URL), photos }
     public struct Conditions: Codable, Sendable {
         public let network: String
@@ -22,10 +22,12 @@ public final class MacFolderSync {
         let requestId: String; let ownerId: String; let deviceId: String; let origin: String; let action: String
         let rootId: String?; let path: String?; let version: String?; let offset: Int64?; let length: Int?; let data: String?
         let transfer: MobileSyncStaging.Request?; let stage: MobileSyncStaging.Stage?; let approval: MobileFolderStore.WriteApproval?
+        let captureId: String?; let capture: MobileFolderInventory.Capture?; let inventoryDeviceId: String?
         let trash: MobileSyncTrash.Request?; let restore: MobileSyncTrash.Restore?; let cursor: String?
     }
     private let origin: URL
     private let store: MobileFolderStore
+    private let inventories: MobileFolderInventory
     private let staging: MobileSyncStaging
     private let trash: MobileSyncTrash?
     private let verify: (String, String) async throws -> Void
@@ -44,12 +46,13 @@ public final class MacFolderSync {
                 choose: @escaping () async throws -> URL?, approve: @escaping (MobileFolderStore.Grant) async throws -> Bool,
                 chooseSource: (() async throws -> SourceSelection?)? = nil,
                 photos: PhotoLibraryReader = PhotoLibraryReader(),
+                inventories: MobileFolderInventory = MobileFolderInventory(),
                 approveTrash: ((MobileFolderStore.Grant) async throws -> Bool)? = nil,
                 approveRestore: ((MobileFolderStore.Grant, MobileSyncTrash.Restore) async throws -> Bool)? = nil,
                 cancelDialog: @escaping () -> Void = {},
                 conditions: @escaping () -> Conditions = { .init(network: "unknown", charging: nil) }) throws {
         self.origin = try FileSyncOwnerScope(ownerId: "origin-validation", url: origin).origin
-        self.store = store; self.staging = staging; self.verify = verify
+        self.inventories = inventories; self.store = store; self.staging = staging; self.verify = verify
         self.trash = trash; self.approveTrash = approveTrash; self.approveRestore = approveRestore
         self.chooseSource = chooseSource; self.photos = photos
         self.choose = choose; self.approve = approve; self.cancelDialog = cancelDialog; self.conditions = conditions
@@ -72,7 +75,7 @@ public final class MacFolderSync {
             return .object([:])
         }
         guard active == nil else { throw ThingtimeNodeError.invalidRequest("Another folder request is running.") }
-        guard ["context", "conditions", "list", "choose", "remove", "scan", "inspect", "read", "read-range", "stage-begin", "stage-append", "stage-range", "stage-finish", "write-approve", "publication-lookup", "publish", "trash", "trash-lookup", "trash-expected", "trash-inspect", "trash-restore", "trash-restore-reviewed", "trash-list"].contains(r.action) else { throw MobileFolderStore.Failure.invalid }
+        guard ["context", "conditions", "list", "choose", "remove", "scan", "scan-capture", "scan-page", "scan-discard", "inspect", "read", "read-range", "stage-begin", "stage-append", "stage-range", "stage-finish", "write-approve", "publication-lookup", "publish", "trash", "trash-lookup", "trash-expected", "trash-inspect", "trash-restore", "trash-restore-reviewed", "trash-list"].contains(r.action) else { throw MobileFolderStore.Failure.invalid }
         guard (r.action == "read-range") == (stream != nil), (r.action == "stage-range") == (receive != nil) else { throw MobileFolderStore.Failure.invalid }
         let task = Task { try await self.execute(r, owner: owner, stream: stream, receive: receive) }
         active = (r.requestId, r.ownerId, r.deviceId, task)
@@ -186,6 +189,25 @@ public final class MacFolderSync {
                         }
                         result["trash"] = try value(lookup)
                     }
+                } else if ["scan-capture", "scan-page", "scan-discard"].contains(r.action) {
+                    guard r.inventoryDeviceId == r.deviceId else { throw MobileFolderStore.Failure.invalid }
+                    inspectedGrant = grant
+                    let inventoryScope = MobileFolderInventory.Scope(owner: owner, deviceId: r.deviceId, rootId: root)
+                    let inventories = inventories
+                    if r.action == "scan-capture" {
+                        guard let id = r.captureId else { throw MobileFolderStore.Failure.invalid }
+                        result["capture"] = try value(await worker { try inventories.capture(inventoryScope, id: id, bookmark: grant.bookmark) })
+                    } else {
+                        guard let capture = r.capture else { throw MobileFolderStore.Failure.invalid }
+                        if r.action == "scan-page" {
+                            guard let offset = r.offset, offset >= 0, offset <= 9_007_199_254_740_991 else { throw MobileFolderStore.Failure.invalid }
+                            result["inventoryPage"] = try value(await worker { try inventories.read(inventoryScope, capture: capture, bookmark: grant.bookmark, offset: Int(offset)) })
+                        } else {
+                            try await worker { try inventories.discard(inventoryScope, capture: capture, bookmark: grant.bookmark) }
+                            result["discarded"] = .bool(true)
+                        }
+                    }
+                    result["complete"] = .bool(true)
                 } else if r.action == "inspect" {
                     guard let path = r.path else { throw MobileFolderStore.Failure.invalid }
                     inspectedGrant = grant

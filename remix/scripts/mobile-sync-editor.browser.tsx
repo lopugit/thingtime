@@ -13,10 +13,30 @@ import { DesktopFolderAccess } from '../app/components/Devices/DesktopFolderAcce
 import { MobileFolderAccess } from '../app/components/Devices/MobileFolderAccess';
 import { nativeBridgeMessageEvent } from '../app/utils/nativeBridge';
 const inspectionQA = new URLSearchParams(location.search).has('inspect');
-const observations = { scans: 0, inspections: 0 };
+const inventoryQA = new URLSearchParams(location.search).has('inventory');
+const observations = { scans: 0, inspections: 0, captures: 0, pages: 0, discarded: 0 };
+const nativeCaptures = new Map<string, { capture: { id: string; generation: string; totalEntries: number }; entries: typeof localEntries }>();
+const inventoryReply = (request: any) => {
+	if (request.action === 'scan-capture') {
+		const capture = { id: request.captureId, generation: crypto.randomUUID(), totalEntries: localEntries.length };
+		nativeCaptures.set(capture.id, { capture, entries: structuredClone(localEntries) });
+		return { complete: true, capture };
+	}
+	if (request.action === 'scan-page' || request.action === 'scan-discard') {
+		const item = nativeCaptures.get(request.capture.id);
+		if (!item || JSON.stringify(item.capture) !== JSON.stringify(request.capture)) throw Error('Native fixture capture changed');
+		if (request.action === 'scan-discard') { nativeCaptures.delete(item.capture.id); return { complete: true, discarded: true }; }
+		const entries = item.entries.slice(request.offset, request.offset + 1), end = request.offset + entries.length;
+		return { complete: true, inventoryPage: { capture: item.capture, offset: request.offset, entries, nextOffset: end === item.capture.totalEntries ? null : end } };
+	}
+	return {};
+};
 const observe = (request: any) => {
 	if (request.action === 'scan') observations.scans++;
 	if (request.action === 'inspect') observations.inspections++;
+	if (request.action === 'scan-capture') observations.captures++;
+	if (request.action === 'scan-page') observations.pages++;
+	if (request.action === 'scan-discard') observations.discarded++;
 };
 Object.assign(window, { syncInspectionFixture: { observations } });
 const photoQA = new URLSearchParams(location.search).has('photos');
@@ -270,7 +290,7 @@ window.thingtimeNativeBridge = {
 	platform: new URLSearchParams(location.search).get('platform') === 'ios' ? 'ios' : 'android',
 	isNativeWebView: true,
 	devicePairingVersion: '1.0.0',
-	fileAccessVersion: inspectionQA && new URLSearchParams(location.search).get('platform') === 'ios' ? '1.2.0' : '1.1.0',
+	fileAccessVersion: inspectionQA && new URLSearchParams(location.search).get('platform') === 'ios' ? (inventoryQA ? '1.3.0' : '1.2.0') : '1.1.0',
 	postMessage(message) {
 		const request = message.payload as any;
 		observe(request);
@@ -294,7 +314,8 @@ window.thingtimeNativeBridge = {
 							payload: {
 								...request,
 								roots,
-								...(request.action === 'scan' ? { complete: true, entries: localEntries } : {}),
+								...inventoryReply(request),
+				...(request.action === 'scan' ? { complete: true, entries: localEntries } : {}),
 								...(request.action === 'inspect' ? { complete: true, entry: localEntries.find(entry => entry.path === request.path) ?? null } : {}),
 								...(captureQA && request.action === 'read' ? captureChunk(request) : {}),
 								...(request.action === 'conditions' ? { conditions: { network: unavailable ? 'offline' : network, charging: true } } : {})
@@ -331,7 +352,8 @@ if (desktop) {
 				...request,
 				origin: canonicalOrigin,
 				roots,
-				...(manifest ? { capabilities: { fileAccessVersion: inspectionQA ? '1.4.0' : '1.1.0' }, apiCapabilities: { ...manifest, origin: canonicalOrigin } } : {}),
+				...(manifest ? { capabilities: { fileAccessVersion: inspectionQA ? (inventoryQA ? '1.5.0' : '1.4.0') : '1.1.0' }, apiCapabilities: { ...manifest, origin: canonicalOrigin } } : {}),
+				...inventoryReply(request),
 				...(request.action === 'scan' ? { complete: true, entries: localEntries } : {}),
 				...(request.action === 'inspect' ? { complete: true, entry: localEntries.find(entry => entry.path === request.path) ?? null } : {}),
 				...(captureQA && request.action === 'read' ? captureChunk(request) : {}),

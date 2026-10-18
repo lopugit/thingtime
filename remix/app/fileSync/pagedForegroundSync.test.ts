@@ -9,6 +9,47 @@ import type { ForegroundSyncInput } from './foregroundSync';
 const signal = () => new AbortController().signal;
 const access = (input: ForegroundSyncInput) => ({ scope: input.currentScope(), currentScope: input.currentScope });
 
+test('native pages drive planning and checkpoint publication without a legacy root scan', async () => {
+	const f = await foregroundFixture(135), input: ForegroundSyncInput = f.input(); let captures = 0;
+	input.scanLocal = async () => { throw Error('legacy root scan must not run'); };
+	input.inspectLocal = async path => structuredClone(f.local.find(row => row.path === path) ?? null);
+	input.scanLocalPages = async function* () {
+		captures++; const generation = crypto.randomUUID(), rows = structuredClone(f.local);
+		for (let offset = 0; offset < rows.length; offset += 128) yield {
+			generation, ordinal: offset / 128, entries: rows.slice(offset, offset + 128),
+			...(offset + 128 >= rows.length ? { totalEntries: rows.length } : {})
+		};
+	};
+	await runPagedForegroundCloudSync(saved, scope, input, signal());
+	assert.equal(captures, 2); assert.equal(f.creates(), 135);
+	const head = (await f.journal().pagedCheckpoints(access(input)).current())!;
+	assert.equal((await f.journal().inventory(access(input)).read(head.baseline.local)).totalEntries, 135);
+	await runPagedForegroundCloudSync(saved, scope, input, signal());
+	assert.equal(captures, 4); assert.equal(f.creates(), 135); f.journal().close();
+});
+
+test('incomplete or substituted native pages never start writes or replace a good checkpoint', async () => {
+	for (const failure of ['missing', 'generation', 'ordinal', 'extra', 'duplicate', 'count', 'ancestor', 'empty'] as const) {
+		const f = await foregroundFixture(), input: ForegroundSyncInput = f.input();
+		await runPagedForegroundCloudSync(saved, scope, input, signal());
+		const head = await f.journal().pagedCheckpoints(access(input)).current(), creates = f.creates();
+		input.scanLocal = async () => { throw Error('legacy root scan must not run'); };
+		input.scanLocalPages = async function* () {
+			if (failure === 'empty') return;
+			const generation = crypto.randomUUID();
+			yield { generation, ordinal: 0, entries: structuredClone(f.local), ...(failure === 'extra' ? { totalEntries: 1 } : {}) };
+			if (failure === 'missing') return;
+			yield { generation: failure === 'generation' ? crypto.randomUUID() : generation, ordinal: failure === 'ordinal' ? 2 : 1,
+				entries: failure === 'duplicate' ? structuredClone(f.local) : failure === 'ancestor' ? [{ ...f.local[0], id: 'orphan', path: 'missing/child' }] : [],
+				totalEntries: failure === 'count' ? 2 : failure === 'duplicate' || failure === 'ancestor' ? 2 : 1 };
+		};
+		await assert.rejects(runPagedForegroundCloudSync(saved, scope, input, signal()), failure);
+		assert.equal(f.creates(), creates, failure);
+		assert.deepEqual(await f.journal().pagedCheckpoints(access(input)).current(), head, failure);
+		assert.equal(await f.journal().pagedRuns(access(input)).active(), null, failure); f.journal().close();
+	}
+});
+
 test('individual path checks avoid whole-root rescans in both foreground runners', async () => {
 	for (const run of [runForegroundCloudSync, runPagedForegroundCloudSync]) {
 		const f = await foregroundFixture(20), input: ForegroundSyncInput = f.input();

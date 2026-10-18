@@ -49,11 +49,16 @@ export function foregroundSyncContext(reviewed: SavedFileSyncConfiguration, scop
 			);
 		return conditions;
 	};
-	const scan = async () => {
-		const entries = await input.scanLocal();
+	const scanCloud = async () => {
 		check();
 		const inventory = parseCloudInventory(await input.inventory(), configuration.remoteFolderId);
 		check();
+		return inventory;
+	};
+	const scan = async () => {
+		const entries = await input.scanLocal();
+		check();
+		const inventory = await scanCloud();
 		return {
 			local: { scope, complete: true, entries },
 			remote: { scope, complete: true, entries: inventory.nodes.map(inventorySyncEntry) },
@@ -97,5 +102,5 @@ export function foregroundSyncContext(reviewed: SavedFileSyncConfiguration, scop
 		stage: async (...args: Parameters<typeof input.localTarget.stage>) => { await authorize(); return input.localTarget!.stage(...args); },
 		publish: async (...args: Parameters<typeof input.localTarget.publish>) => { await authorize(); return input.localTarget!.publish(...args); }
 	} : undefined;
-	return { configuration, approved, check, authorize, scan, readLocal, runtime, localTarget };
+	return { configuration, approved, check, authorize, scan, scanCloud, readLocal, runtime, localTarget };
 }

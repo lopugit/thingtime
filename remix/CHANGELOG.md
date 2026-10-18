@@ -68,6 +68,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-18 — **Codex (AI)**: Mac/iOS foreground sync imports sealed native
+  folder observations in bounded pages, retaining source/device/grant checks
+  and complete checkpoint publication. Large-root cloud paging and installed
+  acceptance remain open; Android is deferred. Details and validation:
+  [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md#native-paged-folder-captures--2026-10-18).
+
+
 - 2026-10-18 — **Codex (AI)**: Mac session-lock checks now read session state
   without enumerating Bluetooth or other hardware. Explicit telemetry fixtures
   keep controller/recovery tests independent of the host's privacy permissions;

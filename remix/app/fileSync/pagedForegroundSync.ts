@@ -9,7 +9,7 @@ import type { PagedPlanSpec, PagedPlanCursor } from './pagedPlanJournal';
 import type { PagedRunSpec, PagedRunProgress } from './pagedRunJournal';
 import { parseReviewedConflict, type ReviewedSyncConflict } from './pagedRunReview';
 import { MAX_SYNC_SCAN_ENTRIES, planFileSync, syncPathKey, type SyncScope, type SyncEntry } from './reconcile';
-import type { CloudInventoryNode } from './cloudInventory';
+import { inventorySyncEntry, type CloudInventoryNode } from './cloudInventory';
 
 /** Import one already complete bounded scan. Native/cloud producers still use
  * their existing limits; pages here do not turn a partial scan into a full one. */
@@ -31,7 +31,7 @@ const identity = (source: 'local' | 'remote'): InventoryIdentity => ({ id: crypt
 /** Called inside the foreground root lock, including review and checkpoint
  * publication. Android keeps its existing runner while its work is deferred. */
 export async function runPagedForegroundCloudSync(reviewed: SavedFileSyncConfiguration, scope: SyncScope, input: ForegroundSyncInput, signal: AbortSignal) {
-	const { configuration, check, authorize, scan, readLocal, runtime, localTarget } = foregroundSyncContext(reviewed, scope, input, signal);
+	const { configuration, check, authorize, scanCloud, readLocal, runtime, localTarget } = foregroundSyncContext(reviewed, scope, input, signal);
 	const access = { scope, currentScope: input.currentScope, signal, cleanup: 'foreground' as const }, inventory = input.journal.inventory(access),
 		plans = input.journal.plans(access), runs = input.journal.pagedRuns(access), checkpoints = input.journal.pagedCheckpoints(access);
 	input.progress({ stage: 'checking', confirmed: 0, total: 0 }); await authorize();
@@ -55,19 +55,45 @@ export async function runPagedForegroundCloudSync(reviewed: SavedFileSyncConfigu
 		await pages<SyncEntry>(rows, (entries, ordinal, final) => inventory.append(id, { ordinal, entries, ...(final ? { totalEntries: rows.length } : {}) }), size);
 		await inventory.seal(id); check();
 	};
-	const capture = async (baseline: PagedPlanSpec['baseline']) => {
-		input.progress({ stage: 'scanning', confirmed: 0, total: 0 });
-		await authorize(); const observed = await scan(); check();
-		// Keep the current complete-scan contract until paged producers ship.
-		planFileSync(observed.local, { scope, complete: true, entries: [] }, { scope, entries: [] }, { mode: 'backup', propagateDeletes: false });
-		const local = identity('local'), remote = identity('remote');
-		await importEntries(local, observed.local.entries);
-		await inventory.beginCloud(remote, observed.inventory);
-		await pages<CloudInventoryNode>(observed.inventory.nodes,
-			(nodes, ordinal, final) => inventory.appendCloud(remote, { ordinal, nodes, ...(final ? { totalEntries: observed.inventory.nodes.length } : {}) }),
-			// Cloud pages carry both canonical metadata and the sync projection.
+	const importLocal = async (id: InventoryIdentity) => {
+		if (!input.scanLocalPages) {
+			const entries = await input.scanLocal(); check();
+			planFileSync({ scope, complete: true, entries }, { scope, complete: true, entries: [] }, { scope, entries: [] }, { mode: 'backup', propagateDeletes: false });
+			return importEntries(id, entries);
+		}
+		await inventory.begin(id);
+		let generation: string | undefined, ordinal = 0, terminal = false;
+		for await (const page of input.scanLocalPages()) {
+			check();
+			if (terminal || !page || page.ordinal !== ordinal || typeof page.generation !== 'string' ||
+				!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(page.generation) || (generation !== undefined && page.generation !== generation))
+				throw Error('Native inventory generation or page order changed.');
+			generation = page.generation; ordinal++;
+			await inventory.append(id, { ordinal: page.ordinal, entries: page.entries,
+				...(page.totalEntries === undefined ? {} : { totalEntries: page.totalEntries }) });
+			terminal = page.totalEntries !== undefined;
+		}
+		check();
+		if (!terminal) throw Error('Native inventory has no final page. Keep the last complete scan.');
+		await inventory.seal(id); check();
+	};
+	const importObservations = async (local: InventoryIdentity, remote: InventoryIdentity, checkpoint = false) => {
+		await importLocal(local);
+		const observed = await scanCloud(); check();
+		// Checkpoints own pre-created plain observation captures. Destination
+		// metadata belongs to planning captures; a baseline stores content stamps.
+		if (checkpoint) return importEntries(remote, observed.nodes.map(inventorySyncEntry));
+		await inventory.beginCloud(remote, observed);
+		await pages<CloudInventoryNode>(observed.nodes,
+			(nodes, ordinal, final) => inventory.appendCloud(remote, { ordinal, nodes, ...(final ? { totalEntries: observed.nodes.length } : {}) }),
 			node => size(node) * 2 + 1024);
 		await inventory.seal(remote); check();
+	};
+	const capture = async (baseline: PagedPlanSpec['baseline']) => {
+		input.progress({ stage: 'scanning', confirmed: 0, total: 0 });
+		await authorize();
+		const local = identity('local'), remote = identity('remote');
+		await importObservations(local, remote);
 		const spec: PagedPlanSpec = { id: crypto.randomUUID(), local, remote, baseline,
 			policy: { mode: configuration.mode, propagateDeletes: configuration.propagateDeletes }, excludedPaths: configuration.excludedPaths };
 		const result = await plans.build(spec);
@@ -140,9 +166,7 @@ export async function runPagedForegroundCloudSync(reviewed: SavedFileSyncConfigu
 	let draft = await checkpoints.begin(checkpoint); check();
 	if (draft.phase === 'collecting') {
 		draft = await checkpoints.restartCollection(checkpoint);
-		const observed = await scan(); check();
-		planFileSync(observed.local, observed.remote, { scope, entries: [] }, { mode: 'backup', propagateDeletes: false });
-		await importEntries(draft.after.local, observed.local.entries); await importEntries(draft.after.remote, observed.remote.entries);
+		await importObservations(draft.after.local, draft.after.remote, true);
 	}
 	await checkpoints.build(checkpoint); check(); report(done, 'complete'); return { spec, progress: done };
 }

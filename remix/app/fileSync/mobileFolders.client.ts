@@ -1,3 +1,4 @@
+import { parseNativeInventoryCapture, parseNativeInventoryPage, type NativeInventoryCapture, type NativeInventoryPage } from './nativeInventory';
 import { trackNativeUploadBackground } from './nativeUploadBackground';
 import { parseFileSyncConfiguration } from './configuration';
 import { validateSyncScope } from './reconcile';
@@ -44,6 +45,9 @@ export type FolderRequest =
 	| { action: 'upload-part'; rootId: string; upload: NativePartUpload & { source: SyncEntry } }
 	| { action: 'list' | 'choose' | 'conditions' | 'prepare-upload' }
 	| { action: 'remove' | 'scan'; rootId: string }
+	| { action: 'scan-capture'; rootId: string; inventoryDeviceId: string; captureId: string }
+	| { action: 'scan-page'; rootId: string; inventoryDeviceId: string; capture: NativeInventoryCapture; offset: number }
+	| { action: 'scan-discard'; rootId: string; inventoryDeviceId: string; capture: NativeInventoryCapture }
 	| { action: 'inspect'; rootId: string; path: string }
 	| { action: 'version-list'; rootId: string; cursor?: string }
 	| { action: 'version-inspect'; rootId: string; versionId: string; expected: SyncEntry }
@@ -85,6 +89,8 @@ export type FolderResult = {
 	conditions?: SyncConditions;
 	entries?: SyncEntry[];
 	inspectedEntry?: SyncEntry | null;
+	capture?: NativeInventoryCapture;
+	inventoryPage?: NativeInventoryPage;
 	chunk?: { version: string; size: number; offset: number; data: string };
 	range?: { version: string; size: number; offset: number; bytes: Uint8Array<ArrayBuffer> };
 };
@@ -101,6 +107,10 @@ export type FolderCapabilities = Pick<
 export const supportsNativePartUploads = (bridge: FolderCapabilities | undefined = getNativeBridge()) =>
 	(bridge?.platform === 'ios' || bridge?.platform === 'android') && /^1\.\d+\.\d+$/.test(bridge.fileUploadVersion ?? '');
 /** These native access contracts independently add exact single-path inspection. */
+export const supportsNativeInventoryPages = (bridge: FolderCapabilities | undefined = getNativeBridge()) => {
+	const minimum = bridge?.platform === 'macos' ? 5 : bridge?.platform === 'ios' ? 3 : undefined;
+	return minimum !== undefined && /^1\.\d+\.\d+$/.test(bridge?.fileAccessVersion ?? '') && Number(bridge!.fileAccessVersion!.split('.')[1]) >= minimum;
+};
 export const supportsNativePathInspection = (bridge: FolderCapabilities | undefined = getNativeBridge()) => {
 	const minimum = bridge?.platform === 'macos' ? 4 : bridge?.platform === 'ios' ? 2 : undefined;
 	return minimum !== undefined && /^1\.\d+\.\d+$/.test(bridge?.fileAccessVersion ?? '') && Number(bridge!.fileAccessVersion!.split('.')[1]) >= minimum;
@@ -440,6 +450,13 @@ export function parseMobileFolderResult(
 		if (!c || !['wifi', 'cellular', 'ethernet', 'offline', 'unknown'].includes(c.network) || (c.charging !== null && typeof c.charging !== 'boolean'))
 			throw Error('Native transfer conditions are unavailable.');
 		result.conditions = { network: c.network, charging: c.charging };
+	} else if (request.action === 'scan-capture' || request.action === 'scan-page' || request.action === 'scan-discard') {
+		if (payload.rootId !== request.rootId || payload.complete !== true) throw Error('Native inventory is incomplete or belongs to another root.');
+		if (request.action === 'scan-capture') {
+			result.capture = parseNativeInventoryCapture(payload.capture);
+			if (result.capture.id !== request.captureId) throw Error('Native capture identity changed.');
+		} else if (request.action === 'scan-page') result.inventoryPage = parseNativeInventoryPage(payload.inventoryPage, request.capture, request.offset);
+		else if (payload.discarded !== true) throw Error('Native inventory cleanup was not confirmed.');
 	} else if (request.action === 'inspect') {
 		if (!validSyncPath(request.path) || payload.rootId !== request.rootId || payload.path !== request.path || payload.complete !== true ||
 			(payload.entry !== null && (!validSyncEntry(payload.entry) || payload.entry.path !== request.path)))
@@ -535,6 +552,8 @@ export function requestMobileFolders(
 ): Promise<FolderResult> {
 	const bridge = getNativeBridge();
 	if (!supportsMobileFolders(bridge)) return Promise.reject(Error('Folder access requires an updated mobile app.'));
+	if (['scan-capture', 'scan-page', 'scan-discard'].includes(request.action) && !supportsNativeInventoryPages(bridge))
+		return Promise.reject(Error('Inventory pages require a supported Mac or iOS app.'));
 	if (request.action === 'inspect' && (!supportsNativePathInspection(bridge) || !validSyncPath(request.path)))
 		return Promise.reject(Error('Path inspection requires a supported app and a relative path.'));
 	if (request.action === 'upload-file' && (!supportsNativeFileUploads(bridge) || !validFileUpload(request.upload)))
@@ -697,6 +716,9 @@ export function requestMobileFolders(
 						'choose',
 						'prepare-upload',
 						'scan',
+						'scan-capture',
+						'scan-page',
+						'scan-discard',
 						'inspect',
 						'read-range',
 						'stage-begin',

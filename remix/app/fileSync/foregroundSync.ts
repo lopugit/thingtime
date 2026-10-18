@@ -1,3 +1,4 @@
+import type { LocalInventoryPage } from './nativeInventory';
 import { foregroundSyncContext } from './foregroundSyncContext';
 import { localTrashContexts } from './localTrash';
 import type { LocalSyncTarget } from './localSyncTarget';
@@ -28,6 +29,7 @@ export type ForegroundSyncInput = {
 	authorizeDevice(): Promise<void>;
 	conditions(): Promise<SyncConditions>;
 	scanLocal(): Promise<SyncEntry[]>;
+	scanLocalPages?(): AsyncIterable<LocalInventoryPage>;
 	inspectLocal?(path: string): Promise<SyncEntry | null>;
 	inventory(): Promise<CloudInventory>;
 	source(entry: SyncEntry): Promise<FingerprintSource>;

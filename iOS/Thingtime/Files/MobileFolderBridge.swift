@@ -8,7 +8,7 @@ import UniformTypeIdentifiers
 @MainActor
 final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
     static let uploadVersion = "1.3.0"
-    static let accessVersion = "1.2.0"
+    static let accessVersion = "1.3.0"
     static let stagingVersion = "1.2.0"
     static let publicationVersion = "1.0.0"
     static let trashVersion = "1.2.0"
@@ -17,6 +17,7 @@ final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
     private var photoPermissionPending = false
     private var sourceChoice: CheckedContinuation<Bool?, Error>?
     private let store: MobileFolderStore
+    private let inventories: MobileFolderInventory
     private let staging: MobileSyncStaging
     private let uploadParts: FileUploadPartStore
     private let trash: MobileSyncTrash
@@ -35,8 +36,8 @@ final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
     private var foregroundObserver: NSObjectProtocol?
     private var foregroundWait: CheckedContinuation<Void, Error>?
     private var background: NativeUploadBackgroundLease?
-    init(store: MobileFolderStore? = nil, staging: MobileSyncStaging = MobileSyncStaging(), trash: MobileSyncTrash = MobileSyncTrash(), uploadParts: FileUploadPartStore = FileUploadPartStore()) {
-        self.store = store ?? MobileFolderStore(); self.staging = staging; self.trash = trash; self.uploadParts = uploadParts
+    init(store: MobileFolderStore? = nil, staging: MobileSyncStaging = MobileSyncStaging(), trash: MobileSyncTrash = MobileSyncTrash(), uploadParts: FileUploadPartStore = FileUploadPartStore(), inventories: MobileFolderInventory = MobileFolderInventory()) {
+        self.inventories = inventories; self.store = store ?? MobileFolderStore(); self.staging = staging; self.trash = trash; self.uploadParts = uploadParts
         super.init()
         UIDevice.current.isBatteryMonitoringEnabled = true
         networkMonitor.pathUpdateHandler = { [weak self] path in
@@ -208,7 +209,7 @@ final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
                 reply: @escaping (String, [String: Any]) -> Void) {
         guard let payload = body["payload"] as? [String: Any], let id = payload["requestId"] as? String, UUID(uuidString: id) != nil,
               let owner = payload["ownerId"] as? String, let action = payload["action"] as? String,
-              ["list", "choose", "remove", "scan", "inspect", "read", "upload-part", "upload-file", "conditions", "suspend", "stage-begin", "stage-append", "stage-download", "stage-finish", "write-approve", "publish", "publication-lookup", "trash", "trash-lookup", "trash-expected", "trash-inspect", "trash-restore", "trash-list", "trash-restore-reviewed"].contains(action),
+              ["list", "choose", "remove", "scan", "scan-capture", "scan-page", "scan-discard", "inspect", "read", "upload-part", "upload-file", "conditions", "suspend", "stage-begin", "stage-append", "stage-download", "stage-finish", "write-approve", "publish", "publication-lookup", "trash", "trash-lookup", "trash-expected", "trash-inspect", "trash-restore", "trash-list", "trash-restore-reviewed"].contains(action),
               let scope = try? MobileDevicePairing.Scope(ownerId: owner, url: root) else { return }
         if action == "suspend" { if requestId == id { suspend() }; return }
         let base: [String: Any] = ["requestId": id, "ownerId": owner, "origin": scope.origin.absoluteString]
@@ -227,6 +228,7 @@ final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
                 try check(); try await verifyOwner(scope, check); try check()
                 var result: [String: Any] = [:]
                 var inspectedGrant: MobileFolderStore.Grant?
+                var inventoryDevice: String?
                 if action == "conditions" {
                     let battery = UIDevice.current.batteryState
                     let charging: Any = battery == .unknown ? NSNull() : (battery == .charging || battery == .full)
@@ -470,6 +472,37 @@ final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
                                 let progress = try await withTaskCancellationHandler(operation: { try await worker.value }, onCancel: { worker.cancel() })
                                 result = ["rootId": rootId, "staging": try JSONSerialization.jsonObject(with: JSONEncoder().encode(progress))]
                             }
+                        } else if ["scan-capture", "scan-page", "scan-discard"].contains(action) {
+                            guard let device = payload["inventoryDeviceId"] as? String, !device.isEmpty, device.utf8.count <= 512,
+                                  let verifyDevice else { throw MobileFolderStore.Failure.invalid }
+                            try await verifyDevice(scope, device, check); try check()
+                            inventoryDevice = device; inspectedGrant = grant
+                            let inventories = self.inventories
+                            let inventoryScope = MobileFolderInventory.Scope(owner: scope, deviceId: device, rootId: rootId)
+                            let id = payload["captureId"] as? String
+                            let capture = try payload["capture"].map { try JSONDecoder().decode(MobileFolderInventory.Capture.self, from: JSONSerialization.data(withJSONObject: $0)) }
+                            let offset = payload["offset"] as? NSNumber
+                            if action == "scan-page" {
+                                guard let offset, CFGetTypeID(offset) != CFBooleanGetTypeID(), offset.doubleValue.isFinite,
+                                      offset.doubleValue >= 0, offset.doubleValue <= 9_007_199_254_740_991,
+                                      offset.doubleValue.rounded(.down) == offset.doubleValue else { throw MobileFolderStore.Failure.invalid }
+                            }
+                            let worker = Task.detached { () throws -> Data in
+                                if action == "scan-capture" {
+                                    guard let id else { throw MobileFolderStore.Failure.invalid }
+                                    return try JSONEncoder().encode(inventories.capture(inventoryScope, id: id, bookmark: grant.bookmark))
+                                }
+                                guard let capture else { throw MobileFolderStore.Failure.invalid }
+                                if action == "scan-page" {
+                                    return try JSONEncoder().encode(inventories.read(inventoryScope, capture: capture, bookmark: grant.bookmark, offset: offset!.intValue))
+                                }
+                                try inventories.discard(inventoryScope, capture: capture, bookmark: grant.bookmark)
+                                return Data()
+                            }
+                            let data = try await withTaskCancellationHandler(operation: { try await worker.value }, onCancel: { worker.cancel() })
+                            result = ["rootId": rootId, "complete": true]
+                            if action == "scan-discard" { result["discarded"] = true }
+                            else { result[action == "scan-capture" ? "capture" : "inventoryPage"] = try JSONSerialization.jsonObject(with: data) }
                         } else if action == "inspect" {
                             guard let path = payload["path"] as? String else { throw MobileFolderStore.Failure.invalid }
                             inspectedGrant = grant
@@ -501,6 +534,7 @@ final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
                     }
                 }
                 try check(); try await verifyOwner(scope, check); try check()
+                if let inventoryDevice, let verifyDevice { try await verifyDevice(scope, inventoryDevice, check); try check() }
                 if let inspectedGrant {
                     let current = try self.store.grant(scope, id: inspectedGrant.id)
                     guard current.bookmark == inspectedGrant.bookmark, current.sourceKind == nil else { throw MobileFolderStore.Failure.changed }

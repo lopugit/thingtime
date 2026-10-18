@@ -11520,3 +11520,14 @@ resume unfinished Android gates only when requested.
 - [x] Compile the iOS simulator scheme with destination selection; do not force an iPhone SDK onto the Watch target using a global `-sdk` override.
 - [ ] Verify current signed installed Mac and iOS folder operations against real native/cloud bytes and revocation through the intended app controls.
 - [ ] Implement stable native/cloud paged producers and verify installed large-root traversal before lifting the live 10,000-path limit.
+
+
+## Native paged folder captures (Mac/iOS) — 2026-10-18
+
+- [x] Stream and reopen 10,001 actual files; verify exact entry set/digests, bounded pages, terminal count, later edits, owner/device/grant/generation refusal, cache eviction and metadata-only discard.
+- [x] Reject truncated/corrupt capture databases and cancellation; missing rows must never become an empty or complete inventory.
+- [x] Negotiate Mac 1.5.0 / iOS 1.3.0; reject incompatible/Android capabilities. Fence every capture/page reply with owner/origin/device/grant identity.
+- [x] Run 135-entry planning and checkpoint publication through native pages with the legacy scan set to throw. Reject missing, reordered, substituted, duplicate and orphan pages before writes; preserve the prior checkpoint.
+- [x] Regression: checkpoint captures retain their existing plain observation schema; cloud destination metadata is attached only to planning captures. Repeated runs and interrupted checkpoint imports recover normally.
+- [x] Inspect real controls with generated adapters in OS-isolated Chromium at desktop/390px through the bottom and open conflict review. Confirm captures/pages/discards and retained-version receipt reuse after reload, with zero legacy root scans.
+- [ ] Repeat capture/page/recovery through installed Mac/iOS picker grants and real providers. Complete stable cloud producers and worker integration before lifting the combined 10,000-path cap. Android remains deferred.

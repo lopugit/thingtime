@@ -4,6 +4,7 @@ import {
 	parseMobileFolderResult,
 	supportsFolderAccess,
 	supportsNativePathInspection,
+	supportsNativeInventoryPages,
 	type FolderCapabilities,
 	type FolderRequest,
 	type FolderResult
@@ -191,6 +192,8 @@ export async function createDesktopFolderHost(input: {
 		fetch: fetchBound,
 		request: async (expectedOwner, request, signal) => {
 			if (expectedOwner !== ownerId) throw changed();
+			if (['scan-capture', 'scan-page', 'scan-discard'].includes(request.action) && !supportsNativeInventoryPages(context.capabilities))
+				throw Error('Inventory pages require an updated Mac app.');
 			if (request.action === 'inspect' && !supportsNativePathInspection(context.capabilities)) throw Error('Update Thingtime Desktop to inspect individual sync paths.');
 			const payload = structuredClone(request);
 			const { value, expected } = await send(payload, signal);

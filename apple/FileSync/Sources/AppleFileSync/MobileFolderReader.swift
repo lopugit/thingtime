@@ -194,6 +194,35 @@ public struct MobileFolderReader {
             guard try stamp(info(root)) == initial else { throw Failure.changed }; return entries
         }
     }
+
+    /// The sink owns uniqueness checks and bounded, disk-backed retention. No
+    /// provisional rows become a complete capture until the second pass succeeds.
+    static func capture(bookmark: Data, append: (Entry) throws -> Void,
+                        replay: ((Entry) throws -> Void) throws -> Void) throws {
+        try access(bookmark) { root in
+            let initial = try stamp(info(root))
+            func walk(_ parent: Int32, prefix: String) throws {
+                let before = try stamp(info(parent))
+                try visitNames(parent) { name in
+                    let path = prefix.isEmpty ? name : "\(prefix)/\(name)"
+                    _ = try components(path)
+                    let fd = openat(parent, name, O_RDONLY | O_NOFOLLOW | O_CLOEXEC | O_NONBLOCK)
+                    guard fd >= 0 else { throw Failure.unavailable }; defer { close(fd) }
+                    let row = try entry(fd, path: path)
+                    try append(row)
+                    if row.kind == "folder" { try walk(fd, prefix: path) }
+                }
+                guard try stamp(info(parent)) == before else { throw Failure.changed }
+            }
+            try walk(root, prefix: "")
+            try replay { row in
+                try Task.checkCancellation()
+                let fd = try openPath(root, path: row.path); defer { close(fd) }
+                guard try stamp(info(fd)) == row.version else { throw Failure.changed }
+            }
+            guard try stamp(info(root)) == initial else { throw Failure.changed }
+        }
+    }
     /// One pinned, coordinated range; the sink applies backpressure. Bytes remain
     /// provisional until this call and the host's final identity checks succeed.
     /// No path, descriptor or bookmark is exposed to the consumer.

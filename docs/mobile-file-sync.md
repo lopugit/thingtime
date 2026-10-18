@@ -2899,3 +2899,47 @@ evidence only. Signed installed Mac and iOS action-path acceptance remain open.
 Stable paged native/cloud inventories are still unfinished; live synchronization
 retains its 10,000-path cap. This change does not establish large-root, background,
 physical-device or 100 GB–100 TB acceptance.
+
+## Native paged folder captures — 2026-10-18
+
+Mac file-access **1.5.0** and iOS file-access **1.3.0** add `scan-capture`,
+`scan-page` and `scan-discard`. The shared foreground controls negotiate these
+versions for folder roots and import one sealed native generation for planning,
+conflict rechecks and checkpoint publication. Older clients and Photos keep the
+existing bounded scan path. Android implementation and acceptance remain deferred.
+
+`MobileFolderInventory` streams descriptor-relative traversal into a private
+SQLite metadata cache, validates path/identity uniqueness and rechecks every
+observed entry before sealing. Replies contain at most 128 entries and 512 KiB;
+clients pin capture identity, generation, offsets and the terminal count. The
+source is reauthorized on each call and the bridge checks device/grant identity
+again before replying. These immutable observations are not retained file bytes
+or Timeline history. Source edits after capture are checked before each effect.
+Eight captures per owner/origin/device/grant are retained at most; each database
+has a 1 GiB page quota. Cancellation, eviction, corruption or omitted rows refuse
+instead of appearing as an empty complete scan. A reused evicted ID gets a new
+generation. Explicit discard removes metadata only.
+
+The shared checkpoint importer preserves its existing plain observation contract;
+planning captures alone hold canonical cloud destination metadata. Partial native
+imports cannot launch effects or replace the prior published checkpoint.
+
+Verification: 255 shared file-sync checks; targeted lint; 73 Apple filesystem tests; full Mac suite 162 passed plus one
+opt-in display-hardware skip; 146 Electron checks; iOS simulator compilation.
+Native tests use 10,001 real files and verify all 79 pages against independently
+constructed names/digests, reopen, later edits, scope/generation refusal, cache
+eviction, truncated/corrupt metadata and cancellation. Shared tests cover page
+protocol validation, 135-entry execution/checkpoint publication without a legacy
+root scan, and malformed/missing pages preserving the last good checkpoint.
+Isolated Chromium at 1440px/390px exercised the real controls, two native capture
+generations, four pages, cleanup and retained conflict receipts after reload;
+layout was checked through the page bottom and open review controls. Raw TypeScript retains 91 diagnostics outside the changed files. Native/cloud
+adapters in that browser check were generated fixtures, not installed-device
+acceptance. Both browser and fixture backend were OS restricted to loopback.
+
+Remaining: stable paged cloud producers, conflict-review scaling, capture workers
+and installed Mac/iOS/provider acceptance. The live combined 10,000-path cap is
+still enforced. Capture hashes file contents in the foreground and retains the
+existing request deadline; this is not a sustained large-data benchmark or a
+persistent background scanner. The installed Mac app is another task's branch
+and sign-in environment; it has not been overwritten for this check.

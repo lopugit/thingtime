@@ -1,5 +1,15 @@
 # Attachments and media
 
+Native folder captures now use `apple/FileSync/MobileFolderInventory.swift`
+(under `Sources/AppleFileSync`), negotiated by `fileSync/nativeInventory.ts`:
+Mac file-access 1.5.0 / iOS 1.3.0. A private SQLite capture supplies immutable
+128-entry / 512-KiB pages; `pagedForegroundSync.ts` imports complete generations
+before planning and checkpoints. Run `MobileFolderInventoryTests`,
+`MacFolderSyncTests`, `nativeInventory.test.ts`, `pagedForegroundSync.test.ts`
+and `test:file-sync`. Photos/older clients retain bounded legacy scans; cloud
+paging, persistent workers and installed large-root acceptance remain open.
+See [native paged captures](../mobile-file-sync.md#native-paged-folder-captures--2026-10-18).
+
 Attachment-content 1.14.0 also serves bounded exact-version byte ranges through
 `attachmentRanges.ts` and the existing content loader. `cloudDownloadSource.ts`
 checks current file metadata and exact range/ETag framing. Download operations
