@@ -1,6 +1,6 @@
 import { validSyncEntry, validSyncPath, type SyncEntry } from './reconcile';
 
-export const CLOUD_PATH_REQUIREMENTS = { 'api.files': '1.4.0', 'api.actions-run': '1.7.0', 'api.mongodb-endpoint': '1.1.0' } as const;
+export const CLOUD_PATH_REQUIREMENTS = { 'api.files': '1.6.0', 'api.actions-run': '1.7.0', 'api.mongodb-endpoint': '1.1.0' } as const;
 export type CloudPathObservation = {
 	version: 1;
 	complete: true;

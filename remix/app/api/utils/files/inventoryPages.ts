@@ -1,15 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import { getHomeThingsCollection, withHomeMongoSnapshot } from '../mongodb/collections';
 import { isCustomMongoEndpointActive } from '../mongodb/endpoint';
-import { isFolderThing, folderThingMatch } from '../../../schemas/folderThing';
+import { folderThingMatch } from '../../../schemas/folderThing';
 import { MAX_FOLDER_DEPTH } from '../things/folderPlacement';
 import { StorageMutationError } from '../storage/storageCore';
-import { parseCloudFile } from '../../../fileSync/cloudFile';
-import { validSyncPath } from '../../../fileSync/reconcile';
 import { parseCloudInventoryRoot, type CloudInventoryNode } from '../../../fileSync/cloudInventory';
 import { CLOUD_INVENTORY_PAGE_BYTES, CLOUD_INVENTORY_PAGE_ENTRIES, CLOUD_INVENTORY_TIMEOUT_MS,
 	parseCloudInventoryPage, type CloudInventoryPage } from '../../../fileSync/cloudInventoryPages';
-import { cloudInventoryAccess as access, readCloudInventoryRoot } from './inventory';
+import { cloudInventoryAccess as access, readCloudInventoryRoot, readCloudInventoryNode } from './inventory';
 import { openInventoryQueue } from './inventoryQueue';
 
 /** One read-only Mongo snapshot, with backpressure all the way from the client
@@ -73,20 +71,8 @@ export function createCloudInventoryPagesService(overrides: Partial<{
 								if (!parent || !access.owned(doc, ownerId) || !access.privateAudience(doc, true) || doc.shareId === rootId)
 									fail(409, 'Cloud inventory contains an inaccessible or ambiguous item');
 								if (parent.depth >= MAX_FOLDER_DEPTH) fail(409, 'Cloud folder depth exceeds the inventory bound');
-								const name = doc.crystal?.name;
-								if (typeof name !== 'string' || name.includes('/') || !validSyncPath(name)) fail(409, 'A cloud file or folder has an invalid name');
-								const path = parent.path ? parent.path + '/' + name : name;
-								if (!validSyncPath(path)) fail(409, 'A cloud path exceeds the supported bounds');
-								let node: CloudInventoryNode;
-								if (isFolderThing(doc)) {
-									if (doc.thingtime?.includes('file') || doc.crystal?.trashed === true) fail(409, 'A cloud folder has an ambiguous kind');
-									node = { kind: 'folder', path, id: doc.shareId, folderId: doc.folderId, revision: access.folderRevision(doc) };
-									await queue.append({ id: doc.shareId, path, depth: parent.depth + 1 });
-								} else {
-									if (doc.thingtime?.length !== 1 || doc.thingtime[0] !== 'file') fail(409, 'A cloud file has an ambiguous kind');
-									node = { kind: 'file', path, file: parseCloudFile({ id: doc.shareId, revision: doc.timelineHeadId,
-										name, folderId: doc.folderId, trashed: doc.crystal.trashed, content: doc.crystal.content }) };
-								}
+								const node = readCloudInventoryNode(doc, ownerId, parent.id, parent.path, rootId as string);
+								if (node.kind === 'folder') await queue.append({ id: node.id, path: node.path, depth: parent.depth + 1 });
 								const length = Buffer.byteLength(JSON.stringify(node)) + 1;
 								if (length + 4096 > CLOUD_INVENTORY_PAGE_BYTES) fail(413, 'Cloud inventory row exceeds its byte bound');
 								if (nodes.length && (nodes.length >= CLOUD_INVENTORY_PAGE_ENTRIES || bytes + length > CLOUD_INVENTORY_PAGE_BYTES)) await flush();

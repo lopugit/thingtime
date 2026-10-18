@@ -42,7 +42,7 @@ export const createFilesHandlers = (
 						[...url.searchParams.keys()].some((key) => !['rootId', 'path'].includes(key)))
 						return json({ ok: false, error: 'Use one rootId alone for inventory, or with one relative path' }, { status: 400 });
 					const result = url.searchParams.has('path')
-						? await (deps.path ?? readCloudPath)(user.id, url.searchParams.get('rootId'), url.searchParams.get('path'))
+						? await (deps.path ?? readCloudPath)(user.id, url.searchParams.get('rootId'), url.searchParams.get('path'), request.signal)
 						: await deps.inventory(user.id, url.searchParams.get('rootId'));
 					return result.ok === false ? json({ ok: false, error: result.error }, { status: result.status }) : json(result);
 				}

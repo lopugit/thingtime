@@ -2866,3 +2866,29 @@ foreground planner/review cap is still 10,000 paths; this increment does not
 claim unrestricted root sizes, durable workers, byte backups or 100 GB–100 TB
 throughput. Android stays deferred. Next: exercise installed/HTTP proxy streaming,
 then remove the remaining bounded review/path-observation bottlenecks.
+
+### 2026-10-19 — bounded wide-folder path observations
+
+Cloud path checks now stream sibling rows through one shared metadata validator
+and an anonymous bounded disk uniqueness index. They no longer accumulate all
+sibling metadata or inherit the 10,000-entry / 8 MiB whole-tree response cap.
+Late aliases, duplicate IDs, permission failures, interrupted reads and scratch
+failures still refuse the observation. The index is unlinked before writing,
+which lets process exit reclaim its disk space. Transaction retries recreate it
+without extending the original 20-second deadline. `api.files` and its client
+requirement are deliberately advanced to 1.6.0.
+
+The focused suite covers a 10,001-file, >8 MiB directory and process-death cleanup;
+the existing isolated real-handler fixture now verifies found/absent/alias paths
+and post-logout refusal against canonical Things writes. This is a scaling
+prerequisite, not installed-device, production throughput or full-backup acceptance.
+The combined foreground cap, bounded conflict review and durable workers remain
+open. Android is deferred. No installed app or primary branch is changed.
+
+Validation: 49 Files tests, 262 shared-sync tests (261 TypeScript plus the module
+mock check), and 95 API-capability tests pass. The isolated authenticated handler
+fixture and built Nitro HTTP manifest/auth smoke pass. Desktop/mobile production
+controls were exercised with generated native/cloud adapters; this does not
+establish installed-device acceptance. Focused lint passes. Full TypeScript still
+reports 91 diagnostics outside the changed files; whole-project typecheck is not
+green.

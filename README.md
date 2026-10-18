@@ -5529,3 +5529,17 @@ logout refusal. It is a handler/database check, not HTTP/browser or installed
 app acceptance. Production needs Mongo snapshot-session support (5+) and enough
 snapshot history for a capture; expiry fails the scan instead of mixing dates.
 The 10,000-path live planner cap and installed/large-volume acceptance remain open.
+
+### Wide-folder cloud path checks
+
+Files capability 1.6.0 streams per-parent path observations with bounded memory.
+The server needs a writable POSIX temporary filesystem with anonymous open-file
+support (Linux/macOS); no additional account, credential or environment variable
+is required. Each active path scan can address up to 128 MiB of temporary disk,
+with two scans admitted per service/process. The file is unlinked before content
+is written, so normal closure and process death both release its allocation.
+Disk capacity, permission, cancellation and timeout failures return unavailable,
+never missing-file evidence. The 20-second observation deadline and legacy
+whole-tree inventory/foreground limits are unchanged. Run the existing isolated
+`npm --prefix remix run test:files:inventory-pages` fixture for actual authenticated
+handler coverage; see `docs/mobile-file-sync.md` for remaining acceptance gates.

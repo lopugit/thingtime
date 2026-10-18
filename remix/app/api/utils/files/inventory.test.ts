@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createCloudInventoryService } from './inventory';
+import { createCloudInventoryService, createCloudPathService } from './inventory';
 import { contentPartPlan } from '../../../fileSync/contentFingerprint';
 const date = new Date('2026-10-17T00:00:00Z');
 const folder = (id: string, parent: string | null, name = id) => ({
@@ -78,18 +78,19 @@ function fixture(input = [folder('root', null), folder('nested', 'root'), file('
 			};
 		}
 	};
-	const read = createCloudInventoryService({
+	const dependencies = {
 		collection: async () => collection,
 		customPlane: () => false,
-		transaction: async (work) => {
+		transaction: async (work: (session: any) => Promise<any>) => {
 			session = { docs: structuredClone(docs) };
 			return work(session);
 		},
 		now: () => time,
 		maxEntries
-	});
+	};
 	return {
-		read,
+		read: createCloudInventoryService(dependencies),
+		bounded: (overrides: Parameters<typeof createCloudPathService>[0] = {}) => createCloudPathService({ ...dependencies, ...overrides }),
 		docs,
 		stats: () => ({ reads, closed }),
 		onRead: (f: () => void) => {
@@ -303,7 +304,7 @@ test('path checks refuse unavailable roots, invalid siblings, aliases and file a
 	const unicode = fixture([folder('root', null), folder('cafe', 'root', 'cafe\u0301')]);
 	assert.equal((await unicode.read('owner', 'root', 'café/missing')).ok, false);
 	const huge = fixture(undefined, 1);
-	assert.equal((await huge.read('owner', 'root', 'nested/missing')).status, 413);
+	assert.equal((await huge.read('owner', 'root', 'nested/missing')).observation.entry, null); // Path checks no longer inherit whole-tree entry bounds.
 	for (const path of ['', '../file', 'nested//file', 'a/'.repeat(64) + 'a'])
 		assert.equal((await fixture().read('owner', 'root', path)).status, 400);
 });
@@ -317,4 +318,77 @@ test('path observations share one snapshot and deadline without claiming a compl
 	const result = await slow.read('owner', 'root', 'missing');
 	assert.equal(result.status, 503); assert.equal(result.observation, undefined);
 	assert.equal(slow.stats().reads, slow.stats().closed);
+});
+
+
+test('wide path observations stream more than 10,000 siblings and reject late ambiguity', async () => {
+ const name = (i: number) => 'Entry-' + '界'.repeat(180) + '-' + String(i).padStart(5, '0');
+ const docs = [folder('root', null), ...Array.from({ length: 10_001 }, (_, i) => file('f' + i, 'root', name(i)))];
+ assert.ok(Buffer.byteLength(JSON.stringify(docs)) > 8 * 1024 * 1024);
+ const f = fixture(docs);
+ const result = await f.read('owner', 'root', name(0));
+ assert.equal(result.ok, true); assert.equal(result.observation.entry.id, 'f0'); assert.equal(result.inventory, undefined);
+ assert.deepEqual(f.stats(), { reads: 1, closed: 1 });
+ f.docs.push(file('duplicate', 'root', name(9999).toUpperCase()));
+ const ambiguous = await f.read('owner', 'root', name(0));
+ assert.equal(ambiguous.status, 409); assert.equal(ambiguous.observation, undefined);
+ assert.deepEqual(f.stats(), { reads: 2, closed: 2 });
+});
+
+test('path proof rejects duplicate identities across levels and unrelated sibling aliases', async () => {
+ for (const extra of [file('file', 'root', 'other-id'), file('alias', 'root', 'NESTED')]) {
+  const f = fixture(); f.docs.push(extra);
+  assert.equal((await f.read('owner', 'root', 'nested/file')).status, 409);
+ }
+ const f = fixture(); f.docs.push(file('other-a', 'root', 'café'), file('other-b', 'root', 'cafe\u0301'));
+ assert.equal((await f.read('owner', 'root', 'absent')).status, 409);
+});
+
+test('scratch failure, cancellation and data-plane changes cannot become successful path absence', async () => {
+ const f = fixture(); let closed = 0;
+ const denied = f.bounded({ workspace: async () => ({ add: async () => { throw Error('private path must not leak'); }, close: async () => { closed++; } }) });
+ const failure = await denied('owner', 'root', 'absent');
+ assert.equal(failure.status, 503); assert.equal(failure.observation, undefined); assert.doesNotMatch(failure.error, /private path/); assert.equal(closed, 1);
+ const abort = new AbortController(); f.onRead(() => abort.abort());
+ assert.equal((await f.bounded()('owner', 'root', 'absent', abort.signal)).status, 503);
+ assert.equal(f.stats().reads, f.stats().closed);
+ let plane = false; f.onRead(() => { plane = true; });
+ assert.equal((await f.bounded({ customPlane: () => plane })('owner', 'root', 'absent')).status, 409);
+});
+
+test('path transaction retries get a fresh uniqueness index but retain the original deadline', async () => {
+ const f = fixture([folder('root', null)]); let attempts = 0, opened = 0, closed = 0;
+ const read = f.bounded({
+  collection: async () => ({ findOne: async () => folder('root', null), find: () => ({ sort() { return this; }, batchSize() { return this; }, async *[Symbol.asyncIterator]() {}, async close() {} }) }),
+  transaction: async work => { await work({}); attempts++; return work({}); },
+  workspace: async () => { opened++; const seen = new Set<string>(); return { add: async key => { assert.equal(seen.has(key), false); seen.add(key); return true; }, close: async () => { closed++; } }; }
+ });
+ assert.equal((await read('owner', 'root', 'absent')).ok, true);
+ assert.deepEqual({ attempts, opened, closed }, { attempts: 1, opened: 2, closed: 2 });
+ const expired = f.bounded({ collection: async () => { throw Error('should not read'); } }); f.clock(0);
+ // Cancellation before acquiring a collection must not open scratch space.
+ const signal = new AbortController(); signal.abort(); assert.equal((await expired('owner', 'root', 'absent', signal.signal)).status, 503);
+});
+
+
+test('path scan admission and workspace close are part of completion', async () => {
+ const f = fixture(); let opened = 0, closed = 0, release!: () => void;
+ const gate = new Promise<void>(resolve => { release = resolve; });
+ const collection = { findOne: async () => folder('root', null), find: () => ({ sort() { return this; }, batchSize() { return this; }, async *[Symbol.asyncIterator]() {}, async close() {} }) };
+ const read = f.bounded({ collection: async () => collection, workspace: async () => {
+  opened++; await gate; return { add: async () => true, close: async () => { closed++; } };
+ } });
+ const first = read('owner', 'root', 'absent'), second = read('owner', 'root', 'absent');
+ assert.equal((await read('owner', 'root', 'absent')).status, 503);
+ release(); assert.equal((await first).ok, true); assert.equal((await second).ok, true);
+ assert.deepEqual({ opened, closed }, { opened: 2, closed: 2 });
+ assert.equal((await read('owner', 'root', 'absent')).ok, true);
+ const brokenClose = f.bounded({ collection: async () => collection, workspace: async () => ({ add: async () => true, close: async () => { throw Error('private scratch path'); } }) });
+ const result = await brokenClose('owner', 'root', 'absent');
+ assert.equal(result.status, 503); assert.equal(result.observation, undefined); assert.doesNotMatch(result.error, /private scratch/);
+ let attempts = 0;
+ const timed = f.bounded({ collection: async () => collection, transaction: async work => {
+  await work({}); attempts++; f.clock(20_001); return work({});
+ } });
+ f.clock(0); assert.equal((await timed('owner', 'root', 'absent')).status, 503); assert.equal(attempts, 1);
 });

@@ -11548,3 +11548,23 @@ resume unfinished Android gates only when requested.
   mandatory for NDJSON as well as JSON. Refuse missing markers; never bypass it.
 - Installed-device and deployed streaming acceptance remain required. A 10,001
   producer test is not proof that the live 10,000-path planner cap is removed.
+
+### Wide-folder cloud path observations — 2026-10-19
+
+- Run `npm --prefix remix run test:files`, `test:file-sync`,
+  `test:api-capabilities` and `test:files:inventory-pages`. The large fixture must
+  exceed both 10,000 siblings and 8 MiB; finding the requested item early must not
+  bypass an invalid or aliased sibling later in the scan.
+- Exercise an exact path, confirmed absence, case/NFC alias, duplicate identity
+  across levels, inaccessible sibling, missing root, file ancestor, cancellation,
+  changed plane, scratch exhaustion, failed scratch close and transaction retry.
+  Only a complete authorized snapshot can return `entry:null`.
+- The child-process crash check must leave no populated scratch file. Verify the
+  endpoint remains private/no-store and the built origin advertises `api.files`
+  1.6.0; older/missing/breaking capability versions must stop the client before a
+  path request. The production-handler fixture must use real signup and Things
+  writers and reject path reads after logout.
+- Installed Mac/iOS, deployed proxy/server behavior, real very-wide directories,
+  million-path throughput and complete large-root synchronization remain separate
+  acceptance gates. Keep Android deferred and the combined foreground cap until
+  bounded review and the remaining integration gates are ready.

@@ -77,10 +77,18 @@ try {
 	assert.equal((await inventory.cloudNode(capture, 'Folder-134'))?.kind, 'folder'); assert.equal(await inventory.cloudNode(capture, 'Later name'), null);
 	const current = (await call(files.loader, '/api/v1/files?rootId=' + root.id)).data.inventory;
 	assert.ok(current.nodes.some((node: any) => node.path === 'Later name'));
+	// Exercise the production path handler and its real temporary disk index
+	// against the independent IDs created by the canonical Things writer.
+	const observed = (await call(files.loader, '/api/v1/files?rootId=' + root.id + '&path=Later%20name')).data.observation;
+	assert.equal(observed.entry.id, lastId); assert.equal(observed.path, 'Later name');
+	assert.equal((await call(files.loader, '/api/v1/files?rootId=' + root.id + '&path=Folder-134')).data.observation.entry, null);
+	assert.equal((await files.loader({ request: request('/api/v1/files?rootId=' + root.id + '&path=later%20name') })).status, 409);
+
 	await call(logout.action, '/api/v1/auth/logout', {});
 	assert.equal((await files.loader({ request: request('/api/v1/files?rootId=' + root.id + '&pages=1') })).status, 401);
+	assert.equal((await files.loader({ request: request('/api/v1/files?rootId=' + root.id + '&path=Later%20name') })).status, 401);
 	console.log(JSON.stringify({ cloudInventoryPagesProof: true, pages, capturedEntries: 135,
-		checks: ['real-signup-and-Things-writers', 'private-Files-handler', 'single-snapshot-concurrent-rename', 'sealed-journal', 'logout-refusal'],
+		checks: ['real-signup-and-Things-writers', 'private-Files-handler', 'single-snapshot-concurrent-rename', 'sealed-journal', 'disk-indexed-path-found-absent-alias', 'logout-refusal'],
 		boundary: 'Production Request handlers and Mongo replica; not HTTP/browser, installed-device or byte-transfer acceptance' }));
 } finally { journal.close(); }
 process.exit(0);

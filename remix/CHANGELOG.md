@@ -68,6 +68,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-19 — **Codex (AI)**: `api.files` 1.6.0 streams wide-folder path
+  observations through bounded anonymous scratch storage, preserving late
+  ambiguity/private-access checks and reclaiming storage after process death.
+  Clients negotiate the new capability; regression and isolated handler coverage
+  include >10,000 siblings, found/absent paths and logout refusal. Installed
+  acceptance and the foreground combined-plan cap remain open. See
+  [PR #1002 notes](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
 - 2026-10-19 — **Codex (AI)**: Mac/iOS cloud inventories stream bounded pages from
   one Mongo snapshot (`api.files` 1.5.0). Incomplete streams and invalid ancestry
   cannot publish checkpoints. Added isolated real-handler and browser checks;

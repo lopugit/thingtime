@@ -505,3 +505,14 @@ checkpoint stamp import. The registry supplies both manifest generators.
 Tests: `inventoryPages.test.ts`, `cloudInventoryPages.test.ts`, paged foreground
 and Files route tests; `test:files:inventory-pages` uses actual API handlers and
 an isolated replica. See the dated sync ledger for acceptance boundaries.
+
+### Bounded cloud path checks
+
+`files/inventory.ts` reads only the matching ancestor chain and streams each
+parent's siblings; `inventoryUniqueness.ts` proves cross-row ID/path uniqueness
+in bounded anonymous scratch storage. `readCloudInventoryNode` is shared by all
+three inventory readers. `api.files` 1.6.0 and `fileSync/cloudPath.ts` negotiate
+this wider path-observation contract. Tests: `inventory.test.ts`,
+`inventoryUniqueness.test.ts`, `cloudPath.test.ts` and
+`test:files:inventory-pages`. See the dated mobile sync ledger for bounds and
+installed/large-production acceptance gaps.

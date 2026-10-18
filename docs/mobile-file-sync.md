@@ -2978,3 +2978,33 @@ foreground planner/review cap is still 10,000 paths; this increment does not
 claim unrestricted root sizes, durable workers, byte backups or 100 GB–100 TB
 throughput. Android stays deferred. Next: exercise installed/HTTP proxy streaming,
 then remove the remaining bounded review/path-observation bottlenecks.
+
+### Bounded cloud path observations (2026-10-19)
+
+`api.files` 1.6.0 streams the siblings at each requested path segment instead of
+retaining their metadata in a whole-tree inventory. The requested result is not
+returned early: every sibling is validated and duplicate identities, NFC/case
+aliases, invalid metadata and private-access failures still invalidate the whole
+observation. JSON inventories, streamed inventories and path checks share one
+row validator. The legacy whole-tree inventory and foreground combined-plan cap
+remain 10,000 paths; this change removes that separate cap from path observation.
+
+A request-owned anonymous POSIX scratch index stores SHA-256 keys, with a fixed
+128 MiB address space, at most 2,097,152 keys, a 256-probe bound, and two concurrent
+path scans per service. Names and IDs are not stored in scratch files. The file
+is unlinked before any keys are written, so process death releases its allocation.
+The existing 20-second total deadline and 64-level path bound remain. Cursor and
+index closure, transaction completion and a final authorization-context/deadline
+check precede success. Transaction retries receive a fresh index and share the
+original deadline. Capacity, cancellation, I/O and cleanup failures never become
+an absent-file result. This requires an anonymous-file-capable POSIX temporary
+filesystem, as on the supported Linux server/macOS development hosts.
+
+Coverage includes 10,001 siblings exceeding 8 MiB, late unrelated aliases,
+duplicate IDs across levels, normalized Unicode names, disk/probe collisions,
+capacity/admission, cancellation, plane changes, transaction retries, failed close
+and abrupt child-process exit. The isolated production-handler fixture creates
+135 real folders through authenticated Things writers, then checks found/absent/
+alias responses and logout refusal using the real disk index. It does not prove
+installed-device behavior or a large production-folder benchmark. Paged conflict
+review, lifting the combined foreground cap, workers and full backups remain open.

@@ -1,3 +1,4 @@
+import { openInventoryUniqueness } from './inventoryUniqueness';
 import { cloudFolderMetadata } from './folderMetadata';
 import { getHomeThingsCollection, withHomeMongoTransaction } from '../mongodb/collections';
 import { isCustomMongoEndpointActive } from '../mongodb/endpoint';
@@ -65,12 +66,11 @@ export function createCloudInventoryService(
 		maxEntries: MAX_SYNC_SCAN_ENTRIES,
 		...overrides
 	};
+	const readPath = createCloudPathService(overrides);
 	return async (ownerId: string, rootId: unknown, requestedPath?: string) => {
+		if (requestedPath !== undefined) return readPath(ownerId, rootId, requestedPath);
 		if (deps.customPlane()) return { ok: false as const, status: 409, error: 'Files currently require the home data plane' };
 		if (!ownerId || !identity(rootId)) return { ok: false as const, status: 400, error: 'Choose a cloud folder root' };
-		if (requestedPath !== undefined && (!validSyncPath(requestedPath) || requestedPath.split('/').length > MAX_FOLDER_DEPTH))
-			return { ok: false as const, status: 400, error: 'Choose a supported relative cloud path' };
-		const prefixes = requestedPath?.split('/').map((_, i, parts) => parts.slice(0, i + 1).join('/'));
 		try {
 			const started = deps.now(),
 				things = await deps.collection();
@@ -116,50 +116,14 @@ export function createCloudInventoryService(
 						if (!owned(doc, ownerId) || !privateAudience(doc, true) || !identity(doc.folderId) || !paths.has(doc.folderId) || seen.has(doc.shareId))
 							fail(409, 'Cloud inventory contains an inaccessible or ambiguous item.');
 						seen.add(doc.shareId);
-						const name = doc.crystal?.name,
-							prefix = paths.get(doc.folderId)!;
-						if (typeof name !== 'string' || name.includes('/') || !validSyncPath(name)) fail(409, 'A cloud file or folder has an invalid name.');
-						const path = prefix ? prefix + '/' + name : name;
-						if (!validSyncPath(path)) fail(409, 'A cloud path exceeds the supported bounds.');
-						const expectedPrefix = prefixes?.[depth - 1];
-						if (expectedPrefix && syncPathKey(path) === syncPathKey(expectedPrefix) && path !== expectedPrefix)
-							fail(409, 'A cloud path has a case or Unicode alias; review it before syncing.');
-						if (isFolderThing(doc)) {
-							if (doc.thingtime?.includes('file') || doc.crystal?.trashed === true) fail(409, 'A cloud folder has an ambiguous kind.');
-							nodes.push({ kind: 'folder', path, id: doc.shareId, folderId: doc.folderId, revision: folderRevision(doc) });
-							paths.set(doc.shareId, path);
-							if (!prefixes || (path === expectedPrefix && depth < prefixes.length)) frontier.push(doc.shareId);
-						} else {
-							if (path === expectedPrefix && prefixes && depth < prefixes.length) fail(409, 'A cloud path ancestor is now a file.');
-							if (doc.thingtime?.length !== 1 || doc.thingtime[0] !== 'file') fail(409, 'A cloud file has an ambiguous kind.');
-							let file;
-							try {
-								file = parseCloudFile({
-									id: doc.shareId,
-									revision: doc.timelineHeadId,
-									name,
-									folderId: doc.folderId,
-									trashed: doc.crystal.trashed,
-									content: doc.crystal.content
-								});
-							} catch {
-								fail(409, 'A cloud file has invalid content metadata; no partial scan was returned.');
-							}
-							nodes.push({ kind: 'file', path, file });
-						}
+						const node = readCloudInventoryNode(doc, ownerId, doc.folderId, paths.get(doc.folderId)!, rootId);
+						nodes.push(node);
+						if (node.kind === 'folder') { paths.set(node.id, node.path); frontier.push(node.id); }
 					}
 				}
 				budget();
 				try {
-					// Validate every observed sibling and its ancestry/collisions before
-					// accepting absence. A path observation never exposes a partial tree
-					// as a complete inventory. Unrelated subtrees are not traversed.
 					const inventory = parseCloudInventory({ version: 1, complete: true, rootId, rootRevision: folderRevision(root), nodes }, rootId);
-					if (requestedPath !== undefined) {
-						const node = inventory.nodes.find(node => node.path === requestedPath);
-						return { ok: true as const, observation: parseCloudPathObservation({ version: 1, complete: true, rootId,
-							rootRevision: inventory.rootRevision, path: requestedPath, entry: node ? inventorySyncEntry(node) : null }, rootId, requestedPath) };
-					}
 					return { ok: true as const, inventory };
 				} catch {
 					return fail(409, 'Cloud folder paths or identities are ambiguous; review the folder before syncing.');
@@ -176,10 +140,73 @@ export const readCloudInventory = createCloudInventoryService();
 
 /** A fresh snapshot of one path. Missing roots/root ancestors, authorization failures
  * and bounded-read failures are errors, never evidence of absence. */
-export function createCloudPathService(overrides: Parameters<typeof createCloudInventoryService>[0] = {}) {
-	const read = createCloudInventoryService(overrides);
-	return (ownerId: string, rootId: unknown, path: unknown) =>
-		typeof path === 'string' ? read(ownerId, rootId, path) : Promise.resolve({ ok: false as const, status: 400, error: 'Choose a relative cloud path' });
+export function createCloudPathService(overrides: Parameters<typeof createCloudInventoryService>[0] & { workspace?: typeof openInventoryUniqueness } = {}) {
+	const deps = { collection: getHomeThingsCollection, transaction: withHomeMongoTransaction,
+		customPlane: isCustomMongoEndpointActive, now: Date.now, workspace: openInventoryUniqueness, ...overrides };
+	let active = 0;
+	return async (ownerId: string, rootId: unknown, requestedPath: unknown, signal?: AbortSignal) => {
+		if (deps.customPlane()) return { ok: false as const, status: 409, error: 'Files currently require the home data plane' };
+		if (!ownerId || !identity(rootId)) return { ok: false as const, status: 400, error: 'Choose a cloud folder root' };
+		if (typeof requestedPath !== 'string' || !validSyncPath(requestedPath) || requestedPath.split('/').length > MAX_FOLDER_DEPTH)
+			return { ok: false as const, status: 400, error: 'Choose a supported relative cloud path' };
+		if (active >= 2) return { ok: false as const, status: 503, error: 'Cloud path capacity is busy; retry later.' };
+		active++;
+		const started = deps.now();
+		const budget = () => {
+			signal?.throwIfAborted();
+			if (deps.customPlane()) fail(409, 'Cloud inventory data plane changed');
+			const remaining = 20_000 - (deps.now() - started);
+			if (remaining <= 0) fail(503, 'Cloud inventory timed out; keep the last complete scan.');
+			return Math.min(remaining, 5000);
+		};
+		try {
+			budget(); const things = await deps.collection();
+			const result = await deps.transaction(async session => {
+				if (!session) throw Error('Path observation requires a snapshot transaction');
+				const root = await readCloudInventoryRoot(things, session, ownerId, rootId, budget, signal);
+				// Each transaction retry owns a new index; a failed attempt cannot make
+				// the next attempt appear to contain duplicate records.
+				const keys = await deps.workspace();
+				try {
+					await keys.add('id:' + rootId, budget);
+					let parentId = rootId, prefix = '', found: CloudInventoryNode | null = null;
+					const parts = requestedPath.split('/');
+					for (let depth = 0; depth < parts.length; depth++) {
+						const expected = prefix ? prefix + '/' + parts[depth] : parts[depth];
+						const expectedKey = syncPathKey(expected);
+						found = null;
+						const cursor = things.find({ ownerId, folderId: { $in: [parentId] },
+							$or: [...folderThingMatch().$or, { thingtime: 'file', 'crystal.trashed': { $ne: true } }] },
+							{ session, projection, maxTimeMS: budget(), signal, readPreference: 'primary' })
+							.batchSize(100); // Uniqueness does not require a database-wide sibling sort.
+						try {
+							for await (const doc of cursor) {
+								budget();
+								const node = readCloudInventoryNode(doc, ownerId, parentId, prefix, rootId), key = syncPathKey(node.path);
+								if (!await keys.add('id:' + doc.shareId, budget) || !await keys.add('path:' + key, budget))
+									fail(409, 'Cloud folder paths or identities are ambiguous; review the folder before syncing.');
+								if (key === expectedKey && node.path !== expected) fail(409, 'A cloud path has a case or Unicode alias; review it before syncing.');
+								if (node.path === expected) found = node;
+							}
+						} finally { await cursor.close(); }
+						budget();
+						if (!found) break;
+						if (depth + 1 < parts.length) {
+							if (found.kind === 'folder') { parentId = found.id; prefix = found.path; }
+							else fail(409, 'A cloud path ancestor is now a file.');
+						}
+					}
+					budget();
+					return { ok: true as const, observation: parseCloudPathObservation({ version: 1, complete: true, rootId,
+						rootRevision: folderRevision(root), path: requestedPath, entry: found ? inventorySyncEntry(found) : null }, rootId, requestedPath) };
+				} finally { await keys.close(); }
+			});
+			budget(); return result;
+		} catch (error) {
+			return error instanceof StorageMutationError ? { ok: false as const, status: error.status, error: error.message }
+				: { ok: false as const, status: 503, error: 'A complete cloud path observation is unavailable; keep the last complete scan.' };
+		} finally { active--; }
+	};
 }
 export const readCloudPath = createCloudPathService();
 
@@ -206,3 +233,23 @@ export async function readCloudInventoryRoot(things: any, session: any, ownerId:
 }
 
 export const cloudInventoryAccess = { projection, identity, owned, privateAudience, folderRevision };
+
+/** Identical row, private audience and path validation for JSON inventories,
+ * paged captures and single-path observations. Cross-row uniqueness is checked
+ * by the complete inventory parser, sealed journal or request-owned disk index. */
+export function readCloudInventoryNode(doc: any, ownerId: string, parentId: string, prefix: string, rootId: string): CloudInventoryNode {
+	if (!owned(doc, ownerId) || !privateAudience(doc, true) || doc.folderId !== parentId || doc.shareId === rootId)
+		fail(409, 'Cloud inventory contains an inaccessible or ambiguous item.');
+	const name = doc.crystal?.name;
+	if (typeof name !== 'string' || name.includes('/') || !validSyncPath(name)) fail(409, 'A cloud file or folder has an invalid name.');
+	const path = prefix ? prefix + '/' + name : name;
+	if (!validSyncPath(path)) fail(409, 'A cloud path exceeds the supported bounds.');
+	if (isFolderThing(doc)) {
+		if (doc.thingtime?.includes('file') || doc.crystal?.trashed === true) fail(409, 'A cloud folder has an ambiguous kind.');
+		return { kind: 'folder', path, id: doc.shareId, folderId: parentId, revision: folderRevision(doc) };
+	}
+	if (doc.thingtime?.length !== 1 || doc.thingtime[0] !== 'file') fail(409, 'A cloud file has an ambiguous kind.');
+	try { return { kind: 'file', path, file: parseCloudFile({ id: doc.shareId, revision: doc.timelineHeadId,
+		name, folderId: parentId, trashed: doc.crystal.trashed, content: doc.crystal.content }) }; }
+	catch { return fail(409, 'A cloud file has invalid content metadata; no partial scan was returned.'); }
+}
