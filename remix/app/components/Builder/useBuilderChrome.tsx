@@ -46,7 +46,7 @@ type UploadTarget =
 	| { kind: 'insert'; containerId: string | null; index: number }
 	| { kind: 'replace'; blockId: string };
 
-export const useBuilderChrome = (draft: UseWebpageDraft, options?: { enabled?: boolean }): UseBuilderChrome => {
+export const useBuilderChrome = (draft: UseWebpageDraft, options?: { enabled?: boolean; allowedBlockTypes?: readonly WebpageBlock['type'][] }): UseBuilderChrome => {
 	const [hoverId, setHoverId] = React.useState<string | null>(null);
 	const [selectedId, setSelectedId] = React.useState<string | null>(null);
 	const [insertAt, setInsertAt] = React.useState<{ containerId: string | null; index: number; anchor: HTMLElement } | null>(null);
@@ -264,7 +264,7 @@ export const useBuilderChrome = (draft: UseWebpageDraft, options?: { enabled?: b
 	const handlePick = React.useCallback((pick: InsertPick) => {
 		const target = insertAt;
 		setInsertAt(null);
-		if (!target) return;
+		if (!target || (options?.allowedBlockTypes && !options.allowedBlockTypes.includes(pick.block.type))) return;
 		const current = draftRef.current;
 		current.setBlocks(insertBlock(current.blocks, target.containerId, target.index, pick.block));
 		if (pick.block.type === 'component' && pick.block.component) {
@@ -273,7 +273,7 @@ export const useBuilderChrome = (draft: UseWebpageDraft, options?: { enabled?: b
 		}
 		setSelectedId(pick.block.id);
 		// eslint-disable-next-line react-hooks/exhaustive-deps -- insertAt is read via closure at call time
-	}, [insertAt]);
+	}, [insertAt, options?.allowedBlockTypes]);
 
 	const contextBlock = contextMenu ? findBlock(draft.blocks, contextMenu.blockId) : null;
 	const richEditorBlock = richEditorBlockId ? findBlock(draft.blocks, richEditorBlockId) : null;
@@ -285,6 +285,7 @@ export const useBuilderChrome = (draft: UseWebpageDraft, options?: { enabled?: b
 		<>
 			{insertAt ? (
 				<BlockInsertMenu
+     allowedBlockTypes={options?.allowedBlockTypes}
 					anchor={insertAt.anchor}
 					existingIds={collectBlockIds(draft.blocks)}
 					onPick={handlePick}

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { templateToBlocks } from './templateBlocks';
+import { templateToBlocks, resolveBlockProps } from './templateBlocks';
 import { sanitizeWebpageBlocks } from '../../schemas/registry';
 import { compositionReferences } from '../../api/utils/actions/sharedCompositionCore';
 import { duplicateBlock, moveBlock, findBlock } from './webpageBlocks';
@@ -40,4 +40,10 @@ test('large authored trees validate without the old 120 block cap, cycles fail',
  assert.equal(sanitizeWebpageBlocks(blocks).ok,true);
  const cycle:any={id:'cycle',type:'container',children:[]};cycle.children.push(cycle);
  assert.equal(sanitizeWebpageBlocks([cycle]).ok,false);
+});
+
+test('intrinsic exact bindings preserve false, zero and true DOM property types',()=>{
+ const props=resolveBlockProps({disabled:'{result.busy}',checked:'{result.checked}',open:'{result.busy}',value:'{result.count}',title:'Count: {result.count}'},{result:{busy:false,checked:true,count:0}});
+ assert.deepEqual(props,{disabled:false,checked:true,open:false,value:0,title:'Count: 0'});
+ assert.equal(resolveBlockProps({disabled:'{result.busy}'},{result:{busy:true}}).disabled,true);
 });
