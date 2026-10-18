@@ -3302,3 +3302,35 @@ timed out waiting for callbacks. The bridge's real foreground/origin checks need
 further diagnosis; no weakened check or hardware success is claimed. The phone
 was locked again at follow-up. Physical background completion, real grants and
 cross-device acceptance remain open. Aster's reserved Mac install was untouched.
+
+## 2026-10-19 — Disk-backed complete selected-tree restore
+
+Restore planning, physical-parent/path validation, output lookup and final
+file-identity verification now use a shared private SQLite workspace. This
+removes the old 10,001-item/32-MiB memory guard while preserving the portable v1
+format, review digest, durable receipts and refusal to overwrite newer data.
+The CLI streams its existing JSON document with stdout backpressure. Normal
+completion, refusal and cancellation dispose of scratch; a killed process may
+leave private temporary files, which never supply restore authority.
+
+Regressions exercise 10,051 folders plus a nonempty file, unchanged legacy review
+hashes, resume with zero source chunk reads, and over 32 MiB of real metadata
+through the actual CLI under a 64 MiB V8 heap budget. This budget does not bound
+total process RSS. Disk-full/cancellation and closed-plan access, disconnected
+cycles, non-folder parents and normalized path aliases are covered alongside
+existing crash/concurrency/corruption checks. The index defaults to a 512 MiB
+disk budget (internal maximum 8 GiB), separate from file-byte size.
+
+Review also reproduced a valid three-level tree being rejected as a disconnected
+cycle: a mixed-depth page could advance past lower-ordinal children discovered
+while processing that page. Planning now completes each depth before advancing.
+The regression restores all 129 reversed-order parent/middle/leaf chains through
+the real filesystem worker and independently checks every leaf directory.
+
+The physical phone was locked at the previous preflight; the latest CoreDevice
+check could not acquire trusted connectivity/power assertions. Its 53-pass/13-fail
+result is still open: all failures await bridge callbacks, but the active-app
+and WebView-origin preconditions were not recorded, so neither a product nor
+fixture root cause is claimed. Native checks and installed-app acceptance are
+unchanged. Full account restore, independent replicas, encryption, production
+rollout and measured large-volume exports remain open; Android stays deferred.

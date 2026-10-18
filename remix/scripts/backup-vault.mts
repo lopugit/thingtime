@@ -7,6 +7,7 @@ import { open, link, unlink } from 'node:fs/promises';
 import { constants } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
+import { once } from 'node:events';
 import { backupId, parseBackupHeader, BACKUP_METADATA_BYTES } from '../app/backups/manifest';
 import { openLocalBackupStore } from '../app/api/utils/backups/localBackupStore';
 import { verifySealedBackup, copySealedBackup, openBackupItem } from '../app/api/utils/backups/portableBackup';
@@ -35,19 +36,30 @@ process.once('SIGTERM', () => abort.abort(Error('Backup operation cancelled')));
 // chosen private vault. Web/native product adapters must supply real authority.
 const access = { scope: header.scope, signal: abort.signal, authorize: async () => {} };
 if (command === 'plan-tree') {
-	const plan = await planBackupTree(source, snapshotId, access),
-		directory = await canonicalRestoreDestination(destination!);
-	console.log(
-		JSON.stringify({
-			review: treeRestoreReview(plan, directory),
+	const plan = await planBackupTree(source, snapshotId, access);
+	try {
+		const directory = await canonicalRestoreDestination(destination!);
+		const write = async (text: string) => {
+			abort.signal.throwIfAborted();
+			if (!process.stdout.write(text)) await once(process.stdout, 'drain', { signal: abort.signal });
+		};
+		const summary = {
+			review: await treeRestoreReview(plan, directory),
 			destination: directory,
 			filesDirectory: join(directory, 'files'),
 			snapshotId,
 			coverage: plan.header.coverage,
-			bytes: plan.seal.bytes,
-			entries: plan.entries.map((entry) => ({ path: entry.path, kind: entry.kind, bytes: entry.item.content?.size ?? 0 }))
-		})
-	);
+			bytes: plan.seal.bytes
+		};
+		// Keep the JSON contract, streaming its entries with stdout backpressure.
+		await write(JSON.stringify(summary).slice(0, -1) + ',"entries":[');
+		let separator = '';
+		for await (const entry of plan.entries()) {
+			await write(separator + JSON.stringify({ path: entry.path, kind: entry.kind, bytes: entry.item.content?.size ?? 0 }));
+			separator = ',';
+		}
+		await write(']}\n');
+	} finally { await plan.close(); }
 } else if (command === 'restore-tree' || command === 'resume-tree') {
 	const result = await restoreBackupTree(source, snapshotId, destination!, thingId!, access, { resume: command === 'resume-tree' });
 	console.log(JSON.stringify({ restored: true, snapshotId, ...result }));

@@ -402,16 +402,21 @@ scan for each restored file. `verifyBackupItemBytes` reuses the same streaming
 canonical fingerprint verifier as backup sealing; source parts may exceed the
 8 MiB memory chunk. The single-file restore API remains compatible.
 
-The current whole-tree restore planner remains bounded even though paged capture
-can exceed its limit. Single-item extraction and vault verification/copy still
-work for larger sealed inventories; a paged whole-tree planner remains open.
-Plans accept the current cloud filesystem adapters only, with a maximum of
-10,001 items including the root and 32 MiB of retained item metadata. They reject
-unsupported types, missing parents, cycles (including the root), unsafe names,
-case/Unicode aliases and excessive depth. The external parent of a selected root
+The planner accepts the current cloud filesystem adapters and uses the same
+private Node 24 SQLite workspace as cloud capture. It streams sealed items into
+indexed storage, resolves physical ancestry in bounded batches, then exposes
+ordinal and path lookups plus parent-first folder iteration. The previous
+10,001-item/32-MiB whole-tree memory limit is removed. The default preparation
+index is capped at 512 MiB on disk, with a 2 MiB SQLite cache and memory mapping
+disabled; internal callers can choose a bounded `BackupWorkspaceOptions.maxBytes`
+up to 8 GiB. This is a metadata workspace budget, not a restored-content quota.
+Plans reject unsupported types, missing/non-folder parents, disconnected and
+root cycles, unsafe names, case/Unicode aliases and excessive depth. The external parent of a selected root
 is descriptive; the restored root's contents go under the selected recovery
 container's `files/`. The review hash binds all metadata, the sealed manifest and
-the canonical chosen destination. This does not import arbitrary Thing metadata,
+the canonical chosen destination. The v1 review digest and recovery receipts
+remain unchanged, including for snapshots reviewed before this disk index. This
+does not import arbitrary Thing metadata,
 restore ownership/ACLs, grant filesystem access or append a server Timeline event.
 
 `localTreeRestore.ts` exclusively creates the private recovery container and
@@ -428,6 +433,11 @@ are preserved and refused, never silently reset to the backup.
 Per-file publication is atomic; the whole tree is not one atomic directory swap.
 Only after checking every expected file/folder and rechecking verified file
 identities/timestamps does the worker write its overall completion marker.
+These final verification identities also live in the disposable index; output
+inspection counts entries and performs indexed lookups rather than retaining a
+whole-tree Map/Set. Every normal success/error closes and removes scratch state.
+A killed process can leave private scratch files behind; they are never reused
+as authority or recovery state, and durable receipts stay in the destination.
 Local process exclusion uses one unique candidate per invocation before scanning
 for other live PIDs. Dead candidates are ignored rather than raced for deletion;
 PID reuse blocks conservatively. It is restricted to a private single-host local
@@ -437,12 +447,19 @@ operator review rather than automatic deletion of somebody else's state.
 
 `backup:vault plan-tree`, `restore-tree` and `resume-tree` expose this workflow;
 see [commands and destination layout](../README.md#restore-a-saved-folder-tree).
+The review command streams its existing JSON entries array with stdout
+backpressure; it does not assemble the entire output in memory.
 Tests cover a real child-process exit after a synced range, dead-process recovery,
 source-chunk removal after a durable checkpoint, zero source reads for completed
 files, concurrent refusal, caller cancellation, output edits, disappeared empty
 folders, corruption, symlinks, alias/cycle refusal and unchanged output on repeat.
 Real API/CLI acceptance restores a 17,825,809-byte captured file and an empty
 folder after live Trash, verifies the full output hash, then reuses the output.
+Scale regressions restore 10,051 folders plus a nonempty file, resume without
+source reads, check the legacy review digest, and run the actual CLI against
+32,002 items exceeding 32 MiB of item metadata under a 64 MiB V8 heap limit.
+That heap limit is not a claim about total process RSS. Scratch exhaustion,
+cancellation and use after close refuse safely; ordinary exits remove scratch.
 These checks establish selected-tree worker recovery, not native restore UI,
 whole-account snapshots, generic Things restoration or 100 TB throughput.
 

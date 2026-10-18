@@ -6,7 +6,8 @@ import { BACKUP_CHUNK_BYTES, BACKUP_METADATA_BYTES, backupJson } from '../../../
 import { timelineScopeKey } from '../../../timeline/contract';
 import { openLocalBackupStore } from './localBackupStore';
 import { openSealedBackup, verifyBackupItemBytes, type BackupAccess, type BackupObjectStore } from './portableBackup';
-import { planBackupTree, treeRestoreReview } from './treeRestorePlan';
+import { planBackupTree, treeRestoreReview, type TreeRestorePlan } from './treeRestorePlan';
+import type { BackupWorkspaceOptions } from './backupWorkspace';
 
 const hash = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex');
 const privateMode = (stat: Awaited<ReturnType<typeof lstat>>) =>
@@ -94,17 +95,28 @@ async function restoreLock(root: string, guard: () => Promise<void>, localGuard:
  * Range bytes are synced and read back before durable receipts. A file is linked
  * into output only after complete fingerprint verification, never overwritten.
  * Use a trusted private local disk, not an adversarial/shared filesystem. */
+type RestoreOptions = {
+	resume?: boolean;
+	workspace?: BackupWorkspaceOptions;
+	progress?(value: { kind: 'range' | 'file'; path: string; bytes: number }): void | Promise<void>;
+};
 export async function restoreBackupTree(
 	store: BackupObjectStore,
 	id: string,
 	destination: string,
 	reviewed: string,
 	access: BackupAccess,
-	options: { resume?: boolean; progress?(value: { kind: 'range' | 'file'; path: string; bytes: number }): void | Promise<void> } = {}
+	options: RestoreOptions = {}
 ) {
-	const plan = await planBackupTree(store, id, access),
-		root = await canonicalRestoreDestination(destination);
-	const review = treeRestoreReview(plan, root);
+	const plan = await planBackupTree(store, id, access, options.workspace);
+	try { return await restorePlannedTree(store, id, destination, reviewed, access, options, plan); }
+	finally { await plan.close(); }
+}
+
+async function restorePlannedTree(store: BackupObjectStore, id: string, destination: string,
+	reviewed: string, access: BackupAccess, options: RestoreOptions, plan: TreeRestorePlan) {
+	const root = await canonicalRestoreDestination(destination);
+	const review = await treeRestoreReview(plan, root);
 	if (reviewed !== review) throw Error('Restore plan or destination changed; review it again');
 	const scope = timelineScopeKey(access.scope);
 	const check = async () => {
@@ -157,25 +169,24 @@ export async function restoreBackupTree(
 	try {
 		const output = join(root, 'files'),
 			staging = join(root, 'staging');
-		const entries = new Map(plan.entries.filter((e) => e.path).map((e) => [e.path, e]));
-		const inspect = async (path = '', seen = new Set<string>()): Promise<Set<string>> => {
+		const inspect = async (path = ''): Promise<number> => {
 			await guard();
 			await directory(join(output, path));
+			let count = 0;
 			for await (const child of await opendir(join(output, path))) {
 				const relative = path ? path + '/' + child.name : child.name,
-					wanted = entries.get(relative);
+					wanted = await plan.kindAtPath(relative);
 				if (!wanted) throw Error('Restore destination contains an unexpected entry');
 				const stat = await lstat(join(output, relative));
-				if (stat.isSymbolicLink() || !privateMode(stat) || (wanted.kind === 'folder' ? !stat.isDirectory() : !stat.isFile()))
+				if (stat.isSymbolicLink() || !privateMode(stat) || (wanted === 'folder' ? !stat.isDirectory() : !stat.isFile()))
 					throw Error('Restore destination contains a changed or unsafe entry');
-				seen.add(relative);
-				if (wanted.kind === 'folder') await inspect(relative, seen);
+				count++;
+				if (wanted === 'folder') count += await inspect(relative);
 			}
-			return seen;
+			return count;
 		};
 		await inspect();
-		const folders = plan.entries.filter((e) => e.kind === 'folder' && e.path).sort((a, b) => a.path.split('/').length - b.path.split('/').length);
-		for (const folder of folders) {
+		for await (const folder of plan.folders()) {
 			await guard();
 			const path = join(output, folder.path);
 			try {
@@ -198,11 +209,10 @@ export async function restoreBackupTree(
 		};
 		const opened = await openSealedBackup(store, id, access);
 		if (backupJson(opened.seal) !== backupJson(plan.seal)) throw Error('Backup changed after restore review');
-		const verifiedFiles = new Map<string, { dev: number; ino: number; size: number; mtimeMs: number; ctimeMs: number }>();
 		let restoredFiles = 0,
 			reusedFiles = 0;
 		for await (const entry of opened.entries) {
-			const selected = plan.entries[entry.item.ordinal];
+			const selected = await plan.entryAt(entry.item.ordinal);
 			if (!selected || backupJson(selected.item) !== backupJson(entry.item)) throw Error('Backup item changed after restore review');
 			if (selected.kind !== 'file') continue;
 			const { path, item } = selected;
@@ -296,14 +306,14 @@ export async function restoreBackupTree(
 					reusedFiles++;
 				}
 				const verified = await lstat(finalPath);
-				verifiedFiles.set(path, { dev: verified.dev, ino: verified.ino, size: verified.size, mtimeMs: verified.mtimeMs, ctimeMs: verified.ctimeMs });
+				await plan.recordVerified(path, { dev: verified.dev, ino: verified.ino, size: verified.size, mtimeMs: verified.mtimeMs, ctimeMs: verified.ctimeMs });
 				await options.progress?.({ kind: 'file', path, bytes: item.content!.size });
 			} finally {
 				await handle.close();
 			}
 		}
-		if ((await inspect()).size !== entries.size) throw Error('Restored tree is incomplete');
-		for (const [path, verified] of verifiedFiles) {
+		if (await inspect() !== plan.count - 1) throw Error('Restored tree is incomplete');
+		for await (const { path, identity: verified } of plan.verifiedFiles()) {
 			await ensureParents(path);
 			const current = await lstat(join(output, path));
 			if (current.isSymbolicLink() || Object.entries(verified).some(([key, value]) => current[key] !== value))

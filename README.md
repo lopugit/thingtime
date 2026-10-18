@@ -5264,8 +5264,8 @@ exact retained attachment versions even after live edits/Trash; unavailable byte
 or revoked access stop completion. A failure before the metadata plan finishes
 requires a new snapshot UUID; a new live inventory cannot replace a partial plan.
 Offline verify/copy/single-item extraction use the commands above. Whole-tree
-restore still has its separate 10,001-item/32-MiB planner bound; larger snapshots
-must not be advertised as having whole-tree restore acceptance yet. This local vault is still
+restore now also uses a bounded disk index, removing the old 10,001-item/32-MiB
+whole-tree memory limit. The local vault is still
 unencrypted and does not provision a cloud replica or physical-media service.
 
 ### Restore a saved folder tree
@@ -5282,6 +5282,13 @@ corepack pnpm --dir remix run backup:vault restore-tree /private/vault SNAPSHOT_
 # After interruption, resume the same snapshot, directory and reviewed plan.
 corepack pnpm --dir remix run backup:vault resume-tree /private/vault SNAPSHOT_UUID /private/recovery REVIEW_HASH
 ```
+
+Node 24 is required. The private disposable SQLite index defaults to a 512 MiB
+metadata budget and a 2 MiB cache; file bytes remain range-streamed. The CLI
+streams the same JSON review document with stdout backpressure, so a large
+review may be redirected to a local file. Normal success/errors remove scratch;
+a process kill can leave private temporary data, which is not recovery state.
+Existing v1 review hashes and interrupted-restore receipts remain compatible.
 
 The destination's parent must already exist. Review binds the snapshot metadata
 and canonical destination; changed scope, paths or destination require review

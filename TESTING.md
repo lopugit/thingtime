@@ -11793,3 +11793,21 @@ resume unfinished Android gates only when requested.
 - Keep HTTP/installed-app acceptance, source retention leases, independent cloud
   replicas, 100 GB–100 TB throughput and paged whole-tree restore open. This
   worker change does not establish those behaviors.
+
+### Large selected-tree restore (2026-10-19)
+
+- Restore a three-level tree spanning folder pages with child IDs ordered before
+  their parents. Every descendant must resolve; completing one depth before
+  advancing prevents valid trees being misreported as disconnected cycles.
+- Run `test:backups`. Keep the 10,051-folder plus file restore/resume regression,
+  zero source reads for already published bytes, legacy v1 review-hash agreement,
+  and actual CLI review of over 32 MiB metadata with a 64 MiB V8 heap limit.
+- Verify scratch-budget exhaustion, cancellation, closed-plan use, missing and
+  non-folder parents, disconnected/root cycles and Unicode/case aliases refuse
+  before destination writes. Normal completion/errors must remove scratch.
+- Retain process-exit, lost-range acknowledgement, concurrent invocation,
+  unexpected output, newer edits, missing empty folders and symlink checks.
+  A completion marker requires the full inventory and final identity checks.
+- These generated/offline cases are not physical-device, whole-account or
+  100 GB–100 TB throughput acceptance. Re-run actual native/provider restore
+  acceptance when those adapters are connected.

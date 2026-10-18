@@ -433,10 +433,13 @@ ordering, physical ancestry and identity/path uniqueness. Resume retains its
 Files 1.2.0 requirement and unchanged sealed format. Run `test:backups`,
 `test-cloud-inventory-pages.mjs`, and the foreground fixture's `--portable-backup
 --large-download` for their distinct storage, handler and API/CLI boundaries.
-Scratch/snapshot limits and the older whole-tree restore bound remain explicit. See the [cloud capture coverage](../portable-backups.md#cloud-folder-capture);
+Scratch/snapshot limits remain explicit. See the [cloud capture coverage](../portable-backups.md#cloud-folder-capture);
 this does not enumerate all account Things or add server Timeline backup events.
 
-`backups/treeRestorePlan.ts` preflights selected filesystem trees; the shared
+`backups/treeRestorePlan.ts` preflights selected filesystem trees using a bounded
+private disk index, including ancestry, paths and final verification records.
+Review output streams with backpressure and retains the v1 digest; the former
+10,001-item/32-MiB planner bound is removed. The shared
 `openSealedBackup` lazy reader avoids per-file inventory rescans.
 `backups/localTreeRestore.ts` restores reviewed trees into an exclusively created
 private local recovery directory, with durable range checkpoints and exclusive

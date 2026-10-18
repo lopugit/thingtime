@@ -87,7 +87,11 @@ async function fixture(change?: (items: BackupItem[]) => void) {
 	await captureBackup(store, id, { read: async (item, at, length) => sources.get(item.thingId)!.slice(at, at + length) }, access);
 	await sealBackup(store, id, access);
 	sources.clear();
-	const review = async (dest = output) => treeRestoreReview(await planBackupTree(store, id, access), await canonicalRestoreDestination(dest));
+	const review = async (dest = output) => {
+		const plan = await planBackupTree(store, id, access);
+		try { return await treeRestoreReview(plan, await canonicalRestoreDestination(dest)); }
+		finally { await plan.close(); }
+	};
 	return { directory, vault, store, output, id, big, small, items, review, close: () => rm(directory, { recursive: true, force: true }) };
 }
 
@@ -154,6 +158,30 @@ test('restores a reviewed full tree; lost range acknowledgement resumes without 
 	} finally {
 		await f.close();
 	}
+});
+
+test('restores nested trees across folder-page boundaries when child ordinals precede their parents', async () => {
+	const f = await fixture((items) => {
+		for (let n = 0; n < 129; n++) {
+			const suffix = String(n).padStart(3, '0'), reversed = String(128 - n).padStart(3, '0');
+			for (const [id, name, parent] of [
+				['p-' + suffix, 'Parent-' + suffix, 'root'],
+				['m-' + reversed, 'Middle', 'p-' + suffix],
+				['l-' + suffix, 'Leaf', 'm-' + reversed]
+			]) items.push({ ordinal: 0, thingId: id, revision: 'v1', content: null,
+				snapshot: { adapter: CLOUD_BACKUP_FOLDER_ADAPTER, version: 1,
+					value: { id, revision: 'v1', name, folderId: parent } } });
+		}
+		items.sort((a, b) => a.thingId < b.thingId ? -1 : a.thingId > b.thingId ? 1 : 0);
+		items.forEach((item, ordinal) => { item.ordinal = ordinal; });
+	});
+	try {
+		const review = await f.review();
+		const result = await restoreBackupTree(f.store, f.id, f.output, review, access);
+		for (let n = 0; n < 129; n++)
+			assert.equal((await lstat(join(result.directory, 'Parent-' + String(n).padStart(3, '0'), 'Middle/Leaf'))).isDirectory(), true);
+		assert.deepEqual(await readFile(join(result.directory, 'Nested/Saved.bin')), f.big);
+	} finally { await f.close(); }
 });
 
 test('real process exit leaves a recoverable range and dead lock; offline CLI reviews and resumes the tree', async () => {
@@ -280,6 +308,17 @@ test('unsafe names, parent cycles and case aliases are refused before destinatio
 		},
 		(items: BackupItem[]) => {
 			(items[0].snapshot.value as any).folderId = 'missing';
+		},
+		(items: BackupItem[]) => {
+			(items[2].snapshot.value as any).folderId = 'folder';
+			(items[3].snapshot.value as any).folderId = 'empty';
+		},
+		(items: BackupItem[]) => {
+			(items[3].snapshot.value as any).folderId = 'a-file';
+		},
+		(items: BackupItem[]) => {
+			(items[2].snapshot.value as any).name = 'Café';
+			(items[3].snapshot.value as any).name = 'CAFE\u0301';
 		}
 	];
 	for (const change of cases) {
