@@ -227,3 +227,55 @@ test('Claude catalogue keys are discovery-only, prefer the dedicated key and nev
 	assert.doesNotMatch(JSON.stringify(result), /secret-provider-body|fixture/);
 	assert.equal(new ModelDiscoveryHttpError(401).status, 401);
 });
+
+test('keyless public discovery parses lifecycle rows, never credentials, and fails closed on changed tables', async () => {
+	const { parsePublicClaudeModels, CLAUDE_PUBLIC_MODELS_URL } = await import('./modelDiscovery');
+	const table = '## Model status\n\n| API model name | Current state | Deprecated |\n| --- | --- | --- |\n| claude-opus-5-5 | Active | N/A |\n| claude-sonnet-5-5 | Deprecated | today |\n| claude-opus-4-20250514 | Retired | yesterday |\n\n## Deprecation history\n| claude-opus-99 | Active | N/A |';
+	const rows = parsePublicClaudeModels(table);
+	assert.deepEqual(rows.map((row) => [row.id, row.lifecycle]), [['claude-opus-5-5', 'active'], ['claude-sonnet-5-5', 'deprecated'], ['claude-opus-4-20250514', 'retired']]);
+	assert.equal(rows[0].label, 'Claude Opus 5.5');
+	for (const text of ['', '<html>unavailable</html>', table.replace('Current state', 'Unknown column'), table.replace('Active', 'Unknown')]) assert.throws(() => parsePublicClaudeModels(text));
+	for (const env of [{}, { ANTHROPIC_MODELS_API_KEY: 'denied-fixture' }]) {
+		const urls: string[] = [];
+		const found = await discoverConfiguredProviderModels('anthropic', { env, fetchImpl: (async (url, init) => {
+			urls.push(String(url));
+			if (String(url) !== CLAUDE_PUBLIC_MODELS_URL) return response({}, 403);
+			assert.equal((init?.headers as any)?.authorization, undefined);
+			assert.equal((init?.headers as any)?.['x-api-key'], undefined);
+			assert.equal(init?.redirect, 'error');
+			return new Response(table);
+		}) as typeof fetch });
+		assert.deepEqual(found, rows);
+		assert.equal(urls.at(-1), CLAUDE_PUBLIC_MODELS_URL);
+	}
+});
+
+test('Claude metadata sync runs without inference credentials and reports its source', async () => {
+	const sync = createAiModelSync({ configured: () => false,
+		discover: async () => [{ id: 'claude-opus-5-5', label: 'Opus 5.5', source: 'public-docs' }],
+		store: { claim: async () => ({ token: 'fixture', startedAt: new Date() }), publish: async () => true, fail: async () => {} }
+	});
+	assert.equal((await sync.syncProvider('anthropic')).source, 'public-docs');
+	assert.equal((await sync.syncProvider('openai')).status, 'skipped');
+});
+
+test('public publication preserves account availability and admission, only explicit retirement hides a model', async () => {
+	const writes: any[] = [];
+	const store = createMongoModelSyncStore({
+		getSettings: async () => ({ updateOne: async () => ({ matchedCount: 1 }), findOne: async () => ({ autoAllowNewModels: false }) }),
+		getThings: async () => ({ bulkWrite: async (ops: any[]) => { writes.push(...ops.map((op) => op.updateOne)); return { matchedCount: ops.length }; }, updateMany: async () => { throw new Error('Public omissions must not retire models'); } }),
+		transaction: async (work: any) => work({})
+	} as any);
+	await store.publish('anthropic', { token: 'fixture', startedAt: new Date() }, [
+		{ id: 'claude-opus-5-5', label: 'Claude Opus 5.5', source: 'public-docs', lifecycle: 'active' },
+		{ id: 'claude-opus-4-20250514', label: 'Old Opus', source: 'public-docs', lifecycle: 'retired' }
+	]);
+	assert.equal(writes[0].update.$setOnInsert.crystal.enabled, false);
+	const updates = writes.filter((write) => write.update.$set).map((write) => write.update.$set);
+	assert.deepEqual(updates.map((update) => update['crystal.publicCatalogAvailable']), [true, false]);
+	for (const update of updates) {
+		assert.equal(update['crystal.providerAvailable'], undefined);
+		assert.equal(update['crystal.lastSyncedAt'], undefined);
+		assert.equal(update['crystal.enabled'], undefined);
+	}
+});

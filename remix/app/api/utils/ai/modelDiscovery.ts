@@ -7,7 +7,7 @@ export class ModelDiscoveryHttpError extends Error {
 	}
 }
 
-export type DiscoveredAiModel = { id: string; label: string };
+export type DiscoveredAiModel = { id: string; label: string; source?: 'public-docs'; lifecycle?: 'active' | 'legacy' | 'deprecated' | 'retired' };
 export type ModelDiscoveryRequest = { url: string; headers: Record<string, string> };
 export const MODEL_DISCOVERY_TIMEOUT_MS = 20_000;
 const MAX_MODELS = 2_000;
@@ -96,34 +96,19 @@ export async function discoverConfiguredProviderModels(
 	// may not grant Models API access; a dedicated discovery key can do so.
 	// This key is never passed into the Claude Code inference environment.
 	const catalogueKey = env.ANTHROPIC_MODELS_API_KEY?.trim() || env.ANTHROPIC_API_KEY?.trim();
-	if (catalogueKey)
-		return discoverProviderModels(
-			provider,
-			{
+	if (catalogueKey) {
+		try {
+			return await discoverProviderModels(provider, {
 				url: 'https://api.anthropic.com/v1/models',
 				headers: { 'x-api-key': catalogueKey, 'anthropic-version': '2023-06-01' }
-			},
-			fetchImpl
-		);
-	const { resolveClaudeOAuthTokens } = await import('./claudeOAuth');
-	const tokens = await resolveClaudeOAuthTokens(env);
-	if (!tokens.length || tokens.length > 8) throw new Error('Claude catalogue credentials unavailable');
-	// Discovery only; inference remains in the isolated Claude Code runtime.
-	// Every configured credential must finish before absence is authoritative.
-	// A scope/plan denial retains the previous catalogue.
-	const lists = await Promise.all(
-		tokens.map((token) =>
-			discoverProviderModels(
-				provider,
-				{
-					url: 'https://api.anthropic.com/v1/models',
-					headers: { authorization: `Bearer ${token}`, 'anthropic-version': '2023-06-01', 'anthropic-beta': 'oauth-2025-04-20' }
-				},
-				fetchImpl
-			)
-		)
-	);
-	return [...new Map(lists.flat().map((model) => [model.id, model])).values()];
+			}, fetchImpl);
+		} catch (error) {
+			if (!(error instanceof ModelDiscoveryHttpError) || ![401, 403].includes(error.status)) throw error;
+		}
+	}
+	// Public lifecycle data needs neither an API key nor a paid Claude account.
+	// It is catalogue metadata, never evidence of this account's inference access.
+	return discoverPublicClaudeModels(fetchImpl);
 }
 
 // Deliberately narrow: generic 404, invalid credentials, rate limits, tool
@@ -140,4 +125,48 @@ export function isModelUnavailableError(error: unknown): boolean {
 		/\bmodel\b/i.test(message) &&
 		/not (?:found|available)|(?:does|may) not exist|no longer (?:available|supported)|retired|decommissioned/i.test(message)
 	);
+}
+
+export const CLAUDE_PUBLIC_MODELS_URL = 'https://platform.claude.com/docs/en/about-claude/model-deprecations.md';
+
+export function parsePublicClaudeModels(markdown: string): DiscoveredAiModel[] {
+	const section = markdown.split(/^## Model status\s*$/m)[1]?.split(/^## /m)[0];
+	if (!section || !/\|\s*API model name\s*\|\s*Current state\s*\|/i.test(section))
+		throw new Error('Public model status table unavailable');
+	const models = new Map<string, DiscoveredAiModel>();
+	for (const line of section.split('\n')) {
+		if (!line.trim().startsWith('|')) continue;
+		const cells = line.split('|').slice(1, -1).map((cell) => cell.trim().replace(/`/g, ''));
+		if (!cells[0]?.startsWith('claude-')) continue;
+		const [id, state] = cells;
+		const lifecycle = state.toLowerCase() as NonNullable<DiscoveredAiModel['lifecycle']>;
+		if (!/^claude-[a-z0-9]+(?:-[a-z0-9]+)*$/.test(id) || !['active', 'legacy', 'deprecated', 'retired'].includes(lifecycle) || models.has(id))
+			throw new Error('Invalid public model status row');
+		const label = id.replace(/^claude-/, 'Claude ').replace(/^(Claude )([a-z]+)/, (_, prefix, family) => prefix + family[0].toUpperCase() + family.slice(1))
+			.replace(/-(\d{8})$/, ' ($1)').replace(/-(\d+)/g, ' $1').replace(/ (\d+) (\d+)(?= |$)/, ' $1.$2');
+		models.set(id, { id, label, source: 'public-docs', lifecycle });
+	}
+	if (!models.size || ![...models.values()].some((model) => model.lifecycle === 'active')) throw new Error('Empty public model catalogue');
+	return [...models.values()];
+}
+
+export async function discoverPublicClaudeModels(fetchImpl: typeof fetch = fetch): Promise<DiscoveredAiModel[]> {
+	const response = await fetchImpl(CLAUDE_PUBLIC_MODELS_URL, {
+		signal: AbortSignal.timeout(MODEL_DISCOVERY_TIMEOUT_MS), redirect: 'error', headers: { accept: 'text/markdown, text/plain' }
+	});
+	if (!response.ok) { await response.body?.cancel(); throw new ModelDiscoveryHttpError(response.status); }
+	const reader = response.body?.getReader();
+	if (!reader) throw new Error('Public model catalogue body unavailable');
+	const chunks: Uint8Array[] = [];
+	let bytes = 0;
+	try {
+		for (;;) {
+			const part = await reader.read();
+			if (part.done) break;
+			bytes += part.value.byteLength;
+			if (bytes > MAX_BODY_BYTES) throw new Error('Public model catalogue exceeded its response budget');
+			chunks.push(part.value);
+		}
+	} finally { await reader.cancel(); }
+	return parsePublicClaudeModels(Buffer.concat(chunks).toString('utf8'));
 }

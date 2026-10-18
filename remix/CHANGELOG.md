@@ -12,6 +12,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 > When you make a manual change, add a bullet under `[Unreleased]` ending with
 
+- 2026-10-18: Refresh Claude public lifecycle metadata without an API key, preserve
+  account-access uncertainty and admin admission, include discovered models in
+  workflow settings, and persist the shared order when Save & apply is used.
+
+
 - 2026-09-22 — **Claude (AI)**: PR preview docs. README and the preview
   listener's manual-dispatch description now state what the protected
   controller already does: every same-repository PR previews into the

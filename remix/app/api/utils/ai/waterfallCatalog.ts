@@ -17,3 +17,15 @@ export const aiWaterfallEndpoints = (connections: readonly LopuVaultProviderPubl
 		hint: connection.reason || 'Your Secure Vault endpoint. Enter the provider-native model ID.'
 	}))
 ];
+
+// Scope endpoints to the caller's runtime, while letting workflow settings opt
+// into the complete live model list instead of intersecting a compiled snapshot.
+export const resolveAiWaterfallEndpoints = (
+	requested: readonly AiWaterfallEndpoint[] | undefined,
+	live: readonly AiWaterfallEndpoint[],
+	useLiveServerModels = false
+): AiWaterfallEndpoint[] => requested ? requested.map((endpoint) => {
+	if (!endpoint.id.startsWith('server:')) return endpoint;
+	const models = live.find((item) => item.id === endpoint.id)?.models ?? [];
+	return { ...endpoint, models: useLiveServerModels ? models : endpoint.models.filter((model) => models.some((item) => item.id === model.id)) };
+}) : [...live];
