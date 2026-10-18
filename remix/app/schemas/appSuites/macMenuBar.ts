@@ -51,7 +51,7 @@ const device = k.stack(
 				),
 				ifEquals('item.state.menuBar.status', 'collecting', k.muted('Reading the Mac menu bar. The next sync will bring its inventory.')),
 				ifEquals('item.state.menuBar.status', 'locked', k.muted('Unlock this Mac to resume its menu bar inventory.')),
-				ifEquals('item.state.menuBar.accessibility', false, k.link('Review Mac permissions', '/devices')),
+				ifEquals('item.state.menuBar.accessibility', false, k.link('Review Mac permissions', '/things')),
 				el('div', { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 300px), 1fr))', gap: '12px', minWidth: 0 }, [
 					{
 						tag: 'tt-collection',
@@ -105,7 +105,7 @@ export const macMenuBarSuite: BehaviourSuite = {
 						]),
 						k.row([
 							k.button('Refresh', refs.actionKey('read'), { deviceId: '{query.deviceId}' }, 'ghost'),
-							k.link('Manage devices', '/devices', 'ghost')
+							k.link('Manage devices', '/things', 'ghost')
 						]),
 						k.muted('Refreshes every 30 seconds while open. Change the device ID and source interval in Builder. Paths stay within your account.'),
 						...k.gates('Mac menu bar', 'See the status items synced from your paired Mac.', {
