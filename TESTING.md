@@ -10194,6 +10194,37 @@ separate from deterministic discovery/lease tests.
 
 - OpenAI vault import: anonymous/non-admin and cross-origin requests must fail; missing server key must create nothing. Import from AI Providers, verify the redacted OpenAI entry named `OPENAI_THINGTIME_API_KEY`, reload, retry and confirm one unchanged entry. No secret may appear in browser responses. Existing chat and credential order must remain intact.
 
+## Mac menu bar and reusable device scripts
+
+- Device and approval links must open `/things`, where paired devices live.
+- Installed browser Actions must reach the selected HTTPS account API with actor
+  and database preconditions intact; changed actors and cross-origin mutations
+  fail before execution. Unconfigured web servers and vault reveal still refuse.
+
+- Install both suites privately; edit the saved Component and Action source in
+  Builder, and verify page refresh retains last-known readings.
+- On the signed installed Mac app, compare inventory program/path/PID with
+  NSRunningApplication; distinguish missing readings from zero and false.
+- Check partial/collecting/locked/offline/no-node/empty states, select a Mac,
+  search and paginate every item; locked snapshots must contain no inventory.
+- At desktop and 390px widths expand details, long paths, output and earlier-run
+  controls, then scroll to the bottom with no clipping or horizontal overflow.
+- Run harmless printf via a paired Mac. Inspect the complete source in approval;
+  deny one request, approve another, and verify exact stdout/exit status.
+- Script runs must require fresh approval regardless of always-allow policy;
+  unpaired, locked, incompatible or unapproved envelopes must fail closed.
+- Verify time/output limits, retry identity, expiry, owner isolation and no
+  result bytes in device event history. Save output only on explicit request.
+- Save a recipe before selecting a device or entering a Run ID; then run the
+  same form with both filled. Each Action must accept exactly its declared fields.
+- Save a full 16 KiB recipe beginning with literal `$input` text; execute the
+  saved Action and verify the exact source survives input defaults and validation.
+- Save full-sized output (including UTF-8 replacement characters) and verify
+  `extended.result` retains every character while searchable metadata validates.
+- Regression: inline collection pagination/search must retain items beyond
+  10,000 while rendering only the current page and including default styles.
+- Run the isolated browser fixture and focused native/backend/capability suites;
+  smoke the built manifest before deploying and repeat the real installed path.
 - Commander daemon trust-boundary integration: complete every HTTP/security assertion and cleanup within the 30-second suite allowance under concurrent native builds; do not treat the default five-second unit-test timeout as a server latency contract.
 - Commander Settings titlebar: repeat maximize/restore on the real screen, including native and web double-click deliveries; verify the previous frame is restored and process headers remain aligned with values after resizing.
 - Incident account cleanup: use real signup and logout notification constructors; accept only system history tied to the exact revoked fixture session. Reject unrelated content, actors and timestamps before writes.

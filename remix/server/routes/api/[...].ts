@@ -1,4 +1,3 @@
-import { resolvePublicOrigin } from '../../../app/api/utils/auth/publicOrigin';
 import { actionDataRoutes } from '../../utils/actionDataRoutes';
 import { defineHandler } from 'nitro/h3';
 import { enforceExpectedActor } from '../../../app/api/utils/auth/expectedActor';
@@ -389,12 +388,17 @@ export default defineHandler(async (event) => {
     if (path === 'v1/ai/chatgpt-plan' && process.env.THINGTIME_DESKTOP_API_MODE !== 'remote') return jsonResponse({ ok: false, available: false, error: 'Choose a configured local or self-hosted account runtime for ChatGPT plan usage.' }, { status: 503, headers: { 'Cache-Control': 'private, no-store' } });
     if (path === 'v1/mail/google/callback') return jsonResponse({ ok: false, error: 'Google callback requires this configured origin.' }, { status: 503, headers: { 'Cache-Control': 'private, no-store' } });
     if (path === 'v1/integrations/ios-release') return jsonResponse({ ok: false, error: 'Configure iOS release delivery on this origin.' }, { status: 503, headers: { 'Cache-Control': 'private, no-store' } });
-    // Fresh vault verification must stay on the selected deployment. Never
-    // forward passwords/assertions to a fallback origin or reveal its keys.
-    if (event.req.headers.has('X-Thingtime-Expected-Actor')) {
-      return jsonResponse({ ok: false, error: 'Browser Actions require a configured account environment at this origin' }, { status: 503, headers: { 'Cache-Control': 'private, no-store' } });
+    // Vault re-verification stays on its configured origin, including when a
+    // browser Action supplies an expected-actor header.
+    if (path === 'v1/vault/reveal') {
+      return jsonResponse({ ok: false, error: 'Vault verification requires a configured local account environment' }, {
+        status: 503, headers: { 'Cache-Control': 'private, no-store, max-age=0', Pragma: 'no-cache' }
+      });
     }
-    if (path === 'v1/passwords' || path === 'v1/mail' || path === 'v1/mail/sync' || path === 'v1/ai/chatgpt-plan') {
+    // The installed shell uses the selected account API for browser Actions,
+    // just like its ordinary account requests. Preserve the actor/data-plane
+    // preconditions for the upstream dispatcher to enforce before any handler.
+    if (event.req.headers.has('X-Thingtime-Expected-Actor') || path === 'v1/passwords' || path === 'v1/mail' || path === 'v1/mail/sync' || path === 'v1/ai/chatgpt-plan') {
       // The installed desktop shell deliberately serves its UI on loopback and
       // pins the account API through its endpoint settings. Ordinary websites
       // and incomplete dev deployments must never silently forward vault data.
@@ -409,18 +413,12 @@ export default defineHandler(async (event) => {
         return jsonResponse({ ok: false, error: 'Use the same Thingtime origin.' }, { status: 403, headers: { 'Cache-Control': 'private, no-store' } });
       if (path === 'v1/ai/chatgpt-plan' && !await selectedRuntimeSupportsPlan(configured, event.req.signal))
         return jsonResponse({ ok: false, error: 'The selected API does not support portable ChatGPT plan connections. Update that runtime first.' }, { status: 409, headers: { 'Cache-Control': 'private, no-store' } });
-      const headers = new Headers(event.req.headers);
-      headers.delete('x-forwarded-host'); headers.delete('x-forwarded-proto');
-      return proxyApiRequestToFallback(new Request(event.req, { headers }), configured);
+      // Nitro's lazy request is not a native Request; preserve its body API
+      // while pinning the selected origin across asynchronous negotiation.
+      return proxyApiRequestToFallback(event.req, { expectedOrigin: configured, stripForwardedOrigin: true });
     }
     // Root data uses this same fallback. Forward its public database
     // precondition and selection unchanged for the upstream to enforce.
-    if (path === 'v1/vault/reveal') {
-      return jsonResponse({ ok: false, error: 'Vault verification requires a configured local account environment' }, {
-        status: 503,
-        headers: { 'Cache-Control': 'private, no-store, max-age=0', Pragma: 'no-cache' }
-      });
-    }
     return proxyApiRequestToFallback(event.req);
   }
 

@@ -147,7 +147,8 @@ const endpointChangedResponse = () => Response.json({
   ok: false, code: 'API_ENDPOINT_CHANGED', error: 'The selected API changed. Retry on the current endpoint.'
 }, { status: 409, headers: { 'Cache-Control': 'private, no-store' } });
 
-export const proxyApiRequestToFallback = async (request: Request, expectedOrigin = getApiFallbackOrigin()) => {
+export const proxyApiRequestToFallback = async (request: Request, options: { stripForwardedOrigin?: boolean; expectedOrigin?: string | null } = {}) => {
+  const expectedOrigin = options.expectedOrigin === undefined ? getApiFallbackOrigin() : options.expectedOrigin;
   const requestUrl = new URL(request.url);
   // Pin authority before any async work. A completed negotiation for a previous
   // endpoint never authorizes sending credentials or a body to its replacement.
@@ -156,6 +157,10 @@ export const proxyApiRequestToFallback = async (request: Request, expectedOrigin
   if (!shouldProxyApiToFallback(request)) return unavailableLocalApiResponse();
   const fallbackUrl = new URL(requestUrl.pathname + requestUrl.search, expectedOrigin!);
   const headers = cloneProxyRequestHeaders(request, fallbackUrl);
+  if (options.stripForwardedOrigin) {
+    headers.delete('x-forwarded-host');
+    headers.delete('x-forwarded-proto');
+  }
   const init: RequestInit & { duplex?: 'half' } = {
     method: request.method,
     headers,

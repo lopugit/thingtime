@@ -31,6 +31,8 @@ export function selectionOptions(data: unknown, valuePath = 'id', labelPath = 't
 		return [{ value: String(id), label: typeof title === 'string' || typeof title === 'number' ? String(title).slice(0, 200) : String(id) }];
 	});
 }
+const choiceFieldStyle: React.CSSProperties = { width: '100%', minWidth: 0, padding: '9px 11px', boxSizing: 'border-box', border: '1px solid var(--tt-border, #e4e4e7)', borderRadius: 10, background: 'var(--tt-bg, white)', color: 'inherit', font: 'inherit' };
+
 export function ComponentSelect({
 	name,
 	optionsPath,
@@ -100,6 +102,7 @@ export function ComponentSelect({
 	if (compact === true && !error && options.length <= 160)
 		return (
 			<select
+                style={choiceFieldStyle}
 				name={field}
 				aria-label={label}
 				required={required === true}
@@ -129,7 +132,7 @@ export function ComponentSelect({
 				}}
 				disabled={!enabled}
 				placeholder={`Search ${label.toLowerCase()}`}
-				style={{ width: '100%', minWidth: 0, padding: 8, boxSizing: 'border-box' }}
+				style={choiceFieldStyle}
 			/>
 			<select
 				name={field}
@@ -140,7 +143,7 @@ export function ComponentSelect({
 				data-tt-action-inputs={local ? JSON.stringify({ op: 'set', key: local, ...(Array.isArray(clear) ? { clear } : {}) }) : undefined}
 				onChange={change}
 				disabled={!enabled}
-				style={{ width: '100%', minWidth: 0, padding: 10, boxSizing: 'border-box' }}
+				style={choiceFieldStyle}
 			>
 				<option value="">Choose…</option>
 				{selection && !visible.some((option) => option.value === selection) ? (
@@ -153,7 +156,7 @@ export function ComponentSelect({
 				))}
 			</select>
 			{chosen ? <p style={{ margin: 0, overflowWrap: 'anywhere' }}>{chosen.label}</p> : null}
-			<div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+			{matches.length > 20 ? <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
 				<button type="button" disabled={!enabled || current === 0} onClick={() => setPage(current - 1)}>
 					Previous choices
 				</button>
@@ -163,7 +166,7 @@ export function ComponentSelect({
 				<button type="button" disabled={!enabled || (current + 1) * 20 >= matches.length} onClick={() => setPage(current + 1)}>
 					More choices
 				</button>
-			</div>
+			</div> : null}
 			{error ? <p role="alert">{error}</p> : null}
 		</div>
 	);

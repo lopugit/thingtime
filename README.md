@@ -4939,3 +4939,42 @@ The directory must be private (0700), outside the repository and web root, and b
 After an unclean shutdown, stop every process using that runtime directory and confirm its API listener and child processes are gone. Read the stable `hostId` from its private `identity.json` (Mongo mode) or `accounts.json` (file mode), then remove only that directory’s stale `.runtime.lock`. In Mongo mode, use the canonical `getSettingsCollection()` on the configured home database to inspect the exact key `Thingtime.ChatGPTPlan.<hostId>.authority`. Clear only `lockOwner` to `null` with a compare-and-set filter containing that exact key, the observed `lockOwner` and observed `fence`. Do not upsert, delete the row or alter `fence`/`revision`. Restart one runtime; its claim advances the fence. Never recover while the previous process might still run. A crash between OpenAI refresh and saving the rotated token may require reconnecting that account; restoring an old token is not a recovery strategy.
 
 Validation: `corepack pnpm --dir remix run test:chatgpt-plan`, `test:api-capabilities`, `test:lopu-chat-streaming`, and `corepack pnpm --dir electron test`. Live consent, an account-specific model list and a completed provider response are separate acceptance requirements; mocked OAuth tests do not establish those outcomes.
+### Paired Mac menu bar and reusable scripts
+
+Install **Mac menu bar** or **Device scripts** from the Builder app catalogue.
+Installation creates private, editable Components, Actions and a page. Pair the
+Mac with the same account and API origin in the installed Thingtime app.
+No extra server secret or collection is required; forks use the ordinary device
+pairing setup and their own API origin.
+
+Menu inventory needs node-state capability 1.11.0 and a current macOS node. It
+refreshes in the background every 30 seconds. Accessibility improves coverage;
+the page distinguishes partial, collecting, locked, offline and unavailable data.
+Some macOS items are not exposed by public APIs. Memory and cumulative CPU time
+are whole-process readings, not individual-icon usage. Locked snapshots contain
+no inventory. Application paths are private device data.
+
+Device scripts reuse the paired-device command queue (`script.run`), negotiated
+with command capability 1.10.0 and native `script.bash.v1`. Each execution needs
+fresh approval of the exact Bash source, even under an always-allow policy.
+Scripts run as the Mac user, without a shell profile or inherited credentials;
+they are **not sandboxed** and can access that user's files and network. The
+source limit is 16 KiB, timeout 1–30 seconds, and combined output limit 16 KiB.
+Ordinary child processes are terminated with the run; intentionally detached
+daemons are outside this contract. Use a fresh Run ID for each intentional run;
+retry an uncertain submission with the same ID and identical input.
+
+The receipt is not execution success: read stdout, stderr, exit code, signal,
+timeout and truncation after approval. Exact command results are owner-only and
+expire after ten minutes. **Save result as a private Thing** explicitly retains
+the full output in `extended.result`, with searchable metadata in `crystal`.
+**Save reusable Action** creates an editable recipe with literal source in its
+JSON string input default (up to the device’s 16 KiB limit); bind the result
+Action as a component source to reuse the data in other Builder pages. Never
+place secrets directly in saved script source or output.
+
+Synthetic UI acceptance: run `node remix/scripts/run-mac-menu-bar-browser.mjs`
+with `TT_PLAYWRIGHT_MODULE` pointing to the installed Playwright module. On macOS
+it applies a process-tree OS network boundary allowing only loopback port 13820,
+uses no real credentials/backend, and writes screenshots/traces to
+`remix/tmp/menu-bar-qa/`. It fails closed if the boundary cannot be established.
