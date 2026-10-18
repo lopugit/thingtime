@@ -4564,3 +4564,46 @@ originals, paired-device transfers, folder traversal/catalogue caps and final
 native/agent-host acceptance. Existing render/export artifacts are historical
 proof, not retested against this checkpoint. The full local-first goal and main
 merge gate remain open.
+
+## Blob ZIP import and download assembly — 2026-10-18
+
+Normal transfer file selection now reads the ZIP in 256 KiB source blocks and
+feeds the existing inflater in 4 KiB compressed chunks. Its two-pass manifest
+and declared-entry validation is shared with the byte-array decoder. Decoded file
+chunks become immutable Blobs without joining a whole file into a JavaScript
+buffer. Size, SHA-256, missing/undeclared/unsafe paths, decompression expansion and
+cancellation checks remain. Blob hashing reuses the same 1 MiB helper as local
+storage. The canonical `thingtime.transfer` v1 schema and its existing input budgets
+have not changed; this is not a streaming-format or unlimited-transfer claim.
+
+The native Import dialog carries these Blobs through local/account selection and
+normal File upload adapters. `LocalThings.import` no longer imposes its additional
+16 MiB per-file / 64 MiB aggregate ceiling. Blob I/O and integrity checks finish
+before the transaction; metadata, bytes and any account upload intent commit or
+roll back together. Anonymous imports create no account queue. Byte-array callers
+remain supported with a frozen copy. There are no new HTTP fields or routes.
+
+Normal ZIP Download now assembles Blob output through the existing ZIP library's
+streaming writer. It snapshots caller-owned arrays, map membership and metadata
+before asynchronous work and checks the in-process availability fence before and
+after assembly. The remaining export collector, local/account export readers and
+clipboard serialization still buffer files; remote retention, paired-device and
+broader traversal/capacity work remain open.
+
+Local verification: 665 workspace checks and four offline-shell checks passed;
+72 native opt-in checks skipped. Things suites passed 322 + 18 checks. Seven
+focused Blob-transfer tests passed, including a 66 MiB two-file normal-reader
+import/reopen with fresh IDs and independent SHA-256, cancellation, retired scope,
+corruption, immutable download snapshots, and anonymous/account quota rollback.
+Totals overlap; the account queue case was added after the broad suite. Both
+byte-array and Blob decoders pass the archive attack regressions. Client build and
+Nitro template sync passed (249 offline assets; 22,261,124 bytes). TypeScript
+matches the existing 91 diagnostics exactly; targeted lint has no errors and two
+existing warnings. Logs: `tmp/blob-transfer-{workspace,things,final-focused,build,lint-final}.log`
+and `tmp/blob-transfer-typecheck-verification.json`.
+
+Native acceptance of this new path remains pending. The earlier isolated Chrome
+run failed to initialize its nested sandbox before reaching the app; no boundary
+was broadened and no new browser run is claimed here. The native matrix must cover
+normal ZIP selection, confirmation, cold offline reopen, exact download and
+failure/cancel states at 1440/390/320px. CI and deployed verification are separate.

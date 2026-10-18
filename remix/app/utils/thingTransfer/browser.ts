@@ -1,4 +1,4 @@
-import { decodeTransferArchive, encodeTransferArchive, transferChecksum, type TransferBundle } from './archive';
+import { decodeTransferArchive, encodeTransferArchive, encodeTransferArchiveBlob, transferChecksum, type TransferBundle } from './archive';
 import { parseTransfer, serializeTransfer, transferAnnotations, TRANSFER_FORMAT, TRANSFER_LIMITS, TransferFormatError, validateTransfer } from './format';
 import type { TransferPlan } from './plan';
 
@@ -134,7 +134,7 @@ export const downloadTransfer = async (bundle: TransferBundle, format: 'json' | 
   if (typeof bundle.assertCurrent === 'function') await bundle.assertCurrent(signal);
   if (format === 'json' && bundle.manifest.files.length) invalid('Use ZIP to include the file bytes');
   const blob = format === 'json' ? new Blob([serializeTransfer(bundle.manifest)], { type: 'application/json' })
-    : new Blob([Uint8Array.from(await encodeTransferArchive(bundle, signal))], { type: 'application/zip' });
+    : await encodeTransferArchiveBlob(bundle, signal);
   signal?.throwIfAborted();
   if (typeof bundle.assertCurrent === 'function') await bundle.assertCurrent(signal);
   const url = URL.createObjectURL(blob);

@@ -20,7 +20,7 @@ test('detects ZIP bytes and verifies complete attached content', async () => {
   const archive = await encodeTransferArchive({ manifest: original, files: new Map([['attachment', bytes]]) });
   const actual = await readTransferFile(new Blob([Uint8Array.from(archive)], { type: 'text/plain' }));
   assert.deepEqual(actual.manifest, original);
-  assert.deepEqual(actual.files.get('attachment'), bytes);
+  assert.deepEqual(new Uint8Array(await actual.files.get('attachment')!.arrayBuffer()), bytes);
 });
 
 test('aborted selection does not publish a stale parsed transfer', async () => {
@@ -42,10 +42,10 @@ test('multi-file selection keeps overlapping identities and different bytes inde
   }
   const bundles = await readTransferFiles(files);
   assert.equal(bundles.length, 2);
-  bundles.forEach((bundle, index) => {
+  for (const [index, bundle] of bundles.entries()) {
     assert.deepEqual(bundle.manifest, originals[index]);
-    assert.deepEqual(bundle.files.get('same-id'), payloads[index]);
-  });
+    assert.deepEqual(new Uint8Array(await bundle.files.get('same-id')!.arrayBuffer()), payloads[index]);
+  }
 });
 
 test('batch selection validates every file before returning and rejects excessive selection', async () => {

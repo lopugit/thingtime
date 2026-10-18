@@ -1,22 +1,6 @@
-import { sha256 } from '@noble/hashes/sha2.js';
 import { WorkspaceError, type WorkspaceBinary } from './storage';
-
-export const binarySize = (value: Uint8Array | Blob) => value instanceof Blob ? value.size : value.byteLength;
-export const binaryBlob = (value: Uint8Array | Blob): Blob => value instanceof Blob ? value : new Blob([Uint8Array.from(value)]);
-
-/** One processing chunk at a time; chunk size is not a maximum file size. */
-export async function blobChecksum(blob: Blob, check: () => void = () => {}) {
- const hash = sha256.create();
- try {
-  check();
-  for (let offset = 0; offset < blob.size; offset += 1024 * 1024) {
-   check();
-   const bytes = new Uint8Array(await blob.slice(offset, offset + 1024 * 1024).arrayBuffer());
-   check(); hash.update(bytes);
-  }
-  check(); return Array.from(hash.digest(), byte => byte.toString(16).padStart(2, '0')).join('');
- } finally { hash.destroy(); }
-}
+import { binarySize } from '../utils/thingTransfer/binary';
+export { binarySize, binaryBlob, blobChecksum } from '../utils/thingTransfer/binary';
 
 /** Every write changes the storage revision. Immutable Blob snapshots can be
  * compared inside IDB without awaiting file I/O and letting the transaction idle.

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { zipSync } from 'fflate';
-import { decodeTransferArchive, encodeTransferArchive, transferChecksum, type TransferBundle } from './archive';
+import { decodeTransferArchive as decodeBytes, decodeTransferArchiveBlob, encodeTransferArchive, transferChecksum, type TransferBundle } from './archive';
 import { TRANSFER_FORMAT, serializeTransfer } from './format';
 
 const fixture = async (): Promise<TransferBundle> => {
@@ -13,19 +13,27 @@ const fixture = async (): Promise<TransferBundle> => {
   };
 };
 
-test('ZIP round trip preserves actual bytes, Unicode filenames and manifest', async () => {
+for (const format of ['bytes', 'blob'] as const) {
+const decodeTransferArchive = async (input: Uint8Array, signal?: AbortSignal): Promise<TransferBundle> => {
+  if (format === 'bytes') return decodeBytes(input, signal);
+  const bundle = await decodeTransferArchiveBlob(new Blob([Uint8Array.from(input)]), signal);
+  return { manifest: bundle.manifest, files: new Map(await Promise.all([...bundle.files].map(async ([id, blob]) => [id, new Uint8Array(await blob.arrayBuffer())] as const))) };
+};
+const testCase = (name: string, run: () => Promise<void>) => test(`${format}: ${name}`, run);
+
+testCase('ZIP round trip preserves actual bytes, Unicode filenames and manifest', async () => {
   const bundle = await fixture();
   bundle.manifest.files[0].name = 'hello 🥰.txt';
   assert.deepEqual(await decodeTransferArchive(await encodeTransferArchive(bundle)), bundle);
 });
 
-test('imports deflated files when a ZIP tool reordered the manifest last', async () => {
+testCase('imports deflated files when a ZIP tool reordered the manifest last', async () => {
   const bundle = await fixture();
   const bytes = zipSync({ 'files/000000': bundle.files.get('photo')!, 'thingtime.json': new TextEncoder().encode(serializeTransfer(bundle.manifest)) }, { level: 6 });
   assert.deepEqual(await decodeTransferArchive(bytes), bundle);
 });
 
-test('refuses missing and tampered bytes before creating an archive', async () => {
+testCase('refuses missing and tampered bytes before creating an archive', async () => {
   const bundle = await fixture();
   bundle.files.set('photo', new Uint8Array(bundle.manifest.files[0].bytes));
   await assert.rejects(encodeTransferArchive(bundle), /checksum/);
@@ -33,7 +41,7 @@ test('refuses missing and tampered bytes before creating an archive', async () =
   await assert.rejects(encodeTransferArchive(bundle), /missing/);
 });
 
-test('refuses undeclared paths, missing files and zip-slip entries', async () => {
+testCase('refuses undeclared paths, missing files and zip-slip entries', async () => {
   const bundle = await fixture();
   const manifest = new TextEncoder().encode(serializeTransfer(bundle.manifest));
   await assert.rejects(decodeTransferArchive(zipSync({ 'thingtime.json': manifest })), /incomplete/);
@@ -42,28 +50,28 @@ test('refuses undeclared paths, missing files and zip-slip entries', async () =>
   }
 });
 
-test('checks actual inflated size and digest, not just a valid manifest', async () => {
+testCase('checks actual inflated size and digest, not just a valid manifest', async () => {
   const bundle = await fixture();
   const manifest = new TextEncoder().encode(serializeTransfer(bundle.manifest));
   await assert.rejects(decodeTransferArchive(zipSync({ 'thingtime.json': manifest, 'files/000000': new Uint8Array(100000) })), /size|limit/);
   await assert.rejects(decodeTransferArchive(zipSync({ 'thingtime.json': manifest, 'files/000000': new Uint8Array(bundle.manifest.files[0].bytes) })), /checksum/);
 });
 
-test('cancellation stops processing without returning a partial bundle', async () => {
+testCase('cancellation stops processing without returning a partial bundle', async () => {
   const bundle = await fixture();
   const signal = AbortSignal.abort(new Error('cancelled'));
   await assert.rejects(encodeTransferArchive(bundle, signal), /cancelled/);
   await assert.rejects(decodeTransferArchive(await encodeTransferArchive(bundle), signal), /cancelled/);
 });
 
-test('zero-file manifests do not hide undeclared archive entries', async () => {
+testCase('zero-file manifests do not hide undeclared archive entries', async () => {
   const bundle = await fixture();
   bundle.manifest.files = [];
   const archive = zipSync({ 'thingtime.json': new TextEncoder().encode(serializeTransfer(bundle.manifest)), 'files/000000': new Uint8Array() });
   await assert.rejects(decodeTransferArchive(archive), /undeclared/);
 });
 
-test('forged ZIP size headers cannot bypass the streaming output limit', async () => {
+testCase('forged ZIP size headers cannot bypass the streaming output limit', async () => {
   const bundle = await fixture();
   const archive = zipSync({ 'thingtime.json': new TextEncoder().encode(serializeTransfer(bundle.manifest)), 'files/000000': new Uint8Array(100000) }, { level: 9 });
   const view = new DataView(archive.buffer, archive.byteOffset, archive.byteLength);
@@ -76,3 +84,5 @@ test('forged ZIP size headers cannot bypass the streaming output limit', async (
   }
   await assert.rejects(decodeTransferArchive(archive), /expands beyond/);
 });
+
+}

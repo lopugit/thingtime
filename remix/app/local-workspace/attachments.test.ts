@@ -84,13 +84,13 @@ test('component media is rebound to copied local bytes and missing bytes never p
  } finally { await db.close(); }
 });
 
-test('invalid byte content and oversized local files fail before any metadata is imported', async () => {
+test('invalid byte content and mismatched file sizes fail before any metadata is imported', async () => {
  const { db, things } = fixture();
  try {
   const input = await bundle();
   await assert.rejects(things.import(input.manifest,null,new Map([['bytes', new Uint8Array(bytes.length)]])),/checksum/);
   await assert.rejects(things.import(input.manifest),/missing or unexpected/);
-  await assert.rejects(things.import({ ...input.manifest,files:[{...input.manifest.files[0],bytes:TEST_STORAGE_CAPACITY.binaryBytes+1}] },null,input.files),/16 MiB/);
+  await assert.rejects(things.import({ ...input.manifest,files:[{...input.manifest.files[0],bytes:TEST_STORAGE_CAPACITY.binaryBytes+1}] },null,input.files),/do not match/);
   assert.equal((await things.snapshot()).length,0);
   let active=true; const fenced = new LocalThings(db,scope,{assertCurrent(){if(!active)throw new Error('retired')},onInvalidate:()=>()=>{}});
   const pending=fenced.import(input.manifest,null,input.files); active=false;

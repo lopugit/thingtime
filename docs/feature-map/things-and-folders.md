@@ -814,3 +814,12 @@ Password migration coverage and encrypted file lifecycle: `passwords/onePassword
 `api/utils/passwords/files.ts`. Every original 1PUX member is retained as an
 encrypted attachment to a source archive entry; item editors preserve structured
 values, source context and password history. See [the password contract](../password-manager.md).
+
+Normal ZIP file selection uses `decodeTransferArchiveBlob` in
+`utils/thingTransfer/archive.ts`; the same two-pass validator serves byte callers.
+`readFile.ts` and `ThingImportDialog.tsx` carry Blob handles into
+`LocalThings.import`, with account queue admission in the existing transaction.
+`utils/thingTransfer/binary.ts` owns the chunked checksum shared with device files.
+Download uses `encodeTransferArchiveBlob` and freezes caller-owned input before
+async work. Run transfer/archive regressions, `transferBlobs.test.ts`, Things and
+local-workspace suites. See [coverage and remaining buffers](../local-workspaces.md#blob-zip-import-and-download-assembly--2026-10-18).

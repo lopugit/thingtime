@@ -24,7 +24,7 @@ import { algorithmTransferContent, isTransferAlgorithm, validateTransferAlgorith
 import { MAX_SAVED_ALGORITHMS } from '../api/utils/algorithms/algorithmContent';
 import { isTransferTheme, validateTransferTheme } from '../utils/thingTransfer/theme';
 import { normalizeSavedTheme, MAX_SAVED_THEMES } from '../theme/savedTheme';
-import { type WorkspaceDatabase, WorkspaceError, LEGACY_FILE_BUFFER_LIMITS, type WorkspaceLease, type WorkspaceScope, type WorkspaceTransaction } from './storage';
+import { type WorkspaceDatabase, WorkspaceError, type WorkspaceLease, type WorkspaceScope, type WorkspaceTransaction } from './storage';
 
 export type LocalThing = TransferThing & { createdAt: string; updatedAt: string; revision: number; localSubmission?: string };
 export type LocalFileMutation = (tx: WorkspaceTransaction, row: LocalAttachment, previous?: LocalAttachment) => Promise<void>;
@@ -434,7 +434,7 @@ export class LocalThings {
 		return exportLocalThingSnapshot(await this.snapshot(), this.builtins, ids, this.lease,
 			async id => (await this.readFile(id, options.signal)).bytes, options);
 	}
-	async import(input: unknown, folderId?: string | null, fileBytes = new Map<string, Uint8Array>(), signal?: AbortSignal) {
+	async import(input: unknown, folderId?: string | null, fileBytes = new Map<string, Uint8Array | Blob>(), signal?: AbortSignal) {
 		this.lease.assertCurrent(); signal?.throwIfAborted();
 		const manifest = parseTransfer(serializeTransfer(validateTransfer(input)));
 		orderTransferImports(manifest);
@@ -442,8 +442,11 @@ export class LocalThings {
 		if (manifest.files.length && this.scope.kind !== 'anonymous' && !this.onFileWrite) fail('LOCAL_OPERATION_UNAVAILABLE', 'Account files require their dedicated sync adapter');
 		// Snapshot caller-owned bytes before asynchronous hashing or persistence.
 		if (!(fileBytes instanceof Map) || fileBytes.size !== manifest.files.length) fail('INVALID_LOCAL_FILE', 'The transfer has missing or unexpected file bytes');
-		if (manifest.files.some(file => file.bytes > LEGACY_FILE_BUFFER_LIMITS.binaryBytes) || manifest.files.reduce((total, file) => total+file.bytes, 0) > LEGACY_FILE_BUFFER_LIMITS.bytes) fail('LOCAL_QUOTA', 'Local files exceed the 16 MiB per-file or 64 MiB workspace limit', 413);
-		const bytes = new Map(manifest.files.map(file => { const value = fileBytes.get(file.id); if (!(value instanceof Uint8Array) || value.byteLength !== file.bytes) return fail('INVALID_LOCAL_FILE', 'Transferred bytes do not match the manifest'); return [file.id, Uint8Array.from(value)] as const; }));
+		const bytes = new Map(manifest.files.map(file => {
+			const value = fileBytes.get(file.id);
+			if (!(value instanceof Uint8Array || value instanceof Blob) || binarySize(value) !== file.bytes) return fail('INVALID_LOCAL_FILE', 'Transferred bytes do not match the manifest');
+			return [file.id, value instanceof Blob ? value : Uint8Array.from(value)] as const;
+		}));
 		await verifyTransferFiles({ manifest, files: bytes }, signal); this.lease.assertCurrent();
 		const recordings = manifest.things.filter(isTransferRecording);
 		for (const row of recordings) recordingTransferFile(row, manifest);
@@ -513,7 +516,11 @@ export class LocalThings {
 				else if (isTransferAlgorithm(row) && this.scope.kind === 'account') await this.algorithmMutations!.import(tx, row);
 				else await this.onWrite?.(tx, row, null, row);
 			}
-			for (const file of manifest.files) { signal?.throwIfAborted(); await tx.putBytes(fileMap.get(file.id)!, bytes.get(file.id)!); }
+			for (const file of manifest.files) {
+				signal?.throwIfAborted(); const value = bytes.get(file.id)!;
+				if (value instanceof Blob) await tx.putBlob(fileMap.get(file.id)!, value);
+				else await tx.putBytes(fileMap.get(file.id)!, value);
+			}
 		}, undefined, signal);
 		return { ok: true, roots: manifest.roots.map(id => map.get(id)!), idMap: Object.fromEntries(map), things: rows };
 	}

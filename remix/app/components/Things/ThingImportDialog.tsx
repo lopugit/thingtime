@@ -8,9 +8,12 @@ import { useApi } from '~/hooks/useApi';
 import { readTransferFiles, MAX_TRANSFER_BATCH } from '~/utils/thingTransfer/readFile';
 import { readTransferClipboard, MAX_CLIPBOARD_BYTES } from '~/utils/thingTransfer/browser';
 import { TRANSFER_LIMITS } from '~/utils/thingTransfer/format';
-import type { TransferBundle } from '~/utils/thingTransfer/archive';
+import type { TransferBundle as BinaryTransferBundle } from '~/utils/thingTransfer/archive';
+import { binaryBlob } from '~/utils/thingTransfer/binary';
 import { isTransferRecording, recordingTransferFile } from '~/utils/thingTransfer/recording';
 import { isTransferEmoji, emojiTransferFile } from '~/utils/thingTransfer/emoji';
+
+type TransferBundle = BinaryTransferBundle<Uint8Array | Blob>;
 
 /** Mount only while open, keyed by account. Unmount cancels parsing/import
  * and delegates uncommitted file cleanup to the normal upload workflow. */
@@ -135,7 +138,7 @@ const ThingImportStep = ({ ownerId, folderId, initialBundle, onClose, batch, com
     const files = bundle.manifest.files.map((entry, index) => {
       // Distinct timestamps prevent the normal picker dedupe from dropping
       // two distinct archive entries with equal names and byte lengths.
-      const file = new File([Uint8Array.from(bundle.files.get(entry.id)!)], entry.name, { type: entry.mime, lastModified: index + 1 });
+      const file = new File([binaryBlob(bundle.files.get(entry.id)!)], entry.name, { type: entry.mime, lastModified: index + 1 });
       fileIds.current.set(file, entry.id);
       return file;
     });

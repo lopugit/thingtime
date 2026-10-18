@@ -175,7 +175,7 @@ export function anonymousApi<T extends Record<string, any>>(remote: T): T {
 			return { ok: true, plan: { roots: manifest.roots, things: manifest.things, files: manifest.files,
 				readLocalFile: async (id: string, signal?: AbortSignal) => { lease.assertCurrent(); signal?.throwIfAborted(); const bytes = files.get(id); if (!bytes) throw new WorkspaceError('MISSING_LOCAL_FILE', 'File is not in this export'); return Uint8Array.from(bytes); } } };
 		},
-		import: async ({ manifest, folderId, localFiles }: { manifest: unknown; folderId?: string | null; localFiles?: Map<string, Uint8Array> }, request?: { signal?: AbortSignal }) => changed(await service().import(manifest, folderId, localFiles, request?.signal)),
+		import: async ({ manifest, folderId, localFiles }: { manifest: unknown; folderId?: string | null; localFiles?: Map<string, Uint8Array | Blob> }, request?: { signal?: AbortSignal }) => changed(await service().import(manifest, folderId, localFiles, request?.signal)),
 		bulk: async ({ op, ids, recursive, folderId = null }: { op: string; ids: string[]; recursive?: boolean; folderId?: string | null }) => {
 			if (op === 'move') { const result = await service().move(ids, folderId); return changed({ ...result, succeeded: ids.length, failed: 0, results: ids.map(id => ({ id, ok: true })) }); }
 			if (op === 'copy') { const bundle = await service().export(ids); const result = await service().import(bundle.manifest, folderId, bundle.files); return changed({ ...result, succeeded: ids.length, failed: 0, results: ids.map(id => ({ id, ok: true, newId: result.idMap[id] })) }); }

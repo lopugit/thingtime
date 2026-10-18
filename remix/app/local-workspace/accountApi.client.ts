@@ -546,7 +546,7 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 				return exportAccountThings(input, { ...current, canRefresh, remote: (args, request) => current.transport.export(args, request?.signal) }, options?.signal);
 			}, options?.signal);
 		};
-	const importThings = async (input: { manifest: unknown; folderId?: string | null; files?: Record<string, string>; localFiles?: Map<string, Uint8Array> }, options?: { signal?: AbortSignal }) => {
+	const importThings = async (input: { manifest: unknown; folderId?: string | null; files?: Record<string, string>; localFiles?: Map<string, Uint8Array | Blob> }, options?: { signal?: AbortSignal }) => {
 			facadeLease.assertCurrent(); options?.signal?.throwIfAborted();
 			if (Object.keys(input || {}).some(key => !['manifest', 'folderId', 'files', 'localFiles'].includes(key))) throw new WorkspaceError('INVALID_IMPORT', 'Unsupported import options.');
 			const manifest = parseTransfer(serializeTransfer(validateTransfer(input.manifest))), folderId = input.folderId;

@@ -12119,3 +12119,12 @@ Local results do not establish current-head CI or deployed acceptance.
 - [x] More than 64 media references queue at three active reads; Blob URLs preserve inert MIME behavior, abort released work and revoke on identity change.
 - [ ] Run `fileBlobs.browser.test.ts` with a task-owned isolated browser/backend: native anonymous upload, copy, offline cold reload, exact download and image preview at 1440/390/320px; scroll top to bottom, open folder controls, verify zero account mutations and no overflow. Current run is blocked before app startup by nested macOS/Chrome sandbox initialization; do not count it as passed or disable protections to pass it.
 - [ ] Complete ZIP/import/export, remote-retention and paired-device streaming plus remaining traversal caps; this checkpoint does not cover those paths.
+
+### Blob ZIP selection and download assembly — 2026-10-18
+
+- [x] Import two 33 MiB files via `readTransferFile` and `LocalThings.import`; reopen storage and compare SHA-256 against an independently computed source digest. Reject any whole-file or archive Blob `arrayBuffer` call in the fixture.
+- [x] Exercise both decoder forms against reordered compressed entries, missing/undeclared/unsafe entries, corrupt bytes, forged expansion headers and cancellation; never return partial content.
+- [x] Refuse scope retirement during hashing; roll back metadata, bytes and account upload intent on native quota failure. Retry after capacity becomes available. Account import must finish locally without waiting for the sender.
+- [x] ZIP download snapshots mutable arrays/map/metadata before async preparation, rejects lost availability and builds Blob output without a whole-archive JS allocation.
+- [ ] In the isolated native browser, select the same ZIP through the Import dialog, confirm it, cold reload offline and download exact bytes; check cancellation/refusal messaging and top-to-bottom desktop/390/320px layout. Existing sandbox-startup blocker remains open.
+- [ ] Finish remaining buffered export collection/clipboard, remote retention and paired-device paths; existing canonical transfer budgets remain unchanged in this checkpoint.

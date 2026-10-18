@@ -4131,3 +4131,25 @@ visibility blockers remain separate. No merge, manual deployment, public content
 or existing-account mutation occurred.
 
 [Implementation, evidence and remaining buffers](../docs/local-workspaces.md#native-blob-file-storage--2026-10-18).
+
+## Blob ZIP transfer checkpoint — 2026-10-18
+
+Normal ZIP selection keeps decoded files as Blobs and uses the existing canonical
+manifest/entry/checksum validation. Local import removes its smaller 16/64 MiB
+buffer ceilings while keeping native storage accounting and atomic account queue
+admission. Download assembles Blob ZIP output and freezes mutable input before
+async checks. No HTTP route, portable schema or authorization contract changed.
+
+Validation: 665 workspace + four offline-shell checks; 322 + 18 Things checks;
+seven focused Blob-transfer cases, including a 66 MiB import/reopen, SHA-256,
+fresh IDs, account intent, cancellation, scope retirement and quota rollback.
+Totals overlap; the final account case ran after the broad suite. Client build and
+template sync passed. TypeScript matches 91 existing diagnostics; lint has zero
+errors and two existing warnings. See `tmp/blob-transfer-*.log` and the
+[workspace checkpoint](../docs/local-workspaces.md#blob-zip-import-and-download-assembly--2026-10-18).
+
+Native browser acceptance remains blocked before app startup by the previously
+recorded macOS/Chrome nested-sandbox failure. No weaker browser or network policy
+was used. Export collection/clipboard buffering, remote retention and the wider
+acceptance matrix remain open. No current-head deployment acceptance or merge is
+claimed; PR/branch visibility and CI must be rechecked independently.

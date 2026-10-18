@@ -68,6 +68,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-18 — **Codex (AI)**: Read selected ZIP transfers as Blob chunks, remove
+  the smaller local import buffer ceilings, and assemble ZIP downloads without a
+  whole-archive JS buffer. Preserve checksum/entry validation and atomic account
+  upload intent. Native browser acceptance remains pending.
+  [PR #1000 checkpoint](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md#blob-zip-transfer-checkpoint--2026-10-18).
+
 - 2026-10-18 — **Codex (AI)**: Keep native local files as Blob handles with bounded
   hashing, atomic post/draft snapshot checks and independent account multipart
   upload. Remove local-only copy and preview buffer ceilings while preserving
