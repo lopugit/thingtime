@@ -4901,6 +4901,26 @@ halves.
 
 ## Commander desktop launcher
 
+- [ ] Click the launcher Settings gear with an empty query and with search results.
+      Tab to it and activate with Return/Space: only Settings opens; the selected
+      search result must not run, and the current query must not be rewritten.
+- [ ] In Activity, confirm Name/PID order remains steady across usage refreshes.
+      Exercise every Sort by/Order option, parent grouping and multiple text,
+      numeric, memory-unit and throughput-unit filters. Missing GPU/network
+      values stay unavailable; a filter with no matches shows its empty state.
+- [ ] Switch Average window through Current, 5/10/30 minutes, 1/3/6/12 hours and
+      1 day. Confirm sorting, filters and displayed usage use the same window,
+      observed history is stated honestly, and reopening/popping out shares
+      the native sample history. Validate a representative PID/name/memory
+      reading against macOS ps/Activity Monitor; do not call newly collected
+      samples a verified full-day history. Run ProcessUsageHistoryTests for
+      weighted averages, expiry, gaps and PID reuse.
+- [ ] Pop Processes out, resize it, scroll to the bottom, and toggle Keep above
+      while focusing another app. Close/reopen it and Settings in both orders.
+      Double-click each title bar twice: maximize inside the usable screen and
+      restore the exact prior frame without entering fullscreen. Verify controls
+      in the title bar do not drag/maximize the window.
+
 - [ ] Run `corepack pnpm --dir Commander test:raycast-extension` and confirm
       regex replacement escapes are decoded once, unsupported escapes remain
       intact, and decoded backslashes are not decoded a second time.

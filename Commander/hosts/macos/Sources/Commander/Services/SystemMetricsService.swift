@@ -6,7 +6,7 @@ import OSLog
 @MainActor
 final class SystemMetricsService {
   private let daemonPID: pid_t
-  private let applicationResponsiveness: ApplicationResponsivenessService
+  let applicationResponsiveness: ApplicationResponsivenessService
   private let logger = Logger(subsystem: "com.thingtime.Commander", category: "Metrics")
   private var previousMachineCPU: (total: UInt64, idle: UInt64)?
   private var previousCommanderCPU: (nanoseconds: UInt64, sampledAt: UInt64)?
@@ -14,8 +14,12 @@ final class SystemMetricsService {
   private var cachedGPU: (sampledAt: Date, utilization: Double?)?
   private var previousProcesses: [pid_t: ProcessCounters] = [:]
   private var loggedFirstSample = false
+  private let processHistory = ProcessUsageHistory()
+  private var cachedSnapshot: (time: Double, value: [String: Any])?
+
 
   private struct ProcessCounters {
+    let startedAtMs: UInt64
     let cpuNanoseconds: UInt64
     let diskReadBytes: UInt64
     let diskWriteBytes: UInt64
@@ -27,7 +31,33 @@ final class SystemMetricsService {
     self.applicationResponsiveness = applicationResponsiveness
   }
 
-  func snapshot() -> [String: Any] {
+  func snapshot(averageSeconds: Int = 0) -> [String: Any] {
+    let now = ProcessInfo.processInfo.systemUptime
+    let current: [String: Any]
+    if let cachedSnapshot, now - cachedSnapshot.time < 1.8 {
+      current = cachedSnapshot.value
+    } else {
+      current = collectSnapshot()
+      let machine = current["machine"] as? [String: Any] ?? [:]
+      processHistory.record(machine["processes"] as? [[String: Any]] ?? [], at: now)
+      cachedSnapshot = (now, current)
+    }
+    guard averageSeconds > 0 else { return current }
+    var result = current
+    var machine = current["machine"] as? [String: Any] ?? [:]
+    machine["processes"] = (machine["processes"] as? [[String: Any]] ?? []).map { process in
+      var row = process
+      if let pid = process["pid"] as? Int,
+         let average = processHistory.average(pid: pid, seconds: averageSeconds, at: now) {
+        row["average"] = average
+      }
+      return row
+    }
+    result["machine"] = machine
+    return result
+  }
+
+  private func collectSnapshot() -> [String: Any] {
     let processMetrics = commanderProcessMetrics()
     let machineCPU = machineCPUPercent()
     let memory = machineMemory()
@@ -222,13 +252,15 @@ final class SystemMetricsService {
     for pid in activePIDs() {
       guard let task = processMetrics(for: pid), let bsd = processBSDInfo(for: pid) else { continue }
       let usage = processResourceUsage(for: pid)
+      let startedAtMs = bsd.pbi_start_tvsec * 1000 + bsd.pbi_start_tvusec / 1000
       let counters = ProcessCounters(
+        startedAtMs: startedAtMs,
         cpuNanoseconds: task.cpuNanoseconds,
         diskReadBytes: usage?.readBytes ?? 0,
         diskWriteBytes: usage?.writeBytes ?? 0,
         sampledAt: now
       )
-      let previous = previousProcesses[pid]
+      let previous = previousProcesses[pid].flatMap { $0.startedAtMs == startedAtMs ? $0 : nil }
       let elapsed = previous.map { now > $0.sampledAt ? now - $0.sampledAt : 0 } ?? 0
       let cpuPercent: Double
       let diskReadPerSecond: Double
@@ -254,6 +286,7 @@ final class SystemMetricsService {
       next[pid] = counters
       rows.append([
         "pid": Int(pid),
+        "startedAtMs": startedAtMs,
         "parentPid": Int(bsd.pbi_ppid),
         "name": processName(for: pid),
         "cpuPercent": cpuPercent,
@@ -264,7 +297,7 @@ final class SystemMetricsService {
     }
     previousProcesses = next
     return rows.sorted {
-      ($0["cpuPercent"] as? Double ?? 0) > ($1["cpuPercent"] as? Double ?? 0)
+      ($0["pid"] as? Int ?? 0) < ($1["pid"] as? Int ?? 0)
     }
   }
 

@@ -1,0 +1,172 @@
+.launcher-settings-button,
+.process-icon-button {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 7px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  color: var(--muted);
+  background: transparent;
+  cursor: pointer;
+}
+.launcher-settings-button:hover,
+.process-icon-button:hover {
+  color: var(--text);
+  background: var(--hover);
+}
+.launcher-settings-button svg,
+.process-icon-button svg {
+  width: 19px;
+  height: 19px;
+}
+.process-controls,
+.process-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: end;
+  margin-bottom: 12px;
+}
+.process-controls label,
+.process-filter label {
+  display: grid;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+.process-controls select,
+.process-filter select,
+.process-filter input,
+.process-add-filter {
+  min-height: 34px;
+  max-width: 100%;
+  padding: 6px 9px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  color: var(--text);
+  background: var(--surface-solid);
+  font: inherit;
+}
+.process-filter input {
+  width: 160px;
+}
+.process-controls .process-checkbox,
+.process-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  white-space: nowrap;
+}
+.process-add-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+}
+.process-sample-note {
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+.processes-window {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  height: 100%;
+  background: var(--surface-solid);
+}
+.processes-window .settings-titlebar {
+  gap: 12px;
+}
+.processes-window .settings-titlebar .process-checkbox {
+  margin-left: auto;
+  font-size: 0.85rem;
+}
+.processes-window-content {
+  overflow: auto;
+  min-height: 0;
+  padding: 18px;
+}
+.processes-window .activity-process-table-wrap {
+  max-height: none;
+}
+.processes-window .activity-process-table thead {
+  position: sticky;
+  top: 0;
+  background: var(--surface-solid);
+  z-index: 1;
+}
+.activity-process-table td:first-child {
+  overflow-wrap: anywhere;
+}
+@media (max-width: 600px) {
+  .search-hint,
+  .search-bar > kbd {
+    display: none;
+  }
+  .search-bar {
+    gap: 10px;
+    padding-inline: 14px;
+  }
+  .processes-window-content {
+    padding: 10px;
+  }
+  .processes-window .settings-titlebar {
+    padding-left: 80px;
+    padding-right: 12px;
+  }
+}
+
+@media (max-width: 700px) {
+  .activity-process-table {
+    min-width: 0;
+    table-layout: fixed;
+  }
+  .activity-process-table thead {
+    display: none;
+  }
+  .activity-process-table tbody {
+    display: block;
+  }
+  .activity-process-table tr {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    border-top: 1px solid var(--line);
+  }
+  .activity-process-table td {
+    min-width: 0;
+    white-space: normal;
+    border: 0;
+    overflow-wrap: anywhere;
+  }
+  .activity-process-table td:first-child {
+    min-width: 0;
+    grid-column: 1 / -1;
+  }
+  .activity-process-table td:not(:first-child)::before {
+    content: attr(data-label);
+    display: block;
+    color: var(--faint);
+    font-size: 0.7rem;
+  }
+  .activity-process-table .activity-process-group {
+    display: block;
+  }
+}
+
+@media (min-width: 701px) {
+  .activity-process-table {
+    table-layout: fixed;
+  }
+  .activity-process-table th:first-child {
+    width: 28%;
+  }
+  .activity-process-table td {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+}
