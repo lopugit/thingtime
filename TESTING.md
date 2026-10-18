@@ -10276,3 +10276,5 @@ separate from deterministic discovery/lease tests.
 - Agent task pages: verify desktop centering and mobile gutters; mark a todo complete with a nonempty neighboring add-todo form, reload, and confirm only that todo changed.
 - Desktop agent task identity: switch API endpoints with matching owner/task IDs and default database identity; the second endpoint must not expose or reuse the first endpoint’s browser claim.
 - Agent general security link: open it from a task; the Things settings category and Agent browsers disclosure must open and scroll to the default policy controls. Save, reload and verify the policy; restore isolated testing after acceptance.
+
+- Device capability growth: a fully equipped Mac (65 current capability identifiers) must publish fresh state, retain every identifier in the owner device response, and populate the menu bar Builder page. Pairing and heartbeat admission share the 128-entry bound; reject 129 entries and invalid identifiers.
