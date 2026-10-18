@@ -80,6 +80,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- **2026-10-19 — No-login draft host:** preserve the canonical sandbox/no-store
+  headers in packaged Nitro builds and visibly disable unavailable JSON export.
+  Fresh isolated MCP/native captures and normal private importer round-trip are
+  recorded in [PR #1000 notes](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+
 - 2026-10-19: Agent Tasks reads locally created tasks, todos and progress offline through explicit owner-scoped structured search. Search 1.4.0 preserves server access fences; account device results remain explicitly partial. Native no-login create/edit/cold-reload/export and real isolated API scope checks pass. See [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md). — Codex (AI)
 
 

@@ -119,3 +119,11 @@ return `503 LOCAL_API_NOT_CONFIGURED`; neither server selects production implici
 a macOS OS network sandbox, including direct-IP and redirect denial. Fixture
 requests accept only a literal loopback HTTP origin and same-origin uploads.
 Keep backend/browser network isolation and dedicated test credentials in place.
+
+
+The no-login draft host uses `draftPreviewCsp` in Vite, Nitro `routeRules` and
+Vercel output headers. Keep all three serving paths aligned; HTML meta CSP
+cannot provide the opaque-origin sandbox. `MCP/test/render-export.integration.test.ts`
+checks the real response and storage denial; `TT_DRAFT_TEST_SESSION` permits the
+explicit isolated runtime origin after health/session verification. See
+[no-login draft preview](../no-login-draft-preview.md).

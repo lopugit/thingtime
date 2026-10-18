@@ -4614,3 +4614,42 @@ Fresh full-app Chromium acceptance passes normal gallery installation while offl
 The opt-in `actionSearch.browser.test.ts` uses its adjacent read-only browser fixture. Set `TT_ACTION_SEARCH_ORIGIN`, `TT_ACTION_SEARCH_SESSION`, `TT_ACTION_SEARCH_ARTIFACTS`, `TT_ACTION_SEARCH_FIXTURE`, `TT_ACTION_SEARCH_PUPPETEER` and `TT_ACTION_SEARCH_CHROME` only inside a verified isolated browser-manager runtime. It refuses a mismatched runtime health/session. Bundle the fixture as browser IIFE `actionSearchFixture` and the test as Node ESM. Do not use a personal profile or production backend.
 
 Validation: 714 workspace tests pass, 76 opt-ins skipped in the ordinary run; four offline-shell tests pass. The new native scenario is run explicitly. Focused Action tests include 22-task pagination, child isolation, canonical exported Action re-import with fresh IDs, cross-account separation, unsupported meanings, cancellation and byte budgets. Capability checks, client/template/server builds and changed-file lint pass. TypeScript still reports the same 91 diagnostics outside changed files. This checkpoint does not establish full data-relationship transfer, signed-in reconnect/queue UI, installed-app acceptance, CI or current-head deployed behavior. The broader goal and target-host downloadable-artifact connection remain open.
+
+
+## Native draft serving correction — 2026-10-19
+
+Fresh original-fixture acceptance found that the packaged Node server omitted
+HTTP sandbox headers, despite Vite/Vercel and the local MCP worker supplying
+them. The HTML metadata policy blocked network features but could not make the
+page opaque. Nitro route rules now reuse the canonical draft policy and no-store.
+The JSON download control also reflects its existing availability fence: disabled
+at startup, during rendering and after validation/render failure.
+
+- Two opt-in native MCP/running-app tests pass without skips. The isolated
+  supplement checks exact text, responsive editor scrolling, renderer-bundle
+  equality, zero page errors/API requests, storage denial, stale export refusal,
+  reload reset and all five ordinary/encoded serving paths.
+- Actual MCP JSON imports through the normal API into a disposable temporary
+  identity. Fresh IDs and component-key remapping preserve the Component render,
+  arguments and page dependency. Private ACLs, anonymous 404s and normal re-export
+  pass; only fixture records are removed, followed by runtime release.
+- Fresh PNGs: 1440×1000, 390×844, 320×844 and card-only 400×560. Content hash remains
+  `a251642fe58ef5b1a2f32f8414591e02d6d52ebd2a50293f6b14c12464d4a06c`.
+  Evidence: `tmp/current-render-native/native/`; network-none, read-only root,
+  no host mounts/ports, bounded 4 GiB/one CPU, no OOM, and cleanup verified.
+- Five draft checks and 37 MCP unit checks pass (two native opt-ins skip in the
+  ordinary command and run explicitly above). Changed-file lint and production
+  client/server builds pass; 252 offline assets. The prior 91 TypeScript baseline
+  diagnostics are unchanged evidence from the preceding checkpoint, not a new
+  clean typecheck claim.
+- Failed attempts remain under `tmp/current-render-native/attempt*`: the first
+  concurrency assertion observed two errors and passed on diagnostic reruns
+  without a runtime change. Its original cause is unconfirmed; assertion output
+  now includes actual errors for future diagnosis. Later failures directly found
+  the missing sandbox header and visibly enabled export control, both repaired.
+  The import supplement initially compared a legitimately remapped component key
+  too strictly; its corrected remapping-aware comparison passes separately.
+
+The target agent-host tool connection remains unavailable. Current PR head/check
+visibility and preview freshness remain separate open gates. No main merge,
+deployment, publication or existing-account content change is included.

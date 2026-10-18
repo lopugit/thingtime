@@ -12551,3 +12551,22 @@ Local results do not establish current-head CI or deployed acceptance.
 - Verify the normal route renders both global and site blocks, a second offline tab's saved global edit refreshes the first, and Reset removes only the personal site override. Check every view at 1440/390/320px and scroll the whole page and inspector. No account Things/drafts/attachments/temporary-account requests or page errors may occur. Run `siteBuilder.browser.test.ts` explicitly in the isolated manager runtime.
 - Delay the selected text's rich-editor chunk: existing text must remain visible. At 320px, the border-style select must stay at least 100px wide and its value must not wrap. Save/Reset must scroll clear of the floating controls. Wait for the actual rich editor before screenshotting.
 - Record container resource events and cleanup. Any OOM invalidates acceptance. A two-browser full-app harness may use the test host's explicit 4096 MiB budget; this never changes network policy or the installed manager's default budget.
+
+
+### No-login draft serving and export state
+
+- Build the production client and Nitro server; run the opt-in MCP/browser test
+  against the isolated runtime with its explicit session ID. Both requested
+  native tests must run, not skip.
+- Assert the actual draft HTTP response has the canonical opaque-origin sandbox
+  and `Cache-Control: no-store`. Check ordinary, directory, query-string and
+  encoded paths; a meta CSP alone cannot block account-origin storage.
+- In a fresh no-session browser, verify storage access is denied, only the two
+  shipped assets load, and no account API runs. Download stays disabled initially,
+  while rendering and after a malformed render; preserve the last good preview.
+- Scroll the editor at 1440/390/320px, check exact fixture text and native PNG
+  dimensions/crop, then import the actual MCP JSON through the ordinary private
+  importer. Permit legitimate ID/component-key remapping; verify content,
+  dependency closure, anonymous denial and canonical re-export independently.
+- Preserve failed attempts. Concurrent MCP assertion failures must show the
+  returned error diagnostics rather than only an unexplained error count.
