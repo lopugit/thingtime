@@ -95,7 +95,7 @@ export const encodeTransferArchiveBlob = async (bundle: TransferBundle<TransferB
  * No archive filename is ever passed to the filesystem or used as a URL.
  */
 const readEntries = async <T extends TransferBinary>(
-  archive: TransferBinary, limits: Map<string, number>, collect: { chunk: (data: Uint8Array) => T; join: (chunks: T[], size: number) => T },
+  archive: TransferBinary, limits: Map<string, number>, collect: { chunk: (data: Uint8Array) => T; join: (chunks: T[], size: number) => T; chunkBytes?: number },
   signal?: AbortSignal, exact = false
 ): Promise<Map<string, T>> => {
   const result = new Map<string, T>();
@@ -116,14 +116,29 @@ const readEntries = async <T extends TransferBinary>(
     }
     let size = 0;
     const chunks: T[] = [];
+    let pending: Uint8Array | undefined, pendingBytes = 0;
     active.add(file);
     file.ondata = (error, data, final) => {
       if (failure) return;
       if (error) { failure = error; return; }
       size += data.byteLength;
       if (size > cap) { failure = new TransferFormatError('An archive entry expands beyond its limit'); file.terminate(); return; }
-      chunks.push(collect.chunk(data));
+      if (collect.chunkBytes) {
+        // Keep the inflater's small input budget without creating a browser
+        // Blob handle for every 4 KiB callback. One bounded buffer per entry
+        // coalesces results before handing them to the browser's Blob store.
+        for (let offset = 0; offset < data.byteLength;) {
+          pending ||= new Uint8Array(Math.min(cap, collect.chunkBytes));
+          const length = Math.min(pending.byteLength - pendingBytes, data.byteLength - offset);
+          pending.set(data.subarray(offset, offset + length), pendingBytes);
+          pendingBytes += length; offset += length;
+          if (pendingBytes === pending.byteLength) {
+            chunks.push(collect.chunk(pending)); pending = undefined; pendingBytes = 0;
+          }
+        }
+      } else chunks.push(collect.chunk(data));
       if (final) {
+        if (pendingBytes) chunks.push(collect.chunk(pending!.subarray(0, pendingBytes)));
         result.set(file.name, collect.join(chunks, size));
         active.delete(file);
       }
@@ -162,7 +177,8 @@ const joinBytes = (chunks: Uint8Array[], size: number): Uint8Array => {
 };
 const byteCollector = { chunk: (data: Uint8Array) => data, join: joinBytes };
 const blobCollector = {
-  // Move each inflater result out of JS buffers before reading another block.
+  chunkBytes: 256 * 1024,
+  // Retain at most one bounded processing buffer, not the whole file.
   chunk: (data: Uint8Array) => new Blob([Uint8Array.from(data)]),
   join: (chunks: Blob[]) => new Blob(chunks),
 };

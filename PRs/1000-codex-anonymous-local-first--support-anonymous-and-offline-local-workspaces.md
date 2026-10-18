@@ -9,6 +9,47 @@ goal. Do not merge until the [coverage matrix](../docs/local-workspaces.md) is
 complete. It builds on main and includes the separate posting independence fix
 in [PR #999](https://github.com/lopugit/thingtime/pull/999).
 
+## Native large-file and ZIP checkpoint — 2026-10-19
+
+The ordinary anonymous file browser now has real packaged-app acceptance for a
+70 MiB file: native selection, independent copy, offline cold reload, exact
+native download, canonical folder ZIP export, normal Import dialog and re-export
+with remapped identities. SHA-256 matches an independently hashed source. Invalid
+JSON reports a visible error; closing an in-progress ZIP parse creates no copies,
+and a fresh import succeeds. Image decoding, opened dialogs and top-to-bottom
+layout pass at 1440×1000, 390×844 and 320px. No account records, queued account
+commands, mutation requests, page errors or whole-file Blob reads were observed.
+
+ZIP decoding now coalesces inflater output in bounded 256 KiB buffers before
+creating browser Blob handles. This avoids creating a handle for every small
+inflater callback while retaining entry limits, integrity checks and cancellation.
+A regression verifies handle count and exact contents; no speedup is claimed.
+
+Validation: 731 workspace tests plus four offline-shell checks pass (79 opt-ins
+skipped by that command); the native file fixture ran explicitly and passed.
+The 33 focused storage/transfer and 21 archive checks overlap the broad suite.
+Client/server builds pass, changed-file lint is clean, and TypeScript retains 91
+baseline diagnostics with none in changed files. Evidence:
+`tmp/file-blobs-native/native/verification.json`, native PNGs and
+`large-transfer.thingtime.json` (manifest only; its binary is not embedded).
+The task-owned runtime enforced network:none, read-only root, no host mounts or
+published ports, with disposable storage, zero OOM events and confirmed cleanup.
+Large fixture inputs/downloads used private runtime scratch; earlier harness
+failures remain recorded separately.
+
+This supersedes the historical nested macOS sandbox blocker for these anonymous
+checks. Account large-file retention/download, paired-device transports, clipboard
+serialization, actual browser quota exhaustion and remaining feature/capacity
+coverage are still open. In particular, the remote account file browser retains a
+32 MiB reader limit that needs separate review; this test exercises local files.
+The target-host MCP artifact connection and final-head CI/deployed acceptance
+remain separate gates. No merge or deployment is included.
+
+Graph refresh: the local semantic proxy returned hollow chunks again; full
+documentation semantic freshness is unverified. The structural graph and portable
+visualization are refreshed independently. The HTML plan passes responsive
+scroll, search and filters with 45 completed / 10 local / 22 open checkpoints.
+
 ## Character navigation and media checkpoint — 2026-10-19
 
 The Things workspace selector opens retained Character content through the same

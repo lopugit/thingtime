@@ -5,6 +5,42 @@ Thingtime application, separate from the stateless agent export sandbox in
 [no-login-draft-preview.md](no-login-draft-preview.md). The full local-first
 rollout is **not ready to merge** until the outstanding rows below are verified.
 
+## Native large-file and ZIP checkpoint — 2026-10-19
+
+The ordinary anonymous file browser now has real packaged-app acceptance for a
+70 MiB file: native selection, independent copy, offline cold reload, exact
+native download, canonical folder ZIP export, normal Import dialog and re-export
+with remapped identities. SHA-256 matches an independently hashed source. Invalid
+JSON reports a visible error; closing an in-progress ZIP parse creates no copies,
+and a fresh import succeeds. Image decoding, opened dialogs and top-to-bottom
+layout pass at 1440×1000, 390×844 and 320px. No account records, queued account
+commands, mutation requests, page errors or whole-file Blob reads were observed.
+
+ZIP decoding now coalesces inflater output in bounded 256 KiB buffers before
+creating browser Blob handles. This avoids creating a handle for every small
+inflater callback while retaining entry limits, integrity checks and cancellation.
+A regression verifies handle count and exact contents; no speedup is claimed.
+
+Validation: 731 workspace tests plus four offline-shell checks pass (79 opt-ins
+skipped by that command); the native file fixture ran explicitly and passed.
+The 33 focused storage/transfer and 21 archive checks overlap the broad suite.
+Client/server builds pass, changed-file lint is clean, and TypeScript retains 91
+baseline diagnostics with none in changed files. Evidence:
+`tmp/file-blobs-native/native/verification.json`, native PNGs and
+`large-transfer.thingtime.json` (manifest only; its binary is not embedded).
+The task-owned runtime enforced network:none, read-only root, no host mounts or
+published ports, with disposable storage, zero OOM events and confirmed cleanup.
+Large fixture inputs/downloads used private runtime scratch; earlier harness
+failures remain recorded separately.
+
+This supersedes the historical nested macOS sandbox blocker for these anonymous
+checks. Account large-file retention/download, paired-device transports, clipboard
+serialization, actual browser quota exhaustion and remaining feature/capacity
+coverage are still open. In particular, the remote account file browser retains a
+32 MiB reader limit that needs separate review; this test exercises local files.
+The target-host MCP artifact connection and final-head CI/deployed acceptance
+remain separate gates. No merge or deployment is included.
+
 ## Character navigation and media checkpoint — 2026-10-19
 
 The Things workspace selector opens retained Character content through the same
@@ -4525,9 +4561,10 @@ they do not prove real Chrome storage exhaustion.
 
 Evidence: `tmp/workspace-capacity-{workspace-final,offline,build,lint-final,
 typecheck-final}.log`. Native Chrome acceptance is pending after both supported
-control methods timed out in the assigned Thingtime window. The remaining
-16 MiB buffered-file/tree adapters, 64 MiB import/preview buffers, password
-traversal and other catalogue/partition caps are separate unfinished work.
+control methods timed out in the assigned Thingtime window. At that checkpoint, buffered-file/tree adapters, import/preview buffers, password
+traversal and catalogue/partition caps remained unfinished. Later Blob and
+traversal checkpoints below supersede specific items; the current matrix remains
+the completion gate.
 No merge, deployment, public exposure or existing-account mutation occurred.
 
 Graph refresh limitation: the local semantic proxy health request timed out
@@ -4648,7 +4685,8 @@ and five existing warnings. TypeScript retains the same 91 baseline diagnostics.
 Evidence: `tmp/local-blob-{workspace-final,regression-final,build-final,server-build-final,lint-complete}.log`
 and `tmp/local-blob-typecheck-verification.json`.
 
-Native acceptance is **not passed**. `fileBlobs.browser.test.ts` exercises the real
+Historical 18 October result (superseded for anonymous files by the
+[19 October native checkpoint](#native-large-file-and-zip-checkpoint--2026-10-19)): native acceptance had not passed. `fileBlobs.browser.test.ts` exercises the real
 anonymous UI, offline cold reload, exact download hash, normal file copy and image
 preview at 1440/390/320px. The fresh browser/backend fixture passed its OS-level
 allowed-loopback, denied redirect, direct-IP and mapped-IPv6 preflight. Chrome then
@@ -4704,7 +4742,9 @@ matches the existing 91 diagnostics exactly; targeted lint has no errors and two
 existing warnings. Logs: `tmp/blob-transfer-{workspace,things,final-focused,build,lint-final}.log`
 and `tmp/blob-transfer-typecheck-verification.json`.
 
-Native acceptance of this new path remains pending. The earlier isolated Chrome
+Historical 18 October result: native acceptance of this new path was pending.
+The [19 October native checkpoint](#native-large-file-and-zip-checkpoint--2026-10-19)
+now verifies the anonymous ZIP flow. The earlier isolated Chrome
 run failed to initialize its nested sandbox before reaching the app; no boundary
 was broadened and no new browser run is claimed here. The native matrix must cover
 normal ZIP selection, confirmation, cold offline reopen, exact download and
@@ -4739,9 +4779,10 @@ in-process IndexedDB fixtures, not native browser acceptance. Things suites pass
 326 + 18 checks. Broader regression, build, lint and typecheck results are retained
 in `tmp/blob-export-*.log`; the PR checkpoint records their final outcomes.
 
-The existing isolated Chrome sandbox-startup blocker remains open. No current-head
-native screenshots, UI acceptance or deployment proof is claimed by this checkpoint.
-The transfer and account browser matrix in `TESTING.md` remains required.
+Historical 18 October result: the isolated Chrome sandbox-startup blocker was
+open. The [19 October native checkpoint](#native-large-file-and-zip-checkpoint--2026-10-19)
+now verifies anonymous file/ZIP UI acceptance. Account, clipboard and deployed
+coverage in `TESTING.md` remains required.
 
 
 ## Owned originals stream into Blob storage — 2026-10-18

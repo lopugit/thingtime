@@ -9,7 +9,7 @@ import { AccountThingSync } from './accountSync';
 import { exportAccountThings } from './accountExport';
 import { bundleFromPlan } from '../utils/thingTransfer/browser';
 import { createQuotaFactory } from './storageTestFixture';
-import { encodeTransferArchiveBlob, transferChecksum, type TransferBundle } from '../utils/thingTransfer/archive';
+import { decodeTransferArchiveBlob, encodeTransferArchiveBlob, transferChecksum, type TransferBundle } from '../utils/thingTransfer/archive';
 import { readTransferFile } from '../utils/thingTransfer/readFile';
 
 const scope = {kind: 'anonymous'} as const;
@@ -27,6 +27,20 @@ async function fixture(size: number): Promise<TransferBundle<Blob>> {
   files: ['a','b'].map((id,i)=>({id:`file-${id}`,targetId:id,path:`files/00000${i}`,name:`${id} 🦄.bin`,mime:'application/octet-stream',bytes:size,sha256:digest}))},
   files: new Map([['file-a',blob],['file-b',blob]])};
 }
+
+test('native ZIP decoding bounds browser Blob handles as well as byte buffers', async () => {
+ const input=await fixture(3*1024*1024),archive=await encodeTransferArchiveBlob(input);
+ const NativeBlob=globalThis.Blob;let handles=0;
+ globalThis.Blob=new Proxy(NativeBlob,{construct(target,args,newTarget){handles++;return Reflect.construct(target,args,newTarget);}});
+ try {
+  const decoded=await decodeTransferArchiveBlob(archive);
+  assert.deepEqual(decoded.manifest,input.manifest);
+  for(const [id,bytes]of decoded.files)assert.equal(await transferChecksum(bytes),input.manifest.files.find(file=>file.id===id)!.sha256);
+  // A separate browser-process handle per inflater callback makes native
+  // imports spend most of their time in Blob registration/IPC.
+  assert.ok(handles<100,`Six MiB should not require ${handles} browser Blob handles`);
+ }finally{globalThis.Blob=NativeBlob;}
+});
 
 test('normal ZIP selection imports over 64 MiB as Blobs with bounded reads and fresh identities', async context => {
  const input = await fixture(33 * 1024 * 1024), original = Blob.prototype.arrayBuffer;

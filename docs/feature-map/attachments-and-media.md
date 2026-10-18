@@ -1,5 +1,14 @@
 # Attachments and media
 
+Anonymous large-file acceptance now covers native 70 MiB save/copy/offline reload,
+exact download, canonical ZIP export, normal import and re-export with fresh IDs
+at 1440/390/320px. Invalid input and cancelled parsing are covered, with zero
+account writes. `archive.ts` coalesces small inflater results into bounded 256 KiB
+Blob parts; `transferBlobs.test.ts` checks handle count and exact bytes. See the
+[native checkpoint](../local-workspaces.md#native-large-file-and-zip-checkpoint--2026-10-19).
+Account retention, the remote file browser's 32 MiB read limit and paired-device
+capacity remain separate work.
+
 Owned-original retention negotiates `api.attachment-content` 1.16.0 and streams
 `cache=retain-bytes&download=1` through the existing full-user/owned-file gates.
 `accountTransport.client.ts` and `accountFiles.ts` carry Blobs with chunk hashing
@@ -32,7 +41,8 @@ before and after reads; native download/upload paths do not buffer a whole file.
 Run `fileBlobs.test.ts`, `media.test.ts`, `filesystemTransfer.test.ts` and
 `test:local-workspace`; opt-in `fileBlobs.browser.test.ts` requires enforced browser
 and backend isolation. See the [Blob checkpoint](../local-workspaces.md#native-blob-file-storage--2026-10-18)
-for the current browser blocker and remaining buffered adapters.
+for historical results; the native checkpoint above supersedes the anonymous
+browser blocker. Remaining account and buffered adapters stay open.
 
 
 Account password-file sync groundwork reuses `passwords/fileTransfer.ts` and the
@@ -209,17 +219,18 @@ Run `test:attachments`, `test:components`, `test:lopu` and the isolated real-byt
 ## Anonymous workspace bytes and transfer
 
 `app/local-workspace/attachments.ts` is the dedicated local metadata adapter;
-`storage.ts` stores bounded byte arrays and JSON atomically under the same scope
-and quota ledger. `things.ts` imports/exports/copies/deletes canonical ZIP content
+`storage.ts` stores immutable Blobs, legacy byte arrays and JSON atomically under
+the same scope and storage ledger. `things.ts` imports/exports/copies/deletes canonical ZIP content
 using the existing transfer validators and composition-media rewriter. The normal
 `ThingImportDialog` bypasses uploading only for local-only workspaces, while
 `thingTransfer/browser.ts` accepts an identity-scoped in-process byte reader.
 No server storage key, approval, ownership or moderation verdict is synthesized.
 
-Bounds: 16 MiB per file, 1 MiB per JSON record, 64 MiB total and 10,000 records.
-Missing bytes or checksum failures reject the operation. Account file import is
-not enabled by this adapter; account access gates above remain authoritative.
-Linked galleries, annotation and account sync remain separate work. Run `test:local-workspace` and `test:things`; see
+Device admission uses browser capacity and atomic quota failure, rather than
+fixed aggregate/record ceilings. Canonical transfer budgets and transport-specific
+limits still apply. Missing bytes or checksum failures reject the operation.
+Account imports use the separately authorized account adapter described above.
+Run `test:local-workspace` and `test:things`; see
 [the coverage matrix](../local-workspaces.md) for local browser evidence.
 
 

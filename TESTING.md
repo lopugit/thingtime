@@ -12282,8 +12282,8 @@ Local results do not establish current-head CI or deployed acceptance.
 - [x] Race same-size binary replacement after checksum preparation; post/draft transactions refuse the stale snapshot. Independent template/working/post copies survive source replacement and draft deletion. Legacy byte records remain readable.
 - [x] Copy two 70 MiB Files through the normal file-transfer port without flattening Blob handles; paired-device size limits still refuse the same transfer. Pass 101 exact Blob parts through the account worker without whole-file allocation.
 - [x] More than 64 media references queue at three active reads; Blob URLs preserve inert MIME behavior, abort released work and revoke on identity change.
-- [ ] Run `fileBlobs.browser.test.ts` with a task-owned isolated browser/backend: native anonymous upload, copy, offline cold reload, exact download and image preview at 1440/390/320px; scroll top to bottom, open folder controls, verify zero account mutations and no overflow. Current run is blocked before app startup by nested macOS/Chrome sandbox initialization; do not count it as passed or disable protections to pass it.
-- [ ] Complete ZIP/import/export, remote-retention and paired-device streaming plus remaining traversal caps; this checkpoint does not cover those paths.
+- [x] 2026-10-19: Run `fileBlobs.browser.test.ts` in a task-owned network-none browser/backend: native anonymous 70 MiB upload, independent copy, offline cold reload, exact SHA-256 download and decoded image preview at 1440/390/320px. Scroll top to bottom and open folder controls; verify no overflow, account records/commands, mutation requests, page errors or whole-file Blob reads. Evidence: `tmp/file-blobs-native/native/verification.json`; runtime cleanup and zero OOM verified.
+- [ ] Complete account remote-retention/download and paired-device streaming plus remaining traversal caps. Anonymous native ZIP acceptance is recorded below; the remote account file browser still has a separate 32 MiB read limit.
 
 ### Blob ZIP selection and download assembly — 2026-10-18
 
@@ -12291,7 +12291,8 @@ Local results do not establish current-head CI or deployed acceptance.
 - [x] Exercise both decoder forms against reordered compressed entries, missing/undeclared/unsafe entries, corrupt bytes, forged expansion headers and cancellation; never return partial content.
 - [x] Refuse scope retirement during hashing; roll back metadata, bytes and account upload intent on native quota failure. Retry after capacity becomes available. Account import must finish locally without waiting for the sender.
 - [x] ZIP download snapshots mutable arrays/map/metadata before async preparation, rejects lost availability and builds Blob output without a whole-archive JS allocation.
-- [ ] In the isolated native browser, select the same ZIP through the Import dialog, confirm it, cold reload offline and download exact bytes; check cancellation/refusal messaging and top-to-bottom desktop/390/320px layout. Existing sandbox-startup blocker remains open.
+- [x] 2026-10-19: In the isolated native browser, export the 70 MiB folder ZIP, select it through the normal Import dialog, confirm, cold reload offline and re-export exact bytes with fresh IDs. Invalid JSON shows an error; closing in-progress parsing creates no copies and a subsequent import succeeds. Opened dialog and top-to-bottom layout pass at desktop/390/320px. Evidence: `tmp/file-blobs-native/native/verification.json`.
+- [x] Bound browser Blob handles as well as processing buffers: decode two 3 MiB files with fewer than 100 Blob constructions and exact hashes. Preserve malicious-entry, expansion, integrity and cancellation regressions.
 - [ ] Finish remaining buffered export collection/clipboard, remote retention and paired-device paths; existing canonical transfer budgets remain unchanged in this checkpoint.
 
 ### Blob export collection and scoped cancellation — 2026-10-18
@@ -12301,7 +12302,8 @@ Local results do not establish current-head CI or deployed acceptance.
 - [x] Capture metadata, file IDs, bytes and callbacks before async hashing/checks. Mutating caller input must not alter the prepared snapshot or its checksum bindings.
 - [x] Cancel a stalled file response and release the reader; reject short/long/forbidden content without a partial bundle. Keep exact attachment source and audience parameters.
 - [x] Retire or cancel an anonymous export after preparation, including a no-file bundle; JSON, clipboard and ZIP must retain the original scope fence.
-- [ ] Run the complete native Import/Export/Copy UI matrix in the isolated browser at 1440×1000, 390×844 and 320px, including top-to-bottom scroll, opened dialogs, cold offline reopen and cancelled/refused states. The recorded Chrome sandbox failure still prevents current native acceptance.
+- [x] 2026-10-19: Run anonymous native file Copy and ZIP Import/Export at 1440×1000, 390×844 and 320px, including top-to-bottom scroll, opened dialogs, cold offline reopen and cancelled/invalid-input states. The manager runtime resolves the historical nested sandbox startup blocker without widening access.
+- [ ] Finish native account and clipboard Import/Export/Copy coverage; anonymous ZIP proof does not establish these paths.
 - [ ] Complete remote retention, paired-device and remaining capacity/traversal work; clipboard text and explicit byte exports still need a final serialized buffer.
 
 
