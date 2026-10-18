@@ -1,3 +1,4 @@
+import { resolveBlockProps } from './templateBlocks';
 import { ComponentCollection } from './ComponentCollection';
 import { ComponentDataScope } from './ComponentSelect';
 import React from 'react';
@@ -986,7 +987,7 @@ const AuthoredBlock = (props: WebpageBlocksRendererProps & { block: WebpageBlock
  const { block, chrome } = props;
  const scope = React.useContext(ComponentDataScope);
  const editing = !!chrome && chrome.seamlessMode !== 'view';
- const attributes = resolveTemplate(block.props || {}, scope) as Record<string, any>;
+ const attributes = resolveBlockProps(block.props || {}, scope) as Record<string, any>;
  if (attributes['data-tt-action-inputs'] && typeof attributes['data-tt-action-inputs'] === 'object') attributes['data-tt-action-inputs'] = JSON.stringify(attributes['data-tt-action-inputs']);
  const selected = chrome?.selectedId === block.id;
  const hovered = chrome?.hoverId === block.id;
@@ -1012,7 +1013,7 @@ const AuthoredBlock = (props: WebpageBlocksRendererProps & { block: WebpageBlock
  };
  if (block.type === 'condition') {
   const matches = resolveTemplate({ ttIf: { ...block.condition, then: 'yes', else: 'no' } }, scope) === 'yes';
-  if (!editing && matches === !!block.condition?.negate) return null;
+  if (!editing) return matches === !!block.condition?.negate ? null : <>{children}</>;
   return <div {...editorProps} style={{ ...editorProps.style, ...(editing ? { padding: '4px', border: '1px dashed var(--tt-border, #ddd)' } : { display: 'contents' }) }}>
    {editing && <small style={{ color: 'var(--tt-muted)' }}>{block.condition?.negate ? 'Otherwise' : 'When'} {String(block.condition?.arg || '')}</small>}{children}
   </div>;

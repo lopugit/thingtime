@@ -67,9 +67,9 @@ export function ComponentCollection({
 		: [];
  if (transparent === true) return <>{items.map((item, index) => {
   const rowScope = { ...scope, item, index, collection: { index, count: items.length } };
-  return <ComponentDataScope.Provider key={String(item.id ?? index)} value={rowScope}>
+  return <Nesting.Provider key={String(item.id ?? index)} value={{...budget, depth:budget.depth+1}}><ComponentDataScope.Provider value={rowScope}>
    {typeof renderItem === 'function' ? renderItem(rowScope) : <HtmlThingRenderer node={createTemplateResolver()(itemTemplate, rowScope) as any} />}
-  </ComponentDataScope.Provider>;
+  </ComponentDataScope.Provider></Nesting.Provider>;
  })}</>;
 	return (
 		<>

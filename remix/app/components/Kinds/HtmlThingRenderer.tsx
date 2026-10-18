@@ -1,3 +1,4 @@
+import { isPngThumbnail } from '../../utils/pngThumbnail';
 import { ComponentChange } from '../Builder/ComponentChange';
 import { ComponentMenu } from '../Builder/ComponentMenu';
 import { ComponentSelect } from '../Builder/ComponentSelect';
@@ -184,7 +185,7 @@ const sanitizeStyle = (style: unknown): React.CSSProperties | undefined => {
 	return out;
 };
 
-const sanitizeProps = (props: unknown): Record<string, unknown> => {
+const sanitizeProps = (props: unknown, tag?: string): Record<string, unknown> => {
 	if (!props || typeof props !== 'object' || Array.isArray(props)) return {};
 
 	const out: Record<string, unknown> = {};
@@ -203,7 +204,7 @@ const sanitizeProps = (props: unknown): Record<string, unknown> => {
 			return;
 		}
 		if ((key === 'href' || key === 'src' || key === 'poster') && typeof value === 'string') {
-			if (!isSafeUrl(value)) return;
+			if (!isSafeUrl(value) && !(tag === 'img' && key === 'src' && isPngThumbnail(value))) return;
 			out[key] = value;
 			return;
 		}
@@ -352,7 +353,7 @@ const renderNode = (node: HtmlThingNode, key: number, depth: number, state: Rend
 		return <span key={key}>{renderChildren(node.children, depth + 1, state)}</span>;
 	}
 
-	const props = fieldProps(tag, sanitizeProps(node.props));
+	const props = fieldProps(tag, sanitizeProps(node.props, tag));
 	if (props.style) props.style = mapStyleMediaUrls(props.style, state.mediaUrl);
 	for (const field of ['src', 'poster', 'href']) if (typeof props[field] === 'string') props[field] = state.mediaUrl(props[field]);
 
@@ -398,7 +399,7 @@ export function HtmlBlockElement({ tag, attributes, editorProps, children }: {
 }) {
  const mediaUrl = useSharedMediaUrl();
  const safeTag = ALLOWED_TAGS.has(tag) && !tag.startsWith('tt-') ? tag : 'div';
- const props = fieldProps(safeTag, sanitizeProps(attributes));
+ const props = fieldProps(safeTag, sanitizeProps(attributes, safeTag));
  if (props.style) props.style = mapStyleMediaUrls(props.style, mediaUrl);
  for (const key of ['src', 'poster', 'href']) if (typeof props[key] === 'string') props[key] = mediaUrl(props[key]);
  const merged = { ...props, ...editorProps, style: { ...(props.style as React.CSSProperties), ...editorProps?.style } };

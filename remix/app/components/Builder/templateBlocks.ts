@@ -1,3 +1,4 @@
+import { componentScopeValue, resolveTemplate } from '../ComponentsLibrary/componentTemplate';
 import type { WebpageBlock } from './webpageBlocks';
 
 /** Expand authored HTML templates, preserving bindings rather than a rendered snapshot.
@@ -27,4 +28,15 @@ export function templateToBlocks(template: unknown, id: (kind: string) => string
    ...(textOnly ? { text: children.join('') } : { children: children.flatMap(visit) }) }];
  };
  return visit(template);
+}
+
+/** DOM properties preserve scalar types for exact bindings; interpolated text stays text. */
+export function resolveBlockProps(props: Record<string, unknown>, scope: Record<string, unknown>): Record<string, unknown> {
+ const resolved = resolveTemplate(props, scope) as Record<string, unknown>;
+ for (const [key, value] of Object.entries(props)) {
+  if (typeof value !== 'string') continue;
+  const match = value.match(/^\{([^{}]+)\}$/);
+  if (match) resolved[key] = componentScopeValue(scope, match[1]);
+ }
+ return resolved;
 }
