@@ -96,20 +96,31 @@ export function journalMaintenance(db: IDBDatabase, access: JournalAccess, keyRa
 						tx.objectStore(JOURNAL_RETENTION_STORE).delete(metadataKey(key, row.kind, row.id));
 						result.next = { scope: key, kind: row.kind, id: row.id, inclusive: false }; done(result); return;
 					}
-					const store = tx.objectStore(children[row.kind][row.store]), request = store.openKeyCursor(range(row.id));
-					let first: IDBValidKey | undefined, last: IDBValidKey | undefined;
-					// The cursor is already confined to this retired scoped record.
-					// Delete one contiguous bounded page, avoiding a separate delete
-					// request for every key in a large obsolete capture.
-					const flush = () => { if (first !== undefined) store.delete(ranges.bound(first, last!)); };
-					request.onsuccess = () => { try {
-						check(); const cursor = request.result;
-						if (!cursor) { flush(); row.store++; remove(); return; }
-						const size = new TextEncoder().encode(JSON.stringify(cursor.primaryKey)).length;
-						if (size + 4096 > INVENTORY_PAGE_BYTES) throw Error('Cleanup key exceeds its byte bound.');
-						if (result.deleted === INVENTORY_PAGE_ENTRIES || bytes + size > INVENTORY_PAGE_BYTES) { flush(); finishPage(); return; }
-						first ??= cursor.primaryKey; last = cursor.primaryKey; result.deleted++; bytes += size; cursor.continue();
+					const store = tx.objectStore(children[row.kind][row.store]);
+					// Start each page at its first remaining key. Reopening the entire
+					// retired prefix can repeatedly traverse tombstones in an index.
+					const seek = store.getKey(range(row.id));
+					seek.onsuccess = () => { try {
+						check();
+						if (seek.result === undefined) { row.store++; remove(); return; }
+						visit(seek.result);
 					} catch (e) { fail(e); } };
+					const visit = (lower: IDBValidKey) => {
+						const request = store.openKeyCursor(ranges.bound(lower, [key, row.id, []]));
+						let first: IDBValidKey | undefined, last: IDBValidKey | undefined;
+						// The cursor is already confined to this retired scoped record.
+						// Delete one contiguous bounded page, avoiding a separate delete
+						// request for every key in a large obsolete capture.
+						const flush = () => { if (first !== undefined) store.delete(ranges.bound(first, last!)); };
+						request.onsuccess = () => { try {
+							check(); const cursor = request.result;
+							if (!cursor) { flush(); row.store++; remove(); return; }
+							const size = new TextEncoder().encode(JSON.stringify(cursor.primaryKey)).length;
+							if (size + 4096 > INVENTORY_PAGE_BYTES) throw Error('Cleanup key exceeds its byte bound.');
+							if (result.deleted === INVENTORY_PAGE_ENTRIES || bytes + size > INVENTORY_PAGE_BYTES) { flush(); finishPage(); return; }
+							first ??= cursor.primaryKey; last = cursor.primaryKey; result.deleted++; bytes += size; cursor.continue();
+						} catch (e) { fail(e); } };
+					};
 				};
 				remove();
 			};

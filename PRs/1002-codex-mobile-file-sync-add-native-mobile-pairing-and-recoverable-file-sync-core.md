@@ -3102,3 +3102,10 @@ range per store/page in the same transaction. It retains the byte bound, pin
 checks, active-run and current-baseline protection, and atomic rollback after
 a queued range deletion. This avoids a separate delete request per obsolete
 row; it does not prune native recovery bytes or account versions.
+
+Cleanup now seeks the first remaining key before opening each page cursor.
+This keeps deleted prefixes outside subsequent cursor ranges and avoids repeated
+tombstone traversal during large reruns. Nine cleanup regressions pass, including
+advancing range starts, restart, pin protection and atomic rollback. The slow
+pre-seek wide runs were stopped after this diagnosed correction; only final-source
+reruns count as acceptance.

@@ -74,6 +74,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-19 — Seek the remaining retired sync metadata before each bounded cleanup page, avoiding repeated deleted-prefix traversal on large reruns; retain transaction rollback and active-baseline guards.
+
 - 2026-10-19 — **Codex (AI)**: Stream Mac/iOS destination alias checks so wide folders can publish downloads and recover Trash. Gate the complete paged runner on patched native contracts; retain limits for older adapters. Add API-provisioned large-root acceptance. Details: [PR 1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md#wide-native-destination-checks--2026-10-19).
 
 - 2026-10-19: Add reproducible isolated Mac paged-sync/API acceptance, including saved conflict choices, native restart recovery and exact byte verification. Installed UI and scale remain open; see [PR 1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).

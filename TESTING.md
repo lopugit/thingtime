@@ -11666,3 +11666,7 @@ resume unfinished Android gates only when requested.
 - [ ] Retired metadata cleanup must delete at most 128 keys per step, preserve
   other scopes and current pins/baselines, and roll back retirement plus all
   queued range deletions when storage fails before transaction completion.
+
+- [ ] Large-root cleanup: confirm each page starts at its first remaining key,
+  preserves the 128-key/byte bounds and active recovery, and finishes after
+  restart without repeatedly traversing the deleted prefix.

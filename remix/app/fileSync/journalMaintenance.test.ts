@@ -39,6 +39,25 @@ async function capture(f: Awaited<ReturnType<typeof fixture>>, id: InventoryIden
 	await f.inventory.seal(id);
 }
 
+test('cleanup seeks the remaining tail instead of reopening a deleted inventory prefix', async () => {
+	const f = await fixture(), id = identity('tail'); await capture(f, id);
+	const original = IDBObjectStore.prototype.openKeyCursor, starts: IDBValidKey[] = [];
+	IDBObjectStore.prototype.openKeyCursor = function (query, direction) {
+		if (this.name === 'inventory-entries') {
+			assert.ok(query instanceof IDBKeyRange);
+			starts.push(structuredClone(query.lower));
+		}
+		return original.call(this, query, direction);
+	};
+	try {
+		await f.maintenance.collect();
+		assert.equal(starts.length, 3);
+		assert.ok(starts.every(key => Array.isArray(key) && key.length === 3));
+		assert.deepEqual(starts.map(key => (key as string[])[2]), ['file-00000', 'file-00125', 'file-00253']);
+		assert.equal((await counts(f.factory))['inventory-entries'], 0);
+	} finally { IDBObjectStore.prototype.openKeyCursor = original; f.journal.close(); }
+});
+
 test('cleanup is bounded and restartable, prevents ID reuse while retiring, and preserves other scopes and unmanaged captures', async () => {
 	let f = await fixture(); const id = identity('managed'); await capture(f, id);
 	const unmanaged = await fixture(f.factory, { ...access(), cleanup: undefined }); await capture(unmanaged, identity('unmanaged'), entries(1));
