@@ -1,3 +1,5 @@
+import { attachmentRetention } from '~/api/utils/attachments/attachmentRetention';
+import { createAttachmentMutationAction } from '~/api/utils/attachments/attachmentResponses';
 import { parseAttachmentRange, readExactRange } from '~/api/utils/attachments/attachmentRanges';
 import { withFoundPostBrowser } from '~/api/utils/things/foundPostRequest';
 import { attachmentImageResponse, parseImageWidth } from '~/api/utils/attachments/imageVariants';
@@ -38,6 +40,9 @@ export const createAttachmentContentLoader = (overrides: Partial<ContentDependen
 			} catch {
 				return json({ ok: false, error: 'Invalid attachment byte range' }, { status: 400 });
 			}
+			const retained = url.searchParams.has('retained');
+			if (retained && (!range || url.searchParams.getAll('retained').length !== 1 || url.searchParams.get('retained') !== '1' || url.searchParams.has('sharedRoot') || url.searchParams.has('key')))
+				return json({ ok: false, error: 'Retention reads require an owned exact byte range' }, { status: 400 });
 			const sharedRoot = url.searchParams.get('sharedRoot');
 			if (sharedRoot !== null && !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(sharedRoot))
 				return json({ ok: false, error: 'Invalid shared root' }, { status: 400 });
@@ -75,7 +80,8 @@ export const createAttachmentContentLoader = (overrides: Partial<ContentDependen
 				// evidence for moderation review; everyone else 404s on blocked docs.
 				audience || sharedRoot ? { id: '', ...audience, ...(user?.isAdmin ? { isAdmin: true } : {}), ...(sharedRoot ? { sharedRoot } : {}) } : null,
 				url.searchParams.get('id'),
-				url.searchParams.get('download') === '1'
+				url.searchParams.get('download') === '1',
+				retained ? range!.version : undefined
 			);
 			if (result.ok === false) return json({ ok: false, error: result.error }, { status: result.status });
 			if (range) {
@@ -94,6 +100,8 @@ export const createAttachmentContentLoader = (overrides: Partial<ContentDependen
 					return json({ ok: false, error: 'Attachment range unavailable; retry the same version' }, { status: 502 });
 				}
 				signal.throwIfAborted();
+				if (retained && (await dependencies.getUser(request))?.id !== user?.id)
+					return json({ ok: false, error: 'Attachment not found' }, { status: 404 });
 				const refreshedAudience = await dependencies.enrichViewer(
 					withLinkKeys(withFoundPostBrowser(viewerOf(user), request, !resolvedUser), [url.searchParams.get('key') || ''])
 				);
@@ -102,7 +110,8 @@ export const createAttachmentContentLoader = (overrides: Partial<ContentDependen
 						? { id: '', ...refreshedAudience, ...(user?.isAdmin ? { isAdmin: true } : {}), ...(sharedRoot ? { sharedRoot } : {}) }
 						: null,
 					url.searchParams.get('id'),
-					false
+					false,
+					retained ? range!.version : undefined
 				);
 				if (current.ok === false) return json({ ok: false, error: current.error }, { status: current.status });
 				if (current.version !== range.version || current.size !== result.size)
@@ -177,5 +186,4 @@ export const createAttachmentContentLoader = (overrides: Partial<ContentDependen
 
 export const loader = createAttachmentContentLoader();
 
-export const action = async () =>
-	withAttachmentPrivateResponse(async () => json({ ok: false, error: 'Method not allowed' }, { status: 405, headers: { Allow: 'GET' } }));
+export const action = createAttachmentMutationAction({ rateKey: 'attachments.read', service: attachmentRetention.retain }, { getUser: getCurrentUser });

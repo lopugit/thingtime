@@ -11847,3 +11847,21 @@ resume unfinished Android gates only when requested.
 - Live-provider IAM, retention/durability, encryption/key recovery, actual vault
   selection, scheduled native jobs and UI remain unverified. Run those paths
   before offering independent cloud backup; this fixture is not 100 TB evidence.
+
+### Backup retention and deletion races (2026-10-19)
+
+- Run `npm --prefix remix run test:attachments:retention`: real disposable Mongo
+  transactions/Request handlers must prove owner-only exact-version holds, atomic
+  batch refusal, concurrent renewals, no byte double-charge, no premature refund,
+  expired renewal refusal and exactly-once purge/refund. Object storage/expiry
+  clock are synthetic; do not count this as live provider acceptance.
+- Run the backup, attachment and capability suites. Refused holds must copy no
+  bytes; long captures renew; expiry/session revocation cannot return protected
+  bytes or publish completion; resumed complete receipts must not read lost sources.
+- Live acceptance remains required: upgrade/drain every deletion/reaper writer
+  sharing storage, verify provider lifecycle retention, begin a large snapshot,
+  request source deletion, interrupt/restart, verify its independent bytes, then
+  expire the hold and confirm exact quota reconciliation. Exercise installed
+  Mac/iOS job controls when connected; Android remains deferred.
+
+- Desktop snapshot retention: allow content POST only for the pinned server, exact actor, home data plane and same local origin; changed/missing scope or cross-site requests must fail before reading mutation bytes. Covered by `server/utils/apiFallback.test.ts`.

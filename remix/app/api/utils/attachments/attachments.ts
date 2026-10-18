@@ -1,3 +1,4 @@
+import { activeAttachmentRetention, attachmentRetention } from './attachmentRetention';
 import { fingerprintFromVerifiedHead, attachmentContentVersion } from './contentFingerprint';
 import { contentPartPlan, MIN_CONTENT_PART_BYTES, MAX_CONTENT_PART_BYTES, type ContentFingerprint } from '../../../fileSync/contentFingerprint';
 import { ownedMediaDraftIds } from '../drafts/media';
@@ -86,6 +87,7 @@ type AttachmentCleanupOutcome = { status: 'deleted' | 'skipped' } | { status: 'd
 type AttachmentViewer = AttachmentAccessViewer;
 
 type AttachmentServiceDependencies = {
+	closeRetention: typeof attachmentRetention.closeForDeletion;
   ownedMediaDraftIds: typeof ownedMediaDraftIds;
 	store: AttachmentStore;
 	getS3: () => AttachmentS3;
@@ -260,6 +262,7 @@ const exactPartRequest = (value: unknown, partCount: number) => {
 };
 
 const defaultDependencies: AttachmentServiceDependencies = {
+	closeRetention: attachmentRetention.closeForDeletion,
   ownedMediaDraftIds,
 	store: attachmentStore,
 	getS3: getPrivateS3,
@@ -386,6 +389,14 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 			claimed = await dependencies.store.claimDeleting(doc.ownerId, doc.shareId, [...allowedStates], scope);
 		}
 		if (!claimed) return { status: 'skipped' };
+		if (claimed.attachmentRetainUntil !== undefined) {
+			claimed = await dependencies.closeRetention(claimed.ownerId, claimed.shareId);
+			if (!claimed) return { status: 'skipped' };
+			if (claimed.attachmentRetentionClosed !== true) {
+				await dependencies.store.deferDeletingRetry(claimed.ownerId, claimed.shareId, claimed.attachmentRetainUntil!);
+				return { status: 'deferred', retryAt: claimed.attachmentRetainUntil! };
+			}
+		}
 		// Linked attachments never had an S3 object: no MPU to abort, no HEAD to
 		// verify, no version to delete. Straight to the transactional row removal
 		// and exact quota refund — S3 stays untouched (and unrequired, so linked
@@ -1245,13 +1256,20 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 		viewer: AttachmentViewer,
 		idInput: unknown,
 		allowLinkedCopy = false,
-		verifyStoredObject = true
+		verifyStoredObject = true,
+		retainedVersion?: string
 	): Promise<AttachmentResult<{ doc: AttachmentDoc }>> => {
 		try {
 			const id = normalizeId(idInput);
 			if (!id) return fail(404, 'Attachment not found');
 			let doc = await dependencies.store.getById(id);
-			if (!doc || doc.attachmentState !== 'ready') return fail(404, 'Attachment not found');
+			if (!doc) return fail(404, 'Attachment not found');
+			const retained = retainedVersion !== undefined && viewer?.id === doc.ownerId && !viewer?.sharedRoot &&
+				/^[a-f0-9]{64}$/.test(retainedVersion) && activeAttachmentRetention(doc, dependencies.now()) &&
+				isAttachmentObjectVersionId(doc.objectVersionId) &&
+				attachmentContentVersion(doc.shareId, doc.objectKey, doc.objectVersionId!) === retainedVersion;
+			if ((retainedVersion !== undefined && !retained) || (doc.attachmentState !== 'ready' && !(retained && doc.attachmentState === 'deleting')))
+				return fail(404, 'Attachment not found');
 			// Pending analysis fails closed for everyone except the owner preview and
 			// an administrator reviewing evidence. Blocked attachments stay admin-only.
 			// 404 (not 403) keeps moderation state from becoming an existence oracle.
@@ -1271,7 +1289,7 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 				!doc.attachmentLinked && !doc.attachmentProfileSlot &&
 				doc.thingtime.length === 1 && doc.thingtime[0] === 'attachment' &&
 				viewer?.id === doc.ownerId;
-			if (!doc.targetId && !durableRecording && (!doc.attachmentExpiresAt ||
+			if (!retained && !doc.targetId && !durableRecording && (!doc.attachmentExpiresAt ||
 				!Number.isFinite(doc.attachmentExpiresAt.getTime()) || doc.attachmentExpiresAt.getTime() <= dependencies.now().getTime())) {
 				return fail(404, 'Attachment not found');
 			}
@@ -1279,8 +1297,8 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 			// selected data plane. Profile media is different: both its attachment and
 			// exact user-slot reference are protected home identity data, so the lean
 			// home-pinned helper remains authoritative under a custom post data plane.
-			if (dependencies.customMongoActive() && doc.attachmentPurpose !== 'profile') return fail(404, 'Attachment not found');
-			const allowed = viewer?.sharedRoot
+			if (dependencies.customMongoActive() && (retainedVersion !== undefined || doc.attachmentPurpose !== 'profile')) return fail(404, 'Attachment not found');
+			const allowed = retained ? true : viewer?.sharedRoot
 				? await dependencies.canViewSharedTarget(viewer, doc, viewer.sharedRoot)
 				: doc.attachmentPurpose === 'profile' && doc.targetId
 					? await dependencies.canViewTarget(viewer, doc)
@@ -1326,10 +1344,10 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 	};
 
 	const download = async (
-		viewer: AttachmentViewer, idInput: unknown, forceDownload: boolean
+		viewer: AttachmentViewer, idInput: unknown, forceDownload: boolean, retainedVersion?: string
 	): Promise<AttachmentResult<{ url: string; expiresAt: string; cacheKey: string; version: string; size: number; contentType: string; disposition: string; image: boolean }>> => {
 		try {
-			const readable = await readableStoredAttachment(viewer, idInput);
+			const readable = await readableStoredAttachment(viewer, idInput, false, true, retainedVersion);
 			if (readable.ok === false) return readable;
 			const { doc } = readable;
 			const s3 = dependencies.getS3();

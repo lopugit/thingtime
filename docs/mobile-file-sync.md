@@ -3493,3 +3493,11 @@ Validation: all 92 backup tests passed before the final credential-await race
 regression; all five final S3 transport/CLI tests then passed. Targeted lint and
 targeted worker/adapter TypeScript checks passed. Full project typecheck retains
 91 diagnostics outside changed files.
+
+## Source retention checkpoint — 2026-10-19
+
+Cloud snapshot capture now acquires and renews bounded exact-version owner holds.
+Deletion stays pending/billed while retained ranges remain available only to the
+owner; expiry is fenced against renewal before exact-version purge/refund.
+See [retention contract and open gates](portable-backups.md#source-version-retention--2026-10-19).
+Android and installed Mac/iOS acceptance remain unchanged and open where recorded.

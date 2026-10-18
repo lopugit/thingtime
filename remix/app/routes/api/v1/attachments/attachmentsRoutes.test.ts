@@ -759,3 +759,24 @@ test('version-pinned ranges bound upstream bytes and reauthorize before returnin
 		assert.equal(result.status, 400);
 	}
 });
+
+
+test('retained ranges recheck the current session after reading and cannot become redirects or shared reads', async () => {
+	const version = 'a'.repeat(64);
+	let reads = 0, auth = 0;
+	const route = createAttachmentContentLoader({
+		getUser: async () => (++auth === 1 ? { id: 'owner', accountKind: 'user' } : null) as any,
+		enforceLimit: allowed as any, enrichViewer: async v => v,
+		download: async (_viewer, _id, _download, retainedVersion) => {
+			assert.equal(retainedVersion, version);
+			return { ok: true, version, size: 1, url: 'https://fixture.invalid', expiresAt: '', cacheKey: '', contentType: 'application/octet-stream', disposition: 'attachment', image: false };
+		},
+		rangeFetch: async () => { reads++; return new Response(new Uint8Array([1]), { status: 206, headers: { 'Content-Range': 'bytes 0-0/1' } }); }
+	});
+	const url = 'https://thingtime.example/api/v1/attachments/content?id=fixture&retained=1&range=1&version=' + version + '&offset=0&length=1';
+	assert.equal((await route({ request: new Request(url) })).status, 404);
+	assert.equal(reads, 1);
+	for (const invalid of [url + '&sharedRoot=other', url + '&key=other', url + '&retained=1', url.replace('&range=1', '')])
+		assert.equal((await route({ request: new Request(invalid) })).status, 400);
+	assert.equal(reads, 1);
+});

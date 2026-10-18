@@ -196,6 +196,22 @@ async function* planItems(store: BackupObjectStore, header: BackupHeader, plan: 
 	}
 	if (previous !== plan.headHash || count !== plan.items || bytes.toString() !== plan.bytes) throw Error('Backup inventory is incomplete');
 }
+/** Bounded traversal of frozen items still needing source bytes. A complete
+ * range receipt skips source retention, not integrity verification: sealBackup
+ * still reads and verifies every chunk and complete source fingerprint. */
+export async function* pendingBackupItems(store: BackupObjectStore, id: string, access: BackupAccess) {
+	const { header, plan, root } = await openPlan(store, id, access);
+	for await (const item of planItems(store, header, plan, access)) {
+		if (!item.content) continue;
+		let offset = 0, ordinal = 0;
+		while (offset < item.content.size) {
+			await check(access, header);
+			const existing = await readJson(store, `${root}/ranges/${item.ordinal}/${ordinal}.json`, BACKUP_METADATA_BYTES);
+			if (existing === null) { yield item; break; }
+			offset = validateRanges(existing, id, item, ordinal++, offset).offset;
+		}
+	}
+}
 function validateRanges(value: unknown, id: string, item: BackupItem, ordinal: number, offset: number) {
 	const page = parseBackupRangePage(value);
 	if (page.snapshotId !== id || page.item !== item.ordinal || page.ordinal !== ordinal || !item.content) throw Error('Backup range identity changed');

@@ -3383,3 +3383,66 @@ Validation: all 92 backup tests passed before the final credential-await race
 regression; all five final S3 transport/CLI tests then passed. Targeted lint and
 targeted worker/adapter TypeScript checks passed. Full project typecheck retains
 91 diagnostics outside changed files.
+
+## Retention checkpoint — 2026-10-19
+
+The authenticated cloud-folder/account capture worker now negotiates
+`api.attachment-content` 1.15.0 and acquires bounded owner-only holds for every
+frozen-plan item still needing source bytes before capture. Batches contain at
+most 64 exact attachment/version pairs. The worker streams the existing plan,
+keeps bounded memory, renews at half the earliest lease duration and refuses
+completion after expiry or failed acquisition. Complete range receipts avoid
+contacting removed sources on retry; the final seal still verifies every retained
+chunk and the original whole-file multipart fingerprint.
+
+Holds last 24 hours and only extend a protected aggregate attachment deadline.
+They do not create a separate history format, duplicate object-byte charge or an
+unbounded list of jobs. Finishing one job cannot release another job's hold.
+Deletion becomes pending, keeps the bytes billed and permits only the owning
+account's explicit exact-version retained range reads. Ordinary/public/shared
+reads remain unavailable after deletion. Cleanup transactionally closes renewal
+before deleting the exact object version and refunding once. Retained range
+responses also recheck the live session after the storage read.
+
+This is bounded source retention, not a finished retention-policy product.
+Metadata enumeration itself does not pin bytes: acquisition may refuse if a
+source disappeared before capture began. An interrupted worker must resume before
+its hold expires to guarantee continued availability; after expiry it can resume
+only if required source bytes still exist. Early per-job release, configurable
+policies, independently verified full-account coverage, backup chunk pruning,
+native job/vault UI and 100 TB acceptance remain open. Existing backup stores have
+no deletion/GC operation, so this change does not prune shared chunks.
+
+Deployment requires all attachment deletion/reaper writers sharing the database
+to run the retention-aware code, and provider lifecycle policies must preserve
+held versions. Older deployments or external bucket administrators do not honor
+these application holds. A capability response alone does not prove that fleet or
+provider rollout. No production mutation or rollout is performed by this branch.
+
+Run `npm --prefix remix run test:attachments:retention` for the disposable replica
+proof: actual signup/content Request handlers and production attachment/accounting
+utilities, real Mongo transactions, atomic refusal, concurrent renewal, deferred
+billing and exactly-once cleanup. Its object transport and expiry clock are
+synthetic; OS network isolation denies other destinations before the fixture
+starts. It requires local `mongod`, `mongosh` and macOS `sandbox-exec` and refuses a
+permissive fallback. `test:backups`, `test:attachments` and
+`test:api-capabilities` cover worker recovery, authorization and negotiation.
+
+
+### Retention validation checkpoint — 2026-10-19
+
+The desktop cookie proxy now admits the retention POST on the existing content
+route only under its unchanged local-origin, expected-server, actor and home-plane
+checks. Regression tests refuse changed/missing identities and cross-site writes
+before consuming their body. This does not install or activate a native backup UI.
+
+Validation: 95 backup, 292 attachment, 96 capability and 9 proxy tests pass.
+The isolated Mongo replica proof exercises authenticated production handlers,
+atomic batch refusal, concurrent renewal, deletion deferral, expiry fencing and
+exact-once storage refunds. Object transport and expiry time are synthetic; the
+OS boundary denies non-test destinations. The built Nitro server advertises
+content 1.15.0 and delete/abort/cleanup 1.2.0, rejects unauthenticated retention
+with 401, and rejects an unscoped retained read with 400. Targeted lint passes;
+the full TypeScript check retains 91 existing diagnostics with none in the
+changed retention/backup/route files. Live provider, installed app, full-account
+coverage and large-scale acceptance remain open.

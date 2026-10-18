@@ -12,6 +12,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 > When you make a manual change, add a bullet under `[Unreleased]` ending with
 
+- 2026-10-19: Cloud snapshot workers acquire renewable source-version holds;
+  attachment deletion defers physical purge/refund and retained byte reads stay
+  owner-only. Added isolated Mongo race/accounting proof and 1.15.0 content /
+  1.2.0 cleanup contracts. Fleet/provider rollout, policy UI and safe backup
+  pruning remain open; see [PR1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
 - 2026-10-19: Added bounded Previous/Next conflict-review navigation and a
   disposable, revision-guarded controller; Chromium restart checks now cover
   controller-driven choices and handoff. Editable Builder wiring remains open.

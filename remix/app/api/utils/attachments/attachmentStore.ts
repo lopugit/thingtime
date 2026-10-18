@@ -76,6 +76,8 @@ export type AttachmentDoc = {
 	attachmentMpuEmptyVerifiedAt?: Date;
 	uploadId?: string;
 	attachmentExpiresAt?: Date;
+	attachmentRetainUntil?: Date;
+	attachmentRetentionClosed?: true;
 	// true only on linked (external URL) attachments: no S3 object exists, the
 	// crystal carries the url, and object bytes are always zero
 	attachmentLinked?: true;
@@ -627,7 +629,10 @@ export const attachmentStore: AttachmentStore = {
 							$set: {
 								attachmentState: 'deleting',
 								attachmentExpiresAt: {
-									$cond: [{ $eq: [{ $type: '$attachmentPartsIssuedAt' }, 'date'] }, attachmentMpuSettlementAt(now), attachmentDeletingRetryAt(now)]
+									$max: [
+										{ $cond: [{ $eq: [{ $type: '$attachmentPartsIssuedAt' }, 'date'] }, attachmentMpuSettlementAt(now), attachmentDeletingRetryAt(now)] },
+										{ $ifNull: ['$attachmentRetainUntil', attachmentDeletingRetryAt(now)] }
+									]
 								},
 								updatedAt: now
 							}

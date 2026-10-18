@@ -507,3 +507,10 @@ then uses the existing exact background acknowledgement and Timeline journal.
 `NativeUploadBackgroundAcceptance.java` observes real API completion while the
 activity is paused; `NativeUploadServiceTest.java` verifies OS lifecycle controls.
 No process-relaunch scheduler or independent history store is introduced.
+
+Cloud backup capture now streams `pendingBackupItems` to acquire/renew source
+retention through attachment-content 1.15.0. A prepared inventory alone is not a
+hold; only a verified completion seal proves independent bytes. Complete range
+receipts skip source re-acquisition on retry, with full verification at sealing.
+The [retention contract](../portable-backups.md#source-version-retention--2026-10-19)
+tracks rollout, early-release/pruning and full-account limits.

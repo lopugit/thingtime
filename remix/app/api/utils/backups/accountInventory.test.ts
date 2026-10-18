@@ -745,6 +745,13 @@ async function fileHistoryBackup() {
 			if (state.revoked) return new Response('', { status: 401 });
 			if (url.pathname === '/api/v1/auth/me') return Response.json({ user: { id: f.scope.ownerId } });
 			assert.equal(url.pathname, '/api/v1/attachments/content');
+			if (init?.method === 'POST') {
+				const { versions } = JSON.parse(String(init.body));
+				for (const entry of versions) assert.equal(available.get(entry.id)?.content.version, entry.version, 'Lease only original available versions');
+				const now = Date.now();
+				return Response.json({ ok: true, versions, serverTime: new Date(now).toISOString(), retainedUntil: new Date(now + 86400000).toISOString() });
+			}
+			assert.equal(url.searchParams.get('retained'), '1');
 			const id = url.searchParams.get('id')!,
 				a = available.get(id);
 			assert.ok(a, 'No live inventory or missing-source read');

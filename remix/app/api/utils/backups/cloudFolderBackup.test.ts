@@ -40,6 +40,9 @@ async function fixture() {
 	const scope = { apiOrigin: 'https://cloud.test', ownerId: 'owner', dataPlane: 'home' };
 	const state = {
 		inventoryReads: 0,
+		retentionRequests: 0,
+		refuseRetention: false,
+		beforeRead: () => {},
 		byteReads: [] as number[],
 		unavailable: false,
 		wrongVersion: false,
@@ -82,12 +85,22 @@ async function fixture() {
 				return new Response(stream, { headers: { 'Content-Type': 'application/x-ndjson' } });
 			}
 			assert.equal(u.pathname, '/api/v1/attachments/content');
+			if (init?.method === 'POST') {
+				state.retentionRequests++;
+				if (state.refuseRetention) return Response.json({ ok: false }, { status: 409 });
+				const { versions } = JSON.parse(String(init.body));
+				assert.deepEqual(versions, [{ id: file.content.attachmentId, version: file.content.version }]);
+				const now = Date.now();
+				return Response.json({ ok: true, versions, serverTime: new Date(now).toISOString(), retainedUntil: new Date(now + 86400000).toISOString() });
+			}
+			assert.equal(u.searchParams.get('retained'), '1');
 			assert.equal(u.searchParams.get('id'), file.content.attachmentId);
 			assert.equal(u.searchParams.get('version'), file.content.version);
 			const at = Number(u.searchParams.get('offset')),
 				length = Number(u.searchParams.get('length'));
 			assert.ok(length <= 2 * 1024 * 1024);
 			state.byteReads.push(at);
+			state.beforeRead();
 			return new Response(bytes.slice(at, at + length), {
 				status: 206,
 				headers: {
@@ -295,5 +308,37 @@ test('cloud CLI rejects unsafe session files and never echoes malformed credenti
 		assert.match(await run(), /private owned session/);
 	} finally {
 		await rm(directory, { recursive: true, force: true });
+	}
+});
+
+
+test('source holds must succeed before any copy and are negotiated as 1.15.0', async () => {
+	const f = await fixture();
+	try {
+		await prepareCloudFolderBackup(f.store, f.id, 'root', f.runtime);
+		f.state.refuseRetention = true;
+		await assert.rejects(resumeCloudFolderBackup(f.store, f.id, f.runtime), /409/);
+		assert.equal(f.state.byteReads.length, 0);
+		assert.ok(f.state.required.some(([feature, version]) => feature === 'api.attachment-content' && version === '1.15.0'));
+		assert.equal(await f.store.read(`snapshots/${f.id}/complete.json`, BACKUP_METADATA_BYTES), null);
+	} finally { await f.close(); }
+});
+
+test('long captures renew holds and expired holds never publish a completion seal', async (t) => {
+	for (const expired of [false, true]) {
+		let clock = 1000;
+		const mock = t.mock.method(performance, 'now', () => clock);
+		const f = await fixture();
+		try {
+			await prepareCloudFolderBackup(f.store, f.id, 'root', f.runtime);
+			f.state.beforeRead = () => { clock = 1000 + (expired ? 25 : 13) * 60 * 60 * 1000; };
+			if (expired) {
+				await assert.rejects(resumeCloudFolderBackup(f.store, f.id, f.runtime), /retention expired/);
+				assert.equal(await f.store.read(`snapshots/${f.id}/complete.json`, BACKUP_METADATA_BYTES), null);
+			} else {
+				await resumeCloudFolderBackup(f.store, f.id, f.runtime);
+				assert.ok(f.state.retentionRequests >= 2);
+			}
+		} finally { mock.mock.restore(); await f.close(); }
 	}
 });

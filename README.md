@@ -5630,3 +5630,14 @@ Chromium nested-sandbox initialization failure is an unavailable native test,
 not permission to disable a sandbox. Neither command uses a personal account,
 installed app data or a production backend. See the
 [acceptance ledger](docs/mobile-file-sync.md#app-owned-mac-transfer-lifecycle--2026-10-19).
+
+### Backup source retention rollout
+
+Cloud backup workers require attachment-content 1.15.0 and acquire renewable
+24-hour exact-version holds. Deploy retention-aware attachment deletion and
+cleanup writers together for every deployment sharing a database; bucket
+lifecycle rules must also preserve those versions. Old writers and provider
+administrators cannot be fenced by an application-only hold. Held bytes remain
+billed, and deletion waits for expiry. No new secret or provider environment
+variable is required. See [portable backup retention](docs/portable-backups.md#source-version-retention--2026-10-19)
+for isolated test prerequisites, boundaries and remaining product work.

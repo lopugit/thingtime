@@ -118,7 +118,7 @@ export function desktopSyncProxyAllowed(request: Request): boolean {
     '/api/v1/auth/me': ['GET'], '/api/v1/things': ['GET', 'POST', 'PATCH'],
     '/api/v1/files': ['GET', 'POST'], '/api/v1/attachments/uploads': ['POST'],
     '/api/v1/attachments/uploads/parts': ['POST'], '/api/v1/attachments/uploads/complete': ['POST'],
-    '/api/v1/attachments/content': ['GET']
+    '/api/v1/attachments/content': ['GET', 'POST']
   };
   return methods[local.pathname]?.includes(request.method) === true;
 }

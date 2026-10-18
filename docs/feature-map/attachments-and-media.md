@@ -593,3 +593,11 @@ publication capability. The bridge verifies paired-device authority, bookmark
 access and final owner/grant/approval state; Photos remains read-only. Shared target
 checks now cover Mac and iOS. The iOS runner is still view-owned, so durable
 app/background execution and installed-device acceptance remain unfinished.
+
+`attachmentRetention.ts` owns exact-version backup holds (content 1.15.0;
+abort/delete/reap 1.2.0). The existing content route accepts bounded owner POST
+batches and owner-only `retained=1` ranges. `attachments.ts` fences purge through
+that service; the normal retry sweep and storage refund remain canonical. Run
+`test:attachments:retention` for real isolated Mongo concurrency/accounting plus
+`test:attachments`, `test:backups` and `test:api-capabilities`. See
+[the retention rollout boundary](../portable-backups.md#source-version-retention--2026-10-19).

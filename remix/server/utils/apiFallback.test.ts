@@ -149,23 +149,25 @@ test('desktop sync forwards only the explicit account/home/server-bound route fa
    'X-Thingtime-Expected-Data-Plane': 'home', 'X-Thingtime-Expected-Api-Origin': 'https://sync.test',
    'x-forwarded-host': 'untrusted.test' };
   try {
-   for (const [path, method] of [['auth/me', 'GET'], ['things', 'PATCH'], ['files', 'POST'], ['attachments/uploads', 'POST'], ['attachments/content', 'GET']]) {
+   for (const [path, method] of [['auth/me', 'GET'], ['things', 'PATCH'], ['files', 'POST'], ['attachments/uploads', 'POST'], ['attachments/content', 'GET'], ['attachments/content', 'POST']]) {
     const request = new Request('http://127.0.0.1:17340/api/v1/' + path, { method, headers, ...(method !== 'GET' ? { body: '{}' } : {}) });
     const response = await (handleApi as any)({ req: request, context: { params: { path: 'v1/' + path } } });
     assert.equal(response.status, 200); assert.equal(response.headers.get('x-thingtime-api-fallback'), 'https://sync.test');
    }
-   for (const patch of [{ 'X-Thingtime-Expected-Api-Origin': 'https://old.test' }, { 'X-Thingtime-Expected-Data-Plane': 'foreign' }, { Origin: 'https://foreign.test' }, { 'Sec-Fetch-Site': 'cross-site' }]) {
-    const request = new Request('http://127.0.0.1:17340/api/v1/things', { method: 'POST', headers: { ...headers, ...patch }, body: '{}' });
-    assert.equal((await (handleApi as any)({ req: request, context: { params: { path: 'v1/things' } } })).status, 503);
+   for (const path of ['things', 'attachments/content']) {
+   for (const patch of [{ 'X-Thingtime-Expected-Api-Origin': 'https://old.test' }, { 'X-Thingtime-Expected-Actor': '' }, { 'X-Thingtime-Expected-Data-Plane': 'foreign' }, { Origin: 'https://foreign.test' }, { 'Sec-Fetch-Site': 'cross-site' }]) {
+    const request = new Request('http://127.0.0.1:17340/api/v1/' + path, { method: 'POST', headers: { ...headers, ...patch }, body: '{}' });
+    assert.equal((await (handleApi as any)({ req: request, context: { params: { path: 'v1/' + path } } })).status, 503);
     assert.equal(request.bodyUsed, false);
+   }
    }
    const request = new Request('http://127.0.0.1:17340/api/v1/actions/run', { method: 'POST', headers, body: '{}' });
    assert.equal((await (handleApi as any)({ req: request, context: { params: { path: 'v1/actions/run' } } })).status, 503);
-   assert.equal(request.bodyUsed, false); assert.equal(calls, 5);
+   assert.equal(request.bodyUsed, false); assert.equal(calls, 6);
    delete process.env.THINGTIME_DESKTOP;
    const web = new Request('http://127.0.0.1:17340/api/v1/things', { method: 'POST', headers, body: '{}' });
    assert.equal((await (handleApi as any)({ req: web, context: { params: { path: 'v1/things' } } })).status, 503);
-   assert.equal(calls, 5);
+   assert.equal(calls, 6);
   } finally { mock.mock.restore(); if (prior === undefined) delete process.env.THINGTIME_DESKTOP; else process.env.THINGTIME_DESKTOP = prior; }
  });
 });
