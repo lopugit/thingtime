@@ -64,6 +64,7 @@ export function localPostProjection(row: LocalThing, all: LocalThing[], owner: s
   images: (crystal.images || []) as string[], attachments, mediaLayout: (crystal.mediaLayout || null) as PublicPost['mediaLayout'],
   listing: (crystal.listing || null) as PublicPost['listing'], thing: (crystal.thing || null) as PublicPost['thing'], tags: base.tags,
   title: typeof crystal.title === 'string' ? crystal.title : null, targetId: row.targetId || null, createdAt: row.createdAt,
+  ...(typeof crystal.subspaceId === 'string' && crystal.subspaceId ? { subspaceContextMissing: true as const } : {}),
   commentCount: children.length,
   comments: includeComments ? children.map(child => localPostProjection(child, all, owner, false, byTarget)) : [], ...(includeComments ? {} : { repliesLoaded: false as const }), shareCount: 0, isShare: false, shareOf: null } as PublicPost & { localOnly: true; targetId: string | null; repliesLoaded?: false };
 }

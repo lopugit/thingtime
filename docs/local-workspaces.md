@@ -5,6 +5,43 @@ Thingtime application, separate from the stateless agent export sandbox in
 [no-login-draft-preview.md](no-login-draft-preview.md). The full local-first
 rollout is **not ready to merge** until the outstanding rows below are verified.
 
+## Inherited audience labels and retained subspace context — 2026-10-19
+
+A live private coordination comment incorrectly displayed “anyone can see this
+post” on its standalone page. Unauthenticated reads of both the parent and
+comment returned 404 without content. The label consumed the resolved parent ACL
+but omitted the separate private-subspace membership boundary.
+
+The shared audience display now describes inherited permissions without claiming
+public access. Native regression also found that the owned local projection lost
+the retained subspace embed after reload. Owned posts and thread context now keep
+the matching subspace's display snapshot; an unknown or changed destination
+explicitly reports missing access details. These projections never grant access,
+change ACLs, copy link secrets, or add server/persisted authority fields.
+
+The packaged native fixture checks a private parent, comment and nested reply,
+plus an independently public post, through ordinary APIs and the actual UI.
+Guest and foreign-account reads of all three private Things return 404; the
+public control returns 200. First-load and repeated navigation at 1440×1000,
+390×844 and 320px pass scrolling and width checks. Evidence is in
+`tmp/inherited-audience-native/native/verification.json` and its twelve PNGs.
+The browser/backend runtime uses network:none and disposable data, and is released.
+
+Validation: 732 workspace checks, four offline-shell checks and 44 focused checks
+pass; the native opt-in runs separately. Builds and changed-file lint pass, and
+TypeScript retains the identical 91 baseline diagnostics. Deployed code still has
+the old label; this PR contains the local fix. No API contract or authorization
+change, merge or manual deployment is included. Protected restore/undo/merge,
+the remaining local matrix and target-host MCP artifacts remain open.
+
+Earlier runs included an incorrect fixture status expectation and a stale local
+HTML template, both corrected in the harness. Two later runs had intermittent
+blank navigations without a classified cause. The final instrumented run passed
+all twelve page/viewport combinations with no page errors or crash events and
+zero OOM. The earlier diagnostics remain in
+`tmp/inherited-audience-navigation-failure/failure.json`; blank-navigation
+stability remains a separate P1 item, not a closed acceptance gate.
+
 ## Native account theme History — 2026-10-19
 
 The packaged application now has native account-theme History acceptance through

@@ -2,7 +2,7 @@ import { localPostProjection, localTargetIndex, postThreadContext } from './post
 import type { LocalThing } from './things';
 import { ACCOUNT_READ_COLLECTIONS, accountReadRefusals, forgetAccountConversation } from './accountReadRevocation';
 import type { PublicPost } from '../components/Feed/feedTypes';
-import { accountDiscussionProjection } from './accountPosts';
+import { accountDiscussionProjection, accountPostAudienceContext } from './accountPosts';
 import { searchLocalThings } from './structuredSearch';
 import { WorkspaceError, workspaceScopeKey, type WorkspaceDatabase, type WorkspaceLease, type WorkspaceScope } from './storage';
 
@@ -81,7 +81,7 @@ export class AccountDiscussionCache {
     if (blocked.has(target)) return null;
     // Known refusals remove synced owned rows atomically. Pending authored work
     // remains recoverable but cannot supply refused conversation context.
-    const post = local && state ? { ...localPostProjection(local,all,this.scope.kind==='account'?this.scope.ownerId:'',false,byTarget), ...state.audience, author, localOnly:false, localWorkspace:true } : snapshot?.post;
+    const post = local && state ? { ...localPostProjection(local,all,this.scope.kind==='account'?this.scope.ownerId:'',false,byTarget), ...accountPostAudienceContext(local.crystal, snapshot?.post), ...state.audience, author, localOnly:false, localWorkspace:true } : snapshot?.post;
     if (!post) return null;
     const withTarget = {...post,targetId:(post as any).targetId || snapshot?.parent || null};
     projected.set(target,withTarget);return withTarget;

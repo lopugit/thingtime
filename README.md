@@ -5354,6 +5354,19 @@ and diagnostics. It verifies offline saves/reload, private read refusals and bot
 sync failure directions without changing Secure-cookie or authorization rules.
 This is account History acceptance; protected restore/undo/merge is still open.
 
+### Isolated inherited-audience acceptance
+
+With the same disposable browser/backend runtime above, run
+`app/components/Sharing/inheritedAudience.browser.test.ts` from `remix/` with
+`TT_INHERITED_AUDIENCE_URL`, `TT_INHERITED_AUDIENCE_ARTIFACTS`,
+`TT_RENDER_SESSION` and `TT_SHARED_PLAYWRIGHT_PATH`. Optional
+`TT_SHARED_CHROME_PATH` selects the isolated browser binary. It creates only
+disposable private-subspace and public control fixtures inside that runtime.
+The test compares the real API's guest/foreign refusals with native parent,
+comment and nested-reply badges, including repeated navigation at three widths.
+Build the client, run `npm run sync:nitro-template`, then build the server before
+packaging, so the served HTML references the current assets.
+
 ### Disposable offline Action verification
 
 The opt-in `remix/app/local-workspace/accountActions.browser.test.ts` uses a fresh

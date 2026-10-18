@@ -23,7 +23,7 @@ import { accountImportSupported } from './accountImport';
 import { AccountFileSync } from './accountFiles';
 import { localThingProjection } from './things';
 import { clearLocalCache } from '../hooks/localCache';
-import { AccountPostCache, overlayAccountPost } from './accountPosts';
+import { AccountPostCache, accountPostAudienceContext, overlayAccountPost } from './accountPosts';
 import { AccountInteractionSync } from './accountInteractions';
 import { withExportDeadline } from '../utils/thingTransfer/exportDeadline';
 import { exportAccountThings, snapshotAccountExportInput } from './accountExport';
@@ -282,7 +282,7 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 		const authoredComments = post.comments.map(comment => ({ ...comment, author, localOnly: false, localWorkspace: true }));
 		const comments = new Map((cached?.comments || []).map(comment => [comment.id,comment]));
 		for (const comment of authoredComments) comments.set(comment.id,comment as any);
-		return { ...post, author, localOnly: false, localWorkspace: true, acl: row.acl, visibility: row.visibility, syncState: row.syncState,
+		return { ...post, ...accountPostAudienceContext(row.crystal, captured), author, localOnly: false, localWorkspace: true, acl: row.acl, visibility: row.visibility, syncState: row.syncState,
 			commentCount: Math.max(post.commentCount || 0,cached?.commentCount || 0,comments.size), comments: [...comments.values()] };
 	};
 	const postContext = async (post: {id:string;thingtime:string[]}) => post.thingtime.includes('comment') ? worker().discussions.threadContext(post.id,owner as any) : {parent:null,root:null};

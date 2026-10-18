@@ -12623,3 +12623,9 @@ Local results do not establish current-head CI or deployed acceptance.
 - [x] Character library selection, reply/parent links, History-to-inspector links and quick-comment completion retain their actor through native cold reload. The principal library remains separate; leaving the actor revokes its image URL.
 - [x] Explicit API actor selection saves in the actor queue; selecting the principal clears inherited delegation. A private target in another partition is refused. Anonymous quick comments keep the anonymous facade and make no account requests.
 - [ ] Complete remaining feature-specific Character routes and the full account/offline acceptance matrix.
+
+### Inherited and cached subspace audience labels (2026-10-19)
+
+- [x] A private subspace's parent, comment and nested reply keep accurate badges across native first loads and repeated navigation at 1440/390/320px. Guests and a foreign account receive 404 for all three; a separate public fixture remains readable. `inheritedAudience.browser.test.ts` emits twelve PNGs and diagnostics in `tmp/inherited-audience-native/native/`.
+- [x] The owned-content projection retains only its matching subspace snapshot. Missing context or a changed destination cannot acquire a public badge from `tt:all`; resolved inherited ACLs never omit the parent's additional boundaries. Focused and broad local tests pass.
+- [ ] Diagnose intermittent blank navigations seen in earlier isolated native runs. Final instrumented run passes without page errors/crash events/OOM, but does not establish the earlier cause. Keep `tmp/inherited-audience-navigation-failure/failure.json` and the full-local-workspace acceptance gate open.

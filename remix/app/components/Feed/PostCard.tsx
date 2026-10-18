@@ -5,7 +5,7 @@ import { PostLinkedThings } from './PostLinkedThings';
 import { CollectionList } from '~/components/Collections/CollectionList';
 import { createDiscussionCommentPager, mergeDiscussionComments, discussionCommentSearchText } from './discussionCommentPages';
 import { SharedMediaProvider, useSharedThingPath, useSharedAccess } from '~/components/Sharing/SharedMedia';
-import { audienceDescription, audienceOfAcl, sharePathForThing, aclForAudience } from '~/components/Sharing/audienceCore';
+import { thingAudienceDisplay, sharePathForThing, aclForAudience } from '~/components/Sharing/audienceCore';
 import React from 'react';
 import {
   Box,
@@ -1720,12 +1720,8 @@ function PostCardImpl(props: PostCardProps) {
       lopu({ title: err?.error || 'Could not change the flair 😞', status: 'error' });
     }
   };
-	const effectiveAcl = post.audience?.acl || post.acl;
-	const privateSubspace = post.subspace?.access === 'private';
-	const circle = privateSubspace ? { emoji: '🔒', label: 'Private subspace', hint: 'Subspace membership is required' } : CIRCLE_META[audienceOfAcl(effectiveAcl)];
-	const audienceText = privateSubspace && audienceOfAcl(effectiveAcl) === 'public'
-		? 'private subspace members only'
-		: `${privateSubspace ? 'private subspace · ' : ''}${audienceDescription(effectiveAcl, mediaThing ? 'media' : 'post', !!post.audience && post.audience.sourceId !== post.id)}`;
+	const circle = thingAudienceDisplay(post, mediaThing ? 'media' : 'post');
+	const audienceText = circle.description;
 
   // Every reaction token on the post, most-used first — feeds the merged
   // react button (top emojis + total count).

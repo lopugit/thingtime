@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { IDBFactory, IDBKeyRange } from 'fake-indexeddb';
 import { WorkspaceDatabase } from './storage';
-import { AccountPostCache, accountPostProjection, overlayAccountPost } from './accountPosts';
+import { AccountPostCache, accountPostProjection, accountPostAudienceContext, overlayAccountPost } from './accountPosts';
+import { thingAudienceDisplay } from '../components/Sharing/audienceCore';
 const scope = { kind: 'account' as const, origin: 'https://example.test', ownerId: 'viewer', dataPlane: 'home' },
 	lease = { assertCurrent() {}, onInvalidate: () => () => {} };
 const post = (id = 'post') => ({
@@ -23,6 +24,23 @@ const post = (id = 'post') => ({
 	viewerReactions: [],
 	reactionCounts: { '❤️': 3 },
 	tags: []
+});
+test('owned content preserves matching retained subspace display context without borrowing a different destination', async () => {
+  const factory = new IDBFactory(), db = new WorkspaceDatabase(factory, undefined, undefined, IDBKeyRange);
+  const cache = new AccountPostCache(db, scope, lease);
+  const subspace = { id: 'private-space', slug: 'private', name: 'Private', access: 'private', viewerRole: 'member' };
+  try {
+    await cache.remember([{ ...post(), acl: ['tt:all'], subspace }]);
+    const retained = await new AccountPostCache(db, scope, lease).get('post');
+    const context = accountPostAudienceContext({ subspaceId: 'private-space' }, retained);
+    assert.deepEqual(context.subspace, subspace);
+    assert.equal(thingAudienceDisplay({ ...post(), acl: ['tt:all'], ...context }).description, 'private subspace members only');
+    const changedDestination = accountPostAudienceContext({ subspaceId: 'another-space' }, retained);
+    assert.equal(changedDestination.subspace, null);
+    assert.equal(thingAudienceDisplay({ ...post(), acl: ['tt:all'], ...changedDestination }).description, 'subspace access details unavailable on this device');
+    assert.equal(accountPostAudienceContext({ subspaceId: 'private-space' }).subspaceContextMissing, true);
+    assert.equal(accountPostAudienceContext({}, retained).subspace, null);
+  } finally { await db.close(); }
 });
 test('retained post snapshots exclude credentials and never acquire ownership or sync state', async () => {
 	const db = new WorkspaceDatabase(new IDBFactory(), undefined, undefined, IDBKeyRange),

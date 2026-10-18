@@ -80,6 +80,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-19: Describe inherited audiences honestly and retain matching subspace context in owned offline projections. Native parent/comment/nested-reply and guest/foreign refusal checks pass at 1440/390/320px; intermittent earlier blank navigation remains tracked. See the [PR #1000 checkpoint](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
 - 2026-10-19: Verify native account-theme offline History, canonical version downloads and independent content/History retry in both failure directions on the isolated packaged app. Protected version changes remain open. See [PR 1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md). — Codex (AI)
 
 - 2026-10-19: Account file downloads use canonical export plans independently of paired-device capabilities and their 32 MiB cap. Native 70 MiB offline save, private reconnect, clean-context download and retained offline reuse pass with exact hashes; existing authorization and transfer bounds remain. See [PR 1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md). — Codex (AI)

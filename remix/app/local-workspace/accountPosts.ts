@@ -117,6 +117,14 @@ function accountConversationProjection(input: unknown, discussion = false): Publ
 	return snapshotTransferValue(project(input)) as unknown as PublicPost;
 }
 export const accountPostProjection = (input: unknown): PublicPost => accountConversationProjection(input);
+/** Preserve only the matching subspace's retained display context when an
+ * owned content projection wins over its read-only server snapshot. */
+export function accountPostAudienceContext(crystal: Record<string, unknown>, retained?: PublicPost | null): Pick<PublicPost, 'subspace' | 'subspaceContextMissing'> {
+  const id = typeof crystal.subspaceId === 'string' ? crystal.subspaceId : '';
+  if (!id) return { subspace: null, subspaceContextMissing: undefined };
+  const subspace = retained?.subspace?.id === id ? retained.subspace : null;
+  return subspace ? { subspace, subspaceContextMissing: undefined } : { subspace: null, subspaceContextMissing: true };
+}
 /** Bounded server discussion projections may represent any authorized Thing.
  * Children are retained separately; a root never asserts complete membership. */
 export const accountDiscussionProjection = (input: unknown): PublicPost => {

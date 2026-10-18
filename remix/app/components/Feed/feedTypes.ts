@@ -148,6 +148,9 @@ export type PublicPost = {
   // outside subspaces. Optional during rollout.
   title?: string | null;
   subspace?: PublicPostSubspace | null;
+  // Device-only projection diagnostic, never an authorization grant. The
+  // content names a subspace but its display snapshot has not been retained.
+  subspaceContextMissing?: true;
   flair?: PublicPostFlair | null;
   // the author's USER flair in this post's subspace (their pick beside their
   // name — a template or custom text). Optional during rollout.
