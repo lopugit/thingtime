@@ -10337,3 +10337,8 @@ separate from deterministic discovery/lease tests.
 - Switch to a catalog/API-key provider and to voice: existing invitation policy still applies. Disconnect or revoke the plan and confirm no fallback billing or continuation; other-owner, scoped-token and Character-override requests must fail before writes/inference.
 - Change account while catalog or provider-save requests are pending. No eligibility hint may come from cache or the old response. A failed provider save must restore the last confirmed choice and show its error; a later successful choice must survive an older failure.
 - Run `test:chatgpt-plan`, `test:lopu-ui` and `test:api-capabilities`; the plan suite includes real create/update persistence-boundary checks with isolated storage adapters. Live installed inference and desktop/mobile picker checks remain separate acceptance evidence.
+
+## Character coordination discovery
+
+- Run `npm --prefix remix run test:characters-preflight`: real loopback HTTP must reject incompatible/missing capabilities, wrong origins, redirects, HTML/malformed manifests, application errors and timeouts; classify Cloudflare 403 separately and permit a fresh successful retry. Requests carry no credentials.
+- Run `npm --prefix remix run characters:preflight -- --origin https://thingtime.com` only on the separately authorized real-account coordination path. Confirm `CAPABILITY_READY`, selected origin, compatible version, and authentication/membership both `not_checked`. Then use the assigned Chrome session and task Character to verify private-subspace read/post/reload separately; do not treat public discovery as account acceptance.
