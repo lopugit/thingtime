@@ -11264,3 +11264,25 @@ protection values as strings, as specified by
 - [ ] Complete remaining managed family/relationship coverage, storage retention
   leases, authorized account restore/jobs/UI, encryption and independent cloud
   copies. Historical attachment support alone is not complete whole-data backup.
+
+
+### Saved drafts and large content in account snapshots — 2026-10-18
+
+- [x] Preserve exact canonical editor snapshot strings, reusable template modes,
+  provenance and revision tombstones. Reject malformed content, extra fields,
+  invalid dates/modes/revisions, oversized editor state and active/deleted mismatch.
+- [x] Resolve draft media at the same database timestamp in owner-indexed batches;
+  missing, foreign, wrong-target/purpose/profile or expiring media must refuse the
+  complete plan. Deletion markers have no active editor or media references.
+- [x] Recover both inline and multi-chunk ordinary Thing snapshots; reject protected
+  kinds and extra envelope fields. Retaining multiple ordinary rows must stream
+  payloads rather than collecting a whole page of large records.
+- [x] Regression: mutate a caller's Buffer after the first chunk write; frozen
+  payloads remain unchanged. Cancel between chunks: no complete plan or seal may
+  be published, and no later source reread may masquerade as the old snapshot.
+- [x] Real Mongo snapshot proof: concurrently delete a working draft's media,
+  replace its editor with a tombstone and edit a 10 MB ordinary Thing. After
+  source database/files and first-vault deletion, verify all original records and
+  exact media from the independent vault (357 records, 22,064,370 payload bytes).
+- [ ] Complete other protected families/settings/device coverage and reviewed
+  account restore/jobs/UI. Offline content readers do not restore live state.

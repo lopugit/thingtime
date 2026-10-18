@@ -68,6 +68,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-18 — **Codex (AI)**: Extend internal account snapshots to saved drafts,
+  templates, deletion tombstones and large canonical Thing content, with exact
+  owned-media checks, bounded chunk retention and independent offline recovery.
+  Real Mongo source-loss proof covers 357 records; whole-account jobs/UI and
+  remaining managed families are still pending. [PR #1002 details](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md#draft-and-large-content-snapshot-coverage--2026-10-18).
+
+
 - 2026-10-18 — **Codex (AI)**: Capture ready attachment bytes and validate file
   history references in account snapshots. Offline readers recover current,
   earlier and retained-conflict versions from the independent vault. Full account

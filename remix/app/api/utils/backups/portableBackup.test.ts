@@ -19,6 +19,7 @@ import {
 } from '../../../backups/manifest';
 import { openLocalBackupStore } from './localBackupStore';
 import {
+	retainBackupPayload,
 	prepareBackup,
 	captureBackup,
 	sealBackup,
@@ -476,5 +477,52 @@ test('missing/reordered manifests and overlapping ranges fail verification; revo
 		assert.equal(yielded, 0);
 	} finally {
 		await rm(root, { recursive: true, force: true });
+	}
+});
+
+test('retained multi-chunk records copy Buffer inputs and refuse completion after interruption between chunks', async () => {
+	for (const interrupted of [false, true]) {
+		const root = await mkdtemp(join(tmpdir(), 'thingtime-retained-record-'));
+		try {
+			const disk = await openLocalBackupStore(root),
+				h = header(),
+				input = Buffer.alloc(BACKUP_CHUNK_BYTES + 17, 37),
+				expectedHash = hash(input);
+			const controller = new AbortController(),
+				scoped = { ...access, signal: controller.signal };
+			let writes = 0;
+			const store: BackupObjectStore = {
+				read: disk.read,
+				put: async (key, bytes) => {
+					await disk.put(key, bytes);
+					if (key.startsWith('chunks/') && ++writes === 1) {
+						input.fill(99); // Buffer.slice would share storage and corrupt the following chunk.
+						if (interrupted) controller.abort();
+					}
+				}
+			};
+			async function* records() {
+				yield await retainBackupPayload(
+					store,
+					h.snapshotId,
+					{ ordinal: 0, thingId: 'b-file', revision: 'v1', snapshot: { adapter: 'fixture-record', version: 1, value: null } },
+					input,
+					scoped
+				);
+			}
+			if (interrupted) {
+				await assert.rejects(prepareBackup(store, h, records(), scoped));
+				assert.equal(await disk.read(`snapshots/${h.snapshotId}/plan.json`, BACKUP_PAGE_BYTES), null);
+				await assert.rejects(sealBackup(disk, h.snapshotId, access));
+			} else {
+				await prepareBackup(store, h, records(), scoped);
+				assert.equal(writes, 2);
+				await captureBackup(disk, h.snapshotId, noSource, access);
+				await sealBackup(disk, h.snapshotId, access);
+				assert.equal(hash((await collect(disk, h.snapshotId)).bytes), expectedHash);
+			}
+		} finally {
+			await rm(root, { recursive: true, force: true });
+		}
 	}
 });

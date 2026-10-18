@@ -5123,15 +5123,19 @@ Do not increase a production history window blindly: measure enumeration time
 and the database storage cost first. No new credentials or app environment
 variables are needed. This producer is internal and refuses unsupported managed
 families; it does not yet supply a whole-account backup API. Ordinary Things,
-file references, ready owned attachments and canonical Timeline record families
-are covered. Canonical file-history references must match attachment records at
-the same database timestamp. Timeline payloads are frozen into private chunk storage during the database snapshot,
-including records too large for manifest metadata. Keep that destination local
+file references, ready owned attachments, saved drafts/templates/tombstones and
+canonical Timeline record families are covered. Canonical file-history references must match attachment records at
+the same database timestamp. Timeline and draft payloads, plus large ordinary
+Thing snapshots, are frozen into private chunk storage during the database
+snapshot. Draft records are bounded to 4 MiB and ordinary snapshots to 128 MiB;
+the latter stream one row at a time through 8 MiB chunks. Validation/encoding
+can hold multiple record-sized buffers, so provision worker memory accordingly. Keep that destination local
 and durable enough to finish within the database history window; failure does
 not permit switching timestamps. Archived receipts are read-only history, not
 server restore authority. The consistency check below also deletes its source
 database, original files and first vault, then verifies history and current/earlier/conflict
-file bytes in an independent copy.
+file bytes, saved drafts/templates/tombstones and large ordinary content in an
+independent copy.
 
 The producer now also needs the existing [private attachment storage](#private-s3-media-and-attachments)
 configuration (or the [local stand-in](#local-attachment-storage-laptop-stand-in-for-the-private-bucket))

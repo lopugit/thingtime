@@ -2188,3 +2188,34 @@ Remaining managed families, non-file relationship closure, retention/pinning,
 account restore/jobs/UI, independent cloud replication, encryption, physical-media
 preparation and measured 100 GB–100 TB transfers remain open. No production
 promotion or new public endpoint is included.
+
+
+### Draft and large-content snapshot coverage — 2026-10-18
+
+Saved working drafts, reusable templates and deletion tombstones now have a
+dedicated account-backup exporter. It preserves the existing AccountDraft/editor
+format, revisions, dates and provenance, without exporting private roots. Media
+references are checked in bounded owner-indexed batches at the same database
+timestamp and must remain bound to the exact draft and purpose. A tombstone is
+never returned as active content.
+
+Large ordinary Thing snapshots retain their canonical `thing-content` shape in
+verified 8 MiB chunks (128 MiB record bound); small snapshots remain inline. The
+producer processes large ordinary rows individually and drafts in batches of
+eight. Retained payloads own their input buffers and check access/readback between
+chunks. Offline readers verify canonical content; they do not import server state.
+
+Validation: 69 backup tests and 26 existing draft tests pass. The real disposable
+replica preserved 357 records, 47 Timeline records and 22,064,370 payload bytes,
+including a 10,080,000-byte ordinary text value. Concurrent draft/media deletion
+and a large-content edit did not change the frozen result. Exact drafts, templates,
+tombstones, media, historical files and large content recovered from an independent
+vault after removing the source database/files and first vault. Targeted lint and
+diff checks pass; raw TypeScript retains the same 91 baseline diagnostics outside
+changed files. [Contract and worker bounds](../docs/portable-backups.md#drafts-templates-and-large-ordinary-things).
+
+This extends the internal inventory, not a complete account-backup feature.
+Remaining managed data/settings/device coverage, retention leases, restore
+writers, backup jobs/UI, independent cloud replication, encryption, physical-media
+preparation and measured 100 GB–100 TB transfers remain open. No production
+promotion is included.

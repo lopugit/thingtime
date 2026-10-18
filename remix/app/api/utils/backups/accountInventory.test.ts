@@ -1,3 +1,6 @@
+import { backupDraftFixture } from './draftRecords.fixtures';
+import { backupDraftFromDoc, openBackupDraft } from './draftRecords';
+import { openBackupThingSnapshot } from './thingSnapshots';
 import { openAccountBackupFile, openAccountBackupFileVersion } from './accountFileRecovery';
 import { timelineEventThingId } from '../timeline/repository';
 import { backupAttachmentFixture, backupFileHistoryFixture } from './attachmentRecords.fixtures';
@@ -34,6 +37,7 @@ function fixture(count = 300) {
 			return value ?? null;
 		},
 		put: async (key, value) => {
+			state.beforePut(key);
 			if (objects.has(key)) assert.deepEqual(objects.get(key), value);
 			else objects.set(key, value.slice());
 		}
@@ -42,6 +46,8 @@ function fixture(count = 300) {
 	const access = { scope, authorize: async () => {}, signal: undefined as AbortSignal | undefined };
 	const state = {
 		beforeHead: async () => {},
+		beforePut: (_key: string) => {},
+		ordinaryYields: [] as string[],
 		queries: 0,
 		closed: 0,
 		ended: 0,
@@ -102,7 +108,10 @@ function fixture(count = 300) {
 						}
 						return result;
 					});
-					yield* state.alterRows(state.queries, projected);
+					for (const row of state.alterRows(state.queries, projected)) {
+						if (options.projection.crystal && options.projection.timelineHeadId) state.ordinaryYields.push(row.shareId);
+						yield row;
+					}
 				}
 			};
 			return cursor;
@@ -271,7 +280,7 @@ for (const mode of ['revoked', 'cancelled', 'scope', 'boundary', 'missing', 'dup
 			if (mode === 'expired') throw Error('SnapshotTooOld');
 			if (mode === 'missing') return rows.slice(1);
 			if (mode === 'duplicate') return [rows[0], rows[0]];
-			if (mode === 'oversized') rows[0].crystal = 'x'.repeat(256 * 1024);
+			if (mode === 'oversized') rows[0].crystal = Array.from({ length: 90_001 }, () => null);
 			return rows;
 		};
 		await assert.rejects(f.run());
@@ -606,3 +615,79 @@ test('a failed storage check drains its bounded batch without starting another o
 	assert.equal(active, 0);
 	assert.equal(f.objects.has(`snapshots/${f.id}/plan.json`), false);
 });
+
+test('large ordinary content, drafts, templates and deletion tombstones survive independently with exact media', async () => {
+	const f = fixture(2),
+		drafts = await backupDraftFixture();
+	const large = 'independent content'.repeat(500_000);
+	f.source[0].crystal = { text: large };
+	f.source[1].crystal = { text: 'second ordinary record' };
+	f.source.push(...drafts.docs, ...drafts.attachments.map((a) => a.doc));
+	for (const a of drafts.attachments) f.heads.set(a.doc.objectKey, a.head);
+	let observedStreaming = false;
+	f.state.beforePut = (key) => {
+		if (key.startsWith('chunks/') && f.state.ordinaryYields.includes('thing-0000')) {
+			assert.deepEqual(f.state.ordinaryYields, ['thing-0000'], 'retain the first large payload before pulling another ordinary row');
+			observedStreaming = true;
+		}
+	};
+	const plan = await f.run();
+	assert.ok(observedStreaming);
+	f.state.beforePut = () => {};
+	assert.equal(plan.items, 7);
+	assert.ok(BigInt(plan.bytes) > BigInt(9 * 1024 * 1024));
+	assert.equal(f.state.queries, 6, 'one batched media dependency query, no per-draft payload lookup');
+	assert.ok(f.projections.every((p) => !p.secure && !p.tokenAcl && !p.linkKey));
+	f.source.length = 0;
+	await captureBackup(
+		f.store,
+		f.id,
+		{
+			read: async (item, offset, length) => {
+				const content = backupAttachmentItemContent(item);
+				const a = drafts.attachments.find((a) => a.doc.shareId === content?.attachmentId);
+				assert.ok(a, 'Frozen draft and ordinary content never consult live source');
+				return a.bytes.subarray(offset, offset + length);
+			}
+		},
+		f.access
+	);
+	await sealBackup(f.store, f.id, f.access);
+	const second = fixture(0);
+	await copySealedBackup(f.store, second.store, f.id, f.access);
+	f.objects.clear();
+	for (const doc of drafts.docs) assert.deepEqual(await openBackupDraft(second.store, f.id, doc.shareId, f.access), backupDraftFromDoc(doc));
+	const snapshot = await openBackupThingSnapshot(second.store, f.id, 'thing-0000', f.access);
+	assert.equal((snapshot.value as any).crystal.text, large);
+	assert.equal(((await openBackupThingSnapshot(second.store, f.id, 'thing-0001', f.access)).value as any).crystal.text, 'second ordinary record');
+	for (const a of drafts.attachments) {
+		const result = await openBackupItem(second.store, f.id, a.doc.shareId, f.access),
+			chunks = [];
+		for await (const bytes of result.ranges) chunks.push(bytes);
+		assert.deepEqual(Buffer.concat(chunks), a.bytes);
+	}
+	assert.ok(![...second.objects.values()].some((bytes) => Buffer.from(bytes).includes('NEVER_EXPORT')));
+});
+
+for (const mode of ['missing', 'foreign', 'target', 'purpose', 'profile', 'deleted', 'expiring'] as const) {
+	test(`draft media ${mode} refuses the complete inventory`, async () => {
+		const f = fixture(0),
+			drafts = await backupDraftFixture();
+		f.source.push(...drafts.docs, ...drafts.attachments.map((a) => a.doc));
+		for (const a of drafts.attachments) f.heads.set(a.doc.objectKey, a.head);
+		const doc: any = drafts.attachments[0].doc;
+		if (mode === 'missing') f.source.splice(f.source.indexOf(doc), 1);
+		if (mode === 'foreign') doc.ownerId = 'someone-else';
+		if (mode === 'target') doc.targetId = 'different-draft';
+		if (mode === 'purpose') doc.attachmentPurpose = 'post';
+		if (mode === 'profile') {
+			doc.attachmentPurpose = 'profile';
+			doc.attachmentProfileSlot = 'avatar';
+		}
+		if (mode === 'deleted') (drafts.docs[0] as any).draftDeleted = true;
+		if (mode === 'expiring') doc.attachmentExpiresAt = new Date('2026-10-19T00:00:00.000Z');
+		await assert.rejects(f.run());
+		assert.equal(f.objects.has(`snapshots/${f.id}/plan.json`), false);
+		assert.equal(f.state.closed, f.state.queries);
+	});
+}

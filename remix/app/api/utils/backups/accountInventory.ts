@@ -1,4 +1,13 @@
 import {
+	backupDraftProjection,
+	backupDraftFromDoc,
+	retainBackupDraft,
+	backupDraftAttachmentReferences,
+	verifyBackupDraftAttachment,
+	type BackupDraftAttachmentReference
+} from './draftRecords';
+import { retainBackupThingSnapshot } from './thingSnapshots';
+import {
 	backupAttachmentProjection,
 	backupAttachmentFromDoc,
 	backupAttachmentItem,
@@ -8,12 +17,10 @@ import {
 } from './attachmentRecords';
 import { getPrivateS3, type AttachmentObjectHead } from '../attachments/privateS3';
 import { type CloudFileContent } from '../../../fileSync/cloudFile';
-import { createHash } from 'node:crypto';
 import { isAccountTimelineKind, timelineBackupProjection, timelineBackupRecordFromDoc, retainTimelineBackupRecord } from './timelineRecords';
 import { getHomeThingsCollection, withHomeMongoSnapshot, THINGS_OWNER_IDENTITY_INDEX } from '../mongodb/collections';
 import { isCustomMongoEndpointActive } from '../mongodb/endpoint';
 import { isProtectedThingtime, MESSENGER_THINGTIME } from '../../../schemas/registry';
-import { thingContentSnapshot } from '../timeline/recordMutation';
 import { CLOUD_FILE_ADAPTER, parseCloudFile } from '../../../fileSync/cloudFile';
 import { timelineScopeKey } from '../../../timeline/contract';
 import { BACKUP_FORMAT, BACKUP_METADATA_BYTES, backupId, backupJson, parseBackupItem, type BackupItem } from '../../../backups/manifest';
@@ -44,7 +51,8 @@ const fileProjection = {
 	'crystal.content': 1
 };
 type Census = { shareId: string; ownerId: string; thingtime: string[] };
-type Family = 'content' | 'file' | 'timeline' | 'attachment';
+type Family = 'content' | 'file' | 'timeline' | 'attachment' | 'draft';
+type AttachmentReference = { fileId: string; content: CloudFileContent } | BackupDraftAttachmentReference;
 function family(doc: Census): Family {
 	if (
 		!Array.isArray(doc.thingtime) ||
@@ -53,6 +61,7 @@ function family(doc: Census): Family {
 		doc.thingtime.some((kind) => typeof kind !== 'string' || !id(kind))
 	)
 		throw Error('Invalid account inventory kind');
+	if (doc.thingtime.length === 1 && doc.thingtime[0] === 'draft') return 'draft';
 	if (doc.thingtime.length === 1 && doc.thingtime[0] === 'file') return 'file';
 	if (doc.thingtime.length === 1 && doc.thingtime[0] === 'attachment') return 'attachment';
 	if (doc.thingtime.length === 1 && isAccountTimelineKind(doc.thingtime[0])) return 'timeline';
@@ -60,28 +69,23 @@ function family(doc: Census): Family {
 		throw Error('Account snapshot needs a dedicated adapter for a managed Thing; no complete inventory was published');
 	return 'content';
 }
-function item(doc: any, ordinal: number, kind: Exclude<Family, 'timeline' | 'attachment'>): BackupItem {
-	if (kind === 'file') {
-		const file = parseCloudFile({
-			id: doc.shareId,
-			revision: doc.timelineHeadId,
-			folderId: doc.folderId ?? null,
-			name: doc.crystal?.name,
-			trashed: doc.crystal?.trashed,
-			content: doc.crystal?.content
-		});
-		return parseBackupItem({
-			ordinal,
-			thingId: doc.shareId,
-			revision: file.revision,
-			snapshot: { adapter: CLOUD_FILE_ADAPTER, version: 1, value: file },
-			// The separately inventoried attachment owns these bytes.
-			content: null
-		});
-	}
-	const snapshot = thingContentSnapshot(doc)!;
-	const revision = doc.timelineHeadId ?? 'snapshot-' + createHash('sha256').update(backupJson(snapshot, BACKUP_METADATA_BYTES)).digest('hex');
-	return parseBackupItem({ ordinal, thingId: doc.shareId, revision, snapshot, content: null });
+function fileItem(doc: any, ordinal: number): BackupItem {
+	const file = parseCloudFile({
+		id: doc.shareId,
+		revision: doc.timelineHeadId,
+		folderId: doc.folderId ?? null,
+		name: doc.crystal?.name,
+		trashed: doc.crystal?.trashed,
+		content: doc.crystal?.content
+	});
+	return parseBackupItem({
+		ordinal,
+		thingId: doc.shareId,
+		revision: file.revision,
+		snapshot: { adapter: CLOUD_FILE_ADAPTER, version: 1, value: file },
+		// The separately inventoried attachment owns these bytes.
+		content: null
+	});
 }
 
 /** Internal worker producer, not a public route or complete account-backup API.
@@ -136,12 +140,12 @@ export function createAccountInventoryProducer(
 		const collection = await deps.collection();
 		return deps.snapshot(async (session) => {
 			if (!session?.snapshotEnabled || session.inTransaction()) throw Error('Account inventory requires a read-only snapshot session');
-			const query = async (
+			const queryRows = async function* (
 				filter: Record<string, unknown>,
 				projection: Record<string, number>,
 				limit = ACCOUNT_INVENTORY_PAGE_SIZE,
 				timeline = false
-			) => {
+			) {
 				await check();
 				const cursor = collection
 					.find(
@@ -160,15 +164,16 @@ export function createAccountInventoryProducer(
 					.sort({ shareId: 1 })
 					.limit(limit)
 					.batchSize(limit);
-				const rows: any[] = [];
+				let count = 0;
 				try {
 					for await (const row of cursor) {
 						access.signal?.throwIfAborted();
-						if (rows.length >= limit) throw Error('Account inventory page exceeds its bound');
+						if (count++ >= limit) throw Error('Account inventory page exceeds its bound');
 						// Bound projected metadata before retaining an entire page. The driver
 						// still owns its bounded wire batch; no oversized row reaches the plan.
 						if (timeline) timelineBackupRecordFromDoc(row);
-						else {
+						else if (projection === backupDraftProjection) backupDraftFromDoc(row);
+						else if (projection !== contentProjection) {
 							const bounded = projection === backupAttachmentProjection ? { ...row } : row;
 							if (projection === backupAttachmentProjection) {
 								for (const key of ['attachmentExpiresAt', 'attachmentPartsIssuedAt', 'attachmentMpuEmptyVerifiedAt']) {
@@ -177,13 +182,17 @@ export function createAccountInventoryProducer(
 							}
 							backupJson(bounded, BACKUP_METADATA_BYTES + 8192);
 						}
-						rows.push(row);
+						yield row;
 					}
 				} finally {
 					await cursor.close();
 				}
 				await check();
-				return rows;
+			};
+			const query = async (...args: Parameters<typeof queryRows>) => {
+				const result: any[] = [];
+				for await (const row of queryRows(...args)) result.push(row);
+				return result;
 			};
 			let page = await query({}, censusProjection);
 			const timestamp = session.snapshotTime;
@@ -219,6 +228,48 @@ export function createAccountInventoryProducer(
 				}
 				return records;
 			};
+			const verifyReferences = async (references: AttachmentReference[]) => {
+				const byId = new Map<string, AttachmentReference[]>();
+				for (const ref of references) {
+					const id = 'content' in ref ? ref.content.attachmentId : ref.attachmentId;
+					const group = byId.get(id) ?? [];
+					group.push(ref);
+					byId.set(id, group);
+				}
+				const ids = [...byId.keys()];
+				for (let offset = 0; offset < ids.length; offset += ACCOUNT_INVENTORY_PAGE_SIZE) {
+					const batch = ids.slice(offset, offset + ACCOUNT_INVENTORY_PAGE_SIZE),
+						expectedIds = new Set(batch);
+					const found = await query({ shareId: { $in: batch } }, backupAttachmentProjection);
+					boundary();
+					if (
+						found.length !== batch.length ||
+						new Set(found.map((doc) => doc.shareId)).size !== batch.length ||
+						found.some((doc) => !expectedIds.has(doc.shareId))
+					)
+						throw Error('Historical or draft attachment is missing or changed');
+					const attachments = await readAttachments(found);
+					for (const doc of found)
+						for (const ref of byId.get(doc.shareId)!) {
+							if ('content' in ref) verifyBackupFileReference(ref.content, ref.fileId, attachments.get(doc.shareId)!);
+							else {
+								if (doc.attachmentExpiresAt != null || doc.attachmentImportDraft) throw Error('Draft attachment is not durably bound');
+								verifyBackupDraftAttachment(ref, attachments.get(doc.shareId)!);
+							}
+						}
+				}
+			};
+			const sameRow = (doc: any, head: Census | undefined, kind: Family) => {
+				if (
+					!head ||
+					doc.ownerId !== scope.ownerId ||
+					doc.shareId !== head.shareId ||
+					JSON.stringify(doc.thingtime) !== JSON.stringify(head.thingtime) ||
+					family(doc) !== kind
+				)
+					throw Error('Account snapshot content changed');
+			};
+
 			async function* rows() {
 				let last = '',
 					ordinal = 0;
@@ -238,14 +289,36 @@ export function createAccountInventoryProducer(
 					const pageOrdinal = ordinal;
 					const ordinals = new Map(page.map((row, index) => [row.shareId, pageOrdinal + index]));
 					// Bounded family batches, never a payload query per Thing. Large
-					// Timeline envelopes use eight rows (at most ~32 MiB of content).
+					// Timeline/draft envelopes use eight rows (at most ~32 MiB of content).
 					for (const [kind, group] of groups) {
-						const batchSize = kind === 'timeline' ? 8 : ACCOUNT_INVENTORY_PAGE_SIZE;
+						const batchSize = kind === 'timeline' || kind === 'draft' ? 8 : ACCOUNT_INVENTORY_PAGE_SIZE;
 						for (let offset = 0; offset < group.length; offset += batchSize) {
 							const expected = group.slice(offset, offset + batchSize);
+							if (kind === 'content') {
+								// Process one large canonical record at a time. Never collect 128
+								// potentially large payloads in addition to the driver's wire batch.
+								let count = 0;
+								for await (const doc of queryRows({ shareId: { $in: expected.map((row) => row.shareId) } }, contentProjection, batchSize)) {
+									await check();
+									boundary();
+									sameRow(doc, expected[count++], kind);
+									const entry = await retainBackupThingSnapshot(store, snapshotId, ordinals.get(doc.shareId)!, doc, {
+										...access,
+										scope,
+										authorize: check
+									});
+									boundary();
+									projected.set(doc.shareId, entry);
+								}
+								if (count !== expected.length) throw Error('Account snapshot content is incomplete');
+								continue;
+							}
+
 							const found = await query(
 								{ shareId: { $in: expected.map((row) => row.shareId) } },
-								kind === 'timeline'
+								kind === 'draft'
+									? backupDraftProjection
+									: kind === 'timeline'
 									? timelineBackupProjection
 									: kind === 'attachment'
 									? backupAttachmentProjection
@@ -258,22 +331,20 @@ export function createAccountInventoryProducer(
 							boundary();
 							if (found.length !== expected.length) throw Error('Account snapshot content is incomplete');
 							const attachments = kind === 'attachment' ? await readAttachments(found) : null;
+							const drafts = kind === 'draft' ? found.map(backupDraftFromDoc) : null;
+							if (drafts) await verifyReferences(drafts.flatMap(backupDraftAttachmentReferences));
 							for (let index = 0; index < found.length; index++) {
 								const doc = found[index],
 									head = expected[index];
-								if (
-									doc.ownerId !== scope.ownerId ||
-									doc.shareId !== head.shareId ||
-									JSON.stringify(doc.thingtime) !== JSON.stringify(head.thingtime) ||
-									family(doc) !== kind
-								)
-									throw Error('Account snapshot content changed');
+								sameRow(doc, head, kind);
 								const entry =
-									kind === 'timeline'
+									kind === 'draft'
+										? await retainBackupDraft(store, snapshotId, ordinals.get(doc.shareId)!, drafts![index], { ...access, scope, authorize: check })
+										: kind === 'timeline'
 										? await retainTimelineBackupRecord(store, snapshotId, ordinals.get(doc.shareId)!, doc, { ...access, scope, authorize: check })
 										: kind === 'attachment'
 										? backupAttachmentItem(attachments!.get(doc.shareId)!, 0)
-										: item(doc, 0, kind);
+										: fileItem(doc, 0);
 								if (kind === 'file')
 									references.push(...backupFileReferences(entry.snapshot, doc.shareId).map((content) => ({ fileId: doc.shareId, content })));
 								if (kind === 'timeline') {
@@ -292,24 +363,7 @@ export function createAccountInventoryProducer(
 					// Resolve file/history byte dependencies in bounded owner-indexed
 					// queries at this SAME database timestamp. Never silently retain a
 					// pointer to missing, foreign or changed historical file bytes.
-					const ids = [...new Set(references.map((ref) => ref.content.attachmentId))];
-					for (let offset = 0; offset < ids.length; offset += ACCOUNT_INVENTORY_PAGE_SIZE) {
-						const batch = ids.slice(offset, offset + ACCOUNT_INVENTORY_PAGE_SIZE);
-						const found = await query({ shareId: { $in: batch } }, backupAttachmentProjection);
-						boundary();
-						if (
-							found.length !== batch.length ||
-							new Set(found.map((doc) => doc.shareId)).size !== batch.length ||
-							found.some((doc) => !batch.includes(doc.shareId))
-						)
-							throw Error('Historical file attachment is missing or changed');
-						const attachments = await readAttachments(found);
-						for (const doc of found) {
-							const attachment = attachments.get(doc.shareId)!;
-							for (const ref of references.filter((ref) => ref.content.attachmentId === doc.shareId))
-								verifyBackupFileReference(ref.content, ref.fileId, attachment);
-						}
-					}
+					await verifyReferences(references);
 					for (const row of page) {
 						await check();
 						boundary();

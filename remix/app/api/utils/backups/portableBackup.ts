@@ -22,6 +22,9 @@ import {
 	type BackupSeal
 } from '../../../backups/manifest';
 
+// Canonical Thing snapshots are bounded separately from manifest metadata.
+export const BACKUP_RETAINED_PAYLOAD_BYTES = 128 * 1024 * 1024;
+
 /** Internal provider boundary: writes are immutable create-if-absent, comparing
  * exact bytes on retry, and must be durable before resolving. No live-source
  * references, URLs or credentials are stored here. Providers own access/quota. */
@@ -133,24 +136,30 @@ export async function retainBackupPayload(
 	if (header.snapshotId !== id) throw Error('Backup payload header changed');
 	await check(access, header);
 	if (await readJson(store, `${root}/plan.json`, BACKUP_METADATA_BYTES)) throw Error('Backup inventory is already sealed');
-	if (!(input instanceof Uint8Array) || input.length < 1 || input.length > BACKUP_CHUNK_BYTES) throw Error('Backup record exceeds its byte bound');
-	const bytes = input.slice();
+	if (!(input instanceof Uint8Array) || input.length < 1 || input.length > BACKUP_RETAINED_PAYLOAD_BYTES)
+		throw Error('Backup record exceeds its byte bound');
+	const bytes = Uint8Array.from(input);
 	const fingerprint = await fingerprintSource({
 		size: bytes.length,
 		check: () => access.signal?.throwIfAborted(),
 		read: async (offset, length) => bytes.subarray(offset, offset + length)
 	});
 	const item = parseBackupItem({ ...descriptor, content: { size: bytes.length, fingerprint } });
-	const sha256 = digest(bytes),
-		range = { offset: 0, length: bytes.length, sha256 };
-	await check(access, header);
-	await store.put(`chunks/${sha256}`, bytes);
-	await check(access, header);
-	await retainedChunk(store, range);
+	const ranges: BackupRange[] = [];
+	for (let offset = 0; offset < bytes.length; offset += BACKUP_CHUNK_BYTES) {
+		const chunk = bytes.subarray(offset, Math.min(offset + BACKUP_CHUNK_BYTES, bytes.length));
+		const sha256 = digest(chunk),
+			range = { offset, length: chunk.length, sha256 };
+		await check(access, header);
+		await store.put(`chunks/${sha256}`, chunk);
+		await check(access, header);
+		await retainedChunk(store, range);
+		ranges.push(range);
+	}
 	await putJson(
 		store,
 		`${root}/ranges/${item.ordinal}/0.json`,
-		parseBackupRangePage({ format: BACKUP_FORMAT, snapshotId: id, item: item.ordinal, ordinal: 0, ranges: [range] }),
+		parseBackupRangePage({ format: BACKUP_FORMAT, snapshotId: id, item: item.ordinal, ordinal: 0, ranges }),
 		access,
 		header
 	);

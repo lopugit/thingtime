@@ -1,3 +1,6 @@
+import { backupDraftFixture } from '../app/api/utils/backups/draftRecords.fixtures';
+import { backupDraftFromDoc, openBackupDraft } from '../app/api/utils/backups/draftRecords';
+import { openBackupThingSnapshot } from '../app/api/utils/backups/thingSnapshots';
 import { backupFileHistoryFixture } from '../app/api/utils/backups/attachmentRecords.fixtures';
 import { backupAttachmentItemContent } from '../app/api/utils/backups/attachmentRecords';
 import { openAccountBackupFile, openAccountBackupFileVersion } from '../app/api/utils/backups/accountFileRecovery';
@@ -31,6 +34,10 @@ const independent = await openLocalBackupStore(join(directory, 'second'));
 const access = { scope: { ownerId: 'snapshot-owner', apiOrigin: 'https://snapshot.test', dataPlane: 'home' }, authorize: async () => {} };
 const history = timelineBackupFixture(access.scope.ownerId);
 const fileHistory = await backupFileHistoryFixture(access.scope.ownerId);
+const drafts = await backupDraftFixture(access.scope.ownerId);
+const attachments = [...fileHistory.attachments, ...drafts.attachments];
+const largeText = 'large ordinary snapshot '.repeat(420_000);
+const largeDoc = { shareId: 'large-thing', ownerId: access.scope.ownerId, thingtime: ['data'], crystal: { text: largeText } };
 const expectedHistory = new Map(
 	[...history.docs, ...fileHistory.docs.filter((doc) => doc.thingtime[0].startsWith('timeline-'))].map((doc) => [
 		doc.shareId,
@@ -39,7 +46,7 @@ const expectedHistory = new Map(
 );
 const originals = join(directory, 'originals');
 await mkdir(originals);
-for (const a of fileHistory.attachments) await writeFile(join(originals, a.doc.shareId), a.bytes, { mode: 0o600 });
+for (const a of attachments) await writeFile(join(originals, a.doc.shareId), a.bytes, { mode: 0o600 });
 let queries = 0,
 	ended = 0,
 	timestamp: string | null = null;
@@ -64,11 +71,13 @@ try {
 	assert.equal(before.executionStats.nReturned, 128);
 	assert.equal(after.executionStats.nReturned, 128);
 	assert.ok(after.executionStats.totalKeysExamined < before.executionStats.totalKeysExamined);
-	await collection.insertMany([...history.docs, ...fileHistory.docs], { writeConcern: { w: 'majority' } });
+	await collection.insertMany([...history.docs, ...fileHistory.docs, ...drafts.docs, ...drafts.attachments.map((a) => a.doc), largeDoc], {
+		writeConcern: { w: 'majority' }
+	});
 	const producer = createAccountInventoryProducer({
 		customPlane: () => false,
 		attachmentHead: async (input) => {
-			const a = fileHistory.attachments.find((a) => a.doc.objectKey === input.objectKey)!;
+			const a = attachments.find((a) => a.doc.objectKey === input.objectKey)!;
 			assert.ok(a);
 			assert.equal(input.versionId, a.doc.objectVersionId);
 			return a.head;
@@ -106,6 +115,13 @@ try {
 							{ writeConcern: { w: 'majority' } }
 						);
 						await collection.deleteOne({ shareId: fileHistory.attachments[0].doc.shareId }, { writeConcern: { w: 'majority' } });
+						await collection.deleteOne({ shareId: drafts.attachments[0].doc.shareId }, { writeConcern: { w: 'majority' } });
+						await collection.updateOne(
+							{ shareId: 'draft-working' },
+							{ $set: { crystal: {}, draftDeleted: true, draftRevision: 4 } },
+							{ writeConcern: { w: 'majority' } }
+						);
+						await collection.updateOne({ shareId: 'large-thing' }, { $set: { crystal: { text: 'later' } } }, { writeConcern: { w: 'majority' } });
 						yield* iterate();
 					};
 				}
@@ -115,10 +131,10 @@ try {
 	});
 	const snapshotId = randomUUID(),
 		plan = await producer(store, snapshotId, access);
-	assert.equal(plan.items, 300 + history.docs.length + fileHistory.docs.length);
+	assert.equal(plan.items, 301 + history.docs.length + fileHistory.docs.length + drafts.docs.length + drafts.attachments.length);
 	assert.ok(BigInt(plan.bytes) > BigInt(2_400_000));
 	assert.equal(plan.pages, 3);
-	assert.ok(queries <= 20, `Unexpected per-record database reads: ${queries}`);
+	assert.ok(queries <= 24, `Unexpected per-record database reads: ${queries}`);
 	assert.equal(ended, 1);
 	assert.ok(timestamp);
 	await collection.deleteMany({}, { writeConcern: { w: 'majority' } });
@@ -137,7 +153,7 @@ try {
 			read: async (item, offset, length) => {
 				const content = backupAttachmentItemContent(item);
 				assert.ok(content);
-				const a = fileHistory.attachments.find((a) => a.doc.shareId === content.attachmentId)!;
+				const a = attachments.find((a) => a.doc.shareId === content.attachmentId)!;
 				assert.deepEqual(content, a.content);
 				const handle = await open(join(originals, a.doc.shareId), 'r');
 				try {
@@ -158,6 +174,14 @@ try {
 	await rm(join(directory, 'first'), { recursive: true });
 	for (const [thingId, record] of expectedHistory) {
 		assert.deepEqual(await openBackupTimelineRecord(independent, snapshotId, thingId, access), record);
+	}
+	for (const doc of drafts.docs) assert.deepEqual(await openBackupDraft(independent, snapshotId, doc.shareId, access), backupDraftFromDoc(doc));
+	assert.equal(((await openBackupThingSnapshot(independent, snapshotId, 'large-thing', access)).value as any).crystal.text, largeText);
+	for (const a of drafts.attachments) {
+		const result = await openBackupItem(independent, snapshotId, a.doc.shareId, access),
+			chunks = [];
+		for await (const bytes of result.ranges) chunks.push(bytes);
+		assert.deepEqual(Buffer.concat(chunks), a.bytes);
 	}
 	const savedFiles = [
 		await openAccountBackupFile(independent, snapshotId, 'file-one', access),
@@ -199,12 +223,15 @@ try {
 				offlineMetadata: 'verified after database, source files and first vault removal',
 				fileVersionRecovery: 'current, earlier and retained conflict exact bytes',
 				timelineRecords: expectedHistory.size,
+				draftRecovery: 'working editor state, reusable template, deletion tombstone and exact owned media',
+				largeThingBytes: Buffer.byteLength(largeText),
 				totalPayloadBytes: plan.bytes,
 				timelineCoverage: 'canonical events, links, branches, heads, large parts, notes, active and cleared version names',
 				emptyInventory: 'server timestamp verified',
 				missingIndex: 'refused without scan fallback',
 				indexExperiment: { shareIdOnlyKeys: before.executionStats.totalKeysExamined, ownerShareIdKeys: after.executionStats.totalKeysExamined },
-				coverage: 'synthetic ordinary Things, Timeline and attachment bytes; not remaining managed families, real S3 loss or full account restore'
+				coverage:
+					'synthetic ordinary Things, drafts, Timeline and attachment bytes; not remaining managed families, real S3 loss or full account restore'
 			},
 			null,
 			2

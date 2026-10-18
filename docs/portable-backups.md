@@ -14,8 +14,9 @@ families and is not exposed as a whole-account backup feature.
 
 `api/utils/backups/accountInventory.ts` freezes owner metadata through one
 read-only MongoDB snapshot session. Census pages contain at most 128 IDs/kinds;
-ordinary/file/attachment families use one projected payload query per page. Timeline
-records use eight-row batches to bound large payloads. Every query
+ordinary/file/attachment families use one projected payload query per page. Large
+ordinary content streams one row at a time; Timeline and draft records use
+eight-row batches to bound large payloads. Every query
 uses the first server-selected cluster timestamp. Ordinary Things use the
 canonical `thing-content` Timeline snapshot; files use `file-content` with their
 exact retained content version and fingerprint. Root credentials, token grants,
@@ -27,14 +28,16 @@ The census covers every owned row in the home Things collection. A managed kind
 without an approved exporter, missing payload, expired database snapshot,
 oversized metadata, changed account or revoked access refuses the plan. It never
 skips an unsupported row and then reports complete coverage. Ready owned
-attachments and all seven Timeline families have dedicated exporters. Account
+attachments, saved drafts/templates/tombstones and all seven Timeline families
+have dedicated exporters. Account
 identity and other managed families still need coverage; ordinary real accounts
 therefore cannot yet complete this producer. Settings in
 other collections and device-local data also need separate coverage contracts.
 
 Successful enumeration seals the durable metadata plan before live file byte
-capture. Canonical Timeline payloads are already frozen into verified chunks
-while the same database snapshot session is open.
+capture. Canonical Timeline and draft payloads, plus ordinary Thing snapshots larger
+than manifest metadata, are already frozen into verified chunks while the same
+database snapshot session is open.
 It uses a server `mongo:<seconds>:<increment>` boundary rather than a client clock.
 Interrupted enumeration requires a **new snapshot ID**: it cannot restart with
 live data under the old timestamp. After the plan is durable, independent file
@@ -127,6 +130,47 @@ inventory admission or permanent cloud object deletion. Source-file deletion is
 verified separately in the disposable replica/filesystem proof. Neither fixture
 establishes complete account restore or measured 100 GB–100 TB throughput.
 Run instructions are in the root README.
+
+### Drafts, templates and large ordinary Things
+
+`draftRecords.ts` preserves the existing `AccountDraft` shape, including the exact
+editor snapshot string, mode, revision, dates and source provenance. Discarded or
+published drafts remain explicit deletion tombstones with no active editor state.
+Saved write IDs describe the historical record; they grant no retry authority.
+The archive wrapper is bounded to 4 MiB, allowing JSON escaping around the existing
+512 KiB editor snapshot and up to 4,096 attachment IDs. Private root fields are
+never included. Eight-row payload batches check media in owner-indexed batches
+of 128 at the same Mongo timestamp. Each reference must match the exact draft,
+post/comment purpose and a durable binding without profile slots or expiry.
+Linked media retains only its URL; it does not become an independently saved file.
+
+`thingSnapshots.ts` retains small ordinary `thing-content` snapshots inline and
+larger ones as canonical payloads in the existing verified chunk store. It does
+not create a second content schema. The retained record limit is 128 MiB; the
+existing canonical Thing depth/node bounds still apply. Each ordinary payload is
+processed before reading the next row, rather than collecting 128 large records.
+The writer owns a copy of input bytes, writes at most 8 MiB per chunk and checks
+access/readback between chunks. At most 16 ranges describe one retained record.
+These records are bounded, not zero-copy: JSON validation/encoding and offline
+reading can hold multiple record-sized buffers. Size the worker memory and Mongo
+history window for this work. This is separate from streaming arbitrarily large
+file bytes through the existing range transport.
+
+`openBackupDraft` and `openBackupThingSnapshot` validate canonical payloads from
+a sealed offline vault. Drafts additionally bind owner, ID, mode and revision;
+tombstones remain tombstones. Neither reader imports live state or bypasses the
+current API's ownership, revision, quota or restore rules.
+
+Validation for this increment: 69 backup tests and 26 existing draft tests pass.
+The disposable replica proof now preserves 357 records, including 47 Timeline
+records, 22,064,370 total payload bytes and a 10,080,000-byte ordinary text value.
+It interleaves draft deletion, media deletion and a large-content edit after the
+census. After deleting the database, original files and first vault, the second
+vault recovers exact drafts/templates/tombstones, media, file versions and large
+ordinary content. Cancellation between retained chunks leaves no complete plan;
+mutating the caller's Buffer cannot change already frozen content. These fixtures
+still do not demonstrate remaining managed-family coverage, account restore,
+permanent S3 loss, a full backup UI or 100 GB–100 TB throughput.
 
 ## Format and invariants
 
