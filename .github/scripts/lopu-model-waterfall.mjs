@@ -179,6 +179,11 @@ async function check() {
     });
     if (!response.ok) {
       const data = await response.json().catch(() => null);
+      // Never echo response messages, request IDs, or arbitrary provider fields:
+      // authentication failures may include portions of a credential.
+      const knownCodes = new Set(['invalid_api_key', 'insufficient_quota', 'credit_balance_exhausted', 'organization_usage_limit_exceeded', 'organization_spend_limit_exceeded', 'project_spend_limit_exceeded', 'rate_limit_exceeded', 'model_not_found', 'model_not_available']);
+      const code = knownCodes.has(data?.error?.code) ? data.error.code : 'unclassified';
+      console.log(`OpenAI preflight rejected: HTTP ${response.status}; code=${code}.`);
       return output({ available: false, retryable: retryableOpenAiError(response.status, data?.error?.code) });
     }
     await response.body?.cancel();
