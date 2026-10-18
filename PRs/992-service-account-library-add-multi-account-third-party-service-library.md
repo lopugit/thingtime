@@ -3,6 +3,33 @@
 Status: open, ready-for-review implementation checkpoint. Google identity and refresh are verified
 locally; production delivery and other providers' positive acceptance remain pending.
 
+## 18 October: develop integration and credential-import contract correction
+
+Merge current develop (`bab5bf8a4`) into the service-account branch, retaining the
+create-only admin OpenAI environment import alongside the user credential library.
+The built-server integration check exposed an existing declaration mismatch:
+`api.admin-ci-credentials` advertised 3.1.0 through the well-known manifest but
+1.0.0 through `/api/v1/capabilities`. Both now publish 3.1.1, and the import
+client requires that correction before mutation. A regression reproduced the
+failure before the fix and checks both manifests plus compatibility boundaries.
+
+Verification: 157 connection, 100 capability and 80 CI credential/control tests
+pass. Targeted lint has no errors (two existing documentation string-concatenation
+warnings); the client bundles and Nitro node-server build pass. The isolated
+browser run is recorded separately after rebuilding Linux native dependencies.
+The first complete run passed 24 checks, but visual review found the floating
+Lopu launcher overlapping a mobile account field. A browser regression reproduced
+that overlap. Credential forms now mark their active presence so the shared
+launcher steps aside; the navbar opener remains available and saved preferences
+are unchanged. Open/cancel, input-edge hit tests and launcher restoration are
+included in the refreshed desktop/mobile acceptance run.
+The documentation graph refresh returned repeated hollow/out-of-scope semantic
+responses and was stopped before publication. Prior semantic data is preserved;
+structural output is refreshed, with latest document semantics unverified.
+Production was inspected independently and still serves the older Connections
+1.0.0 screen at `323d7651651c5c501acd819ae39821ab75031182`; this branch's preview
+and tests do not establish a production release or real multi-provider consent.
+
 ## 18 October: complete saved-credential values and metadata
 
 The form, vault validation, request body, encryption and shared data schema each

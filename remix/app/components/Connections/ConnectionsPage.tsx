@@ -341,7 +341,7 @@ const ConnectionsContent = ({ ownerId }: { ownerId: string | null }) => {
   };
 
   const connectForm = connecting ? (
-    <Box {...cardStyle} padding={5} display="flex" flexDirection="column" rowGap={3}>
+    <Box {...cardStyle} data-tt-credential-form padding={5} display="flex" flexDirection="column" rowGap={3}>
       <Text fontWeight="600">
         {connecting.icon} Connect {connecting.name}
       </Text>

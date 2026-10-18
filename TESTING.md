@@ -10236,3 +10236,9 @@ separate from deterministic discovery/lease tests.
   require checking Gmail, without automatically creating/sending another copy.
   Known failures before dispatch leave the composer editable. Use synthetic
   transport for sending unless the user authorizes specific real recipients.
+
+- Credential form clearance: at desktop and 390px widths, open/cancel an Add account form. The floating Lopu launcher must step aside while the form is present, input edges remain clickable, the navbar opener remains available, and cancellation restores the launcher without changing saved preferences.
+
+- OpenAI import manifest regression: the built server must advertise `api.admin-ci-credentials` 3.1.1 on both `/api/v1/capabilities` and `/.well-known/thingtime-capabilities.json`. Import clients reject older/missing/breaking contracts before mutation and accept compatible patches/minors.
+
+- OpenAI vault import: anonymous/non-admin and cross-origin requests must fail; missing server key must create nothing. Import from AI Providers, verify the redacted OpenAI entry named `OPENAI_THINGTIME_API_KEY`, reload, retry and confirm one unchanged entry. No secret may appear in browser responses. Existing chat and credential order must remain intact.

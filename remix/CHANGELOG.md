@@ -68,6 +68,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-18 — **Codex (AI)**: Reconcile the OAuth library with develop's
+  create-only admin OpenAI import. Correct its mismatched capability manifests
+  to 3.1.1 and require that version before import; add a regression for both
+  discovery endpoints and compatibility boundaries. Keep the floating Lopu
+  launcher clear of open credential forms while retaining navbar access. Focused
+  tests and builds pass.
+  [PR #992 evidence](../PRs/992-service-account-library-add-multi-account-third-party-service-library.md).
+
 - 2026-10-18 — **Codex (AI)**: Remove arbitrary saved-credential field,
   envelope, request-body and shared data-string caps; wrap long Secure Vault
   metadata on mobile and keep credential verification above navigation/floating
@@ -120,6 +128,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   Verify refresh of a genuinely expired Google grant and successful subsequent
   profile API reuse. Keep the existing local callback while adopting isolated
   worktree PM2 names. [PR #992 evidence](../PRs/992-service-account-library-add-multi-account-third-party-service-library.md).
+- 2026-10-18: Add a create-only admin import of the configured OpenAI key into the shared AI credential vault without exposing the value.
+
 - 2026-10-17 — **Codex (AI)**: Stream complete 1PUX imports, preserve source data and rich fields, and add encrypted password attachments and file-inclusive backups. Remove arbitrary import/editor caps and document fork-safe storage setup. [PR #1015 validation](../PRs/1015-codex-password-import-fix-preserve-complete-1pux-imports-and-encrypted-password-attachments.md).
 
 

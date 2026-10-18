@@ -180,6 +180,7 @@ export function AIServiceAccounts({ ownerId }: { ownerId: string | null }) {
               {selected === service.id && (
                 <Box
                   as="form"
+                  data-tt-credential-form
                   mt={4}
                   onSubmit={(event: React.FormEvent) => {
                     event.preventDefault();

@@ -7,6 +7,23 @@ import { routeModules } from '../../server/routes/api/[...]';
 import { thingtimeCapabilityManifest } from '../api/utils/capabilities/thingtimeCapabilities';
 import { capabilitySatisfies } from '../api/utils/capabilities/capabilityContract';
 
+test('configured OpenAI credential import advertises its corrected contract on both manifests', () => {
+	const feature = 'api.admin-ci-credentials';
+	const versions = [
+		createApiCapabilitiesManifest().features[feature],
+		thingtimeCapabilityManifest('https://thingtime.test').features[feature].version
+	];
+	for (const version of versions) {
+		assert.equal(version, '3.1.1');
+		assert.equal(capabilitySatisfies(version, '3.1.1'), true);
+	}
+	for (const version of [undefined, '1.0.0', '3.0.0', '3.1.0', '4.0.0']) {
+		assert.equal(capabilitySatisfies(version, '3.1.1'), false);
+	}
+	for (const version of ['3.1.2', '3.2.0']) assert.equal(capabilitySatisfies(version, '3.1.1'), true);
+	assert.equal(typeof routeModules['v1/admin/ci/credentials'], 'function');
+});
+
 test('Timeline synchronization is registered and versioned on both capability manifests', () => {
 	assert.equal(createApiCapabilitiesManifest().features['api.mongodb-endpoint'], '1.1.0');
 	assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.mongodb-endpoint'].version, '1.1.0');
