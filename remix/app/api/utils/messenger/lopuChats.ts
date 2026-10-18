@@ -1,3 +1,4 @@
+import { ownsPlanAdmission, type OwnedPlanAdmission } from '../ai/chatgptPlanAdmissionCore';
 import { Binary } from 'mongodb';
 import { normalizeReadReferences, type LopuReadReference } from '../lopu/readContext';
 import { lopuAccessMode, type LopuAccessMode } from '../lopu/accessMode';
@@ -293,8 +294,8 @@ export const LOPU_PROVIDER_NOT_IN_VAULT_ERROR = 'That AI provider is not in your
 
 // A pinned providerId must name one of the viewer's own provider connections
 // (never someone else's, never a deleted one) before it is stored.
-const assertOwnVaultProvider = async (viewerId: string, providerId: string | null): Promise<Fail | null> =>
-	!providerId || (await hasUserVaultProvider(viewerId, providerId)) ? null : fail(400, LOPU_PROVIDER_NOT_IN_VAULT_ERROR);
+const assertOwnVaultProvider = async (viewerId: string, providerId: string | null, ownedPlan?: OwnedPlanAdmission | null): Promise<Fail | null> =>
+	!providerId || ownsPlanAdmission(ownedPlan, viewerId, providerId) || (await hasUserVaultProvider(viewerId, providerId)) ? null : fail(400, LOPU_PROVIDER_NOT_IN_VAULT_ERROR);
 
 export type LopuHistoryRow = {
 	crystal?: {
@@ -441,7 +442,8 @@ const turnRows = async (things: any, chatId: string, requestId: string, role: 'u
 export const createLopuChat = async (
 	viewerId: string,
 	input: LopuChatSettingsInput & { title?: unknown } = {},
-	identity?: { creationKey: string }
+	identity?: { creationKey: string },
+	ownedPlan?: OwnedPlanAdmission | null
 ): Promise<LopuChatResult> => {
 	const stableId = identity ? `${LOPU_CHAT_SHARE_ID_PREFIX}${createHash('sha256').update(`${viewerId}:${identity.creationKey}`).digest('hex')}` : null;
 	if (stableId) { const existing = await getLopuChat(viewerId, stableId); if (existing.ok) return existing; }
@@ -450,7 +452,7 @@ export const createLopuChat = async (
 	if (wantsTitle && !title) return fail(400, 'That title did not survive validation');
 	const normalized = normalizeLopuChatSettings(input);
 	if (normalized.ok === false) return normalized;
-	const foreignProvider = await assertOwnVaultProvider(viewerId, normalized.settings.providerId);
+	const foreignProvider = await assertOwnVaultProvider(viewerId, normalized.settings.providerId, ownedPlan);
 	if (foreignProvider) return foreignProvider;
 
 	const things = await getThingsCollection();
@@ -523,7 +525,8 @@ export const getLopuChat = async (viewerId: string, chatId: unknown): Promise<Ge
 export const updateLopuChat = async (
 	viewerId: string,
 	chatId: unknown,
-	input: LopuChatSettingsInput & { title?: unknown; archived?: unknown } = {}
+	input: LopuChatSettingsInput & { title?: unknown; archived?: unknown } = {},
+	ownedPlan?: OwnedPlanAdmission | null
 ): Promise<LopuChatResult> => {
 	const access = await resolveLopuChat(viewerId, chatId);
 	if ('ok' in access && access.ok === false) return access;
@@ -549,7 +552,7 @@ export const updateLopuChat = async (
 	if (input.accessMode !== undefined) patch['crystal.lopu.accessMode'] = normalized.settings.accessMode;
 	if (normalized.changed) {
 		if (normalized.settings.providerId !== current.providerId) {
-			const foreignProvider = await assertOwnVaultProvider(viewerId, normalized.settings.providerId);
+			const foreignProvider = await assertOwnVaultProvider(viewerId, normalized.settings.providerId, ownedPlan);
 			if (foreignProvider) return foreignProvider;
 		}
 		patch['crystal.lopu.model'] = normalized.settings.model;

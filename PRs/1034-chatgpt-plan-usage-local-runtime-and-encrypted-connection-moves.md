@@ -15,17 +15,18 @@ Desktop API changes apply on restart with endpoint-specific browser sessions. Sh
 - Local MongoDB execution is optional. New macOS builds include pinned Community Server 8.0.34, upstream source and notices; fresh profiles prefer the included executable and existing selections remain intact. No Homebrew mutation or system service installation is included.
 - Persistent self-hosted runtimes and encrypted database storage are supported; ephemeral serverless execution and automatic cloud-to-desktop job relay are not implemented.
 - Public OpenAI docs explicitly describe self-hosted remote VMs. The implementation does not claim partner status or approval for every hosted service.
-- Real OpenAI consent, live model discovery and plan inference remain to be verified on the intended installed runtime. Fixture/browser/unit results alone do not establish those outcomes.
+- On installed source `6de54fb70`, real local signup and user-approved OpenAI consent completed; the account connected and discovered GPT-6.1-Sol. Normal Quit stopped local API/Mongo; reopen preserved the local session and connection, and model refresh succeeded with saved credentials.
+- First inference exposed the unverified-local-account admission bug. The follow-up adds a full-session, live owned-plan text-only exception and owner-bound persistence proof; installed inference and new picker-state acceptance remain pending the rebuilt app. No admin bootstrap was used.
 
 ## Verification
 
-Client/server builds, focused suites, desktop/mobile fixtures, and a real isolated Electron local API/Mongo restart passed. Actual installed-app consent remains pending; final results and live acceptance status are recorded in the PR delivery. Coverage includes protocol/session/transfer ownership, Mongo authority fencing, API negotiation, streaming tool loops, desktop managed Mongo lifecycle and endpoint isolation. Client/server builds, changed-file lint and TypeScript baseline comparison apply. Built Nitro/Vite network isolation checks block direct-IP and redirected egress before synthetic testing.
+Client/server builds, focused suites, desktop/mobile fixtures, and a real isolated Electron local API/Mongo restart passed. Actual installed consent/model discovery/restart passed as above; completed live inference remains pending. The isolated bundled Mongo 8.0.34 storage integration also passed with OS-enforced loopback-only networking, encrypted move/reopen and stale-writer fencing. Coverage includes protocol/session/transfer ownership, Mongo authority fencing, API negotiation, streaming tool loops, desktop managed Mongo lifecycle and endpoint isolation. Client/server builds, changed-file lint and TypeScript baseline comparison apply. Built Nitro/Vite network isolation checks block direct-IP and redirected egress before synthetic testing.
 
 The final documentation semantic-index refresh returned incomplete output and was rejected by Graphify’s integrity guard. A structural refresh retains the last complete semantic graph; the latest documentation edits are not claimed as semantically indexed.
 
 ## Public contracts
 
-`api.capabilities` 1.2.0; `api.ai-chatgpt-plan` 1.1.1; `api.ai-models` 1.7.0; `api.lopu-chats-reply` 1.20.0. Setup and key ownership are documented in README and acceptance cases in TESTING.
+`api.capabilities` 1.2.0; `api.ai-chatgpt-plan` 1.1.1; `api.ai-models` 1.8.0; `api.lopu-chats` 1.7.0; `api.lopu-chats-update` 1.6.0; `api.lopu-chats-reply` 1.21.0. Setup and key ownership are documented in README and acceptance cases in TESTING.
 
 ## References
 

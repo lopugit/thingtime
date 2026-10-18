@@ -58,7 +58,7 @@
     "verify:connections": "node scripts/verify-connections.mjs",
     "test:autosave": "node --import tsx --test app/Providers/*.test.ts",
     "test:branding": "node --import tsx --test app/components/Branding/*.test.ts",
-    "test:chatgpt-plan": "node --import tsx --test app/api/utils/ai/chatgptPlan*.test.ts app/routes/api/v1/ai/chatgpt-plan/*.test.ts",
+    "test:chatgpt-plan": "node --import tsx --test app/api/utils/ai/chatgptPlan*.test.ts app/routes/api/v1/ai/chatgpt-plan/*.test.ts && node --experimental-test-module-mocks --import tsx --test app/api/utils/lopu/chatgptPlanAdmissionRoute.test.mts app/api/utils/lopu/chatgptPlanPersistence.test.mts",
     "test:chatgpt": "node --import tsx --test app/api/utils/chatgpt/*.test.ts",
     "test:commander": "node --import tsx --test app/components/Commander/*.test.ts",
     "test:collections": "node --import tsx --test app/api/utils/mongodb/*.test.ts",

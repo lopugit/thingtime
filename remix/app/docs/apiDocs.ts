@@ -3043,11 +3043,11 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // 1.4.0: `models[].pricing` — the list price per million tokens with an `estimated` flag
     // (verified-access design note §2, additive).
     // contractVersion feeds /api/v1/capabilities, featureVersion the well-known Thingtime manifest.
-    contractVersion: '1.7.0',
-    featureVersion: '1.7.0',
+    contractVersion: '1.8.0',
+    featureVersion: '1.8.0',
     summary: 'Only currently available supported models are returned. Lists every AI model Lopu can chat with, its provider access state, the resolved chat defaults, and (for a session) the caller’s own Secure Vault providers.',
     detail:
-      'Version 1.7.0 includes owner-scoped local ChatGPT plan connections in vaultProviders; these use the selected runtime and never fall back to API billing. Version 1.6.0 adds publicCatalogAvailable, catalogSource and catalogCheckedAt; public documentation does not verify account inference access. Version 1.5.1 registers GPT-6 Astra with Low, Medium, High, Extra high and Max reasoning, its context window and list pricing. Existing admin admission choices are preserved. ' +
+      'Version 1.8.0 adds optional planChatEligible:true only for available ChatGPT plan connections owned by a full account session on an eligible local/self-hosted runtime. This text-chat hint is not authority and never applies to voice. Version 1.7.0 includes owner-scoped local ChatGPT plan connections in vaultProviders; these use the selected runtime and never fall back to API billing. Version 1.6.0 adds publicCatalogAvailable, catalogSource and catalogCheckedAt; public documentation does not verify account inference access. Version 1.5.1 registers GPT-6 Astra with Low, Medium, High, Extra high and Max reasoning, its context window and list pricing. Existing admin admission choices are preserved. ' +
       'The available-only public projection of protected `ai-model` Things, including provider-discovered compatible chat models. ' +
       'seeded idempotently from code on the first read (the `default` sentinel is routing, not a model, so it is never ' +
       'listed). Each model carries its provider, the reasoning-effort tiers it offers, the speed lanes it sells (fast = ' +
@@ -4590,12 +4590,12 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // temporary session is 403 { code: LOPU_GUEST } like every other Lopu write (additive
     // refusals; GET is never gated). contractVersion feeds /api/v1/capabilities, featureVersion
     // the well-known Thingtime manifest.
-    contractVersion: '1.6.0',
-    featureVersion: '1.6.0',
+    contractVersion: '1.7.0',
+    featureVersion: '1.7.0',
     // 1.4.0: entries expose lopu.archived; list includes active and archived chats.
     summary: 'Lists the caller’s conversations with Lopu, or starts a new one. OAuth callers must explicitly approve the corresponding Lopu chat, voice, or recording permission.',
     detail:
-      'Chat accessMode: "ask" (default) requires a Confirm card for every Action run and tool that changes things; "full" runs them without prompts. The setting is owner-only, first-party-only, stored per chat, and rechecked during execution. Full access never bypasses account ACLs, quotas, Action limits or scheduled read-only restrictions. Browser Actions use the canonical Thingtime data APIs without exposing credentials; identity, admin, credentials and chat permission routes are not delegable. On reply, accessMode is accepted only for new chats; update existing chats through the settings endpoint so stale replies cannot re-grant access. ' +
+      'Version 1.7.0 admits and pins a live owner/origin-bound ChatGPT plan from a full account session without admin verification. Scoped credentials and Character override headers cannot use this exception; ordinary BYO, catalog and voice policy is unchanged. Chat accessMode: "ask" (default) requires a Confirm card for every Action run and tool that changes things; "full" runs them without prompts. The setting is owner-only, first-party-only, stored per chat, and rechecked during execution. Full access never bypasses account ACLs, quotas, Action limits or scheduled read-only restrictions. Browser Actions use the canonical Thingtime data APIs without exposing credentials; identity, admin, credentials and chat permission routes are not delegable. On reply, accessMode is accepted only for new chats; update existing chats through the settings endpoint so stale replies cannot re-grant access. ' +
       'Optional management: "client" | "server" is stored in lopu settings and applies to subsequent sends; changing it does not interrupt existing work. ' +
       'A Lopu conversation is an ordinary messenger chat (a one-member group owned by the caller) whose ' +
       'externalSource carries { access: "lopu", provider: "lopu" }, so it also appears in /api/v1/chats and its ' +
@@ -4674,11 +4674,11 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // 1.1.0: `providerId` retunes / clears the chat's pinned Secure Vault provider
     // (additive). 1.1.1: fails closed on a limiter outage. contractVersion feeds
     // /api/v1/capabilities, featureVersion the well-known Thingtime manifest.
-    contractVersion: '1.5.0',
-    featureVersion: '1.5.0',
+    contractVersion: '1.6.0',
+    featureVersion: '1.6.0',
     summary: 'Renames a Lopu conversation or retunes its model, effort, speed and pinned provider. OAuth callers must explicitly approve the corresponding Lopu chat, voice, or recording permission.',
     detail:
-      'Chat accessMode: "ask" (default) requires a Confirm card for every Action run and tool that changes things; "full" runs them without prompts. The setting is owner-only, first-party-only, stored per chat, and rechecked during execution. Full access never bypasses account ACLs, quotas, Action limits or scheduled read-only restrictions. Browser Actions use the canonical Thingtime data APIs without exposing credentials; identity, admin, credentials and chat permission routes are not delegable. On reply, accessMode is accepted only for new chats; update existing chats through the settings endpoint so stale replies cannot re-grant access. ' +
+      'Version 1.6.0 permits an owned ChatGPT plan pin only after full-session and live runtime verification. Request-body eligibility claims never authorize a pin. Chat accessMode: "ask" (default) requires a Confirm card for every Action run and tool that changes things; "full" runs them without prompts. The setting is owner-only, first-party-only, stored per chat, and rechecked during execution. Full access never bypasses account ACLs, quotas, Action limits or scheduled read-only restrictions. Browser Actions use the canonical Thingtime data APIs without exposing credentials; identity, admin, credentials and chat permission routes are not delegable. On reply, accessMode is accepted only for new chats; update existing chats through the settings endpoint so stale replies cannot re-grant access. ' +
       'Optional management: "client" | "server" is stored in lopu settings and applies to subsequent sends; changing it does not interrupt existing work. ' +
       'POST { chatId, title?, model?, effort?, speed?, providerId?, archived? }. Only the conversation’s member (its owner) may update it. ' +
       'archived: true hides the chat from the active Lopu view; false restores it. This owner-only, idempotent boolean ' +
@@ -4804,11 +4804,11 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // each spend the same last credit — past the cap the request is refused 429
     // LOPU_TURN_IN_FLIGHT (+ Retry-After) before anything is persisted (additive). contractVersion
     // feeds /api/v1/capabilities, featureVersion the well-known Thingtime manifest.
-    contractVersion: '1.20.0',
-    featureVersion: '1.20.0',
+    contractVersion: '1.21.0',
+    featureVersion: '1.21.0',
     summary: 'Sends one message to Lopu and streams its reply — text, tool calls and live builder patches — as newline-delimited JSON. OAuth callers must explicitly approve the corresponding Lopu chat, voice, or recording permission.',
     detail:
-      'Version 1.20.0 accepts local ChatGPT plan provider IDs with fail-closed account resolution, streaming Responses and existing tool permissions. Plan failure never switches billing. Version 1.19.3 routes GPT-6 Astra native tool turns through Responses, preserving explicit or provider-default reasoning and encrypted reasoning across tool hops without retrying a weaker request. ' +
+      'Version 1.21.0 admits text turns on a live owner/origin-bound ChatGPT plan without admin verification, using a full account session and no Character override header. Scoped credentials, ordinary BYO, catalog and voice retain existing policy; unavailable plans never fall back to API billing. Version 1.20.0 accepts local ChatGPT plan provider IDs with fail-closed account resolution, streaming Responses and existing tool permissions. Plan failure never switches billing. Version 1.19.3 routes GPT-6 Astra native tool turns through Responses, preserving explicit or provider-default reasoning and encrypted reasoning across tool hops without retrying a weaker request. ' +
       'Version 1.19.2 restores up to eight completed tool results (64 KiB) from the exact interrupted private background task on a verified continuation. Current account, conversation, deployment, retention and completed-boundary checks apply. No Action is replayed and no result is added to public message history. Expired task output stops refetching until the account or deployment changes. ' +
       'Version 1.19.1 repairs split JSON-labelled tool fences, retries printed tool requests with bounded corrective hops, and preserves private read locators across checkpoints. Restored get_thing pages reauthorize the viewer and require the same revision; results and grants are never persisted as history. Action failure recovery data reaches the next provider hop. ' +
       'Version 1.19.0 adds read-only inspect_action by authorized id or owner-scoped actionKey. It returns runtime, declared input descriptors, direct effects and optional candidate-input validation without execution, run records or confirmation. Oversized contracts explicitly point to lossless get_thing /inputs pages. Validation covers declared types only, not downstream API state or execution budgets. Invalid run_action inputs are refused before an Ask card. Partial failures retain a runId when available and instruct state verification before replay. Newly authored workspace save Actions expose canonical enum choices, numeric bounds and reference hints; existing saved programs are unchanged. ' +

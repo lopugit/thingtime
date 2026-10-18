@@ -790,3 +790,54 @@ test('catalog errors retain last-known state and an old account refresh cannot p
   assert.deepEqual(getLopuStoreSnapshot().models, afterSwitch);
   assert.deepEqual(getLopuStoreSnapshot().vaultProviders, []);
 });
+
+test('plan admission is discarded after catalog failure and identity change', async () => {
+  resetLopuStoreForTests();
+  const { client } = fakeClient();
+  client.models = async () => ({ ok: true, models: MODELS, defaults: DEFAULTS, vaultProviders: [{ ...VAULT[0], id: 'chatgpt-plan-owned', planChatEligible: true }] });
+  bindLopuApi(client); hydrateLopuStore('plan-owner');
+  await loadLopuModels();
+  assert.equal(getLopuStoreSnapshot().vaultProviders[0].planChatEligible, true);
+  client.models = async () => { throw new Error('offline'); };
+  await loadLopuModels();
+  assert.equal(getLopuStoreSnapshot().vaultProviders[0].planChatEligible, undefined);
+  assert.equal(getLopuStoreSnapshot().vaultProviders[0].id, 'chatgpt-plan-owned', 'last-known display metadata remains');
+  hydrateLopuStore('other-owner');
+  assert.deepEqual(getLopuStoreSnapshot().vaultProviders, []);
+  resetLopuStoreForTests();
+});
+
+test('refused provider saves roll back only the latest choice in the same account, and serialized success survives an older failure', async () => {
+  resetLopuStoreForTests();
+  const { client } = fakeClient();
+  bindLopuApi(client); hydrateLopuStore('u1'); await loadLopuModels(); selectLopuChat('chat-1');
+  client.chats.update = async () => ({ ok: false, error: 'Plan disconnected' });
+  setLopuSettings({ providerId: 'vp-1' }); await flush();
+  assert.equal(getLopuStoreSnapshot().settings.providerId, null);
+  assert.equal(getLopuStoreSnapshot().notices.slice(-1)[0]?.title, 'Plan disconnected');
+  let rejectFirst!: (error: Error) => void;
+  let calls = 0;
+  client.chats.update = async () => { if (++calls === 1) return new Promise((_resolve, reject) => { rejectFirst = reject; }); return { ok: true }; };
+  setLopuSettings({ providerId: 'vp-1' }); await flush();
+  setLopuSettings({ providerId: null });
+  rejectFirst(new Error('old failure')); await flush(); await flush();
+  assert.equal(getLopuStoreSnapshot().settings.providerId, null);
+  assert.equal(calls, 2);
+  calls = 0; setLopuSettings({ providerId: 'vp-1' }); await flush(); hydrateLopuStore('u2');
+  rejectFirst(new Error('old account failure')); await flush();
+  assert.equal(getLopuStoreSnapshot().userId, 'u2'); assert.equal(getLopuStoreSnapshot().settings.providerId, null);
+  resetLopuStoreForTests();
+});
+
+test('hydration never restores plan admission hints and never shares provider metadata across accounts', async () => {
+  const previous = (globalThis as any).window;
+  const storage = new Map<string, string>();
+  (globalThis as any).window = { localStorage: { getItem: (key: string) => storage.get(key) ?? null, setItem: (key: string, value: string) => storage.set(key, value) }, dispatchEvent: () => {}, addEventListener: () => {}, removeEventListener: () => {} };
+  try {
+    storage.set('tt-lopu-models', JSON.stringify({ ownerId: 'owner', vaultProviders: [{ ...VAULT[0], id: 'chatgpt-plan-cached', planChatEligible: true }] }));
+    resetLopuStoreForTests(); hydrateLopuStore('owner');
+    assert.equal(getLopuStoreSnapshot().vaultProviders[0].id, 'chatgpt-plan-cached');
+    assert.equal(getLopuStoreSnapshot().vaultProviders[0].planChatEligible, undefined);
+    hydrateLopuStore('other'); assert.deepEqual(getLopuStoreSnapshot().vaultProviders, []);
+  } finally { (globalThis as any).window = previous; resetLopuStoreForTests(); }
+});

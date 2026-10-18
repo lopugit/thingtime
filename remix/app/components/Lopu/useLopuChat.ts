@@ -1,3 +1,4 @@
+import { selectedPlanChatEligible } from './lopuProviderCore';
 import { isRunningLopuChatTask } from '~/api/utils/lopu/backgroundTaskCore';
 import { syncNativeLopuChatActivity } from '~/utils/lopuChatActivity';
 import { getAiTasks, getAiTaskContextKey, getServerAiTasks, subscribeAiTasks } from './aiTasks.client';
@@ -117,6 +118,7 @@ export const useActiveDraftLabel = (): string | null => {
 // ——— the hook ————————————————————————————————————————————————————————————
 
 export type UseLopuChatOptions = {
+	surface?: 'chat' | 'voice';
 	// a specific conversation to show (null = a fresh one); undefined follows
 	// the shared store's current conversation (the floating window)
 	chatId?: string | null;
@@ -228,7 +230,8 @@ export const useLopuChat = (options: UseLopuChatOptions = {}): UseLopuChat => {
 	// pinned vault provider makes the turn BYO (the gate lets it through when
 	// the admin allows unverified BYO, and the chip reads "your provider")
 	const byo = !!snapshot.settings.providerId;
-	const account = useLopuAccount({ byo });
+	const planChatEligible = options.surface !== 'voice' && snapshot.userId === userId && selectedPlanChatEligible(snapshot.vaultProviders, snapshot.settings.providerId);
+	const account = useLopuAccount({ byo, planChatEligible });
 
 	useBackgroundRefresh(userId ? `lopu-tasks:${userId}` : null, recoverLopuBackgroundTasks, 3000);
 	useBackgroundRefresh(userId ? `lopu-chats:${userId}` : null, () => loadLopuChats({ quiet: true }));
