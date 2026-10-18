@@ -45,23 +45,21 @@ function TransientBlockSession({ scope, actions, enabled = true, onError, childr
 		const root = event.currentTarget as HTMLDivElement;
 		const lifetime = lifetimeRef.current;
 		const target = event.target as Element;
-		// Capture every live click/change before it can bubble into outer Action
-		// surfaces, including controls with no action. Preserve native defaults.
+		// Generic delegates reject this marked boundary even during capture.
+		// Let checkbox/radio clicks reach React's change plugin: stopping native
+		// capture would suppress change and its controlled-value restoration.
 		if (!current.current.enabled) return;
-		event.stopPropagation();
 		const control = target.closest<HTMLElement>('[data-tt-action]');
+		const checkedField = control?.tagName === 'INPUT' && ['checkbox', 'radio'].includes((control as HTMLInputElement).type);
+		if (checkedField && event.type === 'click') return;
+		event.stopPropagation();
 		if (!control || !root.contains(control)) return;
 		if (control.tagName === 'DIALOG' && event.type !== 'cancel') return;
-		// Keep every ordinary delegated Action away from transient form values.
-		// In edit mode leave selection to Builder, whose controls are inert.
 		const field = ['INPUT', 'SELECT', 'TEXTAREA'].includes(control.tagName);
-		if (field !== change) {
-			// Clicking a field must still focus it / open the native file picker,
-			// but must not bubble into an ordinary Action wrapper.
-			event.stopPropagation();
-			return;
-		}
-		event.preventDefault(); event.stopPropagation();
+		if (field !== change) return;
+		// A checkbox/radio change is derived from native click; cancelling its
+		// default would roll back the state even after the adapter accepts it.
+		if (!checkedField) event.preventDefault();
 		if (control.matches(':disabled') || control.getAttribute('aria-disabled') === 'true' || lifetime.signal.aborted) return;
 		if (control.getAttribute('data-tt-action') !== TRANSIENT_BLOCK_ACTION) return;
 		const binding = parseTransientBinding(control.getAttribute('data-tt-action-inputs'));
@@ -91,7 +89,7 @@ function TransientBlockSession({ scope, actions, enabled = true, onError, childr
 		return () => root?.removeEventListener('cancel', cancel, true);
 	});
 	return <ComponentDataScope.Provider value={scope}><NativeControlsEnabled.Provider value={enabled}>
-		<div ref={host} data-tt-transient-boundary="" onClickCapture={event => activate(event, false)} onChangeCapture={event => activate(event, true)}
+		<div ref={host} data-tt-transient-boundary="" onClick={event => { if (current.current.enabled) event.stopPropagation(); }} onClickCapture={event => activate(event, false)} onChangeCapture={event => activate(event, true)}
 			onSubmitCapture={event => { event.preventDefault(); event.stopPropagation(); }}>
 			{children}
 		</div>

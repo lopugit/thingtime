@@ -10311,6 +10311,9 @@ separate from deterministic discovery/lease tests.
       leave private fields unread. Change account/database during a pending operation:
       fields clear, the operation signal aborts and late callbacks cannot update the
       new scope. A rejected model change restores the saved selected option.
+      Check and uncheck a transient checkbox: each click must invoke exactly one
+      adapter callback; rejecting a controlled toggle restores its prior checked
+      state without dispatching an ordinary Action.
 
 
 - On a configured local account backend, connect a real ChatGPT account through the loopback callback, verify the account against ChatGPT, choose its discovered model, and complete a Lopu response plus one read-only tool call. Compare plan usage with ChatGPT Settings → Usage; do not infer a percentage from token counts.
