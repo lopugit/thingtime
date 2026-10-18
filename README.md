@@ -49,6 +49,29 @@ and `THINGTIME_LOCAL_ATTACHMENT_STORAGE_ORIGIN=http://localhost:<web port>`.
 This local adapter refuses deployed/Vercel environments. No new provider secrets
 are needed beyond the existing vault and private object storage configuration.
 
+For the opt-in password-file replay API fixture, use a loopback-only disposable
+server and replica set, a stable `THINGTIME_USER_VAULT_KEY`, and the local object
+adapter above. Register a new synthetic account named `passwordfiles-<8 hex digits>`
+through `/api/v1/auth/register` while `ADMIN_USERNAMES` is empty, then restart only
+that disposable server with the new name in `ADMIN_USERNAMES` to grant its existing
+private-upload test permission. Do not add an existing user or mutate Mongo
+directly. Keep a mode-0600 ignored JSON file with `fixtureKind` set to
+`password-file-sync-qa`, `base` set to `http://127.0.0.1:<port>`, and the new
+account's `username`, `password`, and returned `ownerId`. From `remix/`, run:
+
+```sh
+TT_PASSWORD_FILE_API_FIXTURE=<ignored-fixture.json> \
+TT_PASSWORD_FILE_API_ARTIFACTS=<ignored-output-directory> \
+node --import tsx --test app/local-workspace/passwordFileLifecycle.api.test.ts
+```
+
+The fixture uses the real canonical encrypted upload/download/delete APIs,
+creates a second synthetic account for isolation checks, and cleans up its entry
+content through normal APIs. It retains minimal cancellation receipts and the
+new account rows because no account deletion API exists. Failed multipart runs
+may need the ordinary settlement/cleanup interval; never bypass that fence.
+This is local API evidence, not account file UI or deployed acceptance.
+
 Native system AutoFill and passkey creation are being delivered separately in
 [PR #996](https://github.com/lopugit/thingtime/pull/996). They require signed Apple
 credential-provider bundles, provisioning and device verification. This web

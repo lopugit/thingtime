@@ -2841,3 +2841,57 @@ test('internal password file adapter requires an active owned parent even for th
   assert.equal((await service.download({ id: 'different-owner' }, doc.shareId, true)).ok, false);
   assert.equal((await service.download({ id: doc.ownerId }, doc.shareId, true)).ok, true);
 });
+
+test('password cleanup retains a minimal parent-bound receipt for target and unbound files', async () => {
+  for (const bound of [false, true]) {
+    let doc = attachmentDoc({ attachmentPurpose: 'password', passwordFileParent: '725d1312-9d6f-4460-8ae0-c1c5689861b1', attachmentState: 'ready',
+      ...(bound ? { targetId: '725d1312-9d6f-4460-8ae0-c1c5689861b1' } : {}), objectVersionId: 'version-1', uploadId: undefined });
+    let deleted = 0;
+    const service = createAttachmentService({ passwordVault: true, customMongoActive: () => false, now: () => now, getS3: () => noopS3({ deleteObject: async () => { deleted++; } }), store: {
+      getOwned: async () => doc,
+      claimDeleting: async (_owner: string, _id: string, _states: unknown, scope: any) => {
+        assert.equal(scope.retainCancellation, true); assert.equal(scope.kind, bound ? 'target' : 'draft');
+        doc = { ...doc, attachmentState: 'deleting', attachmentCancellationRequested: true }; return doc;
+      },
+      removeDeleting: async () => { doc = cancelledAttachmentReceipt(doc.ownerId, doc.shareId, now, doc); return true; }
+    } as any });
+    const input = { id: doc.shareId, ...(bound ? { targetId: '725d1312-9d6f-4460-8ae0-c1c5689861b1' } : {}) };
+    assert.deepEqual(await service.remove(doc.ownerId, input, { retainCancellation: true }), { ok: true, deferred: false });
+    assert.equal(doc.passwordFileParent, '725d1312-9d6f-4460-8ae0-c1c5689861b1'); assert.equal(doc.attachmentPurpose, 'password'); assert.equal(doc.attachmentState, 'cancelled');
+    assert.equal(doc.objectSizeBytes, 0); assert.equal(doc.objectVersionId, undefined); assert.equal(doc.uploadId, undefined); assert.equal(doc.targetId, undefined);
+    assert.equal(doc.crystal.name, 'Cancelled upload'); assert.equal(JSON.stringify(doc).includes('launch.bin'), false);
+    assert.deepEqual(await service.remove(doc.ownerId, input, { retainCancellation: true }), { ok: true, deferred: false }); assert.equal(deleted, 1);
+  }
+});
+
+test('request-id cancellation cannot bypass password-purpose protection and native abort retains its receipt', async () => {
+  let doc = attachmentDoc({ attachmentPurpose: 'password', passwordFileParent: '725d1312-9d6f-4460-8ae0-c1c5689861b1', attachmentState: 'pending', uploadId: undefined });
+  let claims = 0;
+  const store = {
+    reserveCancellation: async () => doc, getOwned: async () => doc,
+    claimObjectlessPendingDeleting: async (_owner: string, _id: string, scope: any) => {
+      claims++; assert.equal(scope.retainCancellation, true); doc = { ...doc, attachmentState: 'deleting', attachmentCancellationRequested: true, attachmentObjectlessDelete: true }; return doc;
+    },
+    removeDeleting: async () => { doc = cancelledAttachmentReceipt(doc.ownerId, doc.shareId, now, doc); return true; }
+  } as any;
+  const ordinary = createAttachmentService({ store, customMongoActive: () => false, getS3: () => { throw Error('Private storage must not be reached'); } });
+  assert.equal((await ordinary.cancel(doc.ownerId, { requestId: 'known-password-token' })).ok, false); assert.equal(claims, 0);
+  const native = createAttachmentService({ store, passwordVault: true, customMongoActive: () => false, getS3: () => noopS3({ headObject: async () => { throw Error('No object'); }, isNotFound: () => true }) });
+  assert.deepEqual(await native.cancel(doc.ownerId, { uploadId: doc.shareId }), { ok: true, deferred: false });
+  assert.equal(doc.attachmentState, 'cancelled'); assert.equal(doc.passwordFileParent, '725d1312-9d6f-4460-8ae0-c1c5689861b1'); assert.equal(claims, 1);
+  assert.equal((await ordinary.cancel(doc.ownerId, { requestId: 'known-password-token' })).ok, false);
+});
+
+test('a completed password deletion receipt refuses the delayed original upload start', async () => {
+  const requestId = 'original-password-request', ownerId = 'user-1', id = attachmentIdForRequest(ownerId, requestId);
+  const receipt = cancelledAttachmentReceipt(ownerId, id, now, { attachmentPurpose: 'password', passwordFileParent: '725d1312-9d6f-4460-8ae0-c1c5689861b1' });
+  let starts = 0;
+  const service = createAttachmentService({ passwordVault: true, customMongoActive: () => false, now: () => now,
+    store: { getById: async (candidate: string) => candidate === id ? receipt : null, listExpiredOwned: async () => [] } as any,
+    getS3: () => noopS3({ createMultipartUpload: async () => { starts++; throw Error('A deleted password file must not restart'); } })
+  });
+  assert.deepEqual(await service.start(ownerId, { requestId, filename: 'encrypted.bin', sizeBytes: 16, contentType: 'application/octet-stream', purpose: 'password' }), {
+    ok: false, status: 409, error: 'This upload request was cancelled', code: 'upload_cancelled', retryable: false
+  });
+  assert.equal(starts, 0);
+});

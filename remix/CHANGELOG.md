@@ -68,6 +68,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-18 — **Codex (AI)**: Preserve canonical password-file deletion receipts
+  and independent encrypted files/source archives through entry conflict review.
+  Local API checks cover real upload/download, replay and owner isolation;
+  account file UI activation and native acceptance remain open. Details:
+  [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
 - 2026-10-18 — **Codex (AI)**: Added encrypted account password-file queue and
   retention groundwork with parent ordering, renewable cross-tab claims and
   whole-transfer identity fences. Account UI activation, delete replay and native

@@ -4230,7 +4230,7 @@ receipt. Parent deletion keeps uncertain child intents until canonical parent
 cleanup is acknowledged. An unknown start receipt is recovered through the same
 idempotent `file-start` operation, with normal upload permission still required.
 
-`passwordFileTransport.client.ts` requires `api.passwords` 1.1.0 and current local
+`passwordFileTransport.client.ts` now requires `api.passwords` 1.2.0 (see the replay checkpoint below) and current local
 and remote leases across the whole transfer, including download consumption.
 Object requests omit account credentials. Download retention reuses the local
 encrypted chunk writer without adding upload commands. Incomplete traversals,
@@ -4253,3 +4253,45 @@ return 404 after the row was removed. Treating that response as successful clean
 would not establish a replay fence. Native offline/reconnect/retention tests must
 then use disposable accounts through the normal API. Large-entry codec parity,
 workspace limits and the remaining full-suite matrix also remain open.
+
+
+## Password file deletion replay and conflict preservation — 2026-10-18
+
+The canonical attachment cleanup now retains an owner/parent-bound cancellation
+receipt for password files. It contains no file key, real name, encrypted metadata,
+object version or upload authority. The dedicated password API acknowledges a
+replayed delete/abort only for that receipt and a currently owned live parent;
+missing or foreign rows remain 404. A delayed original start remains refused.
+Parent deletion preserves the same fences and cannot acknowledge deferred object
+cleanup. Ordinary attachment request-ID cancellation also refuses password-purpose
+rows, including retained receipts. Both discovery manifests advertise
+`api.passwords` 1.2.0; the new account file transport requires that version.
+
+Entry conflict review prepares independent encrypted copies of each live local
+file and recursively copies retained source archive entries, remapping references
+(including cycles). New keys, nonces and IDs are generated through the canonical
+file writer. Staged file generations become visible only in the same transaction
+as all new entries and intents. Changed attachments or source entries, unavailable
+source archives, damaged bytes, lock and quota failures retain the original
+conflict. Discarding local edits cancels undispatched work but preserves uncertain
+file cleanup. A complete account refresh that loses a parent with pending file
+work creates a reviewed conflict instead of orphaning those bytes. Child cleanup
+waits for an explicit canonical parent-delete acknowledgement, never an inferred
+404 or an empty queue.
+
+Local verification: the real loopback API fixture completed encrypted multipart
+upload, list, exact-byte download, repeated delete/abort, delayed-start refusal,
+parent cascade and anonymous/wrong-owner/wrong-parent checks. Its successful run
+cleaned up its entries through normal APIs; new fixture accounts and minimal
+receipts remain. An earlier failed signed-URL setup attempt may retain a pending
+multipart reservation until the normal settlement interval; it belongs only to
+that synthetic account. No existing account or public content was modified.
+Evidence: `tmp/password-file-replay-api/{verification,cleanup}.json` and
+`tmp/password-file-replay-api/downloaded-fixture.bin`.
+
+The account file UI still uses its existing remote backend. File status/review
+controls, pump activation, complete remote-file availability reporting and native
+offline/reconnect/retention acceptance remain open. This increment has local unit
+and API proof only; current-head CI and deployed acceptance remain unverified.
+Large local-entry/storage parity and the full-suite matrix are still completion
+gates. No merge or deployment was performed.

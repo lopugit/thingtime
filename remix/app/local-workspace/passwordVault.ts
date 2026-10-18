@@ -2,17 +2,17 @@ import { validatePasswordEntry, validPasswordId, type PasswordEntry, type Passwo
 import { parseTotp } from '../passwords/totp';
 import { sealDeviceVaultValue, openDeviceVaultValue, deviceVaultWriteDigest } from '../passwords/vaultCrypto';
 import type { VaultEnvelope } from '../passwords/vaultEnvelopeContract';
-import { WorkspaceError, type WorkspaceDatabase, type WorkspaceLease, type WorkspaceScope } from './storage';
+import { WorkspaceError, type WorkspaceDatabase, type WorkspaceLease, type WorkspaceScope, type WorkspaceTransaction } from './storage';
 
 import { DeviceVaultSession, deviceVaultCollections } from './deviceVaultSession';
-import { anonymousPasswordStorage, devicePasswordStorage, removeDevicePasswordFiles, type PasswordFileHost } from './passwordFiles';
+import { anonymousPasswordStorage, devicePasswordStorage, removeDevicePasswordFiles, prepareDevicePasswordFileCopies, discardDevicePasswordFileEdits, passwordFileSnapshot, PASSWORD_FILE_COMMANDS, type PasswordFileCommand, type PasswordFileHost } from './passwordFiles';
 import { passwordFileSyncStatus, synchronizePasswordFiles } from './passwordFileSync';
 import type { PasswordFileTransport } from './passwordFileTransport.client';
 import { reconcilePasswordFiles } from './passwordFileReconcile';
 
 const { records: RECORDS, commands: COMMANDS } = deviceVaultCollections('passwords');
 export type DevicePasswordRecord = { id: string; revision: number; remoteRevision: number; createdAt: string; updatedAt: string;
-  encryptedValue?: VaultEnvelope; deleted?: true; writeId?: string; writeDigest?: string };
+  encryptedValue?: VaultEnvelope; deleted?: true; remoteDeleted?: true; writeId?: string; writeDigest?: string };
 export type DevicePasswordCommand = { id: string; recordId: string; localRevision: number; operation: 'save' | 'delete';
   encryptedValue: VaultEnvelope; state: 'pending' | 'frozen' | 'refused'; expectedRevision?: number;
   claim?: { token: string; until: number }; attempts?: number; retryAt?: number; status?: number };
@@ -179,7 +179,7 @@ export class LocalPasswordVault extends DeviceVaultSession {
       if (current?.claim?.token !== item.claim!.token) return;
       const record = await tx.get<DevicePasswordRecord>(RECORDS, item.recordId);
       if (!record || record.remoteRevision !== item.expectedRevision) return refuse('VAULT_DAMAGED', 'The queued password base changed unexpectedly.', 422);
-      await tx.put(RECORDS, record.id, { ...record, remoteRevision: item.expectedRevision! + 1 });
+      await tx.put(RECORDS, record.id, { ...record, remoteRevision: item.expectedRevision! + 1, ...(item.operation === 'delete' ? { remoteDeleted: true } : {}) });
       await tx.delete(COMMANDS, claim.key); return true;
      });
      if (accepted) completed++;
@@ -200,40 +200,76 @@ export class LocalPasswordVault extends DeviceVaultSession {
    return { completed };
   } finally { off(); }
  }
+ private async prepareCopies(before: DevicePasswordRecord, op: ReturnType<LocalPasswordVault['operation']>, signal: AbortSignal) {
+  const sources = new Map<string, { record: DevicePasswordRecord; entry: PasswordEntry; id: string }>();
+  sources.set(before.id, { record: before, entry: await this.value(before, op), id: crypto.randomUUID() });
+  // Source archives are entries too. Traverse only this unlocked device scope;
+  // every copied reference gets a fresh identity, including cyclic references.
+  for (const source of sources.values()) {
+   const id = source.entry.importArchiveId;
+   if (!id || sources.has(id)) continue;
+   const record = await this.db.transaction(this.scope, 'readonly', op.lease, tx => tx.get<DevicePasswordRecord>(RECORDS, id));
+   if (!record || record.deleted) return refuse('PASSWORD_SOURCE', 'The source archive is unavailable on this device. Retain it before copying this entry.', 409);
+   sources.set(id, { record, entry: await this.value(record, op), id: crypto.randomUUID() });
+  }
+  const mapping = new Map([...sources].map(([id, source]) => [id, source.id]));
+  const owner = await this.context, stamp = new Date().toISOString(), copies = [];
+  for (const source of sources.values()) {
+   const entry = { ...source.entry, ...(source.entry.importArchiveId ? { importArchiveId: mapping.get(source.entry.importArchiveId)! } : {}) };
+   const plain = JSON.stringify(entry), id = source.id, writeId = crypto.randomUUID();
+   copies.push({ id, writeId, value: await sealDeviceVaultValue(owner, op.key, id, plain),
+    command: await sealDeviceVaultValue(owner, op.key, `command:${id}:${writeId}`, JSON.stringify({ entry })), digest: await deviceVaultWriteDigest(op.key, id, plain) });
+  }
+  const files = await prepareDevicePasswordFileCopies(this.fileStorageHost(), mapping, signal);
+  return { copiedId: mapping.get(before.id)!, discard: files.discard, commit: async (tx: WorkspaceTransaction) => {
+   for (const source of sources.values()) {
+    const current = await tx.get<DevicePasswordRecord>(RECORDS, source.record.id);
+    if (!current || current.deleted || current.revision !== source.record.revision) return refuse('PASSWORD_CONFLICT', 'An entry or source archive changed while copying. Review it again.');
+   }
+   for (const copy of copies) {
+    if (await tx.get(RECORDS, copy.id)) return refuse('PASSWORD_CONFLICT', 'A copy identity changed. Review the entry again.');
+    await tx.put(RECORDS, copy.id, { id: copy.id, revision: 1, remoteRevision: 0, createdAt: stamp, updatedAt: stamp, encryptedValue: copy.value, writeId: copy.writeId, writeDigest: copy.digest } satisfies DevicePasswordRecord);
+    await tx.put(COMMANDS, `${copy.id}:${copy.writeId}`, { id: copy.writeId, recordId: copy.id, localRevision: 1, operation: 'save', encryptedValue: copy.command, state: 'pending' } satisfies DevicePasswordCommand);
+   }
+   await files.commit(tx);
+  } };
+ }
  /** Explicit review can keep the account value or preserve the device value
   * as a new independent entry. It never force-overwrites the conflicting entry. */
  async resolveRefused(recordId: string, revision: number, choice: 'account' | 'copy', transport: PasswordVaultTransport, signal?: AbortSignal) {
   if (!validPasswordId(recordId) || !validRevision(revision) || !['account', 'copy'].includes(choice)) refuse('PASSWORD_INPUT', 'Choose a valid conflict resolution.', 400);
   const op = this.accountOperation(signal), controller = new AbortController(), off = op.lease.onInvalidate(() => controller.abort());
   const combined = AbortSignal.any([controller.signal, ...(signal ? [signal] : [])]);
+  let copy: Awaited<ReturnType<LocalPasswordVault['prepareCopies']>> | null = null;
   try {
    const before = await this.db.transaction(this.scope, 'readonly', op.lease, async tx => {
     const record = await tx.get<DevicePasswordRecord>(RECORDS, recordId);
     const commands = (await tx.list<DevicePasswordCommand>(COMMANDS)).filter(row => row.value.recordId === recordId).sort((a,b) => a.value.localRevision - b.value.localRevision);
     if (!record || record.revision !== revision || commands[0]?.value.state !== 'refused') return refuse('PASSWORD_CONFLICT', 'This conflict changed. Review it again.');
-    return { record, first: commands[0].value.id };
+    return { record, first: commands[0].value.id, files: await passwordFileSnapshot(tx, new Set([recordId])) };
    });
-   const local = choice === 'copy' ? await this.value(before.record, op) : null;
    const remote = await transport.read(recordId, combined); op.lease.assertCurrent(); combined.throwIfAborted();
    if (remote && (remote.id !== recordId || !validRevision(remote.revision) || remote.revision < 1 || new Date(remote.updatedAt).toISOString() !== remote.updatedAt))
     return refuse('VAULT_RESPONSE', 'The account returned an invalid password entry.', 502);
    const owner = await this.context, remoteValue = remote ? await sealDeviceVaultValue(owner, op.key, recordId, JSON.stringify(validatePasswordEntry(remote.entry))) : undefined;
-   const id = crypto.randomUUID(), writeId = crypto.randomUUID(), stamp = new Date().toISOString();
-   const copy = local ? { value: await sealDeviceVaultValue(owner, op.key, id, JSON.stringify(local)),
-    command: await sealDeviceVaultValue(owner, op.key, `command:${id}:${writeId}`, JSON.stringify({ entry: local })), digest: await deviceVaultWriteDigest(op.key, id, JSON.stringify(local)) } : null;
+   const stamp = new Date().toISOString(), cleanupWriteId = crypto.randomUUID();
+   const cleanup = !remote && before.record.remoteRevision > 0 ? await sealDeviceVaultValue(owner, op.key, `command:${recordId}:${cleanupWriteId}`, '{}') : null;
+   if (choice === 'copy') copy = await this.prepareCopies(before.record, op, combined);
    await this.db.transaction(this.scope, 'readwrite', op.lease, async tx => {
     const record = await tx.get<DevicePasswordRecord>(RECORDS, recordId), commands = (await tx.list<DevicePasswordCommand>(COMMANDS)).filter(row => row.value.recordId === recordId).sort((a,b) => a.value.localRevision - b.value.localRevision);
     if (record?.revision !== revision || commands[0]?.value.id !== before.first || commands[0]?.value.state !== 'refused') return refuse('PASSWORD_CONFLICT', 'This conflict changed. Review it again.');
+    if (await passwordFileSnapshot(tx, new Set([recordId])) !== before.files) return refuse('PASSWORD_CONFLICT', 'The entry attachments changed. Review them again.');
+    await copy?.commit(tx);
     for (const command of commands) await tx.delete(COMMANDS, command.id);
+    await discardDevicePasswordFileEdits(tx, recordId);
+    if (!remote) await removeDevicePasswordFiles(tx, recordId);
     await tx.put(RECORDS, recordId, { id: recordId, revision: revision + 1, remoteRevision: remote?.revision ?? record.remoteRevision,
      createdAt: record.createdAt, updatedAt: remote?.updatedAt ?? stamp, ...(remoteValue ? { encryptedValue: remoteValue } : { deleted: true as const }) } satisfies DevicePasswordRecord);
-    if (copy) {
-     await tx.put(RECORDS, id, { id, revision: 1, remoteRevision: 0, createdAt: stamp, updatedAt: stamp, encryptedValue: copy.value, writeId, writeDigest: copy.digest } satisfies DevicePasswordRecord);
-     await tx.put(COMMANDS, `${id}:${writeId}`, { id: writeId, recordId: id, localRevision: 1, operation: 'save', encryptedValue: copy.command, state: 'pending' } satisfies DevicePasswordCommand);
-    }
+    if (cleanup) await tx.put(COMMANDS, `${recordId}:${cleanupWriteId}`, { id: cleanupWriteId, recordId, localRevision: revision + 1,
+     operation: 'delete', encryptedValue: cleanup, state: 'pending' } satisfies DevicePasswordCommand);
    });
-   return { copiedId: copy ? id : null };
-  } finally { off(); }
+   return { copiedId: copy?.copiedId ?? null };
+  } finally { await copy?.discard().catch(() => {}); off(); }
  }
  /** Pull decrypted pages only while the verified transport and local unlock
   * remain valid. Every retained entry is encrypted before the transaction. */
@@ -271,13 +307,30 @@ export class LocalPasswordVault extends DeviceVaultSession {
    }
    // Only a complete traversal can remove vanished account entries. Concurrent
    // local writes or newer pulls are protected by the captured revision pair.
+   // Prepare encrypted review commands outside IDB. File-only edits do not
+   // advance the entry revision, so check their presence again at commit.
+   const missing = new Map<string, DevicePasswordCommand>();
+   for (const { value: before } of baseline) {
+    if (seen.has(before.id) || before.deleted || !before.remoteRevision) continue;
+    const id = crypto.randomUUID(), entry = await this.value(before, op);
+    missing.set(before.id, { id, recordId: before.id, localRevision: before.revision, operation: 'save',
+     encryptedValue: await sealDeviceVaultValue(await this.context, op.key, `command:${before.id}:${id}`, JSON.stringify({ entry })),
+     expectedRevision: before.remoteRevision, state: 'refused', status: 404 });
+   }
    await this.db.transaction(this.scope, 'readwrite', op.lease, async tx => {
     const pending = new Set((await tx.list<DevicePasswordCommand>(COMMANDS)).map(row => row.value.recordId));
+    const pendingFiles = new Set((await tx.list<PasswordFileCommand>(PASSWORD_FILE_COMMANDS)).map(row => row.value.entryId));
     for (const { value: before } of baseline) {
      if (seen.has(before.id) || pending.has(before.id) || before.deleted || !before.remoteRevision) continue;
      const current = await tx.get<DevicePasswordRecord>(RECORDS, before.id);
-     if (current && current.revision === before.revision && current.remoteRevision === before.remoteRevision)
-      await tx.put(RECORDS, before.id, { id: before.id, revision: before.revision + 1, remoteRevision: before.remoteRevision, createdAt: before.createdAt, updatedAt: new Date().toISOString(), deleted: true } satisfies DevicePasswordRecord);
+     if (!current || current.revision !== before.revision || current.remoteRevision !== before.remoteRevision) continue;
+     if (pendingFiles.has(before.id)) {
+      const review = missing.get(before.id)!;
+      await tx.put(COMMANDS, `${before.id}:${review.id}`, review);
+      continue;
+     }
+     await removeDevicePasswordFiles(tx, before.id);
+     await tx.put(RECORDS, before.id, { id: before.id, revision: before.revision + 1, remoteRevision: before.remoteRevision, createdAt: before.createdAt, updatedAt: new Date().toISOString(), deleted: true } satisfies DevicePasswordRecord);
     }
    });
    return { retained: seen.size };

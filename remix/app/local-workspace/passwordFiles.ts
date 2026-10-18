@@ -1,5 +1,5 @@
 import { sha256 } from '@noble/hashes/sha2.js';
-import { decryptPasswordFile, encryptPasswordFile, iterableStream, validatePasswordFile } from '../passwords/fileCrypto';
+import { decryptPasswordFile, encryptPasswordFile, iterableStream, newPasswordFile, validatePasswordFile } from '../passwords/fileCrypto';
 import { deviceVaultWriteDigest, openDeviceVaultValue, sealDeviceVaultValue, type DeviceVaultKey } from '../passwords/vaultCrypto';
 import type { VaultEnvelope } from '../passwords/vaultEnvelopeContract';
 import type { PasswordStorage, SavedPasswordFile } from '../passwords/storage';
@@ -20,6 +20,11 @@ export type PasswordFileCommand = {
   claim?: { token: string; until: number }; attempts: number; retryAt: number; status?: number;
 };
 const isFile = (row: StoredFile): row is FileRecord => row.deleted !== true;
+/** User-visible file state; acknowledgements do not invalidate a review. */
+export async function passwordFileSnapshot(tx: WorkspaceTransaction, entryIds: ReadonlySet<string>) {
+  return JSON.stringify((await tx.list<StoredFile>(FILES)).filter(row => entryIds.has(row.value.entryId))
+    .map(row => [row.id, row.value.deleted === true ? 'deleted' : row.value.generation]).sort((a, b) => a[0].localeCompare(b[0])));
+}
 type Stage = { entryId: string; id: string; parts: number; expires: number };
 export type PasswordFileHost = { db: WorkspaceDatabase; scope: WorkspaceScope; lease: WorkspaceLease; context: Promise<string>;
   operation(signal?: AbortSignal, touch?: boolean): { key: DeviceVaultKey; lease: WorkspaceLease };
@@ -58,6 +63,24 @@ export async function removeDevicePasswordFiles(tx: WorkspaceTransaction, entryI
   }
 }
 
+/** Entry conflict review discards only that entry's local file edits. Clean
+ * account files remain; uncertain uploads/deletions keep their cleanup intent. */
+export async function discardDevicePasswordFileEdits(tx: WorkspaceTransaction, entryId: string) {
+  for (const { id, value } of await tx.list<PasswordFileCommand>(PASSWORD_FILE_COMMANDS)) {
+    if (value.entryId !== entryId) continue;
+    if (value.operation === 'delete' && !value.attempts && !value.claim) {
+      await tx.delete(PASSWORD_FILE_COMMANDS, id); await tx.delete(FILES, id); continue;
+    }
+    if (value.operation === 'upload') {
+      const row = await tx.get<StoredFile>(FILES, id);
+      if (row && isFile(row)) await removeChunks(tx, row.generation, row.parts);
+      await tx.put(FILES, id, { entryId, id: value.fileId, deleted: true } satisfies StoredFile);
+      if (!value.attempts && !value.remoteId && !value.claim) { await tx.delete(PASSWORD_FILE_COMMANDS, id); continue; }
+    }
+    await tx.put(PASSWORD_FILE_COMMANDS, id, { ...value, operation: 'delete', state: 'pending', retryAt: 0, status: undefined } satisfies PasswordFileCommand);
+  }
+}
+
 /** Anonymous vault adapter: canonical file frames, encrypted metadata, streaming
  * IDB parts and atomic visibility. Account queues use a separate authority lane;
  * this adapter cannot acquire account credentials or silently choose HTTP. */
@@ -79,7 +102,8 @@ export function retainDevicePasswordFile(host: PasswordFileHost, file: SavedPass
   return passwordStorage(host, { remoteId: file.id, parentRevision }).uploadFile(file.entryId, file.metadata, () => stream, signal);
 }
 
-function passwordStorage(host: PasswordFileHost, retention?: { remoteId: string; parentRevision: number }): PasswordStorage {
+type PreparedFileTarget = { sourceEntryId: string; accept(file: FileRecord): void };
+function passwordStorage(host: PasswordFileHost, retention?: { remoteId: string; parentRevision: number }, preparation?: PreparedFileTarget): PasswordStorage {
   const { db, scope } = host;
   const decode = async (row: FileRecord, key: DeviceVaultKey, lease: WorkspaceLease): Promise<SavedPasswordFile> => {
     const plain = await openDeviceVaultValue(await host.context, key, `file:${fileKey(row.entryId, row.id)}`, row.encryptedValue);
@@ -105,15 +129,17 @@ function passwordStorage(host: PasswordFileHost, retention?: { remoteId: string;
       return files;
     },
     async uploadFile(entryId, input, open, signal) {
-      const metadata = validatePasswordFile(input), id = fileKey(entryId, metadata.token), op = host.operation(signal, !retention);
+      const metadata = validatePasswordFile(input), id = fileKey(entryId, metadata.token), op = host.operation(signal, !retention && !preparation);
       const generation = crypto.randomUUID(), owner = await host.context, plain = JSON.stringify(metadata);
       const encryptedValue = await sealDeviceVaultValue(owner, op.key, `file:${id}`, plain);
       const metadataDigest = await deviceVaultWriteDigest(op.key, id, plain);
       const controller = new AbortController(), off = op.lease.onInvalidate(() => controller.abort());
       const combined = AbortSignal.any([controller.signal, ...(signal ? [signal] : [])]);
+      let prepared: FileRecord | undefined, handedOff = false;
+      const checkParent = (tx: WorkspaceTransaction) => parent(tx, preparation?.sourceEntryId ?? entryId);
       try {
         await db.transaction(scope, 'readwrite', op.lease, async tx => {
-          await parent(tx, entryId);
+          await checkParent(tx);
           // Only abandoned staging generations expire; completed files never do.
           for (const row of await tx.list<Stage>(STAGING)) if (row.value.expires < Date.now()) {
             await removeChunks(tx, row.id, row.value.parts); await tx.delete(STAGING, row.id);
@@ -125,7 +151,7 @@ function passwordStorage(host: PasswordFileHost, retention?: { remoteId: string;
           op.lease.assertCurrent(); hash.update(bytes);
           const part = parts;
           await db.transaction(scope, 'readwrite', op.lease, async tx => {
-            await parent(tx, entryId);
+            await checkParent(tx);
             await tx.putBytes(chunkKey(generation, part), bytes);
             await tx.put(STAGING, generation, { entryId, id: metadata.token, parts: part + 1, expires: Date.now() + STAGING_TTL } satisfies Stage);
           });
@@ -133,7 +159,12 @@ function passwordStorage(host: PasswordFileHost, retention?: { remoteId: string;
         }
         const contentDigest = Array.from(hash.digest(), byte => byte.toString(16).padStart(2, '0')).join('');
         await db.transaction(scope, 'readwrite', op.lease, async tx => {
-          await parent(tx, entryId); const existing = await tx.get<StoredFile>(FILES, id);
+          await checkParent(tx); const existing = await tx.get<StoredFile>(FILES, id);
+          if (preparation) {
+            if (existing) fail('The destination file already exists.');
+            prepared = { entryId, id: metadata.token, generation, parts, encryptedValue, metadataDigest, contentDigest };
+            return;
+          }
           if (retention) {
             const entry = await tx.get<DevicePasswordRecord>(RECORDS, entryId);
             if (entry?.revision !== retention.parentRevision || await tx.get(PASSWORD_FILE_COMMANDS, id) ||
@@ -153,12 +184,14 @@ function passwordStorage(host: PasswordFileHost, retention?: { remoteId: string;
           }
           await tx.delete(STAGING, generation);
         });
-        op.lease.assertCurrent(); return { id: metadata.token, entryId, metadata };
+        op.lease.assertCurrent();
+        if (preparation && prepared) { preparation.accept(prepared); handedOff = true; }
+        return { id: metadata.token, entryId, metadata };
       } finally {
         off();
         // Cleanup is key-free and only removes this operation's staging parts.
         // A retired workspace retains them for the next scoped expiry pass.
-        await cleanup(generation).catch(() => {});
+        if (!handedOff) await cleanup(generation).catch(() => {});
       }
     },
     async openFile(entryId, fileId, signal) {
@@ -205,4 +238,49 @@ function passwordStorage(host: PasswordFileHost, retention?: { remoteId: string;
       });
     }
   };
+}
+
+/** Re-encrypt independent copies through the normal chunk writer. Until the
+ * caller atomically commits its new parent entries, these are invisible staged
+ * generations, not partially created entries or downloadable files. */
+export async function prepareDevicePasswordFileCopies(host: PasswordFileHost, mapping: ReadonlyMap<string, string>, signal?: AbortSignal) {
+  const op = host.operation(signal, false), prepared: FileRecord[] = [], storage = devicePasswordStorage(host);
+  for (const [source, target] of mapping) if (!validPasswordId(source) || !validPasswordId(target) || mapping.has(target)) fail('Invalid password copy identity.', 400);
+  if (new Set(mapping.values()).size !== mapping.size) fail('Password copies need independent identities.', 400);
+  const snapshot = (rows: { id: string; value: StoredFile }[]) => rows.filter(row => mapping.has(row.value.entryId))
+    .map(row => [row.id, row.value.deleted === true ? 'deleted' : row.value.generation]).sort((a, b) => a[0].localeCompare(b[0]));
+  const baseline = await host.db.transaction(host.scope, 'readonly', op.lease, tx => tx.list<StoredFile>(FILES));
+  const expected = JSON.stringify(snapshot(baseline));
+  const discard = () => host.db.transaction(host.scope, 'readwrite', host.lease, async tx => {
+    for (const row of prepared) {
+      const stage = await tx.get<Stage>(STAGING, row.generation); if (!stage) continue;
+      await removeChunks(tx, row.generation, stage.parts); await tx.delete(STAGING, row.generation);
+    }
+  });
+  try {
+    for (const { value: row } of baseline) {
+      if (!mapping.has(row.entryId) || !isFile(row)) continue;
+      const opened = await storage.openFile(row.entryId, row.id, signal);
+      const metadata = { ...opened.metadata, ...newPasswordFile(opened.metadata.name, opened.metadata.size) };
+      try {
+        await passwordStorage(host, undefined, { sourceEntryId: row.entryId, accept: record => { prepared.push(record); } })
+          .uploadFile(mapping.get(row.entryId)!, metadata, () => opened.stream, signal);
+      } finally { if (!opened.stream.locked) await opened.stream.cancel().catch(() => {}); }
+    }
+    return {
+      async commit(tx: WorkspaceTransaction) {
+        op.lease.assertCurrent();
+        if (JSON.stringify(snapshot(await tx.list<StoredFile>(FILES))) !== expected) fail('Password attachments changed while copying. Review the entry again.');
+        for (const row of prepared) {
+          await parent(tx, row.entryId); const id = fileKey(row.entryId, row.id);
+          if (await tx.get(FILES, id) || !await tx.get(STAGING, row.generation)) fail('The prepared password copy changed. Review it again.');
+          await tx.put(FILES, id, row);
+          if (host.scope.kind === 'account') await tx.put(PASSWORD_FILE_COMMANDS, id, { id, entryId: row.entryId, fileId: row.id,
+            operation: 'upload', encryptedValue: row.encryptedValue, state: 'pending', attempts: 0, retryAt: 0 } satisfies PasswordFileCommand);
+          await tx.delete(STAGING, row.generation);
+        }
+      },
+      discard
+    };
+  } catch (error) { await discard().catch(() => {}); throw error; }
 }

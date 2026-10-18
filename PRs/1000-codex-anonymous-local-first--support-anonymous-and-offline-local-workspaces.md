@@ -3895,3 +3895,26 @@ Remaining: server deletion replay proof; attachment-preserving entry conflict
 review and remote-parent removal; file status/retry UI and pump wiring; native
 account offline/reconnect verification; large local entry/storage parity and the
 full acceptance matrix. No merge or deployment was performed.
+
+
+## Password file deletion replay and conflict preservation — 2026-10-18
+
+Canonical cleanup now retains secret-free password owner/parent cancellation
+receipts, preserving delete/abort replay and delayed-start refusal. Ordinary
+request-ID cancellation cannot bypass the protected password purpose.
+`api.passwords` 1.2.0 is registered in both manifests and required by the new file
+transport. A real disposable loopback API run verified exact encrypted-byte
+round trips, repeats, cascade cleanup and owner/parent/session isolation.
+
+Conflict copies now preserve independent encrypted attachments and source archive
+entries with remapped references. Preparation stays invisible until atomic entry,
+file and intent commit. Stale attachment reviews and missing/damaged sources
+preserve original data; remote parent disappearance retains pending file work for
+review and explicit canonical cleanup acknowledgement.
+
+Unit/API evidence and remaining boundaries:
+[local workspace checkpoint](../docs/local-workspaces.md#password-file-deletion-replay-and-conflict-preservation--2026-10-18).
+Account file UI/pump activation, failed-pull availability, native offline/reconnect
+acceptance, large local entry/storage parity and the full matrix remain pending.
+No merge or manual deployment. The hosted PR head still differs from the real
+branch ref, so old preview/checks are not current-head verification.

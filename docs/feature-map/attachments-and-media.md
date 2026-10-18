@@ -400,3 +400,10 @@ exact-version cleanup and accounting. Ciphertext skips external moderation.
 Anonymous password attachments use the device password vault rather than the
 ordinary attachment store. Their shared UI/archive backend and scoped encrypted
 chunk lifecycle are documented in [auth and accounts](auth-accounts-and-admin.md#anonymous-password-files-and-shared-archive-storage).
+
+
+Password cleanup retains a minimal parent relation in canonical cancellation
+receipts (`api.passwords` 1.2.0); the dedicated adapter can acknowledge retries
+without retaining names or keys. Ordinary request-ID cancellation refuses that
+purpose. Run `passwords/fileLifecycle.test.ts`, attachment tests and the opt-in
+`passwordFileLifecycle.api.test.ts`; README documents disposable loopback setup.

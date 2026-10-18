@@ -1195,6 +1195,7 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 			let existing: AttachmentDoc;
 			try { existing = await dependencies.store.reserveCancellation(ownerId, id); }
 			catch (error) { if (Number((error as any)?.code) === 11000) continue; throw error; }
+			if (existing.attachmentPurpose === 'password' && !dependencies.passwordVault) return fail(404, 'Attachment not found');
 			if (existing.attachmentState === 'cancelled') return { ok: true, cancelled: true, deferred: false };
 			if (existing.targetId || !['pending', 'deleting'].includes(existing.attachmentState)) {
 				return fail(409, 'Upload already finalized or attached; refresh before deleting', { code: 'upload_already_finalized', retryable: false });
@@ -1226,7 +1227,8 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 			if (existing.attachmentState === 'finalizing') {
 				return fail(409, 'Attachment finalization is in progress — try again');
 			}
-			const outcome = await cleanupClaimedDoc(() => dependencies.getS3(), existing, { kind: 'draft' });
+			const outcome = await cleanupClaimedDoc(() => dependencies.getS3(), existing, { kind: 'draft',
+				...(dependencies.passwordVault && existing.attachmentPurpose === 'password' ? { retainCancellation: true as const } : {}) });
 			if (outcome.status === 'skipped') {
 				const raced = await getOwnedByAttachmentOrRequestId(ownerId, id);
 				if (raced?.targetId) return fail(409, 'Attached files must be removed from their post');
@@ -1342,6 +1344,7 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 			}
 			const reason: AttachmentDeleteClaimScope = {
 				...(existing.targetId ? { kind: 'target', targetId: existing.targetId } : { kind: 'draft', ...(options?.retainCancellation ? { retainCancellation: true as const, ...(isStandaloneAttachmentPurpose(existing.attachmentPurpose) ? { standalonePurpose: existing.attachmentPurpose } : {}) } : {}) }),
+				...(options?.retainCancellation ? { retainCancellation: true as const } : {}),
 				...(expectedUpdatedAt ? { expectedUpdatedAt } : {})
 			};
 			const outcome = await cleanupClaimedDoc(() => dependencies.getS3(), existing, reason);

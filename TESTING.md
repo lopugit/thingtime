@@ -12034,3 +12034,29 @@ never point it at an existing account or deployment.
   require checking Gmail, without automatically creating/sending another copy.
   Known failures before dispatch leave the composer editable. Use synthetic
   transport for sending unless the user authorizes specific real recipients.
+
+
+### Password file replay and conflict preservation — 2026-10-18
+
+- [x] Real disposable loopback API: upload canonical ciphertext, complete/list,
+  download and decrypt identical bytes; delete and abort twice; refuse delayed
+  starts and reads after deletion. Check anonymous, wrong-owner and wrong-parent
+  requests, including after cleanup. Repeat parent cascade deletion. Preserve
+  same-origin/full-session gates and normal multipart settlement.
+- [x] Unit regression: ordinary attachment request-ID cancellation cannot bypass
+  password-purpose protection. Cancellation receipts retain only the protected
+  parent relation and pass canonical accounting validation, without file secrets
+  or object/upload authority. Missing rows remain errors; deferred cleanup stays
+  pending. Both capability manifests advertise the durable replay contract.
+- [x] Unit regression: reviewed copies preserve file bytes with fresh keys and
+  recursively remapped source archives. Concurrent file edits refuse stale
+  decisions; damaged/missing sources cannot create a partial copy. Pending file
+  work survives remote parent removal for review. Discarded undispatched edits
+  cancel locally, while uncertain cleanup waits for canonical acknowledgement.
+- [ ] Enable the independent account file UI pumps and verify native offline
+  attachment save/import/export/reload, reconnect, retention and conflict copies
+  at desktop/390/320px. Remote-file availability must be explicit on failed pulls.
+
+Evidence: `tmp/password-file-replay-api/` and `tmp/password-replay-*.log`.
+These are local unit/API checks; they do not establish current-head CI or
+account attachment browser/deployed acceptance.

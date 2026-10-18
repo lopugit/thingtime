@@ -68,6 +68,8 @@ export type AttachmentDoc = {
 	objectVersionId?: string;
 	attachmentRequestFingerprint?: string;
 	attachmentPurpose?: AttachmentPurpose;
+	// Protected password adapter relation, retained without secrets on cleanup.
+	passwordFileParent?: string;
 	// Server-only import lifecycle marker; never copied from portable content.
 	attachmentImportDraft?: true;
 	attachmentProfileSlot?: ProfileAttachmentSlot;
@@ -235,7 +237,7 @@ export const expiredAttachmentDraftFilter = (
 
 // This tiny accounted receipt occupies the same unique upload identity forever.
 // Expiring it would allow an arbitrarily delayed original start to resurrect bytes.
-export const cancelledAttachmentReceipt = (ownerId: string, id: string, now = new Date()): AttachmentDoc => {
+export const cancelledAttachmentReceipt = (ownerId: string, id: string, now = new Date(), source?: Pick<AttachmentDoc, 'attachmentPurpose' | 'passwordFileParent'>): AttachmentDoc => {
 	const doc = {
 		shareId: id, schemaVersion: COLLECTION_SCHEMA_VERSIONS.things,
 		thingtime: [ATTACHMENT_THINGTIME] as [typeof ATTACHMENT_THINGTIME],
@@ -244,6 +246,7 @@ export const cancelledAttachmentReceipt = (ownerId: string, id: string, now = ne
 		storageClass: 'content' as const, storageAccountingVersion: USER_STORAGE_ACCOUNTING_VERSION,
 		attachmentEnvelopeVersion: ATTACHMENT_ENVELOPE_VERSION, attachmentState: 'cancelled' as const,
 		attachmentCancellationRequested: true as const, objectSizeBytes: 0, objectKey: `objects/${id}`,
+		...(source?.attachmentPurpose === 'password' && source.passwordFileParent ? { attachmentPurpose: 'password' as const, passwordFileParent: source.passwordFileParent } : {}),
 		createdAt: now, updatedAt: now
 	};
 	return { ...doc, sizeBytes: thingStorageSizeBytes(doc) };
@@ -709,7 +712,7 @@ export const attachmentStore: AttachmentStore = {
 			const filter = { ...attachmentMatch(id), ownerId, attachmentState: 'deleting' };
 			const removed = await things.findOne(filter as any, { session }) as any as AttachmentDoc | null;
 			if (!removed) return false;
-			const receipt = removed.attachmentCancellationRequested ? cancelledAttachmentReceipt(ownerId, id) : null;
+			const receipt = removed.attachmentCancellationRequested ? cancelledAttachmentReceipt(ownerId, id, new Date(), removed) : null;
 			if (receipt) await things.replaceOne(filter as any, receipt as any, { session });
 			else await things.deleteOne(filter as any, { session });
 			const bytes = currentContentStorageSizeBytes(removed);

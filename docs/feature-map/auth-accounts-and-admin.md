@@ -249,3 +249,12 @@ expire. The normal anonymous importer/exporter has no HTTP fallback. Test
 `passwordFiles.test.ts` and the opt-in `passwordVault.browser.test.ts` through
 `test:local-workspace`. Account file retention/synchronization and larger entry
 codec coverage remain outstanding; see the local workspace acceptance matrix.
+
+
+Account password file deletion replay/conflict preservation: `api.passwords`
+1.2.0 retains protected parent-bound cancellation receipts through canonical
+attachment cleanup. `passwords/fileLifecycle.test.ts`, attachment tests and
+opt-in `local-workspace/passwordFileLifecycle.api.test.ts` cover replay and owner
+isolation. `passwordSync.test.ts` verifies atomic file/source-archive copies and
+pending-file review after remote parent removal. Account UI activation and native
+file acceptance remain open; see the [checkpoint](../local-workspaces.md#password-file-deletion-replay-and-conflict-preservation--2026-10-18).

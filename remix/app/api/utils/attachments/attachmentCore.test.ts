@@ -562,3 +562,14 @@ test('cancelled receipts are closed zero-object envelopes with durable intent', 
 	assert.equal(attachmentObjectSizeBytesForAccounting(attachment({ attachmentCancellationRequested: true })), null);
 	assert.equal(attachmentObjectSizeBytesForAccounting(attachment({ attachmentState: 'deleting', attachmentCancellationRequested: true })), 42);
 });
+
+test('password cancellation receipts retain only a validated parent relation and zero object authority', () => {
+	const receipt = attachment({ attachmentState: 'cancelled', attachmentCancellationRequested: true,
+		attachmentPurpose: 'password', passwordFileParent: '725d1312-9d6f-4460-8ae0-c1c5689861b1', objectSizeBytes: 0,
+		crystal: { name: 'Cancelled upload', size: 0, contentType: 'application/octet-stream', mediaKind: 'file' } });
+	assert.equal(attachmentObjectSizeBytesForAccounting(receipt), 0);
+	for (const patch of [{ passwordFileParent: undefined }, { passwordFileParent: 'invalid' }, { attachmentPurpose: 'post' },
+		{ attachmentPurpose: undefined }, { passwordFileEnvelope: {} }, { targetId: 'parent' }, { objectSizeBytes: 1 }, { uploadId: 'mpu' }, { objectVersionId: 'version' }]) {
+		assert.equal(attachmentObjectSizeBytesForAccounting({ ...receipt, ...patch }), null, JSON.stringify(patch));
+	}
+});

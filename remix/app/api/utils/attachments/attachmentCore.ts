@@ -1,3 +1,5 @@
+// @ts-ignore Node's direct TypeScript tests require the explicit extension.
+import { validPasswordId } from '../../../passwords/model.ts';
 export const ATTACHMENT_THINGTIME = 'attachment' as const;
 export const ATTACHMENT_ENVELOPE_VERSION = 1 as const;
 
@@ -103,6 +105,8 @@ export type AttachmentStorageCandidate = {
 	objectVersionId?: unknown;
 	attachmentRequestFingerprint?: unknown;
 	attachmentPurpose?: unknown;
+	passwordFileParent?: unknown;
+	passwordFileEnvelope?: unknown;
 	attachmentProfileSlot?: unknown;
 	attachmentFinalizationLeaseId?: unknown;
 	attachmentPartsIssuedAt?: unknown;
@@ -682,6 +686,7 @@ export const attachmentObjectSizeBytesForAccounting = (doc: AttachmentStorageCan
 	// combinations fail closed so they cannot participate in binding or quota
 	// mutation as a canonical row.
 	if (doc.attachmentPurpose !== undefined && !isAttachmentPurpose(doc.attachmentPurpose)) return null;
+	if (doc.passwordFileParent !== undefined && (doc.attachmentPurpose !== 'password' || !validPasswordId(doc.passwordFileParent))) return null;
 	if (doc.attachmentProfileSlot !== undefined && !isAttachmentProfileSlot(doc.attachmentProfileSlot)) return null;
 	if (doc.attachmentPurpose === 'profile') {
 		if (!isAttachmentProfileSlot(doc.attachmentProfileSlot)) return null;
@@ -718,9 +723,12 @@ export const attachmentObjectSizeBytesForAccounting = (doc: AttachmentStorageCan
 		(doc.attachmentCancellationRequested !== true || !['deleting', 'cancelled'].includes(String(doc.attachmentState)))) return null;
 	if (doc.attachmentState === 'cancelled') {
 		// The durable receipt has no object, target, expiry or upload authority.
+		// Password receipts retain only their protected parent relation so the
+		// dedicated API can authenticate retries after encrypted metadata is gone.
+		const passwordReceipt = doc.attachmentPurpose === 'password' && validPasswordId(doc.passwordFileParent);
 		if (doc.attachmentCancellationRequested !== true || doc.objectSizeBytes !== 0 ||
 			doc.uploadId !== undefined || doc.objectVersionId !== undefined || doc.targetId !== undefined ||
-			doc.attachmentExpiresAt !== undefined || doc.attachmentPurpose !== undefined || doc.attachmentLinked !== undefined ||
+			doc.attachmentExpiresAt !== undefined || (doc.attachmentPurpose !== undefined && !passwordReceipt) || doc.passwordFileEnvelope !== undefined || doc.attachmentLinked !== undefined ||
 			doc.attachmentRequestFingerprint !== undefined || doc.attachmentMpuEmptyVerifiedAt !== undefined) return null;
 	}
 	if (doc.attachmentLinked !== undefined && doc.attachmentLinked !== true) return null;

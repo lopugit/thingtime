@@ -16,7 +16,7 @@ export type PasswordFileTransport = {
 /** One authority lease spans each entire transfer, including consumption of a
  * download stream. Signed object requests never carry account credentials. */
 export function accountPasswordFileTransport(scope: Extract<WorkspaceScope, { kind: 'account' }>, lease: WorkspaceLease): PasswordFileTransport {
-  const request = accountPasswordRequest(scope, lease, '1.1.0');
+  const request = accountPasswordRequest(scope, lease, '1.2.0');
   async function authorized<T>(signal: AbortSignal, run: (signal: AbortSignal, check: () => void) => Promise<T>): Promise<T> {
     lease.assertCurrent(); const remote = accountRemoteWorkspaceLease(scope); remote.assertCurrent();
     const controller = new AbortController();

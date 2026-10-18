@@ -8,7 +8,7 @@ import { requireThingtimeCapability } from '../api/utils/capabilities/requireCap
 const fileId = 'att_' + 'a'.repeat(64), entryId = '31793278-3c8a-4ec5-aee6-730e33484c98';
 const signal = () => new AbortController().signal;
 type Reply = (url: string, init: RequestInit, body?: any) => Promise<Response>;
-async function fixture(run: (f: { ownerId: string; bind: (confirmed?: boolean) => ReturnType<typeof accountPasswordFileTransport>; calls: { url: string; init: RequestInit; body?: any }[]; respond: (fn: Reply) => void }) => Promise<void>, version = '1.1.0') {
+async function fixture(run: (f: { ownerId: string; bind: (confirmed?: boolean) => ReturnType<typeof accountPasswordFileTransport>; calls: { url: string; init: RequestInit; body?: any }[]; respond: (fn: Reply) => void }) => Promise<void>, version = '1.2.0') {
   const previous = { window: globalThis.window, fetch: globalThis.fetch };
   const scope = { kind: 'account' as const, ownerId: 'owner', origin: `https://files-${crypto.randomUUID()}.example`, dataPlane: 'home' };
   const calls: { url: string; init: RequestInit; body?: any }[] = [];
@@ -36,7 +36,7 @@ test('files require confirmed actor/plane authority and the file-capable API con
     assert.equal(f.calls[0].init.credentials, 'same-origin'); assert.equal(f.calls[0].body.expectedOwnerId, 'owner');
     bindLocalWorkspace(true, rootIdentity.read().generation); await assert.rejects(transport.page([entryId], undefined, signal())); assert.equal(f.calls.length, 1);
   });
-  await fixture(async f => { await assert.rejects(f.bind().page([entryId], undefined, signal())); assert.equal(f.calls.length, 0); }, '1.0.0');
+  await fixture(async f => { await assert.rejects(f.bind().page([entryId], undefined, signal())); assert.equal(f.calls.length, 0); }, '1.1.0');
 });
 
 test('uploads record server identity before ciphertext, omit object credentials and preserve deferred deletion', async () => {

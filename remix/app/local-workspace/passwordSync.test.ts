@@ -4,6 +4,8 @@ import { IDBFactory, IDBKeyRange } from 'fake-indexeddb';
 import { LocalPasswordVault, type PasswordVaultTransport, type PasswordVaultRemoteEntry } from './passwordVault';
 import { WorkspaceDatabase, WORKSPACE_LIMITS, type WorkspaceLease } from './storage';
 import { emptyPasswordEntry } from '../passwords/model';
+import { newPasswordFile } from '../passwords/fileCrypto';
+import { PASSWORD_FILES, PASSWORD_FILE_COMMANDS, type StoredFile, type PasswordFileCommand } from './passwordFiles';
 const scope = { kind: 'account', ownerId: 'owner', origin: 'https://account.example', dataPlane: 'home' } as const;
 const phrase = 'A separate encrypted fixture passphrase';
 const entry = (title = 'Device credential') => ({ ...emptyPasswordEntry(), title, fields: [{ id: 'password', label: 'Password', type: 'password' as const, value: ' synthetic private credential ' }] });
@@ -163,3 +165,143 @@ for (const kind of ['anonymous', 'account'] as const) {
   } finally { context.mock.timers.reset(); vault.dispose(); await db.close(); }
  });
 }
+
+const readBytes = async (stream: ReadableStream<Uint8Array>) => new Uint8Array(await new Response(stream).arrayBuffer());
+const fileRows = (db: WorkspaceDatabase) => db.transaction(scope, 'readonly', gate(), tx => tx.list<StoredFile>(PASSWORD_FILES));
+const fileCommands = (db: WorkspaceDatabase) => db.transaction(scope, 'readonly', gate(), tx => tx.list<PasswordFileCommand>(PASSWORD_FILE_COMMANDS));
+const refuseWrites = (transport: PasswordVaultTransport): PasswordVaultTransport => ({ ...transport, async write() { throw Object.assign(Error('conflict'), { status: 409 }); } });
+
+test('conflict copies re-encrypt files and cyclic source archives with independent identities', async () => {
+ const f = await fixture(), r = remote();
+ try {
+  const one = command(), archive = command();
+  one.entry = { ...one.entry, importArchiveId: archive.id } as typeof one.entry;
+  archive.entry = { ...archive.entry, importArchiveId: one.id } as typeof archive.entry;
+  await f.vault.save(one); await f.vault.save(archive); await f.vault.synchronize(r.transport);
+  const storage = f.vault.fileStorage(), bytes = new Uint8Array([0, 255, 12]);
+  const attachment = newPasswordFile('Private attachment.bin', bytes.length);
+  const source = { ...newPasswordFile('Source archive member', bytes.length), role: 'source' as const, archivePath: 'files/original.bin' };
+  await storage.uploadFile(one.id, attachment, () => new Blob([bytes]).stream());
+  await storage.uploadFile(archive.id, source, () => new Blob([bytes]).stream());
+  await f.vault.save({ ...command(one.id, 1, 'Device version'), entry: { ...one.entry, title: 'Device version' } });
+  await r.transport.write({ ...command(one.id, 1, 'Account version'), operation: 'save' }, new AbortController().signal);
+  await f.vault.synchronize(r.transport);
+  const result = await f.vault.resolveRefused(one.id, 2, 'copy', r.transport), copyId = result.copiedId!;
+  const copy = await f.vault.read(copyId), copyArchiveId = copy.entry.importArchiveId!;
+  assert.equal(copy.entry.title, 'Device version'); assert.notEqual(copyArchiveId, archive.id);
+  assert.equal((await f.vault.read(copyArchiveId)).entry.importArchiveId, copyId);
+  assert.equal((await f.vault.read(one.id)).entry.title, 'Account version');
+  assert.equal((await f.vault.read(archive.id)).entry.importArchiveId, one.id, 'original source is unchanged');
+  const files = await storage.listFiles([copyId, copyArchiveId]); assert.equal(files.length, 2);
+  for (const file of files) {
+   const original = file.entryId === copyId ? attachment : source;
+   assert.notEqual(file.id, original.token); assert.notEqual(file.metadata.key, original.key); assert.notEqual(file.metadata.nonce, original.nonce);
+   assert.equal(file.metadata.name, original.name); assert.equal(file.metadata.role, original.role); assert.equal(file.metadata.archivePath, original.archivePath);
+   assert.deepEqual(await readBytes((await storage.openFile(file.entryId!, file.id)).stream), bytes);
+  }
+  assert.deepEqual(await storage.listFiles([one.id]), []); assert.equal((await storage.listFiles([archive.id])).length, 1);
+  assert.equal((await fileCommands(f.db)).length, 3, 'two copies plus untouched source file');
+  assert.deepEqual(await f.db.transaction(scope, 'readonly', gate(), tx => tx.list('password-vault-file-staging')), []);
+  await f.vault.synchronize(r.transport); assert.equal(r.values.size, 4);
+ } finally { await f.close(); }
+});
+
+test('vanished remote parents preserve pending file bytes for review and require an explicit cleanup acknowledgement', async () => {
+ const f = await fixture(), r = remote();
+ try {
+  const one = command(); await f.vault.save(one); await f.vault.synchronize(r.transport);
+  const storage = f.vault.fileStorage(), bytes = new Uint8Array([8, 9]), metadata = newPasswordFile('Offline file', 2);
+  await storage.uploadFile(one.id, metadata, () => new Blob([bytes]).stream());
+  // A failed response can hide a successful start; retain its cleanup identity.
+  await f.db.transaction(scope, 'readwrite', gate(), async tx => {
+   const id = `${one.id}:${metadata.token}`, item = (await tx.get<PasswordFileCommand>(PASSWORD_FILE_COMMANDS, id))!;
+   await tx.put(PASSWORD_FILE_COMMANDS, id, { ...item, attempts: 1, state: 'frozen' });
+  });
+  r.values.delete(one.id); await f.vault.reconcile(r.transport);
+  assert.equal((await f.vault.syncStatus())[0].status, 404);
+  assert.deepEqual(await readBytes((await storage.openFile(one.id, metadata.token)).stream), bytes);
+  const result = await f.vault.resolveRefused(one.id, 1, 'copy', r.transport);
+  assert.ok(result.copiedId); await assert.rejects(f.vault.read(one.id), /not found/);
+  assert.equal((await fileCommands(f.db)).filter(row => row.value.entryId === one.id).length, 1);
+  let fileCalls = 0;
+  const files = { async page() { return { files: [], nextCursor: null }; }, async download() { throw Error('unexpected'); },
+   async upload() { fileCalls++; throw Error('unexpected'); }, async locate() { fileCalls++; throw Error('unexpected'); }, async remove() { fileCalls++; throw Error('unexpected'); } };
+  await f.vault.synchronizeFiles(files); assert.equal(fileCalls, 0, 'missing parent is not a cleanup acknowledgement');
+  await f.vault.synchronize(r.transport);
+  assert.ok(r.calls.some(call => call.id === one.id && call.operation === 'delete'));
+  // Only inspect the old child cleanup here; the independent copy can now upload.
+  await f.vault.synchronizeFiles(files);
+  assert.equal((await fileCommands(f.db)).filter(row => row.value.entryId === one.id).length, 0);
+  const copiedFile = (await storage.listFiles([result.copiedId!]))[0];
+  assert.deepEqual(await readBytes((await storage.openFile(result.copiedId!, copiedFile.id)).stream), bytes);
+ } finally { await f.close(); }
+});
+
+for (const choice of ['account', 'copy'] as const) test(`${choice} review refuses concurrent file edits without losing bytes`, async () => {
+ const f = await fixture(), r = remote(), started = deferred(), release = deferred();
+ try {
+  const one = command(); await f.vault.save(one); await f.vault.synchronize(refuseWrites(r.transport));
+  const resolving = f.vault.resolveRefused(one.id, 1, choice, { ...r.transport, async read() { started.resolve(); await release.promise; return null; } });
+  await started.promise;
+  const metadata = newPasswordFile('Newer file', 1), storage = f.vault.fileStorage();
+  await storage.uploadFile(one.id, metadata, () => new Blob([new Uint8Array([42])]).stream());
+  release.resolve(); await assert.rejects(resolving, /attachments changed/);
+  assert.equal((await f.vault.page()).entries.length, 1); assert.equal((await f.vault.syncStatus())[0].state, 'refused');
+  assert.deepEqual(await readBytes((await storage.openFile(one.id, metadata.token)).stream), new Uint8Array([42]));
+  assert.deepEqual(await f.db.transaction(scope, 'readonly', gate(), tx => tx.list('password-vault-file-staging')), []);
+ } finally { release.resolve(); await f.close(); }
+});
+
+test('damaged source bytes abort a copy without replacing the conflict or publishing partial entries', async () => {
+ const f = await fixture(), r = remote();
+ try {
+  const one = command(); await f.vault.save(one);
+  const metadata = newPasswordFile('Damaged file', 1), storage = f.vault.fileStorage();
+  await storage.uploadFile(one.id, metadata, () => new Blob([new Uint8Array([7])]).stream());
+  await storage.uploadFile(one.id, newPasswordFile('Other file', 1), () => new Blob([new Uint8Array([8])]).stream());
+  await f.vault.synchronize(refuseWrites(r.transport));
+  const rows = await fileRows(f.db), row = rows.at(-1)!.value; assert.ok('generation' in row);
+  const generation = row.generation;
+  await f.db.transaction(scope, 'readwrite', gate(), tx => tx.deleteBytes(`password-file:${generation}:0`));
+  const before = await stored(f.db);
+  await assert.rejects(f.vault.resolveRefused(one.id, 1, 'copy', r.transport), /data is missing/);
+  assert.deepEqual(await stored(f.db), before); assert.deepEqual(await fileRows(f.db), rows);
+  assert.equal((await f.vault.page()).entries.length, 1);
+  assert.deepEqual(await f.db.transaction(scope, 'readonly', gate(), tx => tx.list('password-vault-file-staging')), []);
+ } finally { await f.close(); }
+});
+
+test('unavailable source archive refuses a partial conflict copy', async () => {
+ const f = await fixture(), r = remote();
+ try {
+  const one = command(); await f.vault.save({ ...one, entry: { ...one.entry, importArchiveId: crypto.randomUUID() } });
+  await f.vault.synchronize(refuseWrites(r.transport)); const before = await stored(f.db);
+  await assert.rejects(f.vault.resolveRefused(one.id, 1, 'copy', r.transport), /source archive is unavailable/);
+  assert.deepEqual(await stored(f.db), before); assert.equal((await f.vault.page()).entries.length, 1);
+ } finally { await f.close(); }
+});
+
+test('account resolution discards an undispatched deletion but preserves an uncertain file cleanup', async () => {
+ const f = await fixture(), r = remote();
+ try {
+  const one = command(); await f.vault.save(one); await f.vault.synchronize(r.transport);
+  const storage = f.vault.fileStorage(), pending = newPasswordFile('Uncertain upload', 1), clean = newPasswordFile('Account file', 1);
+  for (const metadata of [pending, clean]) await storage.uploadFile(one.id, metadata, () => new Blob([new Uint8Array([3])]).stream());
+  const pendingId = `${one.id}:${pending.token}`, cleanId = `${one.id}:${clean.token}`;
+  await f.db.transaction(scope, 'readwrite', gate(), async tx => {
+   const item = (await tx.get<PasswordFileCommand>(PASSWORD_FILE_COMMANDS, pendingId))!;
+   await tx.put(PASSWORD_FILE_COMMANDS, pendingId, { ...item, attempts: 1, state: 'frozen' });
+   const file = (await tx.get<StoredFile>(PASSWORD_FILES, cleanId))!;
+   await tx.put(PASSWORD_FILES, cleanId, { ...file, remoteId: `att_${'a'.repeat(64)}` }); await tx.delete(PASSWORD_FILE_COMMANDS, cleanId);
+  });
+  await storage.removeFile(one.id, clean.token);
+  await f.vault.save(command(one.id, 1, 'Refused edit')); await f.vault.synchronize(refuseWrites(r.transport));
+  const before = (await fileCommands(f.db)).find(row => row.id === pendingId)!.value;
+  await f.vault.resolveRefused(one.id, 2, 'account', r.transport);
+  const commands = await fileCommands(f.db); assert.equal(commands.length, 1);
+  assert.equal(commands[0].id, pendingId); assert.equal(commands[0].value.operation, 'delete');
+  assert.deepEqual(commands[0].value.encryptedValue, before.encryptedValue); assert.equal(commands[0].value.attempts, 1);
+  assert.equal((await fileRows(f.db)).some(row => row.id === cleanId), false, 'next complete account pull can retain the discarded deletion');
+  await assert.rejects(storage.openFile(one.id, pending.token), /not found/);
+ } finally { await f.close(); }
+});

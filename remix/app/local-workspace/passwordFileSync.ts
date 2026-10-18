@@ -34,6 +34,7 @@ export async function synchronizePasswordFiles(host: PasswordFileHost, transport
           if (pendingParents.has(value.entryId)) continue;
           if (parent!.deleted) {
             // Canonical entry deletion already acknowledged child cleanup.
+            if (!parent!.remoteDeleted) continue;
             await tx.delete(PASSWORD_FILE_COMMANDS, value.id); cleaned++; continue;
           }
           if (attempted.has(value.id) || value.state === 'refused' || value.retryAt > now()) continue;
