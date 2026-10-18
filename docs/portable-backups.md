@@ -14,7 +14,7 @@ families and is not exposed as a whole-account backup feature.
 
 `api/utils/backups/accountInventory.ts` freezes owner metadata through one
 read-only MongoDB snapshot session. Census pages contain at most 128 IDs/kinds;
-ordinary/file families use one projected payload query per page. Timeline
+ordinary/file/attachment families use one projected payload query per page. Timeline
 records use eight-row batches to bound large payloads. Every query
 uses the first server-selected cluster timestamp. Ordinary Things use the
 canonical `thing-content` Timeline snapshot; files use `file-content` with their
@@ -26,9 +26,10 @@ existing canonical records before retaining them.
 The census covers every owned row in the home Things collection. A managed kind
 without an approved exporter, missing payload, expired database snapshot,
 oversized metadata, changed account or revoked access refuses the plan. It never
-skips an unsupported row and then reports complete coverage. Attachment, account and other non-Timeline protected families still need
-dedicated adapters;
-ordinary real accounts therefore cannot yet complete this producer. Settings in
+skips an unsupported row and then reports complete coverage. Ready owned
+attachments and all seven Timeline families have dedicated exporters. Account
+identity and other managed families still need coverage; ordinary real accounts
+therefore cannot yet complete this producer. Settings in
 other collections and device-local data also need separate coverage contracts.
 
 Successful enumeration seals the durable metadata plan before live file byte
@@ -71,21 +72,60 @@ resume against newer database content under an old snapshot identity.
 `openBackupTimelineRecord` reads and validates the sealed offline copy, including
 its canonical payload digest and owner/Thing identity. Archived receipts are
 historical data, not authority to replay server mutations. This is not yet an
-account restore writer. File-version references inside history do not themselves
-copy retained attachment bytes; historical attachment retention and complete
-reference closure still need coverage before whole-account recovery is offered.
+account restore writer. Canonical `file-content` references now resolve against
+ready attachment records at the same database timestamp, including before-images
+and retained-conflict effects. Other adapters and their relationships still need
+complete closure checks before whole-account recovery is offered.
 
-Validation: 42 backup tests include canonical history reconstruction, large
-Unicode snapshot parts, source and first-vault loss, legacy events, version-name
-tombstones, corruption, interrupted persistence and authorization refusal.
-The disposable `scripts/account-snapshot.integration.mts` replica proof retains
-300 ordinary Things and 34 Timeline records (3,208,814 history bytes) at one server
-timestamp despite concurrent majority updates/deletions/inserts. All history is
-read back from a second private vault after removal of the source database and
-first vault. Empty inventories and missing-index refusal also pass. The owner/ID
-index examines 128 keys versus 2,560 with the global ID index for a 128-row page.
-This synthetic storage proof does not establish authenticated whole-account
-export, restore, historical attachment-byte coverage or large transfer throughput.
+### Attachment bytes and offline file-version recovery
+
+`attachmentRecords.ts` exports ready owned attachments using the existing
+canonical attachment crystal and `thing-content` metadata. Purpose, target,
+folder, order and pending/NSFW presentation state remain descriptive. Stored
+objects require an already-finalized immutable version and a verified canonical
+multipart fingerprint from the configured private attachment store. Object keys,
+provider VersionIds, upload IDs, tokens and signed URLs never enter the vault.
+Linked media retains its external URL with no stored byte claim; no external
+URL is fetched. Unsupported lifecycle states, expired unbound drafts, blocked
+media and app/sandbox-managed objects refuse the inventory.
+
+Each bounded census page checks current files and both sides of canonical file
+history against owner-filtered attachment batches at the same Mongo timestamp.
+Missing/foreign attachments, changed target/version/size or a mismatched
+fingerprint refuse the entire plan. Eight concurrent HEAD requests and an
+at-most-128-entry immutable cache bound storage load and avoid repeating recent
+checks; there is no per-reference Mongo query.
+The snapshot window must now also cover these storage HEADs.
+
+An account file is metadata-only in the manifest; its separately inventoried
+attachment owns the byte ranges. `resumeAccountBackup` uses the existing
+expected-owner, home-plane and exact-version attachment endpoint to copy each
+attachment once. It validates ETag, range framing and the full canonical
+fingerprint before sealing. It never re-enumerates newer source metadata.
+`openAccountBackupFile` and `openAccountBackupFileVersion` resolve current files
+or a Timeline event's before/after image to verified offline attachment ranges.
+A consumer must finish the iterator before publishing restored output. These
+readers do not bypass live authorization or authorize replay of archived receipts.
+The selected-folder worker/CLI keeps its existing inline file-byte format;
+account-level restore/UI still needs a reviewed writer.
+
+Validation: 57 backup tests and 18 attachment-core tests pass, including ready
+attachment purposes, linked media, private-field exclusion, large Unicode
+history, no repeated attachment download, interrupted capture, exact offline
+version reads and missing/foreign/changed byte refusal. The real disposable
+replica retains 351 records (47 Timeline records and 11,603,089 payload bytes)
+at one timestamp despite concurrent edits, insertions and deletion of a referenced
+attachment. Current, earlier and retained-conflict bytes read identically from
+a second vault after deleting the source database, source files and first vault.
+The owner/ID index still examines 128 keys versus 2,560 for a 128-row page.
+
+The real authenticated foreground fixture also captures two authorized file
+versions after live Trash through `resumeAccountBackup`, copies the sealed vault,
+removes the first vault and compares both full byte hashes. Those explicitly
+constructed descriptors test the API byte reader; they do not prove whole-account
+inventory admission or permanent cloud object deletion. Source-file deletion is
+verified separately in the disposable replica/filesystem proof. Neither fixture
+establishes complete account restore or measured 100 GB–100 TB throughput.
 Run instructions are in the root README.
 
 ## Format and invariants

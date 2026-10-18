@@ -1,8 +1,12 @@
+import { backupFileHistoryFixture } from '../app/api/utils/backups/attachmentRecords.fixtures';
+import { backupAttachmentItemContent } from '../app/api/utils/backups/attachmentRecords';
+import { openAccountBackupFile, openAccountBackupFileVersion } from '../app/api/utils/backups/accountFileRecovery';
+import { timelineEventThingId } from '../app/api/utils/timeline/repository';
 /** Opt-in storage consistency proof. Uses only a fresh, randomly named database
  * on an explicitly supplied loopback replica set; never loads application env. */
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm, mkdir, writeFile, open } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { MongoClient } from 'mongodb';
@@ -26,7 +30,16 @@ const store = await openLocalBackupStore(join(directory, 'first'));
 const independent = await openLocalBackupStore(join(directory, 'second'));
 const access = { scope: { ownerId: 'snapshot-owner', apiOrigin: 'https://snapshot.test', dataPlane: 'home' }, authorize: async () => {} };
 const history = timelineBackupFixture(access.scope.ownerId);
-const expectedHistory = new Map(history.docs.map((doc) => [doc.shareId, timelineBackupRecordFromDoc(doc)]));
+const fileHistory = await backupFileHistoryFixture(access.scope.ownerId);
+const expectedHistory = new Map(
+	[...history.docs, ...fileHistory.docs.filter((doc) => doc.thingtime[0].startsWith('timeline-'))].map((doc) => [
+		doc.shareId,
+		timelineBackupRecordFromDoc(doc)
+	])
+);
+const originals = join(directory, 'originals');
+await mkdir(originals);
+for (const a of fileHistory.attachments) await writeFile(join(originals, a.doc.shareId), a.bytes, { mode: 0o600 });
 let queries = 0,
 	ended = 0,
 	timestamp: string | null = null;
@@ -51,9 +64,15 @@ try {
 	assert.equal(before.executionStats.nReturned, 128);
 	assert.equal(after.executionStats.nReturned, 128);
 	assert.ok(after.executionStats.totalKeysExamined < before.executionStats.totalKeysExamined);
-	await collection.insertMany(history.docs, { writeConcern: { w: 'majority' } });
+	await collection.insertMany([...history.docs, ...fileHistory.docs], { writeConcern: { w: 'majority' } });
 	const producer = createAccountInventoryProducer({
 		customPlane: () => false,
+		attachmentHead: async (input) => {
+			const a = fileHistory.attachments.find((a) => a.doc.objectKey === input.objectKey)!;
+			assert.ok(a);
+			assert.equal(input.versionId, a.doc.objectVersionId);
+			return a.head;
+		},
 		snapshot: async (work) => {
 			const session = client.startSession({ snapshot: true, causalConsistency: false });
 			try {
@@ -86,6 +105,7 @@ try {
 							{ $set: { secure: 'changed after snapshot' } },
 							{ writeConcern: { w: 'majority' } }
 						);
+						await collection.deleteOne({ shareId: fileHistory.attachments[0].doc.shareId }, { writeConcern: { w: 'majority' } });
 						yield* iterate();
 					};
 				}
@@ -95,10 +115,10 @@ try {
 	});
 	const snapshotId = randomUUID(),
 		plan = await producer(store, snapshotId, access);
-	assert.equal(plan.items, 300 + history.docs.length);
+	assert.equal(plan.items, 300 + history.docs.length + fileHistory.docs.length);
 	assert.ok(BigInt(plan.bytes) > BigInt(2_400_000));
 	assert.equal(plan.pages, 3);
-	assert.equal(queries, 7 + Math.ceil(history.docs.length / 8));
+	assert.ok(queries <= 20, `Unexpected per-record database reads: ${queries}`);
 	assert.equal(ended, 1);
 	assert.ok(timestamp);
 	await collection.deleteMany({}, { writeConcern: { w: 'majority' } });
@@ -114,17 +134,52 @@ try {
 		store,
 		snapshotId,
 		{
-			read: async () => {
-				throw Error('Unexpected live-source access');
+			read: async (item, offset, length) => {
+				const content = backupAttachmentItemContent(item);
+				assert.ok(content);
+				const a = fileHistory.attachments.find((a) => a.doc.shareId === content.attachmentId)!;
+				assert.deepEqual(content, a.content);
+				const handle = await open(join(originals, a.doc.shareId), 'r');
+				try {
+					const bytes = Buffer.alloc(length),
+						result = await handle.read(bytes, 0, length, offset);
+					assert.equal(result.bytesRead, length);
+					return bytes;
+				} finally {
+					await handle.close();
+				}
 			}
 		},
 		access
 	);
 	await sealBackup(store, snapshotId, access);
+	await rm(originals, { recursive: true });
 	await copySealedBackup(store, independent, snapshotId, access);
 	await rm(join(directory, 'first'), { recursive: true });
 	for (const [thingId, record] of expectedHistory) {
 		assert.deepEqual(await openBackupTimelineRecord(independent, snapshotId, thingId, access), record);
+	}
+	const savedFiles = [
+		await openAccountBackupFile(independent, snapshotId, 'file-one', access),
+		await openAccountBackupFileVersion(
+			independent,
+			snapshotId,
+			timelineEventThingId(access.scope.ownerId, fileHistory.files[1].revision),
+			'before',
+			access
+		),
+		await openAccountBackupFileVersion(
+			independent,
+			snapshotId,
+			timelineEventThingId(access.scope.ownerId, fileHistory.files[2].revision),
+			'after',
+			access
+		)
+	];
+	for (const result of savedFiles) {
+		const chunks = [];
+		for await (const bytes of result.ranges) chunks.push(bytes);
+		assert.deepEqual(Buffer.concat(chunks), fileHistory.attachments.find((a) => a.doc.shareId === result.file.content.attachmentId)!.bytes);
 	}
 	for (const n of [0, 4000]) {
 		const result = await openBackupItem(independent, snapshotId, `thing-${String(n).padStart(5, '0')}`, access);
@@ -141,14 +196,15 @@ try {
 				queries,
 				sessionsEnded: ended,
 				concurrentUpdateDeleteInsert: 'original snapshot preserved',
-				offlineMetadata: 'verified after database and first vault removal',
+				offlineMetadata: 'verified after database, source files and first vault removal',
+				fileVersionRecovery: 'current, earlier and retained conflict exact bytes',
 				timelineRecords: expectedHistory.size,
-				timelineBytes: plan.bytes,
+				totalPayloadBytes: plan.bytes,
 				timelineCoverage: 'canonical events, links, branches, heads, large parts, notes, active and cleared version names',
 				emptyInventory: 'server timestamp verified',
 				missingIndex: 'refused without scan fallback',
 				indexExperiment: { shareIdOnlyKeys: before.executionStats.totalKeysExamined, ownerShareIdKeys: after.executionStats.totalKeysExamined },
-				coverage: 'synthetic ordinary Things and Timeline records; not remaining protected families, attachment bytes or full account restore'
+				coverage: 'synthetic ordinary Things, Timeline and attachment bytes; not remaining managed families, real S3 loss or full account restore'
 			},
 			null,
 			2

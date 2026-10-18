@@ -1,7 +1,9 @@
+import { backupAttachmentItem } from '../app/api/utils/backups/attachmentRecords';
+import { thingContentSnapshot } from '../app/api/utils/timeline/recordMutation';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { authCookie } from '../app/api/utils/auth/authCookie';
-import { prepareCloudFolderBackup, resumeCloudFolderBackup } from '../app/api/utils/backups/cloudFolderBackup';
+import { prepareCloudFolderBackup, resumeCloudFolderBackup, resumeAccountBackup } from '../app/api/utils/backups/cloudFolderBackup';
 import { createCloudDownloadSource } from '../app/fileSync/cloudDownloadSource';
 // Opt-in real cloud/API acceptance. Native grants/conditions are explicit test
 // adapters; browser and native UI acceptance is tracked separately.
@@ -431,6 +433,71 @@ try {
 			await assert.rejects(cloud.read(0, pinned.content.size), /changed|unavailable/);
 			// The entire file tree was frozen before Trash, but these bytes were not
 			// captured yet: resume must fetch the retained version, not current state.
+			// Exercise the account capture reader against real authenticated ranges
+			// for a live and retained-conflict version, first copied AFTER Trash.
+			// These two explicit fixture descriptors are not a full account inventory.
+			const historyId = randomUUID(),
+				historyVault = await openLocalBackupStore(join(vaultRoot, 'history'));
+			const historyFiles = [liveBeforeCapture, captureReceipt];
+			const historyItems = historyFiles
+				.map((savedFile) =>
+					backupAttachmentItem(
+						{
+							id: savedFile.content.attachmentId,
+							ownerId: fixture.userId,
+							purpose: 'file',
+							profileSlot: null,
+							linked: false,
+							sortIndex: null,
+							moderation: null,
+							content: savedFile.content,
+							snapshot: thingContentSnapshot({
+								thingtime: ['attachment'],
+								targetId: savedFile.id,
+								crystal: { name: savedFile.name, size: savedFile.content.size, contentType: 'application/octet-stream', mediaKind: 'file' }
+							})!
+						},
+						0
+					)
+				)
+				.sort((a, b) => (a.thingId < b.thingId ? -1 : 1))
+				.map((item, ordinal) => ({ ...item, ordinal }));
+			async function* historyRows() {
+				yield* historyItems;
+			}
+			await prepareBackup(
+				historyVault,
+				{
+					format: BACKUP_FORMAT,
+					snapshotId: historyId,
+					scope: backupAccess.scope,
+					boundary: { kind: 'capture-interval', token: 'explicit-file-history-fixture', startedAt, completedAt },
+					coverage: {
+						selectionId: pinned.id,
+						description: 'Two explicit file versions; fixture-built attachment descriptors, not an account inventory'
+					}
+				},
+				historyRows(),
+				backupAccess
+			);
+			const historyResult = await resumeAccountBackup(historyVault, historyId, backupRuntime);
+			assert.equal(historyResult.seal.items, 2);
+			assert.equal(historyResult.copiedBytes, String(liveBytesBeforeCapture.length + bytes.length));
+			const historyCopy = await openLocalBackupStore(join(vaultRoot, 'history-copy'));
+			await copySealedBackup(historyVault, historyCopy, historyId, backupAccess);
+			await rm(join(vaultRoot, 'history'), { recursive: true });
+			for (const [savedFile, expected] of [
+				[liveBeforeCapture, liveBytesBeforeCapture],
+				[captureReceipt, bytes]
+			] as const) {
+				const saved = await openBackupItem(historyCopy, historyId, savedFile.content.attachmentId, backupAccess);
+				const hash = createHash('sha256');
+				for await (const chunk of saved.ranges) hash.update(chunk);
+				assert.equal(hash.digest('hex'), createHash('sha256').update(expected).digest('hex'));
+			}
+			console.log(
+				'PASS: account capture reader copies two exact authorized file versions after Trash; current and retained-conflict hashes survive independent-vault copy and first-vault removal. Explicit fixture descriptors, not whole-account API acceptance.'
+			);
 			const treeResult = await resumeCloudFolderBackup(tree, treeId, backupRuntime);
 			assert.equal(treeResult.seal.items, 3);
 			const treeFile = await openBackupItem(tree, treeId, pinned.id, backupAccess),

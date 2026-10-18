@@ -2396,3 +2396,37 @@ Remaining protected families, historical attachment bytes, complete graph
 coverage, account restore, scheduled independent cloud copies and the native
 backup/export UI remain open. This checkpoint does not demonstrate 100 GB–100 TB
 transfer, physical-media fulfillment or a production deployment.
+
+
+## Historical attachment bytes in account snapshots — 2026-10-18
+
+Ready owned attachments now enter the frozen account inventory with canonical
+content/placement and exact immutable storage fingerprints. Current files and
+both sides of file-content Timeline events must resolve to owned attachment
+records at the same Mongo timestamp. Checks use bounded batches, eight concurrent immutable HEAD requests and a
+bounded cache; a failed batch is drained before returning. Missing, foreign, blocked, unfinished or changed data refuses the
+plan. No storage keys, provider versions, upload IDs or credentials enter it.
+Linked media preserves its external reference without fetching third-party bytes.
+
+Account file descriptors reference separately captured attachment ranges, so the
+current file and historical references do not download the same attachment again.
+`resumeAccountBackup` uses existing authenticated exact-version APIs;
+`openAccountBackupFile` and `openAccountBackupFileVersion` recover verified offline
+current/before/after bytes without replaying server receipts. Selected-folder
+capture and restore retain their existing format.
+
+Validation: 57 backup and 18 attachment-core tests pass; targeted lint and diff
+checks pass. Raw TypeScript retains the identical 91 baseline diagnostics outside
+changed files. The disposable replica preserved 351 records / 47 Timeline records
+and 11,603,089 payload bytes despite concurrent source changes, including deletion
+of a referenced attachment. Current, earlier and retained-conflict versions were
+read from a second vault after deleting the database, original files and first
+vault. The authenticated foreground fixture also captured current/conflict bytes
+after live Trash and verified both hashes after independent copy/first-vault loss.
+That API test uses explicit fixture descriptors, not full-account admission or
+permanent cloud-object deletion. [Contract/setup](portable-backups.md#attachment-bytes-and-offline-file-version-recovery).
+
+Remaining managed families, non-file relationship closure, retention/pinning,
+account restore/jobs/UI, independent cloud replication, encryption, physical-media
+preparation and measured 100 GB–100 TB transfers remain open. No production
+promotion or new public endpoint is included.

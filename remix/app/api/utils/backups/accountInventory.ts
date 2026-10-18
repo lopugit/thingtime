@@ -1,3 +1,13 @@
+import {
+	backupAttachmentProjection,
+	backupAttachmentFromDoc,
+	backupAttachmentItem,
+	backupFileReferences,
+	verifyBackupFileReference,
+	validateBackupAttachmentDoc
+} from './attachmentRecords';
+import { getPrivateS3, type AttachmentObjectHead } from '../attachments/privateS3';
+import { type CloudFileContent } from '../../../fileSync/cloudFile';
 import { createHash } from 'node:crypto';
 import { isAccountTimelineKind, timelineBackupProjection, timelineBackupRecordFromDoc, retainTimelineBackupRecord } from './timelineRecords';
 import { getHomeThingsCollection, withHomeMongoSnapshot, THINGS_OWNER_IDENTITY_INDEX } from '../mongodb/collections';
@@ -34,7 +44,7 @@ const fileProjection = {
 	'crystal.content': 1
 };
 type Census = { shareId: string; ownerId: string; thingtime: string[] };
-type Family = 'content' | 'file' | 'timeline';
+type Family = 'content' | 'file' | 'timeline' | 'attachment';
 function family(doc: Census): Family {
 	if (
 		!Array.isArray(doc.thingtime) ||
@@ -44,12 +54,13 @@ function family(doc: Census): Family {
 	)
 		throw Error('Invalid account inventory kind');
 	if (doc.thingtime.length === 1 && doc.thingtime[0] === 'file') return 'file';
+	if (doc.thingtime.length === 1 && doc.thingtime[0] === 'attachment') return 'attachment';
 	if (doc.thingtime.length === 1 && isAccountTimelineKind(doc.thingtime[0])) return 'timeline';
 	if (isProtectedThingtime(doc.thingtime) || doc.thingtime.some((kind) => (MESSENGER_THINGTIME as readonly string[]).includes(kind)))
 		throw Error('Account snapshot needs a dedicated adapter for a managed Thing; no complete inventory was published');
 	return 'content';
 }
-function item(doc: any, ordinal: number, kind: Exclude<Family, 'timeline'>): BackupItem {
+function item(doc: any, ordinal: number, kind: Exclude<Family, 'timeline' | 'attachment'>): BackupItem {
 	if (kind === 'file') {
 		const file = parseCloudFile({
 			id: doc.shareId,
@@ -64,7 +75,8 @@ function item(doc: any, ordinal: number, kind: Exclude<Family, 'timeline'>): Bac
 			thingId: doc.shareId,
 			revision: file.revision,
 			snapshot: { adapter: CLOUD_FILE_ADAPTER, version: 1, value: file },
-			content: { size: file.content.size, fingerprint: file.content.fingerprint }
+			// The separately inventoried attachment owns these bytes.
+			content: null
 		});
 	}
 	const snapshot = thingContentSnapshot(doc)!;
@@ -83,9 +95,16 @@ export function createAccountInventoryProducer(
 		collection(): Promise<any>;
 		snapshot<T>(work: (session: any) => Promise<T>): Promise<T>;
 		customPlane(): boolean;
+		attachmentHead(input: { objectKey: string; versionId: string }): Promise<AttachmentObjectHead>;
 	}> = {}
 ) {
-	const deps = { collection: getHomeThingsCollection, snapshot: withHomeMongoSnapshot, customPlane: isCustomMongoEndpointActive, ...overrides };
+	const deps = {
+		collection: getHomeThingsCollection,
+		snapshot: withHomeMongoSnapshot,
+		customPlane: isCustomMongoEndpointActive,
+		attachmentHead: (input: { objectKey: string; versionId: string }) => getPrivateS3().headObject(input),
+		...overrides
+	};
 	return async (store: BackupObjectStore, snapshotId: string, access: BackupAccess) => {
 		const scope = { ...access.scope },
 			scopeKey = timelineScopeKey(scope);
@@ -102,6 +121,18 @@ export function createAccountInventoryProducer(
 		await check();
 		if (await store.read(`snapshots/${snapshotId}/header.json`, BACKUP_METADATA_BYTES))
 			throw Error('Account inventory already started; do not rebuild it from live data');
+		// Bounded immutable-object HEAD cache; no per-attachment database lookup.
+		const heads = new Map<string, AttachmentObjectHead>();
+		const readAttachmentHead = async (doc: any) => {
+			await check();
+			const key = JSON.stringify([doc.shareId, doc.objectKey, doc.objectVersionId, doc.objectSizeBytes]);
+			if (heads.has(key)) return heads.get(key)!;
+			const value = await deps.attachmentHead({ objectKey: doc.objectKey, versionId: doc.objectVersionId });
+			await check();
+			if (heads.size >= ACCOUNT_INVENTORY_PAGE_SIZE) heads.delete(heads.keys().next().value!);
+			heads.set(key, value);
+			return value;
+		};
 		const collection = await deps.collection();
 		return deps.snapshot(async (session) => {
 			if (!session?.snapshotEnabled || session.inTransaction()) throw Error('Account inventory requires a read-only snapshot session');
@@ -137,7 +168,15 @@ export function createAccountInventoryProducer(
 						// Bound projected metadata before retaining an entire page. The driver
 						// still owns its bounded wire batch; no oversized row reaches the plan.
 						if (timeline) timelineBackupRecordFromDoc(row);
-						else backupJson(row, BACKUP_METADATA_BYTES + 8192);
+						else {
+							const bounded = projection === backupAttachmentProjection ? { ...row } : row;
+							if (projection === backupAttachmentProjection) {
+								for (const key of ['attachmentExpiresAt', 'attachmentPartsIssuedAt', 'attachmentMpuEmptyVerifiedAt']) {
+									if (bounded[key] instanceof Date) bounded[key] = bounded[key].toISOString();
+								}
+							}
+							backupJson(bounded, BACKUP_METADATA_BYTES + 8192);
+						}
 						rows.push(row);
 					}
 				} finally {
@@ -160,6 +199,26 @@ export function createAccountInventoryProducer(
 				if (session.snapshotTime?.getHighBitsUnsigned() !== seconds || session.snapshotTime?.getLowBitsUnsigned() !== increment)
 					throw Error('Account snapshot boundary changed');
 			};
+			const readAttachments = async (docs: any[]) => {
+				// Validate the whole owner batch before any storage request. Eight
+				// concurrent immutable HEADs bound both provider load and snapshot time.
+				for (const doc of docs) validateBackupAttachmentDoc(doc, scope.ownerId, Date.parse(occurredAt));
+				const records = new Map<string, Awaited<ReturnType<typeof backupAttachmentFromDoc>>>();
+				for (let at = 0; at < docs.length; at += 8) {
+					const batch = docs.slice(at, at + 8);
+					const results = await Promise.allSettled(
+						batch.map((doc) => backupAttachmentFromDoc(doc, scope.ownerId, Date.parse(occurredAt), readAttachmentHead))
+					);
+					await check();
+					boundary();
+					for (let index = 0; index < results.length; index++) {
+						const result = results[index];
+						if (result.status === 'rejected') throw result.reason;
+						records.set(batch[index].shareId, result.value);
+					}
+				}
+				return records;
+			};
 			async function* rows() {
 				let last = '',
 					ordinal = 0;
@@ -175,6 +234,7 @@ export function createAccountInventoryProducer(
 						groups.set(kind, group);
 					}
 					const projected = new Map<string, BackupItem>();
+					const references: { fileId: string; content: CloudFileContent }[] = [];
 					const pageOrdinal = ordinal;
 					const ordinals = new Map(page.map((row, index) => [row.shareId, pageOrdinal + index]));
 					// Bounded family batches, never a payload query per Thing. Large
@@ -185,12 +245,19 @@ export function createAccountInventoryProducer(
 							const expected = group.slice(offset, offset + batchSize);
 							const found = await query(
 								{ shareId: { $in: expected.map((row) => row.shareId) } },
-								kind === 'timeline' ? timelineBackupProjection : kind === 'file' ? fileProjection : contentProjection,
+								kind === 'timeline'
+									? timelineBackupProjection
+									: kind === 'attachment'
+									? backupAttachmentProjection
+									: kind === 'file'
+									? fileProjection
+									: contentProjection,
 								batchSize,
 								kind === 'timeline'
 							);
 							boundary();
 							if (found.length !== expected.length) throw Error('Account snapshot content is incomplete');
+							const attachments = kind === 'attachment' ? await readAttachments(found) : null;
 							for (let index = 0; index < found.length; index++) {
 								const doc = found[index],
 									head = expected[index];
@@ -204,10 +271,43 @@ export function createAccountInventoryProducer(
 								const entry =
 									kind === 'timeline'
 										? await retainTimelineBackupRecord(store, snapshotId, ordinals.get(doc.shareId)!, doc, { ...access, scope, authorize: check })
+										: kind === 'attachment'
+										? backupAttachmentItem(attachments!.get(doc.shareId)!, 0)
 										: item(doc, 0, kind);
+								if (kind === 'file')
+									references.push(...backupFileReferences(entry.snapshot, doc.shareId).map((content) => ({ fileId: doc.shareId, content })));
+								if (kind === 'timeline') {
+									const record = timelineBackupRecordFromDoc(doc);
+									if (record.kind === 'timeline-event') {
+										const event = (record.value as any).event;
+										for (const snapshot of [event.before, event.after])
+											references.push(...backupFileReferences(snapshot, event.thingId).map((content) => ({ fileId: event.thingId, content })));
+									}
+								}
 								boundary();
 								projected.set(doc.shareId, entry);
 							}
+						}
+					}
+					// Resolve file/history byte dependencies in bounded owner-indexed
+					// queries at this SAME database timestamp. Never silently retain a
+					// pointer to missing, foreign or changed historical file bytes.
+					const ids = [...new Set(references.map((ref) => ref.content.attachmentId))];
+					for (let offset = 0; offset < ids.length; offset += ACCOUNT_INVENTORY_PAGE_SIZE) {
+						const batch = ids.slice(offset, offset + ACCOUNT_INVENTORY_PAGE_SIZE);
+						const found = await query({ shareId: { $in: batch } }, backupAttachmentProjection);
+						boundary();
+						if (
+							found.length !== batch.length ||
+							new Set(found.map((doc) => doc.shareId)).size !== batch.length ||
+							found.some((doc) => !batch.includes(doc.shareId))
+						)
+							throw Error('Historical file attachment is missing or changed');
+						const attachments = await readAttachments(found);
+						for (const doc of found) {
+							const attachment = attachments.get(doc.shareId)!;
+							for (const ref of references.filter((ref) => ref.content.attachmentId === doc.shareId))
+								verifyBackupFileReference(ref.content, ref.fileId, attachment);
 						}
 					}
 					for (const row of page) {

@@ -5123,13 +5123,25 @@ Do not increase a production history window blindly: measure enumeration time
 and the database storage cost first. No new credentials or app environment
 variables are needed. This producer is internal and refuses unsupported managed
 families; it does not yet supply a whole-account backup API. Ordinary Things,
-file references and canonical Timeline record families are covered. Timeline
-payloads are frozen into private chunk storage during the database snapshot,
+file references, ready owned attachments and canonical Timeline record families
+are covered. Canonical file-history references must match attachment records at
+the same database timestamp. Timeline payloads are frozen into private chunk storage during the database snapshot,
 including records too large for manifest metadata. Keep that destination local
 and durable enough to finish within the database history window; failure does
 not permit switching timestamps. Archived receipts are read-only history, not
 server restore authority. The consistency check below also deletes its source
-and first vault, then verifies all history in an independent copy.
+database, original files and first vault, then verifies history and current/earlier/conflict
+file bytes in an independent copy.
+
+The producer now also needs the existing [private attachment storage](#private-s3-media-and-attachments)
+configuration (or the [local stand-in](#local-attachment-storage-laptop-stand-in-for-the-private-bucket))
+in its trusted worker process. It performs exact-version HEADs, never searches
+for credentials or assumes a latest object version. No new bucket permissions,
+secret names or public endpoint are added. `resumeAccountBackup` takes an
+explicit authenticated runtime and reads existing 2 MiB content ranges; live
+revocation, missing objects or expired retention prevent completion. Root
+storage keys and credentials never enter snapshot metadata. Independent cloud
+retention/pinning and complete account job admission remain unfinished.
 
 For its isolated consistency check, start a disposable local MongoDB 5+ replica
 set and explicitly provide its loopback port and replica name. This script does

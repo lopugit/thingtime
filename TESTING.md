@@ -11235,3 +11235,32 @@ protection values as strings, as specified by
 - [ ] Complete remaining protected-family/settings/device exporters, historical
   attachment-byte closure, authorized restore writers and full product backup
   jobs/UI. Archived Timeline receipts never authorize replay on their own.
+
+
+### Historical attachment bytes in account snapshots — 2026-10-18
+
+- [x] Snapshot ready attachments with canonical metadata and verified immutable
+  byte versions. Check every current/before/after/conflict file reference through
+  bounded owner-filtered batches at the same Mongo timestamp. Missing, foreign,
+  changed-target/version/fingerprint, blocked or unfinished data must refuse the
+  full plan; no late reference silently disappears. Verify at most eight
+  concurrent HEAD requests, bounded caching, and draining a failed batch before
+  returning without starting another batch.
+- [x] Preserve all existing attachment purposes and linked URL metadata without
+  copying private object keys, provider versions, upload state or credentials.
+  Linked media never fetches an external URL or claims stored bytes.
+- [x] Capture each attachment once; current/history references reuse its ranges.
+  Lose an accepted capture reply, remove source metadata, resume, independently
+  copy, then remove source bytes and the first vault. Read current, earlier and
+  retained-conflict versions through the canonical offline recovery readers and
+  compare bytes. Wrong live version and revoked access never seal.
+- [x] Real disposable Mongo proof: 351 rows / 47 Timeline records; concurrent
+  writes include deleting a referenced attachment after the census. After source
+  database/files and first vault removal, all three file versions recover exactly.
+- [x] Real API foreground fixture with `--portable-backup --large-download`:
+  account byte reader captures current and conflict attachments after live Trash,
+  then exact hashes survive independent copy and first-vault removal. Explicit
+  fixture descriptors are not whole-account API or permanent-S3-loss proof.
+- [ ] Complete remaining managed family/relationship coverage, storage retention
+  leases, authorized account restore/jobs/UI, encryption and independent cloud
+  copies. Historical attachment support alone is not complete whole-data backup.

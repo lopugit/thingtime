@@ -1,3 +1,4 @@
+import { BACKUP_ATTACHMENT_ADAPTER, backupAttachmentItemContent, parseBackupAttachment } from './attachmentRecords';
 import { createHash } from 'node:crypto';
 import { timelineScopeKey, type TimelineScope } from '../../../timeline/contract';
 import { parseCloudFolder } from '../../../fileSync/cloudFolder';
@@ -163,7 +164,7 @@ export async function prepareCloudFolderBackup(store: BackupObjectStore, snapsho
 /** Resume the original plan, not a new live inventory. Attachment range requests
  * reauthorize the owner and pin immutable object versions; edits/Trash do not
  * substitute current content. Every retained byte is verified before sealing. */
-export async function resumeCloudFolderBackup(store: BackupObjectStore, snapshotId: string, runtime: CloudBackupRuntime) {
+async function resumeCloudBackup(store: BackupObjectStore, snapshotId: string, runtime: CloudBackupRuntime, attachments: boolean) {
 	const c = cloud(runtime);
 	await c.authenticate();
 	const result = await captureBackup(
@@ -171,23 +172,32 @@ export async function resumeCloudFolderBackup(store: BackupObjectStore, snapshot
 		snapshotId,
 		{
 			read: async (item, offset, length, signal) => {
-				if (item.snapshot.adapter !== CLOUD_FILE_ADAPTER || item.snapshot.version !== 1 || !item.content)
-					throw Error('Unsupported cloud backup item');
-				const file = parseCloudFile(item.snapshot.value);
-				if (
-					file.id !== item.thingId ||
-					file.revision !== item.revision ||
-					file.content.size !== item.content.size ||
-					!equalContentFingerprints(file.content.fingerprint, item.content.fingerprint)
-				)
-					throw Error('Cloud backup item changed');
+				let content;
+				if (attachments && item.snapshot.adapter === BACKUP_ATTACHMENT_ADAPTER) {
+					const record = parseBackupAttachment(item.snapshot.value);
+					if (record.ownerId !== c.scope.ownerId) throw Error('Backup attachment owner changed');
+					content = backupAttachmentItemContent(item);
+					if (!content) throw Error('Linked attachment has no stored bytes');
+				} else {
+					if (item.snapshot.adapter !== CLOUD_FILE_ADAPTER || item.snapshot.version !== 1 || !item.content)
+						throw Error('Unsupported cloud backup item');
+					const file = parseCloudFile(item.snapshot.value);
+					if (
+						file.id !== item.thingId ||
+						file.revision !== item.revision ||
+						file.content.size !== item.content.size ||
+						!equalContentFingerprints(file.content.fingerprint, item.content.fingerprint)
+					)
+						throw Error('Cloud backup item changed');
+					content = file.content;
+				}
 				const bytes = new Uint8Array(length);
 				for (let at = 0; at < length; at += MAX_ATTACHMENT_RANGE_BYTES) {
-					const range = { version: file.content.version, offset: offset + at, length: Math.min(MAX_ATTACHMENT_RANGE_BYTES, length - at) };
+					const range = { version: content.version, offset: offset + at, length: Math.min(MAX_ATTACHMENT_RANGE_BYTES, length - at) };
 					const response = await c.request(
 						'/api/v1/attachments/content?' +
 							new URLSearchParams({
-								id: file.content.attachmentId,
+								id: content.attachmentId,
 								range: '1',
 								version: range.version,
 								offset: String(range.offset),
@@ -200,7 +210,7 @@ export async function resumeCloudFolderBackup(store: BackupObjectStore, snapshot
 						throw Error('Cloud backup version changed');
 					}
 					bytes.set(
-						await readExactRange(response, range, file.content.size, () => {
+						await readExactRange(response, range, content.size, () => {
 							c.guard();
 							signal?.throwIfAborted();
 						}),
@@ -227,3 +237,14 @@ export async function resumeCloudFolderBackup(store: BackupObjectStore, snapshot
 	);
 	return { ...result, seal };
 }
+
+/** Selected-folder compatibility entry point. */
+export const resumeCloudFolderBackup = (store: BackupObjectStore, snapshotId: string, runtime: CloudBackupRuntime) =>
+	resumeCloudBackup(store, snapshotId, runtime, false);
+
+/** Captures only the already-frozen account plan. Attachment byte reads use the
+ * existing authenticated exact-version content endpoint. Timeline payloads were
+ * retained during enumeration; a missing history chunk cannot be reconstructed
+ * from newer database state. No complete account API or restore is implied. */
+export const resumeAccountBackup = (store: BackupObjectStore, snapshotId: string, runtime: CloudBackupRuntime) =>
+	resumeCloudBackup(store, snapshotId, runtime, true);

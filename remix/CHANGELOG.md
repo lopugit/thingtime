@@ -68,6 +68,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-18 — **Codex (AI)**: Capture ready attachment bytes and validate file
+  history references in account snapshots. Offline readers recover current,
+  earlier and retained-conflict versions from the independent vault. Full account
+  restore remains open; existing storage setup and evidence are documented in
+  [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
 - 2026-10-18 — **Codex (AI)**: Retain canonical Timeline history, including large
   snapshots, in the existing portable backup chunks at the account inventory's
   database timestamp. Verified independent-copy reads after source and first-vault

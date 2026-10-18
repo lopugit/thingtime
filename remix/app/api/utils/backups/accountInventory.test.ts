@@ -1,3 +1,8 @@
+import { openAccountBackupFile, openAccountBackupFileVersion } from './accountFileRecovery';
+import { timelineEventThingId } from '../timeline/repository';
+import { backupAttachmentFixture, backupFileHistoryFixture } from './attachmentRecords.fixtures';
+import { resumeAccountBackup } from './cloudFolderBackup';
+import { backupAttachmentItemContent } from './attachmentRecords';
 import { timelineBackupFixture } from './timelineRecords.fixtures';
 import { timelineBackupRecordFromDoc, openBackupTimelineRecord } from './timelineRecords';
 import { joinTimelineEvent } from '../../../timeline/records';
@@ -8,7 +13,6 @@ import test from 'node:test';
 import { randomUUID } from 'node:crypto';
 import { createAccountInventoryProducer } from './accountInventory';
 import { captureBackup, sealBackup, openBackupItem, type BackupObjectStore } from './portableBackup';
-import { fingerprintSource } from '../../../fileSync/contentFingerprint';
 
 function fixture(count = 300) {
 	const source: any[] = Array.from({ length: count }, (_, n) => ({
@@ -20,6 +24,8 @@ function fixture(count = 300) {
 		linkKey: 'NEVER_EXPORT',
 		tokenAcl: 'NEVER_EXPORT'
 	}));
+	const heads = new Map<string, any>();
+	const headReads: string[] = [];
 	const objects = new Map<string, Uint8Array>();
 	const store: BackupObjectStore = {
 		read: async (key, max) => {
@@ -34,7 +40,14 @@ function fixture(count = 300) {
 	};
 	const scope = { apiOrigin: 'https://backup.test', ownerId: 'owner', dataPlane: 'home' };
 	const access = { scope, authorize: async () => {}, signal: undefined as AbortSignal | undefined };
-	const state = { queries: 0, closed: 0, ended: 0, beforeQuery: (_n: number) => {}, alterRows: (_n: number, rows: any[]) => rows };
+	const state = {
+		beforeHead: async () => {},
+		queries: 0,
+		closed: 0,
+		ended: 0,
+		beforeQuery: (_n: number) => {},
+		alterRows: (_n: number, rows: any[]) => rows
+	};
 	let frozen: any[];
 	const session = { snapshotEnabled: true, inTransaction: () => false, snapshotTime: undefined as any };
 	const projections: Record<string, number>[] = [];
@@ -97,6 +110,14 @@ function fixture(count = 300) {
 	};
 	const producer = createAccountInventoryProducer({
 		collection: async () => collection,
+		attachmentHead: async (input) => {
+			headReads.push(input.objectKey);
+			await state.beforeHead();
+			const head = heads.get(input.objectKey);
+			assert.ok(head, 'No unexpected attachment HEAD');
+			assert.equal(input.versionId, head.versionId);
+			return head;
+		},
 		customPlane: () => false,
 		snapshot: async (work) => {
 			try {
@@ -108,7 +129,7 @@ function fixture(count = 300) {
 	});
 	const id = randomUUID();
 	const json = (key: string) => JSON.parse(Buffer.from(objects.get(`snapshots/${id}/${key}`)!).toString());
-	return { source, store, objects, scope, access, state, session, projections, id, json, run: () => producer(store, id, access) };
+	return { source, heads, headReads, store, objects, scope, access, state, session, projections, id, json, run: () => producer(store, id, access) };
 }
 
 test('freezes more than two pages despite source edits, inserts and deletions; canonical metadata survives source removal', async () => {
@@ -157,7 +178,10 @@ test('freezes more than two pages despite source edits, inserts and deletions; c
 test('file items retain canonical immutable content references and fingerprints', async () => {
 	const f = fixture(0),
 		bytes = Buffer.from('retained file');
-	const fingerprint = await fingerprintSource({ size: bytes.length, check: () => {}, read: async (at, length) => bytes.subarray(at, at + length) });
+	const attachment = await backupAttachmentFixture('owner', 'attachment-one', bytes);
+	const fingerprint = attachment.content.fingerprint;
+	f.source.push(attachment.doc);
+	f.heads.set(attachment.doc.objectKey, attachment.head);
 	f.source.push({
 		shareId: 'file-one',
 		ownerId: 'owner',
@@ -167,15 +191,16 @@ test('file items retain canonical immutable content references and fingerprints'
 		crystal: {
 			name: 'file.txt',
 			trashed: false,
-			content: { attachmentId: 'attachment-one', version: 'a'.repeat(64), size: bytes.length, fingerprint }
+			content: attachment.content
 		}
 	});
 	await f.run();
-	const item = f.json('plan/0.json').items[0];
+	const item = f.json('plan/0.json').items.find((item: any) => item.thingId === 'file-one');
 	assert.equal(item.snapshot.adapter, 'file-content');
 	assert.equal(item.revision, 'revision-one');
-	assert.equal(item.snapshot.value.content.version, 'a'.repeat(64));
-	assert.deepEqual(item.content, { size: bytes.length, fingerprint });
+	assert.equal(item.snapshot.value.content.version, attachment.content.version);
+	assert.equal(item.content, null);
+	assert.deepEqual(item.snapshot.value.content.fingerprint, fingerprint);
 });
 
 test('empty inventory still needs a server timestamp and produces a valid empty plan', async () => {
@@ -399,4 +424,185 @@ test('sealed Timeline reads refuse changed scope before storage and detect later
 	const range = f.json(`ranges/${part.item.ordinal}/0.json`).ranges[0];
 	f.objects.get(`chunks/${range.sha256}`)![0] ^= 255;
 	await assert.rejects(openBackupTimelineRecord(f.store, f.id, history.firstPartId, f.access));
+});
+
+async function fileHistoryBackup() {
+	const f = fixture(0),
+		history = await backupFileHistoryFixture();
+	f.source.push(...history.docs);
+	for (const a of history.attachments) f.heads.set(a.doc.objectKey, a.head);
+	const available = new Map(history.attachments.map((a) => [a.doc.shareId, a]));
+	const requests: { id: string; offset: number; length: number }[] = [];
+	const state = { wrongVersion: false, revoked: false };
+	const runtime = {
+		scope: f.scope,
+		currentScope: () => f.scope,
+		requireCapability: async () => {},
+		fetch: (async (input, init) => {
+			const url = new URL(String(input)),
+				headers = new Headers(init?.headers);
+			assert.equal(url.origin, f.scope.apiOrigin);
+			assert.equal(init?.redirect, 'error');
+			assert.equal(headers.get('X-Thingtime-Expected-Actor'), f.scope.ownerId);
+			assert.equal(headers.get('X-Thingtime-Expected-Data-Plane'), 'home');
+			if (state.revoked) return new Response('', { status: 401 });
+			if (url.pathname === '/api/v1/auth/me') return Response.json({ user: { id: f.scope.ownerId } });
+			assert.equal(url.pathname, '/api/v1/attachments/content');
+			const id = url.searchParams.get('id')!,
+				a = available.get(id);
+			assert.ok(a, 'No live inventory or missing-source read');
+			assert.equal(url.searchParams.get('version'), a.content.version);
+			const offset = Number(url.searchParams.get('offset')),
+				length = Number(url.searchParams.get('length'));
+			assert.ok(length > 0 && length <= 2 * 1024 * 1024);
+			requests.push({ id, offset, length });
+			return new Response(a.bytes.subarray(offset, offset + length), {
+				status: 206,
+				headers: {
+					ETag: `"${state.wrongVersion ? '0'.repeat(64) : a.content.version}"`,
+					'Content-Range': `bytes ${offset}-${offset + length - 1}/${a.bytes.length}`,
+					'Content-Length': String(length)
+				}
+			});
+		}) as typeof fetch
+	};
+	return { f, history, available, requests, runtime, state };
+}
+
+test('old, current and conflict bytes survive source removal and independent account-vault copy', async () => {
+	const { f, history, available, requests, runtime } = await fileHistoryBackup();
+	const plan = await f.run();
+	assert.equal(plan.items, history.docs.length);
+	assert.equal(f.headReads.length, 3); // history references reuse immutable HEADs
+	assert.equal(f.state.queries, 5 + Math.ceil(history.docs.filter((doc) => doc.thingtime[0].startsWith('timeline-')).length / 8)); // bounded family and reference batches
+	const originalPut = f.store.put;
+	let interrupted = false;
+	f.store.put = async (key, bytes) => {
+		await originalPut(key, bytes);
+		if (!interrupted && key.includes('/ranges/') && bytes.length > 0) {
+			interrupted = true;
+			throw Error('Accepted byte receipt lost');
+		}
+	};
+	await assert.rejects(resumeAccountBackup(f.store, f.id, runtime), /receipt lost/);
+	assert.equal(f.objects.has(`snapshots/${f.id}/complete.json`), false);
+	f.store.put = originalPut;
+	f.source.length = 0; // metadata is now unavailable; resume only the frozen plan
+	await resumeAccountBackup(f.store, f.id, runtime);
+	const second = fixture(0);
+	await copySealedBackup(f.store, second.store, f.id, f.access);
+	f.objects.clear();
+	available.clear();
+	for (const a of history.attachments) {
+		const entry = await openBackupItem(second.store, f.id, a.doc.shareId, f.access);
+		assert.deepEqual(backupAttachmentItemContent(entry.item), a.content);
+		const chunks = [];
+		for await (const chunk of entry.ranges) chunks.push(chunk);
+		assert.deepEqual(Buffer.concat(chunks), a.bytes);
+	}
+	const current = await openAccountBackupFile(second.store, f.id, 'file-one', f.access);
+	const currentChunks = [];
+	for await (const bytes of current.ranges) currentChunks.push(bytes);
+	assert.deepEqual(Buffer.concat(currentChunks), history.attachments[1].bytes);
+	for (const [index, side] of [
+		[1, 'before'],
+		[2, 'after']
+	] as const) {
+		const old = await openAccountBackupFileVersion(second.store, f.id, timelineEventThingId('owner', history.files[index].revision), side, f.access);
+		const chunks = [];
+		for await (const bytes of old.ranges) chunks.push(bytes);
+		assert.deepEqual(Buffer.concat(chunks), history.attachments[index === 1 ? 0 : 2].bytes);
+	}
+	await assert.rejects(
+		openAccountBackupFileVersion(second.store, f.id, timelineEventThingId('owner', history.files[0].revision), 'before', f.access),
+		/no saved file bytes/
+	);
+	assert.equal(
+		requests.reduce((sum, request) => sum + request.length, 0),
+		history.attachments.reduce((sum, a) => sum + a.bytes.length, 0)
+	);
+	const oldReads = requests.filter((r) => r.id === 'attachment-old');
+	assert.equal(
+		oldReads.reduce((n, r) => n + r.length, 0),
+		history.attachments[0].bytes.length
+	);
+	assert.ok(![...second.objects.values()].some((bytes) => /NEVER_EXPORT|objects\/attachment|private-version-/.test(Buffer.from(bytes).toString())));
+});
+
+for (const mode of ['missing', 'foreign', 'version', 'fingerprint', 'target', 'blocked', 'unfinished'] as const) {
+	test(`historical attachment ${mode} refuses the complete account plan`, async () => {
+		const { f, history } = await fileHistoryBackup();
+		const old = history.attachments[0];
+		if (mode === 'missing') f.source.splice(f.source.indexOf(old.doc), 1);
+		if (mode === 'foreign') old.doc.ownerId = 'another-owner';
+		if (mode === 'version') {
+			old.doc.objectVersionId = 'different-version';
+			old.head.versionId = 'different-version';
+		}
+		if (mode === 'fingerprint') old.head.checksumSha256 = Buffer.alloc(32, 1).toString('base64') + '-' + old.head.checksumSha256.split('-').at(-1);
+		if (mode === 'target') old.doc.targetId = 'different-file';
+		if (mode === 'blocked') (old.doc as any).moderation = { status: 'blocked' };
+		if (mode === 'unfinished') old.doc.attachmentState = 'pending';
+		await assert.rejects(f.run());
+		assert.equal(f.objects.has(`snapshots/${f.id}/plan.json`), false);
+		assert.equal(f.objects.has(`snapshots/${f.id}/complete.json`), false);
+	});
+}
+
+for (const mode of ['wrongVersion', 'revoked'] as const) {
+	test(`account byte capture rejects ${mode} and leaves no completion seal`, async () => {
+		const { f, runtime, state } = await fileHistoryBackup();
+		await f.run();
+		state[mode] = true;
+		await assert.rejects(resumeAccountBackup(f.store, f.id, runtime));
+		assert.equal(f.objects.has(`snapshots/${f.id}/complete.json`), false);
+	});
+}
+
+test('attachment fingerprint verification uses at most eight concurrent storage requests and bounded database batches', async () => {
+	const f = fixture(0);
+	const attachments = await Promise.all(Array.from({ length: 24 }, (_, i) => backupAttachmentFixture('owner', `attachment-${i}`)));
+	for (const a of attachments) {
+		f.source.push(a.doc);
+		f.heads.set(a.doc.objectKey, a.head);
+	}
+	let active = 0,
+		peak = 0;
+	f.state.beforeHead = async () => {
+		active++;
+		peak = Math.max(peak, active);
+		await new Promise((resolve) => setTimeout(resolve, 5));
+		active--;
+	};
+	const plan = await f.run();
+	assert.equal(plan.items, 24);
+	assert.equal(f.state.queries, 3);
+	assert.equal(f.headReads.length, 24);
+	assert.equal(peak, 8);
+	assert.equal(active, 0);
+});
+
+test('a failed storage check drains its bounded batch without starting another or sealing a partial plan', async () => {
+	const f = fixture(0);
+	const attachments = await Promise.all(Array.from({ length: 16 }, (_, i) => backupAttachmentFixture('owner', `attachment-${i}`)));
+	for (const a of attachments) {
+		f.source.push(a.doc);
+		f.heads.set(a.doc.objectKey, a.head);
+	}
+	let active = 0,
+		started = 0;
+	f.state.beforeHead = async () => {
+		const ordinal = started++;
+		active++;
+		try {
+			await new Promise((resolve) => setTimeout(resolve, ordinal === 0 ? 1 : 10));
+			if (ordinal === 0) throw Error('Storage unavailable');
+		} finally {
+			active--;
+		}
+	};
+	await assert.rejects(f.run(), /Storage unavailable/);
+	assert.equal(started, 8);
+	assert.equal(active, 0);
+	assert.equal(f.objects.has(`snapshots/${f.id}/plan.json`), false);
 });
