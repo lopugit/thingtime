@@ -74,6 +74,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-19 — **Codex (AI):** Selected-folder backups now consume bounded Files
+  inventory pages and validate/order them with private SQLite scratch storage.
+  Existing sealed plans and byte resume stay compatible; large whole-tree restore
+  and cloud-scale acceptance remain open. See [PR 1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
 - 2026-10-19 — **Codex (AI):** Share app-owned file sync and durable recovery
   between Mac and capable iOS hosts. Files navigation keeps runs alive; foreground
   recovery preserves user Stop and fences hidden work at native lease expiry.

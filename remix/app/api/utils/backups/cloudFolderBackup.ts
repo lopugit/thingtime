@@ -2,16 +2,17 @@ import { BACKUP_ATTACHMENT_ADAPTER, backupAttachmentItemContent, parseBackupAtta
 import { createHash } from 'node:crypto';
 import { timelineScopeKey, type TimelineScope } from '../../../timeline/contract';
 import { parseCloudFolder } from '../../../fileSync/cloudFolder';
-import { parseCloudInventory, MAX_CLOUD_INVENTORY_BYTES } from '../../../fileSync/cloudInventory';
+import { readCloudInventoryStream } from '../../../fileSync/cloudInventoryStream';
+import { openCloudBackupTree } from './cloudBackupTree';
 import { CLOUD_FILE_ADAPTER, parseCloudFile } from '../../../fileSync/cloudFile';
 import { equalContentFingerprints } from '../../../fileSync/contentFingerprint';
 import { MAX_ATTACHMENT_RANGE_BYTES, readExactRange } from '../attachments/attachmentRanges';
 import { EXPECTED_ACTOR_HEADER } from '../auth/expectedActor';
 import { EXPECTED_DATA_PLANE_HEADER } from '../../../utils/dataPlane';
-import { BACKUP_FORMAT, BACKUP_METADATA_BYTES, parseBackupHeader, type BackupItem } from '../../../backups/manifest';
+import { BACKUP_FORMAT, BACKUP_METADATA_BYTES, parseBackupHeader } from '../../../backups/manifest';
 import { prepareBackup, captureBackup, sealBackup, type BackupObjectStore } from './portableBackup';
 
-export const CLOUD_BACKUP_FOLDER_ADAPTER = 'backup-file-folder';
+export { CLOUD_BACKUP_FOLDER_ADAPTER } from './cloudBackupTree';
 export const CLOUD_FOLDER_BACKUP_REQUIREMENTS = {
 	'api.files': '1.2.0',
 	'api.attachment-content': '1.14.0',
@@ -24,6 +25,8 @@ export type CloudBackupRuntime = {
 	fetch: typeof fetch;
 	requireCapability(feature: string, minimum: string): Promise<void>;
 	signal?: AbortSignal;
+	/** Private preparation index only; this is not a byte-copy or retention quota. */
+	maxScratchBytes?: number;
 };
 
 /** Uses existing authenticated APIs only. No signed URLs, session credentials or
@@ -93,15 +96,14 @@ function cloud(runtime: CloudBackupRuntime) {
 	return { scope, guard, request, json, authenticate, access: { scope, signal: runtime.signal, authorize: async () => guard() } };
 }
 
-/** Freeze one complete server inventory before downloading. The existing API's
- * 10,000-node/8 MiB bound fails explicitly; it never becomes a partial backup. */
+/** Freeze one complete paged server observation before downloading. The scratch
+ * index proves physical ancestry and uniqueness, then supplies the canonical
+ * Thing-ID order without collecting the tree in memory. EOF is required before
+ * any durable plan metadata is published; interrupted captures start afresh. */
 export async function prepareCloudFolderBackup(store: BackupObjectStore, snapshotId: string, folderId: string, runtime: CloudBackupRuntime) {
 	const c = cloud(runtime);
-	// Validate the ID before deriving storage keys or making network requests.
 	parseBackupHeader({
-		format: BACKUP_FORMAT,
-		snapshotId,
-		scope: c.scope,
+		format: BACKUP_FORMAT, snapshotId, scope: c.scope,
 		boundary: { kind: 'capture-interval', token: 'pending', startedAt: new Date(0).toISOString(), completedAt: new Date(0).toISOString() },
 		coverage: { selectionId: folderId, description: 'Selected cloud filesystem tree' }
 	});
@@ -110,55 +112,34 @@ export async function prepareCloudFolderBackup(store: BackupObjectStore, snapsho
 	await c.authenticate();
 	const startedAt = new Date().toISOString();
 	const root = parseCloudFolder((await c.json('/api/v1/files?' + new URLSearchParams({ folderId }))).folder);
-	const inventory = parseCloudInventory(
-		(await c.json('/api/v1/files?' + new URLSearchParams({ rootId: folderId }), MAX_CLOUD_INVENTORY_BYTES + 1024)).inventory,
-		folderId
-	);
-	if (root.id !== folderId || root.revision !== inventory.rootRevision) throw Error('Cloud folder changed during inventory; try a new capture');
-	const completedAt = new Date().toISOString();
-	const folderItem = (value: typeof root) => ({
-		thingId: value.id,
-		revision: value.revision,
-		snapshot: { adapter: CLOUD_BACKUP_FOLDER_ADAPTER, version: 1, value },
-		content: null
-	});
-	const rows = [
-		folderItem(root),
-		...inventory.nodes.map((node) =>
-			node.kind === 'folder'
-				? folderItem({ id: node.id, revision: node.revision, folderId: node.folderId, name: node.path.split('/').at(-1)! })
-				: {
-						thingId: node.file.id,
-						revision: node.file.revision,
-						snapshot: { adapter: CLOUD_FILE_ADAPTER, version: 1, value: node.file },
-						content: { size: node.file.content.size, fingerprint: node.file.content.fingerprint }
-				  }
-		)
-	].sort((a, b) => (a.thingId < b.thingId ? -1 : a.thingId > b.thingId ? 1 : 0));
-	async function* items() {
-		for (let ordinal = 0; ordinal < rows.length; ordinal++) yield { ...rows[ordinal], ordinal } as BackupItem;
-	}
-	await c.authenticate();
-	return prepareBackup(
-		store,
-		{
-			format: BACKUP_FORMAT,
-			snapshotId,
-			scope: c.scope,
-			boundary: {
-				kind: 'capture-interval',
-				token: 'inventory-' + createHash('sha256').update(JSON.stringify(inventory)).digest('hex'),
-				startedAt,
-				completedAt
-			},
-			coverage: {
-				selectionId: folderId,
-				description: 'Selected cloud folder file tree including empty folders; ordinary Things and other folders are not included'
+	if (root.id !== folderId) throw Error('Cloud folder changed during inventory; try a new capture');
+	const tree = await openCloudBackupTree(root, { maxBytes: runtime.maxScratchBytes });
+	try {
+		const scope = { origin: c.scope.apiOrigin, ownerId: c.scope.ownerId, dataPlane: c.scope.dataPlane, deviceId: snapshotId, rootId: folderId };
+		const hash = createHash('sha256');
+		for await (const page of readCloudInventoryStream(scope, folderId, {
+			fetch: (input, init) => runtime.fetch(input, init), signal: runtime.signal,
+			requireCapability: (feature, minimum) => runtime.requireCapability(feature, minimum),
+			origin: () => runtime.currentScope().apiOrigin,
+			currentScope: () => {
+				const current = runtime.currentScope();
+				return { ...scope, origin: current.apiOrigin, ownerId: current.ownerId, dataPlane: current.dataPlane };
 			}
-		},
-		items(),
-		c.access
-	);
+		})) {
+			c.guard();
+			if (root.revision !== page.rootRevision) throw Error('Cloud folder changed during inventory; try a new capture');
+			tree.append(page.nodes);
+			hash.update(JSON.stringify(page) + '\n');
+		}
+		await tree.validate(c.guard);
+		await c.authenticate();
+		return await prepareBackup(store, {
+			format: BACKUP_FORMAT, snapshotId, scope: c.scope,
+			boundary: { kind: 'capture-interval', token: 'inventory-' + hash.digest('hex'), startedAt, completedAt: new Date().toISOString() },
+			coverage: { selectionId: folderId,
+				description: 'Selected cloud folder file tree including empty folders; ordinary Things and other folders are not included' }
+		}, tree.items(), c.access);
+	} finally { await tree.close(); }
 }
 
 /** Resume the original plan, not a new live inventory. Attachment range requests

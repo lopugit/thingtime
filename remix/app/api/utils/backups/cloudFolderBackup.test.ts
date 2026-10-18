@@ -10,7 +10,8 @@ import { tmpdir } from 'node:os';
 import { fingerprintSource } from '../../../fileSync/contentFingerprint';
 import { BACKUP_METADATA_BYTES } from '../../../backups/manifest';
 import { openLocalBackupStore } from './localBackupStore';
-import { openBackupItem } from './portableBackup';
+import { openBackupItem, openSealedBackup } from './portableBackup';
+import { CLOUD_INVENTORY_PAGE_ENTRIES } from '../../../fileSync/cloudInventoryPages';
 import { prepareCloudFolderBackup, resumeCloudFolderBackup, CLOUD_BACKUP_FOLDER_ADAPTER, type CloudBackupRuntime } from './cloudFolderBackup';
 
 async function fixture() {
@@ -44,12 +45,14 @@ async function fixture() {
 		wrongVersion: false,
 		wrongAccount: false,
 		revokeAtAuth: Infinity,
-		authReads: 0
+		authReads: 0,
+		required: [] as [string, string][],
+		stream: undefined as (() => ReadableStream<Uint8Array>) | undefined
 	};
 	const runtime: CloudBackupRuntime = {
 		scope,
 		currentScope: () => scope,
-		requireCapability: async () => {},
+		requireCapability: async (feature, version) => { state.required.push([feature, version]); },
 		fetch: async (url, init) => {
 			const u = new URL(String(url)),
 				headers = new Headers(init?.headers);
@@ -69,7 +72,14 @@ async function fixture() {
 			if (u.searchParams.has('rootId')) {
 				state.inventoryReads++;
 				if (state.unavailable) throw Error('Live tree removed');
-				return json({ inventory });
+				assert.equal(u.searchParams.get('pages'), '1');
+				const stream = state.stream?.() ?? new ReadableStream<Uint8Array>({ start(controller) {
+					controller.enqueue(Buffer.from(JSON.stringify({ version: 1, generation: 'frozen-generation', ordinal: 0,
+						rootId: inventory.rootId, rootRevision: inventory.rootRevision, nodes: inventory.nodes,
+						...(inventory.complete ? { totalEntries: inventory.nodes.length } : {}) }) + '\n'));
+					controller.close();
+				} });
+				return new Response(stream, { headers: { 'Content-Type': 'application/x-ndjson' } });
 			}
 			assert.equal(u.pathname, '/api/v1/attachments/content');
 			assert.equal(u.searchParams.get('id'), file.content.attachmentId);
@@ -146,7 +156,7 @@ test('changed root, incomplete tree and changed account refuse before any plan p
 		await assert.rejects(prepareCloudFolderBackup(f.store, f.id, 'root', f.runtime), /changed during inventory/);
 		f.inventory.rootRevision = f.root.revision;
 		f.inventory.complete = false;
-		await assert.rejects(prepareCloudFolderBackup(f.store, f.id, 'root', f.runtime), /incomplete/);
+		await assert.rejects(prepareCloudFolderBackup(f.store, f.id, 'root', f.runtime), /interrupted before completion/);
 		f.inventory.complete = true;
 		f.state.wrongAccount = true;
 		await assert.rejects(prepareCloudFolderBackup(f.store, f.id, 'root', f.runtime), /account changed/);
@@ -180,6 +190,82 @@ test('wrong version, scope switch, cancellation and revoked session cannot seal 
 	} finally {
 		await f.close();
 	}
+});
+
+test('paged capture exceeds the legacy 10,000-item limit without an array inventory and preserves exact-byte recovery', async () => {
+	const f = await fixture(), total = 10_051;
+	let emitted = 0, largestPage = 0;
+	f.state.stream = () => new ReadableStream<Uint8Array>({
+		pull(controller) {
+			if (emitted === total) { controller.close(); return; }
+			const ordinal = Math.floor(emitted / CLOUD_INVENTORY_PAGE_ENTRIES), nodes = [];
+			while (emitted < total && nodes.length < CLOUD_INVENTORY_PAGE_ENTRIES) {
+				const i = emitted++;
+				nodes.push(i === 0 ? { kind: 'file', path: f.file.name, file: f.file }
+					: { kind: 'folder', path: 'Folder ' + i, id: 'z-' + String(total - i).padStart(5, '0'), folderId: 'root', revision: 'r1' });
+			}
+			largestPage = Math.max(largestPage, nodes.length);
+			controller.enqueue(Buffer.from(JSON.stringify({ version: 1, generation: 'large-capture', rootId: 'root',
+				rootRevision: f.root.revision, ordinal, nodes, ...(emitted === total ? { totalEntries: total } : {}) }) + '\n'));
+		}
+	});
+	try {
+		const plan = await prepareCloudFolderBackup(f.store, f.id, 'root', f.runtime);
+		assert.equal(plan.items, total + 1); assert.equal(plan.bytes, String(f.bytes.length));
+		assert.equal(largestPage, 128); assert.ok(f.state.required.some(([feature, version]) => feature === 'api.files' && version === '1.5.0'));
+		// The durable format and byte-resume contract do not require the new
+		// producer after freezing; old compatible origins can recover saved plans.
+		f.state.unavailable = true;
+		f.runtime.requireCapability = async (feature, minimum) => {
+			if (feature === 'api.files') assert.equal(minimum, '1.2.0');
+		};
+		await resumeCloudFolderBackup(f.store, f.id, f.runtime);
+		const access = { scope: f.scope, authorize: async () => {} };
+		const backup = await openSealedBackup(f.store, f.id, access);
+		let count = 0, last = '';
+		for await (const { item } of backup.entries) {
+			assert.equal(item.ordinal, count++); assert.ok(item.thingId > last); last = item.thingId;
+		}
+		assert.equal(count, total + 1); assert.equal(f.state.inventoryReads, 1);
+		const original = await openBackupItem(f.store, f.id, f.file.id, access), chunks = [];
+		for await (const chunk of original.ranges) chunks.push(chunk);
+		assert.deepEqual(Buffer.concat(chunks), f.bytes);
+	} finally { await f.close(); }
+});
+
+test('cross-page collisions, changed ancestry and trailing stream failure never publish a backup header', async () => {
+	for (const failure of ['duplicate-id', 'path-alias', 'wrong-parent', 'trailing-error']) {
+		const f = await fixture();
+		f.state.stream = () => new ReadableStream<Uint8Array>({ start(controller) {
+			const first = { kind: 'folder', path: 'Café', id: 'folder', folderId: 'root', revision: 'r1' };
+			const second = { kind: 'folder', path: 'Other', id: 'second', folderId: 'root', revision: 'r1' };
+			if (failure === 'duplicate-id') second.id = first.id;
+			if (failure === 'path-alias') second.path = 'CAFE\u0301';
+			if (failure === 'wrong-parent') second.folderId = 'missing';
+			for (const [ordinal, node] of [first, second].entries()) controller.enqueue(Buffer.from(JSON.stringify({
+				version: 1, generation: 'failed-capture', rootId: 'root', rootRevision: f.root.revision, ordinal,
+				nodes: [node], ...(ordinal === 1 ? { totalEntries: 2 } : {}) }) + '\n'));
+			if (failure === 'trailing-error') controller.enqueue(Buffer.from('{"error":"source snapshot expired"}\n'));
+			controller.close();
+		} });
+		try {
+			await assert.rejects(prepareCloudFolderBackup(f.store, f.id, 'root', f.runtime));
+			assert.equal(await f.store.read(`snapshots/${f.id}/header.json`, BACKUP_METADATA_BYTES), null);
+			assert.equal(f.state.byteReads.length, 0);
+		} finally { await f.close(); }
+	}
+});
+
+test('older origins refuse new paged captures without falling back to a smaller inventory', async () => {
+	const f = await fixture();
+	f.runtime.requireCapability = async (feature, minimum) => {
+		if (feature === 'api.files' && minimum === '1.5.0') throw Error('Paged inventory capability unavailable');
+	};
+	try {
+		await assert.rejects(prepareCloudFolderBackup(f.store, f.id, 'root', f.runtime), /capability unavailable/);
+		assert.equal(f.state.inventoryReads, 0);
+		assert.equal(await f.store.read(`snapshots/${f.id}/header.json`, BACKUP_METADATA_BYTES), null);
+	} finally { await f.close(); }
 });
 
 test('cloud CLI rejects unsafe session files and never echoes malformed credential contents', async () => {

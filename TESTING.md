@@ -11774,3 +11774,22 @@ resume unfinished Android gates only when requested.
 - Repeat on the intended signed physical iPhone using actual folder data and
   independent byte hashes; simulator/browser fixtures alone do not close native
   suspension, OS expiry or relaunch acceptance.
+
+
+### Paged selected-folder backups (2026-10-19)
+
+- Run `npm --prefix remix run test:backups` and the shared inventory decoder
+  tests. Capture 10,051 generated nodes plus the root using bounded pages, seal
+  the manifest in Thing-ID order and independently compare recovered file bytes.
+- Reject duplicate IDs across pages, normalized path aliases, missing or wrong
+  physical parents, selected-root cycles, truncated streams and trailing errors.
+  None may publish a durable header or plan. Scratch disk exhaustion and
+  cancellation must invalidate the workspace and remove its private files.
+- Older origins must refuse new paged captures. Frozen plans must retain their
+  existing format and resume without new inventory using Files 1.2.0.
+- Run `node remix/scripts/test-cloud-inventory-pages.mjs`: the OS-isolated
+  disposable replica uses production signup, Things, Files and auth handlers;
+  preserve 135 folders plus the root in a sealed vault after a later live edit.
+- Keep HTTP/installed-app acceptance, source retention leases, independent cloud
+  replicas, 100 GB–100 TB throughput and paged whole-tree restore open. This
+  worker change does not establish those behaviors.

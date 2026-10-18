@@ -427,9 +427,13 @@ product integration](../portable-backups.md).
 `api/utils/backups/cloudFolderBackup.ts` now freezes an explicitly selected Files
 inventory into that vault and resumes exact retained attachment ranges after live
 edits/Trash. `backup:cloud` runs the worker with a private caller-supplied session
-configuration; `test:backups` and the foreground fixture's `--portable-backup
---large-download` exercise API/CLI acceptance. Existing 10,000-node/8 MiB inventory
-bounds remain explicit. See the [cloud capture coverage](../portable-backups.md#cloud-folder-capture);
+configuration. Creation now uses the shared `cloudInventoryStream.ts` decoder
+(Files 1.5.0) and `cloudBackupTree.ts` private SQLite scratch index for bounded
+ordering, physical ancestry and identity/path uniqueness. Resume retains its
+Files 1.2.0 requirement and unchanged sealed format. Run `test:backups`,
+`test-cloud-inventory-pages.mjs`, and the foreground fixture's `--portable-backup
+--large-download` for their distinct storage, handler and API/CLI boundaries.
+Scratch/snapshot limits and the older whole-tree restore bound remain explicit. See the [cloud capture coverage](../portable-backups.md#cloud-folder-capture);
 this does not enumerate all account Things or add server Timeline backup events.
 
 `backups/treeRestorePlan.ts` preflights selected filesystem trees; the shared

@@ -3,13 +3,16 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { realpath, stat } from 'node:fs/promises';
-import { basename, dirname } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { IDBFactory, IDBKeyRange } from 'fake-indexeddb';
 import { openSyncJournal } from '../app/fileSync/journal.client';
 import { readCloudFolderInventoryPages } from '../app/fileSync/cloudInventoryPages.client';
 import { capabilitySatisfies } from '../app/api/utils/capabilities/capabilityContract';
 import { thingtimeCapabilityManifest } from '../app/api/utils/capabilities/thingtimeCapabilities';
+import { openLocalBackupStore } from '../app/api/utils/backups/localBackupStore';
+import { prepareCloudFolderBackup, resumeCloudFolderBackup } from '../app/api/utils/backups/cloudFolderBackup';
+import { openSealedBackup } from '../app/api/utils/backups/portableBackup';
 const directory = process.env.THINGTIME_CLOUD_INVENTORY_TEST_DIRECTORY;
 assert.ok(directory && /^mongodb:\/\/127\.0\.0\.1:\d+\/thingtime\?replicaSet=cloud-inventory-pages$/.test(process.env.MONGODB_CONNECTION_STRING || ''));
 assert.equal(process.env.THINGTIME_EMAIL_PROVIDER, 'console');
@@ -22,6 +25,7 @@ const register = await import('../app/routes/api/v1/auth/register/_register');
 const things = await import('../app/routes/api/v1/things/_things');
 const files = await import('../app/routes/api/v1/files/_files');
 const logout = await import('../app/routes/api/v1/auth/logout/_logout');
+const me = await import('../app/routes/api/v1/auth/me/_me');
 let cookie = '';
 const request = (path: string, body?: unknown, method = body === undefined ? 'GET' : 'POST') => new Request(base + path,
 	{ method, headers: { Origin: base, 'Content-Type': 'application/json', Cookie: cookie }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
@@ -84,11 +88,38 @@ try {
 	assert.equal((await call(files.loader, '/api/v1/files?rootId=' + root.id + '&path=Folder-134')).data.observation.entry, null);
 	assert.equal((await files.loader({ request: request('/api/v1/files?rootId=' + root.id + '&path=later%20name') })).status, 409);
 
+	const backupScope = { apiOrigin: base, ownerId: scope.ownerId, dataPlane: 'home' };
+	const vault = await openLocalBackupStore(join(actual, 'backup-vault')), snapshotId = randomUUID();
+	let backupInventories = 0;
+	const backupRuntime = { scope: backupScope, currentScope: () => backupScope,
+		requireCapability: async (feature: string, minimum: string) => {
+			assert.ok(capabilitySatisfies(thingtimeCapabilityManifest(base).features[feature]?.version, minimum));
+		},
+		fetch: async (url: RequestInfo | URL, init?: RequestInit) => {
+			const target = new URL(String(url)); assert.equal(target.origin, base);
+			if (target.searchParams.has('rootId')) { assert.equal(target.searchParams.get('pages'), '1'); backupInventories++; }
+			assert.ok(['/api/v1/files', '/api/v1/auth/me'].includes(target.pathname));
+			return await (target.pathname === '/api/v1/files' ? files : me).loader({ request: new Request(target, {
+				...init, headers: { ...Object.fromEntries(new Headers(init?.headers)), Cookie: cookie }
+			}) });
+		}
+	};
+	assert.equal((await prepareCloudFolderBackup(vault, snapshotId, root.id, backupRuntime)).items, 136);
+	await call(things.action, '/api/v1/things', { id: lastId, crystal: { name: 'After backup' } }, 'PATCH');
+	await resumeCloudFolderBackup(vault, snapshotId, backupRuntime);
+	const sealed = await openSealedBackup(vault, snapshotId, { scope: backupScope, authorize: async () => {} });
+	let backupItems = 0;
+	for await (const { item } of sealed.entries) {
+		backupItems++;
+		if (item.thingId === lastId) assert.equal((item.snapshot.value as any).name, 'Later name');
+	}
+	assert.equal(backupItems, 136); assert.equal(backupInventories, 1);
+
 	await call(logout.action, '/api/v1/auth/logout', {});
 	assert.equal((await files.loader({ request: request('/api/v1/files?rootId=' + root.id + '&pages=1') })).status, 401);
 	assert.equal((await files.loader({ request: request('/api/v1/files?rootId=' + root.id + '&path=Later%20name') })).status, 401);
-	console.log(JSON.stringify({ cloudInventoryPagesProof: true, pages, capturedEntries: 135,
-		checks: ['real-signup-and-Things-writers', 'private-Files-handler', 'single-snapshot-concurrent-rename', 'sealed-journal', 'disk-indexed-path-found-absent-alias', 'logout-refusal'],
+	console.log(JSON.stringify({ cloudInventoryPagesProof: true, pages, capturedEntries: 135, backupItems,
+		checks: ['real-signup-and-Things-writers', 'private-Files-handler', 'single-snapshot-concurrent-rename', 'sealed-journal', 'disk-indexed-path-found-absent-alias', 'paged-backup-vault-retains-pre-edit-metadata', 'logout-refusal'],
 		boundary: 'Production Request handlers and Mongo replica; not HTTP/browser, installed-device or byte-transfer acceptance' }));
 } finally { journal.close(); }
 process.exit(0);

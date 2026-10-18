@@ -5231,8 +5231,11 @@ must continue to enforce the current account, origin and device permissions.
 ### Capture a selected cloud folder
 
 `backup:cloud` is an explicit worker/operator tool, not the native backup UI.
-It freezes the existing complete Files inventory for one private folder (up to
-10,000 entries / 8 MiB of inventory), including empty folders. Ordinary Things,
+On Node 24, it freezes the Files 1.5.0 paged inventory for one private folder,
+including empty folders. A private disposable SQLite index checks ancestry and
+identity/path uniqueness and sorts the manifest without a whole-tree array.
+The default preparation index limit is 512 MiB; snapshot timeout/frontier and
+available scratch disk limits fail explicitly. Ordinary Things,
 other folders, historical versions and account settings are **not** part of this
 selection. Oversized/incomplete trees fail; a capture interval is recorded rather
 than claiming an account-wide point in time. See [coverage and recovery](docs/portable-backups.md#cloud-folder-capture).
@@ -5260,7 +5263,9 @@ sealing. Credentials never enter the vault. Resume reads the saved inventory and
 exact retained attachment versions even after live edits/Trash; unavailable bytes
 or revoked access stop completion. A failure before the metadata plan finishes
 requires a new snapshot UUID; a new live inventory cannot replace a partial plan.
-Offline verify/copy/restore use the commands above. This local vault is still
+Offline verify/copy/single-item extraction use the commands above. Whole-tree
+restore still has its separate 10,001-item/32-MiB planner bound; larger snapshots
+must not be advertised as having whole-tree restore acceptance yet. This local vault is still
 unencrypted and does not provision a cloud replica or physical-media service.
 
 ### Restore a saved folder tree

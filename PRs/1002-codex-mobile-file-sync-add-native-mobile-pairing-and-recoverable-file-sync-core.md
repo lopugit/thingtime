@@ -3264,3 +3264,41 @@ folder-control serialization protect recovery. Mac scheduling remains unchanged;
 Android stays deferred. Physical iPhone and installed-device lifecycle acceptance,
 iOS OS scheduling and complete independent backups remain open. See the
 [implementation and acceptance boundary](../docs/mobile-file-sync.md#ios-app-owned-recovery--2026-10-19).
+
+
+## 2026-10-19 — Paged selected-folder backup capture
+
+Cloud folder backup creation now consumes the existing Files 1.5.0 NDJSON stream
+through a shared decoder. A private Node 24 SQLite scratch index validates
+cross-page identity/path uniqueness and physical ancestry, then supplies the
+unchanged sealed-backup format in canonical Thing-ID order. No whole-tree array
+or legacy 10,000-node fallback remains in this producer. Partial/trailing stream
+errors, root changes, cancellation and scratch exhaustion cannot publish a
+metadata plan. The default index budget is 512 MiB; the source snapshot lifetime
+and frontier bounds still apply. Saved plans retain Files 1.2.0 byte-resume
+compatibility. The bounded whole-tree restore planner remains separate open work
+for larger inventories, alongside full account coverage and independent replicas.
+
+Validation: all 84 backup tests pass, including 10,051 generated nodes plus the
+root and independent recovery of an 8-MiB-plus file. Fifteen focused preparation
+and stream tests pass. The OS-isolated disposable Mongo replica uses actual
+signup, Things, Files and auth handlers to seal 136 items and retain metadata
+across a later live rename; this is handler-level evidence, not HTTP/installed or
+100-TB throughput acceptance. Changed TypeScript source lint passes. The existing
+ESLint parser does not accept the integration script's pre-existing `.mts` syntax;
+that script passed through its actual tsx/Mongo runner. Typecheck remains at 91
+baseline diagnostics with no changed-source errors.
+
+## 2026-10-19 — Physical iPhone native test result
+
+A separately identified development test host from 94761237b was signed and
+installed on the paired iPhone 15 Pro Max (iOS 27). Its unused widget App Group
+entitlement was omitted after isolated provisioning refused that group; this is
+not a release/widget build. The original Thingtime app (build 33) was preserved.
+After initially waiting for an unlock, Xcode ran 66 selected tests: 53 passed and
+13 failed (26 assertions). Pairing, paged inventory, native Trash and mock OS
+lease suites passed; 11 saved-approval cases and two staging/Trash bridge cases
+timed out waiting for callbacks. The bridge's real foreground/origin checks need
+further diagnosis; no weakened check or hardware success is claimed. The phone
+was locked again at follow-up. Physical background completion, real grants and
+cross-device acceptance remain open. Aster's reserved Mac install was untouched.

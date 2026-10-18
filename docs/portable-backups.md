@@ -353,9 +353,20 @@ snapshots are canonical; `backup-file-folder` describes only filesystem name and
 placement, not the folder's ordinary Thing properties or a server Timeline event.
 The header records a capture interval and explicit filesystem-only coverage.
 Ordinary Things, historical versions, other folders and account settings are
-excluded visibly. The existing inventory ceiling (10,000 nodes / 8 MiB) refuses
-larger trees rather than producing a partial success. Whole-account enumeration
+excluded visibly. Creation requires Files 1.5.0 and streams its bounded NDJSON
+pages. `cloudBackupTree.ts` uses Node 24's built-in SQLite in a private disposable
+workspace to reject duplicate IDs, case/Unicode path aliases and mismatched
+physical parents, then enumerate canonical Thing-ID order. It retains no
+whole-tree array. No durable header is written until the exact generation,
+terminal count and EOF pass. Truncation, trailing errors, changed identity or
+scratch exhaustion refuse the capture; scratch files are removed on every exit.
+The default SQLite index budget is 512 MiB (the internal `maxScratchBytes`
+option accepts 64 KiB–8 GiB); this is a preparation bound, not a retention or
+content-byte quota. SQLite cache is 2 MiB, with memory mapping disabled. The
+server's snapshot lifetime/frontier bounds still apply. Whole-account enumeration
 and a durable server-authoritative point-in-time boundary remain required.
+Existing saved plans retain their format and can resume using Files 1.2.0; no
+fallback silently reduces a new capture to the old 10,000-node inventory.
 
 Resume never re-enumerates live state or swaps in a new file revision. It reads
 only missing 8 MiB chunks via authorized exact-version 2 MiB attachment ranges,
@@ -365,6 +376,13 @@ or access is unavailable, the backup remains incomplete. The session is checked
 again immediately before publishing the completion marker, including when all
 bytes were already captured. Interrupted metadata preparation cannot be safely
 recreated from a changed live tree; start a new UUID if no complete plan exists.
+
+The paged regression captures 10,051 generated nodes plus the root, verifies the
+sealed Thing-ID order, and recovers the original nonempty file bytes after its
+synthetic live inventory disappears. The disposable Mongo fixture additionally
+uses real signup, Things writers and Files/auth Request handlers to capture 135
+folders across two pages and preserve their pre-edit metadata in a 136-item
+sealed vault. These are distinct from HTTP and large-volume cloud acceptance.
 
 Validation includes source/account changes, incomplete inventory, revoked final
 publication, cancellation, empty folders and CLI create/resume against the real
@@ -384,6 +402,9 @@ scan for each restored file. `verifyBackupItemBytes` reuses the same streaming
 canonical fingerprint verifier as backup sealing; source parts may exceed the
 8 MiB memory chunk. The single-file restore API remains compatible.
 
+The current whole-tree restore planner remains bounded even though paged capture
+can exceed its limit. Single-item extraction and vault verification/copy still
+work for larger sealed inventories; a paged whole-tree planner remains open.
 Plans accept the current cloud filesystem adapters only, with a maximum of
 10,001 items including the root and 32 MiB of retained item metadata. They reject
 unsupported types, missing parents, cycles (including the root), unsafe names,
