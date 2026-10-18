@@ -368,8 +368,10 @@ const BlockInspector = ({
 	draft,
 	block,
 	onDeselect,
-	onUploadToBlock
+	onUploadToBlock,
+ allowDataSources = true
 }: {
+	allowDataSources?: boolean;
 	draft: UseWebpageDraft;
 	block: WebpageBlock;
 	onDeselect: () => void;
@@ -475,11 +477,11 @@ const BlockInspector = ({
      <FieldRow label="Equals"><Input {...inputStyles} aria-label="Condition equals" value={String(block.condition?.equals ?? '')} onChange={e => patch({ condition: { ...block.condition, equals: e.target.value || undefined } })} /></FieldRow>
     </> : null}
    </> : null}
-   {block.source ? <>
+   {allowDataSources ? block.source ? <>
     <FieldRow label="Data Action"><Input {...inputStyles} value={block.source.action} onChange={e=>patch({source:{...block.source!,action:e.target.value}})} /></FieldRow>
     <FieldRow label="Refresh"><Select {...inputStyles} value={block.source.refresh || 'load'} onChange={e=>patch({source:{...block.source!,refresh:e.target.value as 'load'|'manual'|'interval'}})}><option value="load">After actions</option><option value="manual">On page load</option><option value="interval">Timed refresh</option></Select></FieldRow>
     {block.source.refresh === 'interval' ? <FieldRow label="Refresh interval (ms)"><Input {...inputStyles} type="number" value={block.source.intervalMs || 15000} onChange={e=>patch({source:{...block.source!,intervalMs:Number(e.target.value)}})} /></FieldRow> : null}
-   </> : <Button size="sm" onClick={()=>patch({source:{action:'',refresh:'load'}})}>Bind data Action</Button>}
+   </> : <Button size="sm" onClick={()=>patch({source:{action:'',refresh:'load'}})}>Bind data Action</Button> : null}
 			{block.type === 'text' ? (
 				<>
 					{block.html ? (
@@ -746,6 +748,8 @@ const BlockInspector = ({
 };
 
 export const BuilderDrawer = (props: {
+ allowedBlockTypes?: readonly WebpageBlock['type'][];
+ allowDataSources?: boolean;
 	helpText?: string;
 	hideTransfer?: boolean;
 	footerSpace?: string;
@@ -929,7 +933,7 @@ export const BuilderDrawer = (props: {
 								{regionLabel}
 							</Text>
 						) : null}
-						<Box as="fieldset" disabled={!!draft.branch?.locked} minW={0} border={0} p={0}><BlockInspector draft={draft} block={selected} onDeselect={onDeselect} onUploadToBlock={onUploadToBlock} /></Box>
+						<Box as="fieldset" disabled={!!draft.branch?.locked} minW={0} border={0} p={0}><BlockInspector allowDataSources={props.allowDataSources} draft={draft} block={selected} onDeselect={onDeselect} onUploadToBlock={onUploadToBlock} /></Box>
 					</>
 				) : !props.helpText ? (
 					<Text color="var(--tt-muted, #9a9aa6)" fontSize="xs" lineHeight="1.7">

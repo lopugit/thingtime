@@ -318,3 +318,13 @@ export const blockLabel = (block: WebpageBlock): string => {
 	if (block.type === 'html') return 'html';
 	return `native · ${block.native || '?'}`;
 };
+
+export function requiresEditableBlockContract(blocks: WebpageBlock[]): boolean {
+ const pending = [...blocks];
+ while (pending.length) {
+  const block = pending.pop()!;
+  if (['element','collection','condition'].includes(block.type) || (block.source && block.type !== 'component')) return true;
+  if (block.children) pending.push(...block.children);
+ }
+ return false;
+}

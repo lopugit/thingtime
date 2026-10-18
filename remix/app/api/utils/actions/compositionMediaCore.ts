@@ -158,7 +158,10 @@ export const compositionAttachmentIds = (kinds: string[], crystal: Record<string
 					for (const id of compositionAttachmentIds(['component'], component, { args })) ids.add(id);
 				}
 			}
-			if (block.type === 'element') render({ tag: block.tag, props: block.props }, 0, 'html', block.args || {});
+			if (block.type === 'element') {
+    render({ tag: block.tag, props: block.props });
+    render({ tag: block.tag, props: block.props }, 0, 'stored', storedComponentScope({}, block.args));
+   }
 			blocks(block.children, depth + 1);
 		}
 	};
