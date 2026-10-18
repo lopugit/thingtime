@@ -40,7 +40,7 @@ export function settingsDocumentBlocks(value: unknown): WebpageBlock[] {
   };
   visit(value);
   const result = sanitizeWebpageBlocks(value);
-  if (!result.ok) throw new Error(result.error);
+  if (result.ok === false) throw new Error(result.error);
   return result.blocks as unknown as WebpageBlock[];
 }
 
@@ -56,7 +56,7 @@ export function parseSettingsDocument(value: unknown): SettingsDocument {
  * Web Locks fence cross-tab compare-and-set; unsupported browsers can read but
  * must not silently perform a racy durable write. */
 export function localSettingsDocumentAdapter(scope: SettingsDocumentScope, storage: Pick<Storage, 'getItem' | 'setItem'>,
-  locks: Pick<LockManager, 'request'> | undefined, randomId = () => crypto.randomUUID()): SettingsDocumentAdapter {
+  locks: Pick<LockManager, 'request'> | undefined, randomId: () => string = () => crypto.randomUUID()): SettingsDocumentAdapter {
   const key = settingsDocumentKey(scope);
   const read = () => { const raw = storage.getItem(key); return raw === null ? null : parseSettingsDocument(JSON.parse(raw)); };
   return {
