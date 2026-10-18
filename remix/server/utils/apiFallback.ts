@@ -1,24 +1,18 @@
-const THINGTIME_PRODUCTION_ORIGIN = 'https://thingtime.com';
 const MONGO_PASSWORD_PLACEHOLDER = '<db_password>';
-
-const isLoopbackHostname = (hostname: string) => {
-  const normalized = hostname.toLowerCase().replace(/^\[|\]$/g, '');
-  return normalized === 'localhost' || normalized.endsWith('.localhost') || normalized === '127.0.0.1' || normalized === '::1';
-};
 
 const normaliseOrigin = (value?: string | null) => {
   const trimmed = value?.trim();
-  if (!trimmed) return THINGTIME_PRODUCTION_ORIGIN;
+  if (!trimmed) return null;
 
   try {
-    const url = new URL(trimmed.startsWith('http') ? trimmed : `https://${trimmed}`);
-    if (url.username || url.password) return THINGTIME_PRODUCTION_ORIGIN;
-    if (url.protocol !== 'https:' && !(url.protocol === 'http:' && isLoopbackHostname(url.hostname))) {
-      return THINGTIME_PRODUCTION_ORIGIN;
+    const url = new URL(trimmed);
+    if (url.username || url.password) return null;
+    if (url.protocol !== 'https:') {
+      return null;
     }
     return url.origin;
   } catch {
-    return THINGTIME_PRODUCTION_ORIGIN;
+    return null;
   }
 };
 
@@ -34,7 +28,7 @@ export const getMissingSelfHostedApiEnv = () => {
     missing.push('MONGO_PASS');
   }
 
-  if (process.env.NODE_ENV === 'production' && !process.env.JWT_PRIVATE_KEY?.trim() && !process.env.JWT_SECRET?.trim()) {
+  if (!process.env.JWT_PRIVATE_KEY?.trim() && !process.env.JWT_SECRET?.trim()) {
     missing.push('JWT_PRIVATE_KEY or JWT_SECRET');
   }
 
@@ -43,14 +37,21 @@ export const getMissingSelfHostedApiEnv = () => {
 
 export const hasSelfHostedApiEnv = () => getMissingSelfHostedApiEnv().length === 0;
 
+// Only the installed desktop shell may deliberately bridge to a selected API.
+// Incomplete development/preview servers must never become production clients.
 export const shouldProxyApiToFallback = (request: Request) => {
-  if (hasSelfHostedApiEnv()) return false;
-
+  if (hasSelfHostedApiEnv() || process.env.NODE_ENV === 'test') return false;
+  if (process.env.THINGTIME_DESKTOP !== '1') return false;
   const requestUrl = new URL(request.url);
-  const fallbackUrl = new URL(getApiFallbackOrigin());
-
-  return requestUrl.origin !== fallbackUrl.origin;
+  const fallbackOrigin = getApiFallbackOrigin();
+  return requestUrl.hostname === '127.0.0.1' && fallbackOrigin !== null && requestUrl.origin !== fallbackOrigin;
 };
+
+export const unavailableLocalApiResponse = () => Response.json({
+  ok: false,
+  code: 'LOCAL_API_NOT_CONFIGURED',
+  error: 'Configure this server database and authentication before using its API. Automatic remote fallback is disabled.'
+}, { status: 503, headers: { 'Cache-Control': 'private, no-store, max-age=0', Pragma: 'no-cache' } });
 
 const getSetCookieHeaders = (headers: Headers) => {
   const withGetter = headers as Headers & { getSetCookie?: () => string[] };
@@ -105,7 +106,9 @@ const cloneProxyRequestHeaders = (request: Request, fallbackUrl: URL) => {
 
 export const proxyApiRequestToFallback = async (request: Request) => {
   const requestUrl = new URL(request.url);
-  const fallbackUrl = new URL(requestUrl.pathname + requestUrl.search, getApiFallbackOrigin());
+  // Direct callers cannot bypass the dispatcher's policy.
+  if (!shouldProxyApiToFallback(request)) return unavailableLocalApiResponse();
+  const fallbackUrl = new URL(requestUrl.pathname + requestUrl.search, getApiFallbackOrigin()!);
   const headers = cloneProxyRequestHeaders(request, fallbackUrl);
   const init: RequestInit & { duplex?: 'half' } = {
     method: request.method,
@@ -140,7 +143,7 @@ export const proxyApiRequestToFallback = async (request: Request) => {
     return new Response(
       JSON.stringify({
         ok: false,
-        error: 'Thingtime production API fallback failed',
+        error: 'Selected desktop API is unavailable',
         detail
       }),
       {
