@@ -55,7 +55,7 @@ function WorkspaceStoragePanel({ identity }: { identity: string }) {
   } catch (failure) { if (current() && request === protectionSequence.current) setProtectionError(message(failure)); }
   finally { protecting.current = false; if (current()) setRequesting(false); }
  };
- return <SettingsSection eyebrow="Device storage" description={access?.scope.kind === 'anonymous' ? 'Things, drafts, files and History saved in this browser. Anonymous content is never uploaded.' : 'Local copies, drafts and pending edits for this account and database. Account storage is measured separately.'}>
+ return <SettingsSection eyebrow="Device storage" description={access?.scope.kind === 'anonymous' ? 'Things, drafts, files and History saved in this browser. Anonymous content is never uploaded.' : 'Local copies, drafts and pending edits for this account and its Characters in the selected database. Remote account storage and other databases are measured separately.'}>
   <Flex direction="column" gap={3} data-testid="workspace-storage-settings">
    {usage ? <>
     <Text role="status" fontSize="sm">{error ? 'Last known usage: ' : ''}{bytesLabel(usage.bytes)} stored · {usage.records.toLocaleString()} records</Text>

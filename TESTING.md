@@ -12480,6 +12480,14 @@ Local results do not establish current-head CI or deployed acceptance.
 
 ### Character delegation with local workspaces
 
+- In Settings → Things, save distinct owner/two-Character drafts offline and
+  compare device bytes/counts with the isolated fixture's raw record ledger.
+  Include delegated files; exclude other principals, origins, planes and direct
+  Character sign-ins. Missing/orphaned Character accounting must show an error
+  rather than a partial successful total, without changing saved content.
+  Retire the root identity during discovery and require cancellation. Inspect
+  expanded settings and full-page scroll at 1440/390/320px.
+
 - With an owner-selected composer, save a comment while offline; verify local completion and no HTTP request.
 - With a delegated Character, verify the exact actor/Character/database headers, separate recovery key, no writes to the root-owner queue and no access to root local media. Switch account or database during held requests; stale results must be rejected.
 - Retain a composer/API or explicit-Character submission callback, switch the root account or database, then invoke it. It must reject before HTTP (including capability discovery). Returning to the same account in a new identity generation must not revive it. Losing remote confirmation must stop a held request while allowing a fresh confirmed request from the unchanged local identity. Coverage: `characterDelegation.test.ts` and the real submit-hook regression in `characterCallbacks.test.ts`.

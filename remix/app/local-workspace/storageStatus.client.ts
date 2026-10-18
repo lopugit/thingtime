@@ -7,7 +7,7 @@ export function workspaceStorageBinding() {
  if (!scope) return null;
  const lease = scope.kind === 'anonymous' ? anonymousWorkspaceLease() : accountWorkspaceLease(scope);
  return { scope, lease, identity: JSON.stringify([workspaceScopeKey(scope), rootIdentity.read().generation]),
-  read: async () => workspaceDatabase().transaction(scope, 'readonly', lease, tx => tx.usage()) };
+  read: async () => scope.kind === 'account' ? workspaceDatabase().accountUsage(scope, lease) : workspaceDatabase().transaction(scope, 'readonly', lease, tx => tx.usage()) };
 }
 export const workspaceStorageIdentity = () => workspaceStorageBinding()?.identity || '';
 export function subscribeWorkspaceStorage(listener: () => void) {

@@ -25,7 +25,7 @@ test('native delegated drafts survive offline reload and failed sync does not bl
  };
  await connectivity(false);
  const headers={Origin:base},url=path=>new URL(path,base).href,errors=[],offlineRequests=[],views=[],responses=[];
- let offline=false,failedDraftWrites=0,postId='';
+ let offline=false,failedDraftWrites=0,postId='',storageUsage;
  page.setDefaultTimeout(30_000);page.on('pageerror',error=>errors.push(error.message));
  page.on('console',message=>{if(message.type()==='error' && message.text().includes('same key'))errors.push(message.text());});
  page.on('response',response=>{const path=new URL(response.url()).pathname;if(['/api/root-data','/api/v1/auth/characters'].includes(path))responses.push({path,status:response.status(),method:response.request().method()});});
@@ -64,6 +64,31 @@ test('native delegated drafts survive offline reload and failed sync does not bl
   await choose(b);await poll(()=>editor().innerText(),value=>value==='Actor B draft stays with Actor B.');
   await choose(owner.id);await poll(()=>editor().innerText(),value=>value==='Owner draft stays with the owner.');
   assert.deepEqual(offlineRequests,[]);
+  await page.goto(url('/settings/things'));
+  const storage=page.getByTestId('workspace-storage-settings'),storageCard=page.locator('details').filter({has:storage});
+  await storageCard.locator(':scope > summary').click();await storage.getByRole('status').waitFor();
+  await page.getByText('Local copies, drafts and pending edits for this account and its Characters in the selected database. Remote account storage and other databases are measured separately.',{exact:true}).waitFor();
+  // Independent source of truth: inspect logical record bytes in this clean
+  // fixture, including each Character, instead of calling the meter's adapter.
+  storageUsage=await page.evaluate(async principal=>{
+   const db=await new Promise((resolve,reject)=>{const request=indexedDB.open('thingtime.local-workspaces.v1');request.onsuccess=()=>resolve(request.result);request.onerror=()=>reject(request.error);});
+   try{return await new Promise((resolve,reject)=>{const request=db.transaction('records').objectStore('records').getAll();request.onerror=()=>reject(request.error);request.onsuccess=()=>{
+    const rows=request.result.filter(row=>{const scope=JSON.parse(row.scope);return scope[1]===location.origin && ((scope[0]==='account'&&scope[2]===principal&&scope[3]==='home')||(scope[0]==='delegated-account'&&scope[2]===principal&&scope[4]==='home'));});
+    resolve({bytes:rows.reduce((sum,row)=>sum+row.bytes,0),records:rows.length,actors:[...new Set(rows.filter(row=>JSON.parse(row.scope)[0]==='delegated-account').map(row=>JSON.parse(row.scope)[3]))].sort()});
+   };});}finally{db.close();}
+  },owner.id);
+  assert.deepEqual(storageUsage.actors,[a,b].sort());
+  await storage.getByRole('button',{name:'Refresh usage',exact:true}).click();
+  await poll(()=>storage.getByRole('status').innerText(),text=>text===`${storageUsage.bytes.toLocaleString()} bytes stored · ${storageUsage.records.toLocaleString()} records`);
+  for(const width of [1440,390,320]){
+   await page.setViewportSize({width,height:width===1440?1000:844});
+   await page.evaluate(async()=>{await document.fonts.ready;for(let y=0;y<=document.documentElement.scrollHeight;y+=innerHeight/2){scrollTo(0,y);await new Promise(requestAnimationFrame);}});
+   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth),width);
+   await storageCard.evaluate(element=>window.scrollTo(0,element.getBoundingClientRect().top+window.scrollY-65));
+   if(artifacts)await page.screenshot({path:resolve(artifacts,`character-storage-${width}.png`),animations:'disabled'});
+  }
+  await page.goto(url('/feed'));await choose(owner.id);await poll(()=>editor().innerText(),value=>value==='Owner draft stays with the owner.');
+  assert.deepEqual(offlineRequests,[]);
   await page.route('**/api/v1/drafts',async route=>{if(route.request().method()==='POST'){failedDraftWrites++;return route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({ok:false,error:'Synthetic unavailable draft sync'})});}return route.continue();});
   const rosterReads=()=>responses.filter(row=>row.path==='/api/v1/auth/characters'&&row.method==='GET').length;
   const beforeReconnect=rosterReads();offline=false;await connectivity(false);
@@ -91,7 +116,7 @@ test('native delegated drafts survive offline reload and failed sync does not bl
    if(artifacts)await page.screenshot({path:resolve(artifacts,`character-post-${width}.png`),fullPage:true,animations:'disabled'});
   }
   assert.deepEqual(errors,[]);
-  if(artifacts)await writeFile(resolve(artifacts,'verification.json'),JSON.stringify({offlineCharacterDrafts:true,coldReload:true,ownerAndActorIsolation:true,reconnectRosterRefresh:true,syncReviewAndRetry:true,independentPrivatePost:postId,failedDraftWrites,views,errors,offlineRequests},null,2));
+  if(artifacts)await writeFile(resolve(artifacts,'verification.json'),JSON.stringify({offlineCharacterDrafts:true,coldReload:true,ownerAndActorIsolation:true,storageUsage,reconnectRosterRefresh:true,syncReviewAndRetry:true,independentPrivatePost:postId,failedDraftWrites,views,errors,offlineRequests},null,2));
  }catch(error){
   if(artifacts){await page.screenshot({path:resolve(artifacts,'failure.png')}).catch(()=>{});await writeFile(resolve(artifacts,'failure.json'),JSON.stringify({message:error.message,body:await page.locator('body').innerText().catch(()=>''),errors,offlineRequests,failedDraftWrites,responses},null,2));}throw error;
  }finally{await browser.close();}

@@ -49,6 +49,10 @@ account confirmation. Every remote request still negotiates the Characters
 capability and reauthorizes the selected Character on the server. The Character
 draft sync panel exposes pending changes, retries and conflict review. A sync
 failure preserves the device draft, and posting remains an independent action.
+Settings → Things includes these delegated drafts and their files in the device
+storage total for the signed-in account's selected database. Other accounts,
+direct Character sign-ins and other databases remain separate. The meter reads
+only keys and validated accounting records; it never clones file contents.
 Delegated offline posting and general Character workspace coverage are still
 tracked in [the local-workspace matrix](local-workspaces.md).
 

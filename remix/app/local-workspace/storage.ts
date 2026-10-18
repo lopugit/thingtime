@@ -143,6 +143,52 @@ export class WorkspaceDatabase {
 	transaction<T>(scope: WorkspaceScope, mode: IDBTransactionMode, lease: WorkspaceLease, run: (tx: WorkspaceTransaction) => Promise<T>): Promise<T> {
 		return this.scopedTransaction([scope], mode, lease, (views) => run(views[0]));
 	}
+	/** The account's selected-plane meter includes its delegated editors. Discover
+	 * keys and validate every ledger in one snapshot, without reading file bytes
+	 * or exposing Character content to the settings panel. */
+	accountUsage(scope: Extract<WorkspaceScope, { kind: 'account' }>, lease: WorkspaceLease): Promise<WorkspaceUsage> {
+		if (scope.kind !== 'account' || scope.delegatedBy !== undefined)
+			return Promise.reject(new WorkspaceError('ACCOUNT_REQUIRED', 'Choose the signed-in account to measure its device storage.', 403));
+		const rootKey = workspaceScopeKey(scope);
+		const prefix = JSON.stringify(['delegated-account', scope.origin, scope.ownerId]).slice(0, -1) + ',';
+		return this.scopedTransaction(async (native) => {
+			const keys = new Set([rootKey]);
+			const collect = (store: IDBObjectStore, compound: boolean) => new Promise<void>((resolve, reject) => {
+				const range = compound ? this.keyRanges.bound([prefix], [prefix + '\uffff']) : this.keyRanges.bound(prefix, prefix + '\uffff');
+				const cursor = store.openKeyCursor(range);
+				cursor.onerror = () => reject(cursor.error);
+				cursor.onsuccess = () => {
+					try {
+						lease.assertCurrent();
+						const row = cursor.result;
+						if (!row) return resolve();
+						const key = compound ? (row.key as IDBValidKey[])[0] : row.key;
+						if (typeof key !== 'string') throw new WorkspaceError('INVALID_WORKSPACE', 'Invalid retained workspace key', 409);
+						const parts = JSON.parse(key), actor = { ...scope, delegatedBy: scope.ownerId, ownerId: parts?.[3], dataPlane: parts?.[4] };
+						if (!Array.isArray(parts) || parts.length !== 5 || typeof actor.ownerId !== 'string' || typeof actor.dataPlane !== 'string' || workspaceScopeKey(actor) !== key)
+							throw new WorkspaceError('INVALID_WORKSPACE', 'Invalid retained workspace key', 409);
+						if (actor.dataPlane === scope.dataPlane) keys.add(key);
+						// A key cursor skips the remaining records of this partition. It
+						// neither clones Blobs nor imposes a limit on retained Characters.
+						if (compound) row.continue([key, []]); else row.continue();
+					} catch (error) { reject(error); }
+				};
+			});
+			// Both indexes matter: a missing ledger with records, or an orphaned
+			// nonzero ledger, must report an error rather than an incomplete total.
+			await collect(native.objectStore('records'), true);
+			await collect(native.objectStore('usage'), false);
+			return [...keys];
+		}, 'readonly', lease, async (views) => {
+			const total = { bytes: 0, records: 0 };
+			for (const view of views) {
+				const usage = await view.usage(); total.bytes += usage.bytes; total.records += usage.records;
+				if (!Number.isSafeInteger(total.bytes) || !Number.isSafeInteger(total.records))
+					throw new WorkspaceError('LOCAL_ACCOUNTING_UNAVAILABLE', 'Device storage usage is unavailable. Your saved content has not been changed.', 503);
+			}
+			return total;
+		});
+	}
 	/** Discover only this account/origin's existing local partitions. Keys alone
 	 * are read; no other account content or remote configuration is exposed. */
 	async accountScopes(
@@ -220,13 +266,13 @@ export class WorkspaceDatabase {
 		return this.scopedTransaction([scope, { ...scope, dataPlane: 'home' }], mode, lease, (views) => run({ selected: views[0], home: views[1] }));
 	}
 	private async scopedTransaction<T>(
-		scopes: WorkspaceScope[],
+		scopes: WorkspaceScope[] | ((native: IDBTransaction) => Promise<string[]>),
 		mode: IDBTransactionMode,
 		lease: WorkspaceLease,
 		run: (views: WorkspaceTransaction[]) => Promise<T>
 	): Promise<T> {
 		lease.assertCurrent();
-		const scopeKeys = scopes.map(workspaceScopeKey);
+		const scopeKeys = Array.isArray(scopes) ? scopes.map(workspaceScopeKey) : null;
 		const db = await this.open();
 		lease.assertCurrent();
 		const native = db.transaction(['records', 'usage'], mode);
@@ -375,11 +421,13 @@ export class WorkspaceDatabase {
 			return tx;
 		};
 		const unique = new Map<string, WorkspaceTransaction>();
-		const views = scopeKeys.map((key) => {
-			if (!unique.has(key)) unique.set(key, makeView(key));
-			return unique.get(key)!;
-		});
 		try {
+			const keys = typeof scopes === 'function' ? await scopes(native) : scopeKeys!;
+			lease.assertCurrent();
+			const views = keys.map((key) => {
+				if (!unique.has(key)) unique.set(key, makeView(key));
+				return unique.get(key)!;
+			});
 			const result = await run(views);
 			await writes;
 			lease.assertCurrent();

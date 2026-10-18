@@ -80,6 +80,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-19: Include delegated Character drafts/files in the selected account's
+  device-storage total, with one validated readonly snapshot and unchanged
+  owner/origin/database isolation. See [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md). — Codex (AI)
+
 - 2026-10-19: Save delegated Character drafts in separate device partitions, retain minimal offline selector labels, and reuse canonical draft sync/review independently of posting. Native acceptance and the remaining local-first matrix are tracked in [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md). — Codex (AI)
 
 

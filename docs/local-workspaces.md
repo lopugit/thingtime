@@ -7,6 +7,23 @@ rollout is **not ready to merge** until the outstanding rows below are verified.
 
 ## Character draft checkpoint — 2026-10-19
 
+Storage follow-up: 720 workspace and four offline-shell checks pass. Nine focused
+checks pass (overlapping coverage), including 257 retained Characters and
+cancellation during identity retirement. Native offline Settings matches the
+fixture’s independent record bytes/counts at 1440/390/320px; draft isolation,
+verified reconnect and independent private posting still pass. Client/server
+builds pass; lint has no errors and one existing warning; the 91 TypeScript
+baseline diagnostics are unchanged. Evidence: `tmp/character-storage-native/`.
+The network-none runtime was released. Current-head CI/deployment and full
+Character workspace coverage remain open.
+
+The device-storage meter now includes principal-owned delegated Character
+partitions in the selected database. Its readonly snapshot discovers keys from
+both records and ledgers, validates every included ledger, and returns only
+aggregate bytes/counts. Missing or orphaned accounting is an error, preserving
+the last known UI total. Other origins, principals, direct Character sign-ins
+and data planes stay separate; no new remote request or authority is introduced.
+
 Delegated composer drafts now use the existing account draft/catalog/file queues
 in a partition keyed by origin, principal, Character and data plane. Owner drafts,
 other Characters and direct Character sign-in remain separate. The roster keeps
@@ -26,7 +43,7 @@ anonymous reading returns 404. The isolated runtime was released with zero OOM.
 The test caught duplicate React keys leaving two composers; those keys are now
 distinct and each switch asserts exactly one editor. Background remote-only
 features can still show a reconnect toast; broader offline UI cleanup remains.
-Delegated offline posting, attachment-picker integration, storage management and
+Delegated offline posting, attachment-picker integration, storage cleanup and
 the remaining Character feature matrix stay open. This is not final-head CI or
 deployed acceptance.
 

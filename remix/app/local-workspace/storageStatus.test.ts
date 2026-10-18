@@ -43,6 +43,54 @@ test('device usage counts exact logical bytes and records in only the selected p
  } finally { await h.db.close(); }
 });
 
+test('account usage includes delegated Character bytes only for this principal, origin and plane', async () => {
+ const h = fixture(), actor = { ...account, ownerId: 'actor', delegatedBy: account.ownerId };
+ const included = [account, actor, { ...actor, ownerId: 'actor-two' }];
+ const excluded = [anonymous, { ...account, ownerId: 'actor' }, { ...account, ownerId: 'other' }, { ...actor, delegatedBy: 'other' }, { ...actor, origin: 'https://other.example' }, { ...actor, dataPlane: 'other' }];
+ try {
+  for (const [index, scope] of [...included, ...excluded].entries())
+   await h.db.transaction(scope, 'readwrite', h.lease, async tx => { await tx.put('drafts', 'same-id', { text: 'Private draft' }); await tx.putBlob('file', new Blob([new Uint8Array(index + 1)])); });
+  const expected = { bytes: 0, records: 0 };
+  for (const scope of included) { const usage = await read(h.db, scope, h.lease); expected.bytes += usage.bytes; expected.records += usage.records; }
+  assert.deepEqual(await h.db.accountUsage(account, h.lease), expected);
+  assert.deepEqual(await h.db.accountUsage({ ...account, ownerId: 'actor' }, h.lease), await read(h.db, { ...account, ownerId: 'actor' }, h.lease));
+  await assert.rejects(h.db.accountUsage(actor, h.lease), /signed-in account/);
+  await assert.rejects(h.db.accountUsage(anonymous as any, h.lease), /signed-in account/);
+  h.invalidate(); await assert.rejects(h.db.accountUsage(account, h.lease), /Workspace changed/);
+ } finally { await h.db.close(); }
+});
+
+test('account totals refuse missing and orphaned Character ledgers without changing saved content', async () => {
+ const h = fixture(), actor = { ...account, ownerId: 'actor', delegatedBy: account.ownerId }, key = workspaceScopeKey(actor);
+ try {
+  await h.db.transaction(actor, 'readwrite', h.lease, tx => tx.put('drafts', 'one', { text: 'Retain me' }));
+  const usage = await read(h.db, actor, h.lease);
+  const native = await new Promise<IDBDatabase>((resolve, reject) => { const req = h.factory.open('usage-test'); req.onsuccess = () => resolve(req.result); req.onerror = () => reject(req.error); });
+  const edit = (run: (tx: IDBTransaction) => void) => new Promise<void>((resolve, reject) => { const tx = native.transaction(['records','usage'], 'readwrite'); run(tx); tx.oncomplete = () => resolve(); tx.onabort = () => reject(tx.error); });
+  try {
+   await edit(tx => tx.objectStore('usage').delete(key));
+   await assert.rejects(h.db.accountUsage(account, h.lease), (error: any) => error.code === 'LOCAL_ACCOUNTING_UNAVAILABLE');
+   assert.deepEqual(await h.db.transaction(actor, 'readonly', h.lease, tx => tx.get('drafts','one')), { text: 'Retain me' });
+   await edit(tx => { tx.objectStore('usage').put({ scope:key, ...usage }); tx.objectStore('records').delete([key,'drafts','one']); });
+   await assert.rejects(h.db.accountUsage(account, h.lease), (error: any) => error.code === 'LOCAL_ACCOUNTING_UNAVAILABLE');
+   await edit(tx => tx.objectStore('usage').put({ scope:key, bytes:0, records:0 }));
+   assert.deepEqual(await h.db.accountUsage(account, h.lease), { bytes:0, records:0 });
+  } finally { native.close(); }
+ } finally { await h.db.close(); }
+});
+
+test('account usage traverses every retained Character and stops when the root identity retires', async () => {
+ const h = fixture();
+ try {
+  for (let i = 0; i < 257; i++)
+   await h.db.transaction({ ...account, ownerId:`actor-${i}`, delegatedBy:account.ownerId }, 'readwrite', h.lease, tx => tx.putBytes('file', new Uint8Array(1)));
+  assert.deepEqual(await h.db.accountUsage(account, h.lease), { bytes:257, records:257 });
+  let checks = 0;
+  await assert.rejects(h.db.accountUsage(account, { ...h.lease, assertCurrent() { if (++checks === 20) h.invalidate(); h.lease.assertCurrent(); } }), /Workspace changed/);
+  assert.deepEqual(await h.db.accountUsage(account, guard().lease), { bytes:257, records:257 }, 'Cancelled accounting does not mutate content');
+ } finally { await h.db.close(); }
+});
+
 test('missing or damaged usage is unavailable, never an empty successful meter; content stays intact', async () => {
  const h = fixture(), value = { text: 'Retain me' }, bytes = new TextEncoder().encode(JSON.stringify(value)).length;
  try {
@@ -105,6 +153,8 @@ test('storage settings clear identity immediately and read offline account scope
   assert.deepEqual(await offline.read(), { bytes: 0, records: 0 });
   await workspaceDatabase().transaction(account, 'readwrite', offline.lease, tx => tx.put('things', 'one', { text: 'Account' }));
   assert.equal((await offline.read()).records, 1);
+  await workspaceDatabase().transaction({ ...account, ownerId:'actor', delegatedBy:account.ownerId }, 'readwrite', offline.lease, tx => tx.put('drafts', 'one', { text:'Character' }));
+  assert.equal((await offline.read()).records, 2, 'Settings includes the same principal’s delegated draft storage while offline');
   bindLocalWorkspace(true, generation); assert.equal((await workspaceStorageBinding()!.read()).records, 1);
   await assert.rejects(offline.read(), /Account workspace changed/); assert.ok(changes >= 4);
  } finally { off(); await workspaceDatabase().close(); bindLocalWorkspace(false, rootIdentity.read().generation); Object.assign(globalThis, original); }

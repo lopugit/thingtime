@@ -11,6 +11,16 @@ in [PR #999](https://github.com/lopugit/thingtime/pull/999).
 
 ## Character draft checkpoint — 2026-10-19
 
+Storage follow-up: 720 workspace and four offline-shell checks pass. Nine focused
+checks pass (overlapping coverage), including 257 retained Characters and
+cancellation during identity retirement. Native offline Settings matches the
+fixture’s independent record bytes/counts at 1440/390/320px; draft isolation,
+verified reconnect and independent private posting still pass. Client/server
+builds pass; lint has no errors and one existing warning; the 91 TypeScript
+baseline diagnostics are unchanged. Evidence: `tmp/character-storage-native/`.
+The network-none runtime was released. Current-head CI/deployment and full
+Character workspace coverage remain open.
+
 Delegated drafts use canonical local draft/file queues scoped to principal plus
 actor. Retained roster labels support offline selectors without session/admin
 authority. The shared draft sync panel preserves retry and review controls;
