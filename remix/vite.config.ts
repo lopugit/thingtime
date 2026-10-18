@@ -10,7 +10,7 @@ import { THINGTIME_CAPABILITY_MANIFEST_PATH } from './app/api/utils/capabilities
 import { APPLE_APP_ASSOCIATION_PATH } from './app/api/utils/auth/appleAppAssociation';
 import { ROBOTS_PATH, SITEMAP_PATH } from './app/api/utils/seo/sitemapCore';
 import { installPreviewBuildFreshness } from './app/utils/previewBuildFreshness';
-import { draftPreviewCsp, platformRuntimeCsp, designBundlesCsp, librarySandboxCsp, librarySdkCsp, devCsp } from './scripts/csp.mjs';
+import { mediaWorkerCsp, draftPreviewCsp, platformRuntimeCsp, designBundlesCsp, librarySandboxCsp, librarySdkCsp, devCsp } from './scripts/csp.mjs';
 
 const designDocsBase = '/docs/design-bundles';
 const designDocsDir = fileURLToPath(new URL('../docs/design', import.meta.url));
@@ -200,6 +200,10 @@ const librarySandboxPlugin = (): Plugin => ({
         if (!existsSync(file)) { res.statusCode = 503; res.end('Run npm run build:draft'); return; }
         res.setHeader('Content-Type', 'text/javascript'); res.setHeader('Cache-Control', 'no-store');
         createReadStream(file).pipe(res); return;
+      }
+      if (path === '/app/webPlatform/mediaWorker.ts' || /^\/assets\/mediaWorker-[A-Za-z0-9_-]+\.js$/.test(path)) {
+        res.setHeader('Content-Security-Policy', mediaWorkerCsp);
+        res.setHeader('Cross-Origin-Resource-Policy', 'same-origin');
       }
       if (path === '/platform/runtime.html' || path === '/platform/runtime.js') {
         const file = fileURLToPath(new URL(`./dist${path}`, import.meta.url));

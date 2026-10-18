@@ -32,7 +32,7 @@ test('JSON Action inputs and draft-saving suites negotiate both origin manifests
 	const wellKnown = thingtimeCapabilityManifest('https://thingtime.test').features;
 	for (const [feature, minimum, previous] of [
 		['api.things', '1.33.2', '1.32.0'], ['api.things-update', '1.10.0', '1.9.0'],
-		['api.actions-run', '1.37.0', '1.34.0'], ['api.webpages-suites-install', '1.3.0', '1.2.0']
+		['api.actions-run', '1.37.0', '1.34.0'], ['api.webpages-suites-install', '1.4.0', '1.3.0']
 	]) {
 		assert.equal(route[feature], minimum);
 		assert.equal(wellKnown[feature].version, minimum);

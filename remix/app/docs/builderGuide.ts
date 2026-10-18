@@ -43,6 +43,27 @@ export const builderLookupExample = {
 };
 export const builderGuideSections = [
 	{
+		id: 'framework-capabilities',
+		title: 'Discover the current Thingtime framework',
+		paragraphs: [
+			'This is the canonical Builder guide, shared by /docs/builder, documentation search and Lopu’s authoring prompt. Check it before declaring a request unsupported. The library is broader than HTML tags: saved Components wrap registered native adapters, browser Actions and server Actions. A limit of one runtime or tool is not a platform-wide limit.',
+			'With tools available, use browse_components to find reusable controls, list_demos to discover installable suites, get_demo with the returned slug to inspect a suite, and get_thing with /render or /steps plus pagination to read a saved definition. Use list_actions and inspect_action for Action inputs, permissions and runtime. Do not invent a tool or operation. Tool availability, selected-origin capability contracts, sign-in/permissions and device/browser support are separate checks.',
+			'Web standards (/p/web-standards) exposes the versioned inventory and explicit interactive/inspection/context coverage. tt-web-platform accepts a version: 1 program with JSON document, styles, parameters, declarative steps and registered DOM bindings. Its opaque sandbox and terminable workers keep authored programs outside account authority. It does not accept raw JavaScript strings, arbitrary imports or network destinations. Inspect the exact current example before composing a new program; a standards entry does not imply a fully ported API.',
+			'When a building block is missing, identify the exact absent adapter or unavailable browser codec and explain what is needed. Say what was checked and what remains unverified. Never infer that Thingtime cannot perform long-running local work merely because server Actions have short budgets. Keep application layout and settings in editable Component/Page data and reuse registered native functionality.'
+		]
+	},
+	{
+		id: 'local-media',
+		title: 'Local video compression and encoding',
+		paragraphs: [
+			'Install the media-tools suite (discover its exact slug with list_demos) for a complete editable compressor and a Save edited component Action. The tt-web-platform program.media adapter performs actual local decoding, resizing, encoding and container writing in a trusted secure-context worker behind a run-scoped selected-file bridge. The editable document remains in its opaque sandbox, and the worker denies network access. MP4/MOV/WebM/MKV inputs and MP4 H.264/AAC or WebM VP9/Opus outputs depend on the browser’s WebCodecs support. Unsupported source/output codecs fail explicitly; audio is never silently removed.',
+			'program.media binds distinct IDs in program.document: file (single input type=file), start/cancel (buttons), status (output), progress (progress), and optional preview (video). output contains format (mp4/webm), maxWidth/maxHeight, videoBitrate, frameRate, audio (keep/remove) and audioBitrate. Each accepts a scalar or {op: "input", name: "parameterName"}. Parameter descriptors define editable controls and saved defaults. Dimensions preserve aspect ratio without upscaling; bitrate is a codec target, not a promised final file size.',
+			'The file picker grants access only to the selected local file. No upload, remote URL, account data, custom JavaScript or codec download is involved. Start begins processing, Cancel terminates it, and the host offers Download output only after an actual Blob is returned. Before/after sizes and codec failures are reported. File changes, Stop, rerun, navigation and account changes clear output handles and terminate active processing. Large jobs depend on available device/browser memory; cancel remains available.',
+			'Only primary video and audio tracks are retained. Additional tracks, subtitles and metadata are omitted. Save edited component stores the complete document/styles/media descriptor and current defaults through the existing Thing API; selected files and output bytes are never persisted. tt-upload is the separate account-upload adapter, and tt-media/video handles playback. Do not promise uploading, saving bytes, background continuation after navigation, or universal codec support from this local pipeline.'
+		],
+		example: { media: {file: '#file', start: '#start', cancel: '#cancel', status: '#status', progress: '#progress', preview: '#preview', output: {format: 'webm', maxWidth: 1280, maxHeight: 720, videoBitrate: 1500000, frameRate: 30, audio: 'keep', audioBitrate: 96000}} }
+	},
+	{
 		id: 'start',
 		title: 'Build a working component',
 		paragraphs: [
@@ -103,7 +124,7 @@ export const builderGuideSections = [
 			'Create a secret in your Vault containing your Google Maps Geocoding API key. Replace YOUR_VAULT_ENTRY_ID below with that entry id, never the key. Enable the Geocoding API and billing in your Google Cloud project, and restrict the key appropriately for server requests. Only an action you own can use your Vault credential. Shared runs cannot make lookups.',
 			'The provider registry fixes the HTTPS destination, accepted query and public result shape. Actions cannot choose arbitrary URLs, headers, redirects or raw secrets. Queries cap at 500 characters, responses at 128 KiB and five results, and requests at eight seconds within the action deadline. No automatic retry or per-keystroke billing. Missing setup, quota failures and timeouts produce an error; no matches produce an empty items array.',
 			'Google Maps results include address, placeId, latitude and longitude. Display Google Maps attribution. Follow provider display and storage rules before saving provider-derived data; prefer saving the user-entered address and place id. Built-in run history and source caches omit lookup results. Further providers need a registered adapter, capability coverage, bounded output, credential handling and tests.',
-			'Lopu chat tools fetch_url/http_request and the JavaScript lopu client are separate interfaces. Authored JSON cannot execute JavaScript, fetch, onChange or arbitrary event handlers. Use declarative actions for component behavior.'
+			'Lopu chat tools fetch_url/http_request and the JavaScript lopu client are separate interfaces. Ordinary component markup cannot execute raw JavaScript, fetch, onChange or arbitrary event handlers. Use registered declarative Actions and tt-web-platform programs for supported behavior; consult the framework-capabilities and local-media sections.'
 		],
 		example: builderLookupExample
 	},
