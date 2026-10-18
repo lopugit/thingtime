@@ -190,3 +190,14 @@ pre-queued with no jobs, logs, or cancellable run graph.
   rebase and build doctor retain configured compatible entries without adding
   default. Missing, invalid, incompatible-only and oversized orders stop before
   a model invocation. An explicitly selected default retains its position.
+
+## Configured cross-provider waterfall
+
+- Save Claude High → Astra Medium, then the reverse order, and verify the run's
+  actual models/efforts match each saved plan. No environment selector overrides it.
+- Exercise exhausted/invalid provider credentials and verify the next configured
+  entry runs. Ordinary task errors must stop. Verify selected Claude continuation
+  never resumes after an OpenAI attempt.
+- Test missing OpenAI credentials, invalid settings and incompatible capability
+  manifests. No unconfigured model may run or credential value enter logs/commits.
+- Run `node --test .github/scripts/admin-model-order.test.mjs .github/scripts/lopu-credential-vault.test.mjs`.

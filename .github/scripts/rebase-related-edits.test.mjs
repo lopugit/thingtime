@@ -60,6 +60,7 @@ function hashTrustedTree(root) {
     ".github/scripts/classify-claude-credential-failure.mjs",
     ".github/scripts/graphify-cas.mjs",
     ".github/scripts/lopu-credential-vault.mjs",
+    ".github/scripts/lopu-model-waterfall.mjs",
     ".github/scripts/stage-graphify-snapshots.mjs",
   ]);
 }
@@ -133,7 +134,7 @@ function copyTrustedTree(destination) {
   for (const name of [
     "classify-claude-credential-failure.mjs",
     "graphify-cas.mjs",
-    "lopu-credential-vault.mjs",
+    "lopu-credential-vault.mjs", "lopu-model-waterfall.mjs",
     "stage-graphify-snapshots.mjs",
   ]) {
     cpSync(

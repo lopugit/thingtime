@@ -98,3 +98,6 @@ ds-bundle/
 .design-sync/.cache/
 .design-sync/learnings/
 .design-sync/node_modules
+
+# Ephemeral validated admin model plan generated for one Lopu invocation.
+.lopu-waterfall-action/

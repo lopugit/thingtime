@@ -3,6 +3,7 @@
 import { createHmac, randomBytes } from 'node:crypto';
 import { chmod, mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const MAX_CREDENTIALS = 8;
 const MAX_RESPONSE_BYTES = 256 * 1024;
@@ -13,25 +14,28 @@ const required = (name) => {
   return value;
 };
 
-const validate = (value) => {
+export const validate = (value, platform = 'Anthropic') => {
   if (!value || value.ok !== true || !Array.isArray(value.credentials) || value.credentials.length > MAX_CREDENTIALS) {
     throw new Error('Thingtime returned an invalid credential bundle.');
   }
   const ids = new Set();
   const names = new Set();
   return value.credentials.map((row, index) => {
-    if (!row || typeof row !== 'object' || row.credentialType !== 'claude-code-oauth-token' || !['Anthropic', 'anthropic', 'Claude', 'claude'].includes(row.platform ?? 'Anthropic')) throw new Error('Thingtime returned an unsupported Claude credential type.');
+    const validType = platform === 'OpenAI'
+      ? row?.credentialType === 'openai-api-key' && row?.platform === 'OpenAI'
+      : row?.credentialType === 'claude-code-oauth-token' && ['Anthropic', 'anthropic', 'Claude', 'claude'].includes(row?.platform ?? 'Anthropic');
+    if (!validType) throw new Error('Thingtime returned an unsupported credential type.');
     const id = typeof row.id === 'string' ? row.id.trim() : '';
     const name = typeof row.name === 'string' ? row.name.trim() : '';
     const credential = typeof row.value === 'string' ? row.value.trim() : '';
-    if (!id || !name || /[\u0000-\u001f\u007f]/.test(name) || !credential || /[\r\n]/.test(credential) || ids.has(id) || names.has(name)) throw new Error('Thingtime returned malformed or duplicate credentials.');
+    if (!id || !name || /[\u0000-\u001f\u007f]/.test(name) || !credential || /[\u0000-\u0020\u007f]/.test(credential) || ids.has(id) || names.has(name)) throw new Error('Thingtime returned malformed or duplicate credentials.');
     ids.add(id);
     names.add(name);
     return { id, name, platform: row.platform ?? 'Anthropic', credentialType: row.credentialType, value: credential, priority: index };
   });
 };
 
-const legacyCredentials = () => {
+export const legacyCredentials = () => {
   const candidates = [
     ['Thingtime Claude', process.env.LOPU_LEGACY_CLAUDE_TOKEN_PREFERRED],
     ['Existing Claude', process.env.LOPU_LEGACY_CLAUDE_TOKEN_PRIMARY],
@@ -46,7 +50,7 @@ const legacyCredentials = () => {
   });
 };
 
-const fetchBundle = async () => {
+export const fetchBundle = async (platform = 'Anthropic') => {
   const secret = required('THINGTIME_CI_ROUTER_SECRET');
   const origin = new URL(process.env.THINGTIME_CREDENTIAL_VAULT_ORIGIN?.trim() || 'https://thingtime.com');
   if (origin.protocol !== 'https:' && origin.hostname !== '127.0.0.1' && origin.hostname !== 'localhost') throw new Error('Credential vault origin must use HTTPS.');
@@ -54,14 +58,14 @@ const fetchBundle = async () => {
   origin.search = '';
   origin.hash = '';
   const body = JSON.stringify({
-    platform: 'Anthropic',
+    platform,
     repository: required('GITHUB_REPOSITORY'),
     workflowRef: required('GITHUB_WORKFLOW_REF'),
     runId: required('GITHUB_RUN_ID'),
     runAttempt: required('GITHUB_RUN_ATTEMPT'),
     nonce: randomBytes(24).toString('base64url'),
     requestedAt: new Date().toISOString(),
-    bootstrapCredentials: legacyCredentials()
+    ...(platform === 'Anthropic' ? { bootstrapCredentials: legacyCredentials() } : {})
   });
   const signature = `sha256=${createHmac('sha256', secret).update(body, 'utf8').digest('hex')}`;
   const response = await fetch(origin, {
@@ -75,15 +79,15 @@ const fetchBundle = async () => {
   if (Buffer.byteLength(text, 'utf8') > MAX_RESPONSE_BYTES) throw new Error('Thingtime credential response exceeded the size limit.');
   let parsed;
   try { parsed = JSON.parse(text); } catch { throw new Error(`Thingtime credential fetch failed (${response.status}).`); }
-  if (!response.ok) throw new Error(typeof parsed?.error === 'string' ? `Thingtime credential fetch failed (${response.status}): ${parsed.error}` : `Thingtime credential fetch failed (${response.status}).`);
-  return validate(parsed);
+  if (!response.ok) throw new Error(`Thingtime credential fetch failed (${response.status}).`);
+  return validate(parsed, platform);
 };
 
-const safeCache = async (file) => {
+const safeCache = async (file, platform = 'Anthropic') => {
   try {
     const parsed = JSON.parse(await readFile(file, 'utf8'));
     if (parsed.runId !== process.env.GITHUB_RUN_ID || parsed.runAttempt !== process.env.GITHUB_RUN_ATTEMPT) return null;
-    return validate({ ok: true, credentials: parsed.credentials });
+    return validate({ ok: true, credentials: parsed.credentials }, platform);
   } catch {
     return null;
   }
@@ -118,13 +122,15 @@ const main = async () => {
     const output = process.argv[3];
     const runnerTemp = `${path.resolve(required('RUNNER_TEMP'))}${path.sep}`;
     if (!output || !path.isAbsolute(output) || !`${path.resolve(output)}`.startsWith(runnerTemp)) throw new Error('Credential needle output must be inside RUNNER_TEMP.');
-    const credentials = await safeCache(file);
-    if (!credentials) {
-      try { await readFile(file, 'utf8'); } catch {
-        await writeFile(output, '', { mode: 0o600 });
-        return;
+    const credentials = [];
+    for (const [cacheFile, platform] of [[file, 'Anthropic'], [path.join(required('RUNNER_TEMP'), 'lopu-openai-vault.json'), 'OpenAI']]) {
+      const cached = await safeCache(cacheFile, platform);
+      if (cached) credentials.push(...cached);
+      else {
+        try { await readFile(cacheFile, 'utf8'); }
+        catch (error) { if (error.code === 'ENOENT') continue; throw error; }
+        throw new Error('The current-run credential cache is invalid.');
       }
-      throw new Error('The current-run credential cache is invalid.');
     }
     const needles = credentials.flatMap((row) => [row.value, Buffer.from(row.value, 'utf8').toString('base64')]);
     await writeFile(output, `${needles.join('\n')}\n`, { mode: 0o600 });
@@ -143,11 +149,11 @@ const main = async () => {
       credentials = legacy;
     }
   }
-  if (!credentials.length) throw new Error('The Thingtime Lopu credential waterfall has no enabled credentials.');
+  if (!credentials.length && process.env.LOPU_ALLOW_EMPTY_CLAUDE !== 'true') throw new Error('The Thingtime Lopu credential waterfall has no enabled credentials.');
   await exportBundle(credentials, file);
 };
 
-main().catch((error) => {
+if (process.argv[1] === fileURLToPath(import.meta.url)) main().catch((error) => {
   process.stderr.write(`::error::${error instanceof Error ? error.message : 'Credential vault fetch failed.'}\n`);
   process.exitCode = 1;
 });
