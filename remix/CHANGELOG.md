@@ -75,6 +75,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-19 — **Codex (AI)**: Retry initial personal-instruction account reads
+  independently of local edits. Added isolated native acceptance for anonymous
+  Mail settings, saved readers and competing-tab proxy edits, with offline
+  desktop/mobile evidence. Provider and signed-in sync checks remain open; see
+  [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
 - 2026-10-19 — **Codex (AI)**: Personal Lopu instructions save in anonymous and
   offline device workspaces. Account synchronization runs independently with
   reviewed conflicts and lost-reply recovery; admin base edits remain protected.

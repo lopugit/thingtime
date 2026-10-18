@@ -84,8 +84,8 @@ legacy desktop-origin caches are not reassigned to a selected server.
 `mail/workspace.test.ts` exercises real IndexedDB/encryption with synthetic data:
 account/origin partitions, more than 2,000 retained messages, crypto/transaction
 retirement and rejection before any fetch. The store processes encryption in
-batches without a retention count ceiling. Keep the native UI/provider checks in
-TESTING open until exercised in an isolated browser/native session.
+batches without a retention count ceiling. The native saved-reader and paused-settings checks below now pass locally;
+provider/native-transport and signed-in checks remain separate in TESTING.
 
 ## Independent account-settings synchronization
 
@@ -108,3 +108,26 @@ remain separate checks in TESTING.md. No HTTP contract/version changes are intro
 Mail IndexedDB version 3 upgrades the existing encrypted rows in place and refuses
 version-2 writers, which cannot preserve the new queue metadata. The migration
 regression verifies retained ciphertext and the old-writer VersionError fence.
+
+
+## Native anonymous acceptance
+
+`anonymous.browser.test.ts` runs two fresh contexts against an explicitly isolated
+full-app fixture. `anonymous.browser.fixture.ts` seeds only canonical encrypted
+synthetic messages after account settings are created through the real UI; it is
+never imported by the app. Tests exercise offline settings edit/removal, exact
+reader text and inert markup, search/pagination, proxy editing and competing tabs,
+plus 1440/390/320px scroll/bounds checks. Account/cloud/connector/tracker requests
+fail the test. Provider delivery, popup settings and full-account synchronization
+remain separate. Current evidence and limitations: `docs/local-workspaces.md`.
+
+Bundle the fixture with esbuild (`--bundle --platform=browser --format=iife
+--global-name=MailFixture`) and the test with `--platform=node --format=esm`.
+Run the test inside the verified task namespace with `TT_MAIL_TEST_ORIGIN`,
+`TT_MAIL_TEST_SESSION`, `TT_MAIL_TEST_FIXTURE`, `TT_MAIL_TEST_ARTIFACTS`,
+`TT_MAIL_PUPPETEER` and `TT_MAIL_CHROME` pointing to its own app, files and binaries.
+The health response must match the isolated session. Use no personal profile or
+credentials. Close the allocator's initial app tab before starting the test
+browser, keep the resource limits, inspect cgroup memory events and reject any
+run with renderer/OOM failures. Each scenario closes its browser before the next.
+Missing opt-in variables skip these tests in `test:mail`; skips are not passes.

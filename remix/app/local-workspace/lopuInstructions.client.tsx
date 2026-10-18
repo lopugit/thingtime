@@ -7,6 +7,7 @@ import { LocalLopuInstructions, instructionSettings, promptSnapshot, type Instru
 import { accountRemoteWorkspaceLease, accountWorkspaceLease, anonymousWorkspaceLease, canSyncAccountWorkspace, currentAccountWorkspace, isAnonymousWorkspace, subscribeWorkspaceBinding, subscribeWorkspaceIdentity, workspaceDatabase, workspaceIdentityKey } from './runtime.client';
 import { workspaceScopeKey, WorkspaceError, type WorkspaceScope } from './storage';
 import { createSyncPump } from './syncPump';
+import { syncLopuInstructionPass } from './lopuInstructionSync';
 
 export const LOPU_INSTRUCTIONS_CHANGED = 'thingtime:lopu-instructions-changed';
 const WAKE = 'thingtime:lopu-instructions-sync';
@@ -57,14 +58,9 @@ export function LopuInstructionsSync() {
   const service = lopuInstructionWorkspace(), controller = new AbortController();
   let stopped = false;
   const online = () => !stopped && service.scope.kind === 'account' && navigator.onLine !== false && canSyncAccountWorkspace(service.scope);
-  const pump = createSyncPump(online, async () => {
-   const before = await service.read();
-   if (service.scope.kind !== 'account') return null;
-   await service.sync(instructionTransport(service.scope), controller.signal);
-   const after = await service.read();
-   if (JSON.stringify(before) !== JSON.stringify(after)) announceLopuInstructions(service.scope);
-   return after.pending && !after.conflict ? 60_000 : null;
-  });
+  const pump = createSyncPump(online, () => service.scope.kind === 'account'
+   ? syncLopuInstructionPass(service, instructionTransport(service.scope), controller.signal, () => announceLopuInstructions(service.scope))
+   : Promise.resolve(null));
   const wake = () => pump.wake();
   const off = subscribeWorkspaceBinding(wake), retire = service.lease.onInvalidate(() => controller.abort());
   try {

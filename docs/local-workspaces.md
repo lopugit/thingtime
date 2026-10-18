@@ -4972,3 +4972,49 @@ Graph refresh note: the semantic pass requested 176 chunks across 66 stale files
 it was stopped after confirming that backlog. Prior semantic data is preserved,
 and the structural graph and portable outputs are refreshed for this checkpoint.
 Documentation semantic freshness is not claimed.
+
+
+## Native anonymous Mail and initial instruction retries — 2026-10-19
+
+The real Email settings and Mail pages now have opt-in acceptance checks in
+`remix/app/mail/anonymous.browser.test.ts`. Two fresh anonymous browser contexts
+exercise paused account creation, invalid-hostname feedback, offline edits and
+reload, confirmed cache removal, 52 saved messages, pagination/search, exact body
+text, missing-field and partial/attachment notices, and inert HTML. Proxy inboxes
+are created, edited, reopened and removed through the UI. A competing-tab write
+cannot replace unsaved editor text. No provider credential is entered; the reader
+source is explicitly synthetic canonical data written through the existing
+encrypted mail store. This proves saved-mail behavior, not provider delivery.
+
+Both scenarios passed against the production build in task-owned Chromium,
+including 1440×1000, 390×844 and 320×844 scrolling and bounds. There were zero page
+errors, account-mail/temporary-account/connector/tracker requests, credentials or
+account settings writes. The browser and backend share `network=none`, no host
+mounts/ports, a read-only root and the unchanged 2 GiB limit. The immutable app
+image is `98e4b7025e253bde5e4e23742ebb9420760d6e9e04f43dcab95cab1c584f373e`.
+Evidence: `tmp/mail-native-browser/verified/verification-settings.json`,
+`verification-reader.json`, PNGs and `resources.json`; the latter records zero
+OOM/limit events. Earlier combined runs exhausted the test runtime; they are
+failures, not acceptance evidence. Separate clean scenarios release browser
+history between checks and preserve the real two-tab conflict test. The runner
+also waits for local save completion before reload and opens disclosures after
+mail readiness with native keyboard input.
+
+The personal-instruction worker now retries an initial failed account read even
+when there is no pending device edit, and retries a claim held by another tab.
+Successful idle reads stop polling; explicit conflicts wait for review, and
+anonymous settings never call transport. Three regressions exercise the real
+service and timer pump. Workspace tests: 710 passed, 73 opt-in skipped, plus four
+offline-shell checks. Mail tests: 52 passed, two native opt-ins skipped in the
+ordinary suite and then run explicitly above. Client/template/server builds and
+changed-file lint pass. All 91 TypeScript diagnostics match the existing baseline.
+
+Provider/connector delivery, popup settings, workspace transitions and full-account
+queue/reconnect acceptance remain open. The target ChatGPT host still lacks a
+verified connected artifact tool; local stdio MCP proof remains distinct. These
+results are local, not CI or deployed acceptance, and do not complete the broader
+goal or authorize its main merge.
+
+Graph maintenance: a 90-second semantic update reached only part of its 177-chunk
+backlog. Existing semantic evidence is retained; the structural update and portable
+outputs are refreshed. Current documentation semantic coverage is not claimed.

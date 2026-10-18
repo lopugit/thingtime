@@ -11600,11 +11600,18 @@ separate from deterministic discovery/lease tests.
   keys stay separate; 2,001 messages survive encrypted reopen. Retire identity
   during encryption, decryption, IndexedDB write and remote completion; reject
   the old operation and preserve the previous durable revision. `test:mail`.
-- [ ] Native anonymous Mail and Email settings: create/edit/remove a device-only
-  account, pair a synthetic connector, discover folders and read/search messages,
-  create/edit/delete a proxy, cold reload offline, and switch workspace/origin
-  mid-save. Verify no cloud/capability request, no silent cache truncation, and
-  readable 1440/390/320px layouts including expanded controls and full scrolling.
+- [x] Native anonymous Mail and Email settings in the isolated full app: create
+  paused device settings, reject an invalid hostname, edit/reload fully offline,
+  cancel then confirm local removal. Seed 52 canonical encrypted synthetic
+  messages; verify exact text, inert HTML, missing-field/partial notices,
+  pagination/search and proxy create/edit/remove. A competing tab save preserves
+  the first editor's unsaved text. Verify zero account-mail/temporary-account/
+  connector/tracker requests, no credential or account queue, and full scrolling
+  with no horizontal overflow at 1440/390/320px. Two opt-in tests pass in
+  `app/mail/anonymous.browser.test.ts`; evidence is in `docs/local-workspaces.md`.
+- [ ] Pair a synthetic connector and discover/read mail through the actual
+  transport; switch workspace/origin mid-save. Provider/native connector delivery
+  and the settings popup remain separate from the saved-reader fixture above.
 - [ ] Keep local edits usable during slow account cloud refresh; a stale response
   cannot overwrite edits. Offline account mail must never use cookies/relay until
   root confirmation returns. Verify independent account/proxy edits and removals
@@ -12415,11 +12422,11 @@ Local results do not establish current-head CI or deployed acceptance.
 
 ## Device Lopu instruction settings
 
-- [ ] In a fresh isolated browser, open Settings → Lopu without a session. Add
+- [x] In a fresh isolated browser, open Settings → Lopu without a session. Add
   multiline instructions, disable one, save, go fully offline and cold-reload.
   Text and enabled state persist, with zero `/api/v1/settings/lopu-prompt`
   requests. Check the expanded base prompt and bottom scroll at 1440/390/320px.
-- [ ] Edit the same saved checklist in two tabs. Saving the second must not let
+- [x] Edit the same saved checklist in two tabs. Saving the second must not let
   the first silently overwrite it; retain the first tab's unsaved text and offer
   explicit reload. `lopuInstructions.browser.test.ts` exercises this regression.
 - [ ] In an isolated signed-in fixture, save offline while a remote attempt is
@@ -12430,6 +12437,11 @@ Local results do not establish current-head CI or deployed acceptance.
   must not upload anonymous instructions. Personal row/text sizes beyond the old
   limits must survive local reload; HTTP 413 retains the device copy and reports
   sync failure. Base-prompt administration remains protected.
+- [x] Fail the initial account read before any device edit, then advance the
+  worker timer without a focus event. It must retry, load canonical settings and
+  stop idle polling. A competing tab claim retries without duplicate transport;
+  anonymous settings and explicit conflicts never schedule remote retries.
+  `lopuInstructionSync.test.ts` uses the real service and sync pump.
 - Automated coverage: `test:local-workspace`, `test:api-capabilities`,
   `app/api/utils/lopu/promptSettingsCore.test.ts` and
   `app/routes/api/v1/settings/lopu-prompt/lopuPrompt.test.ts`. Native fixture
