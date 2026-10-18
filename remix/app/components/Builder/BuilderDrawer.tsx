@@ -482,7 +482,9 @@ const BlockInspector = ({
     </> : null}
     {block.type === 'condition' ? <>
      <FieldRow label="Value path"><Input {...inputStyles} aria-label="Condition path" value={String(block.condition?.arg || '')} onChange={e => patch({ condition: { ...block.condition, arg: e.target.value } })} /></FieldRow>
-     <FieldRow label="Equals"><Input {...inputStyles} aria-label="Condition equals" value={String(block.condition?.equals ?? '')} onChange={e => patch({ condition: { ...block.condition, equals: e.target.value || undefined } })} /></FieldRow>
+     <FieldRow label="Equals">{typeof block.condition?.equals === 'boolean' ?
+      <Select {...inputStyles} aria-label="Condition equals" value={String(block.condition.equals)} onChange={e=>patch({condition:{...block.condition,equals:e.target.value==='true'}})}><option value="true">true</option><option value="false">false</option></Select> :
+      <Input {...inputStyles} aria-label="Condition equals" type={typeof block.condition?.equals==='number' ? 'number' : 'text'} placeholder={block.condition?.equals===null ? 'null' : 'Truthy when blank'} value={String(block.condition?.equals ?? '')} onChange={e => patch({ condition: { ...block.condition, equals: e.target.value === '' ? undefined : typeof block.condition?.equals==='number' ? Number(e.target.value) : e.target.value } })} />}</FieldRow>
     </> : null}
    </> : null}
    {allowDataSources ? block.source ? <>

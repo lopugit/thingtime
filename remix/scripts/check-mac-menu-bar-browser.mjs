@@ -86,6 +86,9 @@ try {
   await page.getByLabel('Element alt',{exact:true}).fill('Icon for {item.program}');
   await choose(/summary ·/);
   await page.getByLabel('Block text',{exact:true}).fill('Inspect program and stats');
+  await choose(/When item.state.menuBar.accessibility$/);
+  await page.getByLabel('Condition equals',{exact:true}).selectOption('true');
+  await page.getByLabel('Condition equals',{exact:true}).selectOption('false');
   await choose(/List · Menu bar items/);
   assert.equal(await page.getByLabel('Default page size').inputValue(),'all');
   await page.getByTestId('builder-save').click();
