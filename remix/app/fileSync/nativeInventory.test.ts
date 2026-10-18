@@ -11,8 +11,8 @@ const page = { capture, offset: 0, entries: [entry], nextOffset: null };
 
 test('native inventories negotiate explicit platform versions and pin every response', () => {
 	for (const [platform, fileAccessVersion, supported] of [
-		['macos', '1.4.0', false], ['macos', '1.5.0', true], ['macos', '1.6.0', true],
-		['ios', '1.2.0', false], ['ios', '1.3.0', true], ['ios', '2.0.0', false], ['android', '1.9.0', false]
+		['macos', '1.4.0', false], ['macos', '1.5.0', false], ['macos', '1.5.1', true], ['macos', '1.6.0', true],
+		['ios', '1.2.0', false], ['ios', '1.3.0', false], ['ios', '1.3.1', true], ['ios', '2.0.0', false], ['android', '1.9.0', false]
 	] as const) assert.equal(supportsNativeInventoryPages({ platform, fileAccessVersion }), supported);
 	const parse = (request: FolderRequest, patch = {}) => parseMobileFolderResult({ type: 'mobile-files-result',
 		payload: { ...expected, rootId, complete: true, capture, inventoryPage: page, roots: [], ...patch } }, expected, request);

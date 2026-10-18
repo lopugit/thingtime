@@ -314,3 +314,46 @@ test('cloud page failures preserve the baseline before writes and during checkpo
 		assert.equal(await f.journal().pagedRuns(access(input)).active(), null); f.journal().close();
 	}
 });
+
+test('fully paged foreground crosses 10,000 paths and checkpoints the entire generation', async () => {
+	const f = await foregroundFixture(10001), input: ForegroundSyncInput = f.input();
+	for (const row of f.local.slice(0, -1)) f.rows.set(row.id, {
+		id: row.id, name: row.path, revision: 'present', folderId: saved.configuration.remoteFolderId
+	});
+	input.scanLocal = async () => { throw Error('Unbounded legacy scan'); };
+	input.inventory = async () => { throw Error('Unbounded legacy cloud inventory'); };
+	input.inspectLocal = async path => structuredClone(f.local.find(row => row.path === path) ?? null);
+	input.reviewPagedConflicts = async () => { throw Error('No review expected'); };
+	let nativePages = 0, cloudPages = 0;
+	input.scanLocalPages = async function* () {
+		const generation = crypto.randomUUID();
+		for (let offset = 0; offset < f.local.length; offset += 128) {
+			nativePages++;
+			yield { generation, ordinal: offset / 128, entries: structuredClone(f.local.slice(offset, offset + 128)),
+				...(offset + 128 >= f.local.length ? { totalEntries: f.local.length } : {}) };
+		}
+	};
+	input.inventoryPages = async function* () {
+		const generation = crypto.randomUUID(), rows = [...f.rows.values()];
+		for (let offset = 0; offset < rows.length; offset += 128) {
+			cloudPages++;
+			yield { version: 1, generation, rootId: saved.configuration.remoteFolderId, rootRevision: 'r1', ordinal: offset / 128,
+				nodes: rows.slice(offset, offset + 128).map(row => ({ kind: 'folder', path: row.name, id: row.id, revision: row.revision, folderId: row.folderId })),
+				...(offset + 128 >= rows.length ? { totalEntries: rows.length } : {}) };
+		}
+	};
+	try {
+		const done = await runPagedForegroundCloudSync(saved, scope, input, signal());
+		assert.ok('spec' in done); assert.equal(done.progress.operations, 1); assert.equal(f.creates(), 1);
+		const head = (await f.journal().pagedCheckpoints(access(input)).current())!;
+		assert.ok(head); const inventory = f.journal().inventory(access(input));
+		assert.equal((await inventory.read(head.baseline.local)).totalEntries, 10001);
+		assert.equal((await inventory.read(head.baseline.remote)).totalEntries, 10001);
+		assert.equal(nativePages, 158); assert.equal(cloudPages, 158);
+		input.reviewPagedConflicts = undefined;
+		input.reviewConflicts = async () => { throw Error('Whole-tree review must never open for a large root'); };
+		await assert.rejects(runPagedForegroundCloudSync(saved, scope, input, signal()), /Large folders require/);
+		assert.equal(f.creates(), 1);
+		assert.deepEqual(await f.journal().pagedCheckpoints(access(input)).current(), head);
+	} finally { f.journal().close(); }
+});

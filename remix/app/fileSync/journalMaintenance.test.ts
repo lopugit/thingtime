@@ -72,7 +72,11 @@ test('another reader pins managed inventory and a late reader cannot acquire par
 test('an interrupted cleanup transaction rolls back retirement and every row deletion together', async () => {
 	const f = await fixture(), id = identity('rollback'); await capture(f, id);
 	const before = await counts(f.factory), original = IDBObjectStore.prototype.delete; let writes = 0;
-	IDBObjectStore.prototype.delete = function (...args) { if (this.name === 'inventory-entries' && ++writes === 50) throw Error('storage interruption'); return original.apply(this, args); };
+	IDBObjectStore.prototype.delete = function (...args) {
+		const request = original.apply(this, args);
+		if (this.name === 'inventory-entries' && ++writes === 1) throw Error('storage interruption');
+		return request;
+	};
 	try { await assert.rejects(f.maintenance.step(), /storage interruption/); } finally { IDBObjectStore.prototype.delete = original; }
 	assert.deepEqual(await counts(f.factory), before); assert.equal((await f.inventory.read(id)).totalEntries, 270);
 	await f.maintenance.collect(); assert.equal((await counts(f.factory))['inventory-captures'], 0); f.journal.close();

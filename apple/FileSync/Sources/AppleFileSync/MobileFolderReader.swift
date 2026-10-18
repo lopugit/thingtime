@@ -61,7 +61,7 @@ public struct MobileFolderReader {
         }
         return fd
     }
-    private static func visitNames(_ fd: Int32, visit: (String) throws -> Void) throws {
+    static func visitNames(_ fd: Int32, visit: (String) throws -> Void) throws {
         let next = openat(fd, ".", O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
         guard next >= 0 else { throw Failure.unavailable }
         guard let directory = fdopendir(next) else { close(next); throw Failure.unavailable }; defer { closedir(directory) }

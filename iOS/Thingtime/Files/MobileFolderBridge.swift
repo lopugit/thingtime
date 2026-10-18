@@ -8,10 +8,10 @@ import UniformTypeIdentifiers
 @MainActor
 final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
     static let uploadVersion = "1.3.0"
-    static let accessVersion = "1.3.0"
+    static let accessVersion = "1.3.1"
     static let stagingVersion = "1.2.0"
-    static let publicationVersion = "1.0.0"
-    static let trashVersion = "1.2.0"
+    static let publicationVersion = "1.0.1"
+    static let trashVersion = "1.2.1"
     static let script = WKUserScript(source: "window.thingtimeNativeBridge.fileUploadVersion = '\(uploadVersion)'; window.thingtimeNativeBridge.fileAccessVersion = '\(accessVersion)'; window.thingtimeNativeBridge.fileStagingVersion = '\(stagingVersion)'; window.thingtimeNativeBridge.filePublicationVersion = '\(publicationVersion)'; window.thingtimeNativeBridge.fileTrashVersion = '\(trashVersion)';", injectionTime: .atDocumentStart, forMainFrameOnly: true)
     private let photos = PhotoLibraryReader()
     private var photoPermissionPending = false

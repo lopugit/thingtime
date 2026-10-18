@@ -12,6 +12,7 @@ const apiPort = 28311,
 	dbPort = 28312,
 	base = `http://127.0.0.1:${apiPort}`,
 	root = resolve(import.meta.dirname, '..');
+const wide = process.argv.includes('--wide');
 const clean = { PATH: process.env.PATH, HOME: process.env.HOME, TMPDIR: process.env.TMPDIR || tmpdir() };
 if (!process.env.TT_MAC_PAGED_WORKER) {
 	for (const port of [apiPort, dbPort]) {
@@ -56,7 +57,7 @@ if (!process.env.TT_MAC_PAGED_WORKER) {
 		const policy =
 			accountBackupSandbox(apiPort, true) +
 			`\n(allow network-outbound (remote ip "localhost:${dbPort}"))\n(allow network-inbound (local ip "localhost:${dbPort}"))`;
-		const child = spawn('/usr/bin/sandbox-exec', ['-p', policy, process.execPath, import.meta.filename], {
+		const child = spawn('/usr/bin/sandbox-exec', ['-p', policy, process.execPath, import.meta.filename, ...(wide ? ['--wide'] : [])], {
 			cwd: root,
 			env: { ...clean, TT_MAC_PAGED_WORKER: directory, THINGTIME_MAC_SYNC_FIXTURE_BIN: binary },
 			stdio: ['ignore', 'pipe', 'pipe']
@@ -70,7 +71,7 @@ if (!process.env.TT_MAC_PAGED_WORKER) {
 		const stop = () => child.kill('SIGTERM');
 		process.once('SIGINT', stop);
 		process.once('SIGTERM', stop);
-		timer = setTimeout(stop, 600000);
+		timer = setTimeout(stop, wide ? 1200000 : 600000);
 		const [code] = await once(child, 'exit');
 		const result = output.split('\n').find((line) => line.startsWith('{"macPagedSyncProof":'));
 		if (code !== 0 || !result) {
@@ -227,7 +228,7 @@ if (!process.env.TT_MAC_PAGED_WORKER) {
 		console.log('MAC_PAGED_STAGE native-transfers');
 		const test = start(
 			process.execPath,
-			['--import', 'tsx', 'scripts/mac-file-sync.integration.mts', fixturePath, '--paged', '--large-upload', '--large-download'],
+			['--import', 'tsx', 'scripts/mac-file-sync.integration.mts', fixturePath, '--paged', '--large-upload', '--large-download', ...(wide ? ['--wide'] : [])],
 			{ ...clean, THINGTIME_MAC_SYNC_FIXTURE_BIN: process.env.THINGTIME_MAC_SYNC_FIXTURE_BIN }
 		);
 		const output = collect(test);

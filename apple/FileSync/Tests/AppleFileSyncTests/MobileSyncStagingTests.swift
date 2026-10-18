@@ -64,6 +64,27 @@ final class MobileSyncStagingTests: XCTestCase {
             XCTAssertEqual(try MobileSyncStaging(directory: storage).publish(request, owner: owner, bookmark: bookmark, stage: stage), lookup.receipt)
         }
     }
+    func testPublicationAndRecoveryAcrossWideAncestorsRetainAliasChecks() throws {
+        for wideParent in [false, true] {
+            let bytes = Data("wide-folder-download".utf8)
+            let (storage, selected, owner, request, bookmark, stage) = try publicationFixture(bytes)
+            let wide = wideParent ? selected.appendingPathComponent("nested") : selected
+            for index in 0...10_000 {
+                try Data().write(to: wide.appendingPathComponent("sibling-\(index)"))
+            }
+            let staging = MobileSyncStaging(directory: storage)
+            let receipt = try staging.publish(request, owner: owner, bookmark: bookmark, stage: stage)
+            XCTAssertEqual(try Data(contentsOf: selected.appendingPathComponent(request.operation.mutation.path)), bytes)
+            XCTAssertEqual(try MobileSyncStaging(directory: storage).lookup(request, owner: owner, bookmark: bookmark).receipt, receipt)
+            XCTAssertEqual(receipt.entry, try MobileFolderReader.inspect(bookmark: bookmark, path: request.operation.mutation.path))
+            XCTAssertThrowsError(try NativeFileDestination.coordinated(bookmark: bookmark, path: "NESTED/file.bin") { _, _ in
+                XCTFail("An alternate ancestor spelling must never reach the mutation")
+            })
+            XCTAssertThrowsError(try NativeFileDestination.coordinated(bookmark: bookmark, path: "nested/FILE.bin") { _, _ in
+                XCTFail("An alternate target spelling must never reach the mutation")
+            })
+        }
+    }
     func testPublicationRefusesLocalChangesAndSymlinkEscape() throws {
         let bytes = Data("download".utf8)
         for prior: Data? in [nil, Data("original".utf8)] {

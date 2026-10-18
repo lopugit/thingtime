@@ -539,3 +539,13 @@ HTTP server, replica and synthetic identity. `mac-file-sync.integration.mts
 `nativeInventory`, `cloudInventoryPages.client` and durable conflict choices.
 The README documents signing and network isolation. Installed-app/provider
 acceptance and the combined foreground path limit remain separate gates.
+
+
+Wide destination compatibility: `NativeFileDestination.swift` streams sibling
+alias checks; Mac access 1.5.1/publication 1.1.1 and iOS access 1.3.1/publication
+1.0.1 advertise the correction (Trash 1.2.1). `supportsNativeInventoryPages`
+requires the patched contract, so older clients retain bounded scans. The shared
+runner lifts the combined path ceiling only with all paged/path/review adapters.
+Run `test:files:mac-paged -- --wide` for the API-provisioned 10,003-path Mac proof,
+plus Apple staging/Trash tests and `nativeInventory.test.ts` for version gates.
+See [wide native destinations](../mobile-file-sync.md#wide-native-destination-checks--2026-10-19).

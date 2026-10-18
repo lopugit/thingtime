@@ -33,6 +33,9 @@ const { FolderStream } = createRequire(import.meta.url)('../../electron/lib/fold
 const [fixturePath] = process.argv.slice(2);
 const photoFixture = process.argv.includes('--photos');
 const pagedFixture = process.argv.includes('--paged');
+const wideFixture = process.argv.includes('--wide');
+const wideFolders = wideFixture ? 10001 : 0;
+assert.ok(!wideFixture || pagedFixture, 'Wide acceptance requires the paged runner');
 assert.ok(!pagedFixture || !photoFixture, 'Photos retain their separate bounded acceptance');
 const forcePreflightCooldown = process.argv.includes('--cooldown-before-upload');
 assert.ok(fixturePath);
@@ -184,7 +187,7 @@ async function send(payload: any) {
 	});
 }
 const signal = new AbortController().signal;
-const caps: FolderCapabilities = { platform: 'macos', fileAccessVersion: pagedFixture ? '1.5.0' : '1.3.0', fileStagingVersion: '1.1.0', filePublicationVersion: '1.1.0', fileTrashVersion: '1.2.0' };
+const caps: FolderCapabilities = { platform: 'macos', fileAccessVersion: pagedFixture ? '1.5.1' : '1.3.0', fileStagingVersion: '1.1.0', filePublicationVersion: '1.1.1', fileTrashVersion: '1.2.0' };
 let deviceId: string | undefined, remoteRoot: string | undefined, configurationId: string | undefined;
 const deviceName = 'Mac sync acceptance ' + randomUUID();
 const factory = new IDBFactory();
@@ -311,7 +314,17 @@ try {
 			assert.ok(capabilitySatisfies(manifest.features[feature]?.version, minimum), feature);
 		}
 	};
-	const inventory = async () => parseCloudInventory((await api('/api/v1/files?rootId=' + remoteRoot)).inventory, remoteRoot!);
+	const inventory = async () => {
+		if (!wideFixture) return parseCloudInventory((await api('/api/v1/files?rootId=' + remoteRoot)).inventory, remoteRoot!);
+		// Acceptance truth only; the production runner consumes bounded pages.
+		const nodes: import('../app/fileSync/cloudInventory').CloudInventoryNode[] = [];
+		let rootRevision = '', complete = false;
+		for await (const page of readCloudFolderInventoryPages(scope, remoteRoot!, { ...runtime, signal })) {
+			nodes.push(...page.nodes); rootRevision = page.rootRevision;
+			if (page.totalEntries !== undefined) { assert.equal(nodes.length, page.totalEntries); complete = true; }
+		}
+		assert.ok(complete); return { version: 1 as const, complete: true as const, rootId: remoteRoot!, rootRevision, nodes };
+	};
 
     if (photoFixture) {
         const roots = (await request(fixture.userId, { action: 'list' }, signal)).roots;
@@ -404,6 +417,20 @@ try {
 		remoteBytes = new Uint8Array(process.argv.includes('--large-download') ? 2 * 1024 * 1024 + 17 : 65_539).fill(29);
 	await writeFile(path.join(directory, 'selected/local.bin'), localBytes);
 	await seed('remote.bin', remoteBytes);
+	if (wideFixture) {
+		assert.equal(base.origin, 'http://127.0.0.1:28311');
+		for (let offset = 0; offset < wideFolders; offset += 1000) {
+			const things = Array.from({ length: Math.min(1000, wideFolders - offset) }, (_, i) => ({
+				id: 'folder-' + (offset + i), thingtime: ['folder'], crystal: { name: 'wide-' + String(offset + i).padStart(5, '0') }
+			}));
+			const imported = await api('/api/v1/things/import', { folderId: remoteRoot,
+				manifest: { format: 'thingtime.transfer', version: 1, roots: things.map(t => t.id), things, files: [] } });
+			assert.equal(imported.imported, things.length);
+		}
+		for (let offset = 0; offset < wideFolders; offset += 128)
+			await Promise.all(Array.from({ length: Math.min(128, wideFolders - offset) }, (_, i) =>
+				mkdir(path.join(directory, 'selected', 'wide-' + String(offset + i).padStart(5, '0')))));
+	}
 	primeCooldown = forcePreflightCooldown;
 	let nativePages = 0, cloudPages = 0, reviewInterrupt = false, reviewedChoices = 0;
 	const journalAccess = { scope, currentScope: () => scope };
@@ -503,10 +530,12 @@ try {
 	await assertCompletedRun(original.id, originalIds);
 	const verifyBytes = async (expected: Record<string, Uint8Array>) => {
 		const inv = await inventory();
-		assert.equal(inv.nodes.length, Object.keys(expected).length);
+		assert.equal(inv.nodes.length, Object.keys(expected).length + wideFolders);
+		const folders = inv.nodes.filter(n => n.kind === 'folder');
+		assert.equal(folders.length, wideFolders);
+		if (wideFixture) assert.deepEqual(folders.map(n => n.path).sort(), Array.from({ length: wideFolders }, (_, i) => 'wide-' + String(i).padStart(5, '0')));
 		for (const node of inv.nodes) {
-			assert.equal(node.kind, 'file');
-			if (node.kind !== 'file') throw Error('Unexpected folder');
+			if (node.kind !== 'file') continue;
 			const response = await sessionFetch(new URL('/api/v1/attachments/content?id=' + node.file.content.attachmentId + '&cache=bytes', base));
 			assert.equal(response.status, 200);
 			assert.equal(hash(new Uint8Array(await response.arrayBuffer())), hash(expected[node.path]));
@@ -522,6 +551,17 @@ try {
 	const first = await verifyBytes({ 'local.bin': localBytes, 'remote.bin': remoteBytes });
 	await run();
 	assert.deepEqual(await verifyBytes({ 'local.bin': localBytes, 'remote.bin': remoteBytes }), first);
+	if (wideFixture) {
+		const head = (await journal.pagedCheckpoints(journalAccess).current())!; assert.ok(head);
+		for (const id of [head.baseline.local, head.baseline.remote])
+			assert.equal((await journal.inventory(journalAccess).read(id)).totalEntries, wideFolders + 2);
+		assert.ok(nativePages >= 4 * 79 && cloudPages >= 4 * 79);
+		console.log(JSON.stringify({ ok: true, paged: true, wideFolders, totalPaths: wideFolders + 2, nativePages, cloudPages,
+			nativeCalls, verifyCalls, cooldownCount, cooldownSeconds, counts, picker: 'fixture', keychain: 'not-used',
+			checks: ['wide-native-and-cloud-pages', 'complete-checkpoint', 'real-upload-download-byte-hashes', 'lost-accepted-replies',
+				'native-restart', 'original-operation-IDs', 'no-replayed-transfers', 'stable-convergence'],
+			provisioning: 'cloud folders created by the normal import API; real native directories and HTTP reads/transfers' }));
+	} else {
 	const oldInventory = await inventory();
 	const editedLocal = new Uint8Array(257).fill(41),
 		editedRemote = new Uint8Array(263).fill(53);
@@ -700,6 +740,7 @@ try {
 		})
 	);
     }
+    }
 } finally {
 	loseCloud = false;
 	losePublication = false;
@@ -711,7 +752,7 @@ try {
 	}
 	journal.close();
 	try {
-		if (remoteRoot) {
+		if (remoteRoot && !wideFixture) {
 			const value = await api('/api/v1/files?rootId=' + remoteRoot);
 			for (const node of value.inventory.nodes)
 				if (node.kind === 'file') {
@@ -729,7 +770,7 @@ try {
 				}
 		}
 		if (configurationId) await api('/api/v1/things?id=' + configurationId, undefined, 'DELETE');
-		if (remoteRoot) await api('/api/v1/things?id=' + remoteRoot, undefined, 'DELETE');
+		if (remoteRoot && !wideFixture) await api('/api/v1/things?id=' + remoteRoot, undefined, 'DELETE');
 		const devices = deviceId ? [{ id: deviceId, name: deviceName }] : (await api('/api/v1/devices')).devices;
 		for (const device of devices)
 			if (device.id === deviceId || device.name === deviceName) await api('/api/v1/devices/disconnect', { deviceId: device.id });

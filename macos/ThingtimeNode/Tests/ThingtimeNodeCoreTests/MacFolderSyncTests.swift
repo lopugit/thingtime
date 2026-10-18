@@ -42,7 +42,7 @@ final class MacFolderSyncTests: XCTestCase {
         let context = try await service.handle(request("context")).decode([String: JSONValue].self)
         XCTAssertEqual(context["deviceId"], .string("device"))
         let capabilities = try XCTUnwrap(context["capabilities"]).decode([String: String].self)
-        XCTAssertEqual(capabilities, ["fileAccessVersion": "1.5.0", "fileStagingVersion": "1.1.0", "filePublicationVersion": "1.1.0"])
+        XCTAssertEqual(capabilities, ["fileAccessVersion": "1.5.1", "fileStagingVersion": "1.1.0", "filePublicationVersion": "1.1.1"])
         let result = try await service.handle(request("conditions")).decode([String: JSONValue].self)
         XCTAssertEqual(result["conditions"], .object(["network": .string("unknown"), "charging": .null]))
     }
@@ -344,7 +344,7 @@ final class MacFolderSyncTests: XCTestCase {
             }, choose: { selected }, approve: { _ in writePrompts += 1; return true },
             approveTrash: { _ in trashPrompts += 1; return allowTrash })
         let context = try await service.handle(request("context")).decode([String: JSONValue].self)
-        XCTAssertEqual(try XCTUnwrap(context["capabilities"]).decode([String: String].self)["fileTrashVersion"], "1.1.0")
+        XCTAssertEqual(try XCTUnwrap(context["capabilities"]).decode([String: String].self)["fileTrashVersion"], "1.1.1")
         let id = try await root(service)
         let scan = try await service.handle(request("scan", ["rootId": .string(id)])).decode([String: JSONValue].self)
         let entry = try XCTUnwrap(scan["entries"]).decode([MobileFolderReader.Entry].self)[0]
@@ -404,7 +404,7 @@ final class MacFolderSyncTests: XCTestCase {
             choose: { selected }, approve: { _ in false }, approveTrash: { _ in false },
             approveRestore: { _, _ in prompts += 1; return accept })
         let context = try await service.handle(request("context")).decode([String: JSONValue].self)
-        XCTAssertEqual(try XCTUnwrap(context["capabilities"]).decode([String: String].self)["fileTrashVersion"], "1.2.0")
+        XCTAssertEqual(try XCTUnwrap(context["capabilities"]).decode([String: String].self)["fileTrashVersion"], "1.2.1")
         let id = try await root(service), owner = try FileSyncOwnerScope(ownerId: "owner", url: origin), grant = try store.grant(owner, id: id)
         let entry = try XCTUnwrap(MobileFolderReader.scan(bookmark: grant.bookmark).first { $0.path == "recover.bin" })
         let oldScope = MobileSyncStaging.Scope(origin: origin.absoluteString, ownerId: "owner", dataPlane: "home", rootId: "old-connection", deviceId: "old-device")

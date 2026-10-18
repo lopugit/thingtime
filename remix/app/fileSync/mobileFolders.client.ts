@@ -109,7 +109,11 @@ export const supportsNativePartUploads = (bridge: FolderCapabilities | undefined
 /** These native access contracts independently add exact single-path inspection. */
 export const supportsNativeInventoryPages = (bridge: FolderCapabilities | undefined = getNativeBridge()) => {
 	const minimum = bridge?.platform === 'macos' ? 5 : bridge?.platform === 'ios' ? 3 : undefined;
-	return minimum !== undefined && /^1\.\d+\.\d+$/.test(bridge?.fileAccessVersion ?? '') && Number(bridge!.fileAccessVersion!.split('.')[1]) >= minimum;
+	// The first patch fixes destination alias checks in wide directories. Older
+	// native builds keep the bounded runner even though they can produce pages.
+	const [major, minor, patch] = (bridge?.fileAccessVersion ?? '').split('.').map(Number);
+	return minimum !== undefined && /^1\.\d+\.\d+$/.test(bridge?.fileAccessVersion ?? '') && major === 1 &&
+		(minor > minimum || (minor === minimum && patch >= 1));
 };
 export const supportsNativePathInspection = (bridge: FolderCapabilities | undefined = getNativeBridge()) => {
 	const minimum = bridge?.platform === 'macos' ? 4 : bridge?.platform === 'ios' ? 2 : undefined;

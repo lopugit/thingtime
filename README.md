@@ -5581,3 +5581,10 @@ accepted-reply loss, native restarts, convergence, saved-choice recovery and
 recoverable Trash. Its picker, consent and credential store are test adapters;
 its IndexedDB is an in-process fixture. Installed UI, physical providers, large
 root throughput and browser-process persistence require separate acceptance.
+
+For the combined large-root check, add `-- --wide` to the command. It provisions
+10,001 ordinary folders through the normal import API, creates matching native
+directories and verifies two byte transfers and complete 10,003-path checkpoints
+through reply loss and restart. Allow up to 20 minutes. Mac access 1.5.1 or iOS
+access 1.3.1 is required for the paged native path: earlier builds retain the
+10,000-path bound because their publication alias check used a whole listing.

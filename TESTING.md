@@ -11649,3 +11649,20 @@ resume unfinished Android gates only when requested.
 - Verify the disposable runner releases its two ports and child processes,
   keeps its generated credentials private, and never touches the installed app.
   Do not treat this native/API proof as installed UI or large-volume acceptance.
+
+
+### Wide native publication and complete paged roots
+
+- [ ] Run the Mac paged fixture with `-- --wide`: all cloud folders must be
+  created through the Things import API. Require complete 10,003-path local and
+  remote checkpoints, full byte hashes, accepted-reply recovery, and no repeated
+  transfers on the unchanged rerun. Keep installed/provider acceptance separate.
+- [ ] Verify native publication/lookup and Trash/restore with 10,001 siblings;
+  alternate case/Unicode paths must still refuse before a write. Reopen receipts
+  and compare the retained/restored bytes, including occupied destinations.
+- [ ] Native Mac access 1.5.0 and iOS 1.3.0 must keep bounded legacy behavior;
+  1.5.1/1.3.1 may use the complete paged path. A missing paged review or individual
+  path adapter must preserve the 10,000-path limit and the previous baseline.
+- [ ] Retired metadata cleanup must delete at most 128 keys per step, preserve
+  other scopes and current pins/baselines, and roll back retirement plus all
+  queued range deletions when storage fails before transaction completion.

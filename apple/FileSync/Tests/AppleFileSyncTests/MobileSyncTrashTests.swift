@@ -66,6 +66,17 @@ final class MobileSyncTrashTests: XCTestCase {
         XCTAssertTrue(try f.trash.list(owner: f.owner, rootId: f.request.rootId, bookmark: f.bookmark).items.isEmpty)
         XCTAssertEqual(try f.trash.restoration(f.request, owner: f.owner, bookmark: f.bookmark)?.receipt, receipt)
     }
+    func testTrashAndRestoreInWideDirectoryKeepAllSiblingBytes() throws {
+        let f = try fixture(), parent = f.selected.appendingPathComponent("nested")
+        for index in 0...10_000 { try Data().write(to: parent.appendingPathComponent("sibling-\(index)")) }
+        let receipt = try f.trash.trash(f.request, owner: f.owner, bookmark: f.bookmark)
+        XCTAssertEqual(try f.trash.lookup(f.request, owner: f.owner, bookmark: f.bookmark).receipt, receipt)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: f.target.path))
+        _ = try f.trash.restore(f.request, owner: f.owner, bookmark: f.bookmark,
+            restore: .init(path: "nested/item", expected: inspect(f)))
+        XCTAssertEqual(try Data(contentsOf: f.target), Data("original bytes".utf8))
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: parent.path).count, 10_002)
+    }
     func testRecoveryPaginationHasNoDuplicatesAndIncludesPreviousConnections() throws {
         let f = try fixture()
         _ = try f.trash.trash(f.request, owner: f.owner, bookmark: f.bookmark)

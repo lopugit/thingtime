@@ -63,7 +63,11 @@ enum NativeFileDestination {
                 for (index, name) in parts.enumerated() {
                     // Refuse alternate case/Unicode spellings even on a case-sensitive volume.
                     let alias = name.precomposedStringWithCanonicalMapping.lowercased()
-                    guard try MobileFolderReader.names(parent).allSatisfy({ $0 == name || $0.precomposedStringWithCanonicalMapping.lowercased() != alias }) else { throw Failure.changed }
+                    let before = try MobileFolderReader.stamp(MobileFolderReader.info(parent))
+                    try MobileFolderReader.visitNames(parent) { candidate in
+                        guard candidate.utf8.elementsEqual(name.utf8) || candidate.precomposedStringWithCanonicalMapping.lowercased() != alias else { throw Failure.changed }
+                    }
+                    guard try MobileFolderReader.stamp(MobileFolderReader.info(parent)) == before else { throw Failure.changed }
                     if index < parts.count - 1 {
                         let next = openat(parent, name, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
                         guard next >= 0 else { throw Failure.unavailable }; close(parent); parent = next

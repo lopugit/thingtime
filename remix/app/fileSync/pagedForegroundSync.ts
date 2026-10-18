@@ -138,7 +138,11 @@ export async function runPagedForegroundCloudSync(reviewed: SavedFileSyncConfigu
 		const spec: PagedPlanSpec = { id: crypto.randomUUID(), local, remote, baseline,
 			policy: { mode: configuration.mode, propagateDeletes: configuration.propagateDeletes }, excludedPaths: configuration.excludedPaths };
 		const result = await plans.build(spec);
-		if (result.indexed > MAX_SYNC_SCAN_ENTRIES) throw Error('Combined sync scan exceeds its bounded partition.');
+		// Every whole-tree compatibility boundary must stay bounded. The native
+		// paged path can keep its plan, review and baseline on disk throughout.
+		if (result.indexed > MAX_SYNC_SCAN_ENTRIES &&
+			!(input.scanLocalPages && input.inventoryPages && input.inspectLocal && input.reviewPagedConflicts))
+			throw Error('Large folders require paged native/cloud inventories, individual path checks and paged conflict review.');
 		return spec;
 	};
 	const releaseDraft = async (saved: ReviewDraftSpec, keepPlan = false) => {

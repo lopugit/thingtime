@@ -97,13 +97,18 @@ export function journalMaintenance(db: IDBDatabase, access: JournalAccess, keyRa
 						result.next = { scope: key, kind: row.kind, id: row.id, inclusive: false }; done(result); return;
 					}
 					const store = tx.objectStore(children[row.kind][row.store]), request = store.openKeyCursor(range(row.id));
+					let first: IDBValidKey | undefined, last: IDBValidKey | undefined;
+					// The cursor is already confined to this retired scoped record.
+					// Delete one contiguous bounded page, avoiding a separate delete
+					// request for every key in a large obsolete capture.
+					const flush = () => { if (first !== undefined) store.delete(ranges.bound(first, last!)); };
 					request.onsuccess = () => { try {
 						check(); const cursor = request.result;
-						if (!cursor) { row.store++; remove(); return; }
+						if (!cursor) { flush(); row.store++; remove(); return; }
 						const size = new TextEncoder().encode(JSON.stringify(cursor.primaryKey)).length;
 						if (size + 4096 > INVENTORY_PAGE_BYTES) throw Error('Cleanup key exceeds its byte bound.');
-						if (result.deleted === INVENTORY_PAGE_ENTRIES || bytes + size > INVENTORY_PAGE_BYTES) { finishPage(); return; }
-						store.delete(cursor.primaryKey); result.deleted++; bytes += size; cursor.continue();
+						if (result.deleted === INVENTORY_PAGE_ENTRIES || bytes + size > INVENTORY_PAGE_BYTES) { flush(); finishPage(); return; }
+						first ??= cursor.primaryKey; last = cursor.primaryKey; result.deleted++; bytes += size; cursor.continue();
 					} catch (e) { fail(e); } };
 				};
 				remove();

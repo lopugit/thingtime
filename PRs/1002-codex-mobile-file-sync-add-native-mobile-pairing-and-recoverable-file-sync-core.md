@@ -3060,3 +3060,45 @@ IndexedDB uses the existing in-process test implementation. Separate Chromium
 proofs cover browser-process persistence and editable review UI. This does not
 prove installed Mac/iOS UI, physical providers, million-path throughput or full
 account backups. The 10,000 combined-path cap remains; Android stays deferred.
+
+
+## Wide native destination checks — 2026-10-19
+
+A combined native/API run above 10,000 paths reached the download publication
+step and exposed an older limit in `NativeFileDestination`: alias validation
+materialized every sibling name through the legacy reader. The shared Mac/iOS
+destination now streams names, rejects alternate case or Unicode spellings,
+and verifies the parent directory stamp before and after enumeration. It keeps
+coordinated access, descriptor-relative no-follow traversal, exact destination
+preconditions, retained displaced bytes and original publication receipts.
+
+Mac access 1.5.1 / publication 1.1.1 and iOS access 1.3.1 / publication 1.0.1
+advertise this correction; recoverable Trash is 1.2.1. Clients require the patched
+access versions before using paged native inventories. Older builds keep the
+bounded path. Fully paged native/cloud observations, individual path checks and
+paged conflict review are required to cross the shared 10,000-path ceiling.
+Missing any adapter preserves the limit and the previous complete checkpoint.
+
+`pnpm --dir remix run test:files:mac-paged -- --wide` creates 10,001 cloud
+folders through the normal Things import API and matching real Mac directories.
+The acceptance exercises two real byte transfers, lost accepted replies, native
+restart, complete 10,003-path baselines and unchanged reruns. It owns the same
+OS-isolated disposable HTTP/Mongo environment as the smaller fixture. Its
+20-minute deadline and cleanup are bounded; it never seeds database documents
+directly. The regular command retains the broader conflict/Trash/revocation
+matrix. See the HTML tracker's evidence for the current result of each run.
+
+Regression coverage includes publication/lookup beneath wide ancestors, alias
+refusal, and Trash/restore preserving 10,001 siblings. Shared runner coverage
+checks a complete 10,001-path checkpoint and refusal of whole-array review.
+The iOS simulator build and rendered desktop/phone controls are checked separately.
+These are not installed-app, physical-provider, million-file or 100 GB–100 TB
+acceptance. Persistent native workers, transfer-receipt retention and complete
+backup/restore delivery remain open. Android remains deferred.
+
+Large-root reruns also exercise retired journal cleanup. Cleanup now collects
+at most 128 keys within the existing scoped cursor and deletes one contiguous
+range per store/page in the same transaction. It retains the byte bound, pin
+checks, active-run and current-baseline protection, and atomic rollback after
+a queued range deletion. This avoids a separate delete request per obsolete
+row; it does not prune native recovery bytes or account versions.

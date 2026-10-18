@@ -288,7 +288,7 @@ window.thingtimeNativeBridge = {
 	platform: new URLSearchParams(location.search).get('platform') === 'ios' ? 'ios' : 'android',
 	isNativeWebView: true,
 	devicePairingVersion: '1.0.0',
-	fileAccessVersion: inspectionQA && new URLSearchParams(location.search).get('platform') === 'ios' ? (inventoryQA ? '1.3.0' : '1.2.0') : '1.1.0',
+	fileAccessVersion: inspectionQA && new URLSearchParams(location.search).get('platform') === 'ios' ? (inventoryQA ? '1.3.1' : '1.2.0') : '1.1.0',
 	postMessage(message) {
 		const request = message.payload as any;
 		observe(request);
@@ -350,7 +350,7 @@ if (desktop) {
 				...request,
 				origin: canonicalOrigin,
 				roots,
-				...(manifest ? { capabilities: { fileAccessVersion: inspectionQA ? (inventoryQA ? '1.5.0' : '1.4.0') : '1.1.0' }, apiCapabilities: { ...manifest, origin: canonicalOrigin } } : {}),
+				...(manifest ? { capabilities: { fileAccessVersion: inspectionQA ? (inventoryQA ? '1.5.1' : '1.4.0') : '1.1.0' }, apiCapabilities: { ...manifest, origin: canonicalOrigin } } : {}),
 				...inventoryReply(request),
 				...(request.action === 'scan' ? { complete: true, entries: localEntries } : {}),
 				...(request.action === 'inspect' ? { complete: true, entry: localEntries.find(entry => entry.path === request.path) ?? null } : {}),
