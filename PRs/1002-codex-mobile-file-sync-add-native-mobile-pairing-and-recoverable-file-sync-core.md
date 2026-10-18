@@ -2342,3 +2342,51 @@ deferred; no Android code or acceptance work changed in this checkpoint.
 Account security/credential backup, other managed families, relationship closure,
 retention/pinning, independent cloud storage, jobs, UI and large-scale throughput
 remain required. The HTML tracker keeps whole-account coverage in progress.
+
+
+### Real account profile snapshot path — 2026-10-18
+
+The account inventory now shares `readBackupAccountContent` with its integration
+proof. It checks current owner/home scope and authorization around a bounded
+read-only snapshot query and exposes only approved canonical content. The exact
+account lookup uses the existing unique share-ID index; the full owner census
+still requires its dedicated owner/ID index. A first real-handler run exposed
+that a fresh database uses the legacy-compatible index plan. The fix avoids
+requiring a census index for a single exact identity, without permitting a full
+inventory scan or ignoring the migration prerequisite.
+
+The new opt-in runner owns a disposable Mongo replica on 28142, a private
+scratch directory and child process. It does not load app env, uses console-only
+email and tears down its own database/files. Fixtures register and change data
+through unmodified production Request handlers with live cookie/session auth;
+there are no direct Mongo data inserts, injected users or synthetic cursors.
+The proof passes concurrent API edits under one server timestamp, independent
+copy/source-vault removal, exact profile/private preferences, credential exclusion,
+explicit current-writer restoration, revoked live reads and offline recovery.
+A real fresh account still cannot publish a full inventory before the owner-index
+migration; this expected refusal is checked separately from profile recovery.
+
+Scope: Request handlers plus database, not a Nitro HTTP/browser test. Managed
+profile image restore, full-account family/relationship coverage, backup jobs/UI,
+reviewed restore orchestration and large-volume delivery remain unfinished.
+Android remains deferred and unchanged. The older direct-Mongo fixture remains
+only synthetic storage/index consistency evidence; it does not prove real signup.
+
+Validation: 77 backup tests pass with no skips, and focused source/script lint
+passes. The real-handler integration proof passed; HTTP/browser acceptance and
+whole-account restore remain open.
+Full TypeScript checking reports the same 91 diagnostics as the prior source
+baseline, with no new normalized diagnostics. The final integration run also
+checks stale archived revisions return 409 before an explicit current-revision
+restore. Its first repeat exposed a fixture startup race; the canonical runner
+now waits for readiness from its own mongod log before bootstrapping the replica.
+
+The final runner also passed with OS-enforced network isolation. A preflight
+proves permitted loopback access and denied hostname, direct-IP and redirect
+connections before startup; the database, bootstrap shell and application worker
+all run under that policy. The fixture requires macOS `sandbox-exec` and fails
+closed on unavailable or failed isolation. Ports 28142 and 28144 must be free.
+
+Graph refresh: the local semantic proxy health endpoint timed out on both bounded
+checks (10 and 15 seconds). Use the required structural refresh fallback; changed
+documentation is not claimed to be newly semantically indexed in this increment.

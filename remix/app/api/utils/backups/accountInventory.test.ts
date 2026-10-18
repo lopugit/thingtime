@@ -1,6 +1,6 @@
 import { backupDraftFixture } from './draftRecords.fixtures';
 import { accountContentSnapshot, accountContentValue } from '../../../timeline/accountContent';
-import { backupAccountSnapshotFromDoc, openBackupAccountSnapshot } from './accountSnapshots';
+import { backupAccountSnapshotFromDoc, openBackupAccountSnapshot, readBackupAccountContent } from './accountSnapshots';
 import { buildUserSecure, packRecentReactions } from '../auth/users';
 import { backupThemeFixtures } from './themeSnapshots.fixtures';
 import { backupThemeSnapshotFromDoc, openBackupThemeSnapshot, BACKUP_THEME_CONTENT_ADAPTER } from './themeSnapshots';
@@ -69,7 +69,10 @@ function fixture(count = 300) {
 			assert.equal(filter.ownerId, 'owner');
 			assert.equal(options.collation.locale, 'simple');
 			assert.equal(options.readPreference, 'primary');
-			assert.deepEqual(options.hint, { ownerId: 1, shareId: 1 });
+			assert.deepEqual(
+				options.hint,
+				options.projection.secure && options.projection['crystal.username'] ? { shareId: 1 } : { ownerId: 1, shareId: 1 }
+			);
 			projections.push(options.projection);
 			if (!frozen) {
 				frozen = source.map((row) => BSON.deserialize(BSON.serialize(row)));
@@ -82,12 +85,12 @@ function fixture(count = 300) {
 					return cursor;
 				},
 				limit(n: number) {
-					assert.ok(n === 128 || n === 8);
+					assert.ok(n === 128 || n === 8 || n === 2);
 					limit = n;
 					return cursor;
 				},
 				batchSize(n: number) {
-					assert.ok(n === 128 || n === 8);
+					assert.ok(n === 128 || n === 8 || n === 2);
 					return cursor;
 				},
 				async close() {
@@ -143,7 +146,22 @@ function fixture(count = 300) {
 	});
 	const id = randomUUID();
 	const json = (key: string) => JSON.parse(Buffer.from(objects.get(`snapshots/${id}/${key}`)!).toString());
-	return { source, heads, headReads, store, objects, scope, access, state, session, projections, id, json, run: () => producer(store, id, access) };
+	return {
+		source,
+		heads,
+		headReads,
+		store,
+		objects,
+		scope,
+		access,
+		state,
+		session,
+		projections,
+		id,
+		json,
+		readAccount: () => readBackupAccountContent(access, session, async () => collection),
+		run: () => producer(store, id, access)
+	};
 }
 
 function accountFixture(ownerId = 'owner') {
@@ -184,6 +202,30 @@ function accountFixture(ownerId = 'owner') {
 		}
 	} as any;
 }
+
+test('account reader refuses revoked, switched, missing, duplicate and foreign source identities', async () => {
+	for (const mode of ['revoked', 'switched', 'missing', 'duplicate', 'foreign', 'wrong-family', 'not-snapshot', 'transaction']) {
+		const f = fixture(0);
+		f.source.push(accountFixture());
+		if (mode === 'revoked')
+			f.access.authorize = async () => {
+				throw Error('revoked');
+			};
+		if (mode === 'switched')
+			f.access.authorize = async () => {
+				f.scope.ownerId = 'another';
+			};
+		if (mode === 'missing') f.source.length = 0;
+		if (mode === 'duplicate') f.state.alterRows = (_n, rows) => [...rows, ...rows];
+		if (mode === 'foreign') f.state.alterRows = (_n, rows) => rows.map((row) => ({ ...row, ownerId: 'foreign' }));
+		if (mode === 'wrong-family') f.state.alterRows = (_n, rows) => rows.map((row) => ({ ...row, thingtime: ['user', 'data'] }));
+		if (mode === 'not-snapshot') f.session.snapshotEnabled = false;
+		if (mode === 'transaction') f.session.inTransaction = () => true;
+		await assert.rejects(f.readAccount(), /revoked|unchanged|missing|ambiguous|family|read-only/);
+		assert.equal(f.state.closed, f.state.queries);
+		if (['revoked', 'switched', 'not-snapshot', 'transaction'].includes(mode)) assert.equal(f.state.queries, 0);
+	}
+});
 
 test('account content and private preferences survive source edits and independent vault copy without credentials or defaults', async () => {
 	const f = fixture(0),

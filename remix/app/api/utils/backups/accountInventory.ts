@@ -8,9 +8,8 @@ import {
 } from './draftRecords';
 import { retainBackupThingSnapshot } from './thingSnapshots';
 import {
-	backupAccountProjection,
-	backupAccountSnapshotFromDoc,
-	retainBackupAccountSnapshot,
+	readBackupAccountContent,
+	retainBackupAccountContent,
 	backupProfileAttachmentReferences,
 	verifyBackupProfileAttachment,
 	type BackupProfileAttachmentReference
@@ -184,7 +183,6 @@ export function createAccountInventoryProducer(
 						// still owns its bounded wire batch; no oversized row reaches the plan.
 						if (timeline) timelineBackupRecordFromDoc(row);
 						else if (projection === backupDraftProjection) backupDraftFromDoc(row);
-						else if (projection === backupAccountProjection) backupAccountSnapshotFromDoc(row);
 						else if (projection === backupThemeProjection) backupThemeSnapshotFromDoc(row);
 						else if (projection !== contentProjection) {
 							const bounded = projection === backupAttachmentProjection ? { ...row } : row;
@@ -310,21 +308,30 @@ export function createAccountInventoryProducer(
 						const batchSize = kind === 'timeline' || kind === 'draft' ? 8 : ACCOUNT_INVENTORY_PAGE_SIZE;
 						for (let offset = 0; offset < group.length; offset += batchSize) {
 							const expected = group.slice(offset, offset + batchSize);
-							if (kind === 'content' || kind === 'theme' || kind === 'account') {
+							if (kind === 'account') {
+								if (expected.length !== 1 || expected[0].shareId !== scope.ownerId) throw Error('Account snapshot identity is ambiguous');
+								const guardedAccess = { ...access, scope, authorize: check };
+								const snapshot = await readBackupAccountContent(guardedAccess, session, async () => collection);
+								boundary();
+								await verifyReferences(backupProfileAttachmentReferences(snapshot));
+								const entry = await retainBackupAccountContent(store, snapshotId, ordinals.get(scope.ownerId)!, snapshot, guardedAccess);
+								boundary();
+								projected.set(scope.ownerId, entry);
+								continue;
+							}
+							if (kind === 'content' || kind === 'theme') {
 								// Process one large canonical record at a time. Never collect 128
 								// potentially large payloads in addition to the driver's wire batch.
 								let count = 0;
 								for await (const doc of queryRows(
 									{ shareId: { $in: expected.map((row) => row.shareId) } },
-									kind === 'account' ? backupAccountProjection : kind === 'theme' ? backupThemeProjection : contentProjection,
+									kind === 'theme' ? backupThemeProjection : contentProjection,
 									batchSize
 								)) {
 									await check();
 									boundary();
 									sameRow(doc, expected[count++], kind);
-									if (kind === 'account') await verifyReferences(backupProfileAttachmentReferences(backupAccountSnapshotFromDoc(doc)));
-									const retain =
-										kind === 'account' ? retainBackupAccountSnapshot : kind === 'theme' ? retainBackupThemeSnapshot : retainBackupThingSnapshot;
+									const retain = kind === 'theme' ? retainBackupThemeSnapshot : retainBackupThingSnapshot;
 									const entry = await retain(store, snapshotId, ordinals.get(doc.shareId)!, doc, {
 										...access,
 										scope,

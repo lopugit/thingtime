@@ -68,6 +68,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-18 — **Codex (AI)**: Validate account profile snapshots against real
+  signup/settings handlers on an isolated replica, concurrent updates,
+  independent copies and current-writer restoration. Share the authorized
+  account reader with inventory and use the existing exact-ID index. Enforce
+  loopback-only OS network isolation for the fixture. Whole-account
+  and product restore gates remain open. [PR #1002 notes](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
 - 2026-10-18 — **Codex (AI)**: Retain approved account profile content and private
   preferences in independent snapshots, with exact profile-media checks and
   explicit credential/security exclusions. Offline recovery and refusal tests

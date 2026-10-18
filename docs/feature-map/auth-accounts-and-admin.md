@@ -97,5 +97,11 @@ vault keys, credentials, permissions or security settings. Managed profile image
 must match the owner, exact slot and durable binding at the same database
 snapshot. The offline reader has no authority to write an account or sign in.
 `test:backups` covers independent recovery, exact preferences and malformed or
-foreign data refusal. Real account API capture/restore remains a separate gate.
+foreign data refusal. `test:backups:account-profile` runs actual registration/profile/settings Request
+handlers against its own disposable replica and compares the internal snapshot
+with independent API readback. Its macOS OS network policy and preflight refuse
+connections outside its disposable loopback database, including redirects and
+direct IPs. It exercises explicit current-writer restoration,
+concurrent edits, source-vault removal and revoked authentication. HTTP/browser,
+managed profile-media restore and product restore orchestration remain separate gates.
 See [portable backups](../portable-backups.md#account-profile-content-and-private-preferences).

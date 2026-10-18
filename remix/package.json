@@ -22,6 +22,7 @@
     "test": "npm run test:unit && npm run test:api",
     "test:api": "tsx scripts/run-api-tests.mts",
     "test:error-logs": "node --import tsx --test app/api/utils/errors/errorLogs.test.ts && node --experimental-test-module-mocks --import tsx --test app/api/utils/errors/errorLogs.test.mts",
+    "test:backups:account-profile": "node scripts/test-account-profile-backup.mjs",
     "test:backups": "node --import tsx --test app/api/utils/backups/*.test.ts",
     "backup:vault": "tsx scripts/backup-vault.mts",
     "backup:cloud": "tsx scripts/backup-cloud.mts",

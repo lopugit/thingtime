@@ -5,6 +5,9 @@ import type { TimelineSnapshot } from '../../../timeline/contract';
 import { backupJson } from '../../../backups/manifest';
 import { openBackupItem, retainBackupPayload, type BackupAccess, type BackupObjectStore } from './portableBackup';
 import type { BackupAttachment } from './attachmentRecords';
+import { getHomeThingsCollection } from '../mongodb/collections';
+import { isCustomMongoEndpointActive } from '../mongodb/endpoint';
+import { timelineScopeKey } from '../../../timeline/contract';
 
 export const BACKUP_ACCOUNT_ADAPTER = 'backup-account-content';
 export const BACKUP_ACCOUNT_BYTES = ACCOUNT_CONTENT_BYTES + 1024;
@@ -67,6 +70,61 @@ export function backupAccountSnapshotFromDoc(doc: any): TimelineSnapshot {
 	return accountContentSnapshot({ ownerId: doc.ownerId, profile, preferences: secure.meta ?? {}, recentReactions });
 }
 
+/** Read the account record through the same home snapshot as the inventory.
+ * Only the approved content leaves this API utility; callers never receive the
+ * private user envelope. This is an internal worker read, not a public route. */
+export async function readBackupAccountContent(
+	access: BackupAccess,
+	session: any,
+	collection: () => Promise<any> = getHomeThingsCollection
+): Promise<TimelineSnapshot> {
+	const scope = { ...access.scope },
+		scopeKey = timelineScopeKey(scope);
+	const check = async () => {
+		access.signal?.throwIfAborted();
+		if (scope.dataPlane !== 'home' || isCustomMongoEndpointActive() || timelineScopeKey(access.scope) !== scopeKey)
+			throw Error('Account snapshots require an unchanged home account');
+		await access.authorize();
+		access.signal?.throwIfAborted();
+		if (isCustomMongoEndpointActive() || timelineScopeKey(access.scope) !== scopeKey)
+			throw Error('Account snapshots require an unchanged home account');
+	};
+	await check();
+	if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(scope.ownerId) || !session?.snapshotEnabled || session.inTransaction())
+		throw Error('Account content requires an identified read-only snapshot');
+	const cursor = (await collection())
+		.find(
+			{ ownerId: scope.ownerId, shareId: { $in: [scope.ownerId] } },
+			{
+				session,
+				projection: backupAccountProjection,
+				readPreference: 'primary',
+				collation: { locale: 'simple' },
+				// One exact identity uses the existing unique ID index. The outer
+				// account census still requires its bounded owner/ID paging index.
+				hint: { shareId: 1 },
+				maxTimeMS: 10_000,
+				signal: access.signal
+			}
+		)
+		.sort({ shareId: 1 })
+		.limit(2)
+		.batchSize(2);
+	let snapshot: TimelineSnapshot | undefined;
+	try {
+		for await (const doc of cursor) {
+			await check();
+			if (snapshot || doc.ownerId !== scope.ownerId || doc.shareId !== scope.ownerId) throw Error('Account snapshot identity is ambiguous');
+			snapshot = backupAccountSnapshotFromDoc(doc);
+		}
+	} finally {
+		await cursor.close();
+	}
+	await check();
+	if (!snapshot) throw Error('Account snapshot content is missing');
+	return snapshot;
+}
+
 export type BackupProfileAttachmentReference = { ownerId: string; attachmentId: string; profileSlot: 'avatar' | 'banner' };
 export function backupProfileAttachmentReferences(snapshot: TimelineSnapshot): BackupProfileAttachmentReference[] {
 	const value = accountContentValue(snapshot),
@@ -88,15 +146,21 @@ export function verifyBackupProfileAttachment(ref: BackupProfileAttachmentRefere
 		throw Error('Profile attachment is missing or changed');
 }
 
-export async function retainBackupAccountSnapshot(store: BackupObjectStore, snapshotId: string, ordinal: number, doc: any, access: BackupAccess) {
-	if (doc.ownerId !== access.scope.ownerId) throw Error('Account backup owner changed');
-	const snapshot = backupAccountSnapshotFromDoc(doc),
-		text = json(snapshot),
+export async function retainBackupAccountContent(
+	store: BackupObjectStore,
+	snapshotId: string,
+	ordinal: number,
+	snapshot: TimelineSnapshot,
+	access: BackupAccess
+) {
+	const value = accountContentValue(snapshot);
+	if (value.ownerId !== access.scope.ownerId) throw Error('Account backup owner changed');
+	const text = json(snapshot),
 		sha256 = digest(text);
 	return retainBackupPayload(
 		store,
 		snapshotId,
-		{ ordinal, thingId: doc.shareId, revision: 'snapshot-' + sha256, snapshot: { adapter: BACKUP_ACCOUNT_ADAPTER, version: 1, value: { sha256 } } },
+		{ ordinal, thingId: value.ownerId, revision: 'snapshot-' + sha256, snapshot: { adapter: BACKUP_ACCOUNT_ADAPTER, version: 1, value: { sha256 } } },
 		Buffer.from(text),
 		access
 	);

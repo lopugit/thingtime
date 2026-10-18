@@ -11382,8 +11382,34 @@ resume unfinished Android gates only when requested.
 - [x] Unit: managed profile images require the exact owner, slot, profile purpose
   and durable target. Missing/foreign/rebound/expiring images refuse the complete
   plan; valid image bytes read identically from the sealed vault.
-- [ ] Run the real signup/profile/settings API through a disposable home replica
-  and compare the snapshot against API readback, including concurrent changes.
+- [x] Real signup/profile/settings Request handlers on an isolated home replica
+  match snapshot/API readback under concurrent changes; explicit selected values
+  restore through current writers. HTTP/browser and managed-media acceptance remain open.
 - [ ] Restore a live account through current reviewed writers; cover active
   theme/algorithm selection, visibility, permissions and current revision fences.
   Credential/security recovery and remaining managed-family coverage are open.
+
+
+### Real account profile snapshot integration — 2026-10-18
+
+- Run `npm --prefix remix run test:backups:account-profile` on macOS with free
+  loopback ports 28142/28144 and local `mongod`/`mongosh`. Confirm the OS isolation
+  preflight denies hostname, direct-IP and redirect connections outside the
+  permitted database port before any fixture starts. No permissive fallback is
+  allowed. Confirm the runner removes its own
+  replica/data and never connects to an existing application database.
+- Register through the production handler, then change profile, notification,
+  chat and Lopu settings through their handlers. Compare saved values with API
+  reads, including false/absent preferences and disabled instructions.
+- Interleave concurrent API mutations within the inventory reader's read-only
+  Mongo snapshot. Both reads must retain the original values; a fresh session
+  must see the later committed state.
+- Recover from the second sealed vault after deleting the first. Restore the
+  explicitly selected values through current writers with the live Lopu revision,
+  then compare profile and settings API readbacks with the originals.
+- Verify revoked auth cannot read the live account; offline recovery still binds
+  the archived owner. Missing owner-census indexes must prevent a complete plan.
+- Single-account reads must use the existing unique share-ID index, without
+  weakening the separate owner/ID requirement for whole-account census paging.
+- Keep HTTP/browser, managed image restoration, whole-account families and the
+  product review/restore UI open; handler-level proof does not complete them.

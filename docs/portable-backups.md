@@ -424,3 +424,33 @@ Real API/CLI acceptance restores a 17,825,809-byte captured file and an empty
 folder after live Trash, verifies the full output hash, then reuses the output.
 These checks establish selected-tree worker recovery, not native restore UI,
 whole-account snapshots, generic Things restoration or 100 TB throughput.
+
+### Real account handler and snapshot integration
+
+`test:backups:account-profile` owns a disposable replica and uses unmodified
+signup, profile, notification, chat-settings and Lopu-instruction Request
+handlers. Cookies, live sessions, secure envelopes and database transactions are
+real. The macOS OS network policy confines the database and worker to one private
+loopback port; an enforced-denial preflight covers hostnames, direct IPs and
+redirects before starting the fixture. It never seeds account documents directly.
+`readBackupAccountContent`,
+shared with the inventory producer, returns only the canonical approved content
+and checks current authorization around its bounded, exact-owner query.
+The single account lookup uses the existing unique share-ID index; the full
+owner census retains its mandatory modern owner/ID index and never falls back to
+a scan. Thus a fresh legacy-compatible database can validate one account's
+content without pretending whole-account enumeration is ready.
+
+The test compares independent API readbacks with the retained values,
+interleaves real profile and private preference changes under one server snapshot,
+then seals and copies the record, removes the first vault and recovers it exactly.
+An explicit fixture restore uses current profile/settings writers and a fresh
+Lopu revision; archived identities/revisions supply no authority. Logout refuses
+new live reads while exact-owner offline recovery still works. The fresh database
+also refuses complete inventory without the required index migration.
+
+This proof covers production Request handlers and MongoDB, not the Nitro HTTP
+adapter, browser UI, managed image restoration, complete account restore or new
+backup endpoints. The older `account-snapshot.integration.mts` storage/index
+experiment uses synthetic direct-database records and is not real signup evidence.
+See the root README for dependencies and isolation details.

@@ -5175,6 +5175,33 @@ THINGTIME_ACCOUNT_SNAPSHOT_TEST_URI='mongodb://127.0.0.1:20337/?replicaSet=timel
   corepack pnpm --dir remix exec tsx scripts/account-snapshot.integration.mts
 ```
 
+The account profile integration check creates its own disposable replica on
+loopback port **28142**, with a private temporary data directory. It requires
+macOS `/usr/bin/sandbox-exec`, `mongod` and `mongosh` on PATH
+(`THINGTIME_TEST_MONGOD` may name another mongod binary). An OS network policy
+limits the database, bootstrap shell and application worker to that loopback
+port. Before starting them, a preflight uses **28144** as a forbidden destination
+and verifies denied hostname, direct-IP and redirect connections. Missing or
+failed isolation stops the run; there is no unrestricted fallback.
+It refuses occupied ports, uses no app `.env` or existing database,
+forces the console-only email transport, and stops/removes its replica and data
+on completion. Signup and all profile/settings/restore writes use the actual
+production Request handlers with real cookies, sessions and transactions. The
+same internal account reader used by inventory supplies the snapshot. This is a
+handler/database integration check; it does not claim HTTP/browser acceptance.
+
+```sh
+npm --prefix remix run test:backups:account-profile
+```
+
+The fixture proves concurrent updates keep the old database snapshot, independent
+copy recovery, explicit restoration through current writers and revoked-read
+refusal. It also verifies that a fresh database without the owner-inventory index
+migration cannot publish a complete account plan. The profile lookup uses the
+existing unique share-ID index; whole-account enumeration still requires the
+modern owner/ID index above. External image URLs remain metadata; managed image
+restore, whole-account coverage and the product restore UI are separate gates.
+
 Use a private directory owned by your OS user for each vault. The destination's
 parent must already exist. The current local adapter requires POSIX permissions,
 hard-link publication and directory sync; it is not a raw FAT/USB-media writer.
