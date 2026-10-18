@@ -71,6 +71,31 @@ final class ThingtimeAPIClientTests: XCTestCase {
         }
     }
 
+    func testMenuInventoryTransportNegotiatesOptionalField() async throws {
+        let credential = DeviceCredential(deviceID: "device-1", refreshToken: "ttnode_test", signingPrivateKey: Data(), signingPublicKey: Data())
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+        let telemetry = DeviceTelemetry(deviceName: "Mac", hostName: "mac", modelIdentifier: nil, operatingSystemVersion: "macOS", architecture: "arm64", outputVolume: nil,
+            session: .init(isLocked: true, isOnConsole: true), permissions: .init(accessibility: .denied, screenRecording: .denied), runningApplications: [], displays: [], collectedAt: now,
+            menuBar: .init(status: "locked", collectedAt: now, accessibility: false, unreadableApplications: 0, items: []))
+        for version in ["1.9.0", "1.11.0"] {
+            MockURLProtocol.featureOverrides = ["api.devices-node-state": version]
+            MockURLProtocol.handler = { request in
+                let body = try JSONSerialization.jsonObject(with: try Self.bodyData(request)) as! [String: Any]
+                let state = try XCTUnwrap(body["state"] as? [String: Any])
+                if version == "1.9.0" { XCTAssertNil(state["menuBar"]) }
+                else {
+                    let menu = try XCTUnwrap(state["menuBar"] as? [String: Any])
+                    XCTAssertEqual(menu["status"] as? String, "locked")
+                    XCTAssertEqual((menu["items"] as? [Any])?.count, 0)
+                    XCTAssertNotNil(menu["collectedAt"] as? String)
+                }
+                return (200, Data(#"{"ok":true,"revision":1,"applied":true,"stale":false}"#.utf8))
+            }
+            let client = try ThingtimeAPIClient(baseURL: URL(string: "https://thingtime.test")!, credentialStore: InMemoryDeviceCredentialStore(credential: credential), session: session())
+            try await client.sendHeartbeat(.init(deviceID: "device-1", telemetry: telemetry, connector: .init(state: .running)))
+        }
+    }
+
     func testCapabilityRequirementsRejectWrongOriginMissingAndBreakingFeatures() throws {
         let origin = URL(string: "https://thingtime.test")!
         let features = ThingtimeAPIClient.capabilityRequirements.mapValues { ["version": $0] }

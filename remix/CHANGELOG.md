@@ -78,6 +78,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   commands, bounded result reads and explicit private-Thing/recipe saving.
   Negotiate versioned device capabilities and include collection styles with
   full inline search/pagination. Add isolated desktop/mobile acceptance tooling.
+  [Details and verification](../PRs/1031-mac-menu-bar-paired-device-builder-tools.md).
 - 2026-10-18: Fix incident cleanup to recognize the automatic logout history entry, bound to the revoked test session; retain strict content and actor checks. Production dry-run caught this mismatch before any deletion.
 
 
