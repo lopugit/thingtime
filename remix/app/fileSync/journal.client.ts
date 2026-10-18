@@ -1,19 +1,18 @@
 import { validateSyncCheckpoint, type SyncCheckpoint } from './checkpoint';
 import { validateSyncRun, type SyncRun } from './execute';
-import { validateSyncScope, type SyncScope } from './reconcile';
+import { syncScopeKey, type SyncScope } from './reconcile';
+import { inventoryJournal, upgradeInventoryJournal } from './inventoryJournal';
 
-export const syncScopeKey = (scope: SyncScope): string => {
-	validateSyncScope(scope);
-	return JSON.stringify([scope.origin, scope.ownerId, scope.dataPlane, scope.rootId, scope.deviceId]);
-};
+export { syncScopeKey } from './reconcile';
 
 /** Durable operation state, not file bytes or version history. Canonical file
  * history remains in Timeline. IDB errors are fatal before any new mutation. */
-export const openSyncJournal = async (factory: IDBFactory = indexedDB, name = 'thingtime-file-sync-v1') => {
+export const openSyncJournal = async (factory: IDBFactory = indexedDB, name = 'thingtime-file-sync-v1', keyRange?: typeof IDBKeyRange) => {
 	const db = await new Promise<IDBDatabase>((resolve, reject) => {
-		const request = factory.open(name, 2);
+		const request = factory.open(name, 3);
 		request.onupgradeneeded = () => {
 			for (const store of ['runs', 'checkpoints']) if (!request.result.objectStoreNames.contains(store)) request.result.createObjectStore(store);
+			upgradeInventoryJournal(request.result);
 		};
 		request.onsuccess = () => resolve(request.result);
 		request.onerror = () => reject(request.error);
@@ -113,7 +112,7 @@ export const openSyncJournal = async (factory: IDBFactory = indexedDB, name = 't
 			tx.onabort = tx.onerror = () => reject(tx.error ?? Error('Could not save sync completion.'));
 		});
 	};
-	return { read, persist, checkpoint, complete, close: () => db.close() };
+	return { read, persist, checkpoint, complete, inventory: (access: Parameters<typeof inventoryJournal>[1]) => inventoryJournal(db, access, keyRange), close: () => db.close() };
 };
 
 /** Web clients serialize an entire scan/plan/resume cycle across tabs. Native

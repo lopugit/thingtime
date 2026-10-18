@@ -37,6 +37,12 @@ whole-account backup of native recovery bytes remain open; see the
 Persistent file sync work lives in `app/fileSync/`: `reconcile.ts` plans bounded
 three-way inventory reconciliation, `execute.ts` persists stable operations and
 resolves uncertain receipts, and `journal.client.ts` stores the browser queue.
+Its version-3 upgrade adds `inventoryJournal.ts`: immutable, scope/generation-bound
+observation pages, exact retry receipts, cross-page path/ID uniqueness and
+resumable ancestry validation. Reads stay unavailable until the terminal count
+and every ancestor have been verified. This is a storage prerequisite for large
+roots; foreground/native/cloud scans and planning still use the 10,000-path cap.
+Run `test:file-sync` for the 100,000-path reopen/readback and partial-scan guards.
 The content endpoint also serves exact-version `sha256-parts-v1` fingerprints
 through `getAttachmentFingerprint`; `contentFingerprint.ts` shares part planning
 and bounded local hashing, and `attachmentFingerprint.client.ts` reads the

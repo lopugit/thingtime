@@ -68,6 +68,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-18 — **Codex (AI)**: Add durable paged inventory observations to the
+  existing sync journal, with atomic retry/collision checks and restartable
+  validation before reads. The 100,000-path storage regression passes; native
+  scanning and planner integration remain open, with the live 10,000-path limit
+  unchanged. Android stays deferred. [PR #1002 notes](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
 - 2026-10-18 — **Codex (AI)**: Validate account profile snapshots against real
   signup/settings handlers on an isolated replica, concurrent updates,
   independent copies and current-writer restoration. Share the authorized

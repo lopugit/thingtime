@@ -10055,6 +10055,22 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
   Remove temporary test admin access and restart; verify the account is non-admin.
 
 
+### Paged inventory storage (2026-10-18)
+
+- [x] `inventoryJournal.test.ts`: ingest 100,000 distinct paths in bounded pages,
+  reopen during ingestion and after sealing, then compare every ordered path.
+  A partial capture remains unreadable and preserves the prior complete capture.
+- [x] Reject missing/reordered pages, altered retries/generations, duplicate IDs,
+  case/Unicode collisions and missing/file/aliased parents, including invalid
+  ancestry after a committed validation page. Retrying cannot publish a prefix.
+- [x] Cancel validation after one page, reopen and resume from its durable cursor.
+  Check every account/origin/data-plane/root/device boundary, concurrent exact
+  retries, scoped discard and migration of existing version-2 runs/checkpoints.
+- [ ] Exercise the real browser IndexedDB and installed Mac/iOS adapters with
+  paged source generations and the integrated planner. Native/cloud scanning,
+  paged run/checkpoint execution, million-path and throughput acceptance remain
+  open; the current live sync limit is still 10,000 combined paths.
+
 ## Editable file sync configuration
 
 - [ ] Run `test:file-sync`, `test:schemas`, `test:api-capabilities` and

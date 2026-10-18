@@ -2390,3 +2390,34 @@ closed on unavailable or failed isolation. Ports 28142 and 28144 must be free.
 Graph refresh: the local semantic proxy health endpoint timed out on both bounded
 checks (10 and 15 seconds). Use the required structural refresh fallback; changed
 documentation is not claimed to be newly semantically indexed in this increment.
+
+
+## Resumable paged inventory journal — 2026-10-18
+
+The existing browser sync journal upgrades from version 2 to 3 without replacing
+runs or checkpoints. Its inventory namespace stores observations under the same
+account/origin/data-plane/connection/device scope, plus immutable capture, source
+and generation identities. Pages contain at most 128 entries / 1 MiB; exact page
+receipts make uncertain retries idempotent. Cross-page duplicate identities and
+case/Unicode aliases abort the entire incoming page.
+
+A terminal entry count marks a capture ready for validation, not ready for sync.
+Ancestry validation commits at most 128 entries per transaction and saves its
+cursor, so cancellation/reopening resumes without exposing a valid prefix.
+Missing, differently cased or non-folder parents refuse completion. Only a sealed
+capture can be read in bounded sorted pages. New or failed captures do not replace
+the last complete observations. This is operation storage, not Timeline history
+or permission to write; canonical histories and live mutation guards are unchanged.
+
+Validation: the 100,000-path fake-IndexedDB regression passed ingestion, mid-scan
+reopen, seal, full ordered readback and exact-scope discard. Other regressions
+cover altered retries, missing pages, scope/generation changes, cross-page
+collisions, cancellation/reopen during validation, late invalid ancestors and
+version-2 migration. Focused lint passes. Full TypeScript reports 91 diagnostics,
+none in the changed files. This is synthetic storage evidence, not browser/native
+acceptance or a measured production throughput claim.
+
+Remaining: connect consistent native/cloud paged sources, bounded reconciliation,
+operation runs and baseline checkpoints; then test real browser/installed Mac/iOS
+and million-path workloads. Foreground sync still uses the 10,000 combined-path
+limit. No API contract or Android code changed; Android remains deferred.

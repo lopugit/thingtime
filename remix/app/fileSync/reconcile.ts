@@ -76,6 +76,11 @@ export const validateSyncScope = (scope: SyncScope) => {
 	if (origin.origin !== scope.origin || !['https:', 'http:'].includes(origin.protocol) || origin.username || origin.password) throw new Error('Sync origin must be canonical.');
 };
 
+export const syncScopeKey = (scope: SyncScope): string => {
+	validateSyncScope(scope);
+	return JSON.stringify([scope.origin, scope.ownerId, scope.dataPlane, scope.rootId, scope.deviceId]);
+};
+
 export const planFileSync = (local: SyncScan, remote: SyncScan, baseline: SyncBaseline, policy: SyncPolicy): SyncPlan => {
 	validateSyncScope(local.scope);
 	if (!sameSyncScope(local.scope, remote.scope) || !sameSyncScope(local.scope, baseline.scope)) throw new Error('Sync account, origin, data plane, root or device changed.');
