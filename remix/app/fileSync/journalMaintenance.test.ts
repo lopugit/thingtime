@@ -128,6 +128,9 @@ test('a retired run finishes cleanup even when its already-published checkpoint 
 test('the active root independently protects its recovery inputs when pin indexes are damaged', async () => {
 	const f = await foregroundFixture(135); f.lose();
 	await assert.rejects(runPagedForegroundCloudSync(saved, scope, f.input(), signal()), /lost accepted/);
+	// Retire the released empty review first; this assertion concerns only the
+	// active run and its inputs, not unrelated metadata that is safe to collect.
+	await f.journal().maintenance(access()).collect();
 	const original = (await f.journal().pagedRuns(access()).active())!, db = await connect(f.factory);
 	await new Promise<void>((resolve, reject) => {
 		const tx = db.transaction(['inventory-capture-pins', 'sync-plan-pins'], 'readwrite');

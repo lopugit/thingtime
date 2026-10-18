@@ -5,6 +5,7 @@ import { runForegroundCloudSync } from './foregroundSync';
 import { foregroundFixture, saved, scope } from './foregroundSync.fixture';
 import { retentionFixture, scope as retentionScope } from './conflictRetention.fixture';
 import type { ForegroundSyncInput } from './foregroundSync';
+import type { PagedConflictReviewSession } from './pagedForegroundReview';
 
 const signal = () => new AbortController().signal;
 const access = (input: ForegroundSyncInput) => ({ scope: input.currentScope(), currentScope: input.currentScope });
@@ -154,8 +155,9 @@ test('paged Ignore retains both file versions, releases the active root and reus
 	assert.equal((await f.journal().pagedCheckpoints(access(f.input())).current())?.runId, synced.spec.id); f.journal().close();
 });
 
-test('a fully imported review resumes without reopening the popup, while an incomplete review requires fresh choices', async () => {
-	for (const partial of [false, true]) {
+test('sealed drafts resume partial imports without reopening; older draftless partial imports require review', async () => {
+	for (const scenario of ['complete', 'partial', 'draftless']) {
+		const partial = scenario !== 'complete';
 		const f = await retentionFixture(), input = f.input(), paged = input.journal.pagedRuns;
 		let stop = true;
 		input.journal.pagedRuns = a => { const journal = paged(a); return { ...journal,
@@ -164,10 +166,91 @@ test('a fully imported review resumes without reopening the popup, while an inco
 			prepare: async (...args) => { if (!partial && stop) { stop = false; throw Error('operation preparation stopped'); } return journal.prepare(...args); }
 		}; };
 		await assert.rejects(runPagedForegroundCloudSync(f.saved, retentionScope, input, signal()), /stopped/);
+		if (scenario === 'draftless') {
+			const drafts = input.journal.reviewDrafts(access(input)), draft = (await drafts.active())!;
+			await drafts.release(draft.spec); await input.journal.plans(access(input)).discard(draft.spec.plan);
+		}
 		assert.equal(f.counts().uploads, 0); await f.reload();
 		await runPagedForegroundCloudSync(f.saved, retentionScope, f.input(), signal());
-		assert.equal(f.counts().reviews, partial ? 2 : 1); assert.equal(f.counts().uploads, 1); f.journal().close();
+		assert.equal(f.counts().reviews, scenario === 'draftless' ? 2 : 1); assert.equal(f.counts().uploads, 1); f.journal().close();
 	}
+});
+
+test('paged review resumes saved choices after interruption and fences closed UI sessions', async () => {
+	const f = await retentionFixture(), input: ForegroundSyncInput = f.input(); let oldSession!: PagedConflictReviewSession;
+	input.reviewConflicts = async () => { throw Error('array review must not run'); };
+	input.reviewPagedConflicts = async session => {
+		oldSession = session; const page = await session.read(), row = page.rows[0];
+		await session.choose(row.conflict.path, 'local', row.revision); throw Error('window closed');
+	};
+	await assert.rejects(runPagedForegroundCloudSync(f.saved, retentionScope, input, signal()), /window closed/);
+	assert.equal(f.counts().uploads, 0);
+	assert.throws(() => oldSession.read(), /no longer open/);
+	assert.throws(() => oldSession.choose('report.bin', 'remote', 1), /no longer open/);
+	await f.reload(); const retry: ForegroundSyncInput = f.input();
+	retry.reviewPagedConflicts = async session => {
+		const page = await session.read(); assert.equal(page.rows[0].from, 'local'); assert.equal(page.progress.selected, 1);
+		return { action: 'resolve', revision: page.progress.revision };
+	};
+	const done = await runPagedForegroundCloudSync(f.saved, retentionScope, retry, signal());
+	assert.ok('spec' in done); assert.equal(done.spec.review?.kind, 'resolve'); assert.equal(f.counts().publications, 1);
+	assert.equal(f.counts().reviews, 0); assert.equal(await f.journal().reviewDrafts(access(retry)).active(), null); f.journal().close();
+});
+
+test('fresh recheck rejects edited files before any effect and permits a new current review', async () => {
+	for (const action of ['resolve', 'retain'] as const) {
+		const f = await retentionFixture(), input: ForegroundSyncInput = f.input();
+		input.reviewPagedConflicts = async session => {
+			const page = await session.read(), row = page.rows[0];
+			const selected = await session.choose(row.conflict.path, 'local', row.revision); f.edit();
+			return { action, revision: selected.progress.revision };
+		};
+		await assert.rejects(runPagedForegroundCloudSync(f.saved, retentionScope, input, signal()), /Files changed during conflict review/);
+		assert.equal(f.counts().uploads, 0); assert.equal(f.counts().publications, 0);
+		assert.equal(await input.journal.reviewDrafts(access(input)).active(), null);
+		assert.equal(await input.journal.pagedRuns(access(input)).active(), null);
+		const retry: ForegroundSyncInput = f.input(); retry.reviewPagedConflicts = async session => ({ action: 'retain', revision: (await session.read()).progress.revision });
+		await runPagedForegroundCloudSync(f.saved, retentionScope, retry, signal()); assert.equal(f.counts().retained, 1); f.journal().close();
+	}
+});
+
+test('explicit paged cancellation releases its draft while stale approval leaves saved choices recoverable', async () => {
+	const f = await retentionFixture(), input: ForegroundSyncInput = f.input();
+	input.reviewPagedConflicts = async session => {
+		const page = await session.read(), row = page.rows[0]; await session.choose(row.conflict.path, 'local', row.revision);
+		return { action: 'resolve', revision: page.progress.revision };
+	};
+	await assert.rejects(runPagedForegroundCloudSync(f.saved, retentionScope, input, signal()), /review changed/);
+	assert.equal((await input.journal.reviewDrafts(access(input)).active())?.progress.selected, 1); assert.equal(f.counts().uploads, 0);
+	await f.reload(); const retry: ForegroundSyncInput = f.input(); retry.reviewPagedConflicts = async () => ({ action: 'cancel' });
+	await assert.rejects(runPagedForegroundCloudSync(f.saved, retentionScope, retry, signal()), /cancelled/);
+	assert.equal(await retry.journal.reviewDrafts(access(retry)).active(), null); assert.equal(f.counts().uploads, 0); f.journal().close();
+});
+
+test('saved review settings are fenced and an empty-plan handoff recovers after a lost release', async () => {
+	const f = await retentionFixture(), input: ForegroundSyncInput = f.input();
+	input.reviewPagedConflicts = async () => { throw Error('review interrupted'); };
+	await assert.rejects(runPagedForegroundCloudSync(f.saved, retentionScope, input, signal()), /interrupted/);
+	const changed = { ...f.saved, configuration: { ...f.saved.configuration, localRootId: 'another' } }, retry: ForegroundSyncInput = f.input();
+	const read = retry.readConfiguration; retry.readConfiguration = async () => ({ ...await read() as object, crystal: changed.configuration });
+	await assert.rejects(runPagedForegroundCloudSync(changed, retentionScope, retry, signal()), /saved conflict review belongs to different settings/);
+	assert.equal(f.counts().uploads, 0); f.journal().close();
+	const empty = await foregroundFixture(), request: ForegroundSyncInput = empty.input(), drafts = request.journal.reviewDrafts;
+	request.journal.reviewDrafts = a => ({ ...drafts(a), release: async () => { throw Error('release interrupted'); } });
+	await assert.rejects(runPagedForegroundCloudSync(saved, scope, request, signal()), /release interrupted/);
+	assert.equal(empty.creates(), 0); await empty.reload();
+	await runPagedForegroundCloudSync(saved, scope, empty.input(), signal()); assert.equal(empty.creates(), 1); empty.journal().close();
+});
+
+test('sealed approval survives an interrupted fresh capture without opening review again', async () => {
+	const f = await retentionFixture(), input: ForegroundSyncInput = f.input(), scan = input.scanLocal; let scans = 0, reviews = 0;
+	input.scanLocal = () => { if (++scans === 2) throw Error('fresh capture interrupted'); return scan(); };
+	input.reviewPagedConflicts = async session => { reviews++; return { action: 'retain', revision: (await session.read()).progress.revision }; };
+	await assert.rejects(runPagedForegroundCloudSync(f.saved, retentionScope, input, signal()), /fresh capture interrupted/);
+	assert.equal((await input.journal.reviewDrafts(access(input)).active())?.progress.phase, 'sealed'); assert.equal(f.counts().uploads, 0);
+	await f.reload(); const retry: ForegroundSyncInput = f.input();
+	retry.reviewPagedConflicts = async () => { throw Error('sealed review must not reopen'); };
+	await runPagedForegroundCloudSync(f.saved, retentionScope, retry, signal()); assert.equal(reviews, 1); assert.equal(f.counts().retained, 1); f.journal().close();
 });
 
 test('saved settings are pinned before cloud preparation and a resumed transfer rejects changed roots', async () => {

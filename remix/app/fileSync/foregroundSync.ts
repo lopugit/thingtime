@@ -1,5 +1,6 @@
 import type { LocalInventoryPage } from './nativeInventory';
 import type { CloudInventoryPage } from './cloudInventoryPages';
+import type { PagedConflictReviewResult, PagedConflictReviewSession } from './pagedForegroundReview';
 import { foregroundSyncContext } from './foregroundSyncContext';
 import { localTrashContexts } from './localTrash';
 import type { LocalSyncTarget } from './localSyncTarget';
@@ -40,6 +41,8 @@ export type ForegroundSyncInput = {
 	runtime: CloudTransportRuntime;
 	progress(value: ForegroundSyncProgress): void;
 	reviewConflicts?(conflicts: SyncConflict[]): Promise<SyncConflictReviewResult>;
+	/** Bounded, durable review adapter for editable Builder surfaces. */
+	reviewPagedConflicts?(session: PagedConflictReviewSession): Promise<PagedConflictReviewResult>;
 };
 
 type ConfiguredRun = CloudSyncRun & { configuration: ReturnType<typeof parseFileSyncConfiguration>; startingBaseline: SyncBaseline };

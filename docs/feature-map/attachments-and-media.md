@@ -4,9 +4,12 @@
 the version-10 journal. It binds complete plans/captures, persists revision-checked
 choices, seals reviewed pages for fresh-plan run preparation and shares bounded
 maintenance. Run `pagedReviewDraft.test.ts` and `test:file-sync`; the generated-data
-`review-draft.browser.ts` fixture covers a real Chromium restart. The existing
-popup/foreground arrays still need replacement with these pages and editable
-Builder blocks; this storage checkpoint does not lift the live scan cap.
+`review-draft.browser.ts` fixture covers a real Chromium restart. `pagedForegroundSync.ts` now consumes sealed drafts through fresh-plan checks
+and resumable run import. `pagedForegroundReview.ts` exposes bounded reads and
+revisioned choices for the upcoming editable Builder adapter, plus a streaming
+SHA-256 that preserves existing repeat-Ignore identities. The current popup
+still uses the bounded legacy array callback; replacing it with editable Builder
+blocks and installed acceptance remain open. The live scan cap is unchanged.
 
 Native folder captures now use `apple/FileSync/MobileFolderInventory.swift`
 (under `Sources/AppleFileSync`), negotiated by `fileSync/nativeInventory.ts`:

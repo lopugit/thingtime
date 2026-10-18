@@ -3046,3 +3046,32 @@ No Android work or native installation is included in this checkpoint.
 Checkpoint checks: all 274 file-sync tests and focused lint pass. The full
 TypeScript check still reports 91 diagnostics, all outside changed files; this
 is not a clean whole-project typecheck.
+
+
+## Paged review handoff and recovery — 2026-10-19
+
+The Mac/iOS paged foreground runner now uses the version-10 conflict draft
+through review, fresh capture and run import. A sealed approval survives a
+failed fresh scan or interrupted import; retry reuses the same run identity
+and page receipts. A bounded merge compares every reviewed conflict against
+the fresh complete plan before any operation is created, including conflicts
+added, removed or edited on its last page. Explicit cancellation releases only
+the draft; interrupted editing preserves choices. Closed UI handles, stale
+approval revisions and changed account/settings cannot authorize execution.
+
+`pagedForegroundReview.ts` supplies a paged local adapter (`read` / revisioned
+`choose`) for the editable Builder surface. Its streaming SHA-256 reproduces
+the previous JSON retention identity exactly, using the pinned `@noble/hashes`
+dependency. This preserves repeat Ignore receipt lookup without retaining the
+whole choice list. The existing popup still uses the explicit legacy array
+adapter; individually editable Builder controls and their installed acceptance
+are the next required integration. The combined 10,000-path cap remains.
+
+All 281 shared file-sync checks pass. Validation covers interrupted drafts and imports, old draftless migration,
+settings/cancellation fences, final-page changes, exact hash parity through
+10,001 rows, and bounded 128-row imports. Real isolated Chromium restart checks
+recover the saved choice across 270 conflicts, verify the hash independently
+with Web Crypto, and prepare 270 operations with zero file effects. These prove
+engine/storage behavior, not installed-device transfers or editable UI delivery.
+Full-project TypeScript still reports 91 diagnostics outside changed files.
+Android remains deferred and its code is preserved.

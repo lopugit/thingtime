@@ -68,6 +68,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-19 — **Codex (AI)**: Foreground conflict reviews now retain sealed choices across interrupted scans/imports and validate fresh conflicts in bounded pages before execution. Streaming retention hashes preserve existing Ignore receipts. The editable Builder adapter and installed acceptance remain open; Android stays deferred. Details: [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
 - 2026-10-19 — **Codex (AI)**: Add bounded durable conflict-review drafts, per-row
   revision checks, restart recovery, fresh-plan handoff and bounded cleanup.
   Twelve focused regressions and a Chromium process-restart fixture cover the

@@ -3,6 +3,7 @@ import { openSyncJournal, withSyncRootLock } from '../app/fileSync/journal.clien
 import { newFileSyncConfiguration } from '../app/fileSync/configuration';
 import type { SyncEntry } from '../app/fileSync/reconcile';
 import type { ReviewDraftCursor, ReviewDraftSpec } from '../app/fileSync/pagedReviewDraft';
+import { importReviewDraft, retainedReviewIdentity, sealedReviewRows, verifyFreshReview } from '../app/fileSync/pagedForegroundReview';
 
 const scope = { origin: location.origin, ownerId: 'review-browser-fixture', dataPlane: 'home', deviceId: 'review-device', rootId: 'review-connection' };
 const access = { scope, currentScope: () => scope, cleanup: 'foreground' as const };
@@ -52,14 +53,20 @@ Object.assign(window, { syncReviewDraftFixture: {
 				} while (cursor);
 				await drafts.seal(draft, 'resolve', (await drafts.active())!.progress.revision);
 				const fresh = spec('fresh'); await seed(journal, fresh);
+				await verifyFreshReview(journal.plans(access), fresh.plan, drafts, draft, scope);
+				const streamedDigest = await retainedReviewIdentity(configuration, sealedReviewRows(drafts, draft));
+				// Independent reference in this small fixture only; production streams.
+				const choices = []; for await (const row of sealedReviewRows(drafts, draft)) choices.push(row);
+				const reference = [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify({ configuration, choices }))))]
+					.map(byte => byte.toString(16).padStart(2, '0')).join('');
 				const runs = journal.pagedRuns(access), run = { id: 'review-run', plan: fresh.plan, configuration,
 					review: { id: draft.id, kind: 'resolve' as const, count: 270 } };
-				await runs.begin(run); let ordinal = 0, maxImportPage = 0;
-				do { const page = await drafts.sealedRows(draft, cursor); maxImportPage = Math.max(maxImportPage, page.rows.length);
-					await runs.appendReview(run, { ordinal: ordinal++, rows: page.rows, complete: !page.next }); cursor = page.next ?? undefined;
-				} while (cursor);
+				await runs.begin(run); let maxImportPage = 0;
+				const append = runs.appendReview;
+				runs.appendReview = (s, page) => { maxImportPage = Math.max(maxImportPage, page.rows.length); return append(s, page); };
+				await importReviewDraft(runs, run, drafts, draft);
 				await drafts.release(draft); const cleanup = await journal.maintenance(access).collect();
-				return { saved, maxPage, maxImportPage, cleanup, draft: await drafts.active(), prepared: await runs.prepare(run) };
+				return { saved, maxPage, maxImportPage, digestMatchesWebCrypto: streamedDigest === reference, cleanup, draft: await drafts.active(), prepared: await runs.prepare(run) };
 			} finally { journal.close(); }
 		});
 	}

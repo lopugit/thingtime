@@ -11589,3 +11589,21 @@ resume unfinished Android gates only when requested.
 - [ ] Connect the real foreground popup through editable Builder blocks, preserve
   repeat-Ignore identity, and verify save/cancel/reopen on installed Mac/iOS.
   Keep the live 10,000-path cap and Android deferral until their own gates pass.
+
+
+## Paged foreground conflict review (2026-10-19)
+
+- [ ] Use `test:file-sync` to verify sealed review recovery after partial import,
+  interrupted fresh scans, older draftless runs, explicit cancel, stale revisions,
+  closed callbacks and account/settings changes. No failure may start effects.
+- [ ] Add, remove or edit the final conflict on a multi-page fresh scan. The full
+  run must refuse before copying any earlier file and permit a fresh review.
+- [ ] Compare the streamed retention identity with the old whole-JSON SHA-256
+  for Unicode/escaped paths and 10,001 rows; repeated Ignore must reuse receipts.
+- [ ] Run `scripts/review-draft.browser.ts` in an isolated Chromium process,
+  close/reopen it and verify the saved choice, Web Crypto hash parity and bounded
+  import into 270 prepared operations with zero confirmed effects.
+- [ ] Product acceptance remains open: bind the paged adapter to individually
+  editable Builder blocks; edit nested labels, version controls and repeated
+  fields, save/reload, then exercise real Mac/iOS review, ignore and restore.
+  Keep the 10,000-path cap until this complete path passes. Android is deferred.

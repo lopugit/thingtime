@@ -1,14 +1,15 @@
 import { foregroundSyncContext } from './foregroundSyncContext';
 import { runForegroundCloudSync, type ForegroundSyncInput, type ForegroundSyncProgress } from './foregroundSync';
 import type { SavedFileSyncConfiguration } from './configuredPlan';
-import { resolveFileSyncConflicts, planConflictRetention, type SyncConflict } from './conflictResolution';
+import { resolveFileSyncConflicts, planConflictRetention, type SyncConflict, type SyncConflictReviewResult } from './conflictResolution';
+import { importReviewDraft, retainedReviewIdentity, sealedReviewRows, SyncReviewChangedError, verifyFreshReview, type PagedConflictReviewResult } from './pagedForegroundReview';
+import type { ReviewDraftCursor, ReviewDraftSpec } from './pagedReviewDraft';
 import { createPagedCloudSyncPort } from './cloudSyncPort.client';
 import { executePreparedPagedSyncRun } from './pagedExecute';
 import { INVENTORY_PAGE_BYTES, INVENTORY_PAGE_ENTRIES, type InventoryIdentity, type InventoryCursor } from './inventoryJournal';
-import type { PagedPlanSpec, PagedPlanCursor } from './pagedPlanJournal';
+import type { PagedPlanSpec } from './pagedPlanJournal';
 import type { PagedRunSpec, PagedRunProgress } from './pagedRunJournal';
-import { parseReviewedConflict, type ReviewedSyncConflict } from './pagedRunReview';
-import { MAX_SYNC_SCAN_ENTRIES, planFileSync, syncPathKey, type SyncScope, type SyncEntry } from './reconcile';
+import { MAX_SYNC_SCAN_ENTRIES, planFileSync, type SyncScope, type SyncEntry } from './reconcile';
 import { inventorySyncEntry, type CloudInventoryNode } from './cloudInventory';
 import { parseCloudInventoryPage } from './cloudInventoryPages';
 
@@ -34,19 +35,26 @@ const identity = (source: 'local' | 'remote'): InventoryIdentity => ({ id: crypt
 export async function runPagedForegroundCloudSync(reviewed: SavedFileSyncConfiguration, scope: SyncScope, input: ForegroundSyncInput, signal: AbortSignal) {
 	const { configuration, check, authorize, scanCloud, readLocal, runtime, localTarget } = foregroundSyncContext(reviewed, scope, input, signal);
 	const access = { scope, currentScope: input.currentScope, signal, cleanup: 'foreground' as const }, inventory = input.journal.inventory(access),
-		plans = input.journal.plans(access), runs = input.journal.pagedRuns(access), checkpoints = input.journal.pagedCheckpoints(access);
+		plans = input.journal.plans(access), runs = input.journal.pagedRuns(access), checkpoints = input.journal.pagedCheckpoints(access), drafts = input.journal.reviewDrafts(access);
 	input.progress({ stage: 'checking', confirmed: 0, total: 0 }); await authorize();
 	await input.journal.maintenance(access).collect(); check();
 	let active = await runs.active(); check();
+	let draft = await drafts.active(); check();
 	const previousHead = await checkpoints.current(), legacy = await input.journal.read(scope), legacyCheckpoint = previousHead ? null : await input.journal.checkpoint(scope); check();
 	// Finish legacy uncertain work and lost checkpoints using its original IDs,
 	// receipts and approval contract before migrating a connection's baseline.
-	if (!active && !previousHead && legacy && (legacy.operations.some(op => !op.confirmed) || legacy.version === 2 ||
+	if (!active && !draft && !previousHead && legacy && (legacy.operations.some(op => !op.confirmed) || legacy.version === 2 ||
 		(legacyCheckpoint?.runId !== legacy.id && JSON.stringify((legacy as { configuration?: unknown }).configuration) === JSON.stringify(configuration))))
 		return runForegroundCloudSync(reviewed, scope, input, signal);
 	if (active && JSON.stringify(active.spec.configuration) !== JSON.stringify(configuration))
 		throw Error('An unfinished transfer belongs to different settings. Restore its original settings before retrying; its work has been preserved.');
-	if (active?.review && !active.review.complete) {
+	if (draft && JSON.stringify(draft.spec.configuration) !== JSON.stringify(configuration))
+		throw Error('A saved conflict review belongs to different settings. Restore its original settings before retrying or cancelling it.');
+	if (draft && active && (draft.spec.id !== active.spec.id || (active.spec.review
+		? draft.progress.phase !== 'sealed' || draft.progress.kind !== active.spec.review.kind || draft.progress.count !== active.spec.review.count
+		: draft.progress.phase !== 'reviewing' || draft.progress.count !== 0)))
+		throw Error('The saved review does not belong to the active transfer. Both were preserved.');
+	if (active?.review && !active.review.complete && !draft) {
 		// No operation can start until the entire review is imported. A crash
 		// here requires fresh review, never invented choices for missing pages.
 		await runs.discard(active.spec); await plans.discard(active.spec.plan); active = null;
@@ -133,53 +141,92 @@ export async function runPagedForegroundCloudSync(reviewed: SavedFileSyncConfigu
 		if (result.indexed > MAX_SYNC_SCAN_ENTRIES) throw Error('Combined sync scan exceeds its bounded partition.');
 		return spec;
 	};
-	const conflicts = async (plan: PagedPlanSpec) => {
-		let next: PagedPlanCursor | null = null; const rows: SyncConflict[] = [];
-		do { const page = await plans.read(plan, next ?? undefined); check();
-			rows.push(...page.decisions.filter((d): d is SyncConflict => d.kind === 'conflict')); next = page.next;
-		} while (next);
-		return rows;
+	const releaseDraft = async (saved: ReviewDraftSpec, keepPlan = false) => {
+		await drafts.release(saved); if (!keepPlan) await plans.discard(saved.plan); draft = null;
+	};
+	const reviewDraft = async (saved: ReviewDraftSpec) => {
+		let state = await drafts.build(saved); check();
+		if (state.phase === 'sealed' || !state.count) return state;
+		if (!input.reviewPagedConflicts && !input.reviewConflicts) throw Error(`${state.count} sync conflicts need review. Both copies were preserved.`);
+		input.progress({ stage: 'reviewing', confirmed: state.selected, total: state.count });
+		let result: PagedConflictReviewResult;
+		if (input.reviewPagedConflicts) {
+			let open = true;
+			const current = () => { check(); if (!open) throw Error('This conflict review is no longer open.'); };
+			try { result = structuredClone(await input.reviewPagedConflicts({
+				read: cursor => { current(); return drafts.read(saved, cursor); },
+				choose: (path, from, revision) => { current(); return drafts.choose(saved, path, from, revision); }
+			})); } finally { open = false; }
+		} else {
+			// Compatibility for the existing bounded popup. The Builder adapter
+			// uses reviewPagedConflicts; only this legacy boundary collects arrays.
+			const conflicts: SyncConflict[] = []; let cursor: ReviewDraftCursor | null = null;
+			do { const page = await drafts.read(saved, cursor ?? undefined); conflicts.push(...page.rows.map(r => r.conflict)); cursor = page.next; } while (cursor);
+			let selected: SyncConflictReviewResult;
+			try { selected = structuredClone(await input.reviewConflicts!(structuredClone(conflicts))); }
+			catch (error) { if (!signal.aborted) await releaseDraft(saved); throw error; }
+			check(); const retain = !Array.isArray(selected) && selected.action === 'retain';
+			if (retain) planConflictRetention({ scope, decisions: conflicts }, conflicts);
+			else {
+				resolveFileSyncConflicts({ scope, decisions: conflicts }, conflicts, selected as Exclude<typeof selected, { action: 'retain' }>, configuration.mode);
+				const choices = new Map(Array.isArray(selected) ? selected.map(c => [c.path, c.from]) : []);
+				do { const page = await drafts.read(saved, cursor ?? undefined);
+					for (const row of page.rows) await drafts.choose(saved, row.conflict.path, choices.get(row.conflict.path)!, row.revision);
+					cursor = page.next;
+				} while (cursor);
+			}
+			state = await drafts.begin(saved); result = { action: retain ? 'retain' : 'resolve', revision: state.revision };
+		}
+		check();
+		if (result?.action === 'cancel') { await releaseDraft(saved); throw Error('Conflict review cancelled. Both folders were preserved.'); }
+		if (!result || !['resolve', 'retain'].includes(result.action)) throw Error('Invalid conflict review result.');
+		await authorize(); return drafts.seal(saved, result.action, result.revision);
 	};
 	let spec: PagedRunSpec;
-	if (active) spec = active.spec;
+	if (active) {
+		spec = active.spec;
+		if (draft) {
+			if (spec.review && !active.review?.complete) await importReviewDraft(runs, spec, drafts, draft.spec);
+			await releaseDraft(draft.spec, draft.spec.plan.id === spec.plan.id);
+		}
+	}
 	else {
 		await checkpoints.changeRoots(configuration.localRootId, configuration.remoteFolderId);
 		const head = await checkpoints.current(); check();
-		let baseline = head?.baseline;
+		let baseline = draft?.spec.plan.baseline ?? head?.baseline;
+		if (draft && head && JSON.stringify(draft.spec.plan.baseline) !== JSON.stringify(head.baseline))
+			throw Error('The baseline changed while this conflict review was saved. Its choices were preserved.');
 		if (!baseline) {
 			baseline = { local: identity('local'), remote: identity('remote') };
 			const old = legacyCheckpoint?.localRootId === configuration.localRootId && legacyCheckpoint.remoteFolderId === configuration.remoteFolderId
 				? legacyCheckpoint.baseline.entries : [];
 			await importEntries(baseline.local, old.map(p => p.local)); await importEntries(baseline.remote, old.map(p => p.remote));
 		}
-		let plan = await capture(baseline); const reviewedConflicts = await conflicts(plan);
-		let review: PagedRunSpec['review'], choices: ReviewedSyncConflict[] = [];
-		if (reviewedConflicts.length) {
-			if (!input.reviewConflicts) throw Error(`${reviewedConflicts.length} sync conflicts need review. Both copies were preserved. First: ${reviewedConflicts[0].path}`);
-			input.progress({ stage: 'reviewing', confirmed: 0, total: reviewedConflicts.length });
-			const result = structuredClone(await input.reviewConflicts(structuredClone(reviewedConflicts))); check(); await authorize();
-			const original = plan; plan = await capture(baseline); await plans.discard(original);
-			const fresh = { scope, decisions: await conflicts(plan) }, retain = !Array.isArray(result) && result.action === 'retain';
-			if (retain) planConflictRetention(fresh, reviewedConflicts);
-			else resolveFileSyncConflicts(fresh, reviewedConflicts, result as Exclude<typeof result, { action: 'retain' }>, configuration.mode);
-			const selected = new Map(Array.isArray(result) ? result.map(c => [c.path, c.from]) : []);
-			review = { id: crypto.randomUUID(), kind: retain ? 'retain' : 'resolve', count: reviewedConflicts.length };
-			choices = reviewedConflicts.map(conflict => parseReviewedConflict({ conflict, from: retain ? 'local' : selected.get(conflict.path)! }, review!, configuration.mode, scope));
-			if (retain) {
-				choices.sort((a, b) => syncPathKey(a.conflict.path) < syncPathKey(b.conflict.path) ? -1 : 1);
-				const payload = new TextEncoder().encode(JSON.stringify({ configuration, choices }));
-				review.id = [...new Uint8Array(await crypto.subtle.digest('SHA-256', payload))].map(b => b.toString(16).padStart(2, '0')).join('');
+		const saved = draft?.spec ?? { id: crypto.randomUUID(), plan: await capture(baseline), configuration };
+		const state = await reviewDraft(saved); let plan = saved.plan;
+		let review: PagedRunSpec['review'];
+		if (state.count) {
+			plan = await capture(baseline);
+			try { await verifyFreshReview(plans, plan, drafts, saved, scope); }
+			catch (error) {
+				if (error instanceof SyncReviewChangedError) { await releaseDraft(saved); await plans.discard(plan); }
+				throw error;
+			}
+			review = { id: saved.id, kind: state.kind!, count: state.count };
+			if (review.kind === 'retain') {
+				review.id = await retainedReviewIdentity(configuration, sealedReviewRows(drafts, saved));
 				const retained = await runs.retained(); check();
 				if (retained?.spec.review?.id === review.id && JSON.stringify(retained.spec.configuration) === JSON.stringify(configuration)) {
-					await plans.discard(plan);
+					await releaseDraft(saved); await plans.discard(plan);
 					input.progress({ stage: 'retained', confirmed: retained.progress.confirmed, total: retained.progress.operations });
 					return retained;
 				}
 			}
 		}
-		spec = { id: crypto.randomUUID(), plan, configuration, ...(review ? { review } : {}) };
+		spec = { id: saved.id, plan, configuration, ...(review ? { review } : {}) };
 		await authorize(); await runs.begin(spec);
-		if (review) await pages<ReviewedSyncConflict>(choices, (rows, ordinal, final) => runs.appendReview(spec, { ordinal, rows, complete: final }), size);
+		if (review) await importReviewDraft(runs, spec, drafts, saved);
+		await releaseDraft(saved, !review);
 	}
 	await runs.prepare(spec); await runs.prepareCloud(spec, configuration); check();
 	let state = await runs.begin(spec); const retain = spec.review?.kind === 'retain';
@@ -196,10 +243,10 @@ export async function runPagedForegroundCloudSync(reviewed: SavedFileSyncConfigu
 	if (retain) { await runs.finishRetention(spec); report(done, 'retained'); return { spec, progress: done }; }
 	report(done, 'verifying'); await authorize();
 	const checkpoint = { run: spec, localRootId: configuration.localRootId, remoteFolderId: configuration.remoteFolderId };
-	let draft = await checkpoints.begin(checkpoint); check();
-	if (draft.phase === 'collecting') {
-		draft = await checkpoints.restartCollection(checkpoint);
-		await importObservations(draft.after.local, draft.after.remote, true);
+	let checkpointDraft = await checkpoints.begin(checkpoint); check();
+	if (checkpointDraft.phase === 'collecting') {
+		checkpointDraft = await checkpoints.restartCollection(checkpoint);
+		await importObservations(checkpointDraft.after.local, checkpointDraft.after.remote, true);
 	}
 	await checkpoints.build(checkpoint); check(); report(done, 'complete'); return { spec, progress: done };
 }
