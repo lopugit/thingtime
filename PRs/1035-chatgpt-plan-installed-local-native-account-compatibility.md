@@ -1,6 +1,6 @@
 # PR #1035: installed ChatGPT runtime compatibility
 
-This review-only integration branch combines the installed `fc2edb8` native Passwords/menu/device changes and the subsequently installed browser manager/relay revision `62ddfda`, with main through `66655691` and ChatGPT feature commit `5066a1e27`. Its PR targets `codex/chatgpt-plan-usage`; do not merge it into main to promote the independently reviewed native work in #996 and #1031.
+This review-only integration branch combines the installed `fc2edb8` native Passwords/menu/device changes and the subsequently installed browser manager/relay revision `62ddfda` plus menu and required browser-driver packaging fixes through `c97dbd750`, with main through `66655691` and ChatGPT feature commit `5066a1e27`. Its PR targets `codex/chatgpt-plan-usage`; do not merge it into main to promote the independently reviewed native work in #996 and #1031.
 
 ## Resolved integration boundaries
 
@@ -13,7 +13,7 @@ This review-only integration branch combines the installed `fc2edb8` native Pass
 
 ## Validation
 
-The combined integration passed 143 Electron tests, 19 proxy tests and 99 capability tests. After correcting browser task API authority, all 13 focused renderer/shutdown/Passwords tests passed and independent review cleared the merge. The proxy suite exercises actual Nitro GET/POST requests for Passwords, mail and ChatGPT management. New lifecycle tests verify local AutoFill rejects before cookie access, restart waits for disconnect, and native-clear failure leaves encrypted runtime settings unchanged.
+The combined integration passed 145 Electron tests, 21 proxy tests and 99 capability tests. After correcting browser task API authority, all 13 focused renderer/shutdown/Passwords tests passed and independent review cleared the merge. The browser runtime driver is retained inside app.asar and separately staged for container use; packaged smoke checks load its real dependency. Browser Actions forward expected actor/data-plane headers only through the guarded selected desktop API, while vault reveal remains local. The proxy suite exercises actual Nitro GET/POST requests for Passwords, mail and ChatGPT management. New lifecycle tests verify local AutoFill rejects before cookie access, restart waits for disconnect, and native-clear failure leaves encrypted runtime settings unchanged.
 
 The canonical signed build is `THINGTIME_NODE_CACHE_ROOT="$HOME/Library/Caches/com.thingtime.desktop.node/chatgpt-installed" npm --prefix electron run build`; its verifier checks both native helpers and the outer bundle. Final build/installation status is recorded on PR #1035. No installation is implied by source tests. Preserve the existing app until the exact final signed bundle verifies. Live ChatGPT consent/model discovery/provider execution and installed native acceptance are separate requirements.
 

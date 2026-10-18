@@ -51,7 +51,7 @@
 		"extraResources": [
 			{ "from": "scripts/agent-browser.mjs", "to": "agent-browser.mjs" },
 			{
-				"from": "lib/agent-browsers/runtime",
+				"from": "dist/agent-browser-runtime",
 				"to": "agent-browser-runtime",
 				"filter": ["Dockerfile", ".dockerignore", "*.json", "*.mjs", "*.cjs"]
 			},

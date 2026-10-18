@@ -86,7 +86,7 @@ export const deviceScriptsSuite: BehaviourSuite = {
 											script: '{script}',
 											timeoutSeconds: '{timeoutSeconds}'
 										}),
-										k.link('Review approvals', '/devices')
+										k.link('Review approvals', '/things')
 									]),
 									k.field('Recipe name', k.input('recipeName', { value: 'My Mac script' })),
 									k.button(

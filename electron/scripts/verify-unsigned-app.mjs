@@ -5,6 +5,7 @@ import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
 const { verifyUnsignedArtifacts } = require('../lib/thingtime-node-bridge.cjs');
+const { verifyAgentPackage } = require('../lib/verify-agent-package.cjs');
 
 const appPath = process.argv[2] ? path.resolve(process.argv[2]) : null;
 if (!appPath || process.argv.length !== 3) {
@@ -26,4 +27,5 @@ await verifyUnsignedArtifacts({
     runtimePath
 });
 await verifyPasswordProvider(path.join(contentsPath, 'Helpers/Thingtime Passwords.app'), { unsigned: true });
+verifyAgentPackage(appPath, undefined, { required: true });
 console.log(`Verified unsigned Thingtime app ${appPath}`);

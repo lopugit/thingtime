@@ -10301,3 +10301,5 @@ separate from deterministic discovery/lease tests.
 - Agent general security link: open it from a task; the Things settings category and Agent browsers disclosure must open and scroll to the default policy controls. Save, reload and verify the policy; restore isolated testing after acceptance.
 
 - Installed browser/runtime integration: quitting or restarting must await agent-browser cleanup, OAuth authority release and MongoDB shutdown together. Delay either cleanup and verify the process remains alive; a browser cleanup error must not skip database shutdown. Isolated-test mode must reject direct fallback calls before evaluating a configured remote authority.
+
+- Installed ChatGPT/menu/browser integration: verify expected-actor browser Actions preserve the live Nitro body and reject changed actors/cross-site requests; vault reveal stays local. Verify the packaged agent browser driver loads Puppeteer from app.asar as well as retaining separate container resources.
