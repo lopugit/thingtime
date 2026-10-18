@@ -78,7 +78,9 @@ test('docs action examples validate, lookup needs explicit provider scope and li
 test('shared execution never admits external lookups', () => assert.equal(sharedOperationAllowed('lookup'), false));
 
 test('published schema and component examples pass the real saved-Thing grammar', () => {
- for (const [kind, example] of [['schema', builderGuideSections[0].example], ['component', builderFormExample]] as const) {
+ const schemaExample = builderGuideSections.find((section) => section.id === 'start')?.example;
+ assert.ok(schemaExample, 'the getting-started schema example must remain published');
+ for (const [kind, example] of [['schema', schemaExample], ['component', builderFormExample]] as const) {
   const result = validateThingtimeCrystal([kind], example);
   assert.equal(result.ok, true, JSON.stringify(result));
  }
