@@ -1,4 +1,5 @@
 import React from 'react';
+import { isTransientBlockTarget } from './transientBlockActions';
 import { parseActionJson } from '~/schemas/actionJsonInput';
 import { ComponentDragBoundary } from './ComponentDrag';
 import { pageRuntimeSearch } from './seamlessMode';
@@ -357,6 +358,7 @@ export const gatherFormFields = (root: HTMLElement | null): Record<string, unkno
 	if (!root) return out;
 	const fields = root.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>('input[name], select[name], textarea[name]');
 	fields.forEach((field) => {
+		if (isTransientBlockTarget(field)) return;
 		const name = field.getAttribute('name') || '';
 		if (!name || !QUERY_KEY_PATTERN.test(name) || ['__proto__', 'constructor', 'prototype'].includes(name) || field.matches(':disabled')) return;
 		if (field.tagName === 'INPUT') {
