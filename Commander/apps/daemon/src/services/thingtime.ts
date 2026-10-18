@@ -109,11 +109,34 @@ export class ThingtimeService {
     return Boolean(pending && Date.now() - pending.createdAt <= 10 * 60_000);
   }
 
+  async syncAccount(
+    token: string,
+    settings: CommanderSettings,
+    account: CommanderAccount | undefined,
+  ): Promise<CommanderSettings> {
+    if (!account?.environment || account.id !== settings.activeAccountId)
+      throw new Error('Restore the saved account environment before syncing');
+    const synced = await this.sync(token, {
+      ...settings,
+      thingtimeBaseUrl: account.environment.baseUrl,
+      thingtimeClientId: account.environment.clientId,
+    });
+    // The next-login profile is independent of the account currently syncing.
+    return {
+      ...synced,
+      thingtimeBaseUrl: settings.thingtimeBaseUrl,
+      thingtimeClientId: settings.thingtimeClientId,
+    };
+  }
+
   async sync(token: string, settings: CommanderSettings): Promise<CommanderSettings> {
     const baseUrl = validatedThingtimeBaseUrl(settings.thingtimeBaseUrl);
     const endpoint = new URL('/api/v1/app-data', baseUrl);
     endpoint.searchParams.set('key', 'commander.settings.v1');
-    const response = await fetch(endpoint, { headers: { authorization: `Bearer ${token}` } });
+    const response = await fetch(endpoint, {
+      redirect: 'error',
+      headers: { authorization: `Bearer ${token}` },
+    });
     if (!response.ok) throw new Error(`Thingtime settings read failed (${response.status})`);
     const body = (await response.json()) as { entry?: { value?: CloudSettings } | null };
     const remote = body.entry?.value;
@@ -156,6 +179,7 @@ export class ThingtimeService {
       },
     };
     const write = await fetch(new URL('/api/v1/app-data', baseUrl), {
+      redirect: 'error',
       method: 'POST',
       headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
       body: JSON.stringify({ key: 'commander.settings.v1', value, visibility: 'private' }),
