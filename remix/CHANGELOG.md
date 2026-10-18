@@ -75,6 +75,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-18 — **Codex (AI)**: Convert Mac menu bar process CPU counters with the host Mach timebase. Apple Silicon readings now agree with macOS CPU seconds; regression coverage compares the collector conversion with independent `getrusage` readings.
+
 - 2026-10-18 — **Codex (AI)**: Give installed Device scripts pages a centered, padded Builder container. Remove fixture-provided layout so browser acceptance catches missing page spacing.
 
 - 2026-10-18 — **Codex (AI)**: Add editable agent tasks, todos and progress,
