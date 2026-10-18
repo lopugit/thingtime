@@ -419,7 +419,14 @@ export function useApi() {
     // + for a signed-in viewer their Secure Vault providers as metadata only:
     // vaultProviders: [{ id, name, kind, model, endpointHost, available, reason? }], vault: { configured })
     ai: {
-      models: useCallback(async () => getJson('/api/v1/ai/models'), []),
+      models: useCallback(async () => {
+        const result = await getJson('/api/v1/ai/models');
+        if (result?.vaultProviders?.some((provider: { planChatEligible?: boolean }) => provider.planChatEligible === true)) {
+          try { await requireThingtimeCapability('api.ai-models', '1.8.0'); }
+          catch { return { ...result, vaultProviders: result.vaultProviders.map(({ planChatEligible: _hint, ...provider }: any) => provider) }; }
+        }
+        return result;
+      }, []),
       complete: useCallback(async (input: AiCompletionInput) => {
         for (const [feature, minimum] of Object.entries(AI_COMPLETION_REQUIREMENTS)) await requireThingtimeCapability(feature, minimum);
         return asyncFetcher.submit(input, { action: '/api/v1/ai/complete', errorContext: 'complete text with your selected AI connections' });
@@ -648,6 +655,7 @@ export function useApi() {
         // → vaultProviders[].id); null clears it back to the catalog model
         create: useCallback(
           async (args?: { title?: string; model?: string; effort?: string; speed?: string; providerId?: string | null; accessMode?: 'ask' | 'full'; management?: 'client' | 'server' }) => {
+            if (typeof args?.providerId === 'string' && args.providerId.startsWith('chatgpt-plan-')) await requireThingtimeCapability('api.lopu-chats', '1.7.0');
             if (args?.accessMode) await requireThingtimeCapability('api.lopu-chats', '1.6.0');
             if (args?.management) await requireThingtimeCapability('api.lopu-chats', '1.5.0');
             return asyncFetcher.submit(args || {}, { action: '/api/v1/lopu/chats', errorContext: 'start a Lopu chat' });
@@ -656,6 +664,7 @@ export function useApi() {
         ),
         update: useCallback(
           async (args: { chatId: string; title?: string; model?: string; effort?: string; speed?: string; providerId?: string | null; accessMode?: 'ask' | 'full'; management?: 'client' | 'server'; archived?: boolean }) => {
+            if (typeof args.providerId === 'string' && args.providerId.startsWith('chatgpt-plan-')) await requireThingtimeCapability('api.lopu-chats-update', '1.6.1');
             if (args.accessMode) await requireThingtimeCapability('api.lopu-chats-update', '1.5.0');
             if (args.management) {
               await requireThingtimeCapability('api.lopu-chats', '1.5.0');

@@ -10296,11 +10296,70 @@ separate from deterministic discovery/lease tests.
 - Commander Settings titlebar: repeat maximize/restore on the real screen, including native and web double-click deliveries; verify the previous frame is restored and process headers remain aligned with values after resizing.
 - Incident account cleanup: use real signup and logout notification constructors; accept only system history tied to the exact revoked fixture session. Reject unrelated content, actors and timestamps before writes.
 
+
+## Editable private settings documents
+
+- [x] 2026-10-19: Offline desktop settings render without account/router providers. Synthetic adapter tests cover owner/origin/data-plane separation, revision conflicts, cross-window Web Lock saves, lost create responses, rejected external/native sources, and stale native-operation completion after authority changes.
+- [x] 2026-10-19: Task-owned OS-sandbox browser fixture at 1280px and 375px exercises real desktop settings/Builder with synthetic native IPC: nested legend edit/save/reload, checkbox/select/port changes, secret input clearing, authority busy reset, recovery disclosure and previous/newer workspace calls. Full scroll and screenshots show no overflow. Installed native confirmations and real account-page persistence remain separate acceptance checks. Fixture API19873/19874 only; installed API28631 and direct-IP1.1.1.1 denied.
+- [ ] Enter an isolated Mongo URI, save through the native adapter and confirm the input clears. Saved block documents, preview caches and Action history must contain no URI/token/file values. Switch account/API during an operation; stale results cannot change the new workspace or leave it busy.
+- [ ] Against the intended API, personalize a private settings page, reload it, create a competing edit in another window, and verify the conflict. Capability negotiation and expected-actor/data-plane guards must fail closed after account/backend changes. Offline recovery remains usable with the API unreachable.
+
+## ChatGPT plan connections (local/self-hosted)
+
+- [ ] In the editable ChatGPT settings layout, select and edit a nested button label,
+      repeated model option and transfer-dialog text through Builder; save and reload.
+      Verify the layout persists while private fields, OAuth URLs and transfer files
+      never enter the document, generic Action inputs or source caches. Surround the
+      host with an ordinary Action and attempt a forged nested action; both must
+      leave private fields unread. Change account/database during a pending operation:
+      fields clear, the operation signal aborts and late callbacks cannot update the
+      new scope. A rejected model change restores the saved selected option.
+      Check and uncheck a transient checkbox: each click must invoke exactly one
+      adapter callback; rejecting a controlled toggle restores its prior checked
+      state without dispatching an ordinary Action.
+
+
+- On a configured local account backend, connect a real ChatGPT account through the loopback callback, verify the account against ChatGPT, choose its discovered model, and complete a Lopu response plus one read-only tool call. Compare plan usage with ChatGPT Settings → Usage; do not infer a percentage from token counts.
+- Exercise cancellation, refusal, expired/replayed callback, account switching during exchange, same-email registrations, expired tokens, rotated refresh, missing plan consent, usage limit, unavailable model, signout and remote revocation failure. Confirm stale completions cannot save under a new owner; no tokens appear in browser storage, diagnostics, responses or normal Things exports.
+- Disconnect while a response is active; verify inference and subsequent tool calls stop. Remove or disable the selected runtime, including with a saved chat pin; verify no fallback spends API credits.
+- Inspect Settings and the Lopu provider picker at desktop and 375px, scroll to the bottom, open model selectors, test long labels and keyboard focus, and refresh/account-switch while a request is pending.
+- Verify both origin manifests advertise ai-chatgpt-plan 1.1.1, ai-models 1.8.0, lopu-chats 1.7.0, lopu-chats-update 1.6.0 and lopu-chats-reply 1.21.0 on built Nitro. On Vercel/unconfigured runtime, confirm no OAuth callback, token exchange or storage starts. An explicitly selected persistent remote API must negotiate its own manifest before proxying plan actions; changing the target during negotiation must refuse without forwarding credentials.
+
+- Enable Electron local API with its managed authenticated Mongo replica set; verify stable loopback ports, independent local account/session, persisted encrypted vault records, graceful process shutdown and restart. Missing executable, unavailable OS encryption, occupied port and invalid remote DB must not fall back to production.
+- Switch API endpoints and back; verify each endpoint retains only its own session, cached private state and credentials. Old endpoint requests must stop before restart; a delayed capability response must never authorize a different destination.
+- Generate a receiving code, move one connection, import and retry. Verify source inference is aborted before ciphertext is released, target host identity is retained, duplicate import is idempotent, wrong owner/origin/session and expired/tampered packages refuse, and a lost move response recovers the same encrypted package.
+- At desktop and 375px, expand transfer controls, inspect full receiving origin/account in confirmation, select a file and test errors. Long discovered model names must remain fully readable below the native select.
+- During a delayed manifest response, change the selected API and confirm no credentials reach the replacement. Cancel a proxied streaming reply and verify its upstream request stops.
+- Save a different desktop database without restarting, close and reopen the window, and verify the active API and browser session stay on the original database until restart. Stop the parallel development app with SIGINT/SIGTERM and verify Mongo exits before its temporary profile is removed.
+- Start reconnect, then move that account before consent completes; the late callback must not restore source credentials. Switch Thingtime accounts during receiving-code generation and verify stale transfer state and pending dialogs disappear.
+- Check long source account names, receiving origins, executable paths and all transfer/setup errors at desktop and 375px. The optional MongoDB download link must not install system packages or services automatically.
+- On a fresh Electron profile with the selected API unreachable, open the recovery screen’s desktop connection controls, enable managed local MongoDB, save and restart. Verify a real local homepage and compatible manifest without signing into the cloud; changing a broken remote endpoint must also be possible from recovery.
+- Refuse an encrypted connection move that exceeds the transfer transport envelope before cancelling reconnects, aborting inference or deleting source credentials; verify the original connection remains usable.
+
+
+### Bundled desktop MongoDB
+
+- [ ] On a fresh macOS 14+ profile without Homebrew MongoDB, enable the local API and start the included server. Verify authenticated loopback-only MongoDB and a successful API write/read, then restart and confirm the record persists.
+- [ ] Reinstall the signed app and verify local data, encrypted runtime settings and selected session survive; quit and confirm only this app-owned MongoDB child stops.
+- [ ] Existing executable selections remain selected. On macOS 13, the included server gives an actionable compatibility message while remote API mode works.
+- [ ] Corrupt cached download, missing bundled binary/source/license, wrong release and unsupported architecture fail packaging verification.
+
+- [ ] Desktop public data/federation identifiers use a per-profile keyed HMAC, never an unkeyed connection-string digest. Migrating pre-upgrade encrypted settings preserves the exact existing renderer partition, including after switching databases and returning; failure to persist the alias blocks startup.
 - Agent task pages: verify desktop centering and mobile gutters; mark a todo complete with a nonempty neighboring add-todo form, reload, and confirm only that todo changed.
 - Desktop agent task identity: switch API endpoints with matching owner/task IDs and default database identity; the second endpoint must not expose or reuse the first endpoint’s browser claim.
 - Agent general security link: open it from a task; the Things settings category and Agent browsers disclosure must open and scroll to the default policy controls. Save, reload and verify the policy; restore isolated testing after acceptance.
 
+- Desktop browser/local-runtime integration: quitting waits for browser cleanup and OAuth authority release before managed Mongo shutdown completes; repeated quits and late browser IPC cannot bypass the shared barrier. Pending saved API/database settings must not change the reported running account authority before restart.
 - Device capability growth: a fully equipped Mac (65 current capability identifiers) must publish fresh state, retain every identifier in the owner device response, and populate the menu bar Builder page. Pairing and heartbeat admission share the 128-entry bound; reject 129 entries and invalid identifiers.
+
+- ChatGPT credential management refuses `X-Thingtime-Character` overrides before storage or identity resolution; normal session-selected identities still revalidate after account changes, including OAuth callbacks and encrypted connection moves.
+
+### Owned-plan onboarding regression (2026-10-18)
+
+- With a fresh unverified local/self-hosted user, connect a plan, choose its model and select it in Lopu. Verify the picker stays usable while locked, then a new text chat and reply persist without an admin grant or Thingtime credits. Reload the chat and verify the same plan remains pinned.
+- Switch to a catalog/API-key provider and to voice: existing invitation policy still applies. Disconnect or revoke the plan and confirm no fallback billing or continuation; other-owner, scoped-token and Character-override requests must fail before writes/inference.
+- Change account while catalog or provider-save requests are pending. No eligibility hint may come from cache or the old response. A failed provider save must restore the last confirmed choice and show its error; a later successful choice must survive an older failure.
+- Run `test:chatgpt-plan`, `test:lopu-ui` and `test:api-capabilities`; the plan suite includes real create/update persistence-boundary checks with isolated storage adapters. Live installed inference and desktop/mobile picker checks remain separate acceptance evidence.
 
 ## Character coordination discovery
 
@@ -10309,4 +10368,9 @@ separate from deterministic discovery/lease tests.
 
 - Lopu page patches: insert, replace and setBlocks preserve a page beyond the former 120-block product cap; tests use a finite representative document rather than allocating from the unbounded compatibility constant. Existing operation validation and persistence guards remain separate.
 
+- ChatGPT plan acceptance regression (2026-10-19): keep the global Vercel-management preference enabled, select an owned plan, and send a fresh message plus a follow-up. Both must execute locally, preserve the plan pin, and never show “Nothing to update”. Repeat unchanged settings with a revoked proof and confirm refusal; ordinary providers must retain server management. The floating header must reflect the selected eligible plan while voice keeps its existing invitation gate.
+
+- Suite authority regression covers direct editable menu action/source references, not only component blocks.
+
+- Responses terminal-output regression: after response.output_item.done plus response.completed with empty output, execute the finalized read-only call once, replay encrypted reasoning and matching call_id, and show the final answer. Missing/incomplete terminal events, unfinished starts, duplicate done events and conflicting terminal arguments/namespaces must execute nothing. Synthetic real-SDK streaming suite and the installed saved-plan read-only round trip pass (installed source 1f073a3b8).
 - Editable app suites: page-level element controls and subtree source bindings reference only Actions declared by that suite; expanding a page into individual blocks must not require an opaque Component wrapper.

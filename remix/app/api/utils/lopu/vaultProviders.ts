@@ -34,6 +34,8 @@ export type LopuVaultProviderPublic = {
 	model: string | null;
 	endpointHost: string | null;
 	available: boolean;
+	// Present only for a full-session, owner-scoped ChatGPT text connection.
+	planChatEligible?: true;
 	reason?: string;
 	// the kind's realtime speech-to-speech models (direct voice, §6.1) — empty
 	// for every kind that has none
@@ -42,7 +44,7 @@ export type LopuVaultProviderPublic = {
 
 // Every key the projection may carry — pinned so a test can prove nothing
 // else (a token, an endpoint, a group id) ever rides along.
-export const LOPU_VAULT_PROVIDER_PUBLIC_KEYS: readonly (keyof LopuVaultProviderPublic)[] = ['id', 'name', 'kind', 'model', 'endpointHost', 'available', 'reason', 'realtimeModels'];
+export const LOPU_VAULT_PROVIDER_PUBLIC_KEYS: readonly (keyof LopuVaultProviderPublic)[] = ['id', 'name', 'kind', 'model', 'endpointHost', 'available', 'planChatEligible', 'reason', 'realtimeModels'];
 
 // The vault entry shape the projection reads: the redacted PublicVaultEntry
 // from userVault.ts (no encrypted fields are ever loaded for a list).

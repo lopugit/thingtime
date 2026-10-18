@@ -5,6 +5,8 @@ runtime, and the signed native macOS Thingtime Node as one desktop application.
 It does not duplicate the web source. The deterministic resource build stages:
 
 - the Vite client and Nitro server under `electron/dist/web`;
+- MongoDB Community Server 8.0.34, its source and licenses under
+  `electron/dist/database/mongodb`, plus the MongoDB driver under `electron/dist/database`;
 - `ai-connectors.mjs` and `thingtime-node-runtime.mjs` under `electron/dist/ai`;
 - the signed local/production or ad-hoc UNSIGNED `Thingtime Node.app` under
   `electron/dist/native`.

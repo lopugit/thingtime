@@ -1,13 +1,17 @@
+import { existsSync } from 'node:fs';
 import { access } from 'node:fs/promises';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
 const { verifyUnsignedArtifacts } = require('../lib/thingtime-node-bridge.cjs');
+const { verifyBundledMongo } = require('../lib/bundled-mongodb.cjs');
 const { verifyAgentPackage } = require('../lib/verify-agent-package.cjs');
 
-const appPath = process.argv[2] ? path.resolve(process.argv[2]) : null;
-if (!appPath || process.argv.length !== 3) {
+const requireBundledMongo = process.argv.includes('--require-bundled-mongo');
+const args = process.argv.slice(2).filter((value) => value !== '--require-bundled-mongo');
+const appPath = args[0] ? path.resolve(args[0]) : null;
+if (!appPath || args.length !== 1) {
     throw new Error('Usage: verify-unsigned-app.mjs <Thingtime.app>');
 }
 
@@ -25,5 +29,8 @@ await verifyUnsignedArtifacts({
     outerApp: appPath,
     runtimePath
 });
+const mongoRoot = path.join(contentsPath, 'Resources', 'database', 'mongodb');
+if (requireBundledMongo || existsSync(mongoRoot))
+    await verifyBundledMongo(mongoRoot, { pinned: requireBundledMongo, execute: requireBundledMongo });
 verifyAgentPackage(appPath, undefined, { required: true });
 console.log(`Verified unsigned Thingtime app ${appPath}`);

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { MAX_SHARED_SOURCE_LOADS, evictSharedLoads, queryScopeOf, readSourceCache, sourceCacheKey, writeSourceCache } from './webpageRuntime';
+import { MAX_SHARED_SOURCE_LOADS, gatherFormFields, evictSharedLoads, queryScopeOf, readSourceCache, sourceCacheKey, writeSourceCache } from './webpageRuntime';
 
 // The bounds the page runtime puts on things it does not control: the
 // shared-load map (how many in-flight/settled source requests it may retain),
@@ -196,4 +196,16 @@ test('typed JSON form fields decode once and reject invalid drafts before an Act
 		assert.deepEqual(gatherFormFields(form(JSON.stringify(value))), { program: value });
 	}
 	for (const value of ['', '{', 'x'.repeat(65537)]) assert.throws(() => gatherFormFields(form(value)), /Check the JSON/);
+});
+
+
+test('ordinary Actions cannot gather fields from nested transient settings hosts', () => {
+	const field = (name: string, privateHost: boolean) => ({
+		tagName: 'INPUT', type: 'text', value: privateHost ? 'synthetic-private-transfer-code' : 'public',
+		getAttribute: (key: string) => key === 'name' ? name : null,
+		matches: () => false,
+		closest: (selector: string) => privateHost && selector === '[data-tt-transient-boundary]' ? {} : null
+	});
+	const form = { querySelectorAll: () => [field('ordinary', false), field('destinationCode', true)] } as unknown as HTMLElement;
+	assert.deepEqual(gatherFormFields(form), { ordinary: 'public' });
 });

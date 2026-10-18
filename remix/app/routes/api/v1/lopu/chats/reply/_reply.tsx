@@ -1,7 +1,10 @@
+import { resolveOwnedChatGPTPlan } from '~/api/utils/ai/chatgptPlanAdmission';
+import type { OwnedPlanAdmission } from '~/api/utils/ai/chatgptPlanAdmissionCore';
+import { chatGPTPlanFailure, isChatGPTPlanProvider } from '~/api/utils/ai/chatgptPlanScope';
 import { isLopuAccessActor, lopuAccessMode } from '~/api/utils/lopu/accessMode';
 import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
 import type { ResolveActionActor } from '~/api/utils/actions/firstPartyActionHost';
-import { LOPU_CONTINUE_PROMPT, continuationRequestId, LOPU_RECOVERABLE_STOPS, lopuRecoveryFailures } from '~/api/utils/lopu/continuationCore';
+import { LOPU_CONTINUE_PROMPT, continuationRequestId, lopuProviderManagement, LOPU_RECOVERABLE_STOPS, lopuRecoveryFailures } from '~/api/utils/lopu/continuationCore';
 import { lopuPageReference, lopuPageReferences, LOPU_MAX_PAGE_REFERENCES } from '~/utils/lopuPageContext';
 import { resolveLopuMedia } from '~/api/utils/lopu/chatMedia.server';
 import { json, readJsonBody, requireJsonContentType } from '~/api/http';
@@ -295,9 +298,20 @@ export const replyAsUser = async (request: Request, user: Awaited<ReturnType<typ
   const providerExplicit = input.providerId !== undefined;
   const wantedProviderId = providerExplicit ? input.providerId : settings.providerId;
   let vaultProvider: LopuVaultTurnProvider | null = null;
+  let ownedPlan: OwnedPlanAdmission | null = null;
   let clearStoredProvider = false;
   if (wantedProviderId) {
-    if (!userVaultConfigured()) {
+    if (isChatGPTPlanProvider(wantedProviderId)) {
+      try {
+        const resolved = await resolveOwnedChatGPTPlan(request, user.id, wantedProviderId, execution.resolveActionActor);
+        ownedPlan = resolved.admission;
+        input.management = lopuProviderManagement(input.management, resolved.provider.id);
+        vaultProvider = { ...resolved.provider, effort: null, requestedModel: null };
+      } catch (error) {
+        // A saved plan pin is strict too: losing a runtime must never spend API credits.
+        return json({ ok: false, ...chatGPTPlanFailure(error) }, { status: 409, headers: { 'Cache-Control': 'private, no-store' } });
+      }
+    } else if (!userVaultConfigured()) {
       if (providerExplicit) return json({ ok: false, error: 'Secure Vault is not configured on this server — pick a Thingtime model instead' }, { status: 400 });
       clearStoredProvider = true;
     } else {
@@ -323,7 +337,7 @@ export const replyAsUser = async (request: Request, user: Awaited<ReturnType<typ
   // in the finally below (early return or throw) or once the stream has
   // finished accounting for the turn.
   const expectedBilling = resolveLopuBilling({ vault: !!vaultProvider, mode: lopuChatProviderMode(), configured: hasLopuChatProviderConfigured() });
-  const access = await assertLopuAccess(user, { billing: expectedBilling, reserve: true });
+  const access = await assertLopuAccess(user, { billing: expectedBilling, reserve: true, ownedPlan });
   if (access.ok === false) return lopuAccessResponse(access);
   let released = false;
   const releaseTurn = async () => {
@@ -370,7 +384,7 @@ export const replyAsUser = async (request: Request, user: Awaited<ReturnType<typ
         ...(input.management ? { management: input.management } : {}),
         ...(choice ? { model: choice.model, effort: choice.effort, speed: choice.speed } : {}),
         ...(providerExplicit && vaultProvider ? { providerId: vaultProvider.id } : {})
-      });
+      }, undefined, ownedPlan);
       if (created.ok === false) return json({ ok: false, error: created.error }, { status: created.status });
       chatId = created.chat.id;
       createdHere = true;
@@ -384,7 +398,18 @@ export const replyAsUser = async (request: Request, user: Awaited<ReturnType<typ
       if (overrides && choice) Object.assign(patch, { model: choice.model, effort: choice.effort, speed: choice.speed });
       if (providerExplicit) patch.providerId = vaultProvider?.id ?? null;
       else if (clearStoredProvider) patch.providerId = null;
-      if (Object.keys(patch).length) await updateLopuChat(user.id, chatId, patch).catch(() => null);
+      if (Object.keys(patch).length) {
+        if (ownedPlan && providerExplicit) {
+          // A newly selected plan must be pinned before inference. Do not
+          // present a successful turn while silently retaining another provider.
+          try {
+            const updated = await updateLopuChat(user.id, chatId, patch, ownedPlan);
+            if (updated.ok === false) return json({ ok: false, error: updated.error }, { status: updated.status });
+          } catch {
+            return json({ ok: false, error: 'Could not save the selected ChatGPT plan. Try again.' }, { status: 503, headers: { 'Cache-Control': 'no-store' } });
+          }
+        } else await updateLopuChat(user.id, chatId, patch, ownedPlan).catch(() => null);
+      }
     }
 
     // --- history + the user turn ------------------------------------------
