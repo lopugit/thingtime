@@ -1,4 +1,5 @@
 import { validOptionalLibraryTitle } from '../utils/libraryTitle';
+import { recordAccountThemeChange } from './accountTimeline';
 import { AccountThemeSelection } from './themeSelection';
 import { LocalThemes, type LocalThemeInput } from './themes';
 import type { LocalThing } from './things';
@@ -157,20 +158,22 @@ export class AccountThemeSync {
 		if (previous && !old) return fail('Refresh this account theme before editing it.');
 		if (!previous && row?.folderId && this.scope.dataPlane !== 'home')
 			return fail('Create filed theme copies in the home library.', 'THEME_PLACEMENT_SCOPE');
+		if (input?.visibility !== undefined && !['private', 'public'].includes(String(input.visibility)))
+			return fail('Invalid theme visibility.', 'INVALID_THEME', 400);
+		const visibility = (input?.visibility as State['visibility']) ?? old?.visibility ?? 'private';
+		await recordAccountThemeChange(tx, this.scope, previous, row, { before: old?.visibility ?? 'private', after: visibility }, () => new Date(this.now()).toISOString(), this.uuid);
 		if (!row && old?.baseVersion === null && !old.pending) {
 			await tx.delete(collection, id);
 			await this.bump(tx);
 			return;
 		}
-		if (input?.visibility !== undefined && !['private', 'public'].includes(String(input.visibility)))
-			return fail('Invalid theme visibility.', 'INVALID_THEME', 400);
 		const state: State = {
 			id,
 			revision: (old?.revision ?? 0) + 1,
 			base: old?.base ?? null,
 			baseVersion: old?.baseVersion ?? null,
 			remoteFolderId: old?.remoteFolderId !== undefined ? old.remoteFolderId : old?.base?.folderId,
-			visibility: (input?.visibility as State['visibility']) ?? old?.visibility ?? 'private',
+			visibility,
 			state: old?.state === 'conflict' || old?.state === 'error' ? old.state : 'pending',
 			deleted: !row,
 			titleKnown: old?.titleKnown ?? (!old?.base || old.base.title !== undefined),

@@ -73,6 +73,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- **Codex (AI), 2026-10-18:** Retain account theme edits, imports, moves, titles
+  and deletions in canonical device History atomically with local content and
+  sync intent. Home History can read/export these versions with a custom database
+  selected. Reuse independent History sync/export; native/API acceptance remains open. See the [PR #1000 checkpoint](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md#account-theme-device-history--2026-10-18).
+
 - **Codex (AI), 2026-10-18:** Save/remove cloud-backed mail settings locally with
   encrypted, independently retried account sync; preserve newer edits and show
   reviewed conflicts. Native/API acceptance stays open. See the

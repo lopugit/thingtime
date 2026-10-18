@@ -104,6 +104,9 @@ test('explicit home import preserves a mixed editable bundle atomically and expo
 });
 
 test('unresolved legacy edits are reported without blocking independent home editing', async () => {
+	// Only the content identity collides across partitions. Each subsequent
+	// operation and History event still needs its own legitimate identity.
+	const ids = (first: ReturnType<typeof randomUUID>) => { let used = false; return () => { if (used) return randomUUID(); used = true; return first; }; };
 	const db = database(),
 		id = randomUUID(),
 		old = new AccountThemeSync(
@@ -111,14 +114,14 @@ test('unresolved legacy edits are reported without blocking independent home edi
 			selected,
 			lease,
 			() => 1000,
-			() => id
+			ids(id)
 		),
 		workspace = new LocalAccountHomeThemes(
 			db,
 			selected,
 			lease,
 			() => 2000,
-			() => id
+			ids(id)
 		);
 	try {
 		await old.save({ name: 'Legacy edit', theme: {} });

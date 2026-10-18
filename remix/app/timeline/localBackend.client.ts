@@ -9,12 +9,13 @@ import { currentAccountWorkspace, accountWorkspaceLease, workspaceDatabase } fro
 let backend: IndexedDbTimelineBackend | null = null;
 export const localTimelineBackend = () => backend ??= new IndexedDbTimelineBackend(window.indexedDB);
 
-/** Only the currently bound account/plane can add its authoritative workspace
- * versions. Home History on a different selected plane keeps its existing cache. */
+/** The current account may read its selected partition or its home partition.
+ * Both keep the selected-account lease, so changing identity or selection retires
+ * an old reader. This local authority never confirms remote synchronization. */
 export function scopedTimelineStore(scope: TimelineScope): TimelineLocalStore {
 	const account = currentAccountWorkspace();
-	if (account && account.origin === scope.apiOrigin && account.ownerId === scope.ownerId && account.dataPlane === scope.dataPlane) {
-		const authored = new AccountTimeline(workspaceDatabase(), account, accountWorkspaceLease(account));
+	if (account && account.origin === scope.apiOrigin && account.ownerId === scope.ownerId && (account.dataPlane === scope.dataPlane || scope.dataPlane === 'home')) {
+		const authored = new AccountTimeline(workspaceDatabase(), { ...account, dataPlane: scope.dataPlane }, accountWorkspaceLease(account));
 		return new AccountTimelineStore(scope, localTimelineBackend(), authored);
 	}
 	return new TimelineLocalStore(scope, localTimelineBackend());

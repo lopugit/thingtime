@@ -722,9 +722,20 @@ Anonymous saved themes use the shared approved `theme-content` snapshot in
 `local-workspace/themes.ts` and `timeline.ts`. `timeline/exportVersion.ts` keeps
 that protected projection in History downloads for local and account authority
 (`api.timeline` 1.21.0), without widening generic mutation/restore permissions.
-Regressions: `local-workspace/themeHistory.test.ts` and the opt-in
-`anonymousThemeHistory.browser.test.ts`. Account-authored theme History remains
-a separate home-scope integration task.
+`AccountThemeSync.mutated` also records device-authored theme changes through
+`accountTimeline.recordAccountThemeChange`: content, intent and normalized History
+commit together. Only this dedicated writer supplies the approved before/after
+projection; generic account captures still reject protected kinds. Hydration,
+selection and remote acknowledgements do not author edits. The existing History
+queue and version exporter consume these private drafts without inventing server
+receipts or waiting for theme-content sync. `scopedTimelineStore` includes this
+account's authored home rows while a custom database is selected; the normal
+account facade exports home versions through its home worker. Both keep the
+selected-account lease and retire on identity or database changes. Regressions:
+`local-workspace/themeHistory.test.ts`, `accountThemeHistory.test.ts`,
+`accountThemeHistoryScope.test.ts` and the opt-in
+`anonymousThemeHistory.browser.test.ts`. Account theme native/API acceptance and
+protected restore/undo/merge remain open.
 
 Owned account themes join the existing `accountExport.ts` collector through
 `AccountThemeSync.exportSnapshot`, never the generic protected writer. The

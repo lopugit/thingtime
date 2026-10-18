@@ -2,8 +2,10 @@ import { parseTimelineEntry, parseTimelineEvent, timelineEventText, timelineScop
 import { splitTimelineEvent, joinTimelineEvent, parseTimelineEventRecord, timelineLinkId, type TimelineEventRecord, type TimelineLink } from '../timeline/records';
 import { TimelineLocalStore, timelineLocalRow, timelineLocalIndex, validateTimelineIndex, validateTimelineRow, orderPendingTimelineRows,
  type LocalTimelineRow, type TimelineLocalBackend, type TimelineLocalIndex, type TimelineLocalSelection } from '../timeline/localStore';
-import { recordLocalThingChanges, type LocalMutationCapture } from './timeline';
-import { captureThingChanges } from './thingChanges';
+import { recordLocalThingChanges, type LocalMutationCapture, type ThingHistoryWriter } from './timeline';
+import { captureThingChanges, type ThingChanges } from './thingChanges';
+import { themeContentSnapshot } from '../timeline/themeContent';
+import { isTransferTheme } from '../utils/thingTransfer/theme';
 import type { LocalThing } from './things';
 import { WorkspaceError, type WorkspaceDatabase, type WorkspaceLease, type WorkspaceScope, type WorkspaceTransaction } from './storage';
 
@@ -55,18 +57,30 @@ async function append(tx:WorkspaceTransaction,scope:TimelineScope,input:Timeline
  * These are authored private drafts until the normal server supplies receipts;
  * they never fabricate server revisions, ownership or acceptance ordering. */
 export async function captureAccountThingChanges<T>(tx:WorkspaceTransaction,scope:AccountScope,run:(tx:WorkspaceTransaction)=>Promise<T>,now:()=>string,uuid:()=>string,captures?:Map<string, LocalMutationCapture>):Promise<T>{
- return captureThingChanges(tx,run,async(tx,changes)=>{
-  if(!changes.size)return;
-  let clientId=await tx.get<string>(META,'client');
-  if(!clientId){clientId=`workspace-${uuid()}`;await tx.put(META,'client',clientId);}
-  const timeline=accountTimelineScope(scope);
-  await recordLocalThingChanges(tx,changes,now,uuid,captures,{ownerId:scope.ownerId,clientId,branchId:`device-${clientId}`,mode:'draft',
-   read:id=>readAccountTimelineRow(tx,timeline,id),append:event=>append(tx,timeline,event)});
- },async(tx,id)=>{
+ return captureThingChanges(tx,run,(tx,changes)=>recordAccountChanges(tx,scope,changes,now,uuid,captures),async(tx,id)=>{
   const row=await tx.get<LocalThing>('things',id);if(!row)return null;
   const state=await tx.get<{audience:{acl:string[]}}>('thing-sync',id);
   return {...row,acl:state?.audience.acl || (row as any).acl || ['tt:user']};
  });
+}
+
+async function recordAccountChanges(tx:WorkspaceTransaction,scope:AccountScope,changes:ThingChanges,now:()=>string,uuid:()=>string,captures?:Map<string,LocalMutationCapture>,themeSnapshots?:ThingHistoryWriter['themeSnapshots']){
+  if(!changes.size)return;
+  let clientId=await tx.get<string>(META,'client');
+  if(!clientId){clientId=`workspace-${uuid()}`;await tx.put(META,'client',clientId);}
+  const timeline=accountTimelineScope(scope);
+  await recordLocalThingChanges(tx,changes,now,uuid,captures,{ownerId:scope.ownerId,clientId,branchId:`device-${clientId}`,mode:'draft',themeSnapshots,
+   read:id=>readAccountTimelineRow(tx,timeline,id),append:event=>append(tx,timeline,event)});
+}
+
+/** Called only by the dedicated theme mutation, after its ownership/state
+ * checks. Read hydration and remote acknowledgements never author a version.
+ * Visibility comes from that writer's intent, not the generic Thing ACL. */
+export async function recordAccountThemeChange(tx:WorkspaceTransaction,scope:AccountScope,before:LocalThing|null,after:LocalThing|null,visibility:{before:'private'|'public';after:'private'|'public'},now:()=>string,uuid:()=>string){
+ const id=after?.id??before?.id;
+ if(!id||[before,after].some(row=>row&&(!isTransferTheme(row)||row.id!==id)))failure('Invalid theme History mutation.');
+ const snapshot=(row:LocalThing|null,visibility:'private'|'public')=>row?themeContentSnapshot({crystal:row.crystal,tags:row.tags??[],visibility,folderId:row.folderId??null}):null;
+ await recordAccountChanges(tx,scope,new Map([[id!,{before,after}]]),now,uuid,undefined,new Map([[id!,{before:snapshot(before,visibility.before),after:snapshot(after,visibility.after)}]]));
 }
 
 /** Authoritative device versions live in the existing scoped workspace, using

@@ -564,8 +564,8 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 			changed();
 			return { ok: true, roots: result.roots, ids: result.idMap, imported: result.things.length, filesImported: manifest.files.length, linksImported: 0, savedLocally: true };
 		};
-	const localHistoryScope = (requested: {apiOrigin?: string; ownerId: string; dataPlane: string}) =>
-  requested.ownerId === scope.ownerId && requested.dataPlane === scope.dataPlane && (requested.apiOrigin === undefined || requested.apiOrigin === scope.origin);
+	const localHistoryScope = (requested: {apiOrigin?: string; ownerId: string; dataPlane: string}, includeHome = false) =>
+  requested.ownerId === scope.ownerId && (requested.dataPlane === scope.dataPlane || (includeHome && requested.dataPlane === 'home')) && (requested.apiOrigin === undefined || requested.apiOrigin === scope.origin);
  return { ...online, auth: remote.auth, login: remote.login,
   actions: { ...online.actions,
    run: async (args: {action?: unknown; inputs?: unknown; source?: string} = {}) => {
@@ -648,13 +648,16 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
     facadeLease.assertCurrent();if(request.command==='apply-version')changed();return result;
    },
    canExportLocally: (requested: {apiOrigin?: string; ownerId: string; dataPlane: string}) => {
-    try { facadeLease.assertCurrent(); return localHistoryScope(requested); } catch { return false; }
+    try { facadeLease.assertCurrent(); return localHistoryScope(requested, true); } catch { return false; }
    },
    exportVersion: async (requested: {apiOrigin?: string; ownerId: string; dataPlane: string}, eventId: string, options?: {signal?: AbortSignal; adapter?: string}) => {
     facadeLease.assertCurrent();
-    if (!localHistoryScope(requested)) return online.timeline.exportVersion(requested, eventId, options);
+    if (!localHistoryScope(requested, true)) return online.timeline.exportVersion(requested, eventId, options);
     const result = await withExportDeadline(async signal => {
-     try { return await worker().historyExport(eventId, signal); }
+     try {
+      const service = requested.dataPlane === 'home' ? accountWorkspaceWorker(authorityScope, { localPlane: 'home' }) : worker();
+      return await service.historyExport(eventId, signal);
+     }
      catch (error) {
       facadeLease.assertCurrent(); signal.throwIfAborted();
       if (!(error instanceof WorkspaceError) || error.code !== 'HISTORY_NOT_RETAINED' || navigator.onLine === false || !canSyncAccountWorkspace(scope)) throw error;

@@ -4326,3 +4326,48 @@ live authenticated API round trip. No production/provider account was modified.
 Native 1440/390/320px editing, conflict controls, offline reopen/reconnect and real
 API acceptance remain open with the installed browser-manager socket/policy gate.
 The original target agent-host artifact connection remains separately unverified.
+
+## Account theme device History — 2026-10-18
+
+Dedicated account theme mutations now commit the approved `theme-content`
+before/after projection with the content and its separate sync intent. They use
+the existing normalized Timeline event/link/index rows, device branch and client
+identity. Imports, folder moves, library titles and deletes pass through the same
+writer. Deleting an unsent theme cancels content sync while retaining its History.
+History stores private client drafts, never fabricated server receipts. Its
+existing queue and canonical version exporter work independently of content sync.
+
+Generic protected writes remain refused. Account refresh, selection and remote
+acknowledgements do not author edits. Equivalent saves do not add a version.
+Storage failure rolls back content, active selection, sync intent and History;
+account/origin/data-plane partitions and retired workspace leases still apply.
+
+Home History now includes authored home-workspace rows even while a custom
+database is selected. The normal account facade exports those versions locally
+under the current selected-account lease; switching identity, origin or database
+retires existing readers and exports. This grants no remote-sync authority or
+access to another account or an unselected custom partition. A regression test
+failed before this wiring fix and now passes without making an HTTP request.
+
+Local checks cover exact visibility/tokens/title/folder snapshots, deleted-version
+export, reload, cache eviction, independent synthetic History acknowledgements,
+remote refresh and failure rollback. Native History and real authenticated API
+acceptance are still open, along with protected theme restore/undo/merge. This
+increment adds no HTTP endpoint or remote contract and does not change theme
+catalogue capacity; the broader capacity audit remains outstanding.
+
+Character coordination was checked read-only in the assigned Chrome profile on
+18 October: the live production manifest lacks `api.auth-characters`; the existing
+Thingtime Agents subspace is private. No Character or coordination post was
+created. Native controls now read the installed Thingtime window after an earlier
+`noWindowsAvailable` error. Its Settings and native menus do not expose the task
+Browser controls needed to obtain the manager socket and saved task policy. The
+shipped CLI is present and requires that socket. No account settings or network
+protections were changed, and no permissive test fallback was launched.
+
+Local verification: **690 workspace tests and 4 offline-shell checks passed**
+(**72 opt-in browser/API checks skipped**); **258 Timeline tests passed**. Changed
+TypeScript lint has zero errors and one existing constructor warning. The client,
+platform, embed, draft and offline build passed with 250 verified assets
+(22,769,952 bytes). TypeScript retains exactly the same 91 baseline diagnostics.
+These automated checks do not establish native UI or real account-sync acceptance.
