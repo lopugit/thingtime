@@ -33,6 +33,21 @@ public struct MenuBarTelemetry: Codable, Equatable, Sendable {
 }
 
 public enum SystemMenuBar {
+    private static let timebase: mach_timebase_info_data_t = {
+        var value = mach_timebase_info_data_t()
+        mach_timebase_info(&value)
+        return value
+    }()
+
+    /// proc_pid_rusage CPU counters are Mach absolute ticks, not nanoseconds.
+    /// Convert before adding so even two large counters cannot overflow UInt64.
+    static func cpuSeconds(user: UInt64, system: UInt64,
+                           timebase: mach_timebase_info_data_t = timebase) -> Double? {
+        guard timebase.numer > 0, timebase.denom > 0 else { return nil }
+        return (Double(user) + Double(system)) * Double(timebase.numer)
+            / Double(timebase.denom) / 1_000_000_000
+    }
+
     private static func value(_ element: AXUIElement, _ attribute: String) -> CFTypeRef? {
         var result: CFTypeRef?
         guard AXUIElementCopyAttributeValue(element, attribute as CFString, &result) == .success else { return nil }
@@ -72,7 +87,7 @@ public enum SystemMenuBar {
                       source: source, visible: visible, x: rect.map { Double($0.minX) }, y: rect.map { Double($0.minY) },
                       width: rect.map { Double($0.width) }, height: rect.map { Double($0.height) },
                       residentBytes: measured ? measurements.ri_resident_size : nil,
-                      cpuTimeSeconds: measured ? Double(measurements.ri_user_time + measurements.ri_system_time) / 1_000_000_000 : nil)
+                      cpuTimeSeconds: measured ? cpuSeconds(user: measurements.ri_user_time, system: measurements.ri_system_time) : nil)
             }
             var appItems: [MenuBarItemTelemetry] = []
             if trusted {
