@@ -379,3 +379,16 @@ recovery bytes and immutable operations. `prepareRemove` holds remote parent
 deletion until file cleanup completes, after any uncertain parent write settles.
 Tests: `accountBoundMedia.test.ts` and enabled `offlinePostTemplate.browser.test.ts`;
 see the [deletion checkpoint](../local-workspaces.md#offline-post-templates-and-bound-parent-deletion--2026-10-17).
+
+## Password-vault attachments
+
+`api/utils/passwords/files.ts` uses an internal `passwordVault` adapter to the
+canonical multipart service. The immutable password purpose is refused by normal
+attachment routes. Content is browser-encrypted; the per-file key and real name
+are wrapped by the account vault on the protected attachment root. Only a saved,
+owned password entry may bind the file; deletion and expiry keep existing
+exact-version cleanup and accounting. Ciphertext skips external moderation.
+
+Anonymous password attachments use the device password vault rather than the
+ordinary attachment store. Their shared UI/archive backend and scoped encrypted
+chunk lifecycle are documented in [auth and accounts](auth-accounts-and-admin.md#anonymous-password-files-and-shared-archive-storage).

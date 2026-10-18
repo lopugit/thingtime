@@ -18,7 +18,7 @@ shared schema/owner/createdAt/shareId index; no new indexes or collections.
 and POP3 over verified TLS, pinned public DNS and bounded responses. The local
 loopback adapter is `scripts/mail-connector.mts`; it never exposes arbitrary
 socket operations. Proxy definitions reference folders and cannot mutate mail.
-The route/import map/docs register `api.mail` 1.1.0 and `api.mail-sync` 1.0.0 in both manifests and the
+The route/import map/docs register `api.mail` 1.2.0 and `api.mail-sync` 1.0.0 in both manifests and the
 client negotiates it. Kinds are protected and excluded from generic reads.
 
 Run `test:mail`, `test:mail:transport`, `test:mail:connector`, `test:mail:storage`, `test:settings` and
@@ -39,3 +39,27 @@ iOS's destination drawer opens Mail; WebView uses the relay with its own session
 Run Electron's `test/mail-sync.test.cjs`, `test:mail`, `test:mail:transport`, `test:mail:relay`,
 `test:api-capabilities` (including private desktop proxy tests), native builds
 and the live browser/native checks in TESTING.md.
+
+Gmail uses `api/utils/mail/google.ts` for fixed-endpoint, bounded Gmail
+API calls and refresh tokens; `googleOAuth.ts` owns ten-minute PKCE flows in the
+existing TTL `authOtps` collection. Only the initiating live browser session can
+confirm the verified address. Callback completion alone never links an account.
+Private grants use the existing encrypted/accounted mail-account; projections
+must whitelist public fields. `google-relay` reads a saved grant but persists no
+messages, while `sync` retains the existing cloud revision/deletion fence.
+`GoogleMailConnect.tsx` provides the shared browser/native consent controls.
+`/api/v1/mail/google/callback` is registered in both manifests and the import map,
+and never follows origin fallback. Google client config is an exact-origin map
+in the existing admin vault; see README for fork-safe setup and verification.
+The iOS WKUIDelegate opens explicit new-window HTTP(S) links in the system browser.
+
+`googleActions.ts` and `mail/googleModel.ts` define Gmail modify/label/draft/send
+adapters and strict recipient/header validation. `google-action` takes a stable
+writeId, account revision and validated mutation. `store.ts` admits a protected
+accounted `mail-operation` child before provider I/O; complete retries reuse the
+result, uncertain ones never replay, and known pre-dispatch failures remain
+editable. Account leases/content revisions serialize mutations and reject stale
+sync writes. `google-drafts` pages Google drafts without saving their bodies.
+`GmailWorkspace`, `GmailMessageActions` and `GmailComposer` share those APIs;
+compose drafts use separate encrypted rows in the existing mail IndexedDB store,
+with per-draft revisions and owner/origin isolation. No new collection is added.

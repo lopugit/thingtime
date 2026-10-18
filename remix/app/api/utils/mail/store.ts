@@ -1,4 +1,4 @@
-import { createHmac, randomUUID } from 'node:crypto';
+import { createHash, createHmac, randomUUID } from 'node:crypto';
 import { ensureIndexes, getHomeThingsCollection, withHomeMongoTransaction } from '../mongodb/collections';
 import { HOME_ACCOUNTED_STORAGE_OPTIONS, insertAccountedThing, updateAccountedThing } from '../storage/accountedThings';
 import { encryptUserVaultValue, decryptUserVaultValue, withUserVaultKey } from '../auth/vaultKeys';
@@ -6,6 +6,7 @@ import { openVaultValue } from '../auth/vaultEnvelope';
 import { ACL_OWNER, COLLECTION_SCHEMA_VERSIONS } from '~/schemas/registry';
 import {
 	MailError,
+	MailActionError,
 	MAIL_KINDS,
 	mailId,
 	publicMailAccount,
@@ -15,7 +16,10 @@ import {
 	type MailAccount,
 	type MailBatch
 } from '~/mail/model';
-import { fetchMailBatch, type MailSyncRequest } from './provider';
+import { gmailMutation } from '~/mail/googleModel';
+import { applyGoogleMailMutation, readGoogleDrafts } from './googleActions';
+import { folderFor, fetchMailBatch, type MailSyncRequest } from './provider';
+import { fetchGoogleMailBatch, type GoogleMailGrant, type PrivateMailAccount } from './google';
 const match = (ownerId: string, kind: string, id?: string) => ({
 	ownerId,
 	thingtime: kind,
@@ -89,7 +93,7 @@ export async function listMail(ownerId: string, kind: string, cursor?: string | 
 				: null
 	};
 }
-async function saveRecord(ownerId: string, kind: 'mail-account' | 'mail-inbox', raw: any, writeId: unknown) {
+async function saveRecord(ownerId: string, kind: 'mail-account' | 'mail-inbox', raw: any, writeId: unknown, googleGrant?: GoogleMailGrant) {
 	mailId(writeId);
 	const value = kind === 'mail-account' ? validateMailAccount(raw) : validateMailInbox(raw);
 	const things = await getHomeThingsCollection();
@@ -97,12 +101,18 @@ async function saveRecord(ownerId: string, kind: 'mail-account' | 'mail-inbox', 
 	if (existing && !identity(existing, ownerId, kind)) throw new MailError(404, 'Mail record not found.');
 	if (existing?.mailDeleted) throw new MailError(410, 'This mail record was removed. Create a new one.');
 	if (kind === 'mail-account') {
-		const account = value as MailAccount;
+		const account = value as PrivateMailAccount;
 		// Local-only credentials must never be submitted here. Cloud disabled
 		// accounts retain only settings; disabling removes the encrypted password.
 		if (!account.sync.cloud && Object.values(account.servers).some((server) => server?.password))
 			throw new MailError(400, 'Local-only passwords must stay on this device.');
-		const previous: MailAccount | null = existing ? await open(ownerId, existing) : null;
+		const previous: PrivateMailAccount | null = existing ? await open(ownerId, existing) : null;
+		if (previous && (previous.provider !== account.provider || (previous.provider === 'gmail' && previous.address !== account.address)))
+			throw new MailError(409, 'Connect a new account to change its Google identity.');
+		if (account.provider === 'gmail') {
+			if (!previous?.googleGrant && !googleGrant) throw new MailError(403, 'Connect this account with Google first.');
+			account.googleGrant = previous?.googleGrant || googleGrant;
+		}
 		for (const protocol of ['imap', 'pop3'] as const) {
 			const server = account.servers[protocol];
 			if (!server) continue;
@@ -155,6 +165,15 @@ async function saveRecord(ownerId: string, kind: 'mail-account' | 'mail-inbox', 
 		return kind === 'mail-account' ? publicMailAccount(result as MailAccount) : result;
 	});
 }
+/** Server-only OAuth completion: callers cannot submit or replace a grant through save-account. */
+export const connectGoogleMailAccount = (ownerId: string, id: string, address: string, grant: GoogleMailGrant) =>
+	saveRecord(
+		ownerId,
+		'mail-account',
+		{ id, name: address, address, provider: 'gmail', revision: 0, servers: {}, sync: { cloud: false, local: true, transport: 'relay' } },
+		id,
+		grant
+	);
 export const saveMailAccount = (ownerId: string, input: any) => saveRecord(ownerId, 'mail-account', input.account, input.writeId);
 export const saveMailInbox = (ownerId: string, input: any) => saveRecord(ownerId, 'mail-inbox', input.inbox, input.writeId);
 export async function deleteMailRecord(ownerId: string, kind: unknown, id: unknown, expectedRevision: unknown) {
@@ -196,17 +215,29 @@ export async function deleteMailRecord(ownerId: string, kind: unknown, id: unkno
 		}
 	}
 }
+const fetchAccountBatch = (account: PrivateMailAccount, request: MailSyncRequest, signal?: AbortSignal) =>
+	account.provider === 'gmail' ? fetchGoogleMailBatch(account, request, signal) : fetchMailBatch(account, request, signal);
 export async function syncMailAccount(
 	ownerId: string,
 	id: unknown,
 	request: MailSyncRequest,
 	signal?: AbortSignal,
-	fetchBatch = fetchMailBatch
+	fetchBatch = fetchAccountBatch,
+	deviceOnly = false
 ): Promise<MailBatch> {
 	const doc = await getRecord(ownerId, 'mail-account', id);
-	const account: MailAccount = await open(ownerId, doc);
-	if (!account.sync.cloud) throw new MailError(403, 'Cloud sync is turned off for this account.');
+	const account: PrivateMailAccount = await open(ownerId, doc);
+	if (doc.mailMutationLeaseUntil && new Date(doc.mailMutationLeaseUntil).getTime() > Date.now())
+		throw new MailError(409, 'A Gmail action is still running. Sync again shortly.');
+	if (deviceOnly && (account.provider !== 'gmail' || !account.sync.local)) throw new MailError(403, 'Device Gmail sync is disabled.');
+	if (!deviceOnly && !account.sync.cloud) throw new MailError(403, 'Cloud sync is turned off for this account.');
 	const batch = await fetchBatch(account, request, signal);
+	if (deviceOnly) {
+		const current = await getRecord(ownerId, 'mail-account', id);
+		if (current.mailRevision !== doc.mailRevision || current.mailContentRevision !== doc.mailContentRevision)
+			throw new MailError(409, 'The email account changed while syncing.');
+		return batch;
+	}
 	const records = [
 		...batch.folders.map((value) => ({ kind: 'mail-folder', value })),
 		...batch.messages.map((value) => ({ kind: 'mail-message', value }))
@@ -219,7 +250,11 @@ export async function syncMailAccount(
 			// reading the parent in a snapshot would allow stale inserts after delete.
 			const fence = await updateAccountedThing(
 				things,
-				{ ...match(ownerId, 'mail-account', account.id), mailRevision: doc.mailRevision },
+				{
+					...match(ownerId, 'mail-account', account.id),
+					mailRevision: doc.mailRevision,
+					mailContentRevision: doc.mailContentRevision ?? { $exists: false }
+				},
 				{ $set: { mailSyncFence: randomUUID() } },
 				{ session, ...HOME_ACCOUNTED_STORAGE_OPTIONS }
 			);
@@ -230,15 +265,175 @@ export async function syncMailAccount(
 				await updateAccountedThing(
 					things,
 					{ _id: previous._id },
-					{ $set: { crystal: { encryptedValue }, mailDeleted: false, updatedAt: new Date() } },
+					{
+						$set: {
+							crystal: { encryptedValue },
+							mailDeleted: false,
+							updatedAt: new Date(),
+							...(kind === 'mail-message' ? { mailRemoteId: (value as any).remoteId } : {})
+						}
+					},
 					{ session, ...HOME_ACCOUNTED_STORAGE_OPTIONS }
 				);
 			else
-				await insertAccountedThing(things, document(ownerId, kind, value.id, encryptedValue, { parentId: account.id }), {
-					session,
-					...HOME_ACCOUNTED_STORAGE_OPTIONS
-				});
+				await insertAccountedThing(
+					things,
+					document(ownerId, kind, value.id, encryptedValue, {
+						parentId: account.id,
+						...(kind === 'mail-message' ? { mailRemoteId: (value as any).remoteId } : {})
+					}),
+					{
+						session,
+						...HOME_ACCOUNTED_STORAGE_OPTIONS
+					}
+				);
 		});
 	}
 	return batch;
+}
+
+/** Reads never reveal the saved grant. */
+export async function googleMailDrafts(ownerId: string, input: any, signal?: AbortSignal) {
+	const doc = await getRecord(ownerId, 'mail-account', input.id);
+	const account = await open(ownerId, doc);
+	const result = await readGoogleDrafts(account, input, signal);
+	const current = await getRecord(ownerId, 'mail-account', input.id);
+	if (current.mailRevision !== doc.mailRevision) throw new MailError(409, 'The email account changed.');
+	return result;
+}
+/** Durable admission before provider I/O. Uncertain outcomes never auto-resend. */
+export async function googleMailAction(ownerId: string, input: any, signal?: AbortSignal, apply = applyGoogleMailMutation) {
+	const id = mailId(input.id),
+		writeId = mailId(input.writeId),
+		mutation = gmailMutation(input.mutation);
+	const expectedRevision = revision(input.revision),
+		requestDigest = await digest(ownerId, { id, mutation });
+	const operationId =
+		'mailop_' +
+		createHash('sha256')
+			.update(JSON.stringify([ownerId, id, writeId]))
+			.digest('hex');
+	const things = await getHomeThingsCollection();
+	const doc = await getRecord(ownerId, 'mail-account', id),
+		account: PrivateMailAccount = await open(ownerId, doc);
+	if (account.provider !== 'gmail') throw new MailError(400, 'This action requires a Gmail connection.');
+	const admitted = await withHomeMongoTransaction(async (session) => {
+		const prior = await things.findOne({ shareId: operationId }, { session });
+		if (prior) {
+			if (!identity(prior, ownerId, 'mail-operation') || prior.parentId !== id || prior.mailWriteDigest !== requestDigest)
+				throw new MailError(409, 'This operation id was already used for a different action.');
+			return prior;
+		}
+		const fence = await updateAccountedThing(
+			things,
+			{
+				...match(ownerId, 'mail-account', id),
+				mailRevision: expectedRevision,
+				$or: [{ mailMutationLeaseUntil: { $exists: false } }, { mailMutationLeaseUntil: { $lt: new Date() } }]
+			},
+			{
+				$set: { mailMutationLease: operationId, mailMutationLeaseUntil: new Date(Date.now() + 60000), mailSyncFence: randomUUID() },
+				$inc: { mailContentRevision: 1 }
+			},
+			{ session, ...HOME_ACCOUNTED_STORAGE_OPTIONS }
+		);
+		if (!fence.matchedCount)
+			throw new MailActionError(409, 'The account changed or another Gmail action is still running. Try again shortly.', 'not-applied');
+		await insertAccountedThing(
+			things,
+			document(ownerId, 'mail-operation', operationId, await seal(ownerId, operationId, { status: 'pending' }), {
+				parentId: id,
+				mailWriteDigest: requestDigest,
+				mailOperationStatus: 'pending'
+			}),
+			{ session, ...HOME_ACCOUNTED_STORAGE_OPTIONS }
+		);
+		return null;
+	});
+	if (admitted) {
+		if (admitted.mailOperationStatus === 'complete') return (await open(ownerId, admitted)).result;
+		if (admitted.mailOperationStatus === 'failed') {
+			const error = await open(ownerId, admitted);
+			throw new MailActionError(error.status, error.error, 'not-applied');
+		}
+		throw new MailError(
+			409,
+			'This action may already have reached Gmail. Check Gmail before starting another action; it will not be repeated automatically.'
+		);
+	}
+	// Once admitted, cancelling the HTTP request does not retry the provider call.
+	// A crash or lost provider response deliberately leaves an uncertain receipt.
+	try {
+		const deadline = AbortSignal.timeout(45000);
+		const result = await apply(account, mutation, operationId, signal ? AbortSignal.any([signal, deadline]) : deadline);
+		if ('remoteId' in result && result.remoteId && 'labelIds' in result) {
+			const folderIds = new Set(result.labelIds!.map((label) => folderFor(id, 'gmail', label).id));
+			const rows = await things
+				.find({ ...match(ownerId, 'mail-message'), parentId: id, mailRemoteId: result.remoteId })
+				.limit(1001)
+				.toArray();
+			if (rows.length > 1000) throw new MailError(503, 'Gmail changed, but the saved cache needs refreshing.');
+			for (const row of rows) {
+				const message = await open(ownerId, row);
+				await withHomeMongoTransaction(async (session) => {
+					const fence = await updateAccountedThing(
+						things,
+						{ ...match(ownerId, 'mail-account', id), mailRevision: expectedRevision, mailMutationLease: operationId },
+						{ $set: { mailSyncFence: randomUUID(), mailMutationLeaseUntil: new Date(Date.now() + 60000) } },
+						{ session, ...HOME_ACCOUNTED_STORAGE_OPTIONS }
+					);
+					if (!fence.matchedCount) return;
+					const keep = folderIds.has(message.folderId);
+					await updateAccountedThing(
+						things,
+						{ _id: row._id, mailDeleted: { $ne: true } },
+						{
+							$set: {
+								updatedAt: new Date(),
+								...(keep
+									? { crystal: { encryptedValue: await seal(ownerId, row.shareId, { ...message, unread: result.unread }) } }
+									: { crystal: {}, mailDeleted: true })
+							}
+						},
+						{ session, ...HOME_ACCOUNTED_STORAGE_OPTIONS }
+					);
+				});
+			}
+		}
+		await updateAccountedThing(
+			things,
+			{ ...match(ownerId, 'mail-operation', operationId), mailOperationStatus: 'pending' },
+			{
+				$set: {
+					crystal: { encryptedValue: await seal(ownerId, operationId, { status: 'complete', result }) },
+					mailOperationStatus: 'complete',
+					updatedAt: new Date()
+				}
+			},
+			HOME_ACCOUNTED_STORAGE_OPTIONS
+		);
+		return result;
+	} catch (error) {
+		if (error instanceof MailActionError && error.actionOutcome === 'not-applied') {
+			await updateAccountedThing(
+				things,
+				{ ...match(ownerId, 'mail-operation', operationId), mailOperationStatus: 'pending' },
+				{
+					$set: {
+						mailOperationStatus: 'failed',
+						crystal: { encryptedValue: await seal(ownerId, operationId, { status: error.status, error: error.message }) }
+					}
+				},
+				HOME_ACCOUNTED_STORAGE_OPTIONS
+			);
+		}
+		throw error;
+	} finally {
+		await updateAccountedThing(
+			things,
+			{ ...match(ownerId, 'mail-account', id), mailMutationLease: operationId },
+			{ $unset: { mailMutationLease: '', mailMutationLeaseUntil: '' } },
+			HOME_ACCOUNTED_STORAGE_OPTIONS
+		);
+	}
 }

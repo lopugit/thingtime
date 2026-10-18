@@ -76,7 +76,7 @@ private draft API, editor recovery, account isolation and independent media copi
 
 ## Password manager
 
-See [password-manager.md](../password-manager.md). `api.passwords` 1.0.0 is a
+See [password-manager.md](../password-manager.md). `api.passwords` 1.1.0 is a
 private, session-bound home-plane API over protected `password-manager-entry`
 Things. `api/utils/passwords/passwords.ts` owns accounted mutations, revision
 fences and secret-free native catalog projections; `auth/vaultEnvelope.ts` and
@@ -224,3 +224,21 @@ and unknown outcomes. `providerReview.api.test.ts` and
 `accountProviders.browser.test.ts` are opt-in loopback fixtures with normal API
 registration and entry cleanup. They do not grant broader native, multi-account
 race, CI or deployed acceptance.
+
+Password migration coverage and encrypted file lifecycle: `passwords/onePassword.ts`,
+`transfer.ts`, `fileCrypto.ts`, `files.client.ts`, `backup.client.ts`, and
+`api/utils/passwords/files.ts`. Every original 1PUX member is retained as an
+encrypted attachment to a source archive entry; item editors preserve structured
+values, source context and password history. See [the password contract](../password-manager.md).
+
+### Anonymous password files and shared archive storage
+
+`passwords/storage.ts` is the explicit backend contract for the existing
+attachment UI and 1PUX writer. `local-workspace/passwordFiles.ts` supplies the
+anonymous device adapter, using canonical encrypted frames, encrypted metadata,
+scoped IDB chunks, atomic completion and parent-delete cleanup. Incomplete
+staging expires after 24 hours on a subsequent upload; completed files do not
+expire. The normal anonymous importer/exporter has no HTTP fallback. Test
+`passwordFiles.test.ts` and the opt-in `passwordVault.browser.test.ts` through
+`test:local-workspace`. Account file retention/synchronization and larger entry
+codec coverage remain outstanding; see the local workspace acceptance matrix.

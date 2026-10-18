@@ -682,10 +682,10 @@ test('range programs require the additive owned-boundary contract', () => {
 
  test('password manager registers its live route and version on both discovery manifests', () => {
   const doc = apiEndpointDocs.find(doc => doc.id === 'passwords');
-  assert.equal(doc?.featureVersion, '1.0.0');
+  assert.equal(doc?.featureVersion, '1.1.0');
   assert.deepEqual(doc?.methods, ['GET', 'POST']);
-  assert.equal(createApiCapabilitiesManifest().features['api.passwords'], '1.0.0');
-  assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.passwords'].version, '1.0.0');
+  assert.equal(createApiCapabilitiesManifest().features['api.passwords'], '1.1.0');
+  assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.passwords'].version, '1.1.0');
   assert.equal(typeof routeModules['v1/passwords'], 'function');
  });
 
@@ -752,4 +752,14 @@ test('algorithm display titles require lossless normal transfer capabilities', (
     assert.equal(capabilitySatisfies(prior, minimum), false);
     assert.equal(capabilitySatisfies('2.0.0', minimum), false);
   }
+});
+
+test('Gmail OAuth and its one-use callback are advertised on both manifests and registered', () => {
+	const legacy = createApiCapabilitiesManifest().features;
+	const manifest = thingtimeCapabilityManifest('https://thingtime.test').features;
+	assert.equal(legacy['api.mail'], '1.2.0');
+	assert.equal(manifest['api.mail'].version, '1.2.0');
+	assert.equal(legacy['api.mail-google-callback'], '1.0.0');
+	assert.equal(manifest['api.mail-google-callback'].version, '1.0.0');
+	assert.equal(typeof routeModules['v1/mail/google/callback'], 'function');
 });

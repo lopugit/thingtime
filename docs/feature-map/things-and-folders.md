@@ -359,7 +359,7 @@ cover this boundary; existing account drafts and import permissions are unchange
 
 ## Password manager
 
-See [password-manager.md](../password-manager.md). `api.passwords` 1.0.0 is a
+See [password-manager.md](../password-manager.md). `api.passwords` 1.1.0 is a
 private, session-bound home-plane API over protected `password-manager-entry`
 Things. `api/utils/passwords/passwords.ts` owns accounted mutations, revision
 fences and secret-free native catalog projections; `auth/vaultEnvelope.ts` and
@@ -808,3 +808,9 @@ preserves optional `crystal.title`; private catalogues and title writes negotiat
 `api.algorithms-sync` 1.3.0. Run algorithm library/facade/transport tests and the
 opt-in algorithm API/native browser fixtures. See
 [algorithm display titles](../local-workspaces.md#algorithm-library-display-titles--2026-10-18).
+
+Password migration coverage and encrypted file lifecycle: `passwords/onePassword.ts`,
+`transfer.ts`, `fileCrypto.ts`, `files.client.ts`, `backup.client.ts`, and
+`api/utils/passwords/files.ts`. Every original 1PUX member is retained as an
+encrypted attachment to a source archive entry; item editors preserve structured
+values, source context and password history. See [the password contract](../password-manager.md).

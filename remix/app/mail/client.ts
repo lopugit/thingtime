@@ -1,8 +1,16 @@
-import { requireThingtimeCapability } from '~/api/utils/capabilities/requireCapability.client';
 import type { MailAccount } from './model';
+import { requireThingtimeCapability } from '~/api/utils/capabilities/requireCapability.client';
+export class MailRequestError extends Error {
+	constructor(message: string, public status: number, public actionOutcome?: string) {
+		super(message);
+	}
+}
 export async function mailRequest(ownerId: string, body?: Record<string, unknown>, query: Record<string, string> = {}, signal?: AbortSignal) {
-	await requireThingtimeCapability('api.mail', '1.1.0');
-	const timeout = AbortSignal.timeout(body?.operation === 'sync' ? 60000 : 15000);
+	await requireThingtimeCapability(
+		'api.mail',
+		String(body?.operation || '').startsWith('google-') || (body?.account as MailAccount)?.provider === 'gmail' ? '1.2.0' : '1.1.0'
+	);
+	const timeout = AbortSignal.timeout(body?.operation === 'sync' || String(body?.operation || '').startsWith('google-') ? 60000 : 15000);
 	signal = signal ? AbortSignal.any([signal, timeout]) : timeout;
 	const params = new URLSearchParams({ ...query, expectedOwnerId: ownerId });
 	const response = await fetch(`/api/v1/mail?${params}`, {
@@ -15,7 +23,11 @@ export async function mailRequest(ownerId: string, body?: Record<string, unknown
 	});
 	const result = await response.json().catch(() => null);
 	if (!response.ok || !result?.ok || result.ownerId !== ownerId)
-		throw new Error(result?.error || 'Cloud mail is unavailable. Your device copy is still available.');
+		throw new MailRequestError(
+			result?.error || 'Cloud mail is unavailable. Your device copy is still available.',
+			response.status,
+			result?.actionOutcome
+		);
 	return result;
 }
 export async function localMailRequest(account: MailAccount, token: string, request: Record<string, unknown>, signal: AbortSignal) {

@@ -39,6 +39,16 @@ and serve the production client offline shell. Run the enabled
 The fixture creates disposable accounts and plaintext synthetic CSV evidence;
 keep those outputs untracked. No production account or deployment is required.
 
+Password attachments also require the existing private, versioned S3 setup
+(`THINGTIME_PRIVATE_S3_BUCKET=<bucket>`, `THINGTIME_PRIVATE_S3_REGION=<region>`,
+`THINGTIME_PRIVATE_S3_ROLE_ARN=<role ARN>`), signed multipart PUT/GET CORS for your
+deployment origin, and the account's private-upload permission. Names and bytes
+are encrypted before object upload; keep the same recovery key when upgrading.
+For isolated local QA, set `THINGTIME_LOCAL_ATTACHMENT_STORAGE_DIR=<local path>`
+and `THINGTIME_LOCAL_ATTACHMENT_STORAGE_ORIGIN=http://localhost:<web port>`.
+This local adapter refuses deployed/Vercel environments. No new provider secrets
+are needed beyond the existing vault and private object storage configuration.
+
 Native system AutoFill and passkey creation are being delivered separately in
 [PR #996](https://github.com/lopugit/thingtime/pull/996). They require signed Apple
 credential-provider bundles, provisioning and device verification. This web
@@ -4930,7 +4940,7 @@ A complete provider snapshot atomically marks absent models unavailable, retaini
 their records and admin choices. The public catalogue and shared model selectors
 only offer enabled, available models. Admin retains all compatible rows for audit.
 
-### Incoming mail (IMAP, POP3 and offline inboxes)
+### Incoming mail (Gmail, IMAP, POP3 and offline inboxes)
 
 Open `/settings/email` to connect email accounts, then `/mail` (`/email` is an
 alias). Each account can independently enable **Cloud** and **Local** sync.
@@ -4947,7 +4957,8 @@ vault using the existing Secure Vault setup; no mail-specific encryption key is
 needed. Missing encryption fails closed. Credentials and message content are
 account-bound encrypted protected Things; generic search/sharing cannot expose
 them. Use an app password where your provider requires one. Providers that have
-disabled password authentication require a future OAuth adapter; do not enter a
+disabled password authentication require OAuth: Gmail supports **Connect Gmail
+with Google** below; other OAuth-only providers need an adapter. Do not enter a
 normal account password when the provider requires OAuth. These are incoming
 mail readers; the existing transactional email outbox remains separate.
 
@@ -4975,7 +4986,7 @@ separately; do not expose the connector through a public proxy or Funnel.
 TLS ports are IMAP 993 / POP3 995; mandatory STARTTLS uses 143 / 110. Certificate
 verification is always enabled. The adapters reject private/reserved addresses
 and pin the validated DNS address to prevent rebinding. Plaintext, custom ports,
-internal mail servers and OAuth login are not currently supported. No mail
+internal mail servers and OAuth for the raw IMAP/POP3 adapters are not supported. No mail
 server deletion/mark-read/move commands are issued.
 
 Sync is explicit through **Sync inbox** / **Sync folders**, with **Load older
@@ -4989,6 +5000,87 @@ that device. Browser records are individually AES-GCM encrypted with a
 non-exportable device key; stale-tab writes are refused. This protects stored
 bytes from accidental disclosure, not an attacker running scripts in the same
 origin or an unlocked operating-system account.
+
+#### Gmail with Google authorization
+
+Email settings → **Connect Gmail with Google** starts a ten-minute connection.
+Open **Continue with Google** in a new browser tab (Safari/system browser in
+native apps), choose the Google account and grant Gmail read and write access. Return to
+Thingtime, press **I’ve finished with Google** if needed, and confirm the shown
+address. This connects a mailbox to the current Thingtime account; it does not
+change the Thingtime sign-in identity. No app password or local connector is
+needed, including with Google two-step verification.
+
+The default stores message copies on the device. The refresh authorization is
+always stored encrypted in the existing Thingtime account vault, allowing
+Thingtime’s API to read and manage Gmail on request. Enable cloud message storage separately
+in Edit. Pausing sync keeps the authorization; removing the account removes its
+saved authorization and Thingtime cache without changing Gmail. You can also
+revoke access in your Google Account’s third-party connections settings. If
+Google revokes/expires the grant, remove the old connection and connect again.
+Messages use the same encrypted records and proxy inboxes as other providers.
+Gmail pages contain at most 20 messages; large messages show a partial notice.
+Google-connected accounts also support mark read/unread, archive, move to Trash,
+restore from Trash, create/rename labels and add/remove message labels. The Mail
+composer saves edits encrypted on the device immediately; **Save draft to Gmail**
+creates or updates a Google draft. **Review and send** shows the sender and all
+To/Cc/Bcc recipients before the explicit **Send email** action. No permanent
+mail deletion is exposed. IMAP/POP3 adapters remain read-only.
+
+The composer supports plain-text drafts up to 30,000 characters and 50 addresses
+per recipient field. Existing rich-text/attachment drafts open in Gmail to avoid
+silently losing their formatting or files. Device drafts stay separate from the
+Google draft until saved. Sending uses the confirmed fields; a changed Google
+draft message ID refuses the write. Google does not provide a transactional
+compare-and-swap against edits made simultaneously in another Gmail client.
+
+Provider mutations require a stable writeId and create an encrypted accounted
+`mail-operation` child before network I/O. Completed retries return the saved
+result. An interrupted/uncertain send is never automatically replayed: check
+Gmail Sent before deliberately creating another message. Receipts remain after
+account removal to retain duplicate protection; they contain no mail body or
+Google grant. A short account lease serializes Thingtime mutations and fences
+stale sync cache writes. This is at-most-once admission, not guaranteed delivery
+or automatic recovery after a lost provider response.
+
+Fork/deployment setup (admin only):
+
+1. Create a Google Cloud **Web application** OAuth client, enable **Gmail API**,
+   and configure the consent screen with `openid`, `email`, and
+   `https://www.googleapis.com/auth/gmail.modify`. Add test users while the
+   Google app is in Testing. Register each exact callback URL, for example
+   `https://your-thingtime.example/api/v1/mail/google/callback`.
+2. In the existing Admin System Secure Vault, save a secret with the fixed label
+   `google-mail-oauth`. Its JSON selects credentials by exact origin:
+
+   ```json
+   {
+     "origins": {
+       "https://your-thingtime.example": {
+         "clientId": "YOUR_WEB_CLIENT_ID.apps.googleusercontent.com",
+         "clientSecret": "YOUR_WEB_CLIENT_SECRET",
+         "redirectUri": "https://your-thingtime.example/api/v1/mail/google/callback"
+       }
+     }
+   }
+   ```
+
+   Use separate development/production clients and explicit origin entries.
+   Unlisted preview origins fail closed; no environment borrows credentials.
+   Local testing may register `http://127.0.0.1:<port>` or `http://localhost:<port>`
+   with the same callback path. Use the existing admin/user vault bootstrap;
+   no additional Vercel environment variables are needed. Never commit real
+   client secrets or tokens. Rotation of the Google client ID requires users to
+   reconnect; changing a secret for the same client preserves existing grants.
+3. For public launch, complete Google’s consent verification for restricted
+   Gmail scopes and the applicable security assessment for server-transmitted
+   data. Testing-mode refresh authorization may expire after seven days.
+   See [Google scope requirements](https://developers.google.com/workspace/gmail/api/auth/scopes)
+   and [OAuth production requirements](https://developers.google.com/identity/protocols/oauth2/production-readiness/restricted-scope-verification).
+4. Verify a real consent/refresh/revoke flow on that origin before claiming it
+   active. Unit/synthetic tests do not prove Google app verification or account
+   consent. Provider tokens never enter browser/native storage, callback HTML,
+   public account projections or generic Thing APIs.
 
 Validation commands:
 

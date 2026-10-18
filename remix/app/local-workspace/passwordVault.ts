@@ -5,6 +5,7 @@ import type { VaultEnvelope } from '../passwords/vaultEnvelopeContract';
 import { WorkspaceError, type WorkspaceDatabase, type WorkspaceLease, type WorkspaceScope } from './storage';
 
 import { DeviceVaultSession, deviceVaultCollections } from './deviceVaultSession';
+import { anonymousPasswordStorage, removeDevicePasswordFiles } from './passwordFiles';
 
 const { records: RECORDS, commands: COMMANDS } = deviceVaultCollections('passwords');
 export type DevicePasswordRecord = { id: string; revision: number; remoteRevision: number; createdAt: string; updatedAt: string;
@@ -29,6 +30,15 @@ const validRevision = (value: unknown): value is number => Number.isSafeInteger(
 export class LocalPasswordVault extends DeviceVaultSession {
  constructor(db: WorkspaceDatabase, scope: WorkspaceScope, lease: WorkspaceLease, browserOrigin: string) {
   super(db, scope, lease, browserOrigin, 'passwords');
+ }
+ anonymousStorage() {
+  return anonymousPasswordStorage({ db: this.db, scope: this.scope, lease: this.lease, context: this.context,
+   operation: (signal, touch) => this.operation(signal, touch),
+   exportPage: async (cursor, signal) => {
+    const page = await this.page(cursor, true, signal);
+    return { ...page, entries: page.entries.map(record => ({ id: record.id, entry: record.entry! })) };
+   }
+  });
  }
  private async value(record: DevicePasswordRecord, op: ReturnType<LocalPasswordVault['operation']>) {
   if (record.deleted || !record.encryptedValue) return refuse('PASSWORD_MISSING', 'Password entry not found.', 404);
@@ -95,6 +105,7 @@ export class LocalPasswordVault extends DeviceVaultSession {
    if (previous.revision !== revision) return refuse('PASSWORD_CONFLICT', 'This entry changed. Reopen it before deleting.');
    const next: DevicePasswordRecord = { id, revision: revision + 1, remoteRevision: previous.remoteRevision, createdAt: previous.createdAt, updatedAt: new Date().toISOString(), deleted: true };
    await tx.put(RECORDS, id, next);
+   await removeDevicePasswordFiles(tx, id);
    if (commandValue) await tx.put(COMMANDS, `${id}:${writeId}`, { id: writeId, recordId: id, localRevision: next.revision, operation: 'delete', encryptedValue: commandValue, state: 'pending' } satisfies DevicePasswordCommand);
   });
   op.lease.assertCurrent();

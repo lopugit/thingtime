@@ -68,6 +68,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-18 — **Codex (AI)**: Integrate main's complete password imports and Gmail
+  changes into the local-first branch. Anonymous password attachments and normal
+  1PUX backups now use encrypted device storage through a shared archive backend;
+  clean offline browser round-trip verifies identical bytes at desktop/390/320px
+  without account API calls. Account attachment sync and full-suite acceptance
+  remain open. Details: [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
 - 2026-10-18 — **Codex (AI):** Preserve algorithm library display titles through
   local Rename, canonical transfer and conditional account sync; negotiate
   `api.algorithms-sync` 1.3.0 and retain protected profile boundaries. Verification
@@ -746,6 +753,18 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   [PR #1000 checkpoint](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md)
   and [coverage matrix](../docs/local-workspaces.md). No rollout merge or
   deployment is implied by this checkpoint.
+
+- 2026-10-17 — **Codex (AI)**: Stream complete 1PUX imports, preserve source data and rich fields, and add encrypted password attachments and file-inclusive backups. Remove arbitrary import/editor caps and document fork-safe storage setup. [PR #1015 validation](../PRs/1015-codex-password-import-fix-preserve-complete-1pux-imports-and-encrypted-password-attachments.md).
+
+
+- 2026-10-17 — **Codex (AI)**: Add Gmail connection through Google OAuth, encrypted
+  refresh authorization and Gmail API sync/actions with independent device/cloud
+  message storage, labels, Trash, encrypted draft autosave and explicit sending.
+  Durable receipts prevent replaying uncertain sends. Consent uses the system
+  browser on iOS and desktop; setup is
+  exact-origin vault configuration with documented Google verification requirements.
+  Document isolated native build caches after concurrent signing-stage collisions.
+  [PR #1014 details](../PRs/1014-codex-gmail-oauth-google-login-and-gmail-actions.md).
 
 - 2026-10-17: Add explicit browser mail relay without cloud persistence, bundled desktop direct mail sync, and an iOS Mail shortcut. Preserve transport choice and credential origin boundaries; document native build and relay setup. [PR #1013 details](../PRs/1013-codex-mail-native-relay-native-desktop-mail-sync-and-browser-api-relay.md).
 

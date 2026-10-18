@@ -1,13 +1,14 @@
 /** Identical mail records for the cloud API, browser store and local connector. */
 export const MAIL_VERSION = 1;
 export const MAIL_KINDS = ['mail-account', 'mail-folder', 'mail-message', 'mail-inbox'] as const;
-export type MailProtocol = 'imap' | 'pop3';
+export type MailProtocol = 'imap' | 'pop3' | 'gmail';
 export type MailServer = { host: string; port: number; security: 'tls' | 'starttls'; username: string; password?: string };
 export type MailAccount = {
 	id: string;
 	name: string;
 	address: string;
 	revision: number;
+	provider?: 'gmail';
 	servers: Partial<Record<MailProtocol, MailServer>>;
 	sync: { cloud: boolean; local: boolean; transport?: 'connector' | 'native' | 'relay' };
 };
@@ -34,6 +35,11 @@ export class MailError extends Error {
 	constructor(public status: number, message: string) {
 		super(message);
 		this.name = 'MailError';
+	}
+}
+export class MailActionError extends MailError {
+	constructor(status: number, message: string, public actionOutcome: 'not-applied' | 'uncertain') {
+		super(status, message);
 	}
 }
 export const validMailId = (id: unknown): id is string => typeof id === 'string' && /^[a-zA-Z0-9_-]{8,100}$/.test(id);
@@ -74,7 +80,10 @@ export function validateMailAccount(raw: any): MailAccount {
 			servers[protocol]!.password = password;
 		}
 	}
-	if (!Object.keys(servers).length) throw new MailError(400, 'Enable IMAP or POP3.');
+	if (raw.provider !== undefined && raw.provider !== 'gmail') throw new MailError(400, 'Unsupported mail provider.');
+	if (raw.provider === 'gmail' && (Object.keys(servers).length || raw.sync?.transport !== 'relay'))
+		throw new MailError(400, 'Gmail uses Google authorization through Thingtime.');
+	if (!Object.keys(servers).length && raw.provider !== 'gmail') throw new MailError(400, 'Enable IMAP or POP3.');
 	if (typeof raw.sync?.cloud !== 'boolean' || typeof raw.sync?.local !== 'boolean') throw new MailError(400, 'Choose where this account syncs.');
 	if (raw.sync.transport !== undefined && !['connector', 'native', 'relay'].includes(raw.sync.transport))
 		throw new MailError(400, 'Choose a supported device sync connection.');
@@ -85,13 +94,19 @@ export function validateMailAccount(raw: any): MailAccount {
 		name: mailText(raw.name, 'account name', 160).trim(),
 		address,
 		revision: revision(raw.revision),
+		...(raw.provider === 'gmail' ? { provider: 'gmail' as const } : {}),
 		servers,
 		sync: { cloud: raw.sync.cloud, local: raw.sync.local, ...(raw.sync.transport ? { transport: raw.sync.transport } : {}) }
 	};
 }
 export function publicMailAccount(account: MailAccount): MailAccount {
 	return {
-		...account,
+		id: account.id,
+		name: account.name,
+		address: account.address,
+		revision: account.revision,
+		...(account.provider === 'gmail' ? { provider: 'gmail' as const } : {}),
+		sync: { cloud: account.sync.cloud, local: account.sync.local, ...(account.sync.transport ? { transport: account.sync.transport } : {}) },
 		servers: Object.fromEntries(
 			Object.entries(account.servers).map(([protocol, server]) => [
 				protocol,

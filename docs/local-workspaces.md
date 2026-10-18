@@ -4167,3 +4167,47 @@ remaining full-workspace acceptance matrix.
 Normal remote algorithm title transfers also require `api.things-export` 1.17.0
 and `api.things-import` 1.13.0. The shared client negotiates these before normal
 remote transfer, and both live manifests are checked by the API fixture.
+
+## Anonymous encrypted password files — 2026-10-18
+
+Integrated main `0618f323e` (complete 1PUX/password files and Gmail consent/Actions)
+while preserving local queues, attachment cancellation fences and private vault
+boundaries. The existing archive writer and attachment UI now take an explicit
+`PasswordStorage`; the anonymous adapter uses scoped IDB ciphertext chunks and
+the canonical authenticated file frames. Names, keys and source paths remain
+inside encrypted vault metadata. A file becomes visible atomically after all
+parts are saved. Exact retries compare ciphertext as well as metadata, deletion
+removes associated parts, and a locked vault cancels blocked input and denies
+subsequent decryption. Incomplete upload generations expire after 24 hours on a
+later upload; completed files are retained.
+
+Local verification for this increment:
+- Seven focused file tests: multi-frame and empty files, full backup/import data,
+  52-entry pagination, concurrent replay, changed-byte refusal, partial cleanup,
+  corruption/missing frames, file-removal replay fencing, parent deletion and vault locking. Fetch is forbidden
+  by tests of anonymous archive creation.
+- Clean browser: native offline attachment picker, cold reload/unlock, normal
+  1PUX download, deletion/reimport with fresh identities and exact-byte download;
+  1440/390/320px layout has no horizontal overflow. Zero password API requests,
+  remote writes, account records, queue commands or page errors. Saved secret
+  fields remain encrypted. The in-app browser also reaches the anonymous setup
+  surface; all mutations use a separate disposable browser context.
+- Workspace suite: 598 passed and 68 opt-in cases skipped before the final three
+  focused tests were added; offline-shell suite 4 passed. Passwords 50, attachments
+  314, mail 34, schemas 270 and capability registry 107 passed. Production client
+  and Nitro template built. Raw TypeScript remains at 91 existing diagnostics,
+  with no new signatures. Changed-file lint has no errors (two existing password
+  editor effect-cleanup warnings); the new adapter/tests lint cleanly.
+
+Evidence: `tmp/local-password-files-browser/verification.json`, its three PNGs,
+`synthetic-passwords.1pux` and `restored-attachment.txt`; suite output is in
+`tmp/local-password-files-*.log` and `tmp/local-first-main-*.log`.
+
+Still incomplete: account password attachment retention, independent upload/delete
+sync and conflict handling; large local password entry codec parity with the
+expanded server importer; full unknown-member/category import matrix in the
+native anonymous UI; remaining full-suite matrix and exact-head CI/deployed
+verification. The existing device workspace storage limits also need review
+against the updated power-user policy. This checkpoint does not claim those
+features complete or authorize merging early. The PR API still advertises an
+older head than the actual feature branch, so its checks/preview are stale.

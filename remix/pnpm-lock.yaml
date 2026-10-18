@@ -107,6 +107,9 @@ importers:
       '@simplewebauthn/server':
         specifier: ^13.3.2
         version: 13.3.2
+      '@streamparser/json':
+        specifier: ^0.0.26
+        version: 0.0.26
       '@vercel/analytics':
         specifier: ^2.0.1
         version: 2.0.1(react@19.2.7)
@@ -119,6 +122,9 @@ importers:
       '@vercel/sandbox':
         specifier: 3.0.0
         version: 3.0.0
+      '@zip.js/zip.js':
+        specifier: ^2.24.0
+        version: 2.24.0
       astronomy-engine:
         specifier: 2.1.19
         version: 2.1.19
@@ -1800,6 +1806,9 @@ packages:
   '@standard-schema/spec@1.0.0':
     resolution: {integrity: sha512-m2bOd0f2RT9k8QJx1JN85cZYyH1RqFBdlwtkSlf4tBDYLCiiZnv1fIIwacK6cqwXavOydf0NPToMQgpKq+dVlA==}
 
+  '@streamparser/json@0.0.26':
+    resolution: {integrity: sha512-46597LNFI+MFdUnzX2QJWwmdTRdq0XVD+vVNJTtGVzIrnCuhG9pFo1OAzbNBqci8UJgk/X5KJZ6LcV+y7PTuDQ==}
+
   '@swc/cli@0.8.1':
     resolution: {integrity: sha512-L+ACCGHCiS0VqHVep/INLVnvRvJ2XooQFLZq4L8snhxw1jsqz+XRcY313UsyPVturPPE1shW3jic7rt3qEQTSQ==}
     engines: {node: '>= 20.19.0'}
@@ -2431,6 +2440,10 @@ packages:
 
   '@zag-js/focus-visible@0.31.1':
     resolution: {integrity: sha512-dbLksz7FEwyFoANbpIlNnd3bVm0clQSUsnP8yUVQucStZPsuWjCrhL2jlAbGNrTrahX96ntUMXHb/sM68TibFg==}
+
+  '@zip.js/zip.js@2.24.0':
+    resolution: {integrity: sha512-WlaVKzdqBK+RF3bdiXZWbdCnvGB6PdO4IHC1mn/2Yfl3bASgqUNegnU3+PNg61iecwoPfUi5BgLUPqBukXpyWw==}
+    engines: {bun: '>=0.7.0', deno: '>=1.0.0', node: '>=18.0.0'}
 
   '@zone-eu/mailsplit@5.4.23':
     resolution: {integrity: sha512-2skZfQY5iOAIFwVO4jZzqtMPJyxFpCKemQGVT7O8QxUjHAK+W7LQY/UbK9BWrxeS0wZ64rKZaATY+T9BsF4JSw==}
@@ -8126,6 +8139,8 @@ snapshots:
 
   '@standard-schema/spec@1.0.0': {}
 
+  '@streamparser/json@0.0.26': {}
+
   '@swc/cli@0.8.1(@swc/core@1.15.3)(chokidar@5.0.0)':
     dependencies:
       '@swc/core': 1.15.3
@@ -8953,6 +8968,8 @@ snapshots:
   '@zag-js/focus-visible@0.31.1':
     dependencies:
       '@zag-js/dom-query': 0.31.1
+
+  '@zip.js/zip.js@2.24.0': {}
 
   '@zone-eu/mailsplit@5.4.23':
     dependencies:

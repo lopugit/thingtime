@@ -542,7 +542,7 @@ export const attachmentStore: AttachmentStore = {
 				// Quarantine every newly durable object until analysis either clears/
 				// flags it or deliberately marks it skipped. This lands before complete
 				// returns, so a fast bind cannot expose unscreened bytes during outage.
-				moderation: { status: 'pending' as const },
+				moderation: { status: before.attachmentPurpose === 'password' ? 'skipped' as const : 'pending' as const },
 				attachmentExpiresAt: expiresAt,
 				updatedAt: new Date()
 			};
@@ -569,7 +569,7 @@ export const attachmentStore: AttachmentStore = {
 						crystal,
 						objectVersionId,
 						attachmentState: 'ready',
-						moderation: { status: 'pending' },
+						moderation: next.moderation,
 						...(isDurableRecordingUpload(before) ? {} : { attachmentExpiresAt: expiresAt }),
 						sizeBytes: nextSize,
 						updatedAt: next.updatedAt
@@ -798,6 +798,7 @@ export const attachmentStore: AttachmentStore = {
 				attachmentState: 'ready',
 				'crystal.contentType': 'application/octet-stream',
 				'crystal.detectedContentType': { $exists: false },
+				attachmentPurpose: { $ne: 'password' },
 				...(afterId ? { shareId: { $gt: afterId } } : {})
 			} as any)
 			.sort({ shareId: 1 })
@@ -846,7 +847,7 @@ export const attachmentStore: AttachmentStore = {
 	}
 };
 
-type BindableAttachmentPurpose = Exclude<AttachmentPurpose, 'profile' | 'recording' | 'file'>;
+type BindableAttachmentPurpose = Exclude<AttachmentPurpose, 'profile' | 'recording' | 'file' | 'password'>;
 
 const attachmentPurposeLabel: Record<BindableAttachmentPurpose, string> = {
 	post: 'post',
@@ -996,7 +997,7 @@ export const annotateOwnedAttachment = async (ownerId: string, id: string, patch
 	withHomeMongoTransaction(async (session) => {
 		const things = await getHomeThingsCollection();
 		const before = (await things.findOne({ ...attachmentMatch(id), ownerId } as any, { session })) as any as AttachmentDoc | null;
-		if (!before) throw new AttachmentBindingError(404, 'Attachment not found');
+		if (!before || before.attachmentPurpose === 'password') throw new AttachmentBindingError(404, 'Attachment not found');
 		if (options.expectedUpdatedAt !== undefined && new Date(options.expectedUpdatedAt).getTime() !== before.updatedAt.getTime()) {
 			throw new AttachmentBindingError(409, 'Attachment changed before this edit. Refresh and compare your changes.');
 		}

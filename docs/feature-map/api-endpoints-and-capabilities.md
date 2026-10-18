@@ -393,7 +393,7 @@ both manifests and conditional client negotiation use the canonical docs entry.
 
 ## Password manager
 
-See [password-manager.md](../password-manager.md). `api.passwords` 1.0.0 is a
+See [password-manager.md](../password-manager.md). `api.passwords` 1.1.0 is a
 private, session-bound home-plane API over protected `password-manager-entry`
 Things. `api/utils/passwords/passwords.ts` owns accounted mutations, revision
 fences and secret-free native catalog projections; `auth/vaultEnvelope.ts` and
@@ -481,3 +481,9 @@ minima. Both generated manifests derive from the same endpoint documentation.
 Normal remote algorithm title transfers also require `api.things-export` 1.17.0
 and `api.things-import` 1.13.0. The shared client negotiates these before normal
 remote transfer, and both live manifests are checked by the API fixture.
+
+Password migration coverage and encrypted file lifecycle: `passwords/onePassword.ts`,
+`transfer.ts`, `fileCrypto.ts`, `files.client.ts`, `backup.client.ts`, and
+`api/utils/passwords/files.ts`. Every original 1PUX member is retained as an
+encrypted attachment to a source archive entry; item editors preserve structured
+values, source context and password history. See [the password contract](../password-manager.md).

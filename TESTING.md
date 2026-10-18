@@ -10489,6 +10489,21 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
 
 ## Password manager and native AutoFill
 
+- Anonymous file regression: in a clean offline browser, add a device password
+  attachment, cold reload/unlock, export normal 1PUX, delete and reimport it,
+  and download identical bytes. No password API calls, account queue entries,
+  plaintext file keys/names or credentials may enter device storage. Check
+  empty/multi-frame files, concurrent retries with changed bytes, missing/corrupt
+  frames, cancelled sources, removal followed by a delayed file retry, and parent deletion during upload. A vault lock must
+  cancel a blocked input and prevent subsequent stream decryption. Check desktop,
+  390px and 320px layouts. Account file retention/sync requires separate coverage.
+
+- Password archive regression: in React StrictMode, open an imported entry and
+  verify related source documents/icons populate after effects replay. Export,
+  reimport, and verify the remapped source entry still owns byte-identical files;
+  edited values, removed fields, category changes, and password history survive.
+  Original metadata and raw source members stay intact independently of edits.
+
 - [ ] On desktop and 390px, add two entries for one website, edit/reorder custom
   fields, mask/reveal, close/reopen and delete one without changing the other.
   The heading clears the fixed navigation and device safe area.
@@ -10499,9 +10514,17 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
   Invalid images, oversized images, HOTP and FIDO handoff codes fail clearly.
 - [ ] Preview/import 1Password 1PUX/CSV, Chrome CSV and Apple CSV; test quoted,
   multiline and whitespace-sensitive passwords, Unicode, custom fields, TOTP,
-  cancellation, malformed ZIP and bounded expansion. Export acknowledgement
+  cancellation, malformed ZIP, CRC failures, and bounded working memory. Export acknowledgement
   is required; 1PUX re-import preserves complete ordered Thingtime entries.
-  More than 2,000 accounts export as numbered parts that all import successfully.
+  More than 2,000 accounts and archives over 20 MiB must import without a cap.
+- [ ] Import a 1PUX matrix containing every category and field type, multiple
+  accounts/vaults, attrs after items, archived/favourite flags, nested tags,
+  password history, documents, icons, linked IDs and unknown JSON/ZIP members.
+  Compare source member bytes and edited field values after export/re-import.
+  Empty and multi-part encrypted files download exactly; corrupted, truncated,
+  reordered and wrong-key frames fail. Generic attachment routes must refuse
+  password files, even for the owner. Test failed-save retry and file retry,
+  other-owner denial, private-upload permission, deletion races and recovery.
 - [ ] Use the HTTP fixture with two owners: session unlock, other-owner denial,
   account-switch fence, same-origin proxy handling, no-store, exact retry,
   stale revision, delete tombstones, password recovery and immediate revocation.
@@ -11961,3 +11984,43 @@ never point it at an existing account or deployment.
   import. Normal branches and shared previews must not inherit library aliases.
 - A host below algorithms-sync 1.3 must receive neither catalogue retention
   requests nor title writes. Anonymous work must never call account sync.
+
+
+## Gmail Google authorization
+
+- [ ] In Email settings, start Google consent without an app password. On web,
+  desktop and iOS, confirm Google opens outside embedded WebViews, then return
+  and confirm the exact selected Gmail address. The Thingtime account stays the
+  same; cancel/denial never adds an account.
+- [ ] Exercise duplicate callback/finish, wrong session/origin, account switch,
+  logout, expiry and cancellation during token exchange. Only the initiating
+  live full session can finish. An uncertain finish retry creates one account.
+- [ ] Confirm plaintext Google tokens never appear in account responses, device
+  storage, provider errors or callback HTML. Removing an account erases its saved
+  grant; disabling cloud message storage preserves authorization explicitly.
+- [ ] With device-only Gmail, sync folders/messages, reload and read offline,
+  then create a device proxy inbox. No cloud message/folder documents are written.
+  With cloud enabled, verify encrypted accounted persistence and sync/delete CAS.
+- [ ] Sync a real Google account, verify token refresh, revoked consent, denied
+  scope, labels, paging and large partial messages. Synthetic transport tests
+  alone do not establish consent-screen configuration or production verification.
+- [ ] At desktop and 390px, verify Google controls, confirmation address, errors,
+  storage disclosure and Gmail editor without password/server fields; no clipping
+  or horizontal overflow. Existing IMAP/POP3 forms and transports still work.
+- [ ] Configure separate exact development/production origins in the admin vault.
+  Missing/unlisted origin or rotated client ID fails closed without fallback.
+
+- [ ] Gmail read/unread, archive, label create/rename/apply/remove, Trash and restore
+  update both the provider and the correct cached folder copies. A concurrent
+  sync cannot restore stale state after a mutation; account removal cannot revive
+  cached rows. Unsupported permanent deletion and system-label edits refuse.
+- [ ] Compose To/Cc/Bcc, Unicode subject and text; reject header injection and
+  malformed recipients. Autosave survives reload encrypted and owner-scoped.
+  Save/reopen Google drafts and refuse stale Google draft IDs, unsupported rich
+  formatting/attachments and conflicting device edits without losing content.
+- [ ] Review sender and all recipients before explicit Send. Repeated writeIds
+  never resend; changed payloads with a reused key refuse. Simulate a lost response,
+  process interruption and provider failure after dispatch: show uncertainty and
+  require checking Gmail, without automatically creating/sending another copy.
+  Known failures before dispatch leave the composer editable. Use synthetic
+  transport for sending unless the user authorizes specific real recipients.
