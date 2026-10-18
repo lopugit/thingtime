@@ -1081,7 +1081,9 @@ const BlockView = (
 			// headings, lists, quotes, tables, inline formatting, right there on
 			// the canvas (the drawer's modal remains the "advanced" surface)
 			body = (
-				<React.Suspense fallback={null}>
+				<React.Suspense fallback={block.html
+					? <RichHtmlView html={block.html} as={block.tag || 'div'} typo={styleTypo} sx={richSx} fallback={block.text} />
+					: <Text as={asTag as any} {...(typo as any)}>{block.text}</Text>}>
 					<InlineRichTextEditor
 						history={textHistory}
 						html={block.html}

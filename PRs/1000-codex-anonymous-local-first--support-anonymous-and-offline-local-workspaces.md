@@ -4586,3 +4586,18 @@ Coordination limitation: Mica remains a verified member and the standing global 
 Host connection discovery found no currently callable Thingtime artifact tool and no Thingtime match in the plugin search. More integrations may exist in the host directory; a connected downloadable-artifact path is still unverified. The file-panel open was queued, while the existing in-app file URL could not be inspected because its browser policy rejects file URLs; no alternate browser path was used to bypass that boundary.
 
 Graph refresh: the bounded semantic attempt returned repeated empty node/edge responses and was stopped after 90 seconds. Existing semantic evidence is preserved; the structural graph and portable report/HTML are refreshed. Current documentation semantics and two partially extracted Swift files are not claimed complete.
+
+
+## Native global/site Builder and local media — 2026-10-19
+
+Global/site canvases now expose the existing individual-block selector. Builder file uploads take their content owner from `useWorkspaceUser`, so anonymous/offline selections reach the existing device attachment adapter. Remote authentication remains unchanged. Selected text retains its native rendering while the rich-editor chunk loads. The border-style control fits at 320px and the site inspector reuses the existing toolbar clearance so Save/Reset can scroll above floating buttons.
+
+The fresh full-app Chromium test passes offline global/site creation, normal file-picker upload, exact PNG-byte retention across cold reload, canonical page/file export, native route composition, another tab's saved update and resetting only the site override. Inspector and native page captures at 1440×1000, 390×844 and 320×844 include full scrolling; no horizontal overflow, page errors or account Things/drafts/attachments/temporary-account requests were recorded. Evidence: `tmp/site-builder-native/verified/`; immutable image `sha256:9ee77ac0ed2015c926604108b6ec28555cb7c52b39308c55aa5fb6fa63b4e0ea`.
+
+The real browser-manager fixture keeps network=none, no host mounts/ports, read-only root, one CPU and a disposable backend. This two-browser harness exceeded its default 2 GiB memory allocation, invalidating those attempts. The test host now accepts an explicit bounded 512–4096 MiB optional sixth argument, retaining its 2048 MiB default. The passing run used 4096 MiB with normal Chromium settings, zero OOM events, and verified claim/container cleanup. This is local fixture acceptance, not installed-app or production acceptance.
+
+Run the opt-in `siteBuilder.browser.test.ts` with its adjacent browser fixture, `TT_SITE_TEST_ORIGIN`, `TT_SITE_TEST_SESSION`, `TT_SITE_TEST_FIXTURE`, `TT_SITE_TEST_ARTIFACTS`, `TT_SITE_PUPPETEER` and `TT_SITE_CHROME` inside the verified isolated runtime. The test checks the runtime session and Things capability before work. Never point it at a personal account or permissive backend.
+
+Validation: 710 workspace tests plus four offline-shell checks; 75 workspace opt-ins skipped in the ordinary suite and the new native test run explicitly. Webpage tests 166 pass/5 skip; attachment checks 321 plus 11 pass; browser-manager tests two pass. Client/template/server builds pass with 252 verified assets; changed-file lint has no errors. Typecheck retains its 91 baseline diagnostics. Remaining dedicated editors, account sync/reconnect, protected operations and the connected agent-host artifact path are still open.
+
+Graph maintenance uses the structural refresh; the bounded semantic attempt again returned hollow responses. Current documentation semantic indexing is not claimed. The same two Swift files retain partial-extraction warnings.

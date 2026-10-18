@@ -199,6 +199,8 @@ const BuilderCanvas = ({ pageId, sitePath }: { pageId: string; sitePath?: string
 				title={isGlobal ? 'Global blocks 🌐' : isSiteDoc ? `Site page · ${sitePath || draft.resolved?.page?.crystal?.siteRoute}` : 'Page builder 🧱'}
 				draft={canvasDraft}
 				selectedId={selectedId}
+				onSelectBlock={(id) => id ? chrome.onSelect(id) : deselect()}
+				footerSpace="var(--tt-builder-toolbar-clearance, 160px)"
 				onDeselect={deselect}
 				onClose={() => setDrawerOpen(false)}
 				mode={isSiteDoc ? 'site' : 'page'}

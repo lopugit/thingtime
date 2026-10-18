@@ -80,6 +80,9 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-19: Enable anonymous/offline Builder media uploads through workspace ownership, expose global/site block selection, preserve text while the editor loads, and fix narrow inspector controls/toolbar clearance. Native offline upload/export/cross-tab/reset checks pass in the bounded isolated fixture. See [PR #1000 checkpoint](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md#native-globalsite-builder-and-local-media--2026-10-19). — Codex (AI)
+
+
 - 2026-10-19: Integrate editable Builder blocks with offline local saves, negotiate their contract only at remote transmission, and defer anonymous Timeline storage until use. Native individual-block edit/style/reorder/duplicate/delete, offline reload and canonical export pass in the isolated full app. [PR #1000 checkpoint](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md#editable-builder-integration-and-offline-native-acceptance--2026-10-19).
 
 - 2026-10-19 — **Codex (AI)**: Retry initial personal-instruction account reads
