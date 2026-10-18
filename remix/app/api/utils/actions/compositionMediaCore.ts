@@ -158,7 +158,8 @@ export const compositionAttachmentIds = (kinds: string[], crystal: Record<string
 					for (const id of compositionAttachmentIds(['component'], component, { args })) ids.add(id);
 				}
 			}
-			if (block.type === 'container') blocks(block.children, depth + 1);
+			if (block.type === 'element') render({ tag: block.tag, props: block.props }, 0, 'html', block.args || {});
+			blocks(block.children, depth + 1);
 		}
 	};
 	if (kinds.includes('webpage')) {

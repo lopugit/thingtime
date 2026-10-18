@@ -19,6 +19,7 @@ export const HTML_ALLOWED_TAGS = new Set([
 	'dd',
 	'tt-dialog',
 	'tt-countdown',
+	'dialog',
 	'details',
 	'summary',
 	'tt-upload',
