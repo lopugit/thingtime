@@ -39,7 +39,11 @@ const QUICK_BLOCKS: Array<{ key: string; icon: string; label: string; make: (exi
 		label: 'Eyebrow',
 		make: (existing) => ({ id: newBlockId('eyebrow', existing), type: 'text', text: 'Thingtime · section', style: 'eyebrow' })
 	},
-	{ key: 'column', icon: '⬇️', label: 'Column', make: (existing) => defaultContainerBlock(existing, 'column') },
+ { key: 'input', icon: '⌨', label: 'Input', make: existing => ({ id: newBlockId('input', existing), type: 'element', tag: 'input', props: { name: 'value', placeholder: 'Enter a value' } }) },
+ { key: 'button', icon: '↗', label: 'Button', make: existing => ({ id: newBlockId('button', existing), type: 'element', tag: 'button', text: 'Button', props: { type: 'button' } }) },
+ { key: 'list', icon: '☷', label: 'Editable list', make: existing => ({ id: newBlockId('list', existing), type: 'collection', props: { itemsPath: 'result.items', size: 'all' }, children: [{ id: newBlockId('value', existing), type: 'element', tag: 'p', text: '{item.name}' }] }) },
+ { key: 'condition', icon: '?', label: 'Condition', make: existing => ({ id: newBlockId('condition', existing), type: 'condition', condition: { arg: 'result.ready' }, children: [] }) },
+ { key: 'column', icon: '⬇️', label: 'Column', make: (existing) => defaultContainerBlock(existing, 'column') },
 	{ key: 'row', icon: '➡️', label: 'Row', make: (existing) => defaultContainerBlock(existing, 'row') },
 	{ key: 'grid', icon: '🔲', label: 'Grid', make: (existing) => defaultContainerBlock(existing, 'grid') },
 	{ key: 'media', icon: '🖼', label: 'Media', make: (existing) => defaultMediaBlock(existing) },

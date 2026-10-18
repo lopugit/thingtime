@@ -132,6 +132,7 @@ export const useTtActionClicks = (options?: { onUnowned?: TtActionUnownedHandler
 			event.stopPropagation();
 			if (busyRef.current || control.matches(':disabled') || control.getAttribute('aria-disabled') === 'true') return;
 			const action = control.getAttribute('data-tt-action') || '';
+			if (action === '$transient') return; // An enclosing transient host owns this intent; never persist or dispatch it.
 			if (!action) return;
 			if (action === LOCAL_UI_ACTION) {
 				try {

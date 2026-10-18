@@ -105,7 +105,7 @@ export const useBuilderChrome = (draft: UseWebpageDraft, options?: { enabled?: b
 				uploadToPosition(files, null, blocks.length);
 				return;
 			}
-			if (block.type === 'media') {
+			if (block.type === 'media' || (block.type === 'element' && ['img', 'video', 'audio'].includes(block.tag || ''))) {
 				// first file replaces the media block's source, extras land after it
 				const parentId = findParentId(blocks, blockId);
 				const siblings = parentId === null ? blocks : findBlock(blocks, parentId as string)?.children || [];
@@ -152,7 +152,11 @@ export const useBuilderChrome = (draft: UseWebpageDraft, options?: { enabled?: b
 			const media: WebpageBlock['media'] =
 				attachment.contentType.startsWith('video/') ? 'video' : attachment.contentType.startsWith('audio/') ? 'audio' : 'image';
 			const src = `/api/v1/attachments/content?id=${encodeURIComponent(attachment.id)}`;
-			if (target?.kind === 'replace' && findBlock(current.blocks, target.blockId)?.type === 'media') {
+   const replacement = target?.kind === 'replace' ? findBlock(current.blocks, target.blockId) : null;
+   if (target?.kind === 'replace' && replacement?.type === 'element') {
+    current.setBlocks(updateBlock(current.blocks, target.blockId, { tag: media === 'image' ? 'img' : media, props: { ...replacement.props, src, alt: attachment.name || '' } }));
+    setSelectedId(target.blockId);
+   } else if (target?.kind === 'replace' && replacement?.type === 'media') {
 				current.setBlocks(
 					updateBlock(current.blocks, target.blockId, {
 						media,

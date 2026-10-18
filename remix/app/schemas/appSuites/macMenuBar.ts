@@ -1,3 +1,4 @@
+import { templateToBlocks } from '../../components/Builder/templateBlocks';
 import type { BehaviourSuite } from '../behaviourSuites';
 import { el, ifTruthy, ifEquals, fmt, makeKit, makeTheme } from './kit';
 const k = makeKit(makeTheme());
@@ -59,7 +60,7 @@ const device = k.stack(
 							itemsPath: 'item.state.menuBar.items',
 							label: 'Menu bar items',
 							empty: 'No menu bar items reported in this snapshot.',
-							size: 10,
+							size: 'all',
 							itemTemplate: { ttTemplate: row }
 						}
 					}
@@ -117,7 +118,7 @@ export const macMenuBarSuite: BehaviourSuite = {
 								label: 'Paired Macs',
 								empty: 'Pair Thingtime on your Mac to start syncing its menu bar.',
 								hideSearch: true,
-								size: 5,
+								size: 'all',
 								itemTemplate: { ttTemplate: device }
 							}
 						})
@@ -152,25 +153,16 @@ export const macMenuBarSuite: BehaviourSuite = {
 		{
 			key: 'home',
 			name: 'Mac menu bar',
-			blocks: (ctx, refs) => [
-				{
-					id: ctx.id('shell'),
-					type: 'container',
-					direction: 'column',
-					align: 'center',
-					maxWidth: 1100,
-					gap: 8,
-					css: { width: '100%', 'min-width': '0', padding: '28px 18px 80px' },
-					children: [
-						{
-							id: ctx.id('inventory'),
-							type: 'component',
-							component: refs.component('inventory'),
-							source: { action: refs.actionKey('read'), inputs: { deviceId: '{query.deviceId}' }, refresh: 'interval', intervalMs: 30000 }
-						}
-					]
-				}
-			]
+			blocks: (ctx, refs) => {
+                let index = 0;
+                return [{
+                    id: ctx.id('shell'), type: 'container', direction: 'column', gap: 0,
+                    maxWidth: 1100, align: 'center',
+                    css: { width: '100%', 'min-width': '0', padding: '28px 18px 80px' },
+                    source: { action: refs.actionKey('read'), inputs: { deviceId: '{query.deviceId}' }, refresh: 'interval', intervalMs: 30000 },
+                    children: templateToBlocks(macMenuBarSuite.components[0].render(refs), kind => ctx.id(`${kind}-${++index}`))
+                }];
+            }
 		}
 	]
 };

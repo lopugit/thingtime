@@ -1,3 +1,5 @@
+import { ComponentCollection } from './ComponentCollection';
+import { ComponentDataScope } from './ComponentSelect';
 import React from 'react';
 import { componentTextOverrides } from './componentTextOverrides';
 import { builderPoint, builderRect } from './builderCoordinates';
@@ -6,9 +8,9 @@ import { mapCssMediaUrls } from '../Sharing/renderMediaCore';
 import { Box, Flex, Grid, Text } from '@chakra-ui/react';
 
 import { isExternalHref, isSafeUrl } from '../Kinds/safeUrl';
-import { HtmlThingRenderer } from '../Kinds/HtmlThingRenderer';
+import { HtmlThingRenderer, HtmlBlockElement } from '../Kinds/HtmlThingRenderer';
 import { NativeControlsEnabled } from './NativeComponentControls';
-import { defaultsFromArgs, sanitizeArgSpecs } from '../ComponentsLibrary/componentTemplate';
+import { defaultsFromArgs, sanitizeArgSpecs, resolveTemplate } from '../ComponentsLibrary/componentTemplate';
 import { type TtActionConfirmHandler, type TtActionUnownedHandler } from '../Actions/useTtActionClicks';
 import { LiveTemplate, useThingSource } from './liveComponent';
 import { htmlToNode } from './htmlToNode';
@@ -969,6 +971,63 @@ export type WebpageBlocksRendererProps = {
 	bare?: boolean;
 };
 
+const SourceBlock = (props: WebpageBlocksRendererProps & { block: WebpageBlock }) => {
+ const source = useBlockSource(props.block, props.block.args || {}, !!props.interactive);
+ return <LiveTemplate render={{ tag: 'span' }} scope={{ ...props.block.args, ...source.scope }}
+  interactive={!!props.interactive && (!props.chrome || props.chrome.seamlessMode === 'view')}
+  confirm={props.confirm} onUnowned={props.onTtActionUnowned}>
+  <BlockView {...props} block={{ ...props.block, source: undefined }} />
+ </LiveTemplate>;
+};
+
+/** Authored DOM elements are the selection boundary themselves. No wrapper div
+ * breaks a summary, a grid, or a row. Repeated rows share one editable template. */
+const AuthoredBlock = (props: WebpageBlocksRendererProps & { block: WebpageBlock }) => {
+ const { block, chrome } = props;
+ const scope = React.useContext(ComponentDataScope);
+ const editing = !!chrome && chrome.seamlessMode !== 'view';
+ const attributes = resolveTemplate(block.props || {}, scope) as Record<string, any>;
+ if (attributes['data-tt-action-inputs'] && typeof attributes['data-tt-action-inputs'] === 'object') attributes['data-tt-action-inputs'] = JSON.stringify(attributes['data-tt-action-inputs']);
+ const selected = chrome?.selectedId === block.id;
+ const hovered = chrome?.hoverId === block.id;
+ const children = attributes.transparent === true || block.tag === 'select'
+  ? (block.children || []).map(child => <BlockView {...props} key={child.id} block={child} />)
+  : <BlockList {...props} blocks={block.children || []} containerId={block.id} />;
+ const editorProps: Record<string, any> = {
+  'data-block-id': block.id,
+  style: { ...cssRecordToStyle(block.css), ...(editing && (selected || hovered) ? { outline: '2px solid var(--tt-accent, hotpink)', outlineOffset: '2px' } : {}) },
+  ...(editing ? {
+   onMouseOver: (event: React.MouseEvent<HTMLElement>) => { event.stopPropagation(); chrome.onHover(block.id); },
+   onClick: (event: React.MouseEvent<HTMLElement>) => {
+    if ((event.target as Element).closest('[data-block-id]') !== event.currentTarget) return;
+    event.preventDefault(); event.stopPropagation(); chrome.onSelect(block.id, event.currentTarget);
+   },
+   onContextMenu: (event: React.MouseEvent<HTMLElement>) => {
+    if ((event.target as Element).closest('[data-block-id]') !== event.currentTarget) return;
+    event.preventDefault(); event.stopPropagation(); chrome.onSelect(block.id, event.currentTarget);
+    const point = builderPoint(event.currentTarget, event.clientX, event.clientY);
+    chrome.onContextMenu?.(block.id, point.x, point.y);
+   }
+  } : {})
+ };
+ if (block.type === 'condition') {
+  const matches = resolveTemplate({ ttIf: { ...block.condition, then: 'yes', else: 'no' } }, scope) === 'yes';
+  if (!editing && matches === !!block.condition?.negate) return null;
+  return <div {...editorProps} style={{ ...editorProps.style, ...(editing ? { padding: '4px', border: '1px dashed var(--tt-border, #ddd)' } : { display: 'contents' }) }}>
+   {editing && <small style={{ color: 'var(--tt-muted)' }}>{block.condition?.negate ? 'Otherwise' : 'When'} {String(block.condition?.arg || '')}</small>}{children}
+  </div>;
+ }
+ if (block.type === 'collection' && attributes.transparent === true) return <ComponentCollection {...attributes} renderItem={() => children} />;
+ if (block.type === 'collection') return <div {...editorProps}>
+  {editing ? <><small>List template · {String(attributes.label || 'Records')}</small>{children}</> :
+   <ComponentCollection {...attributes} renderItem={() => children} />}
+ </div>;
+ const text = block.format ? resolveTemplate({ ttFormat: block.format }, scope) : resolveTemplate(block.text || '', scope);
+ return <HtmlBlockElement tag={block.tag || 'div'} attributes={{ ...attributes, ...(editing && ['details', 'dialog'].includes(block.tag || '') ? { open: true } : {}) }} editorProps={editorProps}>
+  {typeof text === 'string' || typeof text === 'number' ? (editing && !text && block.text ? block.text : text) : null}{block.children ? children : null}
+ </HtmlBlockElement>;
+};
+
 const BlockView = (
 	props: WebpageBlocksRendererProps & {
 		block: WebpageBlock;
@@ -1010,6 +1069,8 @@ const BlockView = (
 		[cssTypo]
 	);
 
+	if (block.source && block.type !== 'component') return <SourceBlock {...props} />;
+	if (['element', 'collection', 'condition'].includes(block.type)) return <AuthoredBlock {...props} />;
 	let body: React.ReactNode = null;
 	if (block.type === 'text') {
 		const typo = mergedTypo;

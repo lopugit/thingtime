@@ -25,9 +25,9 @@ export const compositionReferences = (kinds: string[], crystal: Record<string, a
 	const render = () => visitStoredTemplateActions(crystal.render, kinds.includes('component') ? storedComponentScope(crystal, args) : {}, (ref) => add('action', ref));
 	let visited = 0;
 	const blocks = (value: any, depth = 0): void => {
-		if (!Array.isArray(value) || depth > 16) return;
+		if (!Array.isArray(value)) return;
 		for (const block of value) {
-			if (++visited > 1600) return;
+
 			if (!block || typeof block !== 'object') continue;
 			if (block.type === 'component') {
 				if (literal(block.component)) {
@@ -36,7 +36,10 @@ export const compositionReferences = (kinds: string[], crystal: Record<string, a
 				}
 				source(block.source);
 			}
-			if (block.type === 'container') blocks(block.children, depth + 1);
+   source(block.source);
+   if (block.type === 'collection') source(block.props?.source);
+   if (block.type === 'element') visitStoredTemplateActions({ tag: block.tag, props: block.props, ttAction: block.props?.['data-tt-action'] }, storedComponentScope({}, block.args), ref => add('action', ref));
+   blocks(block.children, depth + 1);
 		}
 	};
 	if (kinds.includes('webpage')) blocks(crystal.blocks);

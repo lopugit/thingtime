@@ -389,6 +389,7 @@ export const useWebpageDraft = (target: WebpageTarget | null, options?: UseWebpa
 				blocks
 			};
 			try {
+				await requireThingtimeCapability('api.things', '1.35.0');
 				const draftEventId = page && user?.id && historyEditable ? await draftHistory.flush() : null;
 				if (generation !== generationRef.current) return { ok: false, error: 'Page or account changed while preparing the save.' };
 				if (resolved?.source === 'user' && page) {
