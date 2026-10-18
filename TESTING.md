@@ -11370,3 +11370,20 @@ resume unfinished Android gates only when requested.
   from the second vault after source database/files and first-vault deletion.
 - [ ] Actual account-wide capture/import, active-theme selection restoration,
   remaining managed families and native/UI acceptance remain separate gates.
+
+### Account profile and preferences in independent snapshots — 2026-10-18
+
+- [x] Unit: preserve null/false/absent preferences, partial notification switches,
+  disabled personal instructions, linked profile URLs and ordered reactions;
+  recover exact content from the second vault after source edits/removal.
+- [x] Unit: reject mixed/foreign user identities, malformed JSON/UTF-8, plaintext
+  private envelopes, invalid values and damaged chunks. Error messages must not
+  contain private envelope values; credentials/permissions never enter chunks.
+- [x] Unit: managed profile images require the exact owner, slot, profile purpose
+  and durable target. Missing/foreign/rebound/expiring images refuse the complete
+  plan; valid image bytes read identically from the sealed vault.
+- [ ] Run the real signup/profile/settings API through a disposable home replica
+  and compare the snapshot against API readback, including concurrent changes.
+- [ ] Restore a live account through current reviewed writers; cover active
+  theme/algorithm selection, visibility, permissions and current revision fences.
+  Credential/security recovery and remaining managed-family coverage are open.

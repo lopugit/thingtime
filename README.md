@@ -5137,8 +5137,10 @@ Do not increase a production history window blindly: measure enumeration time
 and the database storage cost first. No new credentials or app environment
 variables are needed. This producer is internal and refuses unsupported managed
 families; it does not yet supply a whole-account backup API. Ordinary Things,
-file references, ready owned attachments, saved drafts/templates/tombstones and
-canonical Timeline record families are covered. Canonical file-history references must match attachment records at
+file references, ready owned attachments, saved drafts/templates/tombstones,
+saved themes, approved account profile/preferences and canonical Timeline record
+families are covered. Account profile content has a 1 MiB value bound; credentials,
+security state and live restore authority are excluded explicitly. Canonical file-history references must match attachment records at
 the same database timestamp. Timeline and draft payloads, plus large ordinary
 Thing snapshots, are frozen into private chunk storage during the database
 snapshot. Draft records are bounded to 4 MiB and ordinary snapshots to 128 MiB;

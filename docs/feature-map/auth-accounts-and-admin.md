@@ -87,3 +87,15 @@ so decrypted fields never enter shared client history/cache. The reusable
 Native provider implementation and signed release are tracked separately in
 [PR #996](https://github.com/lopugit/thingtime/pull/996); this release exposes the
 private catalog and negotiates an optional supported native bridge.
+
+## Account content snapshots
+
+The internal owner inventory uses `backups/accountSnapshots.ts` and the shared
+`timeline/accountContent.ts` v1 contract for approved profile content and private
+preferences. It decodes bounded user BinData without exporting email, passwords,
+vault keys, credentials, permissions or security settings. Managed profile images
+must match the owner, exact slot and durable binding at the same database
+snapshot. The offline reader has no authority to write an account or sign in.
+`test:backups` covers independent recovery, exact preferences and malformed or
+foreign data refusal. Real account API capture/restore remains a separate gate.
+See [portable backups](../portable-backups.md#account-profile-content-and-private-preferences).

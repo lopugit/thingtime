@@ -7,6 +7,14 @@ import {
 	type BackupDraftAttachmentReference
 } from './draftRecords';
 import { retainBackupThingSnapshot } from './thingSnapshots';
+import {
+	backupAccountProjection,
+	backupAccountSnapshotFromDoc,
+	retainBackupAccountSnapshot,
+	backupProfileAttachmentReferences,
+	verifyBackupProfileAttachment,
+	type BackupProfileAttachmentReference
+} from './accountSnapshots';
 import { backupThemeProjection, backupThemeSnapshotFromDoc, retainBackupThemeSnapshot } from './themeSnapshots';
 import {
 	backupAttachmentProjection,
@@ -30,7 +38,7 @@ import { prepareBackup, type BackupAccess, type BackupObjectStore } from './port
 export const ACCOUNT_INVENTORY_PAGE_SIZE = 128;
 const id = (value: unknown): value is string => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(value);
 // Census reads never fetch crystal, secure, tokens, grants or private envelopes.
-// Only the dedicated Timeline family decodes its canonical history envelope.
+// Dedicated Timeline and account adapters decode only their approved content.
 const censusProjection = { _id: 0, shareId: 1, ownerId: 1, thingtime: 1 };
 const contentProjection = {
 	...censusProjection,
@@ -52,8 +60,8 @@ const fileProjection = {
 	'crystal.content': 1
 };
 type Census = { shareId: string; ownerId: string; thingtime: string[] };
-type Family = 'content' | 'file' | 'timeline' | 'attachment' | 'draft' | 'theme';
-type AttachmentReference = { fileId: string; content: CloudFileContent } | BackupDraftAttachmentReference;
+type Family = 'content' | 'file' | 'timeline' | 'attachment' | 'draft' | 'theme' | 'account';
+type AttachmentReference = { fileId: string; content: CloudFileContent } | BackupDraftAttachmentReference | BackupProfileAttachmentReference;
 function family(doc: Census): Family {
 	if (
 		!Array.isArray(doc.thingtime) ||
@@ -62,6 +70,7 @@ function family(doc: Census): Family {
 		doc.thingtime.some((kind) => typeof kind !== 'string' || !id(kind))
 	)
 		throw Error('Invalid account inventory kind');
+	if (doc.thingtime.length === 1 && doc.thingtime[0] === 'user') return 'account';
 	if (doc.thingtime.length === 1 && doc.thingtime[0] === 'draft') return 'draft';
 	if (doc.thingtime.length === 1 && doc.thingtime[0] === 'theme') return 'theme';
 	if (doc.thingtime.length === 1 && doc.thingtime[0] === 'file') return 'file';
@@ -175,6 +184,7 @@ export function createAccountInventoryProducer(
 						// still owns its bounded wire batch; no oversized row reaches the plan.
 						if (timeline) timelineBackupRecordFromDoc(row);
 						else if (projection === backupDraftProjection) backupDraftFromDoc(row);
+						else if (projection === backupAccountProjection) backupAccountSnapshotFromDoc(row);
 						else if (projection === backupThemeProjection) backupThemeSnapshotFromDoc(row);
 						else if (projection !== contentProjection) {
 							const bounded = projection === backupAttachmentProjection ? { ...row } : row;
@@ -255,7 +265,10 @@ export function createAccountInventoryProducer(
 					for (const doc of found)
 						for (const ref of byId.get(doc.shareId)!) {
 							if ('content' in ref) verifyBackupFileReference(ref.content, ref.fileId, attachments.get(doc.shareId)!);
-							else {
+							else if ('profileSlot' in ref) {
+								if (doc.attachmentExpiresAt != null || doc.attachmentImportDraft) throw Error('Profile attachment is not durably bound');
+								verifyBackupProfileAttachment(ref, attachments.get(doc.shareId)!);
+							} else {
 								if (doc.attachmentExpiresAt != null || doc.attachmentImportDraft) throw Error('Draft attachment is not durably bound');
 								verifyBackupDraftAttachment(ref, attachments.get(doc.shareId)!);
 							}
@@ -297,19 +310,21 @@ export function createAccountInventoryProducer(
 						const batchSize = kind === 'timeline' || kind === 'draft' ? 8 : ACCOUNT_INVENTORY_PAGE_SIZE;
 						for (let offset = 0; offset < group.length; offset += batchSize) {
 							const expected = group.slice(offset, offset + batchSize);
-							if (kind === 'content' || kind === 'theme') {
+							if (kind === 'content' || kind === 'theme' || kind === 'account') {
 								// Process one large canonical record at a time. Never collect 128
 								// potentially large payloads in addition to the driver's wire batch.
 								let count = 0;
 								for await (const doc of queryRows(
 									{ shareId: { $in: expected.map((row) => row.shareId) } },
-									kind === 'theme' ? backupThemeProjection : contentProjection,
+									kind === 'account' ? backupAccountProjection : kind === 'theme' ? backupThemeProjection : contentProjection,
 									batchSize
 								)) {
 									await check();
 									boundary();
 									sameRow(doc, expected[count++], kind);
-									const retain = kind === 'theme' ? retainBackupThemeSnapshot : retainBackupThingSnapshot;
+									if (kind === 'account') await verifyReferences(backupProfileAttachmentReferences(backupAccountSnapshotFromDoc(doc)));
+									const retain =
+										kind === 'account' ? retainBackupAccountSnapshot : kind === 'theme' ? retainBackupThemeSnapshot : retainBackupThingSnapshot;
 									const entry = await retain(store, snapshotId, ordinals.get(doc.shareId)!, doc, {
 										...access,
 										scope,
@@ -392,7 +407,7 @@ export function createAccountInventoryProducer(
 					coverage: {
 						selectionId: `owned-things:${scope.ownerId}`,
 						description:
-							'All owned Things in home storage at one database snapshot; unsupported managed families refuse the entire inventory. Account settings outside this collection and other devices require separate producers.'
+							'All owned Things in home storage at one database snapshot; unsupported managed families refuse the entire inventory. User records retain approved profile content and private preferences only; credentials and security state, settings outside this collection and other devices require separate producers.'
 					}
 				},
 				rows(),

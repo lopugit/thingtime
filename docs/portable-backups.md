@@ -22,16 +22,18 @@ canonical `thing-content` Timeline snapshot; files use `file-content` with their
 exact retained content version and fingerprint. Root credentials, token grants,
 link keys and authentication envelopes are not projected into the vault.
 Dedicated Timeline exporters decode their private storage envelopes into the
-existing canonical records before retaining them.
+existing canonical records before retaining them. The dedicated account adapter
+decodes only approved profile content and preferences from the user envelope.
 
 The census covers every owned row in the home Things collection. A managed kind
 without an approved exporter, missing payload, expired database snapshot,
 oversized metadata, changed account or revoked access refuses the plan. It never
 skips an unsupported row and then reports complete coverage. Ready owned
 attachments, saved themes, drafts/templates/tombstones and all seven Timeline families
-have dedicated exporters. Account
-identity and other managed families still need coverage; ordinary real accounts
-therefore cannot yet complete this producer. Settings in
+have dedicated exporters, along with approved account profile content and private
+preferences. Credentials/security state and other managed families still need
+coverage; ordinary real accounts cannot yet rely on this producer for a complete
+account backup. Settings in
 other collections and device-local data also need separate coverage contracts.
 
 Successful enumeration seals the durable metadata plan before live file byte
@@ -196,9 +198,46 @@ preserves 359 records and 22,217,760 payload bytes using 22 bounded queries.
 Partial-theme edits and large-theme deletion after the census do not change the
 archive; both original snapshots recover from the second vault after removing
 the source database/files and first vault. This proves storage behavior on
-synthetic data, not UI delivery or complete account coverage. Account identity,
+synthetic data, not UI delivery or complete account coverage. Account security,
 other managed families/settings, relationship closure, retention/pinning, cloud
 replication, reviewed account restore and jobs/UI remain unfinished.
+
+### Account profile content and private preferences
+
+`timeline/accountContent.ts` defines the shared `account-content` v1 snapshot
+shape. `accountSnapshots.ts` is its owner-only storage adapter. It preserves
+profile identity labels, display name, biography, linked avatar/banner URLs,
+managed image references, birthday, email visibility, read-receipt preference,
+active theme/algorithm references, stored notification switches, personal Lopu
+instructions and recent reactions. Missing preferences stay absent; false,
+null, disabled instructions and reaction order/duplicates stay exact. External
+URLs remain links and are never fetched or claimed as independently saved bytes.
+
+A user must own its exact identity. Only this family reads its private BinData;
+malformed JSON/UTF-8, plaintext, invalid approved values or excessive bounds
+refuse the whole plan with value-free diagnostics. Password hashes, email,
+vault keys, endpoint credentials, security flags, permissions, subscription
+allowances and unknown private fields never enter this content format. These
+exclusions are stated in the inventory coverage; this is not a total account
+security backup. Normalized public-user responses are deliberately not used:
+they add defaults and runtime quota/authority that are not historical content.
+
+The snapshot value is bounded to 1 MiB and retained in verified chunks while the
+same Mongo snapshot is open. Managed profile images must be owned, ready,
+durably bound to this user and the exact avatar/banner slot, with the profile
+purpose. Missing, foreign, expired, rebinding or wrong-slot media refuses the
+plan. Their bytes are captured once through the existing attachment path.
+`openBackupAccountSnapshot` recovers only a sealed, digest-verified snapshot for
+the same owner/origin. It does not sign in, alter active selections, grant access
+or write live profile/settings values; those require current authorized writers.
+
+Validation: 76 backup tests pass. The new unit coverage includes source mutation,
+independent-vault copy/source removal, exact preference preservation, media bytes
+and relationship refusal, corrupt binary/private data, foreign scope and chunk
+damage. These tests use the production secure-envelope builder with an injected
+snapshot cursor; they do not establish real signup/profile API integration or
+live account restoration. Those acceptance gates, credential recovery and
+remaining managed families stay open.
 
 ## Format and invariants
 

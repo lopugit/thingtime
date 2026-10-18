@@ -1,4 +1,7 @@
 import { backupDraftFixture } from './draftRecords.fixtures';
+import { accountContentSnapshot, accountContentValue } from '../../../timeline/accountContent';
+import { backupAccountSnapshotFromDoc, openBackupAccountSnapshot } from './accountSnapshots';
+import { buildUserSecure, packRecentReactions } from '../auth/users';
 import { backupThemeFixtures } from './themeSnapshots.fixtures';
 import { backupThemeSnapshotFromDoc, openBackupThemeSnapshot, BACKUP_THEME_CONTENT_ADAPTER } from './themeSnapshots';
 import { backupDraftFromDoc, openBackupDraft } from './draftRecords';
@@ -142,6 +145,175 @@ function fixture(count = 300) {
 	const json = (key: string) => JSON.parse(Buffer.from(objects.get(`snapshots/${id}/${key}`)!).toString());
 	return { source, heads, headReads, store, objects, scope, access, state, session, projections, id, json, run: () => producer(store, id, access) };
 }
+
+function accountFixture(ownerId = 'owner') {
+	const { secure } = buildUserSecure({
+		email: 'NEVER_EXPORT@example.test',
+		passwordHash: 'NEVER_EXPORT',
+		emailVerified: true,
+		meta: {
+			birthday: '2000-02-29',
+			hideEmailOnProfile: false,
+			readReceiptsEnabled: false,
+			activeThemeId: null,
+			activeFeedAlgorithmId: 'algorithm-old',
+			notificationPrefs: { 'action-run': false, email: { 'weekly-summary': false }, masters: { push: false } },
+			lopuInstructions: { revision: 'prompt-old', instructions: [{ id: 'quiet', text: 'Keep replies brief', enabled: false }] },
+			mongoEndpoints: 'NEVER_EXPORT',
+			deploymentLinks: 'NEVER_EXPORT',
+			privateUploads: true,
+			admin: true,
+			customSecret: 'NEVER_EXPORT'
+		}
+	});
+	return {
+		shareId: ownerId,
+		ownerId,
+		thingtime: ['user'],
+		secure,
+		secureAdmin: true,
+		secureRecentReactions: packRecentReactions(['❤️', 'custom:older', '❤️']),
+		crystal: {
+			username: 'snapshot-user',
+			ttid: 'snapshot-user',
+			displayName: null,
+			bio: 'Exact saved bio',
+			avatarUrl: null,
+			bannerUrl: 'data:image/png;base64,' + 'x'.repeat(64000),
+			privateKey: 'NEVER_EXPORT'
+		}
+	} as any;
+}
+
+test('account content and private preferences survive source edits and independent vault copy without credentials or defaults', async () => {
+	const f = fixture(0),
+		account = accountFixture(),
+		expected = backupAccountSnapshotFromDoc(account);
+	f.source.push(account);
+	f.state.beforeQuery = (n) => {
+		if (n === 2) {
+			account.crystal.bio = 'new biography';
+			account.secure = Buffer.from('{}');
+		}
+	};
+	await f.run();
+	assert.equal(f.state.queries, 3);
+	assert.ok(f.json('header.json').coverage.description.includes('credentials and security state'));
+	assert.ok(![...f.objects.values()].some((bytes) => Buffer.from(bytes).includes('NEVER_EXPORT')));
+	await captureBackup(
+		f.store,
+		f.id,
+		{
+			read: async () => {
+				throw Error('Account content is already retained');
+			}
+		},
+		f.access
+	);
+	await sealBackup(f.store, f.id, f.access);
+	const second = fixture(0);
+	await copySealedBackup(f.store, second.store, f.id, f.access);
+	f.source.length = 0;
+	f.objects.clear();
+	const restored = await openBackupAccountSnapshot(second.store, f.id, 'owner', f.access);
+	assert.deepEqual(restored, expected);
+	const value = accountContentValue(restored);
+	assert.deepEqual(value.preferences.notificationPrefs, { 'action-run': false, email: { 'weekly-summary': false }, masters: { push: false } });
+	assert.equal(Object.prototype.hasOwnProperty.call(value.preferences, 'twoFactorEmailEnabled'), false);
+	assert.deepEqual(value.recentReactions, ['❤️', 'custom:older', '❤️']);
+	await assert.rejects(
+		openBackupAccountSnapshot(second.store, f.id, 'owner', { ...f.access, scope: { ...f.scope, ownerId: 'foreign' } }),
+		/account or origin/
+	);
+	const key = [...second.objects.keys()].find((key) => key.startsWith('chunks/'))!;
+	second.objects.get(key)![0] ^= 1;
+	await assert.rejects(openBackupAccountSnapshot(second.store, f.id, 'owner', f.access));
+});
+
+test('profile image closure verifies owner, slot, purpose, durable binding and exact retained bytes', async () => {
+	for (const mode of ['valid', 'missing', 'foreign', 'wrong-slot', 'wrong-purpose', 'wrong-target', 'expiring'] as const) {
+		const f = fixture(0),
+			account = accountFixture(),
+			attachment = await backupAttachmentFixture('owner', 'profile-image', Buffer.from('exact profile image'), 'profile', 'owner');
+		account.avatarAttachmentId = attachment.doc.shareId;
+		if (mode === 'foreign') attachment.doc.ownerId = 'foreign';
+		if (mode === 'wrong-slot') attachment.doc.attachmentProfileSlot = 'banner';
+		if (mode === 'wrong-purpose') attachment.doc.attachmentPurpose = 'post';
+		if (mode === 'wrong-target') attachment.doc.targetId = 'another-account';
+		if (mode === 'expiring') (attachment.doc as any).attachmentExpiresAt = new Date('2099-01-01');
+		f.source.push(account);
+		if (mode !== 'missing') f.source.push(attachment.doc);
+		f.heads.set(attachment.doc.objectKey, attachment.head);
+		if (mode !== 'valid') {
+			await assert.rejects(f.run());
+			assert.equal(f.objects.has(`snapshots/${f.id}/plan.json`), false);
+			continue;
+		}
+		await f.run();
+		await captureBackup(
+			f.store,
+			f.id,
+			{
+				read: async (item, offset, length) => {
+					assert.equal(item.thingId, attachment.doc.shareId);
+					return attachment.bytes.subarray(offset, offset + length);
+				}
+			},
+			f.access
+		);
+		await sealBackup(f.store, f.id, f.access);
+		f.source.length = 0;
+		assert.equal(accountContentValue(await openBackupAccountSnapshot(f.store, f.id, 'owner', f.access)).profile.avatarAttachmentId, 'profile-image');
+		const retained = await openBackupItem(f.store, f.id, 'profile-image', f.access),
+			chunks = [];
+		for await (const bytes of retained.ranges) chunks.push(bytes);
+		assert.deepEqual(Buffer.concat(chunks), attachment.bytes);
+	}
+});
+
+test('corrupt or ambiguous accounts fail the whole inventory before a complete plan exists', async () => {
+	for (const mode of [
+		'mixed',
+		'wrong-identity',
+		'plaintext',
+		'bad-json',
+		'bad-utf8',
+		'bad-meta',
+		'oversized-profile',
+		'bad-reaction',
+		'bad-preference'
+	] as const) {
+		const f = fixture(0),
+			doc = accountFixture();
+		if (mode === 'mixed') doc.thingtime.push('data');
+		if (mode === 'wrong-identity') doc.shareId = 'different';
+		if (mode === 'plaintext') doc.secure = '{}';
+		if (mode === 'bad-json') doc.secure = Buffer.from('{"passwordHash":"NEVER_EXPORT", invalid json');
+		if (mode === 'bad-utf8') doc.secure = Buffer.from([123, 34, 120, 34, 58, 34, 255, 34, 125]);
+		if (mode === 'bad-meta') doc.secure = Buffer.from('{"meta":[]}');
+		if (mode === 'oversized-profile') doc.crystal.bio = 'x'.repeat(501);
+		if (mode === 'bad-reaction') doc.secureRecentReactions = ['plaintext'];
+		if (mode === 'bad-preference') doc.secure = Buffer.from('{"meta":{"readReceiptsEnabled":"false"}}');
+		f.source.push(doc);
+		await assert.rejects(f.run(), (error: Error) => {
+			assert.ok(!error.message.includes('NEVER_EXPORT'));
+			return true;
+		});
+		assert.equal(f.objects.has(`snapshots/${f.id}/plan.json`), false);
+	}
+});
+
+test('account snapshot contract rejects additional archived fields and preserves absent preferences', () => {
+	const doc = accountFixture();
+	doc.secure = Buffer.from('{}');
+	const snapshot = backupAccountSnapshotFromDoc(doc),
+		value = accountContentValue(snapshot);
+	assert.deepEqual(value.preferences, {});
+	assert.deepEqual(accountContentSnapshot(value), snapshot);
+	assert.throws(() => accountContentValue({ ...snapshot, value: { ...value, passwordHash: 'forged' } }));
+	assert.throws(() => accountContentValue({ ...snapshot, value: { ...value, preferences: { admin: true } } }));
+	assert.throws(() => accountContentValue({ ...snapshot, version: 2 }));
+});
 
 test('saved themes retain canonical partial tokens and large content after independent copy and source loss', async () => {
 	const f = fixture(0),

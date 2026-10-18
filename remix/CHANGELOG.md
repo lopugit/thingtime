@@ -68,6 +68,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-18 — **Codex (AI)**: Retain approved account profile content and private
+  preferences in independent snapshots, with exact profile-media checks and
+  explicit credential/security exclusions. Offline recovery and refusal tests
+  pass; live account API capture/restore remains open. [PR #1002 notes](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
 - 2026-10-18 — **Codex (AI)**: Saved themes join independent account snapshots
   through the canonical Timeline format, with exact partial-token and chunked
   recovery after source loss. Preserve unfinished Android OS continuation in the

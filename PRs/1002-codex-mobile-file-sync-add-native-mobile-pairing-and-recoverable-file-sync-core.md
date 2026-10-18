@@ -2321,3 +2321,24 @@ vault. Targeted ESLint passes (the `.mts` harness uses the TypeScript parser).
 Remaining account families, relationship closure, retention, independent cloud
 replication, reviewed restore/jobs/UI and measured large-volume transfer remain
 open. Android follow-up stays deferred as requested.
+
+## Account profile/preferences checkpoint — 2026-10-18
+
+The internal producer now retains approved account profile content and private
+preferences using one shared `account-content` v1 Timeline shape. Exact absent,
+false/null and disabled states survive independent copy and source loss. The
+owner-only BinData decoder excludes credentials, security/permission flags and
+unknown fields; malformed input fails without echoing private values. Profile
+image dependencies must match the owner, purpose, slot and durable binding at
+the same database snapshot. The offline reader is bounded and digest/scope
+checked; it cannot mutate or authenticate a live account.
+
+Validation: 76 backup tests pass; focused lint passes. New coverage uses the
+production secure-envelope builder and injected snapshot cursor, not a live
+account API. Real signup/profile/settings capture and restore remain unchecked
+in TESTING.md. No endpoint or API capability contract changed. Android remains
+deferred; no Android code or acceptance work changed in this checkpoint.
+
+Account security/credential backup, other managed families, relationship closure,
+retention/pinning, independent cloud storage, jobs, UI and large-scale throughput
+remain required. The HTML tracker keeps whole-account coverage in progress.
