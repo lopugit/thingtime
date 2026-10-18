@@ -5,6 +5,40 @@ Thingtime application, separate from the stateless agent export sandbox in
 [no-login-draft-preview.md](no-login-draft-preview.md). The full local-first
 rollout is **not ready to merge** until the outstanding rows below are verified.
 
+## Native account theme History — 2026-10-19
+
+The packaged application now has native account-theme History acceptance through
+`accountThemeHistory.browser.test.ts`. Three edits through Theme Studio survive
+cold offline reload. Two earlier versions download through the normal History UI
+and pass the canonical History-export parser with exact before/after tokens and
+private device-draft provenance. These are History archives, not transfer bundles.
+
+The real isolated API accepts History while theme-content writes receive a forced
+503; the account theme remains unchanged until its separate retry. Reversing the
+failure proves content can synchronize while History remains queued, then History
+retry accepts the same event. Content receipts never acknowledge History and
+remote refresh/acknowledgement creates no extra device versions. Guest theme and
+History reads and a foreign account's theme/version export are refused.
+
+Native 1440×1000, 390×844 and 320px History/detail views pass scrolling and bounds
+checks. Zero page errors or offline mutation requests were observed. The manager
+runtime enforces network:none, no host mounts/published ports, read-only root and
+disposable data; IPv4/mapped-IPv6 egress denial, zero OOM and empty cleanup pass.
+Evidence: `tmp/account-theme-history-native/native/verification.json`, both
+`theme-history-*.json` exports and `account-theme-history-*.png` screenshots.
+
+Fourteen focused History checks and changed-file lint pass. TypeScript reports
+the identical 91 baseline diagnostics. The current packaged client/server from
+52a03edde was reused; this checkpoint adds acceptance coverage and documentation,
+not an application or API contract change. Initial fixture failures came from
+missing online emulation/account headers and reloading before Save finished;
+the final test waits for normal UI completion and preserves production cookies.
+
+Protected theme/algorithm restore, undo and merge, native import/move/title/delete
+History coverage, selected-custom-plane History acceptance, the broader local
+matrix, target-host MCP artifacts and final CI/deployed verification remain open.
+No merge, manual deployment, existing-account data or installed-app change occurs.
+
 ## Account large-file download and retention — 2026-10-19
 
 Ordinary account-file downloads now obtain the canonical scoped export plan instead
@@ -5020,8 +5054,10 @@ failed before this wiring fix and now passes without making an HTTP request.
 
 Local checks cover exact visibility/tokens/title/folder snapshots, deleted-version
 export, reload, cache eviction, independent synthetic History acknowledgements,
-remote refresh and failure rollback. Native History and real authenticated API
-acceptance are still open, along with protected theme restore/undo/merge. This
+remote refresh and failure rollback. The 19 October native checkpoint above now
+verifies account edits, export and independent real sync in both directions. Native
+import/move/title/delete and custom-plane acceptance, plus protected theme
+restore/undo/merge, remain open. This
 increment adds no HTTP endpoint or remote contract and does not change theme
 catalogue capacity; the broader capacity audit remains outstanding.
 

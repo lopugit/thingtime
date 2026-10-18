@@ -735,8 +735,12 @@ account facade exports home versions through its home worker. Both keep the
 selected-account lease and retire on identity or database changes. Regressions:
 `local-workspace/themeHistory.test.ts`, `accountThemeHistory.test.ts`,
 `accountThemeHistoryScope.test.ts` and the opt-in
-`anonymousThemeHistory.browser.test.ts`. Account theme native/API acceptance and
-protected restore/undo/merge remain open.
+`anonymousThemeHistory.browser.test.ts`. The new opt-in
+`accountThemeHistory.browser.test.ts` verifies three native offline edits, two
+canonical History exports and real receipt acceptance while the independent
+content queue fails, then reverses that failure and retries History. Native
+import/move/title/delete and custom-plane acceptance, plus protected
+restore/undo/merge, remain open.
 
 Owned account themes join the existing `accountExport.ts` collector through
 `AccountThemeSync.exportSnapshot`, never the generic protected writer. The

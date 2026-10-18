@@ -5332,6 +5332,28 @@ API. The `themeImport.api.test.ts` fixture checks conditional title metadata and
 normal importer round-trip. Use the disposable loopback configuration above; no
 existing account or public content is needed.
 
+### Isolated account theme History acceptance
+
+Run the built application and this browser fixture inside a task-owned isolated
+browser-manager runtime, with its disposable replica database and enforced
+browser/backend network boundary. No real account or credentials are required.
+The fixture validates the runtime session and direct-IP egress denial before
+creating private disposable accounts. The offline shell must be built.
+
+```sh
+TT_ACCOUNT_THEME_HISTORY_URL=http://127.0.0.1:<isolated-app-port> \
+TT_ACCOUNT_THEME_HISTORY_ARTIFACTS=/path/to/private-test-artifacts \
+TT_RENDER_SESSION=<manager-session-id> \
+TT_SHARED_PLAYWRIGHT_PATH=/path/to/playwright/index.mjs \
+node --import tsx --test app/local-workspace/accountThemeHistory.browser.test.ts
+```
+
+Run from `remix/`; optional `TT_SHARED_CHROME_PATH` selects the isolated binary.
+The test emits native desktop/mobile/narrow PNGs, canonical History-version JSON
+and diagnostics. It verifies offline saves/reload, private read refusals and both
+sync failure directions without changing Secure-cookie or authorization rules.
+This is account History acceptance; protected restore/undo/merge is still open.
+
 ### Disposable offline Action verification
 
 The opt-in `remix/app/local-workspace/accountActions.browser.test.ts` uses a fresh
