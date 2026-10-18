@@ -1,3 +1,4 @@
+import { useCharacterScope, CHARACTER_HEADER } from '~/components/Characters/CharacterScope';
 import type { VersionRequest } from '../timeline/publishedVersion';
 import type { BranchCheckoutRequest } from '../timeline/branchCheckout';
 import { timelineRequestScope, type TimelineStorage } from '../timeline/storageScope';
@@ -43,13 +44,13 @@ const refreshRootData = () => {
 // GET helper mirroring useAsyncFetcher semantics: parses JSON and throws the
 // parsed payload on !ok so callers catch { ok: false, error } shapes.
 // Every call is recorded in the DevKit request log (method/path/status/ms).
-const getJson = async (url: string, options?: { signal?: AbortSignal; expectedDataPlane?: string | null }) => {
+const getJsonRequest = async (url: string, options?: { signal?: AbortSignal; expectedDataPlane?: string | null; characterId?: string }) => {
   if (url.startsWith('/api/v1/things')) ensureFoundPostBrowserIdentity();
   const started = performance.now();
   let response: Response;
   try {
     response = await fetch(url, { credentials: 'include', signal: options?.signal,
-      ...(options?.expectedDataPlane ? { headers: { [EXPECTED_DATA_PLANE_HEADER]: options.expectedDataPlane } } : {}) });
+      headers: { ...(options?.expectedDataPlane ? { [EXPECTED_DATA_PLANE_HEADER]: options.expectedDataPlane } : {}), ...(options?.characterId ? { [CHARACTER_HEADER]: options.characterId } : {}) } });
   } catch (error) {
     const aborted = error instanceof Error && error.name === 'AbortError';
     recordApiCall({
@@ -117,6 +118,9 @@ const toQuery = (args?: Record<string, unknown>) => {
 };
 
 export function useApi() {
+  const character = useCharacterScope();
+  const getJson = useCallback((url: string, options?: { signal?: AbortSignal; expectedDataPlane?: string | null }) =>
+    getJsonRequest(url, { ...options, ...(character ? { characterId: character.id } : {}) }), [character]);
   const dataPlane = useDataPlane();
   const planeRef = useRef(dataPlane); planeRef.current = dataPlane;
   const asyncFetcher = useAsyncFetcher();
@@ -1259,7 +1263,7 @@ export function useApi() {
 					const attachmentIds = args?.attachmentIds;
 					const ret = asyncFetcher.submit(
 						buildThingCommentRequestPayload(args),
-						{ action: '/api/v1/things/comment' }
+						{ action: '/api/v1/things/comment', ...(args?.characterId ? { characterId: args.characterId, expectedActor: args.characterId } : {}) }
 					);
 					if (Array.isArray(attachmentIds) && attachmentIds.length > 0) {
 						ret.then(refreshRootData).catch(() => {});

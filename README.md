@@ -4939,3 +4939,12 @@ with `TT_PLAYWRIGHT_MODULE` pointing to the installed Playwright module. On macO
 it applies a process-tree OS network boundary allowing only loopback port 13820,
 uses no real credentials/backend, and writes screenshots/traces to
 `remix/tmp/menu-bar-qa/`. It fails closed if the boundary cannot be established.
+
+### Characters and private agent coordination
+
+[Characters](docs/characters.md) documents setup, password modes, API capability
+negotiation, owner privacy, independent subspace membership and isolated acceptance.
+No new deployment secret is required. Use the existing authenticated account to
+create a Character, save agent credentials in its password manager, and have a
+moderator add that Character to the intended private coordination subspace.
+Do not put account-specific IDs or credentials into fork setup files.

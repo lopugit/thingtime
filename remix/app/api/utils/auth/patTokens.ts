@@ -1,3 +1,6 @@
+import { characterAccountLive } from './characterSession';
+import { CHARACTER_HEADER } from './characterSession';
+import { resolveSessionUser } from './getCurrentUser';
 import { internalRequestActor } from './internalRequestActor';
 import { resolveAppToken } from '../apps/appTokens';
 import { appAccountAllows, appAccountThingScopes } from '../apps/accountScopes';
@@ -318,7 +321,7 @@ const resolvePatSessionActor = async (
   }
 
   const userDoc = await findUserById(sub);
-  if (!userDoc || !serviceAccountAuthenticationAllowed(userDoc)) return null;
+  if (!userDoc || (!serviceAccountAuthenticationAllowed(userDoc) || !(await characterAccountLive(userDoc)))) return null;
 
   const maxUses = typeof session.meta?.maxUses === 'number' ? session.meta.maxUses : null;
   const before = typeof session.meta?.usesRemaining === 'number' ? session.meta.usesRemaining : null;
@@ -382,7 +385,7 @@ export const resolveGetBridgeSelf = async (rawToken: unknown): Promise<PatIntros
     return { ok: false, status: 403, error: 'This token is not enabled for GET links 🌍 — mint one with “Works via GET links” ticked' };
   }
   const userDoc = await findUserById(live.sub);
-  if (!userDoc || !serviceAccountAuthenticationAllowed(userDoc)) {
+  if (!userDoc || (!serviceAccountAuthenticationAllowed(userDoc) || !(await characterAccountLive(userDoc)))) {
     return { ok: false, status: 401, error: 'Token is invalid, expired, or revoked' };
   }
   return {
@@ -417,6 +420,8 @@ export const resolveThingsActor = async (request: Request, scope: string | strin
   if (!session) return anonymous;
   if (String(session.userId) !== claims.sub) return anonymous;
 
+  if (!sessionPurposeCanActAsAccount(session.purpose) && request.headers.has(CHARACTER_HEADER)) return anonymous;
+
   if (session.purpose === 'pat') {
     // Bearer-only: PATs live in agent/script configs and never ride a cookie,
     // so a cross-site request can't replay one as an ambient credential.
@@ -437,7 +442,7 @@ export const resolveThingsActor = async (request: Request, scope: string | strin
       return { ok: false, status: 403, error: 'Approve the required account Things permissions for this app' };
     }
     const userDoc = await findUserById(claims.sub);
-    if (!userDoc || !serviceAccountAuthenticationAllowed(userDoc)) return anonymous;
+    if (!userDoc || (!serviceAccountAuthenticationAllowed(userDoc) || !(await characterAccountLive(userDoc)))) return anonymous;
     return { ok: true, actor: { user: app.user, pat: {
       jti: session.jti, name: 'Connected app', scopes: appAccountThingScopes(app.scopes),
       onlyCreatedThings: false, visibility: 'all',
@@ -451,10 +456,11 @@ export const resolveThingsActor = async (request: Request, scope: string | strin
   // full things surface aligned with resolveSessionUser's fail-closed gate.
   if (!sessionPurposeCanActAsAccount(session.purpose)) return anonymous;
 
-  // Full browser/service session — the normal path, no scope limits.
-  const userDoc = await findUserById(claims.sub);
-  if (!userDoc || !serviceAccountAuthenticationAllowed(userDoc)) return anonymous;
-	return { ok: true, actor: { user: await toPublicUserWithStorage(userDoc), pat: null } };
+  // Resolve the acting identity once. A rejected selection must not degrade
+  // into anonymous access (or permit an anonymous write).
+  const user = await resolveSessionUser(claims.jti, claims.sub, request.headers.get(CHARACTER_HEADER));
+  if (!user) return { ok: false, status: 401, error: 'Session or Character unavailable' };
+  return { ok: true, actor: { user, pat: null } };
 };
 
 export type PatIntrospection =
@@ -484,7 +490,7 @@ export const resolvePatIntrospection = async (request: Request): Promise<PatIntr
   }
 
   const userDoc = await findUserById(claims.sub);
-  if (!userDoc || !serviceAccountAuthenticationAllowed(userDoc)) {
+  if (!userDoc || (!serviceAccountAuthenticationAllowed(userDoc) || !(await characterAccountLive(userDoc)))) {
     return { ok: false, status: 401, error: 'Token is invalid, expired, or revoked' };
   }
 

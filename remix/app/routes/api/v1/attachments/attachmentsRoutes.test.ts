@@ -657,3 +657,17 @@ test('the local object-storage route is inert unless the stand-in directory is c
 		if (previous !== undefined) process.env.THINGTIME_LOCAL_ATTACHMENT_STORAGE_DIR = previous;
 	}
 });
+
+test('Character media selectors reuse session authorization and never fall back to public access', async () => {
+  let header: string | null = null;
+  let downloaded = false;
+  const route = createAttachmentContentLoader({
+    getUser: async request => { header = request.headers.get('X-Thingtime-Character'); return null; },
+    enforceLimit: allowed as any,
+    download: async () => { downloaded = true; return { ok: false, status: 404, error: 'missing' }; }
+  });
+  const result = await route({ request: new Request('https://thingtime.example/api/v1/attachments/content?id=file&character=other') });
+  assert.equal(header, 'other'); assert.equal(result.status, 401); assert.equal(downloaded, false);
+  const malformed = await route({ request: new Request('https://thingtime.example/api/v1/attachments/content?id=file&character=') });
+  assert.equal(malformed.status, 400);
+});

@@ -73,6 +73,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-18 — **Codex (AI)**: Add privately owned Characters with independent logins, inherited tier entitlements, session identity selection and Post as controls for posts/comments. Preserve principal account switching and independent private-subspace membership; add isolated real-API/browser acceptance. See [Characters](../docs/characters.md).
+
 - 2026-10-18 — **Codex (AI)**: Fix installed desktop browser Actions through the
   selected account endpoint while retaining actor, database and origin checks;
   correct paired-device Builder links to Things. [PR 1031 notes](../PRs/1031-mac-menu-bar-paired-device-builder-tools.md).
