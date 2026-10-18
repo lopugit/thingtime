@@ -642,9 +642,46 @@ const deviceEndpointDocs: ApiEndpointDoc[] = [
 
 export const apiEndpointDocs: ApiEndpointDoc[] = [
   endpoint({
-    id: 'passwords', contractVersion: '1.0.0', featureVersion: '1.0.0', group: 'auth', title: 'Private password manager', endpoint: '/api/v1/passwords',
+    id: 'mail-google-callback', contractVersion: '1.0.0', featureVersion: '1.0.0', group: 'auth', title: 'Google mail consent callback', endpoint: '/api/v1/mail/google/callback',
+    summary: 'Receive a one-use Google consent result for a pending Gmail connection.',
+    detail: 'Opaque random state, S256 PKCE, fixed registered redirect origin, ten-minute expiry and originating live session bind this callback. The external browser receives only a static completion page. Linking requires confirmation of the verified address from the originating authenticated Thingtime session. No account is linked by this callback alone. No tokens, code or state are echoed.',
+    auth: { mode: 'none', description: 'Single-use OAuth state, live originating session and PKCE; this is not a general anonymous mail API.' }, methods: ['GET'],
+    steps: ['Start google-begin through the authenticated mail endpoint.', 'Google redirects here after consent.', 'Return to Email settings to confirm the selected Gmail address.'],
+    requestExamples: [{ name: 'Consent return', description: 'Google supplies a one-use authorization code and state.', method: 'GET', query: { code: '<authorization-code>', state: '<one-use-state>' } }],
+    responseExamples: [{ status: 200, description: 'Static HTML directing the user back to Thingtime.', body: 'Google authorization received. Return to Thingtime.' }]
+  }),
+  endpoint({
+    id: 'mail-sync', contractVersion: '1.0.0', featureVersion: '1.0.0', group: 'auth', title: 'Incoming mail API relay', endpoint: '/api/v1/mail/sync',
+    summary: 'Read IMAP or POP3 into a device cache without installing a connector or saving cloud mail.',
+    detail: 'POST operation relay, account (including transient app password, sync.local true and sync.transport relay), protocol, optional path, cursor and discover. expectedOwnerId is required in query and body. Credentials and bounded mail pass through this server in memory; neither is saved by this endpoint. Uses the same pinned public DNS, mail-only ports, verified TLS, read-only commands, 45-second deadline and ten-message pages as cloud sync. Never forwards to another Thingtime origin. Does not require cloud vault encryption configuration. The device must opt in; direct device sync never falls back here.',
+    auth: { mode: 'session-or-bearer', description: 'Full current account session; temporary, service and scoped-token accounts refused.' }, methods: ['POST'],
+    steps: ['Choose Thingtime API relay in Email device sync settings.', 'Send one bounded sync request; retain the returned version 1 batch in your encrypted device cache.'],
+    requestExamples: [{ name: 'Relay folders', description: 'Account settings include the app password only for this request.', method: 'POST', query: { expectedOwnerId: '<account-id>' }, body: { operation: 'relay', expectedOwnerId: '<account-id>', account: '<configured account>', protocol: 'imap', discover: true } }],
+    responseExamples: [{ status: 200, description: 'Transient mail batch, no cloud record written.', body: { ok: true, ownerId: '<account-id>', version: 1, folders: [], messages: [], nextCursor: null } }]
+  }),
+  endpoint({
+    id: 'mail', contractVersion: '1.2.0', featureVersion: '1.2.0', group: 'auth', title: 'Private incoming mail', endpoint: '/api/v1/mail',
+    summary: 'Connect Gmail with Google, or IMAP and POP3 accounts and combine folders in virtual inboxes.',
+    detail: 'GET pages 50 encrypted owner records by kind and cursor. All requests require expectedOwnerId in the query; POST also requires it in the body. save-account and save-inbox use an id, writeId and revision. sync discovers IMAP folders or reads ten messages with a continuation cursor; POP3 is read-only and never deletes server mail. Cloud-off password accounts cannot sync here. Gmail provider accounts use Google authorization: google-begin returns a one-use consent URL and flowId; google-status returns the verified address; google-finish requires that address and the originating live browser session; google-cancel drops pending authorization. Flows expire after ten minutes. google-relay reads Gmail into a device cache without persisting messages; sync stores messages only when cloud is enabled. Gmail uses gmail.modify consent and twenty-message pages. google-drafts reads a draft by draftId or pages metadata with cursor. google-action takes id, revision, writeId and mutation: read/unread/archive/trash/untrash with remoteId; label-add/label-remove with remoteId and custom labelId; label-create/label-rename with name and optional labelId; draft-save/send with compose {to,cc,bcc,subject,text}, draftId and current messageId for existing drafts. Send requires a saved draft and explicit UI confirmation. Protected encrypted mail-operation receipts admit each immutable action once; completed retries return the result, uncertain outcomes never replay, and pre-dispatch failures return actionOutcome not-applied. Drafts with rich formatting or attachments must be edited in Gmail. No permanent message deletion. Stored account grants are never accepted from clients. Google refresh tokens stay encrypted in the existing account vault even with cloud message storage off, and never appear in account responses. Account passwords are write-only; this storage endpoint never accepts device-only passwords. sync.transport optionally selects connector, native or relay for device sync; omitted means the legacy connector. delete leaves tombstones and removes cached account contents without modifying provider mail. Both runtimes share mail record version 1.',
+    auth: { mode: 'session-or-bearer', description: 'Full current account session; temporary, service and scoped-token accounts refused.' }, methods: ['GET', 'POST'],
+    steps: ['Sign in and configure an account in Settings → Email.', 'Sync a folder, or create a proxy inbox with owned folder ids.'],
+    requestExamples: [{ name: 'Email accounts', description: 'List owned email accounts.', method: 'GET', query: { kind: 'mail-account', expectedOwnerId: '<account-id>' } }],
+    responseExamples: [{ status: 200, description: 'Private account settings without passwords.', body: { ok: true, records: [], nextCursor: null, configured: true } }]
+  }),
+  endpoint({
+    id: 'integration-ios-release', group: 'integrations', title: 'Deliver iOS release credentials',
+    endpoint: '/api/v1/integrations/ios-release', featureVersion: '1.0.0',
+    summary: 'Purpose-scoped TestFlight credential delivery using a short-lived GitHub identity.',
+    detail: 'Production only. Verifies GitHub OIDC signature, audience, immutable repository and owner IDs, main ref, exact TestFlight workflow, source SHA, allowed event and single-use token. A vault policy enables delivery; explicit migration imports an absent Apple bundle without overwriting it. No browser session or general CI credential grants access.',
+    auth: { mode: 'bearer', description: 'GitHub Actions OIDC token with audience thingtime:ios-testflight; not a Thingtime session token.' },
+    methods: ['POST'], steps: ['Configure the iOS release policy in Admin System Secure Vault.', 'Negotiate api.integration-ios-release 1.0.0.', 'Request a fresh GitHub OIDC token and submit fetch or an explicitly enabled migration.', 'Mask returned credentials and retain them only for this job.'],
+    requestExamples: [{ name: 'Release job', description: 'One request per short-lived identity.', method: 'POST', body: { operation: 'fetch' } }],
+    responseExamples: [{ status: 403, description: 'Wrong identity.', body: { ok: false, error: 'This workflow is not authorized for iOS releases.' } }]
+  }),
+  endpoint({
+    id: 'passwords', contractVersion: '1.1.0', featureVersion: '1.1.0', group: 'auth', title: 'Private password manager', endpoint: '/api/v1/passwords',
     summary: 'Manage encrypted credentials using the current full account session.',
-    detail: 'GET pages metadata with an opaque cursor. POST export returns up to 50 decrypted entries per page for an explicit backup. POST catalog pages native AutoFill names, exact HTTPS domains and public passkey identifiers without secret values. POST read unlocks one owned entry through the live session; save uses a stable id, writeId and revision; delete leaves a value-free tombstone. All POST requests require expectedOwnerId. Values never enter generic Thing APIs or history. Server-assisted recovery preserves entries after password reset.',
+    detail: 'GET pages metadata with an opaque cursor. POST export returns up to 50 decrypted entries per page for an explicit backup. POST catalog pages native AutoFill names, exact HTTPS domains and public passkey identifiers without secret values. POST read unlocks one owned entry through the live session; save uses a stable id, writeId and revision; delete leaves a value-free tombstone. All POST requests require expectedOwnerId. Values never enter generic Thing APIs or history. Server-assisted recovery preserves entries after password reset. Version 1.1 removes arbitrary editor/import size and count caps and preserves extended 1PUX data. Full-session file-start, file-parts, file-complete, file-list, file-download, file-delete and file-abort manage encrypted attachment Things by entryId. Metadata and file keys are account-vault encrypted; object storage receives authenticated ciphertext frames. Generic attachment routes refuse password-purpose objects. Private upload permission and storage accounting still apply.',
     auth: { mode: 'session-or-bearer', description: 'Full user session only; scoped credentials and service accounts are refused.' }, methods: ['GET', 'POST'],
     steps: ['Sign in to a full Thingtime account.', 'GET metadata, then POST read, save or delete with expectedOwnerId.'],
     requestExamples: [{ name: 'Passwords', description: 'List owned entry metadata.', method: 'GET' }],
@@ -1100,10 +1137,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     group: 'admin',
     title: 'Manage the ordered Lopu credential waterfall',
     endpoint: '/api/v1/admin/ci/credentials',
-    featureVersion: '3.0.0',
+    featureVersion: '3.1.0',
     summary: 'Store, rotate, enable, delete, and reorder named AI-platform credentials without exposing their values.',
     detail:
-      'Credential values are AES-256-GCM encrypted with THINGTIME_ADMIN_VAULT_KEY and are write-only from the browser. Each entry has a built-in or custom AI platform label; GET and every mutation response contain redacted metadata only. Lopu requests the ordered compatible platform subset from the vault at run time, so GitHub needs one stable router secret instead of one repository secret per account. At most 128 entries are stored. Anthropic and Claude entries accept only Claude Code OAuth tokens; API keys are rejected. Claude and CI share this store.',
+      'Credential values are AES-256-GCM encrypted with THINGTIME_ADMIN_VAULT_KEY and are write-only from the browser. Each entry has a built-in or custom AI platform label; GET and every mutation response contain redacted metadata only. Lopu requests the ordered compatible platform subset from the vault at run time, so GitHub needs one stable router secret instead of one repository secret per account. At most 128 entries are stored. Anthropic and Claude entries accept only Claude Code OAuth tokens; API keys are rejected. Claude and CI share this store. The same-origin admin import-configured-openai action copies only this deployment’s OPENAI_API_KEY into an enabled OpenAI entry named OPENAI_THINGTIME_API_KEY. It is create-only, retries preserve existing entries, and no secret is returned.',
     auth: { mode: 'session', description: 'Requires an admin session (isAdmin).' },
     methods: ['GET', 'POST'],
     steps: [
@@ -1112,6 +1149,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'Use Admin System Secure Vault to manage the order without copying values back into the browser.'
     ],
     requestExamples: [
+      { name: 'Import the server OpenAI key', description: 'Requires same-origin POST. Never returns the environment value or overwrites an existing entry.', method: 'POST', body: { action: 'import-configured-openai' } },
       { name: 'Add a named AI account', description: 'The platform may be built-in or custom; the value is accepted once and never returned.', method: 'POST', body: { action: 'create', name: 'Thingtime Claude', platform: 'Anthropic', value: '<oauth-token>', enabled: true } },
       { name: 'Reorder the waterfall', description: 'Every stored id must appear exactly once.', method: 'POST', body: { action: 'reorder', order: ['lopu_credential_first', 'lopu_credential_second'] } }
     ],
@@ -2959,6 +2997,17 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     notes: ['Responses set Cache-Control: no-store. Storage audit fields are never exposed by this endpoint.']
   }),
   endpoint({
+    id: 'ai-models-sync', group: 'lopu', title: 'Sync provider model catalogues',
+    endpoint: '/api/v1/ai/models/sync', contractVersion: '1.2.0', featureVersion: '1.2.0',
+    summary: 'Daily model reconciliation with credential-free Claude public lifecycle metadata and redacted failure reasons.',
+    detail: 'Requires the deployment CRON_SECRET bearer. Claude uses public lifecycle documentation when no API key exists or catalogue access is denied. Public metadata sets publicCatalogAvailable, catalogSource and catalogCheckedAt without asserting account access or retiring absent IDs. Authenticated lists retain providerAvailable and lastSyncedAt. Reports and admin policies include source. Complete paginated provider lists atomically update protected ai-model Things. Preserves admin toggles and the last successful catalogue on any failure. Per-provider durable leases coalesce runs; model-not-found recovery and admin sync have a five-minute cooldown. New compatible chat models use provider-default options and are enabled only by admin policy; non-chat models remain excluded. Pricing remains explicitly unknown until published rates are added.',
+    auth: { mode: 'bearer', description: 'CRON_SECRET bearer only; user sessions are not accepted.' },
+    methods: ['GET'],
+    steps: ['Authenticate with the deployment cron bearer.', 'Reconcile each configured provider under a durable lease.'],
+    requestExamples: [],
+    responseExamples: [{ status: 200, description: 'Provider sync statuses; never credentials or provider error bodies.', body: { ok: true, report: [] } }]
+  }),
+  endpoint({
     id: 'ai-models',
     group: 'lopu',
     title: 'Lopu model catalog',
@@ -2970,17 +3019,18 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // 1.4.0: `models[].pricing` — the list price per million tokens with an `estimated` flag
     // (verified-access design note §2, additive).
     // contractVersion feeds /api/v1/capabilities, featureVersion the well-known Thingtime manifest.
-    contractVersion: '1.4.1',
-    featureVersion: '1.4.1',
-    summary: 'Lists every AI model Lopu can chat with, its provider access state, the resolved chat defaults, and (for a session) the caller’s own Secure Vault providers.',
+    contractVersion: '1.6.0',
+    featureVersion: '1.6.0',
+    summary: 'Only currently available supported models are returned. Lists every AI model Lopu can chat with, its provider access state, the resolved chat defaults, and (for a session) the caller’s own Secure Vault providers.',
     detail:
-      'The public projection of the protected `ai-model` Things — one per base model in the Thingtime Admin catalog, ' +
+      'Version 1.6.0 adds publicCatalogAvailable, catalogSource and catalogCheckedAt; public documentation does not verify account inference access. Version 1.5.1 registers GPT-6 Astra with Low, Medium, High, Extra high and Max reasoning, its context window and list pricing. Existing admin admission choices are preserved. ' +
+      'The available-only public projection of protected `ai-model` Things, including provider-discovered compatible chat models. ' +
       'seeded idempotently from code on the first read (the `default` sentinel is routing, not a model, so it is never ' +
       'listed). Each model carries its provider, the reasoning-effort tiers it offers, the speed lanes it sells (fast = ' +
       'Anthropic fast mode / OpenAI priority processing), a derived family, the admin `enabled` toggle, `verified` (the ' +
       'provider key’s probe verdict: true accepted, false rejected, null unknown), and `available` = enabled AND the provider ' +
       'key is configured on the server (CLAUDE_CODE_OAUTH_TOKEN or admin vault Claude OAuth; OPENAI_API_KEY) AND that key has not been ' +
-      'rejected. Claude checks the shared vault for an enabled OAuth token and reports verified: null until an actual ' +
+      'rejected, and the latest complete provider snapshot has not marked the model unavailable. Admin lists retain disabled/retired records. Claude checks the shared vault for an enabled OAuth token and reports verified: null until an actual ' +
       'reply checks model access and allowance. OpenAI uses a bounded GET /v1/models probe (OPENAI_BASE_URL honoured, ' +
       '5 s cap, no retries or redirects, cached for 10 minutes and 2 after failure). A rejected OpenAI key hides its models; ' +
       'unreachable or unexpected responses leave verified: null. `defaults` is the Thingtime.LopuChatDefaults singleton after availability is ' +
@@ -3078,10 +3128,11 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     endpoint: '/api/v1/admin/ai/models',
     // 1.1.0: POST { probe: true } re-checks the provider keys (additive).
     // contractVersion feeds /api/v1/capabilities, featureVersion the well-known Thingtime manifest.
-    contractVersion: '1.1.0',
-    featureVersion: '1.1.0',
+    contractVersion: '1.4.0',
+    featureVersion: '1.4.0',
     summary: 'Enables or disables one catalog model, re-seeds the ai-model Things from the code catalog, or re-checks the provider keys.',
     detail:
+      'Public Claude metadata requires no API key and is labelled separately from authenticated availability. POST { sync: true } refreshes provider lists. POST { provider, allowAll?, autoAllowNewModels? } applies current-model toggles and future-discovery admission. Auto-allow defaults off; unsupported non-chat models remain hidden. GET also returns policies. ' +
       'The only writer of the `ai-model` kind besides the boot-time seed. POST { id, enabled } flips `crystal.enabled` on ' +
       'the genuine system-owned row (a disabled model stays listed but is never selectable and never becomes the default). ' +
       'POST { seed: true } re-runs the idempotent catalog seed: inserts rows for models newly added to the code catalog, ' +
@@ -3269,6 +3320,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'root-data',
+    featureVersion: '1.0.1', contractVersion: '1.0.1',
     group: 'root',
     title: 'Root data',
     endpoint: '/api/root-data',
@@ -3799,13 +3851,13 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'auth-register',
-    featureVersion: '1.3.0',
-    contractVersion: '1.3.0',
+    featureVersion: '1.3.1',
+    contractVersion: '1.3.1',
     group: 'auth',
     title: 'Register user',
     endpoint: '/api/v1/auth/register',
     summary: 'Creates a user account, starts email verification, logs the browser in, and sets the auth cookie.',
-    detail: 'This is the live user signup path. Successful signup records a quiet account-created notification. Tests and seed flows should call this endpoint instead of writing directly to MongoDB.',
+    detail: 'This is the live user signup path. Successful signup records a quiet account-created notification. Tests and seed flows should call this endpoint on an isolated local backend instead of writing directly to MongoDB. Missing database or signing configuration returns 503 LOCAL_API_NOT_CONFIGURED without forwarding the request to another origin.',
     auth: {
       mode: 'none',
       description: 'Public signup endpoint.'
@@ -4726,10 +4778,11 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // each spend the same last credit — past the cap the request is refused 429
     // LOPU_TURN_IN_FLIGHT (+ Retry-After) before anything is persisted (additive). contractVersion
     // feeds /api/v1/capabilities, featureVersion the well-known Thingtime manifest.
-    contractVersion: '1.19.2',
-    featureVersion: '1.19.2',
+    contractVersion: '1.19.3',
+    featureVersion: '1.19.3',
     summary: 'Sends one message to Lopu and streams its reply — text, tool calls and live builder patches — as newline-delimited JSON. OAuth callers must explicitly approve the corresponding Lopu chat, voice, or recording permission.',
     detail:
+      'Version 1.19.3 routes GPT-6 Astra native tool turns through Responses, preserving explicit or provider-default reasoning and encrypted reasoning across tool hops without retrying a weaker request. ' +
       'Version 1.19.2 restores up to eight completed tool results (64 KiB) from the exact interrupted private background task on a verified continuation. Current account, conversation, deployment, retention and completed-boundary checks apply. No Action is replayed and no result is added to public message history. Expired task output stops refetching until the account or deployment changes. ' +
       'Version 1.19.1 repairs split JSON-labelled tool fences, retries printed tool requests with bounded corrective hops, and preserves private read locators across checkpoints. Restored get_thing pages reauthorize the viewer and require the same revision; results and grants are never persisted as history. Action failure recovery data reaches the next provider hop. ' +
       'Version 1.19.0 adds read-only inspect_action by authorized id or owner-scoped actionKey. It returns runtime, declared input descriptors, direct effects and optional candidate-input validation without execution, run records or confirmation. Oversized contracts explicitly point to lossless get_thing /inputs pages. Validation covers declared types only, not downstream API state or execution budgets. Invalid run_action inputs are refused before an Ask card. Partial failures retain a runId when available and instruct state verification before replay. Newly authored workspace save Actions expose canonical enum choices, numeric bounds and reference hints; existing saved programs are unchanged. ' +
@@ -13217,13 +13270,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'webpages-suites-install',
-    contractVersion: '1.3.0',
-    featureVersion: '1.3.0',
+    contractVersion: '1.4.0',
+    featureVersion: '1.4.0',
     group: 'webpages',
     title: 'Install a behaviour suite or app suite',
     endpoint: '/api/v1/webpages/suites/install',
     summary: 'Installs (or re-installs) one suite — schemas, components, actions, sample data, and every page — into the caller’s own things in one idempotent request.',
     detail:
+      '1.4.0 adds the media-tools suite: editable local WebCodecs conversion programs with selected-file input, resize, MP4/WebM encoding, progress/cancel, preview, host download and a saved-component Action. No video bytes are uploaded or persisted by conversion; device codec support is required. ' +
       'JSON Action inputs accept bounded JSON values; form controls decode their JSON text before transport. Literal strings are never reparsed by the API. JSON defaults preserve arrays, objects and null; input references remain inert data. Resolved defaults and nested calls obey the input byte budget. The Web standards workbench can save the edited program and current inputs as a private reusable Component through its authored browser Action. ' +
       'Web standards adds the web-standards installable suite, pure webstandards.browse/component expressions and the reusable tt-web-platform declarative document/CSS/JavaScript runtime. Runtime execution is isolated from account data; inventory provenance and incomplete-demo coverage are explicit. ' +
       'Version 1.1 adds site-forms and catalog-records suites, native form fields, and versioned interactive controls. ' +
@@ -13448,8 +13502,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // 1.1.0: every generation row carries its storage census (dataBytes,
     // storageBytes, indexBytes, indexes) — additive. contractVersion is what
     // the capabilities manifest publishes.
-    contractVersion: '1.3.0',
-    featureVersion: '1.2.0',
+    contractVersion: '1.4.0',
+    featureVersion: '1.4.0',
     summary: 'Per-collection schema-version census, storage generations, and registered migrations with pending counts.',
     detail:
       'Every doc stores the root-level schemaVersion it was written at (docs without one count as version 1), and every ' +
@@ -13692,13 +13746,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 	}),
   endpoint({
     id: 'admin-migrations-run',
-    contractVersion: '1.2.0',
-    featureVersion: '1.3.0',
+    contractVersion: '1.4.0',
+    featureVersion: '1.4.0',
     group: 'admin',
     title: 'Run migration',
     endpoint: '/api/v1/admin/migrations/run',
     summary: 'Runs (or dry-runs) a registered schema-version migration.',
     detail:
+      'cleanup-accidental-catalog-account-2026-10-18 removes only the exact idle incident fixture and its bootstrap/auth records in a home-database transaction. Identity, empty storage, revoked sessions and complete document preimages are checked; unexpected activity aborts cleanup. Dry-run first, then confirm: true. Email delivery and migration audit records remain. ' +
       'Migrations are idempotent, so re-running after a partial failure only touches what is left. The things v1→v2 ' +
       'migration explodes embedded comments/reactions into standalone things, converts share posts to thingtime ' +
       '["post","share"], moves post payloads under crystal, and stamps schemaVersion; the other collections stamp the ' +

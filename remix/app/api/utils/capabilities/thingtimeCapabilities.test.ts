@@ -100,11 +100,11 @@ test('Thingtime capability manifest is origin scoped and covers the generated AP
   assert.equal(capabilitySatisfies('1.3.0', '1.3.0'), true);
   assert.equal(capabilitySatisfies('1.4.0', '1.3.0'), true);
   assert.equal(capabilitySatisfies('2.0.0', '1.3.0'), false);
-  assert.equal(manifest.features['api.admin-migrations-run']?.version, '1.3.0');
+  assert.equal(manifest.features['api.admin-migrations-run']?.version, '1.4.0');
   assert.equal(manifest.features['api.admin-subscriptions']?.version, '1.1.1');
 	assert.equal(manifest.features['api.admin-ci-dispatch']?.version, '2.2.0');
   assert.equal(manifest.features['api.admin-ci-control']?.version, '1.0.2');
-  assert.equal(manifest.features['api.admin-ci-credentials']?.version, '3.0.0');
+  assert.equal(manifest.features['api.admin-ci-credentials']?.version, '3.1.0');
   assert.equal(manifest.features['api.admin-ci-feature-stacks']?.version, '1.4.0');
   assert.equal(manifest.features['api.admin-ci-previews']?.version, '2.0.0');
   assert.equal(manifest.features['api.auth-passkeys-register-options']?.version, '1.1.0');
@@ -251,8 +251,8 @@ test('AI archive clients require the presentation contract before import, export
 test('the Lopu catalog family publishes its verified-provider-key minor updates', () => {
   const manifest = thingtimeCapabilityManifest('https://thingtime.test');
   // 1.4.0: models[].pricing (verified-access design note §2)
-  assert.equal(manifest.features['api.ai-models']?.version, '1.4.1');
-  assert.equal(manifest.features['api.admin-ai-models']?.version, '1.1.0');
+  assert.equal(manifest.features['api.ai-models']?.version, '1.6.0');
+  assert.equal(manifest.features['api.admin-ai-models']?.version, '1.4.0');
   assert.equal(manifest.features['api.settings-lopu-chat-defaults']?.version, '1.1.0');
   // own providers (design note §1.3): providerId on create / update / reply;
   // 1.1.1 = the write buckets fail closed, 1.2.0 = server-verified confirmations;
@@ -260,7 +260,7 @@ test('the Lopu catalog family publishes its verified-provider-key minor updates'
   // and reply 1.4.0 = the in-flight cap (429 LOPU_TURN_IN_FLIGHT past three billed turns at once)
   assert.equal(manifest.features['api.lopu-chats']?.version, '1.6.0');
   assert.equal(manifest.features['api.lopu-chats-update']?.version, '1.5.0');
-  assert.equal(manifest.features['api.lopu-chats-reply']?.version, '1.19.2');
+  assert.equal(manifest.features['api.lopu-chats-reply']?.version, '1.19.3');
   // verified access + credits (design note "Lopu verified access, usage accounting and credits")
   for (const feature of ['api.admin-users-lopu-access', 'api.settings-lopu-access', 'api.lopu-account', 'api.lopu-account-history', 'api.lopu-account-topup-request', 'api.admin-lopu-accounts', 'api.admin-lopu-credits']) {
     assert.equal(manifest.features[feature]?.version, '1.0.0', feature);
@@ -272,7 +272,7 @@ test('historical Lopu receipts advertise a compatible reply patch on both manife
     thingtimeCapabilityManifest('https://thingtime.test').features['api.lopu-chats-reply'].version,
     createApiCapabilitiesManifest().features['api.lopu-chats-reply']
   ]) {
-    assert.equal(version, '1.19.2');
+    assert.equal(version, '1.19.3');
     assert.equal(capabilitySatisfies(version, '1.6.0'), true);
     assert.equal(capabilitySatisfies(version, '1.6.1'), true);
     assert.equal(capabilitySatisfies('1.6.0', '1.6.1'), false);
@@ -329,7 +329,7 @@ test('System vault and deployment reveal contracts are registered and negotiated
   const manifest = thingtimeCapabilityManifest('https://preview.example.test');
   assert.ok(apiV1RouteKeys.includes('v1/admin/system/environment'));
   assert.equal(manifest.features['api.admin-system-environment'].version, '1.0.0');
-  assert.equal(manifest.features['api.admin-ci-credentials'].version, '3.0.0');
+  assert.equal(manifest.features['api.admin-ci-credentials'].version, '3.1.0');
   assert.equal(manifest.features['api.vault-reveal'].version, '1.1.0');
   assert.equal(capabilitySatisfies('1.0.0', '1.1.0'), false);
   assert.equal(capabilitySatisfies('1.1.1', '1.1.0'), true);
@@ -397,7 +397,7 @@ test('Thing discussions and linked post references negotiate additive contracts 
 test('functional demo capabilities advertise compatible catalog and install contracts', () => {
   const manifest = thingtimeCapabilityManifest('https://thingtime.com');
   for (const feature of ['api.webpages-demos', 'api.webpages-suites-install', 'api.admin-webpages-seed-demos']) {
-    assert.equal(manifest.features[feature]?.version, feature === 'api.webpages-demos' ? '1.1.0' : feature === 'api.webpages-suites-install' ? '1.3.0' : '1.2.0');
+    assert.equal(manifest.features[feature]?.version, feature === 'api.webpages-demos' ? '1.1.0' : feature === 'api.webpages-suites-install' ? '1.4.0' : '1.2.0');
     assert.ok(capabilitySatisfies(manifest.features[feature].version, '1.1.0'));
   }
   assert.equal(capabilitySatisfies('1.0.0', '1.1.0'), false);

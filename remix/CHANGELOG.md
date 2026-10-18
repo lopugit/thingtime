@@ -12,6 +12,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 > When you make a manual change, add a bullet under `[Unreleased]` ending with
 
+- 2026-10-18: Refresh Claude public lifecycle metadata without an API key, preserve
+  account-access uncertainty and admin admission, include discovered models in
+  workflow settings, and persist the shared order when Save & apply is used.
+
+
 - 2026-09-22 — **Claude (AI)**: PR preview docs. README and the preview
   listener's manual-dispatch description now state what the protected
   controller already does: every same-repository PR previews into the
@@ -67,6 +72,63 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 ---
 
 ## [Unreleased]
+
+- 2026-10-18 — **Codex (AI)**: Remove implicit production API forwarding from
+  Vite and Nitro; missing local database/signing settings now fail closed before
+  handlers or DB warmup. Restrict fixture destinations and redirects, add an OS
+  isolated server smoke, and provide guarded admin cleanup for the accidental
+  catalog acceptance account, with atomic identity/activity checks and dry-run.
+  Details: [PR #1025](../PRs/1025-local-fallback-safety-prevent-production-test-data.md).
+
+
+- Claude catalogue/workflow persistence validation: [PR #1016 notes](../PRs/1016-claude-catalog-workflow-keyless-claude-model-sync.md).
+
+- 2026-10-18: Add a create-only admin import of the configured OpenAI key into the shared AI credential vault without exposing the value.
+- 2026-10-18 — **Codex (AI)**: Add reusable local video pipelines and a Builder
+  media-tools suite with editable saved layouts/settings, WebCodecs encoding,
+  cancellation, progress, previews and downloads. Secure-host workers preserve
+  the opaque preview sandbox and deny network access. Lopu now receives shared
+  framework-discovery guidance. Suite installation requires capability 1.4.0;
+  browser acceptance verifies real MP4/WebM outputs and responsive layout.
+  [PR 1024 validation](../PRs/1024-media-pipeline-reusable-local-video-compression.md).
+
+- 2026-10-17 — **Codex (AI)**: Stream complete 1PUX imports, preserve source data and rich fields, and add encrypted password attachments and file-inclusive backups. Remove arbitrary import/editor caps and document fork-safe storage setup. [PR #1015 validation](../PRs/1015-codex-password-import-fix-preserve-complete-1pux-imports-and-encrypted-password-attachments.md).
+
+
+- 2026-10-17 — **Codex (AI)**: Add Gmail connection through Google OAuth, encrypted
+  refresh authorization and Gmail API sync/actions with independent device/cloud
+  message storage, labels, Trash, encrypted draft autosave and explicit sending.
+  Durable receipts prevent replaying uncertain sends. Consent uses the system
+  browser on iOS and desktop; setup is
+  exact-origin vault configuration with documented Google verification requirements.
+  Document isolated native build caches after concurrent signing-stage collisions.
+  [PR #1014 details](../PRs/1014-codex-gmail-oauth-google-login-and-gmail-actions.md).
+
+- 2026-10-17: Add explicit browser mail relay without cloud persistence, bundled desktop direct mail sync, and an iOS Mail shortcut. Preserve transport choice and credential origin boundaries; document native build and relay setup. [PR #1013 details](../PRs/1013-codex-mail-native-relay-native-desktop-mail-sync-and-browser-api-relay.md).
+
+- 2026-10-17 — **Codex (AI)**: Prepare incoming mail PR #1009 for the authorized main promotion, preserving the current Settings sections and rerunning the mail/settings checks after integration.
+
+- 2026-10-17 — **Codex (AI)**: Add private incoming-mail accounts, read-only IMAP/POP3 adapters, `/mail` and `/email`, combined and proxy inboxes, independent cloud/local sync, encrypted offline records and a paired loopback connector. Include its exact origin in the shared CSP. Setup is in README; [PR #1009 notes](../PRs/1009-codex-mail-provider-incoming-mail-accounts-proxy-inboxes-cloud-local-sync.md) record verification and remaining acceptance.
+
+- 2026-10-17: Split admin System settings into AI Providers, Lopu, Platform,
+  and Access & limits. Shared settings cards start collapsed, show descriptions
+  and status summaries, preserve drafts, and open for legacy deep links. Labels
+  and controls wrap without squeezing helper text into a narrow column. Details:
+  [PR #1008](../PRs/1008-codex-settings-cards-split-system-settings-into-focused-tabs-and-collapsible-cards.md). — **Codex (AI)**
+
+- 2026-10-17 — **Codex (AI)**: Fix Astra replies rejected by Chat Completions tool/reasoning compatibility. The shared model registry now routes GPT-6 Astra native tools through Responses, publishes its supported reasoning levels and pricing, and preserves provider-default or selected reasoning across tool hops. Both API manifests advertise reply 1.19.3 and catalogue 1.5.1.
+
+- 2026-10-17: Add automatic native-main TestFlight publishing, version allocation, pre-upload widget/signature checks and exact-build processing verification. Add production-only GitHub OIDC delivery and create-only Apple credential migration through the shared admin vault; see [PR #1006 validation and rollout](../PRs/1006-codex-ios-testflight-vault--automatic-ios-testflight-publishing.md).
+
+- 2026-10-17 — **Codex (AI)**: Support a separate Anthropic Models API credential for catalogue discovery when Claude OAuth cannot list models. Keep replies on Claude Code OAuth and show redacted HTTP failure reasons in admin sync reports.
+
+- 2026-10-17 — **Codex (AI)**: Daily provider model inventory sync, bounded
+  model-not-available recovery and admin manual refresh. Retired models leave
+  Lopu/shared selectors; per-provider allow-all and auto-allow-new checkboxes
+  preserve individual choices. Includes Fable 5.1, transactional publication,
+  complete-list validation and fork-safe cron setup in README.
+  Details: [PR #1004](../PRs/1004-codex-provider-model-sync--sync-available-provider-models-and-admin-allow-controls.md).
+
 
 - 2026-10-16 — **Codex (AI)**: Raise Lopu model/settings popup positioners above the floating window and mobile scrim; bound long popup bodies to the viewport so their controls remain scrollable.
 

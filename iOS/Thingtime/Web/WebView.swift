@@ -22,6 +22,7 @@ struct WebView: UIViewRepresentable {
         let webView = ThingtimeWKWebView(frame: .zero, configuration: configuration)
         context.coordinator.webView = webView
         webView.navigationDelegate = context.coordinator
+        webView.uiDelegate = context.coordinator
         webView.allowsBackForwardNavigationGestures = true
         webView.isOpaque = true
         webView.backgroundColor = .white
@@ -59,7 +60,7 @@ struct WebView: UIViewRepresentable {
 
     static let bridgeUserScript = ThingtimeBridgeScript.script
 
-    final class Coordinator: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
+    final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler {
         weak var webView: WKWebView?
         var loadedRootURL: URL?
         private let lopuVoice = LopuVoiceSessionController()
@@ -87,6 +88,19 @@ struct WebView: UIViewRepresentable {
             lopuVoice.sendToWeb = { [weak self] type, payload in
                 self?.sendToWeb(type: type, payload: payload)
             }
+        }
+
+        // OAuth consent must run in the system browser. Explicit new-window web
+        // links retain this app's signed-in page for the session-bound completion.
+        func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration,
+                     for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
+            guard navigationAction.targetFrame == nil,
+                  navigationAction.navigationType == .linkActivated,
+                  let target = navigationAction.request.url,
+                  ["https", "http"].contains(target.scheme?.lowercased() ?? ""),
+                  target.user == nil, target.password == nil else { return nil }
+            UIApplication.shared.open(target)
+            return nil
         }
 
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {

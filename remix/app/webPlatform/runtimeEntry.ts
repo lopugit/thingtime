@@ -1,3 +1,4 @@
+import { bindMediaPipeline } from './liveMediaPipeline';
 import { readCSSProbe } from './cssProbe';
 import { SVG_FILTER_TAGS, SVG_FILTER_LIMITS } from './svgFilterSupport';
 import { compilePlatformProgram, validatePlatformProgram } from './compiler';
@@ -118,6 +119,24 @@ addEventListener('message', (event) => {
 			const a = event.target instanceof Element ? closestElement.call(event.target, 'a') : null;
 			if (a && !a.getAttribute('href')?.startsWith('#')) event.preventDefault();
 		});
+		if (program.media) unbind.push(bindMediaPipeline(root, program.media, input, send, file => {
+			if (domState.active) parent.postMessage({ type: 'tt-platform-file', runId, file }, '*');
+		}, {
+			send: message => parent.postMessage({ ...(message as object), runId }, '*'),
+			subscribe: receive => {
+				const listener = (event: MessageEvent) => {
+					if (domState.active && event.source === parent && event.data?.type === 'tt-platform-media-result' && event.data.runId === runId)
+						receive(event.data.requestId, event.data.result);
+				};
+				addEventListener('message', listener);
+				return () => removeEventListener('message', listener);
+			}
+		}));
+		if (program.media) {
+			const resize = new ResizeObserver(() => parent.postMessage({type: 'tt-platform-layout', runId, height: Math.ceil(root.getBoundingClientRect().height + 40)}, '*'));
+			resize.observe(root);
+			unbind.push(() => resize.disconnect());
+		}
 		const events = { used: 0 };
 		const commandState: { sequence: number; result?: { ok: boolean; value: unknown } } = { sequence: 0 };
 		const observed: (ReturnType<typeof platformEventReceipt> & { label?: string; defaultPreventedAfterDispatch?: boolean })[] = [];

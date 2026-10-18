@@ -116,3 +116,19 @@ browser acceptance also checks reload and repeated search through the renderer.
 expanded transfer dialog without changing the ordinary library defaults.
 Popup menus use the shared transfer layer constants; keyboard copy/cut/paste
 only intercepts events inside the browser and leaves editable inputs alone.
+
+
+## Incoming mail
+
+See [incoming-mail.md](incoming-mail.md) for Email settings, IMAP/POP3, private cloud storage, the paired local connector, offline reading and proxy inbox views.
+
+## Settings sections
+
+`SettingsSection.tsx` is the shared, initially collapsed disclosure card for
+personal settings (page and popup) and admin configuration. It keeps children
+mounted, exposes a title/description/summary, and opens enclosing cards for
+fragment links. `SettingRow` gives labels a readable wrapping basis before
+controls move to the next line. Admin categories live in `adminRoutesCore.ts`:
+AI Providers, Lopu, Platform, and Access & limits replace System; legacy System
+links resolve to AI Providers or to Lopu for Lopu anchors. Browser regression:
+`/scripts/settings-sections.browser.html`; route coverage: `test:admin-integrations`.

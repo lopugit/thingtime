@@ -1006,6 +1006,34 @@ test('GPT-5.6 Sol Responses preserves High/Fast, tool IDs, encrypted reasoning, 
   assert.doesNotMatch(JSON.stringify({ events, outcome }), /opaque-reasoning|reasoning_one|cGl4ZWxz|cGRm/);
 });
 
+for (const effort of [null, 'high', 'max'] as const) {
+  test(`Astra ${effort ?? 'provider-default'} uses Responses and completes a tool round trip without weakening reasoning`, async () => {
+    const call = responseFunction('astra_tool', 'get_thing');
+    const reasoning = { type: 'reasoning', id: 'astra_reasoning', summary: [], encrypted_content: 'private-astra-reasoning' };
+    openAiPlans.push({ status: 400 }); // Chat Completions rejects Astra's native tool contract.
+    responsesPlans.push(
+      { events: [...responseCallEvents(call), responseTerminal([reasoning, call])] },
+      { events: responseTextEvents('ASTRA_OK') }
+    );
+    const { events, outcome } = await collect(turn('Astra check', `gpt-6-astra${effort ? `:${effort}` : ''}`));
+    assert.equal(meta(events).model, 'gpt-6-astra');
+    assert.equal(outcome.text, 'ASTRA_OK');
+    assert.equal(openAiRequests.length, 0);
+    assert.equal(responsesRequests.length, 2);
+    assert.equal(toolCalls.length, 1);
+    for (const { body } of responsesRequests) {
+      assert.equal(body.model, 'gpt-6-astra');
+      assert.deepEqual(body.reasoning, effort ? { effort } : undefined);
+      assert.equal(body.store, false);
+      assert.equal(body.temperature, undefined);
+      assert.equal(body.reasoning_effort, undefined);
+    }
+    assert.ok(responsesRequests[1].body.input.some((item: any) => item.type === 'function_call_output' && item.call_id === 'astra_tool'));
+    assert.deepEqual(responsesRequests[1].body.input.find((item: any) => item.type === 'reasoning'), reasoning);
+    assert.doesNotMatch(JSON.stringify({ events, outcome }), /private-astra-reasoning/);
+  });
+}
+
 test('GPT-5.6 Sol Responses continues a note received after a plain reply', async () => {
   responsesPlans.push({ events: responseTextEvents('First.') }, { events: responseTextEvents('Noted.') });
   let reads = 0;

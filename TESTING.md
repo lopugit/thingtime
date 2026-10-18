@@ -1,5 +1,34 @@
 # TESTING.md — per-area manual test checklists
 
+## Reusable local video compression
+
+- [ ] Install `media-tools` as the intended account; inspect the returned owned
+      Page, Component and Action. An origin with suite capability 1.3.0 refuses
+      this install before mutation; 1.4.0 accepts it.
+- [ ] Run the isolated browser flow documented in README: actual WebCodecs
+      conversion, MP4 H.264/AAC, WebM VP9/Opus and explicit audio removal. Compare
+      downloaded bytes, codecs, dimensions, duration and tracks using ffprobe.
+- [ ] The opaque preview frame still has no same-origin permission. Its fixed
+      secure-host worker can encode and has a network-denying response CSP.
+      An iframe-local worker must not regress into a false unsupported browser.
+- [ ] Invalid files and unsupported codecs show a useful error and clear old
+      downloads. Cancel, Stop / clear, replacing the selected file and replacing
+      a run terminate work; delayed worker output never recreates a download.
+- [ ] Change settings and document labels/styles; save an edited Component,
+      reopen it through Builder and run it with those saved defaults. Reloading
+      never retains local selected video bytes. Check access as the owner.
+- [ ] On the intended deployed origin, encode a synthetic local clip, preview
+      it and download it. Compare the result with the independent source.
+- [ ] At desktop and 390px widths scroll the complete page and preview; open
+      the JSON editor and saved Component controls. No clipping, overlap or
+      horizontal overflow, including progress, errors, video and download.
+- [ ] Shared documentation examples still validate through saved-Thing grammar
+      after adding guide sections; locate examples by section ID, not position.
+- [ ] Lopu's default and custom base prompt paths retain framework-discovery
+      guidance for `/docs/builder`, components, demos and Action inspection.
+      Missing tools or short Action budgets never imply encoding is impossible.
+
+
 ## History timeline design concept (`docs/design/thingtime-history-timeline/`, `/docs/design`)
 
 Fictional-data design concept for unified Thing history (TODO 56). Nothing is
@@ -5520,7 +5549,8 @@ clientId>` (tt:all, other apps, other users, exclusions) 400s; an
 - [ ] `/admin` renders the 🔐 gate card for anonymous/non-admin visitors and
       the dashboard for admins; `/admin/users`, `/admin/apps`,
       `/admin/moderation`, `/admin/tiers`, `/admin/ci-control`,
-      `/admin/external-integrations`, and `/admin/system` each open the exact
+      `/admin/external-integrations`, `/admin/ai-providers`, `/admin/lopu`,
+      `/admin/platform`, and `/admin/access` each open the exact
       matching tab, remain correct through refresh/back/forward, and an unknown
       admin section safely returns to `/admin`. The drawer's Account section
       shows the 🛠️ Admin item only for admins.
@@ -7871,6 +7901,8 @@ a label. Browse cards and `/things` tiles are LINKS, never armed controls.
       it, which costs a reviewer real time.
 ## Lopu AI assistant (`/lopu`, floating launcher, `remix/app/components/Lopu/`, `/api/v1/lopu/chats*`, `/api/v1/ai/models`)
 
+- [ ] GPT-6 Astra: choose provider-default, High and Max reasoning; only Low/Medium/High/Extra high/Max are offered, never None/Minimal/Ultra. On an authorized deployment, verify a plain reply and a harmless read-only tool round trip, keeping the selected model and effort. Native calls must use Responses with `store:false`; encrypted reasoning stays server-side and failed requests never retry with weaker reasoning. Reload to confirm saved model choices and terminal replies. Public catalogue 1.5.1 and reply 1.19.3 must agree in both manifests.
+
 - [ ] Action discovery: inspect an owned server/browser Action in Ask mode;
       no confirmation or run is created. Check enum choices, required fields,
       numeric bounds, reference hints and oversized JSON defaults. Candidate
@@ -8016,7 +8048,7 @@ Design note: `PRs/592-claude-lopu-ai-chatbot-358029--lopu-ai-assistant.md`. Auto
 `TT_VERIFY_ADMIN_PASSWORD` for the admin section).
 
 - Catalog: `GET /api/v1/ai/models` is public, `Cache-Control: no-store`, lists
-  every `AI_WORKFLOW_BASE_MODELS` entry as an `ai-model` Thing projection
+  only available enabled compatible `ai-model` Thing projections (including discovered versions)
   (`enabled`, `available = enabled && provider key configured && not
   rejected`, `verified`, `isDefault`); `providers.<p>` carries
   `{ configured, verified, checkedAt, reason? }` from the bounded key probe
@@ -8024,9 +8056,8 @@ Design note: `PRs/592-claude-lopu-ai-chatbot-358029--lopu-ai-assistant.md`. Auto
   generic `/api/v1/things` paths refuse to create/update/delete `ai-model`
   rows (protected, control plane).
 - Provider keys (`api/utils/ai/providerProbe.ts`): with a wrong
-  `OPENAI_API_KEY` (any string) the catalog lists every OpenAI model
-  `available: false, verified: false`, the picker shows them disabled with
-  "OpenAI key invalid", `defaults.model` falls to the first Anthropic model
+  `OPENAI_API_KEY` (any string) the public catalog omits OpenAI models; admin retains them with
+  `available: false, verified: false`, `defaults.model` falls to the first Anthropic model
   and an explicit per-turn pick of one is a 400 naming the rejected key; with
   the provider unreachable (`OPENAI_BASE_URL` pointing at a closed port) they
   stay offered with `verified: null` and the admin row reads "? key
@@ -9906,6 +9937,12 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
 
 ## Password manager and native AutoFill
 
+- Password archive regression: in React StrictMode, open an imported entry and
+  verify related source documents/icons populate after effects replay. Export,
+  reimport, and verify the remapped source entry still owns byte-identical files;
+  edited values, removed fields, category changes, and password history survive.
+  Original metadata and raw source members stay intact independently of edits.
+
 - [ ] On desktop and 390px, add two entries for one website, edit/reorder custom
   fields, mask/reveal, close/reopen and delete one without changing the other.
   The heading clears the fixed navigation and device safe area.
@@ -9916,9 +9953,17 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
   Invalid images, oversized images, HOTP and FIDO handoff codes fail clearly.
 - [ ] Preview/import 1Password 1PUX/CSV, Chrome CSV and Apple CSV; test quoted,
   multiline and whitespace-sensitive passwords, Unicode, custom fields, TOTP,
-  cancellation, malformed ZIP and bounded expansion. Export acknowledgement
+  cancellation, malformed ZIP, CRC failures, and bounded working memory. Export acknowledgement
   is required; 1PUX re-import preserves complete ordered Thingtime entries.
-  More than 2,000 accounts export as numbered parts that all import successfully.
+  More than 2,000 accounts and archives over 20 MiB must import without a cap.
+- [ ] Import a 1PUX matrix containing every category and field type, multiple
+  accounts/vaults, attrs after items, archived/favourite flags, nested tags,
+  password history, documents, icons, linked IDs and unknown JSON/ZIP members.
+  Compare source member bytes and edited field values after export/re-import.
+  Empty and multi-part encrypted files download exactly; corrupted, truncated,
+  reordered and wrong-key frames fail. Generic attachment routes must refuse
+  password files, even for the owner. Test failed-save retry and file retry,
+  other-owner denial, private-upload permission, deletion races and recovery.
 - [ ] Use the HTTP fixture with two owners: session unlock, other-owner denial,
   account-switch fence, same-origin proxy handling, no-store, exact retry,
   stale revision, delete tombstones, password recovery and immediate revocation.
@@ -9956,3 +10001,184 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
   read the removed session; no legacy Keychain access prompt should appear.
 
 - Password vault routes reject request-scoped internal Action actors for every operation, even if the internal request carries an Authorization header. A full browser session is required directly; internal account authority cannot substitute for it.
+
+
+## Daily provider model availability (2026-10-17)
+
+- [ ] Admin provider checkboxes persist after reload; Allow all current models
+  updates every existing compatible row, while Auto-allow new models affects
+  future discoveries only. Individually disabled rows stay disabled after sync.
+- [ ] Desktop and 390px admin layouts: checkboxes are labeled, wrap inside the
+  provider card, and disable while a save/sync is pending. Failed saves roll back.
+- [ ] A complete paginated list adds compatible new versions and hides absent
+  models from public Lopu/shared waterfall selectors. Admin keeps retired rows.
+  An explicitly selected retired model fails without a substituted/replayed turn.
+- [ ] Empty/malformed/oversized lists, authentication failures, generic 404s,
+  quota failures and partial pagination do not erase prior availability. Cold
+  database failure does not re-enable all models. Test first-sync-before-seed.
+- [ ] Concurrent processes honor the Mongo lease and cooldown; publication is
+  atomic and an expired worker cannot overwrite a newer snapshot. A concurrent
+  admin policy edit is re-read on transaction retry. Run against a replica set.
+- [ ] Cron rejects missing/wrong credentials and HEAD/POST; response is no-store.
+  Admin manual sync rejects non-admins and is rate-limited. Daily production
+  execution requires CRON_SECRET and credential scopes (README setup).
+- [ ] Model-not-found in shared chat/musing/waterfall requests refreshes only
+  that provider; personal vault errors never mutate the shared catalogue.
+  Failed discovery is reported, with no raw credential/provider error leakage.
+
+Automated regressions: `modelSync.test.ts`, `models.test.ts`,
+`models.route.test.ts`, `vercel-config.test.mjs`; existing Lopu streaming and
+model-selection suites cover the consuming surfaces. Live provider calls remain
+separate from deterministic discovery/lease tests.
+
+- Anthropic catalogue discovery: a dedicated ANTHROPIC_MODELS_API_KEY takes precedence over the legacy API key; neither reaches inference. A 401/403 shows a redacted credential hint and preserves prior availability. Raw provider bodies and credentials never enter sync reports.
+
+## Incoming mail
+
+- [ ] Add more than one account in Settings → Email; configure IMAP, POP3 and both, TLS and required STARTTLS. Reload and edit without echoing saved passwords.
+- [ ] Toggle Cloud and Local independently, including both off. Cloud-off sync refuses on the server; local-only credentials never enter a Thingtime API request. Enabling cloud on a previously local account creates the remote revision correctly.
+- [ ] Connect the local connector with the exact origin/token. Refuse an unrelated origin, wrong token, private/reserved DNS answer, invalid certificate and plaintext downgrade. Test slow/disconnected providers without losing the cached inbox.
+- [ ] Discover folders, page older mail, and compare rendered sender, subject and body with the fixture/provider. Verify POP3 UIDL identity and dot unstuffing, IMAP UIDVALIDITY changes, and no DELE/STORE/MOVE/EXPUNGE commands.
+- [ ] `/mail` and `/email` show all accounts, All inboxes and individual folders. Create a proxy from at least two different accounts; editing/removing it leaves all source folders/messages unchanged.
+- [ ] Read previously synced mail offline. Reload with the app shell already available, navigate to a message, search cached text and confirm the offline copy survives. Large messages are visibly partial; HTML/scripts/tracking pixels do not execute or load.
+- [ ] Switch/logout during load, save and sync. No previous user's mail flashes in the next account. A changed remote hostname/username never reuses an old local password. A stale browser tab cannot overwrite newer encrypted device records.
+- [ ] Retry an uncertain save with the same id/writeId and payload; changed payload and stale revision refuse. Remove the account during sync: old completion cannot recreate its children. Verify generic Thing search/read/share and foreign-folder references refuse private mail.
+- [ ] Inspect account form, checkbox groups, proxy selection, long subjects and open message on desktop and 375 px mobile; scroll to the bottom with no horizontal overflow, clipping or hidden controls.
+
+- [ ] Local mail sync passes the real browser CSP in both dev and production policy; only the fixed connector HTTP origin is allowed. Verify after a fresh document navigation, since a cached document can retain its previous CSP.
+
+## Collapsible settings cards (2026-10-17)
+
+- [ ] At desktop and 390px, visit every personal Settings category in both the
+      full page and popup. Sections start collapsed with a title, description,
+      and available status. Expand/collapse using pointer, Enter, and Space;
+      controls stay reachable and an unsaved field survives closing/reopening.
+- [ ] Admin AI Providers, Lopu, Platform, and Access & limits contain the former
+      System controls in the matching category. Verify reload, Back, and legacy
+      `/admin/system#secure-vault` and `/admin/system#lopu-accounts` links.
+      Anonymous and non-admin visitors still see the access gate.
+- [ ] Deep-linked sections (`#secure-vault`, `#lopu-instructions`,
+      `#lopu-credits`, `#gift-invites`) open their enclosing cards automatically.
+      Unrelated sections remain collapsed. A card can still be closed afterward.
+- [ ] Expand long labels, hints, endpoint names, model descriptions and wide
+      controls at 390px and in the settings popup. Text must retain readable
+      width, controls wrap below it, and there is no horizontal page overflow.
+- [ ] Run `/scripts/settings-sections.browser.html` on local Vite: the regression
+      uses real card/row components with synthetic fields to check initial state,
+      draft preservation, nested deep links and narrow layout. It performs no
+      API writes and does not prove authenticated server mutation behavior.
+
+## Automatic iOS TestFlight and vault delivery
+
+- [ ] Run `test:ios-release`, both capability suites and `server/utils/apiFallback.test.ts`.
+  Reject foreign repo/owner/workflow/source, PR/develop/tag events, stale/replayed
+  tokens, previews, disabled policy, oversized payloads and arbitrary environment
+  keys before disclosure; confirm all responses are private/no-store and audit
+  failures return no secrets. The release request must never follow API fallback.
+- [ ] Migrate a disposable bundle through the real admin/API flow; repeat with a
+  different bundle and verify the existing value is preserved. Ordinary admin
+  lists contain metadata only; revealing a selected item requires fresh verification.
+- [ ] Run the Python package and Ruby version-allocation regressions. A missing
+  widget executable, mismatched App Group or phone/Watch/widget build number must
+  stop publishing before upload. Inspect signed entitlements on both archive and IPA.
+- [ ] After approved rollout, verify a native main push triggers the workflow,
+  web-only pushes do not, and feature-branch manual dispatch cannot publish.
+  Check exact App Store Connect build, internal tester availability and the real
+  iPhone Home/Lock Screen widget pickers before claiming device delivery.
+
+
+### Native mail and API relay
+
+- In Email settings, verify existing accounts retain connector mode; new desktop
+  accounts offer direct app sync and new browser/iOS accounts offer API relay.
+  Change modes and reopen the editor; cloud storage and device sync stay independent.
+- Relay without a connector: keep cloud storage off, select API relay, sync IMAP
+  and POP3, reload, read cached mail, and combine folders in a proxy inbox. Confirm
+  the API receives the password only on explicit sync, never settings storage.
+- Refuse cross-origin, wrong-owner, anonymous, scoped/service, oversized, disabled
+  or non-relay requests; rate-limit before dialing; revoked sessions suppress
+  the reply. No provider exception, password or message body appears in logs.
+- Direct desktop sync uses the bundled provider, without a localhost helper.
+  Verify top-level origin isolation, cancellation, navigation and two-request
+  concurrency; failures never fall back to the API or reveal provider errors.
+- Private desktop API proxy accepts only its pinned HTTPS endpoint and same-origin
+  loopback caller. Ordinary web deployments must refuse fallback without reading
+  or forwarding credentials. Exercise both `/mail` and `/mail/sync` boundaries.
+- Build/install the signed desktop app and iOS simulator. In the iOS drawer,
+  Mail opens the selected deployment; relay uses that session and saves the device
+  cache. Do not claim direct iOS sockets, background sync or Watch mail support.
+- Add/Edit account opens its form immediately, even though settings groups default
+  to collapsed; collapsing and reopening preserves unsaved edits.
+- Check the connection selector and explanatory text at desktop and narrow mobile
+  sizes; credentials are masked and the buttons remain reachable.
+
+
+## Gmail Google authorization
+
+- [ ] In Email settings, start Google consent without an app password. On web,
+  desktop and iOS, confirm Google opens outside embedded WebViews, then return
+  and confirm the exact selected Gmail address. The Thingtime account stays the
+  same; cancel/denial never adds an account.
+- [ ] Exercise duplicate callback/finish, wrong session/origin, account switch,
+  logout, expiry and cancellation during token exchange. Only the initiating
+  live full session can finish. An uncertain finish retry creates one account.
+- [ ] Confirm plaintext Google tokens never appear in account responses, device
+  storage, provider errors or callback HTML. Removing an account erases its saved
+  grant; disabling cloud message storage preserves authorization explicitly.
+- [ ] With device-only Gmail, sync folders/messages, reload and read offline,
+  then create a device proxy inbox. No cloud message/folder documents are written.
+  With cloud enabled, verify encrypted accounted persistence and sync/delete CAS.
+- [ ] Sync a real Google account, verify token refresh, revoked consent, denied
+  scope, labels, paging and large partial messages. Synthetic transport tests
+  alone do not establish consent-screen configuration or production verification.
+- [ ] At desktop and 390px, verify Google controls, confirmation address, errors,
+  storage disclosure and Gmail editor without password/server fields; no clipping
+  or horizontal overflow. Existing IMAP/POP3 forms and transports still work.
+- [ ] Configure separate exact development/production origins in the admin vault.
+  Missing/unlisted origin or rotated client ID fails closed without fallback.
+
+- [ ] Gmail read/unread, archive, label create/rename/apply/remove, Trash and restore
+  update both the provider and the correct cached folder copies. A concurrent
+  sync cannot restore stale state after a mutation; account removal cannot revive
+  cached rows. Unsupported permanent deletion and system-label edits refuse.
+- [ ] Compose To/Cc/Bcc, Unicode subject and text; reject header injection and
+  malformed recipients. Autosave survives reload encrypted and owner-scoped.
+  Save/reopen Google drafts and refuse stale Google draft IDs, unsupported rich
+  formatting/attachments and conflicting device edits without losing content.
+- [ ] Review sender and all recipients before explicit Send. Repeated writeIds
+  never resend; changed payloads with a reused key refuse. Simulate a lost response,
+  process interruption and provider failure after dispatch: show uncertainty and
+  require checking Gmail, without automatically creating/sending another copy.
+  Known failures before dispatch leave the composer editable. Use synthetic
+  transport for sending unless the user authorizes specific real recipients.
+
+
+### Claude public catalogue and workflow save regression — 2026-10-18
+
+- With no Anthropic API key and no inference credentials, run admin sync or the
+  authenticated cron. Compare new Claude IDs and lifecycle states with Anthropic's
+  public model status table. Verify public provenance, unknown account access,
+  preserved admission toggles, and no retirement based only on an omitted ID.
+- Exercise denied API catalogue access, malformed/empty public docs, network
+  failure and explicit retired rows. Failures retain the last good catalogue.
+- Enable a newly discovered compatible model, open AI workflow model order, and
+  verify it appears without editing the compiled base list. Disabled models stay
+  absent; conservative unknown effort/speed/pricing remain unknown/default-only.
+- Save & apply a named order, reload, and independently GET the shared order.
+  Verify the same ordered IDs persist without pressing Save model order. Force
+  the shared-settings save to fail: dialog stays open, error is visible, retry
+  updates the saved template without duplication. Cancel and Save waterfall do
+  not apply shared settings; Apply waterfall stages edits as before.
+- On desktop and 390px mobile, scroll the admin page and expanded dialog fully;
+  inspect model menus, long source labels, errors, and all footer controls.
+
+- Before isolated compiled-server acceptance, supply a local JWT secret and Mongo replica set; assert responses have no `x-thingtime-api-fallback` header before creating fixtures or changing settings.
+
+## Local API fallback safety and incident cleanup (2026-10-18)
+
+- [ ] Run `test:root-data`, `test:migrations`, `test:api-capabilities`, and the seed-fixture script tests.
+- [ ] Build Nitro with `NITRO_PRESET=node-server npm --prefix remix run build:server`; run `node remix/scripts/local-api-isolation-smoke.mjs`. Require enforced OS denial for direct IP and redirected outbound traffic before launching either server. Verify both Nitro and Vite reject registration/write/root-data requests with 503, no cookies and no fallback headers. Do not use personal credentials or production Mongo configuration.
+- [ ] On the deployed admin UI, dry-run only `cleanup-accidental-catalog-account-2026-10-18`; verify exact incident identity and idle-account counts before confirming. Check the account is absent afterward, neighboring users remain, and a second dry-run reports zero. Retain delivery/audit records.
+- [ ] Missing/invalid fallback origins, normal web servers, and NODE_ENV=test must never proxy; explicit installed-desktop HTTPS bridges retain database preconditions.
+
+- OpenAI vault import: anonymous/non-admin and cross-origin requests must fail; missing server key must create nothing. Import from AI Providers, verify the redacted OpenAI entry named `OPENAI_THINGTIME_API_KEY`, reload, retry and confirm one unchanged entry. No secret may appear in browser responses. Existing chat and credential order must remain intact.

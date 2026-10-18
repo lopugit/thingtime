@@ -1,6 +1,6 @@
 // Data-only, bounded presentation mods. Values never select executable code.
-export type ThingFieldType = 'text' | 'password' | 'url' | 'email' | 'notes' | 'totp';
-export type ThingFieldMod = { id: string; label: string; type: ThingFieldType };
+export type ThingFieldType = import('~/passwords/model').FieldType;
+export type ThingFieldMod = { id: string; label: string; type: ThingFieldType; section?: string; concealed?: boolean; multiline?: boolean };
 export type ThingMods = { layout: 'fields'; fields: ThingFieldMod[]; sortable?: boolean; removable?: boolean; revealSecrets?: boolean };
 export function moveThingField<T>(fields: readonly T[], index: number, delta: number): T[] {
   const next = [...fields], target = index + delta;

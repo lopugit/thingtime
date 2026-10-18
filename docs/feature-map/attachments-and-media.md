@@ -110,3 +110,26 @@ private draft API, editor recovery, account isolation and independent media copi
 `ComponentUpload.tsx` commits selected bytes through `componentUploadCommit.ts`: a valid private text Post and a non-reserved retry ID hold the upload. `copyStoredAttachment.ts` also supports owner-private `file` copies for Lopu's `save_attachment` in `chatTools.ts`. It reads an authorized pinned source version, reserves quota, copies bytes and uses normal moderation/finalization. The returned file ID and content URL can be used as Thing properties; `managedPlacement.ts` files it in an owned folder. Request replay returns the existing file. Rollback only claims unfinished private uploads, so concurrent retries cannot delete a committed file. Shared/public copy revocation still removes its draft.
 
 Run `test:attachments`, `test:components`, `test:lopu` and the isolated real-byte `scripts/verify-schema-files.ts` acceptance flow. See the public-schema/upload/Lopu checklist in `TESTING.md`.
+
+## Password-vault attachments
+
+`api/utils/passwords/files.ts` uses an internal `passwordVault` adapter to the
+canonical multipart service. The immutable password purpose is refused by normal
+attachment routes. Content is browser-encrypted; the per-file key and real name
+are wrapped by the account vault on the protected attachment root. Only a saved,
+owned password entry may bind the file; deletion and expiry keep existing
+exact-version cleanup and accounting. Ciphertext skips external moderation.
+
+## Local media processing in reusable Components
+
+`app/webPlatform/mediaPipeline.ts` validates the saved `program.media` contract.
+`liveMediaPipeline.ts` binds declarative controls inside the opaque frame;
+`hostMediaPipeline.ts` fences requests and owns a terminable secure-context
+`mediaWorker.ts`. Mediabunny/WebCodecs decode, scale, encode and mux a selected
+local Blob. `mediaOutput.ts` handles random-access mux writes; `mediaExport.ts`
+validates the host download. No attachment upload or remote fetch is involved.
+`schemas/appSuites/mediaTools.ts` composes ordinary saved Page/Component/Action
+Things, with the existing save-draft Action preserving settings as data.
+Canonical docs and Lopu discovery guidance live in `docs/builderGuide.ts`.
+Run `test:web-platform`, `test:api-capabilities`, `test:vercel-config` and the
+isolated real-browser flow in README; see TESTING's local video checklist.

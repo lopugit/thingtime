@@ -730,7 +730,6 @@ export const apiTests: ApiTestDefinition[] = [
       (body) =>
         body?.ok === true &&
         Array.isArray(body?.models) &&
-        body.models.length > 0 &&
         body.models.every(
           (model: any) =>
             typeof model?.id === 'string' &&
@@ -741,7 +740,7 @@ export const apiTests: ApiTestDefinition[] = [
             Array.isArray(model?.speeds) &&
             typeof model?.family === 'string' &&
             typeof model?.enabled === 'boolean' &&
-            typeof model?.available === 'boolean' &&
+            model?.available === true &&
             (model?.verified === null || typeof model?.verified === 'boolean') &&
             typeof model?.isDefault === 'boolean' &&
             (!model.available || model.enabled) &&

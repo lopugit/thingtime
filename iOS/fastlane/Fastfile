@@ -3,6 +3,9 @@ require "fileutils"
 require "plist"
 require "shellwords"
 require "tempfile"
+require "tmpdir"
+require "yaml"
+require_relative "lib/release_version"
 
 ENV["FASTLANE_XCODEBUILD_SETTINGS_TIMEOUT"] ||= "60"
 
@@ -108,6 +111,8 @@ def xcodebuild_xcargs
     args << api_key_xcargs
   end
   args << "DEVELOPMENT_TEAM=#{ENV.fetch('DEVELOPMENT_TEAM')}"
+  args << "THINGTIME_IOS_BUNDLE_IDENTIFIER=#{Shellwords.escape(ENV.fetch('PRODUCT_BUNDLE_IDENTIFIER'))}"
+  args << "THINGTIME_WATCH_BUNDLE_IDENTIFIER=#{Shellwords.escape(ENV.fetch('WATCH_BUNDLE_IDENTIFIER'))}"
   args << thingtime_web_url_xcarg
   args.join(" ")
 end
@@ -137,6 +142,46 @@ def export_options(destination: "export")
 end
 
 platform :ios do
+  desc "Choose a monotonically increasing TestFlight build number"
+  lane :prepare_release do
+    app_store_api_key
+    app = Spaceship::ConnectAPI::App.find(ENV.fetch("PRODUCT_BUNDLE_IDENTIFIER"))
+    UI.user_error!("App Store Connect app not found") unless app
+    spec_path = File.expand_path("../project.yml", __dir__)
+    spec = YAML.load_file(spec_path)
+    builds = Spaceship::ConnectAPI::Build.all(app_id: app.id, platform: "IOS", limit: 100, sort: "-uploadedDate")
+    versions = builds.map(&:version) + [spec.fetch("settings").fetch("base").fetch("CURRENT_PROJECT_VERSION").to_s]
+    number = next_ios_release_number(versions)
+    spec["settings"]["base"]["CURRENT_PROJECT_VERSION"] = number
+    File.write(spec_path, YAML.dump(spec))
+    ENV["EXPECTED_BUILD_NUMBER"] = number
+    File.open(ENV.fetch("GITHUB_ENV"), "a") { |file| file.puts("EXPECTED_BUILD_NUMBER=#{number}") }
+    UI.message("Prepared TestFlight build #{number}")
+  end
+
+  desc "Wait for this exact build to become available to internal testers"
+  lane :verify_release do
+    app_store_api_key
+    app = Spaceship::ConnectAPI::App.find(ENV.fetch("PRODUCT_BUNDLE_IDENTIFIER"))
+    UI.user_error!("App Store Connect app not found") unless app
+    expected = ENV.fetch("EXPECTED_BUILD_NUMBER")
+    ready = false
+    30.times do
+      build = Spaceship::ConnectAPI::Build.all(app_id: app.id, platform: "IOS", build_number: expected, limit: 10).find { |candidate| candidate.version == expected }
+      if build
+        UI.user_error!("Apple rejected build #{expected}") if ["FAILED", "INVALID"].include?(build.processing_state)
+        detail = build.build_beta_detail
+        if build.processing_state == "VALID" && detail&.internal_build_state == "IN_BETA_TESTING"
+          UI.message("TESTFLIGHT_RELEASE_READY build=#{expected} internal=IN_BETA_TESTING")
+          ready = true
+          break
+        end
+      end
+      sleep 20
+    end
+    UI.user_error!("Build #{expected} is not yet available to internal testers. Check processing and automatic internal-group distribution in App Store Connect; do not assume upload failed.") unless ready
+  end
+
   desc "Generate the Xcode project from project.yml"
   lane :generate do
     sh("which xcodegen > /dev/null || (echo 'Installing xcodegen...' && brew install xcodegen)")
@@ -303,6 +348,14 @@ platform :ios do
     UI.user_error!("Xcode did not export #{options.fetch(:ipa_path)}") unless File.exist?(options.fetch(:ipa_path))
 
     archive_path = File.expand_path(File.join(OUTPUT_DIRECTORY, "Thingtime.xcarchive"))
+    if ENV["EXPECTED_BUILD_NUMBER"]
+      verifier = File.expand_path("../scripts/verify-release.py", __dir__)
+      sh("python3", verifier, File.join(archive_path, "Products/Applications/Thingtime.app"))
+      Dir.mktmpdir("thingtime-release-check") do |directory|
+        sh("ditto", "-x", "-k", options.fetch(:ipa_path), directory)
+        sh("python3", verifier, File.join(directory, "Payload/Thingtime.app"))
+      end
+    end
     Tempfile.create(["ThingtimeUploadOptions", ".plist"]) do |upload_options_file|
       upload_options_file.write(export_options(destination: "upload").to_plist)
       upload_options_file.flush

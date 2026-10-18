@@ -27,7 +27,8 @@
 		"verify:signed": "node scripts/verify-signed-app.mjs",
 		"verify:unsigned": "node scripts/verify-unsigned-app.mjs",
 		"verify:web": "node scripts/verify-web-build.mjs",
-		"build:passwords": "node scripts/build-native-passwords.mjs"
+		"build:passwords": "node scripts/build-native-passwords.mjs",
+		"build:mail": "node scripts/build-mail.mjs"
 	},
 	"build": {
 		"appId": "com.thingtime.desktop",
@@ -57,6 +58,13 @@
 			{
 				"from": "dist/ai",
 				"to": "ai",
+				"filter": [
+					"**/*"
+				]
+			},
+			{
+				"from": "dist/mail",
+				"to": "mail",
 				"filter": [
 					"**/*"
 				]

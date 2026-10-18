@@ -61,6 +61,17 @@ export const drawerMenuItems: DrawerTopItem[] = [
 		]
 	},
 	{
+		id: 'mail',
+		label: 'Mail',
+		icon: '✉️',
+		to: '/mail',
+		authOnly: true,
+		children: [
+			{ id: 'mail-inboxes', label: 'All inboxes', to: '/mail', authOnly: true },
+			{ id: 'mail-settings', label: 'Email settings', to: '/settings/email', authOnly: true }
+		]
+	},
+	{
 		id: 'connections',
 		label: 'Connections',
 		icon: '🔗',

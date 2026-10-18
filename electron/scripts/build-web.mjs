@@ -98,6 +98,7 @@ function runRemixScript(script, options = {}) {
 // Install it from that lockfile before the expensive web build, including in a
 // fresh worktree where MCP/node_modules is intentionally absent.
 run(npmCommand, ['ci', '--prefix', mcpDir, '--no-audit', '--no-fund']);
+run(process.execPath, [path.join(electronDir, 'scripts/build-mail.mjs')]);
 
 await rm(stagedWebDir, { force: true, recursive: true });
 await rm(stagedAiDir, { force: true, recursive: true });
