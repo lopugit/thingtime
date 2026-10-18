@@ -321,7 +321,8 @@ export const createAiModelsService = (dependencies: AiModelsServiceDependencies)
         'crystal.label': 1,
         'crystal.enabled': 1,
         'crystal.providerAvailable': 1,
-        'crystal.lastSyncedAt': 1
+        'crystal.lastSyncedAt': 1,
+        'crystal.publicCatalogAvailable': 1, 'crystal.catalogSource': 1, 'crystal.catalogCheckedAt': 1
       });
       for (const [modelId, doc] of docs) enabledById.set(modelId, doc.crystal);
     } catch (error) {
@@ -347,7 +348,10 @@ export const createAiModelsService = (dependencies: AiModelsServiceDependencies)
       const model = publicAiModel(entry, stored?.enabled !== false, providers);
       model.providerAvailable = typeof stored?.providerAvailable === 'boolean' ? stored.providerAvailable : null;
       model.lastSyncedAt = stored?.lastSyncedAt instanceof Date ? stored.lastSyncedAt.toISOString() : null;
-      model.available &&= model.providerAvailable !== false;
+      model.publicCatalogAvailable = typeof stored?.publicCatalogAvailable === 'boolean' ? stored.publicCatalogAvailable : null;
+      model.catalogSource = ['public-docs', 'authenticated'].includes(stored?.catalogSource) ? stored.catalogSource : null;
+      model.catalogCheckedAt = stored?.catalogCheckedAt instanceof Date ? stored.catalogCheckedAt.toISOString() : null;
+      model.available &&= model.providerAvailable !== false && model.publicCatalogAvailable !== false;
       return model;
     });
     const defaults = pickLopuChatDefaults(models, stored);
