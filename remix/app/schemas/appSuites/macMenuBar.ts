@@ -136,6 +136,8 @@ export const macMenuBarSuite: BehaviourSuite = {
 			description: 'Read-only owner-authenticated device snapshots. No commands run and no copy of the snapshot is saved.',
 			category: 'Devices',
 			runtime: 'browser',
+			// Device snapshots include bounded PNG icons and other native telemetry.
+			limits: { maxResultBytes: 8 * 1024 * 1024 },
 			inputs: [{ name: 'deviceId', type: 'string', label: 'Device ID', default: '' }],
 			steps: () => [
 				{
