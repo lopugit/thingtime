@@ -11,6 +11,7 @@ test('CLI compiles the saved order, keeps keys private, and detects modified hel
   const temp = join(dir,'temp'); mkdirSync(temp);
   const fixture = join(dir,'fixture.mjs');
   writeFileSync(fixture, `globalThis.fetch = async (url, options = {}) => {
+   if (String(url).includes('api.openai.com')) return new Response(JSON.stringify({error:{code:process.env.FIXTURE_ERROR_CODE,message:'secret-provider-message'}}),{status:429});
    let value;
    if (String(url).includes('capabilities')) value = {schemaVersion:1,origin:'https://example.test',features:{'api.integration-ci-credentials':{version:'1.1.1'},'api.settings-pr-conflict-auto-resolver-model-waterfall':{version:'1.1.0'}}};
    else if (String(url).includes('settings/')) value = {ok:true,key:'Thingtime.PRConflictAutoResolverModelWaterfall',waterfall:['gpt-6-astra:medium','claude-opus-5:high'],models:[{id:'gpt-6-astra',provider:'openai',efforts:['medium']},{id:'claude-opus-5',provider:'anthropic',efforts:['high']}]};
@@ -28,6 +29,14 @@ test('CLI compiles the saved order, keeps keys private, and detects modified hel
   assert.match(readFileSync(join(dir,'env'),'utf8'), /LOPU_OPENAI_TOKEN_1=sk-fixture-openai/);
   assert.equal(statSync(join(temp,'lopu-openai-vault.json')).mode & 0o777, 0o600);
   const calls = action.runs.steps.filter(s=>s.uses); assert.equal(calls[0].with.model,'gpt-6-astra');assert.equal(calls[0].with.effort,'medium');
+  for (const code of ['insufficient_quota', 'secret-provider-code']) {
+   const preflight = spawnSync(process.execPath,['--import',fixture,join(root,'lopu-model-waterfall.mjs'),'check'],{
+    env:{...env,ATTEMPT_INDEX:'0',LOPU_OPENAI_TOKEN_1:'sk-fixture-openai',FIXTURE_ERROR_CODE:code},encoding:'utf8'
+   });
+   assert.equal(preflight.status,0,preflight.stderr);
+   assert.match(preflight.stdout, new RegExp(`HTTP 429; code=${code==='insufficient_quota' ? code : 'unclassified'}`));
+   assert.doesNotMatch(preflight.stdout + preflight.stderr,/secret-provider|sk-fixture/);
+  }
   const finish = spawnSync(process.execPath,[join(root,'lopu-model-waterfall.mjs'),'finish'],{
     env:{...env,OUTCOMES:'["success","skipped"]',LOPU_OPENAI_TOKEN_1:'sk-fixture-openai'},encoding:'utf8'
   });
