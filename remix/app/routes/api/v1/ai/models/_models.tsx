@@ -1,3 +1,4 @@
+import { planSessionOwns } from '~/api/utils/ai/chatgptPlanAdmission';
 import { getChatGPTPlanRuntime } from '~/api/utils/ai/chatgptPlanRuntime';
 import { chatGPTPlanScope } from '~/api/utils/ai/chatgptPlanScope';
 import { json } from '~/api/http';
@@ -100,12 +101,13 @@ const handlers = createAiModelsHandlers({
     }),
   listPlanProviders: async (request, viewerId) => {
     const runtime = getChatGPTPlanRuntime();
-    if (!runtime) return [];
+    if (!runtime || !await planSessionOwns(request, viewerId)) return [];
     const { accounts } = await runtime.list(await chatGPTPlanScope(request, viewerId));
     return accounts.map((account) => ({
       id: account.id, name: `ChatGPT plan · ${account.label} · ${account.id.slice(-8)}`,
       kind: 'openai' as const, model: account.model, endpointHost: 'api.openai.com',
       available: account.connected && !!account.model,
+      ...(account.connected && !!account.model ? { planChatEligible: true as const } : {}),
       ...(!account.connected ? { reason: 'Reconnect this ChatGPT account in Settings.' } : !account.model ? { reason: 'Choose an available ChatGPT model in Settings.' } : {}),
       realtimeModels: []
     }));

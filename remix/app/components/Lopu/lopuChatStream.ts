@@ -86,7 +86,7 @@ export class LopuStreamError extends Error {
 export const postLopuReply = async (body: LopuReplyBody, options?: { signal?: AbortSignal }): Promise<Response> => {
 	{ // Includes Astra's Responses transport and the checkpoint-capable contract.
 		const { requireThingtimeCapability } = await import('~/api/utils/capabilities/requireCapability.client');
-		await requireThingtimeCapability('api.lopu-chats-reply', '1.20.0');
+		await requireThingtimeCapability('api.lopu-chats-reply', body.providerId?.startsWith('chatgpt-plan-') ? '1.21.0' : '1.20.0');
 	}
 	const started = performance.now();
 	let response: Response;

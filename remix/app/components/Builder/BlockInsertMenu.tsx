@@ -11,7 +11,8 @@ import {
 	defaultMediaBlock,
 	defaultTextBlock,
 	newBlockId,
-	type WebpageBlock
+	type WebpageBlock,
+ type WebpageBlockType
 } from './webpageBlocks';
 import type { ComponentThingLike } from './WebpageBlocksRenderer';
 
@@ -39,7 +40,11 @@ const QUICK_BLOCKS: Array<{ key: string; icon: string; label: string; make: (exi
 		label: 'Eyebrow',
 		make: (existing) => ({ id: newBlockId('eyebrow', existing), type: 'text', text: 'Thingtime · section', style: 'eyebrow' })
 	},
-	{ key: 'column', icon: '⬇️', label: 'Column', make: (existing) => defaultContainerBlock(existing, 'column') },
+ { key: 'input', icon: '⌨', label: 'Input', make: existing => ({ id: newBlockId('input', existing), type: 'element', tag: 'input', props: { name: 'value', placeholder: 'Enter a value' } }) },
+ { key: 'button', icon: '↗', label: 'Button', make: existing => ({ id: newBlockId('button', existing), type: 'element', tag: 'button', text: 'Button', props: { type: 'button' } }) },
+ { key: 'list', icon: '☷', label: 'Editable list', make: existing => ({ id: newBlockId('list', existing), type: 'collection', props: { itemsPath: 'result.items', size: 'all' }, children: [{ id: newBlockId('value', existing), type: 'element', tag: 'p', text: '{item.name}' }] }) },
+ { key: 'condition', icon: '?', label: 'Condition', make: existing => ({ id: newBlockId('condition', existing), type: 'condition', condition: { arg: 'result.ready' }, children: [] }) },
+ { key: 'column', icon: '⬇️', label: 'Column', make: (existing) => defaultContainerBlock(existing, 'column') },
 	{ key: 'row', icon: '➡️', label: 'Row', make: (existing) => defaultContainerBlock(existing, 'row') },
 	{ key: 'grid', icon: '🔲', label: 'Grid', make: (existing) => defaultContainerBlock(existing, 'grid') },
 	{ key: 'media', icon: '🖼', label: 'Media', make: (existing) => defaultMediaBlock(existing) },
@@ -48,12 +53,14 @@ const QUICK_BLOCKS: Array<{ key: string; icon: string; label: string; make: (exi
 ];
 
 export const BlockInsertMenu = (props: {
+	allowedBlockTypes?: readonly WebpageBlockType[];
 	anchor: HTMLElement;
 	existingIds: Set<string>;
 	onPick: (pick: InsertPick) => void;
 	onClose: () => void;
 }) => {
-	const { anchor, existingIds, onPick, onClose } = props;
+	const { anchor, existingIds, onPick, onClose, allowedBlockTypes } = props;
+ const allowed = (type: WebpageBlockType) => !allowedBlockTypes || allowedBlockTypes.includes(type);
 	const [query, setQuery] = React.useState('');
 	const [entries, setEntries] = React.useState<BrowseEntry[]>([]);
 	const [searching, setSearching] = React.useState(false);
@@ -106,6 +113,7 @@ export const BlockInsertMenu = (props: {
 
 	// debounced component search — empty query shows the newest catalog page
 	React.useEffect(() => {
+		if (!allowed('component')) { setEntries([]); return; }
 		let cancelled = false;
 		setSearching(true);
 		const timer = setTimeout(async () => {
@@ -125,7 +133,7 @@ export const BlockInsertMenu = (props: {
 			cancelled = true;
 			clearTimeout(timer);
 		};
-	}, [query]);
+	}, [query, allowedBlockTypes]);
 
 	return (
 		<>
@@ -166,7 +174,7 @@ export const BlockInsertMenu = (props: {
 				<Box width="44px" height="5px" borderRadius="999px" background="var(--tt-border, #ececef)" marginX="auto" marginBottom={3} />
 			) : null}
 			<Flex flexWrap="wrap" gap={1.5} marginBottom={2}>
-				{QUICK_BLOCKS.map((quick) => (
+				{QUICK_BLOCKS.filter(quick => allowed(({ heading:'text', eyebrow:'text', column:'container', row:'container', grid:'container', input:'element', button:'element', list:'collection', service:'html' } as Record<string, WebpageBlockType>)[quick.key] || quick.key as WebpageBlockType)).map((quick) => (
 					<Flex
 						key={quick.key}
 						as="button"
@@ -191,7 +199,7 @@ export const BlockInsertMenu = (props: {
 					</Flex>
 				))}
 			</Flex>
-			<Input
+			{allowed('component') && <Input
 				ref={inputRef}
 				value={query}
 				onChange={(event) => setQuery(event.target.value)}
@@ -201,13 +209,13 @@ export const BlockInsertMenu = (props: {
 				borderColor="var(--tt-border, #ececef)"
 				borderRadius="var(--tt-radius-sm, 9px)"
 				marginBottom={2}
-			/>
+			/>}
 			{searching && !entries.length ? (
 				<Text color="var(--tt-muted, #9a9aa6)" fontFamily="var(--tt-font-mono, ui-monospace, monospace)" fontSize="11px" paddingY={2}>
 					searching…
 				</Text>
 			) : null}
-			{!searching && !entries.length ? (
+			{allowed('component') && !searching && !entries.length ? (
 				<Text color="var(--tt-muted, #9a9aa6)" fontFamily="var(--tt-font-mono, ui-monospace, monospace)" fontSize="11px" paddingY={2}>
 					no components matched
 				</Text>

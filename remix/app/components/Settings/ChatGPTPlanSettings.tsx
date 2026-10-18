@@ -1,23 +1,14 @@
 import React from 'react';
-import {
-	Badge,
-	Box,
-	Button,
-	Flex,
-	Link,
-	Modal,
-	ModalBody,
-	ModalContent,
-	ModalFooter,
-	ModalHeader,
-	ModalOverlay,
-	Select,
-	Text
-} from '@chakra-ui/react';
+import { TransientBlockHost, type TransientBlockActions } from '~/components/Builder/TransientBlockHost';
+import { WebpageBlocksRenderer } from '~/components/Builder/WebpageBlocksRenderer';
+import { SettingsDocumentHost } from './SettingsDocumentHost';
+import { chatGPTPlanBlocks } from './chatGPTPlanBlocks';
 import { requireThingtimeCapability } from '~/api/utils/capabilities/requireCapability.client';
+import { useDataPlane } from '~/hooks/useDataPlane';
+import { EXPECTED_DATA_PLANE_HEADER } from '~/utils/dataPlane';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { useLopu } from '~/components/Lopu/useLopu';
-import { ChatGPTPlanTransfer } from './ChatGPTPlanTransfer';
+import { useChatGPTPlanTransfer } from './ChatGPTPlanTransfer';
 
 const ENDPOINT = '/api/v1/ai/chatgpt-plan';
 const USAGE = 'https://chatgpt.com/settings/usage';
@@ -30,12 +21,6 @@ type Pending = { id: string; url: string; expiresAt: number; status: 'pending' |
 // Only public account metadata is cached; authorization URLs and tokens never persist.
 const snapshots = new Map<string, Snapshot>();
 const acknowledged = new Set<string>();
-const fieldStyles = {
-	background: 'var(--tt-surface-alt, #f5f5f7)',
-	border: '1px solid var(--tt-border, #ececef)',
-	borderRadius: 'var(--tt-radius-sm, 9px)'
-} as const;
-
 function safeAuthorizationUrl(value: unknown): string {
 	if (typeof value !== 'string') throw new Error('Sign-in could not be prepared. Please try again.');
 	let url: URL;
@@ -65,31 +50,25 @@ function planFailure(status: number, code?: string) {
 
 export const ChatGPTPlanSettings = () => {
 	const user = useCurrentUser();
+	const dataPlane = useDataPlane();
 	const origin = typeof window === 'undefined' ? '' : window.location.origin;
-	const scope = user && !user.temporary && user.accountKind !== 'service' ? `${origin}:${user.id}` : '';
+	const scope = user && !user.temporary && user.accountKind !== 'service' ? `${origin}:${user.id}:${dataPlane || "unavailable"}` : '';
 	const currentScope = React.useRef(scope);
 	currentScope.current = scope;
 	return scope && user ? (
-		<ChatGPTPlanScope key={scope} ownerId={user.id} origin={origin} scope={scope} currentScope={currentScope} />
-	) : (
-		<Box borderTop="1px solid var(--tt-border, #ececef)" pt={4}>
-			<Text fontWeight={700} fontSize="sm">
-				ChatGPT plan
-			</Text>
-			<Text fontSize="sm" mt={2}>
-				Sign in to your personal Thingtime account to connect a ChatGPT plan.
-			</Text>
-		</Box>
-	);
+		<ChatGPTPlanScope key={scope} ownerId={user.id} dataPlane={dataPlane} origin={origin} scope={scope} currentScope={currentScope} />
+	) : <PlanDocument scopeKey={`${origin}:signed-out`} view={{ plan: { signedIn: false } }} actions={{}} />;
 };
 
 const ChatGPTPlanScope = ({
 	ownerId,
+	dataPlane,
 	origin,
 	scope,
 	currentScope
 }: {
 	ownerId: string;
+	dataPlane: string | null;
 	origin: string;
 	scope: string;
 	currentScope: React.MutableRefObject<string>;
@@ -119,7 +98,9 @@ const ChatGPTPlanScope = ({
 		setPending(value);
 	}, []);
 	const request = React.useCallback(
-		async (body?: Record<string, unknown>) => {
+		async (body?: Record<string, unknown>, signal?: AbortSignal) => {
+			signal?.throwIfAborted();
+			if (!dataPlane) throw new Error('The active database is still being verified. Please wait for the account to finish loading.');
 			const controller = new AbortController();
 			const started = generation.current;
 			requests.current.add(controller);
@@ -129,30 +110,30 @@ const ChatGPTPlanScope = ({
 				} catch {
 					throw new Error('This Thingtime origin does not support ChatGPT plan connections yet. Update it, then retry.');
 				}
-				if (!current() || controller.signal.aborted || started !== generation.current) throw new DOMException('Scope changed', 'AbortError');
+				if (!current() || controller.signal.aborted || signal?.aborted || started !== generation.current) throw new DOMException('Scope changed', 'AbortError');
 				capabilityReady.current = true;
 				const response = await fetch(`${origin}${ENDPOINT}`, {
 					method: body ? 'POST' : 'GET',
 					credentials: 'same-origin',
 					cache: 'no-store',
-					signal: AbortSignal.any([controller.signal, AbortSignal.timeout(20_000)]),
-					headers: { Accept: 'application/json', 'X-Thingtime-Expected-User': ownerId, ...(body ? { 'Content-Type': 'application/json' } : {}) },
+					signal: AbortSignal.any([controller.signal, AbortSignal.timeout(20_000), ...(signal ? [signal] : [])]),
+					headers: { Accept: 'application/json', 'X-Thingtime-Expected-User': ownerId, 'X-Thingtime-Expected-Actor': ownerId, ...(dataPlane ? { [EXPECTED_DATA_PLANE_HEADER]: dataPlane } : {}), ...(body ? { 'Content-Type': 'application/json' } : {}) },
 					...(body ? { body: JSON.stringify(body) } : {})
 				});
 				const data = await response.json().catch(() => null);
-				if (!current() || controller.signal.aborted || started !== generation.current) throw new DOMException('Scope changed', 'AbortError');
+				if (!current() || controller.signal.aborted || signal?.aborted || started !== generation.current) throw new DOMException('Scope changed', 'AbortError');
 				if (!response.ok || !data?.ok) throw new Error(planFailure(response.status, data?.code));
 				return data;
 			} finally {
 				requests.current.delete(controller);
 			}
 		},
-		[current, origin, ownerId]
+		[current, dataPlane, origin, ownerId]
 	);
 
-	const refresh = React.useCallback(async () => {
+	const refresh = React.useCallback(async (signal?: AbortSignal) => {
 		const sequence = ++readSequence.current;
-		const result = await request();
+		const result = await request(undefined, signal);
 		if (typeof result.available !== 'boolean' || !Array.isArray(result.accounts) || !Array.isArray(result.attempts))
 			throw new Error('ChatGPT connection status is unavailable. Please retry.');
 		const next: Snapshot = { available: result.available, accounts: result.accounts, attempts: result.attempts,
@@ -169,17 +150,17 @@ const ChatGPTPlanScope = ({
 	// cookie identity from exercising authority on the old account's attempt.
 	const cancelOnExit = React.useCallback(
 		(attemptId: string) => {
-			if (!capabilityReady.current || currentScope.current !== scope || window.location.origin !== origin) return;
+			if (!dataPlane || !capabilityReady.current || currentScope.current !== scope || window.location.origin !== origin) return;
 			void fetch(`${origin}${ENDPOINT}`, {
 				method: 'POST',
 				credentials: 'same-origin',
 				keepalive: true,
 				cache: 'no-store',
-				headers: { 'Content-Type': 'application/json', 'X-Thingtime-Expected-User': ownerId },
+				headers: { 'Content-Type': 'application/json', 'X-Thingtime-Expected-User': ownerId, 'X-Thingtime-Expected-Actor': ownerId, ...(dataPlane ? { [EXPECTED_DATA_PLANE_HEADER]: dataPlane } : {}) },
 				body: JSON.stringify({ action: 'cancel', attemptId })
 			}).catch(() => {});
 		},
-		[currentScope, origin, ownerId, scope]
+		[currentScope, dataPlane, origin, ownerId, scope]
 	);
 
 	const stopRequests = React.useCallback(() => {
@@ -252,14 +233,15 @@ const ChatGPTPlanScope = ({
 		};
 	}, [pending?.id, pending?.expiresAt, cancelOnExit, current, refresh, scope, updatePending]);
 
-	const run = async (body: Record<string, unknown>) => {
+	const run = async (body: Record<string, unknown>, signal: AbortSignal) => {
+		if (signal.aborted) return;
 		if (busyRef.current || !current()) return;
 		busyRef.current = true;
 		setBusy(true);
 		setError('');
 		readSequence.current++;
 		try {
-			const data = await request(body);
+			const data = await request(body, signal);
 			if (!current()) return;
 			if (body.action === 'begin') {
 				const id = data.result?.attemptId;
@@ -287,9 +269,9 @@ const ChatGPTPlanScope = ({
 				});
 			else if (body.action === 'select-model')
 				toast.current({ title: 'ChatGPT model saved', description: 'Choose this account in Lopu’s Your providers menu.', status: 'success' });
-			await refresh();
+			await refresh(signal);
 		} catch (failure) {
-			if (current()) {
+			if (current() && !signal.aborted) {
 				const message = failure instanceof Error ? failure.message : 'Please try again.';
 				setError(message);
 				toast.current({ title: 'ChatGPT connection unavailable', description: message, status: 'error' });
@@ -311,169 +293,57 @@ const ChatGPTPlanScope = ({
 		}
 		setWelcome(false);
 	};
-	const unavailable = snapshot?.available === false;
-	return (
-		<Box borderTop="1px solid var(--tt-border, #ececef)" pt={4} minW={0}>
-			<Flex align="center" justify="space-between" gap={2} flexWrap="wrap">
-				<Text as="h3" fontWeight={700} fontSize="sm">
-					ChatGPT plan
-				</Text>
-				<Link href={USAGE} target="_blank" rel="noopener noreferrer" fontSize="sm" textDecoration="underline">
-					Manage usage
-				</Link>
-			</Flex>
-			<Text fontSize="sm" mt={2} color="var(--tt-muted, #777783)">
-				Use your ChatGPT plan for eligible Lopu requests. Credentials stay in protected runtime storage, linked to your Thingtime account.
-			</Text>
-			<Text fontSize="xs" mt={2} color="var(--tt-muted, #777783)">
-				Choose a model below, then select the account in Lopu → Your providers. Plan limits apply; this connection never switches to API credits
-				automatically.
-			</Text>
-			{unavailable ? (
-				<Text role="status" fontSize="sm" mt={3}>
-					Enable the local API and database in Electron’s Desktop settings, or choose a configured self-hosted API. Complete initial ChatGPT sign-in on the runtime computer.
-				</Text>
-			) : null}
-			{snapshot?.available && !snapshot.canAuthorize ? <Text role="status" fontSize="sm" mt={3}>
-				This runtime accepts moved connections. Sign in through your local Electron runtime, then use “Move between runtimes” below.
-			</Text> : null}
-			{!snapshot && !error ? (
-				<Text role="status" fontSize="sm" mt={3}>
-					Checking ChatGPT connections…
-				</Text>
-			) : null}
-			{error ? (
-				<Flex align="center" flexWrap="wrap" gap={2} mt={3}>
-					<Text role="alert" fontSize="sm" flex="1" minW="160px">
-						{error}
-					</Text>
-					<Button
-						size="sm"
-						variant="outline"
-						isDisabled={busy}
-						onClick={() => {
-							void refresh().catch((failure) => {
-								if (current()) setError(failure instanceof Error ? failure.message : 'Please retry.');
-							});
-						}}
-					>
-						Retry
-					</Button>
-				</Flex>
-			) : null}
-			<Flex mt={3} gap={2} flexWrap="wrap" align="center">
-				<Button onClick={() => void run({ action: 'begin' })} isDisabled={busy || !snapshot?.available || !snapshot.canAuthorize || Boolean(pending)}>
-					Continue with ChatGPT
-				</Button>
-			</Flex>
-			{pending ? (
-				<Box mt={3} p={3} border="1px solid var(--tt-border, #ececef)" borderRadius="10px">
-					<Text role="status" fontSize="sm" mb={2}>
-						{pending.status === 'connecting' ? 'Verifying your ChatGPT account…' : 'Sign-in is ready. Continue in your browser, then return here.'}
-					</Text>
-					<Flex gap={2} flexWrap="wrap">
-						{pending.status === 'pending' ? (
-							<Button as="a" href={pending.url} target="_blank" rel="noopener noreferrer" referrerPolicy="no-referrer">
-								Continue with ChatGPT
-							</Button>
-						) : null}
-						<Button variant="ghost" isDisabled={busy} onClick={() => void run({ action: 'cancel', attemptId: pending.id })}>
-							Cancel sign-in
-						</Button>
-					</Flex>
-				</Box>
-			) : null}
-			<Flex direction="column" gap={3} mt={snapshot?.accounts.length ? 4 : 0}>
-				{snapshot?.accounts.map((account) => (
-					<Box key={account.id} border="1px solid var(--tt-border, #ececef)" borderRadius="10px" p={3} minW={0}>
-						<Flex align="center" gap={2} flexWrap="wrap">
-							<Text fontWeight={600} fontSize="sm" overflowWrap="anywhere">
-								{account.label || account.email || 'ChatGPT account'} · {account.id.slice(-8)}
-							</Text>
-							<Badge>{account.connected ? 'Connected' : 'Signed out'}</Badge>
-						</Flex>
-						{account.email ? (
-							<Text fontSize="xs" mt={1} overflowWrap="anywhere" color="var(--tt-muted, #777783)">
-								{account.email}
-							</Text>
-						) : null}
-						{account.connected ? (
-							<>
-								<Text as="label" htmlFor={`chatgpt-model-${account.id}`} display="block" fontSize="sm" mt={3} mb={1}>
-									Model
-								</Text>
-								<Select
-									{...fieldStyles}
-									id={`chatgpt-model-${account.id}`}
-									aria-describedby={`chatgpt-model-name-${account.id}`}
-									value={account.model || ''}
-									maxW="100%"
-									textOverflow="ellipsis"
-									isDisabled={busy || !snapshot?.available || account.models.length === 0}
-									onChange={(event) => void run({ action: 'select-model', id: account.id, model: event.target.value })}
-								>
-									{!account.models.some((model) => model.slug === account.model) ? (
-										<option value="" disabled>
-											Choose an available model
-										</option>
-									) : null}
-									{account.models.map((model) => (
-										<option key={model.slug} value={model.slug}>
-											{model.displayName}
-										</option>
-									))}
-								</Select>
-								<Text id={`chatgpt-model-name-${account.id}`} fontSize="xs" mt={1} overflowWrap="anywhere" color="var(--tt-muted, #777783)">
-									{account.models.find((model) => model.slug === account.model)?.displayName}
-								</Text>
-								{!account.models.length ? (
-									<Text fontSize="xs" mt={2}>
-										No eligible models are available for this account.
-									</Text>
-								) : null}
-								<Button mt={2} size="sm" variant="ghost" isDisabled={busy || !snapshot?.available || Boolean(pending)} onClick={() => void run({ action: 'refresh-models', id: account.id })}>
-									Refresh available models
-								</Button>
-								<Button
-									mt={2}
-									size="sm"
-									variant="ghost"
-									isDisabled={busy || !snapshot?.available || Boolean(pending)}
-									onClick={() => void run({ action: 'disconnect', id: account.id })}
-								>
-									Sign out
-								</Button>
-							</>
-						) : (
-							<Button
-								mt={2}
-								size="sm"
-								isDisabled={busy || !snapshot?.available || !snapshot.canAuthorize || Boolean(pending)}
-								onClick={() => void run({ action: 'begin', id: account.id })}
-							>
-								Continue with ChatGPT
-							</Button>
-						)}
-					</Box>
-				))}
-			</Flex>
-			{snapshot?.available ? <ChatGPTPlanTransfer accounts={snapshot.accounts} disabled={busy || Boolean(pending)} request={request} refresh={refresh} /> : null}
-			<Modal isOpen={welcome} onClose={acknowledge} isCentered size="md">
-				<ModalOverlay />
-				<ModalContent mx={4} maxH="calc(100dvh - 32px)" overflowY="auto">
-					<ModalHeader>You’re using your ChatGPT plan</ModalHeader>
-					<ModalBody>
-						Eligible Lopu requests through this account use your ChatGPT plan. Review usage and app limits in{' '}
-						<Link href={USAGE} target="_blank" rel="noopener noreferrer" textDecoration="underline">
-							ChatGPT settings
-						</Link>
-						.
-					</ModalBody>
-					<ModalFooter>
-						<Button onClick={acknowledge}>Got it</Button>
-					</ModalFooter>
-				</ModalContent>
-			</Modal>
-		</Box>
-	);
+	const transfer = useChatGPTPlanTransfer({ accounts: snapshot?.accounts || [], disabled: busy || !!pending || !snapshot?.available, request, refresh });
+	const account = (id: unknown) => typeof id === 'string' ? snapshot?.accounts.find(value => value.id === id) : undefined;
+	const actions: TransientBlockActions = {
+		...transfer.actions,
+		'plan.begin': ({ inputs, signal }) => {
+			if (!snapshot?.available || !snapshot.canAuthorize || pending || (inputs.id !== undefined && !account(inputs.id))) return;
+			return run({ action: 'begin', ...(inputs.id ? { id: inputs.id } : {}) }, signal);
+		},
+		'plan.cancel': ({ signal }) => pendingRef.current ? run({ action: 'cancel', attemptId: pendingRef.current.id }, signal) : undefined,
+		'plan.open': () => {
+			const attempt = pendingRef.current;
+			if (current() && attempt?.status === 'pending' && attempt.expiresAt > Date.now())
+				window.open(safeAuthorizationUrl(attempt.url), '_blank', 'noopener,noreferrer');
+		},
+		'plan.select-model': ({ inputs, value, signal }) => {
+			const selected = account(inputs.id);
+			if (selected?.connected && selected.models.some(model => model.slug === value))
+				return run({ action: 'select-model', id: selected.id, model: value }, signal);
+		},
+		'plan.refresh-models': ({ inputs, signal }) => account(inputs.id)?.connected && !pending ? run({ action: 'refresh-models', id: inputs.id }, signal) : undefined,
+		'plan.disconnect': ({ inputs, signal }) => account(inputs.id) && !pending ? run({ action: 'disconnect', id: inputs.id }, signal) : undefined,
+		'plan.retry': async ({ signal }) => {
+			try { await refresh(signal); }
+			catch (failure) { if (current() && !signal.aborted) setError(failure instanceof Error ? failure.message : 'Please retry.'); }
+		},
+		'plan.acknowledge': acknowledge
+	};
+	const plan = {
+		signedIn: true, available: !!snapshot?.available, unavailable: snapshot?.available === false,
+		moveOnly: !!snapshot?.available && !snapshot.canAuthorize, loading: !snapshot && !error, error, busy, welcome,
+		cannotBegin: busy || !snapshot?.available || !snapshot.canAuthorize || !!pending,
+		cannotManage: busy || !snapshot?.available || !!pending,
+		pending: !!pending, canOpen: pending?.status === 'pending',
+		pendingMessage: pending?.status === 'connecting' ? 'Verifying your ChatGPT account…' : 'Sign-in is ready. Continue in your browser, then return here.',
+		accounts: (snapshot?.accounts || []).map(item => ({ ...item,
+			label: `${item.label || item.email || 'ChatGPT account'} · ${item.id.slice(-8)}`,
+			connectionStatus: item.connected ? 'Connected' : 'Signed out',
+			modelLabel: item.models.find(model => model.slug === item.model)?.displayName || '', noModels: item.models.length === 0,
+			cannotChooseModel: busy || !snapshot?.available || item.models.length === 0
+		}))
+	};
+	return <PlanDocument scopeKey={scope} view={{ plan, transfer: transfer.scope }} actions={actions}
+		onError={() => { if (current()) setError('The connection could not be updated. Please retry.'); }} />;
 };
+
+function PlanDocument({ scopeKey, view, actions, onError }: {
+	scopeKey: string; view: Record<string, unknown>; actions: TransientBlockActions; onError?: () => void;
+}) {
+	return <SettingsDocumentHost documentKey="chatgpt-plan" defaultDocument={chatGPTPlanBlocks} scopeKey={scopeKey} title="ChatGPT plan layout">
+		{({ blocks, chrome, editing }) => <TransientBlockHost scopeKey={scopeKey} scope={view} actions={actions} enabled={!editing} onError={onError}>
+			<WebpageBlocksRenderer blocks={blocks} componentsByRef={{}} chrome={chrome} interactive={!editing} bare />
+		</TransientBlockHost>}
+	</SettingsDocumentHost>;
+}

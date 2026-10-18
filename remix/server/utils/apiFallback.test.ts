@@ -357,7 +357,7 @@ test('a delayed plan manifest cannot authorize a newly selected endpoint or cons
       assert.equal(response.status, 409);
       assert.equal(request.bodyUsed, false);
       assert.deepEqual(calls, ['https://first.test/.well-known/thingtime-capabilities.json']);
-      const direct = await proxyApiRequestToFallback(request, 'https://first.test');
+      const direct = await proxyApiRequestToFallback(request, { expectedOrigin: 'https://first.test' });
       assert.equal(direct.status, 409);
       assert.equal(request.bodyUsed, false);
       assert.equal(calls.length, 1);
@@ -436,16 +436,17 @@ test('desktop proxy discards a response and its cookies if the selected endpoint
 test('incomplete isolated backends refuse signup and root data without reading a body or contacting a fallback', async t => {
   await withFallbackEnv('https://thingtime.com', async () => {
     process.env.THINGTIME_AGENT_TEST_MODE = '1';
+    process.env.THINGTIME_DESKTOP = '1';
     const fetch = t.mock.method(globalThis, 'fetch', async () => { assert.fail('Isolated tests must never contact a fallback'); });
     try {
-      const request = new Request('http://127.0.0.1:18721/api/v1/auth/signup', { method: 'POST', body: '{"password":"test-only"}' });
+      const request = new Request('http://127.0.0.1:18721/api/v1/auth/signup', { method: 'POST', headers: { Origin: 'http://127.0.0.1:18721', 'Sec-Fetch-Site': 'same-origin', 'X-Thingtime-Expected-Actor': 'owner' }, body: '{"password":"test-only"}' });
       const response = await (handleApi as any)({ req: request, context: { params: { path: 'v1/auth/signup' } } });
       assert.equal(response.status, 503);
       assert.equal(request.bodyUsed, false);
       assert.equal((await response.json()).code, 'AGENT_TEST_CONFIGURATION_REQUIRED');
       const root = await (handleRootData as any)({ req: new Request('http://127.0.0.1:18721/api/root-data') });
       assert.equal(root.status, 503);
-      assert.equal((await proxyApiRequestToFallback(request)).status, 503);
+      assert.equal((await proxyApiRequestToFallback(request, { stripForwardedOrigin: true })).status, 503);
       assert.throws(() => getApiFallbackOrigin(), /cannot use an API fallback/);
       assert.equal(fetch.mock.callCount(), 0);
     } finally { fetch.mock.restore(); }

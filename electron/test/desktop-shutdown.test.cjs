@@ -37,3 +37,15 @@ test('browser cleanup failure still waits for local database cleanup', async () 
  await new Promise(resolve=>setImmediate(resolve)); assert.equal(done,false);
  database.finish(); await pending; assert.equal(warned,true);
 });
+
+
+test('reported account authority uses the running runtime rather than saved pending settings', () => {
+ const endpoint = source.match(/function activeAccountEndpoint\(\) \{[\s\S]*?\n\}/)[0];
+ const evaluate = runningEnabled => vm.runInNewContext(endpoint + '; activeAccountEndpoint()', {
+  localRuntime: { runningEnabled, state: { enabled: !runningEnabled } },
+  appOrigin: 'http://127.0.0.1:28630', activeApiEndpoint: 'https://active.example.test',
+  desktopSettings: { snapshot: () => ({ selectedEndpoint: { url: 'https://pending.example.test' } }) }
+ });
+ assert.equal(evaluate(true), 'http://127.0.0.1:28630');
+ assert.equal(evaluate(false), 'https://active.example.test');
+});

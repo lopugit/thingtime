@@ -152,9 +152,9 @@ const endpointChangedResponse = () => Response.json({
   ok: false, code: 'API_ENDPOINT_CHANGED', error: 'The selected API changed. Retry on the current endpoint.'
 }, { status: 409, headers: { 'Cache-Control': 'private, no-store' } });
 
-export const proxyApiRequestToFallback = async (request: Request, expectedOrigin: string | null | undefined = undefined, options: { stripForwardedOrigin?: boolean } = {}) => {
+export const proxyApiRequestToFallback = async (request: Request, options: { stripForwardedOrigin?: boolean; expectedOrigin?: string | null } = {}) => {
   if (process.env.THINGTIME_AGENT_TEST_MODE === '1') return Response.json({ ok: false, error: 'Isolated tests cannot use an API fallback.' }, { status: 503 });
-  if (expectedOrigin === undefined) expectedOrigin = getApiFallbackOrigin();
+  const expectedOrigin = options.expectedOrigin === undefined ? getApiFallbackOrigin() : options.expectedOrigin;
   const requestUrl = new URL(request.url);
   // Pin authority before any async work. A completed negotiation for a previous
   // endpoint never authorizes sending credentials or a body to its replacement.

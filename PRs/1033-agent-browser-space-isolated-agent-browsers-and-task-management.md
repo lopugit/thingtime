@@ -47,15 +47,29 @@ use supported sign-in/user-presence flows; private keys are never exported.
 - Restricted device defaults persisted through reload. Task overrides persisted
   through the normal API with owner/update CAS. Acceptance restored isolated
   defaults and released all owned claims/sessions and the native test copy.
-- 124 Electron tests, 108 focused backend/capability/suite tests and 40 Settings
-  tests pass. Lint passes. Full TypeScript checking reports 91 existing errors
+- 129 Electron tests, 108 focused backend/capability/suite tests and 40 Settings
+  tests pass. The main password-search merge also passes 79 focused password,
+  capability and fallback tests. Lint passes. Full TypeScript checking reports 91 existing errors
   outside changed files; it is not a clean typecheck.
 - Independent source review found no additional actionable issues after fixes
   for cleanup failure handling, selected API origin scoping and ownership.
 
-The final general-settings deep-link check, signed installed-app acceptance and
-PR deployment verification are pending at this checkpoint. Build success alone
-does not establish those results.
+The repaired Developer ID signed app was installed and launched from
+`~/Applications/Thingtime.app`. Its packaged driver/dependencies load in the
+actual Electron runtime. Lopu navigation opens Agent browsers; the general
+security link opens Things settings and expands the correct disclosure with
+Isolated testing selected. All three security options render. The installed CLI
+negotiated both browser/network-policy capabilities at 1.0.0 and independently
+confirmed the isolated default and zero active claims/sessions. Combined-app
+acceptance and deployment results are recorded on
+[PR #1033](https://github.com/lopugit/thingtime/pull/1033). The local app assembly
+also preserves the password-provider and menu-bar branches already installed on
+the device; those features are outside this PR’s changes to main. Build success
+alone does not establish installed-app acceptance.
+
+The graph refresh retained portable outputs and structural indexing. Some
+semantic extraction chunks returned empty responses after three attempts, so
+Markdown and other non-code semantic coverage is partial, not fully refreshed.
 
 ## Acceptance fixes
 
@@ -63,10 +77,21 @@ does not establish those results.
 - Centered the shared app shell using supported kebab-case CSS properties.
 - Recognized both capitalizations of Docker's explicit missing-object errors,
   while keeping daemon errors fatal and cleanup retryable.
+- Kept isolated-test refusal ahead of desktop expected-actor forwarding after
+  merging main; regression coverage combines both modes and asserts no fallback
+  request or body consumption.
 - Scoped claims to the selected API endpoint, rather than the fixed bundled
   renderer origin.
 - Routed the general-security link to the existing Things category and its
   auto-opening Agent browsers disclosure, rather than an unknown desktop tab.
+- Staged container resources separately so Electron packaging retains the shared
+  native browser driver in the app archive. Signed and unsigned verification now
+  exercise packaged imports with the actual Electron runtime before installation.
+- Replaced all four Mac-traced native package families with locked Linux trees
+  during image construction. The packaged server eagerly imports Sharp, so a
+  macOS-only trace otherwise exits at startup. Image construction now checks
+  exact versions and loads packages from the app resolver. Sharp is updated to
+  0.35.5 and the runtime tar override to 7.5.22; the runtime audit is clean.
 
 ## Boundaries
 

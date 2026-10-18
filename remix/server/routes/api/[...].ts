@@ -110,6 +110,7 @@ export const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/attachments/uploads/abort': () => import('../../../app/routes/api/v1/attachments/uploads/abort/_abort'),
   'v1/attachments/uploads/complete': () => import('../../../app/routes/api/v1/attachments/uploads/complete/_complete'),
   'v1/attachments/uploads/parts': () => import('../../../app/routes/api/v1/attachments/uploads/parts/_parts'),
+  'v1/auth/characters': () => import('../../../app/routes/api/v1/auth/characters/_characters'),
   'v1/auth/accounts': () => import('../../../app/routes/api/v1/auth/accounts/_accounts'),
   'v1/auth/accounts/assume': () => import('../../../app/routes/api/v1/auth/accounts/assume/_assume'),
   'v1/auth/accounts/owned': () => import('../../../app/routes/api/v1/auth/accounts/owned/_owned'),
@@ -398,7 +399,9 @@ export default defineHandler(async (event) => {
         status: 503, headers: { 'Cache-Control': 'private, no-store, max-age=0', Pragma: 'no-cache' }
       });
     }
-    // Preserve actor/data-plane preconditions for the selected upstream API.
+    // The installed shell uses the selected account API for browser Actions,
+    // just like its ordinary account requests. Preserve the actor/data-plane
+    // preconditions for the upstream dispatcher to enforce before any handler.
     if (event.req.headers.has('X-Thingtime-Expected-Actor') || path === 'v1/passwords' || path === 'v1/mail' || path === 'v1/mail/sync' || path === 'v1/ai/chatgpt-plan') {
       // The installed desktop shell deliberately serves its UI on loopback and
       // pins the account API through its endpoint settings. Ordinary websites
@@ -414,9 +417,9 @@ export default defineHandler(async (event) => {
         return jsonResponse({ ok: false, error: 'Use the same Thingtime origin.' }, { status: 403, headers: { 'Cache-Control': 'private, no-store' } });
       if (path === 'v1/ai/chatgpt-plan' && !await selectedRuntimeSupportsPlan(configured, event.req.signal))
         return jsonResponse({ ok: false, error: 'The selected API does not support portable ChatGPT plan connections. Update that runtime first.' }, { status: 409, headers: { 'Cache-Control': 'private, no-store' } });
-      // Preserve Nitro's lazy server request while sanitizing upstream headers.
-      return proxyApiRequestToFallback(event.req, configured, { stripForwardedOrigin: true });
-
+      // Nitro's lazy request is not a native Request; preserve its body API
+      // while pinning the selected origin across asynchronous negotiation.
+      return proxyApiRequestToFallback(event.req, { expectedOrigin: configured, stripForwardedOrigin: true });
     }
     // Root data uses this same fallback. Forward its public database
     // precondition and selection unchanged for the upstream to enforce.

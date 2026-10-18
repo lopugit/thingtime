@@ -1,5 +1,12 @@
 # API endpoints and capabilities
 
+Character agent discovery uses `remix/scripts/character-coordination-preflight.ts`
+and the shared `capabilityContract.ts` SemVer/origin contract. Run
+`npm --prefix remix run characters:preflight -- --origin <selected-origin>` and
+`test:characters-preflight`; see [the coordination runbook](../characters.md#agent-coordination).
+This read-only client adds no route, permission or server contract. Edge refusal
+must remain distinct from missing capabilities, authentication and membership.
+
 Paired Mac inventory uses `api.devices` 1.10.0 and `api.devices-node-state`
 1.11.0 (`deviceMenuBar.ts`, native `MenuBarTelemetry.swift`). Approved Bash uses
 `api.devices-commands` / `api.devices-node-commands` 1.10.0 (`deviceScript.ts`,

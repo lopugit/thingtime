@@ -1,5 +1,23 @@
 # TESTING.md — per-area manual test checklists
 
+## Characters
+
+- [x] Isolated real API + desktop/390px browser acceptance (2026-10-18): create a separate-login Character, select/restore the session, post, comment, reply and post in a private subspace; compare persisted author IDs. API checks cover all login modes, membership denial, owner privacy, tier changes and revocation.
+- [x] Type immediately into a newly mounted editor after changing Character. Post must become enabled without another keystroke; initial editor setup must reconcile input made before listeners attach.
+
+- [ ] Create switch-only, inherited-password and separate-password Characters through Settings. Reload and verify their generated IDs, names and modes against the owner-only API roster.
+- [ ] Inherited login follows the owner's current password and email second factor. Separate login rejects the owner's password; switch-only rejects password login.
+- [ ] Post, comment and reply as each identity. Public profiles/posts never reveal the private owner ID; direct Character sessions cannot list siblings, select the owner or become admins.
+- [ ] Lock one session to a Character; another session remains unchanged. The account roster continues to represent the authenticated principal. Return to the owner and verify its session still works.
+- [ ] After Character writes, verify both its ledger and the owner's ledger remain valid. Change the owner's tier/overrides and verify Character reads and write admission agree without copying owner audit fields or usage.
+- [ ] Private-subspace post cards describe their membership restriction rather than claiming anyone can see them.
+- [ ] A Character cannot read or post in a private subspace before explicit membership; after admission it can coordinate through posts/comments, while a stranger remains blocked.
+- [ ] Disable a Character after login and while selected; revoke direct sessions and reject further login/posts. Re-enable without restoring revoked credentials. Unavailable selections never fall back to anonymous authorship.
+- [ ] Switch composer identities with unsaved drafts/media; drafts remain account-specific, delayed requests retain their actor, and a restored media preview reauthorizes the selected Character.
+- [ ] Inspect settings, post/comment composers, selectors and session controls at desktop and 390px widths. Scroll top to bottom and open dynamic controls; no horizontal overflow, clipping or overlapping text.
+- [ ] Confirm admin ownership lookup works and non-admin/Character sessions cannot use it. Verify scoped app/PAT tokens cannot adopt another identity.
+
+
 ## Agent browsers and editable tasks
 
 - [ ] Install the task suite, create a task, add/complete todos and append progress;
@@ -22,6 +40,14 @@
       a live controller cannot be replaced and old handles cannot claim a new lease.
 - [ ] Native publisher downloads retain signatures and hashes; duplicated
       unrestricted browsers start without personal cookies or saved storage.
+- [ ] The signed and unsigned packaged-module checks load the native driver
+      and Puppeteer from the app archive and verify the separate container
+      resources. Launch the installed app; a valid signature alone cannot catch
+      a runtime module accidentally excluded by `extraResources`.
+- [ ] Build and launch the full container from the packaged Mac app. Its traced
+      bcrypt, Sharp/libvips, resvg and cbor-extract dependencies must load their
+      locked Linux builds through the app resolver. A version mismatch or missing
+      native binary fails image installation before it can be claimed.
 
 - [ ] A daemon disconnect during release reports failure and retains the claim;
       after recovery, release removes only the verified owned resources.
@@ -31,6 +57,9 @@
       the previous database's native registration, claim or live view.
 
 See [the runbook](docs/agent-browsers.md) for commands and evidence boundaries.
+
+- [ ] After merging another feature, password title search still filters before pagination, preserves q across pages, and both manifests advertise api.passwords 1.2.0; client and route search tests remain present.
+
 ## Reusable local video compression
 
 - [ ] Install `media-tools` as the intended account; inspect the returned owned
@@ -10246,6 +10275,11 @@ separate from deterministic discovery/lease tests.
 
 ## Mac menu bar and reusable device scripts
 
+- Device and approval links must open `/things`, where paired devices live.
+- Installed browser Actions must reach the selected HTTPS account API with actor
+  and database preconditions intact; changed actors and cross-origin mutations
+  fail before execution. Unconfigured web servers and vault reveal still refuse.
+
 - Install both suites privately; edit the saved Component and Action source in
   Builder, and verify page refresh retains last-known readings.
 - On the signed installed Mac app, compare inventory program/path/PID with
@@ -10256,6 +10290,8 @@ separate from deterministic discovery/lease tests.
   search and paginate every item; locked snapshots must contain no inventory.
 - At desktop and 390px widths expand details, long paths, output and earlier-run
   controls, then scroll to the bottom with no clipping or horizontal overflow.
+- Render each installed suite without a fixture-supplied page container; verify
+  the suite itself centers its content and preserves mobile side padding.
 - Run harmless printf via a paired Mac. Inspect the complete source in approval;
   deny one request, approve another, and verify exact stdout/exit status.
 - Script runs must require fresh approval regardless of always-allow policy;
@@ -10272,19 +10308,35 @@ separate from deterministic discovery/lease tests.
   10,000 while rendering only the current page and including default styles.
 - Run the isolated browser fixture and focused native/backend/capability suites;
   smoke the built manifest before deploying and repeat the real installed path.
-- Password AutoFill desktop regression (2026-10-18): from a signed installed app, open Passwords via the sidebar and Commander search, connect AutoFill, and confirm real vault metadata loads. Exercise GET and POST private-service proxy routes through a real Nitro HTTP server; preserve query/body and reject cross-origin writes without cloning the server request as a native Request. A selected server older than api.passwords 1.2.0 must reject q search clearly before forwarding credentials/body; matching-major compatible patches must pass.
 - Commander daemon trust-boundary integration: complete every HTTP/security assertion and cleanup within the 30-second suite allowance under concurrent native builds; do not treat the default five-second unit-test timeout as a server latency contract.
 - Commander Settings titlebar: repeat maximize/restore on the real screen, including native and web double-click deliveries; verify the previous frame is restored and process headers remain aligned with values after resizing.
 - Incident account cleanup: use real signup and logout notification constructors; accept only system history tied to the exact revoked fixture session. Reject unrelated content, actors and timestamps before writes.
 
 
+## Editable private settings documents
+
+- [x] 2026-10-19: Offline desktop settings render without account/router providers. Synthetic adapter tests cover owner/origin/data-plane separation, revision conflicts, cross-window Web Lock saves, lost create responses, rejected external/native sources, and stale native-operation completion after authority changes.
+- [ ] In a task-owned isolated browser at desktop and 375px, edit nested desktop runtime/session/recovery labels and layout with the normal Builder. Save, reload and compare the authored document; expand recovery, selectors and the inspector, then scroll top to bottom without overflow.
+- [ ] Enter an isolated Mongo URI, save through the native adapter and confirm the input clears. Saved block documents, preview caches and Action history must contain no URI/token/file values. Switch account/API during an operation; stale results cannot change the new workspace or leave it busy.
+- [ ] Against the intended API, personalize a private settings page, reload it, create a competing edit in another window, and verify the conflict. Capability negotiation and expected-actor/data-plane guards must fail closed after account/backend changes. Offline recovery remains usable with the API unreachable.
+
 ## ChatGPT plan connections (local/self-hosted)
+
+- [ ] In the editable ChatGPT settings layout, select and edit a nested button label,
+      repeated model option and transfer-dialog text through Builder; save and reload.
+      Verify the layout persists while private fields, OAuth URLs and transfer files
+      never enter the document, generic Action inputs or source caches. Surround the
+      host with an ordinary Action and attempt a forged nested action; both must
+      leave private fields unread. Change account/database during a pending operation:
+      fields clear, the operation signal aborts and late callbacks cannot update the
+      new scope. A rejected model change restores the saved selected option.
+
 
 - On a configured local account backend, connect a real ChatGPT account through the loopback callback, verify the account against ChatGPT, choose its discovered model, and complete a Lopu response plus one read-only tool call. Compare plan usage with ChatGPT Settings → Usage; do not infer a percentage from token counts.
 - Exercise cancellation, refusal, expired/replayed callback, account switching during exchange, same-email registrations, expired tokens, rotated refresh, missing plan consent, usage limit, unavailable model, signout and remote revocation failure. Confirm stale completions cannot save under a new owner; no tokens appear in browser storage, diagnostics, responses or normal Things exports.
 - Disconnect while a response is active; verify inference and subsequent tool calls stop. Remove or disable the selected runtime, including with a saved chat pin; verify no fallback spends API credits.
 - Inspect Settings and the Lopu provider picker at desktop and 375px, scroll to the bottom, open model selectors, test long labels and keyboard focus, and refresh/account-switch while a request is pending.
-- Verify both origin manifests advertise ai-chatgpt-plan 1.1.0, ai-models 1.7.0 and lopu-chats-reply 1.20.0 on built Nitro. On Vercel/unconfigured runtime, confirm no OAuth callback, token exchange or storage starts. An explicitly selected persistent remote API must negotiate its own manifest before proxying plan actions; changing the target during negotiation must refuse without forwarding credentials.
+- Verify both origin manifests advertise ai-chatgpt-plan 1.1.1, ai-models 1.8.0, lopu-chats 1.7.0, lopu-chats-update 1.6.0 and lopu-chats-reply 1.21.0 on built Nitro. On Vercel/unconfigured runtime, confirm no OAuth callback, token exchange or storage starts. An explicitly selected persistent remote API must negotiate its own manifest before proxying plan actions; changing the target during negotiation must refuse without forwarding credentials.
 
 - Enable Electron local API with its managed authenticated Mongo replica set; verify stable loopback ports, independent local account/session, persisted encrypted vault records, graceful process shutdown and restart. Missing executable, unavailable OS encryption, occupied port and invalid remote DB must not fall back to production.
 - Switch API endpoints and back; verify each endpoint retains only its own session, cached private state and credentials. Old endpoint requests must stop before restart; a delayed capability response must never authorize a different destination.
@@ -10297,18 +10349,6 @@ separate from deterministic discovery/lease tests.
 - On a fresh Electron profile with the selected API unreachable, open the recovery screen’s desktop connection controls, enable managed local MongoDB, save and restart. Verify a real local homepage and compatible manifest without signing into the cloud; changing a broken remote endpoint must also be possible from recovery.
 - Refuse an encrypted connection move that exceeds the transfer transport envelope before cancelling reconnects, aborting inference or deleting source credentials; verify the original connection remains usable.
 
-- Installed ChatGPT integration: when enabling the local API, changing its database or switching remote APIs, native Passwords must disconnect before saving the authority change and before restart. A failed native clear must leave saved settings unchanged; ordinary Quit/reopen and force-quit after saving must not retain the old OS connection. Local runtime sessions must never be read for a saved remote AutoFill endpoint; local HTTP AutoFill remains unavailable. Verify real Nitro GET/POST forwarding for Passwords, mail and ChatGPT plan alongside pinned endpoint streaming.
-- Agent task pages: verify desktop centering and mobile gutters; mark a todo complete with a nonempty neighboring add-todo form, reload, and confirm only that todo changed.
-- Desktop agent task identity: switch API endpoints with matching owner/task IDs and default database identity; the second endpoint must not expose or reuse the first endpoint’s browser claim.
-- Agent general security link: open it from a task; the Things settings category and Agent browsers disclosure must open and scroll to the default policy controls. Save, reload and verify the policy; restore isolated testing after acceptance.
-
-- Installed browser/runtime integration: quitting or restarting must await agent-browser cleanup, OAuth authority release and MongoDB shutdown together. Delay either cleanup and verify the process remains alive; a browser cleanup error must not skip database shutdown. Isolated-test mode must reject direct fallback calls before evaluating a configured remote authority.
-
-- Installed ChatGPT/menu/browser integration: verify expected-actor browser Actions preserve the live Nitro body and reject changed actors/cross-site requests; vault reveal stays local. Verify the packaged agent browser driver loads Puppeteer from app.asar as well as retaining separate container resources.
-
-- Upgrade session continuity: recovery must require an explicit original HTTPS API and exact previous loopback app URL. Reopen defaultSession at that same renderer origin; verify cookies, drafts/localStorage and IndexedDB independently. Preserve the newer partition; switching API or local database must never reuse legacy storage. Test cancelled/failed recovery, occupied port, immutable origin binding, concurrent endpoint/runtime changes, logout without automatic store changes, and restart/rebuild retention. `electron/scripts/test-session-continuity.cjs` uses only synthetic stores under an OS network boundary; this host currently rejects nested Chromium sandbox initialization, so its real-store acceptance remains unavailable (no permissive fallback).
-- Local-runtime restart visibility: when `ready-to-show` never arrives, completed load, renderer failure and the bounded fallback must reveal the existing window; closing a window must cancel the fallback, and app activation must reveal an existing hidden window.
-
 
 ### Bundled desktop MongoDB
 
@@ -10317,6 +10357,29 @@ separate from deterministic discovery/lease tests.
 - [ ] Existing executable selections remain selected. On macOS 13, the included server gives an actionable compatibility message while remote API mode works.
 - [ ] Corrupt cached download, missing bundled binary/source/license, wrong release and unsupported architecture fail packaging verification.
 
-- Bundled MongoDB acceptance: after staging resources and building Nitro, run `node electron/scripts/test-bundled-local-runtime.cjs`. It uses a fresh encrypted synthetic profile and OS sandbox on ports19881/19882, selects the bundled executable without discovery/installation, creates an account through the normal API, verifies its authenticated session after API/database restart, rejects anonymous database reads, and blocks direct-IP/other-loopback/redirect escape. The fixture never seeds app records directly or uses personal credentials.
-
 - [ ] Desktop public data/federation identifiers use a per-profile keyed HMAC, never an unkeyed connection-string digest. Migrating pre-upgrade encrypted settings preserves the exact existing renderer partition, including after switching databases and returning; failure to persist the alias blocks startup.
+- Agent task pages: verify desktop centering and mobile gutters; mark a todo complete with a nonempty neighboring add-todo form, reload, and confirm only that todo changed.
+- Desktop agent task identity: switch API endpoints with matching owner/task IDs and default database identity; the second endpoint must not expose or reuse the first endpoint’s browser claim.
+- Agent general security link: open it from a task; the Things settings category and Agent browsers disclosure must open and scroll to the default policy controls. Save, reload and verify the policy; restore isolated testing after acceptance.
+
+- Desktop browser/local-runtime integration: quitting waits for browser cleanup and OAuth authority release before managed Mongo shutdown completes; repeated quits and late browser IPC cannot bypass the shared barrier. Pending saved API/database settings must not change the reported running account authority before restart.
+- Device capability growth: a fully equipped Mac (65 current capability identifiers) must publish fresh state, retain every identifier in the owner device response, and populate the menu bar Builder page. Pairing and heartbeat admission share the 128-entry bound; reject 129 entries and invalid identifiers.
+
+- ChatGPT credential management refuses `X-Thingtime-Character` overrides before storage or identity resolution; normal session-selected identities still revalidate after account changes, including OAuth callbacks and encrypted connection moves.
+
+### Owned-plan onboarding regression (2026-10-18)
+
+- With a fresh unverified local/self-hosted user, connect a plan, choose its model and select it in Lopu. Verify the picker stays usable while locked, then a new text chat and reply persist without an admin grant or Thingtime credits. Reload the chat and verify the same plan remains pinned.
+- Switch to a catalog/API-key provider and to voice: existing invitation policy still applies. Disconnect or revoke the plan and confirm no fallback billing or continuation; other-owner, scoped-token and Character-override requests must fail before writes/inference.
+- Change account while catalog or provider-save requests are pending. No eligibility hint may come from cache or the old response. A failed provider save must restore the last confirmed choice and show its error; a later successful choice must survive an older failure.
+- Run `test:chatgpt-plan`, `test:lopu-ui` and `test:api-capabilities`; the plan suite includes real create/update persistence-boundary checks with isolated storage adapters. Live installed inference and desktop/mobile picker checks remain separate acceptance evidence.
+
+## Character coordination discovery
+
+- Run `npm --prefix remix run test:characters-preflight`: real loopback HTTP must reject incompatible/missing capabilities, wrong origins, redirects, HTML/malformed manifests, application errors and timeouts; classify Cloudflare 403 separately and permit a fresh successful retry. Requests carry no credentials.
+- Run `npm --prefix remix run characters:preflight -- --origin https://thingtime.com` only on the separately authorized real-account coordination path. Confirm `CAPABILITY_READY`, selected origin, compatible version, and authentication/membership both `not_checked`. Then use the assigned Chrome session and task Character to verify private-subspace read/post/reload separately; do not treat public discovery as account acceptance.
+
+## Combined installed password integration
+
+- Password AutoFill desktop regression (2026-10-18): from a signed installed app, open Passwords via the sidebar and Commander search, connect AutoFill, and confirm real vault metadata loads. Exercise GET and POST private-service proxy routes through a real Nitro HTTP server; preserve query/body and reject cross-origin writes without cloning the server request as a native Request. A selected server older than api.passwords 1.2.0 must reject q search clearly before forwarding credentials/body; matching-major compatible patches must pass.
+- Installed ChatGPT integration: when enabling the local API, changing its database or switching remote APIs, native Passwords must disconnect before saving the authority change and before restart. A failed native clear must leave saved settings unchanged; ordinary Quit/reopen and force-quit after saving must not retain the old OS connection. Local runtime sessions must never be read for a saved remote AutoFill endpoint; local HTTP AutoFill remains unavailable. Verify real Nitro GET/POST forwarding for Passwords, mail and ChatGPT plan alongside pinned endpoint streaming.
