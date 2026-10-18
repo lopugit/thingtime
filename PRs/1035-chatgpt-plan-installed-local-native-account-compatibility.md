@@ -32,3 +32,13 @@ Integrated feature source `b06d834e8` (owned-plan admission, current main and in
 Merge validation passed all 169 Electron tests and 116 combined proxy/capability tests. The selected-endpoint proxy keeps the feature branch's options signature and the assembly's Passwords/mail manifest checks. The complete prior graph snapshot was retained during conflict resolution; the final integrated source will receive an incremental refresh.
 
 The previously installed `6de54fb70` completed user-approved real OpenAI consent, discovered a ChatGPT model, and preserved its local account and connection through normal Quit/reopen. Saved-credential model refresh passed. First live Lopu inference remains pending the next signed installed build containing the owned-plan admission correction. No administrative account grant was used.
+
+## 2026-10-19 installed inference checkpoint
+
+The canonical build and installer completed for runtime source `116f95ee2`. The installed `~/Applications/Thingtime.app` passes the installer's deep strict signature verification with Developer ID team `6DQQ9V7C84`; its local API and MongoDB start successfully and preserve the existing local account and saved ChatGPT connection. Selecting that connection unlocks the non-invited account's composer. After choosing local chat management, the first real `gpt-6.1-sol` response succeeded through the saved ChatGPT plan. The response, conversation, and provider selection survived a renderer reload.
+
+Live acceptance identified three remaining failures: the initial server-management preference attempted unavailable Vercel Workflow startup; a follow-up send rejected identical provider settings as “Nothing to update”; a read-only `list_my_things` roundtrip ended without a tool result. These are tracked as incomplete acceptance, not waived by the successful text response. No API-key fallback or administrative account grant was used.
+
+The installed settings Builder independently selected a nested local-runtime legend, changed its text, saved the account-owned layout, and retained the change after reload. The original wording was then restored and saved. Runtime endpoints and credentials were unchanged.
+
+The next assembly includes menu follow-ups `a50e26fc4`, `6fc65465c`, and `3b64aa6d9` as `54261e2c0`, `52be9beb1`, and `9835f6b73`. Only their applicable product changes and existing template regression were retained; the other workstream's absent PR note and newer browser fixture were not imported. The combined template tests pass 5/5. These changes are not yet in the installed `116f95ee2` bundle.
