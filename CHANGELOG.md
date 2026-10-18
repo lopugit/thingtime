@@ -15,6 +15,10 @@ verbatim, and CI changes are recorded here from now on.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 every entry is attributed the same way the app changelog attributes them.
 
+## 2026-10-18 — Correct reusable workflow context
+
+- Keep administrator-selected model values in step inputs, where runtime outputs are available; remove premature job environment references. Regression coverage checks the workflow context boundary.
+
 ## 2026-10-18 — Execute the saved admin AI waterfall
 
 - Preserve the complete model, provider and reasoning order from Thingtime's DB
