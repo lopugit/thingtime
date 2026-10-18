@@ -68,6 +68,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-18 — **Codex (AI)**: Keep native local files as Blob handles with bounded
+  hashing, atomic post/draft snapshot checks and independent account multipart
+  upload. Remove local-only copy and preview buffer ceilings while preserving
+  paired-device limits. Unit/build checks pass; isolated Chrome sandbox startup
+  blocks current native acceptance. [PR #1000 checkpoint](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md#native-file-blob-checkpoint--2026-10-18).
+
 - 2026-10-18 — **Codex (AI)**: Remove total password-refresh and retained-workspace
   discovery cutoffs. Fence older password pulls across tabs, preserve partial
   refreshes and cancel key traversal on identity change. Local regression evidence

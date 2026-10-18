@@ -1,5 +1,22 @@
 # Attachments and media
 
+## Device Blob storage
+
+`local-workspace/binary.ts` supplies bounded checksum reads and immutable binary
+snapshot comparisons. `WorkspaceDatabase` keeps Blobs in the existing scoped
+binary collection, with storage revisions for atomic post/draft rechecks; legacy
+byte arrays remain readable. `LocalThings.readFileBlob`, `AccountFileSync` and the
+in-process `readLocalFile` Blob option feed the normal picker, file browser,
+draft copies and scoped media registry. Account permission checks still apply
+before and after reads; native download/upload paths do not buffer a whole file.
+`filesystemTransfer.ts` applies paired-device byte limits only to those transports.
+
+Run `fileBlobs.test.ts`, `media.test.ts`, `filesystemTransfer.test.ts` and
+`test:local-workspace`; opt-in `fileBlobs.browser.test.ts` requires enforced browser
+and backend isolation. See the [Blob checkpoint](../local-workspaces.md#native-blob-file-storage--2026-10-18)
+for the current browser blocker and remaining buffered adapters.
+
+
 Account password-file sync groundwork reuses `passwords/fileTransfer.ts` and the
 local encrypted chunk writer through `local-workspace/passwordFileSync.ts`,
 `passwordFileReconcile.ts` and `passwordFileTransport.client.ts`. Local file

@@ -17,7 +17,7 @@ const setup = () => {
  let last = '';
  const fileTransport: AccountFileTransport = {
   start: async input => { calls.push('upload'); requests.push(input.requestId); last = 'account-' + input.requestId; return { id: last, partSizeBytes: bytes.length, partCount: 1 }; },
-  parts: async (_id, parts) => parts.map(part => ({ ...part, url: 'https://storage.test/part', headers: {}, expiresAt: '2026-10-18' })), put: async (_part, actual) => { assert.deepEqual(actual, bytes); },
+  parts: async (_id, parts) => parts.map(part => ({ ...part, url: 'https://storage.test/part', headers: {}, expiresAt: '2026-10-18' })), put: async (_part, actual) => { assert.deepEqual(actual instanceof Blob ? new Uint8Array(await actual.arrayBuffer()) : actual, bytes); },
   complete: async id => ({ id, name: 'draft.txt', contentType: 'text/plain', mediaKind: 'file', size: bytes.length })
  };
  const writes: any[] = [];
@@ -92,8 +92,8 @@ test('draft media refuses late copying and sync after canonical access refusal, 
   } }), bytes: async () => f.bytes };
   await f.files.retainDraft(transport, remote, (content, admit) => f.drafts.remember(remote, Date.now(), content, admit));
   const local = await f.drafts.drafts.request(undefined, { id: remote.id }), id = local.draft.attachmentIds[0];
-  const read = f.files.readFile.bind(f.files);
-  f.files.readFile = async (...args) => {
+  const read = f.files.readFileBlob.bind(f.files);
+  f.files.readFileBlob = async (...args) => {
    const result = await read(...args);
    await f.db.transaction(scope, 'readwrite', lease, tx => forgetAccountConversation(tx, remote.id, Date.now() + 1));
    return result;
@@ -101,7 +101,7 @@ test('draft media refuses late copying and sync after canonical access refusal, 
   const before = await f.db.transaction(scope, 'readonly', lease, tx => tx.usage());
   await assert.rejects(f.drafts.drafts.request({ operation: 'instantiate', sourceId: remote.id, id: 'late-copy' }), /access to this retained file/);
   await assert.rejects(f.drafts.drafts.request(undefined, { id: 'late-copy' }), /Draft not found/);
-  f.files.readFile = read;
+  f.files.readFileBlob = read;
   await f.db.transaction(scope, 'readonly', lease, tx => assert.rejects(f.files.draftHooks.prepare(tx, local.draft), /access to this retained file/));
   // Releasing the local binding must not erase the original access boundary.
   await f.drafts.drafts.request({ operation: 'delete', id: remote.id, revision: local.draft.revision });

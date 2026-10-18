@@ -187,7 +187,8 @@ export function anonymousApi<T extends Record<string, any>>(remote: T): T {
 		saveLocalFile: async (input: Parameters<ReturnType<typeof anonymousThings>['saveFile']>[0], request?: { signal?: AbortSignal }) => {
 			const row = await service().saveFile(input, request?.signal); return changed({ ok: true, attachment: { id: row.id, ...row.crystal } });
 		},
-		readLocalFile: async ({ id }: { id: string }, request?: { signal?: AbortSignal }) => {
+		readLocalFile: async ({ id }: { id: string }, request?: { signal?: AbortSignal; format?: 'blob' }) => {
+			if (request?.format === 'blob') { const { row, blob } = await service().readFileBlob(id, request.signal); return { ok: true, attachment: { id: row.id, ...row.crystal }, blob }; }
 			const { row, bytes } = await service().readFile(id, request?.signal); return { ok: true, attachment: { id: row.id, ...row.crystal }, bytes };
 		},
 		// Local files are renamed/annotated in place. Without this the shared media

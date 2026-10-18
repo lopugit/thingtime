@@ -1,3 +1,4 @@
+import { binaryBlob, binarySize, blobChecksum, checkedBinary } from './binary';
 import { isStandaloneAttachmentPurpose, sanitizeAttachmentPublicMetadata } from '../api/utils/attachments/attachmentCore';
 import { AccountFileMetadata, fileMetadata, type FileMetadataTransport } from './accountFileMetadata';
 import { normalizePublicAttachment, multipartPartRange, attachmentCompleteRetryPhase } from '../components/Attachments/attachmentUiCore';
@@ -66,14 +67,12 @@ export type AccountFileTransport = {
 	cancel?(requestId: string, signal: AbortSignal): Promise<{ cancelled: true; deferred: boolean; retryAt?: string }>;
 	start(request: Readonly<AccountFileRequest>, signal: AbortSignal): Promise<AccountFilePlan>;
 	parts(id: string, parts: { partNumber: number; checksumSha256: string }[], signal: AbortSignal): Promise<SignedUploadPart[]>;
-	put(part: SignedUploadPart, bytes: Uint8Array, signal: AbortSignal): Promise<void>;
+	put(part: SignedUploadPart, bytes: Uint8Array | Blob, signal: AbortSignal): Promise<void>;
 	complete(id: string, signal: AbortSignal): Promise<PublicAttachment>;
 };
-const checksumBase64 = async (bytes: Uint8Array) => {
-	const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', Uint8Array.from(bytes)));
-	let binary = '';
-	for (const byte of digest) binary += String.fromCharCode(byte);
-	return btoa(binary);
+const checksumBase64 = async (bytes: Uint8Array | Blob, check: () => void) => {
+ const hex = await blobChecksum(binaryBlob(bytes), check);
+ return btoa(String.fromCharCode(...hex.match(/../g)!.map(byte => parseInt(byte, 16))));
 };
 /** Device bytes and immutable upload intent commit together. This adapter never
  * publishes a post or authenticates an offline identity. Its transport must pin
@@ -283,7 +282,7 @@ export class AccountFileSync {
 		const result = await operation; this.lease.assertCurrent(); signal.throwIfAborted(); return result;
 	}
 	readonly draftHooks = {
-		readFile: (id: string) => this.readFile(id),
+		readFile: (id: string) => this.readFileBlob(id),
 		assertFileReadable: (tx: WorkspaceTransaction, id: string) => this.assertReadableInTransaction(tx, id),
 		copiedFile: (tx: WorkspaceTransaction, row: LocalAttachment) => this.enqueue(tx, row),
 		prepare: async (tx: WorkspaceTransaction, draft: AccountDraft): Promise<DraftContent | null> => {
@@ -408,11 +407,16 @@ export class AccountFileSync {
 		this.lease.assertCurrent(); signal?.throwIfAborted();
 	}
 
-	async readFile(id: string, signal?: AbortSignal) {
+	async readFileBlob(id: string, signal?: AbortSignal) {
 		await this.assertFileReadable(id, signal);
-		const result = await this.things.readFile(id, signal);
+		const result = await this.things.readFileBlob(id, signal);
 		await this.assertFileReadable(id, signal);
 		this.lease.assertCurrent(); signal?.throwIfAborted(); return result;
+	}
+	async readFile(id: string, signal?: AbortSignal) {
+		const { row, blob } = await this.readFileBlob(id, signal);
+		const bytes = new Uint8Array(await blob.arrayBuffer());
+		await this.assertFileReadable(id, signal); return { row, bytes };
 	}
 
 	async status() {
@@ -656,13 +660,15 @@ export class AccountFileSync {
 					});
 					completed++; continue;
 				}
-				const { row, bytes } = claimed.deleteRequested && claimed.deletingLocal
-					? await this.tx('readonly', async tx => { const bytes = await tx.getBytes(claimed.id); if (!bytes) throw new WorkspaceError('MISSING_LOCAL_FILE', 'Recovery bytes are missing.', 404); return { row: claimed.deletingLocal!, bytes }; }, controller.signal)
-					: await this.things.readFile(claimed.id, controller.signal);
+				const checkBytes = () => { this.lease.assertCurrent(); controller.signal.throwIfAborted(); };
+				const { row, snapshot } = claimed.deleteRequested && claimed.deletingLocal
+					? await this.tx('readonly', async tx => ({ row: claimed.deletingLocal!, snapshot: checkedBinary(await tx.getBinary(claimed.id), claimed.request.sizeBytes) }), controller.signal)
+					: await this.things.readFileBlob(claimed.id, controller.signal);
+				const bytes = snapshot.value, size = binarySize(bytes);
 				if (
 					row.localAttachment.sha256 !== claimed.sha256 ||
-					bytes.length !== claimed.request.sizeBytes ||
-					(await transferChecksum(bytes)) !== claimed.sha256
+					size !== claimed.request.sizeBytes ||
+					(await blobChecksum(binaryBlob(bytes), checkBytes)) !== claimed.sha256
 				)
 					throw new WorkspaceError('FILE_CHANGED', 'Device file bytes changed. Choose the file again.', 409);
 				let current: FileRecord = claimed;
@@ -678,8 +684,8 @@ export class AccountFileSync {
 						plan.partSizeBytes < 1 ||
 						!Number.isSafeInteger(plan.partCount) ||
 						plan.partCount < 1 ||
-						plan.partCount > 100 ||
-						Math.ceil(bytes.length / plan.partSizeBytes) !== plan.partCount
+						plan.partCount > 10_000 ||
+						Math.ceil(size / plan.partSizeBytes) !== plan.partCount
 					)
 						throw new WorkspaceError('INVALID_UPLOAD_PLAN', 'The account returned an invalid upload plan.', 502);
 					// Persist identity before sending any bytes or attempting completion.
@@ -699,9 +705,9 @@ export class AccountFileSync {
 						if (!numbers.length) continue;
 						const parts = await Promise.all(
 							numbers.map(async (partNumber) => {
-								const range = multipartPartRange(partNumber, plan.partSizeBytes, bytes.length);
+								const range = multipartPartRange(partNumber, plan.partSizeBytes, size);
 								const body = bytes.slice(range.start, range.end);
-								return { partNumber, body, checksumSha256: await checksumBase64(body) };
+								return { partNumber, body, checksumSha256: await checksumBase64(body, checkBytes) };
 							})
 						);
 						const signed = await run(() =>

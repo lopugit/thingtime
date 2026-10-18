@@ -3,7 +3,6 @@ import { Box, Button, Checkbox, Flex, Input, Modal, ModalBody, ModalCloseButton,
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import { useWorkspaceUser } from '~/hooks/useWorkspaceUser';
 import { useApi } from '~/hooks/useApi';
-import { LEGACY_FILE_BUFFER_LIMITS } from '~/local-workspace/storage';
 import { LOCAL_WORKSPACE_CHANGED, workspaceIdentityKey, subscribeWorkspaceIdentity, currentAccountWorkspace, accountRemoteWorkspaceLease } from '~/local-workspace/runtime.client';
 import { formatAttachmentBytes } from '../Attachments/attachmentUiCore';
 import { FILESYSTEM_MAX_BYTES, filesystemPath } from '~/api/utils/devices/deviceFilesystemCore';
@@ -42,7 +41,7 @@ const FilesystemThingsContent = ({ deviceId, initialPath = '', initialFolderId =
   useEffect(() => {
     setLocation(current => (current.deviceId === deviceId && (deviceId ? current.path === initialPath : current.folderId === initialFolderId)) ? current : (deviceId ? { deviceId, path: initialPath } : { folderId: initialFolderId }));
   }, [deviceId, initialPath, initialFolderId]);
-  const fileLimit = location.deviceId ? FILESYSTEM_MAX_BYTES : LEGACY_FILE_BUFFER_LIMITS.binaryBytes;
+  const fileLimit = location.deviceId ? FILESYSTEM_MAX_BYTES : null;
   const [history, setHistory] = useState<FileLocation[]>([]);
   const [items, setItems] = useState<ThingsThing[]>(() => listings.get(locationKey(identity, location)) || []);
   const [devices, setDevices] = useState<Array<{ id: string; name: string; capabilities: string[] }>>([]);
@@ -186,9 +185,9 @@ const FilesystemThingsContent = ({ deviceId, initialPath = '', initialFolderId =
     if (item.inode) return withRemote(signal, remoteSignal => readRemoteFile(item.inode!.deviceId, item.inode!, remoteSignal, approve, progressFor(filesystemName(item))));
     if (!item.thingtime.includes('attachment')) throw new Error('Select a file.');
     if (localOnly || item.id.startsWith('local-file-')) {
-      const result = await apiRef.current.v1.attachments.readLocalFile({ id: item.id }, { signal });
+      const result = await apiRef.current.v1.attachments.readLocalFile({ id: item.id }, { signal, format: 'blob' });
       signal.throwIfAborted();
-      return new File([result.bytes], filesystemName(item), { type: String(result.attachment.contentType) });
+      return new File([result.blob], filesystemName(item), { type: String(result.attachment.contentType) });
     }
     const size = Number(item.crystal.size);
     if (!Number.isSafeInteger(size) || size < 0 || size > FILESYSTEM_MAX_BYTES) throw new Error('Choose a file up to 32 MiB.');
@@ -222,9 +221,8 @@ const FilesystemThingsContent = ({ deviceId, initialPath = '', initialFolderId =
       if (localOnly) throw new Error('Paired devices require a signed-in account.');
       return withRemote(signal, remoteSignal => writeRemoteFile(target.deviceId!, join(target.path!, file.name), file, remoteSignal, approve, progressFor(file.name)));
     }
-    if (file.size > LEGACY_FILE_BUFFER_LIMITS.binaryBytes) throw new Error('A local file cannot exceed 16 MiB.');
-    const bytes = new Uint8Array(await file.arrayBuffer()); signal.throwIfAborted();
-    await apiRef.current.v1.attachments.saveLocalFile({ requestId: crypto.randomUUID(), name: file.name, contentType: file.type || 'application/octet-stream', bytes, folderId: target.folderId }, { signal });
+    signal.throwIfAborted();
+    await apiRef.current.v1.attachments.saveLocalFile({ requestId: crypto.randomUUID(), name: file.name, contentType: file.type || 'application/octet-stream', bytes: file, folderId: target.folderId }, { signal });
   };
 
   const copy = (mode: 'copy' | 'cut', chosen = items.filter(item => selected.has(item.id))) => {
@@ -332,7 +330,7 @@ const FilesystemThingsContent = ({ deviceId, initialPath = '', initialFolderId =
       {view === 'grid' ? <ThingsGridView items={visible} handlers={handlers} displayMode="name" /> : <ThingsListView items={visible} handlers={handlers} displayMode="name" onToggleAll={() => setSelected(selected.size === visible.length ? new Set() : new Set(visible.map(item => item.id)))} allSelected={visible.length > 0 && visible.every(item => selected.has(item.id))} />}
       {!visible.length && !loading && <Text fontSize="13px" textAlign="center" padding={6} color="var(--tt-muted)">{query || kind !== 'all' ? 'No matching files or folders.' : 'No files or folders here yet.'}</Text>}
     </Box>
-    <Text fontSize="11px" color="var(--tt-muted)" marginTop={3}>{visible.length} items{selected.size ? ` · ${selected.size} selected` : ''} · Files up to {formatAttachmentBytes(fileLimit)}</Text>
+    <Text fontSize="11px" color="var(--tt-muted)" marginTop={3}>{visible.length} items{selected.size ? ` · ${selected.size} selected` : ''}{fileLimit === null ? '' : ` · Files up to ${formatAttachmentBytes(fileLimit)}`}</Text>
     {contextItem && <ThingContextMenu {...contextMenu.menuProps} zIndex={TRANSFER_MENU_Z + 2} model={handlers.itemMenuFor!(contextItem)} onAction={({ action: chosen }) => action(contextItem, chosen.command as ThingsItemAction)} />}
     {compact && <Modal isOpen={popup} onClose={() => setPopup(false)} size="3xl" scrollBehavior="inside"><ModalOverlay zIndex={TRANSFER_DIALOG_Z} /><ModalContent marginX={3} maxWidth="min(900px, calc(100vw - 24px))" containerProps={{ zIndex: TRANSFER_DIALOG_Z + 1 }}><ModalHeader>Browse files</ModalHeader><ModalCloseButton /><ModalBody paddingBottom={5}>{popup && <FilesystemThingsBrowser deviceId={location.deviceId} initialPath={location.deviceId ? location.path : ''} initialFolderId={location.folderId} />}</ModalBody></ModalContent></Modal>}
   </Box>;

@@ -25,11 +25,11 @@ test('workspace retirement and deletion revoke existing URLs and discard late by
  const late=setup(); const releaseLate=late.registry.retain('local-a'); late.retire(); await flush(); assert.deepEqual(late.created,[]); releaseLate();
  const deleted=setup(); const releaseDeleted=deleted.registry.retain('local-a'); await flush(); deleted.registry.removed(['local-a']); assert.equal(deleted.registry.url('local-a'),''); assert.match(deleted.registry.errors()[0],/deleted/); releaseDeleted();
 });
-test('concurrent reads and active media references are bounded', async () => {
+test('more than 64 active references use bounded concurrent reads', async () => {
  let running=0,max=0;const complete: (()=>void)[]=[];
  const registry=new LocalMediaRegistry({lease:()=>({assertCurrent(){},onInvalidate(){return()=>{}}}), read:async()=>{running++;max=Math.max(max,running);await new Promise<void>(resolve=>complete.push(resolve));running--;return {bytes:new Uint8Array(1),contentType:'image/png'}},create:()=> 'blob:fixture',revoke(){}});
- const release=Array.from({length:64},(_,n)=>registry.retain(`local-${n}`)); await flush(); assert.equal(max,3);
- assert.throws(()=>registry.retain('local-overflow'),/Too many/);
+ const release=Array.from({length:100},(_,n)=>registry.retain(`local-${n}`)); await flush(); assert.equal(max,3);
+ assert.deepEqual(registry.errors(), []);
  release.forEach(fn=>fn()); complete.forEach(fn=>fn()); await flush(); assert.equal(running,0);
 });
 
@@ -54,7 +54,7 @@ test('scope-only invalidation clears deleted bytes and allows a retained file to
 test('invalidation coalesces reads and cannot expose a stale completion after deletion', async () => {
  const reads: ((bytes: {bytes:Uint8Array;contentType:string}) => void)[] = [], created: string[] = [];
  const registry = new LocalMediaRegistry({ lease: () => ({ assertCurrent() {}, onInvalidate() { return () => {}; } }),
-  read: () => new Promise(resolve => reads.push(resolve)), create: bytes => { const url = `blob:${bytes[0]}`; created.push(url); return url; }, revoke() {} });
+  read: () => new Promise(resolve => reads.push(resolve)), create: bytes => { const url = `blob:${(bytes as Uint8Array)[0]}`; created.push(url); return url; }, revoke() {} });
  const release = registry.retain('local-file'); await flush();
  for (let n=0;n<100;n++) registry.refresh();
  registry.removed(['local-file']); assert.equal(reads.length,1);
@@ -75,4 +75,21 @@ test('disposing a scope revokes loaded URLs and discards queued and late reads',
  assert.deepEqual(revoked,['blob:0']); assert.equal(registry.url('local-first'),'');
  completions.forEach(resolve=>resolve()); await flush();
  assert.equal(reads,4); assert.deepEqual(created,['blob:0']); releases.forEach(release=>release());
+});
+
+
+test('large Blob previews retain native handles and abort released reads', async () => {
+ const chunk = new Uint8Array(1024 * 1024), blob = new Blob(Array.from({length:70}, () => chunk));
+ let received: Blob | Uint8Array | undefined, active: AbortSignal | undefined;
+ const registry = new LocalMediaRegistry({lease:()=>({assertCurrent(){},onInvalidate(){return()=>{}}}),
+  read: async (_id, signal) => { active = signal; return {bytes: blob, contentType: 'image/png'}; },
+  create: value => { received=value; return 'blob:large'; }, revoke() {}});
+ const release = registry.retain('local-large'); await flush();
+ assert.equal(received, blob); assert.equal(registry.url('local-large'), 'blob:large'); assert.deepEqual(registry.errors(), []);
+ release();
+ let released = false;
+ const waiting = new LocalMediaRegistry({lease:()=>({assertCurrent(){},onInvalidate(){return()=>{}}}),
+  read: async (_id, signal) => { active=signal; await new Promise<void>(resolve => signal.addEventListener('abort', () => { released=true;resolve(); }, {once:true})); return {bytes:blob,contentType:'image/png'}; }, create: () => { throw Error('Cancelled preview must not create a URL'); }, revoke() {}});
+ const stop=waiting.retain('local-waiting'); await flush(); stop(); await flush();
+ assert.equal(active?.aborted,true); assert.equal(released,true); assert.deepEqual(waiting.errors(),[]);
 });

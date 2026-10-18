@@ -25,8 +25,8 @@ function currentRegistry() {
  const lease = scope.kind === 'anonymous' ? anonymousWorkspaceLease() : accountWorkspaceLease(scope);
  const registry = new LocalMediaRegistry({
   lease: () => lease,
-  read: async id => { const db = workspaceDatabase(); const reader = scope.kind === 'account' ? new AccountFileSync(db, scope, lease) : new LocalThings(db, scope, lease); const { row, bytes } = await reader.readFile(id); return { bytes, contentType: String(row.crystal.contentType) }; },
-  create: (bytes, type) => URL.createObjectURL(new Blob([Uint8Array.from(bytes)], { type })),
+  read: async (id, signal) => { const db = workspaceDatabase(); const reader = scope.kind === 'account' ? new AccountFileSync(db, scope, lease) : new LocalThings(db, scope, lease); const { row, blob } = await reader.readFileBlob(id, signal); return { bytes: blob, contentType: String(row.crystal.contentType) }; },
+  create: (bytes, type) => URL.createObjectURL(new Blob([bytes instanceof Blob ? bytes : Uint8Array.from(bytes)], { type })),
   revoke: url => URL.revokeObjectURL(url)
  });
  context = { key, registry }; return registry;
@@ -52,7 +52,7 @@ export function useLocalMediaUrl(remote: (url: string) => string, allowLocal = t
  React.useEffect(() => {
   for (const [id, release] of held.current) if (!requested.has(id)) { release(); held.current.delete(id); }
   if (registry) for (const id of requested) if (!held.current.has(id)) {
-   try { held.current.set(id, registry.retain(id)); } catch { /* Capacity errors are surfaced by LocalMediaDiagnostics. */ }
+   try { held.current.set(id, registry.retain(id)); } catch { /* Read errors are surfaced by LocalMediaDiagnostics. */ }
   }
  });
  return (url: string) => {

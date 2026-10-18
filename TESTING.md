@@ -12109,3 +12109,13 @@ Local results do not establish current-head CI or deployed acceptance.
 - [x] Race pulls through separate database connections: an older traversal cannot prune an unchanged entry confirmed by a newer pull, even if the newer pull fails or arrives just before final cleanup; stale pages cannot recreate omitted entries.
 - [x] Reject empty continuing pages, repeated cursors, duplicate identities and invalid metadata without pruning. Locking, cancellation and account retirement stop late response adoption and subsequent requests; baseline failures release listeners.
 - [ ] Repeat long refresh, two-tab cleanup races and account changes in a task-owned isolated browser through the real account transport. Unit fixtures and existing native checkpoints do not satisfy this check.
+
+
+### Native Blob device files — 2026-10-18
+
+- [x] Isolated storage fixtures: save/reopen/retry a 70 MiB Blob with exact SHA-256 and no whole-file `arrayBuffer`; refuse cross-workspace reads, cancel during hashing and roll back quota failures before retrying the same request.
+- [x] Race same-size binary replacement after checksum preparation; post/draft transactions refuse the stale snapshot. Independent template/working/post copies survive source replacement and draft deletion. Legacy byte records remain readable.
+- [x] Copy two 70 MiB Files through the normal file-transfer port without flattening Blob handles; paired-device size limits still refuse the same transfer. Pass 101 exact Blob parts through the account worker without whole-file allocation.
+- [x] More than 64 media references queue at three active reads; Blob URLs preserve inert MIME behavior, abort released work and revoke on identity change.
+- [ ] Run `fileBlobs.browser.test.ts` with a task-owned isolated browser/backend: native anonymous upload, copy, offline cold reload, exact download and image preview at 1440/390/320px; scroll top to bottom, open folder controls, verify zero account mutations and no overflow. Current run is blocked before app startup by nested macOS/Chrome sandbox initialization; do not count it as passed or disable protections to pass it.
+- [ ] Complete ZIP/import/export, remote-retention and paired-device streaming plus remaining traversal caps; this checkpoint does not cover those paths.

@@ -30,13 +30,16 @@ export type WorkspaceLease = {
 	/** A retired editor must not commit even if identity changes during an IDB request. */
 	onInvalidate(callback: () => void): () => void;
 };
-export type WorkspaceRecord<T = unknown> = { scope: string; collection: string; id: string; value: T; bytes: number };
+export type WorkspaceRecord<T = unknown> = { scope: string; collection: string; id: string; value: T; bytes: number; binaryRevision?: string };
 export type WorkspaceUsage = { records: number; bytes: number };
 type Usage = WorkspaceUsage & { scope: string };
 const BINARY_COLLECTION = '@bytes';
+export type WorkspaceBinary = { value: Uint8Array | Blob; revision?: string };
 export type WorkspaceTransaction = {
 	usage(): Promise<WorkspaceUsage>;
 	getBytes(id: string): Promise<Uint8Array | undefined>;
+	getBinary(id: string): Promise<WorkspaceBinary | undefined>;
+	putBlob(id: string, value: Blob): Promise<void>;
 	putBytes(id: string, bytes: Uint8Array): Promise<void>;
 	deleteBytes(id: string): Promise<void>;
 	get<T>(collection: string, id: string): Promise<T | undefined>;
@@ -245,7 +248,7 @@ export class WorkspaceDatabase {
 					throw new WorkspaceError('BINARY_OPERATION_REQUIRED', 'File bytes require the binary storage operation');
 				if (id !== undefined) validKey(id);
 			};
-			const persist = async (collection: string, id: string, value: unknown, bytes: number) => {
+			const persist = async (collection: string, id: string, value: unknown, bytes: number, binaryRevision?: string) => {
 				const previous = (await request(records.get([scopeKey, collection, id]))) as WorkspaceRecord | undefined;
 				const usage: Usage = (await request(usageStore.get(scopeKey))) || { scope: scopeKey, records: 0, bytes: 0 };
 				usage.records += previous ? 0 : 1;
@@ -253,7 +256,7 @@ export class WorkspaceDatabase {
 				if (!Number.isSafeInteger(usage.records) || !Number.isSafeInteger(usage.bytes) || usage.records < 0 || usage.bytes < 0)
 					throw new WorkspaceError('LOCAL_ACCOUNTING_UNAVAILABLE', 'Device storage usage could not be updated safely. Saved content is unchanged.', 503);
 				lease.assertCurrent();
-				await request(records.put({ scope: scopeKey, collection, id, value, bytes } satisfies WorkspaceRecord));
+				await request(records.put({ scope: scopeKey, collection, id, value, bytes, ...(binaryRevision ? { binaryRevision } : {}) } satisfies WorkspaceRecord));
 				await request(usageStore.put(usage));
 			};
 			const removeRecord = async (collection: string, id: string, binary = false) => {
@@ -316,18 +319,30 @@ export class WorkspaceDatabase {
 						throw new WorkspaceError('TIMELINE_EVENT_SIZE', 'This Timeline record exceeds the canonical event capacity.', 413);
 					await persist(collection, id, JSON.parse(encoded), bytes);
 				},
-				getBytes: async (id) => {
+				getBinary: async (id) => {
 					check(BINARY_COLLECTION, id, true);
-					const found = (await request(records.get([scopeKey, BINARY_COLLECTION, id]))) as WorkspaceRecord<Uint8Array> | undefined;
+					const found = (await request(records.get([scopeKey, BINARY_COLLECTION, id]))) as WorkspaceRecord<Uint8Array | Blob> | undefined;
 					lease.assertCurrent();
-					if (found && (!(found.value instanceof Uint8Array) || found.value.byteLength !== found.bytes))
+					if (!found) return undefined;
+					const size = found.value instanceof Uint8Array ? found.value.byteLength : found.value instanceof Blob ? found.value.size : -1;
+					if (size !== found.bytes || (found.binaryRevision !== undefined && typeof found.binaryRevision !== 'string') || (found.value instanceof Blob && !found.binaryRevision))
 						throw new WorkspaceError('INVALID_LOCAL_FILE', 'Stored file bytes are invalid');
+					return { value: found.value, revision: found.binaryRevision };
+				},
+				getBytes: async (id) => {
+					const found = await tx.getBinary(id);
+					if (found?.value instanceof Blob) throw new WorkspaceError('BLOB_READ_REQUIRED', 'Read this file outside the storage transaction through its Blob adapter.');
 					return found?.value;
+				},
+				putBlob: async (id, value) => {
+					check(BINARY_COLLECTION, id, true);
+					if (!(value instanceof Blob)) throw new WorkspaceError('INVALID_LOCAL_FILE', 'File content must be a Blob');
+					await persist(BINARY_COLLECTION, id, value, value.size, crypto.randomUUID());
 				},
 				putBytes: async (id, value) => {
 					check(BINARY_COLLECTION, id, true);
 					if (!(value instanceof Uint8Array)) throw new WorkspaceError('INVALID_LOCAL_FILE', 'File bytes must be a byte array');
-					await persist(BINARY_COLLECTION, id, Uint8Array.from(value), value.byteLength);
+					await persist(BINARY_COLLECTION, id, Uint8Array.from(value), value.byteLength, crypto.randomUUID());
 				},
 				deleteBytes: async (id) => removeRecord(BINARY_COLLECTION, id, true),
 				delete: (collection, id) => removeRecord(collection, id)
@@ -338,6 +353,7 @@ export class WorkspaceDatabase {
 			const remove = tx.delete;
 			const putBytes = tx.putBytes;
 			const deleteBytes = tx.deleteBytes;
+			const putBlob = tx.putBlob;
 			tx.put = (...args) => (writes = writes.then(() => put(...args)));
 			tx.delete = (...args) => (writes = writes.then(() => remove(...args)));
 			tx.putBytes = (...args) => {
@@ -347,6 +363,7 @@ export class WorkspaceDatabase {
 				const copy = Uint8Array.from(bytes);
 				return (writes = writes.then(() => putBytes(id, copy)));
 			};
+			tx.putBlob = (...args) => (writes = writes.then(() => putBlob(...args)));
 			tx.deleteBytes = (...args) => (writes = writes.then(() => deleteBytes(...args)));
 			return tx;
 		};

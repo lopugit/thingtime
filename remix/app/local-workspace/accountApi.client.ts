@@ -694,7 +694,8 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 				const row = await worker().files.things.saveFile(input, options?.signal); changed();
 				return { ok: true, attachment: { id: row.id, ...row.crystal }, savedLocally: true };
 			},
-			readLocalFile: async ({ id }: { id: string }, options?: { signal?: AbortSignal }) => {
+			readLocalFile: async ({ id }: { id: string }, options?: { signal?: AbortSignal; format?: 'blob' }) => {
+			if (options?.format === 'blob') { const { row, blob } = await worker().files.readFileBlob(id, options.signal); return { ok: true, attachment: { id: row.id, ...row.crystal }, blob }; }
 				const { row, bytes } = await worker().files.readFile(id, options?.signal);
 				return { ok: true, attachment: { id: row.id, ...row.crystal }, bytes };
 			}

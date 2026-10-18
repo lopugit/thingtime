@@ -1,3 +1,4 @@
+import { binaryBlob, sameBinary } from './binary';
 import { draftConflict, validateDraftContent, validDraftId, type AccountDraft, type DraftContent } from '../drafts/draftCore';
 import { localPostProjection } from './posts';
 import { postDraftFromPost, remapPostDraftAttachments } from '../drafts/postDraft';
@@ -8,12 +9,12 @@ import { type WorkspaceDatabase, WorkspaceError, type WorkspaceLease, type Works
 
 export type StoredDraft = { draft: AccountDraft; writeId: string; deleted: boolean; source?: { kind: 'template' | 'draft' | 'post'; id: string } };
 export type LocalDraftHooks = {
- readFile?: (id: string) => Promise<{row: LocalAttachment; bytes: Uint8Array}>;
+ readFile?: (id: string) => ReturnType<LocalThings['readFileBlob']>;
  assertFileReadable?: (tx: WorkspaceTransaction, id: string) => Promise<void>;
  copiedFile?: (tx: WorkspaceTransaction, row: LocalAttachment) => Promise<void>;
  changed?: (tx: WorkspaceTransaction, row: StoredDraft, previous?: StoredDraft) => Promise<void>;
 };
-type PreparedFiles = Map<string, { row: LocalAttachment; bytes: Uint8Array }>;
+type PreparedFiles = Map<string, Awaited<ReturnType<LocalThings['readFileBlob']>>>;
 const fail = (status: number, message: string): never => { throw new WorkspaceError('LOCAL_DRAFT_ERROR', message, status); };
 /** Canonical draft snapshots and revision/tombstone semantics. Metadata, media
  * binding, byte copies and quota accounting commit together in the scoped store. */
@@ -24,18 +25,18 @@ export class LocalDrafts {
   const files: PreparedFiles = new Map();
   const things = new LocalThings(this.db, this.scope, this.lease);
   for (const id of content.attachmentIds) {
-   try { files.set(id, await (this.hooks.readFile ? this.hooks.readFile(id) : things.readFile(id))); }
+   try { files.set(id, await (this.hooks.readFile ? this.hooks.readFile(id) : things.readFileBlob(id))); }
    catch { this.lease.assertCurrent(); return fail(400, 'Draft attachment is not in this workspace or its bytes are unavailable'); }
   }
   return files;
  }
  private async file(tx: WorkspaceTransaction, id: string, prepared: PreparedFiles) {
-  const expected = prepared.get(id), row = await tx.get<LocalThing>('things', id), bytes = await tx.getBytes(id);
+  const expected = prepared.get(id), row = await tx.get<LocalThing>('things', id), snapshot = await tx.getBinary(id);
   // The asynchronous checksum ran before the IDB transaction. Recheck exact
-  // metadata and bytes in the transaction, so no TOCTOU or IDB idle-commit gap.
-  if (!expected || !row || !isLocalAttachment(row) || localAttachmentExpired(row) || JSON.stringify(row) !== JSON.stringify(expected.row) || !bytes || bytes.length !== expected.bytes.length || !bytes.every((byte, index) => byte === expected.bytes[index])) return fail(409, 'Draft attachment changed. Retry with the current files.');
+  // metadata and the storage revision in IDB; never await Blob I/O there.
+  if (!expected || !row || !isLocalAttachment(row) || localAttachmentExpired(row) || JSON.stringify(row) !== JSON.stringify(expected.row) || !sameBinary(snapshot, expected.snapshot)) return fail(409, 'Draft attachment changed. Retry with the current files.');
   await this.hooks.assertFileReadable?.(tx, id);
-  return { row, bytes };
+  return { row, snapshot: snapshot!, blob: binaryBlob(snapshot!.value) };
  }
  async releaseFiles(tx: WorkspaceTransaction, draftId: string, kept: string[]) {
   for (const { value: row } of await tx.list<LocalThing>('things')) if (isLocalAttachment(row) && row.localAttachment.draftId === draftId && !kept.includes(row.id)) {
@@ -48,13 +49,13 @@ export class LocalDrafts {
  private async copy(tx: WorkspaceTransaction, source: DraftContent, prepared: PreparedFiles) {
   const mapping = new Map<string, string>(), files: PreparedFiles = new Map();
   for (const sourceId of source.attachmentIds) {
-   const { row, bytes } = await this.file(tx, sourceId, prepared);
+   const { row, blob } = await this.file(tx, sourceId, prepared);
    const id = `local-file-${this.uuid()}`, stamp = new Date().toISOString();
    const copy: LocalAttachment = { id, thingtime: ['attachment'], crystal: { ...row.crystal }, createdAt: stamp, updatedAt: stamp, revision: 1,
     localAttachment: { ...(this.scope.kind === 'account' ? { requestId: this.uuid() } : {}), purpose: source.surface === 'comment' ? 'comment' : 'post', sha256: row.localAttachment.sha256, order: mapping.size, expiresAt: new Date(Date.now() + LOCAL_ATTACHMENT_DRAFT_MS).toISOString() } };
-   await tx.put('things', id, copy); await tx.putBytes(id, bytes);
+   await tx.put('things', id, copy); await tx.putBlob(id, blob);
    await this.hooks.copiedFile?.(tx, copy);
-   mapping.set(sourceId, id); files.set(id, { row: copy, bytes });
+   mapping.set(sourceId, id); files.set(id, { row: copy, blob, snapshot: (await tx.getBinary(id))! });
   }
   return { content: { ...source, attachmentIds: [...mapping.values()], snapshot: remapPostDraftAttachments(source.snapshot, mapping) }, files };
  }

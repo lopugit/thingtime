@@ -4110,3 +4110,24 @@ credential or private browser profile was used. The task's isolated browser and
 backend are stopped, temporary profile/key material is removed, and account
 acceptance remains open. See the claim's `credential-boundary.json` and
 `cleanup.json`. Existing unrelated local services and test data are preserved.
+
+
+## Native file Blob checkpoint — 2026-10-18
+
+Normal local file save/read/copy/download, draft copies and previews now retain
+immutable Blob handles and hash in 1 MiB chunks. Atomic storage revisions fence
+post/draft replacement races; old byte-array records remain readable. Local copies
+no longer inherit paired-device size limits. Account upload parts use native Blob
+slices under unchanged authorization, leases and signed-request protections.
+
+659 workspace + four offline-shell checks passed; 72 opt-in checks skipped.
+17 focused file/copy tests passed (overlap the workspace suite). Client/template/
+Node server builds passed; lint has zero errors/five existing warnings and the
+same 91 TypeScript diagnostics. **Native UI is unverified:** Chrome sandbox
+initialization failed before reaching the isolated app on both attempts. OS network
+preflight passed; browser protections were preserved and temporary services/data
+were cleaned up. Existing account credential-interface and GitHub PR-head
+visibility blockers remain separate. No merge, manual deployment, public content
+or existing-account mutation occurred.
+
+[Implementation, evidence and remaining buffers](../docs/local-workspaces.md#native-blob-file-storage--2026-10-18).

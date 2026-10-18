@@ -1,5 +1,4 @@
 import { useWorkspaceUser } from '~/hooks/useWorkspaceUser';
-import { LEGACY_FILE_BUFFER_LIMITS } from '~/local-workspace/storage';
 import { attachmentCountLimit } from '~/schemas/attachmentLimits';
 import { withAttachmentRateLimitRetry } from './attachmentRateLimitRetry';
 import { HeicImageError, isHeicImage, prepareHeicImage } from './heicImage';
@@ -166,7 +165,7 @@ export const useAttachmentUploads = (
 		: attachmentCountLimit(uploadPurpose);
 	const imageOnly = options.imageOnly === true;
 	const configuredMaxBytes = Number.isSafeInteger(options.maxBytesPerFile) && Number(options.maxBytesPerFile) > 0 ? Number(options.maxBytesPerFile) : null;
-	const maxBytesPerFile = saveOnDevice ? Math.min(configuredMaxBytes || Infinity, LEGACY_FILE_BUFFER_LIMITS.binaryBytes) : configuredMaxBytes;
+	const maxBytesPerFile = configuredMaxBytes;
 	const allowedContentTypes = React.useMemo(
 		() => (options.allowedContentTypes?.length ? new Set(options.allowedContentTypes.map((value) => value.toLowerCase())) : null),
 		[options.allowedContentTypes]
@@ -300,9 +299,8 @@ export const useAttachmentUploads = (
 				}
 				if (saveOnDevice) {
 					if (!['post', 'comment', 'file'].includes(purpose)) throw new Error('This attachment target requires its account service.');
-					if (file.size > LEGACY_FILE_BUFFER_LIMITS.binaryBytes) throw new Error('A local file cannot exceed 16 MiB.');
-					const bytes = new Uint8Array(await file.arrayBuffer()); controller.signal.throwIfAborted();
-					const result = await selectedApi.saveLocalFile({ requestId: localId, name: file.name, contentType: file.type || 'application/octet-stream', bytes, purpose: purpose as 'post' | 'comment' | 'file' }, { signal: controller.signal });
+					controller.signal.throwIfAborted();
+					const result = await selectedApi.saveLocalFile({ requestId: localId, name: file.name, contentType: file.type || 'application/octet-stream', bytes: file, purpose: purpose as 'post' | 'comment' | 'file' }, { signal: controller.signal });
 					const attachment = normalizePublicAttachment(result?.attachment);
 					if (!attachment) throw new Error('Invalid local attachment metadata');
 					if (!isCurrent(localId, attempt)) { void selectedApi.remove({ id: attachment.id }).catch(() => {}); return; }

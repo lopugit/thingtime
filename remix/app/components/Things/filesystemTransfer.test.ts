@@ -67,3 +67,22 @@ test('copy into a cloud descendant is rejected before any destination is created
   await assert.rejects(transferFilesystem({ ...source([parent]), mode: 'copy' }, { folderId: 'child' }, port), /cannot be pasted into itself/);
   assert.deepEqual(calls, []);
 });
+
+test('native file copies preserve Blob handles beyond paired-device buffer limits', async () => {
+  const { port, calls } = fixture();
+  const bytes = new Uint8Array(1024 * 1024), blobs = new Map<string, File>();
+  const items = ['large-one', 'large-two'].map(id => {
+    const blob = new File(Array.from({ length: 70 }, () => bytes), `${id}.bin`);
+    blobs.set(id, blob);
+    return { ...file(id), crystal: { name: blob.name, size: blob.size } };
+  });
+  const written: File[] = [];
+  port.read = async item => blobs.get(item.id)!;
+  port.write = async (_destination, blob) => { written.push(blob); };
+  await transferFilesystem({ ...source(items), mode: 'copy' }, { folderId: 'other' }, port);
+  assert.deepEqual(written, [...blobs.values()]);
+  assert.equal(written[0], blobs.get('large-one'));
+  assert.equal(written[1], blobs.get('large-two'));
+  assert.deepEqual(calls, []);
+  await assert.rejects(transferFilesystem({ ...source(items), mode: 'copy' }, { deviceId: 'mac', path: '' }, port), /Paired-device transfers/);
+});

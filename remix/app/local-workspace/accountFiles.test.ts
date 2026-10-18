@@ -32,7 +32,7 @@ function fixture() {
 			}));
 		},
 		put: async (part, body) => {
-			calls.push({ kind: 'put', value: { number: part.partNumber, body: Array.from(body) } });
+			calls.push({ kind: 'put', value: { number: part.partNumber, body: Array.from(body instanceof Blob ? new Uint8Array(await body.arrayBuffer()) : body) } });
 		},
 		complete: async (id) => {
 			calls.push({ kind: 'complete', value: id });

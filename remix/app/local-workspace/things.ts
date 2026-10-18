@@ -1,3 +1,4 @@
+import { binaryBlob, binarySize, blobChecksum, checkedBinary, sameBinary } from './binary';
 import { normalizeLibraryTitle } from '../utils/libraryTitle';
 import { LOCAL_TIMELINE_FOLDER, localTimelineFolder, recordLocalThingChanges, type LocalMutationCapture } from './timeline';
 import { captureThingChanges, type ThingTransactionCapture } from './thingChanges';
@@ -154,8 +155,8 @@ export class LocalThings {
 		const kinds = previous?.thingtime || input.thingtime;
 		const purpose = Array.isArray(kinds) && kinds.includes('comment') ? 'comment' : 'post';
 		if (!Array.isArray(ids) || ids.length > attachmentCountLimit(purpose) || ids.some(id => typeof id !== 'string') || new Set(ids).size !== ids.length) fail('INVALID_ATTACHMENT', 'Invalid local attachment selection');
-		const files = new Map<string, Awaited<ReturnType<LocalThings['readFile']>>>();
-		for (const fileId of ids as string[]) files.set(fileId, await this.readFile(fileId));
+		const files = new Map<string, Awaited<ReturnType<LocalThings['readFileBlob']>>>();
+		for (const fileId of ids as string[]) files.set(fileId, await this.readFileBlob(fileId));
 		const crystal = previous ? input.replaceCrystal ? input.crystal : { ...previous.crystal, ...input.crystal as object } : input.crystal;
 		const checked = validated({ ...previous, ...input, thingtime: previous?.thingtime || input.thingtime, crystal }, { hasAny: files.size > 0, hasVisual: [...files.values()].some(({ row }) => ['image', 'video'].includes(String(row.crystal.mediaKind))) });
 		if (!checked.thingtime.includes('post') || checked.thingtime.some(kind => !['post', 'comment'].includes(kind))) fail('INVALID_THING', 'Select a local post or comment');
@@ -177,8 +178,8 @@ export class LocalThings {
 			}
 			await this.placement(tx, row);
 			for (const [order, fileId] of (ids as string[]).entries()) {
-				const expected = files.get(fileId)!, file = await tx.get<LocalThing>('things', fileId), bytes = await tx.getBytes(fileId);
-				if (!file || !isLocalAttachment(file) || JSON.stringify(file) !== JSON.stringify(expected.row) || !bytes || bytes.length !== expected.bytes.length || !bytes.every((byte, n) => byte === expected.bytes[n])) fail('WRITE_CONFLICT', 'Post files changed; retry with the current selection', 409);
+				const expected = files.get(fileId)!, file = await tx.get<LocalThing>('things', fileId), bytes = await tx.getBinary(fileId);
+				if (!file || !isLocalAttachment(file) || JSON.stringify(file) !== JSON.stringify(expected.row) || !sameBinary(bytes, expected.snapshot)) fail('WRITE_CONFLICT', 'Post files changed; retry with the current selection', 409);
 				const attachment = file as LocalAttachment;
 				if (attachment.localAttachment.purpose !== purpose || (attachment.targetId && attachment.targetId !== id)) fail('INVALID_ATTACHMENT', 'Post files belong to another Thing');
 				if (attachment.localAttachment.draftId) {
@@ -198,33 +199,40 @@ export class LocalThings {
 			await tx.put('things', id, row); await this.onWrite?.(tx, row, previous || null, input); return row;
 		});
 	}
-	async saveFile(input: { requestId: string; name: string; contentType: string; bytes: Uint8Array; folderId?: string | null; purpose?: 'file' | 'recording' | 'post' | 'comment' }, signal?: AbortSignal) {
+	async saveFile(input: { requestId: string; name: string; contentType: string; bytes: Uint8Array | Blob; folderId?: string | null; purpose?: 'file' | 'recording' | 'post' | 'comment' }, signal?: AbortSignal) {
 		this.lease.assertCurrent(); signal?.throwIfAborted();
 		if (this.scope.kind !== 'anonymous' && !this.onFileWrite) fail('LOCAL_OPERATION_UNAVAILABLE', 'Account files require their dedicated sync adapter');
 		if (!/^[a-zA-Z0-9-]{16,80}$/.test(input.requestId)) fail('INVALID_REQUEST', 'A stable file save request ID is required');
-		if (!(input.bytes instanceof Uint8Array) || input.bytes.byteLength > LEGACY_FILE_BUFFER_LIMITS.binaryBytes) fail('LOCAL_QUOTA', 'A local file cannot exceed 16 MiB', 413);
-		const bytes = Uint8Array.from(input.bytes), sha256 = await transferChecksum(bytes);
+		input = { ...input };
+		if (!(input.bytes instanceof Uint8Array) && !(input.bytes instanceof Blob)) fail('INVALID_LOCAL_FILE', 'File content must be bytes or a Blob');
+		const bytes = input.bytes instanceof Blob ? input.bytes : Uint8Array.from(input.bytes);
+		const sha256 = await blobChecksum(binaryBlob(bytes), () => { this.lease.assertCurrent(); signal?.throwIfAborted(); });
 		this.lease.assertCurrent(); signal?.throwIfAborted();
 		const purpose = input.purpose ?? 'file';
 		if (!['file', 'recording', 'post', 'comment'].includes(purpose) || (!['file', 'recording'].includes(purpose) && input.folderId)) fail('INVALID_ATTACHMENT', 'Invalid local file purpose or placement');
 		const id = `local-file-${input.requestId}`;
-		const row = createLocalAttachment(id, { id: 'bytes', targetId: id, path: 'files/000000', name: input.name, mime: input.contentType, bytes: bytes.byteLength, sha256 }, this.now(), purpose, 0, input.folderId ? { folderId: input.folderId } : {});
+		const row = createLocalAttachment(id, { id: 'bytes', targetId: id, path: 'files/000000', name: input.name, mime: input.contentType, bytes: binarySize(bytes), sha256 }, this.now(), purpose, 0, input.folderId ? { folderId: input.folderId } : {});
 		row.localAttachment.requestId = input.requestId; row.localAttachment.initialFolderId = input.folderId || null;
 		if (!['file', 'recording'].includes(purpose)) row.localAttachment.expiresAt = new Date(Date.parse(this.now()) + LOCAL_ATTACHMENT_DRAFT_MS).toISOString();
-		return this.transaction('readwrite', async tx => {
+		let replay = false;
+		const saved = await this.transaction('readwrite', async tx => {
 			signal?.throwIfAborted();
 			await reapLocalAttachmentDrafts(tx, Date.parse(this.now()));
 			const previous = await tx.get<LocalThing>('things', id);
 			if (previous) {
 				if (!isLocalAttachment(previous) || previous.localAttachment.purpose !== purpose || previous.localAttachment.requestId !== input.requestId || previous.localAttachment.sha256 !== sha256 || previous.crystal.name !== row.crystal.name || previous.crystal.contentType !== row.crystal.contentType || (previous.localAttachment.initialFolderId === undefined ? previous.folderId || null : previous.localAttachment.initialFolderId) !== (row.folderId || null)) fail('WRITE_CONFLICT', 'This file save request was already used for different content', 409);
-				const stored = await tx.getBytes(id);
-				if (!stored || stored.length !== bytes.length || !stored.every((byte, index) => byte === bytes[index])) fail('MISSING_LOCAL_FILE', 'Local file bytes are missing or changed');
-				return previous as LocalAttachment;
+				const stored = await tx.getBinary(id);
+				if (!stored || binarySize(stored.value) !== binarySize(bytes)) fail('MISSING_LOCAL_FILE', 'Local file bytes are missing or changed');
+				replay = true; return previous as LocalAttachment;
 			}
-			await this.placement(tx, row); await tx.put('things', id, row); await tx.putBytes(id, bytes);
+			await this.placement(tx, row); await tx.put('things', id, row); if (bytes instanceof Blob) await tx.putBlob(id, bytes); else await tx.putBytes(id, bytes);
 			await this.onFileWrite?.(tx, row);
 			signal?.throwIfAborted(); return row;
 		});
+		// Blob I/O must happen outside IDB. A replay still verifies the stored
+		// content rather than trusting its metadata or changing any bytes.
+		if (replay && (await this.readFileBlob(id, signal)).row.localAttachment.sha256 !== sha256) fail('MISSING_LOCAL_FILE', 'Local file bytes are missing or changed');
+		this.lease.assertCurrent(); signal?.throwIfAborted(); return saved;
 	}
 	/** Rename a theme through its dedicated local transaction and sync adapter. */
 	async renameLibrary(input: { id: string; displayTitle: unknown; expectedUpdatedAt?: string }) {
@@ -280,17 +288,23 @@ export class LocalThings {
 			await tx.put('things', row.id, row); await this.onFileWrite?.(tx, row, previous); return row;
 		});
 	}
-	async readFile(id: string, signal?: AbortSignal) {
-		this.lease.assertCurrent(); signal?.throwIfAborted();
+	async readFileBlob(id: string, signal?: AbortSignal) {
+		const check = () => { this.lease.assertCurrent(); signal?.throwIfAborted(); }; check();
 		const result = await this.transaction('readonly', async tx => {
 			const row = await tx.get<LocalThing>('things', id);
 			if (!row || !isLocalAttachment(row) || localAttachmentExpired(row, Date.parse(this.now()))) return fail('MISSING_LOCAL_FILE', 'File is not stored in this workspace', 404);
-			const bytes = await tx.getBytes(id);
-			if (!bytes || bytes.byteLength !== row.crystal.size) return fail('MISSING_LOCAL_FILE', 'Local file bytes are missing or changed');
-			return { row, bytes };
+			const snapshot = checkedBinary(await tx.getBinary(id), row.crystal.size);
+			return { row, snapshot, blob: binaryBlob(snapshot.value) };
 		});
-		if (await transferChecksum(result.bytes) !== result.row.localAttachment.sha256) fail('MISSING_LOCAL_FILE', 'Local file bytes are missing or changed');
-		this.lease.assertCurrent(); signal?.throwIfAborted(); return result;
+		if (await blobChecksum(result.blob, check) !== result.row.localAttachment.sha256) fail('MISSING_LOCAL_FILE', 'Local file bytes are missing or changed');
+		check(); return result;
+	}
+	/** Compatibility adapter for buffered transfer consumers. Native file paths
+	 * use readFileBlob and never allocate a whole-file byte array. */
+	async readFile(id: string, signal?: AbortSignal) {
+		const { row, blob } = await this.readFileBlob(id, signal);
+		const bytes = new Uint8Array(await blob.arrayBuffer());
+		this.lease.assertCurrent(); signal?.throwIfAborted(); return { row, bytes };
 	}
 	/** A routing hint from this partition, not an ownership grant. Retained
 	 * history also keeps deleted local identities from falling through to public
@@ -418,7 +432,7 @@ export class LocalThings {
 	}
 	async export(ids: string[], options: CollectTransferOptions = {}) {
 		return exportLocalThingSnapshot(await this.snapshot(), this.builtins, ids, this.lease,
-			id => this.transaction('readonly', tx => tx.getBytes(id)), options);
+			async id => (await this.readFile(id, options.signal)).bytes, options);
 	}
 	async import(input: unknown, folderId?: string | null, fileBytes = new Map<string, Uint8Array>(), signal?: AbortSignal) {
 		this.lease.assertCurrent(); signal?.throwIfAborted();

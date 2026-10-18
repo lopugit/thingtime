@@ -4507,3 +4507,60 @@ credential or private browser profile was used. The task's isolated browser and
 backend are stopped, temporary profile/key material is removed, and account
 acceptance remains open. See the claim's `credential-boundary.json` and
 `cleanup.json`. Existing unrelated local services and test data are preserved.
+
+
+## Native Blob file storage — 2026-10-18
+
+Ordinary device attachments now persist immutable `Blob` values in the existing
+scoped binary collection. `binary.ts` hashes at most 1 MiB per read, checking
+cancellation and the captured workspace lease between chunks. Attachment Things,
+portable metadata, ownership and account authorization contracts are unchanged.
+Every new binary write has a storage-only revision; post/draft transactions compare
+that revision and exact metadata after asynchronous hashing, preventing replacement
+between preparation and commit without keeping IndexedDB open across Blob I/O.
+Legacy byte-array records remain readable and retain exact comparison semantics.
+
+The normal upload picker, Things file browser, download, local file copy, draft
+copy and native media URLs use Blob handles. Local copy no longer inherits the
+paired-device 32 MiB/128 MiB buffer limits. Media reads remain limited to three
+concurrent jobs and abort on release, refresh or identity retirement, rather than
+rejecting a 65th visible reference or more than 64 MiB in visible files. Unsafe
+HTML/SVG stays an opaque download. Actual browser quota failures remain atomic;
+this does not promise unlimited browser storage or decoding capacity.
+
+The account worker slices the same Blob into the canonical signed multipart
+upload plan and hashes each part in chunks. It accepts the service's existing
+maximum of 10,000 parts rather than imposing a client-only 100-part cutoff.
+Authenticated sync is independent of local completion; anonymous work creates no
+account upload intent. Signed requests still omit credentials, refuse redirects
+and enforce the current remote lease. This change adds no HTTP endpoint or remote
+contract; `readLocalFile({id}, {format:'blob'})` is an in-process facade option.
+
+Local evidence: **659 workspace tests passed, 72 opt-in tests skipped**, plus
+**four offline-shell checks**. **17 focused tests** cover exact 70 MiB save/reopen/
+retry, two 70 MiB native copies, quota rollback, cancellation, same-size replacement
+races, independent template/post bytes, legacy records and 101 exact upload parts.
+These totals overlap. Client build, Nitro template sync and Node server build
+passed; 249 offline assets total 22,257,777 bytes. Changed-file lint has zero errors
+and five existing warnings. TypeScript retains the same 91 baseline diagnostics.
+Evidence: `tmp/local-blob-{workspace-final,regression-final,build-final,server-build-final,lint-complete}.log`
+and `tmp/local-blob-typecheck-verification.json`.
+
+Native acceptance is **not passed**. `fileBlobs.browser.test.ts` exercises the real
+anonymous UI, offline cold reload, exact download hash, normal file copy and image
+preview at 1440/390/320px. The fresh browser/backend fixture passed its OS-level
+allowed-loopback, denied redirect, direct-IP and mapped-IPv6 preflight. Chrome then
+failed to initialize its renderer/network sandbox inside the inherited macOS
+sandbox, in both headful and headless attempts, before reaching Thingtime. No
+protections were disabled and no personal browser was used. This run produced no
+native UI screenshots. Logs and preflight evidence remain under
+`tmp/blob-browser-a4b1ddca-7d92-4f95-b054-a146f5fae903/` and
+`tmp/local-blob-browser{,-retry}.log`; task-owned services and temporary database
+were cleaned up. Account authentication tests separately require the device
+Thingtime password manager's supported credential interface.
+
+Remaining scope: bounded buffered ZIP/import/export adapters, retention of remote
+originals, paired-device transfers, folder traversal/catalogue caps and final
+native/agent-host acceptance. Existing render/export artifacts are historical
+proof, not retested against this checkpoint. The full local-first goal and main
+merge gate remain open.

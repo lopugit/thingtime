@@ -137,7 +137,7 @@ export function accountThingTransport(scope: Extract<WorkspaceScope, { kind: 'ac
 				if (url.username || url.password || !(url.protocol === 'https:' || (url.protocol === 'http:' && ['localhost','127.0.0.1','[::1]'].includes(url.hostname)))) throw new WorkspaceError('INVALID_UPLOAD_URL','The account returned an invalid storage URL.',502);
 				const off = remote.onInvalidate(() => retired.abort());
 				try {
-					const response = await fetch(url, { method: 'PUT', body: Uint8Array.from(bytes), headers: part.headers, credentials: 'omit', redirect: 'error', referrerPolicy: 'no-referrer', signal: AbortSignal.any([signal, retired.signal, AbortSignal.timeout(20_000)]) });
+					const response = await fetch(url, { method: 'PUT', body: bytes instanceof Blob ? bytes : Uint8Array.from(bytes), headers: part.headers, credentials: 'omit', redirect: 'error', referrerPolicy: 'no-referrer', signal: AbortSignal.any([signal, retired.signal, AbortSignal.timeout(20_000)]) });
 					lease.assertCurrent(); remote.assertCurrent();
 					if (!response.ok) throw new WorkspaceError('UPLOAD_PART_FAILED','File bytes could not reach storage.',response.status);
 				} finally { off(); }
