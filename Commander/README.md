@@ -267,3 +267,15 @@ sets only that window's level; closing/reopening reuses the window during the
 current app session. Double-click the Settings or Processes title bar to maximize
 within the current screen's usable area, then again to restore its previous frame.
 This does not enter a fullscreen Space.
+
+### Isolated native window development
+
+Run `./script/window-preview.sh` from `Commander/` to build a fast unsigned
+window preview, then open the printed `.app` path. It uses the production
+`CommanderUtilityWindow` implementation and a worktree-specific bundle identity
+and cache directory. It has no daemon, ports, network, credentials, global
+hotkeys, or access to the installed Commander profile. Its duplicate-delivery
+button exercises native/web double-click coalescing; the titlebar and Keep above
+control exercise native window behavior. Run `./script/window-preview.sh --clean`
+to stop and remove this worktree's generated preview before final verification.
+The preview supplements the canonical signed installed-app acceptance checks.

@@ -13,7 +13,6 @@ import {
   type ProcessFilter,
   type ProcessPreferences,
 } from './processModel.js';
-import '../styles/processes.css';
 
 const preferenceKey = 'commander.process-view.v1';
 function readPreferences(): ProcessPreferences {
@@ -285,6 +284,11 @@ export function ProcessesPanel({
       </p>
       <div className="activity-process-table-wrap">
         <table className="activity-process-table">
+          <colgroup>
+            {visibleColumns.map((column) => (
+              <col key={column} style={{ width: column === 'name' ? '28%' : '12%' }} />
+            ))}
+          </colgroup>
           <thead>
             <tr>
               {visibleColumns.map((column) => (

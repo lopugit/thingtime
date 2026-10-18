@@ -132,7 +132,8 @@
     min-width: 0;
     table-layout: fixed;
   }
-  .activity-process-table thead {
+  .activity-process-table thead,
+  .activity-process-table colgroup {
     display: none;
   }
   .activity-process-table tbody {
@@ -167,9 +168,6 @@
 @media (min-width: 701px) {
   .activity-process-table {
     table-layout: fixed;
-  }
-  .activity-process-table th:first-child {
-    width: 28%;
   }
   .activity-process-table td {
     white-space: normal;

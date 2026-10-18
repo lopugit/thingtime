@@ -36,6 +36,20 @@ final class ProcessUsageHistoryTests: XCTestCase {
 
 @MainActor
 final class CommanderUtilityWindowTests: XCTestCase {
+  func testDuplicateNativeAndWebZoomDeliveriesOnlyToggleOnce() {
+    _ = NSApplication.shared
+    let window = CommanderUtilityWindow(contentRect: NSRect(x: 120, y: 140, width: 800, height: 500), styleMask: [.titled, .resizable], backing: .buffered, defer: false)
+    let original = window.frame
+    let usable = NSScreen.main!.visibleFrame
+    window.requestZoom(in: usable, at: 10)
+    let maximized = window.frame
+    window.requestZoom(in: usable, at: 10.01)
+    XCTAssertEqual(window.frame, maximized)
+    window.requestZoom(in: usable, at: 12)
+    XCTAssertEqual(window.frame, original)
+    window.orderOut(nil)
+  }
+
   func testMaximizeRestoresExactFrameAndKeepsResizableNormalWindow() {
     _ = NSApplication.shared
     let original = NSRect(x: 120, y: 140, width: 800, height: 500)
