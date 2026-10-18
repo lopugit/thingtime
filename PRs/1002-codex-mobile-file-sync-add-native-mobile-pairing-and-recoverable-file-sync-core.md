@@ -2987,3 +2987,44 @@ Validation: 288 shared file-sync checks pass, including 19 focused draft/control
 tests. Focused lint passes. Full TypeScript has 91 diagnostics outside changed
 files. The isolated Chromium process-restart proof retains a 20-row view and
 imports at most 128 rows per page; all 270 operations remain unexecuted.
+
+## Editable paged conflict review — 2026-10-19
+
+Mac and iOS now supply `reviewPagedConflicts` directly from `MobileSyncConnections`.
+The active view holds one journal page; every choice is revisioned immediately.
+Explicit Cancel returns the draft-release decision. Stopping the transfer or
+changing account/origin disposes the view and preserves the draft for retry.
+The legacy array review remains for the deferred Android compatibility path.
+
+The view reuses the merged element/collection/condition Builder framework,
+`TransientBlockHost`, and `SettingsDocumentHost`. Heading, muted retention copy,
+repeated path/details, select/options, history and action buttons are individual
+editable blocks. The account stores only a private authored layout, never live
+file metadata, cursors or choices. Desktop uses its selected authenticated API
+transport rather than the renderer origin. Layout editing suspends live actions.
+
+The combined API advertises Things 1.36.0 (file-sync preferences plus editable
+blocks) and webpage resolve/install 1.6.0. File-sync and editable-write clients
+require the combined minor: the earlier 1.35.0 was independently used by these
+two branches and cannot prove both features. Existing endpoint route coverage
+and the isolated built-server manifest smoke pass.
+
+The production review/Builder over a real IndexedDB journal passed isolated
+Chromium checks: 22 conflicts across 20-row pages, immediate choices, Previous/
+Next, failed reads preserving rows, process-restart recovery, separate retention
+text/repeated-path/select-option/button edits saved and reloaded, desktop/mobile
+full-page scrolling, and explicit Cancel, Resolve and Retain results. The fixture
+layout API uses synthetic private Things; this is not installed native transfer,
+real account layout or Timeline restore acceptance. A numeric revision binding
+was corrected and regression-tested. Broader schema checks also updated the
+existing photo `sourceKind` projection expectation.
+
+Reproduce on macOS with `node remix/scripts/check-editable-sync-review.mjs`.
+Set `TT_PLAYWRIGHT_MODULE` to an installed Playwright package path when it is
+outside this checkout, and `TT_REVIEW_EVIDENCE` for saved screenshots/results.
+The harness verifies OS network isolation, owns port 28188 and temporary browser
+profiles, and refuses a permissive fallback. The built API smoke separately uses
+28247 with no live database. Neither test server is a user-facing dev server.
+
+The combined 10,000-path cap, installed Mac/iOS acceptance, background workers,
+complete account backups and large exports remain open. Android stays deferred.

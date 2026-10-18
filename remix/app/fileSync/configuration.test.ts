@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { fileSyncSchema, newFileSyncConfiguration, parseFileSyncConfiguration } from './configuration';
+import { FILE_SYNC_REQUIREMENTS, fileSyncSchema, newFileSyncConfiguration, parseFileSyncConfiguration } from './configuration';
 import { planConfiguredFileSync, readOwnedFileSyncConfiguration, type FileSyncApproval } from './configuredPlan';
 import { validateThingtimeCrystal, getThingtimeSchema, isProtectedThingtime } from '../schemas/registry';
 import { builtinSchemaCopySource, extendSchemaCopy } from '../schemas/schemaCopies';
 import { createApiCapabilitiesManifest } from '../docs/apiDocs';
 import { thingtimeCapabilityManifest } from '../api/utils/capabilities/thingtimeCapabilities';
+import { capabilitySatisfies } from '../api/utils/capabilities/capabilityContract';
 import type { SyncEntry, SyncScope } from './reconcile';
 
 const config = () => newFileSyncConfiguration({ name: 'Documents', deviceId: 'device-1', localRootId: 'native-root-1', remoteFolderId: 'folder-1' });
@@ -29,8 +30,8 @@ test('file sync is discoverable, independently copyable ordinary data with pause
  const copy = extendSchemaCopy(source, { name: 'My sync template', fields: [{ name: 'notes', type: 'string' }] });
  assert.equal(copy.ok, true);
  if (copy.ok) { assert.equal(copy.crystal.forkOf, 'schema-file-sync'); assert.equal(validateThingtimeCrystal(['schema'], copy.crystal).ok, true); }
- assert.equal(createApiCapabilitiesManifest(scope.origin).features['api.things'], '1.35.0');
- assert.equal(thingtimeCapabilityManifest(scope.origin).features['api.things'].version, '1.35.0');
+ assert.equal(createApiCapabilitiesManifest(scope.origin).features['api.things'], '1.36.0');
+ assert.equal(thingtimeCapabilityManifest(scope.origin).features['api.things'].version, '1.36.0');
  const valid = validateThingtimeCrystal(['file-sync'], { ...config(), treeUri: 'content://private', secret: 'never-store' });
  assert.equal(valid.ok, true); if (valid.ok) assert.deepEqual(valid.crystal, config());
  assert.equal(validateThingtimeCrystal(['file-sync', 'post'], config()).ok, false);
@@ -109,4 +110,10 @@ test('backup, upload and download decisions use the saved direction and safe del
   const result = planConfiguredFileSync(i); assert.equal(result.status, 'ready'); if (result.status !== 'ready') continue;
   const copy = result.plan.decisions[0]; assert.equal(copy.kind, 'copy'); if (copy.kind === 'copy') assert.equal(copy.from, mode === 'download' ? 'remote' : 'local');
  }
+});
+
+test('sync configurations require the combined contract rather than the older Builder-only minor', () => {
+ assert.equal(capabilitySatisfies('1.35.0', FILE_SYNC_REQUIREMENTS['api.things']), false);
+ assert.equal(capabilitySatisfies('1.36.0', FILE_SYNC_REQUIREMENTS['api.things']), true);
+ assert.equal(capabilitySatisfies('2.0.0', FILE_SYNC_REQUIREMENTS['api.things']), false);
 });

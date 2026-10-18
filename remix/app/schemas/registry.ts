@@ -1,4 +1,5 @@
 import { fileSyncSchema, parseFileSyncConfiguration, FILE_SYNC_KIND } from '../fileSync/configuration';
+import { HTML_ALLOWED_TAGS } from '../components/Kinds/htmlRenderPolicy';
 import { TIMELINE_SNAPSHOT_PART_KIND } from '../timeline/snapshotParts.ts';
 import { DEVICE_PLATFORMS } from '../devices/platform.ts';
 import { TIMELINE_BRANCH_KIND, TIMELINE_BRANCH_HEAD_KIND } from '../timeline/branches.ts';
@@ -1422,14 +1423,14 @@ export const COMPONENT_KEY_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 
 // Webpage block-tree caps (grammar + sanitizer live beside the component
 // sanitizer further down; see the webpage block grammar section).
-export const MAX_WEBPAGE_BLOCKS = 120;
-export const MAX_WEBPAGE_BLOCK_DEPTH = 8;
+export const MAX_WEBPAGE_BLOCKS = Number.POSITIVE_INFINITY;
+export const MAX_WEBPAGE_BLOCK_DEPTH = Number.POSITIVE_INFINITY;
 export const MAX_WEBPAGE_BLOCK_ID_CHARS = 40;
 export const MAX_WEBPAGE_BLOCK_REF_CHARS = 128;
 export const MAX_WEBPAGE_TEXT_CHARS = 2000;
-export const MAX_WEBPAGE_BLOCKS_BYTES = 48 * 1024;
+export const MAX_WEBPAGE_BLOCKS_BYTES = Number.POSITIVE_INFINITY;
 export const MAX_WEBPAGE_ROUTE_CHARS = 120;
-export const WEBPAGE_BLOCK_TYPES = ['component', 'container', 'text', 'native', 'media', 'html'] as const;
+export const WEBPAGE_BLOCK_TYPES = ['component', 'container', 'text', 'native', 'media', 'html', 'element', 'collection', 'condition'] as const;
 export const WEBPAGE_CONTAINER_DIRECTIONS = ['column', 'row', 'grid'] as const;
 export const WEBPAGE_TEXT_STYLES = ['body', 'heading', 'eyebrow'] as const;
 export const WEBPAGE_BLOCK_ALIGNS = ['start', 'center', 'end', 'stretch'] as const;
@@ -1572,9 +1573,8 @@ const webpageSchema: ThingtimeSchema = {
 			name: 'blocks',
 			type: 'record',
 			required: true,
-			max: MAX_WEBPAGE_BLOCKS,
 			description:
-				`Ordered block tree, max ${MAX_WEBPAGE_BLOCKS} blocks / ${MAX_WEBPAGE_BLOCK_DEPTH} deep: ` +
+				'Ordered editable block tree: ' +
 				'{ id, type: component (component ref + args), container (direction/gap/columns + children), ' +
 				'text (text + style, optional href link), or native (built-in screen key) — plus align/maxWidth per block }.'
 		}
@@ -5749,12 +5749,6 @@ const sanitizeWebpageBlock = (
 		if (Object.keys(css).length) block.css = css;
 	}
 
-	if (type === 'component') {
-		const component = typeof raw.component === 'string' ? raw.component.trim() : '';
-		if (!component || component.length > MAX_WEBPAGE_BLOCK_REF_CHARS || /[$\s]/.test(component)) {
-			return fail(400, `Block ${id} needs a component reference (componentKey or shareId)`);
-		}
-		block.component = component;
 		if (raw.args !== undefined && raw.args !== null) {
 			if (typeof raw.args !== 'object' || Array.isArray(raw.args)) {
 				return fail(400, `Block ${id} args must be an object of scalar arg values`);
@@ -5774,6 +5768,45 @@ const sanitizeWebpageBlock = (
 			}
 			if (Object.keys(args).length) block.args = args;
 		}
+	// Source bindings can scope any editable subtree. Execution retains the
+	// same viewer-owned Action authorization as a component source.
+	if (raw.source != null) {
+		const checked = sanitizeSourceBinding(raw.source);
+		if (isFail(checked)) return checked;
+		block.source = checked.source;
+	}
+	if (type === 'element' || type === 'collection' || type === 'condition') {
+		if (type === 'element') {
+			const tag = typeof raw.tag === 'string' ? raw.tag.toLowerCase() : 'div';
+			if (!HTML_ALLOWED_TAGS.has(tag) || tag.startsWith('tt-')) return fail(400, 'Element blocks require a safe HTML tag');
+			block.tag = tag;
+			if (typeof raw.text === 'string') block.text = raw.text;
+		}
+		for (const key of ['props', 'condition', 'format']) {
+			if (raw[key] == null) continue;
+			if (typeof raw[key] !== 'object' || Array.isArray(raw[key])) return fail(400, `Block ${key} must be an object`);
+			const checked = checkSchemaRenderTree(raw[key], 0, { nodes: 0 });
+			if (checked !== true) return checked;
+			block[key] = raw[key];
+		}
+		if (raw.children != null && !Array.isArray(raw.children)) return fail(400, 'Block children must be a list');
+		const children: Record<string, unknown>[] = [];
+		for (const child of (raw.children || []) as unknown[]) {
+			const checked = sanitizeWebpageBlock(child, depth + 1, state);
+			if (isFail(checked)) return checked;
+			children.push(checked.block);
+		}
+		if (children.length || type !== 'element') block.children = children;
+		return { ok: true, block };
+	}
+
+	if (type === 'component') {
+		const component = typeof raw.component === 'string' ? raw.component.trim() : '';
+		if (!component || component.length > MAX_WEBPAGE_BLOCK_REF_CHARS || /[$\s]/.test(component)) {
+			return fail(400, `Block ${id} needs a component reference (componentKey or shareId)`);
+		}
+		block.component = component;
+
 		// source: a DATA BINDING — the page runtime runs this action AS THE
 		// VIEWER (delegated, owner-only resolution like a ttAction click) when
 		// the page loads and again after any control on the page runs, and
@@ -5899,11 +5932,26 @@ export const sanitizeWebpageBlocks = (input: unknown): { ok: true; blocks: Recor
 	if (!Array.isArray(input)) return fail(400, 'Webpage blocks must be a list');
 	const state = { nodes: 0, ids: new Set<string>() };
 	const blocks: Record<string, unknown>[] = [];
-	for (const entry of input) {
-		const sanitized = sanitizeWebpageBlock(entry, 1, state);
-		if (isFail(sanitized)) return sanitized;
-		blocks.push(sanitized.block);
-	}
+	const pending = input.map(entry => ({ entry, target: blocks }));
+ const seen = new Set<object>();
+ for (let cursor = 0; cursor < pending.length; cursor++) {
+  const { entry, target } = pending[cursor];
+  if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return fail(400, 'Each webpage block must be an object');
+  if (seen.has(entry)) return fail(400, 'Webpage blocks must be an acyclic tree');
+  seen.add(entry);
+  const raw = entry as Record<string, unknown>;
+  if (raw.children != null && !Array.isArray(raw.children)) return fail(400, 'Block children must be a list');
+  const sanitized = sanitizeWebpageBlock({ ...raw, children: undefined }, 1, state);
+  if (isFail(sanitized)) return sanitized;
+  target.push(sanitized.block);
+  if (Array.isArray(raw.children)) {
+   if (!['container', 'element', 'collection', 'condition'].includes(String(raw.type))) return fail(400, 'This block type cannot contain children');
+   const children: Record<string, unknown>[] = [];
+   sanitized.block.children = children;
+   for (const child of raw.children) pending.push({ entry: child, target: children });
+  }
+ }
+
 	let serialized = '';
 	try {
 		serialized = JSON.stringify(blocks);

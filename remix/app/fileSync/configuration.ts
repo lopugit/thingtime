@@ -2,7 +2,7 @@ import type { ThingtimeSchema } from '../schemas/registry';
 import { validSyncPath, syncPathKey, type SyncMode } from './reconcile';
 
 export const FILE_SYNC_KIND = 'file-sync';
-export const FILE_SYNC_REQUIREMENTS = { 'api.things': '1.35.0' } as const;
+export const FILE_SYNC_REQUIREMENTS = { 'api.things': '1.36.0' } as const;
 export const MAX_SYNC_EXCLUSIONS = 100;
 export type FileSyncConfiguration = {
  configurationVersion: 1;

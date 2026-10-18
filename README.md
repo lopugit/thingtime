@@ -5543,3 +5543,12 @@ never missing-file evidence. The 20-second observation deadline and legacy
 whole-tree inventory/foreground limits are unchanged. Run the existing isolated
 `npm --prefix remix run test:files:inventory-pages` fixture for actual authenticated
 handler coverage; see `docs/mobile-file-sync.md` for remaining acceptance gates.
+
+### Editable file-sync review compatibility
+
+The Mac/iOS review layout uses ordinary private webpage Things. Forks must serve
+`api.things >=1.36.0` and `api.webpages-resolve >=1.6.0` with matching majors on
+the selected API origin before saving this layout. Existing account/data-plane
+fences and desktop authenticated proxy transport apply; no extra secret or
+settings-specific endpoint is required. See [mobile file sync](docs/mobile-file-sync.md#editable-paged-conflict-review--2026-10-19)
+for the isolated browser harness and remaining native acceptance gates.

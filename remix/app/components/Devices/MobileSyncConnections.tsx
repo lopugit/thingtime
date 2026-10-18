@@ -5,6 +5,9 @@ import { NativeFileRecovery } from './NativeFileRecovery';
 import { TIMELINE_CHANGED_EVENT } from '~/timeline/clientEvents';
 import React, { useEffect, useId, useRef, useState, useSyncExternalStore } from 'react';
 import { SyncConflictReview } from './SyncConflictReview';
+import { PagedSyncConflictReview } from './PagedSyncConflictReview';
+import { createConflictReviewController } from '~/fileSync/conflictReviewController';
+import type { PagedConflictReviewResult, PagedConflictReviewSession } from '~/fileSync/pagedForegroundReview';
 import type { SyncConflict, SyncConflictChoice, SyncConflictReviewResult } from '~/fileSync/conflictResolution';
 import { Box, Button, Checkbox, Flex, FormControl, FormLabel, Input, Select, Stack, Text, Textarea } from '@chakra-ui/react';
 import type { FolderHost } from '~/fileSync/desktopFolders.client';
@@ -139,6 +142,8 @@ function Connections({
 		retain(): void;
 		cancel(): void;
 	} | null>(null);
+	const [pagedReview, setPagedReview] = useState<{ id: string; controller: ReturnType<typeof createConflictReviewController> } | null>(null);
+	const reviewTransport = React.useMemo(() => host ? { origin: scope.origin, fetch: host.fetch, currentOrigin: host.origin } : undefined, [host, scope.origin]);
 	const [folders, setFolders] = useState<{ id: string; name: string }[]>([]);
 	const [connectionCursor, setConnectionCursor] = useState<string | null>(null),
 		[folderCursor, setFolderCursor] = useState<string | null>(null);
@@ -360,6 +365,25 @@ function Connections({
 									requireCapability
 								},
 								progress: publish,
+								reviewPagedConflicts: (session: PagedConflictReviewSession) =>
+									new Promise<PagedConflictReviewResult>((resolve, reject) => {
+										let settled = false;
+										const finish = (result?: PagedConflictReviewResult) => {
+											if (settled) return;
+											settled = true;
+											active.signal.removeEventListener('abort', abort);
+											if (mounted.current) setPagedReview(null);
+											if (active.signal.aborted) reject(active.signal.reason);
+											else if (result) resolve(result);
+											else reject(Error('Conflict review interrupted. Saved choices can be resumed.'));
+										};
+										const review = createConflictReviewController(session, finish);
+										const abort = () => { review.dispose(); finish(); };
+										active.signal.addEventListener('abort', abort, { once: true });
+										if (active.signal.aborted) { abort(); return; }
+										setPagedReview({ id: saved.id, controller: review });
+										void review.reload().catch(() => { /* controller exposes a retryable error */ });
+									}),
 								reviewConflicts: (conflicts) =>
 									new Promise<SyncConflictReviewResult>((resolve, reject) => {
 										const finish = (choices?: SyncConflictReviewResult) => {
@@ -636,6 +660,10 @@ function Connections({
 									: 'Upload now'}
 							</Button>
 						)}
+						{pagedReview?.id === saved.id && <Box width="100%" minW={0}>
+							<PagedSyncConflictReview controller={pagedReview.controller} mode={saved.configuration.mode}
+								scopeKey={`${key}:${generation}:${saved.id}`} accountTransport={reviewTransport} />
+						</Box>}
 						{fileReview?.id === saved.id && (
 							<SyncConflictReview
 								conflicts={fileReview.conflicts}

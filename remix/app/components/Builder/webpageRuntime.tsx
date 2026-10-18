@@ -1,11 +1,11 @@
 import React from 'react';
+import { isTransientBlockTarget } from './transientBlockActions';
 import { parseActionJson } from '~/schemas/actionJsonInput';
 import { ComponentDragBoundary } from './ComponentDrag';
 import { pageRuntimeSearch } from './seamlessMode';
 import { SharedMediaProvider } from '../Sharing/SharedMedia';
 import { useLocation } from 'react-router';
 
-import { MAX_WEBPAGE_BLOCKS } from '~/schemas/registry';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { requireThingtimeCapability } from '~/api/utils/capabilities/requireCapability.client';
 
@@ -105,7 +105,8 @@ const QUERY_KEY_PATTERN = /^[A-Za-z_][A-Za-z0-9_-]{0,39}$/;
 // oldest-first past a full page's worth of live blocks: the burst of loads for
 // one version is a single render pass, so no sibling can lose an entry it is
 // still waiting on, and the worst case past the cap is one duplicate request.
-export const MAX_SHARED_SOURCE_LOADS = MAX_WEBPAGE_BLOCKS;
+// Cache retention is independent of authored page size; eviction never removes blocks.
+export const MAX_SHARED_SOURCE_LOADS = 120;
 
 export const evictSharedLoads = <T,>(promises: Map<string, T>, max: number = MAX_SHARED_SOURCE_LOADS): void => {
 	// Map iterates in insertion order, so the first key is always the oldest
@@ -357,6 +358,7 @@ export const gatherFormFields = (root: HTMLElement | null): Record<string, unkno
 	if (!root) return out;
 	const fields = root.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>('input[name], select[name], textarea[name]');
 	fields.forEach((field) => {
+		if (isTransientBlockTarget(field)) return;
 		const name = field.getAttribute('name') || '';
 		if (!name || !QUERY_KEY_PATTERN.test(name) || ['__proto__', 'constructor', 'prototype'].includes(name) || field.matches(':disabled')) return;
 		if (field.tagName === 'INPUT') {

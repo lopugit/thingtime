@@ -11621,3 +11621,18 @@ resume unfinished Android gates only when requested.
   `scripts/review-draft.browser.ts` proves controller/journal restart and bounded
   handoff only. Actual editable Builder controls and installed acceptance remain
   open; preserve Android deferral and the 10,000-path limit.
+
+### Editable conflict review acceptance
+
+- Run `scripts/check-editable-sync-review.mjs` from `remix`, with an installed
+  Playwright module. Check each row's numeric revision remains numeric through
+  authored action bindings; a string interpolation must not silently lose a choice.
+- Choose versions across pages, interrupt/restart the browser, and compare saved
+  choices with the journal. Fail a page read: preserve rows, disable completion,
+  reload, and verify Cancel, Resolve and Retain are distinct explicit outcomes.
+- In Builder, separately edit the grey message, repeated path, select option and
+  navigation button; save/reload. The private layout must contain no live paths,
+  review handles or saved choices. Scroll top to bottom on desktop and phone.
+- In installed Mac/iOS, verify the selected origin/account layout and actual
+  files/Timeline after Resolve and Ignore. This last native/data-path acceptance
+  remains open; synthetic UI evidence does not substitute for it.

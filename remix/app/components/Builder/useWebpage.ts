@@ -1,3 +1,4 @@
+import { requiresEditableBlockContract } from './webpageBlocks';
 import { bindingsForBlocks } from '../../timeline/componentBindings';
 import React from 'react';
 import { requireThingtimeCapability } from '~/api/utils/capabilities/requireCapability.client';
@@ -389,6 +390,7 @@ export const useWebpageDraft = (target: WebpageTarget | null, options?: UseWebpa
 				blocks
 			};
 			try {
+				if (requiresEditableBlockContract(blocks)) await requireThingtimeCapability('api.things', '1.36.0');
 				const draftEventId = page && user?.id && historyEditable ? await draftHistory.flush() : null;
 				if (generation !== generationRef.current) return { ok: false, error: 'Page or account changed while preparing the save.' };
 				if (resolved?.source === 'user' && page) {
