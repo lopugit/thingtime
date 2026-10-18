@@ -31,7 +31,7 @@ const fieldStyles = {
 const emptyVault: VaultPayload = { vaultConfigured: false, groups: [], entries: [], providerTemplates: [] };
 
 const postVault = async (body: Record<string, unknown>) => {
-	await requireThingtimeCapability('api.lopu-vault', body.action === 'move-entry' ? '1.2.0' : '1.1.0');
+	await requireThingtimeCapability('api.lopu-vault', body.action === 'save-provider' ? '1.3.1' : body.action === 'move-entry' ? '1.2.0' : '1.1.0');
 	const response = await fetch('/api/v1/lopu/vault', {
 		method: 'POST',
 		credentials: 'include',

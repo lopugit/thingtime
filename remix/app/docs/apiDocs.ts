@@ -4937,14 +4937,15 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
 		id: 'lopu-vault',
+		// 1.3.1: invalid supplied provider tokens fail without any metadata write.
 		// 1.0.1: writes are JSON-only (415, the CSRF fence, before the rate limit) and
 		// refuse a temporary (guest) session with 403 — compatible corrections.
 		// 1.1.0: `model` is optional on save-provider (a template kind runs on its
 		// first catalog model), providerTemplates carry `models[]` (efforts, speeds,
 		// audioInput 'realtime' for direct-voice models), four more kinds
 		// (mistral, deepseek, groq, cohere) — compatible additions.
-		contractVersion: '1.3.0',
-		featureVersion: '1.3.0',
+		contractVersion: '1.3.1',
+		featureVersion: '1.3.1',
 		group: 'lopu',
 		title: 'Lopu Secure Vault',
 		endpoint: '/api/v1/lopu/vault',
@@ -4956,6 +4957,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		steps: [
 			'GET ownerId, provider templates, environments, and redacted entry metadata. Bind cached metadata to ownerId.',
 			'POST create-group, save-secret, or save-provider to create write-only records.',
+			'When updating a provider, omit token or send an empty string to retain its encrypted credential. An invalid supplied token returns 400 before any fields change; it never silently retains the old token while saving new metadata.',
 			'POST move-entry with id and groupId to move a secret or provider between owned environments; null or an empty string means Ungrouped. Only metadata changes; the encrypted value is preserved without decryption.',
 			'POST delete with an owner-scoped record id to remove it.'
 		],

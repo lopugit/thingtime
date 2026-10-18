@@ -55,6 +55,10 @@ proves the host connected.
 - Local admin bootstrap recipe: register a throwaway user, add its username to
   `ADMIN_USERNAMES` in `remix/.env`, restart the dev stack.
 - `TESTING.md`: the auth, passkey, account switcher and admin sections.
+- Saved provider replacement: `connections/vaultTokenReplacement.test.mts`
+  (included in `test:connections`) exercises the vault HTTP action, exact
+  encrypted replacement, intentional blank retention, and no-write rejection.
+  Provider-save clients require `api.lopu-vault` 1.3.1.
 
 Lopu browser Actions bind a revalidated first-party user resolver to the exact
 synthetic Request through `internalRequestActor.ts`. `getCurrentUser` and

@@ -209,6 +209,11 @@ export const saveUserVaultProvider = async (
 	const provider = normalizeLopuProviderKind(input.provider);
 	const endpoint = normalizeLopuProviderEndpoint(input.endpoint);
 	const token = validSecretValue(input.token);
+	// Only an omitted or intentionally blank field means "keep the saved token".
+	// A rejected supplied value must not silently become a metadata-only update.
+	if (input.token !== undefined && input.token !== '' && token === null) {
+		throw new Error('Provider token is invalid. No changes were saved.');
+	}
 	if (!name || !provider || !endpoint) throw new Error('Provider name, type, and HTTPS endpoint are required.');
 	// the model is optional (a template kind falls back to its first catalog
 	// model), but when given it must be a sane provider-native id

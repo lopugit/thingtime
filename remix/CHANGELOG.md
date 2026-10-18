@@ -68,6 +68,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-18 — **Codex (AI)**: Reject invalid provider-token replacements
+  before any metadata or credential changes, preserving intentional blank-field
+  retention. Publish and negotiate `api.lopu-vault` 1.3.1. All 253 focused tests
+  and 20 isolated browser/API check records pass; remaining storage-size limits
+  and real-provider acceptance stay open.
+  [PR #992 evidence](../PRs/992-service-account-library-add-multi-account-third-party-service-library.md).
+
 - 2026-10-18 — **Codex (AI)**: Keep saved AI account names full-width on
   mobile, with account controls on the next row. Validate independent account
   removal, logout and owner isolation with disposable vault-backed browser

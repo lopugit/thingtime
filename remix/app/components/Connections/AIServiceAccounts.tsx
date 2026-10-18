@@ -79,7 +79,7 @@ export function AIServiceAccounts({ ownerId }: { ownerId: string | null }) {
     setBusy(true);
     generation.current++;
     try {
-      await requireThingtimeCapability('api.lopu-vault', '1.3.0');
+      await requireThingtimeCapability('api.lopu-vault', '1.3.1');
       if (service.id === 'anthropic' && !token.trim().startsWith('sk-ant-oat'))
         throw new Error('Enter a Claude Code OAuth token. This connection does not accept Anthropic API keys.');
       if (!live.current) return;

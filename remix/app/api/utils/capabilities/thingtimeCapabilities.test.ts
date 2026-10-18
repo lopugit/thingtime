@@ -14,7 +14,7 @@ test('service-account clients negotiate owner-fenced writes and scoped credentia
     ['api.connections-oauth-callback', '1.1.0', '1.0.0'],
     ['api.connections-feed', '1.1.0', '1.0.0'],
     ['api.connections-filters', '1.1.0', '1.0.0'],
-    ['api.lopu-vault', '1.3.0', '1.2.0'],
+    ['api.lopu-vault', '1.3.1', '1.3.0'],
     ['api.connections-request', '1.1.1', '1.0.0'],
   ]) {
     assert.equal(api.features[feature], required);
@@ -23,6 +23,11 @@ test('service-account clients negotiate owner-fenced writes and scoped credentia
     assert.equal(capabilitySatisfies(undefined, required), false);
     assert.equal(capabilitySatisfies('2.0.0', required), false);
   }
+});
+
+test('provider token replacement requires the corrected vault contract and accepts compatible updates', () => {
+  for (const version of ['1.3.1', '1.3.2', '1.4.0']) assert.equal(capabilitySatisfies(version, '1.3.1'), true);
+  for (const version of [undefined, '1.2.0', '1.3.0', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.3.1'), false);
 });
 
 test('saved-account response redaction is a compatible patch for pagination clients', () => {

@@ -7785,6 +7785,14 @@ checks; `TT_VERIFY_LIVE=1` adds a live Hacker News pull). Manual checklist:
       and find the same entries in Secure Vault and Lopu's provider picker.
       No duplicate credential store; cancelled forms erase typed secrets.
       Subscription sign-in availability must remain explicit.
+- [ ] Provider credential replacement: a supplied null, non-string, or rejected
+      oversized token must return an error without changing the account name,
+      endpoint, group, model, timestamps or encrypted credential. A missing or
+      empty token intentionally preserves the credential; a valid replacement
+      must decrypt exactly, including whitespace and Unicode. Verify using the
+      selected local test entry and fresh password confirmation, never logs.
+      Both manifests expose `api.lopu-vault` 1.3.1; provider-save clients reject
+      1.3.0 and accept compatible patch/minor versions.
 
 ## Commander emoji paste recovery
 

@@ -3,6 +3,32 @@
 Status: open, ready-for-review implementation checkpoint. Google identity and refresh are verified
 locally; production delivery and other providers' positive acceptance remain pending.
 
+## 18 October: provider token replacement fails without partial changes
+
+A supplied invalid token was treated like an omitted token during provider
+updates. The request could return 200, retain the old credential, and still save
+new metadata. The regression reproduced this through the real HTTP action.
+Updates now reject an invalid supplied token before any write. Omitted and empty
+tokens retain their intentional "keep existing" behavior; a valid replacement
+is preserved exactly. Both capability manifests publish `api.lopu-vault` 1.3.1,
+and the provider-save clients require that correction.
+
+Verification: 155 connection tests and 98 capability tests pass, including four
+new token-replacement regressions; targeted lint and client/Nitro builds pass.
+Twenty isolated browser/API check records pass against the built server and a
+fresh MongoDB replica set. Fresh password confirmation verifies the actual
+stored value after rejection, replacement, and intentional retention. The same
+run covers four saved accounts, desktop/mobile forms and scrolling, independent
+removal, logout, cross-owner denial, and fresh-login recovery. All credentials
+are synthetic and provisioned/retrieved through local Thingtime Passwords.
+The kernel boundary blocks browser/backend egress; the task container is removed.
+
+Remaining size-limit work is explicit: form name/token limits, vault field and
+byte validation, the JSON request limit, encryption's default value budget, and
+the shared data-Thing string validator need a coordinated storage-path change.
+This correction does not remove those limits or establish real-provider consent.
+Hosted checks and deployment for the new commit must be verified separately.
+
 ## 18 October: authenticated browser acceptance and mobile account rows
 
 A disposable Linux app and normally sandboxed Chromium share a kernel-enforced
