@@ -79,6 +79,7 @@ export type SearchGroup = {
 };
 
 export type SearchQuery = {
+  scope?: unknown; // 'visible' (default) | 'mine'; mine still preserves all access fences
   near?: unknown;
   radiusKm?: unknown;
   q?: unknown;
@@ -101,6 +102,15 @@ export type SearchQuery = {
   minReactions?: unknown; // engagement thresholds — bounded-window mode (see below)
   minComments?: unknown;
 };
+
+/** The owner comes from the authenticated actor, never a request field.
+ * This predicate narrows the normal visibility/app/PAT fences; it cannot grant access. */
+export function searchOwnerScope(scope: unknown, viewerId?: string | null): { ownerId?: string } | Fail {
+  if (scope === undefined || scope === 'visible') return {};
+  if (scope !== 'mine') return fail(400, 'Search scope must be visible or mine');
+  if (!viewerId) return fail(401, 'Sign in to search your account Things');
+  return { ownerId: viewerId };
+}
 
 const sanitizeFieldPath = (raw: unknown): string | Fail => {
   if (typeof raw !== 'string') return fail(400, 'Each condition needs a field');

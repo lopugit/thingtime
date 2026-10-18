@@ -1,7 +1,9 @@
 import type { BrowserActionHost } from '../components/Actions/browserActionRuntime';
 import { capabilitySatisfies } from '../api/utils/capabilities/capabilityContract';
 import { localThingProjection, LocalThings, type ThingWrite } from './things';
-import { WorkspaceError, type WorkspaceDatabase, type WorkspaceLease, type WorkspaceScope } from './storage';
+import { WorkspaceError, workspaceScopeKey, type WorkspaceDatabase, type WorkspaceLease, type WorkspaceScope } from './storage';
+import { searchLocalThings } from './structuredSearch';
+import { localPostProjection, localTargetIndex } from './posts';
 
 const refuse = (message: string): never => {
 	throw new WorkspaceError('LOCAL_ACTION_REQUEST', message, 409);
@@ -25,7 +27,17 @@ const id = (value: unknown): string =>
 /** This is also the account placement check, before any local effect. */
 const onlyFields = (value: unknown, allowed: string[]) => value === undefined ||
 	(!!value && typeof value === 'object' && !Array.isArray(value) && Object.keys(value).every(key => allowed.includes(key)));
+// Require an authored owner scope before placement. Never reinterpret a public,
+// other-author or ranked text search as a device-only result.
+const localSearchSupported = (step: Record<string, unknown>) => {
+	const body = step.body as Record<string, unknown> | undefined;
+	return step.path === '/api/v1/things/search' && step.method === 'POST' && step.feature === 'api.things-search'
+		&& capabilitySatisfies('1.4.0', String(step.minimumVersion)) && onlyFields(step.query, [])
+		&& onlyFields(body, ['scope', 'mode', 'conditions', 'thingtime', 'sort', 'cursor', 'limit']) && body?.scope === 'mine'
+		&& (body.sort === undefined || body.sort === 'newest' || body.sort === 'oldest');
+};
 export const localActionRequestSupported = (step: Record<string, unknown>) => {
+	if (localSearchSupported(step)) return true;
 	if (step.path === '/api/v1/actions/run' && step.method === 'POST' && step.feature === 'api.actions-run' && capabilitySatisfies('1.10.0', String(step.minimumVersion)))
 		return onlyFields(step.query, []) && onlyFields(step.body, ['action', 'inputs', 'source']);
 	if (step.path !== '/api/v1/things' || step.feature !== 'api.things' || !capabilitySatisfies('1.33.0', String(step.minimumVersion))) return false;
@@ -67,7 +79,16 @@ export function localActionRequests(
 		const things = store ? store(active) : new LocalThings(db, scope, active);
 		const query = object(step.query || {});
 		let result: unknown;
-		if (
+		if (localSearchSupported(step)) {
+			const { scope: _scope, ...search } = object(step.body);
+			const all = await things.snapshot();
+			active.assertCurrent();
+			const page = await searchLocalThings(all, search, workspaceScopeKey(scope));
+			const index = localTargetIndex(all);
+			result = { ...page, things: page.things.map(row => localThingProjection(row, actor)),
+				posts: Object.fromEntries(page.things.filter(row => row.thingtime.includes('post')).map(row => [row.id, localPostProjection(row, all, actor, false, index)])),
+				incomplete: scope.kind === 'account' };
+		} else if (
 			step.path === '/api/v1/actions/run' &&
 			step.method === 'POST' &&
 			step.feature === 'api.actions-run' &&

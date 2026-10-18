@@ -80,6 +80,9 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-19: Agent Tasks reads locally created tasks, todos and progress offline through explicit owner-scoped structured search. Search 1.4.0 preserves server access fences; account device results remain explicitly partial. Native no-login create/edit/cold-reload/export and real isolated API scope checks pass. See [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md). — Codex (AI)
+
+
 - 2026-10-19: Enable anonymous/offline Builder media uploads through workspace ownership, expose global/site block selection, preserve text while the editor loads, and fix narrow inspector controls/toolbar clearance. Native offline upload/export/cross-tab/reset checks pass in the bounded isolated fixture. See [PR #1000 checkpoint](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md#native-globalsite-builder-and-local-media--2026-10-19). — Codex (AI)
 
 

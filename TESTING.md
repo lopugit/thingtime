@@ -8073,6 +8073,15 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       copy. Global blocks and route-specific blocks remain isolated by workspace.
       Unsaved name/text edits recover after reload; Discard retires recovery; reset-to-default removes the
       version and retires unfinished recovery. Recheck after a second reload.
+- [ ] Agent Tasks: install from the normal gallery without a session, disconnect,
+      create a task, add/complete a todo and save progress; cold reload and verify
+      all three independent records. Search 22 tasks across cursor pages; reject
+      cursors from other workspaces/filters. Check 1440/390/320px and scroll every
+      page to the bottom. No anonymous account/search/Action requests or sync.
+      The real isolated API must apply scope=mine on GET and POST, preserve
+      visible search, reject anonymous/forced-anonymous mine scope and invalid
+      scopes. Account retained reads must say incomplete and stay owner-scoped.
+      `actionSearch.test.ts` and opt-in `actionSearch.browser.test.ts` cover this.
 - [ ] Global/site blocks: edit in one offline tab and verify another updates;
       account/origin/data-plane changes cannot retain another workspace's cache.
       Failed refresh keeps loaded blocks with Retry. Import a component/source

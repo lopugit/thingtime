@@ -9738,13 +9738,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'things-search',
-    featureVersion: '1.3.0',
-    contractVersion: '1.3.0',
+    featureVersion: '1.4.0',
+    contractVersion: '1.4.0',
     group: 'things',
     title: 'Search things',
     endpoint: '/api/v1/things/search',
     summary: 'Structured MongoDB-style search plus Google-like ranked text search over every thing you can see. OAuth app tokens may use explicitly approved account Things permissions; legacy picker and app-storage grants retain their prior boundaries.',
     detail:
+      'Optional scope: mine restricts results to the authenticated actor’s own Things without a username lookup; omitted or visible preserves normal search. All existing ACL, app namespace, token, and subspace fences still apply. ' +
       'POST accepts near: {lat,lng} and optional radiusKm (default 50, greater than 0 and at most 1000), narrowing by an indexed spherical radius while preserving all access fences. The search behind /search. Two modes that compose: q runs a ranked text search (weighted ' +
       'wildcard text index over every string field — relevance-sorted like a web search), and ' +
       'conditions runs a structured query built from a whitelisted operator grammar: eq, ne, gt, ' +
@@ -9759,21 +9760,22 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     auth: {
       mode: 'optional',
       description:
-        'Works logged out (tt:all things only, throttled per IP). Authenticated searches also see your own things. ' +
+        'scope: mine requires an authenticated actor (401 otherwise); invalid scope returns 400. Works logged out (tt:all things only, throttled per IP). Authenticated searches also see your own things. ' +
         "App-scoped Bearer tokens get the full grammar (conditions, sorts, cursors, engagement windows) with results fenced server-side to the app's own appId namespace — own entries, plus the app-audience slice when the token holds app-data.shared. appId and acl are never client-searchable fields; the namespace conjunction is injected server-side and inexpressible from the grammar."
     },
     methods: ['GET', 'POST'],
     steps: [
       'GET ?q=<text>&thingtime=&tags=&sort=&cursor=&limit= for the simple shareable form.',
-      'POST { q?, mode: "all"|"any", conditions: [{ field, op, value | values } | { mode, conditions: [...] }], thingtime?, tags?, from?, to?, sort?, cursor?, limit? } for structured searches.',
+      'POST { scope?: "visible"|"mine", q?, mode: "all"|"any", conditions: [{ field, op, value | values } | { mode, conditions: [...] }], thingtime?, tags?, from?, to?, sort?, cursor?, limit? } for structured searches.',
       'Range searches are one atomic between condition ({ field, op: "between", values: [low, high] }, either end open); enum picks are one in condition.',
       'sort defaults to relevance with q, newest otherwise (oldest also supported); ranked pages cursor by offset, chronological pages by the standard createdAt_shareId cursor.',
       'Shortcut filters (the feed/profile Advanced panel) compose with everything above: types (post types, csv), circles (audience circles, csv), author (one username — unknown usernames match nothing), minTextChars/maxTextChars (post text length), and minReactions/minComments.',
       'Engagement thresholds (minReactions/minComments) count child things at read time, so they search a bounded window of the newest (or best-matching) 400 candidates and page within it by offset — the same determinism trade-off as the ranked feed.',
       'The response carries things (generic projections; ranked text results include their query-relative rankScore), posts (full post projections keyed by thing id), nextCursor, and a capped approximate total (a visibility-superset count, only computed on the first page).',
-      'Handle 400 invalid grammar and 429 rate-limited.'
+      'Handle 400 invalid grammar/scope, 401 unauthenticated mine scope, and 429 rate-limited.'
     ],
     requestExamples: [
+      { name: 'My Things', description: 'Search the current authenticated actor’s Things without knowing a username.', method: 'POST', body: { scope: 'mine', thingtime: 'data', sort: 'newest', limit: 20 } },
       {
         name: 'Ranked text search',
         description: 'Google-style: relevance-ranked matches across every string field of every visible thing.',

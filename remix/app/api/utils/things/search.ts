@@ -1,4 +1,4 @@
-import { buildGroup, csvList, parseDate, parseCount, textLengthExpr, MAX_TEXT_QUERY_CHARS, DEFAULT_SEARCH_LIMIT, MAX_SEARCH_LIMIT, MAX_RANKED_OFFSET, ENGAGEMENT_CANDIDATE_WINDOW, MAX_AUTHOR_CHARS, GENERIC_SEARCH_EXCLUDED_THINGTIME, type SearchQuery } from './searchGrammar';
+import { buildGroup, csvList, parseDate, parseCount, searchOwnerScope, textLengthExpr, MAX_TEXT_QUERY_CHARS, DEFAULT_SEARCH_LIMIT, MAX_SEARCH_LIMIT, MAX_RANKED_OFFSET, ENGAGEMENT_CANDIDATE_WINDOW, MAX_AUTHOR_CHARS, GENERIC_SEARCH_EXCLUDED_THINGTIME, type SearchQuery } from './searchGrammar';
 import { parseGeo, geoRadiusClause } from '~/schemas/geo';
 import { findUserByUsername } from '../auth/users';
 import { getThingsCollection } from '../mongodb/collections';
@@ -123,6 +123,8 @@ export const searchThings = async (
   app: AppLens = null
 ): Promise<Fail | SearchResult> => {
   const viewer = asViewer(viewerInput);
+  const ownerScope = searchOwnerScope(query.scope, viewer?.id);
+  if (isFail(ownerScope)) return ownerScope;
   const limit = Math.min(Math.max(1, Number(query.limit) || DEFAULT_SEARCH_LIMIT), MAX_SEARCH_LIMIT);
 
   const q = typeof query.q === 'string' ? query.q.trim().slice(0, MAX_TEXT_QUERY_CHARS) : '';
@@ -135,6 +137,7 @@ export const searchThings = async (
   if (sort === 'relevance' && !q) return fail(400, 'Relevance sorting needs a text query (q)');
 
   const clauses: Record<string, any>[] = [];
+  if (ownerScope.ownerId) clauses.push(ownerScope);
   if (query.near !== undefined) {
     const point = parseGeo(query.near);
     const radius = query.radiusKm === undefined ? 50 : query.radiusKm;

@@ -5,6 +5,13 @@ import { apiEndpointDocs, apiV1DocsRouteKeys, apiV1RouteKeys, createApiCapabilit
 import { capabilitySatisfies } from './capabilityContract';
 import { THINGTIME_CAPABILITY_MANIFEST_PATH, thingtimeCapabilityManifest } from './thingtimeCapabilities';
 
+test('owner-scoped search advertises and negotiates the same additive contract on both manifests', () => {
+  assert.equal(createApiCapabilitiesManifest().features['api.things-search'], '1.4.0');
+  assert.equal(thingtimeCapabilityManifest('https://search.test').features['api.things-search'].version, '1.4.0');
+  for (const version of [undefined, '1.3.0', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.4.0'), false);
+  assert.equal(capabilitySatisfies('1.4.1', '1.4.0'), true);
+});
+
 test('archive import clients reject missing, pre-archive and breaking contracts on both manifests', () => {
   for (const version of ['1.9.1', '1.9.2', '1.10.0']) assert.equal(capabilitySatisfies(version, '1.9.1'), true);
   for (const version of ['', '1.8.0', '1.9.0', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.9.1'), false);
@@ -113,7 +120,7 @@ test('Thingtime capability manifest is origin scoped and covers the generated AP
   assert.equal(manifest.features['api.health-nitro']?.version, '1.2.0');
   assert.equal(manifest.features['api.integration-ci-credentials']?.version, '1.1.1');
   assert.equal(manifest.features['api.integration-ci-progress']?.version, '1.0.0');
-  assert.equal(manifest.features['api.things-search']?.version, '1.3.0');
+  assert.equal(manifest.features['api.things-search']?.version, '1.4.0');
   assert.equal(manifest.features['api.things-share']?.version, '1.3.0');
   assert.equal(manifest.features['api.users-profile']?.version, '1.1.0');
   // subspaces + up/down votes: posts/comments gained title/subspace/flair/
