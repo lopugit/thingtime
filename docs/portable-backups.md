@@ -28,7 +28,7 @@ The census covers every owned row in the home Things collection. A managed kind
 without an approved exporter, missing payload, expired database snapshot,
 oversized metadata, changed account or revoked access refuses the plan. It never
 skips an unsupported row and then reports complete coverage. Ready owned
-attachments, saved drafts/templates/tombstones and all seven Timeline families
+attachments, saved themes, drafts/templates/tombstones and all seven Timeline families
 have dedicated exporters. Account
 identity and other managed families still need coverage; ordinary real accounts
 therefore cannot yet complete this producer. Settings in
@@ -171,6 +171,34 @@ ordinary content. Cancellation between retained chunks leaves no complete plan;
 mutating the caller's Buffer cannot change already frozen content. These fixtures
 still do not demonstrate remaining managed-family coverage, account restore,
 permanent S3 loss, a full backup UI or 100 GB–100 TB throughput.
+
+### Saved themes in account snapshots
+
+`themeSnapshots.ts` uses the existing `theme-content` version 1 Timeline format.
+It preserves partial tokens without filling current defaults, including explicit
+false/zero/null values, display title, tags, visibility and folder. Dedicated
+projection omits private root fields and unrelated crystal fields. The canonical
+Timeline allowlist defines theme content; unknown tokens are not promoted to
+backup content. Mixed protected kinds and invalid approved values refuse the
+complete inventory. Visibility is historical data, not permission to restore
+public sharing without a fresh reviewed write.
+
+Small snapshots remain inline. Larger themes use the existing verified payload
+chunks with a `backup-theme-content` digest descriptor; the original canonical
+snapshot is recovered unchanged. Themes keep the canonical 256 KiB value bound
+and are processed one row at a time in owner-indexed batches, at the same Mongo
+snapshot as the rest of the inventory. `openBackupThemeSnapshot` validates the
+sealed offline content, canonical fields and digest; it does not write live
+themes or change the active selection.
+
+Validation: 72 backup tests pass. The disposable storage consistency proof now
+preserves 359 records and 22,217,760 payload bytes using 22 bounded queries.
+Partial-theme edits and large-theme deletion after the census do not change the
+archive; both original snapshots recover from the second vault after removing
+the source database/files and first vault. This proves storage behavior on
+synthetic data, not UI delivery or complete account coverage. Account identity,
+other managed families/settings, relationship closure, retention/pinning, cloud
+replication, reviewed account restore and jobs/UI remain unfinished.
 
 ## Format and invariants
 

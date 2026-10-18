@@ -1,4 +1,6 @@
 import { backupDraftFixture } from '../app/api/utils/backups/draftRecords.fixtures';
+import { backupThemeFixtures } from '../app/api/utils/backups/themeSnapshots.fixtures';
+import { backupThemeSnapshotFromDoc, openBackupThemeSnapshot } from '../app/api/utils/backups/themeSnapshots';
 import { backupDraftFromDoc, openBackupDraft } from '../app/api/utils/backups/draftRecords';
 import { openBackupThingSnapshot } from '../app/api/utils/backups/thingSnapshots';
 import { backupFileHistoryFixture } from '../app/api/utils/backups/attachmentRecords.fixtures';
@@ -35,6 +37,8 @@ const access = { scope: { ownerId: 'snapshot-owner', apiOrigin: 'https://snapsho
 const history = timelineBackupFixture(access.scope.ownerId);
 const fileHistory = await backupFileHistoryFixture(access.scope.ownerId);
 const drafts = await backupDraftFixture(access.scope.ownerId);
+const themes = backupThemeFixtures(access.scope.ownerId);
+const expectedThemes = new Map(themes.map((doc) => [doc.shareId, backupThemeSnapshotFromDoc(doc)]));
 const attachments = [...fileHistory.attachments, ...drafts.attachments];
 const largeText = 'large ordinary snapshot '.repeat(420_000);
 const largeDoc = { shareId: 'large-thing', ownerId: access.scope.ownerId, thingtime: ['data'], crystal: { text: largeText } };
@@ -71,7 +75,7 @@ try {
 	assert.equal(before.executionStats.nReturned, 128);
 	assert.equal(after.executionStats.nReturned, 128);
 	assert.ok(after.executionStats.totalKeysExamined < before.executionStats.totalKeysExamined);
-	await collection.insertMany([...history.docs, ...fileHistory.docs, ...drafts.docs, ...drafts.attachments.map((a) => a.doc), largeDoc], {
+	await collection.insertMany([...history.docs, ...fileHistory.docs, ...drafts.docs, ...drafts.attachments.map((a) => a.doc), ...themes, largeDoc], {
 		writeConcern: { w: 'majority' }
 	});
 	const producer = createAccountInventoryProducer({
@@ -122,6 +126,12 @@ try {
 							{ writeConcern: { w: 'majority' } }
 						);
 						await collection.updateOne({ shareId: 'large-thing' }, { $set: { crystal: { text: 'later' } } }, { writeConcern: { w: 'majority' } });
+						await collection.updateOne(
+							{ shareId: 'theme-partial' },
+							{ $set: { 'crystal.name': 'later theme' } },
+							{ writeConcern: { w: 'majority' } }
+						);
+						await collection.deleteOne({ shareId: 'theme-large' }, { writeConcern: { w: 'majority' } });
 						yield* iterate();
 					};
 				}
@@ -131,10 +141,10 @@ try {
 	});
 	const snapshotId = randomUUID(),
 		plan = await producer(store, snapshotId, access);
-	assert.equal(plan.items, 301 + history.docs.length + fileHistory.docs.length + drafts.docs.length + drafts.attachments.length);
+	assert.equal(plan.items, 301 + history.docs.length + fileHistory.docs.length + drafts.docs.length + drafts.attachments.length + themes.length);
 	assert.ok(BigInt(plan.bytes) > BigInt(2_400_000));
 	assert.equal(plan.pages, 3);
-	assert.ok(queries <= 24, `Unexpected per-record database reads: ${queries}`);
+	assert.ok(queries <= 25, `Unexpected per-record database reads: ${queries}`);
 	assert.equal(ended, 1);
 	assert.ok(timestamp);
 	await collection.deleteMany({}, { writeConcern: { w: 'majority' } });
@@ -176,6 +186,7 @@ try {
 		assert.deepEqual(await openBackupTimelineRecord(independent, snapshotId, thingId, access), record);
 	}
 	for (const doc of drafts.docs) assert.deepEqual(await openBackupDraft(independent, snapshotId, doc.shareId, access), backupDraftFromDoc(doc));
+	for (const [id, snapshot] of expectedThemes) assert.deepEqual(await openBackupThemeSnapshot(independent, snapshotId, id, access), snapshot);
 	assert.equal(((await openBackupThingSnapshot(independent, snapshotId, 'large-thing', access)).value as any).crystal.text, largeText);
 	for (const a of drafts.attachments) {
 		const result = await openBackupItem(independent, snapshotId, a.doc.shareId, access),
@@ -224,6 +235,7 @@ try {
 				fileVersionRecovery: 'current, earlier and retained conflict exact bytes',
 				timelineRecords: expectedHistory.size,
 				draftRecovery: 'working editor state, reusable template, deletion tombstone and exact owned media',
+				themeRecovery: 'exact partial and large canonical themes after concurrent edit/deletion and source removal',
 				largeThingBytes: Buffer.byteLength(largeText),
 				totalPayloadBytes: plan.bytes,
 				timelineCoverage: 'canonical events, links, branches, heads, large parts, notes, active and cleared version names',
@@ -231,7 +243,7 @@ try {
 				missingIndex: 'refused without scan fallback',
 				indexExperiment: { shareIdOnlyKeys: before.executionStats.totalKeysExamined, ownerShareIdKeys: after.executionStats.totalKeysExamined },
 				coverage:
-					'synthetic ordinary Things, drafts, Timeline and attachment bytes; not remaining managed families, real S3 loss or full account restore'
+					'synthetic ordinary Things, themes, drafts, Timeline and attachment bytes; not remaining managed families, real S3 loss or full account restore'
 			},
 			null,
 			2

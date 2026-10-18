@@ -11353,3 +11353,20 @@ resume unfinished Android gates only when requested.
   sleep, network loss, policy changes, process death and explicit retry.
 - [ ] Full-folder autonomous background work, relaunch/reboot and sustained
   100 GB–100 TB delivery remain outside this checkpoint.
+
+
+### Saved themes in independent snapshots — 2026-10-18
+
+- [x] Preserve the canonical partial theme exactly, including false/zero/null,
+  title, tags, folder and historical visibility; never fill current defaults.
+  Omit private roots and unapproved crystal/token fields.
+- [x] Inline small themes; retain larger canonical snapshots in verified chunks.
+  Capture them inside the same database snapshot, processing one row at a time.
+- [x] Refuse mixed protected kinds, invalid tokens, exceeded field bounds, foreign
+  owners and cancellation without publishing a complete inventory. Wrong-account
+  reads and corrupted retained chunks must refuse.
+- [x] Run the disposable account storage consistency proof: concurrently edit a
+  partial theme and delete a large one after the census; recover both originals
+  from the second vault after source database/files and first-vault deletion.
+- [ ] Actual account-wide capture/import, active-theme selection restoration,
+  remaining managed families and native/UI acceptance remain separate gates.

@@ -7,6 +7,7 @@ import {
 	type BackupDraftAttachmentReference
 } from './draftRecords';
 import { retainBackupThingSnapshot } from './thingSnapshots';
+import { backupThemeProjection, backupThemeSnapshotFromDoc, retainBackupThemeSnapshot } from './themeSnapshots';
 import {
 	backupAttachmentProjection,
 	backupAttachmentFromDoc,
@@ -51,7 +52,7 @@ const fileProjection = {
 	'crystal.content': 1
 };
 type Census = { shareId: string; ownerId: string; thingtime: string[] };
-type Family = 'content' | 'file' | 'timeline' | 'attachment' | 'draft';
+type Family = 'content' | 'file' | 'timeline' | 'attachment' | 'draft' | 'theme';
 type AttachmentReference = { fileId: string; content: CloudFileContent } | BackupDraftAttachmentReference;
 function family(doc: Census): Family {
 	if (
@@ -62,6 +63,7 @@ function family(doc: Census): Family {
 	)
 		throw Error('Invalid account inventory kind');
 	if (doc.thingtime.length === 1 && doc.thingtime[0] === 'draft') return 'draft';
+	if (doc.thingtime.length === 1 && doc.thingtime[0] === 'theme') return 'theme';
 	if (doc.thingtime.length === 1 && doc.thingtime[0] === 'file') return 'file';
 	if (doc.thingtime.length === 1 && doc.thingtime[0] === 'attachment') return 'attachment';
 	if (doc.thingtime.length === 1 && isAccountTimelineKind(doc.thingtime[0])) return 'timeline';
@@ -173,6 +175,7 @@ export function createAccountInventoryProducer(
 						// still owns its bounded wire batch; no oversized row reaches the plan.
 						if (timeline) timelineBackupRecordFromDoc(row);
 						else if (projection === backupDraftProjection) backupDraftFromDoc(row);
+						else if (projection === backupThemeProjection) backupThemeSnapshotFromDoc(row);
 						else if (projection !== contentProjection) {
 							const bounded = projection === backupAttachmentProjection ? { ...row } : row;
 							if (projection === backupAttachmentProjection) {
@@ -294,15 +297,20 @@ export function createAccountInventoryProducer(
 						const batchSize = kind === 'timeline' || kind === 'draft' ? 8 : ACCOUNT_INVENTORY_PAGE_SIZE;
 						for (let offset = 0; offset < group.length; offset += batchSize) {
 							const expected = group.slice(offset, offset + batchSize);
-							if (kind === 'content') {
+							if (kind === 'content' || kind === 'theme') {
 								// Process one large canonical record at a time. Never collect 128
 								// potentially large payloads in addition to the driver's wire batch.
 								let count = 0;
-								for await (const doc of queryRows({ shareId: { $in: expected.map((row) => row.shareId) } }, contentProjection, batchSize)) {
+								for await (const doc of queryRows(
+									{ shareId: { $in: expected.map((row) => row.shareId) } },
+									kind === 'theme' ? backupThemeProjection : contentProjection,
+									batchSize
+								)) {
 									await check();
 									boundary();
 									sameRow(doc, expected[count++], kind);
-									const entry = await retainBackupThingSnapshot(store, snapshotId, ordinals.get(doc.shareId)!, doc, {
+									const retain = kind === 'theme' ? retainBackupThemeSnapshot : retainBackupThingSnapshot;
+									const entry = await retain(store, snapshotId, ordinals.get(doc.shareId)!, doc, {
 										...access,
 										scope,
 										authorize: check

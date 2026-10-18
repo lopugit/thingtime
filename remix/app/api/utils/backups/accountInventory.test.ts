@@ -1,4 +1,6 @@
 import { backupDraftFixture } from './draftRecords.fixtures';
+import { backupThemeFixtures } from './themeSnapshots.fixtures';
+import { backupThemeSnapshotFromDoc, openBackupThemeSnapshot, BACKUP_THEME_CONTENT_ADAPTER } from './themeSnapshots';
 import { backupDraftFromDoc, openBackupDraft } from './draftRecords';
 import { openBackupThingSnapshot } from './thingSnapshots';
 import { openAccountBackupFile, openAccountBackupFileVersion } from './accountFileRecovery';
@@ -140,6 +142,78 @@ function fixture(count = 300) {
 	const json = (key: string) => JSON.parse(Buffer.from(objects.get(`snapshots/${id}/${key}`)!).toString());
 	return { source, heads, headReads, store, objects, scope, access, state, session, projections, id, json, run: () => producer(store, id, access) };
 }
+
+test('saved themes retain canonical partial tokens and large content after independent copy and source loss', async () => {
+	const f = fixture(0),
+		themes = backupThemeFixtures('owner');
+	const expected = new Map(themes.map((doc) => [doc.shareId, backupThemeSnapshotFromDoc(doc)]));
+	f.source.push(...themes);
+	f.state.beforeQuery = (n) => {
+		if (n === 2) themes[0].crystal.name = 'changed after snapshot';
+	};
+	await f.run();
+	const items = f.json('plan/0.json').items;
+	assert.equal(items.find((item: any) => item.thingId === 'theme-large').snapshot.adapter, BACKUP_THEME_CONTENT_ADAPTER);
+	assert.equal(items.find((item: any) => item.thingId === 'theme-partial').snapshot.adapter, 'theme-content');
+	assert.equal(items.find((item: any) => item.thingId === 'theme-partial').revision, 'theme-revision-1');
+	assert.equal(f.state.queries, 3, 'one family batch, no per-theme queries');
+	for (const projection of f.projections) {
+		for (const field of ['secure', 'linkKey', 'tokenAcl', 'crystal']) assert.equal(projection[field], undefined);
+	}
+	assert.ok(![...f.objects.values()].some((bytes) => Buffer.from(bytes).includes('NEVER_EXPORT')));
+	await captureBackup(
+		f.store,
+		f.id,
+		{
+			read: async () => {
+				throw Error('Themes are already frozen');
+			}
+		},
+		f.access
+	);
+	await sealBackup(f.store, f.id, f.access);
+	const second = fixture(0);
+	await copySealedBackup(f.store, second.store, f.id, f.access);
+	f.source.length = 0;
+	f.objects.clear();
+	for (const [id, snapshot] of expected) assert.deepEqual(await openBackupThemeSnapshot(second.store, f.id, id, f.access), snapshot);
+	assert.deepEqual((expected.get('theme-partial')!.value as any).crystal.theme, {
+		colors: { accent: '#eaeaea' },
+		general: { motion: false, radiusScale: 0 }
+	});
+	const foreign = { ...f.access, scope: { ...f.scope, ownerId: 'foreign' } };
+	await assert.rejects(openBackupThemeSnapshot(second.store, f.id, 'theme-partial', foreign), /account or origin/);
+	const key = [...second.objects.keys()].find((key) => key.startsWith('chunks/'))!;
+	assert.ok(key);
+	second.objects.get(key)![0] ^= 1;
+	await assert.rejects(openBackupThemeSnapshot(second.store, f.id, 'theme-large', f.access));
+});
+
+test('malformed or mixed managed themes refuse the whole plan instead of losing content', async () => {
+	for (const mode of ['mixed', 'invalid-token', 'oversized', 'wrong-owner'] as const) {
+		const f = fixture(0),
+			theme: any = backupThemeFixtures('owner')[0];
+		f.source.push(theme);
+		if (mode === 'mixed') theme.thingtime.push('data');
+		if (mode === 'invalid-token') theme.crystal.theme.general.motion = 'false';
+		if (mode === 'oversized') theme.tags = ['x'.repeat(201)];
+		if (mode === 'wrong-owner') f.state.alterRows = (n, rows) => (n === 2 ? rows.map((row) => ({ ...row, ownerId: 'foreign' })) : rows);
+		await assert.rejects(f.run());
+		assert.equal(f.objects.has(`snapshots/${f.id}/plan.json`), false);
+	}
+});
+
+test('cancelled large-theme retention cannot publish a complete inventory', async () => {
+	const f = fixture(0),
+		controller = new AbortController();
+	f.source.push(backupThemeFixtures('owner')[1]);
+	f.access.signal = controller.signal;
+	f.state.beforePut = (key) => {
+		if (key.startsWith('chunks/')) controller.abort();
+	};
+	await assert.rejects(f.run());
+	assert.equal(f.objects.has(`snapshots/${f.id}/plan.json`), false);
+});
 
 test('freezes more than two pages despite source edits, inserts and deletions; canonical metadata survives source removal', async () => {
 	const f = fixture();

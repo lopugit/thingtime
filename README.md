@@ -5148,8 +5148,10 @@ and durable enough to finish within the database history window; failure does
 not permit switching timestamps. Archived receipts are read-only history, not
 server restore authority. The consistency check below also deletes its source
 database, original files and first vault, then verifies history and current/earlier/conflict
-file bytes, saved drafts/templates/tombstones and large ordinary content in an
-independent copy.
+file bytes, saved drafts/templates/tombstones, partial and large saved themes,
+and large ordinary content in an independent copy. Themes use the existing
+Timeline content format; the offline reader does not change the active theme or
+restore sharing. Other managed-family coverage remains incomplete.
 
 The producer now also needs the existing [private attachment storage](#private-s3-media-and-attachments)
 configuration (or the [local stand-in](#local-attachment-storage-laptop-stand-in-for-the-private-bucket))

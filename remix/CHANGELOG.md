@@ -68,6 +68,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-18 — **Codex (AI)**: Saved themes join independent account snapshots
+  through the canonical Timeline format, with exact partial-token and chunked
+  recovery after source loss. Preserve unfinished Android OS continuation in the
+  PR as deferred work. Validation and remaining scope: [PR #1002 notes](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+
 - 2026-10-18 — **Codex (AI)**: Android retains bounded, verified native upload
   parts across uncertain replies and process restart, while rechecking current
   authorization/source and preserving canonical sync/Timeline identities.

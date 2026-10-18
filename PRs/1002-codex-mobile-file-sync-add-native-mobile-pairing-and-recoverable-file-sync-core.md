@@ -2301,3 +2301,23 @@ Resume gates: one clean installed full-hash run, disabled-notification fallback,
 Android 8–13 installed service admission, physical devices, interruption/reboot,
 and review of the native preparation deadline versus the shared timeout. This
 is a preserved unfinished checkpoint, not an Android completion claim.
+
+
+## Saved-theme snapshot coverage — 2026-10-18
+
+The account inventory now captures saved themes using their existing canonical
+Timeline format. Partial themes keep their exact approved values without current
+defaults; larger values use the existing verified chunk store. Dedicated fields
+exclude private storage roots. Owner-indexed batches process each theme before
+reading the next, and the offline reader checks scope, canonical shape and hashes.
+This is internal capture/recovery support, not a new endpoint or live restore UI.
+
+Validation: 72 backup tests pass, including source mutation, private-field
+exclusion, mixed kinds, invalid/oversized values, wrong owners, cancellation and
+corrupt chunks. The disposable replica proof retains 359 records and 22,217,760
+payload bytes with 22 queries; partial and large themes recover exactly after
+concurrent edit/deletion and removal of the database, source files and first
+vault. Targeted ESLint passes (the `.mts` harness uses the TypeScript parser).
+Remaining account families, relationship closure, retention, independent cloud
+replication, reviewed restore/jobs/UI and measured large-volume transfer remain
+open. Android follow-up stays deferred as requested.
