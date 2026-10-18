@@ -10251,6 +10251,8 @@ separate from deterministic discovery/lease tests.
   search and paginate every item; locked snapshots must contain no inventory.
 - At desktop and 390px widths expand details, long paths, output and earlier-run
   controls, then scroll to the bottom with no clipping or horizontal overflow.
+- Render each installed suite without a fixture-supplied page container; verify
+  the suite itself centers its content and preserves mobile side padding.
 - Run harmless printf via a paired Mac. Inspect the complete source in approval;
   deny one request, approve another, and verify exact stdout/exit status.
 - Script runs must require fresh approval regardless of always-allow policy;
@@ -10305,3 +10307,4 @@ separate from deterministic discovery/lease tests.
 - Agent general security link: open it from a task; the Things settings category and Agent browsers disclosure must open and scroll to the default policy controls. Save, reload and verify the policy; restore isolated testing after acceptance.
 
 - Desktop browser/local-runtime integration: quitting waits for browser cleanup and OAuth authority release before managed Mongo shutdown completes; repeated quits and late browser IPC cannot bypass the shared barrier. Pending saved API/database settings must not change the reported running account authority before restart.
+- Device capability growth: a fully equipped Mac (65 current capability identifiers) must publish fresh state, retain every identifier in the owner device response, and populate the menu bar Builder page. Pairing and heartbeat admission share the 128-entry bound; reject 129 entries and invalid identifiers.
