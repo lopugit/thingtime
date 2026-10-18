@@ -209,7 +209,7 @@ test('capabilities publish the native Apple notification device contract', () =>
 	assert.equal(manifest.features['api.watch-pairing'], '1.2.0');
 	assert.equal(manifest.features['api.watch-sync'], '1.1.0');
 	assert.equal(manifest.features['api.watch-things'], '1.1.0');
-	assert.equal(manifest.features['api.devices'], '1.11.0');
+	assert.equal(manifest.features['api.devices'], '1.12.0');
 	assert.equal(manifest.features['api.attachment-uploads'], '1.5.0');
 	assert.equal(manifest.features['api.attachment-upload-parts'], '1.1.0');
 	assert.equal(manifest.features['api.attachment-upload-complete'], '1.4.0');
@@ -573,7 +573,7 @@ test('Lopu continuation clients reject origins without checkpoint and renewable-
 
  test('builder SDK contracts reject missing, older and incompatible action origins', () => {
  const manifest = thingtimeCapabilityManifest('https://thingtime.test');
- for (const [feature, required, previous] of [['api.actions-run', '1.7.0', '1.5.0'], ['api.things', '1.35.0', '1.19.0'], ['api.things-update', '1.5.0', '1.3.0']]) {
+ for (const [feature, required, previous] of [['api.actions-run', '1.7.0', '1.6.0'], ['api.things', '1.35.0', '1.19.0'], ['api.things-update', '1.6.0', '1.3.0']]) {
   assert.equal(capabilitySatisfies(manifest.features[feature].version, required), true);
   assert.equal(capabilitySatisfies(previous, required), false);
   assert.equal(capabilitySatisfies('2.0.0', required), false);

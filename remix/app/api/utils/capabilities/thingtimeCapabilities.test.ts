@@ -84,7 +84,7 @@ test('Thingtime capability manifest is origin scoped and covers the generated AP
 	assert.equal(manifest.features['api.things-fork']?.version, '1.7.0');
 	assert.equal(manifest.features['api.things-import']?.version, '1.11.0');
 	assert.equal(manifest.features['api.things-export']?.version, '1.15.0');
-	assert.equal(manifest.features['api.devices-node-state']?.version, '1.12.0');
+	assert.equal(manifest.features['api.devices-node-state']?.version, '1.13.0');
 	assert.equal(capabilitySatisfies('1.9.0', '1.10.0'), false);
 	assert.equal(capabilitySatisfies('1.11.0', '1.10.0'), true);
   for (const [feature, required, previous] of [['api.things-export', '1.15.0', '1.13.0'], ['api.attachment-content', '1.13.0', '1.6.4']]) {
@@ -462,8 +462,8 @@ test('Characters negotiate management and acting identities on both manifests', 
 test('full Mac capability lists negotiate additive device contracts', () => {
   const manifest = thingtimeCapabilityManifest('https://preview.example.test');
   for (const [feature, current, minimum] of [
-    ['api.devices', '1.11.0', '1.10.0'],
-    ['api.devices-node-state', '1.12.0', '1.11.0'],
+    ['api.devices', '1.12.0', '1.10.0'],
+    ['api.devices-node-state', '1.13.0', '1.11.0'],
     ['api.devices-pairing-claim', '1.1.0', '1.0.0']
   ]) {
     assert.equal(manifest.features[feature]?.version, current);
