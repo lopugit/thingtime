@@ -12585,3 +12585,11 @@ Local results do not establish current-head CI or deployed acceptance.
   dependency closure, anonymous denial and canonical re-export independently.
 - Preserve failed attempts. Concurrent MCP assertion failures must show the
   returned error diagnostics rather than only an unexplained error count.
+
+
+### Delegated Character profile synchronization — 2026-10-19
+
+- [x] Negotiate both canonical manifests and refuse missing/older/breaking actor contracts before client HTTP. Retained callbacks cannot adopt another principal or database; revoked leases abort in-flight requests.
+- [x] Reauthorize the Character on admission, immediately before writes and before disclosure. Preserve same-origin, full-session, rate, selected-plane and conditional-write checks; never fall back to the principal.
+- [x] Run `characterProfileSync.browser.test.ts` explicitly in the network-none native test runtime. Register disposable accounts through the API, verify separate principal/sibling/foreign catalogues, private saves and selections, exact retries, session-selected actors, guest refusal and disable/revocation. Verify built manifest versions and release the runtime.
+- [ ] Complete delegated offline posting, attachment and principal-scoped History acceptance before enabling the full Character workspace facade. This API checkpoint is not that completion.

@@ -155,3 +155,36 @@ test('selection operations use the same admission and hide pointers after accoun
 	assert.equal(denied.status, 401);
 	assert.ok(!(await denied.text()).includes('algorithmId'));
 });
+
+
+test('Character sync reauthorizes the selected actor before writes and disclosure', async () => {
+ const actor = { ...account, user: { ...account.user, id: 'character' } };
+ for (const selected of ['character', null]) {
+  for (const revokeAt of [1, 2, 3, 99]) {
+   let resolutions = 0, writes = 0;
+   const f = fixture({
+    resolveTokenUser: async (token: string, requested: string | null) => {
+     assert.equal(token, 'session'); assert.equal(requested, selected);
+     return ++resolutions >= revokeAt ? null : actor;
+    },
+    synchronizeAlgorithmWrite: async (owner: string, _plane: string, raw: unknown, admit: () => Promise<void>) => {
+     assert.equal(owner, actor.user.id); assert.deepEqual(raw, command);
+     await admit(); writes++; return receipt;
+    }
+   });
+   const response = await f.run({ request: request({ ...body, expectedOwnerId: actor.user.id }, selected ? { 'X-Thingtime-Character': selected } : {}) });
+   assert.equal(response.status, revokeAt > 3 ? 200 : 401);
+   assert.equal(writes, revokeAt > 2 ? 1 : 0);
+   assert.ok(response.headers.get('Vary')?.includes('X-Thingtime-Character'));
+   const result = await response.json();
+   if (response.ok) assert.equal(result.ownerId, actor.user.id);
+   else assert.equal(result.acknowledgment, undefined, 'a revoked delegation never discloses a receipt');
+  }
+ }
+ for (const resolved of [null, account]) {
+  const f = fixture({ resolveTokenUser: async (_token: string, requested: string) => { assert.equal(requested, 'character'); return resolved; } });
+  const response = await f.run({ request: request({ operation: 'snapshot', expectedOwnerId: actor.user.id }, { 'X-Thingtime-Character': 'character' }) });
+  assert.equal(response.status, resolved ? 409 : 401);
+  assert.equal(f.reads() + f.writes(), 0, 'refused delegation cannot fall back to the principal');
+ }
+});

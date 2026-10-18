@@ -530,3 +530,14 @@ Nitro/Vite failure checks are recorded in the PR #1000 integration note.
 
 
 `api.things-search` 1.4.0 adds optional `scope: "mine"` to GET/POST search. `searchOwnerScope` supplies an authenticated owner predicate in conjunction with existing access fences; anonymous mine-search refuses. Both manifests and Agent Tasks Actions use the same version. `local-workspace/actionRequests.ts` adapts only explicit structural mine-search to the leased device snapshot, with partial account metadata. Run capability/workspace tests and the isolated `actionSearch.browser.test.ts`; see the [offline Agent Tasks checkpoint](../local-workspaces.md#offline-agent-tasks-search--2026-10-19).
+
+
+### Character profile sync
+
+`themes/sync/_sync.tsx` (1.6.0) and `algorithms/sync/_sync.tsx` (1.4.0)
+resolve the requested/session-selected actor through `resolveTokenUser` on every
+admission. Delegated `themeTransport.client.ts` and `algorithmTransport.client.ts`
+negotiate those contracts and `api.auth-characters` 1.0.0. Both manifests derive
+versions from `apiEndpointDocs`. Run the route `sync.test.ts` suites,
+`characterProfileSync.test.ts`, capability coverage, and the opt-in native
+`characterProfileSync.browser.test.ts`; see [Characters](../characters.md).

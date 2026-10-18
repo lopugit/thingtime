@@ -9,6 +9,35 @@ goal. Do not merge until the [coverage matrix](../docs/local-workspaces.md) is
 complete. It builds on main and includes the separate posting independence fix
 in [PR #999](https://github.com/lopugit/thingtime/pull/999).
 
+## Character profile sync checkpoint — 2026-10-19
+
+Theme and feed-algorithm synchronization now resolves the requested or
+session-selected Character through the existing live-session authorization path.
+The actor is checked again before mutation and before private response disclosure;
+foreign, disabled or mismatched actors never fall back to the principal. Clients
+negotiate `api.auth-characters` 1.0.0 plus `api.themes-sync` 1.6.0 or
+`api.algorithms-sync` 1.4.0, and send the Character and selected-plane fences.
+Both capability manifests derive these versions from the canonical registry.
+
+Local checks: 57 focused transport/route/manifest tests; 723 workspace tests plus
+four offline-shell tests. The new native browser/API fixture passes against the
+built server: two owning accounts, three Characters, private isolated catalogues,
+conditional saves and selection, exact retry receipts, session selection, guest
+and foreign-Character refusal, wrong-plane refusal and disabled-Character refusal.
+Evidence: `tmp/character-profile-sync-native/native/verification.json` and
+`tmp/character-profile-sync-native/`. The runtime used network:none, no mounts or
+published ports, and was released without OOM. Client/server builds and lint pass;
+TypeScript retains the same 91 baseline diagnostics with no new signatures.
+An earlier harness run timed out because Chromium reported offline inside the
+sealed runtime; the existing loopback connectivity emulation fixed the fixture
+without changing its network boundary. Obsolete task-owned images were removed
+after the runtime build encountered full Docker storage.
+
+This is a prerequisite for broader delegated workspaces. Offline Character
+posting, attachment completion, principal-scoped History caches, the remaining
+workspace matrix, final-head CI/deployed acceptance and target-host MCP artifacts
+remain open. No merge or deployment is included.
+
 ## Character draft checkpoint — 2026-10-19
 
 Storage follow-up: 720 workspace and four offline-shell checks pass. Nine focused

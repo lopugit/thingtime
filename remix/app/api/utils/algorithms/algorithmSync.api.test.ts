@@ -58,7 +58,7 @@ test(
 			const routes = await read(await guest.get('/api/v1/capabilities'), 'live route capability discovery');
 			assert.equal(capabilities.origin, origin);
 			for (const [feature, required] of [
-				['api.algorithms-sync', '1.3.0'],
+				['api.algorithms-sync', '1.4.0'],
 				['api.things-export', '1.17.0'],
 				['api.things-import', '1.13.0'],
 				['api.algorithms-delete', '1.0.1']

@@ -1,6 +1,7 @@
 import { parseThemeHomeContext, type ThemeHomeContext } from '~/api/utils/themes/themeHomeContext';
 import { json, readJsonBody, requireJsonContentType } from '~/api/http';
 import { getAuthToken } from '~/api/utils/auth/authCookie';
+import { CHARACTER_HEADER } from '~/api/utils/auth/characterSession';
 import { resolveTokenUser } from '~/api/utils/auth/getCurrentUser';
 import { internalRequestActor } from '~/api/utils/auth/internalRequestActor';
 import { resolvePublicOrigin } from '~/api/utils/auth/publicOrigin';
@@ -13,7 +14,7 @@ import { THEME_SYNC_MAX_BYTES } from '~/api/utils/themes/themeSyncContract';
 
 const headers = {
 	'Cache-Control': 'private, no-store',
-	Vary: 'Cookie, Authorization, X-Thingtime-Expected-Data-Plane',
+	Vary: 'Cookie, Authorization, X-Thingtime-Character, X-Thingtime-Expected-Data-Plane',
 	'Referrer-Policy': 'no-referrer'
 };
 const privateResponse = (response: Response) => {
@@ -71,7 +72,7 @@ export function createThemeSyncResponse(overrides: Partial<typeof defaults> = {}
 			catch { return deny(400, 'Invalid home theme context.'); }
 			const ownerId = body.expectedOwnerId;
 			const admit = async () => {
-				const account = token ? await deps.resolveTokenUser(token) : null;
+				const account = token ? await deps.resolveTokenUser(token, request.headers.get(CHARACTER_HEADER)) : null;
 				if (!account || account.user.temporary || account.user.accountKind === 'service') throw new Changed(401);
 				if (account.user.id !== ownerId) throw new Changed(409, 'ACTOR_CHANGED');
 				if (deps.mongoDataPlane() !== expectedPlane) throw new Changed(409, 'DATA_PLANE_CHANGED');

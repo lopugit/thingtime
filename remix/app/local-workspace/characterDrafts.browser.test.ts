@@ -72,6 +72,7 @@ test('native delegated drafts survive offline reload and failed sync does not bl
   // fixture, including each Character, instead of calling the meter's adapter.
   storageUsage=await page.evaluate(async principal=>{
    const db=await new Promise((resolve,reject)=>{const request=indexedDB.open('thingtime.local-workspaces.v1');request.onsuccess=()=>resolve(request.result);request.onerror=()=>reject(request.error);});
+   if(!(db instanceof IDBDatabase))throw Error('Fixture workspace database did not open');
    try{return await new Promise((resolve,reject)=>{const request=db.transaction('records').objectStore('records').getAll();request.onerror=()=>reject(request.error);request.onsuccess=()=>{
     const rows=request.result.filter(row=>{const scope=JSON.parse(row.scope);return scope[1]===location.origin && ((scope[0]==='account'&&scope[2]===principal&&scope[3]==='home')||(scope[0]==='delegated-account'&&scope[2]===principal&&scope[4]==='home'));});
     resolve({bytes:rows.reduce((sum,row)=>sum+row.bytes,0),records:rows.length,actors:[...new Set(rows.filter(row=>JSON.parse(row.scope)[0]==='delegated-account').map(row=>JSON.parse(row.scope)[3]))].sort()});

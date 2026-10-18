@@ -80,6 +80,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-19: Resolve delegated/session-selected Characters in private theme and
+  algorithm sync, with repeated authorization and negotiated actor contracts.
+  Native isolated account/API checks pass; full offline Character work remains
+  open. See [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md). — Codex (AI)
+
 - 2026-10-19: Include delegated Character drafts/files in the selected account's
   device-storage total, with one validated readonly snapshot and unchanged
   owner/origin/database isolation. See [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md). — Codex (AI)

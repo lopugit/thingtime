@@ -34,9 +34,10 @@ export function accountAlgorithmTransport(
 		const combined = AbortSignal.any([signal, controller.signal, AbortSignal.timeout(20000)]);
 		try {
 			if (window.location.origin !== scope.origin) throw new WorkspaceError('WORKSPACE_CHANGED', 'Account origin changed.', 409);
+			if (scope.delegatedBy !== undefined) await requireThingtimeCapability('api.auth-characters', '1.0.0');
 			await requireThingtimeCapability(
 				'api.algorithms-sync',
-				operation === 'snapshot' || (operation === 'write' && command && 'content' in command && Object.prototype.hasOwnProperty.call(command.content, 'title')) ? '1.3.0' : operation === 'write' && command && 'folderId' in command ? '1.2.0' : ['selection', 'select'].includes(operation) ? '1.1.0' : '1.0.0'
+				scope.delegatedBy !== undefined ? '1.4.0' : operation === 'snapshot' || (operation === 'write' && command && 'content' in command && Object.prototype.hasOwnProperty.call(command.content, 'title')) ? '1.3.0' : operation === 'write' && command && 'folderId' in command ? '1.2.0' : ['selection', 'select'].includes(operation) ? '1.1.0' : '1.0.0'
 			);
 			await requireThingtimeCapability('api.mongodb-endpoint', '1.1.0');
 			lease.assertCurrent();
@@ -48,7 +49,8 @@ export function accountAlgorithmTransport(
 				cache: 'no-store',
 				redirect: 'error',
 				signal: combined,
-				headers: { 'Content-Type': 'application/json', [EXPECTED_ACTOR_HEADER]: scope.ownerId, [EXPECTED_DATA_PLANE_HEADER]: scope.dataPlane },
+				headers: { 'Content-Type': 'application/json', [EXPECTED_ACTOR_HEADER]: scope.ownerId, [EXPECTED_DATA_PLANE_HEADER]: scope.dataPlane,
+					...(scope.delegatedBy !== undefined ? { 'X-Thingtime-Character': scope.ownerId } : {}) },
 				body: JSON.stringify({ operation, expectedOwnerId: scope.ownerId, ...(command ? { command } : {}) })
 			});
 			let result: any = null;

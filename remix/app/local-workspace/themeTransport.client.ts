@@ -33,13 +33,15 @@ export function accountThemeTransport(
 		const remote = accountRemoteWorkspaceLease(scope);
 		remote.assertCurrent();
 		const controller = new AbortController(),
-			off = remote.onInvalidate(() => controller.abort());
+			off = remote.onInvalidate(() => controller.abort()),
+			offLocal = lease.onInvalidate(() => controller.abort());
 		const combined = AbortSignal.any([signal, controller.signal, AbortSignal.timeout(20_000)]);
 		try {
 			if (window.location.origin !== scope.origin) throw new WorkspaceError('WORKSPACE_CHANGED', 'Account origin changed.', 409);
+			if (scope.delegatedBy !== undefined) await requireThingtimeCapability('api.auth-characters', '1.0.0');
 			await requireThingtimeCapability(
 				'api.themes-sync',
-				context ? '1.5.0' : operation === 'snapshot' ? '1.4.0' : operation === 'selection' || operation === 'select' ? '1.1.0' : command && 'title' in command ? '1.4.0' : command && 'folderId' in command ? '1.3.0' : '1.0.1'
+				scope.delegatedBy !== undefined ? '1.6.0' : context ? '1.5.0' : operation === 'snapshot' ? '1.4.0' : operation === 'selection' || operation === 'select' ? '1.1.0' : command && 'title' in command ? '1.4.0' : command && 'folderId' in command ? '1.3.0' : '1.0.1'
 			);
 			await requireThingtimeCapability('api.mongodb-endpoint', '1.1.0');
 			lease.assertCurrent();
@@ -51,7 +53,8 @@ export function accountThemeTransport(
 				cache: 'no-store',
 				redirect: 'error',
 				signal: combined,
-				headers: { 'Content-Type': 'application/json', [EXPECTED_ACTOR_HEADER]: scope.ownerId, [EXPECTED_DATA_PLANE_HEADER]: scope.dataPlane },
+				headers: { 'Content-Type': 'application/json', [EXPECTED_ACTOR_HEADER]: scope.ownerId, [EXPECTED_DATA_PLANE_HEADER]: scope.dataPlane,
+					...(scope.delegatedBy !== undefined ? { 'X-Thingtime-Character': scope.ownerId } : {}) },
 				body: JSON.stringify({
 					operation,
 					expectedOwnerId: scope.ownerId,
@@ -88,6 +91,7 @@ export function accountThemeTransport(
 			return result;
 		} finally {
 			off();
+			offLocal();
 		}
 	};
 	return {

@@ -5,6 +5,21 @@ import { apiEndpointDocs, apiV1DocsRouteKeys, apiV1RouteKeys, createApiCapabilit
 import { capabilitySatisfies } from './capabilityContract';
 import { THINGTIME_CAPABILITY_MANIFEST_PATH, thingtimeCapabilityManifest } from './thingtimeCapabilities';
 
+test('Character profile synchronization publishes matching actor-aware route contracts', () => {
+  const origin = thingtimeCapabilityManifest('https://characters.example');
+  const routes = createApiCapabilitiesManifest();
+  for (const [kind, version, previous] of [['themes', '1.6.0', '1.5.0'], ['algorithms', '1.4.0', '1.3.0']]) {
+    const feature = `api.${kind}-sync`;
+    assert.equal(origin.features[feature].version, version);
+    assert.equal(routes.features[feature], version);
+    assert.ok(origin.operations.some(operation => operation.feature === feature && operation.path === `/api/v1/${kind}/sync` && operation.methods.includes('POST')));
+    assert.equal(capabilitySatisfies(previous, version), false);
+    assert.equal(capabilitySatisfies(undefined, version), false);
+    assert.equal(capabilitySatisfies('2.0.0', version), false);
+    assert.equal(capabilitySatisfies(version.replace(/0$/, '1'), version), true);
+  }
+});
+
 test('owner-scoped search advertises and negotiates the same additive contract on both manifests', () => {
   assert.equal(createApiCapabilitiesManifest().features['api.things-search'], '1.4.0');
   assert.equal(thingtimeCapabilityManifest('https://search.test').features['api.things-search'].version, '1.4.0');

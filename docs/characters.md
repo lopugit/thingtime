@@ -56,6 +56,22 @@ only keys and validated accounting records; it never clones file contents.
 Delegated offline posting and general Character workspace coverage are still
 tracked in [the local-workspace matrix](local-workspaces.md).
 
+## Private theme and algorithm synchronization
+
+On servers advertising `api.themes-sync` 1.6.0 and `api.algorithms-sync` 1.4.0,
+the canonical sync endpoints accept an owned `X-Thingtime-Character` selection.
+Without that header they use the session-selected acting identity. Every request
+still requires a live full session, same origin, the exact expected actor and
+selected database. The server resolves delegation again before writing and before
+returning private content. Disabled and foreign Characters are refused without
+using the owner's catalogue or selection.
+
+Delegated clients negotiate `api.auth-characters` 1.0.0 alongside the relevant
+sync contract. Snapshots, conditional writes, immutable retries and selection
+use the existing home storage and accounting; these endpoints grant no anonymous
+or offline authority. Broader delegated local workspace wiring remains tracked
+in [the acceptance matrix](local-workspaces.md).
+
 ## Agent coordination
 
 First run the supported, read-only discovery command (Node 20+ and the normal
