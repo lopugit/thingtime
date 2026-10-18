@@ -5050,7 +5050,12 @@ creating another copy. **Apply waterfall** still stages the order for the separa
 ### Incoming mail (Gmail, IMAP, POP3 and offline inboxes)
 
 Open `/settings/email` to connect email accounts, then `/mail` (`/email` is an
-alias). Each account can independently enable **Cloud** and **Local** sync.
+alias). Anonymous workspaces can save device-only mail settings and read their
+retained mail without a Thingtime login. They use explicit direct native sync
+or a paired connector for mailbox access. Cloud storage, Gmail authorization and
+Thingtime API relay require a remotely confirmed Thingtime account; signing in
+does not adopt anonymous mail or credentials. Offline account reads remain local.
+Each account can independently enable **Cloud** and **Local** sync.
 IMAP discovers selectable folders; POP3 exposes its single inbox. **All inboxes**
 combines inbox folders. A proxy inbox is a saved selection of folders from any
 connected accounts: it changes only the view and never copies, moves or deletes
@@ -5098,8 +5103,10 @@ server deletion/mark-read/move commands are issued.
 
 Sync is explicit through **Sync inbox** / **Sync folders**, with **Load older
 mail** for bounded ten-message provider pages. It is not a background cron or
-push service. A device caches up to 2,000 messages, with up to 12,000 text
-characters per message, and marks truncated/oversized messages. HTML is rendered
+push service. A device retains synced messages until removed or browser storage becomes
+unavailable; new saves fail atomically when storage is full. The provider reader
+currently retains up to 12,000 text characters per message and marks partial
+bodies. The provider-size limits are not full-message archival support. HTML is rendered
 as text; remote images and scripts are never loaded. Attachments remain at the
 provider and are counted, not downloaded by this version. Cloud-only proxy
 inboxes sync across your devices; views including device-only accounts stay on

@@ -1,4 +1,7 @@
 import React from 'react';
+import type { MailWorkspace } from './workspace.client';
+import type { WorkspaceLease } from '../local-workspace/storage';
+import { subscribeWorkspaceBinding } from '../local-workspace/runtime.client';
 import type { LocalGmailDraft } from './googleModel';
 import { nativeMailRequest } from './native';
 import { mailRequest, localMailRequest, relayMailRequest } from './client';
@@ -20,8 +23,15 @@ const changes = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel('
 // Auth transitions clear the synchronous first-paint tier. Device records are
 // separately encrypted and scoped to the signed-in owner.
 if (typeof window !== 'undefined') window.addEventListener('thingtime:root-data-refresh', () => memory.clear());
-export function useMail(ownerId: string) {
-	const scope = `${location.origin}:${ownerId}`;
+export function useMail(workspace: MailWorkspace) {
+	const scope = workspace.key;
+	const cloudAvailable = React.useSyncExternalStore(subscribeWorkspaceBinding, workspace.canSync, () => false);
+	const ownerId = workspace.scope.kind === 'account' ? workspace.scope.ownerId : '';
+	const allowCloud = () => {
+		workspace.lease.assertCurrent();
+		if (!workspace.canSync()) throw new Error('Sign in and reconnect to use Thingtime mail services.');
+	};
+
 	const [data, setData] = React.useState(() => memory.get(scope) || emptyLocalMail());
 	const current = React.useRef(data),
 		live = React.useRef(true),
@@ -29,42 +39,66 @@ export function useMail(ownerId: string) {
 	const [ready, setReady] = React.useState(memory.has(scope)),
 		[busy, setBusy] = React.useState(false),
 		[error, setError] = React.useState('');
+	const storageLease = React.useCallback((): WorkspaceLease => {
+		const signal = controller.current.signal;
+		return {
+			assertCurrent: () => {
+				workspace.lease.assertCurrent();
+				signal.throwIfAborted();
+				if (!live.current) throw new Error('Mail closed.');
+			},
+			onInvalidate: (callback) => {
+				signal.addEventListener('abort', callback, { once: true });
+				const unsubscribe = workspace.lease.onInvalidate(callback);
+				return () => {
+					unsubscribe();
+					signal.removeEventListener('abort', callback);
+				};
+			}
+		};
+	}, [workspace]);
+
 	const working = React.useRef(false),
 		epoch = React.useRef(0);
 	const retry = React.useRef<{ payload: string; writeId: string } | null>(null);
 	const publish = React.useCallback(
 		(next: LocalMail) => {
-			if (!live.current) return;
+			try {
+				storageLease().assertCurrent();
+			} catch {
+				return;
+			}
 			current.current = next;
 			memory.set(scope, { ...next, credentials: {}, connectorToken: '' });
 			setData(next);
 		},
-		[scope]
+		[scope, storageLease]
 	);
-	const persist = async (next: LocalMail) => {
-		if (!live.current) throw new Error('Mail closed.');
-		const version = epoch.current;
-		// Keep a bounded reading cache; accounts and proxy definitions are retained.
-		const sorted = [...next.state.messages].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
-		next = { ...next, state: { ...next.state, messages: sorted.slice(0, 2000) } };
-		next = await writeMailLocal(ownerId, next);
-		if (!live.current || epoch.current !== version) return;
-		publish(next);
-		window.dispatchEvent(new CustomEvent('thingtime:mail-changed', { detail: scope }));
-		changes?.postMessage(scope);
-	};
+	const persist = React.useCallback(
+		async (next: LocalMail) => {
+			storageLease().assertCurrent();
+			const version = epoch.current;
+			next = await writeMailLocal(workspace.scope, next, storageLease());
+			if (!live.current || epoch.current !== version) return;
+			publish(next);
+			window.dispatchEvent(new CustomEvent('thingtime:mail-changed', { detail: scope }));
+			changes?.postMessage(scope);
+		},
+		[workspace, publish, scope, storageLease]
+	);
 	const run = async <T>(work: () => Promise<T>): Promise<T | undefined> => {
 		if (working.current || !ready) return;
 		working.current = true;
 		setBusy(true);
 		setError('');
 		try {
+			storageLease().assertCurrent();
 			return await work();
 		} catch (cause) {
 			if (live.current) {
 				setError(cause instanceof Error ? cause.message : 'Mail is unavailable.');
 				if (cause instanceof Error && cause.message.includes('another tab')) {
-					const saved = await readMailLocal(ownerId);
+					const saved = await readMailLocal(workspace.scope, storageLease());
 					if (live.current) publish(saved);
 				}
 			}
@@ -74,65 +108,76 @@ export function useMail(ownerId: string) {
 			if (live.current) setBusy(false);
 		}
 	};
-	const refresh = async (signal = controller.current.signal) => {
-		const remote = {
-			accounts: [] as MailAccount[],
-			folders: [] as MailFolder[],
-			messages: [] as LocalMail['state']['messages'],
-			inboxes: [] as MailInbox[]
-		};
-		for (const [key, kind] of [
-			['accounts', 'mail-account'],
-			['folders', 'mail-folder'],
-			['messages', 'mail-message'],
-			['inboxes', 'mail-inbox']
-		] as const) {
-			let cursor: string | null = null;
-			do {
-				const page = await mailRequest(ownerId, undefined, { kind, ...(cursor ? { cursor } : {}) }, signal);
-				remote[key].push(...page.records);
-				cursor = page.nextCursor;
-				// Message history is paged on the server; keep only this device's bounded cache.
-				if (key === 'messages' && remote.messages.length >= 2000) break;
-			} while (cursor && live.current);
-		}
-		if (!live.current || signal.aborted) return;
-		const local = current.current;
-		const accounts = mergeMailRows(
-			remote.accounts,
-			local.state.accounts.filter((account) => local.localAccountIds.includes(account.id))
-		);
-		const ids = new Set(accounts.map((account) => account.id));
-		const localSyncIds = new Set(accounts.filter((account) => account.sync.local).map((account) => account.id));
-		await persist({
-			...local,
-			state: {
-				accounts,
-				folders: mergeMailRows(
-					remote.folders,
-					local.state.folders.filter((folder) => local.localAccountIds.includes(folder.accountId) || localSyncIds.has(folder.accountId))
-				).filter((folder) => ids.has(folder.accountId)),
-				messages: mergeMailRows(
-					local.state.messages.filter((message) => ids.has(message.accountId)),
-					remote.messages
-				),
-				inboxes: mergeMailRows(
-					remote.inboxes,
-					local.state.inboxes.filter((inbox) => local.localInboxIds.includes(inbox.id))
-				)
+	const refresh = React.useCallback(
+		async (signal = controller.current.signal, background = false) => {
+			storageLease().assertCurrent();
+			if (!workspace.canSync()) return;
+			const revision = current.current.storageRevision;
+			const remote = {
+				accounts: [] as MailAccount[],
+				folders: [] as MailFolder[],
+				messages: [] as LocalMail['state']['messages'],
+				inboxes: [] as MailInbox[]
+			};
+			for (const [key, kind] of [
+				['accounts', 'mail-account'],
+				['folders', 'mail-folder'],
+				['messages', 'mail-message'],
+				['inboxes', 'mail-inbox']
+			] as const) {
+				let cursor: string | null = null;
+				do {
+					const page = await mailRequest(ownerId, undefined, { kind, ...(cursor ? { cursor } : {}) }, signal);
+					remote[key].push(...page.records);
+					cursor = page.nextCursor;
+				} while (cursor && live.current);
 			}
-		});
-	};
+			if (!live.current || signal.aborted || (background && (working.current || current.current.storageRevision !== revision))) return;
+			const local = current.current;
+			const accounts = mergeMailRows(
+				remote.accounts,
+				local.state.accounts.filter((account) => local.localAccountIds.includes(account.id))
+			);
+			const ids = new Set(accounts.map((account) => account.id));
+			const localSyncIds = new Set(accounts.filter((account) => account.sync.local).map((account) => account.id));
+			await persist({
+				...local,
+				state: {
+					accounts,
+					folders: mergeMailRows(
+						remote.folders,
+						local.state.folders.filter((folder) => local.localAccountIds.includes(folder.accountId) || localSyncIds.has(folder.accountId))
+					).filter((folder) => ids.has(folder.accountId)),
+					messages: mergeMailRows(
+						local.state.messages.filter((message) => ids.has(message.accountId)),
+						remote.messages
+					),
+					inboxes: mergeMailRows(
+						remote.inboxes,
+						local.state.inboxes.filter((inbox) => local.localInboxIds.includes(inbox.id))
+					)
+				}
+			});
+		},
+		[ownerId, workspace, storageLease, persist]
+	);
 	React.useEffect(() => {
+		const generation = epoch;
 		live.current = true;
-		epoch.current++;
+		generation.current++;
 		controller.current = new AbortController();
 		const signal = controller.current.signal;
+		const unsubscribe = workspace.lease.onInvalidate(() => {
+			controller.current.abort();
+			memory.delete(scope);
+			setData(emptyLocalMail());
+			setReady(false);
+		});
 		const receive = async (event: Event) => {
 			const changedScope = event instanceof MessageEvent ? event.data : (event as CustomEvent).detail;
 			if (changedScope !== scope || working.current) return;
 			try {
-				const saved = await readMailLocal(ownerId);
+				const saved = await readMailLocal(workspace.scope, storageLease());
 				if (!signal.aborted && !working.current && saved.storageRevision >= current.current.storageRevision) publish(saved);
 			} catch {
 				/* An explicit refresh reports unavailable device storage. */
@@ -144,10 +189,12 @@ export function useMail(ownerId: string) {
 		setBusy(true);
 		(async () => {
 			try {
-				const saved = await readMailLocal(ownerId);
+				const saved = await readMailLocal(workspace.scope, storageLease());
 				if (!live.current || signal.aborted) return;
 				publish(saved);
 				setReady(true);
+				working.current = false;
+				setBusy(false);
 			} catch {
 				if (live.current && !signal.aborted) {
 					setError('Device mail could not be opened. Reload before changing settings.');
@@ -157,27 +204,25 @@ export function useMail(ownerId: string) {
 				return;
 			}
 			try {
-				await refresh(signal);
+				await refresh(signal, true);
 			} catch (cause) {
 				if (live.current && !signal.aborted) setError(cause instanceof Error ? cause.message : 'Cloud mail is unavailable.');
-			} finally {
-				if (!signal.aborted) {
-					working.current = false;
-					setBusy(false);
-				}
 			}
 		})();
 		return () => {
+			unsubscribe();
 			live.current = false;
-			epoch.current++;
+			generation.current++;
 			controller.current.abort();
 			window.removeEventListener('thingtime:mail-changed', receive);
 			changes?.removeEventListener('message', receive);
 		};
-	}, [ownerId, publish, scope]); // Account-keyed parent remounts fence every pending callback.
+	}, [workspace, publish, scope, storageLease, refresh]); // Account-keyed parent remounts fence every pending callback.
 	const saveAccount = (raw: MailAccount) =>
 		run(async () => {
 			let account = validateMailAccount(raw);
+			if (workspace.scope.kind === 'anonymous' && (account.sync.cloud || account.provider === 'gmail' || account.sync.transport === 'relay'))
+				throw new Error('Anonymous mail uses this device or a paired connector. Sign in for cloud, API relay or Google authorization.');
 			const local = current.current,
 				previous = local.state.accounts.find((item) => item.id === account.id);
 			if (previous && previous.revision !== account.revision) throw new Error('These settings changed elsewhere. Reopen the editor.');
@@ -202,6 +247,7 @@ export function useMail(ownerId: string) {
 			}
 			const remote = account.provider === 'gmail' || account.sync.cloud || (previous && !local.localAccountIds.includes(account.id));
 			if (remote) {
+				allowCloud();
 				const submitted = account.sync.cloud ? structuredClone(account) : publicMailAccount(account);
 				if (local.localAccountIds.includes(account.id)) submitted.revision = 0;
 				const payload = JSON.stringify(submitted);
@@ -233,6 +279,7 @@ export function useMail(ownerId: string) {
 			// Proxy inboxes containing local folders remain device-local. Cloud-only
 			// definitions can be shared across the owner's devices through the API.
 			const localOnly =
+				workspace.scope.kind === 'anonymous' ||
 				local.localInboxIds.includes(inbox.id) ||
 				inbox.folderIds.some((id) => {
 					const accountId = local.state.folders.find((folder) => folder.id === id)!.accountId;
@@ -244,6 +291,7 @@ export function useMail(ownerId: string) {
 				throw new Error('Create a new proxy inbox to include device-only folders. This saved view syncs across devices.');
 			let saved = { ...inbox, revision: inbox.revision + 1 };
 			if (!localOnly) {
+				allowCloud();
 				const payload = JSON.stringify(inbox);
 				if (retry.current?.payload !== payload) retry.current = { payload, writeId: crypto.randomUUID() };
 				saved = (await mailRequest(ownerId, { operation: 'save-inbox', inbox, writeId: retry.current.writeId }, {}, controller.current.signal)).inbox;
@@ -283,6 +331,8 @@ export function useMail(ownerId: string) {
 			return true;
 		});
 	async function syncOne(account: MailAccount, protocol: MailProtocol, request: Record<string, unknown>, target: 'cloud' | 'local') {
+		storageLease().assertCurrent();
+		if (target === 'cloud' || account.provider === 'gmail' || account.sync.transport === 'relay') allowCloud();
 		const local = current.current;
 		const batch: MailBatch =
 			account.provider === 'gmail'
@@ -321,7 +371,7 @@ export function useMail(ownerId: string) {
 	}
 	const sync = (selection: string, older = false) =>
 		run(async () => {
-			publish(await readMailLocal(ownerId));
+			publish(await readMailLocal(workspace.scope, storageLease()));
 			const state = current.current.state;
 			const proxy = state.inboxes.find((inbox) => inbox.id === selection);
 			const selectedFolders = proxy ? new Set(proxy.folderIds) : null;
@@ -395,16 +445,17 @@ export function useMail(ownerId: string) {
 			return result;
 		});
 	const saveCompose = async (draft: LocalGmailDraft, remove = false) => {
-		const next = await readMailLocal(ownerId);
+		const next = await readMailLocal(workspace.scope, storageLease());
 		const previous = next.composeDrafts.find((item) => item.id === draft.id);
 		if ((previous?.localRevision || 0) !== draft.localRevision) throw new Error('This draft changed in another tab. Reopen it before editing.');
-		if (!previous && next.composeDrafts.length >= 30) throw new Error('Keep at most 30 device drafts. Send or close an existing draft first.');
 		const saved = { ...draft, localRevision: draft.localRevision + 1 };
 		await persist({ ...next, composeDrafts: [...next.composeDrafts.filter((item) => item.id !== draft.id), ...(remove ? [] : [saved])] });
 		return saved;
 	};
 	return {
 		data,
+		cloudAvailable,
+		anonymous: workspace.scope.kind === 'anonymous',
 		googleAction,
 		saveCompose,
 		discover: (id: string) =>
@@ -422,7 +473,7 @@ export function useMail(ownerId: string) {
 		sync,
 		refresh: () =>
 			run(async () => {
-				publish(await readMailLocal(ownerId));
+				publish(await readMailLocal(workspace.scope, storageLease()));
 				return refresh();
 			}),
 		pair: (connectorToken: string) =>

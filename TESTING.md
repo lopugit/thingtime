@@ -11513,6 +11513,21 @@ separate from deterministic discovery/lease tests.
 
 ## Incoming mail
 
+- [x] Device storage/authority regression: anonymous and offline reads make no
+  cloud discovery/fetch; account/API-origin partitions and same-origin legacy
+  keys stay separate; 2,001 messages survive encrypted reopen. Retire identity
+  during encryption, decryption, IndexedDB write and remote completion; reject
+  the old operation and preserve the previous durable revision. `test:mail`.
+- [ ] Native anonymous Mail and Email settings: create/edit/remove a device-only
+  account, pair a synthetic connector, discover folders and read/search messages,
+  create/edit/delete a proxy, cold reload offline, and switch workspace/origin
+  mid-save. Verify no cloud/capability request, no silent cache truncation, and
+  readable 1440/390/320px layouts including expanded controls and full scrolling.
+- [ ] Keep local edits usable during slow account cloud refresh; a stale response
+  cannot overwrite edits. Offline account mail must never use cookies/relay until
+  root confirmation returns. Previously retained cloud-account settings still
+  need independent queued writes before full local-first acceptance.
+
 - [ ] Add more than one account in Settings → Email; configure IMAP, POP3 and both, TLS and required STARTTLS. Reload and edit without echoing saved passwords.
 - [ ] Toggle Cloud and Local independently, including both off. Cloud-off sync refuses on the server; local-only credentials never enter a Thingtime API request. Enabling cloud on a previously local account creates the remote revision correctly.
 - [ ] Connect the local connector with the exact origin/token. Refuse an unrelated origin, wrong token, private/reserved DNS answer, invalid certificate and plaintext downgrade. Test slow/disconnected providers without losing the cached inbox.

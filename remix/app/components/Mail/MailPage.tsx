@@ -2,22 +2,23 @@ import React from 'react';
 import { GmailWorkspace, GmailMessageActions } from './GmailActions';
 import { Box, Button, Checkbox, Flex, FormControl, FormLabel, Input, Text } from '@chakra-ui/react';
 import { Link } from 'react-router';
-import { useCurrentUser } from '~/hooks/useCurrentUser';
+import { useMailWorkspace } from '~/mail/useMailWorkspace';
+import type { MailWorkspace } from '~/mail/workspace.client';
 import { PageHeader, PageShell } from '~/components/Layout/PageShell';
 import { RainbowButton, SettingsSection } from '~/components/Settings/SettingsSection';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { useMail } from '~/mail/useMail';
 import { selectMailMessages, type MailInbox } from '~/mail/model';
 export function MailPage() {
-	const user = useCurrentUser();
+	const { identity, workspace } = useMailWorkspace();
 	return (
 		<PageShell width={1280}>
-			{user && !user.temporary && user.accountKind !== 'service' ? (
-				<MailScope key={user.id} ownerId={user.id} />
+			{workspace ? (
+				<MailScope key={identity} workspace={workspace} />
 			) : (
 				<>
 					<PageHeader eyebrow="Your things, connected" title="Mail" subtitle="All your inboxes, together." />
-					<Text>Sign in to connect your email accounts and read your saved mail.</Text>
+					<Text>Mail is unavailable while the workspace is changing. Reopen it once your workspace is ready.</Text>
 					<Button as={Link} to="/login" alignSelf="start">
 						Sign in
 					</Button>
@@ -26,8 +27,9 @@ export function MailPage() {
 		</PageShell>
 	);
 }
-function MailScope({ ownerId }: { ownerId: string }) {
-	const mail = useMail(ownerId),
+function MailScope({ workspace }: { workspace: MailWorkspace }) {
+	const ownerId = workspace.scope.kind === 'account' ? workspace.scope.ownerId : '';
+	const mail = useMail(workspace),
 		lopu = useLopu();
 	const [selection, setSelection] = React.useState('all'),
 		[search, setSearch] = React.useState(''),
@@ -69,6 +71,11 @@ function MailScope({ ownerId }: { ownerId: string }) {
 					</Button>
 				}
 			/>
+			{mail.anonymous && (
+				<Text fontSize="sm">
+					Mail stays in this browser’s anonymous workspace. Connect directly from the app or pair a local connector in Email settings.
+				</Text>
+			)}
 			<GmailWorkspace ownerId={ownerId} mail={mail} />
 			<Flex gap={4} direction={{ base: 'column', md: 'row' }} align="start" minW={0}>
 				<Flex as="nav" aria-label="Mail inboxes" direction="column" gap={2} width={{ base: '100%', md: '240px' }} flexShrink={0} minW={0}>

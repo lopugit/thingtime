@@ -4248,3 +4248,54 @@ credential interface remain separate acceptance blockers. Current native
 search/media/layout, final renderer artifacts, importer and host connection checks
 remain open; earlier PNGs are historical. Current CI/deployment evidence is
 recorded on PR #1000, separately from these local checks.
+
+## Anonymous and offline mail boundary — 2026-10-18
+
+The incoming-mail audit found two unnecessary dependencies: the Mail and Email
+settings screens rejected anonymous users, and opening the reader always loaded
+cloud mail before local operations could finish. Both screens now select the
+root-bound workspace. Anonymous settings, proxy views and retained messages use
+the existing encrypted mail store with a distinct anonymous key. A local save
+never upgrades that content to an account record. A verified account can refresh
+cloud mail in the background without holding device edits; a stale background
+refresh is discarded if local work has begun or committed.
+
+Account mail remains home-plane data, scoped by the selected API origin and
+owner. Ordinary same-origin account keys remain compatible. A desktop shell's
+legacy origin-only cache is not automatically adopted under a different API
+origin: there is no evidence identifying its original server. Revisit that
+server with the normal authenticated sync path; do not guess or copy credentials.
+
+All mail API clients, including Gmail controls, now require the matching,
+remotely confirmed account before capability discovery or a cookie-bearing
+request. Anonymous cloud/Gmail/relay choices are unavailable and refused by the
+operation path. Explicit direct native sync and the fixed, paired loopback
+connector remain separate provider connections; reading or saving local settings
+does not contact a mailbox. Existing server authentication, origin checks,
+provider TLS/DNS policy, sanitization and rate limits are unchanged.
+
+Workspace leases fence encrypted reads and writes through crypto completion and
+IndexedDB commit. Invalidation aborts the active transaction and request; older
+work cannot return plaintext to a retired view or commit to a previous workspace.
+Encryption/decryption runs in batches of sixteen records, without limiting the
+number of records. The silent 2,000-message retention truncation and thirty-local-
+draft ceiling were removed. Browser quota failures remain atomic. Provider page,
+message-body and canonical form limits still need the separate streaming review.
+
+Local evidence: `test:mail` **40 passed**, `test:settings` **39 passed**; real
+synthetic TLS IMAP/POP3 and connector boundary suites passed. Tests cover 2,001
+retained messages, anonymous/account/origin separation, stale writes, no network
+before authority, and retirement during encryption, decryption, transaction and
+remote completion. TypeScript still reports the same **91 baseline diagnostics**;
+changed-file lint has no errors or warnings. See the ignored `tmp/mail-*.log`
+files for raw evidence. This is code/storage/transport evidence, not native UI
+acceptance or provider-account verification.
+
+Native mail acceptance remains open: 1440/390/320px settings and reader, proxy
+editing, cross-tab changes, cold offline reload, explicit connector/native sync,
+and account/origin transitions. The installed browser-manager CLI is now present,
+but app control timed out after inventory recovery and exact-path reacquisition;
+its displayed private socket and registered task policy are still needed. No
+claim was taken and no permissive browser was launched. Account cloud-settings
+queues, broader mail lifecycle/capacity and actual Gmail/provider acceptance also
+remain open. The target agent-host artifact connection remains a separate gate.

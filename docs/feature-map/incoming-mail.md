@@ -63,3 +63,26 @@ sync writes. `google-drafts` pages Google drafts without saving their bodies.
 `GmailWorkspace`, `GmailMessageActions` and `GmailComposer` share those APIs;
 compose drafts use separate encrypted rows in the existing mail IndexedDB store,
 with per-draft revisions and owner/origin isolation. No new collection is added.
+
+## Anonymous and offline workspaces
+
+`mail/useMailWorkspace.ts` keys both normal Mail surfaces by trusted root identity;
+`mail/workspace.client.ts` selects the anonymous or account partition and gates
+all cookie-bearing mail clients before capability negotiation. `mail/localStore.ts`
+keeps the existing encrypted rows and canonical records, scopes account mail to
+its API origin/owner (home plane), and uses workspace leases through crypto and
+transaction completion. No account API, new route or remote capability is added.
+
+`useMail` opens local state first; cloud refresh is independent and cannot replace
+newer device edits. Anonymous setup selects native sync or the existing fixed
+paired connector, never relay/cloud/Gmail. Existing device-only account settings
+remain locally editable while offline. Cloud-backed account settings still use
+remote writes and require a future durable local queue. No automatic anonymous
+adoption is allowed. Same-origin old account keys remain readable; unproven
+legacy desktop-origin caches are not reassigned to a selected server.
+
+`mail/workspace.test.ts` exercises real IndexedDB/encryption with synthetic data:
+account/origin partitions, more than 2,000 retained messages, crypto/transaction
+retirement and rejection before any fetch. The store processes encryption in
+batches without a retention count ceiling. Keep the native UI/provider checks in
+TESTING open until exercised in an isolated browser/native session.

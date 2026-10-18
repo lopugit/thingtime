@@ -73,6 +73,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-18 — **Codex (AI)**: Open anonymous/offline Mail through the existing
+  encrypted store, separate device work from cloud refresh, and fence account
+  mail by API origin, verified authority and operation lifetime. Remove silent
+  device message truncation. Native browser/provider acceptance remains open;
+  see the [PR #1000 checkpoint](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
 - 2026-10-18 — **Codex (AI)**: Integrate current main into the local-workspace
   branch, preserving device-only password search, media sandbox/offline assets
   and fail-closed local APIs. Combine password search and durable file receipts

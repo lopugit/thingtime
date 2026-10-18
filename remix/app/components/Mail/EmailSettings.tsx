@@ -3,22 +3,24 @@ import { GoogleMailConnect } from './GoogleMailConnect';
 import { hasNativeMailSync } from '~/mail/native';
 import { Button, Flex, FormControl, FormLabel, Input, Text } from '@chakra-ui/react';
 import { Link } from 'react-router';
-import { useCurrentUser } from '~/hooks/useCurrentUser';
+import { useMailWorkspace } from '~/mail/useMailWorkspace';
+import type { MailWorkspace } from '~/mail/workspace.client';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { RainbowButton, SettingsSection } from '~/components/Settings/SettingsSection';
 import { useMail } from '~/mail/useMail';
 import type { MailAccount } from '~/mail/model';
 import { MailAccountEditor, newMailAccount } from './MailAccountEditor';
 export function EmailSettings() {
-	const user = useCurrentUser();
-	return user && !user.temporary && user.accountKind !== 'service' ? (
-		<EmailSettingsScope key={user.id} ownerId={user.id} />
+	const { identity, workspace } = useMailWorkspace();
+	return workspace ? (
+		<EmailSettingsScope key={identity} workspace={workspace} />
 	) : (
-		<Text>Sign in to connect your email accounts.</Text>
+		<Text>Email settings are unavailable while the workspace is changing. Reopen them once your workspace is ready.</Text>
 	);
 }
-function EmailSettingsScope({ ownerId }: { ownerId: string }) {
-	const mail = useMail(ownerId),
+function EmailSettingsScope({ workspace }: { workspace: MailWorkspace }) {
+	const ownerId = workspace.scope.kind === 'account' ? workspace.scope.ownerId : '';
+	const mail = useMail(workspace),
 		lopu = useLopu();
 	const [draft, setDraft] = React.useState<MailAccount | null>(null),
 		[token, setToken] = React.useState(''),
@@ -30,10 +32,14 @@ function EmailSettingsScope({ ownerId }: { ownerId: string }) {
 		<Flex direction="column" gap={4} minW={0}>
 			<SettingsSection
 				eyebrow="Email accounts"
-				description="Connect as many accounts as you need. Choose cloud storage, a device copy, both, or pause syncing while keeping your saved mail. API relay works in browsers and native apps without an extra installation."
+				description={
+					mail.anonymous
+						? 'Save mail settings and read saved messages in this browser without a Thingtime account. Direct app sync or a paired local connector connects to your mail provider only when you choose Sync.'
+						: 'Connect as many accounts as you need. Choose cloud storage, a device copy, both, or pause syncing while keeping your saved mail. API relay requires a connected Thingtime account.'
+				}
 			>
 				<Flex gap={2} wrap="wrap">
-					<RainbowButton onClick={() => setDraft(newMailAccount())} isDisabled={!mail.ready || mail.busy}>
+					<RainbowButton onClick={() => setDraft(newMailAccount(!mail.anonymous))} isDisabled={!mail.ready || mail.busy}>
 						Add email account
 					</RainbowButton>
 					<Button as={Link} to="/mail">
@@ -43,7 +49,13 @@ function EmailSettingsScope({ ownerId }: { ownerId: string }) {
 						Refresh accounts
 					</Button>
 				</Flex>
-				<GoogleMailConnect ownerId={ownerId} onConnected={mail.refresh} />
+				{mail.cloudAvailable ? (
+					<GoogleMailConnect ownerId={ownerId} onConnected={mail.refresh} />
+				) : (
+					<Text fontSize="sm">
+						Sign in and reconnect for Google authorization, cloud storage or Thingtime API relay. Device mail remains available separately.
+					</Text>
+				)}
 				{!mail.data.state.accounts.length && <Text fontSize="sm">Your connected accounts will appear here.</Text>}
 				{mail.data.state.accounts.map((account) => (
 					<Flex key={account.id} direction="column" gap={2} py={3} borderBottom="1px solid var(--tt-border, #ececef)">
@@ -104,7 +116,16 @@ function EmailSettingsScope({ ownerId }: { ownerId: string }) {
 					</Flex>
 				))}
 			</SettingsSection>
-			{draft && <MailAccountEditor key={draft.id} account={draft} busy={mail.busy} onSave={mail.saveAccount} onCancel={() => setDraft(null)} />}
+			{draft && (
+				<MailAccountEditor
+					allowCloud={!mail.anonymous}
+					key={draft.id}
+					account={draft}
+					busy={mail.busy}
+					onSave={mail.saveAccount}
+					onCancel={() => setDraft(null)}
+				/>
+			)}
 			<SettingsSection
 				eyebrow="Optional local connector"
 				description="Pair this browser with the connector running on your computer. It connects directly to your email servers and keeps credentials out of Thingtime’s cloud."
@@ -112,6 +133,8 @@ function EmailSettingsScope({ ownerId }: { ownerId: string }) {
 				<Text fontSize="sm">
 					{hasNativeMailSync()
 						? 'This app includes direct mail sync: choose Directly from this app in the account settings. '
+						: mail.anonymous
+						? 'Pair a local connector to sync from this browser without a Thingtime account. '
 						: 'Choose Thingtime API relay to sync without installing anything. '}
 					For the separate connector option, start the connector with your Thingtime origin and a random pairing token, then enter that token here.
 					Setup instructions are in the project README’s Incoming mail section.
@@ -144,9 +167,9 @@ function EmailSettingsScope({ ownerId }: { ownerId: string }) {
 				</Text>
 			</SettingsSection>
 			<Text fontSize="xs" color="var(--tt-muted)">
-				Offline reading keeps up to 2,000 recently synced messages on this browser. Sync runs when you press Sync; receiving new mail requires a
-				network connection. Large messages are marked as partial. Gmail accounts connected with Google also support drafts, sending and mailbox
-				actions.
+				Offline reading keeps your synced messages on this browser while device storage is available. Sync runs when you press Sync; receiving new
+				mail requires a network connection. Large messages are marked as partial. Gmail accounts connected with Google also support drafts, sending
+				and mailbox actions.
 			</Text>
 			{mail.busy && (
 				<Text role="status" fontSize="sm">
