@@ -5,7 +5,7 @@ import type { AccountFileMetadata } from './accountFileMetadata';
 import { useOfflineWorkspace } from '../hooks/useWorkspaceUser';
 import React from 'react';
 import { Box, Button, Flex, Text } from '@chakra-ui/react';
-import { useCurrentUser } from '../hooks/useCurrentUser';
+import { useRootUser } from '../hooks/useCurrentUser';
 import { useDataPlane } from '../hooks/useDataPlane';
 import { accountWorkspaceWorker } from './accountApi.client';
 import { LOCAL_WORKSPACE_CHANGED, announceLocalWorkspaceChange } from './runtime.client';
@@ -14,13 +14,17 @@ import type { AccountInteractionSync } from './accountInteractions';
 
 type Review = Awaited<ReturnType<AccountThingSync['inspectConflict']>>;
 type Status = Awaited<ReturnType<AccountThingSync['status']>>;
-export function AccountSyncStatus() {
- const user = useCurrentUser(), dataPlane = useDataPlane(), offline = useOfflineWorkspace();
- const ownerId = offline?.ownerId || (user && !user.temporary ? user.id : null);
- if (!ownerId || !dataPlane) return null;
- return <React.Fragment key={JSON.stringify([ownerId, dataPlane])}><WorkspaceStatus ownerId={ownerId} dataPlane={dataPlane} unconfirmed={!!offline} /><InteractionStatus ownerId={ownerId} dataPlane={dataPlane} unconfirmed={!!offline} /><FileSyncStatus ownerId={ownerId} dataPlane={dataPlane} unconfirmed={!!offline} /><DraftSyncStatus ownerId={ownerId} dataPlane={dataPlane} unconfirmed={!!offline} /></React.Fragment>;
+export function AccountSyncStatus({actorId}: {actorId?:string} = {}) {
+ const user = useRootUser(), dataPlane = useDataPlane(), offline = useOfflineWorkspace();
+ const principal = offline?.ownerId || (user && !user.temporary ? user.id : null);
+ const ownerId = actorId || principal;
+ const delegatedBy = actorId && principal && actorId !== principal ? principal : undefined;
+ if (!principal || !ownerId || !dataPlane) return null;
+ const scope={ownerId,dataPlane,delegatedBy,unconfirmed:!!offline};
+ return <Box key={JSON.stringify([ownerId, delegatedBy, dataPlane])} w="100%" minW={0} sx={delegatedBy ? {'& > section':{marginTop:4}} : {'& > section + section':{marginTop:4}}}><WorkspaceStatus {...scope} /><InteractionStatus {...scope} /><FileSyncStatus {...scope} /><DraftSyncStatus ownerId={principal} actorId={delegatedBy ? ownerId : undefined} dataPlane={dataPlane} unconfirmed={!!offline} /></Box>;
 }
-function WorkspaceStatus({ ownerId, dataPlane, unconfirmed }: { ownerId: string; dataPlane: string; unconfirmed: boolean }) {
+type StatusScope = {ownerId:string;dataPlane:string;unconfirmed:boolean;delegatedBy?:string};
+function WorkspaceStatus({ ownerId, dataPlane, unconfirmed, delegatedBy }: StatusScope) {
  const [rows, setRows] = React.useState<Status>([]), [error, setError] = React.useState('');
  const [review, setReview] = React.useState<Review | null>(null), [busy, setBusy] = React.useState(false);
  const [online, setOnline] = React.useState(navigator.onLine);
@@ -28,13 +32,13 @@ function WorkspaceStatus({ ownerId, dataPlane, unconfirmed }: { ownerId: string;
  const mounted = React.useRef(true);
  React.useEffect(() => {
   mounted.current = true;
-  const service = accountWorkspaceWorker({ kind: 'account', ownerId, dataPlane, origin: window.location.origin });
+  const service = accountWorkspaceWorker({ kind: 'account', ownerId, dataPlane, delegatedBy, origin: window.location.origin });
   serviceRef.current = service;
   const update = () => { setOnline(navigator.onLine); void service.sync.status().then(value => { if (mounted.current) setRows(value.filter(row => row.state !== 'synced')); }).catch(() => {}); };
   update();
   window.addEventListener(LOCAL_WORKSPACE_CHANGED, update); window.addEventListener('online', update); window.addEventListener('offline', update);
   return () => { mounted.current = false; window.removeEventListener(LOCAL_WORKSPACE_CHANGED, update); window.removeEventListener('online', update); window.removeEventListener('offline', update); };
- }, [ownerId, dataPlane]);
+ }, [ownerId, delegatedBy, dataPlane]);
  const act = async (run: (service: ReturnType<typeof accountWorkspaceWorker>) => Promise<unknown>) => {
   const service = serviceRef.current; if (!service) return;
   setBusy(true); setError('');
@@ -42,10 +46,10 @@ function WorkspaceStatus({ ownerId, dataPlane, unconfirmed }: { ownerId: string;
   catch (failure) { if (mounted.current) setError(failure instanceof Error ? failure.message : 'Could not complete sync. Your local edits are preserved.'); }
   finally { if (mounted.current) setBusy(false); }
  };
- if (!rows.length && !error && !unconfirmed) return null;
+ if (!rows.length && !error && (!unconfirmed || delegatedBy)) return null;
  const conflicts = rows.filter(row => row.state === 'conflict').length;
- return <Box as="section" aria-label="Account sync" data-testid="account-sync-status" maxW="900px" w="calc(100% - 32px)" mx="auto" mt="var(--tt-nav-clearance, 72px)" mb={4} px={4} py={3} borderWidth="1px" borderRadius="lg">
-  {unconfirmed ? <Flex gap={3} flexWrap="wrap" align="center"><Text flex="1">Offline account workspace. Local edits are available; account sync is paused until your session is verified.</Text><Button size="sm" isDisabled={!online} onClick={() => window.dispatchEvent(new Event('thingtime:root-data-refresh'))}>Reconnect</Button></Flex> : null}
+ return <Box as="section" aria-label={delegatedBy ? 'Character sync' : 'Account sync'} data-testid="account-sync-status" maxW="900px" w="calc(100% - 32px)" mx="auto" mt="var(--tt-nav-clearance, 72px)" mb={4} px={4} py={3} borderWidth="1px" borderRadius="lg">
+  {unconfirmed && !delegatedBy ? <Flex gap={3} flexWrap="wrap" align="center"><Text flex="1">Offline account workspace. Local edits are available; account sync is paused until your session is verified.</Text><Button size="sm" isDisabled={!online} onClick={() => window.dispatchEvent(new Event('thingtime:root-data-refresh'))}>Reconnect</Button></Flex> : null}
   {rows.length ? <Text role="status">{conflicts ? `${conflicts} sync conflict${conflicts === 1 ? '' : 's'}. Your local edits are preserved.` : rows.some(row => row.state === 'error') ? 'Account sync needs attention. Your local edits are preserved.' : `${rows.length} change${rows.length === 1 ? '' : 's'} saved on this device. ${online ? 'Waiting to sync with your account.' : 'Offline — sync will resume when connected.'}`}</Text> : null}
   <details><summary>Review sync</summary>
    {rows.slice(0, 20).map(row => <Flex key={row.id} gap={3} align="center" flexWrap="wrap" py={2}>
@@ -72,7 +76,7 @@ function WorkspaceStatus({ ownerId, dataPlane, unconfirmed }: { ownerId: string;
 }
 
 
-function InteractionStatus({ ownerId, dataPlane, unconfirmed }: { ownerId: string; dataPlane: string; unconfirmed: boolean }) {
+function InteractionStatus({ ownerId, dataPlane, unconfirmed, delegatedBy }: StatusScope) {
 	const [rows, setRows] = React.useState<Awaited<ReturnType<AccountInteractionSync['status']>>>([]),
 		[review, setReview] = React.useState<Awaited<ReturnType<AccountInteractionSync['inspect']>> | null>(null),
 		[error, setError] = React.useState(''),
@@ -82,7 +86,7 @@ function InteractionStatus({ ownerId, dataPlane, unconfirmed }: { ownerId: strin
 		mounted = React.useRef(true);
 	React.useEffect(() => {
 		mounted.current = true;
-		const current = accountWorkspaceWorker({ kind: 'account', ownerId, dataPlane, origin: window.location.origin });
+		const current = accountWorkspaceWorker({ kind: 'account', ownerId, dataPlane, delegatedBy, origin: window.location.origin });
 		service.current = current;
 		const update = () => {
 			setOnline(navigator.onLine);
@@ -99,7 +103,7 @@ function InteractionStatus({ ownerId, dataPlane, unconfirmed }: { ownerId: strin
 			mounted.current = false;
 			for (const event of [LOCAL_WORKSPACE_CHANGED, 'online', 'offline']) window.removeEventListener(event, update);
 		};
-	}, [ownerId, dataPlane]);
+	}, [ownerId, delegatedBy, dataPlane]);
 	const act = async (run: (value: NonNullable<typeof service.current>) => Promise<unknown>) => {
 		if (!service.current) return;
 		setBusy(true);
@@ -201,7 +205,7 @@ function InteractionStatus({ ownerId, dataPlane, unconfirmed }: { ownerId: strin
 }
 
 
-function FileSyncStatus({ ownerId, dataPlane, unconfirmed }: { ownerId: string; dataPlane: string; unconfirmed: boolean }) {
+function FileSyncStatus({ ownerId, dataPlane, unconfirmed, delegatedBy }: StatusScope) {
 	const [rows, setRows] = React.useState<Awaited<ReturnType<ReturnType<typeof accountWorkspaceWorker>['files']['status']>>>([]);
 	const [review, setReview] = React.useState<Awaited<ReturnType<AccountFileMetadata['inspect']>> | null>(null);
 	const [deletionReview, setDeletionReview] = React.useState<Awaited<ReturnType<AccountFileSync['inspectDeletion']>> | null>(null);
@@ -212,7 +216,7 @@ function FileSyncStatus({ ownerId, dataPlane, unconfirmed }: { ownerId: string; 
 	const mounted = React.useRef(true);
 	React.useEffect(() => {
 		mounted.current = true;
-		const current = accountWorkspaceWorker({ kind: 'account', ownerId, dataPlane, origin: location.origin });
+		const current = accountWorkspaceWorker({ kind: 'account', ownerId, dataPlane, delegatedBy, origin: location.origin });
 		service.current = current;
 		const update = () => {
 			setOnline(navigator.onLine);
@@ -229,7 +233,7 @@ function FileSyncStatus({ ownerId, dataPlane, unconfirmed }: { ownerId: string; 
 			mounted.current = false;
 			for (const event of [LOCAL_WORKSPACE_CHANGED, 'online', 'offline']) window.removeEventListener(event, update);
 		};
-	}, [ownerId, dataPlane]);
+	}, [ownerId, delegatedBy, dataPlane]);
 	if (!rows.length && !error && !review && !deletionReview) return null;
 	const act = async (run: (current: ReturnType<typeof accountWorkspaceWorker>) => Promise<unknown>) => {
 		const current = service.current;

@@ -129,6 +129,8 @@ export function useApi(explicitView?: AccountLocalView) {
   const rootUser = useRootUser();
   const delegated = !!character && character.id !== rootUser?.id;
   const offlineWorkspace = useOfflineWorkspace();
+  const principalId = rootUser?.id || offlineWorkspace?.ownerId;
+  const actionPrincipal = useRef(principalId); actionPrincipal.current = principalId;
   const actionActor = useRef(actionUser?.id);
   actionActor.current = actionUser?.id;
 
@@ -1625,12 +1627,13 @@ export function useApi(explicitView?: AccountLocalView) {
       // path in every browser while the API-level battery stayed green.
       run: useCallback(async (args) => {
         const actor = actionActor.current;
+        const principal = actionPrincipal.current;
         const expectedPlane = planeRef.current;
         const origin = window.location.origin;
         await requireThingtimeCapability('api.actions-run', '1.37.0');
         if (actionActor.current !== actor) throw new Error('The active account changed. Run the action again.');
         const response = await asyncFetcher.submit(buildActionRunBody({ ...args, execution: 'browser' }), { action: '/api/v1/actions/run', expectedActor: actor, expectedDataPlane: expectedPlane });
-        const retained = await retainActionOutcomeRecovery(response, actor, expectedPlane, recovery => enqueueActionOutcomeRecovery(origin, recovery));
+        const retained = await retainActionOutcomeRecovery(response, actor, expectedPlane, recovery => enqueueActionOutcomeRecovery(origin, recovery, principal && principal !== actor ? principal : undefined));
         if (actionActor.current !== actor) throw new Error('The account changed during the Action request. Check History in the original account before running it again.');
         if (planeRef.current !== expectedPlane) throw new Error('The database changed during the Action request. Check History in the original database before running it again.');
         return finishBrowserAction(retained, createBrowserActionHost(() => actionActor.current));
@@ -1645,18 +1648,20 @@ export function useApi(explicitView?: AccountLocalView) {
   };
 
   useEffect(() => {
-    if (!delegated && actionUser?.id && !actionUser.temporary && dataPlane) {
-      const scope = { kind: 'account' as const, origin: window.location.origin, ownerId: actionUser.id, dataPlane };
-      startAccountWorkspaceSync(scope, { localPlane: view.localPlane }); startNotificationHistorySync(scope);
+    if (actionUser?.id && !actionUser.temporary && dataPlane && (!delegated || principalId)) {
+      const scope = { kind: 'account' as const, origin: window.location.origin, ownerId: actionUser.id, dataPlane, ...(delegated ? {delegatedBy:principalId} : {}) };
+      startAccountWorkspaceSync(scope, { localPlane: view.localPlane });
+      if (!delegated) startNotificationHistorySync(scope);
     }
-  }, [delegated, actionUser?.id, actionUser?.temporary, dataPlane, view.localPlane]);
+  }, [delegated, principalId, actionUser?.id, actionUser?.temporary, dataPlane, view.localPlane]);
   const workspaceApi = useRef(new WorkspaceApiIdentity<typeof v1>());
   const identity = rootIdentity.read();
   const workspaceKey = JSON.stringify([identity.generation, identity.pending, offlineWorkspace || null,
     actionUser?.id || null, actionUser?.temporary || false, dataPlane || null, view.localPlane || null,
-    actionUser?.username, actionUser?.displayName, actionUser?.avatarUrl, delegated]);
+    actionUser?.username, actionUser?.displayName, actionUser?.avatarUrl, delegated, principalId]);
   return { v1: workspaceApi.current.resolve(workspaceKey, v1, remote =>
-    delegated ? characterApi(remote) : offlineWorkspace ? accountApi(remote, { id: offlineWorkspace.ownerId, displayName: 'Offline workspace' }, offlineWorkspace.dataPlane, view)
+    delegated ? principalId && actionUser && dataPlane ? accountApi(remote, { id: actionUser.id, username: actionUser.username, displayName: actionUser.displayName, avatarUrl: actionUser.avatarUrl }, dataPlane, view, principalId) : characterApi(remote)
+    : offlineWorkspace ? accountApi(remote, { id: offlineWorkspace.ownerId, displayName: 'Offline workspace' }, offlineWorkspace.dataPlane, view)
     : actionUser && !actionUser.temporary && dataPlane ? accountApi(remote, { id: actionUser.id, username: actionUser.username, displayName: actionUser.displayName, avatarUrl: actionUser.avatarUrl }, dataPlane, view)
     : actionUser && !actionUser.temporary ? remote : anonymousApi(remote)) };
 }

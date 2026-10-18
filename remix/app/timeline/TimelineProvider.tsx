@@ -1,7 +1,8 @@
 import { TimelineNameQueue } from './nameQueue';
 import React from 'react';
 import { useApi } from '../hooks/useApi';
-import { useWorkspaceUser } from '../hooks/useWorkspaceUser';
+import { useWorkspaceUser, useOfflineWorkspace } from '../hooks/useWorkspaceUser';
+import { useRootUser } from '../hooks/useCurrentUser';
 import { useWorkspaceScope } from '../hooks/useWorkspaceScope';
 import { localTimelineScope, LOCAL_TIMELINE_FOLDER, LOCAL_TIMELINE_PLANE } from '../local-workspace/timeline';
 import { anonymousWorkspaceLease } from '../local-workspace/runtime.client';
@@ -27,6 +28,9 @@ export const timelineAccessFailure = (error: unknown): boolean => [401, 403].inc
 
 function useTimelineConnection(pool: TimelineConnectionPool, storage: TimelineStorage, onDenied: (failure: unknown) => Promise<void>): Session {
 	const user = useWorkspaceUser(); const workspace = useWorkspaceScope(); const api = useApi(); const apiRef = React.useRef(api); apiRef.current = api;
+	const root = useRootUser(), offline = useOfflineWorkspace();
+	const principal = root?.id || offline?.ownerId;
+	const delegatedBy = principal && user?.id !== principal ? principal : undefined;
 	const selectedPlane = useDataPlane();
 	const expectedPlane = user?.localOnly ? LOCAL_TIMELINE_PLANE : storage === 'home' ? 'home' : selectedPlane;
 	const [connection, setConnection] = React.useState<Connection | null>(null);
@@ -36,7 +40,7 @@ function useTimelineConnection(pool: TimelineConnectionPool, storage: TimelineSt
 	const retry = React.useRef<() => Promise<void>>(async () => {});
 	const redact = React.useRef<(error: unknown) => Promise<void>>(async () => {});
 	React.useEffect(() => {
-		if (!user?.id) return;
+		if (!user?.id || workspace === 'pending') return;
 		const ownerId = user.id; const origin = window.location.origin;
 		if (user.localOnly) {
 			if (workspace === 'pending') return;
@@ -56,16 +60,18 @@ function useTimelineConnection(pool: TimelineConnectionPool, storage: TimelineSt
 			return () => { alive = false; acquired.release(); window.removeEventListener(TIMELINE_CHANGED_EVENT, flush); retry.current = async () => {}; };
 		}
 
-		const key = storage === 'home' ? `thingtime:timeline-scope:home:${ownerId}` : `thingtime:timeline-scope:${ownerId}`;
+		const key = (storage === 'home' ? `thingtime:timeline-scope:home:${ownerId}` : `thingtime:timeline-scope:${ownerId}`) + (delegatedBy ? `:principal:${delegatedBy}` : '');
 		let alive = true; let generation = 0; let busy = false;
 		const forget = () => { try { sessionStorage.removeItem(key); } catch {} };
 		let lease: ReturnType<TimelineConnectionPool['acquire']> | null = null;
 		const stop = () => { lease?.release(); lease = null; active.current = null; setConnection(null); };
 		const install = (scope: TimelineScope, folderId: string, verified: boolean) => {
 			if (active.current && timelineScopeKey(active.current.scope) === timelineScopeKey(scope)) {
-				if (active.current.folderId !== folderId) throw new Error('Timeline folder changed. Reconnect your history.');
-				if (active.current.verified === verified) return active.current;
-				active.current = { ...active.current, verified }; setConnection(active.current); return active.current;
+				if (active.current.folderId && active.current.folderId !== folderId) throw new Error('Timeline folder changed. Reconnect your history.');
+				if (active.current.folderId === folderId) {
+					if (active.current.verified === verified) return active.current;
+					active.current = { ...active.current, verified }; setConnection(active.current); return active.current;
+				}
 			}
 			if (active.current) setEpoch(value => value + 1);
 			stop();
@@ -76,10 +82,13 @@ function useTimelineConnection(pool: TimelineConnectionPool, storage: TimelineSt
 		// until discovery confirms the current account and data source again.
 		try {
 			const cached = JSON.parse(sessionStorage.getItem(key) || 'null');
-			if (cached?.scope?.ownerId === ownerId && cached.scope.delegatedBy === undefined && cached.scope.apiOrigin === origin && (!expectedPlane || cached.scope.dataPlane === expectedPlane) && typeof cached.folderId === 'string') {
+			if (cached?.scope?.ownerId === ownerId && cached.scope.delegatedBy === delegatedBy && cached.scope.apiOrigin === origin && (!expectedPlane || cached.scope.dataPlane === expectedPlane) && typeof cached.folderId === 'string' && cached.folderId) {
 				timelineScopeKey(cached.scope); install(cached.scope, cached.folderId, false);
 			}
 		} catch { forget(); }
+		// Device-authored History is available before the first remote discovery.
+		// Empty folder metadata is not a persisted folder ID or remote authority.
+		if (!active.current && expectedPlane) install({ownerId,apiOrigin:origin,dataPlane:expectedPlane,...(delegatedBy ? {delegatedBy} : {})}, '', false);
 		const deny = async (failure: unknown) => {
 			if (!alive || !timelineAccessFailure(failure)) return;
 			const old = active.current; generation++; setEpoch(value => value + 1); forget(); stop(); setError(failureMessage(failure));
@@ -104,7 +113,7 @@ function useTimelineConnection(pool: TimelineConnectionPool, storage: TimelineSt
 				const found = await apiRef.current.v1.timeline.discover(ownerId, { storage });
 				if (!alive || attempt !== generation || !navigator.onLine) return;
 				if (found.ownerId !== ownerId || (storage === 'home' && found.dataPlane !== 'home') || typeof found.folderId !== 'string') throw new Error('Timeline account changed. Reopen your Things.');
-				const scope = { ownerId, apiOrigin: origin, dataPlane: found.dataPlane }; timelineScopeKey(scope);
+				const scope = { ownerId, apiOrigin: origin, dataPlane: found.dataPlane, ...(delegatedBy ? {delegatedBy} : {}) }; timelineScopeKey(scope);
 				const current = install(scope, found.folderId, true);
 				try { sessionStorage.setItem(key, JSON.stringify({ scope, folderId: found.folderId })); } catch {}
 				await current.sync.pushPending();
@@ -129,9 +138,9 @@ function useTimelineConnection(pool: TimelineConnectionPool, storage: TimelineSt
 		window.addEventListener('offline', disconnected); window.addEventListener('online', refresh); window.addEventListener('focus', refresh); window.addEventListener(TIMELINE_CHANGED_EVENT, edited);
 		const timer = setInterval(refresh, 15_000); void connect(true);
 		return () => { alive = false; generation++; lease?.release(); lease = null; active.current = null; clearInterval(timer); unlisten(); window.removeEventListener('offline', disconnected); window.removeEventListener('online', refresh); window.removeEventListener('focus', refresh); window.removeEventListener(TIMELINE_CHANGED_EVENT, edited); retry.current = async () => {}; redact.current = async () => {}; };
-	}, [user?.id, user?.localOnly, workspace, pool, storage, onDenied, expectedPlane]);
-	const scoped = timelineConnectionForViewer(connection, workspace === 'pending' ? null : user?.id, expectedPlane);
-	return { storage, identity: JSON.stringify([user?.id ?? null, workspace, storage, epoch]), ownerId: user?.id ?? null, connection: scoped, error, retry: () => retry.current(), redact: failure => redact.current(failure) };
+	}, [user?.id, user?.localOnly, delegatedBy, workspace, pool, storage, onDenied, expectedPlane]);
+	const scoped = timelineConnectionForViewer(connection, workspace === 'pending' ? null : user?.id, expectedPlane, delegatedBy);
+	return { storage, identity: JSON.stringify([user?.id ?? null, delegatedBy, workspace, storage, epoch]), ownerId: user?.id ?? null, connection: scoped, error, retry: () => retry.current(), redact: failure => redact.current(failure) };
 }
 
 /** Home and the selected database use identical records and separate scope

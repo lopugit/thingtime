@@ -53,7 +53,11 @@ test('account local facade and native page resolution work offline without uploa
   assert.equal(remoteCalls,0,'theme save/apply/delete complete locally without account HTTP');
 
   await assert.rejects(api.things.update({ id: page.id, attachmentIds: ['attachment'], crystal: {} } as any), /online adapter/);
-  await api.things.create({ thingtime: ['data'], crystal: {}, attachmentIds: ['attachment'] } as any); assert.equal(remoteCalls, 1, 'unsupported creates retain the complete existing remote adapter');
+  await assert.rejects(api.things.create({ thingtime: ['data'], crystal: {}, attachmentIds: ['attachment'] } as any), { code: 'ACCOUNT_OFFLINE' });
+  assert.equal(remoteCalls, 0, 'unsupported creates cannot enter the remote adapter while offline');
+  Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { onLine: true } });
+  await api.things.create({ thingtime: ['data'], crystal: {}, attachmentIds: ['attachment'] } as any); assert.equal(remoteCalls, 1, 'unsupported creates retain the complete existing remote adapter when online');
+  Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { onLine: false } });
   bindLocalWorkspace(false, rootIdentity.read().generation, scope, false);
   const offlineEdit: any = await api.things.update({ id: page.id, crystal: { name: 'Cold offline account' } });
   assert.equal(offlineEdit.thing.crystal.name, 'Cold offline account');

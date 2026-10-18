@@ -12599,6 +12599,15 @@ Local results do not establish current-head CI or deployed acceptance.
 - [x] Reopen event, branch, note and name queues with the same principal/Character; reject cross-principal, direct-login, origin and plane reuse.
 - [x] Preserve canonical authored History identities and ancestry from the old proven workspace partition; never adopt the ambiguous shared cache.
 - [x] Retire stale readers after account or generation changes; direct-account cache keys remain unchanged.
-- [ ] Complete native delegated Character posting/attachments and History UI acceptance.
+- [x] Native delegated Character post/file creation, cold reload, History UI and private reconnect pass at 1440/390/320px; separate draft failure does not block completion. Library/nested navigation remains open.
 - Regression: `characterTimeline.test.ts`, `test:local-workspace`, `test:timeline`; `accountTimelineNames.browser.test.ts` requires a verified isolated runtime.
 - [x] Native ordinary-account History names/notes: offline save/reload and reconnect at 1440/390/320px; server audit uses an independent disposable browser login; replay after removal returns 409. This does not close delegated Character UI acceptance.
+
+
+### Character local content integration (2026-10-19)
+
+- [x] Actual `useApi` saves Character posts/files/editable Things offline; cold reopen preserves bytes and canonical History exports, while changed principals retire callbacks.
+- [x] A late Action outcome stays in the originating principal/actor cache.
+- [x] Theme/algorithm transport refuses offline entry and a disconnect during capability negotiation, then resumes with unchanged authorization checks.
+- [x] Native delegated post, attachment, cold reload, History, reconnect and draft-failure checks pass. Exact downloaded attachment bytes, guest and principal-only denial, zero offline writes, centered sync panels and 1440/390/320px scrolling are asserted. See `characterWorkspace.browser.test.ts` and the progress plan.
+- [ ] Complete delegated library discovery, nested links and quick-comment actor-selection acceptance.

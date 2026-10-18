@@ -348,3 +348,12 @@ and `accountTimelineScope`, with lease-checked assembly in `timeline/localBacken
 `local-workspace/characterTimeline.test.ts` proves principal/actor isolation,
 legacy authored-version preservation and separate branch/note/name queues.
 The canonical Timeline event/receipt schema and server authority are unchanged.
+
+
+Delegated content now shares `accountWorkspaceWorker` through `useApi` and
+`characterDraftWorkspace`; `CharacterContentScope` owns reloadable post/History
+context. `characterWorkspace.test.ts` covers actual-hook offline files/posts,
+canonical History export and stale-principal refusal. The opt-in browser test
+uses disposable accounts and the normal upload approval API. Remote-operation
+connectivity is checked by `assertAccountSyncAllowed`; the profile transport
+regression covers a disconnect during capability discovery.

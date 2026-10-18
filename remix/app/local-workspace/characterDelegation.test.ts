@@ -79,8 +79,8 @@ test('Character posting remains server-authorized while owner replies stay avail
   assert.equal(reply.savedLocally, true); assert.equal(reply.comment.author.id, scope.ownerId);
   assert.equal(comments.length, 0);
   const before = await accountWorkspaceWorker(scope).sync.exportSnapshot();
-  await assert.rejects(api.things.comment({ id: parent.id, text: 'Character reply', characterId: 'character' }), /Reconnect/);
-  await assert.rejects(withCharacterRequest(async () => assert.fail('Must not run offline')), /Reconnect/);
+  await assert.rejects(api.things.comment({ id: parent.id, text: 'Character reply', characterId: 'character' }), { code: 'ACCOUNT_OFFLINE' });
+  await assert.rejects(withCharacterRequest(async () => assert.fail('Must not run offline')), { code: 'ACCOUNT_OFFLINE' });
   assert.equal(calls.length, 0); assert.equal(comments.length, 0);
   online = true; bind(false);
   await assert.rejects(api.things.comment({ id: parent.id, text: 'Character reply', characterId: 'character' }), /offline/);

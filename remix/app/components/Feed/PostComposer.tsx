@@ -1,6 +1,9 @@
 import { useWorkspaceDraft } from '~/drafts/useWorkspaceDraft';
 import { subscribeWorkspaceStorage, workspaceStorageIdentity } from '~/local-workspace/storageStatus.client';
 import { CharacterComposer } from '~/components/Characters/CharacterComposer';
+import { useCharacterScope } from '~/components/Characters/CharacterScope';
+import { characterContentPath } from '~/components/Characters/CharacterContentScope';
+import { useNavigate } from 'react-router';
 import { DraftPicker, DraftSaveStatus } from '~/drafts/DraftPicker';
 import { PostThingPicker } from './PostThingPicker';
 import { composePostThing, postThingDraft, postThingReferences, type PostThingReference } from './postThingReferences';
@@ -181,6 +184,8 @@ const AccountPostComposer = (props: PostComposerProps) => {
 
   const api = useApi();
 	const user = useWorkspaceUser();
+  const character = useCharacterScope();
+  const navigate = useNavigate();
   const lopu = useLopu();
   const { getThingtime, setThingtime, loading: thingtimeLoading, events } = useThingtime();
 
@@ -777,6 +782,10 @@ const AccountPostComposer = (props: PostComposerProps) => {
       // an edit keeps its pre-filled draft — the parent closes the composer
       if (!isEdit) reset();
 			onPosted(created);
+      // Keep the actor in a reloadable content link after this composer unmounts.
+      // The destination resolves only this principal's retained Character roster.
+      if (character && !isComment && !isEdit && (created as any).syncState)
+        navigate(characterContentPath(`/post/${encodeURIComponent(created.id)}`, character.id));
 		};
 
 		try {

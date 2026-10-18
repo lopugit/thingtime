@@ -1,4 +1,5 @@
 import { useWorkspaceScope } from '~/hooks/useWorkspaceScope';
+import { CharacterContentScope } from '~/components/Characters/CharacterContentScope';
 import { LOCAL_WORKSPACE_CHANGED } from '~/local-workspace/runtime.client';
 import { sharePathForThing } from '~/components/Sharing/audienceCore';
 import { sharedThingPath } from '~/components/Sharing/sharedMediaCore';
@@ -32,7 +33,7 @@ type ThingResponse = {
 
 export const PostPage = () => {
   const scope = useWorkspaceScope(), { id } = useParams(), [query] = useSearchParams();
-  return <WorkspacePostPage key={JSON.stringify([scope,id,query.get('key'),query.get('sharedRoot')])} />;
+  return <CharacterContentScope actorId={query.get('character')} showSync><WorkspacePostPage key={JSON.stringify([scope,id,query.get('key'),query.get('sharedRoot'),query.get('character')])} /></CharacterContentScope>;
 };
 const WorkspacePostPage = () => {
   const { id } = useParams();

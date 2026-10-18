@@ -185,3 +185,26 @@ ambiguous shared-cache records are not adopted. Direct Character sign-in keeps
 a separate partition. `characterTimeline.test.ts` covers every command queue,
 cold reopen and identity retirement. Full offline Character History UI remains
 an explicit gate in [the workspace matrix](local-workspaces.md).
+
+
+### Device content after closing the composer
+
+`CharacterContentScope` resolves `?character=<id>` against the current workspace's
+retained roster for post permalinks and History. `useApi` uses the same
+principal/actor account worker for local posts, attachments and editable Things
+as `characterDraftWorkspace`. Remote requests still reauthorize delegation.
+A guest or unavailable actor receives an explicit status, without falling back
+to another account's local content. Broader library and nested-link selection
+remain tracked in [local workspaces](local-workspaces.md).
+
+Opt-in native coverage: `app/local-workspace/characterWorkspace.browser.test.ts`.
+Run only in a verified isolated runtime with `TT_RENDER_ORIGIN`,
+`TT_RENDER_SESSION`, `TT_SHARED_PLAYWRIGHT_PATH`,
+`TT_CHARACTER_WORKSPACE_ARTIFACTS` and `TT_CHARACTER_ADMIN_FIXTURE`.
+The last path belongs to a disposable administrator fixture in that runtime;
+never provide real-account credentials. Configure the existing local attachment
+storage adapter inside its temporary filesystem. The fixture grants its new
+Character uploads through the normal admin API and checks real post/file
+readback, guest/principal refusal and independent draft failures. Its browser
+and backend must both retain the enforced network boundary. No deployed or
+installed-app acceptance follows from this local test.

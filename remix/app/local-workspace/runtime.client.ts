@@ -105,6 +105,7 @@ export function canSyncAccountWorkspace(scope: Extract<WorkspaceScope, { kind: '
 export function assertAccountSyncAllowed(scope: Extract<WorkspaceScope, { kind: 'account' }>) {
  accountWorkspaceLease(scope).assertCurrent();
  if (!binding?.remoteConfirmed) throw new WorkspaceError('ACCOUNT_UNCONFIRMED', 'This workspace is offline. Reconnect and confirm your account before syncing.', 503);
+ if (typeof navigator !== 'undefined' && navigator.onLine === false) throw new WorkspaceError('ACCOUNT_OFFLINE', 'Account sync is paused while this device is offline.', 503);
 }
 export function subscribeWorkspaceBinding(listener: () => void) { invalidations.add(listener); return () => { invalidations.delete(listener); }; }
 /** A remote operation also retires when confirmation is lost, even if local

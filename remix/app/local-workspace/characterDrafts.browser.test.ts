@@ -46,7 +46,8 @@ test('native delegated drafts survive offline reload and failed sync does not bl
   const a=await create('Draft actor A'),b=await create('Draft actor B');
   await page.reload();assert.equal(await page.evaluate(()=>navigator.onLine),true,'Loopback test must start with Chromium online');await page.getByLabel('Post as',{exact:true}).first().selectOption(a);
   await page.waitForFunction(async()=>{await navigator.serviceWorker.ready;if(!navigator.serviceWorker.controller)return false;for(const key of await caches.keys())if(key.startsWith('thingtime:offline-shell:')&&await(await caches.open(key)).match('/__thingtime_offline_shell_complete__'))return true;return false;});
-  offline=true;await connectivity(true);await page.reload();await choose(a);await write('Actor A draft stays with Actor A.');
+  await connectivity(true);assert.equal(await page.evaluate(()=>navigator.onLine),false);offline=true;
+  await page.reload();await choose(a);await write('Actor A draft stays with Actor A.');
   await choose(b);await write('Actor B draft stays with Actor B.');
   await choose(owner.id);await write('Owner draft stays with the owner.');
   await page.reload();await choose(a);await poll(()=>editor().innerText(),value=>value==='Actor A draft stays with Actor A.');

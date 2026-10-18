@@ -5188,3 +5188,34 @@ prerequisite, not completion of that feature.
 Native ordinary-account History acceptance also passes at 1440/390/320px: names and notes save offline, cold reload, verified reconnect, canonical acknowledgements, separate note removal and three delayed retries refused with 409. No offline writes or page errors; the network-none runtime was released with zero OOM. Evidence: `tmp/character-history-native/native/verification.json` and PNGs. The fixture uses a separate normal browser sign-in for server audit while the editor is disconnected; no cookie/token extraction. Earlier APIRequestContext 401s and a full-Docker image build are retained as fixture/setup failures, not product failures.
 
 Structural Graphify refresh and targeted Characters/auth-map semantic extraction (26 nodes, 28 edges) completed. Full documentation semantic freshness is not claimed.
+
+
+## Character content workspace integration — 2026-10-19
+
+Delegated `useApi` now reuses the canonical account worker with a principal,
+Character, origin and data-plane partition. Drafts, files and authored Things
+share that worker; their independent queues preserve normal post completion.
+Local completion navigates to a reloadable Character permalink. The route
+resolves only the current principal's retained roster, and guest/unknown actors
+show an explicit unavailable state. No link or retained label grants a session.
+
+History uses the same partition and can open device-authored versions before
+remote folder discovery. Empty discovery metadata is not persisted as a folder
+ID. Shared home/selected connections accept the later canonical folder while
+refusing conflicting known folders. Late Action receipts retain their original
+principal. Duplicate offline notices and repeated navigation-sized gaps in the
+Character sync stack are removed.
+
+Native validation exposed a connectivity race: profile requests checked account
+confirmation but could send after capability discovery completed offline.
+The shared remote-operation guard now checks connectivity as well as identity,
+including immediately before transport. `profileConnectivity.test.ts` covers
+both direct/delegated theme and algorithm requests, offline entry, loss during
+discovery and normal resumption. This does not change server permissions or API
+contracts.
+
+Validation and remaining acceptance are recorded in the HTML progress plan.
+Full Character library discovery, nested-link context, quick-comment actor
+selection and the broader local-first matrix remain separate open work.
+
+Validation: 730 workspace checks plus four offline-shell checks pass (79 opt-ins skipped); the new native Character post/file/History fixture ran explicitly and passes at 1440/390/320 CSS pixels. It independently verifies exact remote attachment bytes, private author/ACL, guest and principal-only denial, cold offline reload, zero offline writes and post completion during three forced draft-save 503 responses. The task runtime used network:none, no mounts or exposed ports, disposable credentials/data and a read-only root; it was released after capture. Client/server builds and changed-file lint pass. Timeline has 259 passes; TypeScript retains the same 91 baseline diagnostics. See `tmp/character-local-native/native/verification.json` through the HTML progress plan. These are local checks, not deployed acceptance.

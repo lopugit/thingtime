@@ -30,8 +30,8 @@ export function scopedTimelineStore(scope: TimelineScope): TimelineLocalStore {
 
 /** Independent of React provider lifetime: a late Action result can retain its
  * original owner's outcome without exposing it to the currently signed-in UI. */
-export async function enqueueActionOutcomeRecovery(apiOrigin: string, recovery: ActionOutcomeRecovery) {
-	const store = new TimelineLocalStore({ apiOrigin, ownerId: recovery.event.ownerId, dataPlane: recovery.dataPlane }, localTimelineBackend());
+export async function enqueueActionOutcomeRecovery(apiOrigin: string, recovery: ActionOutcomeRecovery, delegatedBy?: string) {
+	const store = new TimelineLocalStore({ apiOrigin, ownerId: recovery.event.ownerId, dataPlane: recovery.dataPlane, ...(delegatedBy === undefined ? {} : {delegatedBy}) }, localTimelineBackend());
 	await store.enqueueRecovery(recovery);
 	window.dispatchEvent(new Event(TIMELINE_CHANGED_EVENT));
 }

@@ -1,4 +1,6 @@
 import { readActionOutcome, actionOutcomeDescription } from '../../timeline/actionOutcome';
+import { CharacterContentScope } from '../Characters/CharacterContentScope';
+import { TimelineProvider } from '../../timeline/TimelineProvider';
 import { TimelineEventBrowser, VersionNameBadge } from './TimelineEventBrowser';
 import { TimelineVersionNameEditor } from './TimelineVersionNameEditor';
 import { HistoryChangeBox, TimelineCompareNow, useTimelineCompareNow } from './TimelineCompareNow';
@@ -367,7 +369,7 @@ function TimelinePanel({ thingId, folderId, urlState = false }: { thingId: strin
 	return (
 		<Flex direction="column" gap={4} minW={0}>
 			<Flex gap={2} wrap="wrap" align="center">
-				<Text flex="1" fontSize="sm" color="var(--tt-muted)">
+				<Text flex="1" minW="min(180px, 100%)" fontSize="sm" color="var(--tt-muted)">
 					{pending
 						? `${pending} ${pending === 1 ? 'change' : 'changes'} waiting to ${timeline.localOnly ? 'save on this device' : 'sync'}`
 						: timeline.error
@@ -549,6 +551,8 @@ export function HistoryPage() {
 }
 
 export function TimelineHost() {
+	const [query] = useSearchParams();
+	const character = query.get('character');
 	const identity = React.useSyncExternalStore(subscribeWorkspaceStorage, workspaceStorageIdentity, () => '');
 	const [selectedTarget, setTarget] = React.useState<{ identity: string; thingId: string; storage: TimelineStorage } | null>(null);
 	const target = selectedTarget?.identity === identity ? selectedTarget : null;
@@ -571,12 +575,17 @@ export function TimelineHost() {
 				<ModalCloseButton />
 				<ModalBody pb={6} minW={0}>
 					{target ? (
-						<TimelineStorageProvider storage={target.storage}>
-							<TimelinePanel key={`${identity}:${target.thingId}:${target.storage}`} thingId={target.thingId} />
-						</TimelineStorageProvider>
+						<CharacterHistoryTarget actorId={character} storage={target.storage}>
+							<TimelinePanel key={`${identity}:${character}:${target.thingId}:${target.storage}`} thingId={target.thingId} />
+						</CharacterHistoryTarget>
 					) : null}
 				</ModalBody>
 			</ModalContent>
 		</Modal>
 	);
+}
+
+function CharacterHistoryTarget({actorId, storage, children}: {actorId:string|null;storage:TimelineStorage;children:React.ReactNode}) {
+	const content = <TimelineStorageProvider storage={storage}>{children}</TimelineStorageProvider>;
+	return actorId ? <CharacterContentScope actorId={actorId}><TimelineProvider>{content}</TimelineProvider></CharacterContentScope> : content;
 }

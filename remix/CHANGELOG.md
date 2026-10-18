@@ -80,6 +80,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-19: Route delegated Character content through the existing local worker, preserve post/History context across reload, and keep draft completion independent. Fence remote profile requests after an offline transition and tighten sync-notice spacing. Validation and remaining work: [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md). — Codex (AI)
+
 - 2026-10-19: Separate delegated Character History caches and command queues by principal while preserving canonical records and direct-account keys. Keep older authored versions in their proven workspace; full Character UI integration remains open. See [PR #1000 notes](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md). — Codex (AI)
 
 - 2026-10-19: Resolve delegated/session-selected Characters in private theme and

@@ -193,11 +193,11 @@ export const accountWorkspaceWorker = (authorityScope: AccountScope, view: Accou
 /** Root-bound bootstrap, invoked in an effect, never during React rendering. */
 export const startAccountWorkspaceSync = (scope: AccountScope, view: AccountLocalView = {}) => { accountWorkspaceWorker(scope, view).wake(); if (scope.dataPlane !== 'home' && view.localPlane !== 'home') accountWorkspaceWorker(scope, { localPlane: 'home' }).wake(); };
 
-export function accountApi<T extends Record<string, any>>(remote: T, owner: Owner, dataPlane: string, view: AccountLocalView = {}): T {
+export function accountApi<T extends Record<string, any>>(remote: T, owner: Owner, dataPlane: string, view: AccountLocalView = {}, delegatedBy?: string): T {
 	// Keep retained callbacks bound to the destination chosen at construction.
 	view = { localPlane: view.localPlane };
 	if (view.localPlane !== undefined && view.localPlane !== 'home') throw new WorkspaceError('INVALID_WORKSPACE', 'Choose the selected workspace or home.');
-	const authorityScope: AccountScope = { kind: 'account', origin: window.location.origin, ownerId: owner.id, dataPlane };
+	const authorityScope: AccountScope = { kind: 'account', origin: window.location.origin, ownerId: owner.id, dataPlane, ...(delegatedBy === undefined ? {} : { delegatedBy }) };
 	const scope: AccountScope = view.localPlane === 'home' ? { ...authorityScope, dataPlane: 'home' } : authorityScope;
 	// Capture this facade's generation so a retained callback cannot adopt a
 	// later account, even when a worker for that new session already exists.

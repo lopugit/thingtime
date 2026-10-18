@@ -25,7 +25,8 @@ export class TimelineConnectionPool {
 	acquire(scope: TimelineScope, folderId: string) {
 		const key = timelineScopeKey(scope);
 		let entry = this.entries.get(key);
-		if (entry && entry.connection.folderId !== folderId) throw new Error('Timeline folder changed. Reconnect your history.');
+		if (entry && entry.connection.folderId && folderId && entry.connection.folderId !== folderId) throw new Error('Timeline folder changed. Reconnect your history.');
+		if (entry && !entry.connection.folderId && folderId) entry.connection.folderId = folderId;
 		if (!entry) { entry = { connection: this.create(scope, folderId), users: 0 }; this.entries.set(key, entry); }
 		entry.users++;
 		let released = false;
