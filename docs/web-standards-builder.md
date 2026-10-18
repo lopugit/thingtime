@@ -32,6 +32,31 @@ network, navigation, media and worker-only contexts still need dedicated
 capability-backed implementations. Inventory extraction and recipe execution
 are separately tested; schema-valid programs do not prove their behavior.
 
+### Completed media workflow; remaining standards paused
+
+The local compressor media ports shipped in [PR #1024](https://github.com/lopugit/thingtime/pull/1024)
+on 18 October 2026. The `media-tools` suite composes an ordinary Page, editable
+Component and save Action around `tt-web-platform`'s `program.media` adapter:
+selected local files, decoding/encoding, resizing, bitrate/frame-rate/audio
+controls, progress, cancellation, playback and Blob downloads. Saving preserves
+the complete program and defaults as Thing data; video bytes stay temporary on
+the device. Production encoding, playback, download and saved-default reload
+passed, with independently probed output files.
+
+The canonical worked use case is shared by the public Builder docs, docs search
+and Lopu through `builderGuideSections`:
+[Use case: a reusable video compressor](https://thingtime.com/docs/builder/video-compressor-use-case).
+Its mapping explains Page/Component composition, declarative document/styles,
+parameter bindings, the secure-host WebCodecs/Mediabunny worker and the existing
+save Action. The detailed contract remains in
+[Local video compression and encoding](https://thingtime.com/docs/builder/local-media).
+
+This completion records a reusable application workflow, not blanket coverage
+of WebCodecs or every underlying media API member. It does not alter catalogue
+entry classifications or inflate the live counts. The remaining HTML, CSS,
+ECMAScript and browser API batches, including coverage reconciliation, remain
+paused until the owner explicitly resumes them.
+
 ## Generic runtime
 
 The `tt-web-platform` component primitive takes a `program` object, version 1:
