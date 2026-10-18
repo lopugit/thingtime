@@ -4915,3 +4915,60 @@ claims. The installed window now contains another task’s OAuth flow; it is
 preserved. The previously negotiated socket is currently unavailable. No test
 claim or permissive fallback was launched. Private Character coordination is
 initialized; no public publication or production deployment is claimed.
+
+
+## Personal Lopu instructions on the device — 2026-10-19
+
+Settings → Lopu now saves the personal checklist in the existing scoped workspace
+transaction store without sign-in. Disabled rows and line breaks retain the
+canonical `{id,text,enabled}` shape. Account preferences are pinned to the account's
+home partition, while each operation remains bound to the current root identity.
+A different account, origin or anonymous workspace cannot read those instructions.
+Anonymous content never gains an account queue on login.
+
+Local completion does not await a server request. A separate confirmed-account
+worker reads the normal private endpoint and conditionally writes frozen attempts.
+A lost reply is reconciled against canonical server content; a newer device edit
+remains queued. Unseen non-empty account settings and conflicting revisions require
+an explicit comparison and version choice. Cross-tab stale saves preserve the
+unsaved editor text and offer a reload. Background reads cannot silently advance
+the draft's base revision. No Actions or inference execute during settings sync.
+
+The capability is now `api.settings-lopu-prompt` 1.1.0. Personal per-row, count and
+aggregate text caps are removed from the shared validator and editor. The existing
+96 KiB HTTP request boundary remains: a larger device checklist stays saved and
+shows account sync failure, rather than being truncated. A resumable larger-account
+transport remains unfinished; this is not an unlimited remote-save claim. Admin
+base-prompt editing, authentication, same-origin checks and rate limiting retain
+the existing API path.
+
+Focused service tests cover anonymous reopen, independent saves during held writes,
+concurrent claims, immutable retries, lost replies, account/origin separation,
+stale choices and retired identities. Transport tests require a compatible origin
+manifest and fresh root confirmation before every request. Native account-editor
+reconnect and conflict-review acceptance remain open; disposable API acceptance
+alone does not prove the signed-in UI path.
+
+Native local acceptance passed on the production build in the task-owned full-app
+container (image `03f26a42ac463de2a5b8d60072fa97e40e479a23fbb08fe384a3615e54dc39f5`).
+A fresh Chrome context saved without a session, reloaded fully offline, retained
+disabled rows and recovered a competing tab edit without overwriting unsaved text.
+The normal disposable temporary-account API saved 35 rows, including a 2,100-char
+entry; exact readback matched. Anonymous writes returned 401, stale revisions 409,
+and non-admin base edits 403. No account-instruction requests occurred during the
+anonymous UI checks. All three viewport widths stayed within bounds with zero
+page errors. Browser and backend shared the verified `network=none` namespace,
+with no host mounts or published ports. Evidence and PNGs are under ignored
+`tmp/lopu-instructions-browser/artifacts/`. This is local verification, not CI or
+deployed verification. The first browser run stalled while controlling a background
+tab; explicit tab activation corrected the runner without changing app security.
+
+Workspace regression: **707 passed, 73 opt-in skipped**, plus **4 offline-shell
+checks**. Focused contract/settings checks: **122 passed**. Changed-file lint and
+client/server builds pass; **91 TypeScript diagnostics** match the unchanged
+baseline exactly. The client includes 253 verified assets (22,838,459 bytes).
+
+Graph refresh note: the semantic pass requested 176 chunks across 66 stale files;
+it was stopped after confirming that backlog. Prior semantic data is preserved,
+and the structural graph and portable outputs are refreshed for this checkpoint.
+Documentation semantic freshness is not claimed.

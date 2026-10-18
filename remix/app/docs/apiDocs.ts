@@ -3228,9 +3228,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'settings-lopu-prompt', group: 'settings', title: 'Lopu base prompt and personal instructions',
-    endpoint: '/api/v1/settings/lopu-prompt', contractVersion: '1.0.0', featureVersion: '1.0.0',
+    endpoint: '/api/v1/settings/lopu-prompt', contractVersion: '1.1.0', featureVersion: '1.1.0',
     summary: 'Read the public base prompt, manage your private instruction checklist, or edit the base prompt as an admin.',
-    detail: 'GET returns base {basePrompt, revision} and the authenticated account’s personal {instructions, revision}; anonymous readers get no personal instructions. POST scope personal accepts up to 30 {id,text,enabled} entries (2000 characters each, 16000 total). POST scope base is admin-only and accepts basePrompt (16000 characters maximum). Both require the revision from GET (null before the first save); stale edits return 409. Preferences apply to the next AI-generated Lopu reply, including chat, voice and musings. Task-specific prompts, tool contracts and permissions still apply. Canned messages do not call a model.',
+    detail: 'GET returns base {basePrompt, revision} and the authenticated account’s personal {instructions, revision}; anonymous readers get no personal instructions. POST scope personal accepts validated {id,text,enabled} entries without per-entry, count or aggregate text caps; the existing 96 KiB HTTP request boundary remains. Device instructions save independently and report account transport refusal without losing content. POST scope base is admin-only and accepts basePrompt (16000 characters maximum). Both require the revision from GET (null before the first save); stale edits return 409. Preferences apply to the next AI-generated Lopu reply, including chat, voice and musings. Task-specific prompts, tool contracts and permissions still apply. Canned messages do not call a model.',
     auth: { mode: 'optional', description: 'Public base prompt; private instructions are session-owned. Editing the base requires an administrator.' },
     methods: ['GET', 'POST'],
     steps: ['GET the current settings and revisions.', 'POST scope personal with instructions and personal.revision, or scope base with basePrompt and base.revision as an admin.', 'On 409 reload and reconcile before saving.'],

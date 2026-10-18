@@ -4490,3 +4490,36 @@ This establishes local native/MCP proof, not the installed desktop manager,
 a connected tool in this ChatGPT host, or deployed acceptance. Individual
 Builder block editing, delegated Character offline workspaces and the wider
 local capability matrix still prevent goal completion and main merge.
+
+
+## Local personal instructions — 2026-10-19
+
+Settings → Lopu no longer requires sign-in for personal checklist saves. Existing
+workspace transactions retain canonical entries and disabled rows, scoped by
+anonymous or account/origin identity; account preferences use the home partition.
+Independent authenticated synchronization negotiates `api.settings-lopu-prompt`
+1.1.0, freezes conditional attempts, reconciles lost replies, preserves newer edits
+and requires explicit conflict review. Anonymous settings never call the private
+endpoint. Shared base edits retain their admin-only path.
+
+The native production-build check passes anonymous save, fully offline reload,
+cross-tab stale-edit recovery, desktop/mobile/narrow layout, and ordinary private
+API save/readback using a disposable test identity. Normal API boundaries return
+401 for anonymous writes, 409 for stale writes and 403 for non-admin base edits.
+The full-app browser and database ran in the verified network-none namespace;
+there were no personal credentials, host mounts or published ports. Proof and
+screenshots: `tmp/lopu-instructions-browser/artifacts/` (local, ignored).
+
+Workspace tests: 707 passed, 73 opt-in skipped, plus four shell checks. Focused
+contract/settings tests: 122 passed. Client/server build and changed-file lint
+pass; TypeScript retains the same 91 baseline diagnostics. The browser runner now
+activates each test-owned tab before editing; an inactive-tab CDP timeout was not
+an application failure. Account-editor reconnect/conflict acceptance and transport
+beyond the current 96 KiB HTTP boundary remain open. Device data is retained on
+remote refusal; no unlimited remote transport is claimed. Full-goal completion and
+merge remain gated by the coverage matrix.
+
+Graph refresh note: the semantic pass requested 176 chunks across 66 stale files;
+it was stopped after confirming that backlog. Prior semantic data is preserved,
+and the structural graph and portable outputs are refreshed for this checkpoint.
+Documentation semantic freshness is not claimed.

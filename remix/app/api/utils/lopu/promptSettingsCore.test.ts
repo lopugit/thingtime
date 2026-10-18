@@ -3,10 +3,11 @@ import test from 'node:test';
 import { buildLopuSystemPrompt } from './chatPrompt';
 import { composeLopuSurfacePrompt, validateLopuInstructions, validateLopuBasePrompt, validatePromptRevision } from './promptSettingsCore';
 
-test('prompt checklist preserves disabled entries, validates bounds and rejects ambiguous flags or ids', () => {
+test('prompt checklist preserves disabled entries, validates shape and rejects ambiguous flags or ids', () => {
   const rows = [{ id: 'on', text: ' Be brief. ', enabled: true }, { id: 'off', text: 'Disabled secret preference.', enabled: false }];
   assert.deepEqual(validateLopuInstructions(rows), [{ ...rows[0], text: 'Be brief.' }, rows[1]]);
-  for (const value of [null, {}, [rows[0], rows[0]], [{ ...rows[0], enabled: 'false' }], [{ ...rows[0], text: '' }], [{ ...rows[0], text: 'a'.repeat(2001) }], Array.from({ length: 31 }, (_, i) => ({ ...rows[0], id: String(i) })), Array.from({ length: 9 }, (_, i) => ({ ...rows[0], id: String(i), text: 'a'.repeat(2000) }))]) assert.throws(() => validateLopuInstructions(value));
+  for (const value of [null, {}, [rows[0], rows[0]], [{ ...rows[0], enabled: 'false' }], [{ ...rows[0], text: '' }]]) assert.throws(() => validateLopuInstructions(value));
+  assert.equal(validateLopuInstructions(Array.from({length: 40}, (_, i) => ({id: String(i), text: 'a'.repeat(2100), enabled: true}))).length, 40);
   assert.throws(() => validateLopuBasePrompt(' '));
   assert.throws(() => validateLopuBasePrompt('a'.repeat(16001)));
   assert.throws(() => validatePromptRevision(undefined));

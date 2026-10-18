@@ -75,6 +75,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-19 — **Codex (AI)**: Personal Lopu instructions save in anonymous and
+  offline device workspaces. Account synchronization runs independently with
+  reviewed conflicts and lost-reply recovery; admin base edits remain protected.
+  Capability 1.1.0 removes personal checklist product caps while retaining the
+  current HTTP boundary. Verification and remaining native account checks are in
+  [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
 - 2026-10-19 — **Codex (AI)**: Forward the explicitly configured Chromium cache path through the MCP example/test client. Verified current native draft screenshots and canonical private import/re-export in a network-isolated runtime; target-host and wider offline acceptance remain open. See [PR #1000 checkpoints](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
 
 - 2026-10-18: Reconcile Characters and browser tasks with local workspaces; fence delegated requests and media, preserve offline owner comments and independent drafts. Local regression/build checks pass; native and individual-block acceptance remain open. [PR #1000 details](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).

@@ -1,3 +1,4 @@
+import { LopuInstructionsSync } from './local-workspace/lopuInstructions.client';
 import { LocalMediaDiagnostics } from './local-workspace/media.client';
 import { AccountSyncStatus } from './local-workspace/AccountSyncStatus';
 import { ThingDraftsProvider } from './drafts/ThingDrafts';
@@ -159,6 +160,7 @@ export default function App() {
         ) : (
           <Main>
             <AccountSyncStatus />
+            <LopuInstructionsSync />
             <LocalMediaDiagnostics />
             {/* every page is a block-based site: per-route + global blocks
                 render around the native screen; the ✏️ pill enters edit mode */}

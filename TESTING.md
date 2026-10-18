@@ -12411,3 +12411,27 @@ Local results do not establish current-head CI or deployed acceptance.
 ## MCP browser cache and isolated export
 
 - [x] 2026-10-19 local isolated Chromium: run the stdio example and native acceptance with Chromium installed outside the default home cache. Pass only `PLAYWRIGHT_BROWSERS_PATH` explicitly through the MCP client; verify JSON/PNG resources, viewport metadata, invalid/blank/overflow failures and no host credentials. Reimport canonical JSON through the normal API in a disposable private account, permit legitimate ID remapping, and validate equivalent re-export.
+
+
+## Device Lopu instruction settings
+
+- [ ] In a fresh isolated browser, open Settings → Lopu without a session. Add
+  multiline instructions, disable one, save, go fully offline and cold-reload.
+  Text and enabled state persist, with zero `/api/v1/settings/lopu-prompt`
+  requests. Check the expanded base prompt and bottom scroll at 1440/390/320px.
+- [ ] Edit the same saved checklist in two tabs. Saving the second must not let
+  the first silently overwrite it; retain the first tab's unsaved text and offer
+  explicit reload. `lopuInstructions.browser.test.ts` exercises this regression.
+- [ ] In an isolated signed-in fixture, save offline while a remote attempt is
+  held or fails. Local completion must remain independent. Reconnect only after
+  current root confirmation, reconcile a lost reply once, and review competing
+  account changes. Logout/account/plane changes must retire stale replies.
+- [ ] Keep anonymous, two-account and two-origin settings distinct. A new login
+  must not upload anonymous instructions. Personal row/text sizes beyond the old
+  limits must survive local reload; HTTP 413 retains the device copy and reports
+  sync failure. Base-prompt administration remains protected.
+- Automated coverage: `test:local-workspace`, `test:api-capabilities`,
+  `app/api/utils/lopu/promptSettingsCore.test.ts` and
+  `app/routes/api/v1/settings/lopu-prompt/lopuPrompt.test.ts`. Native fixture
+  requirements and evidence are in `docs/local-workspaces.md`; skipped opt-in
+  tests are not acceptance passes.
