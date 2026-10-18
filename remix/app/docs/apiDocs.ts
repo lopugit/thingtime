@@ -65,14 +65,14 @@ const endpoint = (doc: Omit<ApiEndpointDoc, 'docsEndpoint' | 'contractVersion'> 
 const deviceEndpointDocs: ApiEndpointDoc[] = [
 	endpoint({
 		id: 'devices',
-		contractVersion: '1.9.0',
-		featureVersion: '1.9.0',
+		contractVersion: '1.10.0',
+		featureVersion: '1.10.0',
 		group: 'devices',
 		title: 'Paired devices',
 		endpoint: '/api/v1/devices',
 		summary: 'Lists safe paired-device summaries or one detailed computer mirror.',
 		detail:
-			'Returns protected dedicated projections for the caller’s computers and Apple Watches. Watch summaries include bounded last-sync health, the number of Things created by that Watch, and up to ten recent created Things. Generic /things never exposes protected device credentials, hashes, paths, arguments, or screen transport data.',
+			'Returns protected dedicated projections for the caller’s computers and Apple Watches. Watch summaries include bounded last-sync health, the number of Things created by that Watch, and up to ten recent created Things. Version 1.10 includes optional owner-only state.menuBar inventory: status, collection time, permission coverage, items, owning app/executable paths, PID, bundle ID, geometry, resident memory bytes and cumulative process CPU seconds. Memory and CPU belong to the whole process, not an individual icon. Generic /things never exposes protected device state or credentials. Responses are private/no-store.',
 		auth: { mode: 'session-or-bearer', description: 'Full Thingtime user session.' },
 		methods: ['GET'],
 		steps: ['GET to list devices.', 'Pass id to retrieve one device detail.'],
@@ -243,15 +243,15 @@ const deviceEndpointDocs: ApiEndpointDoc[] = [
 	}),
 	endpoint({
 		id: 'devices-node-state',
-    featureVersion: '1.10.0',
-		contractVersion: '1.10.0',
+    featureVersion: '1.11.0',
+		contractVersion: '1.11.0',
 		group: 'devices',
 		title: 'Publish device state',
 		endpoint: '/api/v1/devices/node/state',
 		summary: 'Applies one quota-accounted, monotonic state and connector snapshot.',
 		detail:
 			'Optional capabilities replaces the paired device capability list atomically with a newer state revision. Omission preserves older node capabilities; the full snapshot hash includes supplied capabilities. ' +
-			'The credential fixes owner and device; request ids cannot override either. Equal revision/equal hash is a no-op, equal revision/different hash is 409, and older revisions are ignored. Raw paths, process arguments and window titles are not accepted. Version 1.10 accepts optional, bounded read-only battery measurements: charge cycles, design cycles, capacities in mAh, signed battery current in mA, voltage in mV, temperature in Celsius, time estimates in minutes, and attached adapter rated watts, voltage and current. Missing measurements are null; battery serial numbers and raw registry dictionaries are never accepted.',
+			'The credential fixes owner and device; request ids cannot override either. Equal revision/equal hash is a no-op, equal revision/different hash is 409, and older revisions are ignored. Version 1.11 adds optional menuBar telemetry with owning application/executable paths only; arbitrary process arguments and window titles remain forbidden. A locked inventory must be empty. Omission supports older nodes; unsupported origins receive no menuBar field. Version 1.10 accepts optional, bounded read-only battery measurements: charge cycles, design cycles, capacities in mAh, signed battery current in mA, voltage in mV, temperature in Celsius, time estimates in minutes, and attached adapter rated watts, voltage and current. Missing measurements are null; battery serial numbers and raw registry dictionaries are never accepted.',
 		auth: { mode: 'bearer', description: 'Scoped ttnode_ Bearer credential only.' },
 		methods: ['POST'],
 		steps: [
@@ -289,15 +289,16 @@ const deviceEndpointDocs: ApiEndpointDoc[] = [
 	}),
 	endpoint({
 		id: 'devices-commands',
-    featureVersion: '1.9.0',
-		contractVersion: '1.9.0',
+    featureVersion: '1.10.0',
+		contractVersion: '1.10.0',
 		group: 'devices',
 		title: 'Device commands',
 		endpoint: '/api/v1/devices/commands',
 		summary: 'Lists or creates idempotent, typed commands for one device.',
 		detail:
+			'script.run requires script.bash.v1, a Bash script of at most 16384 UTF-8 bytes and integer timeoutSeconds from 1 to 30. Every run requires fresh approval displaying the exact script; it runs with the Mac user access, not in a security sandbox. Output is capped at 16384 raw bytes (truncated is explicit); stdout, stderr, exitCode, signal and timedOut are returned by the exact owner/device/command GET for ten minutes. Recipes can be saved as Actions and composed with an explicit Thing write. Request bodies are capped at 128 KiB. ' +
 			'The filesystem command requires filesystem.v1 and carries a closed operation: list, read, write, mkdir, copy, move or trash. Paths are home-relative, with no symlink traversal or overwrite. Reads and source mutations require an inode version; files are limited to 32 MiB and chunks to 65536 bytes. Writes bind a UUID, destination, total size and SHA-256, and become visible only after final verification. GET with deviceId and commandId returns a private, owner-scoped result for ten minutes; histories and events omit file bytes, and terminal filesystem commands expire after ten minutes. Directory listings are paginated with cursor and hidden options. ' +
-      'Unknown kinds and input fields are rejected. The typed vocabulary covers controlled apps; audio routing, mute, and levels; Wi-Fi; persistent per-display mode, layout, and mirroring controls; printer, camera, Bluetooth-device, VPN, and power controls; fixed Apple Music and Spotify playback and app-volume changes; fixed active-tab Chrome YouTube/YouTube Music volume; strict screen-relative pointer movement/click/scroll; bounded text entry; allowlisted keyboard shortcuts; lifecycle actions; and screen-session metadata. Every remote input command always needs a fresh approval and the node must have macOS Accessibility permission. Text is not exposed as a key log, and no clipboard, arbitrary script, shell, event tap, Input Monitoring, Full Disk Access, or root capability is requested. Every media volume action accepts only level: 0..1 and always needs a fresh approval plus macOS Automation consent. Chrome additionally requires the user-enabled Allow JavaScript from Apple Events setting and runs one fixed media-element command only; it never accepts a URL, selector, script, browser-profile input, or reports page data. AirDrop and global camera availability use two distinct fixed profile-proposal commands. They each accept only enabled: boolean, require a fresh approval, write exactly one local .mobileconfig, and open macOS profile review; the Mac user must separately install or decline it. The proposal cannot silently install a profile, create MDM enrollment, carry arbitrary profile content, or alter per-app camera TCC. Wi-Fi accepts only a visible SSID and never a password. HDR and Low Power Mode are read-only; Focus, Bluetooth radio state, per-app camera privacy, cross-origin browser embeds, generic global media playback, and live screen-pixel transport have no supported scoped setter. No arbitrary executable input exists. Pairing, capability, freshness, locked-session and macOS privacy checks remain required in every mode.',
+      'Unknown kinds and input fields are rejected. The typed vocabulary covers controlled apps; audio routing, mute, and levels; Wi-Fi; persistent per-display mode, layout, and mirroring controls; printer, camera, Bluetooth-device, VPN, and power controls; fixed Apple Music and Spotify playback and app-volume changes; fixed active-tab Chrome YouTube/YouTube Music volume; strict screen-relative pointer movement/click/scroll; bounded text entry; allowlisted keyboard shortcuts; lifecycle actions; and screen-session metadata. Every remote input command always needs a fresh approval and the node must have macOS Accessibility permission. Text is not exposed as a key log, and these input commands do not request clipboard, scripts, event taps, Input Monitoring, Full Disk Access, or root access. The separate script.run command has its own approval contract. Every media volume action accepts only level: 0..1 and always needs a fresh approval plus macOS Automation consent. Chrome additionally requires the user-enabled Allow JavaScript from Apple Events setting and runs one fixed media-element command only; it never accepts a URL, selector, script, browser-profile input, or reports page data. AirDrop and global camera availability use two distinct fixed profile-proposal commands. They each accept only enabled: boolean, require a fresh approval, write exactly one local .mobileconfig, and open macOS profile review; the Mac user must separately install or decline it. The proposal cannot silently install a profile, create MDM enrollment, carry arbitrary profile content, or alter per-app camera TCC. Wi-Fi accepts only a visible SSID and never a password. HDR and Low Power Mode are read-only; Focus, Bluetooth radio state, per-app camera privacy, cross-origin browser embeds, generic global media playback, and live screen-pixel transport have no supported scoped setter. Only script.run accepts user-authored Bash source; other commands keep their closed schemas. Pairing, capability, freshness, locked-session and macOS privacy checks remain required in every mode.',
 		auth: { mode: 'session-or-bearer', description: 'Full Thingtime user session.' },
 		methods: ['GET', 'POST'],
 		steps: ['Use a stable requestId.', 'POST one closed kind-specific envelope.', 'Retry it unchanged; changed reuse returns 409.'],
@@ -348,13 +349,14 @@ const deviceEndpointDocs: ApiEndpointDoc[] = [
 	}),
 	endpoint({
 		id: 'devices-node-commands',
-    featureVersion: '1.9.0',
-		contractVersion: '1.9.0',
+    featureVersion: '1.10.0',
+		contractVersion: '1.10.0',
 		group: 'devices',
 		title: 'Device command lease channel',
 		endpoint: '/api/v1/devices/node/commands',
 		summary: 'Claims, heartbeats and reports journal-backed device work.',
 		detail:
+			'Successful script.run reports require a bounded script result; only exact owner command reads expose stdout and stderr, and results expire after ten minutes. Shell exit failures and timeouts are reported inside the result, separately from transport completion. Report bodies are capped at 128 KiB. ' +
 			'Successful filesystem reports require a bounded result matching the leased operation. Byte results never enter event streams; terminal upload inputs are redacted and filesystem results are exposed only through the exact owner command read for ten minutes. Exact report retries retain their lease identity and content hash. ' +
       'op=claim optionally long-polls for 20 seconds and returns a short random lease. Only the lease hash is stored. Required-approval commands cannot be claimed while approvalState is pending or denied; a claimed envelope explicitly carries approvalState=approved or not-required. op=heartbeat extends the lease; op=report carries a stable eventId and a monotonic status. Ambiguous expired execution becomes needs-review and is never blindly reclaimed. approval-request and approvals implement the separate in-flight one-decision approval bridge; screen-status updates lifecycle metadata only.',
 		auth: { mode: 'bearer', description: 'Scoped ttnode_ Bearer credential only.' },
@@ -679,9 +681,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     responseExamples: [{ status: 403, description: 'Wrong identity.', body: { ok: false, error: 'This workflow is not authorized for iOS releases.' } }]
   }),
   endpoint({
-    id: 'passwords', contractVersion: '1.2.0', featureVersion: '1.2.0', group: 'auth', title: 'Private password manager', endpoint: '/api/v1/passwords',
+    id: 'passwords', contractVersion: '1.1.0', featureVersion: '1.1.0', group: 'auth', title: 'Private password manager', endpoint: '/api/v1/passwords',
     summary: 'Manage encrypted credentials using the current full account session.',
-    detail: 'GET pages metadata with an opaque cursor. Optional q performs a case-insensitive literal substring search of all owned titles before pagination; trim surrounding whitespace, keep q on every page, and reset the cursor when q changes. Search never decrypts field values. POST export returns up to 50 decrypted entries per page for an explicit backup. POST catalog pages native AutoFill names, exact HTTPS domains and public passkey identifiers without secret values. POST read unlocks one owned entry through the live session; save uses a stable id, writeId and revision; delete leaves a value-free tombstone. All POST requests require expectedOwnerId. Values never enter generic Thing APIs or history. Server-assisted recovery preserves entries after password reset. Version 1.1 removes arbitrary editor/import size and count caps and preserves extended 1PUX data. Full-session file-start, file-parts, file-complete, file-list, file-download, file-delete and file-abort manage encrypted attachment Things by entryId. Metadata and file keys are account-vault encrypted; object storage receives authenticated ciphertext frames. Generic attachment routes refuse password-purpose objects. Private upload permission and storage accounting still apply.',
+    detail: 'GET pages metadata with an opaque cursor. POST export returns up to 50 decrypted entries per page for an explicit backup. POST catalog pages native AutoFill names, exact HTTPS domains and public passkey identifiers without secret values. POST read unlocks one owned entry through the live session; save uses a stable id, writeId and revision; delete leaves a value-free tombstone. All POST requests require expectedOwnerId. Values never enter generic Thing APIs or history. Server-assisted recovery preserves entries after password reset. Version 1.1 removes arbitrary editor/import size and count caps and preserves extended 1PUX data. Full-session file-start, file-parts, file-complete, file-list, file-download, file-delete and file-abort manage encrypted attachment Things by entryId. Metadata and file keys are account-vault encrypted; object storage receives authenticated ciphertext frames. Generic attachment routes refuse password-purpose objects. Private upload permission and storage accounting still apply.',
     auth: { mode: 'session-or-bearer', description: 'Full user session only; scoped credentials and service accounts are refused.' }, methods: ['GET', 'POST'],
     steps: ['Sign in to a full Thingtime account.', 'GET metadata, then POST read, save or delete with expectedOwnerId.'],
     requestExamples: [{ name: 'Passwords', description: 'List owned entry metadata.', method: 'GET' }],
@@ -12857,13 +12859,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     id: 'actions-run',
     // 1.34.0 adds owned XPath evaluator, compiled expression and result objects.
     // 1.34.1 retains trusted mutation provenance; 1.35.0 adds native traversal and reusable synchronous data callbacks.
-    featureVersion: '1.37.0',
-    contractVersion: '1.37.0',
+    featureVersion: '1.37.1',
+    contractVersion: '1.37.1',
     group: 'actions',
     title: 'Run an action',
     endpoint: '/api/v1/actions/run',
     summary: 'Execute one action thing inside its declared capability + budget envelope. OAuth callers must explicitly approve actions.run, including declared action side effects and costs.',
     detail:
+      'Version 1.37.1 fixes browser Action requests in the installed desktop shell: same-origin requests use the selected HTTPS account endpoint with actor and database preconditions preserved; incomplete web servers still fail closed. ' +
       'Version 1.37.0 adds history.recovery:{formatVersion:1,event,dataPlane,proof} when completion retries fail and configured signing keys can seal the exact immutable outcome. API clients should retain this bounded bundle and retry it through api.timeline 1.16.0; never rerun the Action to repair delivery. The first-party client durably queues the same event before reporting local retention, then synchronizes normally across reloads. A lost response or process death before sealing cannot supply a known outcome; incomplete without recovery remains explicit. ' +
       'Version 1.36.0 journals admitted ordinary server runs and outcomes in canonical Timeline, including read-only runs. A failed admission returns 507/503 before execution. Completed runs include history:{status:recorded|incomplete,startedEventId,outcomeEventId:string|null}; incomplete preserves the actual run result and warns that completion was not acknowledged after bounded receipt retries. Do not replay the Action to repair History. A process that stops after admission can leave only a started event. Outcomes omit runtime payloads, use the invoker account/data plane and survive Action deletion. Browser preparation and shared runs remain unrecorded. The bounded action-run records below remain a supplementary debug cache. ' +
       'Traversal programs expose native TreeWalker, NodeIterator and NodeFilter behavior on owned detached trees. Generic synchronous callback objects or functions execute bounded data definitions with explicit bindings through the existing DOM policy, preserving native callback identity, pointer/removal semantics, reentrancy and thrown data. Source evaluation and asynchronous callbacks are not used for synchronous filters. ' +

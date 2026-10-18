@@ -27,7 +27,7 @@ export function createPasswordHandler(overrides: Partial<typeof defaults> = {}) 
       return json({ ok: false, error: 'Please wait before trying again.' }, { ...init, headers: privateHeaders });
     }
     try {
-      if (request.method === 'GET') return json({ ok: true, ownerId: user.id, configured: deps.ownerVaultConfigured(), ...await deps.listPasswords(user.id, new URL(request.url).searchParams.get('cursor'), new URL(request.url).searchParams.get('q') || '') }, { headers });
+      if (request.method === 'GET') return json({ ok: true, ownerId: user.id, configured: deps.ownerVaultConfigured(), ...await deps.listPasswords(user.id, new URL(request.url).searchParams.get('cursor')) }, { headers });
       const origin = request.headers.get('Origin');
       if (request.headers.get('Sec-Fetch-Site') === 'cross-site' || (origin && origin !== resolvePublicOrigin(request).origin)) return json({ ok: false, error: 'Use the same Thingtime origin.' }, { status: 403, headers });
       const invalidType = requireJsonContentType(request);

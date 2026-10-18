@@ -1,11 +1,15 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { createServer, request as httpRequest } from 'node:http';
+import { once } from 'node:events';
+import { H3, toNodeListener } from 'nitro/h3';
 
 import { getApiFallbackOrigin, shouldProxyApiToFallback, proxyApiRequestToFallback } from './apiFallback';
 import handleApi from '../routes/api/[...]';
 import handleRootData from '../routes/api/root-data.get';
 import { enforceExpectedDataPlane, mongoDataPlane } from '../../app/api/utils/mongodb/dataPlane';
 import { getRequestMongoEndpoint } from '../../app/api/utils/mongodb/endpoint';
+import { enforceExpectedActor } from '../../app/api/utils/auth/expectedActor';
 import { EXPECTED_DATA_PLANE_HEADER } from '../../app/utils/dataPlane';
 
 const ENV_KEYS = ['JWT_PRIVATE_KEY', 'JWT_SECRET', 'MONGODB_CONNECTION_STRING', 'THINGTIME_API_FALLBACK_ORIGIN', 'THINGTIME_DESKTOP', 'NODE_ENV', 'MONGO_PASS'] as const;
@@ -113,7 +117,7 @@ test('fallback forwards the database identity, selection and cookie for upstream
 			const count = forwarded.length;
 			const actorRequest = new Request('http://127.0.0.1:17340/api/v1/things', { method: 'POST', headers: { ...headers, 'X-Thingtime-Expected-Actor': 'synthetic-account', [EXPECTED_DATA_PLANE_HEADER]: plane }, body: '{}' });
 			const refusedActor = await (handleApi as any)({ req: actorRequest, context: { params: { path: 'v1/things' } } });
-			assert.equal(refusedActor.status, 503); assert.equal(forwarded.length, count); assert.equal(actorRequest.bodyUsed, false);
+			assert.equal(refusedActor.status, 403); assert.equal(forwarded.length, count); assert.equal(actorRequest.bodyUsed, false);
 		} finally { upstream.mock.restore(); }
 	});
 });
@@ -160,4 +164,74 @@ test('iOS release identities and migration bodies never follow an origin fallbac
     assert.equal(request.bodyUsed, false);
     assert.ok(!(await response.text()).includes('synthetic'));
   });
+});
+
+
+test('desktop browser Actions preserve actor preconditions and reject cross-origin or vault requests before forwarding', async t => {
+ await withFallbackEnv('https://selected.test', async () => {
+  process.env.THINGTIME_DESKTOP = '1';
+  let writes = 0;
+  const upstream = t.mock.method(globalThis, 'fetch', async (url: URL, init: RequestInit) => {
+   const request = new Request(url, init);
+   assert.equal(url.origin, 'https://selected.test');
+   assert.equal(request.headers.get('x-forwarded-host'), null);
+   assert.equal(request.headers.get('x-forwarded-proto'), null);
+   assert.equal(request.headers.get(EXPECTED_DATA_PLANE_HEADER), 'home');
+   const refusal = await enforceExpectedActor(request, async () => ({ id: 'owner' }));
+   if (refusal) return refusal;
+   writes++;
+   return Response.json({ ok: true });
+  });
+  try {
+   const base = { Origin: 'http://127.0.0.1:17340', 'Sec-Fetch-Site': 'same-origin', 'Content-Type': 'application/json', [EXPECTED_DATA_PLANE_HEADER]: 'home', 'x-forwarded-host': 'untrusted.test', 'x-forwarded-proto': 'https' };
+   for (const actor of ['owner', 'changed-account']) {
+    const request = new Request('http://127.0.0.1:17340/api/v1/things', { method: 'POST', headers: { ...base, 'X-Thingtime-Expected-Actor': actor }, body: '{}' });
+    const response = await (handleApi as any)({ req: request, context: { params: { path: 'v1/things' } } });
+    assert.equal(response.status, actor === 'owner' ? 200 : 409);
+   }
+   assert.equal(writes, 1);
+   const count = upstream.mock.callCount();
+   for (const [path, origin, site, status] of [
+    ['v1/things', 'https://foreign.test', 'cross-site', 403],
+    ['v1/things', 'https://foreign.test', 'same-origin', 403],
+    ['v1/vault/reveal', base.Origin, 'same-origin', 503]
+   ] as const) {
+    const request = new Request(`http://127.0.0.1:17340/api/${path}`, { method: 'POST', headers: { ...base, Origin: origin, 'Sec-Fetch-Site': site, 'X-Thingtime-Expected-Actor': 'owner' }, body: '{}' });
+    assert.equal((await (handleApi as any)({ req: request, context: { params: { path } } })).status, status);
+    assert.equal(request.bodyUsed, false);
+   }
+   assert.equal(upstream.mock.callCount(), count);
+  } finally { upstream.mock.restore(); }
+ });
+});
+
+
+test('desktop browser Actions forward real Nitro request bodies without native Request cloning', async t => {
+ await withFallbackEnv('https://selected.test', async () => {
+  process.env.THINGTIME_DESKTOP = '1';
+  const upstream = t.mock.method(globalThis, 'fetch', async (url: URL, init: RequestInit) => {
+   assert.equal(url.origin, 'https://selected.test');
+   const headers = new Headers(init.headers);
+   assert.equal(headers.get('X-Thingtime-Expected-Actor'), 'owner');
+   assert.equal(headers.has('x-forwarded-host'), false);
+   assert.equal(Buffer.from(init.body as ArrayBuffer).toString(), '{"kind":"script.run"}');
+   return Response.json({ ok: true });
+  });
+  const app = new H3(); app.use(handleApi);
+  const server = createServer(toNodeListener(app));
+  server.listen(0, '127.0.0.1'); await once(server, 'listening');
+  const origin = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
+  try {
+   const status = await new Promise<number>((resolve, reject) => {
+    const request = httpRequest(`${origin}/api/v1/devices/commands`, { method: 'POST', headers: {
+     Origin: origin, 'Content-Type': 'application/json', 'X-Thingtime-Expected-Actor': 'owner', 'X-Forwarded-Host': 'foreign.test'
+    } }, response => { response.resume(); response.on('end', () => resolve(response.statusCode!)); });
+    request.on('error', reject); request.end('{"kind":"script.run"}');
+   });
+   assert.equal(status, 200); assert.equal(upstream.mock.callCount(), 1);
+  } finally {
+   upstream.mock.restore();
+   await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+  }
+ });
 });
