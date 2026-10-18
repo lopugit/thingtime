@@ -644,7 +644,7 @@ describe('Commander daemon HTTP trust boundaries', () => {
       await server?.close();
       await rm(temporary, { recursive: true, force: true });
     }
-  });
+  }, 30_000); // Full server lifecycle and hundreds of HTTP/security assertions, not a latency test.
 
   it('does not replay a stale cache frame across a live catalog revision', async () => {
     const temporary = await mkdtemp(path.join(os.tmpdir(), 'commander-stream-cache-test-'));
