@@ -1,17 +1,17 @@
 # Graph Report - thingtime  (2026-10-18)
 
 ## Corpus Check
-- 85 files · ~238,153 words
+- 86 files · ~238,390 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 5 file(s) not represented in the graph (top: (none) 4, .jq 1)
 
 ## Summary
-- 1249 nodes · 2917 edges · 74 communities (61 shown, 13 thin omitted)
+- 1251 nodes · 2919 edges · 74 communities (61 shown, 13 thin omitted)
 - Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 24 edges (avg confidence: 0.85)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `cc9fb55c`
+- Built from commit: `615de4bf`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -111,8 +111,8 @@
   .github/workflows/lopu-pr-lifecycle.yml → .github/workflows/rebase-pr-stacks.yml
 - `PR 634 Comment Admission Hardening` --references--> `Control Plane CI Verify Job`  [EXTRACTED]
   PRs/634-control-plane-event-hardening--harden-lopu-comment-admission.md → .github/workflows/control-plane-ci.yml
-- `publishAdminStatus()` --calls--> `syncPreviewLabels()`  [EXTRACTED]
-  .github/scripts/deploy-admin-pr-previews.mjs → .github/scripts/preview-labels.mjs
+- `classify()` --calls--> `classifyClaudeCredentialFailure()`  [EXTRACTED]
+  .github/scripts/lopu-model-waterfall.mjs → .github/scripts/classify-claude-credential-failure.mjs
 
 ## Import Cycles
 - None detected.
@@ -148,8 +148,8 @@ Cohesion: 0.05
 Nodes (130): applyPicks(), attestationMatches(), botCommentsByLatestEvent(), buildPromotionDispatchRequest(), buildPromotionPlanContext(), cancelPromotionRetirement(), CFG, checkoutRemoteBranch() (+122 more)
 
 ### Community 1 - "deploy-develop-pr-preview.mjs"
-Cohesion: 0.06
-Nodes (118): ACTIVE_STATES, assertCurrentPullRequest(), assertPrebuiltOutput(), assertPreviewBundle(), assertRepositoryDispatchSource(), assertTrustedPrincipal(), assertTrustedPullRequest(), assertTrustedPullRequestStack() (+110 more)
+Cohesion: 0.05
+Nodes (119): ACTIVE_STATES, assertCurrentPullRequest(), assertPrebuiltOutput(), assertPreviewBundle(), assertRepositoryDispatchSource(), assertTrustedPrincipal(), assertTrustedPullRequest(), assertTrustedPullRequestStack() (+111 more)
 
 ### Community 2 - "deploy-admin-pr-previews.mjs"
 Cohesion: 0.08
@@ -172,12 +172,12 @@ Cohesion: 0.11
 Nodes (28): checkpoint(), completedReport(), continuationNumbers(), finalize(), git(), HANDOVER_INSTRUCTIONS, initialize(), numbers() (+20 more)
 
 ### Community 7 - "ref_node_fs"
-Cohesion: 0.13
-Nodes (9): assertPrReleaseContract(), count(), here, workflow, postPublishRefRace(), snapshot, previewSummaryBody(), publishPreviewSummary() (+1 more)
+Cohesion: 0.11
+Nodes (13): assertPrReleaseContract(), count(), here, workflow, allowed(), evaluate, expression, main (+5 more)
 
 ### Community 8 - "preview-fallback.mjs"
-Cohesion: 0.15
-Nodes (19): FALLBACK_BRANCH, FALLBACK_HEADER, FALLBACK_MARKER, fallbackDeploymentIssue(), fallbackDomainIssue(), fallbackPage(), fallbackResponseIssue(), installFallbackAliases() (+11 more)
+Cohesion: 0.14
+Nodes (18): FALLBACK_BRANCH, FALLBACK_HEADER, FALLBACK_MARKER, fallbackDeploymentIssue(), fallbackDomainIssue(), fallbackPage(), installFallbackAliases(), publishedPreviewResponseIssue() (+10 more)
 
 ### Community 9 - "resolve-pr-conflicts-routing-contract.mjs"
 Cohesion: 0.12
@@ -220,7 +220,7 @@ Cohesion: 0.14
 Nodes (17): BASE_REF, BASE_SHA, compute_plan_hash(), GITHUB_OUTPUT, PLAN_HASH, PROMOTION_BRANCH, reject_lineage_mismatch(), require_lineage_replay() (+9 more)
 
 ### Community 19 - "feature-stack-waterfall.test.mjs"
-Cohesion: 0.32
+Cohesion: 0.30
 Nodes (14): canonicalFeatureStackPlan(), decodeFeatureStackPlan(), exactKeys(), featureStackId(), git(), selfTest(), validateWaterfall(), verifyFeatureStackHistory() (+6 more)
 
 ### Community 20 - "PR #603 — Admin preview publisher controller"
@@ -232,8 +232,8 @@ Cohesion: 0.12
 Nodes (16): Astra Medium fallback using the Thingtime vault, Commander signed releases, Desktop and Recovery release pipeline, Discoverable preview status and recovery, Fork setup: Vercel develop previews, `github-actions` — the CI control plane, Known trade-off, Lopu principal repository manager (+8 more)
 
 ### Community 22 - "control-plane-events.test.mjs"
-Cohesion: 0.31
-Nodes (5): ci, workflow, classifyConversation(), classifyQueuedConversation(), hasAutomationMarker()
+Cohesion: 0.21
+Nodes (7): ci, workflow, classifyConversation(), classifyQueuedConversation(), hasAutomationMarker(), previewSummaryBody(), publishPreviewSummary()
 
 ### Community 23 - "rebase-related-edits.test.mjs"
 Cohesion: 0.28
@@ -252,8 +252,8 @@ Cohesion: 0.13
 Nodes (15): lanes: fan out CI promotion lanes, promote: replay merged develop PRs, route: provider router job, rebase-pr-stacks reusable workflow, Cascade to PRs Stacked on This Head, defer_ref_race, Failure Reporting, graph_not_collapsed (+7 more)
 
 ### Community 27 - "lopu-model-waterfall.mjs"
-Cohesion: 0.12
-Nodes (37): models, CAPACITY_PATTERNS, classifyClaudeCredentialFailure(), collectStrings(), CREDENTIAL_PATTERNS, main(), selfTest(), exportBundle() (+29 more)
+Cohesion: 0.15
+Nodes (31): models, exportBundle(), fetchBundle(), legacyCredentials(), main(), required(), safeCache(), validate() (+23 more)
 
 ### Community 28 - "promotion-worker-routing-contract.mjs"
 Cohesion: 0.14
@@ -280,8 +280,8 @@ Cohesion: 0.18
 Nodes (11): Browser and UI validation, Canonical instruction file, Data and API conventions, Delivery messaging, Fundamentals (read first), GitHub push and PR publishing, graphify, iOS development and releases (+3 more)
 
 ### Community 34 - "CHANGELOG.md"
-Cohesion: 0.31
-Nodes (5): Canonical AI Instructions, Astra Medium Credential Fallback, Graphify Content-Addressed Snapshots, Lopu Repository Manager, Astra Fallback Execution
+Cohesion: 0.24
+Nodes (6): Canonical AI Instructions, Astra Medium Credential Fallback, Graphify Content-Addressed Snapshots, Lopu Repository Manager, Astra Fallback Execution, PR 1017: GitHub Lopu admin model waterfall
 
 ### Community 35 - "Control-plane changelog"
 Cohesion: 0.20
@@ -312,8 +312,8 @@ Cohesion: 0.25
 Nodes (8): Build Signed and Notarized Electron Release, Build Unsigned Electron Release, Derive SemVer PR Release Identity, Import Developer ID and Notarization Credentials, Resolve and Validate PR Source, Select Release Distribution, Thingtime Electron PR Release Workflow, Electron App Release
 
 ### Community 42 - "ref_node_child_process"
-Cohesion: 0.18
-Nodes (8): allowed, workflow, answerCommand(), answerQuestion(), CHAT_SYSTEM_PROMPT, safeRunContext(), serveRunChat(), script
+Cohesion: 0.19
+Nodes (7): allowed, workflow, answerCommand(), answerQuestion(), CHAT_SYSTEM_PROMPT, safeRunContext(), serveRunChat()
 
 ### Community 43 - "preview-labels.mjs"
 Cohesion: 0.24
@@ -380,11 +380,11 @@ Cohesion: 0.50
 Nodes (4): feature_stack_merge job, feature_stack_plan job, model_config job, review job
 
 ### Community 72 - "electron-release-gates.test.mjs"
-Cohesion: 0.40
-Nodes (5): allowed(), evaluate, expression, main, workflow
+Cohesion: 0.48
+Nodes (6): CAPACITY_PATTERNS, classifyClaudeCredentialFailure(), collectStrings(), CREDENTIAL_PATTERNS, main(), selfTest()
 
 ### Community 73 - "ref_node_crypto"
-Cohesion: 0.60
+Cohesion: 0.80
 Nodes (4): rawIndexHash(), runGit(), semanticIndexHash(), sha256()
 
 ## Ambiguous Edges - Review These
@@ -393,22 +393,22 @@ Nodes (4): rawIndexHash(), runGit(), semanticIndexHash(), sha256()
 
 ## Knowledge Gaps
 - **101 isolated node(s):** `RUNNER_TEMP`, `GITHUB_OUTPUT`, `SOURCE_PR`, `BASE_REF`, `BASE_SHA` (+96 more)
-  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 358 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
+  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 359 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
 - **13 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `Lopu Agent Composite Action` connect `build-all-branch.mjs` to `CHANGELOG.md`?**
-  _High betweenness centrality (0.101) - this node is a cross-community bridge._
+  _High betweenness centrality (0.107) - this node is a cross-community bridge._
 - **What connects `RUNNER_TEMP`, `GITHUB_OUTPUT`, `SOURCE_PR` to the rest of the system?**
   _101 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `promote-features-to-main.mjs` be split into smaller, more focused modules?**
   _Cohesion score 0.05194805194805195 - nodes in this community are weakly interconnected._
 - **Why does `Astra Medium Credential Fallback` connect `CHANGELOG.md` to `build-all-branch.mjs`?**
-  _High betweenness centrality (0.097) - this node is a cross-community bridge._
+  _High betweenness centrality (0.104) - this node is a cross-community bridge._
 - **Should `deploy-develop-pr-preview.mjs` be split into smaller, more focused modules?**
-  _Cohesion score 0.05559926567007606 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.05496774193548387 - nodes in this community are weakly interconnected._
 - **Should `deploy-admin-pr-previews.mjs` be split into smaller, more focused modules?**
   _Cohesion score 0.07743271221532091 - nodes in this community are weakly interconnected._
 
