@@ -75,6 +75,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-18 — **Codex (AI)**: Add privately owned Characters with independent logins, inherited tier entitlements, session identity selection and Post as controls for posts/comments. Preserve principal account switching and independent private-subspace membership; add isolated real-API/browser acceptance. Capture early editor input during initialization. See [PR 1039 verification](../PRs/1039-characters-private-proxy-accounts.md).
+
 - 2026-10-18 — **Codex (AI)**: Give installed Device scripts pages a centered, padded Builder container. Remove fixture-provided layout so browser acceptance catches missing page spacing.
 
 - 2026-10-18 — **Codex (AI)**: Add editable agent tasks, todos and progress,
