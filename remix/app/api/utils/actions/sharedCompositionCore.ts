@@ -9,7 +9,7 @@ export const storedComponentScope = (crystal: Record<string, any>, args?: Record
 	const scope: Record<string, unknown> = { ...defaultsFromArgs(sanitizeArgSpecs(crystal.args)), ...crystal.savedArgs, ...args };
 	// Runtime source scope overrides these even when an author saved an arg
 	// with the same name. Loop locals are bound only by their actual wrapper.
-	for (const key of ['result', 'state', 'error', 'last', 'viewer', 'query', 'installing', 'hasSource', 'item', 'index', 'n', 'count', 'first', '__proto__', 'constructor', 'prototype']) delete scope[key];
+	for (const key of ['result', 'state', 'error', 'last', 'viewer', 'query', 'installing', 'installAvailable', 'hasSource', 'pending', 'pendingAction', 'page', 'collection', 'item', 'index', 'n', 'count', 'first', '__proto__', 'constructor', 'prototype']) delete scope[key];
 	return scope;
 };
 
