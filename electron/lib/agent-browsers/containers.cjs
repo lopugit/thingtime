@@ -15,7 +15,7 @@ async function inspectOptional(engine, target, { network = false } = {}) {
   catch (error) {
     // A disconnected daemon is not evidence that an owned resource is gone.
     // Only Docker's explicit missing-object response permits successful cleanup.
-    if (/\bNo such (?:object|container|network):/.test(error.message)) return undefined;
+    if (/\bNo such (?:object|container|network):/i.test(error.message)) return undefined;
     throw error;
   }
 }

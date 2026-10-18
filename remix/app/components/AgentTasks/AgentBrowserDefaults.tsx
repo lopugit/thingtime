@@ -15,7 +15,7 @@ export function AgentBrowserDefaults() {
 		return () => { active = false; };
 	}, [bridge]);
 	if (!bridge?.agentBrowserVersion) return null;
-	return <Box display="grid" gap={4} width="100%" minWidth={0}>
+	return <Box id="agent-browser-security" scrollMarginTop="calc(var(--tt-nav-clearance, 54px) + 16px)" display="grid" gap={4} width="100%" minWidth={0}>
 		<Text fontWeight="semibold">Agent browser security</Text>
 		{policy && <AgentNetworkSettings value={policy} onChange={setPolicy} disabled={busy} prefix="Default network security" />}
 		<Text fontSize="sm" color="gray.500">New agent tasks inherit this device default unless their custom security checkbox is enabled. Existing claims keep their current policy.</Text>

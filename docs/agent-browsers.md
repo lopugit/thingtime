@@ -39,7 +39,8 @@ a fresh profile when claimed. Native copies support unrestricted sessions only.
 
 ## Security settings
 
-The device default is in **Settings → Desktop → Agent browser security**.
+The device default is in **Settings → Things → Agent browsers**. The task's
+**General security settings** link opens that disclosure directly.
 Each task has a **Use custom security settings** checkbox:
 
 | Mode | Boundary |
@@ -71,8 +72,11 @@ Source checkouts use `electron/scripts/agent-browser.mjs`.
 Open the task's browser controls once to register its saved policy. Call
 `manifest` and check `agent.browsers` and `agent.network-policy` major version 1.
 Then call `status` to find registered `tasks` and installed browser IDs. The task
-identity includes its origin, database identity, owner and Data Thing ID. Local agents cannot
-change device/task security, install executable code, or take another claim.
+identity includes its selected API origin, database identity, owner and Data Thing ID.
+The bundled desktop window origin is not used as the API identity. The agent
+connection does not expose security changes or executable installation, and
+requires the owning handle for claim controls. The container isolates its browser
+and backend; it does not sandbox an agent's other host tools or shell access.
 
 Send JSON parameters on stdin. For example, using task-local variables:
 
@@ -138,7 +142,7 @@ For desktop development acceptance, `test-agent-desktop-relay.cjs` takes a
 private state directory, immutable full-app image ID and unused loopback port.
 It transports HTTP over the container's stdio without publishing a container
 port. Use its origin as `THINGTIME_DESKTOP_DEV_TEST_ORIGIN` with the existing
-`dev:parallel` command. This opt-in development path verifies the test health
+`dev:parallel` command. For task-owned automated UI checks, `--inspect-ui=<unused-port>` enables a loopback Chromium inspector only in this temporary development app. This opt-in development path verifies the test health
 marker, skips host environment loading and production endpoint checks, and
 loads the real private app through the normal Electron preload. It is disabled
 in packaged builds. The relay is temporary test tooling, not a public dev

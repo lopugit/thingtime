@@ -72,3 +72,16 @@ test('native crash recovery preserves an active profile and removes a confirmed 
     await fs.access(unrelated);
   } finally { await fs.rm(root, { recursive: true, force: true }); }
 });
+
+
+test('already-removed containers are recognized across Docker error capitalization', async () => {
+  for (const message of ['Error: No such object: gone', 'error: no such object: gone']) {
+    const engine = { owner: 'own-manager', run: async args => {
+      assert.equal(args[0], 'inspect');
+      throw new Error(message);
+    } };
+    const browser = new BrowserContainer(engine, { id: '11111111-1111-4111-8111-111111111111', imageId: 'sha256:' + 'a'.repeat(64) });
+    browser.containerId = 'gone';
+    await browser.close();
+  }
+});

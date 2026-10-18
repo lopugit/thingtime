@@ -1544,6 +1544,7 @@ function getDesktopInfo() {
         : null
     },
     contentOrigin: activeContentOrigin || appOrigin,
+    apiOrigin: parallelDevMode && process.env.THINGTIME_DESKTOP_DEV_TEST_ORIGIN ? appOrigin : desktopSettings?.snapshot().selectedEndpoint.url || null,
     currentUrl: mainWindow?.webContents.getURL() || appOrigin,
 		desktopSettings: desktopSettings?.snapshot() || null,
 		desktopSettingsLastError,

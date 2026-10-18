@@ -21,11 +21,11 @@ async function main() {
     const remote = `const http=require('node:http');let text='';process.stdin.on('data',c=>text+=c);process.stdin.on('end',()=>{const input=JSON.parse(text);const req=http.request({host:'127.0.0.1',port:18721,path:input.path,method:input.method,headers:input.headers},res=>{const chunks=[];res.on('data',c=>chunks.push(c));res.on('end',()=>process.stdout.write(JSON.stringify({status:res.statusCode,headers:res.headers,body:Buffer.concat(chunks).toString('base64')})));});req.on('error',()=>process.exit(1));req.end(Buffer.from(input.body,'base64'));});`;
     server = http.createServer(async (request, response) => {
       try {
-        if (!request.url.startsWith('/') || request.url.startsWith('//')) throw new Error('Use the private app path.');
+        if (request.headers.host !== `127.0.0.1:${port}` || !request.url.startsWith('/') || request.url.startsWith('//')) throw new Error('Use the private app path.');
         const chunks = []; for await (const chunk of request) chunks.push(chunk);
-        const headers = { ...request.headers, host: '127.0.0.1:18721', 'accept-encoding': 'identity' };
-        if (headers.origin === `http://127.0.0.1:${port}`) headers.origin = 'http://127.0.0.1:18721';
-        if (headers.referer?.startsWith(`http://127.0.0.1:${port}/`)) headers.referer = headers.referer.replace(`http://127.0.0.1:${port}/`, 'http://127.0.0.1:18721/');
+        // Preserve the browser-facing origin for capability negotiation and CSRF.
+        // The transport connects to container loopback independently of Host.
+        const headers = { ...request.headers, 'accept-encoding': 'identity' };
         delete headers.connection; delete headers['transfer-encoding'];
         const result = JSON.parse(await engine.run(['exec', '-i', task.containerId, 'node', '-e', remote], { input: JSON.stringify({ path: request.url, method: request.method, headers, body: Buffer.concat(chunks).toString('base64') }), timeoutMs: 120000 }));
         delete result.headers['transfer-encoding']; delete result.headers.connection;

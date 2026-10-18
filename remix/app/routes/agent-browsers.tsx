@@ -13,12 +13,21 @@ import { isolatedAgentNetwork, type AgentBrowserSnapshot, type AgentTaskSecurity
 
 export default function AgentBrowsersRoute() {
 	const user = useCurrentUser(), plane = useDataPlane(), { taskId = '' } = useParams();
+	const bridge = getElectronBridge();
+	const [apiOrigin, setApiOrigin] = React.useState<string | null>(() => bridge ? null : location.origin);
+	React.useEffect(() => {
+		let active = true;
+		if (bridge) void bridge.getInfo?.().then(info => {
+			if (active && info.apiOrigin) setApiOrigin(new URL(info.apiOrigin).origin);
+		}).catch(() => { if (active) setApiOrigin(null); });
+		return () => { active = false; };
+	}, [bridge]);
 	return <PageShell width={1100}><PageHeader eyebrow="Thingtime desktop" title="Agent browsers" variant="ink" subtitle="Separate browsers, profiles and security settings for each task." />
-		{user ? plane ? <TaskBrowserControls key={`${user.id}:${plane}:${taskId}`} taskId={taskId} ownerId={user.id} plane={plane} /> : <Text>Task controls require the current database identity. Reconnect the selected API endpoint.</Text> : <Text>Sign in to manage your agent tasks.</Text>}
+		{user ? plane && apiOrigin ? <TaskBrowserControls key={`${apiOrigin}:${user.id}:${plane}:${taskId}`} taskId={taskId} ownerId={user.id} plane={plane} apiOrigin={apiOrigin} /> : <Text>Task controls require the current API origin and database identity. Reconnect the selected API endpoint.</Text> : <Text>Sign in to manage your agent tasks.</Text>}
 	</PageShell>;
 }
 
-function TaskBrowserControls({ taskId, ownerId, plane }: { taskId: string; ownerId: string; plane: string }) {
+function TaskBrowserControls({ taskId, ownerId, plane, apiOrigin }: { taskId: string; ownerId: string; plane: string; apiOrigin: string }) {
 	const api = useApi(), navigate = useNavigate(), bridge = getElectronBridge();
 	const [snapshot, setSnapshot] = React.useState<AgentBrowserSnapshot | null>(null);
 	const [task, setTask] = React.useState<any>(null), [draftId, setDraftId] = React.useState('');
@@ -29,7 +38,7 @@ function TaskBrowserControls({ taskId, ownerId, plane }: { taskId: string; owner
 	const [runtime, setRuntime] = React.useState<{ available: boolean; message?: string; socketPath?: string } | null>(null);
 	const [busy, setBusy] = React.useState(false), [message, setMessage] = React.useState('');
 	const alive = React.useRef(true), ownedClaim = React.useRef<BrowserClaim | null>(null);
-	const taskKey = JSON.stringify([location.origin, plane, ownerId, taskId]);
+	const taskKey = JSON.stringify([apiOrigin, plane, ownerId, taskId]);
 	const getThing = api.v1.things.get;
 	const request = React.useCallback(async (method: string, params: Record<string, unknown> = {}) => {
 		if (!bridge?.agentBrowsers) throw new Error('Open this task in the Thingtime Mac app to use browser controls.');
@@ -81,7 +90,7 @@ function TaskBrowserControls({ taskId, ownerId, plane }: { taskId: string; owner
 	const expiredLease = snapshot?.leases.find(lease => lease.taskId === taskKey && lease.expired);
 	const session = snapshot?.sessions.find(session => session.leaseId === activeLease?.id && session.state === 'ready');
 	return <Box display="grid" gap={5} minWidth={0}>
-		<Flex gap={3} wrap="wrap"><Button as={Link} to="/p/agent-tasks" variant="outline">Task board</Button><Button as={Link} to="/settings/desktop" variant="outline">General security settings</Button>
+		<Flex gap={3} wrap="wrap"><Button as={Link} to="/p/agent-tasks" variant="outline">Task board</Button><Button as={Link} to="/settings/things#agent-browser-security" variant="outline">General security settings</Button>
 			<Button isDisabled={busy} onClick={() => perform(async () => { const installed = await installSuiteOnServer('agent-tasks', { onlyMissing: true }); if (alive.current) navigate(`/p/${installed.entryPageKey}`); })}>Install editable task space</Button>
 		</Flex>
 		{!taskId && <Flex gap={2} wrap="wrap"><Input flex="1 1 240px" aria-label="Task Thing ID" value={draftId} onChange={event => setDraftId(event.target.value)} placeholder="Open a task by its Thing ID" /><Button onClick={() => navigate(`/agent-browsers/${encodeURIComponent(draftId.trim())}`)} isDisabled={!draftId.trim()}>Open task</Button></Flex>}
