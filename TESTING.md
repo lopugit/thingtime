@@ -10250,6 +10250,8 @@ separate from deterministic discovery/lease tests.
   Builder, and verify page refresh retains last-known readings.
 - On the signed installed Mac app, compare inventory program/path/PID with
   NSRunningApplication; distinguish missing readings from zero and false.
+- Compare cumulative CPU seconds with `ps -p <pid> -o time=` on Apple Silicon
+  and Intel. Mach absolute ticks must use the host timebase, not assume nanoseconds.
 - Check partial/collecting/locked/offline/no-node/empty states, select a Mac,
   search and paginate every item; locked snapshots must contain no inventory.
 - At desktop and 390px widths expand details, long paths, output and earlier-run

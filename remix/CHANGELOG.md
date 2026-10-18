@@ -77,6 +77,9 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 - 2026-10-18 — Replace public desktop database connection-string hashes with keyed identifiers while preserving pre-upgrade renderer sessions through an encrypted migration alias.
 
+- 2026-10-18 — **Codex (AI)**: Convert Mac menu bar process CPU counters with the host Mach timebase. Apple Silicon readings now agree with macOS CPU seconds; regression coverage compares the collector conversion with independent `getrusage` readings.
+
+
 - 2026-10-18 — Desktop builds now include pinned MongoDB Community Server, source and notices for optional local execution; fresh profiles need no separate database install, while existing selections/data are preserved. Session recovery and installed acceptance remain in progress in [PR #1034](../PRs/1034-chatgpt-plan-usage-local-runtime-and-encrypted-connection-moves.md).
 
 - 2026-10-18 — **Codex (AI), local installed integration:** Preserve native Passwords and menu/device features alongside ChatGPT local runtime setup. Bind native AutoFill to the running account authority and retire its connection before saving API/database changes and restarting; retain Nitro private-service forwarding and streaming endpoint fencing. [Integration details](../PRs/1035-chatgpt-plan-installed-local-native-account-compatibility.md).
