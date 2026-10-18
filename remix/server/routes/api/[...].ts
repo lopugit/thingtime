@@ -9,7 +9,7 @@ import { getRequestMongoEndpoint, runWithMongoEndpoint } from '../../../app/api/
 import { enforceExpectedDataPlane } from '../../../app/api/utils/mongodb/dataPlane';
 import { CHATGPT_AUTHORIZE_PATH, CHATGPT_DYNAMIC_CLIENT_REGISTRATION_PATH, CHATGPT_MCP_PATH, CHATGPT_OAUTH_RELAY_PATH, CHATGPT_TOKEN_PATH } from '../../../app/api/utils/chatgpt/pluginCore';
 import { StorageMutationError } from '../../../app/api/utils/storage/storageCore';
-import { proxyApiRequestToFallback, shouldProxyApiToFallback } from '../../utils/apiFallback';
+import { hasSelfHostedApiEnv, proxyApiRequestToFallback, shouldProxyApiToFallback, unavailableLocalApiResponse } from '../../utils/apiFallback';
 
 type RouteModule = {
   loader?: (args: { request: Request; params?: Record<string, string> }) => Promise<unknown> | unknown;
@@ -427,6 +427,8 @@ export default defineHandler(async (event) => {
       headers: { 'Cache-Control': 'public, max-age=60, stale-while-revalidate=300' }
     });
   }
+
+  if (!hasSelfHostedApiEnv()) return unavailableLocalApiResponse();
 
   const loadModule = routeModules[path];
 

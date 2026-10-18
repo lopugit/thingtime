@@ -100,7 +100,7 @@ test('Thingtime capability manifest is origin scoped and covers the generated AP
   assert.equal(capabilitySatisfies('1.3.0', '1.3.0'), true);
   assert.equal(capabilitySatisfies('1.4.0', '1.3.0'), true);
   assert.equal(capabilitySatisfies('2.0.0', '1.3.0'), false);
-  assert.equal(manifest.features['api.admin-migrations-run']?.version, '1.3.0');
+  assert.equal(manifest.features['api.admin-migrations-run']?.version, '1.4.1');
   assert.equal(manifest.features['api.admin-subscriptions']?.version, '1.1.1');
 	assert.equal(manifest.features['api.admin-ci-dispatch']?.version, '2.2.0');
   assert.equal(manifest.features['api.admin-ci-control']?.version, '1.0.2');
@@ -397,7 +397,7 @@ test('Thing discussions and linked post references negotiate additive contracts 
 test('functional demo capabilities advertise compatible catalog and install contracts', () => {
   const manifest = thingtimeCapabilityManifest('https://thingtime.com');
   for (const feature of ['api.webpages-demos', 'api.webpages-suites-install', 'api.admin-webpages-seed-demos']) {
-    assert.equal(manifest.features[feature]?.version, feature === 'api.webpages-demos' ? '1.1.0' : feature === 'api.webpages-suites-install' ? '1.3.0' : '1.2.0');
+    assert.equal(manifest.features[feature]?.version, feature === 'api.webpages-demos' ? '1.1.0' : feature === 'api.webpages-suites-install' ? '1.4.0' : '1.2.0');
     assert.ok(capabilitySatisfies(manifest.features[feature].version, '1.1.0'));
   }
   assert.equal(capabilitySatisfies('1.0.0', '1.1.0'), false);

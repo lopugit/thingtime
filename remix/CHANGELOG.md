@@ -73,9 +73,27 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-18: Fix incident cleanup to recognize the automatic logout history entry, bound to the revoked test session; retain strict content and actor checks. Production dry-run caught this mismatch before any deletion.
+
+
+- 2026-10-18 — **Codex (AI)**: Remove implicit production API forwarding from
+  Vite and Nitro; missing local database/signing settings now fail closed before
+  handlers or DB warmup. Restrict fixture destinations and redirects, add an OS
+  isolated server smoke, and provide guarded admin cleanup for the accidental
+  catalog acceptance account, with atomic identity/activity checks and dry-run.
+  Details: [PR #1025](../PRs/1025-local-fallback-safety-prevent-production-test-data.md).
+
+
 - Claude catalogue/workflow persistence validation: [PR #1016 notes](../PRs/1016-claude-catalog-workflow-keyless-claude-model-sync.md).
 
 - 2026-10-18: Add a create-only admin import of the configured OpenAI key into the shared AI credential vault without exposing the value.
+- 2026-10-18 — **Codex (AI)**: Add reusable local video pipelines and a Builder
+  media-tools suite with editable saved layouts/settings, WebCodecs encoding,
+  cancellation, progress, previews and downloads. Secure-host workers preserve
+  the opaque preview sandbox and deny network access. Lopu now receives shared
+  framework-discovery guidance. Suite installation requires capability 1.4.0;
+  browser acceptance verifies real MP4/WebM outputs and responsive layout.
+  [PR 1024 validation](../PRs/1024-media-pipeline-reusable-local-video-compression.md).
 
 - 2026-10-17 — **Codex (AI)**: Stream complete 1PUX imports, preserve source data and rich fields, and add encrypted password attachments and file-inclusive backups. Remove arbitrary import/editor caps and document fork-safe storage setup. [PR #1015 validation](../PRs/1015-codex-password-import-fix-preserve-complete-1pux-imports-and-encrypted-password-attachments.md).
 
