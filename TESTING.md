@@ -11607,3 +11607,17 @@ resume unfinished Android gates only when requested.
   editable Builder blocks; edit nested labels, version controls and repeated
   fields, save/reload, then exercise real Mac/iOS review, ignore and restore.
   Keep the 10,000-path cap until this complete path passes. Android is deferred.
+
+### Paged conflict review controls
+
+- Navigate to the last review page, go Previous and Next, close/reopen the
+  review and verify exact saved choices and row ranges. Long paths must respect
+  the byte limit in both directions without retaining prior pages.
+- A stale choice, off-page field, repeated click or disposed view must not
+  overwrite a newer choice or complete a review. Failed reads retain the prior
+  page. Applying after another writer changes the header requires reload and
+  fresh review; incomplete or folder-blocked choices cannot apply.
+- Run `pagedReviewDraft.test.ts` and `test:file-sync`. The generated-data
+  `scripts/review-draft.browser.ts` proves controller/journal restart and bounded
+  handoff only. Actual editable Builder controls and installed acceptance remain
+  open; preserve Android deferral and the 10,000-path limit.

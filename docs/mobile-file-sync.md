@@ -3075,3 +3075,31 @@ with Web Crypto, and prepare 270 operations with zero file effects. These prove
 engine/storage behavior, not installed-device transfers or editable UI delivery.
 Full-project TypeScript still reports 91 diagnostics outside changed files.
 Android remains deferred and its code is preserved.
+
+## Bounded conflict review controls — 2026-10-19
+
+`conflictReviewController.ts` is the shared data/action adapter for the upcoming
+editable Builder review. It retains one 20-row journal page, persists each choice
+with its row revision, serializes interactions, fences disposed sessions and
+rechecks the reviewed header revision before resolving the foreground callback.
+Failed reads preserve the current page; an error requires a fresh read before
+Apply. Explicit cancellation differs from interruption, which retains choices.
+
+`pagedReviewDraft.ts` provides ascending, bidirectional keyset pages without a
+growing cursor-history array. Previous-page reads obey the same byte bound and
+account/plan/generation checks; run import only accepts forward cursors. The
+Chromium restart fixture uses this controller to reopen 270 conflicts, recover
+the selected version, navigate backward and forward, then prepare the existing
+run without executing file effects. This is engine/controller evidence, not
+installed or visible Builder acceptance. The existing native popup still uses
+the legacy callback, and the combined 10,000-path cap remains in place.
+
+Next integration reuses Finch's merged editable block framework (PR 1042;
+`api.things` 1.35.0 and `api.webpages-resolve` 1.6.0) and Aster's transient
+action host. This branch predates those dependencies; do not introduce a
+parallel opaque Component or persist runtime session handles in saved Things.
+
+Validation: 288 shared file-sync checks pass, including 19 focused draft/controller
+tests. Focused lint passes. Full TypeScript has 91 diagnostics outside changed
+files. The isolated Chromium process-restart proof retains a 20-row view and
+imports at most 128 rows per page; all 270 operations remain unexecuted.

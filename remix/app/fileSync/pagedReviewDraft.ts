@@ -19,7 +19,7 @@ export type ReviewDraftHeader = ReviewDraftProgress & {
 	spec: ReviewDraftSpec; scope: string; instance: string; planInstance: string; retired?: true; next: PagedPlanCursor | null;
 };
 export type ReviewDraftRow = { conflict: SyncConflict; from: SyncSide | null; revision: number };
-export type ReviewDraftCursor = { id: string; instance: string; scope: SyncScope; after: string; read: number };
+export type ReviewDraftCursor = { id: string; instance: string; scope: SyncScope; after: string; read: number; direction?: 'previous' };
 const stores = [JOURNAL_RETENTION_STORE, ...REVIEW_DRAFT_STORES, REVIEW_DRAFT_HEADS, PLAN_STORES[0], PLAN_PIN_STORE, INVENTORY_PIN_STORE, INVENTORY_STORES[0]];
 const bytes = (value: unknown) => new TextEncoder().encode(JSON.stringify(value)).length;
 const identifier = (v: unknown): v is string => typeof v === 'string' && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(v);
@@ -156,22 +156,36 @@ export function reviewDraftJournal(db: IDBDatabase, access: JournalAccess, keyRa
 	const read = async (value: ReviewDraftSpec, continuation?: ReviewDraftCursor, limit = 20) => {
 		const s = parseReviewDraftSpec(value), token = continuation === undefined ? undefined : structuredClone(continuation);
 		if (!Number.isInteger(limit) || limit < 1 || limit > INVENTORY_PAGE_ENTRIES || (continuation !== undefined && (!token || token.id !== s.id ||
-			!identifier(token.instance) || !token.scope || !sameSyncScope(token.scope, scope) || !validSyncPathKey(token.after) || !count(token.read) || token.read < 1))) throw Error('Invalid conflict review cursor or page limit.');
-		return withHeader<{ rows: ReviewDraftRow[]; next: ReviewDraftCursor | null; progress: ReviewDraftProgress }>(s, 'readonly', (h, tx, done, fail) => {
+			!identifier(token.instance) || !token.scope || !sameSyncScope(token.scope, scope) || !validSyncPathKey(token.after) || !count(token.read) || token.read < 1 ||
+			(token.direction !== undefined && token.direction !== 'previous')))) throw Error('Invalid conflict review cursor or page limit.');
+		return withHeader<{ rows: ReviewDraftRow[]; next: ReviewDraftCursor | null; previous: ReviewDraftCursor | null;
+			start: number; progress: ReviewDraftProgress }>(s, 'readonly', (h, tx, done, fail) => {
 			if (!['reviewing', 'sealed'].includes(h.phase) || (token && (token.instance !== h.instance || token.read >= h.count))) throw Error('Conflict review is incomplete or its cursor changed.');
+			const backwards = token?.direction === 'previous';
 			const rows: ReviewDraftRow[] = []; let size = 4096;
-			const request = tx.objectStore(REVIEW_DRAFT_STORES[1]).openCursor(range(s.id, token?.after));
+			const finish = (atBoundary: boolean) => {
+				const start = backwards ? token!.read - rows.length : token?.read ?? 0;
+				if (start < 0 || start + rows.length > h.count ||
+					(atBoundary && (backwards ? start !== 0 : start + rows.length !== h.count))) throw Error('Conflict review ended before its declared count.');
+				if (backwards) rows.reverse();
+				const cursor = (after: string, read: number, previous = false): ReviewDraftCursor => ({ id: s.id, instance: h.instance,
+					scope: structuredClone(scope), after, read, ...(previous ? { direction: 'previous' as const } : {}) });
+				done({ rows, start, progress: progress(h),
+					previous: start && rows.length ? cursor(syncPathKey(rows[0].conflict.path), start, true) : null,
+					next: start + rows.length < h.count && rows.length ? cursor(syncPathKey(rows.at(-1)!.conflict.path), start + rows.length) : null });
+			};
+			// Keyset navigation retains only this page, even after thousands of
+			// Next/Previous clicks. No growing in-memory cursor-history stack.
+			const bounds = backwards ? (keyRange ?? globalThis.IDBKeyRange).bound([key, s.id], [key, s.id, token!.after], false, true) : range(s.id, token?.after);
+			const request = tx.objectStore(REVIEW_DRAFT_STORES[1]).openCursor(bounds, backwards ? 'prev' : 'next');
 			request.onsuccess = () => { try {
 				check(); const cursor = request.result;
-				if (!cursor) {
-					if ((token?.read ?? 0) + rows.length !== h.count) throw Error('Conflict review ended before its declared count.');
-					done({ rows, next: null, progress: progress(h) }); return;
-				}
+				if (!cursor) { finish(true); return; }
 				const value = row(cursor.value, s), length = bytes(value) + 1;
 				if (JSON.stringify(cursor.primaryKey) !== JSON.stringify([key, s.id, syncPathKey(value.conflict.path)])) throw Error('Conflict row path changed.');
 				if (rows.length === limit || size + length > INVENTORY_PAGE_BYTES) {
 					if (!rows.length) throw Error('Conflict review row exceeds its page byte bound.');
-					done({ rows, progress: progress(h), next: { id: s.id, instance: h.instance, scope: structuredClone(scope), after: syncPathKey(rows.at(-1)!.conflict.path), read: (token?.read ?? 0) + rows.length } }); return;
+					finish(false); return;
 				}
 				rows.push(value); size += length; cursor.continue();
 			} catch (e) { fail(e); } };
@@ -217,6 +231,7 @@ export function reviewDraftJournal(db: IDBDatabase, access: JournalAccess, keyRa
 			});
 		},
 		async sealedRows(value: ReviewDraftSpec, cursor?: ReviewDraftCursor) {
+			if (cursor?.direction) throw Error('Sealed review import requires forward pages.');
 			const s = parseReviewDraftSpec(value), page = await read(s, cursor, INVENTORY_PAGE_ENTRIES);
 			if (page.progress.phase !== 'sealed') throw Error('Seal conflict choices before importing a run.');
 			const review = { id: s.id, kind: page.progress.kind!, count: page.progress.count };

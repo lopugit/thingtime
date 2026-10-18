@@ -1,8 +1,10 @@
 // Generated-data IndexedDB acceptance. No account, native files or remote API.
 import { openSyncJournal, withSyncRootLock } from '../app/fileSync/journal.client';
+import { createConflictReviewController } from '../app/fileSync/conflictReviewController';
+import type { PagedConflictReviewResult } from '../app/fileSync/pagedForegroundReview';
 import { newFileSyncConfiguration } from '../app/fileSync/configuration';
 import type { SyncEntry } from '../app/fileSync/reconcile';
-import type { ReviewDraftCursor, ReviewDraftSpec } from '../app/fileSync/pagedReviewDraft';
+import type { ReviewDraftSpec } from '../app/fileSync/pagedReviewDraft';
 import { importReviewDraft, retainedReviewIdentity, sealedReviewRows, verifyFreshReview } from '../app/fileSync/pagedForegroundReview';
 
 const scope = { origin: location.origin, ownerId: 'review-browser-fixture', dataPlane: 'home', deviceId: 'review-device', rootId: 'review-connection' };
@@ -33,8 +35,11 @@ Object.assign(window, { syncReviewDraftFixture: {
 			const journal = await openSyncJournal();
 			try {
 				await seed(journal, draft); const drafts = journal.reviewDrafts(access);
-				await drafts.build(draft); const page = await drafts.read(draft);
-				await drafts.choose(draft, page.rows[0].conflict.path, 'remote', 0);
+				await drafts.build(draft);
+				const controller = createConflictReviewController({ read: cursor => drafts.read(draft, cursor),
+					choose: (path, from, revision) => drafts.choose(draft, path, from, revision) }, () => { throw Error('Unexpected completion'); });
+				await controller.reload(); const page = controller.getSnapshot().page!;
+				await controller.choose(page.rows[0].conflict.path, 'remote', 0); controller.dispose();
 				await journal.maintenance(access).collect();
 				return { progress: (await drafts.active())!.progress, pageSize: page.rows.length };
 			} finally { journal.close(); }
@@ -46,12 +51,21 @@ Object.assign(window, { syncReviewDraftFixture: {
 			try {
 				const drafts = journal.reviewDrafts(access), restored = await drafts.active(), first = await drafts.read(draft);
 				const saved = { count: restored!.progress.count, selected: restored!.progress.selected, from: first.rows[0].from };
-				let cursor: ReviewDraftCursor | undefined, maxPage = 0;
-				do { const page = await drafts.read(draft, cursor); maxPage = Math.max(maxPage, page.rows.length);
-					for (const row of page.rows) if (row.from === null) await drafts.choose(draft, row.conflict.path, 'local', row.revision);
-					cursor = page.next ?? undefined;
-				} while (cursor);
-				await drafts.seal(draft, 'resolve', (await drafts.active())!.progress.revision);
+				let decision: PagedConflictReviewResult | undefined, maxPage = 0;
+				const controller = createConflictReviewController({ read: cursor => drafts.read(draft, cursor),
+					choose: (path, from, revision) => drafts.choose(draft, path, from, revision) }, result => { decision = result; });
+				await controller.reload();
+				for (;;) {
+					const page = controller.getSnapshot().page!; maxPage = Math.max(maxPage, page.rows.length);
+					for (const row of page.rows) if (row.from === null) await controller.choose(row.conflict.path, 'local', row.revision);
+					if (!page.next) break;
+					await controller.next();
+				}
+				await controller.previous(); const previousStart = controller.getSnapshot().page!.start;
+				await controller.next(); const lastStart = controller.getSnapshot().page!.start;
+				await controller.finish('resolve');
+				if (!decision || decision.action !== 'resolve') throw Error('Review did not finish');
+				await drafts.seal(draft, 'resolve', decision.revision);
 				const fresh = spec('fresh'); await seed(journal, fresh);
 				await verifyFreshReview(journal.plans(access), fresh.plan, drafts, draft, scope);
 				const streamedDigest = await retainedReviewIdentity(configuration, sealedReviewRows(drafts, draft));
@@ -66,7 +80,7 @@ Object.assign(window, { syncReviewDraftFixture: {
 				runs.appendReview = (s, page) => { maxImportPage = Math.max(maxImportPage, page.rows.length); return append(s, page); };
 				await importReviewDraft(runs, run, drafts, draft);
 				await drafts.release(draft); const cleanup = await journal.maintenance(access).collect();
-				return { saved, maxPage, maxImportPage, digestMatchesWebCrypto: streamedDigest === reference, cleanup, draft: await drafts.active(), prepared: await runs.prepare(run) };
+				return { saved, maxPage, maxImportPage, navigation: { previousStart, lastStart, closed: controller.getSnapshot().closed }, digestMatchesWebCrypto: streamedDigest === reference, cleanup, draft: await drafts.active(), prepared: await runs.prepare(run) };
 			} finally { journal.close(); }
 		});
 	}

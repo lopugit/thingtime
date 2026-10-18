@@ -7,7 +7,9 @@ maintenance. Run `pagedReviewDraft.test.ts` and `test:file-sync`; the generated-
 `review-draft.browser.ts` fixture covers a real Chromium restart. `pagedForegroundSync.ts` now consumes sealed drafts through fresh-plan checks
 and resumable run import. `pagedForegroundReview.ts` exposes bounded reads and
 revisioned choices for the upcoming editable Builder adapter, plus a streaming
-SHA-256 that preserves existing repeat-Ignore identities. The current popup
+SHA-256 that preserves existing repeat-Ignore identities. The new `conflictReviewController.ts` retains one page, persists revisioned
+choices and fences stale completion; the journal now supports byte-bounded
+Previous/Next navigation without a cursor-history array. The current popup
 still uses the bounded legacy array callback; replacing it with editable Builder
 blocks and installed acceptance remain open. The live scan cap is unchanged.
 

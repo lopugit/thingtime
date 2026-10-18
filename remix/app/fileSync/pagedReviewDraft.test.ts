@@ -8,6 +8,8 @@ import { PLAN_PIN_STORE } from './pagedPlanJournal';
 import { REVIEW_DRAFT_STORES, type ReviewDraftSpec, type ReviewDraftCursor } from './pagedReviewDraft';
 import { type SyncEntry, type SyncScope } from './reconcile';
 import { createSyncRun } from './execute';
+import { createConflictReviewController } from './conflictReviewController';
+import type { PagedConflictReviewResult, PagedConflictReviewSession } from './pagedForegroundReview';
 
 const scope: SyncScope = { origin: 'https://review.test', ownerId: 'owner', dataPlane: 'home', deviceId: 'device', rootId: 'connection' };
 const file = (path: string, side: 'local' | 'remote', version = 'one'): SyncEntry => ({ path, id: side + '-' + path.slice(-100), version,
@@ -208,4 +210,116 @@ test('active review protects inputs even with damaged pin indexes and rejects cu
 	await f.maintenance.collect(); assert.equal((await f.drafts.read(s)).progress.count, 21);
 	await f.drafts.release(s); await f.maintenance.collect(); await seed(f, s, 21); await f.drafts.build(s);
 	await assert.rejects(f.drafts.read(s, first.next), /cursor changed/); f.journal.close();
+});
+
+test('bidirectional keyset pages recover choices after reopen without retaining cursor history', async () => {
+	let f = await fixture(); const s = spec(); await seed(f, s, 83); await f.drafts.build(s);
+	let page = await f.drafts.read(s); assert.equal(page.start, 0); assert.equal(page.previous, null);
+	while (page.next) page = await f.drafts.read(s, page.next);
+	assert.equal(page.start, 80); assert.equal(page.rows.length, 3);
+	await f.drafts.choose(s, 'file-00079', 'remote', 0);
+	f.journal.close(); f = await fixture(f.factory);
+	page = await f.drafts.read(s, page.previous!);
+	assert.equal(page.start, 60); assert.equal(page.rows.at(-1)!.conflict.path, 'file-00079');
+	assert.equal(page.rows.at(-1)!.from, 'remote');
+	assert.equal((await f.drafts.read(s, page.next!)).start, 80);
+	while (page.previous) page = await f.drafts.read(s, page.previous);
+	assert.equal(page.start, 0); assert.equal(page.rows[0].conflict.path, 'file-00000');
+	assert.equal(page.rows.length, 20); f.journal.close();
+});
+
+test('backwards pages honor byte bounds, ascending row order and complete coverage', async () => {
+	const f = await fixture(), s = spec(); await seed(f, s, 130, { long: true }); await f.drafts.build(s);
+	let page = await f.drafts.read(s, undefined, 128);
+	while (page.next) page = await f.drafts.read(s, page.next, 128);
+	let count = page.rows.length;
+	while (page.previous) {
+		const previousEnd = page.start;
+		page = await f.drafts.read(s, page.previous, 128);
+		assert.equal(page.start + page.rows.length, previousEnd);
+		assert.ok(page.rows.length < 128);
+		assert.ok(new TextEncoder().encode(JSON.stringify(page.rows)).length < INVENTORY_PAGE_BYTES);
+		assert.deepEqual(page.rows.map(r => r.conflict.path), page.rows.map(r => r.conflict.path).sort());
+		count += page.rows.length;
+	}
+	assert.equal(count, 130); f.journal.close();
+});
+
+test('backwards cursors reject wrong identities, counts, directions and run-import use', async () => {
+	const f = await fixture(), s = spec(); await seed(f, s, 21); await f.drafts.build(s);
+	const first = await f.drafts.read(s), last = await f.drafts.read(s, first.next!), token = last.previous!;
+	for (const bad of [{ ...token, instance: 'different' }, { ...token, read: 0 }, { ...token, read: 22 },
+		{ ...token, scope: { ...scope, rootId: 'another' } }, { ...token, direction: 'sideways' }]) {
+		await assert.rejects(f.drafts.read(s, bad as ReviewDraftCursor), /cursor|page limit/);
+	}
+	await assert.rejects(f.drafts.read(s, { ...token, read: 19 }), /declared count/);
+	await f.drafts.seal(s, 'retain', (await f.drafts.active())!.progress.revision);
+	await assert.rejects(f.drafts.sealedRows(s, token), /forward pages/);
+	await f.drafts.release(s); await assert.rejects(f.drafts.read(s, token), /no longer active/); f.journal.close();
+});
+
+function controllerFor(f: Fixture, s: ReviewDraftSpec, complete: (result: PagedConflictReviewResult) => void,
+	wrap: (session: PagedConflictReviewSession) => PagedConflictReviewSession = session => session) {
+	return createConflictReviewController(wrap({ read: cursor => f.drafts.read(s, cursor),
+		choose: (path, from, revision) => f.drafts.choose(s, path, from, revision) }), complete);
+}
+
+test('review controller keeps one page, saves immediately and rejects off-page or stale choices', async () => {
+	const f = await fixture(), s = spec(); await seed(f, s, 45); await f.drafts.build(s);
+	const results: PagedConflictReviewResult[] = [], c = controllerFor(f, s, result => results.push(result));
+	const snapshots: number[] = [], unsubscribe = c.subscribe(() => snapshots.push(c.getSnapshot().page?.rows.length ?? 0));
+	await c.reload(); const initial = c.getSnapshot(); assert.equal(initial.page!.start, 0);
+	assert.equal(Reflect.set(initial.page!.rows[0], 'from', 'remote'), false);
+	await c.choose('file-00000', 'remote', 0);
+	assert.equal((await f.drafts.read(s)).rows[0].from, 'remote');
+	await assert.rejects(c.choose('file-00000', 'local', 0), /changed/);
+	await c.reload(); await c.next(); assert.equal(c.getSnapshot().page!.start, 20);
+	await assert.rejects(c.choose('file-00000', 'local', 1), /changed/);
+	await c.previous(); assert.equal(c.getSnapshot().page!.rows[0].from, 'remote');
+	assert.ok(snapshots.every(n => n <= 20)); assert.equal(initial.page!.rows[0].from, null);
+	unsubscribe(); c.dispose(); assert.deepEqual(results, []);
+	assert.equal(c.getSnapshot().page, null); assert.equal((await f.drafts.active())!.progress.selected, 1); f.journal.close();
+});
+
+test('review controller refuses duplicate work and ignores a late load after disposal', async () => {
+	const f = await fixture(), s = spec(); await seed(f, s, 21); await f.drafts.build(s);
+	let resume!: () => void; const gate = new Promise<void>(resolve => { resume = resolve; });
+	let readStarted!: () => void; const started = new Promise<void>(resolve => { readStarted = resolve; });
+	const c = controllerFor(f, s, () => assert.fail('Disposed controller completed'), session => ({ ...session,
+		read: async cursor => { const page = await session.read(cursor); readStarted(); await gate; return page; } }));
+	const pending = c.reload(); await started;
+	await assert.rejects(c.reload(), /Wait for/); assert.throws(() => c.cancel(), /Wait for/);
+	c.dispose(); resume(); await assert.rejects(pending, /no longer open/);
+	assert.deepEqual(c.getSnapshot(), { page: null, error: null, busy: false, closed: true });
+	assert.equal((await f.drafts.active())!.progress.phase, 'reviewing'); f.journal.close();
+});
+
+test('review controller refuses stale approval and only completes once with the reviewed revision', async () => {
+	const f = await fixture(), s = spec(); await seed(f, s, 2); await f.drafts.build(s);
+	const results: PagedConflictReviewResult[] = [], c = controllerFor(f, s, result => results.push(result));
+	await c.reload(); await c.choose('file-00000', 'local', 0); await c.choose('file-00001', 'local', 0);
+	await f.drafts.choose(s, 'file-00001', 'remote', 1);
+	await assert.rejects(c.finish('resolve'), /Saved choices changed/); assert.deepEqual(results, []);
+	assert.equal(c.getSnapshot().page!.rows[1].from, 'remote');
+	await assert.rejects(c.finish('resolve'), /Reload this review/);
+	await c.reload(); const revision = c.getSnapshot().page!.progress.revision;
+	await c.finish('resolve'); assert.deepEqual(results, [{ action: 'resolve', revision }]);
+	await assert.rejects(c.finish('retain'), /no longer open/); assert.throws(() => c.cancel(), /no longer open/);
+	assert.equal(c.getSnapshot().page, null); f.journal.close();
+});
+
+test('review controller preserves the page on read failure and gates incomplete or blocked approval', async () => {
+	for (const folder of [false, true]) {
+		const f = await fixture(), s = spec(); await seed(f, s, 21, { folder }); await f.drafts.build(s);
+		let failure = false; const results: PagedConflictReviewResult[] = [];
+		const c = controllerFor(f, s, result => results.push(result), session => ({ ...session,
+			read: cursor => failure ? Promise.reject(Error('Storage unavailable')) : session.read(cursor) }));
+		await c.reload(); const page = c.getSnapshot().page;
+		failure = true; await assert.rejects(c.next(), /Storage unavailable/); assert.equal(c.getSnapshot().page, page);
+		failure = false; await c.reload(); await assert.rejects(c.finish('resolve'), /incomplete/);
+		await c.reload();
+		if (folder) { await assert.rejects(c.finish('retain'), /source folders/); c.cancel(); assert.deepEqual(results, [{ action: 'cancel' }]); }
+		else { await c.finish('retain'); assert.deepEqual(results, [{ action: 'retain', revision: page!.progress.revision }]); }
+		f.journal.close();
+	}
 });

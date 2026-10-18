@@ -12,6 +12,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 > When you make a manual change, add a bullet under `[Unreleased]` ending with
 
+- 2026-10-19: Added bounded Previous/Next conflict-review navigation and a
+  disposable, revision-guarded controller; Chromium restart checks now cover
+  controller-driven choices and handoff. Editable Builder wiring remains open.
+  See [PR 1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+
 - 2026-09-22 — **Claude (AI)**: PR preview docs. README and the preview
   listener's manual-dispatch description now state what the protected
   controller already does: every same-repository PR previews into the
