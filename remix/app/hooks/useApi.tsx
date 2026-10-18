@@ -564,20 +564,25 @@ export function useApi() {
         async (args) => asyncFetcher.submit({ action: 'settings', settings: args?.settings }, { action: '/api/v1/admin/moderation' }),
         [asyncFetcher]
       ),
-      migrations: useCallback(async () => getJson('/api/v1/admin/migrations'), []),
+      migrations: useCallback(async () => {
+        await requireThingtimeCapability('api.admin-migrations', '1.4.0');
+        return getJson('/api/v1/admin/migrations');
+      }, []),
 			migrationDiagnostic: useCallback(
 				async (args, options?: { signal?: AbortSignal }) => getJson(`/api/v1/admin/migrations/diagnostic${toQuery({ id: args?.id })}`, options),
 				[]
 			),
       migrationsRun: useCallback(
-        async (args) =>
-          asyncFetcher.submit(
+        async (args) => {
+          await requireThingtimeCapability('api.admin-migrations-run', '1.4.0');
+          return asyncFetcher.submit(
             { migration: args?.migration, dryRun: args?.dryRun, confirm: args?.confirm },
             {
               action: '/api/v1/admin/migrations/run',
               errorContext: args?.dryRun ? `preview migration ${args?.migration}` : `run migration ${args?.migration}`
             }
-          ),
+          );
+        },
         [asyncFetcher]
       ),
       usersOverview: useCallback(
