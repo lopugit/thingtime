@@ -92,11 +92,11 @@ extension MobileSyncStagingTests {
         webView.configuration.userContentController.addUserScript(MobileFolderBridge.script)
         webView.loadHTMLString("<html><body>Native trash fixture</body></html>", baseURL: owner.origin)
         for _ in 0..<100 {
-            if let version = try? await webView.evaluateJavaScript("window.thingtimeNativeBridge?.fileTrashVersion"), version as? String == "1.2.0" { break }
+            if let version = try? await webView.evaluateJavaScript("window.thingtimeNativeBridge?.fileTrashVersion"), version as? String == "1.2.1" { break }
             try await Task.sleep(nanoseconds: 20_000_000)
         }
         let version = try await webView.evaluateJavaScript("window.thingtimeNativeBridge.fileTrashVersion")
-        XCTAssertEqual(version as? String, "1.2.0")
+        XCTAssertEqual(version as? String, "1.2.1")
         let encoded = try JSONSerialization.jsonObject(with: JSONEncoder().encode(request))
         let ordinary = MobileFolderStore.WriteApproval(scope: initial.scope, configurationRevision: "v1", configurationHash: String(repeating: "a", count: 64))
         let deletion = MobileFolderStore.WriteApproval(scope: initial.scope, configurationRevision: "v1", configurationHash: ordinary.configurationHash, allowTrash: true)

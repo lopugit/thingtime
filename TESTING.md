@@ -11741,3 +11741,20 @@ resume unfinished Android gates only when requested.
 - Repeat native installed Close/Quit/reopen, sleep/wake, offline/online and
   permission loss with independent byte/Timeline checks before marking worker
   acceptance complete. Android remains deferred.
+
+
+### iOS saved folder approval
+
+- Run `MobileWriteApprovalTests` and `MobileSyncStagingTests` on a task-owned
+  simulator. Recreate the native bridge and reuse exact saved consent without
+  opening a prompt or writing another grant. Missing consent must fail promptly.
+- Change owner, server, paired-device authority, configuration revision/hash or
+  Trash consent. Remove the folder or replace its approval during the final
+  asynchronous device check. Every case must fail without returning authority.
+- Verify publication 1.2.0 per writable folder; photo roots expose no publication
+  capability and reject write checks. Run the shared target suite for both Mac
+  and iOS: check saved consent before staging/publication/Trash; legacy iOS must
+  refuse automatic resume without silently opening a consent dialog.
+- Repeat with real pairing, picker grants and revocation on an installed iOS app
+  before claiming provider or background-worker acceptance. Synthetic bridge
+  authorization is not evidence of physical-device background execution.

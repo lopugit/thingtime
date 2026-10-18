@@ -3385,3 +3385,33 @@ providers, sleep/wake and sustained real-byte acceptance remain open. iOS passiv
 workers, full independent account backups/restore, large exports and physical
 media delivery remain in the full ledger. Android is deferred, with code kept
 in this PR. No remote API or native permission contract changed here.
+
+
+## iOS saved folder approval — 2026-10-19
+
+The iOS publication adapter now advertises `1.2.0`, including explicit publication
+capability on each writable folder and a non-interactive `write-check` operation.
+Photo sources remain read-only. A resumed target uses the same canonical approval
+record as an explicit foreground transfer: owner, origin, paired device, connection,
+configuration revision/hash and separate Trash consent must all match. Checking
+saved approval never opens a consent dialog or saves a new approval.
+
+Both approval actions verify the paired device and bookmark access. Before replying,
+the bridge rechecks the owner, device, unchanged native grant and exact approval;
+revocation or replacement during those asynchronous checks fails closed. Initial
+approval still requires the native consent dialog when no matching record exists.
+Older installed iOS publication adapters retain their explicit foreground flow but
+cannot negotiate saved-consent resume. No remote HTTP contract changes here.
+
+Native WebKit regressions cover bridge recreation without additional persistence,
+missing consent/verifier, unpaired devices, changed configuration/Trash scope,
+owner or grant changes during authorization, unavailable bookmarks, and read-only
+photo roots. Shared target regressions exercise the same pre-effect approval checks
+on Mac and iOS, including no fallback to a prompt. The native tests use disposable
+local folders and synthetic owner/device authorization; they do not establish real
+provider access or physical-device background execution.
+
+This closes an authorization prerequisite. The iOS Files screen still owns its
+sync runner. App-owned durable execution, native background scheduling, physical
+suspend/relaunch acceptance and full independent backup/restore remain open.
+Android remains deferred with its code retained in PR 1002.

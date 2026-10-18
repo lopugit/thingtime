@@ -10,7 +10,7 @@ final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
     static let uploadVersion = "1.3.0"
     static let accessVersion = "1.3.1"
     static let stagingVersion = "1.2.0"
-    static let publicationVersion = "1.0.1"
+    static let publicationVersion = "1.2.0"
     static let trashVersion = "1.2.1"
     static let script = WKUserScript(source: "window.thingtimeNativeBridge.fileUploadVersion = '\(uploadVersion)'; window.thingtimeNativeBridge.fileAccessVersion = '\(accessVersion)'; window.thingtimeNativeBridge.fileStagingVersion = '\(stagingVersion)'; window.thingtimeNativeBridge.filePublicationVersion = '\(publicationVersion)'; window.thingtimeNativeBridge.fileTrashVersion = '\(trashVersion)';", injectionTime: .atDocumentStart, forMainFrameOnly: true)
     private let photos = PhotoLibraryReader()
@@ -209,7 +209,7 @@ final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
                 reply: @escaping (String, [String: Any]) -> Void) {
         guard let payload = body["payload"] as? [String: Any], let id = payload["requestId"] as? String, UUID(uuidString: id) != nil,
               let owner = payload["ownerId"] as? String, let action = payload["action"] as? String,
-              ["list", "choose", "remove", "scan", "scan-capture", "scan-page", "scan-discard", "inspect", "read", "upload-part", "upload-file", "conditions", "suspend", "stage-begin", "stage-append", "stage-download", "stage-finish", "write-approve", "publish", "publication-lookup", "trash", "trash-lookup", "trash-expected", "trash-inspect", "trash-restore", "trash-list", "trash-restore-reviewed"].contains(action),
+              ["list", "choose", "remove", "scan", "scan-capture", "scan-page", "scan-discard", "inspect", "read", "upload-part", "upload-file", "conditions", "suspend", "stage-begin", "stage-append", "stage-download", "stage-finish", "write-approve", "write-check", "publish", "publication-lookup", "trash", "trash-lookup", "trash-expected", "trash-inspect", "trash-restore", "trash-list", "trash-restore-reviewed"].contains(action),
               let scope = try? MobileDevicePairing.Scope(ownerId: owner, url: root) else { return }
         if action == "suspend" { if requestId == id { suspend() }; return }
         let base: [String: Any] = ["requestId": id, "ownerId": owner, "origin": scope.origin.absoluteString]
@@ -229,6 +229,7 @@ final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
                 var result: [String: Any] = [:]
                 var inspectedGrant: MobileFolderStore.Grant?
                 var inventoryDevice: String?
+                var checkedApproval: MobileFolderStore.WriteApproval?
                 if action == "conditions" {
                     let battery = UIDevice.current.batteryState
                     let charging: Any = battery == .unknown ? NSNull() : (battery == .charging || battery == .full)
@@ -325,14 +326,22 @@ final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
                             let worker = Task.detached { try trash.list(owner: scope, rootId: rootId, bookmark: grant.bookmark, cursor: cursor) }
                             let page = try await withTaskCancellationHandler(operation: { try await worker.value }, onCancel: { worker.cancel() })
                             result = ["rootId": rootId, "trashPage": try JSONSerialization.jsonObject(with: JSONEncoder().encode(page))]
-                        } else if action == "write-approve" {
+                        } else if action == "write-approve" || action == "write-check" {
                             let approval = try self.decode(payload["approval"], as: MobileFolderStore.WriteApproval.self)
                             try approval.validate(owner: scope)
+                            guard let verifyDevice else { throw MobileFolderStore.Failure.unavailable }
+                            try await verifyDevice(scope, approval.scope.deviceId, check); try check()
                             if try !self.store.isWriteApproved(scope, id: rootId, approval: approval) {
+                                // Resume may reuse exact native consent, never request or save new consent.
+                                guard action == "write-approve" else { throw MobileFolderStore.Failure.unavailable }
                                 guard try await self.approve(grant: grant, allowTrash: approval.allowTrash == true, webView: webView) else { throw MobileFolderStore.Failure.approvalCancelled }
                                 try check(); try await verifyOwner(scope, check); try check()
+                                try await verifyDevice(scope, approval.scope.deviceId, check); try check()
                                 try self.store.approveWrite(scope, grant: grant, approval: approval)
                             }
+                            let worker = Task.detached { try MobileFolderReader.checkAccess(bookmark: grant.bookmark) }
+                            try await withTaskCancellationHandler(operation: { try await worker.value }, onCancel: { worker.cancel() })
+                            inspectedGrant = grant; inventoryDevice = approval.scope.deviceId; checkedApproval = approval
                             result = ["rootId": rootId, "writeApproval": try JSONSerialization.jsonObject(with: JSONEncoder().encode(approval))]
                         } else if ["trash", "trash-lookup", "trash-expected", "trash-inspect", "trash-restore", "trash-list", "trash-restore-reviewed"].contains(action) {
                             let request = try self.decode(payload["trash"], as: MobileSyncTrash.Request.self)
@@ -538,10 +547,14 @@ final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
                 if let inspectedGrant {
                     let current = try self.store.grant(scope, id: inspectedGrant.id)
                     guard current.bookmark == inspectedGrant.bookmark, current.sourceKind == nil else { throw MobileFolderStore.Failure.changed }
+                    if let checkedApproval {
+                        guard try self.store.isWriteApproved(scope, id: inspectedGrant.id, approval: checkedApproval) else { throw MobileFolderStore.Failure.unavailable }
+                    }
                 }
                 result["roots"] = try self.store.list(scope).map { grant -> [String: Any] in
                     var row: [String: Any] = ["id": grant.id, "name": grant.name]
                     if grant.sourceKind == "photos" { row["sourceKind"] = "photos"; row["photoAccess"] = self.photos.access() }
+                    else { row["publicationVersion"] = Self.publicationVersion }
                     return row
                 }
                 reply("mobile-files-result", base.merging(result) { _, new in new })

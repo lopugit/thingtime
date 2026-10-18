@@ -569,3 +569,12 @@ runner lifts the combined path ceiling only with all paged/path/review adapters.
 Run `test:files:mac-paged -- --wide` for the API-provisioned 10,003-path Mac proof,
 plus Apple staging/Trash tests and `nativeInventory.test.ts` for version gates.
 See [wide native destinations](../mobile-file-sync.md#wide-native-destination-checks--2026-10-19).
+
+
+### iOS saved-consent resume prerequisite (2026-10-19)
+
+Native publication 1.2.0 adds non-interactive exact approval checks and per-folder
+publication capability. The bridge verifies paired-device authority, bookmark
+access and final owner/grant/approval state; Photos remains read-only. Shared target
+checks now cover Mac and iOS. The iOS runner is still view-owned, so durable
+app/background execution and installed-device acceptance remain unfinished.

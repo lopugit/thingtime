@@ -3239,3 +3239,16 @@ no-replay, idle Stop, origin mismatch, and individual Builder edit/save/reload.
 The browser uses synthetic native/HTTP grants, so installed Mac Close/Quit,
 reboot and real providers remain open. See the [full checkpoint](../docs/mobile-file-sync.md#automatic-mac-sync-cycles--2026-10-19).
 Android stays deferred; the full sync and backup goal remains incomplete.
+
+
+## iOS non-interactive folder approval — 2026-10-19
+
+Publication 1.2.0 now verifies exact existing consent without prompting or saving
+approval, including paired-device and real bookmark access checks. Owner, device,
+grant and consent are checked again after asynchronous work. Writable roots expose
+their publication capability; Photos stays read-only. Native bridge tests and the
+shared Mac/iOS target suite cover revocation races, missing authority and legacy
+capability refusal. An older native Trash test expectation now matches the existing
+1.2.1 contract. This is a prerequisite for iOS durable execution, which remains
+incomplete; installed/physical-device acceptance is not claimed. See the
+[full checkpoint](../docs/mobile-file-sync.md#ios-saved-folder-approval--2026-10-19).

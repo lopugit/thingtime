@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { approveMobileSyncTarget } from './mobileSyncTarget.client';
-import { parseMobileFolderResult, supportsMobilePublication, supportsNativeWriteApprovalCheck, type FolderRequest, type FolderResult } from './mobileFolders.client';
+import { parseMobileFolderResult, supportsMobilePublication, supportsMobileFolderPublication, supportsNativeWriteApprovalCheck, type FolderRequest, type FolderResult } from './mobileFolders.client';
 import { newFileSyncConfiguration } from './configuration';
 import type { SyncOperation } from './execute';
 const bridge = {
@@ -200,8 +200,8 @@ test('native trash replies require null receipts and restore the reviewed inode 
 });
 
 
-test('resuming with existing consent requires negotiated non-interactive checks and never falls back to a prompt', async () => {
- const capable = { ...bridge, platform: 'macos', filePublicationVersion: '1.2.0' };
+for (const platform of ['macos', 'ios'] as const) test(`${platform}: resuming with existing consent requires negotiated non-interactive checks and never falls back to a prompt`, async () => {
+ const capable = { ...bridge, platform, filePublicationVersion: '1.2.0' };
  for (const version of [undefined, '1.1.99', '2.0.0', '1.02.0', '1.2.bad']) {
   const legacy = { ...capable, filePublicationVersion: version };
   assert.equal(supportsNativeWriteApprovalCheck(legacy), false);
@@ -222,8 +222,8 @@ test('resuming with existing consent requires negotiated non-interactive checks 
  assert.deepEqual(calls.map(c => c.action), ['list', 'write-check']);
 });
 
-test('saved consent is checked before new staging, publication or Trash effects while receipt recovery stays read-only', async () => {
- const capable = { ...bridge, platform: 'macos', filePublicationVersion: '1.2.0', fileTrashVersion: '1.2.1' };
+for (const platform of ['macos', 'ios'] as const) test(`${platform}: saved consent is checked before new staging, publication or Trash effects while receipt recovery stays read-only`, async () => {
+ const capable = { ...bridge, platform, filePublicationVersion: '1.2.0', fileTrashVersion: '1.2.1' };
  const configured = { ...saved, configuration: { ...saved.configuration, propagateDeletes: true } };
  const calls: FolderRequest[] = [];
  let approved = true;
@@ -268,4 +268,16 @@ test('non-interactive approval replies are bound to the exact settings, Trash co
   { configurationRevision: 'changed' }, { configurationHash: 'b'.repeat(64) }, { allowTrash: undefined }
  ]) assert.throws(() => parse(request, { writeApproval: { ...approval, ...patch } }), /approval changed/);
  for (const writeApproval of [null, undefined, false]) assert.throws(() => parse(request, { writeApproval }));
+});
+
+test('iOS publication 1.2 negotiates each folder while photo sources remain read-only', () => {
+ const capable = { ...bridge, platform: 'ios', filePublicationVersion: '1.2.0' };
+ const folder = { id: rootId, name: 'Selected', publicationVersion: '1.2.0' };
+ assert.equal(supportsMobileFolderPublication(folder, capable), true);
+ assert.equal(supportsMobileFolderPublication({ ...folder, publicationVersion: undefined }, capable), false);
+ assert.equal(supportsMobileFolderPublication({ ...folder, sourceKind: 'photos' }, capable), false);
+ // Previously installed iOS builds retain their existing explicit foreground flow.
+ const legacy = { ...capable, filePublicationVersion: '1.0.1' };
+ assert.equal(supportsNativeWriteApprovalCheck(legacy), false);
+ assert.equal(supportsMobileFolderPublication({ ...folder, publicationVersion: undefined }, legacy), true);
 });
