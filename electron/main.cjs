@@ -19,7 +19,11 @@ if (parallelDevMode) {
 const { checkEndpointCompatibility, compatibilityError, probeEndpointCapabilities } = require('./lib/endpoint-compatibility.cjs');
 const { prepareAppLocations } = require('./lib/app-locations.cjs');
 const { DesktopSettingsStore } = require('./lib/desktop-settings.cjs');
-const { LocalRuntime, endpointPartition, attachQuitSignals } = require('./lib/local-runtime.cjs');
+const { LocalRuntime, attachQuitSignals } = require('./lib/local-runtime.cjs');
+const { SessionAuthority, remoteOrigin, contentOrigin } = require('./lib/session-authority.cjs');
+const { ensureWindowVisible } = require('./lib/window-visibility.cjs');
+const { AuthorityTransition } = require('./lib/authority-transition.cjs');
+const authorityTransition = new AuthorityTransition();
 const {
 	cacheInstalledBundle,
 	cacheReleaseArchive,
@@ -68,6 +72,7 @@ let sessionHash = null;
 let aiConnectorsPromise = null;
 let desktopSettings = null;
 let localRuntime = null;
+let sessionAuthority = null;
 let stoppingLocalRuntime = false;
 let localRuntimeClosed = false;
 attachQuitSignals(app);
@@ -245,7 +250,9 @@ async function startNitroServer() {
   loadLocalEnv();
 
   localRuntime.applyEnvironment(process.env);
-  const port = localRuntime.state.enabled ? localRuntime.state.apiPort : (parallelDevMode ? 28640 : 28630);
+  const fallbackOrigin = `http://127.0.0.1:${parallelDevMode ? 28640 : 28630}`;
+  const remoteContentOrigin = sessionAuthority.rendererOrigin(activeApiEndpoint, fallbackOrigin, localRuntime.state.enabled);
+  const port = localRuntime.state.enabled ? localRuntime.state.apiPort : Number(new URL(remoteContentOrigin).port);
   // A database failure must keep the local mode selected and recoverable in
   // Settings. A conflicting API port is fatal before any untrusted page loads.
   const { assertFreePort } = require('./lib/local-runtime.cjs');
@@ -984,6 +991,7 @@ async function reconcileConfiguredNode({ startIfStopped } = {}) {
 async function initializeDesktopSettings() {
  localRuntime = new LocalRuntime({
   userData: app.getPath('userData'), safeStorage, parallelDev: parallelDevMode,
+  bundledMongodPath: path.join(app.isPackaged ? process.resourcesPath : path.join(__dirname, 'dist'), 'database', 'mongodb', 'bin', 'mongod'),
   createMongoClient: (uri, options) => {
    const driver = require(app.isPackaged ? path.join(process.resourcesPath, 'database', 'driver.cjs') : path.join(__dirname, 'dist', 'database', 'driver.cjs'));
    return new driver.MongoClient(uri, options);
@@ -996,6 +1004,8 @@ async function initializeDesktopSettings() {
 	});
 	const settings = await desktopSettings.initialize();
 	activeApiEndpoint = settings.selectedEndpoint.url;
+ sessionAuthority = new SessionAuthority({ userData: app.getPath('userData'), isolated: parallelDevMode });
+ await sessionAuthority.initialize();
 	setApiFallbackEndpoint(settings.selectedEndpoint.url);
 	endpointCompatibility = { checkedAt: new Date().toISOString(), message: 'Checking computers API compatibility…', status: 'checking' };
 	return desktopSettings.snapshot();
@@ -1370,7 +1380,10 @@ function requireDesktopSettings() {
 	return desktopSettings;
 }
 
-async function switchDesktopEndpoint(endpointId, { confirm = true } = {}) {
+async function switchDesktopEndpoint(endpointId, options) {
+ return authorityTransition.run(() => switchDesktopEndpointGuarded(endpointId, options));
+}
+async function switchDesktopEndpointGuarded(endpointId, { confirm = true } = {}) {
  if (localRuntime?.runningEnabled) throw new Error('Turn off the local API in desktop settings and restart before selecting a remote API.');
 	const settings = requireDesktopSettings();
 	const before = settings.snapshot();
@@ -1527,9 +1540,42 @@ function requireLocalRuntimeSender(event) {
  if (!mainWindow || event.sender !== mainWindow.webContents || event.senderFrame !== mainWindow.webContents.mainFrame || new URL(event.senderFrame.url).origin !== appOrigin) throw new Error('Open local runtime settings in the bundled Thingtime interface.');
 }
 async function configureLocalRuntime(event, request) {
+ return authorityTransition.run(() => configureLocalRuntimeGuarded(event, request));
+}
+async function configureLocalRuntimeGuarded(event, request) {
  requireLocalRuntimeSender(event);
  await localRuntime.configure(request);
  return getDesktopInfo();
+}
+async function changeDesktopSession(event, request, legacy) {
+ return authorityTransition.run(() => changeDesktopSessionGuarded(event, request, legacy));
+}
+async function changeDesktopSessionGuarded(event, request, legacy) {
+ requireLocalRuntimeSender(event);
+ const frame = event.senderFrame;
+ const apiOrigin = remoteOrigin(request?.apiOrigin);
+ const previousContent = legacy ? contentOrigin(request?.contentOrigin) : null;
+ const validateAuthority = () => {
+  requireLocalRuntimeSender(event);
+  if (event.senderFrame !== frame || parallelDevMode || stoppingLocalRuntime || localRuntime?.runningEnabled || localRuntime?.state.enabled ||
+   new URL(activeApiEndpoint).origin !== apiOrigin || new URL(requireDesktopSettings().snapshot().selectedEndpoint.url).origin !== apiOrigin)
+   throw new Error('Choose the original remote API and keep this settings page open before recovering its workspace.');
+ };
+ validateAuthority();
+  const result = await dialog.showMessageBox(mainWindow, {
+   type: 'warning', buttons: ['Cancel', legacy ? 'Restore previous workspace' : 'Use current workspace'], defaultId: 0, cancelId: 0,
+   title: 'Choose workspace storage',
+   message: legacy ? `Restore the previous workspace for ${apiOrigin}?` : `Return to the current workspace for ${apiOrigin}?`,
+   detail: legacy ? `Only continue if ${previousContent} was the previous app address for this exact account API. Its cookies, local storage and IndexedDB will be reused in place. The newer workspace remains separate. Other historical app addresses are not merged. Thingtime will restart.` : 'The newer endpoint-specific workspace will be reopened. The previous workspace remains preserved and associated with this API. Thingtime will restart.'
+  });
+  if (result.response !== 1) return getDesktopInfo();
+  const beforeCommit = async () => { validateAuthority(); };
+  if (legacy) await sessionAuthority.recover({ apiOrigin, contentOrigin: previousContent }, beforeCommit);
+  else await sessionAuthority.useCurrent(apiOrigin, beforeCommit);
+  authorityTransition.retainUntilRestart();
+  // Respond before the renderer is torn down; do not clear either session store.
+  setTimeout(() => { void restartDesktopRuntime().catch(showLoadUrlError); }, 150);
+  return getDesktopInfo();
 }
 async function chooseLocalMongod(event) {
  requireLocalRuntimeSender(event);
@@ -1551,6 +1597,7 @@ function getDesktopInfo() {
     currentUrl: mainWindow?.webContents.getURL() || appOrigin,
 		desktopSettings: effectiveDesktopSettings(),
 		localRuntime: localRuntime?.snapshot() || null,
+    sessionStorage: sessionAuthority?.snapshot((localRuntime?.runningEnabled ? appOrigin : activeApiEndpoint), Boolean(localRuntime?.runningEnabled || localRuntime?.state.enabled)) || null,
 		desktopSettingsLastError,
 		endpointCompatibility,
     isPackaged: app.isPackaged,
@@ -1648,7 +1695,7 @@ function createApplicationMenu() {
 
 function rendererPartition() {
  const target = localRuntime?.runningEnabled ? appOrigin : activeApiEndpoint;
- return endpointPartition(target, localRuntime?.runningEnabled ? localRuntime.runningDatabaseIdentity : '');
+ return sessionAuthority.partition(target, { local: Boolean(localRuntime?.runningEnabled), databaseIdentity: localRuntime?.runningEnabled ? localRuntime.runningDatabaseIdentity : '' });
 }
 function createWindow() {
 	if (!appOrigin) throw new Error('The bundled Thingtime interface is not ready yet.');
@@ -1686,9 +1733,7 @@ function createWindow() {
   mainWindow.webContents.on('render-process-gone', () => desktopSpeech.stop());
   mainWindow.on('closed', () => desktopSpeech.stop());
 
-  mainWindow.once('ready-to-show', () => {
-    mainWindow.show();
-  });
+  ensureWindowVisible(mainWindow);
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     if (isAllowedContentUrl(url)) {
@@ -1748,6 +1793,8 @@ ipcMain.handle('thingtime-desktop:get-settings', (event) => {
 ipcMain.handle('thingtime-desktop:add-endpoint', (event, request) => desktopAddEndpoint(event, request));
 ipcMain.handle('thingtime-desktop:remove-endpoint', (event, request) => desktopRemoveEndpoint(event, request));
 ipcMain.handle('thingtime-desktop:configure-local-runtime', configureLocalRuntime);
+ipcMain.handle('thingtime-desktop:recover-session', (event, request) => changeDesktopSession(event, request, true));
+ipcMain.handle('thingtime-desktop:use-current-session', (event, request) => changeDesktopSession(event, request, false));
 ipcMain.handle('thingtime-desktop:choose-local-mongod', chooseLocalMongod);
 ipcMain.handle('thingtime-desktop:restart-runtime', (event) => { requireLocalRuntimeSender(event); mainWindow?.webContents.stop(); restartDesktopRuntime(); });
 ipcMain.handle('thingtime-desktop:select-endpoint', (event, request) => desktopSelectEndpoint(event, request));
@@ -1835,7 +1882,8 @@ if (!singleInstanceLock) {
    await startNitroServer();
    // Each API/database has its own persisted cookie/storage partition. Clear
    // only HTTP cache so new bundles cannot revive stale root-data responses.
-   await session.fromPartition(rendererPartition()).clearCache();
+   const partition = rendererPartition();
+   await (partition ? session.fromPartition(partition) : session.defaultSession).clearCache();
 			createWindow();
       createApplicationMenu();
       void checkSelectedEndpointCompatibility({ syncNode: true }).catch((error) => {
@@ -1850,9 +1898,8 @@ if (!singleInstanceLock) {
 }
 
 app.on('activate', () => {
-  if (BrowserWindow.getAllWindows().length === 0 && appOrigin) {
-		createWindow();
-  }
+  if (BrowserWindow.getAllWindows().length === 0 && appOrigin) createWindow();
+  else if (mainWindow && !mainWindow.isDestroyed()) { mainWindow.show(); mainWindow.focus(); }
 });
 
 app.on('window-all-closed', () => {

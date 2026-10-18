@@ -4,6 +4,7 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const net = require('node:net');
+const os = require('node:os');
 const { spawn } = require('node:child_process');
 const DOWNLOAD_URL = 'https://www.mongodb.com/try/download/community';
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -66,11 +67,13 @@ function validateState(value) {
 	return value;
 }
 class LocalRuntime {
-	constructor({ userData, safeStorage, parallelDev = false, createMongoClient, spawnProcess = spawn }) {
+	constructor({ userData, safeStorage, parallelDev = false, createMongoClient, spawnProcess = spawn, bundledMongodPath = null, platform = process.platform, hostRelease = os.release() }) {
 		if (!path.isAbsolute(userData)) throw new Error('Local runtime requires an absolute app data directory.');
 		this.root = path.join(userData, 'local-runtime');
 		this.file = path.join(this.root, 'settings.enc');
 		this.safeStorage = safeStorage;
+		this.bundledMongodPath = bundledMongodPath;
+		this.bundledMongoSupported = platform !== 'darwin' || Number(hostRelease.split('.')[0]) >= 23;
 		this.createMongoClient = createMongoClient;
 		this.spawnProcess = spawnProcess;
 		this.state = defaultState(parallelDev);
@@ -84,15 +87,24 @@ class LocalRuntime {
 		return this.safeStorage.isEncryptionAvailable() && this.safeStorage.getSelectedStorageBackend?.() !== 'basic_text';
 	}
 	async initialize() {
+		let existingSettings = false;
 		try {
 			const stat = await fs.lstat(this.file);
 			if (!stat.isFile() || stat.isSymbolicLink() || stat.size > 16384) throw new Error('Invalid local runtime settings file.');
 			if (!this.encryptionReady()) throw new Error('Unlock the system credential store to read local runtime settings.');
 			this.state = validateState(JSON.parse(this.safeStorage.decryptString(await fs.readFile(this.file))));
+			existingSettings = true;
 		} catch (error) {
 			if (error.code !== 'ENOENT') throw new Error('Local runtime settings could not be unlocked. No remote fallback was enabled.');
 		}
-		if (!this.state.mongodPath) this.state.mongodPath = await discoverMongod();
+		if (!this.state.mongodPath) {
+			// Only fresh installations adopt the bundled version automatically. Existing
+			// installations keep their chosen executable and database compatibility.
+			let existingDatabase = false;
+			try { await fs.access(path.join(this.root, 'database', 'WiredTiger')); existingDatabase = true; } catch (error) { if (error.code !== 'ENOENT') throw error; }
+			this.state.mongodPath = !existingSettings && !existingDatabase && await executable(this.bundledMongodPath)
+				? this.bundledMongodPath : await discoverMongod();
+		}
 		return this.snapshot();
 	}
 	snapshot() {
@@ -104,12 +116,18 @@ class LocalRuntime {
 			apiPort: this.state.apiPort,
 			databasePort: this.state.databasePort,
 			mongodPath: this.state.mongodPath,
+			bundledMongoSelected: Boolean(this.bundledMongodPath && this.state.mongodPath === this.bundledMongodPath),
+			bundledMongoSupported: this.bundledMongoSupported,
 			externalDatabaseConfigured: Boolean(this.state.mongoUri),
 			encryptionAvailable: this.encryptionReady(),
 			origin: `http://127.0.0.1:${this.state.apiPort}`,
 			error: this.error,
 			downloadUrl: DOWNLOAD_URL
 		};
+	}
+	assertManagedBinarySupported(state = this.state) {
+		if (state.mongodPath === this.bundledMongodPath && this.bundledMongodPath && !this.bundledMongoSupported)
+			throw new Error('The included MongoDB requires macOS 14 or later. Upgrade macOS, choose a compatible MongoDB executable, or use an existing MongoDB connection.');
 	}
 	async persist(state) {
 		if (!this.encryptionReady()) throw new Error('Unlock the system credential store before configuring the local runtime.');
@@ -135,8 +153,9 @@ class LocalRuntime {
 				...(request.mongoUri ? { mongoUri: validateMongoUri(request.mongoUri) } : {})
 			});
 			if (state.enabled && state.databaseMode === 'external' && !state.mongoUri) throw new Error('Enter the MongoDB URI for this local API.');
+			if (state.enabled && state.databaseMode === 'managed') this.assertManagedBinarySupported(state);
 			if (state.enabled && state.databaseMode === 'managed' && !(await executable(state.mongodPath)))
-				throw new Error('Install MongoDB Community Server and choose its mongod executable first.');
+				throw new Error('MongoDB is unavailable in this build. Choose a MongoDB Community Server executable or use an existing MongoDB connection.');
 			// A replica-set member address is persisted in MongoDB. Changing its port
 			// needs an explicit database migration rather than silently creating a new DB.
 			if (state.databasePort !== this.state.databasePort) {
@@ -207,6 +226,7 @@ class LocalRuntime {
 		await this.persist(this.state);
 		await assertFreePort(this.state.apiPort);
 		if (this.state.databaseMode === 'external') return;
+		this.assertManagedBinarySupported();
 		if (!(await executable(this.state.mongodPath)))
 			throw new Error('The selected mongod executable is unavailable. Choose it again in desktop settings.');
 		await assertFreePort(this.state.databasePort);

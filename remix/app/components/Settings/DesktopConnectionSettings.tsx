@@ -1,3 +1,4 @@
+import { DesktopSessionSettings } from './DesktopSessionSettings';
 import React from 'react';
 import { Box, Button, Flex, Input, Link, Select, Switch, Text } from '@chakra-ui/react';
 import { getElectronBridge, type ThingtimeDesktopInfo, type ThingtimeDesktopSettings } from '~/utils/electronBridge';
@@ -169,6 +170,7 @@ export function DesktopConnectionSettings({ desktopInfo, onInfo }: {
 
  return (
 					<Flex flexDirection="column" rowGap={2} minW={0} sx={{ '&, & *': { boxSizing: 'border-box' } }}>
+                        <DesktopSessionSettings desktopInfo={desktopInfo} onInfo={onInfo} />
 						{runtime && (
 							<Box border="1px solid var(--tt-border, #ececef)" borderRadius="10px" p={3} mb={3} minW={0}>
 								<Text fontWeight={600} fontSize="sm">
@@ -211,7 +213,7 @@ export function DesktopConnectionSettings({ desktopInfo, onInfo }: {
 										{databaseMode === 'managed' ? (
 											<>
 												<Text fontSize="xs" mt={2} overflowWrap="anywhere">
-													{runtime.mongodPath || 'MongoDB Server was not found.'}
+													{runtime.bundledMongoSelected ? 'MongoDB Community Server · Included with Thingtime' : runtime.mongodPath || 'MongoDB Server was not found.'}
 												</Text>
 												<Flex flexWrap="wrap" gap={2} mt={2}>
 													<Button size="sm" isDisabled={electronSettingsLoading} onClick={() => void chooseMongod()}>
@@ -228,7 +230,7 @@ export function DesktopConnectionSettings({ desktopInfo, onInfo }: {
 													</Link>
 												</Flex>
 												<Text fontSize="xs" mt={2}>
-													Install or extract MongoDB Community Server, then choose its mongod executable. Thingtime manages an authenticated database
+													Thingtime includes MongoDB Community Server for a new local setup. You can also choose an existing mongod executable. Thingtime manages an authenticated database
 													in its own app data folder while the app runs. No system service is installed.
 												</Text>
 											</>
@@ -287,6 +289,7 @@ export function DesktopConnectionSettings({ desktopInfo, onInfo }: {
 										</Flex>
 									</>
 								)}
+								{runtime.bundledMongoSelected && runtime.bundledMongoSupported === false && <Text role="alert" fontSize="xs" mt={2}>The included MongoDB requires macOS 14 or later. Choose a compatible executable or an existing MongoDB connection on this Mac.</Text>}
 								{!runtime.encryptionAvailable && (
 									<Text role="alert" fontSize="xs" mt={2}>
 										Unlock the system credential store to save local runtime settings.

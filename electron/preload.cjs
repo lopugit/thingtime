@@ -30,6 +30,8 @@ contextBridge.exposeInMainWorld('thingtimeDesktop', {
 	configureLocalRuntime: (request) => ipcRenderer.invoke('thingtime-desktop:configure-local-runtime', request),
 	chooseLocalMongod: () => ipcRenderer.invoke('thingtime-desktop:choose-local-mongod'),
 	restartRuntime: () => ipcRenderer.invoke('thingtime-desktop:restart-runtime'),
+	recoverDesktopSession: request => ipcRenderer.invoke('thingtime-desktop:recover-session', request),
+	useCurrentDesktopSession: request => ipcRenderer.invoke('thingtime-desktop:use-current-session', request),
 	getDesktopSettings: () => ipcRenderer.invoke('thingtime-desktop:get-settings'),
 	addEndpoint: (request) => ipcRenderer.invoke('thingtime-desktop:add-endpoint', request),
 	removeEndpoint: (request) => ipcRenderer.invoke('thingtime-desktop:remove-endpoint', request),

@@ -102,7 +102,7 @@ try {
 
 const appPath = await builtAppPath();
 if (!appPath) throw new Error('electron-builder did not produce an unpacked Thingtime.app.');
-run(process.execPath, [path.join(electronDir, 'scripts', 'verify-signed-app.mjs'), '--mode', 'local', appPath], {
+run(process.execPath, [path.join(electronDir, 'scripts', 'verify-signed-app.mjs'), '--require-bundled-mongo', '--mode', 'local', appPath], {
 	env: signingEnvironment
 });
 console.log(`Signed local app built at ${appPath}`);

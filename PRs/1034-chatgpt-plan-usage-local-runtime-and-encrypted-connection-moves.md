@@ -32,3 +32,12 @@ The final documentation semantic-index refresh returned incomplete output and wa
 - https://developers.openai.com/siwc/token-sharing-open-source
 - https://developers.openai.com/siwc/token-sharing-open-source/self-hosted-vms
 - https://developers.openai.com/siwc/token-sharing-open-source/profiles-and-sessions
+
+
+## 2026-10-18 bundled database and session continuity
+
+macOS packaging now includes checksum-pinned MongoDB Community 8.0.34, upstream source, SSPL license and notices. Fresh profiles select the included server; existing database executable choices and data stay intact. It remains an opt-in loopback child process, not a system daemon, and requires macOS14 for this bundled version. New builds require and execute-check it after signature verification; old-release recovery and macOS13 updates validate present signed resources without executing the optional database or enforcing the new pin.
+
+Explicit legacy session recovery binds the verified original API and exact historical loopback content origin, reopens the whole defaultSession in place, and preserves the newer partition independently. One shared transition guard prevents backend/configuration changes racing recovery. A bounded window visibility fallback handles renderer failure/slow first paint. Responsive recovery controls passed 1280/375 viewport checks with full scrolling, cancellation, errors, recovery/switch-back and disabled states. Real Electron storage continuity in a nested network sandbox was blocked by Chromium sandbox initialization, so this is not claimed as installed user-session acceptance.
+
+The signed combined699e02e build started its local API and authenticated MongoDB successfully, but its window remained hidden after restart. The fixes above are pending the next installed acceptance. Real ChatGPT consent/model discovery/inference remains unverified; PR1034 is not merged. IntegrationPR1035 also includes the scoped Linux native runtime repair from268858367 (separate browserPR1033), preserving the final combined installation.

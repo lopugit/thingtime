@@ -35,6 +35,8 @@ export type ThingtimeLocalRuntime = {
 	apiPort: number;
 	databasePort: number;
 	mongodPath: string | null;
+	bundledMongoSelected?: boolean;
+	bundledMongoSupported?: boolean;
 	externalDatabaseConfigured: boolean;
 	encryptionAvailable: boolean;
 	origin: string;
@@ -43,6 +45,13 @@ export type ThingtimeLocalRuntime = {
 };
 
 export type ThingtimeDesktopInfo = {
+ sessionStorage?: {
+  mode: 'partitioned' | 'legacy';
+  legacyApiOrigin: string | null;
+  legacyContentOrigin: string | null;
+  recoveryAvailable: boolean;
+  restartRequired?: boolean;
+ };
 	localRuntime?: ThingtimeLocalRuntime | null;
 	appVersion?: string;
 	buildIdentity?: { gitBranch?: string | null; gitCommit?: string | null };
@@ -308,6 +317,8 @@ export type ThingtimeDesktopBridge = {
 	}) => Promise<ThingtimeDesktopInfo>;
 	chooseLocalMongod?: () => Promise<ThingtimeDesktopInfo>;
 	restartRuntime?: () => Promise<void>;
+ recoverDesktopSession?: (request: { apiOrigin: string; contentOrigin: string }) => Promise<ThingtimeDesktopInfo>;
+ useCurrentDesktopSession?: (request: { apiOrigin: string }) => Promise<ThingtimeDesktopInfo>;
 	getDesktopSettings?: () => Promise<ThingtimeDesktopSettings>;
 	addEndpoint?: (request: { label: string; url: string }) => Promise<ThingtimeDesktopSettings>;
 	removeEndpoint?: (request: { endpointId: string }) => Promise<ThingtimeDesktopSettings>;

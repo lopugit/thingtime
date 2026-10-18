@@ -10248,3 +10248,11 @@ separate from deterministic discovery/lease tests.
 - Check long source account names, receiving origins, executable paths and all transfer/setup errors at desktop and 375px. The optional MongoDB download link must not install system packages or services automatically.
 - On a fresh Electron profile with the selected API unreachable, open the recovery screen’s desktop connection controls, enable managed local MongoDB, save and restart. Verify a real local homepage and compatible manifest without signing into the cloud; changing a broken remote endpoint must also be possible from recovery.
 - Refuse an encrypted connection move that exceeds the transfer transport envelope before cancelling reconnects, aborting inference or deleting source credentials; verify the original connection remains usable.
+
+
+### Bundled desktop MongoDB
+
+- [ ] On a fresh macOS 14+ profile without Homebrew MongoDB, enable the local API and start the included server. Verify authenticated loopback-only MongoDB and a successful API write/read, then restart and confirm the record persists.
+- [ ] Reinstall the signed app and verify local data, encrypted runtime settings and selected session survive; quit and confirm only this app-owned MongoDB child stops.
+- [ ] Existing executable selections remain selected. On macOS 13, the included server gives an actionable compatibility message while remote API mode works.
+- [ ] Corrupt cached download, missing bundled binary/source/license, wrong release and unsupported architecture fail packaging verification.

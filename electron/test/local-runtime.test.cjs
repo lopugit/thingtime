@@ -160,3 +160,49 @@ test('development cleanup terminates a stubborn owned process group before retur
 		}
 	}
 });
+
+test('fresh local setup prefers bundled MongoDB while saved executable and database are preserved', () =>
+ fixture(async (_runtime, root) => {
+  const bundled = path.join(root, 'bundled', 'mongod');
+  const selected = path.join(root, 'existing', 'mongod');
+  for (const file of [bundled, selected]) { await fs.mkdir(path.dirname(file), { recursive: true }); await fs.writeFile(file, '#!/bin/sh\nexit 0\n', { mode: 0o700 }); }
+  const fresh = new LocalRuntime({ userData: root, safeStorage: storage, bundledMongodPath: bundled });
+  await fresh.initialize();
+  assert.equal(fresh.snapshot().mongodPath, bundled);
+  assert.equal(fresh.snapshot().bundledMongoSelected, true);
+  await fresh.chooseMongod(selected);
+  await fs.mkdir(path.join(fresh.root, 'database'), { recursive: true });
+  await fs.writeFile(path.join(fresh.root, 'database', 'WiredTiger'), 'existing database');
+  const reopened = new LocalRuntime({ userData: root, safeStorage: storage, bundledMongodPath: bundled });
+  await reopened.initialize();
+  assert.equal(reopened.snapshot().mongodPath, selected);
+  assert.equal(reopened.snapshot().bundledMongoSelected, false);
+  assert.equal(await fs.readFile(path.join(fresh.root, 'database', 'WiredTiger'), 'utf8'), 'existing database');
+ }));
+
+test('bundled MongoDB cannot silently adopt a database whose executable selection is missing', () =>
+ fixture(async (runtime, root) => {
+  const bundled = path.join(root, 'mongod');
+  await fs.writeFile(bundled, '#!/bin/sh\nexit 0\n', { mode: 0o700 });
+  await fs.mkdir(path.join(runtime.root, 'database'), { recursive: true });
+  await fs.writeFile(path.join(runtime.root, 'database', 'WiredTiger'), 'existing database');
+  const reopened = new LocalRuntime({ userData: root, safeStorage: storage, bundledMongodPath: bundled });
+  await reopened.initialize();
+  assert.notEqual(reopened.snapshot().mongodPath, bundled);
+ }));
+
+test('macOS 13 remote mode remains available while bundled local MongoDB requires macOS 14', () =>
+ fixture(async (_runtime, root) => {
+  const bundled = path.join(root, 'mongod');
+  await fs.writeFile(bundled, '#!/bin/sh\nexit 0\n', { mode: 0o700 });
+  const runtime = new LocalRuntime({ userData: root, safeStorage: storage, bundledMongodPath: bundled, platform: 'darwin', hostRelease: '22.6.0' });
+  await runtime.initialize();
+  assert.equal(runtime.snapshot().enabled, false);
+  assert.equal(runtime.snapshot().bundledMongoSupported, false);
+  await runtime.start();
+  await assert.rejects(runtime.configure({ enabled: true, databaseMode: 'managed' }), /macOS 14/);
+  assert.equal(runtime.snapshot().enabled, false);
+  await runtime.configure({ enabled: true, databaseMode: 'external', mongoUri: 'mongodb://fixture.test/thingtime' });
+  assert.equal(runtime.snapshot().enabled, true);
+  assert.equal(new LocalRuntime({ userData: root, safeStorage: storage, bundledMongodPath: bundled, platform: 'darwin', hostRelease: '23.0.0' }).bundledMongoSupported, true);
+ }));
