@@ -84,3 +84,12 @@ test('desktop updater exposes a signed release catalog, cache recovery, and trus
 	assert.match(mainSource, /action, cacheRoot: updateCacheRoot\(\), format: 1/u);
 	assert.match(mainSource, /requireTrustedAiBridgeEvent\(event\);\n  return installCachedRelease/u);
 });
+
+test('agent claims use the selected API origin even when the bundled window origin stays fixed', async () => {
+  const mainSource = await readFile(path.join(electronDir, 'main.cjs'), 'utf8');
+  const routeSource = await readFile(path.join(repoRoot, 'remix/app/routes/agent-browsers.tsx'), 'utf8');
+  assert.match(mainSource, /apiOrigin:.*desktopSettings\?\.snapshot\(\)\.selectedEndpoint\.url/u);
+  assert.match(routeSource, /setApiOrigin\(new URL\(info\.apiOrigin\)\.origin\)/u);
+  assert.match(routeSource, /JSON\.stringify\(\[apiOrigin, plane, ownerId, taskId\]\)/u);
+  assert.doesNotMatch(routeSource, /JSON\.stringify\(\[location\.origin/u);
+});
