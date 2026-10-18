@@ -151,3 +151,29 @@ test('account change after a committed page stops further advancement and resume
 	await assert.rejects(f.checkpoints.build(spec, () => f.changeAccount()), /account or root changed/);
 	f.journal.close(); f = await fixture(f.factory); const result = await f.checkpoints.build(spec); assert.equal(result.entries, 150); f.journal.close();
 });
+
+test('restarting interrupted observations preserves other consumers and cannot reset a building checkpoint', async () => {
+	const f = await fixture(), run = runSpec(), spec = checkpointSpec(run); await seed(f, run, [file('a')]);
+	const after = await finish(f, run, [file('a')], []), draft = await scanAfter(f, spec, after);
+	const other = { ...run.plan, id: 'reader-plan', local: draft.after.local, remote: draft.after.remote };
+	// Keep the second reader active: completed plans release their input pins.
+	await f.plans.begin(other);
+	await assert.rejects(f.checkpoints.restartCollection(spec), /in use by another plan/);
+	assert.deepEqual(await f.checkpoints.begin(spec), draft); assert.deepEqual(await all(f, draft.after.local), after.local);
+	await f.plans.discard(other);
+	const reset = await f.checkpoints.restartCollection(spec);
+	assert.notEqual(reset.after.local.id, draft.after.local.id); assert.notEqual(reset.after.remote.id, draft.after.remote.id);
+	await assert.rejects(f.inventory.read(draft.after.local), /unavailable/);
+	await scanAfter(f, spec, after); await f.checkpoints.step(spec);
+	await assert.rejects(f.checkpoints.restartCollection(spec), /already sealed/); await f.checkpoints.build(spec); f.journal.close();
+});
+
+test('an approved root change clears only the old baseline head and refuses an active transfer', async () => {
+	const f = await fixture(), run = runSpec(), spec = checkpointSpec(run); await seed(f, run, [file('a')]);
+	await assert.rejects(f.checkpoints.changeRoots('new-local', spec.remoteFolderId), /active sync run/);
+	const after = await finish(f, run, [file('a')], []); await scanAfter(f, spec, after); await f.checkpoints.build(spec);
+	const old = await f.checkpoints.current(); await f.checkpoints.changeRoots(spec.localRootId, spec.remoteFolderId);
+	assert.deepEqual(await f.checkpoints.current(), old);
+	await f.checkpoints.changeRoots('new-local', spec.remoteFolderId); assert.equal(await f.checkpoints.current(), null);
+	assert.equal((await f.inventory.read(old!.baseline.local)).totalEntries, 1); f.journal.close();
+});

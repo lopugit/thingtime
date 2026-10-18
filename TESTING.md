@@ -11474,3 +11474,16 @@ resume unfinished Android gates only when requested.
 - [x] Execute 270 generated downloads through the shared cloud transport. Reopen after 129 accepted publications/128 confirmations; require exactly 141 remaining effects, original attachment bindings and independent target receipt readback.
 - [x] Repeat preparation/transfer recovery with two full isolated Chromium process restarts. Retain `cloud-bindings-evidence-2026-10-18` beside the HTML tracker; generated adapters do not count as installed-device acceptance.
 - [ ] Connect stable paged producers and foreground/worker orchestration, then repeat real installed Mac/iOS transfers, permission and provider checks before lifting the live scan cap. Android remains deferred.
+
+
+## Mac/iOS foreground paged recovery (2026-10-18)
+
+- [x] Recover a 135-file foreground run after the 129th accepted effect loses its reply. Preserve original operation IDs, reject changed network conditions, publish an exact complete baseline and make the next run a no-op.
+- [x] Interrupt post-run import after its first page. Reopen with fresh observation generations; do not repeat file publication. Keep another active plan's input captures pinned, and refuse replacing already sealed checkpoint inputs.
+- [x] Finish uncertain legacy work with its existing IDs before migration; reject settings changes while the paged run is pending.
+- [x] Persist review pages with exact retry order/digests/counts. Missing, extra or changed conflict versions keep all prepared operations unexecutable. Reopen fully stored review without another popup; require fresh choices after incomplete import.
+- [x] Lose a retained-version reply, remove the local source, and resume from its accepted receipt. Repeated Ignore must upload nothing extra and must not advance the baseline. A later selected winner must still synchronize.
+- [x] Isolated Chromium at 1440×1000 and 390×844: actual Mac/iOS connection component, open two conflicts, select/reset a winner, Ignore, rendered completion, reload and repeat Ignore. Compare two retained receipts, unchanged cloud revision, zero repeat upload parts and no active run with independent fixture readback. Scroll every affected view top to bottom; inspect the popup and status row for overflow.
+- [x] Retain trace/screenshots/source in `paged-foreground-evidence-2026-10-18` beside the HTML plan. Verify browser/backend OS boundary against hostname, direct-IP, alternate-port and redirect probes, then remove task-owned temporary resources.
+- [ ] Repeat real upload/download/two-way, permission loss, network interruption and provider acceptance in the intended installed Mac/iOS apps. Generated adapters and isolated browser fixtures do not complete this gate.
+- [ ] Complete stable paged producers, worker/relaunch integration and scoped orphan/retention cleanup before lifting the live 10,000-path bound. Android remains deferred.

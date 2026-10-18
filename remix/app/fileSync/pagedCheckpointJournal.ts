@@ -14,7 +14,7 @@ export type PagedCheckpointProgress = { phase: 'collecting' | 'building' | 'seal
 type Header = PagedCheckpointProgress & { spec: PagedCheckpointSpec; scope: string; instance: string; runInstance: string;
 	after: Pair; baseline: Pair; instances: string[]; previous: string | null; positions: Position[]; totals: number[]; revision: number };
 export type PagedCheckpointState = PagedCheckpointProgress & { after: Pair; baseline: Pair };
-const stores = [PAGED_CHECKPOINT_DRAFTS, PAGED_CHECKPOINT_HEADS, PAGED_RUN_HEADS, ...PAGED_RUN_STORES, PLAN_STORES[0], PLAN_PIN_STORE, INVENTORY_STORES[0], INVENTORY_PIN_STORE];
+const stores = [PAGED_CHECKPOINT_DRAFTS, PAGED_CHECKPOINT_HEADS, PAGED_RUN_HEADS, ...PAGED_RUN_STORES, PLAN_STORES[0], PLAN_PIN_STORE, ...INVENTORY_STORES, INVENTORY_PIN_STORE];
 const identifier = (v: unknown): v is string => typeof v === 'string' && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(v);
 const nonnegative = (v: number) => Number.isSafeInteger(v) && v >= 0;
 const original = (s: PagedCheckpointSpec) => [s.run.plan.local, s.run.plan.remote, s.run.plan.baseline.local, s.run.plan.baseline.remote];
@@ -22,7 +22,9 @@ const owned = (h: Header) => [h.after.local, h.after.remote, h.baseline.local, h
 const state = (h: Header): PagedCheckpointState => structuredClone({ phase: h.phase, paths: h.paths, entries: h.entries, pages: h.pages, after: h.after, baseline: h.baseline });
 const specification = (s: PagedCheckpointSpec): PagedCheckpointSpec => {
 	if (!s || !identifier(s.localRootId) || !identifier(s.remoteFolderId)) throw Error('Invalid checkpoint roots.');
-	return { run: parsePagedRunSpec(s.run), localRootId: s.localRootId, remoteFolderId: s.remoteFolderId };
+	const run = parsePagedRunSpec(s.run);
+	if (run.review?.kind === 'retain') throw Error('Conflict retention cannot advance the sync baseline.');
+	return { run, localRootId: s.localRootId, remoteFolderId: s.remoteFolderId };
 };
 
 export function upgradePagedCheckpointJournal(db: IDBDatabase) {
@@ -33,7 +35,7 @@ export function upgradePagedCheckpointJournal(db: IDBDatabase) {
  * confirmed effects. Only sealed, validated output is published. This journal
  * holds observations and receipts; it never writes files or grants authority. */
 export function pagedCheckpointJournal(db: IDBDatabase, access: JournalAccess, keyRange?: typeof IDBKeyRange) {
-	const { scope, key, check, transaction } = journalScope(db, access, keyRange);
+	const { scope, key, check, transaction, range } = journalScope(db, access, keyRange);
 	const inventory = inventoryJournal(db, access, keyRange), runs = pagedRunJournal(db, access, keyRange);
 	const headValue = (h: Header): PagedCheckpointHead => ({ version: 1, scope: key, instance: h.instance, runId: h.spec.run.id,
 		localRootId: h.spec.localRootId, remoteFolderId: h.spec.remoteFolderId, baseline: h.baseline });
@@ -197,6 +199,55 @@ export function pagedCheckpointJournal(db: IDBDatabase, access: JournalAccess, k
 	};
 	return {
 		begin, step,
+		/** A foreground rescan is a new observation generation. If a previous
+		 * process stopped during import, replace both partial scans atomically;
+		 * never append fresh observations to an older partial capture. */
+		async restartCollection(value: PagedCheckpointSpec): Promise<PagedCheckpointState> {
+			const spec = specification(value);
+			return withHeader(spec, 'readwrite', (h, tx, done, fail) => {
+				if (h.phase !== 'collecting') throw Error('Checkpoint observations are already sealed for building.');
+				let pending = 2;
+				[h.after.local, h.after.remote].forEach(old => {
+					const count = tx.objectStore(INVENTORY_PIN_STORE).count(range(old.id));
+					count.onsuccess = () => { try {
+						check(); if (count.result !== 1) throw Error('Post-run observations are in use by another plan.');
+						if (--pending) return;
+
+						const captures = [h.after.local, h.after.remote].map(old => {
+							const next = newInventoryHeader({ id: crypto.randomUUID(), generation: crypto.randomUUID(), source: old.source }, key);
+							tx.objectStore(INVENTORY_STORES[0]).delete([key, old.id]);
+							for (const store of INVENTORY_STORES.slice(1)) tx.objectStore(store).delete(range(old.id));
+							tx.objectStore(INVENTORY_PIN_STORE).delete([key, old.id, spec.run.id, 'checkpoint']);
+							tx.objectStore(INVENTORY_STORES[0]).add(next, [key, next.id]);
+							tx.objectStore(INVENTORY_PIN_STORE).add(true, [key, next.id, spec.run.id, 'checkpoint']);
+							return next;
+						});
+						h.after = { local: inventoryIdentity(captures[0]), remote: inventoryIdentity(captures[1]) };
+						h.instances.splice(0, 2, ...captures.map(c => c.instance!)); h.revision++;
+						save(h, tx); done(state(h));
+					} catch (e) { fail(e); } };
+				});
+			});
+		},
+		/** Changing the explicitly approved roots starts without common history.
+		 * An unfinished run must first finish with its original roots/settings. */
+		async changeRoots(localRootId: string, remoteFolderId: string): Promise<void> {
+			if (!identifier(localRootId) || !identifier(remoteFolderId)) throw Error('Invalid checkpoint roots.');
+			return transaction(stores, 'readwrite', (tx, done, fail) => get<string | undefined>(tx, PAGED_RUN_HEADS, key, active => {
+				if (active !== undefined) throw Error('Finish the active sync run before changing roots.');
+				get<PagedCheckpointHead | undefined>(tx, PAGED_CHECKPOINT_HEADS, key, previous => {
+					if (previous) {
+						validatePagedCheckpointHead(previous, key);
+						if (previous.localRootId !== localRootId || previous.remoteFolderId !== remoteFolderId) {
+							for (const capture of [previous.baseline.local, previous.baseline.remote])
+								tx.objectStore(INVENTORY_PIN_STORE).delete([key, capture.id, previous.instance, 'baseline']);
+							tx.objectStore(PAGED_CHECKPOINT_HEADS).delete(key);
+						}
+					}
+					done(undefined);
+				}, fail);
+			}, fail));
+		},
 		async build(value: PagedCheckpointSpec, changed?: (progress: PagedCheckpointState) => void): Promise<PagedCheckpointState> {
 			const spec = specification(value); let result = await begin(spec);
 			while (result.phase !== 'published') { result = await step(spec); changed?.(result); }

@@ -176,7 +176,7 @@ export async function createPagedCloudSyncPort(spec: PagedRunSpec,
 	const saved = structuredClone(configuration), run = structuredClone(spec);
 	if (input.cloudRootId && input.cloudRootId !== saved.remoteFolderId) throw Error('Saved cloud roots disagree.');
 	if ((await journal.beginCloud(run, saved)).phase !== 'ready') throw Error('Complete cloud bindings before executing.');
-	return createBoundCloudSyncPort(journal.scope, 1, {
+	return createBoundCloudSyncPort(journal.scope, run.review?.kind === 'retain' ? 2 : 1, {
 		byId: id => journal.cloudBinding(run, saved, { id }),
 		byPath: path => journal.cloudBinding(run, saved, { path })
 	}, { ...input, cloudRootId: saved.remoteFolderId }, runtime);

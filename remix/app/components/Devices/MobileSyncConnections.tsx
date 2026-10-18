@@ -27,6 +27,7 @@ import { openSyncJournal, withSyncRootLock, syncScopeKey } from '~/fileSync/jour
 import { readCloudFolderInventory } from '~/fileSync/cloudInventory.client';
 import { approveMobileSyncTarget } from '~/fileSync/mobileSyncTarget.client';
 import { runForegroundCloudSync, type ForegroundSyncProgress } from '~/fileSync/foregroundSync';
+import { runPagedForegroundCloudSync } from '~/fileSync/pagedForegroundSync';
 import { requireThingtimeCapability } from '~/api/utils/capabilities/requireCapability.client';
 import { requestMobileDevice } from './mobileDeviceBridge';
 import { newFileSyncConfiguration, type FileSyncConfiguration } from '~/fileSync/configuration';
@@ -302,7 +303,8 @@ function Connections({
 							? await approveMobileSyncTarget(saved, syncScope, active.signal, requestFolders, capabilities)
 							: undefined;
 						assertActive();
-						await runForegroundCloudSync(
+						const runSync = host || getNativeBridge()?.platform === 'ios' ? runPagedForegroundCloudSync : runForegroundCloudSync;
+						await runSync(
 							saved,
 							syncScope,
 							{
@@ -540,7 +542,7 @@ function Connections({
 					roots.some((root) => root.id === saved.configuration.localRootId);
 				return (
 					<Flex key={saved.id} marginTop={3} align="center" gap={2} wrap="wrap">
-						<Box flex={1} minWidth={0} overflowWrap="anywhere">
+						<Box flex={{ base: '1 1 100%', sm: 1 }} minWidth={0} overflowWrap="anywhere">
 							<Text fontSize="13px" fontWeight={600}>
 								{saved.configuration.name}
 							</Text>

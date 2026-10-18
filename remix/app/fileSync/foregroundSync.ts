@@ -1,17 +1,18 @@
+import { foregroundSyncContext } from './foregroundSyncContext';
 import { localTrashContexts } from './localTrash';
 import type { LocalSyncTarget } from './localSyncTarget';
 import { planConflictRetention, resolveFileSyncConflicts, type SyncConflict, type SyncConflictReviewResult } from './conflictResolution';
 import { parseFileSyncConfiguration } from './configuration';
-import { planConfiguredFileSync, readOwnedFileSyncConfiguration, type SavedFileSyncConfiguration, type SyncConditions } from './configuredPlan';
+import { planConfiguredFileSync, type SavedFileSyncConfiguration, type SyncConditions } from './configuredPlan';
 import { createSyncRun, executeSyncRun, executeRetentionRun, type SyncRun } from './execute';
 import { advanceSyncBaseline, validateSyncCheckpoint } from './checkpoint';
 import { parseCloudSyncRun, prepareCloudInventoryRun, isCloudFolderWrite, type CloudSyncRun } from './cloudWrite';
-import { inventorySyncEntry, parseCloudInventory, type CloudInventory } from './cloudInventory';
+import { type CloudInventory } from './cloudInventory';
 import { createCloudSyncPort } from './cloudSyncPort.client';
 import { createCloudFileTransport, createCloudFolderTransport, type CloudTransportRuntime } from './cloudTransport';
 import type { FingerprintSource } from './contentFingerprint';
 import type { openSyncJournal } from './journal.client';
-import { sameSyncScope, type SyncEntry, type SyncScope, type SyncBaseline } from './reconcile';
+import { type SyncEntry, type SyncScope, type SyncBaseline } from './reconcile';
 
 export type ForegroundSyncProgress = {
 	stage: 'checking' | 'scanning' | 'reviewing' | 'transferring' | 'verifying' | 'complete' | 'retaining' | 'retained';
@@ -21,69 +22,31 @@ export type ForegroundSyncProgress = {
 	bytes?: number;
 	size?: number;
 };
+export type ForegroundSyncInput = {
+	currentScope(): SyncScope;
+	readConfiguration(): Promise<unknown>;
+	authorizeDevice(): Promise<void>;
+	conditions(): Promise<SyncConditions>;
+	scanLocal(): Promise<SyncEntry[]>;
+	inventory(): Promise<CloudInventory>;
+	source(entry: SyncEntry): Promise<FingerprintSource>;
+	localTarget?: LocalSyncTarget;
+	journal: Awaited<ReturnType<typeof openSyncJournal>>;
+	runtime: CloudTransportRuntime;
+	progress(value: ForegroundSyncProgress): void;
+	reviewConflicts?(conflicts: SyncConflict[]): Promise<SyncConflictReviewResult>;
+};
+
 type ConfiguredRun = CloudSyncRun & { configuration: ReturnType<typeof parseFileSyncConfiguration>; startingBaseline: SyncBaseline };
 /** One explicitly requested foreground run. The caller owns a root lock for
  * this whole lifecycle; this never launches work merely because a Thing exists. */
 export async function runForegroundCloudSync(
 	reviewed: SavedFileSyncConfiguration,
 	scope: SyncScope,
-	input: {
-		currentScope(): SyncScope;
-		readConfiguration(): Promise<unknown>;
-		authorizeDevice(): Promise<void>;
-		conditions(): Promise<SyncConditions>;
-		scanLocal(): Promise<SyncEntry[]>;
-		inventory(): Promise<CloudInventory>;
-		source(entry: SyncEntry): Promise<FingerprintSource>;
-		localTarget?: LocalSyncTarget;
-		journal: Awaited<ReturnType<typeof openSyncJournal>>;
-		runtime: CloudTransportRuntime;
-		progress(value: ForegroundSyncProgress): void;
-		reviewConflicts?(conflicts: SyncConflict[]): Promise<SyncConflictReviewResult>;
-	},
+	input: ForegroundSyncInput,
 	signal: AbortSignal
 ) {
-	const configuration = parseFileSyncConfiguration(reviewed.configuration);
-	if (
-		['download', 'two-way'].includes(configuration.mode) &&
-		(!input.localTarget || (configuration.propagateDeletes && (!input.localTarget.trash || !input.localTarget.trashExpected)))
-	)
-		throw Error('Downloads and two-way sync require native write approval; deletion propagation requires recoverable native Trash.');
-	const approved = { ...structuredClone(reviewed), configuration, scope: { ...scope } };
-	const empty = { scope, complete: true, entries: [] };
-	const check = () => {
-		signal.throwIfAborted();
-		if (!sameSyncScope(scope, input.currentScope())) throw Error('Sync context changed.');
-	};
-	const authorize = async () => {
-		check();
-		const current = readOwnedFileSyncConfiguration(await input.readConfiguration(), scope.ownerId);
-		check();
-		await input.authorizeDevice();
-		check();
-		const conditions = await input.conditions();
-		check();
-		const result = planConfiguredFileSync({
-			saved: current,
-			approval: approved,
-			local: empty,
-			remote: empty,
-			baseline: { scope, entries: [] },
-			localRootId: configuration.localRootId,
-			remoteFolderId: configuration.remoteFolderId,
-			conditions
-		});
-		if (result.status === 'waiting')
-			throw Error(
-				{
-					paused: 'This connection is paused.',
-					offline: 'Waiting for an internet connection.',
-					network: 'Waiting for the selected network.',
-					charging: 'Waiting for this device to charge.'
-				}[result.reason]
-			);
-		return conditions;
-	};
+	const { configuration, approved, check, authorize, scan, runtime, localTarget } = foregroundSyncContext(reviewed, scope, input, signal);
 	input.progress({ stage: 'checking', confirmed: 0, total: 0 });
 	await authorize();
 	const checkpoint = await input.journal.checkpoint(scope);
@@ -92,35 +55,6 @@ export async function runForegroundCloudSync(
 		checkpoint && checkpoint.localRootId === configuration.localRootId && checkpoint.remoteFolderId === configuration.remoteFolderId
 			? checkpoint.baseline
 			: { scope, entries: [] };
-	const scan = async () => {
-		const entries = await input.scanLocal();
-		check();
-		const inventory = parseCloudInventory(await input.inventory(), configuration.remoteFolderId);
-		check();
-		return {
-			local: { scope, complete: true, entries },
-			remote: { scope, complete: true, entries: inventory.nodes.map(inventorySyncEntry) },
-			inventory
-		};
-	};
-	const runtime: CloudTransportRuntime = {
-		...input.runtime,
-		// Custom mutation policies must remain in the shared per-part path.
-		nativeUploadApproval: input.runtime.authorizeMutation ? undefined : approved,
-		currentScope: input.currentScope,
-		authorizeMutation: async () => {
-			check();
-			await input.runtime.authorizeMutation?.(signal);
-			await authorize();
-			check();
-		},
-		fetch: async (url, init) => {
-			check();
-			const result = await input.runtime.fetch(url, init);
-			check();
-			return result;
-		}
-	};
 	const existing = await input.journal.read(scope);
 	check();
 	const recordedBaseline = async (saved: ConfiguredRun) => {
@@ -285,35 +219,7 @@ export async function runForegroundCloudSync(
 				await authorize();
 				return input.source(entry);
 			},
-			localTarget: input.localTarget
-				? {
-						lookup: (operation, current, context) => input.localTarget!.lookup(operation, current, context),
-						...(input.localTarget.trash
-							? {
-									trash: async (operation, current, context) => {
-										await authorize();
-										return input.localTarget!.trash!(operation, current, context);
-									}
-							  }
-							: {}),
-						...(input.localTarget.trashExpected
-							? {
-									trashExpected: async (operation, current, context) => {
-										await authorize();
-										return input.localTarget!.trashExpected!(operation, current, context);
-									}
-							  }
-							: {}),
-						stage: async (operation, current, source) => {
-							await authorize();
-							return input.localTarget!.stage(operation, current, source);
-						},
-						publish: async (operation, current, staged) => {
-							await authorize();
-							return input.localTarget!.publish(operation, current, staged);
-						}
-				  }
-				: undefined,
+			localTarget,
 			signal,
 			progress: (path, bytes, size) => {
 				check();

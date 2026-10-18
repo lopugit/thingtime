@@ -68,6 +68,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-18 — **Codex (AI)**: Connect Mac/iOS foreground controls to paged sync
+  recovery, durable conflict choices and checkpoint publication. Repeated Ignore
+  reuses retained-version receipts; interrupted post-run scans restart with fresh
+  generations. Shared approval checks and legacy recovery remain in place. Desktop
+  and phone browser fixtures pass; installed acceptance, stable paged producers
+  and worker integration remain open. Android stays deferred.
+  [Details](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md#macios-foreground-paged-recovery--2026-10-18).
+
 - 2026-10-18 — **Codex (AI)**: PR #1002 retains cloud metadata with paged
   inventories and prepares immutable cloud destinations/native Trash receipt
   links before execution. Indexed bindings reuse the existing guarded transport;

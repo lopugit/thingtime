@@ -440,3 +440,18 @@ uses the same transport as legacy foreground sync, with indexed binding lookup.
 two-browser-restart proof cover storage/transport recovery with generated data.
 Stable scan producers, live foreground/worker integration and installed Mac/iOS
 acceptance remain open. Android is deferred.
+
+
+### Mac/iOS foreground paged recovery (2026-10-18)
+
+`MobileSyncConnections.tsx` selects `fileSync/pagedForegroundSync.ts` for Mac/iOS;
+Android remains on the legacy runner and deferred. `foregroundSyncContext.ts`
+shares live authorization with both runners. Version-8 durable review pages use
+`pagedRunReview.ts` and the canonical conflict policy before operation preparation.
+Retention releases the active root without changing the baseline, and exact
+repeated Ignore reuses receipts. Fresh post-run observation generations prevent
+mixing scans across interruption; checkpoint publication remains atomic. Legacy
+uncertain work completes before migration. `pagedForegroundSync.test.ts`,
+`pagedRunReview.test.ts` and desktop/iOS browser fixtures cover these paths.
+Native/cloud producers still supply complete bounded scans; the 10,000-path cap,
+installed-device acceptance, worker integration and journal cleanup remain open.

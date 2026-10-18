@@ -1,3 +1,4 @@
+import { thingtimeCapabilityManifest } from '../app/api/utils/capabilities/thingtimeCapabilities';
 import type { MobileFolder } from '../app/fileSync/mobileFolders.client';
 import { fingerprintSource } from '../app/fileSync/contentFingerprint';
 import { fileRetentionEventId } from '../app/fileSync/fileVersions';
@@ -111,6 +112,7 @@ window.fetch = async function (this: unknown, input, init) {
 	if (this !== undefined && this !== window) throw new TypeError('Can only call Window.fetch on instances of Window');
 	const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url, location.origin);
 	init?.signal?.throwIfAborted();
+	if (url.pathname === '/.well-known/thingtime-capabilities.json') return fixtureJson(thingtimeCapabilityManifest(url.origin));
 	if (
 		desktop &&
 		['/api/v1/files', '/api/v1/things'].includes(url.pathname) &&
@@ -137,7 +139,7 @@ window.fetch = async function (this: unknown, input, init) {
 		if (url.pathname.endsWith('/parts'))
 			return fixtureJson({
 				ok: true,
-				parts: [{ partNumber: 1, url: location.origin + '/fixture-capture-part', headers: { 'x-amz-checksum-sha256': body.parts[0].checksumSha256 } }]
+				parts: [{ partNumber: 1, url: (desktop ? canonicalOrigin : location.origin) + '/fixture-capture-part', headers: { 'x-amz-checksum-sha256': body.parts[0].checksumSha256 } }]
 			});
 		if (url.pathname.endsWith('/complete')) {
 			captureReady.add(body.uploadId);
@@ -258,7 +260,7 @@ window.fetch = async function (this: unknown, input, init) {
 };
 window.thingtimeNativeBridge = {
 	version: '1.0.0',
-	platform: 'android',
+	platform: new URLSearchParams(location.search).get('platform') === 'ios' ? 'ios' : 'android',
 	isNativeWebView: true,
 	devicePairingVersion: '1.0.0',
 	fileAccessVersion: '1.1.0',
@@ -314,7 +316,7 @@ if (desktop) {
 			}
 			if (request.action === 'remove') roots = roots.filter((root) => root.id !== request.rootId);
 			if (request.action === 'choose') roots = structuredClone(initialRoots);
-			const manifest = request.action === 'context' ? await (await originalFetch('/.well-known/thingtime-capabilities.json')).json() : undefined;
+			const manifest = request.action === 'context' ? thingtimeCapabilityManifest(canonicalOrigin) : undefined;
 			return {
 				...request,
 				origin: canonicalOrigin,

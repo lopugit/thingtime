@@ -2617,3 +2617,66 @@ module-mock `.test.mts` check pass (222 total). The unchanged 100,000-entry
 inventory and 20,000-path planner benchmarks were not repeated. Focused lint
 passes. Whole-project TypeScript output is byte-identical to the prior
 91-diagnostic baseline.
+
+
+## Mac/iOS foreground paged recovery — 2026-10-18
+
+Mac and iOS connection controls now use the paged inventory, plan, operation,
+cloud binding and checkpoint journals for foreground sync. The existing complete
+native/cloud scans are imported in bounded pages; this does not remove their
+10,000-path limit or establish stable paged producers. Android keeps its existing
+runner while its unfinished work remains deferred in this PR.
+
+Journal version 8 persists conflict choices before preparing any operation. The
+same conflict policy validates exact reviewed versions, rejects missing/extra
+choices and prevents effects until every review page has committed. Fully saved
+reviews resume without reopening the popup; interrupted review import requires
+fresh choices. Settings are pinned before cloud preparation. Live account,
+device, root, network and native write approvals still run through the shared
+`foregroundSyncContext.ts` policy before effects.
+
+“Save versions and ignore” retains only conflicting versions, releases the
+active root after confirmation and never advances the common baseline. Repeating
+the same reviewed versions/configuration reuses the retained receipts without
+another upload. A later selected winner still synchronizes normally. Legacy
+uncertain operations and lost checkpoints finish with their original IDs before
+the connection migrates to a paged baseline.
+
+An interrupted post-run observation import restarts with two fresh generations
+atomically; it cannot mix a new scan with old partial rows or replace observations
+held by another active reader. Once checkpoint building starts, it resumes the
+sealed observations. Changing approved roots clears only the old baseline head,
+and refuses while a transfer is active. The executor uses the foreground root
+lock without recursively acquiring it.
+
+Validation: all 238 shared checks pass (237 TypeScript tests and the separate
+module-mock transport test), including the inventory/planner scale cases.
+Focused lint passes; whole-project TypeScript diagnostics are identical to the
+existing 91-diagnostic baseline. New regressions exercise
+135-file transfer recovery across a page boundary, interrupted checkpoint import,
+legacy migration, review import/restart, pinned settings, retention without a
+remaining source and a later winner after Ignore. The pin regression keeps a
+second plan active; completed plans correctly release their input pins.
+
+The actual connection component ran in isolated Chromium at 1440×1000 (Mac
+adapter) and 390×844 (iOS adapter), with real IndexedDB and generated three-byte
+content. Opening two conflicts, choosing/resetting a winner, saving both versions,
+reloading and repeating Ignore produced two retained receipts with zero repeat
+upload parts, no live-file revision change and no remaining active run. Rendered
+completion text was compared with the fixture's independent cloud counters and
+journal readback. Top-to-bottom scrolling and opened-popup inspection passed;
+phone status text now occupies the full row above the controls. Evidence lives
+in `paged-foreground-evidence-2026-10-18` beside the HTML tracker.
+
+Browser and fixture backend were OS-restricted to loopback 28174; hostname,
+direct-IP, alternate-port and redirect denial checks passed. The installed
+agent-browser CLI is now present, but native app-control timeouts prevented
+verifying/registering its task policy; the explicitly isolated fallback runner
+was used. Trace/screenshots/source are retained; temporary browser resources and
+listeners were removed. No installed app or real-account acceptance is claimed.
+
+Still open: installed Mac/iOS transfers and provider/permission acceptance,
+stable paged native/cloud producers, persistent workers, scoped journal retention
+and orphan cleanup, full cross-device convergence, and measured large-volume
+sync/backups. Existing source captures and journals remain retained. Independent
+snapshot coverage and whole-account restore have their separate open gates.
