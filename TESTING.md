@@ -12352,6 +12352,19 @@ separate from deterministic discovery/lease tests.
 
 - Commander Thingtime login: follow `Commander/docs/TESTING.md` callback registration recovery checks for native and registered-loopback handoff, fail-closed registration/capability errors, environment binding, and persisted account identity.
 
+## MongoDB health-check connection pressure
+
+- [ ] Run repeated and concurrent health checks against the same selected
+      MongoDB target. Confirm they reuse the application client and
+      coalesce overlapping checks rather than creating a client per request.
+- [ ] Confirm health checks never close a client or pool shared by application
+      requests; application reads and writes still work after health checks.
+- [ ] With distinct home and custom database selections, verify each health
+      check uses only its selected database and never reads, writes, or reuses
+      the other database's client context. Repeat while checks overlap.
+- [ ] Verify idle application sockets retire after the configured idle timeout
+      and subsequent requests reconnect successfully. Record production recovery as
+      pending until the affected production path is independently verified.
 ### Transfer speed windows (2026-10-19)
 
 - Check each decimal bit unit and logical file/folder/inode unit independently
