@@ -6682,11 +6682,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'chats',
+    contractVersion: '1.1.0',
+    featureVersion: '1.1.0',
     group: 'messenger',
     title: 'Chats',
     endpoint: '/api/v1/chats',
     summary: 'Lists every conversation the caller is in, or creates a channel, group, or DM.',
     detail:
+      'Subspace general channels are reconciled for active subspace members on Messenger entry. All linked chat previews and unread counters are filtered by current subspace membership and live parent existence. ' +
       'GET returns every conversation the caller belongs to — community channels, groups, and DMs — each with an ' +
       'unread count, a lastMessage preview, and the caller membership entry (role, nickname, state, muted, read ' +
       'receipt), plus totalUnread (muted chats excluded), requestsCount, and serverTime. POST creates a chat: ' +
@@ -6765,11 +6768,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'chats-get',
+    contractVersion: '1.0.1',
+    featureVersion: '1.0.1',
     group: 'messenger',
     title: 'Chat detail',
     endpoint: '/api/v1/chats/get',
     summary: 'Reads one chat with its full member list.',
     detail:
+      'Subspace-linked spaces require current active subspace membership on every read and write; removed, pending, banned and left memberships or deleted parents grant no access. Membership administration uses the subspace controls. ' +
       'Returns a single chat by id along with every member — profile, role, nickname, and per-member read ' +
       'receipt — plus communityName for channels. Read receipts follow the privacy parity rule: a member who ' +
       'turned receipts off neither shares a reading position nor sees the positions of others. Only members of ' +
@@ -6824,11 +6830,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'chats-update',
+    contractVersion: '1.0.1',
+    featureVersion: '1.0.1',
     group: 'messenger',
     title: 'Update chat',
     endpoint: '/api/v1/chats/update',
     summary: 'Renames a chat or updates its topic, section, or channel visibility.',
     detail:
+      'Subspace-linked spaces require current active subspace membership on every read and write; removed, pending, banned and left memberships or deleted parents grant no access. Membership administration uses the subspace controls. ' +
       'Groups follow the Messenger convention: any member may rename them. Channels are stricter — only chat or ' +
       'community admins may change them, and channel names are slugged to lowercase. DMs have nothing to rename ' +
       'and return 400. Renames and topic changes insert a system message into the chat so the history explains ' +
@@ -6874,11 +6883,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'chats-members',
+    contractVersion: '1.0.1',
+    featureVersion: '1.0.1',
     group: 'messenger',
     title: 'Chat members',
     endpoint: '/api/v1/chats/members',
     summary: 'Manages chat membership with one verb per call: join, add, remove, role, nickname, or mute.',
     detail:
+      'Linked spaces manage member additions, removals and roles through subspace controls. Per-chat nickname and mute preferences remain editable. ' +
       'POST the chatId plus exactly one verb. join: true joins a public channel of a community you belong to. ' +
       'add lists user ids to bring in (any member may add to a group; private channels need an admin, and everyone ' +
       'added to a channel must already be a community member — channel access never outruns the invite gate). ' +
@@ -6946,11 +6958,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'chats-leave',
+    contractVersion: '1.0.1',
+    featureVersion: '1.0.1',
     group: 'messenger',
     title: 'Leave chat',
     endpoint: '/api/v1/chats/leave',
     summary: 'Leaves a group or channel.',
     detail:
+      'Subspace-linked spaces require current active subspace membership on every read and write; removed, pending, banned and left memberships or deleted parents grant no access. Membership administration uses the subspace controls. ' +
       'Removes the caller from a group or channel; DMs cannot be left. When the departing member is the owner, ' +
       'ownership auto-promotes the earliest admin, or the earliest remaining member when no admin exists, so a ' +
       'chat never ends up ownerless.',
@@ -6988,13 +7003,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'chats-messages',
-    featureVersion: '1.2.0',
-    contractVersion: '1.2.0',
+    featureVersion: '1.2.1',
+    contractVersion: '1.2.1',
     group: 'messenger',
     title: 'Chat messages',
     endpoint: '/api/v1/chats/messages',
     summary: 'Reads a page of messages or sends a new one, including Slack-style thread replies.',
     detail:
+      'Subspace-linked spaces require current active subspace membership on every read and write; removed, pending, banned and left memberships or deleted parents grant no access. Membership administration uses the subspace controls. ' +
       'Version 1.2 preserves long Lopu assistant output and all public tool receipts across relational message segments; later receipt segments carry lopu.toolReceiptOffset. ' +
       'Version 1.1 adds optional lopu.toolCalls[].links ({label, href}, at most 100 per call) to assistant message history. Links allow local paths and credential-free HTTP(S) URLs only; raw tool data and approval grants are excluded. ' +
       'GET pages a chat newest-first with cursor and limit (max 100, default 40); pass threadRootId to scope the ' +
@@ -7083,8 +7099,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'chats-messages-edit',
-    featureVersion: '1.0.1',
-    contractVersion: '1.0.1',
+    featureVersion: '1.0.2',
+    contractVersion: '1.0.2',
     notes: ['Version 1.0.1 preserves canonical stored-upload custom emoji IDs when projecting the edited message. Editing rights and emoji ownership checks are unchanged.'],
     group: 'messenger',
     title: 'Edit message',
@@ -7133,7 +7149,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
-    id: 'chats-messages-delete',
+    id: 'chats-messages-delete', contractVersion: '1.0.1', featureVersion: '1.0.1',
     group: 'messenger',
     title: 'Delete message',
     endpoint: '/api/v1/chats/messages/delete',
@@ -7176,13 +7192,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'chats-react',
-    featureVersion: '1.0.1',
-    contractVersion: '1.0.1',
+    featureVersion: '1.0.2',
+    contractVersion: '1.0.2',
     group: 'messenger',
     title: 'React to message',
     endpoint: '/api/v1/chats/react',
     summary: 'Toggles an emoji reaction on a message.',
     detail:
+      'Subspace-linked spaces require current active subspace membership on every read and write; removed, pending, banned and left memberships or deleted parents grant no access. Membership administration uses the subspace controls. ' +
       'POST a messageId and an emoji token to add the reaction, or again to remove it. The token is either a ' +
       'unicode emoji (the same grammar post reactions use) or custom:<emojiId> referencing an uploaded custom ' +
       'emoji from the community this chat belongs to or from your personal set. The response returns the ' +
@@ -7244,11 +7261,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'chats-read',
+    contractVersion: '1.0.1',
+    featureVersion: '1.0.1',
     group: 'messenger',
     title: 'Read receipt',
     endpoint: '/api/v1/chats/read',
     summary: 'Advances the current user read receipt in a chat.',
     detail:
+      'Subspace-linked spaces require current active subspace membership on every read and write; removed, pending, banned and left memberships or deleted parents grant no access. Membership administration uses the subspace controls. ' +
       'POST chatId and the newest messageId you have displayed. The receipt is a forward-only high-water mark: ' +
       'attempts to move it backwards are ignored. It drives unread counts everywhere and the seen-by indicators ' +
       'other members see, subject to the read-receipt privacy setting.',
@@ -7294,11 +7314,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'chats-requests',
+    contractVersion: '1.0.1',
+    featureVersion: '1.0.1',
     group: 'messenger',
     title: 'Message requests',
     endpoint: '/api/v1/chats/requests',
     summary: 'Lists pending DM requests, or accepts and declines them.',
     detail:
+      'Subspace-linked spaces require current active subspace membership on every read and write; removed, pending, banned and left memberships or deleted parents grant no access. Membership administration uses the subspace controls. ' +
       'GET returns pending DM requests in two buckets: follower for senders who follow you, and unknown for ' +
       'everyone else. POST chatId with accept: true opens the conversation and moves it into the normal inbox; ' +
       'accept: false declines and hides it, and the sender is not told either way. Replying to a pending request ' +
@@ -7358,7 +7381,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
-    id: 'chats-updates',
+    id: 'chats-updates', contractVersion: '1.0.1', featureVersion: '1.0.1',
     group: 'messenger',
     title: 'Chat updates poll',
     endpoint: '/api/v1/chats/updates',
@@ -7460,11 +7483,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'communities',
+    contractVersion: '1.1.0',
+    featureVersion: '1.1.0',
     group: 'messenger',
     title: 'Communities',
     endpoint: '/api/v1/communities',
     summary: 'Lists the caller communities or creates a new one.',
     detail:
+      'Each subspace has a linked space with subspaceId and subspaceSlug. Its identity, roles and membership come from the live subspace; pending, banned, left or deleted subspaces never appear as accessible spaces. ' +
       'GET returns every community the caller belongs to, with the caller role, memberCount, and the ordered ' +
       'sections that file its channels. POST creates a community from a name and optional description, and the ' +
       'creator becomes its owner.',
@@ -7518,11 +7544,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'communities-get',
+    contractVersion: '1.1.0',
+    featureVersion: '1.1.0',
     group: 'messenger',
     title: 'Community detail',
     endpoint: '/api/v1/communities/get',
     summary: 'Reads one community with members, sections, and its channel directory.',
     detail:
+      'Linked spaces return subspaceId and subspaceSlug and derive their current identity, roster, count and roles from the live subspace. ' +
       'Returns the community (including its sections), the first 100 members with roles, the full memberCount, ' +
       'and the channel directory: every channel you have joined plus the joinable public ones, each with ' +
       'memberCount and a joined flag. It is the one call a community screen needs.',
@@ -7570,11 +7599,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'communities-update',
+    contractVersion: '1.0.1',
+    featureVersion: '1.0.1',
     group: 'messenger',
     title: 'Update community',
     endpoint: '/api/v1/communities/update',
     summary: 'Updates a community name or description.',
     detail:
+      'Subspace-linked spaces require current active subspace membership on every read and write; removed, pending, banned and left memberships or deleted parents grant no access. Membership administration uses the subspace controls. ' +
       'Community admins can rename the community or rewrite its description. Sections and channels have their ' +
       'own routes; this one only touches the community record itself.',
     auth: {
@@ -7622,11 +7654,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'communities-members',
+    contractVersion: '1.0.1',
+    featureVersion: '1.0.1',
     group: 'messenger',
     title: 'Community members',
     endpoint: '/api/v1/communities/members',
     summary: 'Changes a community member role, removes a member, or leaves.',
     detail:
+      'Subspace-linked spaces require current active subspace membership on every read and write; removed, pending, banned and left memberships or deleted parents grant no access. Membership administration uses the subspace controls. ' +
       'POST the communityId plus exactly one operation. userId with role promotes or demotes between admin and ' +
       'member (admins only). userId with remove: true removes a member (admins only; the owner is untouchable). ' +
       'leave: true removes the caller — anyone but the owner may leave, since a community must keep its owner.',
@@ -7674,11 +7709,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'communities-invites',
+    contractVersion: '1.0.1',
+    featureVersion: '1.0.1',
     group: 'messenger',
     title: 'Community invites',
     endpoint: '/api/v1/communities/invites',
     summary: 'Lists, mints, or revokes community invite codes.',
     detail:
+      'Subspace-linked spaces require current active subspace membership on every read and write; removed, pending, banned and left memberships or deleted parents grant no access. Membership administration uses the subspace controls. ' +
       'GET with communityId lists the community invites (admins only). POST with communityId mints a new invite ' +
       '— optionally bounded by expiresInDays and maxUses — and returns its code; POST with communityId and ' +
       'revokeId revokes an existing invite. Codes are redeemed through /api/v1/communities/join.',
@@ -7740,11 +7778,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'communities-join',
+    contractVersion: '1.0.1',
+    featureVersion: '1.0.1',
     group: 'messenger',
     title: 'Join community',
     endpoint: '/api/v1/communities/join',
     summary: 'Joins a community by redeeming an invite code.',
     detail:
+      'Subspace-linked spaces cannot be joined by Messenger invite codes: use the subspace join or private membership approval flow. ' +
       'POST a code to join the community it belongs to. Redemption is atomic — expiry, revocation, and use caps ' +
       'are all checked inside the update filter, so an invite can never be over-redeemed in a race. Re-joining a ' +
       'community you are already in is a friendly no-op success.',
@@ -7782,11 +7823,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'communities-sections',
+    contractVersion: '1.0.1',
+    featureVersion: '1.0.1',
     group: 'messenger',
     title: 'Community sections',
     endpoint: '/api/v1/communities/sections',
     summary: 'Creates, renames, removes, or reorders community sections.',
     detail:
+      'Subspace-linked spaces require current active subspace membership on every read and write; removed, pending, banned and left memberships or deleted parents grant no access. Membership administration uses the subspace controls. ' +
       'Sections are the folders channels are filed under. POST the communityId plus exactly one operation: ' +
       'create with a name, rename with an id and name, remove with an id, or reorder with the full ordered id ' +
       'list. All four are admin-only and return the refreshed sections. Removing a section un-files its channels ' +
@@ -7840,11 +7884,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'emojis',
+    contractVersion: '1.0.2',
+    featureVersion: '1.0.2',
     group: 'messenger',
     title: 'Custom emojis',
     endpoint: '/api/v1/emojis',
     summary: 'Lists or uploads custom emojis for a community or the personal set.',
     detail:
+      'Subspace-linked spaces require current active subspace membership on every read and write; removed, pending, banned and left memberships or deleted parents grant no access. Membership administration uses the subspace controls. ' +
       'GET with chatId or communityId returns the emojis usable in that scope — the community set plus your ' +
       'personal set — and requires membership for community scopes. GET with ids (comma-separated emoji ids) ' +
 			'resolves specific emoji metadata with a stable same-origin content URL: message payloads reference reacted emojis as ' +
@@ -7904,11 +7951,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'emojis-delete',
+    contractVersion: '1.0.1',
+    featureVersion: '1.0.1',
     group: 'messenger',
     title: 'Delete custom emoji',
     endpoint: '/api/v1/emojis/delete',
     summary: 'Deletes a custom emoji.',
     detail:
+      'Subspace-linked spaces require current active subspace membership on every read and write; removed, pending, banned and left memberships or deleted parents grant no access. Membership administration uses the subspace controls. ' +
       'The uploader can always delete their own emoji, and community admins can delete any emoji in their ' +
 			'community set. The exact S3 object version is deleted before its quota reservation is refunded and the emoji row is retired. Existing custom:<emoji id> reaction tokens simply stop resolving once the emoji is gone.',
     auth: {
@@ -10446,13 +10496,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // counts for, and shows recentPostCount to, them only; everyone else
     // ranks it at zero and its row carries no recentPostCount (compatible
     // corrections)
-    featureVersion: '1.5.1',
-    contractVersion: '1.5.1',
+    featureVersion: '1.6.0',
+    contractVersion: '1.6.0',
     group: 'subspaces',
     title: 'Subspaces',
     endpoint: '/api/v1/subspaces',
     summary: 'Browses the subspace directory or founds a new subspace.',
     detail:
+      'Every newly created subspace atomically receives a linked Messenger space and general channel. Projections include stable messagesCommunityId and messagesChatId. The idempotent admin subspace-messaging-spaces migration provisions all existing live subspaces. ' +
       'GET lists subspaces (public; each row carries memberCount and the caller’s own membership ' +
       'state under `viewer` — role, member, approved, banned, canModerate, canPost, pending, approvalRequested, ' +
       'userFlair) plus the user-flair settings (userFlairs templates, userFlairSelfAssign, allowCustomUserFlair) — ' +
@@ -10556,13 +10607,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // additive)
     // 1.4.0: moderators get openReportCount — open reports waiting in the
     // Reports queue (S5, additive)
-    featureVersion: '1.4.0',
-    contractVersion: '1.4.0',
+    featureVersion: '1.6.0',
+    contractVersion: '1.6.0',
     group: 'subspaces',
     title: 'Subspace detail',
     endpoint: '/api/v1/subspaces/get',
     summary: 'Reads one subspace by slug or id with counts, the moderator roster, and the caller’s permissions.',
     detail:
+      'Returns stable messagesCommunityId and messagesChatId for the subspace Messages view. Active subspace membership is required for Messenger history; pending, left and banned members cannot read it. ' +
       'Returns the subspace (branding, rules, flairs, access, the user-flair vocabulary: userFlairs templates, ' +
       'userFlairSelfAssign, allowCustomUserFlair, and removalReasons — the canned reasons its moderators remove ' +
       'posts with), memberCount (active members — pending requesters excluded) + ' +
@@ -10593,6 +10645,27 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         body: { ok: true, subspace: { slug: 'rainbows', access: 'private', memberCount: 128, pendingCount: 3, approvalRequestCount: 0, openReportCount: 2, viewer: { role: 'moderator', member: true, canModerate: true, canPost: true } }, moderators: [] }
       },
       { status: 404, description: 'No such subspace.', body: { ok: false, error: 'Subspace not found' } }
+    ]
+  }),
+  endpoint({
+    id: 'subspaces-embeds',
+    featureVersion: '1.0.0',
+    contractVersion: '1.0.0',
+    group: 'subspaces',
+    title: 'Subspace embedded Things',
+    endpoint: '/api/v1/subspaces/embeds',
+    methods: ['GET', 'POST'],
+    summary: 'Read or moderate ordered Thing embeds in the sidebar and above the post feed.',
+    detail: 'GET accepts id, region (sidebar or feed) and optional opaque cursor. Each placement is a relational Thing. Responses reauthorize both subspace visibility and each referenced Thing for the caller; inaccessible references have thing:null and never grant access. POST adds, removes or moves placements and requires an active subspace moderator. Add uses a stable UUID requestId for retry safety; remove takes embedId, and move takes embedId and direction up or down. Placement changes are recorded in the mod log.',
+    auth: { mode: 'optional', description: 'Public placements may be read anonymously. Private subspace reads require active membership. All writes require an authenticated active moderator.' },
+    steps: ['GET ?id=<subspace>&region=sidebar or feed; follow nextCursor for subsequent pages.', 'POST add with thingId and a stable requestId; the moderator must currently be able to view the Thing.', 'POST remove or move using the placement embedId. Referenced Things retain their own permissions.'],
+    requestExamples: [
+      { name: 'Sidebar embeds', description: 'Read the first page.', method: 'GET', query: { id: 'example-subspace', region: 'sidebar' } },
+      { name: 'Add a Thing', description: 'Embed an accessible Thing above the feed.', method: 'POST', body: { id: 'example-subspace', region: 'feed', operation: 'add', thingId: 'example-thing', requestId: 'c0ffee12-dddd-4ddd-8ddd-000000000008' } }
+    ],
+    responseExamples: [
+      { status: 200, description: 'An empty first page.', body: { ok: true, embeds: [], nextCursor: null, canModerate: false } },
+      { status: 403, description: 'Moderation requires an active moderator.', body: { ok: false, error: 'Moderators only' } }
     ]
   }),
   endpoint({
@@ -11060,12 +11133,12 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // 1.1.0: newOwner carries userFlair and the returned subspace the
     // user-flair settings + viewer.userFlair (S3 user flairs, additive)
     // 1.2.0: the returned subspace carries removalReasons (S4, additive)
-    featureVersion: '1.2.1',
-    contractVersion: '1.2.1',
+    featureVersion: '1.2.2',
+    contractVersion: '1.2.2',
     group: 'subspaces',
     title: 'Transfer subspace ownership',
     endpoint: '/api/v1/subspaces/transfer',
-    summary: 'The owner hands the subspace to an active member; the previous owner becomes a moderator.',
+    summary: 'The owner hands the subspace and its linked messages space to an active member; the previous owner becomes a moderator.',
     detail:
       'POST { id|slug, userId|username } as the owner (the member row AND the subspace’s ownerId must both name ' +
       'the caller). The target must be an ACTIVE member (joined, not banned, not left; banned → 403, otherwise ' +
@@ -11102,15 +11175,15 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // things are released too, the slug is held for the previous owner
     // (subspace-tombstone), and a subspace with posts still pointing at it after
     // the release passes answers 409 instead of dropping its doc (additive)
-    featureVersion: '1.2.0',
-    contractVersion: '1.2.0',
+    featureVersion: '1.3.0',
+    contractVersion: '1.3.0',
     group: 'subspaces',
     title: 'Delete subspace',
     endpoint: '/api/v1/subspaces/delete',
     summary: 'The owner deletes the subspace after retyping its slug; posts survive — public ones as plain posts, private/removed ones as author-only posts.',
     detail:
       'POST { id|slug, confirmSlug } as the owner; confirmSlug must equal the slug (a leading "s/" and case are ' +
-      'forgiven) or the call answers 400. Cascade: every post-shaped thing of the subspace (plain posts and ' +
+      'forgiven) or the call answers 400. Cascade: linked messages, message attachments, channels, member preferences, custom emojis and embedded-Thing placements are removed; referenced Things survive. Every post-shaped thing of the subspace (plain posts and ' +
       'rich ["post","comment"] things alike) is released in bounded accounted batches — crystal.subspaceId, ' +
       'crystal.flairId, the root subspaceMod state and the subspacePrivate fence are stripped, titles stay. ' +
       'A post written behind a PRIVATE subspace’s wall, or one the moderators REMOVED, is never made public by ' +

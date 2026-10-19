@@ -968,6 +968,14 @@ export function useApi() {
     // plain GETs (guest-visible); every mutation goes through the fetcher so
     // failures surface through the shared API-failure path.
     subspaces: {
+      embeds: useCallback(async (args: { id: string; region: 'sidebar' | 'feed'; cursor?: string }) => {
+        await requireThingtimeCapability('api.subspaces-embeds', '1.0.0');
+        return getJson(`/api/v1/subspaces/embeds${toQuery(args)}`);
+      }, [getJson]),
+      mutateEmbed: useCallback(async (body: Record<string, unknown>) => {
+        await requireThingtimeCapability('api.subspaces-embeds', '1.0.0');
+        return asyncFetcher.submit(body, { action: '/api/v1/subspaces/embeds', errorContext: 'update subspace embedded Things' });
+      }, [asyncFetcher]),
       // sort: new (default, cursor-paged) | members | active (ranked over a
       // bounded window, offset-paged; rows under active carry recentPostCount
       // — a private subspace's only for its members). `anon: 1` keeps

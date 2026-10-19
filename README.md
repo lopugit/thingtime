@@ -11,6 +11,24 @@ See [setup, agent CLI and security boundaries](docs/agent-browsers.md). Local
 container setup uses Colima and the Docker CLI; no production secrets or copied
 personal browser profiles are required for isolated acceptance tests.
 
+### Subspace messages and embedded Things
+
+New subspaces receive a linked Messenger space and general channel automatically.
+For existing databases, run the registered `subspace-messaging-spaces` migration
+through authenticated admin migration tools after deploying this version.
+The migration is retry-safe; opening Messages also repairs a missing space.
+Use the existing Mongo replica-set setup for transactional provisioning and
+storage accounting. No new provider keys or environment secrets are required.
+Subspace membership remains authoritative for message access. Moderators can
+place accessible Things above posts or in the sidebar; each visitor still needs
+the referenced Thing's own permission.
+
+Run `npm --prefix remix run test:subspace-messages-acceptance` for the disposable
+local API acceptance harness. Browser acceptance uses its `--ui` option and a
+task-owned browser executable via `SUBSPACE_BROWSER_EXECUTABLE`; evidence goes
+to `SUBSPACE_EVIDENCE_DIR`. The harness fails closed behind an OS network fence
+and creates synthetic accounts in its own database, without production secrets.
+
 ### Password manager setup
 
 The private `/passwords` library uses the [Thingtime password manager contract](docs/password-manager.md).

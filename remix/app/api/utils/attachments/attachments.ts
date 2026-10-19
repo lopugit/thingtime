@@ -1308,7 +1308,7 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 			if (dependencies.customMongoActive() && (retainedVersion !== undefined || doc.attachmentPurpose !== 'profile')) return fail(404, 'Attachment not found');
 			const allowed = retained ? true : viewer?.sharedRoot
 				? await dependencies.canViewSharedTarget(viewer, doc, viewer.sharedRoot)
-				: doc.attachmentPurpose === 'profile' && doc.targetId
+				: ['profile', 'message', 'emoji'].includes(doc.attachmentPurpose || '') && doc.targetId
 					? await dependencies.canViewTarget(viewer, doc)
 					: viewer?.id === doc.ownerId || (!!doc.targetId && (await dependencies.canViewTarget(viewer, doc)));
 			if (!allowed) return fail(404, 'Attachment not found');

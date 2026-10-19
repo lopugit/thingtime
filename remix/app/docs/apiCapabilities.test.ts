@@ -33,7 +33,7 @@ test('JSON Action inputs and draft-saving suites negotiate both origin manifests
 	const wellKnown = thingtimeCapabilityManifest('https://thingtime.test').features;
 	for (const [feature, minimum, previous] of [
 		['api.things', '1.36.0', '1.32.0'], ['api.things-update', '1.10.0', '1.9.0'],
-		['api.actions-run', '1.37.1', '1.36.0'], ['api.webpages-suites-install', '1.6.0', '1.4.0']
+		['api.actions-run', '1.37.1', '1.35.0'], ['api.webpages-suites-install', '1.6.0', '1.4.0']
 	]) {
 		assert.equal(route[feature], minimum);
 		assert.equal(wellKnown[feature].version, minimum);
@@ -354,8 +354,8 @@ test('subspace lifecycle + notification type additions publish their contract ve
 	// answers { privatePosts } (additive → minor)
 	// S3 review: transfer's newOwner row carries userFlair (1.1.0, additive)
 	// S4: the returned subspace carries removalReasons (1.2.0, additive)
-	assert.equal(manifest.features['api.subspaces-transfer'], '1.2.1');
-	assert.equal(manifest.features['api.subspaces-delete'], '1.2.0');
+	assert.equal(manifest.features['api.subspaces-transfer'], '1.2.2');
+	assert.equal(manifest.features['api.subspaces-delete'], '1.3.0');
 	// S4 review: subspace-post-removed / subspace-ban rows carry the subspace's
 	// mod team as their actor (1.2.0, additive)
 	assert.equal(manifest.features['api.notifications-list'], '1.7.0');
@@ -388,9 +388,9 @@ test('subspace user flairs publish their contract versions', () => {
 	// things-comment, things-feed, things-user contract 1.1.0 → 1.2.0)
 	// (S4 moved list / get / update on to 1.3.0 — see the removal-reasons test;
 	// S6 moved list on to 1.4.0 — sort=new|members|active)
-	assert.equal(manifest.features['api.subspaces'], '1.5.1');
+	assert.equal(manifest.features['api.subspaces'], '1.6.0');
 	// (S5 moved get on to 1.4.0 — openReportCount for moderators)
-	assert.equal(manifest.features['api.subspaces-get'], '1.4.0');
+	assert.equal(manifest.features['api.subspaces-get'], '1.6.0');
 	assert.equal(manifest.features['api.subspaces-update'], '1.5.0');
 	// S3 review: kick / ban strip the flair, demotion strips a mod-only pick,
 	// mods may dress the owner (members 1.3.1, corrections); moderate's
@@ -425,10 +425,10 @@ test('subspace removal reasons + moderation modals publish their contract versio
 	for (const feature of ['api.subspaces-join', 'api.subspaces-leave']) {
 		assert.equal(manifest.features[feature], '1.3.0', feature);
 	}
-	assert.equal(manifest.features['api.subspaces'], '1.5.1'); // S6: sort=new|members|active; S6 review: anon=1 + rate key + private activity fenced
-	assert.equal(manifest.features['api.subspaces-get'], '1.4.0'); // S5: openReportCount
+	assert.equal(manifest.features['api.subspaces'], '1.6.0'); // S6: sort=new|members|active; S6 review: anon=1 + rate key + private activity fenced
+	assert.equal(manifest.features['api.subspaces-get'], '1.6.0'); // S5: openReportCount
 	assert.equal(manifest.features['api.subspaces-feed'], '1.3.0'); // S5: subspaceMod.reportCount
-	assert.equal(manifest.features['api.subspaces-transfer'], '1.2.1');
+	assert.equal(manifest.features['api.subspaces-transfer'], '1.2.2');
 	// S4 review: moderate remove takes ruleIndex (a cited rule composed and
 	// bounded server-side), is a no-op on an already-removed post, and the
 	// author's bell comes from the mod team with the reason's headline (1.3.0,
@@ -452,7 +452,7 @@ test('subspace reports publish their contract versions', () => {
 	// the open rows' own targetId) — compatible corrections
 	assert.equal(manifest.features['api.subspaces-report'], '1.0.1');
 	assert.equal(manifest.features['api.subspaces-reports'], '1.0.1');
-	assert.equal(manifest.features['api.subspaces-get'], '1.4.0');
+	assert.equal(manifest.features['api.subspaces-get'], '1.6.0');
 	assert.equal(manifest.features['api.subspaces-moderate'], '1.4.0');
 	assert.equal(manifest.features['api.subspaces-feed'], '1.3.0');
 	for (const feature of ['api.things-comment', 'api.things-user']) {
@@ -477,7 +477,7 @@ test('subspace discovery publishes its contract versions', () => {
 	// anon=1 (the edge-cacheable logged-out view, additive), is rate-limited
 	// (subspaces.list, 120/min) and fences a private subspace's activity to
 	// its ACTIVE members (compatible corrections) — 1.4.0 → 1.5.0.
-	assert.equal(manifest.features['api.subspaces'], '1.5.1');
+	assert.equal(manifest.features['api.subspaces'], '1.6.0');
 	assert.equal(manifest.features['api.things-feed'], '1.8.0');
 	for (const feature of ['api.things-comment', 'api.things-user']) {
 		assert.equal(manifest.features[feature], feature === 'api.things-comment' ? '1.9.0' : '1.7.0', feature);
@@ -486,7 +486,7 @@ test('subspace discovery publishes its contract versions', () => {
 	// shared projection's other three ids are untouched)
 	assert.equal(manifest.features['api.things'], '1.36.0');
 	assert.equal(manifest.features['api.subspaces-feed'], '1.3.0');
-	assert.equal(manifest.features['api.subspaces-get'], '1.4.0');
+	assert.equal(manifest.features['api.subspaces-get'], '1.6.0');
 });
 
 test('marketing publishing publishes its public read and admin write contracts', () => {
@@ -749,3 +749,17 @@ test('local ChatGPT plan capabilities cover both manifests and reject unsupporte
     assert.equal(capabilitySatisfies(version, version), true);
   }
 });
+
+ test('subspace view clients negotiate linked messaging and embedded Thing placements', () => {
+  const source = createApiCapabilitiesManifest();
+  const origin = thingtimeCapabilityManifest('https://subspaces.test');
+  for (const [feature, minimum] of [['api.subspaces-get', '1.6.0'], ['api.subspaces-embeds', '1.0.0']]) {
+    assert.equal(source.features[feature], minimum);
+    assert.equal(origin.features[feature].version, minimum);
+    assert.equal(capabilitySatisfies(undefined, minimum), false);
+    assert.equal(capabilitySatisfies('2.0.0', minimum), false);
+    assert.equal(capabilitySatisfies(minimum, minimum), true);
+    assert.equal(capabilitySatisfies('1.99.0', minimum), true);
+  }
+  assert.equal(capabilitySatisfies('1.5.1', '1.6.0'), false);
+ });

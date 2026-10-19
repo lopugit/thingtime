@@ -47,7 +47,7 @@ test('Messenger custom-emoji parsing and projections publish a compatible correc
   const source = createApiCapabilitiesManifest();
   const origin = thingtimeCapabilityManifest('https://emoji.test');
   for (const feature of ['api.chats-messages', 'api.chats-messages-edit', 'api.chats-react']) {
-    const expected = feature === 'api.chats-messages' ? '1.2.0' : '1.0.1';
+    const expected = feature === 'api.chats-messages' ? '1.2.1' : '1.0.2';
     assert.equal(source.features[feature], expected); assert.equal(origin.features[feature].version, expected);
     assert.equal(capabilitySatisfies('1.0.0', '1.0.1'), false);
     assert.equal(capabilitySatisfies('1.0.2', '1.0.1'), true);
@@ -87,7 +87,7 @@ test('Thingtime capability manifest is origin scoped and covers the generated AP
 	assert.equal(manifest.features['api.devices-node-state']?.version, '1.13.0');
 	assert.equal(capabilitySatisfies('1.9.0', '1.10.0'), false);
 	assert.equal(capabilitySatisfies('1.11.0', '1.10.0'), true);
-  for (const [feature, required, previous] of [['api.things-export', '1.15.0', '1.12.0'], ['api.attachment-content', '1.15.0', '1.6.4']]) {
+  for (const [feature, required, previous] of [['api.things-export', '1.15.0', '1.13.0'], ['api.attachment-content', '1.15.0', '1.6.4']]) {
     assert.equal(manifest.features[feature]?.version, required);
     assert.equal(capabilitySatisfies(required, required), true);
     assert.equal(capabilitySatisfies(previous, required), false);
@@ -185,9 +185,9 @@ test('Thingtime capability manifest is origin scoped and covers the generated AP
   // S6 review: list takes anon=1 (the edge-cacheable logged-out view,
   // additive), is rate-limited (subspaces.list) and fences a private
   // subspace's activity to its members (compatible corrections) — 1.5.0
-  assert.equal(manifest.features['api.subspaces']?.version, '1.5.1');
+  assert.equal(manifest.features['api.subspaces']?.version, '1.6.0');
   assert.equal(manifest.features['api.subspaces-update']?.version, '1.5.0');
-  assert.equal(manifest.features['api.subspaces-get']?.version, '1.4.0');
+  assert.equal(manifest.features['api.subspaces-get']?.version, '1.6.0');
   // S3 review: kick / ban strip the flair, demotion strips a mod-only pick,
   // mods may dress the owner (members 1.3.1, corrections)
   // S4: ban takes a private mod-log `note` (members 1.4.0, additive)
@@ -209,8 +209,8 @@ test('Thingtime capability manifest is origin scoped and covers the generated AP
   // rather than strand posts behind a missing doc (additive)
   // S3 review: transfer's newOwner row carries userFlair (1.1.0, additive)
   // S4: the returned subspace carries removalReasons (1.2.0, additive)
-  assert.equal(manifest.features['api.subspaces-transfer']?.version, '1.2.1');
-  assert.equal(manifest.features['api.subspaces-delete']?.version, '1.2.0');
+  assert.equal(manifest.features['api.subspaces-transfer']?.version, '1.2.2');
+  assert.equal(manifest.features['api.subspaces-delete']?.version, '1.3.0');
   // S4 review: post-removed / ban rows carry the subspace's mod team as actor (1.2.0, additive)
   assert.equal(manifest.features['api.notifications-list']?.version, '1.7.0');
   assert.equal(manifest.features['api.notifications-settings']?.version, '1.7.0');
@@ -431,8 +431,8 @@ test('native traversal requires bounded synchronous callback support on both man
     thingtimeCapabilityManifest('https://traversal.test').features['api.actions-run'].version
   ]) {
     assert.equal(current, '1.37.1');
-    assert.equal(capabilitySatisfies(current, '1.36.0'), true);
-    for (const old of ['', '1.34.0', '1.34.1', '2.0.0']) assert.equal(capabilitySatisfies(old, '1.36.0'), false);
+    assert.equal(capabilitySatisfies(current, '1.35.0'), true);
+    for (const old of ['', '1.34.0', '1.34.1', '2.0.0']) assert.equal(capabilitySatisfies(old, '1.35.0'), false);
   }
 });
 

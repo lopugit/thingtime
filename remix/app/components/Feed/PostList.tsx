@@ -12,6 +12,7 @@ import type { EngagementEvent, PostChange, PublicPost } from './feedTypes';
 
 export type PostListProps = {
   posts: PublicPost[];
+  active?: boolean;
   loading: boolean;
   hasMore: boolean;
   // called from an IntersectionObserver sentinel
@@ -22,6 +23,7 @@ export type PostListProps = {
   // keyboard-focused post (useFeedShortcuts j/k) — its wrapper draws a subtle
   // accent ring; pages without shortcuts just omit this
   focusedPostId?: string | null;
+  expandAllComments?: boolean;
 };
 
 const SkeletonCard = () => (
@@ -64,12 +66,14 @@ const SkeletonCard = () => (
 const PostRow = React.memo(function PostRow({
   post,
   focused,
+  expandAllComments,
   onPostChanged,
   onEngagement,
   observeView
 }: {
   post: PublicPost;
   focused: boolean;
+  expandAllComments?: boolean;
   onPostChanged: (id: string, next: PostChange) => void;
   onEngagement?: (event: EngagementEvent) => void;
   observeView: (element: Element | null, thingId: string) => void;
@@ -90,13 +94,13 @@ const PostRow = React.memo(function PostRow({
     >
       {/* onPostChanged already takes the post id, so the row passes it straight
       through — no per-row wrapper closure to break PostCard's memo. */}
-      <PostCard post={post} onChanged={onPostChanged} onEngagement={onEngagement} />
+      <PostCard post={post} onChanged={onPostChanged} onEngagement={onEngagement} expandAllComments={expandAllComments} />
     </Box>
   );
 });
 
 export const PostList = (props: PostListProps) => {
-  const { posts, loading, hasMore, onLoadMore, onPostChanged, onEngagement, emptyLabel, focusedPostId } = props;
+  const { posts, loading, hasMore, onLoadMore, onPostChanged, onEngagement, emptyLabel, focusedPostId, expandAllComments, active = true } = props;
 
   const sentinelRef = React.useRef<HTMLDivElement | null>(null);
   // public view-count telemetry — wired here so every PostList surface (feed,
@@ -106,8 +110,8 @@ export const PostList = (props: PostListProps) => {
   // refs so the observer callback always sees fresh state without re-wiring
   const loadMoreRef = React.useRef(onLoadMore);
   loadMoreRef.current = onLoadMore;
-  const stateRef = React.useRef({ loading, hasMore });
-  stateRef.current = { loading, hasMore };
+  const stateRef = React.useRef({ loading, hasMore, active });
+  stateRef.current = { loading, hasMore, active };
 
   React.useEffect(() => {
     const sentinel = sentinelRef.current;
@@ -117,7 +121,7 @@ export const PostList = (props: PostListProps) => {
       (entries) => {
         entries.forEach((entry) => {
           if (!entry.isIntersecting) return;
-          if (stateRef.current.loading || !stateRef.current.hasMore) return;
+          if (!stateRef.current.active || stateRef.current.loading || !stateRef.current.hasMore) return;
           loadMoreRef.current();
         });
       },
@@ -136,6 +140,7 @@ export const PostList = (props: PostListProps) => {
           key={post.id}
           post={post}
           focused={post.id === focusedPostId}
+          expandAllComments={expandAllComments}
           onPostChanged={onPostChanged}
           onEngagement={onEngagement}
           observeView={observeView}

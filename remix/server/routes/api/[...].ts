@@ -263,6 +263,7 @@ export const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/subspaces': () => import('../../../app/routes/api/v1/subspaces/_subspaces'),
   'v1/subspaces/delete': () => import('../../../app/routes/api/v1/subspaces/delete/_delete'),
   'v1/subspaces/feed': () => import('../../../app/routes/api/v1/subspaces/feed/_feed'),
+  'v1/subspaces/embeds': () => import('../../../app/routes/api/v1/subspaces/embeds/_embeds'),
   'v1/subspaces/get': () => import('../../../app/routes/api/v1/subspaces/get/_get'),
   'v1/subspaces/join': () => import('../../../app/routes/api/v1/subspaces/join/_join'),
   'v1/subspaces/leave': () => import('../../../app/routes/api/v1/subspaces/leave/_leave'),
