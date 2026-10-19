@@ -129,6 +129,44 @@ test('matching cancellation and host invalidation retain the original native bin
     await assert.rejects(pending);
     assert.deepEqual(f.calls[1], { requestId: input.requestId, ownerId: 'owner', deviceId: 'device', origin: 'https://sync.test', action: 'suspend' });
 });
+test('Quit before renderer pagehide preserves a fixed lifecycle wait and forbids new native work', async () => {
+    for (const cancelled of [false, true]) {
+        const f = fixture(), input = f.input({ action: 'scan-page' });
+        let entered, finish;
+        const started = new Promise(resolve => { entered = resolve; });
+        f.run(async (_method, request) => {
+            if (request.action === 'suspend') { finish(); return {}; }
+            entered();
+            return new Promise((resolve, reject) => {
+                finish = () => cancelled
+                    ? reject(Object.assign(Error('Folder access was cancelled.'), { name: 'ThingtimeNodeBridgeError', code: 'cancelled' }))
+                    : resolve({ ...request, roots: [] });
+            });
+        });
+        const pending = f.host.request(f.event, input); await started;
+        f.host.quit(); f.host.quit();
+        await assert.rejects(pending, { message: '[folder_sync_shutdown] Thingtime is closing. Saved sync work can resume when reopened.' });
+        assert.deepEqual(f.calls[1], { requestId: input.requestId, ownerId: 'owner', deviceId: 'device', origin: 'https://sync.test', action: 'suspend' });
+        await assert.rejects(f.host.request(f.event, f.input()), /\[folder_sync_shutdown\]/);
+        assert.equal(f.calls.length, 2);
+        assert.equal(f.host.active, null);
+    }
+});
+test('Quit during verification preserves cancellation but never relabels an actual authority refusal', async () => {
+    for (const refused of [false, true]) {
+        const f = fixture(); let entered, finish;
+        const started = new Promise(resolve => { entered = resolve; });
+        f.host.verifyAccount = async (_context, signal) => {
+            entered(); await new Promise(resolve => { finish = resolve; });
+            if (refused) throw Error('Account mismatch');
+            signal.throwIfAborted();
+        };
+        const pending = f.host.request(f.event, f.input()); await started;
+        f.host.quit(); finish();
+        await assert.rejects(pending, refused ? /Account mismatch/ : /\[folder_sync_shutdown\]/);
+        assert.equal(f.calls.length, 0);
+    }
+});
 test('cookie-session account read pins the proxy destination, refuses redirects and bounds bodies', async () => {
     const url = 'http://127.0.0.1:12555/api/v1/auth/me'; let mode = 'valid', requests = 0;
     const context = { appOrigin: 'http://127.0.0.1:12555', apiOrigin: 'https://sync.test', ownerId: 'owner', window: { webContents: { session: { fetch: async (target, init) => {

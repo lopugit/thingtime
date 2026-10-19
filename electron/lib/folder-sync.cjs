@@ -12,6 +12,7 @@ const UUID = /^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/iu;
 const identifier = value => typeof value === 'string' && value.length > 0 && Buffer.byteLength(value) <= 512 && !/[\p{Cc}\p{Cf}]/u.test(value);
 const unavailable = () => new Error('Folder access changed. Reopen this device with the current account.');
 const verificationRetry = () => new Error('[folder_identity_retry] Folder identity verification is temporarily unavailable. Retry after reconnecting.');
+const shutdownWait = () => new Error('[folder_sync_shutdown] Thingtime is closing. Saved sync work can resume when reopened.');
 const transientStatus = status => status === 408 || status === 429 || (status >= 500 && status <= 599);
 async function verificationFetch(context, url, options) {
     try { return await context.window.webContents.session.fetch(url, options); }
@@ -93,7 +94,7 @@ async function readCapabilities(context, signal) {
 class DesktopFolderSync {
     constructor({ context, requestNative, verifyAccount = readAccount, capabilities = readCapabilities, timeoutMs = 300_000 }) {
         this.context = context; this.requestNative = requestNative; this.verifyAccount = verifyAccount;
-        this.capabilities = capabilities; this.timeoutMs = timeoutMs; this.generation = 0; this.active = null;
+        this.capabilities = capabilities; this.timeoutMs = timeoutMs; this.generation = 0; this.active = null; this.quitting = false;
     }
     capture(event, input) {
         const context = this.context(), window = context.window;
@@ -106,6 +107,7 @@ class DesktopFolderSync {
             (input.action !== 'context' && !(input.action === 'suspend' && input.origin === undefined) && input.origin !== apiOrigin) || Buffer.byteLength(JSON.stringify(stageRangeMetadata(input))) > 131_072) throw unavailable();
         if (Object.prototype.hasOwnProperty.call(input, 'pageSize') &&
             (!['scan-page', 'scan-skips'].includes(input.action) || !Number.isSafeInteger(input.pageSize) || input.pageSize < 1 || input.pageSize > 4096)) throw unavailable();
+        if (this.quitting) throw shutdownWait();
         return { ...context, apiOrigin, ownerId: input.ownerId, event, generation: this.generation };
     }
     assertCurrent(state) {
@@ -114,9 +116,9 @@ class DesktopFolderSync {
         if (current.generation !== state.context.generation || current.window !== state.context.window ||
             current.apiOrigin !== state.context.apiOrigin || current.appOrigin !== state.context.appOrigin) throw unavailable();
     }
-    cancel(state = this.active) {
+    cancel(state = this.active, reason) {
         if (!state || this.active !== state || state.abort.signal.aborted) return;
-        state.abort.abort();
+        state.abort.abort(reason);
         // Cancel the native request with its original binding, including after an
         // account/endpoint switch. Never retarget it using the new renderer input.
         if (state.dispatched) void this.requestNative('folder-sync.request', {
@@ -125,6 +127,9 @@ class DesktopFolderSync {
         }).catch(() => {});
     }
     invalidate() { this.generation += 1; this.nativePageCapability = null; this.cancel(); }
+    // before-quit can precede renderer pagehide while local services drain.
+    // Preserve admission through that interval, but permit no further IO.
+    quit() { this.quitting = true; this.generation += 1; this.nativePageCapability = null; this.cancel(this.active, shutdownWait()); }
     samePageCapability(context, input) {
         const cached = this.nativePageCapability;
         return cached && cached.window === context.window && cached.generation === context.generation &&
@@ -198,6 +203,14 @@ class DesktopFolderSync {
                 if (Buffer.byteLength(JSON.stringify(metadata)) > 900_000) throw unavailable();
             } else if (Buffer.byteLength(JSON.stringify(value)) > 900_000) throw unavailable();
             return value;
+        } catch (error) {
+            // The native bridge reports cancellation with its own fixed code.
+            // A genuine authority/protocol refusal still keeps its diagnosis.
+            if (this.quitting && state.abort.signal.aborted &&
+                (error === state.abort.signal.reason || error?.name === 'AbortError' ||
+                    (error?.name === 'ThingtimeNodeBridgeError' && error.code === 'cancelled')))
+                throw state.abort.signal.reason;
+            throw error;
         } finally { clearTimeout(timer); if (this.active === state) this.active = null; }
     }
 }

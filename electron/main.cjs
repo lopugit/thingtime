@@ -139,7 +139,7 @@ const desktopFileExport = new DesktopFileExport({
         apiOrigin: desktopSettings?.snapshot().selectedEndpoint.url }),
     choose: (window, options) => dialog.showSaveDialog(window, options)
 });
-app.on('before-quit', () => { syncWindowLease.quit(); desktopFolderSync.invalidate(); desktopFileExport.invalidate(); });
+app.on('before-quit', () => { syncWindowLease.quit(); desktopFolderSync.quit(); desktopFileExport.invalidate(); });
 
 
 function getSessionHash() {

@@ -12523,3 +12523,16 @@ separate from deterministic discovery/lease tests.
   capture and generation, schedule the next cycle on completion, and fence stale
   callbacks. Explicit Stop followed by a one-shot run must stay one-shot.
 - [ ] Verify installed automatic reconnect and the real home upload receipt.
+
+### Desktop Quit during file sync — 2026-10-20
+
+- [x] Quit while an account check or native inventory request is pending, before
+  renderer `pagehide`. Preserve a fixed lifecycle wait, suspend only the original
+  native binding, refuse new requests and discard late replies. Repeated Quit is
+  idempotent; real authority refusals remain terminal.
+- [x] Recognize only the exact shutdown marker through Electron IPC redaction;
+  near matches and unrelated native details remain hidden and terminal.
+- [ ] In the signed installed app, Quit during import and reopen without Start or
+  Retry. Verify the automatic interval, same sealed capture, continued import and
+  a real payload receipt. The PR #1054 installed check reproduced attention on
+  Quit, so automatic lifecycle acceptance remains open until this passes.
