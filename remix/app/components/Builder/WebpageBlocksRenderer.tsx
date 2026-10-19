@@ -1,3 +1,4 @@
+import { useFormatClock } from './useFormatClock';
 import { resolveBlockProps } from './templateBlocks';
 import { contentSlot } from './contentSlots';
 import { ComponentCollection } from './ComponentCollection';
@@ -990,6 +991,7 @@ const SourceBlock = (props: WebpageBlocksRendererProps & { block: WebpageBlock }
 const AuthoredBlock = (props: WebpageBlocksRendererProps & { block: WebpageBlock }) => {
  const { block, chrome } = props;
  const scope = React.useContext(ComponentDataScope);
+ const formatNow = useFormatClock(block.format, scope);
  const editing = !!chrome && chrome.seamlessMode !== 'view';
  const attributes = resolveBlockProps(block.props || {}, scope) as Record<string, any>;
  if (attributes['data-tt-action-inputs'] && typeof attributes['data-tt-action-inputs'] === 'object') attributes['data-tt-action-inputs'] = JSON.stringify(attributes['data-tt-action-inputs']);
@@ -1028,7 +1030,7 @@ const AuthoredBlock = (props: WebpageBlocksRendererProps & { block: WebpageBlock
    <ComponentCollection {...attributes} renderItem={() => children} />}
  </div>;
  const slot = contentSlot(props.contentSlots, attributes['data-tt-content-slot']);
- const text = block.format ? resolveTemplate({ ttFormat: block.format }, scope) : resolveTemplate(block.text || '', scope);
+ const text = block.format ? resolveTemplate({ ttFormat: block.format }, { ...scope, clock: { now: formatNow } }) : resolveTemplate(block.text || '', scope);
  return <HtmlBlockElement tag={block.tag || 'div'} attributes={{ ...attributes, ...(editing && ['details', 'dialog'].includes(block.tag || '') ? { open: true } : {}) }} editorProps={editorProps}>
   {typeof text === 'string' || typeof text === 'number' ? (editing && !text && block.text ? block.text : text) : null}{block.children ? children : null}{slot ? slot({ scope, editing }) : null}
  </HtmlBlockElement>;
