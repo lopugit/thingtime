@@ -236,3 +236,17 @@ test('iOS native cloud staging resumes accepted binary ranges without sending by
 			)
 		);
 });
+
+
+test('download telemetry excludes retained offsets and repeated completed stages', async () => {
+ const f = await fixture(), signal = new AbortController().signal;
+ const bridge = { platform: 'macos' as const, fileAccessVersion: '1.2.0', fileStagingVersion: '1.1.0' };
+ await assert.rejects(stageMobileCopy(scope, rootId, f.operation, f.source, signal, f.request, bridge), /lost acknowledged/);
+ const transferred: number[] = [], received: number[] = [];
+ const record = (bytes: number, total: number) => { transferred.push(bytes); received.push(total); };
+ await stageMobileCopy(scope, rootId, f.operation, f.source, signal, f.request, bridge, record);
+ assert.deepEqual(transferred, [0, 3]); assert.deepEqual(received, [2 * 1024 * 1024, f.bytes.length]);
+ transferred.length = 0;
+ await stageMobileCopy(scope, rootId, f.operation, f.source, signal, f.request, bridge, record);
+ assert.deepEqual(transferred, [0]);
+});

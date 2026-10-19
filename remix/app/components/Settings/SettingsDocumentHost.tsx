@@ -20,7 +20,15 @@ export type SettingsDocumentHostProps = {
   persistence?: 'account' | 'device';
   /** Native hosts provide their selected authenticated API transport. */
   accountTransport?: { origin: string; fetch: typeof fetch; currentOrigin: () => string };
-  children: (render: { blocks: WebpageBlock[]; chrome: BuilderChrome | null; editing: boolean }) => React.ReactNode;
+  children: (render: SettingsDocumentControls) => React.ReactNode;
+};
+
+export type SettingsDocumentControls = {
+  blocks: WebpageBlock[]; chrome: BuilderChrome | null; editing: boolean;
+  /** Authored blocks only; the same validation, account scope and revision fence as Builder saves. */
+  setBlocks: (blocks: WebpageBlock[]) => void;
+  save: () => Promise<{ ok: boolean; error?: string; id?: string }>;
+  canSave: boolean; saving: boolean; dirty: boolean;
 };
 
 const OfflineContents = React.createContext<React.ReactNode>(null);
@@ -99,15 +107,17 @@ function SettingsDocumentSession({ defaultDocument, title = 'Settings layout', p
     return () => { active = false; };
   }, [adapter, reload, writable, cacheKey, defaults, persistence, title]);
   const update = (blocks: WebpageBlock[]) => {
+    if (saving.current) return;
     try { const safe = settingsDocumentBlocks(blocks); revision.current++; setDocument(previous => ({ ...previous, blocks: safe })); }
     catch (cause) { setError(cause instanceof Error ? cause.message : 'This layout change is unavailable.'); }
   };
   const saving = React.useRef(false);
+  const [saveBusy, setSaveBusy] = React.useState(false);
   const save = async () => {
     if (saving.current) return { ok: false, error: 'A layout save is already running.' };
     if (!writable || !ready || !adapter) return { ok: false, error: 'Reload the current account layout before saving.' };
     const signal = controller.current.signal;
-    saving.current = true;
+    saving.current = true; setSaveBusy(true);
     const snapshot = current.current;
     const edit = revision.current;
     try {
@@ -123,7 +133,7 @@ function SettingsDocumentSession({ defaultDocument, title = 'Settings layout', p
       const message = cause instanceof Error ? cause.message : 'The layout could not be saved.';
       if (!signal.aborted) setError(message);
       return { ok: false, error: message };
-    } finally { saving.current = false; }
+    } finally { saving.current = false; if (!signal.aborted) setSaveBusy(false); }
   };
   const draft: UseWebpageDraft = {
     loading: !ready, error: !!error, blocks: document.blocks, setBlocks: update, dirty,
@@ -135,15 +145,15 @@ function SettingsDocumentSession({ defaultDocument, title = 'Settings layout', p
   };
   return <Box minW={0} data-settings-document={documentScope.documentKey}>
     <Flex gap={2} mb={2} align="center" flexWrap="wrap">
-      <Button size="xs" variant="ghost" onClick={() => setEditing(value => !value)}>{editing ? 'Done editing layout' : 'Edit layout'}</Button>
+      <Button size="xs" variant="ghost" isDisabled={saveBusy} onClick={() => setEditing(value => !value)}>{editing ? 'Done editing layout' : 'Edit layout'}</Button>
       {dirty && <Text fontSize="xs">Unsaved layout</Text>}
-      {editing && <Button size="xs" isDisabled={!ready || !writable || !dirty} onClick={() => void save()}>Save layout</Button>}
+      {editing && <Button size="xs" isDisabled={!ready || !writable || !dirty || saveBusy} onClick={() => void save()}>Save layout</Button>}
       {!writable && <Text fontSize="xs">Sign in to save a personal layout.</Text>}
     </Flex>
     {error && <Flex gap={2} align="center"><Text role="alert" fontSize="xs">{error}</Text><Button size="xs" onClick={() => setReload(value => value + 1)}>Retry</Button></Flex>}
-    {editing ? <SettingsEditor key="edit" draft={draft} name={document.name} onName={name => { revision.current++; setDocument(previous => ({ ...previous, name })); }}>
-      {chrome => children({ blocks: document.blocks, chrome, editing: true })}
-    </SettingsEditor> : <React.Fragment key="view">{children({ blocks: document.blocks, chrome: null, editing: false })}</React.Fragment>}
+    {editing ? <SettingsEditor key="edit" draft={draft} name={document.name} onName={name => { if (saving.current) return; revision.current++; setDocument(previous => ({ ...previous, name })); }}>
+      {chrome => children({ blocks: document.blocks, chrome, editing: true, setBlocks: update, save, canSave: ready && writable && !saveBusy, saving: saveBusy, dirty })}
+    </SettingsEditor> : <React.Fragment key="view">{children({ blocks: document.blocks, chrome: null, editing: false, setBlocks: update, save, canSave: ready && writable && !saveBusy, saving: saveBusy, dirty })}</React.Fragment>}
   </Box>;
 }
 

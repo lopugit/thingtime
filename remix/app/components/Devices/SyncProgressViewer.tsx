@@ -1,4 +1,5 @@
 import React from 'react';
+import { TransferSpeedTrackers, type TransferSpeedTrackersProps } from './TransferSpeedTrackers';
 import type { ForegroundSyncProgress } from '~/fileSync/foregroundSync';
 import { parseSyncProgressDescriptor, projectSyncProgress, type SyncProgressDescriptor, type SyncProgressSource, type SyncProgressState } from '~/fileSync/progressProjection';
 import { createJournalSyncProgressSource } from '~/fileSync/progressProjection.client';
@@ -9,7 +10,7 @@ import { SettingsDocumentHost, type SettingsDocumentHostProps } from '../Setting
 import { syncProgressBlocks, syncProgressDisplay, type SyncProgressBranch } from './syncProgressBlocks';
 
 export type SyncProgressViewerProps = {
-	scopeKey: string; descriptor?: SyncProgressDescriptor | null; progress?: ForegroundSyncProgress;
+	scopeKey: string; series?: TransferSpeedTrackersProps['series']; descriptor?: SyncProgressDescriptor | null; progress?: ForegroundSyncProgress;
 	currentScope(): SyncScope; status?: SyncProgressState; message?: string;
 	accountTransport?: SettingsDocumentHostProps['accountTransport'];
 	/** Isolated fixtures may supply bounded synthetic metadata. */
@@ -22,7 +23,7 @@ export function SyncProgressViewer(props: SyncProgressViewerProps) {
 	return <SyncProgressSession key={`${props.scopeKey}:${parsed.descriptor?.run.id ?? 'indexing'}`} {...props} descriptor={parsed.descriptor}
 		invalidDescriptor={parsed.invalid} />;
 }
-function SyncProgressSession({ scopeKey, descriptor, progress, currentScope, status = 'running', message, accountTransport, source: suppliedSource, invalidDescriptor }: SyncProgressViewerProps & { invalidDescriptor?: boolean }) {
+function SyncProgressSession({ scopeKey, series, descriptor, progress, currentScope, status = 'running', message, accountTransport, source: suppliedSource, invalidDescriptor }: SyncProgressViewerProps & { invalidDescriptor?: boolean }) {
 	const scopeRef = React.useRef(currentScope); scopeRef.current = currentScope;
 	const progressRef = React.useRef(progress); progressRef.current = progress;
 	const source = React.useMemo(() => suppliedSource || (descriptor ? createJournalSyncProgressSource(descriptor, () => scopeRef.current()) : null), [descriptor, suppliedSource]);
@@ -108,9 +109,9 @@ function SyncProgressSession({ scopeKey, descriptor, progress, currentScope, sta
 		}
 	};
 	const displayBranches = invalidDescriptor ? { ...branches, '': { ...branches[''], error: 'Saved sync progress metadata is invalid. Resume sync to read its current journal.' } } : branches;
-	return <SettingsDocumentHost documentKey="file-sync-progress" defaultDocument={syncProgressBlocks} scopeKey={scopeKey} title="File sync progress" accountTransport={accountTransport}>
+	return <><SettingsDocumentHost documentKey="file-sync-progress" defaultDocument={syncProgressBlocks} scopeKey={scopeKey} title="File sync progress" accountTransport={accountTransport}>
 		{({ blocks, chrome, editing }) => <TransientBlockHost scopeKey={scopeKey} scope={syncProgressDisplay(displayBranches, progress, status, !!source, message, focusedFolder)} actions={actions} enabled={!editing}>
 			<WebpageBlocksRenderer blocks={blocks} componentsByRef={{}} chrome={chrome} />
 		</TransientBlockHost>}
-	</SettingsDocumentHost>;
+	</SettingsDocumentHost><TransferSpeedTrackers scopeKey={scopeKey} series={series} accountTransport={accountTransport} /></>;
 }

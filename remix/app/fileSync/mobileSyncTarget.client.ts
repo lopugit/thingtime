@@ -99,10 +99,11 @@ export async function approveMobileSyncTarget(
 			if (!result.publication) throw Error('Native publication lookup is unavailable.');
 			return result.publication;
 		},
-		stage: async (operation, current, source) => {
+		reportsTransferBytes: true,
+		stage: async (operation, current, source, transferred) => {
 			const input = transfer(operation, current);
 			await recheckApproval();
-			return stageMobileCopy(input.scope, rootId, input.operation, source, signal, request, bridge);
+			return stageMobileCopy(input.scope, rootId, input.operation, source, signal, request, bridge, transferred);
 		},
 		publish: async (operation, current, stage) => {
 			const input = transfer(operation, current);

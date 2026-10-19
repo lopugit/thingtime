@@ -15,11 +15,13 @@ import { sameSyncContent, sameSyncScope, validSyncEntry, type SyncEntry, type Sy
  */
 export type LocalStagedCopy = { operationId: string; scope: SyncScope; token: string; entry: SyncEntry };
 export type LocalSyncTarget = {
+	/** Optional telemetry contract; old adapters report an unavailable byte rate. */
+	reportsTransferBytes?: true;
 	/** Present only after native deletion consent; never an unlink fallback. */
 	trash?(operation: SyncOperation, scope: SyncScope, context?: LocalTrashContext): Promise<SyncReceipt>;
 	trashExpected?(operation: SyncOperation, scope: SyncScope, context?: LocalTrashContext): Promise<SyncEntry>;
 	lookup(operation: SyncOperation, scope: SyncScope, context?: LocalTrashContext): Promise<SyncReceiptLookup>;
-	stage(operation: SyncOperation, scope: SyncScope, source?: FingerprintSource): Promise<LocalStagedCopy>;
+	stage(operation: SyncOperation, scope: SyncScope, source?: FingerprintSource, transferred?: (bytes: number, received: number) => void): Promise<LocalStagedCopy>;
 	publish(operation: SyncOperation, scope: SyncScope, stage: LocalStagedCopy): Promise<SyncReceipt>;
 };
 export function validateLocalStage(stage: LocalStagedCopy, operation: SyncOperation, scope: SyncScope): void {

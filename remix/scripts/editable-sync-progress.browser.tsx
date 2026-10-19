@@ -28,7 +28,8 @@ window.fetch = async function(input, init) {
 	if (url.pathname.includes('thingtime-capabilities')) return Response.json(thingtimeCapabilityManifest(location.origin));
 	if (url.pathname === '/api/v1/webpages/resolve') {
 		const page = JSON.parse(localStorage.getItem(layoutKey) || 'null');
-		return Response.json(page ? { ok: true, page, source: 'user' } : { ok: false }, { status: page ? 200 : 404 });
+		const selected = page?.crystal?.pageKey === url.searchParams.get('id') ? page : null;
+        return Response.json(selected ? { ok: true, page: selected, source: 'user' } : { ok: false }, { status: selected ? 200 : 404 });
 	}
 	if (url.pathname === '/api/v1/things' && ['POST', 'PATCH'].includes(init?.method || '')) {
 		const input = JSON.parse(String(init?.body)), old = JSON.parse(localStorage.getItem(layoutKey) || 'null');

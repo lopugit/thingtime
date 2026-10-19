@@ -25,6 +25,7 @@ export async function executePreparedPagedSyncRun(value: PagedRunSpec, savedScop
 		for (const operation of page.operations) {
 			check(); const receipt = await executeSyncOperation(operation, scope, port, options.signal); check();
 			state = await journal.confirm(spec, receipt); check(); options.changed?.(state);
+			port.confirmed?.(operation, receipt);
 		}
 	}
 	return state;

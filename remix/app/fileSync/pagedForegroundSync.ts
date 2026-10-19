@@ -245,6 +245,7 @@ export async function runPagedForegroundCloudSync(reviewed: SavedFileSyncConfigu
 	};
 	const port = await createPagedCloudSyncPort(spec, configuration, runs, {
 		currentScope: input.currentScope, signal, localTarget,
+		transfer: input.transfer,
 		readLocal,
 		openSource: async entry => { await authorize(); return input.source(entry); },
 		progress: (path, bytes, size) => { check(); input.progress({ stage: retain ? 'retaining' : 'transferring', confirmed: state.confirmed, total: state.operations, path, bytes, size }); }

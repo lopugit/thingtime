@@ -11,6 +11,7 @@ import { DesktopSyncAutomation } from './DesktopSyncAutomation';
 import { HomeBackupPreset } from './HomeBackupPreset';
 import { SyncProgressViewer } from './SyncProgressViewer';
 import type { SyncProgressDescriptor } from '~/fileSync/progressProjection';
+import { createTransferActivitySession } from '~/fileSync/transferActivity';
 import { createConflictReviewController } from '~/fileSync/conflictReviewController';
 import type { PagedConflictReviewResult, PagedConflictReviewSession } from '~/fileSync/pagedForegroundReview';
 import type { SyncConflict, SyncConflictChoice, SyncConflictReviewResult } from '~/fileSync/conflictResolution';
@@ -114,6 +115,7 @@ function Connections({
 		[viewBusy, setBusy] = useState(false),
 		[notice, setNotice] = useState('');
 	const nativeTask = useSyncExternalStore(nativeSyncTasks.subscribe, nativeSyncTasks.read, nativeSyncTasks.read);
+	const transferSession = useRef<{ id: string; session: ReturnType<typeof createTransferActivitySession> } | null>(null);
 	const ownNativeTask = nativeTask && nativeTask.scope.ownerId === scope.ownerId &&
 		nativeTask.scope.origin === scope.origin && nativeTask.scope.deviceId === scope.deviceId && nativeTask.scope.dataPlane === scope.dataPlane
 		? nativeTask : null;
@@ -294,9 +296,12 @@ function Connections({
 		void run(async (assertActive) => {
 			const active = controller.current!,
 				syncScope = { ...scope, rootId: saved.id };
+			transferSession.current?.session.stop();
+			const speeds = createTransferActivitySession(); transferSession.current = { id: saved.id, session: speeds };
 			setProgressDescriptors(previous => ({ ...previous, [saved.id]: undefined }));
 			const publish = (value: ForegroundSyncProgress & { message?: string }) => {
 				assertActive();
+				speeds.stage(value.stage);
 				setTransfers((previous) => ({ ...previous, [saved.id]: value }));
 				writeStampedCache(progressKey(saved.id), value);
 				if (value.stage === 'retained') window.dispatchEvent(new Event(TIMELINE_CHANGED_EVENT));
@@ -388,6 +393,7 @@ function Connections({
 									requireCapability
 								},
 								progress: publish,
+								transfer: value => { assertActive(); speeds.add(value); },
 								progressSession: (descriptor: SyncProgressDescriptor) => {
 									assertActive(); setProgressDescriptors(previous => ({ ...previous, [saved.id]: descriptor }));
 									const cacheKey = 'tt:sync-progress-tree:' + syncScopeKey(syncScope);
@@ -452,6 +458,7 @@ function Connections({
 					});
 				throw cause;
 			} finally {
+				speeds.stop();
 				journal?.close();
 				if (mounted.current) setActiveTransfer(null);
 			}
@@ -699,6 +706,7 @@ function Connections({
 						</Box>}
 						{(host || capabilities?.platform === 'ios') && (progress || progressDescriptor) && <Box width="100%" minW={0}>
 							<SyncProgressViewer scopeKey={`${key}:${generation}:${saved.id}`} descriptor={progressDescriptor}
+								series={task?.transferSeries ?? (transferSession.current?.id === saved.id ? transferSession.current.session.series : undefined)}
 								progress={progress ?? undefined} status={task?.status ?? (running ? 'running' : progress?.stage === 'complete' ? 'complete' : 'paused')}
 								message={progress?.message} accountTransport={reviewTransport} currentScope={() => {
 									if (!mounted.current || rootIdentity.read().pending || rootIdentity.read().generation !== generation || runtimeOrigin() !== scope.origin)

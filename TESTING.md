@@ -11890,3 +11890,20 @@ resume unfinished Android gates only when requested.
   signed installed Mac with the reviewed home grant/exclusions; compare actual
   transferred bytes and parent totals. Synthetic fixture success is not this
   release acceptance. Retain Android's later-date status and original app data.
+
+
+### Transfer speed windows (2026-10-19)
+
+- Check each decimal bit unit and logical file/folder/inode unit independently
+  for upload and download, including non-aligned rolling-window boundaries,
+  large counters, idle zero, unknown byte telemetry, pause/resume, account change
+  and at least 24 hours of bounded history. Retried receipts and retained offsets
+  must not inflate either direction. Journal failure must not count a completion.
+- Add multiple trackers with different windows, apply and save their settings,
+  reload, remove one and save again. Invalid windows must remain rejected.
+  In actual Builder edit each tracker label, control and reading separately.
+  Check save-in-flight controls and desktop/mobile full-page overflow.
+- On the signed installed Mac, compare real transferred payload totals and
+  logical confirmations against the live readings. Verify native adapters that
+  omit telemetry show unavailable rather than a fabricated rate. Synthetic
+  fixture checks do not establish installed or provider throughput acceptance.

@@ -17,6 +17,7 @@ import type { FingerprintSource } from './contentFingerprint';
 import type { openSyncJournal } from './journal.client';
 import { type SyncEntry, type SyncScope, type SyncBaseline } from './reconcile';
 import type { SyncProgressDescriptor } from './progressProjection';
+import type { TransferActivity } from './transferActivity';
 
 export type ForegroundSyncProgress = {
 	stage: 'checking' | 'scanning' | 'reviewing' | 'transferring' | 'verifying' | 'complete' | 'retaining' | 'retained';
@@ -46,6 +47,7 @@ export type ForegroundSyncInput = {
 	progress(value: ForegroundSyncProgress): void;
 	/** Read-only journal references for the editable progress hierarchy. */
 	progressSession?(value: SyncProgressDescriptor): void;
+	transfer?(value: TransferActivity): void;
 	reviewConflicts?(conflicts: SyncConflict[]): Promise<SyncConflictReviewResult>;
 	/** Bounded, durable review adapter for editable Builder surfaces. */
 	reviewPagedConflicts?(session: PagedConflictReviewSession): Promise<PagedConflictReviewResult>;
@@ -231,6 +233,7 @@ export async function runForegroundCloudSync(
 			},
 			localTarget,
 			signal,
+			transfer: input.transfer,
 			progress: (path, bytes, size) => {
 				check();
 				input.progress({

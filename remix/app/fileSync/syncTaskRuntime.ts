@@ -4,6 +4,8 @@ import type { createConflictReviewController } from './conflictReviewController'
 import type { SyncConflict, SyncConflictChoice } from './conflictResolution';
 import type { FolderHost } from './desktopFolders.client';
 import type { SyncProgressDescriptor } from './progressProjection';
+import { createTransferActivitySession, type TransferActivity } from './transferActivity';
+import type { TransferSpeedSeries } from './transferSpeed';
 
 export type SyncTaskSnapshot = {
 	scope: SyncScope;
@@ -11,6 +13,7 @@ export type SyncTaskSnapshot = {
 	host?: FolderHost;
 	progress: ForegroundSyncProgress & { message?: string };
 	progressDescriptor?: SyncProgressDescriptor;
+	transferSeries?: TransferSpeedSeries;
 	status?: 'running' | 'paused' | 'error' | 'complete';
 	pagedReview?: ReturnType<typeof createConflictReviewController>;
 	legacyReview?: { conflicts: SyncConflict[]; apply(choices: SyncConflictChoice[]): void; retain(): void; cancel(): void };
@@ -24,6 +27,7 @@ export function createSyncTaskRuntime() {
 	let active: AbortController | undefined;
 	let saveStop: (() => Promise<void>) | undefined;
 	let suspensionMessage: string | undefined;
+	let transferSession: ReturnType<typeof createTransferActivitySession> | undefined;
 	const listeners = new Set<() => void>();
 	const publish = (value: SyncTaskSnapshot | null) => {
 		snapshot = value;
@@ -41,16 +45,20 @@ export function createSyncTaskRuntime() {
 		// Lifecycle interruption preserves runnable admission. Only cancel saves
 		// the user's durable Stop, so returning to the foreground can recover.
 		suspend(message: string) { if (active && !active.signal.aborted) { suspensionMessage = message; active.abort(); } },
-		invalidate() { active?.abort(); publish(null); },
-		async start(scope: SyncScope, run: (signal: AbortSignal, update: (patch: Partial<Pick<SyncTaskSnapshot, 'progress' | 'progressDescriptor' | 'pagedReview' | 'legacyReview' | 'host'>>) => void) => Promise<void>, onStop?: () => Promise<void>) {
+		invalidate() { active?.abort(); transferSession?.clear(); publish(null); },
+		async start(scope: SyncScope, run: (signal: AbortSignal, update: (patch: Partial<Pick<SyncTaskSnapshot, 'progress' | 'progressDescriptor' | 'pagedReview' | 'legacyReview' | 'host'>> & { transfer?: TransferActivity }) => void) => Promise<void>, onStop?: () => Promise<void>) {
 			if (active) throw Error('A transfer is already running. Reopen its connection to review or stop it.');
 			syncScopeKey(scope);
 			const controller = new AbortController(); active = controller; saveStop = onStop;
 			suspensionMessage = undefined;
-			publish({ scope: structuredClone(scope), active: true, status: 'running', progress: { stage: 'checking', confirmed: 0, total: 0 } });
-			const update = (patch: Partial<Pick<SyncTaskSnapshot, 'progress' | 'progressDescriptor' | 'pagedReview' | 'legacyReview' | 'host'>>) => {
+			const transfers = createTransferActivitySession(); transferSession = transfers;
+			publish({ scope: structuredClone(scope), active: true, status: 'running', transferSeries: transfers.series, progress: { stage: 'checking', confirmed: 0, total: 0 } });
+			const update = (patch: Partial<Pick<SyncTaskSnapshot, 'progress' | 'progressDescriptor' | 'pagedReview' | 'legacyReview' | 'host'>> & { transfer?: TransferActivity }) => {
 				controller.signal.throwIfAborted();
-				if (snapshot) publish({ ...snapshot, ...patch });
+				const { transfer, ...view } = patch;
+				if (view.progress) transfers.stage(view.progress.stage);
+				if (transfer) transfers.add(transfer);
+				if (snapshot) publish({ ...snapshot, ...view });
 			};
 			try { await run(controller.signal, update); }
 			catch (error) {
@@ -58,6 +66,7 @@ export function createSyncTaskRuntime() {
 					message: controller.signal.aborted ? suspensionMessage ?? 'Transfer stopped. Retry to recover saved work.' :
 						error instanceof Error ? error.message : 'Transfer interrupted. Retry to recover saved work.' } });
 			} finally {
+				transfers.stop();
 				if (snapshot) publish({ ...snapshot, active: false,
 					status: snapshot.status === 'running' ? (snapshot.progress.stage === 'complete' ? 'complete' : 'paused') : snapshot.status,
 					pagedReview: undefined, legacyReview: undefined });

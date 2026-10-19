@@ -10,6 +10,7 @@ import { prepareCloudSyncRun, parseCloudSyncRun } from './cloudWrite';
 import { createCloudSyncPort } from './cloudSyncPort.client';
 import { createCloudFileTransport, type CloudTransportRuntime } from './cloudTransport';
 import { openSyncJournal } from './journal.client';
+import type { TransferActivity } from './transferActivity';
 const scope: SyncScope = { origin: 'https://sync.test', ownerId: 'owner', dataPlane: 'home', rootId: 'root', deviceId: 'phone' };
 const bytes = new Uint8Array([1, 2, 3, 4]);
 const source = (): FingerprintSource => ({ size: bytes.length, read: async (offset, size) => bytes.slice(offset, offset + size), check: () => {} });
@@ -46,7 +47,7 @@ async function fixture() {
    throw Error('Unexpected request');
   } };
  const make = () => prepareCloudSyncRun(createSyncRun(planFileSync({ scope, complete: true, entries: [entry] }, { scope, complete: true, entries: [] }, { scope, entries: [] }, { mode: 'backup', propagateDeletes: false })), [{ before: null, folderId: null }]);
- const port = (run: SyncRun, persist: (run: SyncRun) => Promise<void>) => createCloudSyncPort(run, { currentScope: () => current, persist, readLocal: async () => entry, openSource: async () => { opens++; return source(); } }, runtime);
+ const port = (run: SyncRun, persist: (run: SyncRun) => Promise<void>, transfer?: (value: TransferActivity) => void) => createCloudSyncPort(run, { transfer, currentScope: () => current, persist, readLocal: async () => entry, openSource: async () => { opens++; return source(); } }, runtime);
  return { make, port, runtime, entry, file: () => file, counts: () => ({ puts, starts, commits, opens }), lose: () => { lost = true; }, context: (next: SyncScope) => { current = next; }, hook: (next: typeof hook) => { hook = next; } };
 }
 test('real transport joins executor and durable journal, recovering a lost commit without rereading or uploading bytes', async () => {
@@ -209,4 +210,27 @@ test('whole-file handoff independently verifies stored bytes before canonical pu
   }
   assert.equal(jobs,1);assert.equal(completes,0);assert.equal(f.counts().puts,0);assert.equal(f.counts().commits,mismatch?0:1);
  }
+});
+
+
+test('speed telemetry counts payload once and logical files only after durable confirmation', async () => {
+ const f = await fixture(), run = f.make(), events: TransferActivity[] = [];
+ let durable = false;
+ await executeSyncRun(run, f.port(run, async value => { durable = value.operations.every(op => op.confirmed); }, event => {
+  if ('kind' in event) assert.equal(durable, true);
+  events.push(event);
+ }));
+ assert.deepEqual(events, [{ direction: 'upload', bytes: 4 }, { direction: 'upload', kind: 'file' }]);
+ events.length = 0;
+ await executeSyncRun(run, f.port(run, async () => {}, event => events.push(event)));
+ assert.deepEqual(events, [], 'receipt recovery is not new transfer traffic or a new copied file');
+});
+
+test('ready attachment reuse and failed journal confirmations do not inflate throughput', async () => {
+ const f = await fixture(), run = f.make(), events: TransferActivity[] = []; let fail = true;
+ f.hook((path, body) => { if (path === '/api/v1/files' && body && fail) { fail = false; throw Error('before publication'); } return null; });
+ await assert.rejects(executeSyncRun(run, f.port(run, async () => {}, event => events.push(event))), /before publication/);
+ assert.deepEqual(events, [{ direction: 'upload', bytes: 4 }]); events.length = 0;
+ await assert.rejects(executeSyncRun(run, f.port(run, async value => { if (value.operations.every(op => op.confirmed)) throw Error('journal full'); }, event => events.push(event))), /journal full/);
+ assert.deepEqual(events, [], 'ready attachment has no new bytes and failed journal has no confirmed file');
 });

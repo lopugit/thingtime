@@ -3495,3 +3495,34 @@ changed files. These fixtures use synthetic native/API grants; real home upload
 and signed installed acceptance are still required. The private coordination
 comment could not be verified after Chrome control timed out; no duplicate was
 sent, and cleanup of task-created tab411841516 could not be confirmed.
+
+
+### Live transfer speed trackers — 2026-10-19
+
+The editable progress viewer now includes saved, individually editable speed
+trackers. Add up to 16, each with an independent 1-second to 24-hour averaging
+window and Kbps, Mbps, Gbps, Files/ps, Folders/ps or INodes/ps units. Each tracker
+shows upload and download separately. Preferences use the existing account
+settings document and revision fence; live counters remain in memory and are
+cleared across account changes. INodes/ps means logical files plus folders.
+
+A single bounded per-run history uses monotonic time and decimal bit rates.
+Unknown byte capabilities remain unavailable; idle measures zero, while pause
+and resume rebase the window. Mac/browser uploads count acknowledged payload
+parts; downloads exclude retained staging offsets. Receipt recovery and repeated
+completion do not count new traffic. File/folder counts advance only after the
+newly executed copy is durably confirmed. Native whole-file/part upload adapters
+without distinct new-byte telemetry report unavailable byte rates rather than
+counting recovered bytes. These are payload rates, not network header or retry
+traffic measurements.
+
+Validation: 47 focused telemetry/transport/lifecycle checks and 14 targeted
+settings/template/hierarchy checks pass. Isolated Chromium covers all six units,
+independent windows, add/remove/save/reload, invalid values, save-in-flight
+controls, actual nested Builder edits, and 1440/390 full-page layout. Existing
+13-level hierarchy acceptance also passes. Client build and changed-file lint
+pass. Installed-app/deployed acceptance and the real home upload remain open.
+
+The user authorized merging this task into main and starting the selected home
+upload afterward. Publication still requires reconciling current main and stale
+PR-head metadata; a feature-branch push is not evidence of a main merge.

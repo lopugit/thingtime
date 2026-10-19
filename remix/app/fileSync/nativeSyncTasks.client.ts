@@ -81,6 +81,7 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 				check();
 				await runPagedForegroundCloudSync(reviewed, binding, {
 					currentScope, localTarget, journal: journal!, runtime, progress: publish,
+					transfer: value => { check(); update({ transfer: value }); },
 					progressSession: descriptor => {
 						check(); update({ progressDescriptor: descriptor });
 						const key = 'tt:sync-progress-tree:' + syncScopeKey(binding);
