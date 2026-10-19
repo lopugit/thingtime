@@ -1,4 +1,5 @@
 import { SyncConditionsWait } from './foregroundSyncContext';
+import { SyncConnectionWait, isSyncConnectionFailure } from './syncConnectionWait';
 import { pauseSyncJobAdmission, type SyncJob } from './syncJobJournal';
 import { holdDesktopSyncWindow, setDesktopSyncScheduled } from './desktopSyncWindow.client';
 import { createNativeSyncHost, getNativeSyncAdapter, isNativeSyncAdapterCurrent } from './nativeSyncHost.client';
@@ -7,10 +8,10 @@ import { rootIdentity } from '../utils/rootIdentity';
 import { createSyncTaskRuntime } from './syncTaskRuntime';
 import { openSyncJournal, withSyncRootLock, syncScopeKey } from './journal.client';
 import { runPagedForegroundCloudSync } from './pagedForegroundSync';
-import { readNativeInventory } from './nativeInventory';
+import { readNativeInventory, NativeInventoryRetryWait, type LocalInventoryPage } from './nativeInventory';
 import { readCloudFolderInventoryPages } from './cloudInventoryPages.client';
 import { readCloudFolderInventory } from './cloudInventory.client';
-import { mobileFolderSource, supportsNativeInventoryPages, supportsNativePathInspection } from './mobileFolders.client';
+import { mobileFolderSource, supportsNativeInventoryPages, supportsNativePathInspection, supportsNativeBackupCapture } from './mobileFolders.client';
 import { approveMobileSyncTarget } from './mobileSyncTarget.client';
 import { assertPhotoSourcePolicy } from './photoSourcePolicy';
 import { createConflictReviewController } from './conflictReviewController';
@@ -32,7 +33,7 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 	const reviewed = structuredClone(saved), binding = structuredClone(scope);
 	if (binding.dataPlane !== 'home' || binding.rootId !== reviewed.id || binding.deviceId !== reviewed.configuration.deviceId)
 		throw Error('The file sync connection changed.');
-	let stopRequested = false, saveStop: (() => Promise<void>) | undefined;
+	let stopRequested = false, saveStop: (() => Promise<void>) | undefined, cancelCapture: (() => Promise<void>) | undefined;
 	await nativeSyncTasks.start(binding, async (signal, update) => {
 		const checkIdentity = () => {
 			if (rootIdentity.read().pending || rootIdentity.read().generation !== generation || !isNativeSyncAdapterCurrent(adapter))
@@ -51,7 +52,7 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 			check();
 			journal = await openSyncJournal(); check();
 			jobs = journal.jobs({ scope: binding, currentScope: () => { checkIdentity(); return binding; } });
-			saveStop = async () => { const stopping = job ?? resume; if (stopping) await pauseSyncJobAdmission(jobs!, stopping.id); };
+			saveStop = async () => { const stopping = job ?? resume; if (stopping) await pauseSyncJobAdmission(jobs!, stopping.id); await cancelCapture?.().catch(() => {}); };
 			if (adapter.platform === 'macos') releaseWindow = await holdDesktopSyncWindow(adapter.bridge); check();
 			const host = await createNativeSyncHost({ ownerId: binding.ownerId, deviceId: binding.deviceId, adapter, signal, assertCurrent: check });
 			if (host.origin() !== binding.origin) throw Error('The selected sync server changed.');
@@ -63,6 +64,31 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 			const request = host.request, capabilities = host.capabilities;
 			const currentScope = () => { check(); host.assertCurrent(); return binding; };
 			const runtime = { currentScope, origin: host.origin, fetch: host.fetch, requireCapability: host.requireCapability };
+			cancelCapture = async () => {
+				if (!job?.nativeCaptureId) return;
+				await request(binding.ownerId, { action: 'scan-cancel', rootId: reviewed.configuration.localRootId, inventoryDeviceId: binding.deviceId,
+					captureId: job.nativeCaptureId, capturePolicy: 'backup-supported', excludedPaths: reviewed.configuration.excludedPaths }, signal);
+			};
+			const nativePages = async function* (): AsyncGenerator<LocalInventoryPage> {
+				const backup = supportsNativeBackupCapture(capabilities) && reviewed.configuration.mode === 'backup' && !reviewed.configuration.propagateDeletes;
+				if (backup && !job!.nativeCaptureId) {
+					const changed = await jobs!.capture(job!, crypto.randomUUID()); check();
+					if (!changed) throw Error('The sync job changed before indexing.'); job = changed;
+				}
+				for await (const page of readNativeInventory({ ownerId: binding.ownerId, deviceId: binding.deviceId, rootId: reviewed.configuration.localRootId,
+					excludedPaths: reviewed.configuration.excludedPaths, signal, request, ...(backup ? { backupPolicy: reviewed.configuration, captureId: job!.nativeCaptureId,
+						onCaptureStatus: async value => {
+							if (job!.nativeCaptureGeneration === value.generation) return;
+							const changed = await jobs!.observeCapture(job!, value.generation); check();
+							if (!changed) throw Error('The sync job changed during indexing.'); job = changed;
+						},
+						onProgress: value => publish({ stage: 'scanning', confirmed: 0, total: 0, indexed: value.totalEntries, skipped: value.totalSkipped,
+							coverage: value.coverage, consistency: value.consistency }) } : {}) })) yield page;
+				if (backup) {
+					const changed = await jobs!.capture(job!, null); check();
+					if (!changed) throw Error('The sync job changed after indexing.'); job = changed;
+				}
+			};
 			const publish = (progress: Parameters<typeof update>[0]['progress']) => {
 				check(); if (!progress) return; update({ progress });
 				const key = 'tt:sync-progress:' + syncScopeKey(binding);
@@ -75,12 +101,26 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 				const inspect = supportsNativePathInspection(capabilities) && roots.some(root => root.id === reviewed.configuration.localRootId && root.sourceKind !== 'photos');
 				const localTarget = ['download', 'two-way'].includes(reviewed.configuration.mode)
 					? await approveMobileSyncTarget(reviewed, binding, signal, request, capabilities, resume ? 'existing' : 'request') : undefined;
+				if (!resume) {
+					const prior = await jobs!.read(); check();
+					// A new approved revision cannot borrow the earlier native job.
+					// Cancel its same-connection scan before dropping that ticket.
+					if (prior?.nativeCaptureId && JSON.stringify(prior.reviewed.configuration) === JSON.stringify(reviewed.configuration) && prior.reviewed.updatedAt !== reviewed.updatedAt) {
+						await request(binding.ownerId, { action: 'scan-cancel', rootId: prior.reviewed.configuration.localRootId, inventoryDeviceId: binding.deviceId,
+							captureId: prior.nativeCaptureId, capturePolicy: 'backup-supported', excludedPaths: prior.reviewed.configuration.excludedPaths }, signal); check();
+					}
+				}
 				job = resume ? await jobs!.begin(resume, Date.now(), crypto.randomUUID()) : await jobs!.admit(reviewed, crypto.randomUUID(), intervalMs);
 				if (!job) return; // A stopped/completed/replaced discovery is never replayed.
 				if (stopRequested) await jobs!.transition(job, 'paused');
 				check();
 				await runPagedForegroundCloudSync(reviewed, binding, {
 					currentScope, localTarget, journal: journal!, runtime, progress: publish,
+					inventorySession: descriptor => {
+						check(); update({ inventoryDescriptor: descriptor });
+						const key = 'tt:sync-inventory:' + syncScopeKey(binding);
+						writeStampedCache(key, descriptor); pruneCacheNamespace('tt:sync-inventory:', key, 32);
+					},
 					transfer: value => { check(); update({ transfer: value }); },
 					progressSession: descriptor => {
 						check(); update({ progressDescriptor: descriptor });
@@ -101,8 +141,7 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 					conditions: async () => (await request(binding.ownerId, { action: 'conditions' }, signal)).conditions!,
 					scanLocal: async () => (await request(binding.ownerId, { action: 'scan', rootId: reviewed.configuration.localRootId, excludedPaths: reviewed.configuration.excludedPaths }, signal)).entries!,
 					...(inspect && supportsNativeInventoryPages(capabilities) ? {
-						scanLocalPages: () => readNativeInventory({ ownerId: binding.ownerId, deviceId: binding.deviceId,
-							rootId: reviewed.configuration.localRootId, excludedPaths: reviewed.configuration.excludedPaths, signal, request })
+						scanLocalPages: nativePages
 					} : {}),
 					...(inspect ? { inspectLocal: async (path: string) => (await request(binding.ownerId,
 						{ action: 'inspect', rootId: reviewed.configuration.localRootId, path }, signal)).inspectedEntry! } : {}),
@@ -141,7 +180,9 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 			}, undefined, signal);
 		} catch (error) {
 			const failed = job ?? (resume?.intervalMs !== undefined ? resume : null);
-			if (failed && jobs && !signal.aborted && !(error instanceof SyncConditionsWait)) await jobs.attention(failed);
+			if (failed && jobs && !signal.aborted && isSyncConnectionFailure(error))
+				throw new SyncConnectionWait('Waiting for the connection to return. Saved transfer progress will continue automatically.');
+			if (failed && jobs && !signal.aborted && !(error instanceof SyncConditionsWait) && !(error instanceof NativeInventoryRetryWait)) await jobs.attention(failed);
 			throw error;
 		} finally {
 			visibility?.dispose(); journal?.close(); unsubscribe(); window.removeEventListener('pagehide', leave);

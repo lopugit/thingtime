@@ -119,3 +119,75 @@ test('native paged reader pins exclusions and never imports excluded observation
 		assert.equal(requests.at(-1)?.action, 'scan-discard');
 	}
 });
+
+test('Mac 1.8 backup capture preserves coverage, polls one identity and pages every skip', async () => {
+	const { supportsNativeBackupCapture } = await import('./mobileFolders.client');
+	for (const [platform, fileAccessVersion, wanted] of [['macos', '1.7.9', false], ['macos', '1.8.0', true], ['macos', '2.8.0', false], ['ios', '1.8.0', false]] as const)
+		assert.equal(supportsNativeBackupCapture({ platform, fileAccessVersion }), wanted);
+	const captureId = crypto.randomUUID(), current = { ...capture, id: captureId, coverage: 'partial' as const, consistency: 'per-entry' as const, totalSkipped: 129 };
+	const requests: FolderRequest[] = [], progress: unknown[] = [];
+	const rows = [];
+	for await (const frame of readNativeInventory({ ownerId: 'owner', deviceId: 'device', rootId, captureId, backupPolicy: { mode: 'backup', propagateDeletes: false },
+		signal: new AbortController().signal, waitForPoll: async () => {}, onProgress: p => progress.push(p), request: async (_, request) => {
+			requests.push(request);
+			if (request.action === 'scan-capture') return { roots: [], backupCapture: { ...current, state: 'running' } };
+			if (request.action === 'scan-status') { assert.equal(request.captureId, captureId); return { roots: [], backupCapture: { ...current, state: 'complete' } }; }
+			if (request.action === 'scan-skips') return { roots: [], skippedPage: { capture: current, offset: request.offset, totalSkipped: 129,
+				skipped: Array.from({ length: Math.min(128, 129 - request.offset) }, (_, i) => ({ ordinal: request.offset + i, path: 'link-' + (request.offset + i), reason: 'symlink', scope: 'entry' })),
+				nextOffset: request.offset === 0 ? 128 : null } };
+			if (request.action === 'scan-page') return { roots: [], inventoryPage: { ...page, capture: current } };
+			return { roots: [] };
+		} })) rows.push(frame);
+	assert.equal(rows.length, 3); assert.deepEqual(rows.map(p => p.skippedPage?.skipped.length), [128, 1, undefined]);
+	assert.equal(rows[2].totalEntries, 1); assert.ok(rows.every(p => p.backupCapture?.coverage === 'partial'));
+	assert.equal(progress.length, 2); assert.equal(requests.at(-1)?.action, 'scan-discard');
+});
+
+test('backup metadata cannot downgrade into strict capture or cross native pages', async () => {
+	const { parseNativeBackupCapture, parseNativeSkippedPage } = await import('./nativeInventory');
+	const partial = { ...capture, coverage: 'partial' as const, consistency: 'per-entry' as const, totalSkipped: 1 };
+	const skips = { capture: partial, offset: 0, totalSkipped: 1, skipped: [{ ordinal: 0, path: null, reason: 'changed', scope: 'root' }], nextOffset: null };
+	assert.deepEqual(parseNativeSkippedPage(skips, partial, 0), skips);
+	for (const patch of [{ coverage: 'full' }, { consistency: 'snapshot' }, { totalSkipped: 0 }]) assert.throws(() => parseNativeBackupCapture({ ...partial, ...patch }));
+	assert.throws(() => parseNativeInventoryPage({ ...page, capture }, partial, 0));
+	assert.throws(() => parseNativeSkippedPage({ ...skips, capture }, partial, 0));
+	assert.throws(() => parseNativeSkippedPage({ ...skips, skipped: [{ ordinal: 0, path: null, reason: 'symlink', scope: 'root' }] }, partial, 0));
+	const request: FolderRequest = { action: 'scan-capture', rootId, inventoryDeviceId: 'device', captureId: partial.id };
+	assert.throws(() => parseMobileFolderResult({ type: 'mobile-files-result', payload: { ...expected, roots: [], rootId, complete: true, capture: partial } }, expected, request));
+	const response = { ...expected, roots: [], rootId, capturePolicy: 'backup-supported', complete: false, backupCapture: { ...partial, state: 'running' } };
+	assert.deepEqual(parseMobileFolderResult({ type: 'mobile-files-result', payload: response }, expected, { ...request, capturePolicy: 'backup-supported' })?.backupCapture, response.backupCapture);
+	assert.throws(() => parseMobileFolderResult({ type: 'mobile-files-result', payload: { ...response, complete: true } }, expected, { ...request, capturePolicy: 'backup-supported' }));
+});
+
+test('backup requires explicit deletion-free policy and transient native timeout preserves reconnect identity', async () => {
+	const { NativeInventoryRetryWait } = await import('./nativeInventory');
+	for (const backupPolicy of [{ mode: 'two-way', propagateDeletes: false }, { mode: 'backup', propagateDeletes: true }] as const) {
+		await assert.rejects(async () => { for await (const _ of readNativeInventory({ ownerId: 'owner', deviceId: 'device', rootId, backupPolicy,
+			signal: new AbortController().signal, request: async () => assert.fail('unsafe request') })) {} }, /backup with deletion/);
+	}
+	const captureId = crypto.randomUUID(); let calls = 0;
+	for (const failure of ['Folder access timed out.', 'Permission revoked']) {
+		await assert.rejects(async () => { for await (const _ of readNativeInventory({ ownerId: 'owner', deviceId: 'device', rootId, captureId,
+			backupPolicy: { mode: 'backup', propagateDeletes: false }, signal: new AbortController().signal, request: async (_, request) => {
+				assert.equal(request.action, 'scan-capture'); assert.equal('captureId' in request && request.captureId, captureId); calls++; throw Error(failure);
+			} })) {} }, error => failure.includes('timed out') ? error instanceof NativeInventoryRetryWait : (error as Error).message === failure);
+	}
+	assert.equal(calls, 2);
+});
+
+test('running backup coverage remains partial until sealing, including a scan with no skips', async () => {
+	const { parseNativeBackupStatus } = await import('./nativeInventory');
+	const c = { ...capture, coverage: 'partial' as const, consistency: 'per-entry' as const, totalSkipped: 0 };
+	assert.equal(parseNativeBackupStatus({ ...c, state: 'running' }).coverage, 'partial');
+	assert.throws(() => parseNativeBackupStatus({ ...c, state: 'complete' }));
+	let current = c; const frames = [];
+	for await (const frame of readNativeInventory({ ownerId: 'owner', deviceId: 'device', rootId, signal: new AbortController().signal,
+		backupPolicy: { mode: 'backup', propagateDeletes: false }, waitForPoll: async () => {}, request: async (_, request) => {
+			if (request.action === 'scan-capture') { current = { ...c, id: request.captureId }; return { roots: [], backupCapture: { ...current, state: 'running' } }; }
+			if (request.action === 'scan-status') return { roots: [], backupCapture: { ...current, coverage: 'full', state: 'complete' } };
+			if (request.action === 'scan-skips') return { roots: [], skippedPage: { capture: { ...current, coverage: 'full' }, offset: 0, skipped: [], nextOffset: null, totalSkipped: 0 } };
+			if (request.action === 'scan-page') return { roots: [], inventoryPage: { ...page, capture: { ...current, coverage: 'full' } } };
+			return { roots: [] };
+		} })) frames.push(frame);
+	assert.equal(frames.at(-1)?.backupCapture?.coverage, 'full');
+});

@@ -1,3 +1,4 @@
+import { assertBackupCapturePolicy } from './nativeInventory';
 import { JOURNAL_RETENTION_STORE, registerJournalMetadata, forgetJournalMetadata } from './journalRetention';
 import { MAX_SYNC_EXCLUSIONS } from './configuration';
 import { inventoryIdentity, inventoryJournal, INVENTORY_PAGE_BYTES, INVENTORY_PAGE_ENTRIES, INVENTORY_PIN_STORE,
@@ -92,6 +93,10 @@ export function pagedPlanJournal(db: IDBDatabase, access: JournalAccess, keyRang
 						check(); validateInventoryHeader(read.result, capture, key);
 						const header: InventoryHeader = read.result;
 						if (header.phase !== 'complete') throw Error('Sync planning requires complete inventories.');
+						if (i < 2 && header.backupCapture) {
+							if (i !== 0 || header.derivedCoverage) throw Error('A native source capture is required for backup planning.');
+							assertBackupCapturePolicy(spec.policy);
+						}
 						// Legacy captures acquire one immutable internal instance while pinned.
 						// Recreating the same caller ID/generation must not rebind a run.
 						const instance = instances.get(capture.id) ?? header.instance ?? crypto.randomUUID();

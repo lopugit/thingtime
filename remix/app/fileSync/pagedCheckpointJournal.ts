@@ -121,6 +121,11 @@ export function pagedCheckpointJournal(db: IDBDatabase, access: JournalAccess, k
 	};
 	const step = async (value: PagedCheckpointSpec): Promise<PagedCheckpointState> => {
 		const spec = specification(value);
+		const draft = await withHeader<Header>(spec, 'readonly', (h, _tx, done) => done(h));
+		if (draft.phase === 'collecting') {
+			const complete = await withHeader<boolean>(spec, 'readonly', (_h, _tx, done, _fail, captures) => done(captures.slice(0, 2).every(c => c.phase === 'complete')));
+			if (complete) await inventory.copyCoverage(draft.after.local, draft.baseline.local, spec.run.plan.policy);
+		}
 		const h = await withHeader<Header>(spec, 'readwrite', (h, tx, done, _fail, captures) => {
 			if (h.phase === 'collecting') {
 				if (captures.slice(0, 2).some(c => c.phase !== 'complete')) throw Error('Complete both post-run inventory captures before building the checkpoint.');
@@ -162,6 +167,12 @@ export function pagedCheckpointJournal(db: IDBDatabase, access: JournalAccess, k
 				if (page.total !== h.totals[4]) throw Error('Checkpoint receipt count changed.'); return page.rows;
 			});
 		check();
+		const candidatePaths = [...new Set([...pages.flat().map(entry => entry.path), ...effects.map(effect => effect.operation.mutation.path)])];
+		const unobserved = new Map<string, boolean>();
+		for (let offset = 0; offset < candidatePaths.length; offset += INVENTORY_PAGE_ENTRIES) {
+			const paths = candidatePaths.slice(offset, offset + INVENTORY_PAGE_ENTRIES), flags = await inventory.unobserved(h.after.local, paths);
+			paths.forEach((path, i) => unobserved.set(path, flags[i]));
+		}
 		const positions = structuredClone(h.positions), offsets = [0, 0, 0, 0, 0], output: [SyncEntry[], SyncEntry[]] = [[], []];
 		const lengths = [...pages.map(page => page.length), effects.length]; let paths = 0, size = 4096;
 		while (paths < INVENTORY_PAGE_ENTRIES) {
@@ -175,11 +186,12 @@ export function pagedCheckpointJournal(db: IDBDatabase, access: JournalAccess, k
 			const entries = heads.map((entry, i) => included[i] ? entry : null);
 			if (!sameSyncContent(entries[2], entries[3])) throw Error('Checkpoint baseline must contain matching content.');
 			let prior = entries[2] && entries[3] ? { path, local: entries[2], remote: entries[3] } : null;
-			if (included[4]) {
+			const unobservedLocal = unobserved.get(path) === true;
+			if (included[4] && !unobservedLocal) {
 				const m = effect!.operation.mutation, receipt = effect!.receipt;
 				prior = m.kind === 'trash' ? null : { path, local: m.from === 'local' ? m.source : receipt.entry!, remote: m.from === 'remote' ? m.source : receipt.entry! };
 			}
-			const next = advanceSyncBaselinePair(prior, entries[0], entries[1]);
+			const next = unobservedLocal ? prior : advanceSyncBaselinePair(prior, entries[0], entries[1]);
 			const bytes = new TextEncoder().encode(JSON.stringify([entries, included[4] ? effect : null, next])).length;
 			if (size + bytes > INVENTORY_PAGE_BYTES) { if (!paths) throw Error('Checkpoint row exceeds its byte bound.'); break; }
 			if (next) { output[0].push(next.local); output[1].push(next.remote); }

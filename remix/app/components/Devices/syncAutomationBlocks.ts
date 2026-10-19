@@ -9,8 +9,8 @@ const control = { 'min-height': '40px', padding: '8px 12px', border: '1px solid 
  * option and button remains selectable through the ordinary Builder. */
 export const syncAutomationBlocks: WebpageBlock[] = [{ id: 'automation', type: 'element', tag: 'fieldset',
 	props: { 'aria-label': 'Automatic file sync' }, css: { 'min-width': '0', padding: '12px', border: '1px solid var(--tt-border, #ddd)', 'border-radius': '12px' }, children: [
-		text('automation-title', 'legend', 'Automatic sync'),
-		text('automation-help', 'p', 'Check this connection for changes while Thingtime is running, including with its Mac window closed. After Quit, checks continue when you reopen Thingtime. Your network, power and folder choices still apply.'),
+		text('automation-title', 'legend', 'Sync this device’s files automatically'),
+		text('automation-help', 'p', 'Keep this connection on to resume saved work when this device reconnects and check for new changes. Thingtime can continue with its Mac window closed; after Quit, it resumes when reopened. Your network, power, exclusions and explicit pauses still apply.'),
 		text('automation-status', 'p', '{automatic.status}', { role: 'status' }),
 		text('automation-error', 'p', '{automatic.error}', { role: 'alert' }),
 		text('automation-label', 'p', 'Check for changes'),

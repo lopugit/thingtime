@@ -58,6 +58,42 @@
 
 See [the runbook](docs/agent-browsers.md) for commands and evidence boundaries.
 
+## Agent overview and task reporting
+
+- [ ] Author the dashboard page, components, schema references and write
+      Actions as saved Things in Thingtime. Confirm no account-specific Thing
+      definitions or credentials are committed with the reusable adapter.
+- [ ] Use an external `AGENT_OVERVIEW_AUTHORED_THINGS` JSON fixture to identify
+      disposable local saved Things. Keep it outside Git and verify selected
+      origin, IDs and `api.agent-overview` 2.0.0 before the run.
+- [ ] Compare project/task/agent records and relational todo, question and
+      progress Things with ordinary API readback under the same authorized
+      viewer. Verify ACL, Character, app namespace and scoped-token boundaries.
+- [ ] Exercise hierarchy, projects, agents, kanban, reports and questions
+      views; search/status/project filters; optional CSV active/blocked/complete
+      classifications; and cursor paging beyond 50 rows.
+- [ ] Change classifications or another cursor-bound filter and confirm the
+      old cursor is rejected. Confirm raw statuses, numeric depth and absent
+      titles are left for saved-page presentation; no indent, label or fallback
+      title is expected from the API.
+- [ ] Confirm complete versus partial coverage and lower-bound partial counts.
+      Include detached parents and cycles; preserve rows and identify unresolved
+      parents until their scan completes.
+- [ ] Leave measurements unknown and verify null/unavailable display, never
+      fabricated zero or inferred runtime. Record only measured values and
+      compare them against source Things.
+- [ ] Receive a stream snapshot, heartbeat and changed snapshot. Reconnect to
+      the current view without claiming event replay. Revoke access or change
+      data plane during streaming; stop presenting prior data as current.
+- [ ] In Builder, independently edit nested text, controls, icons and repeated
+      fields in the externally authored saved page. Save/reload and confirm
+      behavior; inspect desktop/mobile top-to-bottom and expanded controls.
+- [ ] Confirm no automatic ChatGPT/Codex transcript, tool, billing-token or
+      process-state capture is claimed by the read adapter.
+
+See [the adapter guide](docs/agent-overview.md) for the contract, external
+fixture boundary, coverage, stream recovery and Builder acceptance.
+
 - [ ] After merging another feature, password title search still filters before pagination, preserves q across pages, and both manifests advertise api.passwords 1.2.0; client and route search tests remain present.
 
 ## Reusable local video compression
@@ -10235,7 +10271,10 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
 
 ## Editable file sync configuration
 
-- [ ] In the signed installed Mac app, choose a folder containing a symbolic link, hardlink or special file and start sync. Show the specific validated relative path and reason; do not label an errored transfer ready. No partial capture may seal, transfer, or authorize deletion. Verify target bytes outside the grant are never read. Change the account/grant during the failed scan and reject its stale diagnostic. After an explicit exclusion, retry with a fresh capture ID.
+- [ ] In the signed installed Mac app, test strict upload/two-way scans containing a symbolic link, hardlink or special file. Show the validated relative path and reason; never label an errored transfer ready or seal a partial strict capture. Verify targets outside the grant are never read and account/grant changes reject stale diagnostics.
+- [ ] With Mac file access 1.8 and backup mode with deletion propagation disabled, index supported entries and review every skipped observation in the paged Backup coverage panel. Confirm partial completion never claims a full backup, excluded subtrees are not opened, and earlier cloud copies/baseline facts survive unreadable root/subtree gaps.
+- [ ] Leave the connection screen, close/reopen the Mac window, disconnect/reconnect the network and restart the renderer during native indexing. Reuse the admitted capture and confirmed operation receipts. A helper restart may restart one native generation automatically; repeated failures require attention. Explicit Stop must remain paused after reopening.
+- [ ] Edit nested coverage title, skip path/reason/scope and paging controls in Builder, save/reload, and check desktop/mobile top-to-bottom layout with multiple skip pages. Logout or an origin/root change must fence journal reads. Verify the skipped ledger is published only after its complete generation is durable.
 
 
 - [ ] Run `test:file-sync`, `test:schemas`, `test:api-capabilities` and

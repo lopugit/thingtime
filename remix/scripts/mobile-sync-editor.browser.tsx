@@ -15,19 +15,25 @@ import { nativeSyncTasks } from '../app/fileSync/nativeSyncTasks.client';
 import { NativeSyncBootstrap } from '../app/fileSync/NativeSyncBootstrap';
 import { MobileFolderAccess } from '../app/components/Devices/MobileFolderAccess';
 import { nativeBridgeMessageEvent } from '../app/utils/nativeBridge';
+const partialQA = new URLSearchParams(location.search).has('partial');
 const homeQA = new URLSearchParams(location.search).has('home');
 const inspectionQA = new URLSearchParams(location.search).has('inspect');
 const inventoryQA = new URLSearchParams(location.search).has('inventory');
-const observations = { requests: 0, scans: 0, inspections: 0, captures: 0, pages: 0, discarded: 0, scanPolicies: [] as string[][] };
+const observations = { requests: 0, scans: 0, inspections: 0, captures: 0, pages: 0, discarded: 0, skipPages: [] as number[], scanPolicies: [] as string[][] };
 const nativeCaptures = new Map<string, { capture: { id: string; generation: string; totalEntries: number }; entries: typeof localEntries }>();
 const inventoryReply = (request: any) => {
 	if (request.action === 'scan-capture') {
 		if (new URLSearchParams(location.search).has('diagnostic')) return { complete: false, scanFailure: { reason: 'symlink', path: 'nested/link' } };
 		const excludedPaths = canonicalNativeScanExclusions(request.excludedPaths ?? []);
 		const entries = localEntries.filter(entry => !isNativeScanExcluded(entry.path, excludedPaths));
-		const capture = { id: request.captureId, generation: crypto.randomUUID(), totalEntries: entries.length };
+		const capture = { id: request.captureId, generation: crypto.randomUUID(), totalEntries: entries.length, ...(partialQA ? { coverage: 'partial', consistency: 'per-entry', totalSkipped: 301 } : {}) };
 		nativeCaptures.set(capture.id, { capture, entries: structuredClone(entries) });
-		return { complete: true, capture, excludedPaths };
+		return { complete: true, excludedPaths, ...(partialQA ? { backupCapture: { ...capture, state: 'complete' } } : { capture }) };
+	}
+	if (request.action === 'scan-skips') {
+		const item = nativeCaptures.get(request.capture.id)!;
+		const count = Math.min(128, 301 - request.offset); observations.skipPages.push(count);
+		return { complete: true, skippedPage: { capture: item.capture, offset: request.offset, totalSkipped: 301, nextOffset: request.offset + count === 301 ? null : request.offset + count, skipped: Array.from({ length: count }, (_, n) => ({ ordinal: request.offset + n, path: 'Skipped/' + String(request.offset + n).padStart(3, '0') + '-long-unreadable-entry', reason: 'unreadable', scope: 'entry' })) } };
 	}
 	if (request.action === 'scan-page' || request.action === 'scan-discard') {
 		const item = nativeCaptures.get(request.capture.id);
@@ -86,6 +92,7 @@ const transferFolderPath = (row: any): string => {
 	return parts.join('/');
 };
 let holdNextScan = false, holdTransferReply = false;
+let loseTransportReply = false;
 let loseTransferReply = false,
 	network = 'wifi';
 const localEntries: any[] = homeQA ? ['Applications', 'Applications/ignored', 'CustomSkip', 'CustomSkip/ignored', 'Library', 'Library/ignored', '.Trash', '.Trash/ignored', 'Documents', 'Documents/Keep', 'LibraryExtra'].map((path, i) => ({ path, id: 'home-' + i, version: 'native-v1', kind: 'folder', size: 0, sha256: null })) : conflictQA
@@ -243,6 +250,7 @@ window.fetch = async function (this: unknown, input, init) {
 			transferFolders.push(folder);
 			localStorage.setItem('tt:fixture:sync-transfer-folders', JSON.stringify(transferFolders));
 			if (holdTransferReply) await new Promise(() => {});
+			if (loseTransportReply) { loseTransportReply = false; unavailable = true; throw new TypeError('Failed to fetch'); }
 			if (loseTransferReply) {
 				loseTransferReply = false;
 				throw Error('Fixture lost accepted folder creation');
@@ -389,7 +397,7 @@ if (desktop) {
 				...request,
 				origin: canonicalOrigin,
 				roots,
-				...(manifest ? { capabilities: { fileAccessVersion: homeQA ? '1.6.0' : inspectionQA ? (inventoryQA ? '1.5.1' : '1.4.0') : '1.1.0' }, apiCapabilities: { ...manifest, origin: canonicalOrigin } } : {}),
+				...(manifest ? { capabilities: { fileAccessVersion: partialQA ? '1.8.0' : homeQA ? '1.6.0' : inspectionQA ? (inventoryQA ? '1.5.1' : '1.4.0') : '1.1.0' }, apiCapabilities: { ...manifest, origin: canonicalOrigin } } : {}),
 				...inventoryReply(request),
 				...(request.action === 'scan' ? { complete: true, entries: localEntries.filter(entry => !isNativeScanExcluded(entry.path, canonicalNativeScanExclusions(request.excludedPaths ?? []))), excludedPaths: canonicalNativeScanExclusions(request.excludedPaths ?? []) } : {}),
 				...(request.action === 'inspect' ? { complete: true, entry: localEntries.find(entry => entry.path === request.path) ?? null } : {}),
@@ -418,6 +426,7 @@ function Fixture() {
 					<Button onClick={() => setShowFolders(value => !value)}>{showFolders ? 'Leave Files screen' : 'Reopen Files screen'}</Button>
 					<Button onClick={() => { for (const release of heldScans.values()) release(); }}>Release scan</Button>
 					<Button onClick={() => { holdTransferReply = true; }}>Hold accepted upload reply</Button>
+					<Button onClick={() => { loseTransportReply = true; }}>Disconnect after accepted upload</Button>
 					<Button onClick={() => {
 						localEntries.push({ path: 'Later folder ' + localEntries.length, id: 'later-' + localEntries.length, version: 'native-v1', kind: 'folder', size: 0, sha256: null });
 						localStorage.setItem('tt:fixture:sync-local-folders', JSON.stringify(localEntries));
@@ -481,7 +490,7 @@ function Fixture() {
 					<Button
 						size="sm"
 						onClick={() => {
-							unavailable = true;
+							unavailable = true; window.dispatchEvent(new Event('offline'));
 						}}
 					>
 						Go offline
@@ -489,7 +498,7 @@ function Fixture() {
 					<Button
 						size="sm"
 						onClick={() => {
-							unavailable = false;
+							unavailable = false; window.dispatchEvent(new Event('online'));
 						}}
 					>
 						Go online

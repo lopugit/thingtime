@@ -13,6 +13,104 @@ final class MobileFolderInventoryTests: XCTestCase {
         return (source, try FolderBookmark.create(source), .init(owner: owner, deviceId: "fixture-device", rootId: UUID().uuidString.lowercased()), root.appendingPathComponent("journal"))
     }
 
+    func testBackupCaptureKeepsSupportedFilesAndPagesExplicitSkips() throws {
+        let (source, bookmark, scope, directory) = try fixture()
+        let outside = source.deletingLastPathComponent().appendingPathComponent("outside-pipe")
+        XCTAssertEqual(mkfifo(outside.path, 0o600), 0)
+        for i in 0..<130 {
+            try FileManager.default.createSymbolicLink(at: source.appendingPathComponent("link-\(i)"), withDestinationURL: outside)
+        }
+        try Data("supported".utf8).write(to: source.appendingPathComponent("first"))
+        try FileManager.default.linkItem(at: source.appendingPathComponent("first"), to: source.appendingPathComponent("alias"))
+        XCTAssertEqual(mkfifo(source.appendingPathComponent("pipe").path, 0o600), 0)
+        try Data().write(to: source.appendingPathComponent("bad\\name"))
+        let store = MobileFolderInventory(directory: directory), id = UUID().uuidString.lowercased()
+        let capture = try store.prepareBackup(scope, id: id, generation: UUID().uuidString.lowercased(), bookmark: bookmark)
+        XCTAssertEqual(capture.coverage, "partial"); XCTAssertEqual(capture.consistency, "per-entry")
+        XCTAssertEqual(capture.totalEntries, 1); XCTAssertEqual(capture.totalSkipped, 133)
+        XCTAssertThrowsError(try store.read(scope, capture: capture, bookmark: bookmark, offset: 0))
+        XCTAssertThrowsError(try store.readSkipped(scope, capture: capture, bookmark: bookmark, offset: 0))
+        try store.sealBackup(scope, capture: capture, bookmark: bookmark)
+        let entries = try store.read(scope, capture: capture, bookmark: bookmark, offset: 0).entries
+        XCTAssertEqual(entries.count, 1); XCTAssertEqual(entries[0].size, 9)
+        var gaps: [MobileFolderInventory.Skipped] = [], offset = 0
+        repeat {
+            let page = try store.readSkipped(scope, capture: capture, bookmark: bookmark, offset: offset)
+            XCTAssertEqual(page.capture, capture); XCTAssertEqual(page.offset, offset)
+            XCTAssertLessThanOrEqual(page.skipped.count, 128)
+            XCTAssertLessThanOrEqual(try JSONEncoder().encode(page).count, MobileFolderInventory.maximumPageBytes)
+            gaps += page.skipped
+            guard let next = page.nextOffset else { break }; offset = next
+        } while true
+        XCTAssertEqual(gaps.map(\.ordinal), Array(0..<133))
+        XCTAssertEqual(gaps.filter { $0.reason == .symlink }.count, 130)
+        XCTAssertEqual(gaps.filter { $0.reason == .duplicateIdentity }.count, 1)
+        XCTAssertEqual(gaps.filter { $0.reason == .fifo }.count, 1)
+        XCTAssertEqual(gaps.filter { $0.reason == .invalidPath && $0.path == nil }.count, 1)
+        let stripped = MobileFolderInventory.Capture(id: capture.id, generation: capture.generation, totalEntries: capture.totalEntries)
+        XCTAssertThrowsError(try store.read(scope, capture: stripped, bookmark: bookmark, offset: 0))
+        XCTAssertThrowsError(try store.readSkipped(scope, capture: stripped, bookmark: bookmark, offset: 0))
+        XCTAssertThrowsError(try store.capture(scope, id: id, bookmark: bookmark))
+        XCTAssertEqual(try store.backupStatus(scope, id: id, bookmark: bookmark)?.state, "complete")
+        XCTAssertThrowsError(try MobileFolderReader.scan(bookmark: bookmark))
+    }
+
+    func testBackupUnreadableSubtreeIsExplicitAndDoesNotHideSupportedSibling() throws {
+        guard geteuid() != 0 else { throw XCTSkip("Permission fixture requires an unprivileged user") }
+        let (source, bookmark, scope, directory) = try fixture()
+        let blocked = source.appendingPathComponent("blocked")
+        try FileManager.default.createDirectory(at: blocked, withIntermediateDirectories: true)
+        try Data().write(to: blocked.appendingPathComponent("hidden"))
+        try Data().write(to: source.appendingPathComponent("kept"))
+        try FileManager.default.setAttributes([.posixPermissions: 0], ofItemAtPath: blocked.path)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: blocked.path) }
+        let store = MobileFolderInventory(directory: directory)
+        let capture = try store.prepareBackup(scope, id: UUID().uuidString.lowercased(), generation: UUID().uuidString.lowercased(), bookmark: bookmark)
+        try store.sealBackup(scope, capture: capture, bookmark: bookmark)
+        XCTAssertEqual(try store.read(scope, capture: capture, bookmark: bookmark, offset: 0).entries.map(\.path), ["kept"])
+        let gaps = try store.readSkipped(scope, capture: capture, bookmark: bookmark, offset: 0).skipped
+        XCTAssertTrue(gaps.contains { $0.path == "blocked" && $0.scope == .subtree && $0.reason == .unreadable })
+        XCTAssertEqual(capture.coverage, "partial")
+    }
+
+    func testBackupRootMutationRecordsGapWithoutWholeTreeReplay() throws {
+        let (source, bookmark, _, _) = try fixture()
+        try Data().write(to: source.appendingPathComponent("first"))
+        var gaps: [MobileFolderReader.BackupGap] = [], rows: [MobileFolderReader.Entry] = [], changed = false
+        try MobileFolderReader.captureBackup(bookmark: bookmark, append: { row in
+            rows.append(row)
+            if !changed { changed = true; try Data().write(to: source.appendingPathComponent("added")) }
+            return true
+        }, skip: { gaps.append($0) })
+        XCTAssertTrue(rows.contains { $0.path == "first" })
+        XCTAssertTrue(gaps.contains { $0.path == nil && $0.scope == .root && $0.reason == .changed })
+    }
+
+    func testBackupCancellationAndLostHostLeaveUnsealedGeneration() async throws {
+        let (source, bookmark, scope, directory) = try fixture()
+        try Data().write(to: source.appendingPathComponent("first"))
+        let store = MobileFolderInventory(directory: directory), id = UUID().uuidString.lowercased()
+        let interrupted = try store.prepareBackup(scope, id: id, generation: UUID().uuidString.lowercased(), bookmark: bookmark)
+        XCTAssertEqual(try store.backupStatus(scope, id: id, bookmark: bookmark)?.state, "interrupted")
+        XCTAssertThrowsError(try store.read(scope, capture: interrupted, bookmark: bookmark, offset: 0))
+        let work = Task.detached {
+            try store.prepareBackup(scope, id: id, generation: UUID().uuidString.lowercased(), bookmark: bookmark,
+                progress: { _, _ in withUnsafeCurrentTask { $0?.cancel() } })
+        }
+        do { _ = try await work.value; XCTFail("Cancelled backup prepared") } catch is CancellationError { }
+        let replacement = try store.prepareBackup(scope, id: id, generation: UUID().uuidString.lowercased(), bookmark: bookmark)
+        XCTAssertNotEqual(replacement.generation, interrupted.generation)
+        XCTAssertEqual(replacement.coverage, "full"); XCTAssertEqual(replacement.totalSkipped, 0)
+        try store.sealBackup(scope, capture: replacement, bookmark: bookmark)
+        XCTAssertThrowsError(try store.read(scope, capture: interrupted, bookmark: bookmark, offset: 0))
+        XCTAssertEqual(try store.readSkipped(scope, capture: replacement, bookmark: bookmark, offset: 0).skipped.count, 0)
+        // Cancellation may arrive during the final fsync. The host abandons
+        // that exact generation before reporting interruption.
+        try store.abandonBackup(scope, capture: replacement, bookmark: bookmark)
+        XCTAssertThrowsError(try store.read(scope, capture: replacement, bookmark: bookmark, offset: 0))
+        XCTAssertEqual(try store.backupStatus(scope, id: id, bookmark: bookmark)?.state, "interrupted")
+    }
+
     func testExclusionsPruneBeforeOpeningAndPreserveExactPathBoundaries() throws {
         let (source, bookmark, scope, directory) = try fixture()
         // Each excluded subtree contains a symlink the reader must never open.

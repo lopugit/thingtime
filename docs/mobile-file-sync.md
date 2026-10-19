@@ -3598,3 +3598,46 @@ The renderer rejects foreign, malformed or contradictory diagnostics and display
 the specific indexing problem instead of describing it as a pairing failure.
 Unsupported entries are not skipped by this change. Exclusion changes require a
 fresh capture and retain the existing no-follow and deletion protections.
+
+## Resumable partial home backups — 2026-10-19
+
+Mac file access **1.8.0** adds `capturePolicy: "backup-supported"` for backup
+connections with deletion propagation disabled. Strict upload, download and
+two-way scans keep their complete-inventory requirements. The local signed-host
+adapter provides short `scan-capture`, `scan-status`, `scan-cancel` and
+`scan-skips` requests. A capture ticket is bound to the account, selected origin,
+device, root grant and exact exclusions. Transport interruption does not cancel
+the native scan. Explicit Stop saves the paused admission before cancelling it;
+authority loss prevents sealing and reading its result.
+
+The sealed descriptor includes `coverage`, `consistency: "per-entry"`, and
+`totalSkipped`. Supported files are hashed and checked separately without a
+full-tree replay. This is a file-by-file observation, not a filesystem snapshot
+at one instant. Links are not followed, sockets/pipes/devices are not opened,
+and unsupported or unreadable entries appear in a durable ordered ledger.
+Root/subtree gaps preserve prior baseline facts and never authorize deletions.
+Pages contain at most 128 entries and 512 KiB. Native execution uses one active
+scan, 64 KiB read buffers and existing cache limits; very large-volume
+throughput and those capacity boundaries still require acceptance testing.
+
+The device journal keeps the capture ticket through reconnects and renderer
+restarts. One changed native generation can restart automatically; repeated
+interruptions require attention instead of looping indefinitely. Normal
+network/power waits remain eligible for the scheduler and display as waiting.
+An explicit retry renews that recovery allowance. Confirmed cloud operations
+retain their existing receipt identity. Files changing after indexing can still
+stop a transfer for review; this work does not silently skip upload failures.
+
+Progress is at **`/settings/things` → Sync connections** in the installed app.
+The two-step progress viewer and editable Backup coverage blocks read this
+device's journal. Skip pages are exposed after the complete local inventory is
+durable and remain available until the next retained capture replaces them.
+Another browser/device cannot yet inspect this local progress journal remotely.
+Enable **Sync this device's files automatically** to admit recurring work.
+Closing the Mac window preserves the app-owned runner; quitting the app stops
+execution until it reopens. No always-running OS service is claimed.
+
+Symbolic-link content/restore, hard-link relationships, faithful special-entry
+metadata and full-home installed acceptance remain separate unfinished work.
+Android remains deferred. Existing grants, private destination selection and
+the home exclusions must be reviewed before real account transfer.

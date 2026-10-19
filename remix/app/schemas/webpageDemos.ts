@@ -25,7 +25,13 @@ export type DemoBlock = {
 	args?: Record<string, string | number | boolean>;
 	// component: a data binding — the page runtime runs this action as the
 	// viewer and hands the result to the template as `result`
-	source?: { action: string; inputs?: Record<string, string | number | boolean>; refresh?: 'load' | 'manual' | 'interval'; intervalMs?: number };
+	source?: {
+		action: string;
+		inputs?: Record<string, string | number | boolean>;
+		refresh?: 'load' | 'manual' | 'interval' | 'live';
+		intervalMs?: number;
+		stream?: { path: string; feature: string; minimumVersion: string };
+	};
 	direction?: 'column' | 'row' | 'grid';
 	gap?: number;
 	columns?: number;

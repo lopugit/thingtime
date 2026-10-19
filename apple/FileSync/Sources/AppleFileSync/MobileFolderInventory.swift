@@ -18,6 +18,49 @@ public struct MobileFolderInventory: Sendable {
         public let id: String
         public let generation: String
         public let totalEntries: Int
+        public let coverage: String?
+        public let consistency: String?
+        public let totalSkipped: Int?
+        public init(id: String, generation: String, totalEntries: Int, coverage: String? = nil, consistency: String? = nil, totalSkipped: Int? = nil) {
+            self.id = id; self.generation = generation; self.totalEntries = totalEntries
+            self.coverage = coverage; self.consistency = consistency; self.totalSkipped = totalSkipped
+        }
+    }
+    public struct BackupStatus: Encodable, Sendable {
+        public let id: String; public let generation: String; public let state: String
+        public let coverage: String; public let consistency = "per-entry"
+        public let totalEntries: Int; public let totalSkipped: Int
+        public init(capture: Capture, state: String) {
+            id = capture.id; generation = capture.generation; self.state = state
+            coverage = state == "complete" ? (capture.coverage ?? "partial") : "partial"
+            totalEntries = capture.totalEntries; totalSkipped = capture.totalSkipped ?? 0
+        }
+    }
+    public struct Skipped: Codable, Sendable {
+        public let ordinal: Int
+        public let path: String?
+        public let reason: MobileFolderReader.ScanFailure.Reason
+        public let scope: MobileFolderReader.BackupGap.Scope
+        init(ordinal: Int, gap: MobileFolderReader.BackupGap) {
+            self.ordinal = ordinal; path = gap.path; reason = gap.reason; scope = gap.scope
+        }
+        enum CodingKeys: String, CodingKey { case ordinal, path, reason, scope }
+        public func encode(to encoder: Encoder) throws {
+            var c = encoder.container(keyedBy: CodingKeys.self)
+            try c.encode(ordinal, forKey: .ordinal); try c.encode(reason, forKey: .reason); try c.encode(scope, forKey: .scope)
+            if let path { try c.encode(path, forKey: .path) } else { try c.encodeNil(forKey: .path) }
+        }
+    }
+    public struct SkippedPage: Encodable, Sendable {
+        public let capture: Capture; public let offset: Int; public let skipped: [Skipped]
+        public let nextOffset: Int?; public let totalSkipped: Int
+        enum CodingKeys: String, CodingKey { case capture, offset, skipped, nextOffset, totalSkipped }
+        public func encode(to encoder: Encoder) throws {
+            var c = encoder.container(keyedBy: CodingKeys.self)
+            try c.encode(capture, forKey: .capture); try c.encode(offset, forKey: .offset)
+            try c.encode(skipped, forKey: .skipped); try c.encode(totalSkipped, forKey: .totalSkipped)
+            if let nextOffset { try c.encode(nextOffset, forKey: .nextOffset) } else { try c.encodeNil(forKey: .nextOffset) }
+        }
     }
     public struct Page: Codable, Sendable {
         public let capture: Capture
@@ -39,6 +82,8 @@ public struct MobileFolderInventory: Sendable {
         let complete: Bool
         var excludedPaths: [String]? = nil
         var retired: Bool? = nil
+        var capturePolicy: String? = nil
+        var prepared: Bool? = nil
     }
     public static let maximumPageEntries = 128
     public static let maximumPageBytes = 512 * 1024
@@ -86,6 +131,15 @@ public struct MobileFolderInventory: Sendable {
     private func validate(_ record: Record, scope: Scope, id: String, bookmark: Data) throws {
         guard record.scope == scope, record.capture.id == id.lowercased(), record.bookmarkHash == Self.digest(bookmark),
               UUID(uuidString: record.capture.generation) != nil, record.capture.totalEntries >= 0 else { throw Failure.changed }
+        if record.capturePolicy == "backup-supported" {
+            guard record.capture.consistency == "per-entry", let skipped = record.capture.totalSkipped, skipped >= 0,
+                  ["full", "partial"].contains(record.capture.coverage ?? ""),
+                  record.capture.coverage != "full" || skipped == 0,
+                  !record.complete || record.prepared == true else { throw Failure.changed }
+        } else {
+            guard record.capturePolicy == nil, record.capture.coverage == nil, record.capture.consistency == nil,
+                  record.capture.totalSkipped == nil else { throw Failure.changed }
+        }
     }
 
     /// A caller-chosen ID survives a lost reply. Unsealed captures can be rebuilt;
@@ -96,7 +150,7 @@ public struct MobileFolderInventory: Sendable {
         return try locked(scope, id: id, creating: true) { fd in
             if let old = try NativeFileJournal.read(fd, as: Record.self) {
                 try validate(old, scope: scope, id: id, bookmark: bookmark)
-                guard old.retired != true, (old.excludedPaths ?? []) == exclusions else { throw Failure.changed }
+                guard old.retired != true, old.capturePolicy == nil, (old.excludedPaths ?? []) == exclusions else { throw Failure.changed }
                 if old.complete { return old.capture }
             }
             let generation = UUID().uuidString.lowercased(), key = Self.digest(bookmark)
@@ -121,6 +175,129 @@ public struct MobileFolderInventory: Sendable {
             let result = Capture(id: id.lowercased(), generation: generation, totalEntries: count)
             try NativeFileJournal.save(Record(scope: scope, bookmarkHash: key, capture: result, complete: true, excludedPaths: exclusions), fd)
             return result
+        }
+    }
+
+    /// Private provisional rows are committed before the host's final live
+    /// authorization check. Only sealBackup makes them readable.
+    public func prepareBackup(_ scope: Scope, id: String, generation: String, bookmark: Data, excludedPaths: [String] = [],
+                              progress: @Sendable (Int, Int) -> Void = { _, _ in }) throws -> Capture {
+        guard UUID(uuidString: generation) != nil else { throw Failure.invalid }
+        let exclusions = try MobileFolderReader.canonicalExclusions(excludedPaths)
+        try MobileFolderReader.checkAccess(bookmark: bookmark)
+        return try locked(scope, id: id, creating: true) { fd in
+            if let old = try NativeFileJournal.read(fd, as: Record.self) {
+                try validate(old, scope: scope, id: id, bookmark: bookmark)
+                guard old.retired != true, old.capturePolicy == "backup-supported", (old.excludedPaths ?? []) == exclusions else { throw Failure.changed }
+                if old.complete { return old.capture }
+            }
+            let initial = Capture(id: id.lowercased(), generation: generation.lowercased(), totalEntries: 0, coverage: "partial", consistency: "per-entry", totalSkipped: 0)
+            try NativeFileJournal.save(Record(scope: scope, bookmarkHash: Self.digest(bookmark), capture: initial,
+                complete: false, excludedPaths: exclusions, capturePolicy: "backup-supported"), fd)
+            for name in ["inventory.sqlite", "inventory.sqlite-journal"] {
+                if unlinkat(fd, name, 0) != 0 && errno != ENOENT { throw Failure.storage }
+            }
+            let db = try Database(directory: fd, create: true)
+            try db.execute("CREATE TABLE entries (ordinal INTEGER PRIMARY KEY, path TEXT NOT NULL UNIQUE, identity TEXT NOT NULL UNIQUE, data BLOB NOT NULL)")
+            try db.execute("CREATE TABLE skipped (ordinal INTEGER PRIMARY KEY, data BLOB NOT NULL)")
+            try db.execute("CREATE TABLE blocked_paths (path TEXT PRIMARY KEY)")
+            try db.execute("BEGIN IMMEDIATE")
+            var count = 0, skipped = 0, nextOrdinal = 0
+            func skip(_ gap: MobileFolderReader.BackupGap) throws {
+                guard skipped < 9_007_199_254_740_991 else { throw Failure.limit }
+                try db.insertSkipped(Skipped(ordinal: skipped, gap: gap)); skipped += 1; progress(count, skipped)
+            }
+            try MobileFolderReader.captureBackup(bookmark: bookmark, excludedPaths: excludedPaths, append: { row in
+                try Task.checkCancellation()
+                do {
+                    if try db.blocked(row.path) {
+                        try skip(.init(path: row.path, reason: .pathCollision, scope: row.kind == "folder" ? .subtree : .entry))
+                        return false
+                    }
+                    try db.insert(row, ordinal: nextOrdinal); nextOrdinal += 1; count += 1; progress(count, skipped)
+                    return true
+                } catch let failure as MobileFolderReader.ScanFailure {
+                    if failure.reason == .pathCollision {
+                        // No first-wins upload into a case/Unicode ambiguous path.
+                        try db.block(row.path)
+                        count -= try db.removeCollision(row.path) { previous in
+                            try skip(.init(path: previous.path, reason: .pathCollision, scope: previous.kind == "folder" ? .subtree : .entry))
+                        }
+                    }
+                    try skip(.init(path: row.path, reason: failure.reason, scope: row.kind == "folder" ? .subtree : .entry))
+                    return false
+                }
+            }, skip: skip)
+            try Task.checkCancellation()
+            // Removing ambiguous earlier entries leaves ordinal gaps. Compact
+            // once on disk before publishing any final page/count.
+            try db.execute("CREATE TABLE sealed_entries (ordinal INTEGER PRIMARY KEY, path TEXT NOT NULL UNIQUE, identity TEXT NOT NULL UNIQUE, data BLOB NOT NULL)")
+            try db.execute("INSERT INTO sealed_entries SELECT ROW_NUMBER() OVER (ORDER BY ordinal) - 1, path, identity, data FROM entries")
+            try db.execute("DROP TABLE entries")
+            try db.execute("ALTER TABLE sealed_entries RENAME TO entries")
+            try db.execute("COMMIT")
+            let result = Capture(id: id.lowercased(), generation: generation.lowercased(), totalEntries: count,
+                                 coverage: skipped == 0 ? "full" : "partial", consistency: "per-entry", totalSkipped: skipped)
+            try NativeFileJournal.save(Record(scope: scope, bookmarkHash: Self.digest(bookmark), capture: result,
+                complete: false, excludedPaths: exclusions, capturePolicy: "backup-supported", prepared: true), fd)
+            return result
+        }
+    }
+    public func sealBackup(_ scope: Scope, capture: Capture, bookmark: Data) throws {
+        try MobileFolderReader.checkAccess(bookmark: bookmark)
+        try locked(scope, id: capture.id) { fd in
+            guard let old = try NativeFileJournal.read(fd, as: Record.self), old.capture == capture,
+                  old.capturePolicy == "backup-supported", old.prepared == true, old.retired != true else { throw Failure.changed }
+            try validate(old, scope: scope, id: capture.id, bookmark: bookmark)
+            try Task.checkCancellation()
+            try NativeFileJournal.save(Record(scope: scope, bookmarkHash: old.bookmarkHash, capture: capture,
+                complete: true, excludedPaths: old.excludedPaths, capturePolicy: old.capturePolicy, prepared: true), fd)
+        }
+    }
+    /// Close a cancellation/seal race without reopening the source grant.
+    /// This only makes private provisional metadata unreadable again.
+    public func abandonBackup(_ scope: Scope, capture: Capture, bookmark: Data) throws {
+        try locked(scope, id: capture.id) { fd in
+            guard let old = try NativeFileJournal.read(fd, as: Record.self), old.capture == capture,
+                  old.capturePolicy == "backup-supported", old.retired != true else { throw Failure.changed }
+            try validate(old, scope: scope, id: capture.id, bookmark: bookmark)
+            try NativeFileJournal.save(Record(scope: scope, bookmarkHash: old.bookmarkHash, capture: capture,
+                complete: false, excludedPaths: old.excludedPaths, capturePolicy: old.capturePolicy, prepared: false), fd)
+        }
+    }
+    /// Call only when this scope has no active scanner holding its cache lock.
+    public func backupStatus(_ scope: Scope, id: String, bookmark: Data, excludedPaths: [String] = []) throws -> BackupStatus? {
+        let exclusions = try MobileFolderReader.canonicalExclusions(excludedPaths)
+        try MobileFolderReader.checkAccess(bookmark: bookmark)
+        guard FileManager.default.fileExists(atPath: try location(scope, id: id).path) else { return nil }
+        return try locked(scope, id: id) { fd in
+            guard let old = try NativeFileJournal.read(fd, as: Record.self) else { return nil }
+            try validate(old, scope: scope, id: id, bookmark: bookmark)
+            guard old.retired != true, old.capturePolicy == "backup-supported", (old.excludedPaths ?? []) == exclusions else { throw Failure.changed }
+            return BackupStatus(capture: old.capture, state: old.complete ? "complete" : "interrupted")
+        }
+    }
+    public func readSkipped(_ scope: Scope, capture: Capture, bookmark: Data, offset: Int) throws -> SkippedPage {
+        try MobileFolderReader.checkAccess(bookmark: bookmark)
+        guard offset >= 0, let total = capture.totalSkipped, total >= 0,
+              offset < total || (offset == 0 && total == 0) else { throw Failure.invalid }
+        return try locked(scope, id: capture.id) { fd in
+            guard let record = try NativeFileJournal.read(fd, as: Record.self), record.complete, record.retired != true,
+                  record.capturePolicy == "backup-supported", record.capture == capture else { throw Failure.changed }
+            try validate(record, scope: scope, id: capture.id, bookmark: bookmark)
+            let db = try Database(directory: fd, create: false)
+            var rows: [Skipped] = [], bytes = 16_384, bounded = false
+            try db.rows(offset: offset, table: "skipped") { ordinal, data in
+                guard ordinal == offset + rows.count, ordinal < total else { throw Failure.storage }
+                if rows.count == Self.maximumPageEntries || bytes + data.count > Self.maximumPageBytes { bounded = true; return false }
+                let row = try JSONDecoder().decode(Skipped.self, from: data)
+                let gap = MobileFolderReader.BackupGap(path: row.path, reason: row.reason, scope: row.scope)
+                guard row.ordinal == ordinal, gap.path == row.path, gap.reason == row.reason, gap.scope == row.scope else { throw Failure.storage }
+                rows.append(row); bytes += data.count; return true
+            }
+            let next = offset + rows.count
+            guard next <= total, !rows.isEmpty || total == 0, bounded || next == total else { throw Failure.storage }
+            return SkippedPage(capture: capture, offset: offset, skipped: rows, nextOffset: next == total ? nil : next, totalSkipped: total)
         }
     }
 
@@ -219,9 +396,61 @@ public struct MobileFolderInventory: Sendable {
                 throw MobileFolderReader.ScanFailure(reason: status == SQLITE_ROW ? .pathCollision : .duplicateIdentity, path: entry.path)
             }
         }
-        func rows(offset: Int, visit: (Int, Data) throws -> Bool) throws {
+        func insertSkipped(_ row: Skipped) throws {
+            let data = try JSONEncoder().encode(row)
+            guard data.count <= 65_536 else { throw Failure.limit }
             var statement: OpaquePointer?
-            guard sqlite3_prepare_v2(handle, "SELECT ordinal, data FROM entries WHERE ordinal >= ? ORDER BY ordinal", -1, &statement, nil) == SQLITE_OK else { throw Failure.storage }
+            guard sqlite3_prepare_v2(handle, "INSERT INTO skipped VALUES (?, ?)", -1, &statement, nil) == SQLITE_OK else { throw Failure.storage }
+            defer { sqlite3_finalize(statement) }
+            let copy = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
+            guard sqlite3_bind_int64(statement, 1, Int64(row.ordinal)) == SQLITE_OK,
+                  data.withUnsafeBytes({ sqlite3_bind_blob(statement, 2, $0.baseAddress, Int32(data.count), copy) }) == SQLITE_OK,
+                  sqlite3_step(statement) == SQLITE_DONE else { throw Failure.storage }
+        }
+        func blocked(_ path: String) throws -> Bool {
+            let key = path.precomposedStringWithCanonicalMapping.lowercased(), copy = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
+            var statement: OpaquePointer?
+            guard sqlite3_prepare_v2(handle, "SELECT 1 FROM blocked_paths WHERE ? = path OR substr(?,1,length(path)+1) = path || '/' LIMIT 1", -1, &statement, nil) == SQLITE_OK else { throw Failure.storage }
+            defer { sqlite3_finalize(statement) }
+            for i in Int32(1)...2 { guard sqlite3_bind_text(statement, i, key, -1, copy) == SQLITE_OK else { throw Failure.storage } }
+            let status = sqlite3_step(statement); guard status == SQLITE_ROW || status == SQLITE_DONE else { throw Failure.storage }
+            return status == SQLITE_ROW
+        }
+        func block(_ path: String) throws {
+            let key = path.precomposedStringWithCanonicalMapping.lowercased(), copy = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
+            var statement: OpaquePointer?
+            guard sqlite3_prepare_v2(handle, "INSERT OR IGNORE INTO blocked_paths VALUES (?)", -1, &statement, nil) == SQLITE_OK else { throw Failure.storage }
+            defer { sqlite3_finalize(statement) }
+            guard sqlite3_bind_text(statement, 1, key, -1, copy) == SQLITE_OK, sqlite3_step(statement) == SQLITE_DONE else { throw Failure.storage }
+        }
+        func removeCollision(_ path: String, visit: (MobileFolderReader.Entry) throws -> Void) throws -> Int {
+            let key = path.precomposedStringWithCanonicalMapping.lowercased()
+            let predicate = "path = ? OR substr(path, 1, length(?) + 1) = ? || '/'"
+            let copy = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
+            func bind(_ statement: OpaquePointer?) throws {
+                for i in Int32(1)...3 { guard sqlite3_bind_text(statement, i, key, -1, copy) == SQLITE_OK else { throw Failure.storage } }
+            }
+            var read: OpaquePointer?
+            guard sqlite3_prepare_v2(handle, "SELECT data FROM entries WHERE " + predicate, -1, &read, nil) == SQLITE_OK else { throw Failure.storage }
+            defer { sqlite3_finalize(read) }; try bind(read)
+            while true {
+                try Task.checkCancellation()
+                let status = sqlite3_step(read)
+                if status == SQLITE_DONE { break }
+                guard status == SQLITE_ROW, let blob = sqlite3_column_blob(read, 0) else { throw Failure.storage }
+                let size = Int(sqlite3_column_bytes(read, 0)); guard size > 0, size <= 65_536 else { throw Failure.storage }
+                try visit(JSONDecoder().decode(MobileFolderReader.Entry.self, from: Data(bytes: blob, count: size)))
+            }
+            var remove: OpaquePointer?
+            guard sqlite3_prepare_v2(handle, "DELETE FROM entries WHERE " + predicate, -1, &remove, nil) == SQLITE_OK else { throw Failure.storage }
+            defer { sqlite3_finalize(remove) }; try bind(remove)
+            guard sqlite3_step(remove) == SQLITE_DONE else { throw Failure.storage }
+            return Int(sqlite3_changes(handle))
+        }
+        func rows(offset: Int, table: String = "entries", visit: (Int, Data) throws -> Bool) throws {
+            var statement: OpaquePointer?
+            guard ["entries", "skipped"].contains(table) else { throw Failure.invalid }
+            guard sqlite3_prepare_v2(handle, "SELECT ordinal, data FROM " + table + " WHERE ordinal >= ? ORDER BY ordinal", -1, &statement, nil) == SQLITE_OK else { throw Failure.storage }
             defer { sqlite3_finalize(statement) }
             guard sqlite3_bind_int64(statement, 1, Int64(offset)) == SQLITE_OK else { throw Failure.storage }
             while true {

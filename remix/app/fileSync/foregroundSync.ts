@@ -1,3 +1,4 @@
+import type { InventoryIdentity } from './inventoryJournal';
 import type { LocalInventoryPage } from './nativeInventory';
 import type { CloudInventoryPage } from './cloudInventoryPages';
 import type { PagedConflictReviewResult, PagedConflictReviewSession } from './pagedForegroundReview';
@@ -19,6 +20,8 @@ import { type SyncEntry, type SyncScope, type SyncBaseline } from './reconcile';
 import type { SyncProgressDescriptor } from './progressProjection';
 import type { TransferActivity } from './transferActivity';
 
+export type SyncInventoryDescriptor = { scope: SyncScope; inventory: InventoryIdentity };
+
 export type ForegroundSyncProgress = {
 	stage: 'checking' | 'scanning' | 'reviewing' | 'transferring' | 'verifying' | 'complete' | 'retaining' | 'retained';
 	confirmed: number;
@@ -29,6 +32,9 @@ export type ForegroundSyncProgress = {
 	/** Persisted discovered entries; an absent total stays indeterminate. */
 	indexed?: number;
 	indexTotal?: number;
+	skipped?: number;
+	coverage?: 'full' | 'partial';
+	consistency?: 'per-entry';
 };
 export type ForegroundSyncInput = {
 	currentScope(): SyncScope;
@@ -47,6 +53,8 @@ export type ForegroundSyncInput = {
 	progress(value: ForegroundSyncProgress): void;
 	/** Read-only journal references for the editable progress hierarchy. */
 	progressSession?(value: SyncProgressDescriptor): void;
+	/** Scope-bound access to the durable scan and its paged skip ledger. */
+	inventorySession?(value: SyncInventoryDescriptor): void;
 	transfer?(value: TransferActivity): void;
 	reviewConflicts?(conflicts: SyncConflict[]): Promise<SyncConflictReviewResult>;
 	/** Bounded, durable review adapter for editable Builder surfaces. */

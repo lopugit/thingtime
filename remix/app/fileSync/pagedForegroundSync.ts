@@ -1,3 +1,4 @@
+import { assertBackupCapturePolicy, parseNativeBackupCapture, type NativeBackupCapture } from './nativeInventory';
 import { foregroundSyncContext } from './foregroundSyncContext';
 import { runForegroundCloudSync, type ForegroundSyncInput, type ForegroundSyncProgress } from './foregroundSync';
 import type { SavedFileSyncConfiguration } from './configuredPlan';
@@ -59,6 +60,11 @@ export async function runPagedForegroundCloudSync(reviewed: SavedFileSyncConfigu
 		// here requires fresh review, never invented choices for missing pages.
 		await runs.discard(active.spec); await plans.discard(active.spec.plan); active = null;
 	}
+	const restoredInventory = active?.spec.plan.local ?? draft?.spec.plan.local;
+	if (restoredInventory && await inventory.coverage(restoredInventory)) {
+		check(); await inventory.retainLatest(restoredInventory);
+		input.inventorySession?.({ scope: structuredClone(scope), inventory: structuredClone(restoredInventory) });
+	}
 	const importEntries = async (id: InventoryIdentity, rows: readonly SyncEntry[]) => {
 		await inventory.begin(id);
 		await pages<SyncEntry>(rows, (entries, ordinal, final) => inventory.append(id, { ordinal, entries, ...(final ? { totalEntries: rows.length } : {}) }), size);
@@ -73,23 +79,44 @@ export async function runPagedForegroundCloudSync(reviewed: SavedFileSyncConfigu
 			return;
 		}
 		await inventory.begin(id);
-		let generation: string | undefined, ordinal = 0, terminal = false, indexed = 0;
+		if (reportIndex) await inventory.retainLatest(id);
+		let generation: string | undefined, ordinal = 0, terminal = false, indexed = 0, skipped = 0;
+		let coverage: NativeBackupCapture | undefined;
 		for await (const page of input.scanLocalPages()) {
 			check();
-			if (terminal || !page || page.ordinal !== ordinal || typeof page.generation !== 'string' ||
+			if (terminal || !page || typeof page.generation !== 'string' ||
 				!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(page.generation) || (generation !== undefined && page.generation !== generation))
 				throw Error('Native inventory generation or page order changed.');
+			if (page.backupCapture) {
+				assertBackupCapturePolicy(configuration);
+				const next = parseNativeBackupCapture(page.backupCapture);
+				if (next.generation !== page.generation || (coverage && JSON.stringify(coverage) !== JSON.stringify(next)) || (!coverage && ordinal !== 0))
+					throw Error('Native backup coverage changed.');
+				coverage = next; await inventory.setCoverage(id, coverage, configuration);
+			} else if (coverage) throw Error('Native backup coverage is missing.');
+			generation = page.generation;
+			if (page.skippedPage) {
+				if (!coverage || ordinal !== 0 || page.entries.length !== 0 || page.totalEntries !== undefined) throw Error('Invalid skipped inventory frame.');
+				await inventory.appendSkips(id, page.skippedPage); skipped += page.skippedPage.skipped.length;
+				if (reportIndex) input.progress({ stage: 'scanning', confirmed: 0, total: 0, indexed, indexTotal: coverage.totalEntries,
+					skipped, coverage: coverage.coverage, consistency: coverage.consistency });
+				continue;
+			}
+			if (page.ordinal !== ordinal) throw Error('Native inventory generation or page order changed.');
 			generation = page.generation; ordinal++;
 			await inventory.append(id, { ordinal: page.ordinal, entries: page.entries,
 				...(page.totalEntries === undefined ? {} : { totalEntries: page.totalEntries }) });
 			indexed += page.entries.length;
 			if (reportIndex) input.progress({ stage: 'scanning', confirmed: 0, total: 0, indexed,
-				...(page.totalEntries === undefined ? {} : { indexTotal: page.totalEntries }) });
+				...(page.totalEntries === undefined ? {} : { indexTotal: page.totalEntries }), ...(coverage ? { skipped, coverage: coverage.coverage, consistency: coverage.consistency } : {}) });
 			terminal = page.totalEntries !== undefined;
 		}
 		check();
 		if (!terminal) throw Error('Native inventory has no final page. Keep the last complete scan.');
 		await inventory.seal(id); check();
+		// Publish only once coverage and every skip page are durable. A viewer
+		// mounted earlier could mistake an unfilled capture for strict coverage.
+		if (reportIndex && coverage) input.inventorySession?.({ scope: structuredClone(scope), inventory: structuredClone(id) });
 	};
 	const importObservations = async (local: InventoryIdentity, remote: InventoryIdentity, checkpoint = false) => {
 		await importLocal(local, !checkpoint);
@@ -239,16 +266,17 @@ export async function runPagedForegroundCloudSync(reviewed: SavedFileSyncConfigu
 	}
 	await runs.prepare(spec); await runs.prepareCloud(spec, configuration); check();
 	input.progressSession?.({ scope: structuredClone(scope), run: structuredClone(spec) });
+	const planningCoverage = await inventory.coverage(spec.plan.local);
 	let state = await runs.begin(spec); const retain = spec.review?.kind === 'retain';
 	const report = (value: PagedRunProgress, stage: ForegroundSyncProgress['stage'] = retain ? 'retaining' : 'transferring') => {
-		state = value; input.progress({ stage, confirmed: value.confirmed, total: value.operations });
+		state = value; input.progress({ stage, confirmed: value.confirmed, total: value.operations, ...(planningCoverage ? { coverage: planningCoverage.coverage, skipped: planningCoverage.totalSkipped, consistency: planningCoverage.consistency } : {}) });
 	};
 	const port = await createPagedCloudSyncPort(spec, configuration, runs, {
 		currentScope: input.currentScope, signal, localTarget,
 		transfer: input.transfer,
 		readLocal,
 		openSource: async entry => { await authorize(); return input.source(entry); },
-		progress: (path, bytes, size) => { check(); input.progress({ stage: retain ? 'retaining' : 'transferring', confirmed: state.confirmed, total: state.operations, path, bytes, size }); }
+		progress: (path, bytes, size) => { check(); input.progress({ stage: retain ? 'retaining' : 'transferring', confirmed: state.confirmed, total: state.operations, path, bytes, size, ...(planningCoverage ? { coverage: planningCoverage.coverage, skipped: planningCoverage.totalSkipped, consistency: planningCoverage.consistency } : {}) }); }
 	}, runtime);
 	const done = await executePreparedPagedSyncRun(spec, scope, runs, port, { signal, changed: p => report(p) }); check();
 	if (retain) { await runs.finishRetention(spec); report(done, 'retained'); return { spec, progress: done }; }

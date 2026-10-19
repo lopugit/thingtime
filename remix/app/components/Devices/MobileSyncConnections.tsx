@@ -10,6 +10,8 @@ import { PagedSyncConflictReview } from './PagedSyncConflictReview';
 import { DesktopSyncAutomation } from './DesktopSyncAutomation';
 import { HomeBackupPreset } from './HomeBackupPreset';
 import { SyncProgressViewer } from './SyncProgressViewer';
+import { BackupCoverageViewer } from './BackupCoverageViewer';
+import type { SyncInventoryDescriptor } from '~/fileSync/foregroundSync';
 import type { SyncProgressDescriptor } from '~/fileSync/progressProjection';
 import { createTransferActivitySession } from '~/fileSync/transferActivity';
 import { createConflictReviewController } from '~/fileSync/conflictReviewController';
@@ -33,6 +35,7 @@ import {
 	supportsNativeFileVersions,
 	supportsNativePathInspection,
 	supportsNativeInventoryPages,
+	supportsNativeBackupCapture,
 	supportsNativeBackgroundUploads
 } from '~/fileSync/mobileFolders.client';
 import { openSyncJournal, withSyncRootLock, syncScopeKey } from '~/fileSync/journal.client';
@@ -148,6 +151,7 @@ function Connections({
 	});
 	const [transfers, setTransfers] = useState<Record<string, ForegroundSyncProgress & { message?: string }>>({});
 	const [progressDescriptors, setProgressDescriptors] = useState<Record<string, SyncProgressDescriptor | undefined>>({});
+	const [inventoryDescriptors, setInventoryDescriptors] = useState<Record<string, SyncInventoryDescriptor | undefined>>({});
 	const [activeTransfer, setActiveTransfer] = useState<string | null>(null);
 	const [foregroundFileReview, setFileReview] = useState<{
 		id: string;
@@ -300,6 +304,8 @@ function Connections({
 			const speeds = createTransferActivitySession(); transferSession.current = { id: saved.id, session: speeds };
 			setProgressDescriptors(previous => ({ ...previous, [saved.id]: undefined }));
 			writeStampedCache('tt:sync-progress-tree:' + syncScopeKey(syncScope), null);
+			setInventoryDescriptors(previous => ({ ...previous, [saved.id]: undefined }));
+			writeStampedCache('tt:sync-inventory:' + syncScopeKey(syncScope), null);
 			let latestProgress: ForegroundSyncProgress = { stage: 'checking', confirmed: 0, total: 0 };
 			const publish = (value: ForegroundSyncProgress & { message?: string }) => {
 				assertActive();
@@ -369,7 +375,12 @@ function Connections({
 								...(inspectPaths && supportsNativeInventoryPages(capabilities) ? {
 									scanLocalPages: () => readNativeInventory({ ownerId: scope.ownerId, deviceId: scope.deviceId,
 										rootId: saved.configuration.localRootId, signal: active.signal, request: requestFolders,
-										excludedPaths: saved.configuration.excludedPaths })
+										excludedPaths: saved.configuration.excludedPaths,
+                                        ...(supportsNativeBackupCapture(capabilities) && saved.configuration.mode === 'backup' && !saved.configuration.propagateDeletes ? {
+                                            backupPolicy: { mode: 'backup' as const, propagateDeletes: false },
+                                            onProgress: value => publish({ stage: 'scanning', confirmed: 0, total: 0, indexed: value.totalEntries,
+                                                skipped: value.totalSkipped, coverage: value.coverage, consistency: value.consistency })
+                                        } : {}) })
 								} : {}),
 								...(inspectPaths ? { inspectLocal: async (path: string) => (await requestFolders(scope.ownerId,
 									{ action: 'inspect', rootId: saved.configuration.localRootId, path }, active.signal)).inspectedEntry! } : {}),
@@ -397,7 +408,12 @@ function Connections({
 								},
 								progress: publish,
 								transfer: value => { assertActive(); speeds.add(value); },
-								progressSession: (descriptor: SyncProgressDescriptor) => {
+								inventorySession: (descriptor: SyncInventoryDescriptor) => {
+                                    assertActive(); setInventoryDescriptors(previous => ({ ...previous, [saved.id]: descriptor }));
+                                    const cacheKey = 'tt:sync-inventory:' + syncScopeKey(syncScope);
+                                    writeStampedCache(cacheKey, descriptor); pruneCacheNamespace('tt:sync-inventory:', cacheKey, 32);
+                                },
+                                progressSession: (descriptor: SyncProgressDescriptor) => {
 									assertActive(); setProgressDescriptors(previous => ({ ...previous, [saved.id]: descriptor }));
 									const cacheKey = 'tt:sync-progress-tree:' + syncScopeKey(syncScope);
 									writeStampedCache(cacheKey, descriptor); pruneCacheNamespace('tt:sync-progress-tree:', cacheKey, 32);
@@ -598,6 +614,8 @@ function Connections({
 				const progressScope = { ...scope, rootId: saved.id };
 				const progressDescriptor = task ? task.progressDescriptor : progressDescriptors[saved.id] ?? (!running
 					? readStampedCache<SyncProgressDescriptor>('tt:sync-progress-tree:' + syncScopeKey(progressScope)) ?? undefined : undefined);
+				const inventoryDescriptor = task ? task.inventoryDescriptor : inventoryDescriptors[saved.id] ?? (!running
+                    ? readStampedCache<SyncInventoryDescriptor>('tt:sync-inventory:' + syncScopeKey(progressScope)) ?? undefined : undefined);
 				const downloading = saved.configuration.mode === 'download';
 				const twoWay = saved.configuration.mode === 'two-way';
 				const nativeRoot = roots.find((root) => root.id === saved.configuration.localRootId);
@@ -644,6 +662,8 @@ function Connections({
 										: 'This direction is not available yet'
 									: !supportsMobileSyncConditions(capabilities)
 									? 'Update this app to transfer files'
+									: task?.waiting
+									? 'Waiting to continue automatically'
 									: task?.status === 'error' || (!running && progress?.message && !['complete', 'retained'].includes(progress.stage))
 									? 'Needs attention'
 									: running
@@ -719,7 +739,15 @@ function Connections({
 									return progressScope;
 								}} />
 						</Box>}
-						{pagedReview?.id === saved.id && <Box width="100%" minW={0}>
+						{inventoryDescriptor && <Box width="100%" minW={0}>
+                            <BackupCoverageViewer scopeKey={`${key}:${generation}:${saved.id}`} descriptor={inventoryDescriptor} accountTransport={reviewTransport}
+                                currentScope={() => {
+                                    if (!mounted.current || rootIdentity.read().pending || rootIdentity.read().generation !== generation || runtimeOrigin() !== scope.origin)
+                                        throw Error('The account or storage destination changed.');
+                                    return progressScope;
+                                }} />
+                        </Box>}
+                        {pagedReview?.id === saved.id && <Box width="100%" minW={0}>
 							<PagedSyncConflictReview controller={pagedReview.controller} mode={saved.configuration.mode}
 								scopeKey={`${key}:${generation}:${saved.id}`} accountTransport={reviewTransport} />
 						</Box>}

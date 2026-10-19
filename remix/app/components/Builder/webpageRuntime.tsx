@@ -1,4 +1,5 @@
 import React from 'react';
+import { INVALID_PAGINATION_CURSOR, MAX_PAGINATION_CURSOR_CHARS, isPaginationCursorKey } from '~/schemas/paginationCursor';
 import { isTransientBlockTarget } from './transientBlockActions';
 import { parseActionJson } from '~/schemas/actionJsonInput';
 import { ComponentDragBoundary } from './ComponentDrag';
@@ -50,6 +51,8 @@ export type WebpageRuntime = {
 	viewer: WebpageRuntimeViewer;
 	query: Record<string, string>;
 	version: number;
+	// Explicit Refresh/Retry requests, separate from completed control reports.
+	refreshVersion: number;
 	last: WebpageRuntimeLastRun | null;
 	installing: boolean;
 	// bump the version — every source-bound block refetches
@@ -79,6 +82,7 @@ const INERT_RUNTIME: WebpageRuntime = {
 	viewer: INERT_VIEWER,
 	query: {},
 	version: 0,
+	refreshVersion: 0,
 	last: null,
 	installing: false,
 	refresh: () => {},
@@ -131,7 +135,11 @@ export const queryScopeOf = (search: string): Record<string, string> => {
 	let count = 0;
 	params.forEach((value, key) => {
 		if (key === 'key' || count >= MAX_QUERY_KEYS || !QUERY_KEY_PATTERN.test(key)) return;
-		out[key] = value.slice(0, MAX_QUERY_VALUE_CHARS);
+		// Opaque cursors must survive navigation byte-for-byte. Never turn an
+		// oversized token into a valid first-page request by silently dropping it.
+		out[key] = isPaginationCursorKey(key)
+			? value.length <= MAX_PAGINATION_CURSOR_CHARS ? value : INVALID_PAGINATION_CURSOR
+			: value.slice(0, MAX_QUERY_VALUE_CHARS);
 		count += 1;
 	});
 	return out;
@@ -161,6 +169,7 @@ export const WebpageRuntimeProvider = ({
 	const user = useCurrentUser();
 	const location = useLocation();
 	const [version, setVersion] = React.useState(0);
+	const [refreshVersion, setRefreshVersion] = React.useState(0);
 	const [lastRun, setLast] = React.useState<{ identity: object; search: string; run: WebpageRuntimeLastRun } | null>(null);
 	const [installing, setInstalling] = React.useState(false);
 	const onInstallRef = React.useRef(onInstall);
@@ -197,7 +206,10 @@ export const WebpageRuntimeProvider = ({
 		[pageId, linkKey]
 	);
 
-	const refresh = React.useCallback(() => setVersion((current) => current + 1), []);
+	const refresh = React.useCallback(() => {
+		setVersion((current) => current + 1);
+		setRefreshVersion((current) => current + 1);
+	}, []);
 	const report = React.useCallback(
 		(run: Omit<WebpageRuntimeLastRun, 'at'>) => {
 			setLast({ identity, search: runtimeSearch, run: { ...run, at: Date.now() } });
@@ -249,6 +261,7 @@ export const WebpageRuntimeProvider = ({
 			viewer,
 			query,
 			version,
+			refreshVersion,
 			last,
 			installing,
 			refresh,
@@ -266,6 +279,7 @@ export const WebpageRuntimeProvider = ({
 			viewer,
 			query,
 			version,
+			refreshVersion,
 			last,
 			installing,
 			refresh,

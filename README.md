@@ -6,10 +6,14 @@ https://thingtime.com
 
 Thingtime for Mac includes task-owned browser installs, claims and a live
 viewer, with isolated, IP-restricted and unrestricted network settings. The
-editable task space uses normal private Things for tasks, todos and updates.
-See [setup, agent CLI and security boundaries](docs/agent-browsers.md). Local
-container setup uses Colima and the Docker CLI; no production secrets or copied
-personal browser profiles are required for isolated acceptance tests.
+Agent work records, dashboards, schemas, components and Actions are ordinary saved
+Things authored in Thingtime. The committed `api.agent-overview` 2.0.0 code is
+a schema-parameterized read adapter; it includes no dashboard definitions.
+See the [adapter contract and fork/test setup](docs/agent-overview.md), and
+[agent browser setup, CLI and security boundaries](docs/agent-browsers.md).
+Local isolated acceptance uses Colima and the Docker CLI, disposable identities
+and an external `AGENT_OVERVIEW_AUTHORED_THINGS` JSON fixture; it requires no
+production secrets or copied personal browser profiles.
 
 ### Subspace messages and embedded Things
 
