@@ -12370,3 +12370,7 @@ separate from deterministic discovery/lease tests.
 ## Renderer port and origin recovery
 
 - [ ] Verify explicit selected and recovered renderer ports are honored, an occupied selected port refuses startup before import, and automatic-origin history remains unchanged. `electron/test/renderer-server.test.cjs` passes 18/18.
+
+- Completed sync speed counters must say Complete, while explicitly paused runs say Paused; no-sample and unavailable telemetry remain explicit. Verify both directions after real confirmed operations.
+
+- Password AutoFill disconnect must fail closed when protected Keychain deletion returns locked, denied, missing-entitlement or unavailable; endpoint changes must wait for success and allow a retry. Run the injected-status Swift tests and Electron helper-failure tests without accessing user credentials.

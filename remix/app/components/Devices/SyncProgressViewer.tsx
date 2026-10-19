@@ -113,5 +113,5 @@ function SyncProgressSession({ scopeKey, series, descriptor, progress, currentSc
 		{({ blocks, chrome, editing }) => <TransientBlockHost scopeKey={scopeKey} scope={syncProgressDisplay(displayBranches, progress, status, !!source, message, focusedFolder)} actions={actions} enabled={!editing}>
 			<WebpageBlocksRenderer blocks={blocks} componentsByRef={{}} chrome={chrome} />
 		</TransientBlockHost>}
-	</SettingsDocumentHost><TransferSpeedTrackers scopeKey={scopeKey} series={series} accountTransport={accountTransport} /></>;
+	</SettingsDocumentHost><TransferSpeedTrackers scopeKey={scopeKey} state={status === 'running' && progress?.stage === 'complete' ? 'complete' : status} series={series} accountTransport={accountTransport} /></>;
 }

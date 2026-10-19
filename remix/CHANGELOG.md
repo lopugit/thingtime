@@ -96,6 +96,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-19 — **Codex (AI)**: Prepare the current-main file-sync release with reviewed home exclusions, editable hierarchical progress and saved transfer-speed windows; preserve current account/runtime protections and installed AutoFill integration. Completed speed counters now say Complete. Validation and release gates: [PR #1046](../PRs/1046-codex-file-sync-release-recoverable-file-sync-home-backups-and-live-progress.md).
+
 - Commander login verification and API contract details: [PR #1044](../PRs/1044-commander-login-callback-fix-commander-thingtime-login-callback-registration.md).
 
 - 2026-10-19 — **Codex (AI)**: Check Commander OAuth capabilities and callback registration before browser login; recover an unregistered native callback through the explicitly registered loopback callback and bind PKCE attempts to their original server, app and redirect.

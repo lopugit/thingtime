@@ -51,11 +51,11 @@ function Fixture() {
 		path: rows.find(r => r.entry.size === 990)!.entry.path, bytes: 495, size: 990 });
 	return <ChakraProvider><Box maxW="760px" mx="auto" p={4}>
 		<Text as="h1">Editable progress acceptance</Text>
-		<Button onClick={() => setStatus('paused')}>Pause fixture</Button>
+		<Button onClick={() => { series.pause(); setStatus('paused'); }}>Pause fixture</Button>
 		<Button onClick={() => setStatus('error')}>Fail fixture</Button>
 		<Button onClick={() => setProgress({ stage: 'scanning', total: 0, confirmed: 0, indexed: 128 })}>Index fixture</Button>
 		<Button onClick={() => setProgress({ stage: 'transferring', total: rows.length, confirmed: 4, path: rows.find(r => r.entry.size === 990)!.entry.path, bytes: 495, size: 990 })}>Transfer fixture</Button>
-		<Button onClick={() => { for (const row of rows) row.operation!.confirmed = true; setStatus('complete'); setProgress({ stage: 'complete', total: rows.length, confirmed: rows.length }); }}>Complete fixture</Button>
+		<Button onClick={() => { for (const row of rows) row.operation!.confirmed = true; series.pause(); setStatus('complete'); setProgress({ stage: 'complete', total: rows.length, confirmed: rows.length }); }}>Complete fixture</Button>
 		<SyncProgressViewer scopeKey="synthetic-progress" series={series} source={progress.stage === 'scanning' ? undefined : source} currentScope={() => scope} progress={progress} status={status} />
 	</Box></ChakraProvider>;
 }

@@ -6159,3 +6159,27 @@ Saved documents contain authored blocks only. Password/file values, MongoDB
 credentials, OAuth tokens and transfer files remain in transient/native adapters;
 external component loaders and data Actions cannot be inserted into these
 sensitive layouts. Offline layout writes require browser Web Locks.
+
+### File-sync release and installed Password AutoFill
+
+The combined Mac app includes both approved folder-sync/export adapters and the
+standalone Password AutoFill host/extension. Build them through the canonical
+`npm run build-electron` path, then install only the verified app with
+`corepack pnpm@10.12.1 --dir electron install:local`. Do not replace the
+file-sync main/preload files wholesale with an older installed-app branch.
+
+For a fork, set `THINGTIME_PASSWORD_SIGNING_IDENTITY` to the intended Apple
+signing identity (it may fall back to `THINGTIME_NODE_SIGNING_IDENTITY`) and
+`APPLE_TEAM_ID` or `DEVELOPMENT_TEAM` to your team. When using manual provisioning,
+set both `THINGTIME_PASSWORD_HOST_PROFILE` and
+`THINGTIME_PASSWORD_PROVIDER_PROFILE`; use profile names, never credential
+contents. Optional `THINGTIME_PASSWORD_REGISTER_DEVICE=1` enables Xcode device
+registration. Keep signing assets in Keychain/Xcode's supported stores. The
+helper host and extension need their stable bundle identifiers, the shared
+Keychain group and AutoFill entitlements provisioned for the same team.
+
+`npm --prefix electron run build:passwords` builds the helper; the canonical
+`verify:signed` path also checks its nested signatures, identity/team, entitlement
+and provisioning contracts. `CODE_SIGNING_ALLOWED=NO` is for isolated compilation
+only and does not establish installed AutoFill or Keychain acceptance. Never
+install an unsigned helper over a working signed app.

@@ -91,7 +91,18 @@ if (!process.env.TT_SPEED_WORKER) {
 				assert.ok(bounds.scrollWidth <= bounds.width, JSON.stringify(bounds)); if (bounds.y + bounds.height >= bounds.total - 1) break; assert.ok(++steps < 100); await page.evaluate(() => scrollBy(0, innerHeight * 0.8)); }
 			await page.screenshot({ path: join(evidence, `${name}-bottom.png`) }); await page.evaluate(() => scrollTo(0, 0)); await page.screenshot({ path: join(evidence, `${name}.png`) });
 		}
-		assert.deepEqual(errors, []); await writeFile(join(evidence, 'result.json'), JSON.stringify({ ok: true, isolated: true, viewports: [1440, 390], nestedBlocksEdited: true, savedAndReloaded: true, independentWindows: true, directions: ['upload', 'download'], units: ['Kbps', 'Mbps', 'Gbps', 'Files/ps', 'Folders/ps', 'INodes/ps'] }));
+        await page.getByRole('button', { name: 'Pause fixture', exact: true }).click();
+        await host.getByText('Sent: Paused', { exact: true }).waitFor();
+        await host.getByText('Received: Paused', { exact: true }).waitFor();
+        await host.getByText('Received: Paused', { exact: true }).scrollIntoViewIfNeeded();
+        await page.screenshot({ path: join(evidence, 'mobile-paused.png') });
+        await page.getByRole('button', { name: 'Complete fixture', exact: true }).click();
+        await host.getByText('Sent: Complete', { exact: true }).waitFor();
+        await host.getByText('Received: Complete', { exact: true }).waitFor();
+        await host.getByText('Received: Complete', { exact: true }).scrollIntoViewIfNeeded();
+        await page.screenshot({ path: join(evidence, 'mobile-complete.png') });
+        assert.equal(await host.getByText(/^(Sent|Received): Paused$/).count(), 0);
+		assert.deepEqual(errors, []); await writeFile(join(evidence, 'result.json'), JSON.stringify({ ok: true, isolated: true, viewports: [1440, 390], nestedBlocksEdited: true, savedAndReloaded: true, independentWindows: true, terminalStates: ['paused', 'complete'], directions: ['upload', 'download'], units: ['Kbps', 'Mbps', 'Gbps', 'Files/ps', 'Folders/ps', 'INodes/ps'] }));
 		console.log(`EDITABLE_TRANSFER_SPEED_OK ${evidence}`);
 	} catch (error) {
 		if (page) { await page.screenshot({ path: join(evidence, 'failed.png') }).catch(() => {}); await writeFile(join(evidence, 'failed-dom.txt'), await page.locator('body').innerText()).catch(() => {}); }
