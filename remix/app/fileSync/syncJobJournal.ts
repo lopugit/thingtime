@@ -20,6 +20,7 @@ export type SyncJob = {
 	nativeCaptureGeneration?: string;
 	nativeCaptureRestarts?: number;
 };
+export const syncJobCanPause = (job: SyncJob | null) => !!job && ['runnable', 'scheduled', 'attention'].includes(job.state);
 export const syncJobEnabled = (job: SyncJob) => job.intervalMs !== undefined && ['runnable', 'scheduled'].includes(job.state);
 export const syncJobDue = (job: SyncJob, now: number) => job.state === 'runnable' ||
 	(job.state === 'scheduled' && Number.isSafeInteger(now) && now >= job.nextRunAt!);
@@ -162,7 +163,7 @@ export function syncJobJournal(db: IDBDatabase, access: JournalAccess, keyRange?
 				{ ...rest, state: 'scheduled', nextRunAt: now + current.intervalMs };
 		}),
 		pause: (expected: SyncJob) => change(expected, current =>
-			['runnable', 'scheduled', 'attention'].includes(current.state) ? { ...current, state: 'paused' } : null),
+			syncJobCanPause(current) ? { ...current, state: 'paused' } : null),
 		attention: (expected: SyncJob) => change(expected, current =>
 			['runnable', 'scheduled'].includes(current.state) ? { ...current, state: 'attention' } : null)
 	};
