@@ -1,5 +1,23 @@
 # TODO
 
+## Agent operating foundations
+
+- **Make Character coordination and Agent overview reporting executable and verifiable.**
+  The current automation instructions reference `docs/characters.md`,
+  `docs/agent-overview.md`, and
+  `npm --prefix remix run characters:preflight -- --origin <origin>`, but none
+  exists on the inspected PR head or `origin/develop` snapshot (2026-10-19;
+  the script is absent from `remix/package.json`).
+  The public capability manifest advertises `api.auth-characters` 1.0.0 and
+  `api.agent-overview` 2.0.0; this does not establish an authenticated
+  Character session or private workspace membership. Build a documented,
+  origin-bound preflight and reusable reporting runbook without exposing
+  private workspace identifiers or treating a manifest as access proof.
+  [Acceptance and phases](claude-todo/58-agent-coordination-and-task-reporting.md);
+  related developer-ecosystem context:
+  [baseline](../NOTES/trusted-developer-ecosystem-baseline.md) and
+  [roadmap](../PLAN/trusted-developer-ecosystem-roadmap.md).
+
 ## Priority 1 — Fundamental product behavior
 
 - **Complete SEO, Schema.org and rich results across all pages, `/things` and public UGC.**
