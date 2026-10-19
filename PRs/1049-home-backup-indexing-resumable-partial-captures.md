@@ -27,6 +27,10 @@ Supported files can proceed while coverage remains explicitly partial.
   capture and provisional count retraction after a late path collision being
   rejected by the client. The actual suspend wire path has a native regression;
   17 native-inventory/partial-backup TypeScript tests pass after both fixes.
+- Installed update preparation exposed a shutdown crash: the visibility cleanup
+  accessed `window.webContents` after Electron destroyed the window. Cleanup now
+  retains the original event emitter; a regression makes the destroyed getter
+  throw and verifies cleanup and late events remain safe.
 - Shared worker: final 39 focused tests passed; broader 59-test and
   maintenance/runtime suites passed before the final restart changes.
 - Integrated canonical file-sync suite: 378 TypeScript tests and one module-mock

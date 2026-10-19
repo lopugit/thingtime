@@ -24,3 +24,12 @@ test('closed window is never resurrected by a delayed readiness fallback', () =>
  const f = fixture(); f.window.emit('closed'); f.fire();
  assert.equal(f.shows(), 0); assert.equal(f.cleared(), true);
 });
+test('quit cleanup never reads webContents from an already destroyed window', () => {
+ const f = fixture(), contents = f.window.webContents;
+ Object.defineProperty(f.window, 'webContents', { get() { throw new TypeError('Object has been destroyed'); } });
+ assert.doesNotThrow(() => f.window.emit('closed'));
+ for (const event of ['did-finish-load', 'did-fail-load', 'render-process-gone']) {
+  assert.equal(contents.listenerCount(event), 0); contents.emit(event);
+ }
+ f.fire(); assert.equal(f.shows(), 0); assert.equal(f.cleared(), true);
+});
