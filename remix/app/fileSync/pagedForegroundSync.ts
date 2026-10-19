@@ -70,7 +70,7 @@ export async function runPagedForegroundCloudSync(reviewed: SavedFileSyncConfigu
 		await pages<SyncEntry>(rows, (entries, ordinal, final) => inventory.append(id, { ordinal, entries, ...(final ? { totalEntries: rows.length } : {}) }), size);
 		await inventory.seal(id); check();
 	};
-	const importLocal = async (id: InventoryIdentity, reportIndex = true) => {
+	const importLocal = async (id: InventoryIdentity, reportIndex = true, resumable = false) => {
 		if (!input.scanLocalPages) {
 			const entries = await input.scanLocal(); check();
 			planFileSync({ scope, complete: true, entries }, { scope, complete: true, entries: [] }, { scope, entries: [] }, { mode: 'backup', propagateDeletes: false });
@@ -82,7 +82,27 @@ export async function runPagedForegroundCloudSync(reviewed: SavedFileSyncConfigu
 		if (reportIndex) await inventory.retainLatest(id);
 		let generation: string | undefined, ordinal = 0, terminal = false, indexed = 0, skipped = 0;
 		let coverage: NativeBackupCapture | undefined;
-		for await (const page of input.scanLocalPages()) {
+		const report = () => { if (reportIndex) input.progress({ stage: 'scanning', confirmed: 0, total: 0, indexed,
+			...(coverage ? { indexTotal: coverage.totalEntries, skipped, coverage: coverage.coverage, consistency: coverage.consistency } : {}) }); };
+		if (resumable) {
+			const state = await inventory.importState(id); check();
+			ordinal = state.pages; indexed = state.entries; skipped = state.skipped; coverage = state.coverage ?? undefined;
+			generation = coverage?.generation; terminal = state.phase !== 'collecting';
+			if ((indexed || skipped || terminal) && !coverage) throw Error('Saved native import coverage is missing.');
+			if (state.derived || (coverage && (indexed > coverage.totalEntries || (terminal && indexed !== coverage.totalEntries) ||
+				((indexed > 0 || terminal) && skipped !== coverage.totalSkipped)))) throw Error('Saved native import totals changed.');
+			report();
+		}
+		const options = resumable ? { retainCaptureUntilHandoff: true, resume: async (capture: NativeBackupCapture) => {
+			check(); const next = parseNativeBackupCapture(capture);
+			if (coverage && JSON.stringify(coverage) !== JSON.stringify(next)) throw Error('Saved native import generation changed.');
+			if (!coverage) { await inventory.setCoverage(id, next, configuration); check(); coverage = next; }
+			generation = next.generation; report();
+			return { entryOffset: indexed, skippedOffset: skipped, ordinal, complete: terminal };
+		} } : undefined;
+		// A captured import already owns all its immutable source rows. Resume
+		// seal at its committed validation cursor, without another native read.
+		for await (const page of terminal ? [] : input.scanLocalPages(options)) {
 			check();
 			if (terminal || !page || typeof page.generation !== 'string' ||
 				!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(page.generation) || (generation !== undefined && page.generation !== generation))
@@ -92,7 +112,8 @@ export async function runPagedForegroundCloudSync(reviewed: SavedFileSyncConfigu
 				const next = parseNativeBackupCapture(page.backupCapture);
 				if (next.generation !== page.generation || (coverage && JSON.stringify(coverage) !== JSON.stringify(next)) || (!coverage && ordinal !== 0))
 					throw Error('Native backup coverage changed.');
-				coverage = next; await inventory.setCoverage(id, coverage, configuration);
+				if (!coverage) await inventory.setCoverage(id, next, configuration);
+				coverage = next;
 			} else if (coverage) throw Error('Native backup coverage is missing.');
 			generation = page.generation;
 			if (page.skippedPage) {
@@ -118,8 +139,8 @@ export async function runPagedForegroundCloudSync(reviewed: SavedFileSyncConfigu
 		// mounted earlier could mistake an unfilled capture for strict coverage.
 		if (reportIndex && coverage) input.inventorySession?.({ scope: structuredClone(scope), inventory: structuredClone(id) });
 	};
-	const importObservations = async (local: InventoryIdentity, remote: InventoryIdentity, checkpoint = false) => {
-		await importLocal(local, !checkpoint);
+	const importObservations = async (local: InventoryIdentity, remote: InventoryIdentity, checkpoint = false, resumable = false) => {
+		await importLocal(local, !checkpoint, resumable);
 		if (input.inventoryPages) {
 			// A checkpoint stores stamps, but must first validate the complete physical tree.
 			const observed = checkpoint ? identity('remote') : remote;
@@ -162,11 +183,11 @@ export async function runPagedForegroundCloudSync(reviewed: SavedFileSyncConfigu
 			node => size(node) * 2 + 1024);
 		await inventory.seal(remote); check();
 	};
-	const capture = async (baseline: PagedPlanSpec['baseline']) => {
+	const capture = async (baseline: PagedPlanSpec['baseline'], purpose: 'initial' | 'review' = 'initial') => {
 		input.progress({ stage: 'scanning', confirmed: 0, total: 0 });
 		await authorize();
-		const local = identity('local'), remote = identity('remote');
-		await importObservations(local, remote);
+		const local = input.beginLocalImport ? await input.beginLocalImport(purpose) : identity('local'), remote = identity('remote');
+		await importObservations(local, remote, false, !!input.beginLocalImport);
 		const spec: PagedPlanSpec = { id: crypto.randomUUID(), local, remote, baseline,
 			policy: { mode: configuration.mode, propagateDeletes: configuration.propagateDeletes }, excludedPaths: configuration.excludedPaths, ...(configuration.ignoreRules ? { ignoreRules: configuration.ignoreRules } : {}) };
 		const result = await plans.build(spec);
@@ -240,12 +261,15 @@ export async function runPagedForegroundCloudSync(reviewed: SavedFileSyncConfigu
 		}
 		const saved = draft?.spec ?? { id: crypto.randomUUID(), plan: await capture(baseline), configuration };
 		const state = await reviewDraft(saved); let plan = saved.plan;
+		// The active review head now pins the initial plan and its inputs. Never
+		// release a different, partially imported fresh-review generation.
+		await input.releaseLocalImport?.(saved.plan.local); check();
 		let review: PagedRunSpec['review'];
 		if (state.count) {
-			plan = await capture(baseline);
+			plan = await capture(baseline, 'review');
 			try { await verifyFreshReview(plans, plan, drafts, saved, scope); }
 			catch (error) {
-				if (error instanceof SyncReviewChangedError) { await releaseDraft(saved); await plans.discard(plan); }
+				if (error instanceof SyncReviewChangedError) { await releaseDraft(saved); await plans.discard(plan); await input.releaseLocalImport?.(plan.local); }
 				throw error;
 			}
 			review = { id: saved.id, kind: state.kind!, count: state.count };
@@ -254,6 +278,7 @@ export async function runPagedForegroundCloudSync(reviewed: SavedFileSyncConfigu
 				const retained = await runs.retained(); check();
 				if (retained?.spec.review?.id === review.id && JSON.stringify(retained.spec.configuration) === JSON.stringify(configuration)) {
 					await releaseDraft(saved); await plans.discard(plan);
+					await input.releaseLocalImport?.(plan.local); check();
 					input.progress({ stage: 'retained', confirmed: retained.progress.confirmed, total: retained.progress.operations });
 					return retained;
 				}
@@ -264,6 +289,7 @@ export async function runPagedForegroundCloudSync(reviewed: SavedFileSyncConfigu
 		if (review) await importReviewDraft(runs, spec, drafts, saved);
 		await releaseDraft(saved, !review);
 	}
+	await input.releaseLocalImport?.(spec.plan.local); check();
 	await runs.prepare(spec); await runs.prepareCloud(spec, configuration); check();
 	input.progressSession?.({ scope: structuredClone(scope), run: structuredClone(spec) });
 	const planningCoverage = await inventory.coverage(spec.plan.local);

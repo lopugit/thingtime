@@ -8,7 +8,9 @@ import { rootIdentity } from '../utils/rootIdentity';
 import { createSyncTaskRuntime } from './syncTaskRuntime';
 import { openSyncJournal, withSyncRootLock, syncScopeKey } from './journal.client';
 import { runPagedForegroundCloudSync } from './pagedForegroundSync';
-import { readNativeInventory, NATIVE_INVENTORY_BATCH_ENTRIES, NativeInventoryRetryWait, type LocalInventoryPage } from './nativeInventory';
+import { readNativeInventory, NATIVE_INVENTORY_BATCH_ENTRIES, NativeInventoryRetryWait, type LocalInventoryPage, type NativeBackupCapture } from './nativeInventory';
+import type { ForegroundSyncInput } from './foregroundSync';
+import type { InventoryIdentity } from './inventoryJournal';
 import { readCloudFolderInventoryPages } from './cloudInventoryPages.client';
 import { readCloudFolderInventory } from './cloudInventory.client';
 import { mobileFolderSource, supportsNativeInventoryPages, supportsNativePathInspection, supportsNativeBackupCapture, supportsNativeIgnoreRules, supportsNativeInventoryBatches } from './mobileFolders.client';
@@ -65,27 +67,53 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 			if (reviewed.configuration.ignoreRules && !supportsNativeIgnoreRules(capabilities)) throw Error('Update Thingtime Mac before using this connection’s Gitignore rules.');
 			const currentScope = () => { check(); host.assertCurrent(); return binding; };
 			const runtime = { currentScope, origin: host.origin, fetch: host.fetch, requireCapability: host.requireCapability };
+			const backup = supportsNativeBackupCapture(capabilities) && reviewed.configuration.mode === 'backup' && !reviewed.configuration.propagateDeletes;
+			let capturedSource: NativeBackupCapture | undefined;
+			const releaseLocalImport = async (inventory: InventoryIdentity) => {
+				if (!job?.localImport || JSON.stringify(job.localImport.inventory) !== JSON.stringify(inventory)) return;
+				const source = capturedSource?.id === job.nativeCaptureId ? capturedSource : undefined;
+				const changed = await jobs!.finishImport(job, inventory); check();
+				if (!changed) throw Error('The sync job changed before import handoff.'); job = changed;
+				// Its durable consumer owns the journal now. Cleanup is best effort;
+				// interrupted cleanup leaves only the native cache's bounded retention.
+				if (source) await request(binding.ownerId, { action: 'scan-discard', rootId: reviewed.configuration.localRootId,
+					inventoryDeviceId: binding.deviceId, capture: source, capturePolicy: 'backup-supported',
+					...(reviewed.configuration.ignoreRules ? { ignoreRules: reviewed.configuration.ignoreRules } : {}) }, signal).catch(() => {});
+				capturedSource = undefined; check();
+			};
+			const beginLocalImport = async (purpose: 'initial' | 'review') => {
+				if (job!.localImport?.purpose === purpose) return structuredClone(job!.localImport.inventory);
+				if (job!.localImport) await releaseLocalImport(job!.localImport.inventory);
+				const legacy = purpose === 'initial' && job!.nativeCaptureId && job!.nativeCaptureGeneration
+					? await journal!.inventory({ scope: binding, currentScope, signal }).latestNativeImport(job!.nativeCaptureId, job!.nativeCaptureGeneration) : null;
+				check(); const inventory = legacy ?? { id: crypto.randomUUID(), generation: crypto.randomUUID(), source: 'local' as const };
+				const changed = await jobs!.beginImport(job!, purpose, inventory); check();
+				if (!changed) throw Error('The sync job changed before inventory import.'); job = changed;
+				return structuredClone(job.localImport!.inventory);
+			};
 			cancelCapture = async () => {
 				if (!job?.nativeCaptureId) return;
 				await request(binding.ownerId, { action: 'scan-cancel', rootId: reviewed.configuration.localRootId, inventoryDeviceId: binding.deviceId,
 					captureId: job.nativeCaptureId, capturePolicy: 'backup-supported', excludedPaths: reviewed.configuration.excludedPaths, ...(reviewed.configuration.ignoreRules ? { ignoreRules: reviewed.configuration.ignoreRules } : {}) }, signal);
 			};
-			const nativePages = async function* (): AsyncGenerator<LocalInventoryPage> {
-				const backup = supportsNativeBackupCapture(capabilities) && reviewed.configuration.mode === 'backup' && !reviewed.configuration.propagateDeletes;
+			const nativePages = async function* (options?: Parameters<NonNullable<ForegroundSyncInput['scanLocalPages']>>[0]): AsyncGenerator<LocalInventoryPage> {
 				if (backup && !job!.nativeCaptureId) {
 					const changed = await jobs!.capture(job!, crypto.randomUUID()); check();
 					if (!changed) throw Error('The sync job changed before indexing.'); job = changed;
 				}
 				for await (const page of readNativeInventory({ ownerId: binding.ownerId, deviceId: binding.deviceId, rootId: reviewed.configuration.localRootId,
-					excludedPaths: reviewed.configuration.excludedPaths, ...(reviewed.configuration.ignoreRules ? { ignoreRules: reviewed.configuration.ignoreRules } : {}), signal, request, ...(supportsNativeInventoryBatches(capabilities) ? { pageSize: NATIVE_INVENTORY_BATCH_ENTRIES } : {}), ...(backup ? { backupPolicy: reviewed.configuration, captureId: job!.nativeCaptureId,
+					excludedPaths: reviewed.configuration.excludedPaths, ...(reviewed.configuration.ignoreRules ? { ignoreRules: reviewed.configuration.ignoreRules } : {}), signal, request, ...options, ...(supportsNativeInventoryBatches(capabilities) ? { pageSize: NATIVE_INVENTORY_BATCH_ENTRIES } : {}), ...(backup ? { backupPolicy: reviewed.configuration, captureId: job!.nativeCaptureId,
 						onCaptureStatus: async value => {
+							if (value.state === 'complete') capturedSource = value;
 							if (job!.nativeCaptureGeneration === value.generation) return;
+							const resetImport = !!job!.localImport && !!job!.nativeCaptureGeneration;
 							const changed = await jobs!.observeCapture(job!, value.generation); check();
 							if (!changed) throw Error('The sync job changed during indexing.'); job = changed;
+							if (resetImport) throw new NativeInventoryRetryWait('The native scan changed. Its new generation will import separately.');
 						},
 						onProgress: value => publish({ stage: 'scanning', confirmed: 0, total: 0, indexed: value.totalEntries, skipped: value.totalSkipped,
 							coverage: value.coverage, consistency: value.consistency }) } : {}) })) yield page;
-				if (backup) {
+				if (backup && !options?.retainCaptureUntilHandoff) {
 					const changed = await jobs!.capture(job!, null); check();
 					if (!changed) throw Error('The sync job changed after indexing.'); job = changed;
 				}
@@ -142,7 +170,7 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 					conditions: async () => (await request(binding.ownerId, { action: 'conditions' }, signal)).conditions!,
 					scanLocal: async () => (await request(binding.ownerId, { action: 'scan', rootId: reviewed.configuration.localRootId, excludedPaths: reviewed.configuration.excludedPaths, ...(reviewed.configuration.ignoreRules ? { ignoreRules: reviewed.configuration.ignoreRules } : {}) }, signal)).entries!,
 					...(inspect && supportsNativeInventoryPages(capabilities) ? {
-						scanLocalPages: nativePages
+						scanLocalPages: nativePages, ...(backup ? { beginLocalImport, releaseLocalImport } : {})
 					} : {}),
 					...(inspect ? { inspectLocal: async (path: string) => (await request(binding.ownerId,
 						{ action: 'inspect', rootId: reviewed.configuration.localRootId, path }, signal)).inspectedEntry! } : {}),

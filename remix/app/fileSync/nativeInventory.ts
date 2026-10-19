@@ -65,6 +65,20 @@ export function parseNativeSkippedPage(value: unknown, capture: NativeBackupCapt
 }
 export type NativeInventoryPage = { capture: NativeInventoryCapture; offset: number; entries: SyncEntry[]; nextOffset: number | null };
 export type LocalInventoryPage = { generation: string; ordinal: number; entries: SyncEntry[]; totalEntries?: number; backupCapture?: NativeBackupCapture; skippedPage?: NativeSkippedPage };
+/** Counts are read from committed journal transactions, never transport batch
+ * boundaries. The adapter binds them to this exact native source and job. */
+export type NativeInventoryResume = { entryOffset: number; skippedOffset: number; ordinal: number; complete: boolean };
+function parseNativeInventoryResume(value: NativeInventoryResume, capture: NativeBackupCapture): NativeInventoryResume {
+	if (!value || typeof value.complete !== 'boolean' ||
+		![value.entryOffset, value.skippedOffset, value.ordinal].every(n => Number.isSafeInteger(n) && n >= 0) ||
+		value.entryOffset > capture.totalEntries || value.skippedOffset > capture.totalSkipped ||
+		Math.ceil(value.entryOffset / JOURNAL_PAGE_ENTRIES) > value.ordinal ||
+		(value.entryOffset > 0 && (value.ordinal === 0 || value.skippedOffset !== capture.totalSkipped)) ||
+		(value.ordinal > value.entryOffset && !(value.complete && value.ordinal - value.entryOffset === 1)) ||
+		(value.complete && (value.entryOffset !== capture.totalEntries || value.skippedOffset !== capture.totalSkipped || value.ordinal === 0)))
+		throw Error('Invalid native inventory resume cursor.');
+	return { entryOffset: value.entryOffset, skippedOffset: value.skippedOffset, ordinal: value.ordinal, complete: value.complete };
+}
 const uuid = /^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/;
 function parseNativeInventoryCaptureBase(value: unknown): { id: string; generation: string; totalEntries: number } {
 	const c = value as NativeInventoryCapture;
@@ -95,6 +109,10 @@ export function parseNativeInventoryPage(value: unknown, capture: NativeInventor
 export async function* readNativeInventory(input: {
 	ownerId: string; deviceId: string; rootId: string; signal: AbortSignal; excludedPaths?: string[]; ignoreRules?: string;
 	backupPolicy?: SyncPolicy; captureId?: string; pageSize?: number; onProgress?(progress: NativeIndexProgress): void;
+	/** Called only after fresh native authorization pins a complete descriptor. */
+	resume?(capture: NativeBackupCapture): Promise<NativeInventoryResume>;
+	/** The caller discards this backup source after its durable journal handoff. */
+	retainCaptureUntilHandoff?: boolean;
 	/** Durable task adapter binds observed native generations and restart budget. */
 	onCaptureStatus?(status: NativeBackupStatus): Promise<void>;
 	/** A task-owned scheduler may replace the abortable polling delay in tests. */
@@ -121,10 +139,15 @@ export async function* readNativeInventory(input: {
 	let preserveCapture = false;
 	try {
 		signal.throwIfAborted();
+		if ((input.resume !== undefined || input.retainCaptureUntilHandoff !== undefined) && !input.backupPolicy)
+			throw Error('Native inventory resume and handoff require a backup capture.');
+		if (input.retainCaptureUntilHandoff !== undefined && typeof input.retainCaptureUntilHandoff !== 'boolean')
+			throw Error('Invalid native inventory handoff policy.');
 		const captureId = input.captureId ?? crypto.randomUUID();
 		if (!uuid.test(captureId)) throw Error('Invalid native capture identity.');
 		if (input.backupPolicy) assertBackupCapturePolicy(input.backupPolicy);
 		const begin = await request(ownerId, { action: 'scan-capture', ...ignoredPolicy, rootId, inventoryDeviceId, captureId, ...(input.backupPolicy ? { capturePolicy: 'backup-supported' as const } : {}), ...(excludedPaths.length ? { excludedPaths } : {}) }, signal);
+		let offset = 0, ordinal = 0;
 		if (input.backupPolicy) {
 			let status = parseNativeBackupStatus(begin.backupCapture);
 			while (true) {
@@ -151,8 +174,14 @@ export async function* readNativeInventory(input: {
 				if (next.generation !== status.generation || next.totalSkipped < status.totalSkipped) throw Error('Native indexing generation or coverage changed.');
 				status = next;
 			}
-			let skipOffset = 0;
-			do {
+			const continuation = input.resume ? parseNativeInventoryResume(await input.resume(structuredClone(capture as NativeBackupCapture)), capture as NativeBackupCapture) : undefined;
+			signal.throwIfAborted();
+			if (continuation?.complete) return;
+			offset = continuation?.entryOffset ?? 0; ordinal = continuation?.ordinal ?? 0;
+			let skipOffset = continuation?.skippedOffset ?? 0;
+			// A fresh reader still verifies the native empty skip page. A resume
+			// can rely on the journal's already committed complete skip ledger.
+			while (!continuation || skipOffset < (capture as NativeBackupCapture).totalSkipped) {
 				signal.throwIfAborted();
 				const response = await request(ownerId, { action: 'scan-skips', ...batch, ...ignoredPolicy, rootId, inventoryDeviceId, capture: capture as NativeBackupCapture, offset: skipOffset, capturePolicy: 'backup-supported' }, signal);
 				const skippedPage = parseNativeSkippedPage(response.skippedPage, capture as NativeBackupCapture, skipOffset, pageSize);
@@ -166,10 +195,16 @@ export async function* readNativeInventory(input: {
 				}
 				if (skippedPage.nextOffset === null) break;
 				skipOffset = skippedPage.nextOffset;
-			} while (true);
+			}
 		} else { capture = parseNativeInventoryCapture(begin.capture); if (capture.coverage !== undefined) throw Error('Partial inventory requires the negotiated backup policy.'); }
 		if (capture.id !== captureId) throw Error('Native capture identity changed.');
-		let offset = 0, ordinal = 0;
+		if (input.resume && offset === capture.totalEntries && offset > 0) {
+			// Older collecting journals may already contain every row but lack
+			// the terminal marker. The native protocol refuses a nonempty EOF
+			// offset; finish with a bounded journal-only terminal page instead.
+			yield { generation: capture.generation, ordinal, entries: [], totalEntries: capture.totalEntries, backupCapture: capture as NativeBackupCapture };
+			return;
+		}
 		while (true) {
 			signal.throwIfAborted();
 			const response = await request(ownerId, { action: 'scan-page', ...batch, ...ignoredPolicy, rootId, inventoryDeviceId, capture, offset, ...(input.backupPolicy ? { capturePolicy: 'backup-supported' as const } : {}) }, signal);
@@ -193,6 +228,6 @@ export async function* readNativeInventory(input: {
 	} finally {
 		// Owner changes/cancellation can refuse cleanup. The native cache evicts
 		// old captures under its scope lock, so an abandoned request stays bounded.
-		if (capture && !signal.aborted && !preserveCapture) await request(ownerId, { action: 'scan-discard', ...ignoredPolicy, rootId, inventoryDeviceId, capture, ...(input.backupPolicy ? { capturePolicy: 'backup-supported' as const } : {}) }, signal).catch(() => {});
+		if (capture && !signal.aborted && !preserveCapture && !input.retainCaptureUntilHandoff) await request(ownerId, { action: 'scan-discard', ...ignoredPolicy, rootId, inventoryDeviceId, capture, ...(input.backupPolicy ? { capturePolicy: 'backup-supported' as const } : {}) }, signal).catch(() => {});
 	}
 }

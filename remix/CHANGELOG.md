@@ -96,10 +96,17 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-20: Resume Mac backup imports from committed entry, skip and validation
+  cursors after reconnect or app restart. Bind the retained import to its exact
+  reviewed job and preserve it through cleanup until a durable plan owns it.
+  Existing matching native captures can adopt their already imported prefix.
+  Installed recovery and first payload acceptance remain pending. — Codex (AI)
+
 - 2026-10-20: Preserve automatic file-sync admission when normal desktop Quit
   cancels an in-flight folder request before renderer shutdown. The host refuses
   new work and retains a fixed lifecycle wait through IPC; actual authority
-  refusals remain terminal. Installed restart acceptance remains pending. — Codex (AI)
+  refusals remain terminal. Signed installed Quit/reopen resumed the saved
+  five-minute job without Start or Retry; first payload acceptance remains open. — Codex (AI)
 
 - 2026-10-20 — Codex (AI): Preserve redacted desktop verification retries through
   IPC and sealed inventory imports; keep the automatic interval on an explicit

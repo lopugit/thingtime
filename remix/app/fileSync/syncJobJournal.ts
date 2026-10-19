@@ -2,6 +2,7 @@ import { parseFileSyncConfiguration } from './configuration';
 import type { SavedFileSyncConfiguration } from './configuredPlan';
 import { journalScope, type JournalAccess } from './journalScope';
 import { syncScopeKey, type SyncScope } from './reconcile';
+import { INVENTORY_PIN_STORE, inventoryIdentity, type InventoryIdentity } from './inventoryJournal';
 
 const STORE = 'sync-admitted-jobs';
 export const SYNC_JOB_PAGE_SIZE = 32;
@@ -19,6 +20,8 @@ export type SyncJob = {
 	nativeCaptureId?: string;
 	nativeCaptureGeneration?: string;
 	nativeCaptureRestarts?: number;
+	/** A committed import prefix belongs to this exact admission and purpose. */
+	localImport?: { purpose: 'initial' | 'review'; inventory: InventoryIdentity };
 };
 export const syncJobCanPause = (job: SyncJob | null) => !!job && ['runnable', 'scheduled', 'attention'].includes(job.state);
 export const syncJobEnabled = (job: SyncJob) => job.intervalMs !== undefined && ['runnable', 'scheduled'].includes(job.state);
@@ -62,6 +65,9 @@ function validate(value: SyncJob): SyncJob {
 		typeof value.id !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(value.id) ||
 		JSON.stringify(canonical(value.reviewed, value.scope)) !== JSON.stringify(value.reviewed))
 		throw Error('Invalid saved sync job.');
+	if (value.localImport !== undefined && (!value.localImport || !['initial', 'review'].includes(value.localImport.purpose) ||
+		inventoryIdentity(value.localImport.inventory).source !== 'local' || value.reviewed.configuration.mode !== 'backup' || value.reviewed.configuration.propagateDeletes))
+		throw Error('Invalid saved local import.');
 	return value;
 }
 
@@ -79,8 +85,13 @@ export function syncJobJournal(db: IDBDatabase, access: JournalAccess, keyRange?
 		if (typeof window !== 'undefined') window.dispatchEvent(new Event(SYNC_JOBS_CHANGED_EVENT));
 		return value;
 	};
+	const pinImport = (tx: IDBTransaction, previous: SyncJob | null, next: SyncJob) => {
+		const old = previous?.localImport?.inventory, current = next.localImport?.inventory;
+		if (old && old.id !== current?.id) tx.objectStore(INVENTORY_PIN_STORE).delete([bound.key, old.id, 'admitted-import']);
+		if (current) tx.objectStore(INVENTORY_PIN_STORE).put(true, [bound.key, current.id, 'admitted-import']);
+	};
 	const change = (expected: SyncJob, update: (current: SyncJob) => SyncJob | null) =>
-		bound.transaction<SyncJob | null>([STORE], 'readwrite', (tx, done, fail) => {
+		bound.transaction<SyncJob | null>([STORE, INVENTORY_PIN_STORE], 'readwrite', (tx, done, fail) => {
 			validate(expected);
 			if (expected.key !== bound.key) throw Error('Sync job scope changed.');
 			const store = tx.objectStore(STORE), request = store.get(bound.key);
@@ -89,13 +100,24 @@ export function syncJobJournal(db: IDBDatabase, access: JournalAccess, keyRange?
 					const current = request.result ? validate(request.result) : null;
 					if (!current || current.id !== expected.id || current.revision !== expected.revision) { done(null); return; }
 					const next = update(current);
-					if (next) store.put(validate({ ...next, revision: current.revision + 1 }));
+					if (next) { validate(next); pinImport(tx, current, next); store.put(validate({ ...next, revision: current.revision + 1 })); }
 					done(next ? { ...next, revision: current.revision + 1 } : null);
 				} catch (error) { fail(error); }
 			};
 		}).then(value => value ? changed(value) : value);
 	return {
 		read,
+		beginImport: (expected: SyncJob, purpose: 'initial' | 'review', inventory: InventoryIdentity) => change(expected, current => {
+			if (current.state !== 'runnable') return null;
+			if (current.localImport?.purpose === purpose) return current;
+			if (current.localImport) throw Error('The previous local import has not been handed off.');
+			return { ...current, localImport: { purpose, inventory: inventoryIdentity(inventory) } };
+		}),
+		finishImport: (expected: SyncJob, inventory: InventoryIdentity) => change(expected, current => {
+			if (current.state !== 'runnable' || JSON.stringify(current.localImport?.inventory) !== JSON.stringify(inventoryIdentity(inventory))) return null;
+			const { localImport: _import, nativeCaptureId: _capture, nativeCaptureGeneration: _generation, nativeCaptureRestarts: _restarts, ...rest } = current;
+			return rest;
+		}),
 		capture: (expected: SyncJob, id: string | null) => change(expected, current => {
 			if (current.state !== 'runnable') return null;
 			const { nativeCaptureId: _old, nativeCaptureGeneration: _generation, nativeCaptureRestarts: _restarts, ...rest } = current;
@@ -105,7 +127,9 @@ export function syncJobJournal(db: IDBDatabase, access: JournalAccess, keyRange?
 			if (current.state !== 'runnable' || !current.nativeCaptureId) return null;
 			const restarts = (current.nativeCaptureRestarts ?? 0) + (current.nativeCaptureGeneration && current.nativeCaptureGeneration !== generation ? 1 : 0);
 			if (restarts > 1) throw Error('Backup indexing was repeatedly interrupted. Check folder access and local storage before retrying.');
-			return { ...current, nativeCaptureGeneration: generation, nativeCaptureRestarts: restarts };
+			const { localImport, ...rest } = current;
+			return { ...rest, ...(localImport && (!current.nativeCaptureGeneration || current.nativeCaptureGeneration === generation) ? { localImport } : {}),
+				nativeCaptureGeneration: generation, nativeCaptureRestarts: restarts };
 		}),
 		/** Discovery is account-scoped across origins/devices. Each candidate is
 		 * independently checked against the native selected origin before IO. */
@@ -124,7 +148,7 @@ export function syncJobJournal(db: IDBDatabase, access: JournalAccess, keyRange?
 				} catch (error) { fail(error); }
 			};
 		}),
-		admit: (saved: SavedFileSyncConfiguration, id: string, intervalMs?: number) => bound.transaction<SyncJob>([STORE], 'readwrite', (tx, done, fail) => {
+		admit: (saved: SavedFileSyncConfiguration, id: string, intervalMs?: number) => bound.transaction<SyncJob>([STORE, INVENTORY_PIN_STORE], 'readwrite', (tx, done, fail) => {
 			const reviewed = canonical(saved, bound.scope), store = tx.objectStore(STORE), request = store.get(bound.key);
 			request.onsuccess = () => {
 				try {
@@ -137,11 +161,12 @@ export function syncJobJournal(db: IDBDatabase, access: JournalAccess, keyRange?
 					const job = validate({ version: 1, key: bound.key, id: unfinished && !policyChanged ? previous.id : id,
 						revision: (previous?.revision ?? 0) + 1, scope: bound.scope, reviewed, state: 'runnable',
 						...(repeat === undefined ? {} : { intervalMs: repeat }),
+						...(unfinished && !policyChanged && previous.localImport && JSON.stringify(previous.reviewed) === JSON.stringify(reviewed) ? { localImport: previous.localImport } : {}),
 						...(unfinished && !policyChanged && previous.nativeCaptureId && JSON.stringify(previous.reviewed) === JSON.stringify(reviewed) ? { nativeCaptureId: previous.nativeCaptureId, ...(previous.nativeCaptureGeneration ? { nativeCaptureGeneration: previous.nativeCaptureGeneration, nativeCaptureRestarts: previous.state === 'runnable' ? previous.nativeCaptureRestarts ?? 0 : 0 } : {}) } : {}) });
 					const count = store.index('account').count(accountRange());
 					count.onsuccess = () => {
 						if (!previous && count.result >= MAX_SYNC_JOBS_PER_ACCOUNT) { fail(Error('This account has reached its saved sync job limit.')); return; }
-						store.put(job); done(job);
+						pinImport(tx, previous, job); store.put(job); done(job);
 					};
 				} catch (error) { fail(error); }
 			};
@@ -149,16 +174,21 @@ export function syncJobJournal(db: IDBDatabase, access: JournalAccess, keyRange?
 		/** CAS prevents an old discovery or late completion from reviving a
 		 * stopped job, replacing a newer attempt, or replaying completed work. */
 		transition: (expected: SyncJob, state: 'runnable' | 'paused' | 'attention' | 'complete') => change(expected,
-			current => current.state === 'runnable' ? { ...current, state } : null),
+			current => {
+				if (current.state !== 'runnable') return null;
+				if (state !== 'complete') return { ...current, state };
+				const { localImport: _import, nativeCaptureId: _capture, nativeCaptureGeneration: _generation, nativeCaptureRestarts: _restarts, ...rest } = current;
+				return { ...rest, state };
+			}),
 		begin: (expected: SyncJob, now: number, id: string) => change(expected, current => {
 			if (!syncJobDue(current, now)) return null;
-			const { nextRunAt: _due, nativeCaptureId, nativeCaptureGeneration, nativeCaptureRestarts, ...rest } = current;
-			return { ...rest, id: current.state === 'scheduled' ? id : current.id, state: 'runnable', ...(current.state === 'runnable' && nativeCaptureId ? { nativeCaptureId, ...(nativeCaptureGeneration ? { nativeCaptureGeneration, nativeCaptureRestarts: nativeCaptureRestarts ?? 0 } : {}) } : {}) };
+			const { nextRunAt: _due, nativeCaptureId, nativeCaptureGeneration, nativeCaptureRestarts, localImport, ...rest } = current;
+			return { ...rest, id: current.state === 'scheduled' ? id : current.id, state: 'runnable', ...(current.state === 'runnable' && localImport ? { localImport } : {}), ...(current.state === 'runnable' && nativeCaptureId ? { nativeCaptureId, ...(nativeCaptureGeneration ? { nativeCaptureGeneration, nativeCaptureRestarts: nativeCaptureRestarts ?? 0 } : {}) } : {}) };
 		}),
 		finish: (expected: SyncJob, now: number) => change(expected, current => {
 			if (current.state !== 'runnable') return null;
 			if (!Number.isSafeInteger(now) || now < 0) throw Error('Invalid sync completion time.');
-			const { nativeCaptureId: _capture, nativeCaptureGeneration: _generation, nativeCaptureRestarts: _restarts, ...rest } = current;
+			const { nativeCaptureId: _capture, nativeCaptureGeneration: _generation, nativeCaptureRestarts: _restarts, localImport: _import, ...rest } = current;
 			return current.intervalMs === undefined ? { ...rest, state: 'complete' } :
 				{ ...rest, state: 'scheduled', nextRunAt: now + current.intervalMs };
 		}),

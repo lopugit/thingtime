@@ -43,7 +43,12 @@ export type ForegroundSyncInput = {
 	authorizeDevice(): Promise<void>;
 	conditions(): Promise<SyncConditions>;
 	scanLocal(): Promise<SyncEntry[]>;
-	scanLocalPages?(): AsyncIterable<LocalInventoryPage>;
+	scanLocalPages?(options?: {
+		resume?(capture: import('./nativeInventory').NativeBackupCapture): Promise<import('./nativeInventory').NativeInventoryResume>;
+		retainCaptureUntilHandoff?: boolean;
+	}): AsyncIterable<LocalInventoryPage>;
+	beginLocalImport?(purpose: 'initial' | 'review'): Promise<InventoryIdentity>;
+	releaseLocalImport?(inventory: InventoryIdentity): Promise<void>;
 	inspectLocal?(path: string): Promise<SyncEntry | null>;
 	inventory(): Promise<CloudInventory>;
 	inventoryPages?(): AsyncIterable<CloudInventoryPage>;

@@ -12536,3 +12536,18 @@ separate from deterministic discovery/lease tests.
   Retry. Verify the automatic interval, same sealed capture, continued import and
   a real payload receipt. The PR #1054 installed check reproduced attention on
   Quit, so automatic lifecycle acceptance remains open until this passes.
+
+
+### Durable native import recovery — 2026-10-20
+
+- [x] Interrupt page import, validation and plan handoff; reopen the journal and
+  resume committed work without refetching the prefix or creating cloud effects
+  before authorization and a durable consumer head. Exercise short native pages.
+- [x] Preserve import ownership through cleanup and multiple restarts. Policy,
+  reviewed revision and native generation changes must fence old imports; stale
+  and cancelled job writes cannot remove another attempt's retention pin.
+- [ ] Upgrade the signed installed app during a real home import. Adopt only its
+  matching sealed capture, continue beyond the pre-upgrade prefix, then Quit and
+  reopen without Start or Retry and verify the prefix is retained.
+- [ ] Independently verify a real payload receipt and downloaded sample bytes;
+  scan/import counts alone do not establish an uploaded or complete backup.

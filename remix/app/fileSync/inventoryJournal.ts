@@ -193,6 +193,24 @@ export function inventoryJournal(db: IDBDatabase, access: JournalAccess, keyRang
 	};
 	return {
 		setCoverage: (value: InventoryIdentity, capture: NativeBackupCapture, policy: SyncPolicy) => setCoverage(value, capture, policy), appendSkips, readSkips,
+		importState: (value: InventoryIdentity) => withHeader<InventoryProgress & { skipped: number; derived: boolean; coverage: NativeBackupCapture | null }>(value, 'readonly', (header, _tx, done) => done({
+			...progress(header), skipped: header.skippedEntries ?? 0, derived: header.derivedCoverage === true,
+			coverage: header.backupCapture ? parseNativeBackupCapture(header.backupCapture) : null
+		})),
+		/** Upgrade an older admitted job without rereading its committed prefix.
+		 * The caller must already hold the exact reviewed job's native ticket. */
+		latestNativeImport: (captureId: string, generation: string): Promise<InventoryIdentity | null> => transaction('readonly', (tx, done, fail) => {
+			const read = tx.objectStore(INVENTORY_PIN_STORE).get([key, 'latest-review']);
+			read.onsuccess = () => { try {
+				check(); if (read.result === undefined) { done(null); return; }
+				const id = inventoryIdentity(read.result), get = tx.objectStore(INVENTORY_STORES[0]).get([key, id.id]);
+				get.onsuccess = () => { try {
+					check(); const header: InventoryHeader = get.result; validate(header, id);
+					done(header.source === 'local' && !header.derivedCoverage && header.backupCapture?.id === captureId &&
+						header.backupCapture.generation === generation ? id : null);
+				} catch (error) { fail(error); } };
+			} catch (error) { fail(error); } };
+		}),
 		/** Keep just the current review capture; later cycles release the prior
 		 * pin atomically. The UI cache carries only its scope-bound identity. */
 		async retainLatest(value: InventoryIdentity): Promise<void> {
