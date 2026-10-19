@@ -2,7 +2,12 @@
 
 const { stageRangeMetadata } = require('./folder-stream.cjs');
 const { normalizeEndpointUrl } = require('./desktop-settings.cjs');
+const { randomUUID } = require('node:crypto');
 const ACTIONS = new Set(['context', 'list', 'choose', 'conditions', 'remove', 'scan', 'scan-capture', 'scan-status', 'scan-cancel', 'scan-skips', 'scan-page', 'scan-discard', 'inspect', 'read', 'read-range', 'stage-begin', 'stage-append', 'stage-range', 'stage-finish', 'write-approve', 'write-check', 'publication-lookup', 'publish', 'trash', 'trash-lookup', 'trash-expected', 'trash-inspect', 'trash-restore', 'trash-list', 'trash-restore-reviewed', 'suspend']);
+const supportsBatchPages = version => {
+    const parts = typeof version === 'string' && version.length <= 32 && /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/.exec(version);
+    return !!parts && parts[1] === '1' && Number.isSafeInteger(Number(parts[2])) && Number.isSafeInteger(Number(parts[3])) && Number(parts[2]) >= 10;
+};
 const UUID = /^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/iu;
 const identifier = value => typeof value === 'string' && value.length > 0 && Buffer.byteLength(value) <= 512 && !/[\p{Cc}\p{Cf}]/u.test(value);
 const unavailable = () => new Error('Folder access changed. Reopen this device with the current account.');
@@ -90,6 +95,8 @@ class DesktopFolderSync {
         if (!input || typeof input !== 'object' || Array.isArray(input) || !UUID.test(input.requestId) ||
             !identifier(input.ownerId) || !identifier(input.deviceId) || !ACTIONS.has(input.action) ||
             (input.action !== 'context' && !(input.action === 'suspend' && input.origin === undefined) && input.origin !== apiOrigin) || Buffer.byteLength(JSON.stringify(stageRangeMetadata(input))) > 131_072) throw unavailable();
+        if (Object.prototype.hasOwnProperty.call(input, 'pageSize') &&
+            (!['scan-page', 'scan-skips'].includes(input.action) || !Number.isSafeInteger(input.pageSize) || input.pageSize < 1 || input.pageSize > 4096)) throw unavailable();
         return { ...context, apiOrigin, ownerId: input.ownerId, event, generation: this.generation };
     }
     assertCurrent(state) {
@@ -108,7 +115,18 @@ class DesktopFolderSync {
             origin: state.context.apiOrigin, action: 'suspend'
         }).catch(() => {});
     }
-    invalidate() { this.generation += 1; this.cancel(); }
+    invalidate() { this.generation += 1; this.nativePageCapability = null; this.cancel(); }
+    samePageCapability(context, input) {
+        const cached = this.nativePageCapability;
+        return cached && cached.window === context.window && cached.generation === context.generation &&
+            cached.appOrigin === context.appOrigin && cached.apiOrigin === context.apiOrigin &&
+            cached.ownerId === input.ownerId && cached.deviceId === input.deviceId ? cached : null;
+    }
+    rememberPageCapability(context, input, value) {
+        this.nativePageCapability = { window: context.window, generation: context.generation, appOrigin: context.appOrigin,
+            apiOrigin: context.apiOrigin, ownerId: input.ownerId, deviceId: input.deviceId,
+            supported: supportsBatchPages(value?.capabilities?.fileAccessVersion) };
+    }
     async request(event, input) {
         const context = this.capture(event, input);
         if (input.action === 'suspend') {
@@ -136,6 +154,20 @@ class DesktopFolderSync {
                     throw new Error('The selected server does not support this version of folder sync.');
                 }
             }
+            if (state.input.pageSize !== undefined) {
+                if (!this.samePageCapability(context, state.input)) {
+                    const negotiation = { requestId: randomUUID(), ownerId: context.ownerId, deviceId: state.input.deviceId,
+                        origin: context.apiOrigin, action: 'context' };
+                    const nativeContext = await this.requestNative('folder-sync.request', negotiation, { signal: state.abort.signal });
+                    await verify();
+                    if (!nativeContext || nativeContext.requestId !== negotiation.requestId || nativeContext.ownerId !== negotiation.ownerId ||
+                        nativeContext.deviceId !== negotiation.deviceId || nativeContext.origin !== negotiation.origin ||
+                        Buffer.byteLength(JSON.stringify(nativeContext)) > 900_000) throw unavailable();
+                    this.rememberPageCapability(context, state.input, nativeContext);
+                }
+                if (!this.samePageCapability(context, state.input)?.supported)
+                    throw new Error('This native host does not support larger inventory pages. Update Thingtime and reconnect.');
+            }
             state.dispatched = true;
             const value = await this.requestNative('folder-sync.request', { ...state.input, origin: context.apiOrigin }, { signal: state.abort.signal });
             if (!value || typeof value !== 'object') throw unavailable();
@@ -146,6 +178,7 @@ class DesktopFolderSync {
             await verify();
             if (!value || typeof value !== 'object' || value.requestId !== input.requestId || value.ownerId !== input.ownerId ||
                 value.deviceId !== input.deviceId || value.origin !== context.apiOrigin) throw unavailable();
+            if (state.input.action === 'context') this.rememberPageCapability(context, state.input, value);
             if (input.action === 'read-range') {
                 const c = value.chunk;
                 if (!Number.isSafeInteger(input.length) || input.length <= 0 || input.length > 32 * 1024 * 1024 ||

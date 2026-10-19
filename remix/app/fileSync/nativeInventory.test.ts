@@ -309,3 +309,125 @@ test('default status polling leaves headroom for shared device reads and aborts 
  const prior = statusReads; t.mock.timers.tick(60_000);
  await new Promise<void>(resolve => setImmediate(resolve)); assert.equal(statusReads, prior);
 });
+
+test('Mac inventory batches require negotiated 1.10 and a bounded page-only request', async () => {
+ const { supportsNativeInventoryBatches } = await import('./mobileFolders.client');
+ const { nativeInventoryPageSize } = await import('./nativeInventory');
+ const request = { action: 'scan-page' as const, rootId, inventoryDeviceId: 'device', capture, offset: 0, pageSize: 4096 };
+ for (const [platform, fileAccessVersion, supported] of [
+  ['macos', '1.9.9', false], ['macos', '1.10.0', true], ['macos', '1.11.0', true],
+  ['macos', '2.10.0', false], ['ios', '1.10.0', false], ['android', '1.10.0', false]
+ ] as const) {
+  const capabilities = { platform, fileAccessVersion };
+  assert.equal(supportsNativeInventoryBatches(capabilities), supported);
+  if (supported) assert.doesNotThrow(() => assertNativeScanExclusions(request, capabilities));
+  else assert.throws(() => assertNativeScanExclusions(request, capabilities), /Update Thingtime/);
+ }
+ assert.equal(nativeInventoryPageSize(), 128);
+ for (const bad of [0, -1, 4097, 1.5, null, '4096', NaN, Infinity])
+  assert.throws(() => nativeInventoryPageSize(bad), /page size/);
+ assert.throws(() => assertNativeScanExclusions({ action: 'scan', rootId, pageSize: 4096 } as any,
+  { platform: 'macos', fileAccessVersion: '1.10.0' }), /action/);
+});
+
+test('opt-in inventory results retain the requested count, exact generation and byte bounds', async () => {
+ const { parseNativeSkippedPage } = await import('./nativeInventory');
+ const entries = Array.from({ length: 129 }, (_, i) => ({ ...entry, id: String(i), path: `file-${i}` }));
+ const c = { ...capture, totalEntries: entries.length };
+ const p = { capture: c, offset: 0, entries, nextOffset: null };
+ assert.throws(() => parseNativeInventoryPage(p, c, 0));
+ assert.equal(parseNativeInventoryPage(p, c, 0, 4096).entries.length, 129);
+ assert.throws(() => parseNativeInventoryPage(p, c, 0, 128));
+ const req = { action: 'scan-page' as const, rootId, inventoryDeviceId: 'device', capture: c, offset: 0, pageSize: 4096 };
+ assert.equal(parseMobileFolderResult({ type: 'mobile-files-result', payload: {
+  ...expected, roots: [], rootId, complete: true, inventoryPage: p
+ } }, expected, req)?.inventoryPage?.entries.length, 129);
+ const huge = entries.map(e => ({ ...e, path: (('x'.repeat(200) + '/').repeat(20)) + e.path }));
+ assert.throws(() => parseNativeInventoryPage({ ...p, entries: huge }, c, 0, 4096), /byte bound/);
+ const bc = { ...c, coverage: 'partial' as const, consistency: 'per-entry' as const, totalSkipped: 129 };
+ const skipped = entries.map((e, ordinal) => ({ ordinal, path: e.path, reason: 'symlink', scope: 'entry' }));
+ const sp = { capture: bc, offset: 0, skipped, nextOffset: null, totalSkipped: 129 };
+ assert.throws(() => parseNativeSkippedPage(sp, bc, 0));
+ assert.equal(parseNativeSkippedPage(sp, bc, 0, 4096).skipped.length, 129);
+ assert.throws(() => parseNativeSkippedPage({ ...sp, skipped: skipped.map((s, i) => ({ ...s, path: huge[i].path })) }, bc, 0, 4096), /byte bound/);
+});
+
+test('batched import preserves canonical journal pages, skip offsets and final totals', async () => {
+ const { parseNativeSkippedPage } = await import('./nativeInventory');
+ const current = { ...capture, totalEntries: 701, coverage: 'partial' as const, consistency: 'per-entry' as const, totalSkipped: 257 };
+ const requests: FolderRequest[] = [], frames = [];
+ for await (const frame of readNativeInventory({ ownerId: 'owner', deviceId: 'device', rootId, captureId: current.id,
+  backupPolicy: { mode: 'backup', propagateDeletes: false }, pageSize: 4096, signal: new AbortController().signal,
+  request: async (_, r) => {
+   requests.push(r);
+   if (r.action === 'scan-capture') return { roots: [], backupCapture: { ...current, state: 'complete' } };
+   if (r.action === 'scan-skips') {
+    assert.equal(r.pageSize, 4096);
+    return { roots: [], skippedPage: { capture: current, offset: 0, totalSkipped: 257, nextOffset: null,
+     skipped: Array.from({ length: 257 }, (_, ordinal) => ({ ordinal, path: `link-${ordinal}`, reason: 'symlink', scope: 'entry' })) } };
+   }
+   if (r.action === 'scan-page') {
+    assert.equal(r.pageSize, 4096);
+    // Hosts may end before pageSize to satisfy the byte bound.
+    const end = Math.min(r.offset + 400, current.totalEntries);
+    return { roots: [], inventoryPage: { capture: current, offset: r.offset, nextOffset: end === current.totalEntries ? null : end,
+     entries: Array.from({ length: end - r.offset }, (_, i) => ({ ...entry, id: String(r.offset + i), path: `file-${r.offset + i}` })) } };
+   }
+   return { roots: [] };
+  } })) frames.push(frame);
+ const skips = frames.filter(p => p.skippedPage).map(p => p.skippedPage!);
+ assert.deepEqual(skips.map(p => [p.offset, p.skipped.length, p.nextOffset]), [[0, 128, 128], [128, 128, 256], [256, 1, null]]);
+ for (const p of skips) assert.deepEqual(parseNativeSkippedPage(p, current, p.offset), p);
+ const pages = frames.filter(p => !p.skippedPage);
+ assert.deepEqual(pages.map(p => p.ordinal), pages.map((_, i) => i));
+ assert.ok(pages.every(p => p.entries.length <= 128));
+ assert.equal(pages.flatMap(p => p.entries).length, 701);
+ assert.equal(new Set(pages.flatMap(p => p.entries).map(e => e.path)).size, 701);
+ assert.ok(pages.slice(0, -1).every(p => p.totalEntries === undefined));
+ assert.equal(pages.at(-1)?.totalEntries, 701);
+ assert.deepEqual(requests.filter(r => r.action === 'scan-page').map(r => r.offset), [0, 400]);
+ assert.equal(requests.at(-1)?.action, 'scan-discard');
+});
+
+test('cancellation between subpages never exposes the remainder of a transport batch', async () => {
+ const abort = new AbortController(), current = { ...capture, totalEntries: 257 };
+ let yielded = 0;
+ await assert.rejects(async () => {
+  for await (const frame of readNativeInventory({ ownerId: 'owner', deviceId: 'device', rootId, pageSize: 4096,
+   captureId: current.id, signal: abort.signal, request: async (_, r) => {
+    if (r.action === 'scan-capture') return { roots: [], capture: current };
+    return { roots: [], inventoryPage: { capture: current, offset: 0, nextOffset: null,
+     entries: Array.from({ length: 257 }, (_, i) => ({ ...entry, id: String(i), path: `file-${i}` })) } };
+   } })) {
+   yielded++;
+   assert.equal(frame.entries.length, 128);
+   abort.abort();
+  }
+ }, { name: 'AbortError' });
+ assert.equal(yielded, 1);
+});
+
+
+test('transient batch import failure keeps the sealed capture for reconnect', async () => {
+ const { NativeInventoryRetryWait } = await import('./nativeInventory');
+ const current = { ...capture, coverage: 'full' as const, consistency: 'per-entry' as const, totalSkipped: 0 };
+ const requests: string[] = []; let fail = true;
+ const input = { ownerId: 'owner', deviceId: 'device', rootId, captureId: current.id, pageSize: 4096,
+  backupPolicy: { mode: 'backup' as const, propagateDeletes: false }, signal: new AbortController().signal,
+  request: async (_: string, r: FolderRequest) => {
+   requests.push(r.action);
+   if (r.action === 'scan-capture') return { roots: [], backupCapture: { ...current, state: 'complete' as const } };
+   if (r.action === 'scan-skips') return { roots: [], skippedPage: { capture: current, offset: 0, skipped: [], nextOffset: null, totalSkipped: 0 } };
+   if (r.action === 'scan-page') {
+    if (fail) throw Error('[folder_identity_retry]');
+    return { roots: [], inventoryPage: { ...page, capture: current } };
+   }
+   return { roots: [] };
+  } };
+ await assert.rejects(async () => { for await (const _ of readNativeInventory(input)) {} }, NativeInventoryRetryWait);
+ assert.ok(!requests.includes('scan-discard'));
+ fail = false;
+ const frames = []; for await (const p of readNativeInventory(input)) frames.push(p);
+ assert.equal(frames.at(-1)?.generation, current.generation);
+ assert.equal(requests.at(-1), 'scan-discard');
+});

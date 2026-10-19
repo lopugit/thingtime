@@ -84,6 +84,60 @@ final class MobileFolderInventoryTests: XCTestCase {
         }
     }
 
+    func testOptionalPageSizesReuseSealedCapturesWithExactOffsetsAndByteBounds() throws {
+        let (source, bookmark, scope, directory) = try fixture()
+        for i in 0..<1301 {
+            try Data().write(to: source.appendingPathComponent(String(repeating: "f", count: 220) + String(format: "%04d", i)))
+        }
+        let store = MobileFolderInventory(directory: directory)
+        // The capture itself has no new fields and survives the paging upgrade.
+        let capture = try store.capture(scope, id: UUID().uuidString.lowercased(), bookmark: bookmark)
+        XCTAssertEqual(try store.read(scope, capture: capture, bookmark: bookmark, offset: 0).entries.count, 128)
+        let first = try store.read(scope, capture: capture, bookmark: bookmark, offset: 0, pageSize: 512)
+        XCTAssertEqual(first.entries.count, 512); XCTAssertEqual(first.nextOffset, 512)
+        let second = try store.read(scope, capture: capture, bookmark: bookmark, offset: 512, pageSize: 512)
+        XCTAssertEqual(second.entries.count, 512); XCTAssertEqual(second.nextOffset, 1024)
+        let last = try store.read(scope, capture: capture, bookmark: bookmark, offset: 1024, pageSize: 512)
+        XCTAssertEqual(last.entries.count, 277); XCTAssertNil(last.nextOffset)
+        XCTAssertEqual(Set((first.entries + second.entries + last.entries).map(\.path)).count, 1301)
+        let bounded = try store.read(scope, capture: capture, bookmark: bookmark, offset: 0, pageSize: 4096)
+        XCTAssertGreaterThan(bounded.entries.count, 128); XCTAssertLessThan(bounded.entries.count, 1301)
+        XCTAssertEqual(bounded.nextOffset, bounded.entries.count)
+        XCTAssertLessThanOrEqual(try JSONEncoder().encode(bounded).count, MobileFolderInventory.maximumPageBytes)
+        let tail = try store.read(scope, capture: capture, bookmark: bookmark, offset: bounded.entries.count, pageSize: 4096)
+        XCTAssertEqual(bounded.entries.count + tail.entries.count, 1301); XCTAssertNil(tail.nextOffset)
+        for invalid in [-1, 0, 4097, Int.max] {
+            XCTAssertThrowsError(try store.read(scope, capture: capture, bookmark: Data(), offset: 0, pageSize: invalid))
+        }
+        let foreign = MobileFolderInventory.Scope(owner: try FileSyncOwnerScope(ownerId: "foreign", url: scope.owner.origin),
+            deviceId: scope.deviceId, rootId: scope.rootId)
+        XCTAssertThrowsError(try store.read(foreign, capture: capture, bookmark: bookmark, offset: 0, pageSize: 4096))
+    }
+
+    func testSkipPagesOptInto4096WithLegacyDefaultAndExactLastPage() throws {
+        let (source, bookmark, scope, directory) = try fixture()
+        for i in 0..<4103 {
+            try FileManager.default.createSymbolicLink(at: source.appendingPathComponent("link-\(i)"),
+                withDestinationURL: source.appendingPathComponent("missing"))
+        }
+        let store = MobileFolderInventory(directory: directory)
+        let capture = try store.prepareBackup(scope, id: UUID().uuidString.lowercased(), generation: UUID().uuidString.lowercased(), bookmark: bookmark)
+        try store.sealBackup(scope, capture: capture, bookmark: bookmark)
+        XCTAssertEqual(capture.totalSkipped, 4103)
+        XCTAssertEqual(try store.readSkipped(scope, capture: capture, bookmark: bookmark, offset: 0).skipped.count, 128)
+        let first = try store.readSkipped(scope, capture: capture, bookmark: bookmark, offset: 0, pageSize: 4096)
+        XCTAssertEqual(first.skipped.count, 4096); XCTAssertEqual(first.nextOffset, 4096)
+        XCTAssertEqual(first.skipped.map(\.ordinal), Array(0..<4096))
+        XCTAssertLessThanOrEqual(try JSONEncoder().encode(first).count, MobileFolderInventory.maximumPageBytes)
+        let last = try store.readSkipped(scope, capture: capture, bookmark: bookmark, offset: 4096, pageSize: 4096)
+        XCTAssertEqual(last.skipped.map(\.ordinal), Array(4096..<4103)); XCTAssertNil(last.nextOffset)
+        for invalid in [-1, 0, 4097, Int.max] {
+            XCTAssertThrowsError(try store.readSkipped(scope, capture: capture, bookmark: Data(), offset: 0, pageSize: invalid))
+        }
+        let foreign = MobileFolderInventory.Scope(owner: scope.owner, deviceId: "foreign", rootId: scope.rootId)
+        XCTAssertThrowsError(try store.readSkipped(foreign, capture: capture, bookmark: bookmark, offset: 0, pageSize: 4096))
+    }
+
     func testBackupCaptureKeepsSupportedFilesAndPagesExplicitSkips() throws {
         let (source, bookmark, scope, directory) = try fixture()
         let outside = source.deletingLastPathComponent().appendingPathComponent("outside-pipe")

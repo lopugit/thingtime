@@ -3669,3 +3669,27 @@ approval; pending operation receipts remain separately protected. Rules and
 exact exclusions are part of capture identity and must survive retries with
 the same spelling. Installed home-upload acceptance is tracked in
 [PR1049](../PRs/1049-home-backup-indexing-resumable-partial-captures.md).
+
+
+## Batched native inventory import — 2026-10-20
+
+Mac `fileAccessVersion` **1.10.0** adds optional integer `pageSize` (1–4096) to
+`scan-page` and `scan-skips`. Omission retains 128 rows. Other actions, malformed
+sizes and unsupported hosts refuse the option. Every response remains bounded
+to 512 KiB and may end before the requested count. Clients advance using the
+returned exact offset, immutable capture descriptor and final total, never a
+predicted offset. Electron negotiates the native version for the bound window,
+account, device and origin; every page still performs live authorization.
+
+This reduces network verification round trips when importing a sealed inventory
+with millions of entries. It does not alter scanning, capture storage, granted
+paths, transfer authorization or the canonical journal. The client validates the
+entire transport batch, then emits at most 128 entries per journal page, with
+abort checks between pages. Skip subpages retain exact ledger offsets and totals.
+A transient import transport failure leaves the sealed capture available to the
+existing reconnect job; permanent failures retain the existing refusal behavior.
+
+Unit/native coverage is separate from installed throughput acceptance. Measure
+the actual installed import and first confirmed payload before claiming this
+resolves end-to-end backup performance. Symlink/special-file preservation,
+Android and complete backup acceptance remain unfinished.

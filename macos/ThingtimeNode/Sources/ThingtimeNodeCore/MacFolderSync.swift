@@ -5,7 +5,7 @@ import Foundation
 /// commands. The desktop host must also verify its active browser account.
 @MainActor
 public final class MacFolderSync {
-    public static let version = "1.9.0"
+    public static let version = "1.10.0"
     public enum SourceSelection { case folder(URL), photos }
     public struct Conditions: Codable, Sendable {
         public let network: String
@@ -23,6 +23,7 @@ public final class MacFolderSync {
         let excludedPaths: [String]?
         let ignoreRules: String?
         let capturePolicy: String?
+        let pageSize: Int?
         let rootId: String?; let path: String?; let version: String?; let offset: Int64?; let length: Int?; let data: String?
         let transfer: MobileSyncStaging.Request?; let stage: MobileSyncStaging.Stage?; let approval: MobileFolderStore.WriteApproval?
         let captureId: String?; let capture: MobileFolderInventory.Capture?; let inventoryDeviceId: String?
@@ -285,6 +286,10 @@ public final class MacFolderSync {
             guard ["scan", "scan-capture", "scan-status", "scan-cancel", "scan-page", "scan-skips", "scan-discard"].contains(r.action) else { throw MobileFolderStore.Failure.invalid }
             _ = try MobileFolderIgnoreRules(text)
         }
+        if case .object(let fields) = payload, fields["pageSize"] != nil {
+            guard ["scan-page", "scan-skips"].contains(r.action), let pageSize = r.pageSize,
+                  (1...MobileFolderInventory.maximumBatchPageEntries).contains(pageSize) else { throw MobileFolderStore.Failure.invalid }
+        }
         let owner = try FileSyncOwnerScope(ownerId: r.ownerId, url: origin)
         if r.action == "suspend" {
             if let active, active.id == r.requestId, active.owner == r.ownerId, active.device == r.deviceId { suspendRequest() }
@@ -463,9 +468,9 @@ public final class MacFolderSync {
                             if r.action == "scan-page" || r.action == "scan-skips" {
                                 guard let offset = r.offset, offset >= 0, offset <= 9_007_199_254_740_991 else { throw MobileFolderStore.Failure.invalid }
                                 if r.action == "scan-skips" {
-                                    result["skippedPage"] = try value(await worker { try inventories.readSkipped(inventoryScope, capture: capture, bookmark: grant.bookmark, offset: Int(offset), ignoreRules: r.ignoreRules) })
+                                    result["skippedPage"] = try value(await worker { try inventories.readSkipped(inventoryScope, capture: capture, bookmark: grant.bookmark, offset: Int(offset), ignoreRules: r.ignoreRules, pageSize: r.pageSize) })
                                 } else {
-                                    result["inventoryPage"] = try value(await worker { try inventories.read(inventoryScope, capture: capture, bookmark: grant.bookmark, offset: Int(offset), ignoreRules: r.ignoreRules) })
+                                    result["inventoryPage"] = try value(await worker { try inventories.read(inventoryScope, capture: capture, bookmark: grant.bookmark, offset: Int(offset), ignoreRules: r.ignoreRules, pageSize: r.pageSize) })
                                 }
                             } else {
                                 try await worker { try inventories.discard(inventoryScope, capture: capture, bookmark: grant.bookmark, ignoreRules: r.ignoreRules) }
