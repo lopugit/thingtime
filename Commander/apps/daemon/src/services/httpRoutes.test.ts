@@ -11,7 +11,7 @@ describe('Commander active HTTP capability registry', () => {
       const operation = manifest.features[`commander.${route.id}`]!;
       expect(operation.version).toMatch(/^\d+\.\d+\.\d+$/);
       expect(operation.operations[0]).toMatchObject({ method: route.method, path: route.path });
-      const pathname = route.path.replace('*', 'test-id');
+      const pathname = route.path.replaceAll('*', 'test-id');
       expect(resolveCommanderRoute(route.method === '*' ? 'GET' : route.method, pathname)?.id).toBe(route.id);
       expect(operation.operations[0]!.authentication).toBe(
         route.path.startsWith('/api/native/')
