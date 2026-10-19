@@ -11865,3 +11865,28 @@ resume unfinished Android gates only when requested.
   Mac/iOS job controls when connected; Android remains deferred.
 
 - Desktop snapshot retention: allow content POST only for the pinned server, exact actor, home data plane and same local origin; changed/missing scope or cross-site requests must fail before reading mutation bytes. Covered by `server/utils/apiFallback.test.ts`.
+
+### Home upload exclusions and hierarchical progress (2026-10-19)
+
+- Apply the Mac home-backup preset to an existing draft: retain selected roots
+  and custom exclusions, add Library/Applications/.Trash, set backup/paused and
+  disable delete propagation. Pending saves and Photos sources must refuse it.
+- Excluded native directories must be pruned before access, traversal or hashing;
+  an excluded unreadable directory must not fail an otherwise valid scan. Test
+  nested/case/Unicode boundaries, malformed/oversized policies and capture-ID
+  reuse with a changed policy after success or failure. Older hosts and leaked
+  excluded inventory rows must fail closed; Android behavior stays deferred.
+- Progress: unknown index totals remain indeterminate; verify empty/unchanged,
+  zero-byte files, nested mixed-size parents, partial bytes, pause/error, resume,
+  page boundaries and completed retained metadata against independent receipts.
+  Never count the final byte callback twice or show 100% before confirmation.
+  Account/origin/root changes and malformed cached descriptors must not leak or
+  crash. Completed display reads must not reactivate retired run writes.
+- Run the file-sync suite and the isolated home-upload/desktop-lifecycle browser
+  harnesses. In actual Builder, independently edit a heading, help, control and
+  repeated-row field, save/reload, then exercise expand/collapse, pagination and 13-level focused-folder/parent/root navigation.
+  Scroll desktop 1440/mobile 390 top to bottom and inspect overflow/stacking.
+- Before declaring ready for real upload, exercise the matching deployed API and
+  signed installed Mac with the reviewed home grant/exclusions; compare actual
+  transferred bytes and parent totals. Synthetic fixture success is not this
+  release acceptance. Retain Android's later-date status and original app data.

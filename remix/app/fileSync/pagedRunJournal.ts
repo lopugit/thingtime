@@ -118,13 +118,14 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 	const validate = (h: Header, spec: PagedRunSpec) => validatePagedRunHeader(h, spec, scope);
 	const save = (h: Header, tx: IDBTransaction) => { validate(h, h.spec); tx.objectStore(PAGED_RUN_STORES[0]).put(h, [key, h.spec.id]); };
 	const withHeader = <T>(spec: PagedRunSpec, mode: IDBTransactionMode,
-		work: (h: Header, tx: IDBTransaction, done: (v: T) => void, fail: (e: unknown) => void) => void) =>
+		work: (h: Header, tx: IDBTransaction, done: (v: T) => void, fail: (e: unknown) => void) => void, releasedDisplay = false) =>
 		transaction<T>(stores, mode, (tx, done, fail) => {
 			const head = tx.objectStore(PAGED_RUN_HEADS).get(key);
 			head.onsuccess = () => { try {
-				check(); if (head.result !== spec.id) throw Error('Resume the active paged sync run.');
+				check(); if (head.result !== spec.id && !releasedDisplay) throw Error('Resume the active paged sync run.');
 				const get = tx.objectStore(PAGED_RUN_STORES[0]).get([key, spec.id]);
 				get.onsuccess = () => { try { check(); validate(get.result, spec);
+					if (head.result !== spec.id && get.result.phase !== 'complete') throw Error('Sync progress run is not active.');
 					const plan = tx.objectStore(PLAN_STORES[0]).get([key, spec.plan.id]);
 					plan.onsuccess = () => { try {
 						check(); validatePagedPlanHeader(plan.result, spec.plan, key);
@@ -348,6 +349,27 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 	return {
 		get scope() { return structuredClone(scope); },
 		begin, step, read, beginCloud, stepCloud,
+		/** A bounded display-only join. This never starts or confirms work. All
+		 * paths share one scope-fenced readonly transaction rather than one
+		 * transaction per rendered inventory row. */
+		async operationsForPaths(value: PagedRunSpec, paths: readonly string[]): Promise<(SyncOperation | null)[]> {
+			const spec = parsePagedRunSpec(value), requested = [...paths];
+			if (requested.length > INVENTORY_PAGE_ENTRIES || requested.some(path => !validSyncPath(path)) ||
+				new Set(requested.map(syncPathKey)).size !== requested.length) throw Error('Invalid sync progress page.');
+			return withHeader(spec, 'readonly', (h, tx, done, fail) => {
+				if (h.phase === 'preparing') throw Error('Sync progress is not prepared.');
+				if (!requested.length) { done([]); return; }
+				const result: (SyncOperation | null)[] = new Array(requested.length); let pending = requested.length;
+				requested.forEach((path, index) => {
+					const get = tx.objectStore(PAGED_RUN_STORES[1]).index('path').get([key, spec.id, syncPathKey(path)]);
+					get.onsuccess = () => { try {
+						check(); const operation = get.result === undefined ? null : row(get.result, spec).operation;
+						if (operation && operation.mutation.path !== path) throw Error('Sync progress path changed.');
+						result[index] = operation; if (!--pending) done(result);
+					} catch (error) { fail(error); } };
+				});
+			}, true);
+		},
 		async appendReview(value: PagedRunSpec, page: { ordinal: number; rows: ReviewedSyncConflict[]; complete?: boolean }): Promise<PagedReviewProgress> {
 			const spec = parsePagedRunSpec(value);
 			if (!spec.review || !page || !nonnegative(page.ordinal) || !Array.isArray(page.rows) || !page.rows.length ||

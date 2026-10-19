@@ -47,6 +47,21 @@ public struct MobileFolderReader {
         guard parts.count <= 128, parts.allSatisfy({ !$0.isEmpty && $0 != "." && $0 != ".." && $0.utf16.count <= 255 }) else { throw Failure.invalid }
         return parts
     }
+    /// Same exact-path/descendant and NFC/lowercase contract as syncPathKey.
+    /// Validate before accessing the grant; globs have no special meaning.
+    public static func canonicalExclusions(_ paths: [String]) throws -> [String] {
+        guard paths.count <= 100, paths.reduce(0, { $0 + $1.utf8.count }) <= 16_384 else { throw Failure.invalid }
+        let keys = try paths.map { path -> String in
+            _ = try components(path)
+            return path.precomposedStringWithCanonicalMapping.lowercased()
+        }
+        guard Set(keys).count == keys.count else { throw Failure.invalid }
+        return keys.sorted()
+    }
+    private static func excluded(_ path: String, keys: [String]) -> Bool {
+        let key = path.precomposedStringWithCanonicalMapping.lowercased()
+        return keys.contains { key == $0 || key.hasPrefix($0 + "/") }
+    }
     static func info(_ fd: Int32) throws -> stat {
         var result = stat(); guard fstat(fd, &result) == 0 else { throw Failure.unavailable }; return result
     }
@@ -75,9 +90,10 @@ public struct MobileFolderReader {
             try visit(name)
         }
     }
-    static func names(_ fd: Int32) throws -> [String] {
+    static func names(_ fd: Int32, including: (String) -> Bool = { _ in true }) throws -> [String] {
         var result: [String] = []
         try visitNames(fd) { name in
+            guard including(name) else { return }
             result.append(name); guard result.count <= maximumEntries else { throw Failure.limit }
         }
         return result.sorted { $0.utf8.lexicographicallyPrecedes($1.utf8) }
@@ -166,12 +182,13 @@ public struct MobileFolderReader {
             return value
         }
     }
-    public static func scan(bookmark: Data) throws -> [Entry] {
-        try access(bookmark) { root in
+    public static func scan(bookmark: Data, excludedPaths: [String] = []) throws -> [Entry] {
+        let exclusions = try canonicalExclusions(excludedPaths)
+        return try access(bookmark) { root in
             let initial = try stamp(info(root)); var entries: [Entry] = [], aliases = Set<String>(), byteBudget = 0
             func walk(_ parent: Int32, prefix: String) throws {
                 let initialDirectory = try stamp(info(parent))
-                for name in try names(parent) {
+                for name in try names(parent, including: { !excluded(prefix.isEmpty ? $0 : "\(prefix)/\($0)", keys: exclusions) }) {
                     try Task.checkCancellation(); let path = prefix.isEmpty ? name : "\(prefix)/\(name)"; _ = try components(path)
                     guard aliases.insert(path.precomposedStringWithCanonicalMapping.lowercased()).inserted else { throw Failure.invalid }
                     guard entries.count < maximumEntries else { throw Failure.limit }
@@ -197,14 +214,16 @@ public struct MobileFolderReader {
 
     /// The sink owns uniqueness checks and bounded, disk-backed retention. No
     /// provisional rows become a complete capture until the second pass succeeds.
-    static func capture(bookmark: Data, append: (Entry) throws -> Void,
+    static func capture(bookmark: Data, excludedPaths: [String] = [], append: (Entry) throws -> Void,
                         replay: ((Entry) throws -> Void) throws -> Void) throws {
+        let exclusions = try canonicalExclusions(excludedPaths)
         try access(bookmark) { root in
             let initial = try stamp(info(root))
             func walk(_ parent: Int32, prefix: String) throws {
                 let before = try stamp(info(parent))
                 try visitNames(parent) { name in
                     let path = prefix.isEmpty ? name : "\(prefix)/\(name)"
+                    guard !excluded(path, keys: exclusions) else { return }
                     _ = try components(path)
                     let fd = openat(parent, name, O_RDONLY | O_NOFOLLOW | O_CLOEXEC | O_NONBLOCK)
                     guard fd >= 0 else { throw Failure.unavailable }; defer { close(fd) }

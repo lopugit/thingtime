@@ -8,7 +8,7 @@ import UniformTypeIdentifiers
 @MainActor
 final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
     static let uploadVersion = "1.3.0"
-    static let accessVersion = "1.3.1"
+    static let accessVersion = "1.4.0"
     static let stagingVersion = "1.2.0"
     static let publicationVersion = "1.2.0"
     static let trashVersion = "1.2.1"
@@ -488,6 +488,11 @@ final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
                             inventoryDevice = device; inspectedGrant = grant
                             let inventories = self.inventories
                             let inventoryScope = MobileFolderInventory.Scope(owner: scope, deviceId: device, rootId: rootId)
+                            let exclusions: [String]
+                            if let supplied = payload["excludedPaths"] {
+                                guard let paths = supplied as? [String] else { throw MobileFolderStore.Failure.invalid }
+                                _ = try MobileFolderReader.canonicalExclusions(paths); exclusions = paths
+                            } else { exclusions = [] }
                             let id = payload["captureId"] as? String
                             let capture = try payload["capture"].map { try JSONDecoder().decode(MobileFolderInventory.Capture.self, from: JSONSerialization.data(withJSONObject: $0)) }
                             let offset = payload["offset"] as? NSNumber
@@ -499,7 +504,7 @@ final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
                             let worker = Task.detached { () throws -> Data in
                                 if action == "scan-capture" {
                                     guard let id else { throw MobileFolderStore.Failure.invalid }
-                                    return try JSONEncoder().encode(inventories.capture(inventoryScope, id: id, bookmark: grant.bookmark))
+                                    return try JSONEncoder().encode(inventories.capture(inventoryScope, id: id, bookmark: grant.bookmark, excludedPaths: exclusions))
                                 }
                                 guard let capture else { throw MobileFolderStore.Failure.invalid }
                                 if action == "scan-page" {
@@ -510,6 +515,7 @@ final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
                             }
                             let data = try await withTaskCancellationHandler(operation: { try await worker.value }, onCancel: { worker.cancel() })
                             result = ["rootId": rootId, "complete": true]
+                            if action == "scan-capture", payload["excludedPaths"] != nil { result["excludedPaths"] = exclusions }
                             if action == "scan-discard" { result["discarded"] = true }
                             else { result[action == "scan-capture" ? "capture" : "inventoryPage"] = try JSONSerialization.jsonObject(with: data) }
                         } else if action == "inspect" {
@@ -521,11 +527,18 @@ final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
                             result = ["rootId": rootId, "path": path, "complete": true, "entry": encoded]
                         } else if action == "scan" {
                             let photos = self.photos
-                            let worker = Task.detached { try grant.sourceKind == "photos" ? photos.scan(scope: scope.key + ":" + grant.id) : MobileFolderReader.scan(bookmark: grant.bookmark) }
+                            let exclusions: [String]
+                            if let supplied = payload["excludedPaths"] {
+                                guard let paths = supplied as? [String] else { throw MobileFolderStore.Failure.invalid }
+                                _ = try MobileFolderReader.canonicalExclusions(paths); exclusions = paths
+                            } else { exclusions = [] }
+                            guard grant.sourceKind != "photos" || exclusions.isEmpty else { throw MobileFolderStore.Failure.invalid }
+                            let worker = Task.detached { try grant.sourceKind == "photos" ? photos.scan(scope: scope.key + ":" + grant.id) : MobileFolderReader.scan(bookmark: grant.bookmark, excludedPaths: exclusions) }
                             let entries = try await withTaskCancellationHandler(operation: { try await worker.value }, onCancel: { worker.cancel() })
                             var encoded = try JSONSerialization.jsonObject(with: JSONEncoder().encode(entries)) as! [[String: Any]]
                             for i in encoded.indices where encoded[i]["sha256"] == nil { encoded[i]["sha256"] = NSNull() }
                             result = ["rootId": rootId, "complete": true, "entries": encoded]
+                            if payload["excludedPaths"] != nil { result["excludedPaths"] = exclusions }
                         } else {
                             guard let path = payload["path"] as? String, let version = payload["version"] as? String,
                                   version.utf8.count <= 512, let offset = payload["offset"] as? NSNumber,

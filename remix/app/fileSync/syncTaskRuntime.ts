@@ -3,12 +3,15 @@ import type { ForegroundSyncProgress } from './foregroundSync';
 import type { createConflictReviewController } from './conflictReviewController';
 import type { SyncConflict, SyncConflictChoice } from './conflictResolution';
 import type { FolderHost } from './desktopFolders.client';
+import type { SyncProgressDescriptor } from './progressProjection';
 
 export type SyncTaskSnapshot = {
 	scope: SyncScope;
 	active: boolean;
 	host?: FolderHost;
 	progress: ForegroundSyncProgress & { message?: string };
+	progressDescriptor?: SyncProgressDescriptor;
+	status?: 'running' | 'paused' | 'error' | 'complete';
 	pagedReview?: ReturnType<typeof createConflictReviewController>;
 	legacyReview?: { conflicts: SyncConflict[]; apply(choices: SyncConflictChoice[]): void; retain(): void; cancel(): void };
 };
@@ -39,23 +42,25 @@ export function createSyncTaskRuntime() {
 		// the user's durable Stop, so returning to the foreground can recover.
 		suspend(message: string) { if (active && !active.signal.aborted) { suspensionMessage = message; active.abort(); } },
 		invalidate() { active?.abort(); publish(null); },
-		async start(scope: SyncScope, run: (signal: AbortSignal, update: (patch: Partial<Pick<SyncTaskSnapshot, 'progress' | 'pagedReview' | 'legacyReview' | 'host'>>) => void) => Promise<void>, onStop?: () => Promise<void>) {
+		async start(scope: SyncScope, run: (signal: AbortSignal, update: (patch: Partial<Pick<SyncTaskSnapshot, 'progress' | 'progressDescriptor' | 'pagedReview' | 'legacyReview' | 'host'>>) => void) => Promise<void>, onStop?: () => Promise<void>) {
 			if (active) throw Error('A transfer is already running. Reopen its connection to review or stop it.');
 			syncScopeKey(scope);
 			const controller = new AbortController(); active = controller; saveStop = onStop;
 			suspensionMessage = undefined;
-			publish({ scope: structuredClone(scope), active: true, progress: { stage: 'checking', confirmed: 0, total: 0 } });
-			const update = (patch: Partial<Pick<SyncTaskSnapshot, 'progress' | 'pagedReview' | 'legacyReview' | 'host'>>) => {
+			publish({ scope: structuredClone(scope), active: true, status: 'running', progress: { stage: 'checking', confirmed: 0, total: 0 } });
+			const update = (patch: Partial<Pick<SyncTaskSnapshot, 'progress' | 'progressDescriptor' | 'pagedReview' | 'legacyReview' | 'host'>>) => {
 				controller.signal.throwIfAborted();
 				if (snapshot) publish({ ...snapshot, ...patch });
 			};
 			try { await run(controller.signal, update); }
 			catch (error) {
-				if (snapshot) publish({ ...snapshot, progress: { ...snapshot.progress,
+				if (snapshot) publish({ ...snapshot, status: controller.signal.aborted ? 'paused' : 'error', progress: { ...snapshot.progress,
 					message: controller.signal.aborted ? suspensionMessage ?? 'Transfer stopped. Retry to recover saved work.' :
 						error instanceof Error ? error.message : 'Transfer interrupted. Retry to recover saved work.' } });
 			} finally {
-				if (snapshot) publish({ ...snapshot, active: false, pagedReview: undefined, legacyReview: undefined });
+				if (snapshot) publish({ ...snapshot, active: false,
+					status: snapshot.status === 'running' ? (snapshot.progress.stage === 'complete' ? 'complete' : 'paused') : snapshot.status,
+					pagedReview: undefined, legacyReview: undefined });
 				if (active === controller) { active = undefined; saveStop = undefined; }
 			}
 		}

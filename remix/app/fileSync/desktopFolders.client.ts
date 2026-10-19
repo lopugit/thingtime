@@ -3,6 +3,7 @@ import type { ThingtimeDesktopBridge } from '../utils/electronBridge';
 import { capabilitySatisfies } from '../api/utils/capabilities/capabilityContract';
 import {
 	parseMobileFolderResult,
+	assertNativeScanExclusions,
 	supportsFolderAccess,
 	supportsNativePathInspection,
 	supportsNativeInventoryPages,
@@ -150,6 +151,7 @@ export async function createDesktopFolderHost(input: {
 		fetch: fetchBound,
 		request: async (expectedOwner, request, signal) => {
 			if (expectedOwner !== ownerId) throw changed();
+			assertNativeScanExclusions(request, context.capabilities);
 			if (['scan-capture', 'scan-page', 'scan-discard'].includes(request.action) && !supportsNativeInventoryPages(context.capabilities))
 				throw Error('Inventory pages require an updated Mac app.');
 			if (request.action === 'inspect' && !supportsNativePathInspection(context.capabilities)) throw Error('Update Thingtime Desktop to inspect individual sync paths.');

@@ -81,6 +81,11 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 				check();
 				await runPagedForegroundCloudSync(reviewed, binding, {
 					currentScope, localTarget, journal: journal!, runtime, progress: publish,
+					progressSession: descriptor => {
+						check(); update({ progressDescriptor: descriptor });
+						const key = 'tt:sync-progress-tree:' + syncScopeKey(binding);
+						writeStampedCache(key, descriptor); pruneCacheNamespace('tt:sync-progress-tree:', key, 32);
+					},
 					readConfiguration: async () => {
 						const url = new URL('/api/v1/things', binding.origin); url.searchParams.set('id', reviewed.id);
 						const response = await host.fetch(url, { credentials: 'include', cache: 'no-store', redirect: 'error', signal,
@@ -93,10 +98,10 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 						assertPhotoSourcePolicy(reviewed.configuration, (await request(binding.ownerId, { action: 'list' }, signal)).roots); check();
 					},
 					conditions: async () => (await request(binding.ownerId, { action: 'conditions' }, signal)).conditions!,
-					scanLocal: async () => (await request(binding.ownerId, { action: 'scan', rootId: reviewed.configuration.localRootId }, signal)).entries!,
+					scanLocal: async () => (await request(binding.ownerId, { action: 'scan', rootId: reviewed.configuration.localRootId, excludedPaths: reviewed.configuration.excludedPaths }, signal)).entries!,
 					...(inspect && supportsNativeInventoryPages(capabilities) ? {
 						scanLocalPages: () => readNativeInventory({ ownerId: binding.ownerId, deviceId: binding.deviceId,
-							rootId: reviewed.configuration.localRootId, signal, request })
+							rootId: reviewed.configuration.localRootId, excludedPaths: reviewed.configuration.excludedPaths, signal, request })
 					} : {}),
 					...(inspect ? { inspectLocal: async (path: string) => (await request(binding.ownerId,
 						{ action: 'inspect', rootId: reviewed.configuration.localRootId, path }, signal)).inspectedEntry! } : {}),

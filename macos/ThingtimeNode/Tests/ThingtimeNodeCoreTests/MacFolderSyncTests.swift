@@ -37,12 +37,33 @@ final class MacFolderSyncTests: XCTestCase {
     private func rejects(_ work: () async throws -> JSONValue) async {
         do { _ = try await work(); XCTFail("Unauthorized request succeeded") } catch { }
     }
+    func testNativeScansPruneAndEchoExclusionsAndBindCaptureReuse() async throws {
+        let service = try service(), id = try await root(service)
+        let selected = folder.appendingPathComponent("selected")
+        try FileManager.default.createDirectory(at: selected.appendingPathComponent("Library"), withIntermediateDirectories: true)
+        try FileManager.default.createSymbolicLink(at: selected.appendingPathComponent("Library/blocked"),
+            withDestinationURL: selected.appendingPathComponent("missing"))
+        try Data().write(to: selected.appendingPathComponent("kept"))
+        let fields: [String: JSONValue] = ["rootId": .string(id), "excludedPaths": .array([.string("library")])]
+        let scan = try await service.handle(request("scan", fields)).decode([String: JSONValue].self)
+        XCTAssertEqual(scan["excludedPaths"], fields["excludedPaths"])
+        XCTAssertEqual(try XCTUnwrap(scan["entries"]).decode([MobileFolderReader.Entry].self).map(\.path), ["kept"])
+        let captureFields = fields.merging(["inventoryDeviceId": .string("device"), "captureId": .string(UUID().uuidString.lowercased())]) { _, v in v }
+        let captured = try await service.handle(request("scan-capture", captureFields)).decode([String: JSONValue].self)
+        XCTAssertEqual(captured["excludedPaths"], fields["excludedPaths"])
+        XCTAssertEqual(try XCTUnwrap(captured["capture"]).decode(MobileFolderInventory.Capture.self).totalEntries, 1)
+        await rejects { try await service.handle(self.request("scan-capture", captureFields.merging(["excludedPaths": .array([])]) { _, v in v })) }
+        await rejects { try await service.handle(self.request("scan", ["rootId": .string(id)])) }
+        await rejects { try await service.handle(self.request("scan", fields.merging(["excludedPaths": .array([.string("../escape")])]) { _, v in v })) }
+        await rejects { try await service.handle(self.request("scan", fields.merging(["excludedPaths": .null]) { _, v in v })) }
+    }
+
     func testContextAndUnknownConditionsUseTheSharedFolderContract() async throws {
         let service = try service()
         let context = try await service.handle(request("context")).decode([String: JSONValue].self)
         XCTAssertEqual(context["deviceId"], .string("device"))
         let capabilities = try XCTUnwrap(context["capabilities"]).decode([String: String].self)
-        XCTAssertEqual(capabilities, ["fileAccessVersion": "1.5.1", "fileStagingVersion": "1.1.0", "filePublicationVersion": "1.2.0"])
+        XCTAssertEqual(capabilities, ["fileAccessVersion": "1.6.0", "fileStagingVersion": "1.1.0", "filePublicationVersion": "1.2.0"])
         let result = try await service.handle(request("conditions")).decode([String: JSONValue].self)
         XCTAssertEqual(result["conditions"], .object(["network": .string("unknown"), "charging": .null]))
     }

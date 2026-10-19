@@ -80,6 +80,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-19 — **Codex (AI)**: Add a paused home-folder backup preset, native
+  pre-traversal exclusions, and an editable two-step sync hierarchy with
+  cumulative file/folder progress. Completed journal results remain readable
+  without reviving write authority. Isolated UI/native verification and live
+  release gates are tracked in [PR 1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+
 - 2026-10-19: Added an independent S3 replica provider and resumable upload/download
   worker for the existing portable backup format, with private credential handoff,
   bounded progress and kill/resume/source-loss protocol checks. Fixed SDK mutation

@@ -16,6 +16,7 @@ import { createCloudFileTransport, createCloudFolderTransport, type CloudTranspo
 import type { FingerprintSource } from './contentFingerprint';
 import type { openSyncJournal } from './journal.client';
 import { type SyncEntry, type SyncScope, type SyncBaseline } from './reconcile';
+import type { SyncProgressDescriptor } from './progressProjection';
 
 export type ForegroundSyncProgress = {
 	stage: 'checking' | 'scanning' | 'reviewing' | 'transferring' | 'verifying' | 'complete' | 'retaining' | 'retained';
@@ -24,6 +25,9 @@ export type ForegroundSyncProgress = {
 	path?: string;
 	bytes?: number;
 	size?: number;
+	/** Persisted discovered entries; an absent total stays indeterminate. */
+	indexed?: number;
+	indexTotal?: number;
 };
 export type ForegroundSyncInput = {
 	currentScope(): SyncScope;
@@ -40,6 +44,8 @@ export type ForegroundSyncInput = {
 	journal: Awaited<ReturnType<typeof openSyncJournal>>;
 	runtime: CloudTransportRuntime;
 	progress(value: ForegroundSyncProgress): void;
+	/** Read-only journal references for the editable progress hierarchy. */
+	progressSession?(value: SyncProgressDescriptor): void;
 	reviewConflicts?(conflicts: SyncConflict[]): Promise<SyncConflictReviewResult>;
 	/** Bounded, durable review adapter for editable Builder surfaces. */
 	reviewPagedConflicts?(session: PagedConflictReviewSession): Promise<PagedConflictReviewResult>;

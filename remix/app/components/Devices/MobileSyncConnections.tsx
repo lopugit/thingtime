@@ -8,6 +8,9 @@ import React, { useEffect, useId, useRef, useState, useSyncExternalStore } from 
 import { SyncConflictReview } from './SyncConflictReview';
 import { PagedSyncConflictReview } from './PagedSyncConflictReview';
 import { DesktopSyncAutomation } from './DesktopSyncAutomation';
+import { HomeBackupPreset } from './HomeBackupPreset';
+import { SyncProgressViewer } from './SyncProgressViewer';
+import type { SyncProgressDescriptor } from '~/fileSync/progressProjection';
 import { createConflictReviewController } from '~/fileSync/conflictReviewController';
 import type { PagedConflictReviewResult, PagedConflictReviewSession } from '~/fileSync/pagedForegroundReview';
 import type { SyncConflict, SyncConflictChoice, SyncConflictReviewResult } from '~/fileSync/conflictResolution';
@@ -142,6 +145,7 @@ function Connections({
 		});
 	});
 	const [transfers, setTransfers] = useState<Record<string, ForegroundSyncProgress & { message?: string }>>({});
+	const [progressDescriptors, setProgressDescriptors] = useState<Record<string, SyncProgressDescriptor | undefined>>({});
 	const [activeTransfer, setActiveTransfer] = useState<string | null>(null);
 	const [foregroundFileReview, setFileReview] = useState<{
 		id: string;
@@ -290,6 +294,7 @@ function Connections({
 		void run(async (assertActive) => {
 			const active = controller.current!,
 				syncScope = { ...scope, rootId: saved.id };
+			setProgressDescriptors(previous => ({ ...previous, [saved.id]: undefined }));
 			const publish = (value: ForegroundSyncProgress & { message?: string }) => {
 				assertActive();
 				setTransfers((previous) => ({ ...previous, [saved.id]: value }));
@@ -350,11 +355,13 @@ function Connections({
 								conditions: async () => (await requestFolders(scope.ownerId, { action: 'conditions' }, active.signal)).conditions!,
 								scanLocal: async () =>
 									(
-										await requestFolders(scope.ownerId, { action: 'scan', rootId: saved.configuration.localRootId }, active.signal)
+										await requestFolders(scope.ownerId, { action: 'scan', rootId: saved.configuration.localRootId,
+											...((host || capabilities?.platform === 'ios') && saved.configuration.excludedPaths.length ? { excludedPaths: saved.configuration.excludedPaths } : {}) }, active.signal)
 									).entries!,
 								...(inspectPaths && supportsNativeInventoryPages(capabilities) ? {
 									scanLocalPages: () => readNativeInventory({ ownerId: scope.ownerId, deviceId: scope.deviceId,
-										rootId: saved.configuration.localRootId, signal: active.signal, request: requestFolders })
+										rootId: saved.configuration.localRootId, signal: active.signal, request: requestFolders,
+										excludedPaths: saved.configuration.excludedPaths })
 								} : {}),
 								...(inspectPaths ? { inspectLocal: async (path: string) => (await requestFolders(scope.ownerId,
 									{ action: 'inspect', rootId: saved.configuration.localRootId, path }, active.signal)).inspectedEntry! } : {}),
@@ -381,6 +388,11 @@ function Connections({
 									requireCapability
 								},
 								progress: publish,
+								progressSession: (descriptor: SyncProgressDescriptor) => {
+									assertActive(); setProgressDescriptors(previous => ({ ...previous, [saved.id]: descriptor }));
+									const cacheKey = 'tt:sync-progress-tree:' + syncScopeKey(syncScope);
+									writeStampedCache(cacheKey, descriptor); pruneCacheNamespace('tt:sync-progress-tree:', cacheKey, 32);
+								},
 								reviewPagedConflicts: (session: PagedConflictReviewSession) =>
 									new Promise<PagedConflictReviewResult>((resolve, reject) => {
 										let settled = false;
@@ -575,6 +587,9 @@ function Connections({
 				const task = ownNativeTask?.scope.rootId === saved.id ? ownNativeTask : null;
 				const progress = task?.progress ?? transfers[saved.id] ?? readStampedCache<ForegroundSyncProgress & { message?: string }>(progressKey(saved.id));
 				const running = !!task?.active || (viewBusy && activeTransfer === saved.id);
+				const progressScope = { ...scope, rootId: saved.id };
+				const progressDescriptor = task ? task.progressDescriptor : progressDescriptors[saved.id] ?? (!running
+					? readStampedCache<SyncProgressDescriptor>('tt:sync-progress-tree:' + syncScopeKey(progressScope)) ?? undefined : undefined);
 				const downloading = saved.configuration.mode === 'download';
 				const twoWay = saved.configuration.mode === 'two-way';
 				const nativeRoot = roots.find((root) => root.id === saved.configuration.localRootId);
@@ -682,6 +697,15 @@ function Connections({
 							<DesktopSyncAutomation saved={saved} scope={{ ...scope, rootId: saved.id }} generation={generation}
 								disabled={!allowed || !!draft || !ready} accountTransport={reviewTransport} />
 						</Box>}
+						{(host || capabilities?.platform === 'ios') && (progress || progressDescriptor) && <Box width="100%" minW={0}>
+							<SyncProgressViewer scopeKey={`${key}:${generation}:${saved.id}`} descriptor={progressDescriptor}
+								progress={progress ?? undefined} status={task?.status ?? (running ? 'running' : progress?.stage === 'complete' ? 'complete' : 'paused')}
+								message={progress?.message} accountTransport={reviewTransport} currentScope={() => {
+									if (!mounted.current || rootIdentity.read().pending || rootIdentity.read().generation !== generation || runtimeOrigin() !== scope.origin)
+										throw Error('The account or storage destination changed.');
+									return progressScope;
+								}} />
+						</Box>}
 						{pagedReview?.id === saved.id && <Box width="100%" minW={0}>
 							<PagedSyncConflictReview controller={pagedReview.controller} mode={saved.configuration.mode}
 								scopeKey={`${key}:${generation}:${saved.id}`} accountTransport={reviewTransport} />
@@ -705,6 +729,8 @@ function Connections({
 			)}
 			{draft && (
 				<Box marginTop={4} border="1px solid var(--tt-border, #ececef)" borderRadius="12px" padding={3}>
+					{host && <HomeBackupPreset draft={draft} disabled={busy || !ready} scopeKey={`${key}:${generation}:${draft.id}`}
+						onChange={edit} accountTransport={reviewTransport} />}
 					<SyncConfigurationForm draft={draft} roots={roots} folders={folders} disabled={busy || draft.pending || !ready} onChange={edit} />
 					{folderCursor && (
 						<Button size="sm" minHeight="40px" marginTop={2} isDisabled={busy} onClick={() => void run(() => load('folders', folderCursor))}>

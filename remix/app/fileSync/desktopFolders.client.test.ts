@@ -221,3 +221,12 @@ test('queued requests keep immutable payloads and cancelled waiters never dispat
 		]
 	);
 });
+
+
+test('desktop excluded scans fail before dispatch on an older native host', async () => {
+	const f = fixture(), host = await f.create(), calls = f.calls.length;
+	for (const request of [{ action: 'scan' as const, rootId, excludedPaths: ['Library'] },
+		{ action: 'scan-capture' as const, rootId, captureId: crypto.randomUUID(), inventoryDeviceId: 'device', excludedPaths: ['Library'] }])
+		await assert.rejects(host.request('owner', request, f.lifetime.signal), /Update Thingtime to exclude paths/);
+	assert.equal(f.calls.length, calls);
+});

@@ -37,6 +37,7 @@ public struct MobileFolderInventory: Sendable {
         let bookmarkHash: String
         let capture: Capture
         let complete: Bool
+        var excludedPaths: [String]? = nil
         var retired: Bool? = nil
     }
     public static let maximumPageEntries = 128
@@ -89,17 +90,18 @@ public struct MobileFolderInventory: Sendable {
 
     /// A caller-chosen ID survives a lost reply. Unsealed captures can be rebuilt;
     /// their server-generated generation changes and no pages were readable.
-    public func capture(_ scope: Scope, id: String, bookmark: Data) throws -> Capture {
+    public func capture(_ scope: Scope, id: String, bookmark: Data, excludedPaths: [String] = []) throws -> Capture {
+        let exclusions = try MobileFolderReader.canonicalExclusions(excludedPaths)
         try MobileFolderReader.checkAccess(bookmark: bookmark)
         return try locked(scope, id: id, creating: true) { fd in
             if let old = try NativeFileJournal.read(fd, as: Record.self) {
                 try validate(old, scope: scope, id: id, bookmark: bookmark)
-                guard old.retired != true else { throw Failure.changed }
+                guard old.retired != true, (old.excludedPaths ?? []) == exclusions else { throw Failure.changed }
                 if old.complete { return old.capture }
             }
             let generation = UUID().uuidString.lowercased(), key = Self.digest(bookmark)
             try NativeFileJournal.save(Record(scope: scope, bookmarkHash: key,
-                capture: Capture(id: id.lowercased(), generation: generation, totalEntries: 0), complete: false), fd)
+                capture: Capture(id: id.lowercased(), generation: generation, totalEntries: 0), complete: false, excludedPaths: exclusions), fd)
             for name in ["inventory.sqlite", "inventory.sqlite-journal"] {
                 if unlinkat(fd, name, 0) != 0 && errno != ENOENT { throw Failure.storage }
             }
@@ -107,7 +109,7 @@ public struct MobileFolderInventory: Sendable {
             try db.execute("CREATE TABLE entries (ordinal INTEGER PRIMARY KEY, path TEXT NOT NULL UNIQUE, identity TEXT NOT NULL UNIQUE, data BLOB NOT NULL)")
             try db.execute("BEGIN IMMEDIATE")
             var count = 0
-            try MobileFolderReader.capture(bookmark: bookmark, append: { entry in
+            try MobileFolderReader.capture(bookmark: bookmark, excludedPaths: excludedPaths, append: { entry in
                 guard count < 9_007_199_254_740_991 else { throw Failure.limit }
                 try db.insert(entry, ordinal: count); count += 1
             }, replay: { visit in
@@ -117,7 +119,7 @@ public struct MobileFolderInventory: Sendable {
             })
             try db.execute("COMMIT")
             let result = Capture(id: id.lowercased(), generation: generation, totalEntries: count)
-            try NativeFileJournal.save(Record(scope: scope, bookmarkHash: key, capture: result, complete: true), fd)
+            try NativeFileJournal.save(Record(scope: scope, bookmarkHash: key, capture: result, complete: true, excludedPaths: exclusions), fd)
             return result
         }
     }

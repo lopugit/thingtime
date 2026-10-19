@@ -10,19 +10,23 @@ import { createMemoryRouter, RouterProvider } from 'react-router';
 import { Box, Button, ChakraProvider, Flex, Text } from '@chakra-ui/react';
 import { SyncConflictReview } from '../app/components/Devices/SyncConflictReview';
 import { DesktopFolderAccess } from '../app/components/Devices/DesktopFolderAccess';
+import { canonicalNativeScanExclusions, isNativeScanExcluded } from '../app/fileSync/nativeScanExclusions';
 import { nativeSyncTasks } from '../app/fileSync/nativeSyncTasks.client';
 import { NativeSyncBootstrap } from '../app/fileSync/NativeSyncBootstrap';
 import { MobileFolderAccess } from '../app/components/Devices/MobileFolderAccess';
 import { nativeBridgeMessageEvent } from '../app/utils/nativeBridge';
+const homeQA = new URLSearchParams(location.search).has('home');
 const inspectionQA = new URLSearchParams(location.search).has('inspect');
 const inventoryQA = new URLSearchParams(location.search).has('inventory');
-const observations = { requests: 0, scans: 0, inspections: 0, captures: 0, pages: 0, discarded: 0 };
+const observations = { requests: 0, scans: 0, inspections: 0, captures: 0, pages: 0, discarded: 0, scanPolicies: [] as string[][] };
 const nativeCaptures = new Map<string, { capture: { id: string; generation: string; totalEntries: number }; entries: typeof localEntries }>();
 const inventoryReply = (request: any) => {
 	if (request.action === 'scan-capture') {
-		const capture = { id: request.captureId, generation: crypto.randomUUID(), totalEntries: localEntries.length };
-		nativeCaptures.set(capture.id, { capture, entries: structuredClone(localEntries) });
-		return { complete: true, capture };
+		const excludedPaths = canonicalNativeScanExclusions(request.excludedPaths ?? []);
+		const entries = localEntries.filter(entry => !isNativeScanExcluded(entry.path, excludedPaths));
+		const capture = { id: request.captureId, generation: crypto.randomUUID(), totalEntries: entries.length };
+		nativeCaptures.set(capture.id, { capture, entries: structuredClone(entries) });
+		return { complete: true, capture, excludedPaths };
 	}
 	if (request.action === 'scan-page' || request.action === 'scan-discard') {
 		const item = nativeCaptures.get(request.capture.id);
@@ -36,12 +40,13 @@ const inventoryReply = (request: any) => {
 const observe = (request: any) => {
 	if (request.action !== 'suspend') observations.requests++;
 	if (request.action === 'scan') observations.scans++;
+	if (request.action === 'scan' || request.action === 'scan-capture') observations.scanPolicies.push(canonicalNativeScanExclusions(request.excludedPaths ?? []));
 	if (request.action === 'inspect') observations.inspections++;
 	if (request.action === 'scan-capture') observations.captures++;
 	if (request.action === 'scan-page') observations.pages++;
 	if (request.action === 'scan-discard') observations.discarded++;
 };
-Object.assign(window, { syncInspectionFixture: { observations, task: () => nativeSyncTasks.read(), pendingScans: () => heldScans.size } });
+Object.assign(window, { syncInspectionFixture: { observations, task: () => nativeSyncTasks.read(), pendingScans: () => heldScans.size, savedRows: () => structuredClone(rows) } });
 const photoQA = new URLSearchParams(location.search).has('photos');
 const desktop = new URLSearchParams(location.search).get('platform') === 'desktop';
 const iosTaskQA = new URLSearchParams(location.search).get('platform') === 'ios' && new URLSearchParams(location.search).has('tasks');
@@ -69,10 +74,20 @@ let rows: any[] = JSON.parse(localStorage.getItem(databaseKey) || 'null') ?? [
 	{ id: 'cloud-documents', thingtime: ['folder'], author: { id: ownerId }, acl: ['tt:user'], crystal: { name: 'Cloud documents' } }
 ];
 let transferFolders: any[] = JSON.parse(localStorage.getItem('tt:fixture:sync-transfer-folders') || '[]');
+const transferFolderPath = (row: any): string => {
+	const parts = [row.name], visited = new Set([row.id]);
+	while (row.folderId !== 'cloud-documents') {
+		const parentId = row.folderId;
+		row = transferFolders.find(parent => parent.id === parentId);
+		if (!row || visited.has(row.id) || parts.length >= 128) throw Error('Synthetic inventory ancestry changed');
+		visited.add(row.id); parts.unshift(row.name);
+	}
+	return parts.join('/');
+};
 let holdNextScan = false, holdTransferReply = false;
 let loseTransferReply = false,
 	network = 'wifi';
-const localEntries: any[] = conflictQA
+const localEntries: any[] = homeQA ? ['Applications', 'Applications/ignored', 'CustomSkip', 'CustomSkip/ignored', 'Library', 'Library/ignored', '.Trash', '.Trash/ignored', 'Documents', 'Documents/Keep', 'LibraryExtra'].map((path, i) => ({ path, id: 'home-' + i, version: 'native-v1', kind: 'folder', size: 0, sha256: null })) : conflictQA
 	? Array.from({ length: captureQA ? 2 : 22 }, (_, i) => ({
 			path: `Report-${String(i + 1).padStart(2, '0')}${i === 0 ? '-a-long-filename-for-review-on-a-small-phone-screen' : ''}.txt`,
 			id: `native-${i}`,
@@ -84,7 +99,7 @@ const localEntries: any[] = conflictQA
 	  }))
 	: JSON.parse(localStorage.getItem('tt:fixture:sync-local-folders') || 'null') ?? [{ path: 'Upload sample', id: 'native-sample-folder', version: 'native-v1', kind: 'folder', size: 0, sha256: null }];
 let conflictRevision = 'cloud-1';
-if ((conflictQA || taskQA) && !rows.some((row) => row.thingtime.includes('file-sync')))
+if ((homeQA || conflictQA || taskQA) && !rows.some((row) => row.thingtime.includes('file-sync')))
 	rows.push({
 		id: captureQA ? 'capture-connection' : 'conflict-connection',
 		updatedAt: '2026-10-17T00:00:00.000Z',
@@ -97,12 +112,12 @@ if ((conflictQA || taskQA) && !rows.some((row) => row.thingtime.includes('file-s
 			deviceId,
 			localRootId: '11111111-1111-4111-8111-111111111111',
 			remoteFolderId: 'cloud-documents',
-			mode: 'backup',
+			mode: homeQA ? 'two-way' : 'backup',
 			paused: false,
 			propagateDeletes: false,
 			network: 'any',
 			chargingOnly: false,
-			excludedPaths: []
+			excludedPaths: homeQA ? ['CustomSkip'] : []
 		}
 	});
 const conflictFiles = () =>
@@ -147,7 +162,7 @@ window.fetch = async function (this: unknown, input, init) {
 	const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url, location.origin);
 	init?.signal?.throwIfAborted();
 	if (url.pathname === '/.well-known/thingtime-capabilities.json') return fixtureJson(thingtimeCapabilityManifest(url.origin));
-	if (desktop && taskQA && url.pathname === '/api/v1/webpages/resolve') {
+	if (desktop && (taskQA || homeQA) && url.pathname === '/api/v1/webpages/resolve') {
 		const headers = new Headers(init?.headers);
 		if (url.origin !== location.origin || headers.get('X-Thingtime-Expected-Api-Origin') !== canonicalOrigin ||
 			headers.get('X-Thingtime-Expected-Actor') !== ownerId || headers.get('X-Thingtime-Expected-Data-Plane') !== 'home')
@@ -237,7 +252,7 @@ window.fetch = async function (this: unknown, input, init) {
 			const inventory = {
 				version: 1, complete: true, rootId: url.searchParams.get('rootId'), rootRevision: 'fixture-root-v1',
 				nodes: conflictQA ? conflictFiles().map(file => ({ kind: 'file', path: file.name, file }))
-					: transferFolders.map(row => ({ kind: 'folder', path: row.name, id: row.id, folderId: row.folderId, revision: row.revision }))
+					: transferFolders.map(row => ({ kind: 'folder', path: transferFolderPath(row), id: row.id, folderId: row.folderId, revision: row.revision }))
 			};
 			if (url.searchParams.get('pages') === '1') return new Response(JSON.stringify({ ...inventory,
 				generation: crypto.randomUUID(), ordinal: 0, totalEntries: inventory.nodes.length }) + '\n',
@@ -297,7 +312,7 @@ window.fetch = async function (this: unknown, input, init) {
 		loseReply = false;
 		throw Error('Fixture lost the accepted response');
 	}
-	return fixtureJson({ ok: true, thing: rows.at(-1) });
+	return fixtureJson({ ok: true, thing: method === 'PATCH' ? rows.find(row => row.id === body.id) : rows.at(-1) });
 };
 window.thingtimeNativeBridge = {
 	version: '1.0.0',
@@ -305,7 +320,7 @@ window.thingtimeNativeBridge = {
 	isNativeWebView: true,
 	devicePairingVersion: '1.0.0',
 	...(iosTaskQA ? { fileStagingVersion: '1.2.0', filePublicationVersion: '1.2.0' } : {}),
-	fileAccessVersion: inspectionQA && new URLSearchParams(location.search).get('platform') === 'ios' ? (inventoryQA ? '1.3.1' : '1.2.0') : '1.1.0',
+	fileAccessVersion: homeQA ? '1.4.0' : inspectionQA && new URLSearchParams(location.search).get('platform') === 'ios' ? (inventoryQA ? '1.3.1' : '1.2.0') : '1.1.0',
 	postMessage(message) {
 		const request = message.payload as any;
 		observe(request);
@@ -327,7 +342,7 @@ window.thingtimeNativeBridge = {
 								...request,
 								roots,
 								...inventoryReply(request),
-				...(request.action === 'scan' ? { complete: true, entries: localEntries } : {}),
+				...(request.action === 'scan' ? { complete: true, entries: localEntries.filter(entry => !isNativeScanExcluded(entry.path, canonicalNativeScanExclusions(request.excludedPaths ?? []))), excludedPaths: canonicalNativeScanExclusions(request.excludedPaths ?? []) } : {}),
 								...(request.action === 'inspect' ? { complete: true, entry: localEntries.find(entry => entry.path === request.path) ?? null } : {}),
 								...(captureQA && request.action === 'read' ? captureChunk(request) : {}),
 								...(request.action === 'conditions' ? { conditions: { network: unavailable ? 'offline' : network, charging: true } } : {})
@@ -373,9 +388,9 @@ if (desktop) {
 				...request,
 				origin: canonicalOrigin,
 				roots,
-				...(manifest ? { capabilities: { fileAccessVersion: inspectionQA ? (inventoryQA ? '1.5.1' : '1.4.0') : '1.1.0' }, apiCapabilities: { ...manifest, origin: canonicalOrigin } } : {}),
+				...(manifest ? { capabilities: { fileAccessVersion: homeQA ? '1.6.0' : inspectionQA ? (inventoryQA ? '1.5.1' : '1.4.0') : '1.1.0' }, apiCapabilities: { ...manifest, origin: canonicalOrigin } } : {}),
 				...inventoryReply(request),
-				...(request.action === 'scan' ? { complete: true, entries: localEntries } : {}),
+				...(request.action === 'scan' ? { complete: true, entries: localEntries.filter(entry => !isNativeScanExcluded(entry.path, canonicalNativeScanExclusions(request.excludedPaths ?? []))), excludedPaths: canonicalNativeScanExclusions(request.excludedPaths ?? []) } : {}),
 				...(request.action === 'inspect' ? { complete: true, entry: localEntries.find(entry => entry.path === request.path) ?? null } : {}),
 				...(captureQA && request.action === 'read' ? captureChunk(request) : {}),
 				...(captureQA && request.action === 'read-range'

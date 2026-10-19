@@ -5641,3 +5641,22 @@ administrators cannot be fenced by an application-only hold. Held bytes remain
 billed, and deletion waits for expiry. No new secret or provider environment
 variable is required. See [portable backup retention](docs/portable-backups.md#source-version-retention--2026-10-19)
 for isolated test prerequisites, boundaries and remaining product work.
+
+### Home-folder upload and progress development
+
+The Mac home-backup preset starts paused, excludes `Library`, `Applications` and
+`.Trash`, preserves custom exclusions and never propagates deletions. The user
+must select a native home-folder grant and review the cloud target before saving
+and starting. Exclusions now prune native discovery before directory access;
+this needs Mac file access 1.6.0 or iOS 1.4.0. Older hosts refuse excluded scans.
+No new secrets or external configuration are introduced. The selected server
+must satisfy the existing sync capability requirements; a web deployment alone
+does not upgrade the native host.
+
+The two-step progress viewer reads the existing scoped journal and exposes its
+labels, controls and repeated hierarchy fields through Builder. It is bounded
+and can read completed runs until ordinary journal collection. Test with
+`node remix/scripts/test-home-backup-ui.mjs /tmp/thingtime-home-upload-ui/home`
+and the existing desktop lifecycle harness. These checks use disposable native
+and HTTP fixtures under OS network isolation; they do not read a real home folder
+or establish installed-app acceptance. See [the acceptance ledger](docs/mobile-file-sync.md).

@@ -64,14 +64,16 @@ export async function runPagedForegroundCloudSync(reviewed: SavedFileSyncConfigu
 		await pages<SyncEntry>(rows, (entries, ordinal, final) => inventory.append(id, { ordinal, entries, ...(final ? { totalEntries: rows.length } : {}) }), size);
 		await inventory.seal(id); check();
 	};
-	const importLocal = async (id: InventoryIdentity) => {
+	const importLocal = async (id: InventoryIdentity, reportIndex = true) => {
 		if (!input.scanLocalPages) {
 			const entries = await input.scanLocal(); check();
 			planFileSync({ scope, complete: true, entries }, { scope, complete: true, entries: [] }, { scope, entries: [] }, { mode: 'backup', propagateDeletes: false });
-			return importEntries(id, entries);
+			await importEntries(id, entries);
+			if (reportIndex) input.progress({ stage: 'scanning', confirmed: 0, total: 0, indexed: entries.length, indexTotal: entries.length });
+			return;
 		}
 		await inventory.begin(id);
-		let generation: string | undefined, ordinal = 0, terminal = false;
+		let generation: string | undefined, ordinal = 0, terminal = false, indexed = 0;
 		for await (const page of input.scanLocalPages()) {
 			check();
 			if (terminal || !page || page.ordinal !== ordinal || typeof page.generation !== 'string' ||
@@ -80,6 +82,9 @@ export async function runPagedForegroundCloudSync(reviewed: SavedFileSyncConfigu
 			generation = page.generation; ordinal++;
 			await inventory.append(id, { ordinal: page.ordinal, entries: page.entries,
 				...(page.totalEntries === undefined ? {} : { totalEntries: page.totalEntries }) });
+			indexed += page.entries.length;
+			if (reportIndex) input.progress({ stage: 'scanning', confirmed: 0, total: 0, indexed,
+				...(page.totalEntries === undefined ? {} : { indexTotal: page.totalEntries }) });
 			terminal = page.totalEntries !== undefined;
 		}
 		check();
@@ -87,7 +92,7 @@ export async function runPagedForegroundCloudSync(reviewed: SavedFileSyncConfigu
 		await inventory.seal(id); check();
 	};
 	const importObservations = async (local: InventoryIdentity, remote: InventoryIdentity, checkpoint = false) => {
-		await importLocal(local);
+		await importLocal(local, !checkpoint);
 		if (input.inventoryPages) {
 			// A checkpoint stores stamps, but must first validate the complete physical tree.
 			const observed = checkpoint ? identity('remote') : remote;
@@ -233,6 +238,7 @@ export async function runPagedForegroundCloudSync(reviewed: SavedFileSyncConfigu
 		await releaseDraft(saved, !review);
 	}
 	await runs.prepare(spec); await runs.prepareCloud(spec, configuration); check();
+	input.progressSession?.({ scope: structuredClone(scope), run: structuredClone(spec) });
 	let state = await runs.begin(spec); const retain = spec.review?.kind === 'retain';
 	const report = (value: PagedRunProgress, stage: ForegroundSyncProgress['stage'] = retain ? 'retaining' : 'transferring') => {
 		state = value; input.progress({ stage, confirmed: value.confirmed, total: value.operations });

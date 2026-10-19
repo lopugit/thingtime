@@ -5,7 +5,7 @@ import Foundation
 /// commands. The desktop host must also verify its active browser account.
 @MainActor
 public final class MacFolderSync {
-    public static let version = "1.5.1"
+    public static let version = "1.6.0"
     public enum SourceSelection { case folder(URL), photos }
     public struct Conditions: Codable, Sendable {
         public let network: String
@@ -20,6 +20,7 @@ public final class MacFolderSync {
     }
     private struct Request: Decodable {
         let requestId: String; let ownerId: String; let deviceId: String; let origin: String; let action: String
+        let excludedPaths: [String]?
         let rootId: String?; let path: String?; let version: String?; let offset: Int64?; let length: Int?; let data: String?
         let transfer: MobileSyncStaging.Request?; let stage: MobileSyncStaging.Stage?; let approval: MobileFolderStore.WriteApproval?
         let captureId: String?; let capture: MobileFolderInventory.Capture?; let inventoryDeviceId: String?
@@ -69,6 +70,13 @@ public final class MacFolderSync {
         let r = try JSONDecoder().decode(Request.self, from: encoded)
         guard UUID(uuidString: r.requestId) != nil, !r.deviceId.isEmpty, r.deviceId.utf8.count <= 512,
               r.origin == origin.absoluteString else { throw MobileFolderStore.Failure.invalid }
+        if case .object(let fields) = payload, fields["excludedPaths"] != nil, r.excludedPaths == nil {
+            throw MobileFolderStore.Failure.invalid
+        }
+        if let exclusions = r.excludedPaths {
+            guard ["scan", "scan-capture"].contains(r.action) else { throw MobileFolderStore.Failure.invalid }
+            _ = try MobileFolderReader.canonicalExclusions(exclusions)
+        }
         let owner = try FileSyncOwnerScope(ownerId: r.ownerId, url: origin)
         if r.action == "suspend" {
             if let active, active.id == r.requestId, active.owner == r.ownerId, active.device == r.deviceId { suspend() }
@@ -201,7 +209,7 @@ public final class MacFolderSync {
                     let inventories = inventories
                     if r.action == "scan-capture" {
                         guard let id = r.captureId else { throw MobileFolderStore.Failure.invalid }
-                        result["capture"] = try value(await worker { try inventories.capture(inventoryScope, id: id, bookmark: grant.bookmark) })
+                        result["capture"] = try value(await worker { try inventories.capture(inventoryScope, id: id, bookmark: grant.bookmark, excludedPaths: r.excludedPaths ?? []) })
                     } else {
                         guard let capture = r.capture else { throw MobileFolderStore.Failure.invalid }
                         if r.action == "scan-page" {
@@ -221,8 +229,11 @@ public final class MacFolderSync {
                     result["entry"] = try entry.map { try value($0) } ?? .null
                 } else if r.action == "scan" {
                     result["entries"] = try value(await worker {
-                        if grant.sourceKind == "photos" { return try photos.scan(scope: photoScope) }
-                        return try MobileFolderReader.scan(bookmark: grant.bookmark)
+                        if grant.sourceKind == "photos" {
+                            guard r.excludedPaths?.isEmpty != false else { throw MobileFolderStore.Failure.invalid }
+                            return try photos.scan(scope: photoScope)
+                        }
+                        return try MobileFolderReader.scan(bookmark: grant.bookmark, excludedPaths: r.excludedPaths ?? [])
                     })
                     result["complete"] = .bool(true)
                 } else if r.action == "read-range" {
@@ -287,6 +298,7 @@ public final class MacFolderSync {
                 }
             }
         }
+        if let exclusions = r.excludedPaths { result["excludedPaths"] = try value(exclusions) }
         try await authorized(r)
         if let inspectedGrant {
             let current = try store.grant(owner, id: inspectedGrant.id)

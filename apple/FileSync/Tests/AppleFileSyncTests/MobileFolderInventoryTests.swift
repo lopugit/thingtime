@@ -13,6 +13,55 @@ final class MobileFolderInventoryTests: XCTestCase {
         return (source, try FolderBookmark.create(source), .init(owner: owner, deviceId: "fixture-device", rootId: UUID().uuidString.lowercased()), root.appendingPathComponent("journal"))
     }
 
+    func testExclusionsPruneBeforeOpeningAndPreserveExactPathBoundaries() throws {
+        let (source, bookmark, scope, directory) = try fixture()
+        // Each excluded subtree contains a symlink the reader must never open.
+        // The included sibling proves exclusions are exact paths, not prefixes.
+        for name in ["Library", ".Trash", "Café", "keep"] {
+            try FileManager.default.createDirectory(at: source.appendingPathComponent(name), withIntermediateDirectories: true)
+            try FileManager.default.createSymbolicLink(at: source.appendingPathComponent(name + "/blocked"),
+                withDestinationURL: source.appendingPathComponent("missing"))
+        }
+        try FileManager.default.createSymbolicLink(at: source.appendingPathComponent("Applications"),
+            withDestinationURL: source.appendingPathComponent("missing"))
+        try Data("included".utf8).write(to: source.appendingPathComponent("Library-copy"))
+        try Data().write(to: source.appendingPathComponent("keep/file"))
+        let exclusions = ["library", "APPLICATIONS", ".Trash", "CAFE\u{301}", "keep/blocked"]
+        let small = try MobileFolderReader.scan(bookmark: bookmark, excludedPaths: exclusions)
+        XCTAssertEqual(Set(small.map(\.path)), ["Library-copy", "keep", "keep/file"])
+        let store = MobileFolderInventory(directory: directory), id = UUID().uuidString.lowercased()
+        let capture = try store.capture(scope, id: id, bookmark: bookmark, excludedPaths: exclusions)
+        let page = try store.read(scope, capture: capture, bookmark: bookmark, offset: 0)
+        XCTAssertEqual(Set(page.entries.map(\.path)), Set(small.map(\.path)))
+        XCTAssertEqual(capture.totalEntries, 3)
+        XCTAssertEqual(try store.capture(scope, id: id, bookmark: bookmark, excludedPaths: exclusions.reversed()), capture)
+        XCTAssertThrowsError(try store.capture(scope, id: id, bookmark: bookmark, excludedPaths: []))
+        XCTAssertThrowsError(try MobileFolderReader.scan(bookmark: bookmark))
+        XCTAssertThrowsError(try store.capture(scope, id: UUID().uuidString.lowercased(), bookmark: bookmark))
+    }
+
+    func testFailedCaptureCannotRetryWithAnotherExclusionPolicy() throws {
+        let (source, bookmark, scope, directory) = try fixture()
+        try FileManager.default.createSymbolicLink(at: source.appendingPathComponent("blocked"),
+            withDestinationURL: source.appendingPathComponent("missing"))
+        let store = MobileFolderInventory(directory: directory), id = UUID().uuidString.lowercased()
+        XCTAssertThrowsError(try store.capture(scope, id: id, bookmark: bookmark))
+        XCTAssertThrowsError(try store.capture(scope, id: id, bookmark: bookmark, excludedPaths: ["blocked"]))
+        let next = try store.capture(scope, id: UUID().uuidString.lowercased(), bookmark: bookmark, excludedPaths: ["blocked"])
+        XCTAssertEqual(next.totalEntries, 0)
+    }
+
+    func testExclusionsValidateBeforeOpeningTheGrant() throws {
+        for paths in [["../escape"], ["/absolute"], ["Library", "LIBRARY"], [""],
+                      Array(repeating: "path", count: 101),
+                      (0..<100).map { String(repeating: "x", count: 180) + String($0) }] {
+            XCTAssertThrowsError(try MobileFolderReader.canonicalExclusions(paths))
+            XCTAssertThrowsError(try MobileFolderReader.scan(bookmark: Data(), excludedPaths: paths))
+        }
+        XCTAssertEqual(try MobileFolderReader.canonicalExclusions(["Library", "keep/file"]), ["keep/file", "library"])
+        XCTAssertEqual(try MobileFolderReader.canonicalExclusions(["*.tmp"]), ["*.tmp"])
+    }
+
     func testLargeCapturePagesReopenAndRetainExactObservation() throws {
         let (source, bookmark, scope, directory) = try fixture()
         for index in 0..<10_001 { try Data().write(to: source.appendingPathComponent("file-\(index)")) }

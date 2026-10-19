@@ -98,7 +98,7 @@ if (!process.env.TT_DESKTOP_SYNC_WORKER) {
 		await page.getByRole('button', { name: 'Leave Files screen', exact: true }).click();
 		await page.getByRole('button', { name: 'Reopen Files screen', exact: true }).click();
 		await page.getByRole('button', { name: 'Stop transfer', exact: true }).click();
-		await page.getByText('Transfer stopped. Retry to recover saved work.', { exact: true }).waitFor();
+		await page.getByRole('status').filter({ hasText: /^Transfer stopped\. Retry to recover saved work\.$/ }).waitFor();
 		await page.getByText('App transfer lease: idle', { exact: true }).waitFor();
 		assert.equal((await readJobs())[0].state, 'paused');
 		await restart(`http://127.0.0.1:${port}/?platform=desktop&tasks&away`);

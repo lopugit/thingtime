@@ -1,4 +1,5 @@
 import { parseNativeInventoryCapture, parseNativeInventoryPage, type NativeInventoryCapture, type NativeInventoryPage } from './nativeInventory';
+import { canonicalNativeScanExclusions, isNativeScanExcluded } from './nativeScanExclusions';
 import { trackNativeUploadBackground } from './nativeUploadBackground';
 import { parseFileSyncConfiguration } from './configuration';
 import { validateSyncScope } from './reconcile';
@@ -44,8 +45,9 @@ export type FolderRequest =
 	| { action: 'upload-file'; rootId: string; upload: NativeFileUpload & { source: SyncEntry } }
 	| { action: 'upload-part'; rootId: string; upload: NativePartUpload & { source: SyncEntry } }
 	| { action: 'list' | 'choose' | 'conditions' | 'prepare-upload' }
-	| { action: 'remove' | 'scan'; rootId: string }
-	| { action: 'scan-capture'; rootId: string; inventoryDeviceId: string; captureId: string }
+	| { action: 'remove'; rootId: string }
+	| { action: 'scan'; rootId: string; excludedPaths?: string[] }
+	| { action: 'scan-capture'; rootId: string; inventoryDeviceId: string; captureId: string; excludedPaths?: string[] }
 	| { action: 'scan-page'; rootId: string; inventoryDeviceId: string; capture: NativeInventoryCapture; offset: number }
 	| { action: 'scan-discard'; rootId: string; inventoryDeviceId: string; capture: NativeInventoryCapture }
 	| { action: 'inspect'; rootId: string; path: string }
@@ -115,6 +117,23 @@ export const supportsNativeInventoryPages = (bridge: FolderCapabilities | undefi
 	return minimum !== undefined && /^1\.\d+\.\d+$/.test(bridge?.fileAccessVersion ?? '') && major === 1 &&
 		(minor > minimum || (minor === minimum && patch >= 1));
 };
+/** Exclusions are pruned before opening native files or descending directories. */
+export const supportsNativeScanExclusions = (bridge: FolderCapabilities | undefined = getNativeBridge()) => {
+	const minimum = bridge?.platform === 'macos' ? 6 : bridge?.platform === 'ios' ? 4 : undefined;
+	return minimum !== undefined && /^1\.\d+\.\d+$/.test(bridge?.fileAccessVersion ?? '') &&
+		Number(bridge!.fileAccessVersion!.split('.')[1]) >= minimum;
+};
+export function assertNativeScanExclusions(request: FolderRequest, bridge: FolderCapabilities | undefined) {
+	if (request.action !== 'scan' && request.action !== 'scan-capture') return;
+	const keys = canonicalNativeScanExclusions(request.excludedPaths === undefined ? [] : request.excludedPaths);
+	if (keys.length && !supportsNativeScanExclusions(bridge)) throw Error('Update Thingtime to exclude paths before scanning this folder.');
+}
+function verifyScanExclusions(request: Extract<FolderRequest, { action: 'scan' | 'scan-capture' }>, echoed: unknown): string[] {
+	const keys = canonicalNativeScanExclusions(request.excludedPaths === undefined ? [] : request.excludedPaths);
+	if (keys.length && JSON.stringify(keys) !== JSON.stringify(canonicalNativeScanExclusions(echoed)))
+		throw Error('Native scan exclusions changed.');
+	return keys;
+}
 export const supportsNativePathInspection = (bridge: FolderCapabilities | undefined = getNativeBridge()) => {
 	const minimum = bridge?.platform === 'macos' ? 4 : bridge?.platform === 'ios' ? 2 : undefined;
 	return minimum !== undefined && /^1\.\d+\.\d+$/.test(bridge?.fileAccessVersion ?? '') && Number(bridge!.fileAccessVersion!.split('.')[1]) >= minimum;
@@ -457,6 +476,7 @@ export function parseMobileFolderResult(
 	} else if (request.action === 'scan-capture' || request.action === 'scan-page' || request.action === 'scan-discard') {
 		if (payload.rootId !== request.rootId || payload.complete !== true) throw Error('Native inventory is incomplete or belongs to another root.');
 		if (request.action === 'scan-capture') {
+			verifyScanExclusions(request, payload.excludedPaths);
 			result.capture = parseNativeInventoryCapture(payload.capture);
 			if (result.capture.id !== request.captureId) throw Error('Native capture identity changed.');
 		} else if (request.action === 'scan-page') result.inventoryPage = parseNativeInventoryPage(payload.inventoryPage, request.capture, request.offset);
@@ -467,12 +487,13 @@ export function parseMobileFolderResult(
 			throw Error('Invalid native path observation.');
 		result.inspectedEntry = payload.entry === null ? null : structuredClone(payload.entry);
 	} else if (request.action === 'scan') {
+		const exclusions = verifyScanExclusions(request, payload.excludedPaths);
 		if (
 			payload.rootId !== request.rootId ||
 			payload.complete !== true ||
 			!Array.isArray(payload.entries) ||
 			payload.entries.length > 10_000 ||
-			payload.entries.some((e: any) => !validSyncEntry(e))
+			payload.entries.some((e: any) => !validSyncEntry(e) || isNativeScanExcluded(e.path, exclusions))
 		)
 			throw Error('Folder scan is incomplete. Keep the existing sync state.');
 		const scope = { ...expected, dataPlane: 'home', rootId: request.rootId, deviceId: 'native-scan' };
@@ -560,6 +581,7 @@ export function requestMobileFolders(
 ): Promise<FolderResult> {
 	const bridge = getNativeBridge();
 	if (!supportsMobileFolders(bridge)) return Promise.reject(Error('Folder access requires an updated mobile app.'));
+	try { assertNativeScanExclusions(request, bridge); } catch (error) { return Promise.reject(error); }
 	if (['scan-capture', 'scan-page', 'scan-discard'].includes(request.action) && !supportsNativeInventoryPages(bridge))
 		return Promise.reject(Error('Inventory pages require a supported Mac or iOS app.'));
 	if (request.action === 'inspect' && (!supportsNativePathInspection(bridge) || !validSyncPath(request.path)))

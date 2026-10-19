@@ -3501,3 +3501,52 @@ Deletion stays pending/billed while retained ranges remain available only to the
 owner; expiry is fenced against renewal before exact-version purge/refund.
 See [retention contract and open gates](portable-backups.md#source-version-retention--2026-10-19).
 Android and installed Mac/iOS acceptance remain unchanged and open where recorded.
+
+
+## Home-folder upload and two-step progress — 2026-10-19
+
+The Mac connection editor now offers a home-backup preset. It preserves the
+selected local/cloud roots and custom exclusions, adds `Library`, `Applications`
+and `.Trash`, chooses backup mode, disables delete propagation and keeps the
+connection paused for review. It neither chooses a filesystem grant nor starts
+an upload. Choose the home folder through the native picker, review the cloud
+destination/exclusions, uncheck Paused, save, then use Upload now.
+
+Native Mac file access 1.6.0 and iOS file access 1.4.0 prune excluded relative
+paths before opening, traversing or hashing them. Both bounded scans and paged
+captures use the same case-folded/NFC exact-path-or-descendant policy. Captures
+pin that policy even after failure; reusing a capture with different exclusions
+fails. Clients refuse excluded scans on older hosts and validate the returned
+policy/pages. Android remains deferred and retains its existing planner behavior.
+
+The editable progress document has two stages: indexed file structure, then
+file/folder transfer progress. Index totals stay indeterminate until known.
+Expandable folders aggregate child bytes, files, confirmations and status from
+the existing durable journal. The viewer keeps at most 32 siblings per page and
+eight expanded branches, with focused-folder/parent/root navigation for deeper
+paths. It batches readonly operation lookups and refreshes durable
+totals at most every 30 seconds plus completion, and displays current-file byte
+feedback immediately. Optimistic bytes never become confirmations or 100 percent
+before the durable receipt. Completed-run display survives uploader shutdown
+until normal journal collection; missing old metadata is reported explicitly.
+Account/origin/root guards remain active, and no write authority is revived.
+
+Labels, controls, progress bars and repeated row fields are individual Builder
+blocks. The bars use ordinary editable blocks with accessible progress semantics.
+This is a source/UI checkpoint: real home-folder upload, the matching
+production Files capability, signed installed Mac acceptance and measured large
+volume throughput remain open. Aster's combined Mac install ownership remains
+preserved. The standalone Electron backup-copy worker passes seven real bundled
+worker tests but is not yet wired to installed job/vault controls.
+
+
+Validation checkpoint: the isolated home UI passed11 checks and desktop lifecycle
+passed16, including independent3-folder receipts and actual Builder save/reload.
+Native exclusions passed10 Swift inventory tests,21 Mac bridge tests and25
+focused shared checks;37 larger paging/recovery checks also passed. The full iOS
+app, Watch, widget and test bundle built, and26 selected simulator tests passed
+with zero failures/skips. Full project TypeScript reports91 diagnostics outside
+changed files. These fixtures use synthetic native/API grants; real home upload
+and signed installed acceptance are still required. The private coordination
+comment could not be verified after Chrome control timed out; no duplicate was
+sent, and cleanup of task-created tab411841516 could not be confirmed.
