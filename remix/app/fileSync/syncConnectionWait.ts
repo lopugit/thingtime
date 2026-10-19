@@ -3,6 +3,7 @@
  * receipts determine whether a lost response is replayed or already complete. */
 export class SyncConnectionWait extends Error {}
 export function isSyncConnectionFailure(error: unknown): boolean {
+	if (error instanceof SyncConnectionWait) return true;
 	if (!(error instanceof Error)) return false;
 	if (error.name === 'TimeoutError') return true;
 	if (error.name === 'TypeError' && /^(failed to fetch|fetch failed|load failed|networkerror(?:\b|:))/i.test(error.message)) return true;

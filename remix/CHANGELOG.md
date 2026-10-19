@@ -96,6 +96,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-20 — Codex (AI): Preserve redacted desktop verification retries through
+  IPC and sealed inventory imports; keep the automatic interval on an explicit
+  retry after attention, while retaining explicit Stop behavior.
+
+
 - 2026-10-20: Add negotiated, byte-bounded Mac inventory batches to reduce the
   handoff after Commander indexing. Retain canonical journal pages and saved
   captures through transient import failures; installed throughput acceptance

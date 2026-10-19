@@ -12511,3 +12511,15 @@ separate from deterministic discovery/lease tests.
   enforce opt-in bounds, version negotiation and owner/grant checks.
 - [ ] Install the verified signed build, resume the existing home capture without
   rescanning, compare actual import progress and confirm a real payload receipt.
+
+### Desktop retry continuity — 2026-10-20
+
+- [x] Exercise initial context and later native requests through Electron error
+  wrapping: preserve only the exact verification-retry message; arbitrary native
+  details, revocation and near-matching strings remain redacted and terminal.
+- [x] Verification timeouts are retryable; explicit cancellation remains a stop.
+  A typed retry during sealed inventory import must retain the capture.
+- [x] Reopen an automatic attention-state admission and retry: retain interval,
+  capture and generation, schedule the next cycle on completion, and fence stale
+  callbacks. Explicit Stop followed by a one-shot run must stay one-shot.
+- [ ] Verify installed automatic reconnect and the real home upload receipt.

@@ -319,3 +319,28 @@ test('native page negotiation and large responses preserve post-operation accoun
         assert.deepEqual(f.calls.map(call => call.action), boundary === 'page-account' ? ['context', 'scan-page'] : ['context']);
     }
 });
+
+test('verification deadlines remain retryable while explicit cancellation remains cancellation', async () => {
+    for (const read of [readAccount, readCapabilities]) {
+        for (const name of ['TimeoutError', 'AbortError']) {
+            const f = fixture(), reason = new DOMException('private transport detail', name);
+            f.context.window.webContents.session = { fetch: async () => { throw reason; } };
+            await assert.rejects(read(f.context, AbortSignal.abort(reason)), error => {
+                assert.equal(error.message.includes('[folder_identity_retry]'), name === 'TimeoutError');
+                if (name === 'TimeoutError') assert.doesNotMatch(error.message, /private transport detail/);
+                else assert.equal(error, reason);
+                return true;
+            });
+        }
+    }
+});
+
+
+test('a concurrent deadline cannot turn a verified HTTP authority refusal into a retry', async () => {
+    for (const status of [401, 403]) {
+        const f = fixture();
+        f.context.window.webContents.session = { fetch: async () => new Response('', { status }) };
+        const signal = AbortSignal.abort(new DOMException('deadline', 'TimeoutError'));
+        await assert.rejects(readAccount(f.context, signal), error => !error.message.includes('[folder_identity_retry]'));
+    }
+});

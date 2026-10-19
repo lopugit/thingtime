@@ -1,3 +1,4 @@
+import { isSyncConnectionFailure } from './syncConnectionWait';
 import { canonicalIgnoreRules, createSyncIgnorePolicy } from './syncIgnore';
 import { canonicalNativeScanExclusions, isNativeScanExcluded } from './nativeScanExclusions';
 import { validSyncEntry, validSyncPath, type SyncEntry, type SyncPolicy } from './reconcile';
@@ -107,7 +108,7 @@ export async function* readNativeInventory(input: {
 		try { return await input.request(owner, request, requestSignal); }
 		catch (error) {
 			signal.throwIfAborted();
-			if (input.backupPolicy && ((error instanceof Error && /\[folder_identity_retry\]|timed?\s*out|timeout|network(?: request| connection)? (?:failed|lost|unavailable)|failed to fetch|offline|disconnected|connection (?:lost|closed)/i.test(error.message)) ||
+			if (input.backupPolicy && (isSyncConnectionFailure(error) || (error instanceof Error && /\[folder_identity_retry\]|timed?\s*out|timeout|network(?: request| connection)? (?:failed|lost|unavailable)|failed to fetch|offline|disconnected|connection (?:lost|closed)/i.test(error.message)) ||
 				(error instanceof DOMException && error.name === 'TimeoutError'))) throw new NativeInventoryRetryWait('Backup indexing is reconnecting. Its capture has been preserved.');
 			throw error;
 		}
