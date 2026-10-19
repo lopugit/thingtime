@@ -60,6 +60,8 @@ schema-parameterized adapter or separately authored saved Thing page.
 
 ## Current-main integration — 2026-10-19
 
+- Follow-up integration includes `origin/main` at `ace31f5c9c928529d6d0f4b9ad324319f48b7507` and preserves its shared MongoDB health pooling and diagnostics tests. Only the additive changelog entries required manual resolution.
+
 - Integrated `origin/main` at `f8fb34d8e6536cea5d36caa33de7af9ca6119b7e`, preserving file-sync imports, validation and capability contracts alongside the reusable live-source framework. No saved page, Component, Schema or Action definitions were added.
 - Advanced live-source creation negotiation to `api.things` 1.37.0 because current main already advertises 1.36.0 for file-sync support. Retained `api.agent-overview` 2.0.0, update 1.11.0 and resolve 1.7.0.
 - Corrected the focused overview script's obsolete saved-suite test path. Overview/actor/source checks (42), capability checks (106), schema checks (275), and webpage checks passed. The SSE heartbeat check now waits for the observed event and cancels its reader rather than relying on a 16 ms wall-clock deadline.

@@ -347,6 +347,18 @@ test('storage-aware health and the corrected email environment gate publish thei
 	assert.equal(manifest.features['api.email-config'], '1.0.1');
 });
 
+test('pooled MongoDB diagnostics publish compatible patches in both manifests', () => {
+	const legacy = createApiCapabilitiesManifest(), manifest = thingtimeCapabilityManifest('https://thingtime.test');
+	for (const feature of ['api.health-mongodb', 'api.mongodb-status', 'api.mongodb-status-data']) {
+		assert.equal(legacy.features[feature], '1.0.1');
+		assert.equal(manifest.features[feature].version, '1.0.1');
+		assert.equal(capabilitySatisfies('1.0.1', '1.0.0'), true);
+		assert.equal(capabilitySatisfies('1.0.0', '1.0.1'), false);
+		assert.equal(capabilitySatisfies('2.0.0', '1.0.1'), false);
+		assert.equal(capabilitySatisfies(undefined, '1.0.1'), false);
+	}
+});
+
 test('subspace lifecycle + notification type additions publish their contract versions', () => {
 	const manifest = createApiCapabilitiesManifest();
 	// S1 review fixes: guarded transfer writes (409 on a race — patch), and a

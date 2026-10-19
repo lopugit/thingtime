@@ -94,7 +94,8 @@ try {
   await ready(server);
   const manifest = (await api('/.well-known/thingtime-capabilities.json')).data;
   assert.equal(manifest.origin, origin, 'Manifest must describe this isolated origin');
-  const requirements = { 'api.subspaces': '1.5.1', 'api.chats': '1.1.0', 'api.chats-messages': '1.2.1', 'api.subspaces-embeds': '1.0.0' };
+  const requirements = { 'api.subspaces': '1.5.1', 'api.chats': '1.1.0', 'api.chats-messages': '1.2.1', 'api.subspaces-embeds': '1.0.0',
+    'api.health-mongodb': '1.0.1', 'api.mongodb-status': '1.0.1', 'api.mongodb-status-data': '1.0.1' };
   for (const [feature, minimum] of Object.entries(requirements)) {
     const actual = manifest.features[feature]?.version?.split('.').map(Number);
     const required = minimum.split('.').map(Number);
@@ -111,6 +112,22 @@ try {
   const createSpace = async (slug, access) => (await api('/api/v1/subspaces', { cookie: owner.cookie, body: { slug, name: slug.replaceAll('_', ' '), access }, status: 201 })).data.subspace;
   const space = await createSpace('messages_acceptance', 'public');
   const second = await createSpace('messages_scope_test', 'private');
+  // Real driver and built routes: simultaneous diagnostics share the active
+  // application pool, then ordinary writes/reads must still work afterward.
+  const healthResults = await Promise.all([
+    api('/api/v1/health/mongodb'), api('/api/v1/health/mongodb'),
+    api('/api/v1/mongodb/status-data'), api('/api/v1/mongodb/status', { method: 'POST' })
+  ]);
+  for (const { data } of healthResults) {
+    assert.equal(data.connected, true, JSON.stringify(data));
+    assert.equal(data.custom, false);
+    assert.equal(data.dbName, 'thingtime');
+    assert.equal(data.replicaSet, 'subspace_messages');
+    assert.equal(data.error, null);
+    assert.equal(typeof data.pingMs, 'number');
+  }
+  await api('/api/v1/subspaces/update', { cookie: owner.cookie, body: { id: space.id, description: 'Application pool remains usable after health checks' } });
+  assert.equal((await api(`/api/v1/subspaces/get?id=${space.id}`, { cookie: owner.cookie })).data.subspace.description, 'Application pool remains usable after health checks');
   for (let n = 0; n < 2; n++) {
     const migration = (await api('/api/v1/admin/migrations/run', { cookie: owner.cookie, body: { migration: 'subspace-messaging-spaces' } })).data;
     assert.equal(migration.ok, true);
@@ -176,7 +193,8 @@ try {
   await manage(member, 'remove');
   await assertNoLeak(member, 'removed');
   await joinSpace(member);
-  const post = (await api('/api/v1/things', { cookie: owner.cookie, body: { thingtime: ['post'], crystal: { type: 'text', text: 'Subspace acceptance discussion', subspaceId: space.id }, acl: ['tt:all'] } })).data.post;
+  const richText = { kind: 'rich-text', blocks: [{ id: 'acceptance-heading', type: 'header', data: { text: 'Subspace acceptance discussion', level: 2 } }, { id: 'acceptance-paragraph', type: 'paragraph', data: { text: 'Ordinary rich-text embedded post body' } }] };
+  const post = (await api('/api/v1/things', { cookie: owner.cookie, body: { thingtime: ['post'], crystal: { type: 'text', text: 'Subspace acceptance discussion', richText, subspaceId: space.id }, acl: ['tt:all'] } })).data.post;
   assert(post.id);
   await api('/api/v1/things/comment', { cookie: member.cookie, body: { id: post.id, text: 'First saved subspace comment' } });
   const makeComponent = async (name, acl = ['tt:all']) => (await api('/api/v1/things', { cookie: owner.cookie, body: {
@@ -228,6 +246,15 @@ try {
   const feedEmbed = await addEmbed(embedded.id, 'feed');
   const genericRead = await fetch(origin + '/api/v1/things?id=' + feedEmbed.embed.id, { headers: { Cookie: owner.cookie } });
   assert.equal(genericRead.status, 404, 'Generic Thing reads cannot bypass dedicated embed gates');
+  const richPostEmbeds = {};
+  for (const region of ['feed', 'sidebar']) {
+    richPostEmbeds[region] = (await addEmbed(post.id, region)).embed.id;
+    const projection = await readEmbeds(owner, region);
+    const projected = projection.embeds.find(row => row.id === richPostEmbeds[region]);
+    assert(projected?.thing, `${region}: ordinary rich-text post must be projected`);
+    assert.deepEqual(projected.thing.crystal.richText, richText);
+    if (process.env.SUBSPACE_EVIDENCE_DIR) await writeFile(join(process.env.SUBSPACE_EVIDENCE_DIR, `${region}-rich-post-projection.json`), JSON.stringify(projected, null, 2));
+  }
   // More than one page proves batching is not a product count cap.
   for (let n = 0; n < 21; n++) await addEmbed(embedded.id);
   const firstPage = await readEmbeds(member);
@@ -246,7 +273,7 @@ try {
     const webOrigin = `http://127.0.0.1:${ports.web}`;
     await ready(vite, webOrigin);
     const fixture = join(dir, 'browser-fixture.json');
-    await writeFile(fixture, JSON.stringify({ origin: webOrigin, cookie: owner.cookie, outsiderCookie: outsider.cookie, space, second, memberCookie: member.cookie, memberId: member.data.user.id, embeddedThingId: embedded.id, feedEmbedId: feedEmbed.embed.id, postId: post.id, messageId: sent.id, redirect: `http://127.0.0.1:${trap.address().port}/redirect` }), { mode: 0o600 });
+    await writeFile(fixture, JSON.stringify({ origin: webOrigin, cookie: owner.cookie, outsiderCookie: outsider.cookie, space, second, memberCookie: member.cookie, memberId: member.data.user.id, embeddedThingId: embedded.id, feedEmbedId: feedEmbed.embed.id, richPostEmbeds, postId: post.id, messageId: sent.id, redirect: `http://127.0.0.1:${trap.address().port}/redirect` }), { mode: 0o600 });
     const ui = start(process.execPath, ['scripts/subspace-messages-acceptance.mjs', '--browser-worker', fixture], {
       PLAYWRIGHT_MODULE: process.env.PLAYWRIGHT_MODULE,
       SUBSPACE_BROWSER_EXECUTABLE: process.env.SUBSPACE_BROWSER_EXECUTABLE,
@@ -264,7 +291,7 @@ try {
   await api(`/api/v1/chats/get?id=${deleteSpace.messagesChatId}`, { cookie: owner.cookie, status: 404 });
   assert(!(await api('/api/v1/chats', { cookie: owner.cookie })).data.chats.some(row => row.id === deleteSpace.messagesChatId));
   assert(!(await api('/api/v1/communities', { cookie: owner.cookie })).data.communities.some(row => row.id === deleteSpace.messagesCommunityId));
-  console.log(JSON.stringify({ ok: true, productionAccess: false, checks: ['backend OS boundary and redirect denial', 'disposable replica set', 'origin capability manifest', 'idempotent general provisioning', 'real message send/read and retry', 'outsider/pending/banned/left/removed denial', 'list-preview redaction', 'private/public transition and rejoin', 'embeds moderation and source revocation', 'embed ordering, pagination and replay safety'], browser: process.argv.includes('--ui') ? 'passed' : 'not requested' }));
+  console.log(JSON.stringify({ ok: true, productionAccess: false, checks: ['backend OS boundary and redirect denial', 'disposable replica set', 'origin capability manifest', 'concurrent pooled MongoDB health followed by ordinary write/read', 'idempotent general provisioning', 'real message send/read and retry', 'outsider/pending/banned/left/removed denial', 'list-preview redaction', 'private/public transition and rejoin', 'embeds moderation and source revocation', 'embed ordering, pagination and replay safety'], browser: process.argv.includes('--ui') ? 'passed' : 'not requested' }));
 } catch (error) {
   console.error(error.message);
   if (server) await writeFile(join(process.env.SUBSPACE_EVIDENCE_DIR || tmpdir(), 'thingtime-subspace-messages-server.log'), server.log(), { mode: 0o600 });
@@ -301,7 +328,7 @@ async function browserAcceptance() {
   const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
   const page = await context.newPage();
   const errors = [];
-  page.on('pageerror', error => errors.push(error.message));
+  page.on('pageerror', error => { errors.push(error.message); void writeFile(join(out, 'pageerrors.json'), JSON.stringify(errors, null, 2)); });
   const setSession = async cookie => {
     await context.clearCookies();
     await context.addCookies(cookie.split('; ').map(pair => {
@@ -356,13 +383,16 @@ async function browserAcceptance() {
     await setSession(fixture.cookie);
     await openSpace(fixture.space);
     await assertMode('Posts');
-    await page.getByText('Subspace acceptance discussion', { exact: true }).waitFor({ timeout: 30000 });
+    await page.getByText('Subspace acceptance discussion', { exact: true }).first().waitFor({ timeout: 30000 });
     const sidebar = page.getByTestId('subspace-sidebar-embeds');
     await sidebar.getByText('Embedded acceptance component', { exact: true }).first().waitFor({ timeout: 30000 });
     const sidebarRead = await page.evaluate(async id => (await fetch('/api/v1/subspaces/embeds?id=' + id + '&region=sidebar')).json(), fixture.space.id);
     assert(sidebarRead.embeds.some(row => row.thing?.id === fixture.embeddedThingId), 'Sidebar source must match the real API projection');
     assert(await sidebar.locator('article').count() > 0, 'Sidebar must render actual repeated Thing cards');
-    await note('Feed and sidebar rendered with independent API evidence');
+    await sidebar.getByText('Ordinary rich-text embedded post body', { exact: true }).waitFor({ timeout: 30000 });
+    await page.getByTestId('subspace-feed-embeds').getByText('Ordinary rich-text embedded post body', { exact: true }).waitFor({ timeout: 30000 });
+    await page.screenshot({ path: join(out, 'rich-post-embedded-feed-sidebar.png'), fullPage: true });
+    await note('Ordinary Editor.js post rendered in feed and sidebar with independent API evidence');
     await commentsToggle().check();
     await page.getByText('First saved subspace comment', { exact: true }).waitFor({ timeout: 30000 });
     const editor = page.locator('[contenteditable="true"]').first();

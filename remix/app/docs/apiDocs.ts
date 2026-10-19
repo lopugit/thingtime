@@ -4382,11 +4382,13 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'health-mongodb',
+    contractVersion: '1.0.1',
+    featureVersion: '1.0.1',
     group: 'health',
     title: 'MongoDB health',
     endpoint: '/api/v1/health/mongodb',
     summary: 'Returns MongoDB connectivity for the current or target environment.',
-    detail: 'This route wraps the MongoDB status helper and can proxy remote health checks through the environment status resolver.',
+    detail: 'This route wraps the MongoDB status helper and can proxy remote health checks through the environment status resolver. Version 1.0.1 reuses the application connection pool without collection adoption or index writes, coalesces simultaneous checks only for the exact selected connection/database, and bounds diagnostics to two seconds. It never closes the shared application client. The response shape and endpoint selection are unchanged.',
     auth: {
       mode: 'none',
       description: 'Public health endpoint. Secrets are sanitized from responses.'
@@ -5633,11 +5635,13 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'mongodb-status',
+    contractVersion: '1.0.1',
+    featureVersion: '1.0.1',
     group: 'mongodb',
     title: 'MongoDB status',
     endpoint: '/api/v1/mongodb/status',
     summary: 'Returns MongoDB connection status for UI status checks and API tests.',
-    detail: 'This route responds with HTTP 200 even when MongoDB is down; the body connected field carries the health state.',
+    detail: 'This route responds with HTTP 200 even when MongoDB is down; the body connected field carries the health state. Version 1.0.1 uses the existing application pool and coalesces simultaneous checks for the exact selected endpoint/database within a two-second diagnostic deadline, without closing the shared client or performing collection adoption/index writes.',
     auth: {
       mode: 'none',
       description: 'Public health endpoint. Credentials are sanitized.'
@@ -5666,11 +5670,13 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'mongodb-status-data',
+    contractVersion: '1.0.1',
+    featureVersion: '1.0.1',
     group: 'mongodb',
     title: 'MongoDB status data',
     endpoint: '/api/v1/mongodb/status-data',
     summary: 'Resource-only JSON version of MongoDB status.',
-    detail: 'Use this route for plain fetch calls that should never render the in-app API tester component.',
+    detail: 'Use this route for plain fetch calls that should never render the in-app API tester component. Version 1.0.1 shares the pooled, coalesced, two-second read-only diagnostic used by MongoDB health/status, with unchanged response fields and endpoint selection.',
     auth: {
       mode: 'none',
       description: 'Public health endpoint. Credentials are sanitized.'
