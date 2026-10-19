@@ -31,6 +31,9 @@ export type PublicSubspaceViewer = {
 
 export type PublicSubspace = {
 	id: string;
+	// Optional while older local caches and servers roll forward.
+	messagesCommunityId?: string | null;
+	messagesChatId?: string | null;
 	slug: string;
 	name: string;
 	description: string | null;

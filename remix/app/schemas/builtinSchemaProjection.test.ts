@@ -50,6 +50,7 @@ const EXPECTED_PROJECTED_FIELDS: Record<string, string[]> = {
   "vote": ["optionIndex", "voteKey"],
   "updown": ["direction", "updownKey"],
   "subspace": ["slug", "name", "description", "access", "nsfw", "rules", "flairs", "userFlairs", "removalReasons", "userFlairSelfAssign", "allowCustomUserFlair", "branding"],
+  "subspace-embed": ["region", "thingId", "order"],
   "subspace-member": ["memberKey", "role", "approved", "banned", "banReason", "banUntil", "left", "pending", "approvalRequested", "userFlair"],
   "subspace-modlog": ["action", "postId", "userId", "reason", "detail"],
   "subspace-tombstone": ["slug", "subspaceId", "previousOwnerId", "deletedAt"],

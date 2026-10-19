@@ -80,3 +80,26 @@ the existing PostComposer, useApi and private drafts through a keyed context.
 Quick comments and nested replies use PostAsSelect with a captured actor header.
 See [Characters](../characters.md). Subspace permissions are checked as the
 selected Character; owning the Character does not inherit private membership.
+
+## Subspace messages and embedded Things
+
+Subspaces provision a stable Messenger space and general channel through
+`api/utils/messenger/subspaceMessages.ts`. `subspaceAccess.ts` checks current
+subspace membership for chats, previews and media. The registered
+`subspace-messaging-spaces` migration provisions existing subspaces.
+
+`SubspaceViewControls.tsx` uses editable Builder blocks. Viewer-scoped
+`subspaceViewPrefs.ts` persists Posts/Messages and automatic comment expansion.
+`SubspaceMessagesPanel.tsx` shares Messenger's ChatView; hidden views preserve
+drafts without advancing message read receipts.
+
+Moderators manage sidebar and above-feed Thing placements with
+`/api/v1/subspaces/embeds` (`api.subspaces-embeds` 1.0.0). Each placement is a
+protected relational `subspace-embed` Thing. Readers must pass the subspace gate
+and the referenced Thing's independent ACL on every load. Embedding never
+changes an audience or shares a hidden link secret.
+
+Run `test:subspaces`, `test:messenger`, `test:feed`, `test:api-capabilities`, then
+`test:subspace-messages-acceptance` against the built server. The latter creates
+its own OS-fenced disposable replica and real API fixtures; `--ui` additionally
+checks desktop/mobile rendering and saved controls.
