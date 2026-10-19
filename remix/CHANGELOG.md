@@ -17,7 +17,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   saved per-subspace comment expansion, and moderator-managed embedded Things
   above posts and in the sidebar. Message access follows live subspace membership;
   embedded Things retain their own access rules. Includes a retry-safe existing
-  subspace migration and isolated acceptance harness. — Codex (AI)
+  subspace migration and isolated acceptance harness. See [PR 1045](../PRs/1045-subspace-messages-views-and-moderated-embeds.md) for verification and rollout status. — Codex (AI)
 
 - 2026-10-19: Keep personal-plan chats on local management, make repeated verified provider selections idempotent, and align the floating header with plan eligibility. Added regressions for first sends, follow-ups, old-client background admission and revoked proofs. Reconcile completed Responses output items before executing tools; incomplete/conflicting output remains fail-closed (installed tool acceptance pending). — Codex (AI)
 

@@ -59,12 +59,15 @@ async function ready(running, readyOrigin = origin) {
 }
 async function api(path,{body,cookie,as,method,status=200}={}) {
   console.log(`${method||(body?'POST':'GET')} ${path.split('?')[0]}`);
+  const started = Date.now();
   const response=await fetch(origin+path,{method:method||(body?'POST':'GET'),headers:{'Content-Type':'application/json',Origin:origin,...(cookie?{Cookie:cookie}:{}),...(as?{'X-Thingtime-Character':as}:{})},...(body?{body:JSON.stringify(body)}:{}),signal:AbortSignal.timeout(30000)});
   const data=await response.json();
+  console.log(`Completed ${path.split('?')[0]} in ${Date.now() - started}ms (${response.status})`);
   assert.equal(response.status,status,`${path}: ${JSON.stringify(data)}`);
   return {data,cookie:response.headers.getSetCookie().map(c=>c.split(';')[0]).join('; ')};
 }
 let server;
+let database;
 try {
   assert.equal(process.platform, 'darwin', 'Requires OS network sandbox; refusing unrestricted fallback');
   for (const port of Object.values(ports)) {
@@ -76,7 +79,7 @@ try {
   assert.equal((await once(preflight.child, 'exit'))[0], 0, preflight.log());
   assert.equal(trapHits, 1, 'Redirect must reach the local trap before external target is denied');
   await mkdir(join(dir, 'db'));
-  start('/opt/homebrew/bin/mongod', ['--dbpath', join(dir, 'db'), '--port', String(ports.db), '--bind_ip', '127.0.0.1', '--replSet', 'subspace_messages', '--nounixsocket']);
+  database = start('/opt/homebrew/bin/mongod', ['--dbpath', join(dir, 'db'), '--port', String(ports.db), '--bind_ip', '127.0.0.1', '--replSet', 'subspace_messages', '--nounixsocket']);
   const client = new MongoClient(`mongodb://127.0.0.1:${ports.db}/?directConnection=true`, { serverSelectionTimeoutMS: 1000 });
   try {
     for (let n = 0;; n++) { try { await client.connect(); break; } catch (error) { if (n > 20) throw error; await delay(300); } }
@@ -265,6 +268,15 @@ try {
 } catch (error) {
   console.error(error.message);
   if (server) await writeFile(join(process.env.SUBSPACE_EVIDENCE_DIR || tmpdir(), 'thingtime-subspace-messages-server.log'), server.log(), { mode: 0o600 });
+  if (database) {
+    const events = database.log().split('\n').flatMap(line => { try {
+      const event = JSON.parse(line); const attr = event.attr || {};
+      return [{ time: event.t, severity: event.s, component: event.c, eventId: event.id,
+        durationMillis: attr.durationMillis, errorCode: attr.code, keysExamined: attr.keysExamined, docsExamined: attr.docsExamined,
+        writeConflicts: attr.writeConflicts, numYields: attr.numYields }];
+    } catch { return []; } });
+    await writeFile(join(process.env.SUBSPACE_EVIDENCE_DIR || tmpdir(), 'database-timings.json'), JSON.stringify(events, null, 2), { mode: 0o600 });
+  }
   process.exitCode = 1;
 } finally {
   for (const child of children.reverse()) await stop({ child });
