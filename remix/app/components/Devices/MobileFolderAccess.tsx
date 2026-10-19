@@ -24,6 +24,7 @@ function FolderAccess({ ownerId, deviceId, host }: FolderAccessProps) {
 	const [roots, setRoots] = useState<MobileFolder[]>(() => cached.get(key) ?? []),
 		[busy, setBusy] = useState(false),
 		[error, setError] = useState('');
+	const [rootsReady, setRootsReady] = useState(() => cached.has(key));
 	const [checked, setChecked] = useState<Record<string, string>>({});
 	const pending = useRef<AbortController | null>(null);
 	const task = useSyncExternalStore(nativeSyncTasks.subscribe, nativeSyncTasks.read, nativeSyncTasks.read);
@@ -39,6 +40,7 @@ function FolderAccess({ ownerId, deviceId, host }: FolderAccessProps) {
 				const result = await requestFolders(ownerId, request, controller.signal);
 				if (controller.signal.aborted) return;
 				setRoots(result.roots);
+				setRootsReady(true);
 				cached.set(key, result.roots);
 				if (cached.size > 32) cached.delete(cached.keys().next().value!);
 				if (request.action === 'scan') {
@@ -116,7 +118,7 @@ function FolderAccess({ ownerId, deviceId, host }: FolderAccessProps) {
 					{error}
 				</Text>
 			) : null}
-			<MobileSyncConnections ownerId={ownerId} deviceId={deviceId} roots={roots} host={host} />
+			<MobileSyncConnections ownerId={ownerId} deviceId={deviceId} roots={roots} rootsReady={rootsReady} host={host} />
 		</Box>
 	);
 }

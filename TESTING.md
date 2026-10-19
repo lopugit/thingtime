@@ -12470,3 +12470,10 @@ separate from deterministic discovery/lease tests.
 - [x] A persisted one-time job in attention state remains explicitly stoppable after reopening, even without an automatic interval. Changing ignore settings cannot replace it until Stop is durably saved; stale callbacks cannot complete its replacement. `syncJobJournal.test.ts` passes 17 checks.
 - [x] `node remix/scripts/test-stopped-sync-job-recovery.mjs /tmp/thingtime-stopped-sync-job-acceptance` passes10 isolated desktop/mobile checks: Save starts nothing; Stop survives reload; zero-operation attention restarts under exact v2rules and schedules its next cycle; pending accepted writes remain fenced with no duplicate. All three states pass top-to-bottom overflow checks at1440/390px.
 - [ ] Repeat the Stop and restart transition in the installed signed Mac app with the existing home backup, then verify real indexing and transfer progress.
+
+
+### Resumed indexing status and observation traffic
+
+- [x] Cold-reopen a saved sync while its native scan is active. Before the view has loaded folder grants, show a pending folder list rather than missing access. Speed trackers must show Waiting for indexing; an explicit Stop must still show Paused. Check desktop and mobile widths from top to bottom.
+- [x] Run the native inventory polling regression: status observations continue, leave at least half the shared device-read budget available, and abort immediately without another native request.
+- [ ] Verify a complete real home index and the first cloud payload receipt. A count reset or partial scan alone is not successful backup acceptance.

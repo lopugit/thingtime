@@ -235,3 +235,30 @@ test('Gitignore policy is negotiated before all capture requests and every respo
   for (const changed of [undefined, '', 'other/']) assert.throws(() => parseMobileFolderResult({ type: 'mobile-files-result', payload: { ...payload, ignoreRules: changed } }, expected, request), /ignore rules changed/);
  }
 });
+
+
+test('default status polling leaves headroom for shared device reads and aborts promptly', async t => {
+ t.mock.timers.enable({ apis: ['setTimeout'] });
+ const controller = new AbortController(); let statusReads = 0;
+ const id = crypto.randomUUID();
+ const status = { id, generation: crypto.randomUUID(), totalEntries: 0, totalSkipped: 0,
+  state: 'running' as const, coverage: 'partial' as const, consistency: 'per-entry' as const };
+ const iterator = readNativeInventory({ ownerId: 'owner', deviceId: 'device', rootId, captureId: id,
+  signal: controller.signal, backupPolicy: { mode: 'backup', propagateDeletes: false },
+  request: async (_, request) => {
+   if (request.action === 'scan-status') statusReads++;
+   assert.ok(['scan-capture', 'scan-status'].includes(request.action));
+   return { roots: [], backupCapture: status };
+  } });
+ const stopped = assert.rejects(iterator.next(), /abort/i);
+ for (let ms = 0; ms < 60_000; ms += 100) {
+  t.mock.timers.tick(100); await new Promise<void>(resolve => setImmediate(resolve));
+ }
+ // Native reads authorize twice. Reserve at least half of the 240/minute
+ // device budget for the monitor, heartbeat and other device operations.
+ assert.ok(statusReads >= 20, 'continues observing progress');
+ assert.ok(statusReads * 2 + 6 <= 120, `excessive authenticated reads: ${statusReads}`);
+ controller.abort(); await stopped;
+ const prior = statusReads; t.mock.timers.tick(60_000);
+ await new Promise<void>(resolve => setImmediate(resolve)); assert.equal(statusReads, prior);
+});

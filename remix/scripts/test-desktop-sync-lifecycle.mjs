@@ -96,8 +96,24 @@ if (!process.env.TT_DESKTOP_SYNC_WORKER) {
 		await page.getByRole('button', { name: 'Upload now', exact: true }).click();
 		await page.getByText('Checking both folders…', { exact: true }).waitFor();
 		await page.getByRole('button', { name: 'Leave Files screen', exact: true }).click();
+		await restart(`http://127.0.0.1:${port}/?platform=desktop&tasks&away&hold-scan`);
+		await page.waitForFunction(() => window.syncInspectionFixture.pendingScans() === 1);
 		await page.getByRole('button', { name: 'Reopen Files screen', exact: true }).click();
+		await page.getByText('Transfer in progress · Folder list pending', { exact: true }).waitFor();
+		await page.getByText('Upload: Waiting for indexing', { exact: true }).waitFor();
+		await page.getByText('Download: Waiting for indexing', { exact: true }).waitFor();
+		assert.equal(await page.getByText(/Folder access missing|Source access or backup policy needs review|Upload: Paused/).count(), 0);
+		for (const [name, width] of [['desktop', 1440], ['mobile', 390]]) {
+			await page.setViewportSize({ width, height: 1000 });
+			for (const fraction of [0, 0.5, 1]) {
+				await page.evaluate(f => scrollTo(0, document.documentElement.scrollHeight * f), fraction);
+				assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), name);
+			}
+			await page.getByText('Transfer in progress · Folder list pending', { exact: true }).scrollIntoViewIfNeeded();
+			await page.screenshot({ path: join(evidence, `${name}-resumed-indexing.png`) });
+		}
 		await page.getByRole('button', { name: 'Stop transfer', exact: true }).click();
+		await page.getByText('Upload: Paused', { exact: true }).waitFor();
 		await page.getByRole('status').filter({ hasText: /^Transfer stopped\. Retry to recover saved work\.$/ }).waitFor();
 		await page.getByText('App transfer lease: idle', { exact: true }).waitFor();
 		assert.equal((await readJobs())[0].state, 'paused');
