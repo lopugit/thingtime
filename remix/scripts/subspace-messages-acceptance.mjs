@@ -94,7 +94,8 @@ try {
   await ready(server);
   const manifest = (await api('/.well-known/thingtime-capabilities.json')).data;
   assert.equal(manifest.origin, origin, 'Manifest must describe this isolated origin');
-  const requirements = { 'api.subspaces': '1.5.1', 'api.chats': '1.1.0', 'api.chats-messages': '1.2.1', 'api.subspaces-embeds': '1.0.0' };
+  const requirements = { 'api.subspaces': '1.5.1', 'api.chats': '1.1.0', 'api.chats-messages': '1.2.1', 'api.subspaces-embeds': '1.0.0',
+    'api.health-mongodb': '1.0.1', 'api.mongodb-status': '1.0.1', 'api.mongodb-status-data': '1.0.1' };
   for (const [feature, minimum] of Object.entries(requirements)) {
     const actual = manifest.features[feature]?.version?.split('.').map(Number);
     const required = minimum.split('.').map(Number);
@@ -111,6 +112,22 @@ try {
   const createSpace = async (slug, access) => (await api('/api/v1/subspaces', { cookie: owner.cookie, body: { slug, name: slug.replaceAll('_', ' '), access }, status: 201 })).data.subspace;
   const space = await createSpace('messages_acceptance', 'public');
   const second = await createSpace('messages_scope_test', 'private');
+  // Real driver and built routes: simultaneous diagnostics share the active
+  // application pool, then ordinary writes/reads must still work afterward.
+  const healthResults = await Promise.all([
+    api('/api/v1/health/mongodb'), api('/api/v1/health/mongodb'),
+    api('/api/v1/mongodb/status-data'), api('/api/v1/mongodb/status', { method: 'POST' })
+  ]);
+  for (const { data } of healthResults) {
+    assert.equal(data.connected, true, JSON.stringify(data));
+    assert.equal(data.custom, false);
+    assert.equal(data.dbName, 'thingtime');
+    assert.equal(data.replicaSet, 'subspace_messages');
+    assert.equal(data.error, null);
+    assert.equal(typeof data.pingMs, 'number');
+  }
+  await api('/api/v1/subspaces/update', { cookie: owner.cookie, body: { id: space.id, description: 'Application pool remains usable after health checks' } });
+  assert.equal((await api(`/api/v1/subspaces/get?id=${space.id}`, { cookie: owner.cookie })).data.subspace.description, 'Application pool remains usable after health checks');
   for (let n = 0; n < 2; n++) {
     const migration = (await api('/api/v1/admin/migrations/run', { cookie: owner.cookie, body: { migration: 'subspace-messaging-spaces' } })).data;
     assert.equal(migration.ok, true);
@@ -274,7 +291,7 @@ try {
   await api(`/api/v1/chats/get?id=${deleteSpace.messagesChatId}`, { cookie: owner.cookie, status: 404 });
   assert(!(await api('/api/v1/chats', { cookie: owner.cookie })).data.chats.some(row => row.id === deleteSpace.messagesChatId));
   assert(!(await api('/api/v1/communities', { cookie: owner.cookie })).data.communities.some(row => row.id === deleteSpace.messagesCommunityId));
-  console.log(JSON.stringify({ ok: true, productionAccess: false, checks: ['backend OS boundary and redirect denial', 'disposable replica set', 'origin capability manifest', 'idempotent general provisioning', 'real message send/read and retry', 'outsider/pending/banned/left/removed denial', 'list-preview redaction', 'private/public transition and rejoin', 'embeds moderation and source revocation', 'embed ordering, pagination and replay safety'], browser: process.argv.includes('--ui') ? 'passed' : 'not requested' }));
+  console.log(JSON.stringify({ ok: true, productionAccess: false, checks: ['backend OS boundary and redirect denial', 'disposable replica set', 'origin capability manifest', 'concurrent pooled MongoDB health followed by ordinary write/read', 'idempotent general provisioning', 'real message send/read and retry', 'outsider/pending/banned/left/removed denial', 'list-preview redaction', 'private/public transition and rejoin', 'embeds moderation and source revocation', 'embed ordering, pagination and replay safety'], browser: process.argv.includes('--ui') ? 'passed' : 'not requested' }));
 } catch (error) {
   console.error(error.message);
   if (server) await writeFile(join(process.env.SUBSPACE_EVIDENCE_DIR || tmpdir(), 'thingtime-subspace-messages-server.log'), server.log(), { mode: 0o600 });

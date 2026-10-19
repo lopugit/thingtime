@@ -42,6 +42,10 @@ const getClientCachedFor = (uri: string, isHome: boolean) => {
       isHome
         ? {
             maxPoolSize: 10,
+            minPoolSize: 0,
+            // Driver 6.21 retires idle sockets even with minPoolSize zero.
+            // Warm serverless workers must not retain their peak pool forever.
+            maxIdleTimeMS: 60_000,
             serverSelectionTimeoutMS: 5000,
             connectTimeoutMS: 5000,
             socketTimeoutMS: 30000,
@@ -74,6 +78,23 @@ const getClientCachedFor = (uri: string, isHome: boolean) => {
   }
 
   return entry;
+};
+
+// A read-only snapshot for diagnostics. Do not use getThingtimeDb here: its
+// first-contact adoption/index work is inappropriate for a public health read.
+// Capture the entire request selection before any await so concurrent custom
+// endpoint checks cannot borrow another request's database or authority.
+export const getMongoStatusConnection = () => {
+  const custom = isCustomMongoEndpointActive();
+  try {
+    const uri = getActiveMongoUri();
+    const dbName = getActiveMongoDbName();
+    return { uri, custom, dbName, getDb: async () => (await getClientCachedFor(uri, !custom)).db(dbName) };
+  } catch (error) {
+    // Preserve the selected plane even when its configuration cannot be read.
+    // The error remains internal; status.ts emits only its sanitized summary.
+    return { custom, error };
+  }
 };
 
 // Run one logical mutation against MongoDB's transaction retry contract. The
