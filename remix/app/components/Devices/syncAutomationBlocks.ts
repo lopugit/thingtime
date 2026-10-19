@@ -18,6 +18,6 @@ export const syncAutomationBlocks: WebpageBlock[] = [{ id: 'automation', type: '
 			{ id: 'automation-interval', type: 'element', tag: 'select', props: { name: 'interval', 'aria-label': 'Automatic sync interval', value: '{automatic.interval}', disabled: '{automatic.startDisabled}', ...action('interval') }, css: control,
 				children: [['60000', 'Every minute'], ['300000', 'Every 5 minutes'], ['900000', 'Every 15 minutes'], ['3600000', 'Every hour']].map(([value, label]) => text('automation-interval-' + value, 'option', label, { value })) },
 			{ ...text('automation-start', 'button', 'Start automatic sync', { type: 'button', disabled: '{automatic.startDisabled}', ...action('start') }), css: control },
-			{ ...text('automation-stop', 'button', 'Stop automatic sync', { type: 'button', disabled: '{automatic.stopDisabled}', ...action('stop') }), css: control }
+			{ ...text('automation-stop', 'button', '{automatic.stopLabel}', { type: 'button', disabled: '{automatic.stopDisabled}', ...action('stop') }), css: control }
 		] }
 	] }];

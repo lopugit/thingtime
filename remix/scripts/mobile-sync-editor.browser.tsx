@@ -20,21 +20,23 @@ const partialQA = new URLSearchParams(location.search).has('partial');
 const homeQA = new URLSearchParams(location.search).has('home');
 const inspectionQA = new URLSearchParams(location.search).has('inspect');
 const inventoryQA = new URLSearchParams(location.search).has('inventory');
-const observations = { requests: 0, scans: 0, inspections: 0, captures: 0, pages: 0, discarded: 0, skipPages: [] as number[], scanPolicies: [] as string[][] };
+const observations = { requests: 0, scans: 0, inspections: 0, captures: 0, pages: 0, discarded: 0, skipPages: [] as number[], ignorePolicies: [] as string[], scanPolicies: [] as string[][] };
 const nativeCaptures = new Map<string, { capture: { id: string; generation: string; totalEntries: number }; entries: typeof localEntries }>();
 const inventoryReply = (request: any) => {
+	if (request.action === 'scan-cancel') { nativeCaptures.delete(request.captureId); return { complete: false, cancelled: true, excludedPaths: request.excludedPaths ?? [] }; }
 	if (request.action === 'scan-capture') {
 		if (new URLSearchParams(location.search).has('diagnostic')) return { complete: false, scanFailure: { reason: 'symlink', path: 'nested/link' } };
 		const excludedPaths = canonicalNativeScanExclusions(request.excludedPaths ?? []);
 		const entries = localEntries.filter(entry => !isNativeScanExcluded(entry.path, excludedPaths));
-		const capture = { id: request.captureId, generation: crypto.randomUUID(), totalEntries: entries.length, ...(partialQA ? { coverage: 'partial', consistency: 'per-entry', totalSkipped: 301 } : {}) };
+		const capture = { id: request.captureId, generation: crypto.randomUUID(), totalEntries: entries.length, ...((partialQA || ignoreQA) && request.capturePolicy === 'backup-supported' ? { coverage: partialQA ? 'partial' : 'full', consistency: 'per-entry', totalSkipped: partialQA ? 301 : 0 } : {}) };
 		nativeCaptures.set(capture.id, { capture, entries: structuredClone(entries) });
-		return { complete: true, excludedPaths, ...(partialQA ? { backupCapture: { ...capture, state: 'complete' } } : { capture }) };
+		return { complete: true, excludedPaths, ...((partialQA || ignoreQA) && request.capturePolicy === 'backup-supported' ? { backupCapture: { ...capture, state: 'complete' } } : { capture }) };
 	}
 	if (request.action === 'scan-skips') {
 		const item = nativeCaptures.get(request.capture.id)!;
-		const count = Math.min(128, 301 - request.offset); observations.skipPages.push(count);
-		return { complete: true, skippedPage: { capture: item.capture, offset: request.offset, totalSkipped: 301, nextOffset: request.offset + count === 301 ? null : request.offset + count, skipped: Array.from({ length: count }, (_, n) => ({ ordinal: request.offset + n, path: 'Skipped/' + String(request.offset + n).padStart(3, '0') + '-long-unreadable-entry', reason: 'unreadable', scope: 'entry' })) } };
+		const total = (item.capture as any).totalSkipped;
+		const count = Math.min(128, total - request.offset); observations.skipPages.push(count);
+		return { complete: true, skippedPage: { capture: item.capture, offset: request.offset, totalSkipped: total, nextOffset: request.offset + count === total ? null : request.offset + count, skipped: Array.from({ length: count }, (_, n) => ({ ordinal: request.offset + n, path: 'Skipped/' + String(request.offset + n).padStart(3, '0') + '-long-unreadable-entry', reason: 'unreadable', scope: 'entry' })) } };
 	}
 	if (request.action === 'scan-page' || request.action === 'scan-discard') {
 		const item = nativeCaptures.get(request.capture.id);
@@ -50,7 +52,7 @@ const observe = (request: any) => {
 	if (request.action === 'scan') observations.scans++;
 	if (request.action === 'scan' || request.action === 'scan-capture') observations.scanPolicies.push(canonicalNativeScanExclusions(request.excludedPaths ?? []));
 	if (request.action === 'inspect') observations.inspections++;
-	if (request.action === 'scan-capture') observations.captures++;
+	if (request.action === 'scan-capture') { observations.captures++; observations.ignorePolicies.push(request.ignoreRules ?? ''); }
 	if (request.action === 'scan-page') observations.pages++;
 	if (request.action === 'scan-discard') observations.discarded++;
 };

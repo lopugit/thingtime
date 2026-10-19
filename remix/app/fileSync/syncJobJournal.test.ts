@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { IDBFactory, IDBKeyRange } from 'fake-indexeddb';
 import { openSyncJournal } from './journal.client';
-import { MAX_SYNC_JOBS_PER_ACCOUNT, SYNC_JOB_PAGE_SIZE, pauseSyncJobAdmission } from './syncJobJournal';
+import { MAX_SYNC_JOBS_PER_ACCOUNT, SYNC_JOB_PAGE_SIZE, pauseSyncJobAdmission, syncJobCanPause } from './syncJobJournal';
 import { newFileSyncConfiguration } from './configuration';
 import type { SyncScope } from './reconcile';
 const scope: SyncScope = { origin: 'https://sync.example', ownerId: 'owner', dataPlane: 'home', deviceId: 'device', rootId: 'connection' };
@@ -187,4 +187,27 @@ test('native helper restart gets one durable automatic generation retry without 
  await assert.rejects(jobs.observeCapture(same, crypto.randomUUID()), /repeatedly interrupted/);
  await jobs.attention(same); job = await jobs.admit(configuration, 'ignored'); assert.equal(job.nativeCaptureRestarts, 0);
  assert.equal((await jobs.observeCapture(job, crypto.randomUUID()))?.nativeCaptureRestarts, 1); journal.close();
+});
+
+
+test('legacy one-shot attention can be explicitly stopped before applying new ignore settings', async () => {
+ const factory = new IDBFactory(); let journal = await open(factory), jobs = jobsFor(journal);
+ const original = saved();
+ const attention = (await jobs.attention(await jobs.admit(original, 'legacy-once')))!;
+ assert.equal(attention.intervalMs, undefined);
+ journal.close(); journal = await open(factory); jobs = jobsFor(journal);
+ const recovered = (await jobs.read())!;
+ assert.equal(syncJobCanPause(recovered), true, 'the UI must expose Stop even without an automatic interval');
+ const updated = { ...original, configuration: { ...original.configuration, configurationVersion: 2 as const, ignoreRules: 'node_modules/' } };
+ await assert.rejects(jobs.admit(updated, 'automatic', 300_000), /different settings/);
+ assert.deepEqual(await jobs.read(), recovered, 'failed start must preserve the earlier job');
+ await pauseSyncJobAdmission(jobs, recovered.id);
+ assert.equal((await jobs.read())?.state, 'paused');
+ assert.equal(syncJobCanPause(await jobs.read()), false);
+ const replacement = await jobs.admit(updated, 'automatic', 300_000);
+ assert.equal(replacement.id, 'automatic');
+ assert.equal(replacement.reviewed.configuration.ignoreRules, 'node_modules/');
+ assert.equal(replacement.intervalMs, 300_000);
+ assert.equal(await jobs.finish(recovered, Date.now()), null, 'old callbacks cannot finish the replacement');
+ journal.close();
 });

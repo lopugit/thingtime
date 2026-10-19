@@ -12463,3 +12463,10 @@ separate from deterministic discovery/lease tests.
 - Edit nested Builder controls separately, save/reload, and inspect the entire
   editor at desktop/mobile sizes. On the signed installed Mac verify saved
   home exclusions and dependency defaults before starting the real upload.
+
+
+### 2026-10-19 · Legacy one-time sync recovery
+
+- [x] A persisted one-time job in attention state remains explicitly stoppable after reopening, even without an automatic interval. Changing ignore settings cannot replace it until Stop is durably saved; stale callbacks cannot complete its replacement. `syncJobJournal.test.ts` passes 17 checks.
+- [x] `node remix/scripts/test-stopped-sync-job-recovery.mjs /tmp/thingtime-stopped-sync-job-acceptance` passes10 isolated desktop/mobile checks: Save starts nothing; Stop survives reload; zero-operation attention restarts under exact v2rules and schedules its next cycle; pending accepted writes remain fenced with no duplicate. All three states pass top-to-bottom overflow checks at1440/390px.
+- [ ] Repeat the Stop and restart transition in the installed signed Mac app with the existing home backup, then verify real indexing and transfer progress.
