@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readNativeInventory, parseNativeInventoryCapture, parseNativeInventoryPage, type NativeInventoryCapture } from './nativeInventory';
+import { readNativeInventory, parseNativeInventoryCapture, parseNativeInventoryPage, type NativeInventoryCapture, type NativeBackupCapture, type NativeInventoryResume } from './nativeInventory';
 import { parseMobileFolderResult, supportsNativeInventoryPages, supportsNativeScanExclusions, assertNativeScanExclusions, type FolderRequest } from './mobileFolders.client';
 
 const rootId = crypto.randomUUID(), generation = crypto.randomUUID();
@@ -431,4 +431,183 @@ test('transient batch import failure keeps the sealed capture for reconnect', as
  const frames = []; for await (const p of readNativeInventory(input)) frames.push(p);
  assert.equal(frames.at(-1)?.generation, current.generation);
  assert.equal(requests.at(-1), 'scan-discard');
+});
+
+test('resume verifies the live complete source before continuing a partially committed skip ledger', async () => {
+ const current: NativeBackupCapture = { ...capture, totalEntries: 129, coverage: 'partial', consistency: 'per-entry', totalSkipped: 260 };
+ const requests: FolderRequest[] = [], frames = [], order: string[] = [];
+ for await (const frame of readNativeInventory({ ownerId: 'owner', deviceId: 'device', rootId, captureId: current.id,
+  backupPolicy: { mode: 'backup', propagateDeletes: false }, pageSize: 4096, signal: new AbortController().signal,
+  waitForPoll: async () => {}, onCaptureStatus: async status => { order.push(status.state); },
+  resume: async descriptor => { order.push('resume'); assert.deepEqual(descriptor, current); return { entryOffset: 0, skippedOffset: 130, ordinal: 0, complete: false }; },
+  request: async (_, r) => {
+   requests.push(r);
+   if (r.action === 'scan-capture') return { roots: [], backupCapture: { ...current, totalEntries: 200, totalSkipped: 0, state: 'running' } };
+   if (r.action === 'scan-status') return { roots: [], backupCapture: { ...current, state: 'complete' } };
+   if (r.action === 'scan-skips') {
+    assert.equal(r.offset, 130);
+    return { roots: [], skippedPage: { capture: current, offset: r.offset, totalSkipped: 260, nextOffset: null,
+     skipped: Array.from({ length: 130 }, (_, i) => ({ ordinal: 130 + i, path: `link-${130 + i}`, reason: 'symlink', scope: 'entry' })) } };
+   }
+   if (r.action === 'scan-page') return { roots: [], inventoryPage: { capture: current, offset: 0, nextOffset: null,
+    entries: Array.from({ length: 129 }, (_, i) => ({ ...entry, id: String(i), path: `file-${i}` })) } };
+   return { roots: [] };
+  } })) frames.push(frame);
+ assert.deepEqual(order, ['running', 'complete', 'resume']);
+ assert.deepEqual(frames.filter(f => f.skippedPage).map(f => [f.skippedPage!.offset, f.skippedPage!.skipped.length, f.skippedPage!.nextOffset]), [[130, 128, 258], [258, 2, null]]);
+ assert.deepEqual(frames.filter(f => !f.skippedPage).map(f => [f.ordinal, f.entries.length]), [[0, 128], [1, 1]]);
+ assert.equal(frames.at(-1)?.totalEntries, 129);
+ assert.equal(requests.at(-1)?.action, 'scan-discard');
+});
+
+test('resume uses exact committed entry offsets and ordinals across short native batches', async () => {
+ const current: NativeBackupCapture = { ...capture, totalEntries: 321, coverage: 'partial', consistency: 'per-entry', totalSkipped: 2 };
+ const requests: FolderRequest[] = [], frames = [], lengths = [43, 129, 132];
+ for await (const frame of readNativeInventory({ ownerId: 'owner', deviceId: 'device', rootId, captureId: current.id,
+  backupPolicy: { mode: 'backup', propagateDeletes: false }, pageSize: 4096, signal: new AbortController().signal,
+  resume: async () => ({ entryOffset: 17, skippedOffset: 2, ordinal: 3, complete: false }),
+  request: async (_, r) => {
+   requests.push(r);
+   if (r.action === 'scan-capture') return { roots: [], backupCapture: { ...current, state: 'complete' } };
+   if (r.action === 'scan-page') {
+    const length = lengths.shift()!, end = r.offset + length;
+    return { roots: [], inventoryPage: { capture: current, offset: r.offset, nextOffset: end === current.totalEntries ? null : end,
+     entries: Array.from({ length }, (_, i) => ({ ...entry, id: String(r.offset + i), path: `file-${r.offset + i}` })) } };
+   }
+   assert.equal(r.action, 'scan-discard'); return { roots: [] };
+  } })) frames.push(frame);
+ assert.deepEqual(requests.filter(r => r.action === 'scan-page').map(r => r.offset), [17, 60, 189]);
+ assert.deepEqual(frames.map(f => [f.ordinal, f.entries.length]), [[3, 43], [4, 128], [5, 1], [6, 128], [7, 4]]);
+ assert.equal(frames.flatMap(f => f.entries).length, 304);
+ assert.equal(new Set(frames.flatMap(f => f.entries).map(e => e.path)).size, 304);
+ assert.ok(frames.slice(0, -1).every(f => f.totalEntries === undefined));
+ assert.equal(frames.at(-1)?.totalEntries, 321);
+});
+
+test('captured journals need no native pages and collecting EOF uses one bounded terminal journal page', async () => {
+ for (const complete of [false, true]) {
+  const current: NativeBackupCapture = { ...capture, totalEntries: 17, coverage: 'full', consistency: 'per-entry', totalSkipped: 0 };
+  const requests: string[] = [], frames = [];
+  for await (const frame of readNativeInventory({ ownerId: 'owner', deviceId: 'device', rootId, captureId: current.id,
+   backupPolicy: { mode: 'backup', propagateDeletes: false }, signal: new AbortController().signal,
+   retainCaptureUntilHandoff: true,
+   resume: async () => ({ entryOffset: 17, skippedOffset: 0, ordinal: complete ? 4 : 3, complete }),
+   request: async (_, r) => { requests.push(r.action); assert.equal(r.action, 'scan-capture'); return { roots: [], backupCapture: { ...current, state: 'complete' } }; }
+  })) frames.push(frame);
+  assert.deepEqual(requests, ['scan-capture']);
+  assert.deepEqual(frames, complete ? [] : [{ generation: current.generation, ordinal: 3, entries: [], totalEntries: 17, backupCapture: current }]);
+ }
+});
+
+test('empty initial captures still verify native page zero while committed empty journals resume without pages', async () => {
+ for (const complete of [false, true]) {
+  const current: NativeBackupCapture = { ...capture, totalEntries: 0, coverage: 'full', consistency: 'per-entry', totalSkipped: 0 };
+  const requests: string[] = [], frames = [];
+  for await (const frame of readNativeInventory({ ownerId: 'owner', deviceId: 'device', rootId, captureId: current.id,
+   backupPolicy: { mode: 'backup', propagateDeletes: false }, signal: new AbortController().signal,
+   resume: async () => ({ entryOffset: 0, skippedOffset: 0, ordinal: complete ? 1 : 0, complete }),
+   request: async (_, r) => {
+    requests.push(r.action);
+    if (r.action === 'scan-capture') return { roots: [], backupCapture: { ...current, state: 'complete' } };
+    if (r.action === 'scan-page') { assert.equal(r.offset, 0); return { roots: [], inventoryPage: { capture: current, offset: 0, entries: [], nextOffset: null } }; }
+    assert.equal(r.action, 'scan-discard'); return { roots: [] };
+   } })) frames.push(frame);
+  assert.deepEqual(requests, complete ? ['scan-capture', 'scan-discard'] : ['scan-capture', 'scan-page', 'scan-discard']);
+  assert.equal(frames.length, complete ? 0 : 1);
+  if (!complete) { assert.equal(frames[0].ordinal, 0); assert.equal(frames[0].totalEntries, 0); }
+ }
+});
+
+test('malformed committed cursors never issue native skip or entry reads', async () => {
+ const current: NativeBackupCapture = { ...capture, totalEntries: 260, coverage: 'partial', consistency: 'per-entry', totalSkipped: 4 };
+ const valid: NativeInventoryResume = { entryOffset: 130, skippedOffset: 4, ordinal: 3, complete: false };
+ for (const bad of [null, {}, { ...valid, entryOffset: -1 }, { ...valid, entryOffset: 261 }, { ...valid, entryOffset: 1.5 },
+  { ...valid, entryOffset: Number.MAX_SAFE_INTEGER + 1 }, { ...valid, skippedOffset: -1 }, { ...valid, skippedOffset: 5 },
+  { ...valid, skippedOffset: NaN }, { ...valid, skippedOffset: 3 }, { ...valid, ordinal: -1 }, { ...valid, ordinal: 0 },
+  { ...valid, ordinal: 1 }, { ...valid, ordinal: 131 }, { ...valid, ordinal: Infinity }, { ...valid, complete: 'yes' },
+  { ...valid, complete: true }, { ...valid, entryOffset: 0, ordinal: 1 },
+  { entryOffset: 260, skippedOffset: 3, ordinal: 4, complete: true }, { entryOffset: 0, skippedOffset: 4, ordinal: 0, complete: true }]) {
+  const calls: string[] = [];
+  await assert.rejects(async () => {
+   for await (const _ of readNativeInventory({ ownerId: 'owner', deviceId: 'device', rootId, captureId: current.id,
+    backupPolicy: { mode: 'backup', propagateDeletes: false }, signal: new AbortController().signal, retainCaptureUntilHandoff: true,
+    resume: async () => bad as NativeInventoryResume,
+    request: async (_, r) => { calls.push(r.action); return { roots: [], backupCapture: { ...current, state: 'complete' } }; } })) assert.fail('invalid cursor emitted a page');
+  }, /resume cursor/);
+  assert.deepEqual(calls, ['scan-capture']);
+ }
+});
+
+test('resume adapters reject replacement descriptors before any source pages or journal completion', async () => {
+ const wanted: NativeBackupCapture = { ...capture, coverage: 'full', consistency: 'per-entry', totalSkipped: 0 };
+ for (const changed of [{ generation: crypto.randomUUID() }, { totalEntries: 2 }, { coverage: 'partial' as const, totalSkipped: 1 }]) {
+  const calls: string[] = [];
+  await assert.rejects(async () => {
+   for await (const _ of readNativeInventory({ ownerId: 'owner', deviceId: 'device', rootId, captureId: wanted.id,
+    backupPolicy: { mode: 'backup', propagateDeletes: false }, signal: new AbortController().signal, retainCaptureUntilHandoff: true,
+    resume: async fresh => { assert.notDeepEqual(fresh, wanted); throw Error('Saved native descriptor changed.'); },
+    request: async (_, r) => { calls.push(r.action); return { roots: [], backupCapture: { ...wanted, ...changed, state: 'complete' } }; } })) assert.fail('replacement escaped');
+  }, /descriptor changed/);
+  assert.deepEqual(calls, ['scan-capture']);
+ }
+});
+
+test('caller-owned handoff retains a backup after completion or consumer rejection and remains backup-only', async () => {
+ const current: NativeBackupCapture = { ...capture, coverage: 'full', consistency: 'per-entry', totalSkipped: 0 };
+ for (const fail of [false, true]) {
+  const calls: string[] = [];
+  try {
+   for await (const _ of readNativeInventory({ ownerId: 'owner', deviceId: 'device', rootId, captureId: current.id,
+    backupPolicy: { mode: 'backup', propagateDeletes: false }, signal: new AbortController().signal, retainCaptureUntilHandoff: true,
+    request: async (_, r) => {
+     calls.push(r.action);
+     if (r.action === 'scan-capture') return { roots: [], backupCapture: { ...current, state: 'complete' } };
+     if (r.action === 'scan-skips') return { roots: [], skippedPage: { capture: current, offset: 0, skipped: [], nextOffset: null, totalSkipped: 0 } };
+     assert.equal(r.action, 'scan-page'); return { roots: [], inventoryPage: { ...page, capture: current } };
+    } })) { if (fail) throw Error('Journal storage refused.'); }
+   assert.equal(fail, false);
+  } catch (error) { assert.equal(fail, true); assert.match((error as Error).message, /storage refused/); }
+  assert.ok(!calls.includes('scan-discard'));
+ }
+ for (const options of [{ retainCaptureUntilHandoff: true }, { resume: async () => ({ entryOffset: 0, skippedOffset: 0, ordinal: 0, complete: false }) }])
+  await assert.rejects(async () => { for await (const _ of readNativeInventory({ ownerId: 'owner', deviceId: 'device', rootId,
+   signal: new AbortController().signal, ...options, request: async () => assert.fail('strict capture used backup resume') })) {} }, /require a backup capture/);
+});
+
+test('resuming does not relax page generation, offset or excluded-path fences', async () => {
+ const current: NativeBackupCapture = { ...capture, totalEntries: 2, coverage: 'full', consistency: 'per-entry', totalSkipped: 0 };
+ for (const changed of ['generation', 'offset', 'excluded']) {
+  const calls: string[] = [];
+  await assert.rejects(async () => {
+   for await (const _ of readNativeInventory({ ownerId: 'owner', deviceId: 'device', rootId, captureId: current.id,
+    backupPolicy: { mode: 'backup', propagateDeletes: false }, excludedPaths: ['Library'], signal: new AbortController().signal,
+    retainCaptureUntilHandoff: true, resume: async fresh => {
+     assert.deepEqual(fresh, current);
+     // The callback receives its own descriptor, so accidental mutation cannot
+     // redefine the native generation/count used to validate later pages.
+     fresh.totalEntries = 99;
+     return { entryOffset: 1, skippedOffset: 0, ordinal: 1, complete: false };
+    }, request: async (_, r) => {
+     calls.push(r.action);
+     if (r.action === 'scan-capture') return { roots: [], backupCapture: { ...current, state: 'complete' } };
+     assert.equal(r.action, 'scan-page'); assert.equal(r.offset, 1);
+     return { roots: [], inventoryPage: { capture: changed === 'generation' ? { ...current, generation: crypto.randomUUID() } : current,
+      offset: changed === 'offset' ? 0 : 1, entries: [{ ...entry, path: changed === 'excluded' ? 'library/private' : 'file' }], nextOffset: null } };
+    } })) assert.fail('unverified resumed observation escaped');
+  }, changed === 'excluded' ? /excluded path/ : /page changed/);
+  assert.deepEqual(calls, ['scan-capture', 'scan-page']);
+ }
+});
+
+test('cancellation during journal cursor lookup cannot request or expose native pages', async () => {
+ const current: NativeBackupCapture = { ...capture, coverage: 'full', consistency: 'per-entry', totalSkipped: 0 };
+ const abort = new AbortController(), calls: string[] = [];
+ await assert.rejects(async () => {
+  for await (const _ of readNativeInventory({ ownerId: 'owner', deviceId: 'device', rootId, captureId: current.id,
+   backupPolicy: { mode: 'backup', propagateDeletes: false }, signal: abort.signal, retainCaptureUntilHandoff: true,
+   resume: async () => { abort.abort(); return { entryOffset: 0, skippedOffset: 0, ordinal: 0, complete: false }; },
+   request: async (_, r) => { calls.push(r.action); return { roots: [], backupCapture: { ...current, state: 'complete' } }; }
+  })) assert.fail('cancelled cursor emitted a page');
+ }, { name: 'AbortError' });
+ assert.deepEqual(calls, ['scan-capture']);
 });
