@@ -1,4 +1,5 @@
 import { readActionOutcome } from './actionOutcome.ts';
+import { timelineFileVersion } from '../fileSync/fileVersions';
 import type { TimelineEvent, TimelineSnapshot } from './contract.ts';
 import type { LocalTimelineRow } from './localStore.ts';
 import type { HistoryNoteView } from './notes.ts';
@@ -129,7 +130,10 @@ const versionNameRecord = (event: TimelineEvent): Record<string, any> | null =>
 export function historyCard(row: LocalTimelineRow, notes: HistoryNoteView[] = [], name?: TimelineVersionName) {
 	const { event } = row;
 	const outcome = readActionOutcome(event);
-	const content = historyContent(event.after ?? event.before);
+	const file = timelineFileVersion(event, event.after ? 'after' : 'before');
+	const content = file
+		? { crystal: { name: file.name, size: file.content.size, trashed: file.trashed }, kinds: ['file'] }
+		: historyContent(event.after ?? event.before);
 	const crystal = content?.crystal;
 	const title =
 		(outcome?.actionName ?? '') || text(versionNameRecord(event)?.name) || text(crystal?.title || crystal?.name) || (event.after?.adapter === 'folder-placement' ? 'Moved Thing' : 'Thing');

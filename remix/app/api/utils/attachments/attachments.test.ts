@@ -2438,6 +2438,30 @@ test('only an authorized working draft can donate a bound file to a post', async
   if (rejected.ok === false) assert.equal(rejected.status, 409);
 });
 
+test('fingerprints reveal only verified exact-version content after live attachment authorization', async () => {
+	const original = attachmentDoc({ attachmentPurpose: 'file', attachmentState: 'ready', attachmentExpiresAt: undefined, objectVersionId: 'version-1' });
+	let doc = original; let reads = 0; let custom = false;
+	let head = { sizeBytes: doc.objectSizeBytes, checksumSha256: `${checksum(3)}-2`, checksumType: 'COMPOSITE', attachmentId: doc.shareId, versionId: 'version-1' };
+	let onRead = () => {};
+	const service = createAttachmentService({ store: { getById: async () => doc } as any, now: () => now, customMongoActive: () => custom,
+		getS3: () => noopS3({ headObject: async input => { assert.equal(input.versionId, 'version-1'); reads++; onRead(); return head; }, signDownload: async () => { throw Error('fingerprints never sign byte URLs'); } }) });
+	const result = await service.fingerprint({ id: doc.ownerId }, doc.shareId);
+	assert.equal(result.ok, true);
+	if (result.ok) {
+		assert.deepEqual(result.fingerprint, { algorithm: 'sha256-parts-v1', partSizeBytes: ATTACHMENT_MIN_PART_BYTES, partCount: 2, sha256: Buffer.alloc(32, 3).toString('hex') });
+		assert.match(result.version, /^[a-f0-9]{64}$/);
+		assert.equal(JSON.stringify(result).includes('objects/'), false); assert.equal(JSON.stringify(result).includes('version-1'), false);
+	}
+	for (const viewer of [null, { id: 'other' }]) { const before = reads; assert.equal((await service.fingerprint(viewer, doc.shareId)).ok, false); assert.equal(reads, before); }
+	for (const patch of [{ checksumType: 'FULL_OBJECT' }, { checksumSha256: `${checksum(3)}-1` }, { checksumSha256: 'invalid' }, { sizeBytes: 1 }, { attachmentId: 'other' }, { versionId: 'other' }]) {
+		const saved = head; head = { ...head, ...patch }; const rejected = await service.fingerprint({ id: doc.ownerId }, doc.shareId); assert.equal(rejected.ok, false); if (!rejected.ok) assert.equal(rejected.status, 409); head = saved;
+	}
+	onRead = () => { doc = { ...original, attachmentState: 'deleting' }; };
+	assert.equal((await service.fingerprint({ id: original.ownerId }, original.shareId)).ok, false);
+	onRead = () => {}; doc = original; custom = true; const before = reads;
+	assert.equal((await service.fingerprint({ id: doc.ownerId }, doc.shareId)).ok, false); assert.equal(reads, before);
+});
+
 test('password files cannot use ordinary attachment start, parts, complete, download, export or cleanup APIs', async () => {
   const doc = attachmentDoc({ attachmentPurpose: 'password', attachmentState: 'ready', targetId: 'vault-entry', objectVersionId: 'version-1' });
   let claims = 0;

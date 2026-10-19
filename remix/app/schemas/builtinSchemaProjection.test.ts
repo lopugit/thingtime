@@ -18,6 +18,7 @@ const fieldNames = (crystal: Record<string, unknown>): string[] => (crystal.fiel
 // Pinned projections. A diff here is a REVIEW PROMPT, not necessarily a bug:
 // a new registry field should appear (except a reserved name) and the pin updated in the same change.
 const EXPECTED_PROJECTED_FIELDS: Record<string, string[]> = {
+  file: ['name', 'trashed', 'content'],
   'password-manager-entry': ['title', 'passwordType', 'fields'],
   draft: [], // Private snapshots never enter the public schema projection.
   "timeline-snapshot-part": [],
@@ -55,6 +56,7 @@ const EXPECTED_PROJECTED_FIELDS: Record<string, string[]> = {
   "subspace-modlog": ["action", "postId", "userId", "reason", "detail"],
   "subspace-tombstone": ["slug", "subspaceId", "previousOwnerId", "deletedAt"],
   "subspace-report": ["postId", "commentId", "reason", "note", "status", "resolution", "resolvedById", "resolvedAt", "reportKey"],
+  "file-sync": ["configurationVersion", "name", "deviceId", "localRootId", "remoteFolderId", "sourceKind", "mode", "paused", "propagateDeletes", "network", "chargingOnly", "excludedPaths"],
   "folder": ["name", "icon", "description"],
   "app": ["clientId", "name", "origins", "nativeRedirectUris", "subscriptionTier", "subscriptionTierVersionId", "subscriptionTierVersion", "storageAllowanceBytes", "storageAllowanceOverrideBytes", "storageUsedBytes", "userStorageAllowanceBytes", "storageAccountingVersion"],
   "app-data": ["appId", "key", "value"],

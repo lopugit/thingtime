@@ -81,8 +81,17 @@ test('PAT scope and app namespace survive route snapshots without downgrading cr
 test('SSE changes detect deletion, ignore timestamps, and reauthorize before publishing', async () => {
 	let reads = 0, auth = 0;
 	const handler = createAgentOverviewHandler(dependencies({ resolveActor: async () => { auth++; return { kind: 'user', user }; },
-		readAgentOverview: async () => ({ rows: ++reads === 1 ? [thing('deleted-later')] : [], measuredAt: String(reads) }) }), { intervalMs: 2, lifetimeMs: 16 });
-	const response = await handler({ request: request(true) }); const output = await response.text();
+		readAgentOverview: async () => ({ rows: ++reads === 1 ? [thing('deleted-later')] : [], measuredAt: String(reads) }) }), { intervalMs: 2, lifetimeMs: 5_000 });
+	const response = await handler({ request: request(true) });
+	const reader = response.body!.getReader(), decoder = new TextDecoder();
+	let output = '';
+	try {
+		while (!output.includes('event: heartbeat')) {
+			const { value, done } = await reader.read();
+			if (done) break;
+			output += decoder.decode(value, { stream: true });
+		}
+	} finally { await reader.cancel(); }
 	assert.equal((output.match(/event: snapshot/g) || []).length, 2); assert.match(output, /event: heartbeat/); assert.ok(auth >= 5);
 	assert.match(output, /retry: 2000/); assert.equal(response.headers.get('Content-Type'), 'text/event-stream; charset=utf-8');
 });

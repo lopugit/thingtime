@@ -58,6 +58,14 @@ schema-parameterized adapter or separately authored saved Thing page.
   edits saved and reloaded, reconnect and session revocation. Rendered values
   matched independent Thing readbacks. All disposable services were cleaned up.
 
+## Current-main integration — 2026-10-19
+
+- Integrated `origin/main` at `f8fb34d8e6536cea5d36caa33de7af9ca6119b7e`, preserving file-sync imports, validation and capability contracts alongside the reusable live-source framework. No saved page, Component, Schema or Action definitions were added.
+- Advanced live-source creation negotiation to `api.things` 1.37.0 because current main already advertises 1.36.0 for file-sync support. Retained `api.agent-overview` 2.0.0, update 1.11.0 and resolve 1.7.0.
+- Corrected the focused overview script's obsolete saved-suite test path. Overview/actor/source checks (42), capability checks (106), schema checks (275), and webpage checks passed. The SSE heartbeat check now waits for the observed event and cancels its reader rather than relying on a 16 ms wall-clock deadline.
+- Client and Node server builds passed. Restored the locked local `@noble/hashes` dependency after the incoming file-sync tests exposed a stale install, and aligned their manifest assertion with 1.37.0.
+- The local-proxy semantic refresh returned incomplete/hollow document chunks and was safely refused by Graphify's shrink guard. Kept the prior semantic data and used the structural incremental refresh; current integration documentation is not claimed to be freshly semantically indexed.
+
 ## Production release acceptance — pending
 
 Use a local disposable identity and the external, uncommitted

@@ -34,6 +34,7 @@ export function ComponentCollection({
 	filters,
 	hideSearch,
 	hideSize,
+	hideCount,
 	size,
 	source,
 	filterPath,
@@ -87,6 +88,7 @@ export function ComponentCollection({
 				empty={typeof empty === 'string' ? empty : 'Nothing here yet.'}
 				hideSearch={hideSearch === true}
 				hideSize={hideSize === true}
+				hideCount={hideCount === true}
 				onSizeChange={setChosenSize}
 				size={chosenSize ?? (
 					size === 'all' ? 'all' : size === 'infinite' ? 'infinite' : COLLECTION_SIZES.includes(Number(size) as CollectionSize) ? (Number(size) as CollectionSize) : undefined

@@ -9,6 +9,11 @@ not commit account-specific page or schema Things as application source.
 
 Clients negotiate `api.agent-overview` **2.0.0** at the selected origin before
 using the adapter. This is a breaking contract from the earlier preview. The
+saved-page authoring client also negotiates `api.things` 1.37.0,
+`api.things-update` 1.11.0, and `api.webpages-resolve` 1.7.0 for live-source
+persistence and rendering. A 1.36.0 Things origin supports file-sync records
+but does not promise the live-source addition.
+The
 caller supplies schema names or IDs for task and any available project, agent,
 question, progress, and todo records using `taskSchema`, `projectSchema`,
 `agentSchema`, `questionSchema`, `progressSchema`, and `todoSchema`. A task
