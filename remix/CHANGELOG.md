@@ -80,6 +80,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- Commander login verification and API contract details: [PR #1044](../PRs/1044-commander-login-callback-fix-commander-thingtime-login-callback-registration.md).
+
 - 2026-10-19 — **Codex (AI)**: Check Commander OAuth capabilities and callback registration before browser login; recover an unregistered native callback through the explicitly registered loopback callback and bind PKCE attempts to their original server, app and redirect.
 
 - 2026-10-19: Give the editable Mac menu inventory Action an explicit 8 MiB browser response budget so real icon-bearing device snapshots load instead of failing at the 64 KiB default.
