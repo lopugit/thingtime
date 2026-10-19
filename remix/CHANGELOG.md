@@ -99,6 +99,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 - 2026-10-19: Diagnose unsupported or changed Mac scan entries with bounded relative paths, preserving complete-capture, account and folder-grant checks. Failed transfers show Needs attention. Real home indexing remains an open acceptance gate; no partial backup is claimed. — Codex (AI)
 
 
+- 2026-10-19 — Connection-pressure mitigation: reuse the application MongoDB
+  client for health checks, coalesce concurrent checks, and retire idle sockets.
+  Production recovery pending; the observed alert does not establish causation.
+  [PR #1048 details](../PRs/1048-subspace-production-acceptance-and-mongodb-health-pooling.md).
 - 2026-10-19 — **Codex (AI)**: Prepare the current-main file-sync release with reviewed home exclusions, editable hierarchical progress and saved transfer-speed windows; preserve current account/runtime protections and installed AutoFill integration. Completed speed counters now say Complete. Validation and release gates: [PR #1046](../PRs/1046-codex-file-sync-release-recoverable-file-sync-home-backups-and-live-progress.md).
 
 - Commander login verification and API contract details: [PR #1044](../PRs/1044-commander-login-callback-fix-commander-thingtime-login-callback-registration.md).

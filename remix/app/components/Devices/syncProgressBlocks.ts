@@ -91,7 +91,8 @@ export function syncProgressDisplay(branches: Record<string, SyncProgressBranch>
 	const root = branches[''], summary = root?.page?.parent, busy = Object.values(branches).some(branch => branch.busy);
 	const focused = branches[focusedFolder]?.page?.parent;
 	const focusDisplay = focused ? syncProgressNodeDisplay(focused, progress, state) : null;
-	const indexed = hasIndex ? summary ? `${summary.files.toLocaleString()} files and ${summary.folders.toLocaleString()} folders indexed.` : 'Structure indexed. Reading saved totals…'
+	const stoppedIndex = !hasIndex && ['error', 'paused', 'cancelled'].includes(state);
+	const indexed = stoppedIndex ? `Indexing ${state === 'error' ? 'stopped' : state} before completion.${progress?.indexed !== undefined ? ` ${progress.indexed.toLocaleString()} entries observed.` : ''}` : hasIndex ? summary ? `${summary.files.toLocaleString()} files and ${summary.folders.toLocaleString()} folders indexed.` : 'Structure indexed. Reading saved totals…'
 		: progress?.indexed !== undefined ? `${progress.indexed.toLocaleString()} entries indexed${progress.indexTotal === undefined ? ' · Total still being discovered.' : ` of ${progress.indexTotal.toLocaleString()}. Validating structure…`}`
 		: progress?.stage === 'checking' ? 'Checking access…' : 'Indexing files… Total still being discovered.';
 	const globalState = state === 'error' ? 'Error' : state === 'cancelled' ? 'Cancelled' : state === 'paused' ? 'Paused' : progress?.stage === 'complete' || state === 'complete' ? 'Complete'

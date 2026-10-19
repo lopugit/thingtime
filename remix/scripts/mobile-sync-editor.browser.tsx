@@ -22,6 +22,7 @@ const observations = { requests: 0, scans: 0, inspections: 0, captures: 0, pages
 const nativeCaptures = new Map<string, { capture: { id: string; generation: string; totalEntries: number }; entries: typeof localEntries }>();
 const inventoryReply = (request: any) => {
 	if (request.action === 'scan-capture') {
+		if (new URLSearchParams(location.search).has('diagnostic')) return { complete: false, scanFailure: { reason: 'symlink', path: 'nested/link' } };
 		const excludedPaths = canonicalNativeScanExclusions(request.excludedPaths ?? []);
 		const entries = localEntries.filter(entry => !isNativeScanExcluded(entry.path, excludedPaths));
 		const capture = { id: request.captureId, generation: crypto.randomUUID(), totalEntries: entries.length };

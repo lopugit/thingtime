@@ -299,8 +299,11 @@ function Connections({
 			transferSession.current?.session.stop();
 			const speeds = createTransferActivitySession(); transferSession.current = { id: saved.id, session: speeds };
 			setProgressDescriptors(previous => ({ ...previous, [saved.id]: undefined }));
+			writeStampedCache('tt:sync-progress-tree:' + syncScopeKey(syncScope), null);
+			let latestProgress: ForegroundSyncProgress = { stage: 'checking', confirmed: 0, total: 0 };
 			const publish = (value: ForegroundSyncProgress & { message?: string }) => {
 				assertActive();
+				latestProgress = value;
 				speeds.stage(value.stage);
 				setTransfers((previous) => ({ ...previous, [saved.id]: value }));
 				writeStampedCache(progressKey(saved.id), value);
@@ -451,9 +454,7 @@ function Connections({
 			} catch (cause) {
 				if (!active.signal.aborted)
 					publish({
-						stage: 'checking',
-						confirmed: 0,
-						total: 0,
+						...latestProgress,
 						message: cause instanceof Error ? cause.message : 'Transfer interrupted. Retry to recover saved work.'
 					});
 				throw cause;
@@ -711,7 +712,7 @@ function Connections({
 						{(host || capabilities?.platform === 'ios') && (progress || progressDescriptor) && <Box width="100%" minW={0}>
 							<SyncProgressViewer scopeKey={`${key}:${generation}:${saved.id}`} descriptor={progressDescriptor}
 								series={task?.transferSeries ?? (transferSession.current?.id === saved.id ? transferSession.current.session.series : undefined)}
-								progress={progress ?? undefined} status={task?.status ?? (running ? 'running' : progress?.stage === 'complete' ? 'complete' : 'paused')}
+								progress={progress ?? undefined} status={task?.status ?? (running ? 'running' : progress?.stage === 'complete' ? 'complete' : progress?.message && progress.stage !== 'retained' ? 'error' : 'paused')}
 								message={progress?.message} accountTransport={reviewTransport} currentScope={() => {
 									if (!mounted.current || rootIdentity.read().pending || rootIdentity.read().generation !== generation || runtimeOrigin() !== scope.origin)
 										throw Error('The account or storage destination changed.');

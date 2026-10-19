@@ -118,8 +118,17 @@ if (!process.env.TT_DESKTOP_SYNC_WORKER) {
 		await inspectLayout('upload-complete-progress');
 		await progress.getByRole('button', { name: 'Collapse Documents', exact: true }).click();
 		await progress.getByText('Documents/Keep', { exact: true }).waitFor({ state: 'hidden' });
-		assert.deepEqual(errors, []);
-		const result = { ok: true, checks: ['preset-edits-selected-draft-only', 'backup-paused-no-delete-propagation', 'preserves-existing-exclusions', 'editable-form-fields', 'nested-title-help-button-builder-save-reload', 'paused-save-prevents-transfer', 'Mac-1.6-native-filtered-capture', 'excluded-subtrees-absent-and-prefix-sibling-retained', 'desktop-mobile-top-bottom-no-overflow', 'integrated-progress-complete-with-independent-three-folder-receipts', 'progress-expand-collapse-nested-folder'], results, observations: observed,
+        await page.goto(`http://127.0.0.1:${port}/?platform=desktop&home&diagnostic`);
+        await page.getByRole('button', { name: 'Upload now', exact: true }).click();
+        await page.getByText('Needs attention', { exact: true }).waitFor();
+        await page.getByText('Indexing stopped before completion.', { exact: true }).waitFor();
+        await page.getByText('Indexing stopped at “nested/link”: symbolic links are not supported. Review this item and your exclusions before retrying.', { exact: true }).first().waitFor();
+        assert.equal(await page.getByText('Ready to upload', { exact: true }).count(), 0);
+        assert.equal(await page.getByText('Structure indexed. Reading saved totals…', { exact: true }).count(), 0);
+        assert.deepEqual(await page.evaluate(() => JSON.parse(localStorage.getItem('tt:fixture:sync-transfer-folders') || '[]')), uploads);
+        await inspectLayout('indexing-failure');
+        assert.deepEqual(errors, []);
+		const result = { ok: true, checks: ['preset-edits-selected-draft-only', 'backup-paused-no-delete-propagation', 'preserves-existing-exclusions', 'editable-form-fields', 'nested-title-help-button-builder-save-reload', 'paused-save-prevents-transfer', 'Mac-1.6-native-filtered-capture', 'excluded-subtrees-absent-and-prefix-sibling-retained', 'desktop-mobile-top-bottom-no-overflow', 'integrated-progress-complete-with-independent-three-folder-receipts', 'progress-expand-collapse-nested-folder', 'scoped-scan-error-shown-with-no-additional-uploads', 'failure-needs-attention-not-ready', 'failed-retry-does-not-reuse-old-index'], results, observations: observed,
 			coverage: 'Production preset/editor/Builder/transfer/progress UI with synthetic scoped HTTP/native grants, private Chromium profile and verified OS network isolation. Installed app, real home folder and real cloud upload unverified.' };
 		await writeFile(join(evidence, 'browser-result.json'), JSON.stringify(result, null, 2)); console.log(JSON.stringify(result));
 	} catch (error) {
