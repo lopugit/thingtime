@@ -96,6 +96,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- Commander login verification and API contract details: [PR #1044](../PRs/1044-commander-login-callback-fix-commander-thingtime-login-callback-registration.md).
+
+- 2026-10-19 — **Codex (AI)**: Check Commander OAuth capabilities and callback registration before browser login; recover an unregistered native callback through the explicitly registered loopback callback and bind PKCE attempts to their original server, app and redirect.
+
 - 2026-10-19 — **Codex (AI)**: Integrate mobile file-sync contracts with main: preserve Character, password, runtime and streaming guards; version device and pairing-claim additions as 1.13/1.2 without collision; bind the selected runtime and legacy renderer port through the owned middleware socket while retaining origin history. Renderer port acceptance: 18/18 focused tests. See [PR 1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
 
 - 2026-10-19 — **Codex (AI)**: Added editable saved upload/download speed trackers, independent averaging windows and decimal bit/logical-entry units. Bounded per-run history excludes retained offsets and recovered confirmations; native adapters without byte telemetry remain explicit. Isolated Builder and transport checks pass; release and real home upload remain open. See [PR 1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
