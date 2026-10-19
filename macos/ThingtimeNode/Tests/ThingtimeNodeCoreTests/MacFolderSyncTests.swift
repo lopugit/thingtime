@@ -451,6 +451,59 @@ final class MacFolderSyncTests: XCTestCase {
         }
     }
 
+    func testBatchPageSizeIsValidatedAndRetainsBothLiveOwnerChecks() async throws {
+        var checks = 0, denyAt = Int.max
+        let service = try service(verify: { owner, device in
+            checks += 1
+            guard owner == "owner", device == "device", checks != denyAt else { throw MobileFolderStore.Failure.unavailable }
+        })
+        let id = try await root(service)
+        for i in 0..<600 { try Data().write(to: folder.appendingPathComponent("selected/file-\(i)")) }
+        let fields: [String: JSONValue] = ["rootId": .string(id), "inventoryDeviceId": .string("device"), "captureId": .string(UUID().uuidString.lowercased())]
+        let captured = try await service.handle(request("scan-capture", fields)).decode([String: JSONValue].self)
+        let pageFields = fields.merging(["capture": try XCTUnwrap(captured["capture"]), "offset": .number(0), "pageSize": .number(512)]) { _, v in v }
+        checks = 0
+        let result = try await service.handle(request("scan-page", pageFields)).decode([String: JSONValue].self)
+        let page = try XCTUnwrap(result["inventoryPage"]).decode(MobileFolderInventory.Page.self)
+        XCTAssertEqual(page.entries.count, 512); XCTAssertEqual(page.nextOffset, 512); XCTAssertEqual(checks, 2)
+        for boundary in [1, 2] {
+            checks = 0; denyAt = boundary
+            await rejects { try await service.handle(self.request("scan-page", pageFields)) }
+            XCTAssertEqual(checks, boundary)
+        }
+        denyAt = Int.max
+        for i in 0..<600 {
+            try FileManager.default.createSymbolicLink(at: folder.appendingPathComponent("selected/link-\(i)"),
+                withDestinationURL: folder.appendingPathComponent("missing"))
+        }
+        let backup = backupFields(id)
+        _ = try await service.handle(request("scan-capture", backup))
+        let sealed = try await awaitBackup(service, fields: backup)
+        var descriptor = try XCTUnwrap(sealed["backupCapture"]).decode([String: JSONValue].self)
+        XCTAssertEqual(descriptor.removeValue(forKey: "state"), .string("complete"))
+        let skippedFields = backup.filter { $0.key != "excludedPaths" }.merging(["capture": .object(descriptor), "offset": .number(0), "pageSize": .number(512)]) { _, v in v }
+        checks = 0
+        let skippedResult = try await service.handle(request("scan-skips", skippedFields)).decode([String: JSONValue].self)
+        let skipped = try XCTUnwrap(skippedResult["skippedPage"]).decode([String: JSONValue].self)
+        XCTAssertEqual(try XCTUnwrap(skipped["skipped"]).decode([MobileFolderInventory.Skipped].self).count, 512)
+        XCTAssertEqual(skipped["nextOffset"], .number(512)); XCTAssertEqual(checks, 2)
+        for boundary in [1, 2] {
+            checks = 0; denyAt = boundary
+            await rejects { try await service.handle(self.request("scan-skips", skippedFields)) }
+            XCTAssertEqual(checks, boundary)
+        }
+        denyAt = Int.max
+        await rejects { try await service.handle(self.request("scan-page", pageFields.merging(["ownerId": .string("foreign")]) { _, v in v })) }
+        await rejects { try await service.handle(self.request("scan-page", pageFields.merging(["deviceId": .string("foreign")]) { _, v in v })) }
+        for invalid: JSONValue in [.null, .bool(true), .number(-1), .number(0), .number(4097), .number(1.5), .string("512")] {
+            await rejects { try await service.handle(self.request("scan-page", pageFields.merging(["pageSize": invalid]) { _, v in v })) }
+            await rejects { try await service.handle(self.request("scan-skips", ["pageSize": invalid, "capturePolicy": .string("backup-supported")])) }
+        }
+        for action in ["context", "list", "choose", "scan", "scan-capture", "scan-status", "scan-cancel", "scan-discard", "inspect"] {
+            await rejects { try await service.handle(self.request(action, ["pageSize": .number(512)])) }
+        }
+    }
+
     func testNativeScansPruneAndEchoExclusionsAndBindCaptureReuse() async throws {
         let service = try service(), id = try await root(service)
         let selected = folder.appendingPathComponent("selected")
@@ -515,7 +568,7 @@ final class MacFolderSyncTests: XCTestCase {
         let context = try await service.handle(request("context")).decode([String: JSONValue].self)
         XCTAssertEqual(context["deviceId"], .string("device"))
         let capabilities = try XCTUnwrap(context["capabilities"]).decode([String: String].self)
-        XCTAssertEqual(capabilities, ["fileAccessVersion": "1.9.0", "fileStagingVersion": "1.1.0", "filePublicationVersion": "1.2.0"])
+        XCTAssertEqual(capabilities, ["fileAccessVersion": "1.10.0", "fileStagingVersion": "1.1.0", "filePublicationVersion": "1.2.0"])
         let result = try await service.handle(request("conditions")).decode([String: JSONValue].self)
         XCTAssertEqual(result["conditions"], .object(["network": .string("unknown"), "charging": .null]))
     }

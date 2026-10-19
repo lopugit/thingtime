@@ -12495,3 +12495,19 @@ separate from deterministic discovery/lease tests.
   and Git-ignore rules, real native capture completion, automatic reconnect and
   at least one independently confirmed payload upload receipt. Index counts alone
   do not establish upload success or a complete backup.
+
+
+### Batched native inventory handoff — 2026-10-20
+
+- [x] Negotiate Mac access 1.10.0 before requesting larger pages. Reject older or
+  foreign-major hosts, non-integer/out-of-range sizes and options on other actions.
+- [x] Import variable-length transport batches into canonical 128-entry journal
+  pages. Pin the generation, exact offsets, total counts and 512 KiB byte bound;
+  retain complete skip coverage and abort before exposing another subpage.
+  Keep the sealed total visible while importing intermediate pages.
+- [x] A transient failure while importing a sealed capture must not discard it;
+  reconnect reuses its generation and only retires it after successful import.
+- [x] Native and Electron checks retain default128 behavior and independently
+  enforce opt-in bounds, version negotiation and owner/grant checks.
+- [ ] Install the verified signed build, resume the existing home capture without
+  rescanning, compare actual import progress and confirm a real payload receipt.

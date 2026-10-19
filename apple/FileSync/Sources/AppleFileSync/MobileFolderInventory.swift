@@ -90,6 +90,12 @@ public struct MobileFolderInventory: Sendable {
         var ignoredCount: Int? = nil
     }
     public static let maximumPageEntries = 128
+    public static let maximumBatchPageEntries = 4096
+    private static func pageLimit(_ requested: Int?) throws -> Int {
+        let limit = requested ?? maximumPageEntries
+        guard (1...maximumBatchPageEntries).contains(limit) else { throw Failure.invalid }
+        return limit
+    }
     public static let maximumPageBytes = 512 * 1024
     public static let maximumCaptures = 8
     private typealias Failure = MobileFolderStore.Failure
@@ -312,7 +318,8 @@ public struct MobileFolderInventory: Sendable {
             return BackupStatus(capture: old.capture, state: old.complete ? "complete" : "interrupted", ignoredCount: old.ignoredCount ?? 0)
         }
     }
-    public func readSkipped(_ scope: Scope, capture: Capture, bookmark: Data, offset: Int, ignoreRules: String? = nil) throws -> SkippedPage {
+    public func readSkipped(_ scope: Scope, capture: Capture, bookmark: Data, offset: Int, ignoreRules: String? = nil, pageSize: Int? = nil) throws -> SkippedPage {
+        let limit = try Self.pageLimit(pageSize)
         try MobileFolderReader.checkAccess(bookmark: bookmark)
         guard offset >= 0, let total = capture.totalSkipped, total >= 0,
               offset < total || (offset == 0 && total == 0) else { throw Failure.invalid }
@@ -324,7 +331,7 @@ public struct MobileFolderInventory: Sendable {
             var rows: [Skipped] = [], bytes = 16_384, bounded = false
             try db.rows(offset: offset, table: "skipped") { ordinal, data in
                 guard ordinal == offset + rows.count, ordinal < total else { throw Failure.storage }
-                if rows.count == Self.maximumPageEntries || bytes + data.count > Self.maximumPageBytes { bounded = true; return false }
+                if rows.count == limit || bytes + data.count > Self.maximumPageBytes { bounded = true; return false }
                 let row = try JSONDecoder().decode(Skipped.self, from: data)
                 let gap = MobileFolderReader.BackupGap(path: row.path, reason: row.reason, scope: row.scope)
                 guard row.ordinal == ordinal, gap.path == row.path, gap.reason == row.reason, gap.scope == row.scope else { throw Failure.storage }
@@ -338,7 +345,8 @@ public struct MobileFolderInventory: Sendable {
 
     /// Sealed rows are immutable. The final offset and total count prove that
     /// the client received the whole capture, including an empty directory.
-    public func read(_ scope: Scope, capture: Capture, bookmark: Data, offset: Int, ignoreRules: String? = nil) throws -> Page {
+    public func read(_ scope: Scope, capture: Capture, bookmark: Data, offset: Int, ignoreRules: String? = nil, pageSize: Int? = nil) throws -> Page {
+        let limit = try Self.pageLimit(pageSize)
         try MobileFolderReader.checkAccess(bookmark: bookmark)
         guard offset >= 0 else { throw Failure.invalid }
         return try locked(scope, id: capture.id) { fd in
@@ -349,7 +357,7 @@ public struct MobileFolderInventory: Sendable {
             var entries: [MobileFolderReader.Entry] = [], bytes = 16_384, bounded = false
             try db.rows(offset: offset) { ordinal, data in
                 guard ordinal == offset + entries.count, ordinal < capture.totalEntries else { throw Failure.storage }
-                if entries.count == Self.maximumPageEntries || bytes + data.count > Self.maximumPageBytes { bounded = true; return false }
+                if entries.count == limit || bytes + data.count > Self.maximumPageBytes { bounded = true; return false }
                 entries.append(try JSONDecoder().decode(MobileFolderReader.Entry.self, from: data)); bytes += data.count
                 return true
             }

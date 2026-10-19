@@ -89,9 +89,17 @@ test('foreground partial backup uploads supported entries, publishes partial cov
 		for (let offset = 0; offset < f.local.length; offset += 128) yield { generation: c.generation, ordinal: offset / 128, entries: structuredClone(f.local.slice(offset, offset + 128)),
 			backupCapture: c, ...(offset + 128 >= f.local.length ? { totalEntries: f.local.length } : {}) };
 	};
-	let completed: unknown; input.progress = value => { if (value.stage === 'complete') completed = value; };
+	let completed: unknown, partialImportObserved = false;
+	input.progress = value => {
+		if (value.stage === 'complete') completed = value;
+		if (value.stage === 'scanning' && value.coverage && value.indexed! > 0 && value.indexed! < f.local.length) {
+			partialImportObserved = true;
+			assert.equal(value.indexTotal, f.local.length, 'sealed total must remain visible throughout batch import');
+		}
+	};
 	let descriptor: InventoryIdentity | undefined; input.inventorySession = d => { descriptor = d.inventory; };
 	await assert.rejects(runPagedForegroundCloudSync(saved, scope, input, new AbortController().signal), /lost accepted/);
+	assert.ok(partialImportObserved);
 	assert.equal(f.creates(), 129); assert.equal((await input.journal.inventory(access).readSkips(descriptor!))?.totalSkipped, 1);
 	await f.reload(); input.journal = f.journal(); descriptor = undefined;
 	await runPagedForegroundCloudSync(saved, scope, input, new AbortController().signal); assert.equal(f.creates(), 129);

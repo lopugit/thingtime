@@ -8,10 +8,10 @@ import { rootIdentity } from '../utils/rootIdentity';
 import { createSyncTaskRuntime } from './syncTaskRuntime';
 import { openSyncJournal, withSyncRootLock, syncScopeKey } from './journal.client';
 import { runPagedForegroundCloudSync } from './pagedForegroundSync';
-import { readNativeInventory, NativeInventoryRetryWait, type LocalInventoryPage } from './nativeInventory';
+import { readNativeInventory, NATIVE_INVENTORY_BATCH_ENTRIES, NativeInventoryRetryWait, type LocalInventoryPage } from './nativeInventory';
 import { readCloudFolderInventoryPages } from './cloudInventoryPages.client';
 import { readCloudFolderInventory } from './cloudInventory.client';
-import { mobileFolderSource, supportsNativeInventoryPages, supportsNativePathInspection, supportsNativeBackupCapture, supportsNativeIgnoreRules } from './mobileFolders.client';
+import { mobileFolderSource, supportsNativeInventoryPages, supportsNativePathInspection, supportsNativeBackupCapture, supportsNativeIgnoreRules, supportsNativeInventoryBatches } from './mobileFolders.client';
 import { approveMobileSyncTarget } from './mobileSyncTarget.client';
 import { assertPhotoSourcePolicy } from './photoSourcePolicy';
 import { createConflictReviewController } from './conflictReviewController';
@@ -77,7 +77,7 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 					if (!changed) throw Error('The sync job changed before indexing.'); job = changed;
 				}
 				for await (const page of readNativeInventory({ ownerId: binding.ownerId, deviceId: binding.deviceId, rootId: reviewed.configuration.localRootId,
-					excludedPaths: reviewed.configuration.excludedPaths, ...(reviewed.configuration.ignoreRules ? { ignoreRules: reviewed.configuration.ignoreRules } : {}), signal, request, ...(backup ? { backupPolicy: reviewed.configuration, captureId: job!.nativeCaptureId,
+					excludedPaths: reviewed.configuration.excludedPaths, ...(reviewed.configuration.ignoreRules ? { ignoreRules: reviewed.configuration.ignoreRules } : {}), signal, request, ...(supportsNativeInventoryBatches(capabilities) ? { pageSize: NATIVE_INVENTORY_BATCH_ENTRIES } : {}), ...(backup ? { backupPolicy: reviewed.configuration, captureId: job!.nativeCaptureId,
 						onCaptureStatus: async value => {
 							if (job!.nativeCaptureGeneration === value.generation) return;
 							const changed = await jobs!.observeCapture(job!, value.generation); check();

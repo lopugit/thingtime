@@ -252,3 +252,70 @@ test('native trash and restoration use the same live main-frame account boundary
         await assert.rejects(f.host.request(f.event, f.input({ action, rootId: input.rootId, trash })));
     }
 });
+
+
+test('larger inventory pages negotiate native 1.10 once within the live account and device scope', async () => {
+    const f = fixture();
+    let checks = 0;
+    const verify = f.host.verifyAccount;
+    f.host.verifyAccount = async (...args) => { checks++; return verify(...args); };
+    f.run(async (_method, request) => ({ ...request, roots: [], capabilities: { fileAccessVersion: '1.10.0' } }));
+    const first = f.input({ action: 'scan-page', pageSize: 4096, offset: 0 });
+    assert.equal((await f.host.request(f.event, first)).pageSize, 4096);
+    assert.deepEqual(f.calls.map(call => call.action), ['context', 'scan-page']);
+    assert.notEqual(f.calls[0].requestId, first.requestId);
+    assert.equal(f.calls[0].pageSize, undefined);
+    assert.deepEqual([f.calls[0].ownerId, f.calls[0].deviceId, f.calls[0].origin], ['owner', 'device', f.context.apiOrigin]);
+    assert.equal(checks, 3); // Before negotiation, after negotiation, after the page.
+    checks = 0;
+    await f.host.request(f.event, f.input({ action: 'scan-skips', pageSize: 512, offset: 4096 }));
+    assert.equal(checks, 2); // Cached capability never replaces either live account check.
+    assert.deepEqual(f.calls.map(call => call.action), ['context', 'scan-page', 'scan-skips']);
+    await f.host.request(f.event, f.input({ action: 'scan-page', pageSize: 512, deviceId: 'another-device' }));
+    assert.deepEqual(f.calls.slice(-2).map(call => call.action), ['context', 'scan-page']);
+    f.host.invalidate();
+    await f.host.request(f.event, f.input({ action: 'scan-page', pageSize: 512 }));
+    assert.deepEqual(f.calls.slice(-2).map(call => call.action), ['context', 'scan-page']);
+});
+
+test('explicit native context warms page negotiation and older native hosts retain legacy paging', async () => {
+    const f = fixture();
+    f.run(async (_method, request) => ({ ...request, roots: [], capabilities: { fileAccessVersion: '1.11.0' } }));
+    await f.host.request(f.event, f.input({ action: 'context' }));
+    await f.host.request(f.event, f.input({ action: 'scan-page', pageSize: 512 }));
+    assert.deepEqual(f.calls.map(call => call.action), ['context', 'scan-page']);
+    for (const version of [undefined, '1.9.9', '2.0.0', '1.010.0', '1.10.0-beta', '1.10.99999999999999999999']) {
+        const old = fixture();
+        old.run(async (_method, request) => ({ ...request, roots: [], capabilities: { fileAccessVersion: version } }));
+        await assert.rejects(old.host.request(old.event, old.input({ action: 'scan-page', pageSize: 512 })), /larger inventory pages/);
+        assert.deepEqual(old.calls.map(call => call.action), ['context']);
+        await old.host.request(old.event, old.input({ action: 'scan-page' }));
+        assert.deepEqual(old.calls.map(call => call.action), ['context', 'scan-page']);
+        assert.equal(old.calls[1].pageSize, undefined);
+    }
+});
+
+test('invalid page sizes and page sizes on unrelated actions never reach native', async () => {
+    const f = fixture();
+    for (const action of ['scan-page', 'scan-skips'])
+        for (const pageSize of [null, undefined, true, '512', 0, -1, 4097, 1.5, Number.MAX_SAFE_INTEGER + 1])
+            await assert.rejects(f.host.request(f.event, f.input({ action, pageSize })));
+    for (const action of ['context', 'list', 'choose', 'scan', 'scan-capture', 'scan-status', 'scan-cancel', 'scan-discard', 'read', 'suspend'])
+        await assert.rejects(f.host.request(f.event, f.input({ action, pageSize: 512 })));
+    assert.equal(f.calls.length, 0);
+});
+
+test('native page negotiation and large responses preserve post-operation account and identity fences', async () => {
+    for (const boundary of ['negotiation-account', 'negotiation-binding', 'page-account']) {
+        const f = fixture();
+        f.run(async (_method, request) => {
+            const result = { ...request, roots: [], capabilities: { fileAccessVersion: '1.10.0' } };
+            if (boundary === 'negotiation-account' && request.action === 'context') f.account('foreign');
+            if (boundary === 'negotiation-binding' && request.action === 'context') result.ownerId = 'foreign';
+            if (boundary === 'page-account' && request.action === 'scan-page') f.account('foreign');
+            return result;
+        });
+        await assert.rejects(f.host.request(f.event, f.input({ action: 'scan-page', pageSize: 4096 })));
+        assert.deepEqual(f.calls.map(call => call.action), boundary === 'page-account' ? ['context', 'scan-page'] : ['context']);
+    }
+});

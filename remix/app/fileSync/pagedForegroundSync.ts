@@ -108,7 +108,7 @@ export async function runPagedForegroundCloudSync(reviewed: SavedFileSyncConfigu
 				...(page.totalEntries === undefined ? {} : { totalEntries: page.totalEntries }) });
 			indexed += page.entries.length;
 			if (reportIndex) input.progress({ stage: 'scanning', confirmed: 0, total: 0, indexed,
-				...(page.totalEntries === undefined ? {} : { indexTotal: page.totalEntries }), ...(coverage ? { skipped, coverage: coverage.coverage, consistency: coverage.consistency } : {}) });
+				...(coverage ? { indexTotal: coverage.totalEntries } : page.totalEntries === undefined ? {} : { indexTotal: page.totalEntries }), ...(coverage ? { skipped, coverage: coverage.coverage, consistency: coverage.consistency } : {}) });
 			terminal = page.totalEntries !== undefined;
 		}
 		check();

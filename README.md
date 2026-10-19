@@ -6210,3 +6210,12 @@ A temporary identity timeout, offline connection, HTTP408/429 or server5xx leave
 the private capture intact. Status/effects still require fresh authorization;
 sealing waits with capped backoff. Revocation, changed grants and cancellation
 still stop the job. Automatic sync can retry the same capture after reconnecting.
+
+
+Mac file access 1.10.0 also negotiates `pageSize` for sealed inventory import.
+New clients request up to 4096 rows within the existing 512 KiB response bound;
+older hosts and omitted options retain 128-row responses. The client splits each
+batch into the existing 128-row journal format. Each request still checks the
+account, selected origin, device and grant before and after native IO. No new
+service, secret or database migration is required, and saved sealed captures
+remain compatible with the signed update.

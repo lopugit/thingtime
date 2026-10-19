@@ -10,6 +10,14 @@ export type NativeScanSkip = { ordinal: number; path: string | null; reason: 'sy
 export type NativeSkippedPage = { capture: NativeBackupCapture; offset: number; skipped: NativeScanSkip[]; nextOffset: number | null; totalSkipped: number };
 export type NativeIndexProgress = Pick<NativeBackupStatus, 'state' | 'coverage' | 'consistency' | 'totalEntries' | 'totalSkipped'>;
 export class NativeInventoryRetryWait extends Error {}
+export const NATIVE_INVENTORY_BATCH_ENTRIES = 4096;
+const JOURNAL_PAGE_ENTRIES = 128;
+/** Opt-in transport bound; journal pages keep their existing portable format. */
+export function nativeInventoryPageSize(value: unknown = JOURNAL_PAGE_ENTRIES): number {
+	if (!Number.isSafeInteger(value) || (value as number) < 1 || (value as number) > NATIVE_INVENTORY_BATCH_ENTRIES)
+		throw Error('Invalid native inventory page size.');
+	return value as number;
+}
 // Each status read reauthorizes before and after native IO. Keep observation
 // traffic comfortably below the shared device-read budget while the native
 // worker continues independently; this does not cache or skip authorization.
@@ -42,10 +50,11 @@ export function parseNativeScanSkip(value: unknown, ordinal: number): NativeScan
 			s.path === null ? s.reason !== 'invalid-path' : !validSyncPath(s.path))) throw Error('Invalid native skipped item.');
 	return { ordinal, path: s.path, reason: s.reason, scope: s.scope };
 }
-export function parseNativeSkippedPage(value: unknown, capture: NativeBackupCapture, offset: number): NativeSkippedPage {
+export function parseNativeSkippedPage(value: unknown, capture: NativeBackupCapture, offset: number, pageSize?: number): NativeSkippedPage {
+	const maximum = nativeInventoryPageSize(pageSize);
 	const p = value as NativeSkippedPage, expected = parseNativeBackupCapture(capture);
 	if (!p || JSON.stringify(parseNativeBackupCapture(p.capture)) !== JSON.stringify(expected) || !Number.isSafeInteger(offset) || offset < 0 ||
-		p.offset !== offset || p.totalSkipped !== expected.totalSkipped || !Array.isArray(p.skipped) || p.skipped.length > 128) throw Error('Native skipped inventory changed.');
+		p.offset !== offset || p.totalSkipped !== expected.totalSkipped || !Array.isArray(p.skipped) || p.skipped.length > maximum) throw Error('Native skipped inventory changed.');
 	const next = offset + p.skipped.length;
 	if (next > expected.totalSkipped || (!p.skipped.length && (offset !== 0 || expected.totalSkipped !== 0)) ||
 		p.nextOffset !== (next === expected.totalSkipped ? null : next)) throw Error('Native skipped inventory is incomplete.');
@@ -66,10 +75,11 @@ export function parseNativeInventoryCapture(value: unknown): NativeInventoryCapt
 	const c = value as NativeInventoryCapture;
 	return c && ['coverage', 'consistency', 'totalSkipped'].some(key => key in c) ? parseNativeBackupCapture(c) : parseNativeInventoryCaptureBase(c);
 }
-export function parseNativeInventoryPage(value: unknown, capture: NativeInventoryCapture, offset: number): NativeInventoryPage {
+export function parseNativeInventoryPage(value: unknown, capture: NativeInventoryCapture, offset: number, pageSize?: number): NativeInventoryPage {
+	const maximum = nativeInventoryPageSize(pageSize);
 	const p = value as NativeInventoryPage, expected = parseNativeInventoryCapture(capture);
 	if (!p || JSON.stringify(parseNativeInventoryCapture(p.capture)) !== JSON.stringify(expected) ||
-		!Number.isSafeInteger(offset) || offset < 0 || p.offset !== offset || !Array.isArray(p.entries) || p.entries.length > 128 ||
+		!Number.isSafeInteger(offset) || offset < 0 || p.offset !== offset || !Array.isArray(p.entries) || p.entries.length > maximum ||
 		p.entries.some(entry => !validSyncEntry(entry))) throw Error('Native inventory page changed.');
 	const next = offset + p.entries.length;
 	if (next > expected.totalEntries || (!p.entries.length && (offset !== 0 || expected.totalEntries !== 0)) ||
@@ -83,7 +93,7 @@ export function parseNativeInventoryPage(value: unknown, capture: NativeInventor
  * never become an empty scan; the caller seals its journal after the final count. */
 export async function* readNativeInventory(input: {
 	ownerId: string; deviceId: string; rootId: string; signal: AbortSignal; excludedPaths?: string[]; ignoreRules?: string;
-	backupPolicy?: SyncPolicy; captureId?: string; onProgress?(progress: NativeIndexProgress): void;
+	backupPolicy?: SyncPolicy; captureId?: string; pageSize?: number; onProgress?(progress: NativeIndexProgress): void;
 	/** Durable task adapter binds observed native generations and restart budget. */
 	onCaptureStatus?(status: NativeBackupStatus): Promise<void>;
 	/** A task-owned scheduler may replace the abortable polling delay in tests. */
@@ -91,6 +101,8 @@ export async function* readNativeInventory(input: {
 	request(ownerId: string, request: FolderRequest, signal: AbortSignal): Promise<FolderResult>;
 }): AsyncGenerator<LocalInventoryPage> {
 	const { ownerId, deviceId: inventoryDeviceId, rootId, signal } = input;
+	const pageSize = nativeInventoryPageSize(input.pageSize);
+	const batch = input.pageSize === undefined ? {} : { pageSize };
 	const request: typeof input.request = async (owner, request, requestSignal) => {
 		try { return await input.request(owner, request, requestSignal); }
 		catch (error) {
@@ -105,6 +117,7 @@ export async function* readNativeInventory(input: {
 	const ignoreRules = canonicalIgnoreRules(input.ignoreRules), ignore = createSyncIgnorePolicy(ignoreRules);
 	const ignoredPolicy = ignoreRules ? { ignoreRules } : {};
 	let capture: NativeInventoryCapture | undefined;
+	let preserveCapture = false;
 	try {
 		signal.throwIfAborted();
 		const captureId = input.captureId ?? crypto.randomUUID();
@@ -140,10 +153,16 @@ export async function* readNativeInventory(input: {
 			let skipOffset = 0;
 			do {
 				signal.throwIfAborted();
-				const response = await request(ownerId, { action: 'scan-skips', ...ignoredPolicy, rootId, inventoryDeviceId, capture: capture as NativeBackupCapture, offset: skipOffset, capturePolicy: 'backup-supported' }, signal);
-				const skippedPage = parseNativeSkippedPage(response.skippedPage, capture as NativeBackupCapture, skipOffset);
+				const response = await request(ownerId, { action: 'scan-skips', ...batch, ...ignoredPolicy, rootId, inventoryDeviceId, capture: capture as NativeBackupCapture, offset: skipOffset, capturePolicy: 'backup-supported' }, signal);
+				const skippedPage = parseNativeSkippedPage(response.skippedPage, capture as NativeBackupCapture, skipOffset, pageSize);
 				signal.throwIfAborted();
-				yield { generation: capture.generation, ordinal: 0, entries: [], backupCapture: capture as NativeBackupCapture, skippedPage };
+				for (let start = 0; start < Math.max(1, skippedPage.skipped.length); start += JOURNAL_PAGE_ENTRIES) {
+					signal.throwIfAborted();
+					const skipped = skippedPage.skipped.slice(start, start + JOURNAL_PAGE_ENTRIES);
+					const offset = skipOffset + start, next = offset + skipped.length;
+					yield { generation: capture.generation, ordinal: 0, entries: [], backupCapture: capture as NativeBackupCapture,
+						skippedPage: { ...skippedPage, offset, skipped, nextOffset: next === skippedPage.totalSkipped ? null : next } };
+				}
 				if (skippedPage.nextOffset === null) break;
 				skipOffset = skippedPage.nextOffset;
 			} while (true);
@@ -152,18 +171,27 @@ export async function* readNativeInventory(input: {
 		let offset = 0, ordinal = 0;
 		while (true) {
 			signal.throwIfAborted();
-			const response = await request(ownerId, { action: 'scan-page', ...ignoredPolicy, rootId, inventoryDeviceId, capture, offset, ...(input.backupPolicy ? { capturePolicy: 'backup-supported' as const } : {}) }, signal);
+			const response = await request(ownerId, { action: 'scan-page', ...batch, ...ignoredPolicy, rootId, inventoryDeviceId, capture, offset, ...(input.backupPolicy ? { capturePolicy: 'backup-supported' as const } : {}) }, signal);
 			signal.throwIfAborted();
-			const page = parseNativeInventoryPage(response.inventoryPage, capture, offset);
+			const page = parseNativeInventoryPage(response.inventoryPage, capture, offset, pageSize);
 			if (page.entries.some(entry => isNativeScanExcluded(entry.path, exclusions) || ignore.ignored(entry.path, entry.kind))) throw Error('Native inventory included an excluded path.');
-			yield { generation: capture.generation, ordinal: ordinal++, entries: page.entries, ...(input.backupPolicy ? { backupCapture: capture as NativeBackupCapture } : {}),
-				...(page.nextOffset === null ? { totalEntries: capture.totalEntries } : {}) };
+			for (let start = 0; start < Math.max(1, page.entries.length); start += JOURNAL_PAGE_ENTRIES) {
+				signal.throwIfAborted();
+				const entries = page.entries.slice(start, start + JOURNAL_PAGE_ENTRIES);
+				yield { generation: capture.generation, ordinal: ordinal++, entries, ...(input.backupPolicy ? { backupCapture: capture as NativeBackupCapture } : {}),
+					...(page.nextOffset === null && start + entries.length === page.entries.length ? { totalEntries: capture.totalEntries } : {}) };
+			}
 			if (page.nextOffset === null) return;
 			offset = page.nextOffset;
 		}
+	} catch (error) {
+		// A temporary transport failure must not retire the sealed native source
+		// that the durable job needs for its next import attempt.
+		preserveCapture = error instanceof NativeInventoryRetryWait;
+		throw error;
 	} finally {
 		// Owner changes/cancellation can refuse cleanup. The native cache evicts
 		// old captures under its scope lock, so an abandoned request stays bounded.
-		if (capture && !signal.aborted) await request(ownerId, { action: 'scan-discard', ...ignoredPolicy, rootId, inventoryDeviceId, capture, ...(input.backupPolicy ? { capturePolicy: 'backup-supported' as const } : {}) }, signal).catch(() => {});
+		if (capture && !signal.aborted && !preserveCapture) await request(ownerId, { action: 'scan-discard', ...ignoredPolicy, rootId, inventoryDeviceId, capture, ...(input.backupPolicy ? { capturePolicy: 'backup-supported' as const } : {}) }, signal).catch(() => {});
 	}
 }
