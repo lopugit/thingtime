@@ -230,3 +230,32 @@ test('desktop excluded scans fail before dispatch on an older native host', asyn
 		await assert.rejects(host.request('owner', request, f.lifetime.signal), /Update Thingtime to exclude paths/);
 	assert.equal(f.calls.length, calls);
 });
+
+test('fixed native verification retry survives IPC redaction; arbitrary and authority failures remain terminal', async () => {
+ const { SyncConnectionWait, isSyncConnectionFailure } = await import('./syncConnectionWait');
+ const marker = '[folder_identity_retry] Folder identity verification is temporarily unavailable. Retry after reconnecting.';
+ for (const message of [marker, `Error invoking remote method 'thingtime-desktop:folder-sync': Error: ${marker}`,
+  `private-prefix ${marker}`, `${marker} private-suffix`, 'Folder access changed. Reopen this device with the current account.']) {
+  for (const initial of [true, false]) {
+   let fail = initial;
+   const bridge = { folderSyncRequest: async (input: any) => {
+    if (fail) throw Error(message);
+    return { ...input, origin, capabilities: { fileAccessVersion: '1.10.0' },
+     apiCapabilities: { schemaVersion: 1, origin, features: {} } };
+   } };
+   const attempt = async () => {
+    const host = await createDesktopFolderHost({ ownerId: 'owner', deviceId: 'device', bridge,
+     signal: new AbortController().signal, rendererOrigin: () => 'http://127.0.0.1:12001', assertCurrent: () => {} });
+    fail = true;
+    await host.request('owner', { action: 'list' }, new AbortController().signal);
+   };
+   const expected = message === marker || message.startsWith("Error invoking remote method '");
+   await assert.rejects(attempt(), error => {
+    assert.equal(error instanceof SyncConnectionWait, expected);
+    assert.equal(isSyncConnectionFailure(error), expected);
+    assert.doesNotMatch((error as Error).message, /private-prefix|private-suffix|folder_identity_retry/);
+    return true;
+   });
+  }
+ }
+});

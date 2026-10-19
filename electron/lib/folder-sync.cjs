@@ -16,6 +16,7 @@ const transientStatus = status => status === 408 || status === 429 || (status >=
 async function verificationFetch(context, url, options) {
     try { return await context.window.webContents.session.fetch(url, options); }
     catch (error) {
+        if (options.signal.aborted && options.signal.reason?.name === 'TimeoutError') throw verificationRetry();
         options.signal.throwIfAborted();
         // Chromium network failures use net::ERR_* messages. Certificate,
         // redirect and policy failures deliberately remain terminal.
@@ -52,6 +53,10 @@ async function readAccount(context, signal) {
             (context.appOrigin !== context.apiOrigin && response.headers.get('x-thingtime-api-fallback') !== context.apiOrigin)) throw unavailable();
         const value = await boundedJson(response, signal, 64 * 1024);
         if (value?.user?.id !== context.ownerId || value?.user?.accountKind !== 'user') throw unavailable();
+    } catch (error) {
+        if (signal.aborted && signal.reason?.name === 'TimeoutError' &&
+            (error === signal.reason || ['AbortError', 'TimeoutError'].includes(error?.name))) throw verificationRetry();
+        throw error;
     } finally { if (!response.body?.locked) await response.body?.cancel().catch(() => {}); }
 }
 async function readCapabilities(context, signal) {
@@ -76,6 +81,10 @@ async function readCapabilities(context, signal) {
             if (typeof version === 'string' && /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/.test(version) && version.length <= 32) features[key] = { version };
         }
         return { schemaVersion: 1, origin: context.apiOrigin, features };
+    } catch (error) {
+        if (signal.aborted && signal.reason?.name === 'TimeoutError' &&
+            (error === signal.reason || ['AbortError', 'TimeoutError'].includes(error?.name))) throw verificationRetry();
+        throw error;
     } finally { if (!response.body?.locked) await response.body?.cancel().catch(() => {}); }
 }
 

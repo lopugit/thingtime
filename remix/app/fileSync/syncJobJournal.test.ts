@@ -211,3 +211,20 @@ test('legacy one-shot attention can be explicitly stopped before applying new ig
  assert.equal(await jobs.finish(recovered, Date.now()), null, 'old callbacks cannot finish the replacement');
  journal.close();
 });
+
+test('retrying automatic attention preserves its interval and sealed capture; explicit Stop still disables repetition', async () => {
+ const factory = new IDBFactory(); let journal = await open(factory), jobs = jobsFor(journal);
+ const configuration = { ...saved(), configuration: { ...saved().configuration, mode: 'backup' as const, propagateDeletes: false } };
+ const captureId = crypto.randomUUID(), generation = crypto.randomUUID();
+ let job = (await jobs.capture(await jobs.admit(configuration, 'automatic', 300_000), captureId))!;
+ job = (await jobs.observeCapture(job, generation))!;
+ await jobs.attention(job); journal.close(); journal = await open(factory); jobs = jobsFor(journal);
+ const retry = await jobs.admit(configuration, 'unused');
+ assert.equal(retry.id, job.id); assert.equal(retry.intervalMs, 300_000);
+ assert.equal(retry.nativeCaptureId, captureId); assert.equal(retry.nativeCaptureGeneration, generation);
+ const finished = (await jobs.finish(retry, 100))!;
+ assert.equal(finished.state, 'scheduled'); assert.equal(finished.nextRunAt, 300_100);
+ await jobs.pause(finished);
+ assert.equal((await jobs.admit(configuration, 'explicit-one-shot')).intervalMs, undefined);
+ journal.close();
+});

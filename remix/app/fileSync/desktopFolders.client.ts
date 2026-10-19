@@ -1,3 +1,4 @@
+import { SyncConnectionWait } from './syncConnectionWait';
 import { createFolderHostFetch } from './folderHostFetch.client';
 import type { ThingtimeDesktopBridge } from '../utils/electronBridge';
 import { capabilitySatisfies } from '../api/utils/capabilities/capabilityContract';
@@ -90,8 +91,12 @@ export async function createDesktopFolderHost(input: {
 					dispatched = true;
 					return invoke({ ...expected, ...payload }).catch((error: unknown) => {
 						// Electron wraps rejected IPC messages and discards custom error
-						// fields. Only recognize this fixed host compatibility message;
+						// fields. Only recognize fixed host compatibility/retry messages;
 						// never display arbitrary native errors, paths or transport details.
+						const retry = '[folder_identity_retry] Folder identity verification is temporarily unavailable. Retry after reconnecting.';
+						if (error instanceof Error && (error.message === retry ||
+							error.message === `Error invoking remote method 'thingtime-desktop:folder-sync': Error: ${retry}`))
+							throw new SyncConnectionWait('Waiting for folder access verification to reconnect.');
 						const unsupported = 'The selected server does not support this version of folder sync.';
 						if (error instanceof Error && (error.message === unsupported ||
 							error.message === `Error invoking remote method 'thingtime-desktop:folder-sync': Error: ${unsupported}`))

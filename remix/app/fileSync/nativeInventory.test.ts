@@ -410,6 +410,7 @@ test('cancellation between subpages never exposes the remainder of a transport b
 
 test('transient batch import failure keeps the sealed capture for reconnect', async () => {
  const { NativeInventoryRetryWait } = await import('./nativeInventory');
+ const { SyncConnectionWait } = await import('./syncConnectionWait');
  const current = { ...capture, coverage: 'full' as const, consistency: 'per-entry' as const, totalSkipped: 0 };
  const requests: string[] = []; let fail = true;
  const input = { ownerId: 'owner', deviceId: 'device', rootId, captureId: current.id, pageSize: 4096,
@@ -419,7 +420,7 @@ test('transient batch import failure keeps the sealed capture for reconnect', as
    if (r.action === 'scan-capture') return { roots: [], backupCapture: { ...current, state: 'complete' as const } };
    if (r.action === 'scan-skips') return { roots: [], skippedPage: { capture: current, offset: 0, skipped: [], nextOffset: null, totalSkipped: 0 } };
    if (r.action === 'scan-page') {
-    if (fail) throw Error('[folder_identity_retry]');
+    if (fail) throw new SyncConnectionWait('Waiting for folder access verification to reconnect.');
     return { roots: [], inventoryPage: { ...page, capture: current } };
    }
    return { roots: [] };

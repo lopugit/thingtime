@@ -3693,3 +3693,19 @@ Unit/native coverage is separate from installed throughput acceptance. Measure
 the actual installed import and first confirmed payload before claiming this
 resolves end-to-end backup performance. Symlink/special-file preservation,
 Android and complete backup acceptance remain unfinished.
+
+## Desktop retry continuity — 2026-10-20
+
+The desktop bridge preserves the host's exact, redacted identity-verification
+retry signal as a typed connection wait. Both initial negotiation and later
+inventory reads use it; authority failures and arbitrary native errors remain
+terminal/redacted. Verification deadlines retain that same retry classification.
+A sealed inventory stays available through a connection wait. Explicit retry of
+an automatic attention-state job retains its admitted interval and capture;
+explicit Stop still disables repetition unless automatic sync is started again.
+
+Installed PR1053 reused the sealed 3,653,988-entry home capture after Retry without
+a new Rust scan, but automatic restart entered attention and the old Retry path
+dropped its interval. The exact triggering failure was not retained across Quit.
+The fixes above address reproduced code paths; real automatic restart and cloud
+payload acceptance remain open. Index/import counts do not prove payload upload.
