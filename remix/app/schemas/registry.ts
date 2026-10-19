@@ -1,7 +1,6 @@
 import { validateLiveSource } from './liveSources';
 import { fileSyncSchema, parseFileSyncConfiguration, FILE_SYNC_KIND } from '../fileSync/configuration';
 import { HTML_ALLOWED_TAGS } from '../components/Kinds/htmlRenderPolicy';
-import { PASSWORD_TYPES, FIELD_TYPES } from '../passwords/model';
 import { TIMELINE_SNAPSHOT_PART_KIND } from '../timeline/snapshotParts.ts';
 import { DEVICE_PLATFORMS } from '../devices/platform.ts';
 import { TIMELINE_BRANCH_KIND, TIMELINE_BRANCH_HEAD_KIND } from '../timeline/branches.ts';
