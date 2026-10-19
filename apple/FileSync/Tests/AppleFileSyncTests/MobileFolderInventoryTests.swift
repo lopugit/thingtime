@@ -115,10 +115,19 @@ final class MobileFolderInventoryTests: XCTestCase {
         try Data("test".utf8).write(to: source.appendingPathComponent("first"))
         try FileManager.default.linkItem(at: source.appendingPathComponent("first"), to: source.appendingPathComponent("second"))
         let store = MobileFolderInventory(directory: directory), id = UUID().uuidString.lowercased()
-        XCTAssertThrowsError(try store.capture(scope, id: id, bookmark: bookmark))
+        XCTAssertThrowsError(try store.capture(scope, id: id, bookmark: bookmark)) { error in
+            XCTAssertEqual((error as? MobileFolderReader.ScanFailure)?.reason, .duplicateIdentity)
+            XCTAssertTrue(["first", "second"].contains((error as? MobileFolderReader.ScanFailure)?.path ?? ""))
+        }
         try FileManager.default.removeItem(at: source.appendingPathComponent("second"))
         try FileManager.default.createSymbolicLink(at: source.appendingPathComponent("second"), withDestinationURL: source.appendingPathComponent("first"))
-        XCTAssertThrowsError(try store.capture(scope, id: id, bookmark: bookmark))
+        XCTAssertThrowsError(try store.capture(scope, id: id, bookmark: bookmark)) { error in
+            XCTAssertEqual((error as? MobileFolderReader.ScanFailure)?.reason, .symlink)
+            XCTAssertEqual((error as? MobileFolderReader.ScanFailure)?.path, "second")
+        }
+        let bucket = try XCTUnwrap(FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil).first)
+        let record = try Data(contentsOf: bucket.appendingPathComponent(id).appendingPathComponent("record.json"))
+        XCTAssertEqual((try JSONSerialization.jsonObject(with: record) as? [String: Any])?["complete"] as? Bool, false)
         try FileManager.default.removeItem(at: source.appendingPathComponent("second"))
         XCTAssertEqual(try store.capture(scope, id: id, bookmark: bookmark).totalEntries, 1)
     }
@@ -130,7 +139,56 @@ final class MobileFolderInventoryTests: XCTestCase {
         XCTAssertThrowsError(try MobileFolderReader.capture(bookmark: bookmark, append: { row in
             rows.append(row)
             try Data("changed".utf8).write(to: source.appendingPathComponent("first"))
-        }, replay: { visit in for row in rows { try visit(row) } }))
+        }, replay: { visit in for row in rows { try visit(row) } })) { error in
+            XCTAssertEqual((error as? MobileFolderReader.ScanFailure)?.reason, .changed)
+            XCTAssertEqual((error as? MobileFolderReader.ScanFailure)?.path, "first")
+        }
+    }
+
+
+    func testRootDirectoryChangeKeepsOriginalFailureWithoutInventingAPath() throws {
+        let (source, bookmark, _, _) = try fixture()
+        try Data().write(to: source.appendingPathComponent("first"))
+        var rows: [MobileFolderReader.Entry] = [], changed = false
+        XCTAssertThrowsError(try MobileFolderReader.capture(bookmark: bookmark, append: { row in
+            rows.append(row)
+            if !changed {
+                changed = true
+                try Data().write(to: source.appendingPathComponent("added-during-capture"))
+            }
+        }, replay: { visit in for row in rows { try visit(row) } })) { error in
+            XCTAssertNil(error as? MobileFolderReader.ScanFailure)
+            guard case MobileFolderStore.Failure.changed = error else {
+                return XCTFail("Expected original root changed failure")
+            }
+        }
+    }
+
+    func testScanDiagnosticsRejectLinksSpecialAndInvalidPathsWithoutReadingTargets() throws {
+        let (source, bookmark, _, _) = try fixture()
+        let outside = source.deletingLastPathComponent().appendingPathComponent("outside")
+        XCTAssertEqual(mkfifo(outside.path, 0o600), 0)
+        try FileManager.default.createSymbolicLink(at: source.appendingPathComponent("link"), withDestinationURL: outside)
+        // A followed FIFO would block. The diagnostic is about the link itself.
+        XCTAssertThrowsError(try MobileFolderReader.scan(bookmark: bookmark)) { error in
+            XCTAssertEqual((error as? MobileFolderReader.ScanFailure)?.reason, .symlink)
+            XCTAssertEqual((error as? MobileFolderReader.ScanFailure)?.path, "link")
+        }
+        try FileManager.default.removeItem(at: source.appendingPathComponent("link"))
+        XCTAssertEqual(mkfifo(source.appendingPathComponent("pipe").path, 0o600), 0)
+        XCTAssertThrowsError(try MobileFolderReader.scan(bookmark: bookmark)) { error in
+            XCTAssertEqual((error as? MobileFolderReader.ScanFailure)?.reason, .special)
+            XCTAssertEqual((error as? MobileFolderReader.ScanFailure)?.path, "pipe")
+        }
+        try FileManager.default.removeItem(at: source.appendingPathComponent("pipe"))
+        try Data().write(to: source.appendingPathComponent("bad\\name"))
+        XCTAssertThrowsError(try MobileFolderReader.scan(bookmark: bookmark)) { error in
+            XCTAssertEqual((error as? MobileFolderReader.ScanFailure)?.reason, .invalidPath)
+            XCTAssertNil((error as? MobileFolderReader.ScanFailure)?.path)
+        }
+        let diagnostic = MobileFolderReader.ScanFailure(reason: .unreadable, path: "../private")
+        let fields = try JSONSerialization.jsonObject(with: JSONEncoder().encode(diagnostic)) as! [String: Any]
+        XCTAssertEqual(fields["reason"] as? String, "invalid-path"); XCTAssertTrue(fields["path"] is NSNull)
     }
 
     func testAbandonedCaptureEvictionIsBoundedAndOldGenerationRefused() throws {

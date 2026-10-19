@@ -10235,6 +10235,9 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
 
 ## Editable file sync configuration
 
+- [ ] In the signed installed Mac app, choose a folder containing a symbolic link, hardlink or special file and start sync. Show the specific validated relative path and reason; do not label an errored transfer ready. No partial capture may seal, transfer, or authorize deletion. Verify target bytes outside the grant are never read. Change the account/grant during the failed scan and reject its stale diagnostic. After an explicit exclusion, retry with a fresh capture ID.
+
+
 - [ ] Run `test:file-sync`, `test:schemas`, `test:api-capabilities` and
   `test:things`. The `file-sync` schema copies without mutating its system
   definition and accepts only its bounded typed fields; private native paths,

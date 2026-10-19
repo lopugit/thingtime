@@ -3578,3 +3578,23 @@ pass. Installed-app/deployed acceptance and the real home upload remain open.
 The user authorized merging this task into main and starting the selected home
 upload afterward. Publication still requires reconciling current main and stale
 PR-head metadata; a feature-branch push is not evidence of a main merge.
+
+
+## Home indexing diagnostics — 2026-10-19
+
+The merged release was installed and its production Files 1.6 contract verified.
+The first real home-folder run stopped during indexing, before transferring files.
+The native capture is deliberately all-or-nothing: links and special entries,
+unreadable or changing files, duplicate inode identities and normalized-path
+collisions cannot silently disappear from a complete inventory. Hashing and the
+final replay also remain bounded by the native request timeout; a large live home
+folder is not yet proven to fit that bound.
+
+Mac file access 1.7.0 adds a bounded `scanFailure` response for `scan` and
+`scan-capture`: a fixed reason and validated relative path, or an `invalid-path`
+reason with a null path. These responses carry `complete: false` and no usable
+entries or capture. Owner, request, selected origin, root and grant are rechecked.
+The renderer rejects foreign, malformed or contradictory diagnostics and displays
+the specific indexing problem instead of describing it as a pairing failure.
+Unsupported entries are not skipped by this change. Exclusion changes require a
+fresh capture and retain the existing no-follow and deletion protections.

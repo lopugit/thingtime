@@ -643,6 +643,10 @@ function Connections({
 										: 'This direction is not available yet'
 									: !supportsMobileSyncConditions(capabilities)
 									? 'Update this app to transfer files'
+									: task?.status === 'error' || (!running && progress?.message && !['complete', 'retained'].includes(progress.stage))
+									? 'Needs attention'
+									: running
+									? 'Transfer in progress'
 									: twoWay
 									? 'Ready for two-way sync with folder approval'
 									: downloading

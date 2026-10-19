@@ -5,7 +5,7 @@ import Foundation
 /// commands. The desktop host must also verify its active browser account.
 @MainActor
 public final class MacFolderSync {
-    public static let version = "1.6.0"
+    public static let version = "1.7.0"
     public enum SourceSelection { case folder(URL), photos }
     public struct Conditions: Codable, Sendable {
         public let network: String
@@ -209,7 +209,11 @@ public final class MacFolderSync {
                     let inventories = inventories
                     if r.action == "scan-capture" {
                         guard let id = r.captureId else { throw MobileFolderStore.Failure.invalid }
-                        result["capture"] = try value(await worker { try inventories.capture(inventoryScope, id: id, bookmark: grant.bookmark, excludedPaths: r.excludedPaths ?? []) })
+                        do {
+                            result["capture"] = try value(await worker { try inventories.capture(inventoryScope, id: id, bookmark: grant.bookmark, excludedPaths: r.excludedPaths ?? []) })
+                        } catch let failure as MobileFolderReader.ScanFailure {
+                            result["scanFailure"] = try value(failure)
+                        }
                     } else {
                         guard let capture = r.capture else { throw MobileFolderStore.Failure.invalid }
                         if r.action == "scan-page" {
@@ -220,7 +224,7 @@ public final class MacFolderSync {
                             result["discarded"] = .bool(true)
                         }
                     }
-                    result["complete"] = .bool(true)
+                    result["complete"] = .bool(result["scanFailure"] == nil)
                 } else if r.action == "inspect" {
                     guard let path = r.path else { throw MobileFolderStore.Failure.invalid }
                     inspectedGrant = grant
@@ -228,14 +232,19 @@ public final class MacFolderSync {
                     result["path"] = .string(path); result["complete"] = .bool(true)
                     result["entry"] = try entry.map { try value($0) } ?? .null
                 } else if r.action == "scan" {
-                    result["entries"] = try value(await worker {
-                        if grant.sourceKind == "photos" {
-                            guard r.excludedPaths?.isEmpty != false else { throw MobileFolderStore.Failure.invalid }
-                            return try photos.scan(scope: photoScope)
-                        }
-                        return try MobileFolderReader.scan(bookmark: grant.bookmark, excludedPaths: r.excludedPaths ?? [])
-                    })
-                    result["complete"] = .bool(true)
+                    if grant.sourceKind != "photos" { inspectedGrant = grant }
+                    do {
+                        result["entries"] = try value(await worker {
+                            if grant.sourceKind == "photos" {
+                                guard r.excludedPaths?.isEmpty != false else { throw MobileFolderStore.Failure.invalid }
+                                return try photos.scan(scope: photoScope)
+                            }
+                            return try MobileFolderReader.scan(bookmark: grant.bookmark, excludedPaths: r.excludedPaths ?? [])
+                        })
+                    } catch let failure as MobileFolderReader.ScanFailure {
+                        result["scanFailure"] = try value(failure)
+                    }
+                    result["complete"] = .bool(result["scanFailure"] == nil)
                 } else if r.action == "read-range" {
                     guard let path = r.path, let version = r.version, let offset = r.offset, let length = r.length,
                           let stream else { throw MobileFolderStore.Failure.invalid }

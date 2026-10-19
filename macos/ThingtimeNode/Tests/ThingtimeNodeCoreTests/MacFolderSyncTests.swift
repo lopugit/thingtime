@@ -53,9 +53,47 @@ final class MacFolderSyncTests: XCTestCase {
         XCTAssertEqual(captured["excludedPaths"], fields["excludedPaths"])
         XCTAssertEqual(try XCTUnwrap(captured["capture"]).decode(MobileFolderInventory.Capture.self).totalEntries, 1)
         await rejects { try await service.handle(self.request("scan-capture", captureFields.merging(["excludedPaths": .array([])]) { _, v in v })) }
-        await rejects { try await service.handle(self.request("scan", ["rootId": .string(id)])) }
+        let failed = try await service.handle(request("scan", ["rootId": .string(id)])).decode([String: JSONValue].self)
+        XCTAssertEqual(failed["complete"], .bool(false)); XCTAssertNil(failed["entries"])
+        XCTAssertEqual(failed["scanFailure"], .object(["reason": .string("symlink"), "path": .string("Library/blocked")]))
         await rejects { try await service.handle(self.request("scan", fields.merging(["excludedPaths": .array([.string("../escape")])]) { _, v in v })) }
         await rejects { try await service.handle(self.request("scan", fields.merging(["excludedPaths": .null]) { _, v in v })) }
+    }
+
+
+    func testScanFailureIsIdentityBoundAndReauthorizesOwnerAndGrant() async throws {
+        let selected = folder.appendingPathComponent("selected")
+        try FileManager.default.createSymbolicLink(at: selected.appendingPathComponent("blocked"), withDestinationURL: selected.appendingPathComponent("missing"))
+        for action in ["scan", "scan-capture"] {
+            for revoked in ["none", "identity", "grant"] {
+                var saved: [String: Data] = [:], calls = 0
+                let owner = try FileSyncOwnerScope(ownerId: "owner", url: origin)
+                let store = MobileFolderStore(load: { saved[$0.key] }, save: { saved[$0.key] = $1 })
+                let grant = try store.add(owner, selected: selected)
+                let service = try MacFolderSync(origin: origin, store: store,
+                    staging: MobileSyncStaging(directory: folder.appendingPathComponent(UUID().uuidString)),
+                    verify: { _, _ in
+                        calls += 1
+                        if calls == 2 {
+                            if revoked == "identity" { throw MobileFolderStore.Failure.unavailable }
+                            if revoked == "grant" { try store.remove(owner, id: grant.id) }
+                        }
+                    }, choose: { nil }, approve: { _ in false },
+                    inventories: MobileFolderInventory(directory: folder.appendingPathComponent(UUID().uuidString)))
+                let requestId = UUID().uuidString
+                let fields: [String: JSONValue] = ["rootId": .string(grant.id), "inventoryDeviceId": .string("device"), "captureId": .string(UUID().uuidString.lowercased())]
+                if revoked != "none" {
+                    await rejects { try await service.handle(self.request(action, fields, id: requestId)) }
+                } else {
+                    let result = try await service.handle(request(action, fields, id: requestId)).decode([String: JSONValue].self)
+                    XCTAssertEqual(result["requestId"], .string(requestId)); XCTAssertEqual(result["ownerId"], .string("owner"))
+                    XCTAssertEqual(result["rootId"], .string(grant.id)); XCTAssertEqual(result["complete"], .bool(false))
+                    XCTAssertEqual(result["scanFailure"], .object(["reason": .string("symlink"), "path": .string("blocked")]))
+                    for key in ["entries", "capture", "inventoryPage"] { XCTAssertNil(result[key]) }
+                }
+                XCTAssertEqual(calls, 2)
+            }
+        }
     }
 
     func testContextAndUnknownConditionsUseTheSharedFolderContract() async throws {
@@ -63,7 +101,7 @@ final class MacFolderSyncTests: XCTestCase {
         let context = try await service.handle(request("context")).decode([String: JSONValue].self)
         XCTAssertEqual(context["deviceId"], .string("device"))
         let capabilities = try XCTUnwrap(context["capabilities"]).decode([String: String].self)
-        XCTAssertEqual(capabilities, ["fileAccessVersion": "1.6.0", "fileStagingVersion": "1.1.0", "filePublicationVersion": "1.2.0"])
+        XCTAssertEqual(capabilities, ["fileAccessVersion": "1.7.0", "fileStagingVersion": "1.1.0", "filePublicationVersion": "1.2.0"])
         let result = try await service.handle(request("conditions")).decode([String: JSONValue].self)
         XCTAssertEqual(result["conditions"], .object(["network": .string("unknown"), "charging": .null]))
     }

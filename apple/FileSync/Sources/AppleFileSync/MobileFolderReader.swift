@@ -38,6 +38,49 @@ public struct MobileFolderReader {
         public let version: String; public let size: Int64; public let offset: Int64; public let data: String
     }
     public typealias Failure = MobileFolderStore.Failure
+    /// A bounded diagnostic containing only a validated, grant-relative path.
+    public struct ScanFailure: Error, Encodable, Equatable, Sendable {
+        public enum Reason: String, Encodable, Sendable {
+            case symlink, special, unreadable, changed
+            case invalidPath = "invalid-path"
+            case duplicateIdentity = "duplicate-identity"
+            case pathCollision = "path-collision"
+        }
+        public let reason: Reason
+        public let path: String?
+        init(reason: Reason, path: String?) {
+            if let path, (try? MobileFolderReader.components(path)) != nil {
+                self.reason = reason; self.path = path
+            } else { self.reason = .invalidPath; self.path = nil }
+        }
+        enum CodingKeys: String, CodingKey { case reason, path }
+        public func encode(to encoder: Encoder) throws {
+            var c = encoder.container(keyedBy: CodingKeys.self)
+            try c.encode(reason, forKey: .reason)
+            if let path { try c.encode(path, forKey: .path) } else { try c.encodeNil(forKey: .path) }
+        }
+    }
+    private static func scanAt<T>(_ path: String, work: () throws -> T) throws -> T {
+        do { return try work() }
+        catch Failure.changed { throw ScanFailure(reason: .changed, path: path) }
+        catch Failure.unavailable { throw ScanFailure(reason: .unreadable, path: path) }
+        catch Failure.invalid { throw ScanFailure(reason: .invalidPath, path: nil) }
+    }
+    private static func scanOpen(_ parent: Int32, name: String, path: String) throws -> Int32 {
+        var before = stat()
+        guard fstatat(parent, name, &before, AT_SYMLINK_NOFOLLOW) == 0 else {
+            throw ScanFailure(reason: errno == ENOENT ? .changed : .unreadable, path: path)
+        }
+        let type = before.st_mode & S_IFMT
+        guard type != S_IFLNK else { throw ScanFailure(reason: .symlink, path: path) }
+        guard type == S_IFREG || type == S_IFDIR else { throw ScanFailure(reason: .special, path: path) }
+        let fd = openat(parent, name, O_RDONLY | O_NOFOLLOW | O_CLOEXEC | O_NONBLOCK)
+        guard fd >= 0 else { throw ScanFailure(reason: errno == ENOENT || errno == ELOOP ? .changed : .unreadable, path: path) }
+        do {
+            guard try stamp(info(fd)) == stamp(before) else { throw ScanFailure(reason: .changed, path: path) }
+            return fd
+        } catch { close(fd); throw error }
+    }
     public static let maximumEntries = 10_000
     public static let maximumReadBytes = 65_536
     static func components(_ path: String) throws -> [String] {
@@ -185,19 +228,19 @@ public struct MobileFolderReader {
     public static func scan(bookmark: Data, excludedPaths: [String] = []) throws -> [Entry] {
         let exclusions = try canonicalExclusions(excludedPaths)
         return try access(bookmark) { root in
-            let initial = try stamp(info(root)); var entries: [Entry] = [], aliases = Set<String>(), byteBudget = 0
+            let initial = try stamp(info(root)); var entries: [Entry] = [], aliases = Set<String>(), identities = Set<String>(), byteBudget = 0
             func walk(_ parent: Int32, prefix: String) throws {
                 let initialDirectory = try stamp(info(parent))
                 for name in try names(parent, including: { !excluded(prefix.isEmpty ? $0 : "\(prefix)/\($0)", keys: exclusions) }) {
-                    try Task.checkCancellation(); let path = prefix.isEmpty ? name : "\(prefix)/\(name)"; _ = try components(path)
-                    guard aliases.insert(path.precomposedStringWithCanonicalMapping.lowercased()).inserted else { throw Failure.invalid }
+                    try Task.checkCancellation(); let path = prefix.isEmpty ? name : "\(prefix)/\(name)"; _ = try scanAt(path) { try components(path) }
+                    guard aliases.insert(path.precomposedStringWithCanonicalMapping.lowercased()).inserted else { throw ScanFailure(reason: .pathCollision, path: path) }
                     guard entries.count < maximumEntries else { throw Failure.limit }
-                    let fd = openat(parent, name, O_RDONLY | O_NOFOLLOW | O_CLOEXEC | O_NONBLOCK)
-                    guard fd >= 0 else { throw Failure.unavailable }; defer { close(fd) }
-                    let entry = try Self.entry(fd, path: path)
+                    let fd = try scanOpen(parent, name: name, path: path); defer { close(fd) }
+                    let entry = try scanAt(path) { try Self.entry(fd, path: path) }
+                    guard identities.insert(entry.id).inserted else { throw ScanFailure(reason: .duplicateIdentity, path: path) }
                     byteBudget += try JSONEncoder().encode(entry).count
                     guard byteBudget <= 4 * 1024 * 1024 else { throw Failure.limit }; entries.append(entry)
-                    if entry.kind == "folder" { try walk(fd, prefix: path) }
+                    if entry.kind == "folder" { try scanAt(path) { try walk(fd, prefix: path) } }
                 }
                 guard try stamp(info(parent)) == initialDirectory else { throw Failure.changed }
             }
@@ -205,8 +248,11 @@ public struct MobileFolderReader {
             // Recheck observed identities after traversal. A failure never becomes
             // an empty/complete scan. Executors still recheck each mutation stamp.
             for entry in entries {
-                try Task.checkCancellation(); let fd = try openPath(root, path: entry.path); defer { close(fd) }
-                guard try stamp(info(fd)) == entry.version else { throw Failure.changed }
+                try Task.checkCancellation()
+                try scanAt(entry.path) {
+                    let fd = try openPath(root, path: entry.path); defer { close(fd) }
+                    guard try stamp(info(fd)) == entry.version else { throw Failure.changed }
+                }
             }
             guard try stamp(info(root)) == initial else { throw Failure.changed }; return entries
         }
@@ -224,20 +270,21 @@ public struct MobileFolderReader {
                 try visitNames(parent) { name in
                     let path = prefix.isEmpty ? name : "\(prefix)/\(name)"
                     guard !excluded(path, keys: exclusions) else { return }
-                    _ = try components(path)
-                    let fd = openat(parent, name, O_RDONLY | O_NOFOLLOW | O_CLOEXEC | O_NONBLOCK)
-                    guard fd >= 0 else { throw Failure.unavailable }; defer { close(fd) }
-                    let row = try entry(fd, path: path)
+                    _ = try scanAt(path) { try components(path) }
+                    let fd = try scanOpen(parent, name: name, path: path); defer { close(fd) }
+                    let row = try scanAt(path) { try entry(fd, path: path) }
                     try append(row)
-                    if row.kind == "folder" { try walk(fd, prefix: path) }
+                    if row.kind == "folder" { try scanAt(path) { try walk(fd, prefix: path) } }
                 }
                 guard try stamp(info(parent)) == before else { throw Failure.changed }
             }
             try walk(root, prefix: "")
             try replay { row in
                 try Task.checkCancellation()
-                let fd = try openPath(root, path: row.path); defer { close(fd) }
-                guard try stamp(info(fd)) == row.version else { throw Failure.changed }
+                try scanAt(row.path) {
+                    let fd = try openPath(root, path: row.path); defer { close(fd) }
+                    guard try stamp(info(fd)) == row.version else { throw Failure.changed }
+                }
             }
             guard try stamp(info(root)) == initial else { throw Failure.changed }
         }

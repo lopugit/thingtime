@@ -207,7 +207,17 @@ public struct MobileFolderInventory: Sendable {
                   sqlite3_bind_text(statement, 2, entry.path.precomposedStringWithCanonicalMapping.lowercased(), -1, copy) == SQLITE_OK,
                   sqlite3_bind_text(statement, 3, entry.id, -1, copy) == SQLITE_OK,
                   data.withUnsafeBytes({ sqlite3_bind_blob(statement, 4, $0.baseAddress, Int32(data.count), copy) }) == SQLITE_OK else { throw Failure.storage }
-            guard sqlite3_step(statement) == SQLITE_DONE else { throw Failure.invalid }
+            guard sqlite3_step(statement) == SQLITE_DONE else {
+                guard sqlite3_errcode(handle) == SQLITE_CONSTRAINT else { throw Failure.storage }
+                // Determine the violated key without publishing SQLite error text.
+                var check: OpaquePointer?
+                guard sqlite3_prepare_v2(handle, "SELECT 1 FROM entries WHERE path = ?", -1, &check, nil) == SQLITE_OK else { throw Failure.storage }
+                defer { sqlite3_finalize(check) }
+                guard sqlite3_bind_text(check, 1, entry.path.precomposedStringWithCanonicalMapping.lowercased(), -1, copy) == SQLITE_OK else { throw Failure.storage }
+                let status = sqlite3_step(check)
+                guard status == SQLITE_ROW || status == SQLITE_DONE else { throw Failure.storage }
+                throw MobileFolderReader.ScanFailure(reason: status == SQLITE_ROW ? .pathCollision : .duplicateIdentity, path: entry.path)
+            }
         }
         func rows(offset: Int, visit: (Int, Data) throws -> Bool) throws {
             var statement: OpaquePointer?

@@ -52,6 +52,28 @@ test('incomplete, duplicate, colliding and missing-ancestor scans never become a
 		assert.throws(() => parse(extra));
 	assert.deepEqual(parse({ entries: [] })?.entries, []);
 });
+test('scan diagnostics remain scoped failures and cannot disguise a partial inventory as complete', () => {
+	for (const action of ['scan', 'scan-capture'] as const) {
+		const request = action === 'scan' ? { action, rootId } : {
+			action, rootId, inventoryDeviceId: 'device', captureId: '00000000-0000-4000-8000-000000000002'
+		};
+		const diagnostic = { rootId, complete: false, scanFailure: { reason: 'symlink', path: 'nested/link' } };
+		const parse = (extra = {}) => parseMobileFolderResult(response({ ...diagnostic, ...extra }), expected, request);
+		assert.throws(() => parse(), /Indexing stopped at “nested\/link”: symbolic links are not supported/);
+		for (const key of ['requestId', 'ownerId', 'origin']) assert.equal(parse({ [key]: 'other' }), null);
+		for (const extra of [
+			{ rootId: 'other' }, { complete: true }, { complete: undefined }, { entries: [] }, { capture: {} }, { inventoryPage: {} },
+			{ scanFailure: { reason: 'unknown', path: 'nested/link' } }, { scanFailure: { reason: 'toString', path: 'nested/link' } },
+			{ scanFailure: { reason: 'unreadable', path: null } }, { scanFailure: { reason: 'symlink', path: '/private/path' } },
+			{ scanFailure: { reason: 'symlink', path: '../outside' } }, { scanFailure: { reason: 'symlink', path: 'bad\u202epath' } },
+			{ scanFailure: { reason: 'symlink', path: 'nested/link', message: 'untrusted native details' } }
+		]) assert.throws(() => parse(extra), /Invalid native scan diagnostic/);
+		assert.throws(() => parse({ scanFailure: { reason: 'invalid-path', path: null } }), /Indexing stopped: a path cannot be represented safely/);
+		for (const reason of ['special', 'unreadable', 'changed', 'duplicate-identity', 'path-collision'])
+			assert.throws(() => parse({ scanFailure: { reason, path: 'nested/file' } }), /Indexing stopped at “nested\/file”/);
+		assert.throws(() => parseMobileFolderResult(response(diagnostic), expected, { action: 'list' }), /Invalid native scan diagnostic/);
+	}
+});
 test('bounded reads reject changed versions, offsets, byte counts and source sizes', () => {
 	const request = { action: 'read' as const, rootId, path: 'file', version: '1', offset: 0, length: 3 };
 	const chunk = { version: '1', size: 3, offset: 0, data: 'AQID' };

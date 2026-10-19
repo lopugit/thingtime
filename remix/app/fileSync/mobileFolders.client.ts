@@ -272,6 +272,27 @@ export function parseMobileFolderResult(
 			...(r.sourceKind === 'photos' ? { sourceKind: r.sourceKind, photoAccess: r.photoAccess } : {})
 		}))
 	};
+	if (payload.scanFailure !== undefined) {
+		const reasons: Record<string, string> = {
+			symlink: 'symbolic links are not supported',
+			special: 'this is not a regular file or folder',
+			unreadable: 'this item could not be read',
+			changed: 'this item changed during indexing',
+			'invalid-path': 'a path cannot be represented safely',
+			'duplicate-identity': 'multiple paths refer to the same file',
+			'path-collision': 'multiple paths have the same normalized name'
+		};
+		const failure = payload.scanFailure;
+		if ((request.action !== 'scan' && request.action !== 'scan-capture') || payload.rootId !== request.rootId ||
+			payload.complete !== false || payload.entries !== undefined || payload.capture !== undefined || payload.inventoryPage !== undefined ||
+			!failure || typeof failure !== 'object' || Array.isArray(failure) ||
+			Object.keys(failure).some(key => !['reason', 'path'].includes(key)) ||
+			typeof failure.reason !== 'string' || !Object.hasOwn(reasons, failure.reason) ||
+			(failure.path === null ? failure.reason !== 'invalid-path' : !validSyncPath(failure.path)))
+			throw Error('Invalid native scan diagnostic.');
+		const location = failure.path === null ? '' : ` at “${failure.path}”`;
+		throw Error(`Indexing stopped${location}: ${reasons[failure.reason]}. Review this item and your exclusions before retrying.`);
+	}
 	if (request.action === 'upload-file') {
 		const file = payload.uploadedFile,
 			upload = request.upload;
