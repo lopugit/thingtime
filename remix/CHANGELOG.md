@@ -96,6 +96,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- PR1052 implementation, validation and coverage details: [Commander backup indexer](../PRs/1052-commander-backup-indexer-reuse-commander-rust-indexing.md).
+
 - 2026-10-20: Reuse Commander’s Rust indexer for Mac backup traversal and parallel
   content fingerprints, preserving saved Git-ignore rules and the canonical
   inventory. Keep captures through transient identity verification failures while
