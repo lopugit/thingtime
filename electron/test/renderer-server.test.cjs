@@ -108,3 +108,28 @@ test('an unfinished bundle import cannot serve application content', async t => 
     release(); const renderer = await startup;
     assert.equal(await (await fetch(renderer.origin)).text(), 'owned');
 });
+
+
+test('an explicitly selected runtime or recovered legacy port wins without changing automatic-origin history', async t => {
+    const directory = await profile(t);
+    const previous = await start(t, directory);
+    const history = await fs.readFile(path.join(directory, STATE_FILE), 'utf8');
+    const selected = await start(t, await profile(t));
+    const selectedPort = selected.server.address().port;
+    await selected.close();
+    const current = await startRendererServer({ profilePath: directory, selectedPort, loadApplication: application });
+    t.after(current.close);
+    assert.equal(current.server.address().port, selectedPort);
+    assert.equal(await (await fetch(current.origin)).text(), 'owned');
+    assert.equal(await fs.readFile(path.join(directory, STATE_FILE), 'utf8'), history);
+    assert.notEqual(current.origin, previous.origin);
+});
+
+test('an occupied explicitly selected port fails before importing another runtime', async t => {
+    const directory = await profile(t), occupied = await start(t, await profile(t));
+    let loaded = false;
+    await assert.rejects(startRendererServer({ profilePath: directory, selectedPort: occupied.server.address().port,
+        loadApplication: async () => { loaded = true; return application(); } }), /in use/);
+    assert.equal(loaded, false);
+    await assert.rejects(fs.readFile(path.join(directory, STATE_FILE)), { code: 'ENOENT' });
+});

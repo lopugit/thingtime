@@ -23,8 +23,8 @@ final class PairingEngine {
     }
     static final Map<String,String> REQUIREMENTS = new LinkedHashMap<>();
     static {
-        REQUIREMENTS.put("api.auth-me", "1.0.0"); REQUIREMENTS.put("api.devices", "1.10.0");
-        REQUIREMENTS.put("api.devices-pairing", "1.0.0"); REQUIREMENTS.put("api.devices-pairing-claim", "1.1.0");
+        REQUIREMENTS.put("api.auth-me", "1.0.0"); REQUIREMENTS.put("api.devices", "1.13.0");
+        REQUIREMENTS.put("api.devices-pairing", "1.0.0"); REQUIREMENTS.put("api.devices-pairing-claim", "1.2.0");
         REQUIREMENTS.put("api.devices-node-state", "1.9.0");
     }
     private final Store store; private final Transport transport; private final Check check;

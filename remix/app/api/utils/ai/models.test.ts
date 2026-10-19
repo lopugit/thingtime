@@ -273,7 +273,7 @@ test('listAiModels projects enabled/available/isDefault from the rows, the env, 
   assert.deepEqual(await service.resolveLopuChatDefaults(next.models), next.defaults);
 });
 
-test('a catalog outage degrades to the code catalog (everything enabled), logs, and retries on the next read', async () => {
+test('a catalog outage fails closed instead of resurrecting models and retries on the next read', async () => {
   const fake = createFakeThings();
   const logs: string[] = [];
   let outage = true;
@@ -289,12 +289,8 @@ test('a catalog outage degrades to the code catalog (everything enabled), logs, 
     log: (message: string) => logs.push(message)
   });
 
-  const degraded = await service.listAiModels();
-  assert.equal(degraded.models.length, AI_MODEL_CATALOG.length);
-  assert.ok(degraded.models.every((model) => model.enabled));
-  assert.equal(degraded.defaults.model, 'gpt-5.6-sol', 'hard default needs Anthropic, so the first OpenAI model stands in');
+  await assert.rejects(service.listAiModels(), /temporarily unavailable/);
   assert.ok(logs.some((line) => line.includes('catalog read unavailable')));
-  assert.ok(logs.some((line) => line.includes('chat defaults unavailable')));
   assert.equal(fake.docs.length, 0);
 
   outage = false;
@@ -325,4 +321,21 @@ test('setAiModelEnabled flips only crystal.enabled on the genuine row and report
   const enabled = await service.setAiModelEnabled('claude-opus-5', true);
   assert.equal(enabled.ok && enabled.model.available, true);
   assert.equal(enabled.ok && enabled.defaults.model, 'claude-opus-5');
+});
+
+
+test('public lifecycle metadata is projected without asserting account access and retired models stay unavailable', async () => {
+  const { fake, service } = createService();
+  await service.ensureAiModelCatalog();
+  const opus = fake.docs.find((doc) => doc.shareId === aiModelShareId('claude-opus-5'));
+  Object.assign(opus.crystal, { publicCatalogAvailable: true, catalogSource: 'public-docs', catalogCheckedAt: NOW });
+  let model = (await service.listAiModels()).models.find((item) => item.id === 'claude-opus-5')!;
+  assert.equal(model.catalogSource, 'public-docs');
+  assert.equal(model.catalogCheckedAt, NOW.toISOString());
+  assert.equal(model.providerAvailable, null);
+  assert.equal(model.available, true);
+  opus.crystal.publicCatalogAvailable = false;
+  model = (await service.listAiModels()).models.find((item) => item.id === 'claude-opus-5')!;
+  assert.equal(model.enabled, true);
+  assert.equal(model.available, false);
 });

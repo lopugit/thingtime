@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { createDesktopOperationGate } from './desktopOperationGate';
 import { localSettingsDocumentAdapter, settingsDocumentBlocks, settingsDocumentKey } from './settingsDocument';
 import { accountSettingsDocumentAdapter } from './settingsDocument.client';
+import { DESKTOP_CONNECTION_BLOCKS, DESKTOP_RECOVERY_BLOCKS } from './desktopSettingsDocuments';
 import { syncConflictReviewBlocks } from '../Devices/syncConflictReviewBlocks';
 
 const scope = { origin: 'https://settings.example.test', ownerId: 'owner', dataPlane: 'home', documentKey: 'desktop-connection' };
@@ -21,11 +23,11 @@ function localFixture() {
   return { values, storage, locks, adapter: () => localSettingsDocumentAdapter(scope, storage, locks, () => `r${++revision}`) };
 }
 
-test('authored conflict review documents survive canonical sanitization without private values', () => {
-  for (const blocks of [syncConflictReviewBlocks]) {
+test('authored desktop and recovery documents survive canonical sanitization without private values', () => {
+  for (const blocks of [DESKTOP_CONNECTION_BLOCKS, DESKTOP_RECOVERY_BLOCKS, syncConflictReviewBlocks]) {
     const saved = settingsDocumentBlocks(blocks);
     assert.deepEqual(settingsDocumentBlocks(saved), saved);
-    assert.ok(JSON.stringify(saved).includes('$transient'));
+    assert.ok(JSON.stringify(saved).includes(blocks === syncConflictReviewBlocks ? '$transient' : 'runtime.save'));
     assert.ok(!JSON.stringify(saved).includes('mongodb://user:password'));
   }
 });
@@ -130,4 +132,15 @@ test('remote endpoints require the existing same-origin proxy and scope changes 
   await assert.rejects(adapter.save(document, signal()), /origin changed/);
   assert.equal(calls, 1);
   assert.throws(() => accountSettingsDocumentAdapter(scope, dependencies), /origin changed/);
+});
+
+test('changing native authority releases old busy state without allowing stale completion to unlock new work', () => {
+  const gate = createDesktopOperationGate(); gate.setScope('first');
+  const old = gate.begin('first')!; assert.ok(old); assert.equal(gate.busy, true);
+  assert.equal(gate.begin('first'), null);
+  gate.setScope('second'); assert.equal(gate.busy, false);
+  assert.equal(gate.begin('first'), null);
+  const current = gate.begin('second')!;
+  assert.equal(gate.finish(old), false); assert.equal(gate.busy, true);
+  assert.equal(gate.finish(current), true); assert.equal(gate.busy, false);
 });

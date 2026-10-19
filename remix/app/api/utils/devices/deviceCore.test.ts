@@ -334,6 +334,7 @@ test('device-wide commands require the capability from the signed pairing claim'
 
 test('command vocabulary is closed and every input envelope is kind-specific', () => {
 	assert.deepEqual(DEVICE_COMMAND_KINDS, [
+ 'script.run',
     'filesystem',
 		'connector.start',
 		'connector.stop',
@@ -517,7 +518,7 @@ test('paired account execution preferences default to always allow, with reversi
 	assert.equal(normalizeDevicePermissionMode('ask-every-time'), 'ask-every-time');
 	assert.equal(normalizeDevicePermissionMode('deny'), 'deny');
 	for (const kind of DEVICE_COMMAND_KINDS) {
-		assert.equal(deviceCommandRequiresApproval(kind, false), ['app.force-quit', 'system.restart', 'system.shutdown', 'system.logout', 'system.power.idle-timer.set', 'system.policy.airdrop.profile.propose', 'system.policy.camera.profile.propose', 'system.media.apple-music.playback.set', 'system.media.apple-music.volume.set', 'system.media.spotify.playback.set', 'system.media.spotify.volume.set', 'system.media.chrome-youtube.volume.set', 'input.pointer.move', 'input.pointer.click', 'input.pointer.scroll', 'input.keyboard.type', 'input.keyboard.shortcut'].includes(kind), kind);
+		assert.equal(deviceCommandRequiresApproval(kind, false), ['script.run', 'app.force-quit', 'system.restart', 'system.shutdown', 'system.logout', 'system.power.idle-timer.set', 'system.policy.airdrop.profile.propose', 'system.policy.camera.profile.propose', 'system.media.apple-music.playback.set', 'system.media.apple-music.volume.set', 'system.media.spotify.playback.set', 'system.media.spotify.volume.set', 'system.media.chrome-youtube.volume.set', 'input.pointer.move', 'input.pointer.click', 'input.pointer.scroll', 'input.keyboard.type', 'input.keyboard.shortcut'].includes(kind), kind);
 		assert.equal(deviceCommandRequiresApproval(kind, true), true, kind);
 	}
 	const semantic = { kind: 'claude-thingtime', capabilities: ['session.send', 'explicit-approval'] };

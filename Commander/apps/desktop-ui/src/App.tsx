@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect, useMemo } from 'react';
 import { extensionCommandItemId } from '@commander/protocol';
+import { ProcessesWindow } from './components/ProcessesWindow.js';
 import { Launcher } from './components/Launcher.js';
 import { Settings } from './components/Settings.js';
 import { useCommander } from './hooks/useCommander.js';
@@ -10,7 +11,7 @@ const EmojiPicker = lazy(async () => {
   return { default: module.EmojiPicker };
 });
 
-export function App({ surface: surfaceOverride }: { surface?: 'launcher' | 'settings' } = {}) {
+export function App({ surface: surfaceOverride }: { surface?: 'launcher' | 'settings' | 'processes' } = {}) {
   const state = useCommander();
   const params = useMemo(() => new URLSearchParams(window.location.search), []);
   const surface = surfaceOverride ?? params.get('surface') ?? 'launcher';
@@ -86,6 +87,7 @@ export function App({ surface: surfaceOverride }: { surface?: 'launcher' | 'sett
   document.documentElement.dataset.textSize = state.bootstrap.settings.textSize;
   document.documentElement.dataset.windowMode = state.bootstrap.settings.windowMode;
 
+  if (surface === 'processes') return <ProcessesWindow state={state} />;
   if (surface === 'settings') return <Settings state={state} />;
   if (state.activeView === 'emoji-symbols')
     return (

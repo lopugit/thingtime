@@ -27,7 +27,7 @@ import { StorageMutationError } from '../storage/storageCore';
 import { PrivateS3ConfigError } from './config';
 
 const createAttachmentService = (overrides: Parameters<typeof createProductionAttachmentService>[0] = {}) =>
-  createProductionAttachmentService({ ownedMediaDraftIds: async () => [], ...overrides });
+  createProductionAttachmentService({ ownedMediaDraftIds: async () => [], ...overrides, ...(overrides.store ? { store: { getOwned: async () => attachmentDoc(), ...overrides.store } } : {}) });
 
 const checksum = (byte: number) => Buffer.alloc(32, byte).toString('base64');
 const now = new Date('2026-08-09T00:00:00.000Z');
@@ -2460,4 +2460,28 @@ test('fingerprints reveal only verified exact-version content after live attachm
 	assert.equal((await service.fingerprint({ id: original.ownerId }, original.shareId)).ok, false);
 	onRead = () => {}; doc = original; custom = true; const before = reads;
 	assert.equal((await service.fingerprint({ id: doc.ownerId }, doc.shareId)).ok, false); assert.equal(reads, before);
+});
+
+test('password files cannot use ordinary attachment start, parts, complete, download, export or cleanup APIs', async () => {
+  const doc = attachmentDoc({ attachmentPurpose: 'password', attachmentState: 'ready', targetId: 'vault-entry', objectVersionId: 'version-1' });
+  let claims = 0;
+  const store = { getById: async () => doc, getOwned: async () => doc, claimFinalizing: async () => { claims++; return { doc }; } } as any;
+  const service = createAttachmentService({ store, now: () => now, customMongoActive: () => false, getS3: () => { throw new Error('Must not access storage'); } });
+  assert.equal((await service.start(doc.ownerId, { purpose: 'password' })).ok, false);
+  assert.equal((await service.signParts(doc.ownerId, { uploadId: doc.shareId, parts: [] })).ok, false);
+  assert.equal((await service.complete(doc.ownerId, { uploadId: doc.shareId })).ok, false);
+  assert.equal((await service.cancel(doc.ownerId, { uploadId: doc.shareId })).ok, false);
+  assert.equal((await service.remove(doc.ownerId, { id: doc.shareId, targetId: doc.targetId })).ok, false);
+  assert.equal((await service.download({ id: doc.ownerId }, doc.shareId, true)).ok, false);
+  assert.equal((await service.describeTransfer({ id: doc.ownerId }, doc.shareId, { includeFiles: false })).ok, false);
+  assert.equal(claims, 0);
+});
+test('internal password file adapter requires an active owned parent even for the owner', async () => {
+  const doc = attachmentDoc({ attachmentPurpose: 'password', attachmentState: 'ready', targetId: 'vault-entry', objectVersionId: 'version-1' });
+  let active = false;
+  const service = createAttachmentService({ passwordVault: true, store: { getById: async () => doc } as any, now: () => now, customMongoActive: () => false, canViewTarget: async () => active, getS3: () => noopS3() });
+  assert.equal((await service.download({ id: doc.ownerId }, doc.shareId, true)).ok, false);
+  active = true;
+  assert.equal((await service.download({ id: 'different-owner' }, doc.shareId, true)).ok, false);
+  assert.equal((await service.download({ id: doc.ownerId }, doc.shareId, true)).ok, true);
 });

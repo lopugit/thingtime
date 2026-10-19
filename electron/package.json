@@ -28,7 +28,9 @@
 		"verify:signed": "node scripts/verify-signed-app.mjs",
 		"verify:unsigned": "node scripts/verify-unsigned-app.mjs",
 		"verify:web": "node scripts/verify-web-build.mjs",
-		"verify:renderer-restart": "node scripts/verify-renderer-restart.mjs"
+		"verify:renderer-restart": "node scripts/verify-renderer-restart.mjs",
+		"build:mail": "node scripts/build-mail.mjs",
+		"build:database": "node scripts/build-database.mjs"
 	},
 	"build": {
 		"appId": "com.thingtime.desktop",
@@ -48,6 +50,12 @@
 			"package.json"
 		],
 		"extraResources": [
+			{ "from": "scripts/agent-browser.mjs", "to": "agent-browser.mjs" },
+			{
+				"from": "dist/agent-browser-runtime",
+				"to": "agent-browser-runtime",
+				"filter": ["Dockerfile", ".dockerignore", "*.json", "*.mjs", "*.cjs"]
+			},
 			{
 				"from": "dist/web",
 				"to": "web",
@@ -58,6 +66,20 @@
 			{
 				"from": "dist/ai",
 				"to": "ai",
+				"filter": [
+					"**/*"
+				]
+			},
+			{
+				"from": "dist/mail",
+				"to": "mail",
+				"filter": [
+					"**/*"
+				]
+			},
+			{
+				"from": "dist/database",
+				"to": "database",
 				"filter": [
 					"**/*"
 				]
@@ -97,5 +119,9 @@
 	"devDependencies": {
 		"electron": "^43.1.0",
 		"electron-builder": "^26.15.3"
+	},
+	"dependencies": {
+		"@puppeteer/browsers": "3.2.5",
+		"puppeteer-core": "25.14.0"
 	}
 }

@@ -531,3 +531,5 @@ ceremony can consume a marker, before any session is issued.
 ### Saved AI waterfall data
 
 Personal waterfall library entries are owner-only `data` Things with `crystal.systemType: ai-waterfall-v1`; each config is its own bounded record, not an array embedded on the user. Generic Thing create/update supplies storage accounting and optimistic revision checks. No new physical collection is introduced.
+
+Incoming mail uses protected `mail-account`, `mail-folder`, `mail-message`, `mail-inbox` and `mail-operation` Things in the existing `things` collection. Message, folder and operation receipt rows are relational children of the account (`parentId`). Operation receipts fence duplicate provider mutations without storing message bodies or grants. Credentials/content use account-vault encryption; home-plane writes use the shared transactional storage ledger. See [incoming mail](docs/feature-map/incoming-mail.md).

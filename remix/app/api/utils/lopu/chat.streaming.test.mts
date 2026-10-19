@@ -1,4 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
+import OpenAI from 'openai';
 import assert from 'node:assert/strict';
 import { createServer, type IncomingHttpHeaders, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
@@ -32,7 +33,7 @@ const anthropicRequests: CapturedRequest[] = [];
 const openAiPlans: OpenAiPlan[] = [];
 const openAiRequests: CapturedRequest[] = [];
 // Responses uses its actual SDK SSE parser against this same HTTP fixture.
-type ResponsesPlan = { events?: Array<Record<string, unknown>>; status?: number };
+type ResponsesPlan = { events?: Array<Record<string, unknown>>; status?: number; error?: Record<string, unknown> };
 const responsesPlans: ResponsesPlan[] = [];
 const responsesRequests: CapturedRequest[] = [];
 let waterfall: string[] = [];
@@ -135,7 +136,7 @@ const server = createServer(async (request, response) => {
     const plan = responsesPlans.shift();
     if (!plan || plan.status) {
       response.writeHead(plan?.status || 400, { 'content-type': 'application/json' })
-        .end(JSON.stringify({ error: { message: 'Provider refused the request', type: 'invalid_request_error' } }));
+        .end(JSON.stringify({ error: plan?.error ?? { message: 'Provider refused the request', type: 'invalid_request_error' } }));
     } else sse(response, plan.events || [], true);
     return;
   }
@@ -152,7 +153,7 @@ const server = createServer(async (request, response) => {
   response.writeHead(404).end('unexpected test route');
 });
 
-await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+await new Promise<void>((resolve) => server.listen(Number(process.env.THINGTIME_STREAM_TEST_PORT) || 0, '127.0.0.1', resolve));
 const origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
 const envNames = [
   'CLAUDE_CODE_OAUTH_TOKEN',
@@ -952,6 +953,190 @@ const responseTextEvents = (value: string) => [
   responseTerminal([responseMessage(value)])
 ];
 
+// Explicit SDK injection keeps synthetic OAuth credentials on the test server;
+// production plan endpoints refuse development rewrites.
+const chatGPTPlanTurn = (extra: Record<string, unknown> = {}) => turn('Use my plan', null, {
+  vaultProvider: vaultRecord({ authMode: 'chatgpt-plan', provider: 'openai', endpoint: 'https://api.openai.com/v1', model: 'account-model', name: 'My ChatGPT plan' }),
+  deps: {
+    runTool: fakeRunTool, mintConfirmation: fakeMint, fallbackPaceMs: 0,
+    resolveVaultProviderClient: async (provider: any) => ({ transport: 'openai', toolProtocol: 'native', baseURL: 'https://api.openai.com/v1', apiKey: provider.token, model: provider.model, rewritten: false, authMode: 'chatgpt-plan' }),
+    createOpenAi: (options: any) => new OpenAI({ ...options, baseURL: `${origin}/v1` })
+  },
+  ...extra
+});
+
+test('ChatGPT plan forces Responses, namespaces local tools and preserves namespace during continuation', async () => {
+  process.env.OPENAI_ORG_ID = 'server-org';
+  process.env.OPENAI_PROJECT_ID = 'server-project';
+  const call = { ...responseFunction('plan_call', 'get_thing'), namespace: 'thingtime' };
+  responsesPlans.push(
+    { events: [...responseCallEvents(call), responseTerminal([call])] },
+    { events: responseTextEvents('Plan reply.') }
+  );
+  const { events, outcome } = await collect(chatGPTPlanTurn());
+  assert.equal(outcome.provider, 'vault');
+  assert.equal(outcome.stopReason, 'end_turn');
+  assert.equal(outcome.text, 'Plan reply.');
+  assert.equal(meta(events).billing, 'byo');
+  assert.equal(toolCalls.length, 1);
+  assert.equal(responsesRequests.length, 2);
+  for (const { body, headers } of responsesRequests) {
+    assert.equal(body.model, 'account-model');
+    assert.equal(body.stream, true);
+    assert.equal(body.store, false);
+    assert.equal(body.max_output_tokens, undefined);
+    assert.equal(body.tools.length, 1);
+    assert.equal(body.tools[0].type, 'namespace');
+    assert.equal(body.tools[0].name, 'thingtime');
+    assert.ok(body.tools[0].tools.some((tool: any) => tool.name === 'get_thing'));
+    assert.equal(headers.authorization, 'Bearer vault-token-xyz');
+    assert.equal(headers['openai-organization'], undefined);
+    assert.equal(headers['openai-project'], undefined);
+  }
+  assert.deepEqual(responsesRequests[1].body.input.find((item: any) => item.type === 'function_call'), call);
+  assert.equal(openAiRequests.length + anthropicRequests.length, 0);
+  assert.equal(waterfallReads, 0);
+});
+
+test('ChatGPT plan completes a read-only tool round trip when terminal output is omitted from the envelope', async () => {
+  const call = { ...responseFunction('plan_list', 'list_my_things', '{"kind":"data","limit":1}'), namespace: 'thingtime' };
+  const reasoning = { type: 'reasoning', id: 'plan_reasoning', summary: [], encrypted_content: 'private-replay-state' };
+  responsesPlans.push({ events: [
+    { type: 'response.output_item.done', output_index: 0, item: reasoning },
+    ...responseCallEvents(call, 1), responseTerminal([])
+  ] }, { events: responseTextEvents('Found your things.') });
+  const { events, outcome } = await collect(chatGPTPlanTurn());
+  assert.equal(outcome.stopReason, 'end_turn');
+  assert.equal(outcome.text, 'Found your things.');
+  assert.deepEqual(toolCalls.map(({ id, name, input }) => ({ id, name, input })), [{ id: 'plan_list', name: 'list_my_things', input: { kind: 'data', limit: 1 } }]);
+  assert.equal(events.filter(event => event.type === 'tool_result').length, 1);
+  assert.deepEqual(responsesRequests[1].body.input.filter((item: any) => ['reasoning', 'function_call'].includes(item.type)), [reasoning, call]);
+  assert.equal(responsesRequests[1].body.input.find((item: any) => item.type === 'function_call_output').call_id, call.call_id);
+  assert.doesNotMatch(JSON.stringify({ events, outcome }), /private-replay-state/);
+});
+
+for (const omittedFrom of ['done', 'terminal'] as const) {
+  test(`ChatGPT plan accepts optional completed status omitted from ${omittedFrom}`, async () => {
+    const call = { ...responseFunction('plan_list', 'list_my_things'), namespace: 'thingtime' };
+    const withoutStatus = { ...call };
+    delete withoutStatus.status;
+    responsesPlans.push({ events: [
+      ...responseCallEvents(omittedFrom === 'done' ? withoutStatus : call),
+      responseTerminal([omittedFrom === 'terminal' ? withoutStatus : call])
+    ] }, { events: responseTextEvents('Done.') });
+    const { outcome } = await collect(chatGPTPlanTurn());
+    assert.equal(outcome.stopReason, 'end_turn');
+    assert.equal(outcome.text, 'Done.');
+    assert.equal(toolCalls.length, 1);
+  });
+}
+
+for (const failure of ['unfinished', 'conflicting-arguments', 'conflicting-namespace', 'duplicate-done', 'incomplete', 'dropped'] as const) {
+  test(`ChatGPT plan refuses ${failure} streamed items without executing tools`, async () => {
+    const call = { ...responseFunction('plan_list', 'list_my_things', '{"kind":"data","limit":1}'), namespace: 'thingtime' };
+    const streamEvents = responseCallEvents(call);
+    if (failure === 'unfinished') streamEvents.pop();
+    if (failure === 'duplicate-done') streamEvents.push(streamEvents.at(-1)!);
+    const terminalCall = failure === 'conflicting-arguments' ? { ...call, arguments: '{"kind":"data","limit":2}' }
+      : { ...call, namespace: 'elsewhere' };
+    responsesPlans.push({ events: [...streamEvents, ...(failure === 'dropped' ? [] : [responseTerminal(
+      failure.startsWith('conflicting') ? [terminalCall] : [], failure === 'incomplete' ? 'incomplete' : 'completed', 'max_output_tokens'
+    )])] });
+    const { events, outcome } = await collect(chatGPTPlanTurn());
+    assert.equal(outcome.stopReason, 'error');
+    assert.ok(events.some(event => event.type === 'error'));
+    assert.equal(toolCalls.length, 0);
+    assert.equal(responsesRequests.length, 1);
+  });
+}
+
+for (const failure of ['incomplete', 'dropped', 'usage-limit'] as const) {
+  test(`ChatGPT plan ${failure} after partial text never becomes a successful fallback`, async () => {
+    const call = { ...responseFunction('must_not_run'), namespace: 'thingtime' };
+    const terminal = failure === 'incomplete' ? responseTerminal([call], 'incomplete', 'max_output_tokens')
+      : { type: 'response.failed', response: { error: { code: 'subscription_sharing_usage_limit_exceeded', message: 'vault-token-xyz provider body secret' } } };
+    responsesPlans.push({ events: [
+      { type: 'response.output_text.delta', delta: 'Partial answer.' },
+      ...responseCallEvents(call),
+      ...(failure === 'dropped' ? [] : [terminal])
+    ] });
+    const { events, outcome } = await collect(chatGPTPlanTurn());
+    assert.equal(outcome.stopReason, 'error');
+    assert.equal(outcome.provider, 'vault');
+    assert.equal(outcome.text, 'Partial answer.');
+    assert.ok(events.some(event => event.type === 'error'));
+    if (failure === 'usage-limit') {
+      assert.match(outcome.error, /usage limit reached/);
+      assert.equal(events.find(event => event.type === 'error').retryable, false);
+    }
+    assert.doesNotMatch(JSON.stringify({ events, outcome }), /vault-token-xyz|provider body secret/);
+    assert.equal(toolCalls.length, 0);
+    assert.equal(responsesRequests.length, 1);
+    assert.equal(openAiRequests.length + anthropicRequests.length, 0);
+  });
+}
+
+test('ChatGPT plan HTTP usage refusal is sanitized and never retried or replaced by API billing', async () => {
+  responsesPlans.push({ status: 429, error: { code: 'subscription_sharing_usage_limit_exceeded', message: 'vault-token-xyz provider body secret' } });
+  const logs: unknown[] = [];
+  const logMock = mock.method(console, 'error', (...args: unknown[]) => { logs.push(args); });
+  try {
+    const { events, outcome } = await collect(chatGPTPlanTurn());
+    assert.equal(outcome.stopReason, 'error');
+    assert.equal(outcome.provider, 'vault');
+    assert.equal(outcome.text, '');
+    assert.equal(text(events), '');
+    assert.match(outcome.error, /usage limit reached/);
+    assert.equal(events.find(event => event.type === 'error').retryable, false);
+    assert.doesNotMatch(JSON.stringify({ events, outcome, logs }), /vault-token-xyz|provider body secret/);
+    assert.equal(responsesRequests.length, 1);
+    assert.equal(openAiRequests.length + anthropicRequests.length, 0);
+  } finally { logMock.mock.restore(); }
+});
+
+test('ChatGPT plan refuses a foreign tool namespace before execution', async () => {
+  const call = { ...responseFunction(), namespace: 'another_app' };
+  responsesPlans.push({ events: [...responseCallEvents(call), responseTerminal([call])] });
+  const { outcome } = await collect(chatGPTPlanTurn());
+  assert.equal(outcome.stopReason, 'error');
+  assert.equal(toolCalls.length, 0);
+  assert.equal(responsesRequests.length, 1);
+});
+
+for (const source of ['request', 'authorization'] as const) test(`ChatGPT plan ${source} cancellation before a completed tool batch prevents execution and fallback`, async () => {
+  const call = { ...responseFunction(), namespace: 'thingtime' };
+  responsesPlans.push({ events: [...responseCallEvents(call), responseTerminal([call])] });
+  const controller = new AbortController();
+  const stream = chatGPTPlanTurn(source === 'request' ? { signal: controller.signal } : {
+    vaultProvider: vaultRecord({ authMode: 'chatgpt-plan', provider: 'openai', endpoint: 'https://api.openai.com/v1', model: 'account-model', authSignal: controller.signal })
+  });
+  let outcome: any;
+  for (;;) {
+    const step = await stream.next();
+    if (step.done) { outcome = step.value; break; }
+    if (step.value.type === 'tool_use') controller.abort();
+  }
+  assert.equal(outcome.stopReason, 'aborted');
+  assert.equal(outcome.provider, 'vault');
+  assert.equal(toolCalls.length, 0);
+  assert.equal(responsesRequests.length, 1);
+  assert.equal(openAiRequests.length + anthropicRequests.length, 0);
+});
+
+test('ChatGPT plan credentials cannot use a custom endpoint, default model, development rewrite or voice route', async () => {
+  const { resolveVaultProviderClientConfig, callVaultProviderCompletion, mintVaultProviderRealtimeSession } = await import('./vaultProviderClient.ts');
+  const provider = { ...vaultRecord(), provider: 'openai' as const, authMode: 'chatgpt-plan' as const, endpoint: 'https://api.openai.com/v1' };
+  for (const endpoint of ['https://elsewhere.example/v1', 'https://api.openai.com/v1/extra', 'https://api.openai.com/v1?key=secret']) {
+    await assert.rejects(resolveVaultProviderClientConfig({ ...provider, endpoint }), { name: 'ChatGPTPlanError' });
+  }
+  await assert.rejects(resolveVaultProviderClientConfig({ ...provider, model: null }), { name: 'ChatGPTPlanError' });
+  rewriteToFake('https://api.openai.com');
+  await assert.rejects(resolveVaultProviderClientConfig(provider), { name: 'ChatGPTPlanError' });
+  await assert.rejects(callVaultProviderCompletion(provider, { system: '', history: [], prompt: 'Hi' }), { name: 'ChatGPTPlanError' });
+  await assert.rejects(mintVaultProviderRealtimeSession(provider, { model: 'account-model' }), { name: 'ChatGPTPlanError' });
+  assert.equal(responsesRequests.length + openAiRequests.length + anthropicRequests.length, 0);
+});
+
 test('GPT-5.6 Sol Responses preserves High/Fast, tool IDs, encrypted reasoning, media, notes and cache usage across hops', async () => {
   const firstCall = responseFunction('provider_call_one', 'get_thing');
   const secondCall = responseFunction('provider_call_two', 'search_things', '{"query":"page"}');
@@ -1005,6 +1190,34 @@ test('GPT-5.6 Sol Responses preserves High/Fast, tool IDs, encrypted reasoning, 
   assert.deepEqual(replay.at(-1), { role: 'user', content: 'Also check the title.' });
   assert.doesNotMatch(JSON.stringify({ events, outcome }), /opaque-reasoning|reasoning_one|cGl4ZWxz|cGRm/);
 });
+
+for (const effort of [null, 'high', 'max'] as const) {
+  test(`Astra ${effort ?? 'provider-default'} uses Responses and completes a tool round trip without weakening reasoning`, async () => {
+    const call = responseFunction('astra_tool', 'get_thing');
+    const reasoning = { type: 'reasoning', id: 'astra_reasoning', summary: [], encrypted_content: 'private-astra-reasoning' };
+    openAiPlans.push({ status: 400 }); // Chat Completions rejects Astra's native tool contract.
+    responsesPlans.push(
+      { events: [...responseCallEvents(call), responseTerminal([reasoning, call])] },
+      { events: responseTextEvents('ASTRA_OK') }
+    );
+    const { events, outcome } = await collect(turn('Astra check', `gpt-6-astra${effort ? `:${effort}` : ''}`));
+    assert.equal(meta(events).model, 'gpt-6-astra');
+    assert.equal(outcome.text, 'ASTRA_OK');
+    assert.equal(openAiRequests.length, 0);
+    assert.equal(responsesRequests.length, 2);
+    assert.equal(toolCalls.length, 1);
+    for (const { body } of responsesRequests) {
+      assert.equal(body.model, 'gpt-6-astra');
+      assert.deepEqual(body.reasoning, effort ? { effort } : undefined);
+      assert.equal(body.store, false);
+      assert.equal(body.temperature, undefined);
+      assert.equal(body.reasoning_effort, undefined);
+    }
+    assert.ok(responsesRequests[1].body.input.some((item: any) => item.type === 'function_call_output' && item.call_id === 'astra_tool'));
+    assert.deepEqual(responsesRequests[1].body.input.find((item: any) => item.type === 'reasoning'), reasoning);
+    assert.doesNotMatch(JSON.stringify({ events, outcome }), /private-astra-reasoning/);
+  });
+}
 
 test('GPT-5.6 Sol Responses continues a note received after a plain reply', async () => {
   responsesPlans.push({ events: responseTextEvents('First.') }, { events: responseTextEvents('Noted.') });

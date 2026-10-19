@@ -23,7 +23,8 @@ export async function stageMobileCopy(
 	source: FingerprintSource | undefined,
 	signal: AbortSignal,
 	request: (ownerId: string, input: FolderRequest, signal: AbortSignal) => Promise<FolderResult> = requestMobileFolders,
-	bridge?: FolderCapabilities
+	bridge?: FolderCapabilities,
+	transferred?: (bytes: number, received: number) => void
 ): Promise<LocalStagedCopy> {
 	const transfer: MobileStageRequest = structuredClone({ scope, rootId, operation: { ...operation, confirmed: false } });
 	validateSyncRun({ version: 1, id: 'stage-' + operation.id, scope: transfer.scope, operations: [transfer.operation] });
@@ -55,12 +56,14 @@ export async function stageMobileCopy(
 	await check();
 	let progress = await send({ action: 'stage-begin', rootId, transfer });
 	if (!Number.isSafeInteger(progress.received) || progress.received < 0 || progress.received > m.source.size) throw Error('Invalid staged offset.');
+	transferred?.(0, progress.received);
 	while (!progress.stage && progress.received < m.source.size) {
 		const start = progress.received;
 		if (nativeCloud) {
 			const length = Math.min(2 * 1024 * 1024, m.source.size - start);
 			progress = await send({ action: 'stage-download', rootId, transfer, offset: start, length, cloudFile: nativeCloud.file });
 			if (progress.received !== start + length || progress.stage) throw Error('Native staging progress changed during transfer.');
+			transferred?.(length, progress.received);
 			await check();
 			continue;
 		}
@@ -69,6 +72,7 @@ export async function stageMobileCopy(
 		const bytes = await source!.read(start, Math.min(2 * 1024 * 1024, m.source.size - start), signal);
 		signal.throwIfAborted();
 		if (bytes.length !== Math.min(2 * 1024 * 1024, m.source.size - start)) throw Error('Incomplete cloud stage bytes.');
+		transferred?.(bytes.length, start + bytes.length);
 		if (streaming) {
 			progress = await send({ action: 'stage-range', rootId, transfer, offset: start, bytes });
 			if (progress.received !== start + bytes.length || progress.stage) throw Error('Native staging progress changed during transfer.');

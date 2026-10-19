@@ -353,6 +353,7 @@ public struct DeviceTelemetry: Codable, Equatable, Sendable {
     public let spotify: SpotifyTelemetry
     public let chromeYouTube: ChromeYouTubeTelemetry
     public let collectedAt: Date
+    public let menuBar: MenuBarTelemetry?
 
     public init(
         deviceName: String,
@@ -373,6 +374,7 @@ public struct DeviceTelemetry: Codable, Equatable, Sendable {
         runningApplications: [RunningApplicationTelemetry],
         displays: [DisplayTelemetry],
         collectedAt: Date,
+        menuBar: MenuBarTelemetry? = nil,
         printers: [PrinterTelemetry] = [],
         cameras: [CameraTelemetry] = [],
         bluetoothDevices: [BluetoothDeviceTelemetry] = [],
@@ -401,6 +403,7 @@ public struct DeviceTelemetry: Codable, Equatable, Sendable {
         self.runningApplications = runningApplications
         self.displays = displays
         self.collectedAt = collectedAt
+        self.menuBar = menuBar
         self.printers = printers
         self.cameras = cameras
         self.bluetoothDevices = bluetoothDevices
@@ -437,6 +440,9 @@ public extension DeviceTelemetryProviding {
 public final class DeviceTelemetryCollector: DeviceTelemetryProviding {
     private let sessionActivity: SessionActivityMonitor
     private let powerAssertions: PowerAssertionController
+    private var menuBarSnapshot: MenuBarTelemetry?
+    private var menuBarRead: Task<Void, Never>?
+    private var menuBarGeneration = UUID()
 
     public init() {
         sessionActivity = SessionActivityMonitor()
@@ -481,7 +487,27 @@ public final class DeviceTelemetryCollector: DeviceTelemetryProviding {
     }
 
     public func snapshot(now: Date = Date()) -> DeviceTelemetry {
-        DeviceTelemetry(
+        let session = sessionSnapshot()
+        if session.isLocked {
+            menuBarGeneration = UUID()
+            menuBarSnapshot = SystemMenuBar.snapshot(now: now, locked: true)
+        } else if menuBarRead == nil && (menuBarSnapshot == nil || now.timeIntervalSince(menuBarSnapshot!.collectedAt) >= 30 || menuBarSnapshot?.status == "locked") {
+            let generation = UUID()
+            menuBarGeneration = generation
+            if menuBarSnapshot == nil || menuBarSnapshot?.status == "locked" {
+                menuBarSnapshot = .init(status: "collecting", collectedAt: now, accessibility: AXIsProcessTrusted(), unreadableApplications: 0, items: [])
+            }
+            // AX calls can time out in another process. Keep them off the node's
+            // main actor so heartbeat, permission UI and commands stay responsive.
+            menuBarRead = Task { [weak self] in
+                let snapshot = await Task.detached(priority: .utility) { await SystemMenuBar.snapshotWithIcons() }.value
+                guard let self else { return }
+                self.menuBarRead = nil
+                guard self.menuBarGeneration == generation, !self.sessionSnapshot().isLocked else { return }
+                self.menuBarSnapshot = snapshot
+            }
+        }
+        return DeviceTelemetry(
             deviceName: Host.current().localizedName ?? ProcessInfo.processInfo.hostName,
             hostName: ProcessInfo.processInfo.hostName,
             modelIdentifier: Self.sysctlString("hw.model"),
@@ -512,6 +538,7 @@ public final class DeviceTelemetryCollector: DeviceTelemetryProviding {
                 },
             displays: SystemDisplayConfiguration.displays(),
             collectedAt: now,
+            menuBar: menuBarSnapshot,
             printers: SystemPrinters.all(),
             cameras: SystemCameras.all(),
             bluetoothDevices: SystemBluetooth.pairedDevices(),

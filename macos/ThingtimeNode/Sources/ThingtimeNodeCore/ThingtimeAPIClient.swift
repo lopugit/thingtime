@@ -46,10 +46,14 @@ private actor DeviceCapabilityCache {
     private var checkedAt: Date?
     private var batteryDetails = false
     private var fileSyncIdentity = false
+    private var menuBar = false
+    private var scripts = false
     func isFresh() -> Bool { checkedAt.map { Date().timeIntervalSince($0) < 300 } ?? false }
     func supportsBatteryDetails() -> Bool { batteryDetails }
     func supportsFileSyncIdentity() -> Bool { fileSyncIdentity }
-    func accept(supportsBatteryDetails: Bool, supportsFileSyncIdentity: Bool) { batteryDetails = supportsBatteryDetails; fileSyncIdentity = supportsFileSyncIdentity; checkedAt = Date() }
+    func supportsMenuBar() -> Bool { menuBar }
+    func supportsScripts() -> Bool { scripts }
+    func accept(supportsBatteryDetails: Bool, supportsFileSyncIdentity: Bool, supportsMenuBar: Bool, supportsScripts: Bool) { batteryDetails = supportsBatteryDetails; fileSyncIdentity = supportsFileSyncIdentity; menuBar = supportsMenuBar; scripts = supportsScripts; checkedAt = Date() }
 }
 
 public final class ThingtimeAPIClient: ControlPlaneClient, @unchecked Sendable {
@@ -80,6 +84,22 @@ public final class ThingtimeAPIClient: ControlPlaneClient, @unchecked Sendable {
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let features = json["features"] as? [String: [String: Any]],
               let version = features["api.devices-node-state"]?["version"] as? String else { return false }
+        let parts = version.split(separator: ".").compactMap { Int($0) }
+        return parts.count == 3 && parts[0] == 1 && parts[1] >= 10
+    }
+    static func supportsMenuBar(_ data: Data, origin: URL) -> Bool {
+        guard compatibleManifest(data, origin: origin),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let features = json["features"] as? [String: [String: Any]],
+              let version = features["api.devices-node-state"]?["version"] as? String else { return false }
+        let parts = version.split(separator: ".").compactMap { Int($0) }
+        return parts.count == 3 && parts[0] == 1 && parts[1] >= 13
+    }
+    static func supportsScripts(_ data: Data, origin: URL) -> Bool {
+        guard compatibleManifest(data, origin: origin),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let features = json["features"] as? [String: [String: Any]],
+              let version = features["api.devices-node-commands"]?["version"] as? String else { return false }
         let parts = version.split(separator: ".").compactMap { Int($0) }
         return parts.count == 3 && parts[0] == 1 && parts[1] >= 10
     }
@@ -141,7 +161,7 @@ public final class ThingtimeAPIClient: ControlPlaneClient, @unchecked Sendable {
         guard let response = raw as? HTTPURLResponse, response.statusCode == 200,
               response.url?.scheme == baseURL.scheme, response.url?.host == baseURL.host, response.url?.port == baseURL.port,
               data.count <= 2_097_152, Self.compatibleManifest(data, origin: baseURL) else { throw ThingtimeAPIClientError.incompatibleCapabilities }
-        await capabilityCache.accept(supportsBatteryDetails: Self.supportsBatteryDetails(data, origin: baseURL), supportsFileSyncIdentity: Self.supportsFileSyncIdentity(data, origin: baseURL))
+        await capabilityCache.accept(supportsBatteryDetails: Self.supportsBatteryDetails(data, origin: baseURL), supportsFileSyncIdentity: Self.supportsFileSyncIdentity(data, origin: baseURL), supportsMenuBar: Self.supportsMenuBar(data, origin: baseURL), supportsScripts: Self.supportsScripts(data, origin: baseURL))
     }
 
 
@@ -271,6 +291,7 @@ public final class ThingtimeAPIClient: ControlPlaneClient, @unchecked Sendable {
             let soundEffectsVolume: Double?
             let soundEffectsMuted: Bool?
             let brightness: Double?
+            let menuBar: MenuBarTelemetry?
             let openApps: [App]
             let audioDevices: [AudioDevice]
             let wifi: WiFi
@@ -426,6 +447,7 @@ public final class ThingtimeAPIClient: ControlPlaneClient, @unchecked Sendable {
         let credential = try await requireCredential(deviceID: heartbeat.deviceID)
         try await requireCapabilities()
         let detailedBattery = await capabilityCache.supportsBatteryDetails()
+        let menuBarSupported = await capabilityCache.supportsMenuBar()
         let telemetry = heartbeat.telemetry
         let brightness = telemetry.displays.first(where: { $0.isMain })?.brightness
         var connectors = [StateBody.Connector(
@@ -457,6 +479,7 @@ public final class ThingtimeAPIClient: ControlPlaneClient, @unchecked Sendable {
                 soundEffectsVolume: telemetry.soundEffectsOutputVolume,
                 soundEffectsMuted: telemetry.soundEffectsOutputMuted,
                 brightness: brightness,
+                menuBar: menuBarSupported ? telemetry.menuBar : nil,
                 openApps: Array(telemetry.runningApplications.compactMap { application in
                     guard let identifier = application.bundleIdentifier?.trimmingCharacters(in: .whitespacesAndNewlines),
                           !identifier.isEmpty else { return nil }
@@ -531,12 +554,13 @@ public final class ThingtimeAPIClient: ControlPlaneClient, @unchecked Sendable {
         )
         guard response.ok else { throw ThingtimeAPIClientError.invalidResponse }
         guard let command = response.command else { return CommandLeaseBatch(commands: []) }
+        if command.kind == "script.run", !(await capabilityCache.supportsScripts()) { throw ThingtimeAPIClientError.incompatibleCapabilities }
         guard let leaseID = command.leaseId,
               !leaseID.isEmpty,
               let expiresAt = Self.isoDate(command.leaseExpiresAt) else {
             throw ThingtimeAPIClientError.invalidResponse
         }
-        guard !command.requiresApproval || command.approvalState == "approved" else {
+        guard (command.kind != "script.run" || command.requiresApproval), !command.requiresApproval || command.approvalState == "approved" else {
             throw ThingtimeAPIClientError.invalidResponse
         }
         return CommandLeaseBatch(commands: [LeasedCommand(
@@ -570,6 +594,9 @@ public final class ThingtimeAPIClient: ControlPlaneClient, @unchecked Sendable {
         }
         if report.status == .succeeded, let filesystem = report.response.result?.objectValue?["filesystem"] {
             body["result"] = filesystem
+        }
+        if report.status == .succeeded, let script = report.response.result?.objectValue?["script"] {
+            body["result"] = script
         }
         if let outputReference = Self.commandOutputReference(report.response) {
             body["outputRef"] = .string(outputReference)

@@ -601,3 +601,25 @@ that service; the normal retry sweep and storage refund remain canonical. Run
 `test:attachments:retention` for real isolated Mongo concurrency/accounting plus
 `test:attachments`, `test:backups` and `test:api-capabilities`. See
 [the retention rollout boundary](../portable-backups.md#source-version-retention--2026-10-19).
+## Password-vault attachments
+
+`api/utils/passwords/files.ts` uses an internal `passwordVault` adapter to the
+canonical multipart service. The immutable password purpose is refused by normal
+attachment routes. Content is browser-encrypted; the per-file key and real name
+are wrapped by the account vault on the protected attachment root. Only a saved,
+owned password entry may bind the file; deletion and expiry keep existing
+exact-version cleanup and accounting. Ciphertext skips external moderation.
+
+## Local media processing in reusable Components
+
+`app/webPlatform/mediaPipeline.ts` validates the saved `program.media` contract.
+`liveMediaPipeline.ts` binds declarative controls inside the opaque frame;
+`hostMediaPipeline.ts` fences requests and owns a terminable secure-context
+`mediaWorker.ts`. Mediabunny/WebCodecs decode, scale, encode and mux a selected
+local Blob. `mediaOutput.ts` handles random-access mux writes; `mediaExport.ts`
+validates the host download. No attachment upload or remote fetch is involved.
+`schemas/appSuites/mediaTools.ts` composes ordinary saved Page/Component/Action
+Things, with the existing save-draft Action preserving settings as data.
+Canonical docs and Lopu discovery guidance live in `docs/builderGuide.ts`.
+Run `test:web-platform`, `test:api-capabilities`, `test:vercel-config` and the
+isolated real-browser flow in README; see TESTING's local video checklist.

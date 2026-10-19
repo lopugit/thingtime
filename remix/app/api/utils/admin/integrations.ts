@@ -78,6 +78,13 @@ export const revealAdminSecret = async (id: string): Promise<string | null> => {
 	return record ? decryptSecret(record as StoredAdminSecret) : null;
 };
 
+// Server-only automation lookup. Callers must authenticate a purpose-scoped machine
+// identity and use fixed labels, never a request-controlled selector.
+export const readAdminAutomationSecret = async (label: string): Promise<string | null> => {
+  const record = await (await getAdminIntegrationSecretsCollection()).findOne({ label });
+  return record ? decryptSecret(record as StoredAdminSecret) : null;
+};
+
 const encryptSecret = (id: string, value: string) => {
 	const key = vaultKey();
 	if (!key) throw new Error('Secret vault is unavailable. Configure THINGTIME_ADMIN_VAULT_KEY with a 32-byte base64url key.');

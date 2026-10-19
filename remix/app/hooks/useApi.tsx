@@ -1,6 +1,7 @@
 import { FILE_SYNC_REQUIREMENTS } from '~/fileSync/configuration';
 import { parseCloudFile, parseCloudFileCommit, type CloudFileCommit } from '~/fileSync/cloudFile';
 import type { TimelineScope } from '~/timeline/contract';
+import { useCharacterScope, CHARACTER_HEADER } from '~/components/Characters/CharacterScope';
 import type { VersionRequest } from '../timeline/publishedVersion';
 import type { BranchCheckoutRequest } from '../timeline/branchCheckout';
 import { timelineRequestScope, type TimelineStorage } from '../timeline/storageScope';
@@ -46,15 +47,15 @@ const refreshRootData = () => {
 // GET helper mirroring useAsyncFetcher semantics: parses JSON and throws the
 // parsed payload on !ok so callers catch { ok: false, error } shapes.
 // Every call is recorded in the DevKit request log (method/path/status/ms).
-export type ThingRequestOptions = { signal?: AbortSignal; expectedDataPlane?: string | null; expectedActor?: string; expectedApiOrigin?: string };
-const getJson = async (url: string, options?: ThingRequestOptions) => {
+export type ThingRequestOptions = { signal?: AbortSignal; expectedDataPlane?: string | null; expectedActor?: string; expectedApiOrigin?: string; characterId?: string };
+const getJsonRequest = async (url: string, options?: ThingRequestOptions) => {
   if (url.startsWith('/api/v1/things')) ensureFoundPostBrowserIdentity();
   const started = performance.now();
   let response: Response;
   try {
     response = await fetch(url, { credentials: 'include', signal: options?.signal,
       ...(options?.expectedApiOrigin ? { redirect: 'error' as const, cache: 'no-store' as const } : {}),
-      headers: { ...(options?.expectedApiOrigin ? { 'X-Thingtime-Expected-Api-Origin': options.expectedApiOrigin } : {}), ...(options?.expectedDataPlane ? { [EXPECTED_DATA_PLANE_HEADER]: options.expectedDataPlane } : {}), ...(options?.expectedActor ? { 'X-Thingtime-Expected-Actor': options.expectedActor } : {}) } });
+      headers: { ...(options?.expectedApiOrigin ? { 'X-Thingtime-Expected-Api-Origin': options.expectedApiOrigin } : {}), ...(options?.expectedDataPlane ? { [EXPECTED_DATA_PLANE_HEADER]: options.expectedDataPlane } : {}), ...(options?.expectedActor ? { 'X-Thingtime-Expected-Actor': options.expectedActor } : {}), ...(options?.characterId ? { [CHARACTER_HEADER]: options.characterId } : {}) } });
     if (options?.expectedApiOrigin && (response.redirected || (options.expectedApiOrigin !== window.location.origin && response.headers.get('x-thingtime-api-fallback') !== options.expectedApiOrigin))) {
       await response.body?.cancel().catch(() => {});
       throw Error('The selected API server changed.');
@@ -126,6 +127,9 @@ const toQuery = (args?: Record<string, unknown>) => {
 };
 
 export function useApi() {
+  const character = useCharacterScope();
+  const getJson = useCallback((url: string, options?: ThingRequestOptions) =>
+    getJsonRequest(url, { ...options, ...(character ? { characterId: character.id } : {}) }), [character]);
   const dataPlane = useDataPlane();
   const planeRef = useRef(dataPlane); planeRef.current = dataPlane;
   const asyncFetcher = useAsyncFetcher();
@@ -443,18 +447,28 @@ export function useApi() {
     // + for a signed-in viewer their Secure Vault providers as metadata only:
     // vaultProviders: [{ id, name, kind, model, endpointHost, available, reason? }], vault: { configured })
     ai: {
-      models: useCallback(async () => getJson('/api/v1/ai/models'), []),
+      models: useCallback(async () => {
+        const result = await getJson('/api/v1/ai/models');
+        if (result?.vaultProviders?.some((provider: { planChatEligible?: boolean }) => provider.planChatEligible === true)) {
+          try { await requireThingtimeCapability('api.ai-models', '1.8.0'); }
+          catch { return { ...result, vaultProviders: result.vaultProviders.map(({ planChatEligible: _hint, ...provider }: any) => provider) }; }
+        }
+        return result;
+      }, []),
       complete: useCallback(async (input: AiCompletionInput) => {
         for (const [feature, minimum] of Object.entries(AI_COMPLETION_REQUIREMENTS)) await requireThingtimeCapability(feature, minimum);
         return asyncFetcher.submit(input, { action: '/api/v1/ai/complete', errorContext: 'complete text with your selected AI connections' });
       }, [asyncFetcher])
     },
     admin: {
+      aiModels: useCallback(async () => getJson('/api/v1/admin/ai/models'), []),
       // { id, enabled } toggles one catalog model; { seed: true } re-runs the catalog upsert;
       // { probe: true } re-checks the provider keys (fresh providers.<p>.verified + the re-projected list)
       setAiModel: useCallback(
-        async (args: { id?: string; enabled?: boolean; seed?: boolean; probe?: boolean }) =>
-          asyncFetcher.submit(args, { action: '/api/v1/admin/ai/models', errorContext: 'update the Lopu model catalog' }),
+        async (args: { id?: string; enabled?: boolean; seed?: boolean; probe?: boolean; sync?: boolean; provider?: string; allowAll?: boolean; autoAllowNewModels?: boolean }) => {
+          await requireThingtimeCapability('api.admin-ai-models', '1.4.0');
+          return asyncFetcher.submit(args, { action: '/api/v1/admin/ai/models', errorContext: 'update the Lopu model catalog' });
+        },
         [asyncFetcher]
       ),
       setLopuChatDefaults: useCallback(
@@ -589,20 +603,25 @@ export function useApi() {
         async (args) => asyncFetcher.submit({ action: 'settings', settings: args?.settings }, { action: '/api/v1/admin/moderation' }),
         [asyncFetcher]
       ),
-      migrations: useCallback(async () => getJson('/api/v1/admin/migrations'), []),
+      migrations: useCallback(async () => {
+        await requireThingtimeCapability('api.admin-migrations', '1.4.1');
+        return getJson('/api/v1/admin/migrations');
+      }, []),
 			migrationDiagnostic: useCallback(
 				async (args, options?: { signal?: AbortSignal }) => getJson(`/api/v1/admin/migrations/diagnostic${toQuery({ id: args?.id })}`, options),
 				[]
 			),
       migrationsRun: useCallback(
-        async (args) =>
-          asyncFetcher.submit(
+        async (args) => {
+          await requireThingtimeCapability('api.admin-migrations-run', '1.4.1');
+          return asyncFetcher.submit(
             { migration: args?.migration, dryRun: args?.dryRun, confirm: args?.confirm },
             {
               action: '/api/v1/admin/migrations/run',
               errorContext: args?.dryRun ? `preview migration ${args?.migration}` : `run migration ${args?.migration}`
             }
-          ),
+          );
+        },
         [asyncFetcher]
       ),
       usersOverview: useCallback(
@@ -664,6 +683,7 @@ export function useApi() {
         // → vaultProviders[].id); null clears it back to the catalog model
         create: useCallback(
           async (args?: { title?: string; model?: string; effort?: string; speed?: string; providerId?: string | null; accessMode?: 'ask' | 'full'; management?: 'client' | 'server' }) => {
+            if (typeof args?.providerId === 'string' && args.providerId.startsWith('chatgpt-plan-')) await requireThingtimeCapability('api.lopu-chats', '1.7.0');
             if (args?.accessMode) await requireThingtimeCapability('api.lopu-chats', '1.6.0');
             if (args?.management) await requireThingtimeCapability('api.lopu-chats', '1.5.0');
             return asyncFetcher.submit(args || {}, { action: '/api/v1/lopu/chats', errorContext: 'start a Lopu chat' });
@@ -672,6 +692,7 @@ export function useApi() {
         ),
         update: useCallback(
           async (args: { chatId: string; title?: string; model?: string; effort?: string; speed?: string; providerId?: string | null; accessMode?: 'ask' | 'full'; management?: 'client' | 'server'; archived?: boolean }) => {
+            if (typeof args.providerId === 'string' && args.providerId.startsWith('chatgpt-plan-')) await requireThingtimeCapability('api.lopu-chats-update', '1.6.1');
             if (args.accessMode) await requireThingtimeCapability('api.lopu-chats-update', '1.5.0');
             if (args.management) {
               await requireThingtimeCapability('api.lopu-chats', '1.5.0');
@@ -1290,7 +1311,7 @@ export function useApi() {
 					const attachmentIds = args?.attachmentIds;
 					const ret = asyncFetcher.submit(
 						buildThingCommentRequestPayload(args),
-						{ action: '/api/v1/things/comment' }
+						{ action: '/api/v1/things/comment', ...(args?.characterId ? { characterId: args.characterId, expectedActor: args.characterId } : {}) }
 					);
 					if (Array.isArray(attachmentIds) && attachmentIds.length > 0) {
 						ret.then(refreshRootData).catch(() => {});

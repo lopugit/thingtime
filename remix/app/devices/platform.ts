@@ -7,8 +7,8 @@ export const isDevicePlatform = (value: unknown): value is DevicePlatform =>
 
 /** Mobile clients must negotiate these before starting a pairing claim. */
 export const MOBILE_DEVICE_REQUIREMENTS = {
-	'api.devices': '1.10.0',
+	'api.devices': '1.13.0',
 	'api.devices-pairing': '1.0.0',
-	'api.devices-pairing-claim': '1.1.0',
+	'api.devices-pairing-claim': '1.2.0',
 	'api.devices-node-state': '1.9.0'
 } as const;

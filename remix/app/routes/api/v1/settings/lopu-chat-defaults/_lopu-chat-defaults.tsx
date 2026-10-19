@@ -1,6 +1,6 @@
 import { json, readJsonBody } from '~/api/http';
 
-import { listAiModels } from '~/api/utils/ai/models';
+import { AI_MODEL_CATALOG, listAiModels } from '~/api/utils/ai/models';
 import { LOPU_CHAT_DEFAULTS_KEY, validateLopuChatDefaults, type StoredLopuChatDefaults } from '~/api/utils/ai/modelsCore';
 import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
 import { requireAdmin } from '~/api/utils/auth/requireAdmin';
@@ -90,6 +90,11 @@ export const createLopuChatDefaultsHandlers = (dependencies: HandlerDependencies
       return json({ ok: false, error: validated.error }, { status: 400, headers: NO_STORE_HEADERS });
     }
 
+    if (!AI_MODEL_CATALOG.some((model) => model.modelId === validated.defaults.model)) {
+      const catalog = await dependencies.listAiModels(gate.user);
+      if (!catalog.models.some((model) => model.id === validated.defaults.model))
+        return json({ ok: false, error: 'Choose a model discovered in the provider catalogue.' }, { status: 400, headers: NO_STORE_HEADERS });
+    }
     const stored = await dependencies.setStoredDefaults(validated.defaults, gate.user.id);
     return json(await responseBody(stored, gate.user), { headers: NO_STORE_HEADERS });
   };

@@ -1,6 +1,7 @@
 import { attachmentRetention } from '~/api/utils/attachments/attachmentRetention';
 import { createAttachmentMutationAction } from '~/api/utils/attachments/attachmentResponses';
 import { parseAttachmentRange, readExactRange } from '~/api/utils/attachments/attachmentRanges';
+import { CHARACTER_HEADER } from '~/api/utils/auth/characterSession';
 import { withFoundPostBrowser } from '~/api/utils/things/foundPostRequest';
 import { attachmentImageResponse, parseImageWidth } from '~/api/utils/attachments/imageVariants';
 import { json, redirect } from '~/api/http';
@@ -48,7 +49,14 @@ export const createAttachmentContentLoader = (overrides: Partial<ContentDependen
 				return json({ ok: false, error: 'Invalid shared root' }, { status: 400 });
 			const width = parseImageWidth(url.searchParams.get('width'));
 			if (width === null) return json({ ok: false, error: 'Unsupported image width' }, { status: 400 });
-			const resolvedUser = await dependencies.getUser(request);
+			// Media elements cannot attach an identity header. This optional selector
+            // is authorized by the same full-session ownership check as a composer.
+            const character = url.searchParams.get('character');
+            if (character !== null && !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(character)) return json({ ok: false, error: 'Invalid Character' }, { status: 400 });
+            const actorRequest = character === null ? request : new Request(request, { headers: new Headers(request.headers) });
+            if (character !== null) actorRequest.headers.set(CHARACTER_HEADER, character);
+            const resolvedUser = await dependencies.getUser(actorRequest);
+            if (character !== null && !resolvedUser) return json({ ok: false, error: 'Character unavailable' }, { status: 401 });
 			// Service credentials are not first-party attachment principals. Treat
 			// them exactly like an anonymous caller for public-post authorization.
 			const user = resolvedUser?.accountKind === 'user' ? resolvedUser : null;
@@ -100,7 +108,7 @@ export const createAttachmentContentLoader = (overrides: Partial<ContentDependen
 					return json({ ok: false, error: 'Attachment range unavailable; retry the same version' }, { status: 502 });
 				}
 				signal.throwIfAborted();
-				if (retained && (await dependencies.getUser(request))?.id !== user?.id)
+				if (retained && (await dependencies.getUser(actorRequest))?.id !== user?.id)
 					return json({ ok: false, error: 'Attachment not found' }, { status: 404 });
 				const refreshedAudience = await dependencies.enrichViewer(
 					withLinkKeys(withFoundPostBrowser(viewerOf(user), request, !resolvedUser), [url.searchParams.get('key') || ''])

@@ -68,7 +68,7 @@ export const MAX_SESSION_REPLACEMENT_ATTACHMENT_CLEANUP = 25;
 export const MAX_ATTACHMENT_DETECTION_BACKFILL_PER_RUN = 200;
 export const ATTACHMENT_DETECTION_BACKFILL_WALL_CLOCK_MS = 25 * 1000;
 export const ATTACHMENT_DETECTION_BACKFILL_CONCURRENCY = 5;
-export const ATTACHMENT_UPLOAD_PURPOSES = ['post', 'comment', 'message', 'profile-avatar', 'profile-banner', 'custom-emoji', 'recording', 'recording-import', 'file', 'file-import', 'subspace-icon', 'subspace-banner'] as const;
+export const ATTACHMENT_UPLOAD_PURPOSES = ['post', 'comment', 'message', 'profile-avatar', 'profile-banner', 'custom-emoji', 'recording', 'recording-import', 'file', 'file-import', 'subspace-icon', 'subspace-banner', 'password'] as const;
 export type AttachmentUploadPurpose = (typeof ATTACHMENT_UPLOAD_PURPOSES)[number];
 export const MAX_CUSTOM_EMOJI_ATTACHMENT_BYTES = 512 * 1024;
 export const CUSTOM_EMOJI_ATTACHMENT_CONTENT_TYPES = new Set(['image/gif', 'image/jpeg', 'image/png', 'image/webp']);
@@ -88,6 +88,8 @@ type AttachmentViewer = AttachmentAccessViewer;
 
 type AttachmentServiceDependencies = {
 	closeRetention: typeof attachmentRetention.closeForDeletion;
+	// Only the full-session password endpoint constructs this internal adapter.
+	passwordVault?: boolean;
   ownedMediaDraftIds: typeof ownedMediaDraftIds;
 	store: AttachmentStore;
 	getS3: () => AttachmentS3;
@@ -145,6 +147,7 @@ const attachmentUploadIntent = (
 	if (value === undefined || value === 'post') return { requestPurpose: 'post', purpose: 'post' };
 	if (value === 'comment') return { requestPurpose: value, purpose: 'comment' };
 	if (value === 'message') return { requestPurpose: value, purpose: 'message' };
+	if (value === 'password') return { requestPurpose: value, purpose: 'password' };
 	if (value === 'file') return { requestPurpose: value, purpose: 'file' };
 	if (value === 'file-import') return { requestPurpose: value, purpose: 'file', recordingImportDraft: true };
 	if (value === 'recording') return { requestPurpose: value, purpose: 'recording' };
@@ -754,7 +757,7 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 				return fail(400, 'Invalid attachment upload request');
 			}
 			const intent = attachmentUploadIntent(raw.purpose);
-			if (!intent) return fail(400, 'Invalid attachment upload purpose');
+			if (!intent || (intent.purpose === 'password' && !dependencies.passwordVault)) return fail(400, 'Invalid attachment upload purpose');
 			if (intent.purpose !== 'profile' && dependencies.customMongoActive()) {
 				return fail(400, 'Private attachments are unavailable with a custom MongoDB endpoint');
 			}
@@ -847,7 +850,7 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 			}
 			// Recording starts can be replayed after a lost completion receipt.
 			// The owner and exact metadata fingerprint have already been checked.
-			if (['recording', 'file'].includes(intent.purpose) && reserved.attachmentState === 'ready') {
+			if (['recording', 'file', 'password'].includes(intent.purpose) && reserved.attachmentState === 'ready') {
 				if (intent.recordingImportDraft && (reserved.attachmentImportDraft !== true ||
 					!(reserved.attachmentExpiresAt instanceof Date) || !Number.isFinite(reserved.attachmentExpiresAt.getTime()) ||
 					reserved.attachmentExpiresAt.getTime() <= dependencies.now().getTime())) {
@@ -945,7 +948,7 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 			const id = normalizeId(raw.uploadId);
 			if (!id) return fail(400, 'Invalid attachment upload id');
 			const doc = await dependencies.store.getOwned(ownerId, id);
-			if (!doc || doc.attachmentState !== 'pending' || !doc.uploadId) return fail(404, 'Attachment upload not found');
+			if (!doc || (doc.attachmentPurpose === 'password' && !dependencies.passwordVault) || doc.attachmentState !== 'pending' || !doc.uploadId) return fail(404, 'Attachment upload not found');
 			if (!doc.attachmentExpiresAt || doc.attachmentExpiresAt.getTime() <= dependencies.now().getTime()) {
 				return fail(410, 'Attachment upload expired');
 			}
@@ -980,6 +983,8 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 			if (Object.keys(raw).some((key) => key !== 'uploadId')) return fail(400, 'Invalid completion request');
 			const id = normalizeId(raw.uploadId);
 			if (!id) return fail(400, 'Invalid attachment upload id');
+			const candidate = await dependencies.store.getOwned(ownerId, id);
+			if (candidate?.attachmentPurpose === 'password' && !dependencies.passwordVault) return fail(404, 'Attachment upload not found');
 			const finalizationLeaseId = dependencies.uuid();
 			const finalizationClaim = await dependencies.store.claimFinalizing(ownerId, id, finalizationLeaseId);
 			if (!finalizationClaim) return fail(404, 'Attachment upload not found');
@@ -1055,7 +1060,7 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 					return fail(409, 'Attachment object version is unavailable');
 				}
 				await s3.markObjectReady({ objectKey: doc.objectKey, versionId: doc.objectVersionId });
-				dependencies.queueModeration?.(doc.shareId);
+				if (doc.attachmentPurpose !== 'password') dependencies.queueModeration?.(doc.shareId);
 				return { ok: true, attachment: attachmentPublicProjection(doc.shareId, doc.crystal) };
 			}
 			if (!finalizationClaim.acquired) {
@@ -1141,7 +1146,7 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 				return fail(409, 'Uploaded object failed integrity verification');
 			}
 
-			const detected = detectedAttachmentType(await s3.detectContentType({ objectKey: doc.objectKey, versionId: head.versionId }), doc.crystal.name);
+			const detected = doc.attachmentPurpose === 'password' ? { contentType: 'application/octet-stream', mediaKind: 'file' as const } : detectedAttachmentType(await s3.detectContentType({ objectKey: doc.objectKey, versionId: head.versionId }), doc.crystal.name);
 			const lostAfterDetection = await renewFinalizationLease(head.versionId);
 			if (lostAfterDetection) return lostAfterDetection;
 			const readyCrystal: AttachmentCrystal = { ...doc.crystal, ...detected };
@@ -1165,7 +1170,7 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 			// Moderation runs AFTER the upload is durable and never affects the
 			// response — the analyzer stamps the protected root field async and the
 			// admin sweep retries anything that misses this kickoff.
-			dependencies.queueModeration?.(doc.shareId);
+			if (doc.attachmentPurpose !== 'password') dependencies.queueModeration?.(doc.shareId);
 			return { ok: true, attachment: attachmentPublicProjection(doc.shareId, doc.crystal) };
 		} catch (error) {
 			return knownFailure(error) || unavailable('complete', error);
@@ -1192,6 +1197,7 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 			if (!id) return fail(400, 'Invalid attachment upload id');
 			const existing = await getOwnedByAttachmentOrRequestId(ownerId, id);
 			if (!existing) return { ok: true, deferred: false };
+			if (existing.attachmentPurpose === 'password' && !dependencies.passwordVault) return fail(404, 'Attachment not found');
 			if (existing.targetId) return fail(409, 'Attached files must be removed from their post');
 			if (existing.attachmentState === 'finalizing') {
 				return fail(409, 'Attachment finalization is in progress — try again');
@@ -1222,6 +1228,7 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 			if (raw.targetId !== undefined && !targetId) return fail(400, 'Invalid attachment target id');
 			const existing = await getOwnedByAttachmentOrRequestId(ownerId, id);
 			if (!existing) return { ok: true, deferred: false };
+			if (existing.attachmentPurpose === 'password' && !dependencies.passwordVault) return fail(404, 'Attachment not found');
 			// Internal copy rollback may only discard unfinished uploads. The
 			// cleanup claim below CAS-fences the observed state, so a concurrent
 			// finalization cannot turn this retry into deletion of a durable file.
@@ -1230,7 +1237,7 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 			// clean up its former draft ids. Once bound, only post cascade deletion
 			// may remove the object; this check makes that ambiguous success safe.
 			if (existing.targetId && existing.targetId !== targetId) return fail(409, 'Attached files must be removed from their post');
-			if (existing.targetId && existing.attachmentPurpose && !['post', 'comment'].includes(existing.attachmentPurpose)) {
+			if (existing.targetId && existing.attachmentPurpose && !['post', 'comment', ...(dependencies.passwordVault ? ['password'] : [])].includes(existing.attachmentPurpose)) {
 				return fail(409, 'This attached file must be removed from its owning surface');
 			}
 			if (existing.attachmentState === 'finalizing') {
@@ -1270,6 +1277,7 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 				attachmentContentVersion(doc.shareId, doc.objectKey, doc.objectVersionId!) === retainedVersion;
 			if ((retainedVersion !== undefined && !retained) || (doc.attachmentState !== 'ready' && !(retained && doc.attachmentState === 'deleting')))
 				return fail(404, 'Attachment not found');
+			if (doc.attachmentPurpose === 'password' && (!dependencies.passwordVault || viewer?.id !== doc.ownerId || !doc.targetId || !(await dependencies.canViewTarget(viewer, doc)))) return fail(404, 'Attachment not found');
 			// Pending analysis fails closed for everyone except the owner preview and
 			// an administrator reviewing evidence. Blocked attachments stay admin-only.
 			// 404 (not 403) keeps moderation state from becoming an existence oracle.

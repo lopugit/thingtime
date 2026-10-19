@@ -65,10 +65,15 @@ async function closeServer(server) {
 }
 
 /** Own the listening socket throughout startup; never probe an unknown server. */
-async function startRendererServer({ profilePath, loadApplication }) {
+async function startRendererServer({ profilePath, loadApplication, selectedPort }) {
+    if (selectedPort !== undefined && (!Number.isInteger(selectedPort) || selectedPort < 1024 || selectedPort > 65535)) {
+        throw new Error('Invalid selected Desktop port');
+    }
     await fs.mkdir(profilePath, { recursive: true, mode: 0o700 });
     const stateFile = path.join(profilePath, STATE_FILE);
-    const savedPort = await readPort(stateFile);
+    // An explicitly selected local API or recovered legacy origin owns its exact
+    // address. Keep the older automatic-origin record untouched for recovery.
+    const savedPort = selectedPort ?? await readPort(stateFile);
     let middleware;
     const server = http.createServer((request, response) => {
         if (!middleware) {
@@ -87,7 +92,7 @@ async function startRendererServer({ profilePath, loadApplication }) {
             server.listen({ host: '127.0.0.1', port: savedPort ?? 0, exclusive: true });
         });
         const port = server.address().port;
-        if (savedPort === null) await savePort(stateFile, port);
+        if (selectedPort === undefined && savedPort === null) await savePort(stateFile, port);
         const origin = `http://127.0.0.1:${port}`;
         const application = await loadApplication({ port, origin });
         if (typeof application.middleware !== 'function') {

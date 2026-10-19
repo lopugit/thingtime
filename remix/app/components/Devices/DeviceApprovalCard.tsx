@@ -78,7 +78,7 @@ export const DeviceApprovalCard = memo(({ approval, now = Date.now(), controlFor
 						<DeviceStatusPill label={approval.status} tone={approvalTone(approval.status)} />
 						{approval.localOnly ? <DeviceStatusPill label="on-device" tone="neutral" /> : null}
 					</Flex>
-					<Text fontSize="12px" lineHeight="1.45" marginTop={1.5} whiteSpace="pre-wrap">
+					<Text fontSize="12px" lineHeight="1.45" marginTop={1.5} whiteSpace="pre-wrap" overflowWrap="anywhere" maxHeight="360px" overflowY="auto">
 						{approval.prompt}
 					</Text>
 					{expiry ? (

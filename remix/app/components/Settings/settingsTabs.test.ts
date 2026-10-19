@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import { SETTINGS_TABS, resolveSettingsTab, settingsTabHref } from './settingsTabs';
 test('every category has a unique reloadable URL; profile is default', () => {
 	assert.equal(resolveSettingsTab(), 'profile');
@@ -12,6 +13,9 @@ test('existing section bookmarks select the section’s category', () => {
 	assert.equal(resolveSettingsTab(null, '#ai-waterfalls'), 'ai-waterfalls');
 	assert.equal(resolveSettingsTab(null, '#secure-vault'), 'security');
 	assert.equal(resolveSettingsTab(null, '#lopu'), 'lopu');
+	assert.equal(resolveSettingsTab(null, '#lopu-instructions'), 'lopu');
+	assert.equal(resolveSettingsTab(null, '#lopu-accounts'), 'admin');
+	assert.equal(resolveSettingsTab(null, '#lopu-base-prompt'), 'admin');
 	assert.equal(resolveSettingsTab(null, '#lopu-credits'), 'account');
 	assert.equal(resolveSettingsTab('things', '#lopu'), 'things');
 });
@@ -23,4 +27,15 @@ test('Account owns new and legacy invite and credits links without overriding un
 		assert.equal(resolveSettingsTab('profile', hash), 'profile');
 	}
 	assert.equal(resolveSettingsTab('lopu'), 'lopu');
+});
+
+test('agent browser security links to its actual settings category and disclosure anchor', async () => {
+	const route = await readFile(new URL('../../routes/agent-browsers.tsx', import.meta.url), 'utf8');
+	const controls = await readFile(new URL('../AgentTasks/AgentBrowserDefaults.tsx', import.meta.url), 'utf8');
+	const href = route.match(/to="([^"]+)"[^>]*>General security settings/)?.[1];
+	assert.ok(href, 'The task page must expose general security settings');
+	const url = new URL(href, 'http://test.local');
+	assert.equal(resolveSettingsTab(url.pathname.split('/').pop(), url.hash), 'things');
+	assert.equal(url.hash, '#agent-browser-security');
+	assert.ok(controls.includes(`id="${url.hash.slice(1)}"`), 'The settings disclosure must contain its deep-link target');
 });

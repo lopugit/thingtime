@@ -174,7 +174,8 @@ function cloudFileTransport(runtime: CloudTransportRuntime, saved: CloudWrite, s
 				throw Error('Cloud path changed; reconcile this run.');
 			return file.trashed ? null : cloudFileSyncEntry(file, m.path);
 		},
-		async apply(source?: FingerprintSource, progress?: (bytes: number, total: number) => void): Promise<SyncReceipt> {
+		async apply(source?: FingerprintSource, progress?: (bytes: number, total: number) => void,
+			transferred?: (bytes: number | null) => void): Promise<SyncReceipt> {
 			const previous = await lookup();
 			if (previous.status === 'complete') return previous.receipt;
 			if (m.kind === 'trash') return commit(write.before!.content);
@@ -201,6 +202,9 @@ function cloudFileTransport(runtime: CloudTransportRuntime, saved: CloudWrite, s
 			if (!identifier(upload?.id) || upload.partSizeBytes !== plan.partSizeBytes || upload.partCount !== plan.partCount)
 				throw Error('Invalid cloud upload plan.');
 			if (upload.state !== 'ready' && nativeUpload && nativeApproval) {
+				// Older native whole-file progress includes already-retained bytes.
+				// Do not turn those completion offsets into invented network traffic.
+				transferred?.(null);
 				await runtime.authorizeMutation?.(signal);
 				await sourceCheck();
 				const uploaded = await nativeUpload({ uploadId: upload.id, requestId: write.operation.id, authorization: structuredClone(nativeApproval) }, signal, progress);
@@ -268,6 +272,7 @@ function cloudFileTransport(runtime: CloudTransportRuntime, saved: CloudWrite, s
 						if (!response.ok) throw Error(`Cloud upload part failed (${response.status}); retain this run.`);
 					}
 					digests.set(digest, i * 32);
+					transferred?.(source.uploadPart ? null : length);
 					progress?.(offset + length, source.size);
 				}
 				if (!equalContentFingerprints({ algorithm: 'sha256-parts-v1', ...plan, sha256: hex(await hash(digests)) }, m.source.fingerprint!))

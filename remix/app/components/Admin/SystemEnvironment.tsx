@@ -1,5 +1,6 @@
+import { SettingsSection } from '~/components/Settings/SettingsSection';
 import React from 'react';
-import { Box, Button, Flex, Heading, Input, Select, Text } from '@chakra-ui/react';
+import { Box, Button, Flex, Input, Select, Text } from '@chakra-ui/react';
 import { requireThingtimeCapability } from '~/api/utils/capabilities/requireCapability.client';
 import { VaultReveal } from '~/components/Settings/VaultReveal';
 import type { EnvironmentEntry } from '~/api/utils/admin/systemEnvironment';
@@ -58,14 +59,13 @@ export const SystemEnvironment = () => {
 		}
 	};
 	return (
-		<Box border="1px solid var(--tt-border, #e7e7eb)" borderRadius="12px" p={4} mt={4}>
-			<Heading size="sm">Deployment environment variables</Heading>
-			<Text fontSize="sm" opacity={0.65} mt={2}>
-				Thingtime’s Vercel project, including production, preview and development. Changes apply on the next deployment. Values marked sensitive by
-				Vercel can be replaced but cannot be shown.
-			</Text>
+		<SettingsSection
+			eyebrow="Deployment environment"
+			description="Manage deployment variables. Changes apply on the next deployment; sensitive values can be replaced but not shown."
+			summary={snapshot ? (snapshot.configured ? `${snapshot.entries.length} variables` : 'Vercel not configured') : 'Metadata not yet loaded'}
+		>
 			{snapshot?.configured === false ? (
-				<Text mt={3}>Connect Vercel in the platform credentials above and configure this server’s Vercel project to manage its variables here.</Text>
+				<Text mt={3}>Connect Vercel in the AI Providers tab and configure this server’s Vercel project to manage its variables here.</Text>
 			) : null}
 			{error ? (
 				<Text role="alert" color="red.600" mt={3}>
@@ -186,6 +186,6 @@ export const SystemEnvironment = () => {
 					Add variable
 				</Button>
 			</Flex>
-		</Box>
+		</SettingsSection>
 	);
 };

@@ -91,6 +91,7 @@ export function foregroundSyncContext(reviewed: SavedFileSyncConfiguration, scop
 		}
 	};
 	const localTarget = input.localTarget ? {
+		reportsTransferBytes: input.localTarget.reportsTransferBytes,
 		lookup: input.localTarget.lookup.bind(input.localTarget),
 		...(input.localTarget.trash ? { trash: async (...args: Parameters<NonNullable<typeof input.localTarget.trash>>) => {
 			await authorize(); return input.localTarget!.trash!(...args);

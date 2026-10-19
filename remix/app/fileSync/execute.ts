@@ -34,6 +34,8 @@ export type SyncExecutionPort = {
 	/** Resolve only after the complete immutable run is durable. Must serialize
 	 * one runner per root (native lock / browser Web Lock), including restarts. */
 	persist(run: SyncRun): Promise<void>;
+	/** Notification after a receipt reaches the caller's durable journal. */
+	confirmed?(operation: SyncOperation, receipt: SyncReceipt): void;
 };
 
 export type SyncMutationOrderKey = [number, number, string];
@@ -145,9 +147,10 @@ const executeRun = async (saved: SyncRun, port: SyncExecutionPort, signal: Abort
 	for (const operation of run.operations) {
 		check();
 		if (operation.confirmed) continue;
-		await executeSyncOperation(operation, run.scope, port, signal);
+		const receipt = await executeSyncOperation(operation, run.scope, port, signal);
 		operation.confirmed = true;
 		await durable();
+		port.confirmed?.(operation, receipt);
 	}
 	return run;
 };

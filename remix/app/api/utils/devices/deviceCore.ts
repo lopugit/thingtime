@@ -1,8 +1,11 @@
+import { normalizeDeviceScriptInput, type DeviceScriptInput } from './deviceScript';
+import { normalizeDeviceMenuBar, type DeviceMenuBar } from './deviceMenuBar';
 import { normalizeFilesystemInput, type FilesystemInput } from './deviceFilesystemCore';
 import { createHash } from 'node:crypto';
 import { isDevicePlatform, type DevicePlatform } from '../../../devices/platform';
 
 export const DEVICE_COMMAND_KINDS = [
+	'script.run',
 	'filesystem',
 	'connector.start',
 	'connector.stop',
@@ -78,6 +81,7 @@ export const normalizeDevicePermissionMode = (value: unknown): DevicePermissionM
 // Force quitting can discard unsaved work. It must always create a fresh
 // approval, even when the paired device otherwise allows routine controls.
 const ALWAYS_APPROVAL_DEVICE_COMMANDS = new Set<DeviceCommandKind>([
+	'script.run',
 	'app.force-quit',
 	'system.restart',
 	'system.shutdown',
@@ -239,6 +243,7 @@ export type DeviceAppleMusicState = { isInstalled: boolean; isRunning: boolean }
 export type DeviceSpotifyState = { isInstalled: boolean; isRunning: boolean };
 export type DeviceChromeYouTubeState = { isInstalled: boolean; isRunning: boolean };
 export type DeviceStateSnapshot = {
+	menuBar?: DeviceMenuBar;
 	locked: boolean;
 	volume: number | null;
 	muted: boolean | null;
@@ -312,11 +317,13 @@ export const normalizeDeviceState = (value: unknown): DeviceStateSnapshot | null
 		!Object.keys(raw).every((key) =>
 			[
 				'locked', 'volume', 'muted', 'inputVolume', 'inputMuted', 'soundEffectsVolume', 'soundEffectsMuted', 'brightness', 'battery', 'powerTimers', 'openApps', 'audioDevices', 'wifi',
-				'displays', 'printers', 'cameras', 'bluetoothDevices', 'vpnServices', 'appleMusic', 'spotify', 'chromeYouTube'
+				'displays', 'printers', 'cameras', 'bluetoothDevices', 'vpnServices', 'appleMusic', 'spotify', 'chromeYouTube', 'menuBar'
 			].includes(key)
 		)
 	)
 		return null;
+	const menuBar = raw.menuBar === undefined ? undefined : normalizeDeviceMenuBar(raw.menuBar);
+	if (menuBar === null || (raw.locked === true && menuBar && (menuBar.status !== 'locked' || menuBar.items.length))) return null;
 	const appsRaw = raw.openApps === undefined ? [] : raw.openApps;
 	if (!Array.isArray(appsRaw) || appsRaw.length > MAX_DEVICE_OPEN_APPS) return null;
 	const openApps: DeviceOpenApp[] = [];
@@ -506,7 +513,8 @@ export const normalizeDeviceState = (value: unknown): DeviceStateSnapshot | null
 		vpnServices,
 		appleMusic,
 		spotify,
-		chromeYouTube
+		chromeYouTube,
+		...(menuBar ? { menuBar } : {})
 	};
 };
 
@@ -680,6 +688,7 @@ type ConnectorInput = { connectorId: string };
 type CursorPageInput = { cursor?: string; limit?: number };
 
 export type DeviceCommandInputByKind = {
+	'script.run': DeviceScriptInput;
 	'filesystem': FilesystemInput;
 	'connector.start': ConnectorInput;
 	'connector.stop': ConnectorInput;
@@ -787,6 +796,7 @@ export const deviceConnectorSupportsCommand = (
 
 const DEVICE_COMMAND_CAPABILITY: Partial<Record<DeviceCommandKind, string>> = {
 	'filesystem': 'filesystem.v1',
+	'script.run': 'script.bash.v1',
 	'app.focus': 'apps.launch',
 	'app.launch': 'apps.launch',
 	'app.quit': 'apps.quit',
@@ -966,6 +976,10 @@ export const normalizeDeviceCommand = <K extends DeviceCommandKind>(
 	const ok = (input: unknown) => ({ ok: true as const, input: input as DeviceCommandInputByKind[K] });
 
 	switch (kind) {
+		case	'script.run': {
+			const input = normalizeDeviceScriptInput(raw);
+			return input ? ok(input) : deviceFail(400, 'Invalid bounded Bash script');
+		}
 		case 'filesystem': {
 			const input = normalizeFilesystemInput(raw);
 			return input ? ok(input) : deviceFail(400, 'Invalid bounded filesystem operation');

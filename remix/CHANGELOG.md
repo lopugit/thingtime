@@ -23,6 +23,16 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   controller-driven choices and handoff. Editable Builder wiring remains open.
   See [PR 1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
 
+- 2026-10-19: Keep personal-plan chats on local management, make repeated verified provider selections idempotent, and align the floating header with plan eligibility. Added regressions for first sends, follow-ups, old-client background admission and revoked proofs. Reconcile completed Responses output items before executing tools; incomplete/conflicting output remains fail-closed (installed tool acceptance pending). — Codex (AI)
+
+- 2026-10-18: Admit full-session owners to Lopu text chat through their live ChatGPT plan without an admin grant, preserve provider ownership on chat writes, and discard cached eligibility across identity changes. Catalog/API-key/voice invitation policy is unchanged. Live consent/model discovery/restart passed; rebuilt inference acceptance remains pending. See [PR 1034](../PRs/1034-chatgpt-plan-usage-local-runtime-and-encrypted-connection-moves.md). — Codex (AI)
+
+- 2026-10-18: Fix rejected Mac telemetry after menu bar/script support pushed the native capability list to 65 entries. Pairing, heartbeat and owner projections now share a bounded 128-entry contract, with native-vocabulary regression coverage. See [PR 1038](../PRs/1038-device-scripts-page-layout-restore-full-mac-telemetry.md) for acceptance findings and the installed page layout correction.
+
+- 2026-10-18: Refresh Claude public lifecycle metadata without an API key, preserve
+  account-access uncertainty and admin admission, include discovered models in
+  workflow settings, and persist the shared order when Save & apply is used.
+
 
 - 2026-09-22 — **Claude (AI)**: PR preview docs. README and the preview
   listener's manual-dispatch description now state what the protected
@@ -79,6 +89,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 ---
 
 ## [Unreleased]
+
+- 2026-10-19 — **Codex (AI)**: Integrate mobile file-sync contracts with main: preserve Character, password, runtime and streaming guards; version device and pairing-claim additions as 1.13/1.2 without collision; bind the selected runtime and legacy renderer port through the owned middleware socket while retaining origin history. Renderer port acceptance: 18/18 focused tests. See [PR 1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-19 — **Codex (AI)**: Added editable saved upload/download speed trackers, independent averaging windows and decimal bit/logical-entry units. Bounded per-run history excludes retained offsets and recovered confirmations; native adapters without byte telemetry remain explicit. Isolated Builder and transport checks pass; release and real home upload remain open. See [PR 1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
 
 - 2026-10-19 — **Codex (AI)**: Add a paused home-folder backup preset, native
   pre-traversal exclusions, and an editable two-step sync hierarchy with
@@ -684,6 +698,121 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   workers and product integration remain in progress; see the
   [acceptance ledger](../docs/mobile-file-sync.md) and
   [PR #1002 verification note](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+- 2026-10-19: Give the editable Mac menu inventory Action an explicit 8 MiB browser response budget so real icon-bearing device snapshots load instead of failing at the 64 KiB default.
+
+- 2026-10-19 — **Codex (AI)**: Installed ChatGPT-plan acceptance passed fresh text, same-chat follow-up, a read-only Things tool roundtrip and saved model/conversation/Builder layout persistence; retain local execution placement and idempotent settings updates. [PR #1034 evidence](../PRs/1034-chatgpt-plan-usage-local-runtime-and-encrypted-connection-moves.md).
+
+- 2026-10-19 — **Codex (AI)**: Desktop connection, local runtime and session recovery now use editable Builder documents with offline persistence, private account webpage adapters, revision/origin fences and transient native controls. Focused persistence/SSR tests, isolated desktop/mobile fixtures and installed account-owned Builder edit-save-reload checks pass.
+
+- 2026-10-18 — Integrate Characters and CPU telemetry main updates; fence ChatGPT credential management to the current session identity so request overrides cannot survive a later Character switch. Publish the compatible `api.ai-chatgpt-plan` 1.1.1 correction.
+
+- 2026-10-18 — Integrate the merged agent-browser manager with ChatGPT runtime packaging, isolated proxy guards and supervised desktop restart. Both MongoDB and browser resources remain required in new builds. [PR #1034 validation](../PRs/1034-chatgpt-plan-usage-local-runtime-and-encrypted-connection-moves.md).
+
+- 2026-10-18 — Replace public desktop database connection-string hashes with keyed identifiers while preserving pre-upgrade renderer sessions through an encrypted migration alias.
+
+- 2026-10-18 — Desktop builds now include pinned MongoDB Community Server, source and notices for optional local execution; fresh profiles need no separate database install, while existing selections/data are preserved. Session recovery and installed acceptance remain in progress in [PR #1034](../PRs/1034-chatgpt-plan-usage-local-runtime-and-encrypted-connection-moves.md).
+
+- 2026-10-18 — **Codex (AI)**: Add ChatGPT plan consent and Lopu execution, optional Electron local API/authenticated MongoDB setup, encrypted connection moves between self-hosted runtimes, and isolated endpoint sessions with pinned streaming proxy requests. [Scope and validation](../PRs/1034-chatgpt-plan-usage-local-runtime-and-encrypted-connection-moves.md).
+
+- 2026-10-19 — **Codex (AI)**: Add individually editable bound Builder elements, list templates and conditions; migrate Mac menu bar composition, default its pagination to Show all, and include scoped icon thumbnails. Acceptance and deployment tracking: [PR 1042](../PRs/1042-menu-bar-editable-blocks.md).
+- 2026-10-18 — **Codex (AI)**: Add supported Character coordination preflight using the canonical origin-scoped manifest, distinguish Cloudflare discovery refusal from account/capability failures, and cover failure/retry behavior through real HTTP. See [the runbook](../docs/characters.md#agent-coordination).
+
+
+- 2026-10-18 — **Codex (AI)**: Convert Mac menu bar process CPU counters with the host Mach timebase. Apple Silicon readings now agree with macOS CPU seconds; regression coverage compares the collector conversion with independent `getrusage` readings.
+- 2026-10-18 — **Codex (AI)**: Add privately owned Characters with independent logins, inherited tier entitlements, session identity selection and Post as controls for posts/comments. Preserve principal account switching and independent private-subspace membership; add isolated real-API/browser acceptance. Capture early editor input during initialization. See [PR 1039 verification](../PRs/1039-characters-private-proxy-accounts.md).
+
+- 2026-10-18 — **Codex (AI)**: Give installed Device scripts pages a centered, padded Builder container. Remove fixture-provided layout so browser acceptance catches missing page spacing.
+
+- 2026-10-18 — **Codex (AI)**: Add editable agent tasks, todos and progress,
+  a Mac browser manager with task claims/live viewing, verified Chrome/Chromium
+  copies, device/task network controls and a private full-app container runtime.
+  Isolated authentication/database configuration refuses production fallback.
+  Packaged-container builds replace Mac-native libraries with verified Linux
+  dependencies and fail installation on binary/version mismatches.
+  Setup is documented in [the agent browser runbook](../docs/agent-browsers.md);
+  verification and fixes are recorded in [PR #1033](../PRs/1033-agent-browser-space-isolated-agent-browsers-and-task-management.md).
+
+- 2026-10-18 — **Codex (AI)**: Restore the existing password-title search, pagination and api.passwords 1.2.0 contract accidentally removed by the menu-bar merge. Preserve all menu-bar and script functionality.
+
+- 2026-10-18 — **Codex (AI)**: Fix installed desktop browser Actions through the
+  selected account endpoint while retaining actor, database and origin checks;
+  correct paired-device Builder links to Things. [PR 1031 notes](../PRs/1031-mac-menu-bar-paired-device-builder-tools.md).
+
+- 2026-10-18 — **Codex (AI)**: Add editable Mac menu bar and Device scripts
+  Builder suites, private menu telemetry, freshly approved paired-Mac Bash
+  commands, bounded result reads and explicit private-Thing/recipe saving.
+  Negotiate versioned device capabilities and include collection styles with
+  full inline search/pagination. Add isolated desktop/mobile acceptance tooling.
+  [Details and verification](../PRs/1031-mac-menu-bar-paired-device-builder-tools.md).
+- 2026-10-18 — **Codex (AI)**: Commander launcher Settings gear, stable process ordering, typed filters and sampled averaging windows, a resizable Processes pop-out with Keep above, and Settings maximize/restore. [PR #1030](../PRs/1030-commander-window-controls-settings-and-process-monitor.md).
+- 2026-10-18: Password title search now filters the whole private vault before pagination (`api.passwords` 1.2.0), cancels stale searches, and distinguishes no matches from request failure. Added HTTP pagination/owner-isolation and capability regressions.
+- 2026-10-18 — **Codex (AI)**: Document the reusable video compressor as a
+  Builder use case, including editable definitions, local encoding, saved
+  presets and verified output. Record the completed media workflow separately
+  from the still-paused standards catalogue backlog.
+
+
+- 2026-10-18: Fix incident cleanup to recognize the automatic logout history entry, bound to the revoked test session; retain strict content and actor checks. Production dry-run caught this mismatch before any deletion.
+
+
+- 2026-10-18 — **Codex (AI)**: Remove implicit production API forwarding from
+  Vite and Nitro; missing local database/signing settings now fail closed before
+  handlers or DB warmup. Restrict fixture destinations and redirects, add an OS
+  isolated server smoke, and provide guarded admin cleanup for the accidental
+  catalog acceptance account, with atomic identity/activity checks and dry-run.
+  Details: [PR #1025](../PRs/1025-local-fallback-safety-prevent-production-test-data.md).
+
+
+- Claude catalogue/workflow persistence validation: [PR #1016 notes](../PRs/1016-claude-catalog-workflow-keyless-claude-model-sync.md).
+
+- 2026-10-18: Add a create-only admin import of the configured OpenAI key into the shared AI credential vault without exposing the value.
+- 2026-10-18 — **Codex (AI)**: Add reusable local video pipelines and a Builder
+  media-tools suite with editable saved layouts/settings, WebCodecs encoding,
+  cancellation, progress, previews and downloads. Secure-host workers preserve
+  the opaque preview sandbox and deny network access. Lopu now receives shared
+  framework-discovery guidance. Suite installation requires capability 1.4.0;
+  browser acceptance verifies real MP4/WebM outputs and responsive layout.
+  [PR 1024 validation](../PRs/1024-media-pipeline-reusable-local-video-compression.md).
+
+- 2026-10-17 — **Codex (AI)**: Stream complete 1PUX imports, preserve source data and rich fields, and add encrypted password attachments and file-inclusive backups. Remove arbitrary import/editor caps and document fork-safe storage setup. [PR #1015 validation](../PRs/1015-codex-password-import-fix-preserve-complete-1pux-imports-and-encrypted-password-attachments.md).
+
+
+- 2026-10-17 — **Codex (AI)**: Add Gmail connection through Google OAuth, encrypted
+  refresh authorization and Gmail API sync/actions with independent device/cloud
+  message storage, labels, Trash, encrypted draft autosave and explicit sending.
+  Durable receipts prevent replaying uncertain sends. Consent uses the system
+  browser on iOS and desktop; setup is
+  exact-origin vault configuration with documented Google verification requirements.
+  Document isolated native build caches after concurrent signing-stage collisions.
+  [PR #1014 details](../PRs/1014-codex-gmail-oauth-google-login-and-gmail-actions.md).
+
+- 2026-10-17: Add explicit browser mail relay without cloud persistence, bundled desktop direct mail sync, and an iOS Mail shortcut. Preserve transport choice and credential origin boundaries; document native build and relay setup. [PR #1013 details](../PRs/1013-codex-mail-native-relay-native-desktop-mail-sync-and-browser-api-relay.md).
+
+- 2026-10-17 — **Codex (AI)**: Prepare incoming mail PR #1009 for the authorized main promotion, preserving the current Settings sections and rerunning the mail/settings checks after integration.
+
+- 2026-10-17 — **Codex (AI)**: Add private incoming-mail accounts, read-only IMAP/POP3 adapters, `/mail` and `/email`, combined and proxy inboxes, independent cloud/local sync, encrypted offline records and a paired loopback connector. Include its exact origin in the shared CSP. Setup is in README; [PR #1009 notes](../PRs/1009-codex-mail-provider-incoming-mail-accounts-proxy-inboxes-cloud-local-sync.md) record verification and remaining acceptance.
+
+- 2026-10-17: Split admin System settings into AI Providers, Lopu, Platform,
+  and Access & limits. Shared settings cards start collapsed, show descriptions
+  and status summaries, preserve drafts, and open for legacy deep links. Labels
+  and controls wrap without squeezing helper text into a narrow column. Details:
+  [PR #1008](../PRs/1008-codex-settings-cards-split-system-settings-into-focused-tabs-and-collapsible-cards.md). — **Codex (AI)**
+
+- 2026-10-17 — **Codex (AI)**: Fix Astra replies rejected by Chat Completions tool/reasoning compatibility. The shared model registry now routes GPT-6 Astra native tools through Responses, publishes its supported reasoning levels and pricing, and preserves provider-default or selected reasoning across tool hops. Both API manifests advertise reply 1.19.3 and catalogue 1.5.1.
+
+- 2026-10-17: Add automatic native-main TestFlight publishing, version allocation, pre-upload widget/signature checks and exact-build processing verification. Add production-only GitHub OIDC delivery and create-only Apple credential migration through the shared admin vault; see [PR #1006 validation and rollout](../PRs/1006-codex-ios-testflight-vault--automatic-ios-testflight-publishing.md).
+
+- 2026-10-17 — **Codex (AI)**: Support a separate Anthropic Models API credential for catalogue discovery when Claude OAuth cannot list models. Keep replies on Claude Code OAuth and show redacted HTTP failure reasons in admin sync reports.
+
+- 2026-10-17 — **Codex (AI)**: Daily provider model inventory sync, bounded
+  model-not-available recovery and admin manual refresh. Retired models leave
+  Lopu/shared selectors; per-provider allow-all and auto-allow-new checkboxes
+  preserve individual choices. Includes Fable 5.1, transactional publication,
+  complete-list validation and fork-safe cron setup in README.
+  Details: [PR #1004](../PRs/1004-codex-provider-model-sync--sync-available-provider-models-and-admin-allow-controls.md).
+
+
+- 2026-10-16 — **Codex (AI)**: Raise Lopu model/settings popup positioners above the floating window and mobile scrim; bound long popup bodies to the viewport so their controls remain scrollable.
 
 - 2026-10-16 — **Codex (AI)**: Keep fresh Lopu chats ready to send while unrelated background tasks run; scope busy checks and Stop to the selected conversation.
 

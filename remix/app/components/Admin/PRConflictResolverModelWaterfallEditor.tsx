@@ -1,8 +1,8 @@
+import { SettingsSection } from '~/components/Settings/SettingsSection';
 import React from 'react';
 import { Button, Flex, Text } from '@chakra-ui/react';
 import { SavedAiWaterfallSelector } from '~/components/AI/SavedAiWaterfallSelector';
 import {
-	AI_WORKFLOW_BASE_MODELS,
 	normalizePrConflictResolverModelWaterfall,
 	parseAiWorkflowModelOptionId
 } from '~/api/utils/settings/prConflictResolverModelWaterfallCore';
@@ -16,7 +16,7 @@ const cached = () => normalizePrConflictResolverModelWaterfall(readLocalCache(CA
 const endpoints = (['anthropic', 'openai', 'default'] as const).map((provider) => ({
 	id: provider === 'default' ? 'default' : `server:${provider}`,
 	label: provider === 'default' ? 'Provider default' : provider === 'anthropic' ? 'Anthropic' : 'OpenAI',
-	models: AI_WORKFLOW_BASE_MODELS.filter((model) => model.provider === provider)
+	models: provider === 'default' ? [{ id: 'default', label: 'Default model', efforts: [], speeds: ['normal' as const] }] : []
 }));
 const asConfig = (waterfall: string[]): AiWaterfallConfig => ({
 	version: 1,
@@ -63,11 +63,11 @@ export const PRConflictResolverModelWaterfallEditor = () => {
 		};
 	}, []);
 	const dirty = JSON.stringify(waterfall) !== JSON.stringify(saved);
-	const save = async () => {
+	const save = async (nextWaterfall = waterfall) => {
 		generation.current += 1;
 		setSaving(true);
 		try {
-			const response = await apiRef.current.v1.admin.setPrConflictResolverModelWaterfall(waterfall);
+			const response = await apiRef.current.v1.admin.setPrConflictResolverModelWaterfall(nextWaterfall);
 			if (!response?.ok) throw new Error(response?.error || 'Could not save model order.');
 			const next = normalizePrConflictResolverModelWaterfall(response.waterfall);
 			setSaved(next);
@@ -77,14 +77,17 @@ export const PRConflictResolverModelWaterfallEditor = () => {
 			lopu({ title: 'AI model order saved', status: 'success' });
 		} catch (error) {
 			lopu({ title: error instanceof Error ? error.message : 'Could not save model order.', status: 'error' });
+			throw error;
 		} finally {
 			setSaving(false);
 		}
 	};
 	return (
-		<Flex direction="column" gap={3}>
-			<Text fontWeight="600">AI workflow model order</Text>
-			<Text fontSize="sm">Shared defaults for AI-backed features. Each runtime uses compatible entries; features can save their own waterfall.</Text>
+		<SettingsSection
+			eyebrow="AI workflow model order"
+			description="Shared model defaults for AI-backed features. Each runtime uses compatible entries."
+			summary={`${waterfall.length} models · ${dirty ? 'Unsaved changes' : 'Saved'}`}
+		>
 			<Text fontSize="sm" overflowWrap="anywhere">
 				{waterfall.map((id) => [parseAiWorkflowModelOptionId(id)?.label || id, ...id.split(':').slice(1)].join(' · ')).join(' → ')}
 			</Text>
@@ -99,7 +102,7 @@ export const PRConflictResolverModelWaterfallEditor = () => {
 				>
 					Choose AI waterfall
 				</Button>
-				<Button size="sm" isDisabled={!dirty || saving} isLoading={saving} onClick={() => void save()}>
+				<Button size="sm" isDisabled={!dirty || saving} isLoading={saving} onClick={() => void save().catch(() => {})}>
 					Save model order
 				</Button>
 			</Flex>
@@ -108,6 +111,12 @@ export const PRConflictResolverModelWaterfallEditor = () => {
 				isOpen={open}
 				value={asConfig(waterfall)}
 				endpoints={endpoints}
+				useLiveServerModels
+				onSaveApply={async (config) => {
+					await save(normalizePrConflictResolverModelWaterfall(config.entries.map((entry) =>
+						[entry.modelId, ...(entry.effort ? [entry.effort] : []), ...(entry.speed === 'fast' ? ['fast'] : [])].join(':')
+					)));
+				}}
 				allowInherit={false}
 				onClose={() => setOpen(false)}
 				onApply={(config) => {
@@ -122,6 +131,6 @@ export const PRConflictResolverModelWaterfallEditor = () => {
 					);
 				}}
 			/>
-		</Flex>
+		</SettingsSection>
 	);
 };

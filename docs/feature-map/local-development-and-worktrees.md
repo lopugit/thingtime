@@ -1,5 +1,20 @@
 # Local development and worktrees
 
+## Agent browser runtime
+
+`electron/lib/agent-browsers/` owns device installations, exclusive leases,
+network policy, process ownership and the private Unix control socket. The
+shipped `runtime/` recipe bundles Chromium, MongoDB and the packaged app without
+worktree credentials. `agentTesting.ts` and `apiFallback.ts` fence the backend;
+`electron/scripts/agent-browser.mjs` is the token-file CLI. Setup and acceptance
+commands live in [agent-browsers.md](../agent-browsers.md). Run the
+`electron/test/agent-browser-*.test.cjs` tests and full-app two-agent acceptance
+when changing allocation, networking, startup or cleanup.
+`runtime/prepare-native.cjs` replaces Mac-traced native packages with locked
+Linux package trees and loads them during image construction. Keep its runtime
+lock synchronized with app native dependency upgrades and exercise a packaged
+full-app launch, not only host-side module checks.
+
 ## First ten minutes in a fresh checkout or worktree
 
 ```sh
@@ -104,3 +119,11 @@ It never registers or reconfigures the installed Node. The shared browser fixtur
 `/scripts/mobile-sync-editor.browser.html?platform=desktop` exercises the actual
 editor with synthetic native/API replies. Neither proves signed installed Mac
 transfers, restart journal recovery or native streaming throughput.
+## Local API isolation
+
+Vite always forwards to this checkout’s Nitro port. Missing Mongo/signing settings
+return `503 LOCAL_API_NOT_CONFIGURED`; neither server selects production implicitly.
+`remix/scripts/local-api-isolation-smoke.mjs` exercises built Nitro and Vite under
+a macOS OS network sandbox, including direct-IP and redirect denial. Fixture
+requests accept only a literal loopback HTTP origin and same-origin uploads.
+Keep backend/browser network isolation and dedicated test credentials in place.

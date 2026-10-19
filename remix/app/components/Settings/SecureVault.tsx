@@ -4,6 +4,7 @@ import { Badge, Box, Button, Flex, Input, Select, Text } from '@chakra-ui/react'
 import { useLopu } from '~/components/Lopu/useLopu';
 import { requireThingtimeCapability } from '~/api/utils/capabilities/requireCapability.client';
 import { VaultReveal } from './VaultReveal';
+import { ChatGPTPlanSettings } from './ChatGPTPlanSettings';
 
 type Group = { id: string; name: string };
 type Entry = {
@@ -133,6 +134,8 @@ export const SecureVault = () => {
 					{vault.groups.map((group) => <Badge key={group.id} px={2} py={1}>{group.name} <Box as="button" ml={1} aria-label={`Delete ${group.name}`} onClick={() => deleteEntry(group)}>×</Box></Badge>)}
 				</Flex>
 			</Box>
+
+			<ChatGPTPlanSettings />
 
 			<Box borderTop="1px solid var(--tt-border, #ececef)" pt={4}>
 				<Text fontWeight={700} fontSize="sm">AI provider connection</Text>

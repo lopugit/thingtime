@@ -49,3 +49,14 @@ test('unexpected crypto failures are redacted and unavailable encryption fails c
   assert.equal(response.status, 503); assert.equal((await response.text()).includes('fixture-secret'), false);
   assert.equal((await createPasswordHandler({ ...defaults, ownerVaultConfigured: () => false })({ request: request() })).status, 503);
 });
+
+test('title search and cursor reach the owner-scoped list without revealing values', async () => {
+  const handler = createPasswordHandler({ ...defaults, listPasswords: async (id, cursor, query) => {
+    assert.equal(id, 'owner'); assert.equal(cursor, 'opaque-cursor'); assert.equal(query, 'Facebook [.*]');
+    return { entries: [], nextCursor: null };
+  } });
+  const response = await handler({ request: new Request('https://thingtime.example/api/v1/passwords?q=Facebook%20%5B.*%5D&cursor=opaque-cursor') });
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get('cache-control'), 'private, no-store');
+  assert.deepEqual((await response.json()).entries, []);
+});

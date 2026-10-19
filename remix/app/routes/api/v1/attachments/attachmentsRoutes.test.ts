@@ -780,3 +780,17 @@ test('retained ranges recheck the current session after reading and cannot becom
 		assert.equal((await route({ request: new Request(invalid) })).status, 400);
 	assert.equal(reads, 1);
 });
+
+test('Character media selectors reuse session authorization and never fall back to public access', async () => {
+  let header: string | null = null;
+  let downloaded = false;
+  const route = createAttachmentContentLoader({
+    getUser: async request => { header = request.headers.get('X-Thingtime-Character'); return null; },
+    enforceLimit: allowed as any,
+    download: async () => { downloaded = true; return { ok: false, status: 404, error: 'missing' }; }
+  });
+  const result = await route({ request: new Request('https://thingtime.example/api/v1/attachments/content?id=file&character=other') });
+  assert.equal(header, 'other'); assert.equal(result.status, 401); assert.equal(downloaded, false);
+  const malformed = await route({ request: new Request('https://thingtime.example/api/v1/attachments/content?id=file&character=') });
+  assert.equal(malformed.status, 400);
+});

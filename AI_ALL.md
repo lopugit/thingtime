@@ -29,6 +29,28 @@ update stale details. Do not recursively reread this file through its aliases.
 - For PR reviews, prioritize code quality, performance, potential bugs,
   crashes, and especially security issues before style commentary.
 
+## Individually editable Thingtime blocks
+
+- Build Thingtime pages and interfaces from individual, user-editable Thingtime blocks. Headings, text, inputs, buttons, images/icons, containers, lists, and each field inside a repeated card must be selectable and editable through normal Builder controls, including rearranging, styling, duplicating, and deleting them where applicable.
+- Do not package a whole page, form, dashboard, or multi-part card as one opaque Component, native block, or monolithic HTML template. Editing one large source definition is not a substitute for individual block editing. Reusable Components must expose their constituent blocks for editing; repeated content must expose an editable block template rather than freezing each rendered instance into hardcoded markup.
+- When a needed primitive, binding, repetition, or interaction is missing, extend the reusable Thingtime Builder/framework so ordinary users can compose and edit it. Keep native code limited to necessary device capabilities and data adapters; compose the visible interface with editable Thingtime blocks.
+- Verify this in the actual Builder: select and edit representative nested text, controls, icons, and repeated-card fields separately, save, reload, and confirm the live page still works. A single outer selection outline or editable JSON/HTML alone does not meet this requirement.
+
+## Power users: no arbitrary product limits
+
+Thingtime is for power users and should stay simple to use at any scale. Do not
+impose arbitrary file-size, character-count, field-count, item-count, or similar
+limits on features, uploads, text inputs, imports, or exports. A product limit is
+allowed only when the user explicitly requests it for that particular feature.
+Use streaming, chunking, pagination, backpressure, cancellation and resumable
+operations to manage resources without rejecting or truncating valid user data.
+Processing batch sizes are implementation details, not maximum user data sizes.
+Preserve authorization, integrity validation and legitimate storage accounting.
+Where a protocol or external platform has an unavoidable constraint, identify it
+accurately, handle it transparently where possible, and explain the concrete
+constraint rather than presenting an invented Thingtime limit. Remove existing
+arbitrary caps in the flow being changed, including hidden UI/server mismatches.
+
 ## Feature maps — read the map for the domain you touch
 
 `docs/feature-map/` holds one short map per domain (attachments and media,
@@ -382,6 +404,29 @@ or authorization for new work.
   the graph and manifest. Keep structural output usable if semantic extraction
   fails, record that limitation, and never claim missing semantic coverage was
   indexed. Use the immutable snapshot/cache policy below.
+
+## Agent browsers and editable tasks
+
+- For Character coordination, follow [the Characters runbook](docs/characters.md#agent-coordination)
+  and run `npm --prefix remix run characters:preflight -- --origin <selected-origin>`.
+  A Cloudflare 403 from an ad hoc Python probe does not prove Characters are
+  unavailable. Use the supported origin-scoped discovery path, distinguish edge
+  refusal from capability/authentication/membership failures, and continue
+  independent work. Never spoof clients, copy browser credentials, change origins
+  or weaken network isolation to recover coordination.
+- Follow [the agent-browser runbook](docs/agent-browsers.md) for task-owned
+  testing in the Thingtime Mac app, installation, CLI claims and live viewing.
+  Keep tasks, todos and progress as editable Things; the native adapter owns
+  device browser installations, claims and enforced network boundaries.
+- Scope a native task to its origin, database identity, owner and Thing ID.
+  Claim separately for each concurrent agent; never reuse another claim's
+  handle or mutable browser profile. Read and preserve the effective policy.
+- Full-app acceptance must cover independent data and authentication, rendered
+  desktop/mobile task controls, live viewing, cleanup and enforced browser plus
+  backend network restrictions. A fixture, healthy API or build alone is not
+  evidence that the installed feature works.
+- The live global credential policy remains authoritative: use the Thingtime
+  password manager on the executing device through its supported interfaces.
 
 ## Fundamentals (read first)
 

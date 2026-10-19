@@ -62,3 +62,18 @@ test('custom prompt preferences preserve both per-chat access modes and the immu
     assert.match(prompt.volatile, accessMode === 'full' ? /Full access/ : /Ask before running/);
   }
 });
+
+
+test('framework discovery survives custom base prompts and unavailable tools', () => {
+  for (const protocol of ['native', 'text', 'none'] as const) {
+    const prompt = buildLopuStablePrompt(protocol, 'Custom voice');
+    assert.match(prompt, /Verify framework capabilities before answering/);
+    assert.match(prompt, /\/docs\/builder/);
+    assert.match(prompt, /browse_components, list_demos and get_demo/);
+    assert.match(prompt, /name the missing primitive and the evidence checked/);
+    assert.match(prompt, /program.media/);
+    assert.match(prompt, /audio is never silently removed/);
+    assert.match(prompt, /If tools are unavailable, say it is unverified/);
+    assert.match(prompt, /never substitute controls for functionality and claim completion/);
+  }
+});

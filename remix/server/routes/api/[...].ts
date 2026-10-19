@@ -1,4 +1,4 @@
-import { resolvePublicOrigin } from '../../../app/api/utils/auth/publicOrigin';
+import { agentTestRefusal } from '../../../app/api/utils/agentTesting';
 import { actionDataRoutes } from '../../utils/actionDataRoutes';
 import { defineHandler } from 'nitro/h3';
 import { enforceExpectedActor } from '../../../app/api/utils/auth/expectedActor';
@@ -9,7 +9,7 @@ import { getRequestMongoEndpoint, runWithMongoEndpoint } from '../../../app/api/
 import { enforceExpectedDataPlane } from '../../../app/api/utils/mongodb/dataPlane';
 import { CHATGPT_AUTHORIZE_PATH, CHATGPT_DYNAMIC_CLIENT_REGISTRATION_PATH, CHATGPT_MCP_PATH, CHATGPT_OAUTH_RELAY_PATH, CHATGPT_TOKEN_PATH } from '../../../app/api/utils/chatgpt/pluginCore';
 import { StorageMutationError } from '../../../app/api/utils/storage/storageCore';
-import { desktopSyncProxyAllowed, proxyApiRequestToFallback, shouldProxyApiToFallback } from '../../utils/apiFallback';
+import { getApiFallbackOrigin, hasSelfHostedApiEnv, proxyApiRequestToFallback, selectedRuntimeSupportsPlan, shouldProxyApiToFallback, unavailableLocalApiResponse } from '../../utils/apiFallback';
 
 type RouteModule = {
   loader?: (args: { request: Request; params?: Record<string, string> }) => Promise<unknown> | unknown;
@@ -18,6 +18,8 @@ type RouteModule = {
 
 export const routeModules: Record<string, () => Promise<RouteModule>> = {
   ...actionDataRoutes,
+  'v1/devices/node/identity': () => import('../../../app/routes/api/v1/devices/node/identity/_identity'),
+  'v1/devices/disconnect': () => import('../../../app/routes/api/v1/devices/disconnect/_disconnect'),
   'v1/files': () => import('../../../app/routes/api/v1/files/_files'),
   'v1/lopu/network': () => import('../../../app/routes/api/v1/lopu/network/_network'),
   'v1/lopu/tasks': () => import('../../../app/routes/api/v1/lopu/tasks/_tasks'),
@@ -69,6 +71,7 @@ export const routeModules: Record<string, () => Promise<RouteModule>> = {
   [CHATGPT_DYNAMIC_CLIENT_REGISTRATION_PATH.replace('/api/', '')]: () => import('../../../app/routes/api/v1/integrations/chatgpt/oauth/register/_register'),
   [CHATGPT_OAUTH_RELAY_PATH.replace('/api/', '')]: () => import('../../../app/routes/api/v1/integrations/chatgpt/oauth/relay/_relay'),
   'v1/integrations/ci/route': () => import('../../../app/routes/api/v1/integrations/ci/route/_route'),
+  'v1/integrations/ios-release': () => import('../../../app/routes/api/v1/integrations/ios-release/_ios-release'),
   'v1/integrations/ci/credentials': () => import('../../../app/routes/api/v1/integrations/ci/credentials/_credentials'),
   'v1/integrations/ci/progress': () => import('../../../app/routes/api/v1/integrations/ci/progress/_progress'),
   'v1/integrations/vercel/webhook': () => import('../../../app/routes/api/v1/integrations/vercel/webhook/_webhook'),
@@ -80,6 +83,8 @@ export const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/algorithms/track': () => import('../../../app/routes/api/v1/algorithms/track/_track'),
   'v1/algorithms/update': () => import('../../../app/routes/api/v1/algorithms/update/_update'),
   'v1/ai/connections': () => import('../../../app/routes/api/v1/ai/connections/_connections'),
+  'v1/ai/models/sync': () => import('../../../app/routes/api/v1/ai/models/sync/_sync'),
+  'v1/ai/chatgpt-plan': () => import('../../../app/routes/api/v1/ai/chatgpt-plan/_chatgpt-plan'),
   'v1/ai/models': () => import('../../../app/routes/api/v1/ai/models/_models'),
 	'v1/ai/waterfalls': () => import('../../../app/routes/api/v1/ai/waterfalls/_waterfalls'),
   'v1/ai/complete': () => import('../../../app/routes/api/v1/ai/complete/_complete'),
@@ -108,6 +113,7 @@ export const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/attachments/uploads/abort': () => import('../../../app/routes/api/v1/attachments/uploads/abort/_abort'),
   'v1/attachments/uploads/complete': () => import('../../../app/routes/api/v1/attachments/uploads/complete/_complete'),
   'v1/attachments/uploads/parts': () => import('../../../app/routes/api/v1/attachments/uploads/parts/_parts'),
+  'v1/auth/characters': () => import('../../../app/routes/api/v1/auth/characters/_characters'),
   'v1/auth/accounts': () => import('../../../app/routes/api/v1/auth/accounts/_accounts'),
   'v1/auth/accounts/assume': () => import('../../../app/routes/api/v1/auth/accounts/assume/_assume'),
   'v1/auth/accounts/owned': () => import('../../../app/routes/api/v1/auth/accounts/owned/_owned'),
@@ -162,8 +168,6 @@ export const routeModules: Record<string, () => Promise<RouteModule>> = {
 	'v1/devices/events': () => import('../../../app/routes/api/v1/devices/events/_events'),
 	'v1/devices/node/commands': () => import('../../../app/routes/api/v1/devices/node/commands/_commands'),
 	'v1/devices/node/live-sync': () => import('../../../app/routes/api/v1/devices/node/live-sync/_live-sync'),
-	'v1/devices/disconnect': () => import('../../../app/routes/api/v1/devices/disconnect/_disconnect'),
-	'v1/devices/node/identity': () => import('../../../app/routes/api/v1/devices/node/identity/_identity'),
 	'v1/devices/node/state': () => import('../../../app/routes/api/v1/devices/node/state/_state'),
 	'v1/devices/node/sync': () => import('../../../app/routes/api/v1/devices/node/sync/_sync'),
 	'v1/devices/pairing': () => import('../../../app/routes/api/v1/devices/pairing/_pairing'),
@@ -276,6 +280,9 @@ export const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/get': () => import('../../../app/routes/api/v1/get/_get'),
   'v1/groups': () => import('../../../app/routes/api/v1/groups/_groups'),
   'v1/groups/audience-sources': () => import('../../../app/routes/api/v1/groups/audience-sources/_audience-sources'),
+  'v1/mail/sync': () => import('../../../app/routes/api/v1/mail/sync/_sync'),
+  'v1/mail/google/callback': () => import('../../../app/routes/api/v1/mail/google/callback/_callback'),
+  'v1/mail': () => import('../../../app/routes/api/v1/mail/_mail'),
   'v1/passwords': () => import('../../../app/routes/api/v1/passwords/_passwords'),
   'v1/drafts': () => import('../../../app/routes/api/v1/drafts/_drafts'),
   'v1/tiers': () => import('../../../app/routes/api/v1/tiers/_tiers'),
@@ -346,6 +353,8 @@ const normalizeResponse = (value: unknown) => {
 };
 
 export default defineHandler(async (event) => {
+  const refusedTest = agentTestRefusal();
+  if (refusedTest) return refusedTest;
   const path = normalizePath(event.context.params?.path, event.req.url);
   const method = event.req.method.toUpperCase();
 
@@ -383,39 +392,40 @@ export default defineHandler(async (event) => {
   }
 
   if (shouldProxyApiToFallback(event.req)) {
-    // Fresh vault verification must stay on the selected deployment. Never
-    // forward passwords/assertions to a fallback origin or reveal its keys.
-    if (event.req.headers.has('X-Thingtime-Expected-Actor')) {
-      if (desktopSyncProxyAllowed(event.req)) {
-        // Nitro/srvx requests are Request-compatible, but cannot be copied with
-        // Node's Request constructor (its private Undici state is a different brand).
-        return proxyApiRequestToFallback(event.req, { omitForwardedOrigin: true });
-      }
-      return jsonResponse({ ok: false, error: 'Browser Actions require a configured account environment at this origin' }, { status: 503, headers: { 'Cache-Control': 'private, no-store' } });
+    if (path === 'v1/ai/chatgpt-plan' && process.env.THINGTIME_DESKTOP_API_MODE !== 'remote') return jsonResponse({ ok: false, available: false, error: 'Choose a configured local or self-hosted account runtime for ChatGPT plan usage.' }, { status: 503, headers: { 'Cache-Control': 'private, no-store' } });
+    if (path === 'v1/mail/google/callback') return jsonResponse({ ok: false, error: 'Google callback requires this configured origin.' }, { status: 503, headers: { 'Cache-Control': 'private, no-store' } });
+    if (path === 'v1/integrations/ios-release') return jsonResponse({ ok: false, error: 'Configure iOS release delivery on this origin.' }, { status: 503, headers: { 'Cache-Control': 'private, no-store' } });
+    // Vault re-verification stays on its configured origin, including when a
+    // browser Action supplies an expected-actor header.
+    if (path === 'v1/vault/reveal') {
+      return jsonResponse({ ok: false, error: 'Vault verification requires a configured local account environment' }, {
+        status: 503, headers: { 'Cache-Control': 'private, no-store, max-age=0', Pragma: 'no-cache' }
+      });
     }
-    if (path === 'v1/passwords') {
+    // The installed shell uses the selected account API for browser Actions,
+    // just like its ordinary account requests. Preserve the actor/data-plane
+    // preconditions for the upstream dispatcher to enforce before any handler.
+    if (event.req.headers.has('X-Thingtime-Expected-Actor') || path === 'v1/passwords' || path === 'v1/mail' || path === 'v1/mail/sync' || path === 'v1/ai/chatgpt-plan') {
       // The installed desktop shell deliberately serves its UI on loopback and
       // pins the account API through its endpoint settings. Ordinary websites
       // and incomplete dev deployments must never silently forward vault data.
       const local = new URL(event.req.url);
-      const configured = process.env.THINGTIME_API_FALLBACK_ORIGIN || '';
+      const configured = getApiFallbackOrigin() || '';
       const desktop = process.env.THINGTIME_DESKTOP === '1' && local.hostname === '127.0.0.1';
       let upstream: URL | null = null;
       try { upstream = new URL(configured); } catch { /* fail closed */ }
-      if (!desktop || !upstream || upstream.protocol !== 'https:' || upstream.username || upstream.password)
-        return jsonResponse({ ok: false, error: 'Configure password encryption on this deployment.' }, { status: 503, headers: { 'Cache-Control': 'private, no-store' } });
-      if (event.req.headers.get('Sec-Fetch-Site') === 'cross-site' || (method !== 'GET' && event.req.headers.get('Origin') !== resolvePublicOrigin(event.req).origin))
+      if (!desktop || !upstream || upstream.username || upstream.password)
+        return jsonResponse({ ok: false, error: 'Configure private account services on this deployment.' }, { status: 503, headers: { 'Cache-Control': 'private, no-store' } });
+      if (event.req.headers.get('Sec-Fetch-Site') === 'cross-site' || (method !== 'GET' && event.req.headers.get('Origin') !== local.origin))
         return jsonResponse({ ok: false, error: 'Use the same Thingtime origin.' }, { status: 403, headers: { 'Cache-Control': 'private, no-store' } });
-      return proxyApiRequestToFallback(event.req, { omitForwardedOrigin: true });
+      if (path === 'v1/ai/chatgpt-plan' && !await selectedRuntimeSupportsPlan(configured, event.req.signal))
+        return jsonResponse({ ok: false, error: 'The selected API does not support portable ChatGPT plan connections. Update that runtime first.' }, { status: 409, headers: { 'Cache-Control': 'private, no-store' } });
+      // Nitro's lazy request is not a native Request; preserve its body API
+      // while pinning the selected origin across asynchronous negotiation.
+      return proxyApiRequestToFallback(event.req, { expectedOrigin: configured, stripForwardedOrigin: true });
     }
     // Root data uses this same fallback. Forward its public database
     // precondition and selection unchanged for the upstream to enforce.
-    if (path === 'v1/vault/reveal') {
-      return jsonResponse({ ok: false, error: 'Vault verification requires a configured local account environment' }, {
-        status: 503,
-        headers: { 'Cache-Control': 'private, no-store, max-age=0', Pragma: 'no-cache' }
-      });
-    }
     return proxyApiRequestToFallback(event.req);
   }
 
@@ -426,6 +436,8 @@ export default defineHandler(async (event) => {
       headers: { 'Cache-Control': 'public, max-age=60, stale-while-revalidate=300' }
     });
   }
+
+  if (!hasSelfHostedApiEnv()) return unavailableLocalApiResponse();
 
   const loadModule = routeModules[path];
 

@@ -76,7 +76,7 @@ private draft API, editor recovery, account isolation and independent media copi
 
 ## Password manager
 
-See [password-manager.md](../password-manager.md). `api.passwords` 1.0.0 is a
+See [password-manager.md](../password-manager.md). `api.passwords` 1.1.0 is a
 private, session-bound home-plane API over protected `password-manager-entry`
 Things. `api/utils/passwords/passwords.ts` owns accounted mutations, revision
 fences and secret-free native catalog projections; `auth/vaultEnvelope.ts` and
@@ -105,3 +105,70 @@ direct IPs. It exercises explicit current-writer restoration,
 concurrent edits, source-vault removal and revoked authentication. HTTP/browser,
 managed profile-media restore and product restore orchestration remain separate gates.
 See [portable backups](../portable-backups.md#account-profile-content-and-private-preferences).
+
+## AI provider model availability
+
+`api/utils/ai/modelDiscovery.ts` reads complete credential-scoped provider lists;
+`modelSync.ts` publishes them atomically into protected home-plane `ai-model`
+Things with a durable settings lease/cooldown. `models.ts` projects availability
+and preserves admin choices. Daily authenticated cron and admin manual sync use
+this same service; shared inference model-not-found errors trigger a bounded
+refresh without replay. `LopuModelsEditor.tsx` owns per-provider allow-all and
+future auto-admission controls. Public model selectors consume the live catalogue;
+unknown model capabilities and pricing are conservative. See README automatic AI
+model catalogue sync and TESTING daily provider model availability.
+
+`settings/prConflictResolverModelWaterfallCore.ts` owns known reasoning tiers and
+native Responses requirements (including GPT-6 Astra); `lopu/chat.ts` consumes
+that transport policy. `chat.streaming.test.mts` exercises Astra default/High/Max
+reasoning and tool-result replay through the real SDK against an HTTP fixture.
+
+## Incoming mail
+
+See [incoming-mail.md](incoming-mail.md) for Email settings, IMAP/POP3, private cloud storage, the paired local connector, offline reading and proxy inbox views.
+
+## iOS release automation
+
+`api/utils/releases/iosRelease.ts` uses the existing admin integration secret,
+claim and audit stores. `iosReleaseCore.ts` validates the fixed release policy and
+Apple bundle. GitHub OIDC grants only `integrations/ios-release` access after
+immutable repository/owner, main workflow, event and source checks; it grants no
+admin session or general vault access. See [setup and acceptance](../ios-automatic-testflight.md).
+
+Password migration coverage and encrypted file lifecycle: `passwords/onePassword.ts`,
+`transfer.ts`, `fileCrypto.ts`, `files.client.ts`, `backup.client.ts`, and
+`api/utils/passwords/files.ts`. Every original 1PUX member is retained as an
+encrypted attachment to a source archive entry; item editors preserve structured
+values, source context and password history. See [the password contract](../password-manager.md).
+
+Claude keyless discovery reads the official public lifecycle table through
+`modelDiscovery.ts`. `modelSync.ts` stores public provenance separately from
+credential availability, preserving admission and absent rows. The workflow
+editor opts into live server model lists through `waterfallCatalog.ts` and awaits
+its settings write through `AiWaterfallSelector.onSaveApply`. Regression coverage:
+`modelSync.test.ts`, `waterfallCatalog.test.ts`, and the Claude public catalogue /
+workflow save checklist in TESTING.
+
+## Incident cleanup
+
+`api/utils/migrations/accidentalCatalogAccount.ts` registers the destructive,
+incident-specific catalog fixture cleanup. The existing admin migration API
+requires dry-run/confirmation, checks exact identity and idle account state, and
+deletes account/bootstrap/auth records atomically in the home DB. It cannot
+accept arbitrary target accounts. Delivery and migration audit records remain.
+
+OpenAI environment-to-vault import uses `credentialVault.ts::importConfiguredOpenAiCredential` through the existing admin credentials route and `PlatformCredentials.tsx`. It is same-origin, admin-only and create-only; `api.admin-ci-credentials` 3.1.0 is negotiated before use. The sole source is server `OPENAI_API_KEY`, and the destination is `OpenAI` / `OPENAI_THINGTIME_API_KEY`.
+
+
+## Local ChatGPT plan connections
+
+`ai/chatgptPlanProtocol.ts` validates dynamic registration, JWT identity, scopes, rotation and Responses restrictions. `chatgptPlanRuntime.ts` owns protected local credentials, loopback callbacks, one-use attempts, account/session/origin fences and per-account cancellation. The authenticated `ai/chatgpt-plan` route publishes redacted state only; `Settings/ChatGPTPlanSettings.tsx` negotiates its capability. Model discovery and Lopu use the existing provider path with strict saved plan pins and no billing fallback. See README ChatGPT plan usage, TESTING and `test:chatgpt-plan`. `chatgptPlanStorage.ts` encrypts owner/origin-scoped records in the account MongoDB and fences its single refresh authority. `chatgptPlanTransfer.ts` seals explicit moves to a destination-owned key. Electron `local-runtime.cjs` manages optional authenticated local Mongo and generated OS-protected secrets; API switching uses separate sessions and restart.
+## Characters
+
+See [Characters](../characters.md) for the settings, login modes, private ownership,
+admin lookup, session selection, agent coordination and acceptance runbook.
+`characterCore.ts`, `characterSession.ts`, `characters.ts` and
+`characterEntitlements.ts` extend the existing home-plane user/session/ledger paths.
+`resolveSessionUser` defaults to the authenticated principal for roster and
+credential callers; request authentication passes an explicit selection (or null
+for the session default). Never re-mint a principal session with an acting user ID.

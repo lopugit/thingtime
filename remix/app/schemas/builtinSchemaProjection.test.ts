@@ -33,7 +33,7 @@ const EXPECTED_PROJECTED_FIELDS: Record<string, string[]> = {
   "lopu-recording-job": [],
   "lopu-recording-reminder": [],
   "lopu-reminder": [],
-  "thing": ["shareId", "schemaVersion", "thingtime", "crystal", "geo", "extended", "ownerId", "sourceDeviceId", "acl", "targetId", "tags", "sizeBytes", "storageClass", "storageAccountingVersion", "attachmentEnvelopeVersion", "attachmentState", "objectSizeBytes", "objectKey", "objectVersionId", "attachmentRequestFingerprint", "attachmentPurpose", "attachmentProfileSlot", "moderation", "subspaceMod", "subspacePrivate", "attachmentFinalizationLeaseId", "attachmentPartsIssuedAt", "attachmentObjectlessDelete", "attachmentMpuEmptyVerifiedAt", "uploadId", "attachmentExpiresAt", "expiresAt", "avatarAttachmentId", "bannerAttachmentId", "iconAttachmentId", "subspaceMediaDeleting", "emojiAttachmentId", "createdAt", "updatedAt"],
+  "thing": ["shareId", "schemaVersion", "thingtime", "crystal", "geo", "extended", "ownerId", "sourceDeviceId", "acl", "targetId", "tags", "sizeBytes", "storageClass", "storageAccountingVersion", "attachmentEnvelopeVersion", "attachmentState", "objectSizeBytes", "objectKey", "objectVersionId", "attachmentRequestFingerprint", "attachmentPurpose", "passwordFileEnvelope", "passwordFileParent", "attachmentProfileSlot", "moderation", "subspaceMod", "subspacePrivate", "attachmentFinalizationLeaseId", "attachmentPartsIssuedAt", "attachmentObjectlessDelete", "attachmentMpuEmptyVerifiedAt", "uploadId", "attachmentExpiresAt", "expiresAt", "avatarAttachmentId", "bannerAttachmentId", "iconAttachmentId", "subspaceMediaDeleting", "emojiAttachmentId", "createdAt", "updatedAt"],
   "post": ["type", "text", "richText", "images", "listing", "thing", "title", "subspaceId", "flairId"],
   "attachment": ["name", "filenamePreview", "title", "description", "size", "contentType", "mediaKind", "detectedContentType"],
   "comment": ["text"],
@@ -117,6 +117,12 @@ const EXPECTED_PROJECTED_FIELDS: Record<string, string[]> = {
   "password-reset": ["token", "userId", "email", "expiresAt", "consumedAt", "schemaVersion", "createdAt"],
   "auth-otp": ["challenge", "userId", "purpose", "codeHash", "attempts", "expiresAt", "consumedAt", "schemaVersion", "createdAt"],
   "email-message": ["provider", "stream", "templateKey", "status", "from", "replyTo", "to", "subject", "html", "text", "sensitive", "metadata", "tags", "providerMessageId", "suppressedRecipients", "schemaVersion", "createdAt", "updatedAt"],
+  // Mail payloads live in the encrypted envelope, never the public crystal.
+  "mail-account": [],
+  "mail-folder": [],
+  "mail-message": [],
+  "mail-inbox": [],
+  "mail-operation": [],
   "rate-limit": ["key", "expiresAt", "requests", "count", "schemaVersion"],
   "deployment-peer": ["origin", "signingPublicKey", "firstSeenAt", "lastSeenAt", "expiresAt", "syncCursor", "schemaVersion"],
   "admin-integration-secret": ["id", "label", "cipherText", "iv", "tag", "createdAt", "updatedAt", "schemaVersion"],
@@ -159,14 +165,14 @@ test('registered server-owned Things are protected from generic Thing CRUD', () 
 test('managed attachment, moderation, user, and emoji fields are closed server-owned root fields', () => {
 	const root = thingtimeSchemas.find((schema) => schema.id === 'thing')!;
 	const fields = new Map(root.fields.map((field) => [field.name, field]));
-	for (const name of ['attachmentPurpose', 'attachmentProfileSlot', 'moderation', 'avatarAttachmentId', 'bannerAttachmentId', 'iconAttachmentId', 'subspaceMediaDeleting', 'emojiAttachmentId']) {
+	for (const name of ['passwordFileEnvelope', 'passwordFileParent', 'attachmentPurpose', 'attachmentProfileSlot', 'moderation', 'avatarAttachmentId', 'bannerAttachmentId', 'iconAttachmentId', 'subspaceMediaDeleting', 'emojiAttachmentId']) {
 		assert.equal(fields.get(name)?.system, true, name);
 		assert.equal(fields.get(name)?.required, false, name);
 	}
 	// 'recording' is the owner-private standalone purpose: it never binds to a
 	// target, so it stays out of BindableAttachmentPurpose and is denied by
 	// canViewHomeAttachmentTarget's non-post fallthrough.
-	assert.deepEqual(fields.get('attachmentPurpose')?.values, ['post', 'comment', 'message', 'profile', 'emoji', 'recording', 'file', 'subspace-icon', 'subspace-banner']);
+	assert.deepEqual(fields.get('attachmentPurpose')?.values, ['post', 'comment', 'message', 'profile', 'emoji', 'recording', 'file', 'subspace-icon', 'subspace-banner', 'password']);
 	assert.deepEqual(fields.get('attachmentProfileSlot')?.values, ['avatar', 'banner']);
 });
 

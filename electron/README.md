@@ -5,6 +5,8 @@ runtime, and the signed native macOS Thingtime Node as one desktop application.
 It does not duplicate the web source. The deterministic resource build stages:
 
 - the Vite client and Nitro server under `electron/dist/web`;
+- MongoDB Community Server 8.0.34, its source and licenses under
+  `electron/dist/database/mongodb`, plus the MongoDB driver under `electron/dist/database`;
 - `ai-connectors.mjs` and `thingtime-node-runtime.mjs` under `electron/dist/ai`;
 - the signed local/production or ad-hoc UNSIGNED `Thingtime Node.app` under
   `electron/dist/native`.
@@ -57,6 +59,21 @@ that version and gives electron-builder's nested dependency collector an
 isolated temporary `pnpm` shim resolving to the same pin, so an unrelated
 global pnpm cannot silently change the packaged dependency graph. The shim is
 removed after success or failure.
+
+Concurrent worktree builds must use separate native staging/cache roots. For
+example, run the following from the worktree's repository root, replacing
+`my-worktree` with its unique name:
+
+```sh
+THINGTIME_NODE_CACHE_ROOT="$HOME/Library/Caches/com.thingtime.desktop.node/my-worktree" \
+  corepack pnpm@10.12.1 --dir electron build
+```
+
+The cache must remain under `~/Library/Caches/com.thingtime.desktop.node`.
+SwiftPM serializes its own build directory, but the shared default bundle-stage
+directory can still be replaced by another build during signing. Keep each
+worktree's cache override for subsequent native verification/build commands,
+and coordinate replacement of the single installed app before installing.
 
 `build:web` runs the Remix/Nitro build with `NITRO_PRESET=node_middleware`,
 materializes `remix/.output` into `electron/dist/web/.output` without external

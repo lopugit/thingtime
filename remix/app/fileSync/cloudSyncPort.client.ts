@@ -10,7 +10,8 @@ import { createCloudFileTransport, createCloudRetentionTransport, createCloudFol
 import { parseCloudSyncRun, parseCloudWrite, isCloudFolderWrite, type CloudWrite } from './cloudWrite';
 import type { FingerprintSource } from './contentFingerprint';
 import { sameSyncScope, sameSyncStamp, type SyncEntry, type SyncScope } from './reconcile';
-import type { SyncExecutionPort, SyncRun } from './execute';
+import { validateSyncReceipt, type SyncExecutionPort, type SyncRun } from './execute';
+import type { TransferActivity } from './transferActivity';
 
 import type { CloudOperationBinding } from './cloudBinding';
 export type { CloudOperationBinding } from './cloudBinding';
@@ -27,6 +28,7 @@ export type CloudSyncPortInput = {
 	/** Validated saved root for older runs without per-operation roots. */
 	cloudRootId?: string;
 	progress?: (path: string, bytes: number, total: number) => void;
+	transfer?: (activity: TransferActivity) => void;
 };
 const defaultRuntime = (input: CloudSyncPortInput): CloudTransportRuntime => ({ currentScope: input.currentScope,
 	origin: () => window.location.origin, fetch: (url, init) => fetch(url, init), requireCapability: requireThingtimeCapability });
@@ -36,6 +38,8 @@ const defaultRuntime = (input: CloudSyncPortInput): CloudTransportRuntime => ({ 
 export function createBoundCloudSyncPort(savedScope: SyncScope, version: 1 | 2, bindings: CloudOperationBindings,
 	input: CloudSyncPortInput, runtime: CloudTransportRuntime = defaultRuntime(input)): Omit<SyncExecutionPort, 'persist'> {
 	const scope = structuredClone(savedScope), { check } = cloudRequests(runtime, scope, input.signal);
+	// One serialized operation is active; never retain a growing set of paths/IDs.
+	let appliedId: string | undefined;
 	const fileTransport = version === 2 ? createCloudRetentionTransport : createCloudFileTransport;
 	const parsed = (value: CloudOperationBinding | null) => {
 		check(); if (!value) throw Error('Unknown cloud sync operation.');
@@ -86,13 +90,20 @@ export function createBoundCloudSyncPort(savedScope: SyncScope, version: 1 | 2, 
 
 	return {
 		currentScope: input.currentScope,
+		confirmed: (operation, receipt) => {
+			check(); validateSyncReceipt(operation, scope, receipt);
+			if (appliedId !== operation.id) return;
+			appliedId = undefined;
+			const m = operation.mutation;
+			if (m.kind === 'copy') input.transfer?.({ direction: m.from === 'local' ? 'upload' : 'download', kind: m.source.kind });
+		},
 		read: async (side, path) => {
 			check();
 			if (side === 'local') { const entry = await input.readLocal(path); check(); return entry; }
 			const binding = await byPath(path);
 			return transport(binding).read();
 		},
-		lookup: async (id, requestedScope) => transport(await get(id, requestedScope)).lookup(),
+		lookup: async (id, requestedScope) => { appliedId = undefined; return transport(await get(id, requestedScope)).lookup(); },
 		trashExpected: async (operation, scope) => {
 			const { write, trashContext: context } = await get(operation.id, scope),
 				m = operation.mutation;
@@ -113,6 +124,7 @@ export function createBoundCloudSyncPort(savedScope: SyncScope, version: 1 | 2, 
 			const { write, trashContext } = await get(operation.id, scope);
 			if (JSON.stringify({ ...operation, confirmed: false }) !== JSON.stringify({ ...write.operation, confirmed: false }))
 				throw Error('Cloud sync operation changed.');
+			appliedId = operation.id;
 
 			if (isLocalTrash(write)) {
 				const { check } = cloudRequests(runtime, scope, input.signal);
@@ -131,7 +143,9 @@ export function createBoundCloudSyncPort(savedScope: SyncScope, version: 1 | 2, 
 				const { check } = cloudRequests(runtime, scope, input.signal);
 				const source = m.source.kind === 'file' ? createCloudDownloadSource(runtime, scope, write.before!, input.signal) : undefined;
 				check();
-				const staged = await input.localTarget!.stage(structuredClone(operation), { ...scope }, source);
+				if (source && !input.localTarget!.reportsTransferBytes) input.transfer?.({ direction: 'download', bytes: null });
+				const staged = await input.localTarget!.stage(structuredClone(operation), { ...scope }, source,
+					(bytes, received) => { check(); input.transfer?.({ direction: 'download', bytes }); input.progress?.(m.path, received, m.source.size); });
 				check();
 				validateLocalStage(staged, operation, scope);
 				if (source) await source.verify!();
@@ -143,7 +157,9 @@ export function createBoundCloudSyncPort(savedScope: SyncScope, version: 1 | 2, 
 			}
 			if (isCloudFolderWrite(write)) return createCloudFolderTransport(runtime, write, input.signal).apply();
 			const source = operation.mutation.kind === 'copy' ? await input.openSource(operation.mutation.source) : undefined;
-			return fileTransport(runtime, write, input.signal).apply(source, (bytes, total) => input.progress?.(operation.mutation.path, bytes, total));
+			return fileTransport(runtime, write, input.signal).apply(source,
+				(bytes, total) => input.progress?.(operation.mutation.path, bytes, total),
+				bytes => { check(); input.transfer?.({ direction: 'upload', bytes }); });
 		}
 	};
 }

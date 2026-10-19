@@ -8,6 +8,8 @@ import { fileURLToPath } from 'node:url';
 const electronDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const require = createRequire(import.meta.url);
 const electronExecutable = require('electron');
+const { stopOwnedProcessGroup } = require('../lib/local-runtime.cjs');
+if (process.platform === 'win32') throw new Error('Parallel desktop development currently requires POSIX process groups.');
 const stagedWebDir = path.join(electronDir, 'dist', 'web');
 const stagedAiDir = path.join(electronDir, 'dist', 'ai');
 
@@ -21,37 +23,85 @@ function runScript(name) {
 	if (result.status !== 0) throw new Error(`${name} failed with exit code ${result.status ?? 'unknown'}`);
 }
 
+const inspectorArg = process.argv.find(value => value.startsWith('--inspect-ui='));
+const inspectorPort = inspectorArg ? Number(inspectorArg.slice('--inspect-ui='.length)) : null;
+if (inspectorArg && (!Number.isSafeInteger(inspectorPort) || inspectorPort < 1024 || inspectorPort > 65535)) throw new Error('Choose an unused nonprivileged UI inspection port.');
+const launchArgs = ['.', ...(inspectorPort ? [`--remote-debugging-port=${inspectorPort}`, '--remote-debugging-address=127.0.0.1'] : [])];
+
 let profilePath;
+let processesStopped = true;
 try {
-	runScript('build-web.mjs');
+	if (!process.argv.includes('--use-staged')) runScript('build-web.mjs');
 	runScript('verify-web-build.mjs');
 	profilePath = await mkdtemp(path.join(os.tmpdir(), 'thingtime-desktop-dev-'));
 	console.log(`Starting unsigned Thingtime Dev with isolated profile ${profilePath}`);
-	const child = spawn(electronExecutable, ['.'], {
-		cwd: electronDir,
-		env: {
-			...process.env,
-			THINGTIME_DESKTOP_PARALLEL_DEV: '1',
-			THINGTIME_DESKTOP_DEV_PROFILE: profilePath,
-			THINGTIME_NODE_ALLOW_DEV_REGISTRATION: '0'
-		},
-		stdio: 'inherit'
-	});
-	const forwardSignal = (signal) => child.kill(signal);
+	let requestedRestart = false;
+	let stopping = false;
+	let child;
+	let escalationTimer;
+	let groupCleanup;
+	const cleanup = () => (groupCleanup ||= stopOwnedProcessGroup(child?.pid));
+	const forwardSignal = () => {
+		stopping = true;
+		// Give Electron's before-quit hook time to release the DB authority and
+		// stop MongoDB. Never terminate the database group at the first signal.
+		child?.kill('SIGTERM');
+		if (!escalationTimer)
+			escalationTimer = setTimeout(() => {
+				void cleanup().catch(() => {});
+			}, 15000);
+	};
 	process.on('SIGINT', forwardSignal);
 	process.on('SIGTERM', forwardSignal);
-	const result = await new Promise((resolve, reject) => {
-		child.once('error', reject);
-		child.once('exit', (code, signal) => resolve({ code, signal }));
-	});
-	process.off('SIGINT', forwardSignal);
-	process.off('SIGTERM', forwardSignal);
-	if (result.code !== 0 && result.signal !== 'SIGINT' && result.signal !== 'SIGTERM') {
-		throw new Error(`Thingtime Dev exited with ${result.signal || result.code}`);
+	try {
+		do {
+			if (stopping) break;
+			requestedRestart = false;
+			groupCleanup = null;
+			child = spawn(electronExecutable, launchArgs, {
+				cwd: electronDir,
+				detached: true,
+				env: {
+					...process.env,
+					THINGTIME_DESKTOP_PARALLEL_DEV: '1',
+					THINGTIME_DESKTOP_DEV_PROFILE: profilePath,
+					THINGTIME_NODE_ALLOW_DEV_REGISTRATION: '0'
+				},
+				stdio: ['inherit', 'inherit', 'inherit', 'ipc']
+			});
+			processesStopped = false;
+			child.on('message', (message) => {
+				if (message?.type === 'thingtime-dev-restart') requestedRestart = true;
+			});
+			let result;
+			try {
+				result = await new Promise((resolve, reject) => {
+					child.once('error', reject);
+					child.once('exit', (code, signal) => resolve({ code, signal }));
+				});
+			} finally {
+				clearTimeout(escalationTimer);
+				escalationTimer = null;
+				await cleanup();
+				processesStopped = true;
+			}
+			if (result.code !== 0 && result.signal !== 'SIGINT' && result.signal !== 'SIGTERM')
+				throw new Error(`Thingtime Dev exited with ${result.signal || result.code}`);
+		} while (requestedRestart && !stopping);
+	} finally {
+		process.off('SIGINT', forwardSignal);
+		process.off('SIGTERM', forwardSignal);
+		clearTimeout(escalationTimer);
 	}
 } finally {
-	if (profilePath) await rm(profilePath, { force: true, recursive: true });
-	await rm(stagedWebDir, { force: true, recursive: true });
-	await rm(stagedAiDir, { force: true, recursive: true });
-	console.log('Removed the Thingtime Dev profile and staged web/AI bundles.');
+	if (!processesStopped) {
+		console.error(`Preserved development profile and bundles because process shutdown was not verified: ${profilePath}`);
+	} else {
+		if (profilePath) await rm(profilePath, { force: true, recursive: true });
+		await rm(stagedWebDir, { force: true, recursive: true });
+		await rm(stagedAiDir, { force: true, recursive: true });
+		await rm(path.join(electronDir, 'dist', 'mail'), { force: true, recursive: true });
+		await rm(path.join(electronDir, 'dist', 'database'), { force: true, recursive: true });
+		console.log('Removed the Thingtime Dev profile and staged web/AI bundles.');
+	}
 }

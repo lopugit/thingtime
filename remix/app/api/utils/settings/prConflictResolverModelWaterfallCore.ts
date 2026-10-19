@@ -27,11 +27,14 @@ export type AiWorkflowBaseModel = {
   // 'fast' is offered only where the provider sells a faster lane: Anthropic
   // fast mode (Claude Opus 5 / 4.8) and OpenAI priority processing.
   speeds: readonly AiModelSpeed[];
+  // Native function calls must use Responses for these OpenAI models.
+  requiresResponsesForTools?: boolean;
 };
 
 const CLAUDE_EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'] as const;
 const CLAUDE_EFFORTS_46 = ['low', 'medium', 'high', 'max'] as const; // xhigh arrived with Opus 4.7
 const OPENAI_EFFORTS_56 = ['none', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra'] as const;
+const OPENAI_EFFORTS_ASTRA = ['low', 'medium', 'high', 'xhigh', 'max'] as const;
 const OPENAI_EFFORTS_5X = ['none', 'low', 'medium', 'high', 'xhigh'] as const;
 const OPENAI_EFFORTS_CODEX = ['low', 'medium', 'high', 'xhigh'] as const;
 const OPENAI_EFFORTS_GPT5 = ['minimal', 'low', 'medium', 'high'] as const;
@@ -51,6 +54,7 @@ export const AI_WORKFLOW_BASE_MODELS: readonly AiWorkflowBaseModel[] = [
   // Anthropic — reasoning-effort tiers per model capability; fast mode is an
   // Anthropic research preview limited to Claude Opus 5 and Claude Opus 4.8.
   { id: 'claude-fable-5', label: 'Claude Fable 5', provider: 'anthropic', efforts: CLAUDE_EFFORTS, speeds: NORMAL_ONLY },
+  { id: 'claude-fable-5-1', label: 'Claude Fable 5.1', provider: 'anthropic', efforts: CLAUDE_EFFORTS, speeds: NORMAL_ONLY },
   { id: 'claude-opus-5', label: 'Claude Opus 5', provider: 'anthropic', efforts: CLAUDE_EFFORTS, speeds: NORMAL_AND_FAST },
   { id: 'claude-opus-4-8', label: 'Claude Opus 4.8', provider: 'anthropic', efforts: CLAUDE_EFFORTS, speeds: NORMAL_AND_FAST },
   { id: 'claude-opus-4-7', label: 'Claude Opus 4.7', provider: 'anthropic', efforts: CLAUDE_EFFORTS, speeds: NORMAL_ONLY },
@@ -61,7 +65,9 @@ export const AI_WORKFLOW_BASE_MODELS: readonly AiWorkflowBaseModel[] = [
 
   // OpenAI — 'fast' maps to priority processing (service tier) on the models
   // OpenAI sells it for; codex/o-series/pro models stay normal-only.
-  { id: 'gpt-5.6-sol', label: 'GPT-5.6 Sol', provider: 'openai', efforts: OPENAI_EFFORTS_56, speeds: NORMAL_AND_FAST },
+  // https://developers.openai.com/api/docs/models/gpt-6-astra
+  { id: 'gpt-6-astra', label: 'GPT-6 Astra', provider: 'openai', efforts: OPENAI_EFFORTS_ASTRA, speeds: NORMAL_ONLY, requiresResponsesForTools: true },
+  { id: 'gpt-5.6-sol', label: 'GPT-5.6 Sol', provider: 'openai', efforts: OPENAI_EFFORTS_56, speeds: NORMAL_AND_FAST, requiresResponsesForTools: true },
   { id: 'gpt-5.6-terra', label: 'GPT-5.6 Terra', provider: 'openai', efforts: OPENAI_EFFORTS_56, speeds: NORMAL_AND_FAST },
   { id: 'gpt-5.6-luna', label: 'GPT-5.6 Luna', provider: 'openai', efforts: OPENAI_EFFORTS_56, speeds: NORMAL_AND_FAST },
   { id: 'gpt-5.5', label: 'GPT-5.5', provider: 'openai', efforts: OPENAI_EFFORTS_5X, speeds: NORMAL_AND_FAST },
@@ -109,6 +115,21 @@ const baseModelById = new Map<string, AiWorkflowBaseModel>(
   AI_WORKFLOW_BASE_MODELS.map((model) => [model.id, model])
 );
 
+// Discovery may introduce a new text-model version between deployments. Its
+// baseline adapter uses provider-default effort and standard speed; never infer
+// optional capabilities from a similarly named model. Live availability and
+// admin admission are enforced by the server catalogue, not this grammar.
+export const getAiWorkflowBaseModel = (id: string): AiWorkflowBaseModel | null => {
+  const known = baseModelById.get(id);
+  if (known) return known;
+  const provider = /^claude-(?:fable|opus|sonnet|haiku|mythos)-[0-9]+(?:-[0-9]+)*$/.test(id) ? 'anthropic'
+    : /^(?:gpt-[0-9]+(?:\.[0-9]+)*(?:-(?:mini|nano|pro|sol|terra|luna|astra))?|o[0-9]+(?:-mini|-pro)?)(?:-[0-9]{4}-[0-9]{2}-[0-9]{2})?$/.test(id) ? 'openai' : null;
+  return provider ? { id, label: id, provider, efforts: [], speeds: ['normal'] } : null;
+};
+
+export const requiresOpenAiResponsesForTools = (id: string): boolean =>
+  getAiWorkflowBaseModel(id)?.requiresResponsesForTools === true;
+
 export type AiWorkflowModelChoice = {
   id: PRConflictResolverModelId; // canonical composed option id
   model: string; // provider-native model id ('default' is the sentinel)
@@ -137,7 +158,7 @@ export const parseAiWorkflowModelOptionId = (value: unknown): AiWorkflowModelCho
   if (typeof value !== 'string' || value.length < 1 || value.length > 128) return null;
 
   const [baseId, ...segments] = value.split(':');
-  const base = baseModelById.get(baseId);
+  const base = getAiWorkflowBaseModel(baseId);
   if (!base) return null;
 
   let effort: AiModelEffort | null = null;

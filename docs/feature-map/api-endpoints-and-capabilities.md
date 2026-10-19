@@ -14,6 +14,21 @@ Things/files. Both routes use the import map and docs registry. Native
 `ThingtimeAPIClient.verifyFileSyncIdentity` negotiates the optional identity
 feature and selects the exact local credential. `device-identity.integration.mts`
 checks real signed pairing, privacy, owner-only disconnect and no claim revival.
+Character agent discovery uses `remix/scripts/character-coordination-preflight.ts`
+and the shared `capabilityContract.ts` SemVer/origin contract. Run
+`npm --prefix remix run characters:preflight -- --origin <selected-origin>` and
+`test:characters-preflight`; see [the coordination runbook](../characters.md#agent-coordination).
+This read-only client adds no route, permission or server contract. Edge refusal
+must remain distinct from missing capabilities, authentication and membership.
+
+Paired Mac inventory uses `api.devices` 1.10.0 and `api.devices-node-state`
+1.11.0 (`deviceMenuBar.ts`, native `MenuBarTelemetry.swift`). Approved Bash uses
+`api.devices-commands` / `api.devices-node-commands` 1.10.0 (`deviceScript.ts`,
+native `DeviceScript.swift`). Both extend existing routes. Optional native
+negotiation preserves compatibility with older origins; script leases require
+explicit approved envelopes. Editable suites live in `appSuites/macMenuBar.ts`
+and `appSuites/deviceScripts.ts`; scripts retain results only on explicit
+private-Thing creation. See README and TESTING for limits and acceptance.
 
 Timeline 1.18.0 adds named versions, undo and version export on the existing
 route: the POST command `name-version` (`api/utils/timeline/versionNames.ts`,
@@ -391,7 +406,7 @@ both manifests and conditional client negotiation use the canonical docs entry.
 
 ## Password manager
 
-See [password-manager.md](../password-manager.md). `api.passwords` 1.0.0 is a
+See [password-manager.md](../password-manager.md). `api.passwords` 1.2.0 is a
 private, session-bound home-plane API over protected `password-manager-entry`
 Things. `api/utils/passwords/passwords.ts` owns accounted mutations, revision
 fences and secret-free native catalog projections; `auth/vaultEnvelope.ts` and
@@ -401,3 +416,31 @@ so decrypted fields never enter shared client history/cache. The reusable
 `Thingtime` fields mod renders the entry without global Thing persistence.
 Native integrations live in `apple/Passwords`, `apple/PasswordProvider`,
 `iOS/Thingtime/Web/PasswordBridge.swift` and `electron/lib/password-provider.cjs`.
+
+
+## Incoming mail
+
+See [incoming-mail.md](incoming-mail.md) for Email settings, IMAP/POP3, private cloud storage, the paired local connector, offline reading and proxy inbox views.
+
+## iOS TestFlight delivery
+
+`api.integration-ios-release` 1.0.0 registers the production-only
+`POST /api/v1/integrations/ios-release` in both manifests and the Nitro import map.
+The native release script negotiates the origin manifest before requesting a
+single-use GitHub OIDC credential delivery or explicitly enabled create-only
+migration. No origin fallback is allowed. Run `test:ios-release`, capability and
+API fallback tests; see [the release runbook](../ios-automatic-testflight.md).
+
+Password migration coverage and encrypted file lifecycle: `passwords/onePassword.ts`,
+`transfer.ts`, `fileCrypto.ts`, `files.client.ts`, `backup.client.ts`, and
+`api/utils/passwords/files.ts`. Every original 1PUX member is retained as an
+encrypted attachment to a source archive entry; item editors preserve structured
+values, source context and password history. See [the password contract](../password-manager.md).
+
+The admin migration status/run contracts are `1.4.0` for guarded incident cleanup;
+the migration UI negotiates both before use. Missing local Mongo/JWT settings
+produce a no-store `503 LOCAL_API_NOT_CONFIGURED` before handler/body execution.
+Public docs and capability discovery remain local and available.
+
+
+`api.ai-chatgpt-plan` 1.1.0 registers GET redacted account/attempt status, local authorization availability and storage mode; same-origin POST begin/cancel/select-model/refresh-models/disconnect/prepare-import/move-account/import-account. An optional `X-Thingtime-Expected-User` header rejects stale-account UI requests. `api.ai-models` 1.7.0 lists owner-scoped plan connections; `api.lopu-chats-reply` 1.20.0 resolves those IDs strictly even when saved and uses plan Responses without API billing fallback. Explicit desktop remote selections negotiate and pin the receiving API before proxying; local mode never falls back. `api.capabilities` 1.2.0 permits custom loopback data authorities for local runtimes. Both manifests derive these versions from the canonical docs registry; tests live in `ai/chatgpt-plan`, `apiCapabilities.test.ts` and the Lopu stream suite.
