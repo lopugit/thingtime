@@ -96,6 +96,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-19: Keep resumed file-sync indexing distinct from missing folder access and paused transfer counters. Reduce native status polling to leave room for authenticated device traffic; every native request retains live authorization. Add redacted native interruption categories to distinguish storage, network and identity failures; full-home scan restart diagnosis remains open. — Codex (AI)
+
 - 2026-10-19 · Codex (AI): Keep Stop available for unfinished one-time sync jobs, including attention after a failed scan. The editable automation panel now explains how to stop an earlier job before applying changed ignore rules; existing policy and operation-journal fences remain intact.
 
 - 2026-10-19 — **Codex (AI)**: Add resumable Mac home-backup indexing, durable skipped-item coverage, Gitignore-style sync rules and automatic reconnect recovery. Supported files can be backed up without following links or reading live sockets; incomplete coverage stays explicit. Installed home-folder acceptance and link restoration remain pending. See [PR #1049 verification](../PRs/1049-home-backup-indexing-resumable-partial-captures.md).

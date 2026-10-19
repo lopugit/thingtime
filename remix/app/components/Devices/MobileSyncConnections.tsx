@@ -62,8 +62,8 @@ import {
 	type ConfigurationEditorScope
 } from '~/fileSync/configurationEditor';
 
-type ConnectionsProps = { ownerId: string; deviceId: string; roots: MobileFolder[]; host?: FolderHost };
-export function MobileSyncConnections({ ownerId, deviceId, roots, host }: ConnectionsProps) {
+type ConnectionsProps = { ownerId: string; deviceId: string; roots: MobileFolder[]; rootsReady?: boolean; host?: FolderHost };
+export function MobileSyncConnections({ ownerId, deviceId, roots, rootsReady = true, host }: ConnectionsProps) {
 	const owner = useCurrentUser(),
 		dataPlane = useDataPlane();
 	const identity = useSyncExternalStore(rootIdentity.subscribe, rootIdentity.read, rootIdentity.read);
@@ -75,6 +75,7 @@ export function MobileSyncConnections({ ownerId, deviceId, roots, host }: Connec
 			scope={scope}
 			generation={identity.generation}
 			roots={roots}
+			rootsReady={rootsReady}
 			host={host}
 		/>
 	);
@@ -83,11 +84,13 @@ function Connections({
 	scope,
 	generation,
 	roots,
+	rootsReady,
 	host
 }: {
 	scope: ConfigurationEditorScope;
 	generation: number;
 	roots: MobileFolder[];
+	rootsReady: boolean;
 	host?: FolderHost;
 }) {
 	const requestFolders = host?.request ?? requestMobileFolders;
@@ -657,7 +660,9 @@ function Connections({
 								</Text>
 							)}
 							<Text fontSize="12px">
-								{!sourceAllowed
+								{!rootsReady
+									? running ? 'Transfer in progress · Folder list pending' : 'Checking folder access…'
+									: !sourceAllowed
 									? 'Source access or backup policy needs review'
 									: saved.configuration.paused
 									? 'Paused'
@@ -678,7 +683,7 @@ function Connections({
 									: downloading
 									? 'Ready to download with folder approval'
 										: appOwned ? 'Ready to upload' : 'Ready for a foreground upload'}
-								{!roots.some((root) => root.id === saved.configuration.localRootId) ? ' · Folder access missing' : ''}
+								{rootsReady && !nativeRoot ? ' · Folder access missing' : ''}
 							</Text>
 							{progress && (
 								<Text

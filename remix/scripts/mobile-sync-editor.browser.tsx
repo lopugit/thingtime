@@ -94,7 +94,7 @@ const transferFolderPath = (row: any): string => {
 	}
 	return parts.join('/');
 };
-let holdNextScan = false, holdTransferReply = false;
+let holdNextScan = new URLSearchParams(location.search).has('hold-scan'), holdTransferReply = false;
 let loseTransportReply = false;
 let loseTransferReply = false,
 	network = 'wifi';

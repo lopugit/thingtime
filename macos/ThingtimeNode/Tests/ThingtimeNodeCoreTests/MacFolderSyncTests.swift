@@ -7,6 +7,17 @@ import AppleFileSync
 @MainActor
 final class MacFolderSyncTests: XCTestCase {
     private let origin = URL(string: "https://sync.test")!
+    func testBackupDiagnosticsNeverExposeErrorDescriptionsOrURLs() {
+        let sensitive = "secret-token /private/home/filename"
+        let network = URLError(.timedOut, userInfo: [NSLocalizedDescriptionKey: sensitive, NSURLErrorFailingURLStringErrorKey: sensitive])
+        XCTAssertEqual(MacFolderSync.backupDiagnosticCode(network), "network--1001")
+        XCTAssertEqual(MacFolderSync.backupDiagnosticCode(ThingtimeAPIClientError.rejected(status: 429)), "identity-http-429")
+        XCTAssertEqual(MacFolderSync.backupDiagnosticCode(ThingtimeAPIClientError.notPaired), "identity-not-paired")
+        XCTAssertEqual(MacFolderSync.backupDiagnosticCode(MobileFolderStore.Failure.storage), "local-storage")
+        XCTAssertEqual(MacFolderSync.backupDiagnosticCode(CancellationError()), "cancelled")
+        XCTAssertEqual(MacFolderSync.backupDiagnosticCode(NSError(domain: sensitive, code: 1, userInfo: [NSLocalizedDescriptionKey: sensitive])), "unexpected")
+    }
+
     private var folder: URL!
     override func setUpWithError() throws {
         folder = FileManager.default.temporaryDirectory.appendingPathComponent("mac-sync-" + UUID().uuidString)

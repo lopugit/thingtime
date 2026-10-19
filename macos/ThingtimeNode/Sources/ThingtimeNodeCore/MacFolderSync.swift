@@ -48,6 +48,32 @@ public final class MacFolderSync {
     /// retention and a 24-hour execution lifetime. Transport failures do not
     /// cancel it; explicit cancel, authority loss or lifetime expiry do.
     public static let maximumBackupJobSeconds: TimeInterval = 24 * 60 * 60
+    // Diagnostics deliberately exclude localized descriptions, URL userInfo,
+    // filenames, account IDs and native bookmark data.
+    static func backupDiagnosticCode(_ error: Error) -> String {
+        if error is CancellationError { return "cancelled" }
+        if let network = error as? URLError { return "network-" + String(network.code.rawValue) }
+        if let api = error as? ThingtimeAPIClientError {
+            switch api {
+            case .rejected(let status): return "identity-http-" + String(status)
+            case .notPaired: return "identity-not-paired"
+            case .incompatibleCapabilities: return "identity-capabilities"
+            default: return "identity-response"
+            }
+        }
+        if let source = error as? MobileFolderStore.Failure {
+            switch source {
+            case .unavailable: return "source-unavailable"
+            case .invalid: return "source-invalid"
+            case .limit: return "source-limit"
+            case .changed: return "source-changed"
+            case .storage: return "local-storage"
+            case .approvalCancelled: return "approval-cancelled"
+            }
+        }
+        return "unexpected"
+    }
+
     private final class BackupProgress: @unchecked Sendable {
         private let lock = NSLock()
         private var capture: MobileFolderInventory.Capture
@@ -134,6 +160,7 @@ public final class MacFolderSync {
                 try Task.checkCancellation()
                 progress.finish(prepared)
             } catch {
+                ThingtimeNodeLog.actions.error("Backup indexing stopped: phase=scan code=\(Self.backupDiagnosticCode(error), privacy: .public)")
                 if let preparedCapture {
                     // Cleanup runs independently of the cancelled job task. A
                     // cancellation racing the final fsync cannot leave it sealed.
@@ -152,7 +179,10 @@ public final class MacFolderSync {
                     guard Date().timeIntervalSince(started) < Self.maximumBackupJobSeconds else { throw MobileFolderStore.Failure.changed }
                     try await self.verify(scope.owner.ownerId, scope.deviceId)
                     guard try self.store.grant(scope.owner, id: grant.id).bookmark == grant.bookmark else { throw MobileFolderStore.Failure.changed }
-                } catch { task.cancel(); return }
+                } catch {
+                    ThingtimeNodeLog.actions.error("Backup indexing stopped: phase=monitor code=\(Self.backupDiagnosticCode(error), privacy: .public)")
+                    task.cancel(); return
+                }
             }
         }
         backupJob = BackupJob(scope: scope, grant: grant, exclusions: exclusions, ignoreRules: rules, progress: progress, task: task, monitor: monitor)
@@ -236,6 +266,7 @@ public final class MacFolderSync {
         catch {
             if !(error is CancellationError), let job = backupJob,
                job.scope.owner.ownerId == r.ownerId, job.scope.deviceId == r.deviceId {
+                ThingtimeNodeLog.actions.error("Backup indexing stopped: phase=request-authorization code=\(Self.backupDiagnosticCode(error), privacy: .public)")
                 job.task.cancel(); job.monitor.cancel()
             }
             throw error

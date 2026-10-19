@@ -10,6 +10,10 @@ export type NativeScanSkip = { ordinal: number; path: string | null; reason: 'sy
 export type NativeSkippedPage = { capture: NativeBackupCapture; offset: number; skipped: NativeScanSkip[]; nextOffset: number | null; totalSkipped: number };
 export type NativeIndexProgress = Pick<NativeBackupStatus, 'state' | 'coverage' | 'consistency' | 'totalEntries' | 'totalSkipped'>;
 export class NativeInventoryRetryWait extends Error {}
+// Each status read reauthorizes before and after native IO. Keep observation
+// traffic comfortably below the shared device-read budget while the native
+// worker continues independently; this does not cache or skip authorization.
+export const NATIVE_INDEX_POLL_MS = 2_000;
 export function assertBackupCapturePolicy(policy: SyncPolicy | undefined) {
 	if (policy?.mode !== 'backup' || policy.propagateDeletes !== false) throw Error('Partial native captures require backup with deletion propagation disabled.');
 }
@@ -119,7 +123,7 @@ export async function* readNativeInventory(input: {
 				if (input.waitForPoll) await input.waitForPoll();
 				else await new Promise<void>((resolve, reject) => {
 					const finish = () => { signal.removeEventListener('abort', abort); resolve(); };
-					const timer = setTimeout(finish, 500);
+					const timer = setTimeout(finish, NATIVE_INDEX_POLL_MS);
 					const abort = () => { clearTimeout(timer); signal.removeEventListener('abort', abort); reject(signal.reason); };
 					signal.addEventListener('abort', abort, { once: true }); if (signal.aborted) abort();
 				});
