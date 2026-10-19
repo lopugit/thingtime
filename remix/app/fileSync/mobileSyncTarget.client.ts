@@ -10,6 +10,7 @@ import {
 	supportsMobileTrash,
 	supportsMobileTrashTransitions,
 	supportsNativeWriteApprovalCheck,
+	supportsNativeIgnoreRules,
 	type FolderCapabilities,
 	type MobileWriteApproval
 } from './mobileFolders.client';
@@ -30,6 +31,7 @@ export async function approveMobileSyncTarget(
 		throw Error('Update the app to resume with saved folder approval without a dialog.');
 	const configuration = parseFileSyncConfiguration(saved.configuration),
 		rootId = configuration.localRootId;
+	if (configuration.ignoreRules && !supportsNativeIgnoreRules(bridge)) throw Error('Update Thingtime Mac to apply Gitignore rules before syncing.');
 	if (saved.id !== scope.rootId || configuration.deviceId !== scope.deviceId) throw Error('Sync approval scope changed.');
 	const roots = (await request(scope.ownerId, { action: 'list' }, signal)).roots;
 	if (

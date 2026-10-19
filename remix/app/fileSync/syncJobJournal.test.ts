@@ -154,3 +154,37 @@ test('Stop reports persistence failure and bounds competing revisions', async ()
  await assert.rejects(pauseSyncJobAdmission({ read: jobs.read, pause: async () => { attempts++; return null; } }, first.id), /changed while stopping/);
  assert.equal(attempts, 3); assert.deepEqual(await jobs.read(), first); journal.close();
 });
+
+test('native backup capture identity survives lifecycle/offline retry, but Stop and new settings fence it', async () => {
+ const factory = new IDBFactory(); let journal = await open(factory), jobs = jobsFor(journal);
+ const configuration = { ...saved(), configuration: { ...saved().configuration, mode: 'backup' as const, propagateDeletes: false } };
+ const captureId = crypto.randomUUID(), admitted = await jobs.admit(configuration, 'backup');
+ const indexing = (await jobs.capture(admitted, captureId))!; assert.equal(indexing.nativeCaptureId, captureId);
+ assert.equal(await jobs.capture(admitted, crypto.randomUUID()), null); journal.close();
+ journal = await open(factory); jobs = jobsFor(journal);
+ const offline = (await jobs.read())!; assert.equal(offline.state, 'runnable');
+ const eligible = (await jobs.begin(offline, Date.now(), 'ignored'))!; assert.equal(eligible.nativeCaptureId, captureId);
+ const stopped = (await jobs.pause(eligible))!; assert.equal(await jobs.begin(stopped, Date.now(), 'ignored'), null);
+ assert.equal(stopped.nativeCaptureId, captureId);
+ const retry = await jobs.admit(configuration, 'ignored'); assert.equal(retry.nativeCaptureId, captureId);
+ const cleared = (await jobs.capture(retry, null))!; assert.equal(cleared.nativeCaptureId, undefined);
+ const again = (await jobs.capture(cleared, captureId))!;
+ const changed = await jobs.admit({ ...configuration, updatedAt: '2026-10-19T01:00:00.000Z' }, 'ignored'); assert.equal(changed.nativeCaptureId, undefined);
+ assert.equal(await jobs.finish(again, Date.now()), null);
+ const finished = (await jobs.finish(changed, Date.now()))!; assert.equal(finished.nativeCaptureId, undefined); journal.close();
+});
+
+test('native helper restart gets one durable automatic generation retry without consuming transport reconnect attempts', async () => {
+ const factory = new IDBFactory(); let journal = await open(factory), jobs = jobsFor(journal);
+ const configuration = { ...saved(), configuration: { ...saved().configuration, mode: 'backup' as const, propagateDeletes: false } };
+ let job = (await jobs.capture(await jobs.admit(configuration, 'backup'), crypto.randomUUID()))!;
+ const first = crypto.randomUUID(), restarted = crypto.randomUUID();
+ job = (await jobs.observeCapture(job, first))!;
+ for (let n = 0; n < 3; n++) { job = (await jobs.begin(job, Date.now(), 'ignored'))!; assert.equal(job.nativeCaptureRestarts, 0); }
+ journal.close(); journal = await open(factory); jobs = jobsFor(journal); job = (await jobs.read())!;
+ job = (await jobs.observeCapture(job, restarted))!; assert.equal(job.nativeCaptureRestarts, 1);
+ const same = (await jobs.observeCapture(job, restarted))!; assert.equal(same.nativeCaptureRestarts, 1);
+ await assert.rejects(jobs.observeCapture(same, crypto.randomUUID()), /repeatedly interrupted/);
+ await jobs.attention(same); job = await jobs.admit(configuration, 'ignored'); assert.equal(job.nativeCaptureRestarts, 0);
+ assert.equal((await jobs.observeCapture(job, crypto.randomUUID()))?.nativeCaptureRestarts, 1); journal.close();
+});

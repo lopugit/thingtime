@@ -1,4 +1,4 @@
-import { parseFileSyncConfiguration } from './configuration';
+import { parseFileSyncConfiguration, FILE_SYNC_IGNORE_REQUIREMENTS } from './configuration';
 import { planConfiguredFileSync, readOwnedFileSyncConfiguration, type SavedFileSyncConfiguration } from './configuredPlan';
 import { inventorySyncEntry, parseCloudInventory } from './cloudInventory';
 import { sameSyncScope, validSyncEntry, validSyncPath, type SyncScope } from './reconcile';
@@ -28,6 +28,8 @@ export function foregroundSyncContext(reviewed: SavedFileSyncConfiguration, scop
 		if (!sameSyncScope(scope, input.currentScope())) throw Error('Sync context changed.');
 	};
 	const authorize = async () => {
+		check();
+		if (configuration.ignoreRules) await input.runtime.requireCapability('api.things', FILE_SYNC_IGNORE_REQUIREMENTS['api.things']);
 		check();
 		const current = readOwnedFileSyncConfiguration(await input.readConfiguration(), scope.ownerId);
 		check();

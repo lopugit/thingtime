@@ -3578,3 +3578,94 @@ pass. Installed-app/deployed acceptance and the real home upload remain open.
 The user authorized merging this task into main and starting the selected home
 upload afterward. Publication still requires reconciling current main and stale
 PR-head metadata; a feature-branch push is not evidence of a main merge.
+
+
+## Home indexing diagnostics — 2026-10-19
+
+The merged release was installed and its production Files 1.6 contract verified.
+The first real home-folder run stopped during indexing, before transferring files.
+The native capture is deliberately all-or-nothing: links and special entries,
+unreadable or changing files, duplicate inode identities and normalized-path
+collisions cannot silently disappear from a complete inventory. Hashing and the
+final replay also remain bounded by the native request timeout; a large live home
+folder is not yet proven to fit that bound.
+
+Mac file access 1.7.0 adds a bounded `scanFailure` response for `scan` and
+`scan-capture`: a fixed reason and validated relative path, or an `invalid-path`
+reason with a null path. These responses carry `complete: false` and no usable
+entries or capture. Owner, request, selected origin, root and grant are rechecked.
+The renderer rejects foreign, malformed or contradictory diagnostics and displays
+the specific indexing problem instead of describing it as a pairing failure.
+Unsupported entries are not skipped by this change. Exclusion changes require a
+fresh capture and retain the existing no-follow and deletion protections.
+
+## Resumable partial home backups — 2026-10-19
+
+Mac file access **1.8.0** adds `capturePolicy: "backup-supported"` for backup
+connections with deletion propagation disabled. Strict upload, download and
+two-way scans keep their complete-inventory requirements. The local signed-host
+adapter provides short `scan-capture`, `scan-status`, `scan-cancel` and
+`scan-skips` requests. A capture ticket is bound to the account, selected origin,
+device, root grant and exact exclusions. Transport interruption does not cancel
+the native scan. Explicit Stop saves the paused admission before cancelling it;
+authority loss prevents sealing and reading its result.
+
+The sealed descriptor includes `coverage`, `consistency: "per-entry"`, and
+`totalSkipped`. Supported files are hashed and checked separately without a
+full-tree replay. This is a file-by-file observation, not a filesystem snapshot
+at one instant. Links are not followed, sockets/pipes/devices are not opened,
+and unsupported or unreadable entries appear in a durable ordered ledger.
+Root/subtree gaps preserve prior baseline facts and never authorize deletions.
+Pages contain at most 128 entries and 512 KiB. Native execution uses one active
+scan, 64 KiB read buffers and existing cache limits; very large-volume
+throughput and those capacity boundaries still require acceptance testing.
+
+The device journal keeps the capture ticket through reconnects and renderer
+restarts. One changed native generation can restart automatically; repeated
+interruptions require attention instead of looping indefinitely. Normal
+network/power waits remain eligible for the scheduler and display as waiting.
+An explicit retry renews that recovery allowance. Confirmed cloud operations
+retain their existing receipt identity. Files changing after indexing can still
+stop a transfer for review; this work does not silently skip upload failures.
+
+Progress is at **`/settings/things` → Sync connections** in the installed app.
+The two-step progress viewer and editable Backup coverage blocks read this
+device's journal. Skip pages are exposed after the complete local inventory is
+durable and remain available until the next retained capture replaces them.
+Another browser/device cannot yet inspect this local progress journal remotely.
+Enable **Sync this device's files automatically** to admit recurring work.
+Closing the Mac window preserves the app-owned runner; quitting the app stops
+execution until it reopens. No always-running OS service is claimed.
+
+Symbolic-link content/restore, hard-link relationships, faithful special-entry
+metadata and full-home installed acceptance remain separate unfinished work.
+Android remains deferred. Existing grants, private destination selection and
+the home exclusions must be reviewed before real account transfer.
+
+## Sync ignore rules — 2026-10-19
+
+The connection editor at `/settings/things` exposes a separate root-relative
+Gitignore rule list. Exact excluded paths continue to take precedence. The
+common-exclusions action fills editable dependency/cache directory rules such
+as `node_modules/`, Python environments, Gradle/Maven caches, CocoaPods, Dart,
+Rust and Go module caches. It does not erase exact exclusions or start a run.
+
+Patterns follow [Git's ignore syntax](https://git-scm.com/docs/gitignore): one
+rule per line, comments with `#`, ordered `!` exceptions, root anchoring with
+`/`, directory-only trailing `/`, wildcards and escaped literals. An ignored
+parent must itself be included before a child exception can take effect. A
+path checker lets the user review the result. Repository `.gitignore` files
+are not automatically read; this list belongs to the selected sync connection.
+Matching is case-sensitive. Native traversal prunes ignored entries before
+opening or hashing their content. Intentionally excluded entries do not count
+as incomplete backup coverage, and previously saved copies are retained.
+
+Nonempty rules use saved `configurationVersion: 2`, negotiated through
+`api.things` 1.38.0 and Mac `fileAccess` 1.9.0. Older clients refuse version2
+instead of dropping the policy. Empty-rule configurations retain version1
+compatibility. Changing a policy requires stopping the current admission,
+saving the edited connection and explicitly starting it with new local
+approval; pending operation receipts remain separately protected. Rules and
+exact exclusions are part of capture identity and must survive retries with
+the same spelling. Installed home-upload acceptance is tracked in
+[PR1049](../PRs/1049-home-backup-indexing-resumable-partial-captures.md).

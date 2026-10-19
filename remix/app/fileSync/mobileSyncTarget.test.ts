@@ -281,3 +281,18 @@ test('iOS publication 1.2 negotiates each folder while photo sources remain read
  assert.equal(supportsNativeWriteApprovalCheck(legacy), false);
  assert.equal(supportsMobileFolderPublication({ ...folder, publicationVersion: undefined }, legacy), true);
 });
+
+test('ignore policy changes approval hash while empty rules preserve legacy approval and unsupported native fails closed', async () => {
+ const capable = { ...bridge, platform: 'macos' as const, fileAccessVersion: '1.9.0', filePublicationVersion: '1.2.0' }, hashes: string[] = [];
+ const request = async (_owner: string, input: FolderRequest): Promise<FolderResult> => {
+  if (input.action === 'list') return parse(input, {});
+  assert.equal(input.action, 'write-approve'); if (input.action !== 'write-approve') throw Error('unexpected');
+  hashes.push(input.approval.configurationHash); return parse(input, { writeApproval: input.approval });
+ };
+ await approveMobileSyncTarget(saved, scope, new AbortController().signal, request, capable);
+ await approveMobileSyncTarget({ ...saved, configuration: { ...saved.configuration, configurationVersion: 2, ignoreRules: '' } }, scope, new AbortController().signal, request, capable);
+ await approveMobileSyncTarget({ ...saved, configuration: { ...saved.configuration, configurationVersion: 2, ignoreRules: 'node_modules/' } }, scope, new AbortController().signal, request, capable);
+ assert.equal(hashes[0], hashes[1]); assert.notEqual(hashes[0], hashes[2]);
+ await assert.rejects(approveMobileSyncTarget({ ...saved, configuration: { ...saved.configuration, configurationVersion: 2, ignoreRules: 'node_modules/' } }, scope, new AbortController().signal, request,
+  { ...capable, fileAccessVersion: '1.8.0' }), /Gitignore/);
+});

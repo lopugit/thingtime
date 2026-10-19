@@ -384,6 +384,17 @@ and `file-sync-foreground.integration.mts` cover stale choices and receipt recov
 
 ## Retained file history
 
+Device sync ignore rules use `fileSync/syncIgnore.ts` and the shared
+`syncIgnore.fixtures.json` Git oracle corpus. `SyncIgnoreRulesEditor` exposes
+editable Builder blocks, dependency-folder defaults and a path tester inside
+`MobileSyncConnections`. Nonempty rules require configuration version 2,
+`api.things` 1.38 and native file access 1.9; older clients refuse the policy.
+Apple's `MobileFolderIgnoreRules` prunes matching entries before descent or
+hashing. Planner/checkpoint journals preserve ignored baseline entries so a new
+exclusion cannot become a deletion. `syncIgnorePolicy.test.ts` and
+`scripts/test-sync-ignore-ui.mjs` cover policy changes, save-only behavior and
+responsive Builder editing. See the sync ledger for installed acceptance.
+
 `components/Timeline/TimelineFileVersions.tsx` renders canonical `file-content`
 Timeline snapshots and uses `fileSync/fileVersions.ts` for content identity and
 restore validation. `useApi().v1.files` reads/commits through the existing files

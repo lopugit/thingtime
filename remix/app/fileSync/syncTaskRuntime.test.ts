@@ -2,9 +2,33 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createSyncTaskRuntime } from './syncTaskRuntime';
 import type { SyncScope } from './reconcile';
+import { SyncConditionsWait } from './foregroundSyncContext';
+import { NativeInventoryRetryWait } from './nativeInventory';
+import { SyncConnectionWait, isSyncConnectionFailure } from './syncConnectionWait';
 
 const scope: SyncScope = { origin: 'https://sync.example', ownerId: 'owner', dataPlane: 'home', deviceId: 'device', rootId: 'connection' };
 const gate = () => { let resolve!: () => void; const promise = new Promise<void>(done => { resolve = done; }); return { promise, resolve }; };
+
+test('temporary condition and reconnect waits remain resumable without an error status', async () => {
+	for (const error of [new SyncConditionsWait('offline'), new NativeInventoryRetryWait('Reconnecting'), new SyncConnectionWait('Connection lost')]) {
+		const tasks = createSyncTaskRuntime();
+		await tasks.start(scope, async () => { throw error; });
+		assert.equal(tasks.read()?.waiting, true);
+		assert.equal(tasks.read()?.status, 'paused');
+		assert.equal(tasks.read()?.active, false);
+		assert.equal(tasks.read()?.progress.message, error.message);
+		await tasks.start(scope, async (_signal, update) => update({ progress: { stage: 'complete', total: 1, confirmed: 1 } }));
+		assert.equal(tasks.read()?.waiting, undefined);
+		assert.equal(tasks.read()?.status, 'complete');
+	}
+});
+
+test('connection loss can retry without treating rejected permissions or changed data as a transport failure', () => {
+	for (const error of [new TypeError('Failed to fetch'), new TypeError('Load failed'), new Error('Network request failed'), new DOMException('Request expired', 'TimeoutError')])
+		assert.equal(isSyncConnectionFailure(error), true);
+	for (const error of [new Error('Cloud sync request failed (403)'), new Error('Source file changed.'), new TypeError('Invalid response'), new Error('Network access denied'), 'offline'])
+		assert.equal(isSyncConnectionFailure(error), false);
+});
 
 test('unmounting every observer does not stop execution; reopening sees current progress', async () => {
 	const tasks = createSyncTaskRuntime(), held = gate(); let signal!: AbortSignal;

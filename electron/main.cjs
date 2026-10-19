@@ -22,7 +22,7 @@ const { startRendererServer } = require('./lib/renderer-server.cjs');
 const { DesktopSettingsStore } = require('./lib/desktop-settings.cjs');
 const { LocalRuntime, attachQuitSignals } = require('./lib/local-runtime.cjs');
 const { SessionAuthority, remoteOrigin, contentOrigin } = require('./lib/session-authority.cjs');
-const { ensureWindowVisible } = require('./lib/window-visibility.cjs');
+const { ensureWindowVisible, loadWindow } = require('./lib/window-visibility.cjs');
 const { AuthorityTransition } = require('./lib/authority-transition.cjs');
 const authorityTransition = new AuthorityTransition();
 const {
@@ -107,7 +107,12 @@ app.on('before-quit', (event) => {
  event.preventDefault();
  if (desktopServicesClosing) return;
  desktopServicesClosing = true;
- void closeDesktopServices().finally(() => { desktopServicesClosed = true; app.quit(); });
+ void closeDesktopServices().finally(() => {
+  desktopServicesClosed = true;
+  // Electron may still be unwinding the prevented native Quit dispatch when
+  // cleanup resolves immediately. Retry on the next event-loop turn.
+  setImmediate(() => app.quit());
+ });
 });
 let desktopSettingsLastError = null;
 let endpointCompatibility = null;
@@ -1754,6 +1759,7 @@ function rendererPartition() {
  return sessionAuthority.partition(target, { local: Boolean(localRuntime?.runningEnabled), databaseIdentity: localRuntime?.runningEnabled ? localRuntime.runningDatabaseIdentity : '' });
 }
 function createWindow() {
+  if (desktopServicesClosing || desktopServicesClosed) return;
 	if (!appOrigin) throw new Error('The bundled Thingtime interface is not ready yet.');
 	activeContentOrigin = new URL(appOrigin).origin;
 
@@ -1820,9 +1826,12 @@ function createWindow() {
     shell.openExternal(url);
   });
 
-	mainWindow.loadURL(appOrigin).catch((error) => {
-		desktopSettingsLastError = error instanceof Error ? error.message : String(error);
-		showLoadUrlError(error);
+	void loadWindow(mainWindow, appOrigin, {
+		isClosing: () => desktopServicesClosing || desktopServicesClosed,
+		onError(error) {
+			desktopSettingsLastError = error instanceof Error ? error.message : String(error);
+			showLoadUrlError(error);
+		}
 	});
 }
 

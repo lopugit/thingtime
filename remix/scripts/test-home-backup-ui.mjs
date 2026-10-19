@@ -80,13 +80,15 @@ if (!process.env.TT_DESKTOP_SYNC_WORKER) {
 		const inspectLayout = async suffix => {
 			for (const [label, width, height] of [['desktop', 1440, 1000], ['mobile', 390, 844]]) {
 				await page.setViewportSize({ width, height }); await page.evaluate(() => scrollTo(0, 0));
+                await page.screenshot({ path: join(evidence, label + '-' + suffix + '-top.png') });
 				let steps = 0;
 				for (;;) {
 					const m = await page.evaluate(() => ({ w: innerWidth, sw: document.documentElement.scrollWidth, y: scrollY, h: innerHeight, total: document.documentElement.scrollHeight }));
 					assert.ok(m.sw <= m.w + 1, JSON.stringify(m)); if (m.y + m.h >= m.total - 1) break;
 					assert.ok(steps++ < 60); await page.evaluate(() => scrollBy(0, innerHeight * .8));
 				}
-				await page.screenshot({ path: join(evidence, label + '-' + suffix + '.png'), fullPage: true }); results.push({ label, state: suffix, steps });
+				await page.screenshot({ path: join(evidence, label + '-' + suffix + '-bottom.png') });
+                await page.screenshot({ path: join(evidence, label + '-' + suffix + '.png'), fullPage: true }); results.push({ label, state: suffix, steps });
 			}
 		};
 		await inspectLayout('home-preset');
@@ -118,8 +120,49 @@ if (!process.env.TT_DESKTOP_SYNC_WORKER) {
 		await inspectLayout('upload-complete-progress');
 		await progress.getByRole('button', { name: 'Collapse Documents', exact: true }).click();
 		await progress.getByText('Documents/Keep', { exact: true }).waitFor({ state: 'hidden' });
-		assert.deepEqual(errors, []);
-		const result = { ok: true, checks: ['preset-edits-selected-draft-only', 'backup-paused-no-delete-propagation', 'preserves-existing-exclusions', 'editable-form-fields', 'nested-title-help-button-builder-save-reload', 'paused-save-prevents-transfer', 'Mac-1.6-native-filtered-capture', 'excluded-subtrees-absent-and-prefix-sibling-retained', 'desktop-mobile-top-bottom-no-overflow', 'integrated-progress-complete-with-independent-three-folder-receipts', 'progress-expand-collapse-nested-folder'], results, observations: observed,
+        await page.goto(`http://127.0.0.1:${port}/?platform=desktop&home&diagnostic`);
+        await page.getByRole('button', { name: 'Upload now', exact: true }).click();
+        await page.getByText('Needs attention', { exact: true }).waitFor();
+        await page.getByText('Indexing stopped before completion.', { exact: true }).waitFor();
+        await page.getByText('Indexing stopped at “nested/link”: symbolic links are not supported. Review this item and your exclusions before retrying.', { exact: true }).first().waitFor();
+        assert.equal(await page.getByText('Ready to upload', { exact: true }).count(), 0);
+        assert.equal(await page.getByText('Structure indexed. Reading saved totals…', { exact: true }).count(), 0);
+        assert.deepEqual(await page.evaluate(() => JSON.parse(localStorage.getItem('tt:fixture:sync-transfer-folders') || '[]')), uploads);
+        await inspectLayout('indexing-failure');
+        await page.goto(`http://127.0.0.1:${port}/?platform=desktop&home&partial`);
+        await page.getByRole('button', { name: 'Retry transfer', exact: true }).click();
+        const coverage = page.getByRole('region', { name: 'Backup coverage', exact: true });
+        await coverage.getByText('Partial backup · 301 skipped observations. This is not a complete backup.', { exact: true }).waitFor();
+        assert.equal(await coverage.locator('[data-block-id="backup-skip-path"]').count(), 128);
+        assert.deepEqual(await page.evaluate(() => window.syncInspectionFixture.observations.skipPages), [128, 128, 45]);
+        await coverage.getByRole('button', { name: 'Next skipped items', exact: true }).click();
+        await coverage.getByText('Skipped observations 129–256 of 301', { exact: true }).waitFor();
+        await coverage.getByRole('button', { name: 'Next skipped items', exact: true }).click();
+        await coverage.getByText('Skipped observations 257–301 of 301', { exact: true }).waitFor();
+        assert.equal(await coverage.locator('[data-block-id="backup-skip-path"]').count(), 45);
+        assert.equal(await coverage.getByRole('button', { name: 'Next skipped items', exact: true }).isDisabled(), true);
+        await inspectLayout('partial-coverage-last-page');
+        const coverageLayout = page.locator('[data-settings-document="file-sync-backup-coverage"]');
+        await coverageLayout.getByRole('button', { name: 'Edit layout', exact: true }).click();
+        await coverage.locator('[data-block-id="backup-coverage-title"]').click();
+        for (const [id, text] of [['backup-skip-path', 'Skipped path: {item.path}'], ['backup-skip-reason', 'Reason: {item.reason}'], ['backup-skip-scope', 'Scope: {item.scope}'], ['backup-coverage-next', 'More skipped observations']]) {
+            await page.getByRole('combobox', { name: 'Select block', exact: true }).selectOption(id);
+            await page.getByRole('textbox', { name: 'Block text', exact: true }).fill(text);
+        }
+        await page.screenshot({ path: join(evidence, 'partial-coverage-builder.png'), fullPage: true });
+        await page.getByRole('button', { name: 'Close builder', exact: true }).click();
+        await coverageLayout.getByRole('button', { name: 'Save layout', exact: true }).click();
+        await coverageLayout.getByText('Unsaved layout', { exact: true }).waitFor({ state: 'hidden' });
+        await coverageLayout.getByRole('button', { name: 'Done editing layout', exact: true }).click();
+        await page.reload();
+        await coverage.getByText('Skipped path: Skipped/000-long-unreadable-entry', { exact: true }).waitFor();
+        await coverage.getByText('Reason: Unreadable', { exact: true }).first().waitFor();
+        await coverage.getByText('Scope: This entry was skipped', { exact: true }).first().waitFor();
+        await coverage.getByRole('button', { name: 'More skipped observations', exact: true }).click();
+        await coverage.getByText('Skipped observations 129–256 of 301', { exact: true }).waitFor();
+        await inspectLayout('partial-coverage-reloaded');
+        assert.deepEqual(errors, []);
+		const result = { ok: true, checks: ['preset-edits-selected-draft-only', 'backup-paused-no-delete-propagation', 'preserves-existing-exclusions', 'editable-form-fields', 'nested-title-help-button-builder-save-reload', 'paused-save-prevents-transfer', 'Mac-1.6-native-filtered-capture', 'excluded-subtrees-absent-and-prefix-sibling-retained', 'desktop-mobile-top-bottom-no-overflow', 'integrated-progress-complete-with-independent-three-folder-receipts', 'progress-expand-collapse-nested-folder', 'scoped-scan-error-shown-with-no-additional-uploads', 'failure-needs-attention-not-ready', 'failed-retry-does-not-reuse-old-index', 'partial-301-skips-in-bounded-durable-pages', 'nested-skip-path-reason-scope-and-next-control-builder-save-reload'], results, observations: observed,
 			coverage: 'Production preset/editor/Builder/transfer/progress UI with synthetic scoped HTTP/native grants, private Chromium profile and verified OS network isolation. Installed app, real home folder and real cloud upload unverified.' };
 		await writeFile(join(evidence, 'browser-result.json'), JSON.stringify(result, null, 2)); console.log(JSON.stringify(result));
 	} catch (error) {

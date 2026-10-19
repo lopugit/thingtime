@@ -38,6 +38,52 @@ public struct MobileFolderReader {
         public let version: String; public let size: Int64; public let offset: Int64; public let data: String
     }
     public typealias Failure = MobileFolderStore.Failure
+    /// A bounded diagnostic containing only a validated, grant-relative path.
+    public struct ScanFailure: Error, Encodable, Equatable, Sendable {
+        public enum Reason: String, Codable, Sendable {
+            case symlink, special, unreadable, changed, fifo, socket, device
+            case invalidPath = "invalid-path"
+            case duplicateIdentity = "duplicate-identity"
+            case pathCollision = "path-collision"
+        }
+        public let reason: Reason
+        public let path: String?
+        init(reason: Reason, path: String?) {
+            if let path, (try? MobileFolderReader.components(path)) != nil {
+                self.reason = reason; self.path = path
+            } else { self.reason = .invalidPath; self.path = nil }
+        }
+        enum CodingKeys: String, CodingKey { case reason, path }
+        public func encode(to encoder: Encoder) throws {
+            var c = encoder.container(keyedBy: CodingKeys.self)
+            try c.encode(reason, forKey: .reason)
+            if let path { try c.encode(path, forKey: .path) } else { try c.encodeNil(forKey: .path) }
+        }
+    }
+    private static func scanAt<T>(_ path: String, work: () throws -> T) throws -> T {
+        do { return try work() }
+        catch Failure.changed { throw ScanFailure(reason: .changed, path: path) }
+        catch Failure.unavailable { throw ScanFailure(reason: .unreadable, path: path) }
+        catch Failure.invalid { throw ScanFailure(reason: .invalidPath, path: nil) }
+    }
+    private static func scanOpen(_ parent: Int32, name: String, path: String, backup: Bool = false) throws -> Int32 {
+        var before = stat()
+        guard fstatat(parent, name, &before, AT_SYMLINK_NOFOLLOW) == 0 else {
+            throw ScanFailure(reason: errno == ENOENT ? .changed : .unreadable, path: path)
+        }
+        let type = before.st_mode & S_IFMT
+        guard type != S_IFLNK else { throw ScanFailure(reason: .symlink, path: path) }
+        guard type == S_IFREG || type == S_IFDIR else {
+            let reason: ScanFailure.Reason = backup ? (type == S_IFIFO ? .fifo : type == S_IFSOCK ? .socket : type == S_IFCHR || type == S_IFBLK ? .device : .special) : .special
+            throw ScanFailure(reason: reason, path: path)
+        }
+        let fd = openat(parent, name, O_RDONLY | O_NOFOLLOW | O_CLOEXEC | O_NONBLOCK)
+        guard fd >= 0 else { throw ScanFailure(reason: errno == ENOENT || errno == ELOOP ? .changed : .unreadable, path: path) }
+        do {
+            guard try stamp(info(fd)) == stamp(before) else { throw ScanFailure(reason: .changed, path: path) }
+            return fd
+        } catch { close(fd); throw error }
+    }
     public static let maximumEntries = 10_000
     public static let maximumReadBytes = 65_536
     static func components(_ path: String) throws -> [String] {
@@ -62,6 +108,15 @@ public struct MobileFolderReader {
         let key = path.precomposedStringWithCanonicalMapping.lowercased()
         return keys.contains { key == $0 || key.hasPrefix($0 + "/") }
     }
+    private static func ignored(_ parent: Int32, name: String, path: String, rules: MobileFolderIgnoreRules) -> Bool {
+        guard rules.text != nil else { return false }
+        var attributes = stat()
+        // Only metadata on this directory entry: never follow a link to decide
+        // whether a directory-only rule applies. Failed metadata stays visible
+        // to the ordinary scan diagnostics instead of becoming an ignore.
+        guard fstatat(parent, name, &attributes, AT_SYMLINK_NOFOLLOW) == 0 else { return false }
+        return rules.ignoresEntry(path, isDirectory: attributes.st_mode & S_IFMT == S_IFDIR)
+    }
     static func info(_ fd: Int32) throws -> stat {
         var result = stat(); guard fstat(fd, &result) == 0 else { throw Failure.unavailable }; return result
     }
@@ -76,7 +131,7 @@ public struct MobileFolderReader {
         }
         return fd
     }
-    static func visitNames(_ fd: Int32, visit: (String) throws -> Void) throws {
+    static func visitNames(_ fd: Int32, invalidName: () throws -> Void = { throw Failure.invalid }, visit: (String) throws -> Void) throws {
         let next = openat(fd, ".", O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
         guard next >= 0 else { throw Failure.unavailable }
         guard let directory = fdopendir(next) else { close(next); throw Failure.unavailable }; defer { closedir(directory) }
@@ -85,7 +140,9 @@ public struct MobileFolderReader {
             guard let ent = readdir(directory) else { if errno != 0 { throw Failure.unavailable }; break }
             guard let name = withUnsafePointer(to: &ent.pointee.d_name, { p in
                 p.withMemoryRebound(to: CChar.self, capacity: Int(ent.pointee.d_namlen) + 1) { String(validatingCString: $0) }
-            }) else { throw Failure.invalid }
+            }) else {
+                try invalidName(); continue
+            }
             if name == "." || name == ".." { continue }
             try visit(name)
         }
@@ -182,22 +239,25 @@ public struct MobileFolderReader {
             return value
         }
     }
-    public static func scan(bookmark: Data, excludedPaths: [String] = []) throws -> [Entry] {
-        let exclusions = try canonicalExclusions(excludedPaths)
+    public static func scan(bookmark: Data, excludedPaths: [String] = [], ignoreRules: String? = nil) throws -> [Entry] {
+        let exclusions = try canonicalExclusions(excludedPaths), rules = try MobileFolderIgnoreRules(ignoreRules)
         return try access(bookmark) { root in
-            let initial = try stamp(info(root)); var entries: [Entry] = [], aliases = Set<String>(), byteBudget = 0
+            let initial = try stamp(info(root)); var entries: [Entry] = [], aliases = Set<String>(), identities = Set<String>(), byteBudget = 0
             func walk(_ parent: Int32, prefix: String) throws {
                 let initialDirectory = try stamp(info(parent))
-                for name in try names(parent, including: { !excluded(prefix.isEmpty ? $0 : "\(prefix)/\($0)", keys: exclusions) }) {
-                    try Task.checkCancellation(); let path = prefix.isEmpty ? name : "\(prefix)/\(name)"; _ = try components(path)
-                    guard aliases.insert(path.precomposedStringWithCanonicalMapping.lowercased()).inserted else { throw Failure.invalid }
+                for name in try names(parent, including: { name in
+                    let path = prefix.isEmpty ? name : "\(prefix)/\(name)"
+                    return !excluded(path, keys: exclusions) && !ignored(parent, name: name, path: path, rules: rules)
+                }) {
+                    try Task.checkCancellation(); let path = prefix.isEmpty ? name : "\(prefix)/\(name)"; _ = try scanAt(path) { try components(path) }
+                    guard aliases.insert(path.precomposedStringWithCanonicalMapping.lowercased()).inserted else { throw ScanFailure(reason: .pathCollision, path: path) }
                     guard entries.count < maximumEntries else { throw Failure.limit }
-                    let fd = openat(parent, name, O_RDONLY | O_NOFOLLOW | O_CLOEXEC | O_NONBLOCK)
-                    guard fd >= 0 else { throw Failure.unavailable }; defer { close(fd) }
-                    let entry = try Self.entry(fd, path: path)
+                    let fd = try scanOpen(parent, name: name, path: path); defer { close(fd) }
+                    let entry = try scanAt(path) { try Self.entry(fd, path: path) }
+                    guard identities.insert(entry.id).inserted else { throw ScanFailure(reason: .duplicateIdentity, path: path) }
                     byteBudget += try JSONEncoder().encode(entry).count
                     guard byteBudget <= 4 * 1024 * 1024 else { throw Failure.limit }; entries.append(entry)
-                    if entry.kind == "folder" { try walk(fd, prefix: path) }
+                    if entry.kind == "folder" { try scanAt(path) { try walk(fd, prefix: path) } }
                 }
                 guard try stamp(info(parent)) == initialDirectory else { throw Failure.changed }
             }
@@ -205,8 +265,11 @@ public struct MobileFolderReader {
             // Recheck observed identities after traversal. A failure never becomes
             // an empty/complete scan. Executors still recheck each mutation stamp.
             for entry in entries {
-                try Task.checkCancellation(); let fd = try openPath(root, path: entry.path); defer { close(fd) }
-                guard try stamp(info(fd)) == entry.version else { throw Failure.changed }
+                try Task.checkCancellation()
+                try scanAt(entry.path) {
+                    let fd = try openPath(root, path: entry.path); defer { close(fd) }
+                    guard try stamp(info(fd)) == entry.version else { throw Failure.changed }
+                }
             }
             guard try stamp(info(root)) == initial else { throw Failure.changed }; return entries
         }
@@ -214,34 +277,102 @@ public struct MobileFolderReader {
 
     /// The sink owns uniqueness checks and bounded, disk-backed retention. No
     /// provisional rows become a complete capture until the second pass succeeds.
-    static func capture(bookmark: Data, excludedPaths: [String] = [], append: (Entry) throws -> Void,
+    static func capture(bookmark: Data, excludedPaths: [String] = [], ignoreRules: String? = nil, append: (Entry) throws -> Void,
                         replay: ((Entry) throws -> Void) throws -> Void) throws {
-        let exclusions = try canonicalExclusions(excludedPaths)
+        let exclusions = try canonicalExclusions(excludedPaths), rules = try MobileFolderIgnoreRules(ignoreRules)
         try access(bookmark) { root in
             let initial = try stamp(info(root))
             func walk(_ parent: Int32, prefix: String) throws {
                 let before = try stamp(info(parent))
                 try visitNames(parent) { name in
                     let path = prefix.isEmpty ? name : "\(prefix)/\(name)"
-                    guard !excluded(path, keys: exclusions) else { return }
-                    _ = try components(path)
-                    let fd = openat(parent, name, O_RDONLY | O_NOFOLLOW | O_CLOEXEC | O_NONBLOCK)
-                    guard fd >= 0 else { throw Failure.unavailable }; defer { close(fd) }
-                    let row = try entry(fd, path: path)
+                    guard !excluded(path, keys: exclusions), !ignored(parent, name: name, path: path, rules: rules) else { return }
+                    _ = try scanAt(path) { try components(path) }
+                    let fd = try scanOpen(parent, name: name, path: path); defer { close(fd) }
+                    let row = try scanAt(path) { try entry(fd, path: path) }
                     try append(row)
-                    if row.kind == "folder" { try walk(fd, prefix: path) }
+                    if row.kind == "folder" { try scanAt(path) { try walk(fd, prefix: path) } }
                 }
                 guard try stamp(info(parent)) == before else { throw Failure.changed }
             }
             try walk(root, prefix: "")
             try replay { row in
                 try Task.checkCancellation()
-                let fd = try openPath(root, path: row.path); defer { close(fd) }
-                guard try stamp(info(fd)) == row.version else { throw Failure.changed }
+                try scanAt(row.path) {
+                    let fd = try openPath(root, path: row.path); defer { close(fd) }
+                    guard try stamp(info(fd)) == row.version else { throw Failure.changed }
+                }
             }
             guard try stamp(info(root)) == initial else { throw Failure.changed }
         }
     }
+    public struct BackupGap: Codable, Equatable, Sendable {
+        public enum Scope: String, Codable, Sendable { case entry, subtree, root }
+        public let path: String?
+        public let reason: ScanFailure.Reason
+        public let scope: Scope
+        init(path: String?, reason: ScanFailure.Reason, scope: Scope) {
+            if scope == .root && path == nil && (reason == .changed || reason == .unreadable) {
+                self.path = nil; self.reason = reason; self.scope = .root
+            } else if scope != .root, let path, (try? MobileFolderReader.components(path)) != nil {
+                self.path = path; self.reason = reason; self.scope = scope
+            } else { self.path = nil; self.reason = .invalidPath; self.scope = .subtree }
+        }
+        enum CodingKeys: String, CodingKey { case path, reason, scope }
+        public func encode(to encoder: Encoder) throws {
+            var c = encoder.container(keyedBy: CodingKeys.self)
+            if let path { try c.encode(path, forKey: .path) } else { try c.encodeNil(forKey: .path) }
+            try c.encode(reason, forKey: .reason); try c.encode(scope, forKey: .scope)
+        }
+    }
+
+    /// Backup observations describe independently checked entries, never a
+    /// snapshot or deletion authority. The sink keeps collision checks on disk.
+    static func captureBackup(bookmark: Data, excludedPaths: [String] = [], ignoreRules: String? = nil,
+                              ignored: () throws -> Void = {}, append: (Entry) throws -> Bool, skip: (BackupGap) throws -> Void) throws {
+        let exclusions = try canonicalExclusions(excludedPaths), rules = try MobileFolderIgnoreRules(ignoreRules)
+        try access(bookmark) { root in
+            func gap(_ prefix: String, _ reason: ScanFailure.Reason) throws {
+                try skip(BackupGap(path: prefix.isEmpty ? nil : prefix, reason: reason, scope: prefix.isEmpty ? .root : .subtree))
+            }
+            func walk(_ parent: Int32, prefix: String) throws {
+                let before = try stamp(info(parent))
+                do {
+                    try visitNames(parent, invalidName: {
+                        try skip(BackupGap(path: nil, reason: .invalidPath, scope: .subtree))
+                    }) { name in
+                        try Task.checkCancellation()
+                        let path = prefix.isEmpty ? name : "\(prefix)/\(name)"
+                        guard !excluded(path, keys: exclusions) else { return }
+                        if Self.ignored(parent, name: name, path: path, rules: rules) { try ignored(); return }
+                        do {
+                            _ = try scanAt(path) { try components(path) }
+                            let fd = try scanOpen(parent, name: name, path: path, backup: true); defer { close(fd) }
+                            let row = try scanAt(path) { try entry(fd, path: path) }
+                            // An open descriptor may have been renamed out of this
+                            // grant. Re-resolve the current grant-relative name.
+                            try scanAt(path) {
+                                let current = try openPath(root, path: path); defer { close(current) }
+                                guard try stamp(info(current)) == row.version else { throw Failure.changed }
+                            }
+                            guard try append(row) else { return }
+                            if row.kind == "folder" {
+                                do { try walk(fd, prefix: path) }
+                                catch Failure.unavailable { try gap(path, .unreadable) }
+                                catch Failure.changed { try gap(path, .changed) }
+                            }
+                        } catch let failure as ScanFailure {
+                            try skip(BackupGap(path: failure.path, reason: failure.reason, scope: failure.reason == .unreadable || failure.reason == .changed ? .subtree : .entry))
+                        }
+                    }
+                } catch Failure.unavailable { try gap(prefix, .unreadable) }
+                if try stamp(info(parent)) != before { try gap(prefix, .changed) }
+            }
+            try walk(root, prefix: "")
+            try Task.checkCancellation()
+        }
+    }
+
     /// One pinned, coordinated range; the sink applies backpressure. Bytes remain
     /// provisional until this call and the host's final identity checks succeed.
     /// No path, descriptor or bookmark is exposed to the consumer.

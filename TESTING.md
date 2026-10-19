@@ -10271,6 +10271,14 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
 
 ## Editable file sync configuration
 
+- [ ] In the signed installed Mac app, test strict upload/two-way scans containing a symbolic link, hardlink or special file. Show the validated relative path and reason; never label an errored transfer ready or seal a partial strict capture. Verify targets outside the grant are never read and account/grant changes reject stale diagnostics.
+- [ ] With Mac file access 1.8 and backup mode with deletion propagation disabled, index supported entries and review every skipped observation in the paged Backup coverage panel. Confirm partial completion never claims a full backup, excluded subtrees are not opened, and earlier cloud copies/baseline facts survive unreadable root/subtree gaps.
+- [x] Regression: send the actual scoped `suspend` RPC during an active request while a backup waits to seal; the request cancels while the same background generation completes. Accept provisional supported-count retractions after path collisions while still pinning the final sealed page count.
+- [ ] Quit and reopen the installed Mac app after a completed window load; no destroyed-window cleanup alert should appear, and admitted sync work should resume. Automated regression destroys the window getter before cleanup and verifies all captured WebContents listeners are removed.
+- [ ] Leave the connection screen, close/reopen the Mac window, disconnect/reconnect the network and restart the renderer during native indexing. Reuse the admitted capture and confirmed operation receipts. A helper restart may restart one native generation automatically; repeated failures require attention. Explicit Stop must remain paused after reopening.
+- [ ] Edit nested coverage title, skip path/reason/scope and paging controls in Builder, save/reload, and check desktop/mobile top-to-bottom layout with multiple skip pages. Logout or an origin/root change must fence journal reads. Verify the skipped ledger is published only after its complete generation is durable.
+
+
 - [ ] Run `test:file-sync`, `test:schemas`, `test:api-capabilities` and
   `test:things`. The `file-sync` schema copies without mutating its system
   definition and accepts only its bounded typed fields; private native paths,
@@ -12423,3 +12431,35 @@ separate from deterministic discovery/lease tests.
 - Completed sync speed counters must say Complete, while explicitly paused runs say Paused; no-sample and unavailable telemetry remain explicit. Verify both directions after real confirmed operations.
 
 - Password AutoFill disconnect must fail closed when protected Keychain deletion returns locked, denied, missing-entitlement or unavailable; endpoint changes must wait for success and allow a retry. Run the injected-status Swift tests and Electron helper-failure tests without accessing user credentials.
+
+- [ ] File sync: after one completed transfer, force the next indexing attempt to fail. It must show Needs attention and Indexing stopped before completion, without reusing the old hierarchy or uploading additional entries.
+
+### Desktop shutdown with an unfinished page load
+
+- Quit while the bundled window is still loading and while closing its local
+  HTTP server rejects that load. No late URL error dialog may block process
+  exit. A Dock activation during cleanup must not recreate a blank window.
+- Repeat with already-idle services whose cleanup resolves immediately. The
+  second Quit request must run after Electron unwinds the first native dispatch.
+- A genuine load failure in a live window must still display its actionable
+  error. Reopen the installed signed app and verify the same account and saved
+  sync connection survive; do not treat a forced termination as clean Quit.
+
+### Device sync ignore rules
+
+- Compare the shared TypeScript and Swift corpus with `git check-ignore` for
+  comments, escapes, ordered negation, parent-directory exclusions, anchored
+  patterns, globstars, character classes and UTF-8 names. Native enumeration
+  must prune ignored folders before opening or hashing descendants.
+- Save custom rules, add defaults twice, remove a default and reload. Defaults
+  must preserve user rules, and Save must not begin a transfer. Test both File
+  and Folder paths, including exact exclusions that negation cannot override.
+- Stop an admitted job, change its policy and explicitly start again. Reuse the
+  existing account/grant fences; cancel the old capture with its original
+  policy. Ignored baseline children must not disappear or cause parent deletion.
+- Verify older clients refuse configuration version 2, missing server/native
+  capabilities prevent work, and capture/status/page/cancel replies retain the
+  exact policy. Test missing cached captures without weakening scope checks.
+- Edit nested Builder controls separately, save/reload, and inspect the entire
+  editor at desktop/mobile sizes. On the signed installed Mac verify saved
+  home exclusions and dependency defaults before starting the real upload.

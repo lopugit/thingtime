@@ -1,9 +1,10 @@
+import { createSyncIgnorePolicy } from './syncIgnore';
 import { JOURNAL_RETENTION_STORE, registerJournalMetadata, retireJournalMetadata } from './journalRetention';
 import { advanceSyncBaselinePair, PAGED_CHECKPOINT_HEADS, validatePagedCheckpointHead, type PagedCheckpointHead } from './checkpoint';
 import { inventoryJournal, inventoryIdentity, newInventoryHeader, INVENTORY_PAGE_BYTES, INVENTORY_PAGE_ENTRIES, INVENTORY_PIN_STORE,
 	INVENTORY_STORES, validateInventoryHeader, type InventoryHeader, type InventoryIdentity } from './inventoryJournal';
 import { journalScope, type JournalAccess } from './journalScope';
-import { PLAN_PIN_STORE, PLAN_STORES, validatePagedPlanHeader, type PagedPlanHeader } from './pagedPlanJournal';
+import { PLAN_PIN_STORE, PLAN_STORES, pagedPlanJournal, validatePagedPlanHeader, type PagedPlanHeader } from './pagedPlanJournal';
 import { PAGED_RUN_HEADS, PAGED_RUN_STORES, pagedRunJournal, parsePagedRunSpec, validatePagedRunHeader, type PagedRunHeader, type PagedRunSpec } from './pagedRunJournal';
 import { sameSyncContent, syncPathKey, validSyncPathKey, type SyncEntry } from './reconcile';
 
@@ -54,7 +55,7 @@ export function upgradePagedCheckpointJournal(db: IDBDatabase) {
  * holds observations and receipts; it never writes files or grants authority. */
 export function pagedCheckpointJournal(db: IDBDatabase, access: JournalAccess, keyRange?: typeof IDBKeyRange) {
 	const { scope, key, check, transaction, range } = journalScope(db, access, keyRange);
-	const inventory = inventoryJournal(db, access, keyRange), runs = pagedRunJournal(db, access, keyRange);
+	const inventory = inventoryJournal(db, access, keyRange), plans = pagedPlanJournal(db, access, keyRange), runs = pagedRunJournal(db, access, keyRange);
 	const validate = (h: Header, spec: PagedCheckpointSpec) => validatePagedCheckpointHeader(h, spec, key);
 	const get = <T>(tx: IDBTransaction, store: string, id: IDBValidKey, done: (value: T) => void, fail: (e: unknown) => void) => {
 		const request = tx.objectStore(store).get(id);
@@ -121,6 +122,11 @@ export function pagedCheckpointJournal(db: IDBDatabase, access: JournalAccess, k
 	};
 	const step = async (value: PagedCheckpointSpec): Promise<PagedCheckpointState> => {
 		const spec = specification(value);
+		const draft = await withHeader<Header>(spec, 'readonly', (h, _tx, done) => done(h));
+		if (draft.phase === 'collecting') {
+			const complete = await withHeader<boolean>(spec, 'readonly', (_h, _tx, done, _fail, captures) => done(captures.slice(0, 2).every(c => c.phase === 'complete')));
+			if (complete) await inventory.copyCoverage(draft.after.local, draft.baseline.local, spec.run.plan.policy);
+		}
 		const h = await withHeader<Header>(spec, 'readwrite', (h, tx, done, _fail, captures) => {
 			if (h.phase === 'collecting') {
 				if (captures.slice(0, 2).some(c => c.phase !== 'complete')) throw Error('Complete both post-run inventory captures before building the checkpoint.');
@@ -162,6 +168,14 @@ export function pagedCheckpointJournal(db: IDBDatabase, access: JournalAccess, k
 				if (page.total !== h.totals[4]) throw Error('Checkpoint receipt count changed.'); return page.rows;
 			});
 		check();
+		const candidatePaths = [...new Set([...pages.flat().map(entry => entry.path), ...effects.map(effect => effect.operation.mutation.path)])];
+		const unobserved = new Map<string, boolean>(), protectedParents = new Map<string, boolean>();
+		for (let offset = 0; offset < candidatePaths.length; offset += INVENTORY_PAGE_ENTRIES) {
+			const paths = candidatePaths.slice(offset, offset + INVENTORY_PAGE_ENTRIES), flags = await inventory.unobserved(h.after.local, paths);
+			const parents = await plans.protectedPaths(spec.run.plan, paths);
+			paths.forEach((path, i) => { unobserved.set(path, flags[i]); protectedParents.set(path, parents[i]); });
+		}
+		const ignore = createSyncIgnorePolicy(spec.run.plan.ignoreRules, spec.run.plan.excludedPaths);
 		const positions = structuredClone(h.positions), offsets = [0, 0, 0, 0, 0], output: [SyncEntry[], SyncEntry[]] = [[], []];
 		const lengths = [...pages.map(page => page.length), effects.length]; let paths = 0, size = 4096;
 		while (paths < INVENTORY_PAGE_ENTRIES) {
@@ -175,11 +189,12 @@ export function pagedCheckpointJournal(db: IDBDatabase, access: JournalAccess, k
 			const entries = heads.map((entry, i) => included[i] ? entry : null);
 			if (!sameSyncContent(entries[2], entries[3])) throw Error('Checkpoint baseline must contain matching content.');
 			let prior = entries[2] && entries[3] ? { path, local: entries[2], remote: entries[3] } : null;
-			if (included[4]) {
+			const unobservedLocal = unobserved.get(path) === true || ignore.ignored(path, (entries.find(Boolean)?.kind ?? (effect!.operation.mutation.kind === 'copy' ? effect!.operation.mutation.source.kind : effect!.operation.mutation.expected.kind)));
+			if (included[4] && !unobservedLocal) {
 				const m = effect!.operation.mutation, receipt = effect!.receipt;
 				prior = m.kind === 'trash' ? null : { path, local: m.from === 'local' ? m.source : receipt.entry!, remote: m.from === 'remote' ? m.source : receipt.entry! };
 			}
-			const next = advanceSyncBaselinePair(prior, entries[0], entries[1]);
+			const next = unobservedLocal || (prior && protectedParents.get(path)) ? prior : advanceSyncBaselinePair(prior, entries[0], entries[1]);
 			const bytes = new TextEncoder().encode(JSON.stringify([entries, included[4] ? effect : null, next])).length;
 			if (size + bytes > INVENTORY_PAGE_BYTES) { if (!paths) throw Error('Checkpoint row exceeds its byte bound.'); break; }
 			if (next) { output[0].push(next.local); output[1].push(next.remote); }

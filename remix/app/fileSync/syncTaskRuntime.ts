@@ -1,11 +1,14 @@
 import { syncScopeKey, type SyncScope } from './reconcile';
-import type { ForegroundSyncProgress } from './foregroundSync';
+import type { ForegroundSyncProgress, SyncInventoryDescriptor } from './foregroundSync';
 import type { createConflictReviewController } from './conflictReviewController';
 import type { SyncConflict, SyncConflictChoice } from './conflictResolution';
 import type { FolderHost } from './desktopFolders.client';
 import type { SyncProgressDescriptor } from './progressProjection';
 import { createTransferActivitySession, type TransferActivity } from './transferActivity';
 import type { TransferSpeedSeries } from './transferSpeed';
+import { SyncConditionsWait } from './foregroundSyncContext';
+import { NativeInventoryRetryWait } from './nativeInventory';
+import { SyncConnectionWait } from './syncConnectionWait';
 
 export type SyncTaskSnapshot = {
 	scope: SyncScope;
@@ -13,8 +16,10 @@ export type SyncTaskSnapshot = {
 	host?: FolderHost;
 	progress: ForegroundSyncProgress & { message?: string };
 	progressDescriptor?: SyncProgressDescriptor;
+	inventoryDescriptor?: SyncInventoryDescriptor;
 	transferSeries?: TransferSpeedSeries;
 	status?: 'running' | 'paused' | 'error' | 'complete';
+	waiting?: boolean;
 	pagedReview?: ReturnType<typeof createConflictReviewController>;
 	legacyReview?: { conflicts: SyncConflict[]; apply(choices: SyncConflictChoice[]): void; retain(): void; cancel(): void };
 };
@@ -46,14 +51,14 @@ export function createSyncTaskRuntime() {
 		// the user's durable Stop, so returning to the foreground can recover.
 		suspend(message: string) { if (active && !active.signal.aborted) { suspensionMessage = message; active.abort(); } },
 		invalidate() { active?.abort(); transferSession?.clear(); publish(null); },
-		async start(scope: SyncScope, run: (signal: AbortSignal, update: (patch: Partial<Pick<SyncTaskSnapshot, 'progress' | 'progressDescriptor' | 'pagedReview' | 'legacyReview' | 'host'>> & { transfer?: TransferActivity }) => void) => Promise<void>, onStop?: () => Promise<void>) {
+		async start(scope: SyncScope, run: (signal: AbortSignal, update: (patch: Partial<Pick<SyncTaskSnapshot, 'progress' | 'progressDescriptor' | 'inventoryDescriptor' | 'pagedReview' | 'legacyReview' | 'host'>> & { transfer?: TransferActivity }) => void) => Promise<void>, onStop?: () => Promise<void>) {
 			if (active) throw Error('A transfer is already running. Reopen its connection to review or stop it.');
 			syncScopeKey(scope);
 			const controller = new AbortController(); active = controller; saveStop = onStop;
 			suspensionMessage = undefined;
 			const transfers = createTransferActivitySession(); transferSession = transfers;
 			publish({ scope: structuredClone(scope), active: true, status: 'running', transferSeries: transfers.series, progress: { stage: 'checking', confirmed: 0, total: 0 } });
-			const update = (patch: Partial<Pick<SyncTaskSnapshot, 'progress' | 'progressDescriptor' | 'pagedReview' | 'legacyReview' | 'host'>> & { transfer?: TransferActivity }) => {
+			const update = (patch: Partial<Pick<SyncTaskSnapshot, 'progress' | 'progressDescriptor' | 'inventoryDescriptor' | 'pagedReview' | 'legacyReview' | 'host'>> & { transfer?: TransferActivity }) => {
 				controller.signal.throwIfAborted();
 				const { transfer, ...view } = patch;
 				if (view.progress) transfers.stage(view.progress.stage);
@@ -62,7 +67,8 @@ export function createSyncTaskRuntime() {
 			};
 			try { await run(controller.signal, update); }
 			catch (error) {
-				if (snapshot) publish({ ...snapshot, status: controller.signal.aborted ? 'paused' : 'error', progress: { ...snapshot.progress,
+				const waiting = !controller.signal.aborted && (error instanceof SyncConditionsWait || error instanceof NativeInventoryRetryWait || error instanceof SyncConnectionWait);
+				if (snapshot) publish({ ...snapshot, waiting, status: controller.signal.aborted || waiting ? 'paused' : 'error', progress: { ...snapshot.progress,
 					message: controller.signal.aborted ? suspensionMessage ?? 'Transfer stopped. Retry to recover saved work.' :
 						error instanceof Error ? error.message : 'Transfer interrupted. Retry to recover saved work.' } });
 			} finally {

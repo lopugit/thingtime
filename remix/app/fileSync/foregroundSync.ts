@@ -1,3 +1,5 @@
+import { createSyncIgnorePolicy } from './syncIgnore';
+import type { InventoryIdentity } from './inventoryJournal';
 import type { LocalInventoryPage } from './nativeInventory';
 import type { CloudInventoryPage } from './cloudInventoryPages';
 import type { PagedConflictReviewResult, PagedConflictReviewSession } from './pagedForegroundReview';
@@ -19,6 +21,8 @@ import { type SyncEntry, type SyncScope, type SyncBaseline } from './reconcile';
 import type { SyncProgressDescriptor } from './progressProjection';
 import type { TransferActivity } from './transferActivity';
 
+export type SyncInventoryDescriptor = { scope: SyncScope; inventory: InventoryIdentity };
+
 export type ForegroundSyncProgress = {
 	stage: 'checking' | 'scanning' | 'reviewing' | 'transferring' | 'verifying' | 'complete' | 'retaining' | 'retained';
 	confirmed: number;
@@ -29,6 +33,9 @@ export type ForegroundSyncProgress = {
 	/** Persisted discovered entries; an absent total stays indeterminate. */
 	indexed?: number;
 	indexTotal?: number;
+	skipped?: number;
+	coverage?: 'full' | 'partial';
+	consistency?: 'per-entry';
 };
 export type ForegroundSyncInput = {
 	currentScope(): SyncScope;
@@ -47,6 +54,8 @@ export type ForegroundSyncInput = {
 	progress(value: ForegroundSyncProgress): void;
 	/** Read-only journal references for the editable progress hierarchy. */
 	progressSession?(value: SyncProgressDescriptor): void;
+	/** Scope-bound access to the durable scan and its paged skip ledger. */
+	inventorySession?(value: SyncInventoryDescriptor): void;
 	transfer?(value: TransferActivity): void;
 	reviewConflicts?(conflicts: SyncConflict[]): Promise<SyncConflictReviewResult>;
 	/** Bounded, durable review adapter for editable Builder surfaces. */
@@ -63,6 +72,7 @@ export async function runForegroundCloudSync(
 	signal: AbortSignal
 ) {
 	const { configuration, approved, check, authorize, scan, readLocal, runtime, localTarget } = foregroundSyncContext(reviewed, scope, input, signal);
+	const ignore = createSyncIgnorePolicy(configuration.ignoreRules, configuration.excludedPaths);
 	input.progress({ stage: 'checking', confirmed: 0, total: 0 });
 	await authorize();
 	const checkpoint = await input.journal.checkpoint(scope);
@@ -142,7 +152,7 @@ export async function runForegroundCloudSync(
 		let observed = await scan();
 		// A completed run may have lost its checkpoint write. Fresh agreement can
 		// advance that baseline; divergent content retains the last common evidence.
-		baseline = advanceSyncBaseline(baseline, observed.local, observed.remote);
+		baseline = advanceSyncBaseline(baseline, observed.local, observed.remote, ignore.ignored);
 		const conditions = await authorize();
 		let planned = planConfiguredFileSync({
 			saved: reviewed,
@@ -258,7 +268,7 @@ export async function runForegroundCloudSync(
 	await authorize();
 	baseline = await recordedBaseline({ ...run, operations: done.operations });
 	const observed = await scan();
-	baseline = advanceSyncBaseline(baseline, observed.local, observed.remote);
+	baseline = advanceSyncBaseline(baseline, observed.local, observed.remote, ignore.ignored);
 	check();
 	await input.journal.complete({
 		version: 1,

@@ -1,6 +1,7 @@
+import { assertBackupCapturePolicy, parseNativeBackupCapture, parseNativeSkippedPage, type NativeBackupCapture, type NativeSkippedPage } from './nativeInventory';
 import { JOURNAL_RETENTION_STORE, registerJournalMetadata, forgetJournalMetadata } from './journalRetention';
 import { inventorySyncEntry, parseCloudInventoryNode, parseCloudInventoryRoot, type CloudInventoryNode, type CloudInventoryRoot } from './cloudInventory';
-import { sameSyncStamp, validSyncPath, sameSyncScope, syncPathKey, validSyncEntry, validSyncPathKey, type SyncEntry, type SyncScope } from './reconcile';
+import { sameSyncStamp, validSyncPath, sameSyncScope, syncPathKey, validSyncEntry, validSyncPathKey, type SyncEntry, type SyncScope, type SyncPolicy } from './reconcile';
 import { journalScope, type JournalAccess } from './journalScope';
 
 export const INVENTORY_PAGE_ENTRIES = 128;
@@ -10,7 +11,7 @@ export const INVENTORY_STORES = ['inventory-captures', 'inventory-pages', 'inven
 export type InventoryIdentity = { id: string; source: 'local' | 'remote'; generation: string };
 export type InventoryCursor = InventoryIdentity & { scope: SyncScope; after: string; read: number };
 export type InventoryProgress = { phase: 'collecting' | 'captured' | 'complete'; pages: number; entries: number; validatedEntries: number };
-export type InventoryHeader = InventoryIdentity & InventoryProgress & { scope: string; instance?: string; retired?: true; cloud?: CloudInventoryRoot; validatedThrough: string | null };
+export type InventoryHeader = InventoryIdentity & InventoryProgress & { scope: string; instance?: string; retired?: true; cloud?: CloudInventoryRoot; backupCapture?: NativeBackupCapture; skippedEntries?: number; derivedCoverage?: true; validatedThrough: string | null };
 type Row = { scope: string; capture: string; path: string; identity: string; entry: SyncEntry; cloud?: CloudInventoryNode };
 const encoder = new TextEncoder();
 const identifier = (value: unknown): value is string => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(value);
@@ -30,6 +31,12 @@ export const validateInventoryHeader = (header: InventoryHeader, expected: Inven
 		(header.validatedEntries === 0 ? header.validatedThrough !== null : !validSyncPathKey(header.validatedThrough)) ||
 		(header.phase === 'collecting' && header.validatedEntries !== 0) || (header.phase === 'complete' && header.validatedEntries !== header.entries))
 		throw Error('Inventory generation changed or is unavailable.');
+	if (header.backupCapture !== undefined) {
+		const c = parseNativeBackupCapture(header.backupCapture);
+		if (header.source !== 'local' || !Number.isSafeInteger(header.skippedEntries) || header.skippedEntries! < 0 || header.skippedEntries! > c.totalSkipped ||
+			(header.derivedCoverage !== undefined && header.derivedCoverage !== true) ||
+			(header.phase === 'complete' && header.skippedEntries !== c.totalSkipped)) throw Error('Backup coverage or skipped inventory changed.');
+	} else if (header.skippedEntries !== undefined || header.derivedCoverage !== undefined) throw Error('Backup coverage is missing.');
 	if (header.cloud !== undefined) {
 		if (header.source !== 'remote') throw Error('Cloud metadata requires a remote inventory.');
 		parseCloudInventoryRoot(header.cloud);
@@ -130,7 +137,112 @@ export function inventoryJournal(db: IDBDatabase, access: JournalAccess, keyRang
 			} catch (error) { fail(error); } };
 		});
 	};
+	const setCoverage = async (value: InventoryIdentity, capture: NativeBackupCapture, policy: SyncPolicy, derived = false) => {
+		assertBackupCapturePolicy(policy); const expected = parseNativeBackupCapture(capture);
+		return withHeader<void>(value, 'readwrite', (header, tx, done) => {
+			if (header.source !== 'local' || header.cloud) throw Error('Backup coverage requires a local capture.');
+			if (header.backupCapture) {
+				if (JSON.stringify(header.backupCapture) !== JSON.stringify(expected) || !!header.derivedCoverage !== derived) throw Error('Backup coverage changed.');
+				done(undefined); return;
+			}
+			if (header.phase !== 'collecting' || header.pages !== 0) throw Error('Backup coverage must precede inventory entries.');
+			tx.objectStore(INVENTORY_STORES[0]).put({ ...header, backupCapture: expected, skippedEntries: 0, ...(derived ? { derivedCoverage: true } : {}) }, [key, header.id]);
+			done(undefined);
+		});
+	};
+	const appendSkips = async (value: InventoryIdentity, page: NativeSkippedPage) => {
+		return withHeader<void>(value, 'readwrite', (header, tx, done, fail) => {
+			if (!header.backupCapture) throw Error('Backup coverage is missing.');
+			const parsed = parseNativeSkippedPage(page, header.backupCapture, page.offset), pages = tx.objectStore(INVENTORY_STORES[1]);
+			const id = [key, header.id, 'skip', parsed.offset], read = pages.get(id);
+			read.onsuccess = () => { try {
+				check();
+				if (read.result !== undefined) {
+					if (JSON.stringify(read.result) !== JSON.stringify(parsed)) throw Error('Skipped inventory retry changed.');
+					done(undefined); return;
+				}
+				if (header.phase !== 'collecting' || parsed.offset !== header.skippedEntries) throw Error('Skipped inventory is missing or out of order.');
+				pages.add(parsed, id);
+				const paths = new Map<string, 'entry' | 'subtree'>();
+				for (const skip of parsed.skipped) {
+					if (skip.path === null) { pages.put(true, [key, header.id, 'skip-root']); continue; }
+					const path = syncPathKey(skip.path);
+					paths.set(path, paths.get(path) === 'subtree' || skip.scope === 'subtree' ? 'subtree' : 'entry');
+				}
+				for (const [path, scope] of paths) {
+					const pathId = [key, header.id, 'skip-path', path], previous = pages.get(pathId);
+					previous.onsuccess = () => { try { check(); pages.put(previous.result === 'subtree' || scope === 'subtree' ? 'subtree' : 'entry', pathId); } catch (error) { fail(error); } };
+				}
+				tx.objectStore(INVENTORY_STORES[0]).put({ ...header, skippedEntries: parsed.offset + parsed.skipped.length }, [key, header.id]); done(undefined);
+			} catch (error) { fail(error); } };
+		});
+	};
+	const readSkips = async (value: InventoryIdentity, offset = 0): Promise<NativeSkippedPage | null> => {
+		return withHeader(value, 'readonly', (header, tx, done, fail) => {
+			if (!Number.isSafeInteger(offset) || offset < 0) throw Error('Invalid skipped inventory continuation.');
+			if (!header.backupCapture) { if (offset !== 0) throw Error('Invalid skipped inventory continuation.'); done(null); return; }
+			const read = tx.objectStore(INVENTORY_STORES[1]).get([key, header.id, 'skip', offset]);
+			read.onsuccess = () => { try {
+				check();
+				if (header.backupCapture!.totalSkipped === 0 && offset === 0) {
+					done({ capture: structuredClone(header.backupCapture!), offset: 0, skipped: [], nextOffset: null, totalSkipped: 0 }); return;
+				}
+				done(parseNativeSkippedPage(read.result, header.backupCapture!, offset));
+			} catch (error) { fail(error); } };
+		});
+	};
 	return {
+		setCoverage: (value: InventoryIdentity, capture: NativeBackupCapture, policy: SyncPolicy) => setCoverage(value, capture, policy), appendSkips, readSkips,
+		/** Keep just the current review capture; later cycles release the prior
+		 * pin atomically. The UI cache carries only its scope-bound identity. */
+		async retainLatest(value: InventoryIdentity): Promise<void> {
+			return withHeader(value, 'readwrite', (header, tx, done, fail) => {
+				const pins = tx.objectStore(INVENTORY_PIN_STORE), pointer = [key, 'latest-review'], read = pins.get(pointer);
+				read.onsuccess = () => { try {
+					check();
+					if (read.result !== undefined) {
+						const old = inventoryIdentity(read.result);
+						pins.delete([key, old.id, 'latest-review']);
+					}
+					pins.put(true, [key, header.id, 'latest-review']); pins.put(inventoryIdentity(header), pointer); done(undefined);
+				} catch (error) { fail(error); } };
+			});
+		},
+		/** Look up only these bounded paths and their ancestors, rather than
+		 * loading or rescanning the whole skip ledger per checkpoint page. */
+		async unobserved(value: InventoryIdentity, paths: string[]): Promise<boolean[]> {
+			if (!Array.isArray(paths) || paths.length > INVENTORY_PAGE_ENTRIES || paths.some(path => !validSyncPath(path))) throw Error('Invalid coverage path page.');
+			return withHeader(value, 'readonly', (header, tx, done, fail) => {
+				if (!header.backupCapture || header.backupCapture.coverage === 'full' || !paths.length) { done(paths.map(() => false)); return; }
+				if (header.skippedEntries !== header.backupCapture.totalSkipped) throw Error('Skipped inventory is incomplete.');
+				const store = tx.objectStore(INVENTORY_STORES[1]), root = store.get([key, header.id, 'skip-root']);
+				root.onsuccess = () => { try {
+					check(); if (root.result === true) { done(paths.map(() => true)); return; }
+					const results = paths.map(() => false); let remaining = paths.reduce((n, path) => n + path.split('/').length, 0);
+					paths.forEach((path, i) => {
+						const parts = path.split('/');
+						for (let n = 1; n <= parts.length; n++) {
+							const request = store.get([key, header.id, 'skip-path', syncPathKey(parts.slice(0, n).join('/'))]);
+							request.onsuccess = () => { try { check(); if (request.result === 'subtree' || (n === parts.length && request.result === 'entry')) results[i] = true;
+								if (--remaining === 0) done(results); } catch (error) { fail(error); } };
+						}
+					});
+				} catch (error) { fail(error); } };
+			});
+		},
+		/** Native source coverage stays attached even to a derived checkpoint.
+		 * Its totalEntries describes that source, not the derived baseline count. */
+		coverage: (value: InventoryIdentity) => withHeader<NativeBackupCapture | null>(value, 'readonly', (header, _tx, done) => done(header.backupCapture ? structuredClone(header.backupCapture) : null)),
+		async copyCoverage(from: InventoryIdentity, to: InventoryIdentity, policy: SyncPolicy) {
+			const c = await withHeader<NativeBackupCapture | null>(from, 'readonly', (header, _tx, done) => {
+				if (header.phase !== 'complete') throw Error('Source inventory coverage is incomplete.');
+				done(header.backupCapture ? structuredClone(header.backupCapture) : null);
+			});
+			if (!c) return;
+			await setCoverage(to, c, policy, true);
+			let offset = 0;
+			do { const page = (await readSkips(from, offset))!; await appendSkips(to, page); if (page.nextOffset === null) return; offset = page.nextOffset; } while (true);
+		},
 		begin: (value: InventoryIdentity) => begin(value),
 		beginCloud: (value: InventoryIdentity, root: CloudInventoryRoot) => begin(value, parseCloudInventoryRoot(root)),
 		append: (value: InventoryIdentity, page: { ordinal: number; entries: readonly SyncEntry[]; totalEntries?: number }) => append(value, page),
@@ -147,6 +259,8 @@ export function inventoryJournal(db: IDBDatabase, access: JournalAccess, keyRang
 			while (true) {
 				const result = await withHeader<InventoryProgress>(expected, 'readwrite', (header, tx, done, fail) => {
 					if (header.phase === 'collecting') throw Error('Inventory has no terminal page.');
+					if (header.backupCapture && (header.skippedEntries !== header.backupCapture.totalSkipped ||
+						(!header.derivedCoverage && header.entries !== header.backupCapture.totalEntries))) throw Error('Backup entries or skipped inventory are incomplete.');
 					if (header.phase === 'complete') { done(progress(header)); return; }
 					const entries = tx.objectStore(INVENTORY_STORES[2]), request = entries.openCursor(range(header.id, header.validatedThrough ?? undefined));
 					let count = header.validatedEntries, through = header.validatedThrough, processed = 0;

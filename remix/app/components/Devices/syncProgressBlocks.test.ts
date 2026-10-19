@@ -47,3 +47,10 @@ test('focused folder navigation renders its children and retains global indexed 
 	assert.match(display.indexDescription, /100 files and 13 folders/);
 	assert.equal(display.rows[0].path, 'Deep/level-09/file');
 });
+
+ test('a failed unsealed scan never claims that indexing is still running or complete', () => {
+    const display = syncProgressDisplay({}, { stage: 'scanning', confirmed: 0, total: 0, indexed: 128 }, 'error', false, 'Unreadable entry').sync;
+    assert.equal(display.indexDescription, 'Indexing stopped before completion. 128 entries observed.');
+    assert.match(display.uploadDescription, /^Error/);
+    assert.equal(display.current, 'Unreadable entry');
+ });

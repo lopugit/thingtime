@@ -177,6 +177,39 @@ if (!process.env.TT_DESKTOP_SYNC_WORKER) {
 		await page.getByRole('button', { name: 'Reopen Files screen', exact: true }).waitFor();
 		assert.equal((await readJobs())[0].state, 'paused');
 		assert.equal(await page.evaluate(() => window.syncInspectionFixture.observations.scans), 0);
+		await page.getByRole('button', { name: 'Reopen Files screen', exact: true }).click();
+		await page.getByRole('button', { name: 'Go offline', exact: true }).click();
+		await page.getByRole('button', { name: 'Upload now', exact: true }).click();
+		await page.waitForFunction(() => window.syncInspectionFixture.task()?.waiting === true);
+		assert.equal((await readJobs())[0].state, 'runnable');
+		assert.equal(await page.evaluate(() => window.syncInspectionFixture.observations.scans + window.syncInspectionFixture.observations.captures), 0);
+		await page.getByText('Waiting to continue automatically', { exact: true }).waitFor();
+		await page.getByRole('button', { name: 'Go online', exact: true }).click();
+		await page.clock.runFor(1000);
+		await page.getByText('Last transfer finished.', { exact: true }).waitFor();
+		assert.equal((await readJobs())[0].state, 'complete');
+		const resumedScans = await page.evaluate(() => window.syncInspectionFixture.observations.scans + window.syncInspectionFixture.observations.captures);
+		assert.ok(resumedScans > 0);
+		await page.evaluate(() => window.dispatchEvent(new Event('online'))); await page.clock.runFor(1000);
+		assert.equal(await page.evaluate(() => window.syncInspectionFixture.observations.scans + window.syncInspectionFixture.observations.captures), resumedScans);
+		// An accepted remote write with a lost transport reply keeps its admission.
+		const beforeTransportLoss = await page.evaluate(() => JSON.parse(localStorage.getItem('tt:fixture:sync-transfer-folders')));
+		await page.getByRole('button', { name: 'Add another local folder', exact: true }).click();
+		await page.getByRole('button', { name: 'Disconnect after accepted upload', exact: true }).click();
+		await page.getByRole('button', { name: 'Upload now', exact: true }).click();
+		await page.waitForFunction(() => window.syncInspectionFixture.task()?.waiting === true);
+		await page.getByText('Waiting to continue automatically', { exact: true }).waitFor();
+		const transportJob = (await readJobs())[0]; assert.equal(transportJob.state, 'runnable');
+		const acceptedReceipt = await page.evaluate(() => JSON.parse(localStorage.getItem('tt:fixture:sync-transfer-folders')));
+		assert.equal(acceptedReceipt.length, beforeTransportLoss.length + 1);
+		await page.getByRole('button', { name: 'Leave Files screen', exact: true }).click();
+		await page.getByRole('button', { name: 'Go online', exact: true }).click(); await page.clock.runFor(1000);
+		await page.waitForFunction(() => window.syncInspectionFixture.task()?.status === 'complete');
+		const recoveredTransportJob = (await readJobs())[0];
+		assert.equal(recoveredTransportJob.id, transportJob.id); assert.equal(recoveredTransportJob.state, 'complete');
+		assert.deepEqual(await page.evaluate(() => JSON.parse(localStorage.getItem('tt:fixture:sync-transfer-folders'))), acceptedReceipt);
+		await page.getByRole('button', { name: 'Reopen Files screen', exact: true }).click();
+		await page.getByText('Last transfer finished.', { exact: true }).waitFor();
 		await page.goto(`http://127.0.0.1:${port}/?platform=desktop&tasks&capture&inspect&inventory`);
 		await page.getByRole('button', { name: 'Upload now', exact: true }).click();
 		await page.getByRole('button', { name: 'Save versions and ignore', exact: true }).waitFor();
@@ -187,6 +220,7 @@ if (!process.env.TT_DESKTOP_SYNC_WORKER) {
 		await page.getByRole('button', { name: 'Reopen Files screen', exact: true }).click();
 		await page.getByText('1 of 2 choices ready', { exact: true }).waitFor();
 		assert.equal(await page.getByRole('region', { name: 'Review sync conflicts', exact: true }).getByRole('combobox').first().inputValue(), 'local');
+		await page.getByRole('region', { name: 'Backup coverage', exact: true }).waitFor({ state: 'hidden' });
 		for (const [label, width, height] of [['desktop', 1440, 1000], ['mobile', 390, 844]]) {
 			await page.setViewportSize({ width, height }); await page.evaluate(() => scrollTo(0, 0));
 			let steps = 0;
@@ -201,7 +235,7 @@ if (!process.env.TT_DESKTOP_SYNC_WORKER) {
 		await page.getByText('App transfer lease: idle', { exact: true }).waitFor();
 		await page.getByText('Captured versions: 2.', { exact: false }).waitFor();
 		assert.deepEqual(errors, []);
-		const result = { ok: true, checks: ['view-unmount-during-scan', 'complete-without-view', 'browser-restart-after-accepted-write-before-reply', 'same-job-and-operation-after-restart', 'durable-stop-does-not-auto-resume', 'other-account-origin-and-revoked-root-refused', 'reopen-progress', 'unchanged-no-replay', 'reattached-stop', 'saved-review-choice-after-reattach', 'retain-both-versions', 'automatic-cycle-picks-up-new-folder', 'no-early-cycle', 'idle-window-retention', 'scheduled-process-restart', 'idle-stop-survives-restart'], results,
+		const result = { ok: true, checks: ['view-unmount-during-scan', 'complete-without-view', 'browser-restart-after-accepted-write-before-reply', 'same-job-and-operation-after-restart', 'durable-stop-does-not-auto-resume', 'other-account-origin-and-revoked-root-refused', 'reopen-progress', 'unchanged-no-replay', 'reattached-stop', 'saved-review-choice-after-reattach', 'retain-both-versions', 'automatic-cycle-picks-up-new-folder', 'no-early-cycle', 'idle-window-retention', 'scheduled-process-restart', 'idle-stop-survives-restart', 'offline-admission-runnable-without-capture', 'online-resumes-once-without-replay', 'strict-capture-hides-backup-coverage', 'accepted-upload-transport-loss-remains-runnable', 'online-recovers-same-job-and-receipt-without-duplicate'], results,
 			coverage: 'Production UI, app-owned adapter and IndexedDB; synthetic HTTP/native grants, OS network isolation. Real persistent Chromium process restart verified; installed Mac Quit/relaunch and OS reboot remain unverified.' };
 		await writeFile(join(evidence, 'browser-result.json'), JSON.stringify(result, null, 2)); console.log(JSON.stringify(result));
 	} catch (error) {
