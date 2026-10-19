@@ -3396,6 +3396,17 @@ email whose link points at the attacker.
 
 ## Subspaces (`remix/app/components/Subspaces/`, `remix/app/api/utils/subspaces/`, `/api/v1/subspaces*`)
 
+- [x] 2026-10-19 isolated real API and desktop/390px acceptance: message send/read, saved views/comments, draft retention, live permission revocation, searchable moderator embeds and independent Builder control/repeated-title edits survive reload. See [PR 1045 evidence and remaining production gates](PRs/1045-subspace-messages-views-and-moderated-embeds.md).
+- [ ] Search embedded Things when the search API returns grouped post dictionaries as well as flat arrays; results remain selectable and malformed buckets do not crash the editor.
+
+- [ ] New and existing subspaces have exactly one assigned Messenger space and general channel; provisioning retries and concurrent opens never duplicate them. Run the registered backfill twice and verify all subspaces.
+- [ ] Toggle Posts/Messages, retain both unsent drafts, reload the selected mode, and confirm hidden messages do not advance read receipts. Check desktop and mobile to the bottom of both views.
+- [ ] Expand all comments shows loaded post comments and replies; turn it off, reload, navigate to another subspace and switch accounts to verify saved preference isolation without unbounded auto-pagination.
+- [ ] Pending, banned, removed and former members cannot read/send linked messages, see previews, or download message media; private changes and subspace deletion revoke every entry point.
+- [ ] Moderators add, move and remove accessible Things in the sidebar and above-feed regions; non-moderators are refused. Reload and verify order, pagination and placement between composer and first post. Revoke a referenced Thing and confirm it is unavailable without exposing hidden-link keys or granting access.
+- [ ] Select nested view/embed control labels independently in Builder, edit/save/reload, and confirm the real controls still act on the correct subspace.
+
+
 - [ ] Owner can rename a subspace to `thingtime`; posts and memberships retain their IDs, settings navigates to the new URL, and reload works. Non-owner renames return 403; reserved slugs return 400; taken/held slugs and concurrent competing renames return 409 without changing the original. The old URL is released.
 - [ ] `/s` lists subspaces newest-first with member counts; search narrows by
       slug/name; **Mine ⭐** shows only joined ones; **Create ➕** (or
