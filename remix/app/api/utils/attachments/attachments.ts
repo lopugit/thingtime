@@ -1,3 +1,6 @@
+import { activeAttachmentRetention, attachmentRetention } from './attachmentRetention';
+import { fingerprintFromVerifiedHead, attachmentContentVersion } from './contentFingerprint';
+import { contentPartPlan, MIN_CONTENT_PART_BYTES, MAX_CONTENT_PART_BYTES, type ContentFingerprint } from '../../../fileSync/contentFingerprint';
 import { ownedMediaDraftIds } from '../drafts/media';
 import { attachmentCountLimit } from '../../../schemas/attachmentLimits';
 import { createHash, randomUUID } from 'node:crypto';
@@ -54,8 +57,8 @@ import { findUserById, userPublicUploadsEnabled, userPrivateUploadsEnabled } fro
 
 export const ATTACHMENT_UPLOAD_TTL_MS = 24 * 60 * 60 * 1000;
 export const ATTACHMENT_READY_DRAFT_TTL_MS = 24 * 60 * 60 * 1000;
-export const ATTACHMENT_MIN_PART_BYTES = 8 * 1024 * 1024;
-export const ATTACHMENT_MAX_PART_BYTES = 5 * 1024 * 1024 * 1024;
+export const ATTACHMENT_MIN_PART_BYTES = MIN_CONTENT_PART_BYTES;
+export const ATTACHMENT_MAX_PART_BYTES = MAX_CONTENT_PART_BYTES;
 export const ATTACHMENT_MAX_OBJECT_BYTES = 5 * 1024 * 1024 * 1024 * 1024;
 export const MAX_PART_URLS_PER_REQUEST = 20;
 export const MAX_EXPIRED_ATTACHMENTS_PER_REAP = 1000;
@@ -84,6 +87,7 @@ type AttachmentCleanupOutcome = { status: 'deleted' | 'skipped' } | { status: 'd
 type AttachmentViewer = AttachmentAccessViewer;
 
 type AttachmentServiceDependencies = {
+	closeRetention: typeof attachmentRetention.closeForDeletion;
 	// Only the full-session password endpoint constructs this internal adapter.
 	passwordVault?: boolean;
   ownedMediaDraftIds: typeof ownedMediaDraftIds;
@@ -159,16 +163,8 @@ export const attachmentIdForRequest = (ownerId: string, requestId: string): stri
 	`att_${createHash('sha256').update('thingtime-attachment-request-v1\0').update(ownerId).update('\0').update(requestId).digest('hex')}`;
 
 export const attachmentPartPlan = (sizeBytes: number) => {
-	const oneMiB = 1024 * 1024;
-	const minimumForTenThousand = Math.ceil(sizeBytes / 10_000);
-	const partSizeBytes = Math.ceil(Math.max(ATTACHMENT_MIN_PART_BYTES, minimumForTenThousand) / oneMiB) * oneMiB;
-	if (partSizeBytes > ATTACHMENT_MAX_PART_BYTES) {
-		throw new AttachmentServiceError(400, 'Attachment is too large');
-	}
-	return {
-		partSizeBytes,
-		partCount: Math.ceil(sizeBytes / partSizeBytes)
-	};
+	try { return contentPartPlan(sizeBytes); }
+	catch (error) { throw new AttachmentServiceError(400, (error as Error).message); }
 };
 
 export const attachmentExpectedPartBytes = (objectSizeBytes: number, partNumber: number): number => {
@@ -269,6 +265,7 @@ const exactPartRequest = (value: unknown, partCount: number) => {
 };
 
 const defaultDependencies: AttachmentServiceDependencies = {
+	closeRetention: attachmentRetention.closeForDeletion,
   ownedMediaDraftIds,
 	store: attachmentStore,
 	getS3: getPrivateS3,
@@ -395,6 +392,14 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 			claimed = await dependencies.store.claimDeleting(doc.ownerId, doc.shareId, [...allowedStates], scope);
 		}
 		if (!claimed) return { status: 'skipped' };
+		if (claimed.attachmentRetainUntil !== undefined) {
+			claimed = await dependencies.closeRetention(claimed.ownerId, claimed.shareId);
+			if (!claimed) return { status: 'skipped' };
+			if (claimed.attachmentRetentionClosed !== true) {
+				await dependencies.store.deferDeletingRetry(claimed.ownerId, claimed.shareId, claimed.attachmentRetainUntil!);
+				return { status: 'deferred', retryAt: claimed.attachmentRetainUntil! };
+			}
+		}
 		// Linked attachments never had an S3 object: no MPU to abort, no HEAD to
 		// verify, no version to delete. Straight to the transactional row removal
 		// and exact quota refund — S3 stays untouched (and unrequired, so linked
@@ -1258,13 +1263,20 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 		viewer: AttachmentViewer,
 		idInput: unknown,
 		allowLinkedCopy = false,
-		verifyStoredObject = true
+		verifyStoredObject = true,
+		retainedVersion?: string
 	): Promise<AttachmentResult<{ doc: AttachmentDoc }>> => {
 		try {
 			const id = normalizeId(idInput);
 			if (!id) return fail(404, 'Attachment not found');
 			let doc = await dependencies.store.getById(id);
-			if (!doc || doc.attachmentState !== 'ready') return fail(404, 'Attachment not found');
+			if (!doc) return fail(404, 'Attachment not found');
+			const retained = retainedVersion !== undefined && viewer?.id === doc.ownerId && !viewer?.sharedRoot &&
+				/^[a-f0-9]{64}$/.test(retainedVersion) && activeAttachmentRetention(doc, dependencies.now()) &&
+				isAttachmentObjectVersionId(doc.objectVersionId) &&
+				attachmentContentVersion(doc.shareId, doc.objectKey, doc.objectVersionId!) === retainedVersion;
+			if ((retainedVersion !== undefined && !retained) || (doc.attachmentState !== 'ready' && !(retained && doc.attachmentState === 'deleting')))
+				return fail(404, 'Attachment not found');
 			if (doc.attachmentPurpose === 'password' && (!dependencies.passwordVault || viewer?.id !== doc.ownerId || !doc.targetId || !(await dependencies.canViewTarget(viewer, doc)))) return fail(404, 'Attachment not found');
 			// Pending analysis fails closed for everyone except the owner preview and
 			// an administrator reviewing evidence. Blocked attachments stay admin-only.
@@ -1285,7 +1297,7 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 				!doc.attachmentLinked && !doc.attachmentProfileSlot &&
 				doc.thingtime.length === 1 && doc.thingtime[0] === 'attachment' &&
 				viewer?.id === doc.ownerId;
-			if (!doc.targetId && !durableRecording && (!doc.attachmentExpiresAt ||
+			if (!retained && !doc.targetId && !durableRecording && (!doc.attachmentExpiresAt ||
 				!Number.isFinite(doc.attachmentExpiresAt.getTime()) || doc.attachmentExpiresAt.getTime() <= dependencies.now().getTime())) {
 				return fail(404, 'Attachment not found');
 			}
@@ -1293,8 +1305,8 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 			// selected data plane. Profile media is different: both its attachment and
 			// exact user-slot reference are protected home identity data, so the lean
 			// home-pinned helper remains authoritative under a custom post data plane.
-			if (dependencies.customMongoActive() && doc.attachmentPurpose !== 'profile') return fail(404, 'Attachment not found');
-			const allowed = viewer?.sharedRoot
+			if (dependencies.customMongoActive() && (retainedVersion !== undefined || doc.attachmentPurpose !== 'profile')) return fail(404, 'Attachment not found');
+			const allowed = retained ? true : viewer?.sharedRoot
 				? await dependencies.canViewSharedTarget(viewer, doc, viewer.sharedRoot)
 				: ['profile', 'message', 'emoji'].includes(doc.attachmentPurpose || '') && doc.targetId
 					? await dependencies.canViewTarget(viewer, doc)
@@ -1340,10 +1352,10 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 	};
 
 	const download = async (
-		viewer: AttachmentViewer, idInput: unknown, forceDownload: boolean
-	): Promise<AttachmentResult<{ url: string; expiresAt: string; cacheKey: string; size: number; contentType: string; disposition: string; image: boolean }>> => {
+		viewer: AttachmentViewer, idInput: unknown, forceDownload: boolean, retainedVersion?: string
+	): Promise<AttachmentResult<{ url: string; expiresAt: string; cacheKey: string; version: string; size: number; contentType: string; disposition: string; image: boolean }>> => {
 		try {
-			const readable = await readableStoredAttachment(viewer, idInput);
+			const readable = await readableStoredAttachment(viewer, idInput, false, true, retainedVersion);
 			if (readable.ok === false) return readable;
 			const { doc } = readable;
 			const s3 = dependencies.getS3();
@@ -1357,6 +1369,7 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 			return {
 				ok: true,
 				...signed,
+				version: attachmentContentVersion(doc.shareId, doc.objectKey, doc.objectVersionId!),
 				// Opaque and viewer-scoped: never expose an object key, bucket or VersionId.
 				cacheKey: createHash('sha256')
 					.update(JSON.stringify([doc.shareId, doc.objectVersionId, viewer?.id || 'anonymous', forceDownload, doc.crystal.contentType]))
@@ -1369,6 +1382,25 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 		} catch (error) {
 			return knownFailure(error) || unavailable('download', error);
 		}
+	};
+
+	// Exact-version integrity receipt through the same authorization as content.
+	const fingerprint = async (viewer: AttachmentViewer, idInput: unknown): Promise<AttachmentResult<{ id: string; version: string; size: number; fingerprint: ContentFingerprint }>> => {
+		try {
+			const result = await readableStoredAttachment(viewer, idInput);
+			if (result.ok === false) return result;
+			const { doc } = result;
+			const head = await verifiedHeadForDoc(dependencies.getS3(), doc, doc.objectVersionId);
+			const value = fingerprintFromVerifiedHead(head);
+			if (!value) return fail(409, 'Verified content fingerprint is unavailable; keep both files and retry or re-upload.');
+			// Recheck access and lifecycle after the storage request; a revoked or
+			// deleted attachment cannot yield a fresh comparison receipt.
+			const current = await readableStoredAttachment(viewer, idInput, false, false);
+			if (current.ok === false) return current;
+			if (current.doc.objectVersionId !== head.versionId || current.doc.objectKey !== doc.objectKey) return fail(409, 'Attachment changed during fingerprint verification');
+			const version = attachmentContentVersion(doc.shareId, doc.objectKey, head.versionId);
+			return { ok: true, id: doc.shareId, version, size: head.sizeBytes, fingerprint: value };
+		} catch (error) { return knownFailure(error) || unavailable('fingerprint', error); }
 	};
 
 	// The download gates without a signed URL: size and served type only. The
@@ -1529,6 +1561,7 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 		remove,
 		download,
 		inspectDownload,
+		fingerprint,
 		describeTransfer,
 		copy,
 		inspectForPost,
@@ -1551,6 +1584,7 @@ export const cancelAttachmentUpload = service.cancel;
 export const deleteAttachment = service.remove;
 export const getAttachmentDownload = service.download;
 export const inspectAttachmentDownload = service.inspectDownload;
+export const getAttachmentFingerprint = service.fingerprint;
 export const describeAttachmentTransfer = service.describeTransfer;
 export const copySharedAttachment = service.copy;
 export const inspectReadyAttachmentsForPost = service.inspectForPost;

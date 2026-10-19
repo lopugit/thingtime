@@ -629,6 +629,54 @@ persisted; every check is client-side.
 
 ## Remote brightness and files
 
+- [ ] Android selected folders: use only a synthetic test folder with the system
+  picker. Verify cancel, activity pause/resume/recreation, account/origin change,
+  expired pending selection, persisted restart readback, Check folder and Remove
+  access without file deletion. A second account reference must retain its OS
+  grant; failed storage must never release an existing reference. Unknown size,
+  virtual items, loading/partial providers, missing folders and changed bytes
+  with an unchanged timestamp must refuse a complete scan/read. Run Android JVM
+  tests and `android/scripts/test-mobile-devices.sh` with a private local fixture;
+  the optional `folderSelection=true` test still requires real picker selection.
+- [ ] Android folder-control fixture: open
+  `/scripts/mobile-folders.browser.html?platform=android` at phone and desktop
+  widths; choose/check/remove and fail a request. Retain prior selections and
+  avoid overflow. Check the installed signed-in app's native list result too;
+  synthetic browser responses cannot prove provider permissions.
+
+- [ ] iOS selected-folder access: choose a synthetic Files folder, cancel the
+  picker, relaunch and check the retained grant, then remove access without
+  deleting its contents. Switch account/origin or background during selection,
+  hashing and reads: stale callbacks never publish bytes or leave controls busy.
+  A missing/revoked provider, symlink, changed inode/version, colliding name or
+  scan limit must fail without a complete/empty inventory. Hash an 8 MiB + 17
+  byte fixture independently and verify its final partial read. Run native
+  `MobileFolderTests` and web `test:file-sync`.
+- [ ] Folder-control remount regression: open
+  `/scripts/mobile-folders.browser.html` in StrictMode at 1280px and 390px,
+  choose/check/remove synthetic grants, arm a failure and check again. Existing
+  selections remain visible, controls recover after remount/cancellation, long
+  names wrap and action groups fit without horizontal overflow. This fixture
+  proves UI behavior only; signed-in native picker acceptance is separate.
+
+- [ ] Native iOS pairing: select a compatible local origin, sign in, add this
+      device from Things and Settings, reload/relaunch and verify exactly one
+      iOS device. Interrupt prepare/complete and retry; change accounts/origins
+      during requests; background/foreground the app; revoke the credential and
+      reconnect explicitly. Keys/credentials must never appear in bridge replies.
+      Run `iOS/scripts/test-mobile-devices.sh` with a disposable local fixture;
+      keep simulator signing enabled so secure-storage failures are not bypassed.
+- [ ] Mobile device contract: pair signed synthetic iOS and Android descriptors,
+  list/read them through the owner API and reload Things. Their platform must
+  survive server and client projections without becoming macOS or acquiring
+  desktop controls. Changed proof fields and foreign owners must be refused.
+- [ ] Persistent sync (acceptance pending native adapters): edit both copies,
+  delete one while editing the other, interrupt after accepted publication,
+  restart with the same operation IDs and fill the journal disk. No file may
+  be overwritten/deleted from an incomplete scan or unconfirmed receipt. Change
+  account/origin/data plane during each async stage. Run `test:file-sync`; its
+  simulated transport tests do not replace real native/cloud byte checks.
+
 - [ ] A running macOS app with an empty or whitespace-only name must use its
   bundle identifier in the heartbeat. Blank identifiers are skipped before the
   64-app limit; the full state update must still reach the server.
@@ -657,6 +705,12 @@ persisted; every check is client-side.
   account's command IDs. Command history/events never contain chunk bytes.
   Repeat directory listing after temporary-upload cleanup: scanning on a
   duplicated descriptor must not consume the subsequent listing's cursor.
+- [ ] Session-lock policy checks and lock confirmation must use the narrow
+  session snapshot, without enumerating Bluetooth or other hardware. Run the
+  controller tests in an unsigned XCTest host: locked approved commands and
+  unlocked unapproved commands must be refused, desktop command replay must
+  send once, and explicit telemetry refresh must replay its retained response.
+  Hardware telemetry and privacy permissions require separate signed-app checks.
 - [ ] Run native `swift test`, `test:devices`, `test:things`, `test:attachments`,
   `test:api-capabilities`, a complete web build, and Electron tests. The
   opt-in `TT_BRIGHTNESS_HARDWARE_TEST=1 swift test --filter DisplayBrightnessTests`
@@ -10084,6 +10138,1914 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
 
 - Password vault routes reject request-scoped internal Action actors for every operation, even if the internal request carries an Authorization header. A full browser session is required directly; internal account authority cannot substitute for it.
 
+## Android native device pairing
+
+- [ ] Run `android/scripts/test-mobile-devices.sh` against a disposable local
+  account and a test emulator/device; inspect the installed Things card and
+  Check connection round-trip, then relaunch and confirm the same device ID.
+- [ ] Pause or navigate while prepare/complete is in flight; no stale bridge
+  reply may reach a new page/account. Retry the saved completion without
+  generating a duplicate device. Reject unsupported server capabilities.
+- [ ] Cross-origin frames/documents cannot invoke pairing; cookies and node
+  credentials never follow redirects. Responses and encrypted records are bounded.
+- [ ] Corrupt or transplant an encrypted record to another account/origin:
+  fail closed with no plaintext fallback. Verify no-backup storage and that
+  native secrets do not appear in bridge replies or logs.
+- [ ] Check Android system bars and keyboard at narrow and foldable widths.
+  Web controls must stay inside the native inset container; WebView padding
+  alone does not reliably move its rendered page away from status/navigation bars.
+- [ ] Revoke then explicitly reconnect; confirm a full account and selected
+  server are required. Pairing alone must not request storage/Photos permission
+  or advertise background sync/continuous presence.
+
+
+### File-sync verified content (2026-10-17)
+
+- [ ] Run `test:file-sync`, `test:attachments` and `test:api-capabilities`.
+  Composite multipart checksums must never compare equal to whole-file hashes;
+  reject wrong part boundaries, noncanonical digests, changed object versions,
+  source changes during hashing and account/root changes while reading.
+- [ ] Run the README's opt-in `file-sync-fingerprint.integration.mts` against
+  a disposable local upload-approved account. Check two real parts, identical
+  start/complete retries, matching cloud/local fingerprints, an independent
+  whole-file download hash, anonymous 404, deleted-file 404 and fixture cleanup.
+- [ ] Fingerprint requests obey the existing content ACL/moderation/expiry and
+  rate limits, remain private/no-store, reject image/cache variants and never
+  expose storage URLs/keys/versions. Missing checksums, 404, 409, offline and
+  oversized responses must preserve the current sync state, not imply deletion.
+- [ ] Both compiled manifests advertise `api.attachment-content` 1.13.0.
+  Full native transfers, zero-byte files, large-part streaming and production
+  object-storage acceptance remain separate items in `docs/mobile-file-sync.md`.
+
+
+### Stable cloud file revisions (2026-10-17)
+
+- [ ] Run `test:files`, `test:file-sync`, `test:attachments`, `test:things`,
+  `test:timeline`, `test:schemas` and `test:api-capabilities`.
+- [ ] Run `file-versions.integration.mts` with the README's disposable local
+  fixture. Replace real bytes while retaining the file ID, race two expected-head
+  commits (one winner), replay an old operation after later edits and look up its
+  original receipt. Different input under an old operation must fail.
+- [ ] Verify every successful edit in the canonical Timeline; a failed append
+  or accounting operation must roll back file publication and attachment binding.
+  Never accept a client draft as proof that a file mutation ran.
+- [ ] Live files list once; retained byte attachments and Trash stay out of the
+  normal owner library. Move into a folder, reject a pre-move revision, delete
+  the folder and verify reparenting/history without losing file content.
+- [ ] Trash and restore through guarded commits, including an older attachment;
+  independently hash both versions. Generic hard deletion and bound attachment
+  cleanup must fail. Retained bytes stay charged. Verify anonymous/foreign
+  refusal, blocked/linked/expired/bound upload rejection and home-plane fencing.
+- [ ] Built manifests expose files 1.0.0, things 1.34.0 and bulk 1.6.0. Native
+  background transfers and the version/conflict/retention UI remain in the full
+  sync acceptance ledger; this backend acceptance does not substitute for them.
+
+### Cloud sync transport and interrupted execution
+
+- [ ] Run `test:file-sync`: close/reopen IndexedDB after an accepted commit loses
+  its response; resume with the same pinned folder/file identity and confirm that
+  no source is opened and no bytes are uploaded again.
+- [ ] Interrupt before publication after upload completion; retry reuses the
+  ready upload. Reject changed immutable journal destinations, stale revisions,
+  foreign receipts, mismatched bytes, oversized responses and unsupported APIs.
+- [ ] Switch account/root/origin during a request. Stop before further writes;
+  verify expected-actor/data-plane headers against the real API. Signed object
+  PUTs must omit cookies, account credentials and referrers.
+- [ ] Run the opt-in `scripts/file-sync-cloud.integration.mts` with a disposable
+  localhost account: real multipart interruption/restart, lost accepted commit,
+  stable replacement, independent hashes of retained versions and executor Trash.
+  Remove temporary test admin access and restart; verify the account is non-admin.
+
+
+### Paged inventory storage (2026-10-18)
+
+- [x] `inventoryJournal.test.ts`: ingest 100,000 distinct paths in bounded pages,
+  reopen during ingestion and after sealing, then compare every ordered path.
+  A partial capture remains unreadable and preserves the prior complete capture.
+- [x] Reject missing/reordered pages, altered retries/generations, duplicate IDs,
+  case/Unicode collisions and missing/file/aliased parents, including invalid
+  ancestry after a committed validation page. Retrying cannot publish a prefix.
+- [x] Cancel validation after one page, reopen and resume from its durable cursor.
+  Check every account/origin/data-plane/root/device boundary, concurrent exact
+  retries, scoped discard and migration of existing version-2 runs/checkpoints.
+- [ ] Exercise the real browser IndexedDB and installed Mac/iOS adapters with
+  paged source generations and the integrated planner. Native/cloud scanning,
+  paged run/checkpoint execution, million-path and throughput acceptance remain
+  open; the current live sync limit is still 10,000 combined paths.
+
+## Editable file sync configuration
+
+- [ ] Run `test:file-sync`, `test:schemas`, `test:api-capabilities` and
+  `test:things`. The `file-sync` schema copies without mutating its system
+  definition and accepts only its bounded typed fields; private native paths,
+  URIs and credentials never enter the authored configuration.
+- [ ] Run README's `file-sync-configuration.integration.mts` on a disposable
+  loopback account. Verify private create/list/reload, all policy choices,
+  invalid path refusal, stale-edit 409, normal cleanup and logout. Confirm the
+  runtime reads the actual public `author.id` projection, rejecting other owners
+  and shared audiences. View all eleven fields in `/docs/schemas#schema-file-sync`.
+- [ ] After a saved configuration changes direction, destination, exclusions,
+  revision, owner, origin, data plane or device, old local approval must not
+  authorize a new plan. Paused/offline/unknown-network/unknown-charging conditions
+  must not produce mutations. Stored configuration alone grants no access.
+- [ ] Exclude a child, then delete its parent on the other replica. Keep the
+  excluded child and its ancestor folder; allowed siblings may still sync.
+  Apply exclusions to both inventories and baseline, and reject incomplete,
+  case/Unicode-colliding or missing-ancestor scans before filtering. This
+  regression prevents exclusions from turning protected descendants into
+  apparent empty-folder deletions.
+- [ ] Native approval persistence and policy rechecks during
+  actual native transfers remain separate acceptance in `docs/mobile-file-sync.md`.
+
+
+## Mobile sync connection editor
+
+- [x] In an installed iOS WebKit app, start a real foreground transfer after
+  native approval. Inventory and byte requests must retain the Window receiver
+  for `fetch`; copying the function into a transport must not cause an illegal
+  invocation. The editor browser fixture rejects an unrelated fetch receiver.
+
+- [ ] Open `scripts/mobile-sync-editor.browser.html` in the local dev browser.
+  Exercise the real editor/useApi with synthetic native and Things responses.
+  Save all settings, reload before saving, and verify complete draft restoration,
+  including whitespace-only names and unfinished invalid exclusion text.
+  Backup disables deletion propagation; empty/invalid destinations/exclusions
+  cannot dispatch. Repeat at desktop 1280px and mobile 390px/320px, including
+  long folder names, checkbox wrapping and lower save/error controls.
+- [ ] Lose the next accepted create/edit reply; readback confirms the same
+  connection without a duplicate write. Go offline before saving, reload, and
+  retry the fixed pending ID/payload. Retry never silently edits an uncertain
+  payload. The real-API configuration integration covers both accepted reply
+  losses through the same save helper, exact write counts and stale edits.
+- [ ] Change the saved version elsewhere before saving. Preserve the full local
+  draft, inspect saved settings without discarding it, then explicitly replace
+  the draft with a freshly read saved version. Do not silently overwrite.
+- [ ] Remove native access during editing: keep the saved connection and mark
+  missing access. If no mutation was dispatched on the first attempt, the draft
+  stays editable. Do not unlock a previously uncertain write on a failed grant
+  check. A confirmed existing save can be read back without restoring the grant.
+- [ ] Quota/disabled draft storage blocks HTTP dispatch. Another tab replacing
+  the draft disables further edits until reload. Account/origin/device/data-plane
+  changes cannot retarget a save; requests carry both guards and stale async
+  completions are fenced, including React StrictMode remounts.
+- [ ] Check paginated private cloud folders/connections, excluded invalid/shared
+  connections, cached first paint and missing-grant labels in signed-in native
+  apps. The synthetic fixture is not proof of real picker/background transfers.
+
+- [ ] In transport fixtures, classify storage requests by parsed exact origin,
+  never a URL prefix that would accept a lookalike host. CodeQL flagged the old
+  test-only prefix check; production transport authorization is separate.
+
+
+### Complete cloud folder inventory (2026-10-17)
+
+- [ ] With a disposable local account, run `test:files`, `test:file-sync` and
+  `scripts/file-versions.integration.mts`. Read a private root containing nested
+  folders, a stable file and an ordinary note: return all folders and the exact
+  live file revision/fingerprint, exclude the note and trashed files, and allow
+  an explicitly complete empty subtree. Remove fixtures via normal APIs.
+- [ ] Concurrent metadata edits between breadth reads must not mix versions in
+  one snapshot. One query per breadth level must serve sibling folders; reject
+  missing/cyclic ancestors, foreign/shared/namespaced descendants, malformed
+  metadata, traversal and case/Unicode aliases without a partial result.
+- [ ] Entry, depth, byte and total time limits must fail the whole scan, close
+  cursors and preserve the worker's prior complete baseline. The total budget
+  must also cover transaction retries. Anonymous, duplicate/mixed selectors
+  and custom-storage requests must not disclose a tree.
+- [ ] Change owner, origin, root, device or data plane during capability checks,
+  HTTP or body streaming: cancel/refuse the observation. Abort and oversized or
+  malformed replies must never become an empty successful scan. A successful
+  inventory alone must not authorize a later write.
+
+
+### Recoverable nested cloud uploads (2026-10-17)
+
+- [ ] Run `test:files`, `test:file-sync` and the opt-in
+  `scripts/file-sync-cloud.integration.mts` with the disposable local fixture.
+  Lose the accepted parent-creation response, reopen the durable journal, then
+  interrupt a multipart upload and lose its final commit reply. Resuming must
+  create exactly one nested tree and preserve both independently hashed byte
+  versions without rereading bytes after a confirmed commit.
+- [ ] Race identical folder-create operations: return the same immutable receipt
+  and charge/create once. Race different IDs using case/Unicode-equivalent names:
+  one wins and the other receives 409. Reject occupied IDs, changed replay input,
+  private/namespace/ancestry violations and client-authored Timeline drafts.
+- [ ] Edit or delete a created folder via ordinary Things APIs: its original
+  receipt must remain immutable and replay must not recreate it. Children must
+  reauthorize the current destination before creation. Roll back on quota/history
+  failure or filename normalization; do not run effects from aborted attempts.
+- [ ] Verify new directories consume no file byte source, missing parent mappings
+  fail before dispatch and original parent IDs survive IDB reopen. Folder deletion
+  remains unsupported by this adapter and must not become a blind recursive
+  delete. Remove acceptance folders only through normal APIs and retain accounted
+  file versions in private Trash.
+
+
+### Foreground mobile upload recovery (2026-10-17)
+
+- [ ] In the synthetic mobile editor, choose an unpaused Backup connection.
+  Use cellular under Wi-Fi-only policy: Upload refuses before mutation. Restore
+  Wi-Fi, lose the next upload reply, reload and retry; the original folder is
+  recovered once. Hold the next scan, start, Stop, reload and Retry; progress
+  survives and the run completes. Verify controls at 1280, 390 and 320px.
+- [ ] Run `test:file-sync`: missing/malformed native policy signals and old
+  bridge versions cannot authorize transfers; v1 IDB upgrades preserve pending
+  work, stale/incomplete runs cannot complete a checkpoint, and changed reviewed
+  configuration stops effects. Interrupted scans must never become empty trees.
+- [ ] With the disposable local account/upload setup, run
+  `scripts/file-sync-foreground.integration.mts`. Lose an accepted file commit,
+  reopen the journal and recover without byte reupload. Fail the completion
+  checkpoint, edit local bytes, then recover the original common baseline from
+  immutable receipts and replace the same file without a false cloud conflict.
+  Independently hash the downloaded bytes; repeat without changes makes no PUT.
+  Restore temporary env settings/restart and retain accounted Trash versions.
+- [ ] Native acceptance remains separate: on iOS and Android verify paired
+  conditions, real selected-file upload, revoked grant, account switch,
+  background/foreground and device revocation. Do not infer native background or
+  continuous network enforcement from foreground/mock acceptance.
+
+
+### Android verified range reads (2026-10-17)
+
+- [ ] Scan an 8 MiB + 17 byte fixture and read every 64 KiB range through fresh
+  readers sharing scoped proofs: count exactly one file of provider bytes for
+  aligned ranges, and compare independent full hashes. Verify unaligned reads
+  spanning chunks. Same-size/same-timestamp changes must fail for touched chunks
+  and the full pre-publication verification, including a ready-upload retry.
+- [ ] Clear/evict proofs or change owner/origin/grant namespace: fall back to
+  full source verification. Cancellation and incomplete streams return no bytes.
+  Legacy clients must continue to get full-file checking by default.
+- [ ] Run Android debug/JVM/lint and the normal emulator suite. Separately run
+  optional `THINGTIME_FOLDER_UPLOAD_TEST=1` with only the documented synthetic
+  picker folder and disposable upload-approved local account. Verify the actual
+  Upload now control, cloud file identity and downloaded SHA-256; retain accounted
+  bytes in Trash and restore temporary admin env. Generated provider tests alone
+  do not prove this optional installed-app picker/upload path.
+
+
+### Bounded download ranges and staged publication (2026-10-17)
+
+- [ ] Run `test:attachments`, `test:api-capabilities` and `test:file-sync`.
+  Require attachment-content 1.14.0, exact HTTP 206/ETag/Content-Range and byte
+  count; reject duplicate/mixed selectors, oversized ranges, wrong versions,
+  truncated/oversized storage bodies and redirects. Reauthorize after reading:
+  revoked access or changed content must return no bytes.
+- [ ] Run the foreground integration script with `--large-download` and the
+  disposable local fixture. Read 17 MiB + 17 bytes via bounded ranges, compare
+  independent whole-file SHA-256 and multipart fingerprints, deny anonymous and
+  wrong-version reads, and refuse the source after cloud replacement. Restore
+  temporary env/restart PM2; retain accounted versions in private Trash.
+- [ ] In executor tests, stage a nested download, lose its accepted publication
+  reply, reopen IndexedDB and recover without new byte reads/stages/publications.
+  Local destination races, source changes, invalid stage proofs and changed
+  account/origin must refuse publication. No native publisher must refuse the
+  port entirely. Native platform staging/CAS/relaunch acceptance remains separate
+  from these adapter tests; never enable download controls on fixture evidence.
+
+
+### iOS private download staging (2026-10-17)
+
+- [ ] Run `MobileSyncStagingTests`, `MobileFolderTests` and
+  `MobileDevicePairingTests` on a concrete simulator after XcodeGen. Receive
+  8 MiB + 17 bytes in bounded chunks, reopen, replay a lost acknowledgement and
+  verify the full multipart hash. Inject failure after byte flush but before the
+  checkpoint: resume at the acknowledged offset, discarding only the extra tail.
+- [ ] Reject changed immutable operations, foreign owner/origin, gaps, oversized
+  chunks, altered replay bytes, checksum mismatch, symlinks and corrupted finished
+  stages. Empty files/folders retain the shared JSON shape, including explicit
+  null `sha256`; completed stages are reverified before reuse.
+- [ ] Exercise actual WebKit capability injection and native handler dispatch
+  through an owned synthetic bookmark. Verify injected and ready-event file access
+  versions both use 1.1.1. Require owner checks before and after each
+  request and an untouched selected folder. This synthetic authentication test
+  must not be reported as cloud/native or OS-picker acceptance.
+- [ ] Run `test:file-sync`: missing/breaking staging capability, malformed native
+  progress/proofs, changed source and cancellation fail closed. Reopen after a lost
+  native chunk reply without writing acknowledged bytes again. Rebuild/install
+  the final simulator app, verify its binary and launch/render it. Native write
+  approval, publication CAS/retained conflicts and process-kill recovery still
+  require their own acceptance before enabling downloads.
+
+
+### iOS approved download publication (2026-10-17)
+
+- [x] Run selected native staging/folder/pairing tests: same-volume absent-file,
+  empty-directory and replacement publication; retained original bytes; reopen
+  after rename before receipt; immutable receipt after a later local edit;
+  expected-target mismatch, symlink escape and an uncoordinated final-check race.
+  A raced edit must remain retained and pending, never receive a success receipt.
+- [x] Native picker grants start read-only. Verify missing write approval refuses
+  actual WK bridge publication; explicit synthetic consent permits only the
+  matching scope/settings/grant. Settings/revision changes, reselect and removal
+  invalidate consent. These tests do not substitute for a real consent click.
+- [x] Run `test:file-sync`: negotiate publication capability separately, reject
+  forged receipts/approval bindings, recover lost native replies and failed
+  baseline checkpoint writes using the original operation, preserve later edits
+  and refuse download deletion propagation.
+- [ ] In the authenticated installed iOS app, choose a disposable Files folder,
+  save a download connection, cancel then approve the native dialog, download
+  nested real cloud bytes and compare independent hashes. Edit settings/reselect
+  the folder and require renewed consent. Check narrow and wide layouts.
+- [ ] Kill/relaunch after native rename but before receipt persistence; recover
+  without repeating swap. Edit before recovery and verify pending conflict plus
+  both retained versions. Test local/iCloud/third-party providers, offline,
+  protected storage locked, low disk space and physical devices. Unsupported
+  providers must preserve both sides. Add conflict resolution/restore acceptance
+  before describing these pending cases as automatic convergence.
+
+
+### Installed iOS download acceptance and real process exit (2026-10-17)
+
+- [x] In iPhone 17 Pro / iOS 26.5, pair through Things, choose only the empty
+  acceptance folder in Files, save an unpaused download connection with deletion
+  propagation off, cancel then approve the real native dialog. Cancellation
+  leaves the folder empty. Download nested real cloud files, independently verify
+  17-byte and 8 MiB + 17-byte SHA-256 values, repeat, then replace the cloud binary
+  with 8 MiB + 31 bytes. Verify the replacement hash, retained original hash/inode
+  and unchanged file inode/mtime. Relaunch retains completed progress.
+- [x] Deliberately exit the native test host after rename but before receipt;
+  recover in a different process for create, replace and edit-before-recovery.
+  The last case remains pending and retains both versions. This is process-exit
+  evidence, not reboot or physical storage-power-loss evidence.
+- [x] After the polling/cancellation fix, repeat native cancellation and retry
+  while periodic device status refresh runs. No "another device request" error
+  should interrupt the transfer; cancellation must not imply lost folder access.
+- [x] Edit the saved connection name/revision and require new native approval;
+  cancel, retry and approve in build 33, then complete the transfer.
+- [ ] Re-select the folder and require renewed native approval. Check wide
+  layouts and physical/iCloud/third-party providers separately.
+
+### Android private download staging (2026-10-17)
+
+- [x] Run JVM contract tests and `SyncStagingTest` on Android 15 / API 35:
+  canonical multipart bytes, short tail, empty files/folders, explicit null
+  digest fields, reopen/replay, incomplete progress, changed immutable bindings,
+  foreign scopes, bad paths, oversized/gapped/altered chunks, corrupt checkpoints
+  and modified completed stages. Verify private symlink/directory/FIFO refusal;
+  hard links must be refused either by Android's platform policy or staging.
+- [x] Hold a writer after fsync and cancel a waiting caller. Assert only one
+  native lock descriptor exists before/after cancellation and the writer can
+  complete. Repeated successful calls must not leak private file descriptors.
+- [x] Run `android/scripts/test-mobile-staging-process.sh`: kill the actual
+  test host after payload fsync before progress save, then after finished-stage
+  save. Fresh-process verification must reuse the original operation, discard
+  only the unacknowledged tail, preserve the completed proof, verify all
+  8 MiB + 17 bytes, and pass the production shared TypeScript codec.
+- [x] On the authenticated installed WebView, assert staging capability is
+  present and publication capability is absent. Send a full 64 KiB base64 chunk
+  envelope for an unregistered grant and require the native permission error,
+  without a private URI in the response or a transport timeout.
+- [ ] Through the installed Android app's real picker, verify stage dispatch
+  with an actual account/grant, changed account, revoked grant, navigation and
+  cancellation. No private URI/path may appear in responses. Private staging
+  must leave the selected folder untouched and must not enable Download now.
+- [ ] Verify Android 8.0 compatibility on a supported runtime, low-disk failure,
+  reboot and physical storage behavior. Implement and separately verify native
+  write consent, publication recovery/retained conflicts and provider writes
+  before claiming Android download acceptance.
+
+### Android native write approval (2026-10-17)
+
+- [x] Registry tests: same-URI re-selection during consent rejects the old
+  generation; changed owner/site/root/device/revision/hash cannot reuse approval.
+  Limit approvals to 32 per selection and replace revisions within one scope.
+- [x] Failed approval saves release only newly acquired write access. Removing
+  an approved account preserves another approved account; removing the final
+  approval releases write access while preserving remaining read references.
+  OS write revocation must invalidate a saved approval. Reacquiring the OS grant
+  for one connection must not reactivate other accounts or connections.
+- [x] Run `THINGTIME_FOLDER_APPROVAL_TEST=1` with the disposable picker fixture.
+  In the installed app, Cancel must save no approval, Continue to Files must
+  require the exact folder and OS write grant, identical retry must return
+  without another prompt, and a changed revision must require fresh consent.
+  Re-selection clears approval and unused OS write permission. Responses must
+  contain no private URI. Publication capability must remain absent.
+- [x] Run the optional directory-descriptor probe on Android 15 local storage:
+  directory opens, but relative child access fails `EACCES`. Do not infer atomic
+  rename support or scoped-storage bypass from a readable directory descriptor.
+- [ ] Verify wrong-folder and revoked-picker results, background/navigation
+  during consent, Android 8.0 runtime, physical/third-party providers and
+  process/reboot recovery before claiming full native write acceptance.
+
+### Android offline-folder publication backend (2026-10-17)
+
+- [x] Verify nested folders and an 8 MiB + 17-byte multipart file through real
+  native staging/publication; scan, ranged read and retry must preserve content
+  and the immutable receipt. Ancestor versions must change with descendants.
+- [x] Replace conditionally, verify retained original bytes/version, then replay
+  an older receipt after a later edit. Replay must not overwrite current bytes.
+- [x] Reject stale target versions, case aliases, missing parents, foreign
+  account/site/root, changed operations, forged stages and changed source bytes.
+  Corrupt or symlinked blobs must fail scans/reads and target preconditions.
+- [x] Race two creates and require one file / one receipt. Throw before commit
+  and after commit: recovery must distinguish rollback from accepted-response
+  loss, never expose a partial entry or delete an uncertain candidate.
+- [x] The native stage-copy callback receives a read-only descriptor; changing
+  its underlying source during copy must fail final stage verification.
+- [x] Run `android/scripts/test-mobile-managed-process.sh` on a disposable
+  Android 15 emulator: actual process kills before/after commit and after
+  replacement; verify from a fresh process and validate native receipts with
+  the production TypeScript codec. Keep the run-ID proof on failure.
+- [ ] Integrate native root removal and existing write approval, per-folder
+  capabilities and Download now; native creation/read-only Files are covered below. Verify real cloud bytes
+  in the installed app before claiming user-facing Android download delivery.
+- [ ] Verify API 26/physical devices, reboot/power-loss, low storage, retention,
+  Files edits, background scheduling and large-root behavior separately.
+
+
+### Android offline folders in Files (2026-10-17)
+
+- [x] Cancel native creation before confirming: no root/catalog is created.
+  Create a synthetic named offline folder, select it in the real system picker,
+  and verify **Check folder** reports its published file. Visually navigate
+  Files to the nested 8 MiB + 17-byte fixture and verify all bytes via the real
+  ContentResolver. The initial manual run timed out before selection; the
+  successful retry reused that empty root and cleaned its fixtures.
+- [x] An explicit canonical document path must open the correct starting folder
+  and breadcrumbs. Cross-root/ancestor requests and hostile IDs fail closed.
+  Stable file IDs survive replacement; existing readers keep original bytes.
+- [x] Refuse every writable descriptor mode, directories, cancelled opens,
+  corrupt/symlinked blobs and cross-account native root selection. Unknown
+  projection columns cannot disclose native paths or account identifiers.
+- [x] Installed provider requires `MANAGE_DOCUMENTS` plus explicit URI grants;
+  an ungranted shell UID cannot enumerate roots. Native exposure is required,
+  and v1 catalog migration keeps existing roots hidden with stable IDs.
+- [x] Removing Thingtime access keeps offline files. The acceptance fixture
+  separately removes only its synthetic root and blobs after verification.
+- [x] Refuse oversized child metadata without returning a partial listing;
+  provider queries must remain bounded even for a native catalog at the limit.
+- [x] Re-run all three process-loss publication cases after schema migration;
+  retained bytes and shared receipts remain recoverable.
+- [ ] Verify physical/API 26 devices, system reboot, low storage, cancellation
+  during creation, writable Files editing and cloud Download now separately.
+
+
+### Android foreground offline-folder downloads (2026-10-17)
+
+- [x] Per-folder capability is required by publication bridge 1.1. Generic SAF
+  roots, missing roots and incompatible versions cannot reach approval/staging.
+  Legacy iOS publication 1.0 remains compatible; Android cannot use that fallback.
+- [x] Native adapter rejects cross-account/root/device scopes, stale selection,
+  removed or OS-revoked read grants, changed configuration and failed approval
+  persistence. Revocation during copy leaves no committed entry or receipt.
+- [x] Approval permits private catalog publication without OS write permission;
+  Files descriptors remain read-only and removal preserves published bytes.
+- [x] Media worker must not intercept pinned sync ranges, fingerprint JSON,
+  expected-actor/data-plane or no-store requests. Preserve native API response
+  status, exact version and byte-range headers; retain normal media cache tests.
+- [x] Real cloud download through installed Android controls: cancel native
+  approval, retry with approval, independently hash text and nested 8 MiB + 17
+  bytes, then repeat without changing native entries. Use the private disposable
+  fixture/runbook in `android/README.md`.
+- [x] Visually inspect both downloaded files in Android Files, return to
+  Thingtime, remove access and verify files remain. Final API 35 suite: 46
+  executed checks, two opt-in process cases skipped (`OK (48 tests)`).
+- [ ] Verify real cloud replacement/reapproval, physical/API 26 devices, low
+  storage, system reboot, background scheduling and large-root performance.
+
+### Two-way foreground connections (2026-10-17)
+
+- [x] Mixed upload/download run survives lost cloud and native replies and
+  journal reload; confirmed operation identities and one publication per side
+  remain stable. A repeated converged run has zero mutations.
+- [x] Refuse two-way execution before scanning when native approval is absent
+  or deletion propagation is enabled. Conflicting initial bytes stop the whole
+  plan before cloud or native effects; preserve both copies.
+- [x] Installed Android: use the optional two-way runbook, cancel/allow native
+  consent, verify both transfer directions and independent replacements, repeat
+  without changing file identities/revisions, inspect Files and remove access.
+- [x] Installed Android: change saved settings through the revision-guarded
+  Things API, refresh and require renewed native consent. Cancel, compare the
+  complete cloud inventory and native identities/full hashes, then allow the
+  retry and require unchanged convergence. This models settings saved elsewhere,
+  not editing through the connection form.
+- [x] Installed iOS simulator: cancel/retry native consent, run mixed uploads
+  and downloads, independently replace each side, compare full byte hashes,
+  and repeat without changing cloud revisions or local inodes/mtimes. Local
+  source edits use disposable container files, not an external Files editor.
+- [ ] Verify iOS external Files edits, two-way settings reapproval, concurrent
+  same-file edits and interrupted two-way restart recovery.
+- [ ] Add Mac receivers, recoverable native trash, explicit conflict resolution,
+  native background workers, Photos, peer sync and large-folder acceptance.
+
+
+### Shared Apple receiver and macOS portability (2026-10-17)
+
+- [x] Run the same native folder/publication cases on macOS and iOS. Verify
+  bounded real bytes, grant isolation, symlink/version refusal, concurrent
+  receivers, replacement retention and failed-publication recovery.
+- [x] Preserve the pre-extraction owner JSON and Keychain account key; keep the
+  existing iOS bookmark format and v1 staging/grant records.
+- [x] Exercise actual process exits after rename and before receipt on both
+  platforms, followed by a fresh process: create, replacement and local edit
+  after exit. Preserve originals and refuse to overwrite that later edit.
+- [ ] Verify Mac installed picker/consent, account-bound desktop dispatch,
+  Keychain/sandbox/TCC behavior, real cloud two-way transfer and signed install.
+- [ ] Verify additional filesystems/providers, physical iOS, reboot and low
+  storage separately; process exit is not power-loss or background acceptance.
+
+
+### Mac folder host identity and device disconnect (2026-10-17)
+
+- [x] Use a paired identity to read real temporary bytes; reject other owners,
+  devices, origins, traversal and revoked/changed local credentials. Multiple
+  native credentials must select exactly one device; never use a cached identity.
+- [x] Stage/publish 65,537 bytes only after matching native approval; reject
+  cancellation/changed configuration, replay the receipt and preserve bytes when
+  the grant is removed. Generic and remotely leased dispatch must reject access.
+- [x] Cancel only the matching pending request/dialog. Modal approval timers must
+  run in AppKit's modal mode; actual AppKit UI cancellation remains unchecked.
+- [x] On the managed loopback stack, verify capability discovery and real signed
+  pairing; ordinary browser cookies cannot introspect device identity. Reject
+  caller-supplied identity IDs, anonymous/device-token disconnects, malformed
+  owner overrides and unknown devices. Disconnect twice; identity becomes 401,
+  old claim replay becomes 409 and device history/browser session remain.
+- [x] Run `test:devices`, `test:api-capabilities`, targeted lint, the focused Swift
+  suite and the Node release build. Full TypeScript remains at the existing 91
+  diagnostics. Broader NodeController tests abort under XCTest's missing Bluetooth
+  usage description; do not count that run as passing.
+- [ ] Expose through Electron only after current browser-account verification,
+  origin mapping, native capability/timeouts and network/power conditions exist.
+- [ ] Verify real Mac picker/consent, signed Keychain/TCC, interrupted cloud
+  transfers, sustained throughput/rate limits, release/install and mobile regressions.
+
+### Desktop folder bridge and proxy scope (2026-10-17)
+
+- [x] Real isolated Electron profile: main-frame IPC + cookie-session account
+  checks reject wrong accounts, proxy destinations and child frames. Public
+  capability discovery carries no cookies. Cookie changes cancel pending work.
+  Native dispatch is synthetic; do not count this as a signed Mac transfer.
+- [x] Shared renderer runtime: exact owner/device/origin/request replies, bounded
+  native source reads, cancellation before/after context negotiation, anonymous
+  signed uploads and canonical-to-bundled API mapping. Reject missing actor/home
+  headers, redirects, foreign destinations and wrong proxy response headers.
+- [x] Proxy regression: only the explicit desktop sync route/method family may
+  forward expected-actor requests. Ordinary web deployments and Browser Actions
+  remain denied. Changed destinations fail before consuming mutation bodies.
+- [x] Browser StrictMode fixture: desktop folder scan, configuration save,
+  foreground completion and unsaved draft reload; desktop and 390px controls have
+  no horizontal overflow. Existing mobile folder controls still work.
+- [ ] Signed installed Mac: real picker/consent, account switch while dialogs are
+  open, Keychain/TCC, upload/download/two-way bytes and interrupted receipts.
+- [x] Isolated full-process restart: run `verify:renderer-restart` after Electron
+  `build:web` and `verify:web`. Four separate processes preserve shared journal
+  IDs, confirmed progress, the completion baseline and pending editor drafts.
+  Synthetic receipt recovery must not replay mutations; other scopes stay empty.
+  An occupied saved port must refuse startup without contacting its server;
+  release it and verify exact recovery. No installed/native acceptance is implied.
+- [x] Stable-origin regression: malformed, oversized, symlink and non-file address
+  records remain untouched and fail startup. Competing first starts cannot
+  overwrite the record; failed bundle loading releases the owned socket; fresh
+  profiles have distinct addresses. Loading middleware serves only uncached 503s
+  until it is ready. Existing HTTP cache clearing preserves application storage.
+- [ ] Signed installed Desktop: verify the same journal/draft persistence with
+  real native/cloud transfers and app upgrades; preserve the profile/address
+  record together. Older random-port origins are not automatically migrated.
+- [ ] Measure native streaming throughput and identity-rate-limit behavior on
+  large files/roots; per-64-KiB bridge correctness tests do not establish scale.
+
+
+### Mac native/cloud transfer and rate-limit recovery (2026-10-17)
+
+- [x] Build `MacFolderSyncFixture` and run `scripts/mac-file-sync.integration.mts`
+  with a private disposable loopback account. Real Swift upload/download bytes,
+  signed pairing and live identity checks must pass. Synthetic picker/consent,
+  conditions and credential storage are explicitly outside installed acceptance.
+- [x] Lose accepted cloud and native publication replies. Restart the native
+  process, retain the same run/operation IDs, and recover without another PUT or
+  publication. Independently hash both destinations; repeat for stable revisions.
+- [x] Edit one local file and another cloud file. Both changes converge with
+  stable file IDs; old cloud byte versions remain readable and unchanged.
+- [x] Trigger the real 240/minute native identity limit. Honor one valid integer
+  Retry-After up to 60 seconds, then repeat the live check with the exact original
+  credential. The verified run observed one 47-second cooldown and completed.
+  Never retry 401/403, invalid/long delays or a second 429. Cancellation, local
+  unpairing or credential replacement during the wait stops before retry.
+- [x] Disconnect through the owner API; native scanning must fail with 401 while
+  selected bytes remain intact. Clean fixtures through canonical APIs and remove
+  the private test directory; keep accounted Trash/history.
+- [ ] Signed Electron/XPC, actual AppKit approval, Keychain/TCC, sustained native
+  streaming and large-folder throughput remain required. The measured 129 native
+  calls / 259 verification attempts for this small complete acceptance sequence
+  are evidence of remaining overhead, not a performance pass.
+
+
+### Sync authorization and HTTP deadlines (2026-10-17)
+
+- [x] Model a native cooldown longer than 30 seconds during foreground mutation
+  authorization. The regression must fail on the old early timer and pass with
+  authorization completed before the request deadline begins.
+- [x] Every upload mutation (start, part signing, PUT, completion, file commit)
+  reauthorizes before its fresh network deadline; GET lookups do not. Cancellation,
+  changed scope and refused approval must prevent the PUT and file commit.
+- [x] Run Mac acceptance with `--cooldown-before-upload`: the real preflight took
+  61,971 ms, including a 50-second server-directed cooldown, then sent the upload
+  with an unexpired signal. Mixed transfers, replacements, lost replies, native
+  restart, original IDs and revocation still passed with four PUTs/two publications.
+  The forced device-budget pressure is not a throughput benchmark.
+- [x] Run all shared sync tests (104 plus one module-mock transport check), targeted
+  lint and TypeScript. The latter remains the identical existing 91 diagnostics.
+
+## Mac file range stream (2026-10-17)
+
+- [x] Transfer a range crossing 8 MiB through the real native adapter and shared
+  cloud writer; verify full hashes, replacement, lost-reply recovery and original
+  operation IDs with `mac-file-sync.integration.mts --large-upload`.
+- [x] Check one live native verification before and after the range, 64 KiB
+  backpressured frames, and unchanged ordinary XPC bounds. Exercise the actual
+  nested sink/ack protocol through an anonymous XPC connection.
+- [x] Reject source modification, path replacement, cancellation during delivery,
+  sink refusal, malformed/missing/reordered/duplicate/oversized frames and wrong
+  final scope/range. Never treat provisional bytes as successful completion.
+- [x] Verify an 8 MiB-plus binary range through isolated Electron IPC and reject
+  account change before returning it. Native dispatch is a fixture here.
+- [ ] Verify the signed installed Mac app with real picker, Keychain and TCC.
+- [ ] Benchmark sustained upload/download and large roots; download staging and
+  mobile reads still use individual chunk requests. Android download range
+  acceptance is recorded below.
+
+## Mac download staging stream (2026-10-17)
+
+- [x] Negotiate Mac staging 1.1 and send 2 MiB cloud ranges as binary Electron
+  IPC; retain 64 KiB appends for older Mac, iOS and Android staging 1.0.
+- [x] Check bounded helper headers, sequential 64 KiB XPC pulls, truncated and
+  oversized sources, malformed offsets and account/main-frame boundaries.
+- [x] Recover an interrupted range and a payload-flushed/checkpoint-lost range
+  without advancing the durable offset; refuse replay with changed bytes.
+- [x] Verify late native identity refusal leaves only private recoverable state,
+  while publication still needs separate consent and final content verification.
+- [x] Run real APIs with `--large-upload --large-download`: lose a staging reply,
+  restart the native fixture, resume at the accepted offset, then verify hashes,
+  replacements, original IDs, retained versions and revocation without replay.
+- [ ] Verify signed installed XPC/Keychain/TCC, physical mobile streaming,
+  abrupt machine power loss, low storage and sustained large-root performance.
+
+### Android binary download range regression — 2026-10-17
+
+- [x] On the installed API 35 app, run the existing two-way acceptance with a
+  fresh cloud fixture. Verify staging 1.1, nonzero raw binary frames bounded to
+  64 KiB plus their 36-byte nonce, zero legacy append messages, exact cloud-byte
+  counts, final hashes, repeated convergence and native settings reapproval.
+- [x] Unit transport checks reject malformed/out-of-order frame requests and
+  premature completion; cancellation suspends the exact native request. Native
+  frame tests ignore stale/duplicate/unsolicited frames and wake on cancellation.
+- [x] Real private Android staging: a multi-frame range checkpoints once;
+  replay compares every frame; interrupted reads, short frames and loss after
+  fsync leave only the old durable offset, and resume truncates extra tails.
+- [ ] Verify binary-capable physical devices and an older WebView chunk fallback.
+
+### Sync conflict review — 2026-10-17
+
+- [x] Open a conflicting connection, choose versions across pages, and verify
+  Apply stays disabled until every conflict has a valid choice. One-way modes
+  cannot reverse direction; folder/type/excluded conflicts cannot become deletes.
+- [x] Change either version, identity, content, settings or account while review
+  is pending; applying must refuse before writes. Cancellation preserves both
+  copies, and Stop transfer removes the pending review and releases the root lock.
+- [x] Lose an accepted chosen replacement response, reopen the journal and retry:
+  retain the same operation/choice without another upload or prompt. Real cloud
+  acceptance independently hashes both retained versions and checks stable IDs.
+- [x] Check long filenames, pagination and muted grey preservation reassurance
+  at 390px and 1280px without overflow; missing-copy conflicts refer to existing
+  data rather than claiming both versions exist.
+- [x] Installed Android two-way conflicts: Cancel, keep cloud, keep device,
+  independently verify both sides' hashes and repeat convergence after each.
+- [ ] Verify installed iOS/Mac review and physical devices; folder conflict
+  resolution, keep-both rename, retained-version browsing and restore controls.
+
+### Retained cloud file versions — 2026-10-17
+
+- [x] File Things open home Timeline; malformed, foreign, draft and unsupported
+  snapshots do not offer file actions. Content IDs include byte length and
+  multipart framing rather than mislabeling the multipart hash as whole-file SHA256.
+- [x] Review restore shows the current name; Cancel sends no mutation. A concurrent
+  file change refuses the stale command. Review latest file requires fresh review.
+- [x] Lose an accepted reply, reopen the version and Retry: the same persisted
+  operation completes with one write. Verify account changes during a pending
+  read cannot reveal a restore review or enable a download.
+- [x] Long names and content IDs fit 390px and 1280px browser layouts without overflow.
+- [x] Real API acceptance: serialized restore replay, original/current byte hashes,
+  permission failures and canonical Timeline snapshots (`file-versions.integration.mts`).
+- [x] Installed Android History/export/restore acceptance (checkpoints below).
+- [ ] Installed iOS and Mac History/download/restore acceptance; local device
+  retained-version browsing and content-ID search across folders.
+
+### Installed file History and effect replay — 2026-10-17
+
+- [x] File revision cards show their recorded filename and remain discoverable
+  under the Files filter and filename search; malformed/unsupported/foreign
+  snapshots cannot invent file cards (`browserModel.test.ts`).
+- [x] Run `scripts/file-history.browser.html` under React StrictMode: Review
+  opens after effect replay; Cancel sends no write; lost reply plus reopen and
+  retry uses one operation; account change during a delayed read removes
+  download access and cannot reveal a late review.
+- [x] Run Android `THINGTIME_FILE_HISTORY_TEST=1` with a disposable local
+  account: real History filter, two retained versions, cancel without writes,
+  restore and both complete byte hashes. Verify the saved review screenshot.
+- [x] Native History export into Android Files (Save As acceptance below).
+- [ ] Installed iOS and Mac restore, local retained-version browsing and
+  cross-folder content-ID retrieval.
+
+### Android historical Save As — 2026-10-17
+
+- [x] With the installed debug app and disposable History fixture, cancel the
+  first Save As dialog; the UI confirms cancellation and no file is created.
+  Save both versions to Downloads under the same suggested name. Android adds
+  a suffix for the second file; independently check 128 bytes of value 11 and
+  257 bytes of value 22. Both cloud versions and restore remain available.
+- [ ] Cancel or change account while Save As pauses the activity; a late result
+  cannot resume the old export or satisfy a newer request. Backgrounding during
+  transfer stops it. Provider interruption must not show saved success.
+- [x] Native unit checks reject mismatched version/range headers, redirects,
+  truncated/extra/corrupt bytes and cancellation; multipart boundary streaming
+  and complete provider-byte verification pass.
+- [x] Shared bridge checks negotiate the feature, ignore foreign callbacks,
+  reject changed version receipts and abort the native request on cancellation.
+- [ ] Physical devices, API 26, low storage, remote document providers, process
+  termination during provider writes, and iOS/Mac native exports.
+- [x] Refresh/reorder unrelated cookies between export phases without cancelling
+  an unchanged session. Changed, missing or duplicate `tt_auth` credentials still
+  fail closed (`SessionCookieTest`); native save errors retain actionable guidance
+  in the shared History error display (`fileExport.client.test.ts`).
+
+
+### iOS retained file export — 2026-10-17
+
+- [x] Run AppleFileSync tests: bounded multipart ranges, damaged/short/oversized
+  reads, unsafe names and framing, existing-file/symlink collisions, cancellation
+  before publication and authorization loss after copying must preserve existing
+  files and remove only the unpublished candidate.
+- [x] Run FileExportBridgeTests plus the mobile bridge/device/destination tests:
+  export support is explicitly negotiated and only the exact auth cookie is
+  pinned; missing/duplicate/malformed credentials refuse.
+- [x] Rebuild/install on iOS 26.5 simulator, open real History, cancel the first
+  Files picker without writes, then save both retained versions to one folder.
+  Verify both exact byte arrays and collision naming independently.
+- [x] In the installed History screen, review/cancel restore without a revision
+  change, then restore the earlier version and verify both retained cloud files.
+- [ ] Repeat with a physical iPhone/iPad, external Files providers, low storage,
+  account change/revocation while a picker or copy is pending, and process kill.
+  Background export and native Mac History export remain separate coverage.
+
+
+### Android binary upload ranges (2026-10-17)
+
+- [x] Bound native ranges and frames; require exact request/offset/length/final
+  metadata. Reject stale source versions, unchanged-metadata content edits,
+  early completion and malformed acknowledgements. Ignore foreign frames.
+- [x] Check acknowledgement timeout, cancellation while waiting and proof-cache
+  eviction; preserve full pre-publication source verification.
+- [x] Negotiate access 1.4 only with WebView binary support; retain older-host
+  chunk transport and existing Android binary downloads.
+- [x] Real selected-folder upload through the installed API 35 app: independent
+  cloud SHA-256 matches 8,388,625 bytes; two ranges, 129 binary frames, zero legacy
+  multi-byte reads. Scope completion to the newly created connection and use
+  the shared current status text, so old completed cards cannot satisfy it.
+- [x] Final native runner: 49 executed checks, two opt-in restart cases skipped;
+  39 JVM tests, 127 shared checks, Android build/lint and targeted lint pass.
+  Both installed APK hashes match the built outputs and the app is relaunched.
+- [ ] Physical devices, API 26, background uploads, large provider-performance
+  runs, and iOS binary ranges remain separate acceptance.
+
+
+### iOS native cloud range staging (2026-10-17)
+
+- On iOS 17+, negotiate staging 1.2, select a disposable folder through Files,
+  approve downloads, and sync a nested 8 MiB + 17-byte file. Independently compare
+  complete local/cloud hashes; assert native `stage-download` ranges are at most
+  2 MiB and no base64 `stage-append` messages carry those bytes.
+- Lose a range acknowledgement, resume its original operation, and verify the
+  persisted offset prevents replay. Older staging 1.0 hosts still use the existing
+  path; a mismatched owner/origin/file revision fails before staging starts.
+- Refuse wrong attachment/version/range/length and changed or trashed cloud files.
+  Change the session through the native cookie store during work; verify active
+  transport is cancelled even without an observer notification. Unrelated cookie
+  changes must not interrupt transfers. Keep grant, foreground and navigation
+  checks active and require the normal final fingerprint before publication.
+- Run `NativeFileSessionTests`, `MobileFolderTests`, `MobileSyncStagingTests`,
+  `FileExportBridgeTests` in a signed simulator test host (Keychain requires it),
+  plus `test:file-sync` and explicit installed native-cloud acceptance. Recheck
+  History export consent/cancellation when changing the shared network transport.
+
+- Run interactive iOS transfer/History acceptance on a dedicated simulator when
+  another task uses the same bundle ID; distinguish an installation-terminated
+  test host from a product crash and preserve the interrupted fixture for cleanup.
+- Observe installed History export replies through a native test observer installed
+  at document start; a WebView/dev reload must not erase the acceptance counter.
+  Explicitly cancel in Files, save both byte versions without overwriting, cancel
+  restore, then restore and independently read both retained cloud attachments.
+
+### Retaining an alternate file version without publishing — 2026-10-17
+
+- [x] `POST /api/v1/files` with `kind=retained-version` stores an owned ready
+  upload in the existing file's Timeline. The live bytes, revision, filename,
+  folder and modification date stay unchanged; the Published head does not advance.
+- [x] Exact retained-operation replay/lookup survives later file edits without a
+  second upload/binding charge. A normal commit lookup cannot mistake retention
+  for publication. Mixed/duplicate/unknown selectors fail closed.
+- [x] Stale, renamed, moved, trashed or missing roots and foreign/blocked/expiring
+  uploads fail without binding bytes. Timeline failure rolls the binding and
+  accounting back. Client-authored effects cannot impersonate retained receipts.
+- [x] Real API/object-storage acceptance (`file-versions.integration.mts`) races
+  retention against publication, verifies the live winner, replays after later
+  edits, restores the alternate version and independently hashes all retained
+  bytes. Anonymous reads and direct deletion of retained attachments are refused.
+- [x] Retention effects appear under Timeline's Files filter with their recorded
+  filename; ordinary or malformed effects cannot offer file-version actions.
+- [ ] Wire explicit conflict capture to native source reads/uploads and durable
+  client retry state; verify Ignore after capture, reload and source-file loss on
+  installed Mac/iOS/Android. This API alone does not preserve an uncaptured device
+  file, implement content-ID search or provide independent whole-data backups.
+
+
+### Durable conflict capture — 2026-10-17
+
+- [x] Save two-existing-file conflicts through the shared foreground transport.
+  Verify the root bytes/revision stay unchanged, both versions are independently
+  readable and no common sync baseline advances. A later normal sync must still
+  require a winner choice; repeating Ignore reuses its immutable receipt.
+- [x] Lose an accepted capture reply, reopen IndexedDB and remove the source.
+  Recover using the original receipt without scanning, reopening or uploading
+  the captured source. Exercise the real local API/object store with
+  `scripts/file-sync-foreground.integration.mts`.
+- [x] Cancellation, account/settings changes, a changed review and failed durable
+  persistence stop before upload. Version-1 execution and baseline completion
+  reject a version-2 retention run; persisted intent cannot be changed in place.
+- [x] Render `mobile-sync-editor.browser.html?capture=1&view=review` at 390px and
+  1280px: muted content-ID copy, long filenames and 40px action buttons wrap
+  without horizontal overflow. This static review fixture does not upload data.
+- [ ] Complete interactive browser and installed iOS/Android/Mac capture, reload
+  and source-loss acceptance. This run's browser inputs did not reach either
+  existing Edit/Upload handlers; rendered layout is not click-through evidence.
+- [ ] Add explicit re-review/abandonment for a pending uncaptured version that
+  changes, folder/missing-file capture, content-ID lookup and whole backups.
+
+### Portable backup storage and export — 2026-10-17
+
+- [x] Capture a real local file in bounded chunks, lose an accepted range-page
+  reply, reopen the private vault and read only the remaining source bytes.
+  Delete the original, seal/read back the backup and compare the full byte hash.
+- [x] Interrupt export after an accepted chunk, resume without retransmitting
+  that chunk, then delete the first vault and restore from the second. A fully
+  repeated export fetches no source chunks. Verify empty files and metadata-only
+  items, and preserve canonical Timeline snapshot data and placement as metadata.
+- [x] Exercise offline `backup:vault verify`, `copy` and `restore-file` in child
+  processes. Restore byte-identical output; refuse overwriting an existing path.
+  A missing source vault is not created by the verify command.
+- [x] Missing/corrupt bytes, reordered/missing manifest pages, overlapping ranges
+  and altered seals must fail. Cancellation and wrong/revoked scope stop work;
+  revoked access after a range read must yield no bytes to the restore consumer.
+  Unsafe paths/symlinks and concurrent changed immutable writes are refused.
+- [x] Stream 100 TB and 10 PB metadata inventories through bounded pages, keeping
+  exact cumulative decimal counters beyond Number.MAX_SAFE_INTEGER. This is not
+  evidence of a 100 TB byte transfer or disk-throughput acceptance.
+- [x] Run the real API foreground fixture with `--portable-backup`: capture exact
+  authorized cloud ranges, lose a capture reply, Trash the source, reopen/recover,
+  copy independently, remove the first vault and verify the restored byte hash.
+- [ ] Implement/verify the complete server inventory boundary, protected job and
+  manifest Things, quota, cloud replicas, scheduling/retention and server Timeline
+  events. Add native consent/UI, encrypted media, multi-item restore and measured
+  large-data export. Existing helper/CLI checks do not prove those product flows.
+
+### Cloud folder backup worker — 2026-10-17
+
+- [x] Freeze a real complete selected folder including empty folders; capture its
+  exact retained bytes only after the live file moves to Trash. Verify full hashes.
+- [x] Run authenticated `backup:cloud create` and `resume` child processes with a
+  private disposable session config; repeat capture downloads zero new bytes.
+  Run the foreground fixture with `--portable-backup --large-download` (17,825,809 bytes).
+- [x] Reject a root revision mismatch, incomplete inventory, wrong account/origin,
+  cancellation and a revoked session immediately before completion publication.
+  Test the real `/auth/me` `{ user }` response without an `ok` envelope.
+- [x] Refuse exposed credential files and non-loopback HTTP origins; malformed
+  session JSON must never echo its secret contents through CLI errors.
+- [ ] Complete account-wide/paged snapshot inventory, native consent/UI, scheduled
+  independent cloud copies and Timeline backup lifecycle; selected-filesystem
+  coverage and command-line acceptance do not establish these outcomes.
+
+### Reviewed portable tree restore — 2026-10-17
+
+- [x] Dry-run the whole saved tree with `backup:vault plan-tree`; no destination
+  is created. Changed review/destination and existing recovery roots must refuse.
+- [x] Preserve nested files and empty folders. Exit a real child process after
+  its first durable range, then resume through the CLI. Accepted ranges and
+  completed files require zero source-chunk reads; compare full output hashes.
+- [x] Repeat restore without changing file inode/mtime. Reuse manifest scans
+  across files rather than performing a whole-inventory scan per file.
+- [x] Refuse concurrent workers, symlinks, unexpected output, unsafe names,
+  missing/cyclic parents and case aliases. Cancellation releases only its own
+  candidate. Corrupt accepted staging and later user edits remain untouched.
+- [x] A file edited after publication or an empty folder removed during the run
+  must prevent the overall completion marker; resume can recreate a missing
+  empty folder without rewriting already verified files.
+- [x] Run the real foreground API fixture with `--portable-backup --large-download`:
+  restore captured bytes after live Trash, preserve its empty folder, hash-check
+  the 17,825,809-byte output and repeat CLI resume without rewriting it.
+- [ ] Native restore review/consent, account-wide/generic Thing restoration,
+  cross-device/shared-filesystem destinations and large-data throughput remain.
+
+### Mac History Save As and bundled static assets — 2026-10-17
+
+- [x] Regression: a selected server without compatible `api.devices-node-identity`
+  must explain that the server version does not support folder sync before native dispatch.
+  Account/endpoint changes during negotiation still refuse; a compatible manifest
+  never skips native pairing verification. Renderer errors hide native paths and
+  IPC details. Run the Electron folder host and shared desktop-folder tests.
+- Installed-app check: open Things in the rebuilt signed Mac app, verify the
+  server compatibility message under Folders on this Mac, and leave the existing
+  pairing, selected endpoint and folder grants unchanged.
+- [x] Export 17 MiB through the production preload/host, real Electron session
+  cookies and native Save panel; verify all saved bytes, canonical multipart
+  fingerprint, nine bounded ranges and removal of the request's partial file.
+- [x] Reject foreign frames/origins, invalid content descriptors, changed accounts
+  during the picker/ranges, proxy mismatch, short/oversized/corrupt bodies, wrong
+  version/framing, cancellation and concurrent requests. Existing files, symlinks
+  and files created during transfer must remain untouched. A failure after
+  publication preserves the saved bytes and reports uncertainty.
+- [x] Shared History client negotiates the Mac capability, retains cancellation
+  binding, checks exact version receipts and sanitizes host errors.
+- [ ] Authenticated signed installed-app History save/cancel/restore against a
+  real retained file, account switching during its native picker, external-volume
+  permissions, low disk space and app termination during transfer.
+- [x] Regression: Electron's Nitro middleware preset must serve startup JS/CSS
+  bytes from the package, not the HTML catch-all. Check responses across the
+  restart fixture and visually open the rebuilt isolated app.
+
+- [x] Regression: an account-bound Desktop API request must work through the
+  real bundled Nitro/srvx middleware. Do not clone its framework Request using
+  Node's private-state copy constructor. Verify GET and POST body preservation,
+  forwarded-origin removal, and unchanged actor/home/origin checks. Run the
+  native export fixture with `--headless` after `build:web` to cover real
+  cookie-session account checks and exact-version ranges through this proxy.
+
+### Account snapshot inventory foundation — 2026-10-17
+
+- [x] Freeze more than two owner pages using one server snapshot timestamp.
+  Interleave real majority-committed updates, deletion and insertion; retained
+  records must reflect the original timestamp. Seal/read metadata after source
+  database removal (`scripts/account-snapshot.integration.mts`, disposable local
+  replica only). Also verify an empty collection supplies a server timestamp.
+- [x] Refuse unsupported managed families before payload access; never export
+  root credentials, link keys or authentication envelopes. Dedicated Timeline
+  exporters may decode only validated history envelopes. Do not seal a partial
+  inventory. Preserve canonical Timeline metadata and exact file references.
+- [x] Regression: expired snapshots, missing/malformed timestamps, transaction
+  sessions, changed account during authorization, revoked access, cancellation,
+  missing/duplicate payloads and oversized metadata cannot publish a plan.
+  Cursor/session cleanup and refusal to rebuild the same ID are covered.
+- [x] Regression: the account index must not overflow legacy bootstrap's 64
+  slots. Modern plan is 52; full compatibility remains 64. Missing index refuses
+  the producer without a cross-account scan fallback. Real explain: 2,560 to 128
+  keys examined for a 128-result page in the 6,000-row fixture.
+- [ ] Dedicated protected-family exporters, full account/settings/device coverage,
+  authenticated job admission/quota, large metadata, retained-byte pinning and
+  independent cloud copying, Timeline backup lifecycle, native UI and measured
+  100 GB–100 TB export remain required before claiming whole-account backup.
+
+
+### Recoverable Apple native Trash — 2026-10-17
+
+- [x] Require separate native deletion consent, exact configuration/scope/grant
+  binding and an explicit allowTrash reply; download-only permission, cancelled
+  deletion consent, old hosts, changed settings and revoked accounts refuse.
+- [x] Retain exact file/empty-file/empty-directory bytes by exclusive same-volume
+  rename. Refuse changed sources, nonempty planned folders, symlink ancestors,
+  exposed private journals and attempts to move the adapter's own lock/data.
+- [x] Regression: a replacement or newly populated folder racing the native move
+  stays pending and recoverable. Explicit folder restore preserves children and
+  symlinks without following them. Restore never overwrites a recreated path.
+- [x] Kill disposable children after trash/restore rename and before receipt;
+  a fresh process recovers the same operation. Retried deletion must never remove
+  restored or recreated files. Existing download publication recovery still passes.
+- [x] Real Mac adapter/API fixture: restart, original receipt, alternate restore,
+  exact hashes and device revocation; isolated synthetic picker/consent only.
+- [x] Mac focused adapter/identity/XPC 42; Apple 41; iOS simulator 27; shared
+  file-sync 139; Electron folder/stream 17. Full native suite hits an unrelated
+  Bluetooth usage-description test-host crash. Web tsc remains 91 diagnostics.
+- [ ] Enable automatic native deletion only after fresh remote absence and parent
+  revision handling, Android parity, recovery browsing and installed consent QA.
+  Verify external volumes/providers and preserve local recovery in whole-account
+  backup before promising device-loss recovery.
+
+
+### Cloud path freshness — 2026-10-17
+
+- [x] Exercise Files/sync suites: explicit absence versus 404/401/409/413/503;
+  replace an old path with a new id; refuse case/Unicode aliases, inaccessible
+  siblings, file ancestors, invalid root ancestry and incomplete observations.
+- [x] Rename a cloud ancestor while a file is staged: the unchanged old file id
+  must not allow native publication. Preserve receipt recovery across reload.
+- [x] Exercise the opt-in Mac/API fixture's nested path absent/create/delete/
+  recreate checks with independent ids and an uppercase alias refusal.
+- [ ] Enable local deletion propagation only after parent stamp transitions,
+  native recovery controls and platform-specific Trash support are verified.
+
+
+### Foreground Apple deletion and recovery browser — 2026-10-17
+
+- [x] Parent stamps advance only from exact same-scope completed child receipts;
+  intervening edits, foreign receipts and incomplete post-crash transitions refuse.
+  The immutable run and original operation IDs stay unchanged.
+- [x] Fresh cloud path replacement, missing roots and failed reads stop native
+  removal. Every removal rechecks cloud absence and native source identity.
+- [x] Native recovery pages limit returned records to 20, preserve pagination
+  across unrelated records, filter owner/origin/grant, and include prior pairing
+  and connection IDs only under that same owned surviving grant.
+- [x] Explicit native restore consent is separate from sync approval. Cancelled
+  consent, revoked identity and occupied destinations preserve retained bytes.
+  Interrupted restore retains its exact intent and resumes without a new path.
+- [x] Recovery UI at 1280px and 390px: long paths wrap, controls are 40px high,
+  no horizontal page overflow, invalid destination disabled and restore feedback
+  visible. Synthetic browser fixture; native consent is tested separately.
+- [x] Real Mac/API: shared planner removes children then parent; lose Trash reply,
+  restart native/IndexedDB, resume original IDs, list retained files, restore with
+  lost reply/restart and verify exact bytes. Revocation refuses later access.
+- [ ] Installed native recovery consent and selected-folder lifecycle; Android
+  parity, external/provider volumes, recovery after removing/rechoosing a grant,
+  and inclusion of native recovery storage in device-loss backups remain open.
+
+### Android transactional Trash and recovery — 2026-10-17
+
+- [x] Delete rollback leaves the exact visible entry and no recovery receipt;
+  lost replies replay the same completed operation. Original bytes remain intact.
+- [x] Nested child/sibling receipts advance only the pinned direct parent;
+  external edits, foreign scopes and nonempty directories stop removal.
+- [x] Restore requires exact reviewed retained metadata and an absent destination;
+  case aliases, missing parents and corrupt bytes refuse. Lost replies cannot
+  overwrite later edits or choose a different destination.
+- [x] Schema 2 migration retains files and publication receipts. Recovery pages
+  return at most 20, include previous owned pairing/configuration IDs, and exclude
+  other accounts and native grants.
+- [x] Copy consent never permits deletion. Explicit deletion consent survives
+  encrypted reload, while reselection and revocation invalidate approval. A
+  permission change inside a delete/restore transaction rolls back all effects.
+- [x] Kill a real Android process before and after both SQLite commits; reopen
+  in a new process, verify rollback/exact replay and all restored bytes.
+- [x] Installed authenticated WebView: native delete consent cancel/allow, shared
+  recovery list/review, separate restore cancel/allow, exact retry without another
+  prompt, restored bytes, no horizontal overflow and Android Files inspection.
+- [ ] Physical-device/background/provider acceptance, native recovery in backups,
+  independent snapshot copies and whole-account large-volume export remain open.
+
+- [ ] Investigate Android emulator paint artifacts after expanding/scrolling the
+  recovery card. Measured Things section bounds do not overlap, but captured
+  pixels show stale search/toolbar layers. Keep physical-device visual acceptance
+  open; do not infer a CSS sizing fix from the screenshot alone.
+
+- [x] Installed Android two-way deletion: enable deletion with separate native
+  cancel/allow consent, remove a cloud child and its parent, suppress one real
+  committed native reply, reload and resume the same IndexedDB operation IDs,
+  verify repeated convergence, then restore parent before child with native
+  confirmation and independently hash the original bytes.
+
+  Installed API 35 emulator acceptance passed on 2026-10-18: 236.765 seconds,
+  one test, no failures. Verified the new document, original operation IDs,
+  resumed parent removal, repeat convergence, reviewed parent/child restore,
+  independent original-byte hashes and the restored 8.39 MB file in Android
+  Files. Earlier intermittent WebView timeouts and physical devices remain
+  separate coverage limits; a passing run does not explain those timeouts.
+
+- [x] The Android acceptance runner streams `OFFLINE_CREATE_QA_READY` before
+  folder selection and `OFFLINE_FILES_QA_READY` before manual Files inspection.
+  Do not interact during the preceding bridge checks. Confirm the terminal
+  retains the final JUnit result and exits unsuccessfully on a failed test or
+  adb transport, even when earlier progress lines report passed substeps.
+
+  The canonical runner passed on 2026-10-18: 61 instrumentation tests in
+  331.348 seconds, including the opt-in live planner recovery scenario; build,
+  JVM unit tests and Android lint passed. A focused shell check of the actual
+  runner block verifies success, JUnit failure and adb failure exit handling.
+
+
+### Android retained replacement versions — 2026-10-18
+
+- [x] Schema 3 to 4 migration retains original file/blob/publication identity,
+  derives only its original grant and leaves unknown capture time null.
+- [x] Paged lists return at most 20; foreign owner/origin/grant, stale review,
+  corrupt bytes, occupied/case-alias destinations and missing parents refuse.
+- [x] Restore creates an independent file and keeps both current and retained
+  versions. Precommit failure or grant revocation rolls back; lost replies and
+  later edits replay the original receipt without a second write.
+- [x] Installed API 35 WebView: replace, review, cancel, reload, resume the same
+  saved operation, native confirmation, complete restored hash, exact retry and
+  both 8.39 MB copies visibly present in Android Files. Wait for enabled controls
+  after reload before clicking; presence alone is insufficient during refresh.
+- [x] Shared response validation rejects wrong folder, content, path, operation
+  or reused file identity. Live synthetic 390px/1280px controls fit without
+  horizontal overflow and show completed-copy feedback.
+- [ ] Physical devices, Apple native version browsing, native history in
+  independent backups, grant replacement and actual process-kill acceptance
+  specific to version-copy restore remain open.
+
+Canonical runner: 67 instrumentation tests passed in 174.246 seconds, with build,
+JVM tests and Android lint. Shared suite: 148 passed. Raw TypeScript: 91 existing
+diagnostics outside changed files. These results do not establish 100 TB data
+transfer, whole-account snapshots or production deployment.
+
+
+### Android photo library backup
+
+- On a disposable Android 11+ emulator, cancel the native photo explanation and
+  confirm no folder is selected. Complete the permission flow and Files selection;
+  selection alone must not upload anything.
+- Confirm the connection identifies originals and full/limited access, defaults to
+  paused backup, disables other directions and deletion propagation, and remains
+  readable without overflow at mobile and desktop widths.
+- Run `THINGTIME_PHOTO_BACKUP_TEST=1 android/scripts/test-mobile-devices.sh
+  /path/to/private-fixture.json`; compare the downloaded original SHA-256, add a
+  second owned test image, delete the first locally, and verify both cloud copies
+  remain. Re-run without extra publications.
+- Run the installed `PhotoLibraryTest` checks: duplicate display names retain
+  distinct paths, pending/trashed/deleted assets are not readable, denied access
+  and cancellation fail rather than return an empty scan, and provider writes
+  fail. Never treat a permissions flag as a persisted grant.
+- Real limited-selection changes, video/EXIF format coverage, physical devices,
+  large libraries and background completion remain additional release checks.
+
+### iOS original-photo backup
+
+- On a disposable simulator, use Things to pair the device and choose Photo
+  library (backup). Verify the explanation, native permission, and full/limited
+  source projection; denying permission must not create an authorized source.
+- A photo connection must stay backup-only with deletion propagation disabled.
+  Native write approval, staging, publication and Trash actions must reject it.
+- Run `THINGTIME_PHOTO_BACKUP_TEST=1 iOS/scripts/test-mobile-sync-installed.sh`
+  with `DEST` and a private disposable account fixture. Verify original PNG
+  cloud download hashes, discovery after another photo is added and retention
+  after the first test original is moved to Recently Deleted.
+- `PhotoLibraryTests` covers distinct same-name resources, multipart fingerprints,
+  bounded reads, owner/grant cache partitioning, changed inventories, revoked
+  permission, missing originals, cancellation and denied write authority.
+- Keep actual limited-selection changes, Live Photo/video/EXIF fixtures, iCloud
+  downloads, physical devices, large libraries and background acceptance open
+  until each has direct evidence. Resource bytes do not prove album/database
+  restoration or an independent whole-device snapshot.
+
+### iOS file-backed multipart uploads
+
+- Run the shared Apple package and the iOS `FileUploadPartTests`,
+  `PhotoLibraryTests`, `NativeFileSessionTests` and `NativeFileUploadTests`.
+  Confirm canonical part bounds, 33 MiB capture through bounded chunks, actual
+  selected-file mutation refusal, permission loss, incomplete streams,
+  cancellation, foreign/credential-bearing signed URLs, extra headers and
+  oversized/error responses cannot publish a successful part.
+- Run the opt-in installed photo backup acceptance from iOS/README.md with a
+  disposable loopback account and simulator. Verify at least four native parts,
+  two complete multipart originals, zero legacy bulk bridge reads, independent
+  download hashes and retained cloud bytes after local deletion. Clean up only
+  the test's originals/configuration/grant using recoverable product paths.
+- Run shared cloud transport/native upload adapter tests, including native
+  failure/lost-response retry with identical IDs, digest mismatch and aborted
+  completion. Older hosts must retain their existing supported transfer path.
+- Physical hardware, actual OS process death during PUT, disk exhaustion,
+  prolonged network loss and measured 100 GB–100 TB throughput remain required;
+  bounded fixture checks do not prove those properties.
+
+- During an iOS identity check, present an OS Photos dialog or suspend the app.
+  Confirm the pending web identity request settles promptly instead of holding
+  the serialized device queue until its 120-second timeout. Repeated suspension
+  sends one cancellation; switching web destinations sends no old account
+  context to the new page (`MobileDeviceBridgeLifecycleTests`).
+
+### Mac photo library backup
+
+- Run `MacPhotosSyncTests`, `MacFolderSyncTests` and `FolderStreamXPCTests`.
+  Verify original multipart fingerprints/binary bytes, read-only projection,
+  cancellation/stale account during selection, revocation during a stream,
+  changed source refusal and grant removal. Photos must reject every native
+  write/stage/publish/Trash action before prompting or touching recovery storage.
+- Run the opt-in `mac-file-sync.integration.mts --photos` with a mode-0600
+  disposable loopback account fixture and rebuilt `MacFolderSyncFixture`. Check
+  independent download hashes before/after replacement, original retention,
+  new-photo discovery, source-deletion retention, native restart and no duplicate
+  upload on repeat. This uses synthetic PhotoKit/picker adapters.
+- In an updated signed installed Mac app, cancel source selection and the photo
+  explanation; neither may create a grant or request OS access. With explicitly
+  approved library access, verify full/denied access, original photo/video bytes,
+  metadata and revocation through the actual shared Things controls. Retain
+  existing endpoint, account, pairing and grants. Live Mac library acceptance
+  remains open until this separate session is completed.
+
+### iOS durable upload-part recovery
+
+- Run `FileUploadPartStoreTests` and the existing capture/transport suites. Verify
+  fresh-instance reuse without source recapture; changed source/grant under the
+  same identity refused; different owners/origins/roots isolated; truncated,
+  corrupt, symlink and hardlink payloads refused; count/byte limits preserve other
+  unfinished parts and explicit successful release frees capacity.
+- Run `apple/FileSync/scripts/test-upload-part-process.sh`. The disposable child
+  must exit 77 both after payload fsync before the digest checkpoint and after
+  complete capture. A distinct process must recapture the incomplete payload,
+  reuse the committed payload without calling its source stream, reject a changed
+  live source version and release only its exact cache entry. Regression class:
+  native upload inputs were temporary and disappeared during process interruption.
+- Run the installed multipart photo test and confirm `IOS_UPLOAD_CACHE_RELEASE_PASS`
+  alongside independent cloud hashes, four native parts and zero bulk bridge
+  reads. Successful uploads must leave no new retained part directories.
+- Keep actual process death during PUT, app/device restart scheduling, power loss,
+  exhausted physical storage, cache-management UX and 100 GB–100 TB acceptance
+  open. Cache-process fixtures do not prove native background completion.
+
+File protection is configured in iOS capture attributes but is not verified by
+this simulator: it returns no protection attribute. The separate
+`testDeviceFileProtectionAfterCapture` skips Simulator and requires physical iOS
+hardware; device lock/reboot enforcement remains an open acceptance check. Read
+protection values as strings, as specified by
+[Apple's protectionKey API](https://developer.apple.com/documentation/foundation/fileattributekey/protectionkey).
+
+### Native whole-file upload jobs
+
+- [ ] In the disposable iOS photo acceptance, require two whole-file bridge
+      requests, at least four native part progress events, exact original-byte
+      download hashes and no bulk read/per-part upload fallback through WebKit.
+      Verify new-photo discovery, cloud retention after local deletion, and no
+      successful part-cache leftovers.
+- [ ] Between parts, pause/edit the connection or revoke pairing; change owner,
+      audience, roots, network or charging state. No subsequent part/completion
+      may run under the stale authorization. Cancellation preserves the original
+      journal and any unfinished retained part.
+- [ ] Reject changed upload identity, malformed digest and wrong composite before
+      completion. A ready reservation skips retransmission; a wrong server
+      fingerprint still blocks Timeline publication. Exact accepted file replay
+      does not repeat the native job.
+- [ ] Reject foreign, duplicate, backwards, noncanonical or oversized progress
+      messages; they cannot extend the 15-minute inactivity deadline. Custom
+      runtime mutation policies continue through the original per-part path.
+- [ ] Do not count foreground acceptance as background/reboot/force-quit proof.
+
+
+### iOS continued-upload lifecycle
+
+- [ ] Run `NativeUploadBackgroundTests`: single registration, serial jobs,
+  monotonic byte progress, final completion, expiry, cancellation and refused
+  submission. A timed-out request must not attach its late callback to a new job.
+- [ ] Run shared native-upload tests: reject acknowledgements from another
+  owner/origin/root/request/upload/source, from older hosts or with malformed
+  background flags. Duplicate acknowledgements cannot extend authority. Pause
+  only an accepted hidden job's timer; restore the timeout in foreground. Abort
+  removes authority and listeners; navigation must always abort.
+- [ ] Run the disposable installed photo acceptance on the updated host, checking
+  original download hashes, new-photo discovery, retained cloud versions and cache
+  cleanup when the OS refuses continued processing.
+- [ ] Add `THINGTIME_PHOTO_BACKGROUND_TEST=1` to require actual OS acceptance.
+  After its readiness marker, use Home, independently observe an initially
+  unfinished attachment become ready while the app remains backgrounded, return
+  to Thingtime and verify canonical publication. Refusal is a failed background
+  acceptance check, not a pass or evidence that the foreground fallback failed.
+- [ ] On physical iOS, cancel using system progress UI and test expiry, lock,
+  network/power changes, grant/device revocation, force quit and relaunch. Do not
+  infer these from simulator lifecycle mocks or foreground success.
+
+
+### Timeline history inside account snapshots — 2026-10-18
+
+- [x] Freeze all seven Timeline record families, including legacy events, active
+  and cleared names and Unicode snapshot parts larger than manifest metadata.
+  Rejoin normalized events/links and reconstruct the original large snapshot.
+- [x] Interleave real database changes after the snapshot census, including
+  deletion of a Timeline part and damage to a live event. Export must retain the
+  original records; after source database and first vault removal, every record
+  must read identically from the independent vault (334 records, 34 history).
+- [x] Regression: missing/corrupt chunks, lost accepted range replies, revoked
+  ownership, wrong scope and an unsupported family on a later census page cannot
+  certify a partial snapshot. An interrupted enumeration needs a new identity.
+  Reads must detect corruption introduced after sealing.
+- [ ] Complete remaining protected-family/settings/device exporters, historical
+  attachment-byte closure, authorized restore writers and full product backup
+  jobs/UI. Archived Timeline receipts never authorize replay on their own.
+
+
+### Historical attachment bytes in account snapshots — 2026-10-18
+
+- [x] Snapshot ready attachments with canonical metadata and verified immutable
+  byte versions. Check every current/before/after/conflict file reference through
+  bounded owner-filtered batches at the same Mongo timestamp. Missing, foreign,
+  changed-target/version/fingerprint, blocked or unfinished data must refuse the
+  full plan; no late reference silently disappears. Verify at most eight
+  concurrent HEAD requests, bounded caching, and draining a failed batch before
+  returning without starting another batch.
+- [x] Preserve all existing attachment purposes and linked URL metadata without
+  copying private object keys, provider versions, upload state or credentials.
+  Linked media never fetches an external URL or claims stored bytes.
+- [x] Capture each attachment once; current/history references reuse its ranges.
+  Lose an accepted capture reply, remove source metadata, resume, independently
+  copy, then remove source bytes and the first vault. Read current, earlier and
+  retained-conflict versions through the canonical offline recovery readers and
+  compare bytes. Wrong live version and revoked access never seal.
+- [x] Real disposable Mongo proof: 351 rows / 47 Timeline records; concurrent
+  writes include deleting a referenced attachment after the census. After source
+  database/files and first vault removal, all three file versions recover exactly.
+- [x] Real API foreground fixture with `--portable-backup --large-download`:
+  account byte reader captures current and conflict attachments after live Trash,
+  then exact hashes survive independent copy and first-vault removal. Explicit
+  fixture descriptors are not whole-account API or permanent-S3-loss proof.
+- [ ] Complete remaining managed family/relationship coverage, storage retention
+  leases, authorized account restore/jobs/UI, encryption and independent cloud
+  copies. Historical attachment support alone is not complete whole-data backup.
+
+
+### Saved drafts and large content in account snapshots — 2026-10-18
+
+- [x] Preserve exact canonical editor snapshot strings, reusable template modes,
+  provenance and revision tombstones. Reject malformed content, extra fields,
+  invalid dates/modes/revisions, oversized editor state and active/deleted mismatch.
+- [x] Resolve draft media at the same database timestamp in owner-indexed batches;
+  missing, foreign, wrong-target/purpose/profile or expiring media must refuse the
+  complete plan. Deletion markers have no active editor or media references.
+- [x] Recover both inline and multi-chunk ordinary Thing snapshots; reject protected
+  kinds and extra envelope fields. Retaining multiple ordinary rows must stream
+  payloads rather than collecting a whole page of large records.
+- [x] Regression: mutate a caller's Buffer after the first chunk write; frozen
+  payloads remain unchanged. Cancel between chunks: no complete plan or seal may
+  be published, and no later source reread may masquerade as the old snapshot.
+- [x] Real Mongo snapshot proof: concurrently delete a working draft's media,
+  replace its editor with a tombstone and edit a 10 MB ordinary Thing. After
+  source database/files and first-vault deletion, verify all original records and
+  exact media from the independent vault (357 records, 22,064,370 payload bytes).
+- [ ] Complete other protected families/settings/device coverage and reviewed
+  account restore/jobs/UI. Offline content readers do not restore live state.
+
+### Android native whole-file uploads — 2026-10-18
+
+- [x] Replay lost part/completion replies under the original immutable operation;
+  completed reservations perform no new source reads or PUTs. Verify bounded
+  reads, exact reconstructed bytes and cleanup of transient part files.
+- [x] Same-timestamp source edits, replaced provider identity, changed metadata,
+  foreign owner/device/ACL/revision, unknown configuration policy and disallowed
+  network/power must refuse. Canonical connection comparison includes arrays.
+- [x] HTTP regressions: storage must receive no ambient cookie, Origin or auth;
+  refuse redirects/auth challenges, changed credentials, extra signed headers,
+  foreign HTTP targets, oversized replies and cancellation during an active call.
+- [x] Android filesystem regression: use the supported free-space query;
+  `Files.getFileStore` throws SecurityException in the sandbox. Capture a real
+  managed-blob part, verify its bytes and reject a replaced source afterward.
+- [x] Installed API 35: choose the synthetic SAF fixture through the real picker,
+  upload two parts with one native job and zero bulk WebView frames, independently
+  hash downloaded bytes, then run managed-blob replacement/source checks.
+- [x] Installed photo backup: two native jobs and zero bulk reads; independently
+  hash originals, discover a new photo, preserve the cloud revision after local
+  deletion and repeat without another publication.
+- [ ] Physical devices, long jobs, low disk, interrupted actual PUT, background
+  policy, OS process death/relaunch and sustained large-data throughput.
+
+
+### Android durable native upload parts — 2026-10-18
+
+- [x] Bug class: a lost PUT reply or process restart must retain the original
+  verified part, not delete it or invent a new upload. Reopen the cache and check
+  exact IDs, bytes, source-read counts and release after a confirmed handoff.
+- [x] Kill-point regression: interruption after payload fsync but before the ready
+  record must recapture; an uncommitted directory and atomic discard may be
+  cleaned, while unknown files, symlinks and hardlinks must fail closed.
+- [x] Refuse changed grant/source identity and corrupt payloads before disclosure.
+  Retry rechecks current authorization and source even when cached bytes exist.
+  Wrong-owner removal must retain the part; exact account/root removal clears it.
+- [x] Enforce bounded reservations without evicting uncertain uploads; verify
+  private file/directory modes, native file locking and no credential persistence.
+- [x] Run both explicit `NativeUploadRecoveryTest` phases from android/README.md,
+  with force-stop between them. Assert different process IDs, original operation
+  and upload IDs, exact two-part bytes, cached first-part reuse and cleanup.
+- [x] Repeat installed SAF picker/API upload with the cache enabled: one native
+  whole-file job, zero bulk WebView reads, complete downloaded hash and cleanup.
+- [ ] OS-scheduled background work, autonomous relaunch, physical devices,
+  power loss during fsync, interrupted actual network PUT and sustained large data.
+
+
+### Android current-file OS continuation — 2026-10-18
+
+Deferred by user on 2026-10-18. Preserve this code and evidence in PR #1002;
+resume unfinished Android gates only when requested.
+
+- [x] Bug class: notification consent may pause the activity. Request it before
+  creating transfer authority, then reauthenticate on return; first approval must
+  not cancel the subsequent upload. Old clients never receive the new action.
+- [x] Exact OS acknowledgement gates hidden uploads. Refusal cannot be revived
+  by a late callback; normal completion releases the job without cancelling work.
+- [x] Real notification Pause, stale Pause, OS stop and completion remove only the
+  current job/notification; stopped work is not automatically rescheduled.
+- [ ] Run `THINGTIME_BACKGROUND_UPLOAD_TEST=1` using the documented 32 MiB + 17
+  byte synthetic SAF file. Observe pending then ready while the real activity is
+  paused, return and verify pinned downloaded-byte SHA-256 and zero bulk bridge bytes.
+- [ ] Disabled notifications must keep foreground fallback. Validate Android 8–13
+  foreground-service admission on an installed device, as well as physical-device
+  sleep, network loss, policy changes, process death and explicit retry.
+- [ ] Full-folder autonomous background work, relaunch/reboot and sustained
+  100 GB–100 TB delivery remain outside this checkpoint.
+
+
+### Saved themes in independent snapshots — 2026-10-18
+
+- [x] Preserve the canonical partial theme exactly, including false/zero/null,
+  title, tags, folder and historical visibility; never fill current defaults.
+  Omit private roots and unapproved crystal/token fields.
+- [x] Inline small themes; retain larger canonical snapshots in verified chunks.
+  Capture them inside the same database snapshot, processing one row at a time.
+- [x] Refuse mixed protected kinds, invalid tokens, exceeded field bounds, foreign
+  owners and cancellation without publishing a complete inventory. Wrong-account
+  reads and corrupted retained chunks must refuse.
+- [x] Run the disposable account storage consistency proof: concurrently edit a
+  partial theme and delete a large one after the census; recover both originals
+  from the second vault after source database/files and first-vault deletion.
+- [ ] Actual account-wide capture/import, active-theme selection restoration,
+  remaining managed families and native/UI acceptance remain separate gates.
+
+### Account profile and preferences in independent snapshots — 2026-10-18
+
+- [x] Unit: preserve null/false/absent preferences, partial notification switches,
+  disabled personal instructions, linked profile URLs and ordered reactions;
+  recover exact content from the second vault after source edits/removal.
+- [x] Unit: reject mixed/foreign user identities, malformed JSON/UTF-8, plaintext
+  private envelopes, invalid values and damaged chunks. Error messages must not
+  contain private envelope values; credentials/permissions never enter chunks.
+- [x] Unit: managed profile images require the exact owner, slot, profile purpose
+  and durable target. Missing/foreign/rebound/expiring images refuse the complete
+  plan; valid image bytes read identically from the sealed vault.
+- [x] Real signup/profile/settings Request handlers on an isolated home replica
+  match snapshot/API readback under concurrent changes; explicit selected values
+  restore through current writers. HTTP/browser and managed-media acceptance remain open.
+- [ ] Restore a live account through current reviewed writers; cover active
+  theme/algorithm selection, visibility, permissions and current revision fences.
+  Credential/security recovery and remaining managed-family coverage are open.
+
+
+### Real account profile snapshot integration — 2026-10-18
+
+- Run `npm --prefix remix run test:backups:account-profile` on macOS with free
+  loopback ports 28142/28144 and local `mongod`/`mongosh`. Confirm the OS isolation
+  preflight denies hostname, direct-IP and redirect connections outside the
+  permitted database port before any fixture starts. No permissive fallback is
+  allowed. Confirm the runner removes its own
+  replica/data and never connects to an existing application database.
+- Register through the production handler, then change profile, notification,
+  chat and Lopu settings through their handlers. Compare saved values with API
+  reads, including false/absent preferences and disabled instructions.
+- Interleave concurrent API mutations within the inventory reader's read-only
+  Mongo snapshot. Both reads must retain the original values; a fresh session
+  must see the later committed state.
+- Recover from the second sealed vault after deleting the first. Restore the
+  explicitly selected values through current writers with the live Lopu revision,
+  then compare profile and settings API readbacks with the originals.
+- Verify revoked auth cannot read the live account; offline recovery still binds
+  the archived owner. Missing owner-census indexes must prevent a complete plan.
+- Single-account reads must use the existing unique share-ID index, without
+  weakening the separate owner/ID requirement for whole-account census paging.
+- Keep HTTP/browser, managed image restoration, whole-account families and the
+  product review/restore UI open; handler-level proof does not complete them.
+
+
+### Paged file-sync reconciliation (PR #1002, 2026-10-18)
+
+- [ ] Run `npm --prefix remix run test:file-sync`; include the 100,000-entry inventory and 20,000-path planner cases. Compare all four modes and both deletion policies with the whole-tree planner.
+- [ ] Interrupt indexing and planning separately after a committed page, reopen the journal and verify exact ordered decisions. Partial plans must refuse reads and must not advance the live baseline.
+- [ ] Place an edited descendant beyond the first page while deleting its unchanged parent on the other replica. Require a delete/edit conflict; excluded children must protect parent deletion.
+- [ ] Introduce a late cross-replica case/Unicode alias or mismatched baseline, including an excluded path. Require failure with no readable partial decisions.
+- [ ] Try changing scope, captures, policy, exclusions and read cursors. Run competing builders; require immutable settings, no duplicate decisions and no foreign-scope access.
+- [ ] Attempt capture discard while two plans pin it. Finish one, then discard the other; only the final pin removal may permit capture discard. An initialization failure must roll back every pin.
+- [ ] Verify version-3 capture migration, long-path byte bounds, and Unicode lowercasing that expands an otherwise valid filename segment. Folded cursor keys must not be validated as filesystem segments.
+- [ ] Repeat the generated 20,000-decision proof in OS-isolated Chromium with two process restarts, exact path/source comparisons, input-pin checks, traces and scoped cleanup. This does not prove native transfer or lift the live scan cap.
+
+
+### Paged file-sync operations (PR #1002, 2026-10-18)
+
+- [ ] Run the shared file-sync suite and `pagedRunJournal.test.ts`. Compare multi-page copy/trash ordering with the whole-tree runner, including shallow copied parents and deepest deleted children.
+- [ ] Interrupt preparation, reopen and discover the active run. Operation IDs must stay identical. Introduce a conflict beyond the first page and require all execution to remain refused.
+- [ ] Lose an accepted reply, fail confirmation storage and cancel after acceptance separately. Resume with the original receipt ID; count independent effects to prove no repeat.
+- [ ] Race paged preparation with legacy persistence, and two paged executors with the same Web Lock. Only one run may own a root; only the next pending operation may be confirmed.
+- [ ] Refuse altered receipts, changed scope/settings, pending outcomes, duplicate IDs and changed source/target stamps. Preserve the prior checkpoint; neither completed nor uncertain paged runs may release it prematurely.
+- [ ] Upgrade a version-4 database containing captures, a complete plan and a legacy run. Verify all old data before preparing the paged run.
+- [ ] Repeat the OS-isolated Chromium proof with 10,001 operations and two process restarts. Verify 257 accepted receipts versus 256 confirmations at interruption and exactly 9,744 new effects after resume. Keep source metadata and independent receipt readback separate from journal assertions.
+- [ ] Connect real paged native/cloud adapters and checkpoint publication, then exercise installed Mac/iOS transfers before lifting the live scan limit. Generated receipt tests alone do not satisfy this gate. Android is deferred.
+
+
+## Paged sync checkpoint recovery (2026-10-18)
+
+- [x] Run `pagedCheckpointJournal.test.ts`: refuse capture before full confirmation; retain post-copy edits; resume bounded merges and output sealing; prevent case aliases and account changes from publishing.
+- [x] Interrupt between local/remote output page writes, reopen, replay the same page, and verify the previous published head survives until both outputs seal.
+- [x] Verify recreated public inventory IDs cannot rebind an existing plan; original capture instances remain pinned through execution and checkpoint preparation.
+- [x] Retry an old publication while a later run is active and after a later checkpoint publishes. Neither the new run nor its baseline may be released or overwritten; legacy writers and stale plans must refuse.
+- [x] Isolated Chromium: three process restarts, 400 independent receipts, interruption at 257 accepted/256 confirmed, checkpoint restart at 128 paths, exact 400 baseline pairs, post-copy edit and next-run preservation. Evidence: `paged-checkpoint-evidence-2026-10-18` beside the HTML tracker. Generated metadata only; no live account or file bytes.
+- [ ] Connect paged native/cloud scans, destination preparation, Trash receipt chains and checkpoint publication to the foreground/worker lifecycle; run real installed Mac/iOS acceptance before lifting the 10,000-path cap. Android remains deferred.
+
+
+## Paged cloud binding recovery (2026-10-18)
+
+- [x] Retain cloud nodes and reconciliation stamps in the same bounded page; refuse changed attachments on exact retry even when their stamps match. Validate physical ancestry, aliases and metadata-free legacy capture migration.
+- [x] Reopen partial cloud preparation, preserve original parent operation IDs and exact configuration, and refuse starting until every binding is durable. Reject metadata attachment after execution begins.
+- [x] Compare native Trash receipt chains across multiple pages with the original whole-run derivation, including deep descendants and wide siblings.
+- [x] Exceed the expanded binding byte budget before the entry budget; resume without skipping paths. Inject a quota failure inside a binding transaction; neither rows nor cursor may partially commit.
+- [x] Execute 270 generated downloads through the shared cloud transport. Reopen after 129 accepted publications/128 confirmations; require exactly 141 remaining effects, original attachment bindings and independent target receipt readback.
+- [x] Repeat preparation/transfer recovery with two full isolated Chromium process restarts. Retain `cloud-bindings-evidence-2026-10-18` beside the HTML tracker; generated adapters do not count as installed-device acceptance.
+- [ ] Connect stable paged producers and foreground/worker orchestration, then repeat real installed Mac/iOS transfers, permission and provider checks before lifting the live scan cap. Android remains deferred.
+
+
+## Mac/iOS foreground paged recovery (2026-10-18)
+
+- [x] Recover a 135-file foreground run after the 129th accepted effect loses its reply. Preserve original operation IDs, reject changed network conditions, publish an exact complete baseline and make the next run a no-op.
+- [x] Interrupt post-run import after its first page. Reopen with fresh observation generations; do not repeat file publication. Keep another active plan's input captures pinned, and refuse replacing already sealed checkpoint inputs.
+- [x] Finish uncertain legacy work with its existing IDs before migration; reject settings changes while the paged run is pending.
+- [x] Persist review pages with exact retry order/digests/counts. Missing, extra or changed conflict versions keep all prepared operations unexecutable. Reopen fully stored review without another popup; require fresh choices after incomplete import.
+- [x] Lose a retained-version reply, remove the local source, and resume from its accepted receipt. Repeated Ignore must upload nothing extra and must not advance the baseline. A later selected winner must still synchronize.
+- [x] Isolated Chromium at 1440×1000 and 390×844: actual Mac/iOS connection component, open two conflicts, select/reset a winner, Ignore, rendered completion, reload and repeat Ignore. Compare two retained receipts, unchanged cloud revision, zero repeat upload parts and no active run with independent fixture readback. Scroll every affected view top to bottom; inspect the popup and status row for overflow.
+- [x] Retain trace/screenshots/source in `paged-foreground-evidence-2026-10-18` beside the HTML plan. Verify browser/backend OS boundary against hostname, direct-IP, alternate-port and redirect probes, then remove task-owned temporary resources.
+- [ ] Repeat real upload/download/two-way, permission loss, network interruption and provider acceptance in the intended installed Mac/iOS apps. Generated adapters and isolated browser fixtures do not complete this gate.
+- [ ] Complete stable paged producers, worker/relaunch integration and scoped orphan/retention cleanup before lifting the live 10,000-path bound. Android remains deferred.
+
+
+## Bounded foreground journal cleanup (2026-10-18)
+
+- [x] Stop cleanup after 128 child-row deletions, reopen the journal and finish. Refuse reads and public-ID reuse while the retired header still exists; allow a new generation only after complete removal.
+- [x] Keep another reader's pinned input, another account's records and unregistered captures. Late readers must not acquire a partially retired generation.
+- [x] Inject a deletion failure inside the transaction: the retirement flag, cursor and all child deletions roll back together. Change accounts after a committed page and refuse further cleanup until the original scope resumes.
+- [x] Repeat foreground sync seven times and compare all store counts after warmup. Preserve exact current baseline entries and avoid additional cloud effects.
+- [x] Preserve an uncertain 135-operation run, its original IDs and accepted receipts. Repeat Ignore without another upload; keep the latest retained run. Independently protect active inputs when pin indexes are missing.
+- [x] Retire a completed run, collect its old published checkpoint between cleanup pages, then finish the already-authorized cleanup without losing the current baseline.
+- [x] Run all 246 file-sync checks, focused lint and whole-project TypeScript comparison. The existing 91 diagnostics remain; no new diagnostics were introduced.
+- [x] Isolated Chromium: five Ignore repetitions on each Mac/iOS layout with stable store counts, rendered completion and independent receipt readback; a 270-entry cleanup interrupted after 128 rows and resumed after a full process restart. Scroll top to bottom and inspect the opened review and final status. Retain both traces and source hashes with the HTML plan.
+- [ ] Repeat on installed Mac/iOS devices/providers and integrate stable paged producers/workers before lifting the live scan cap. Inventory data without an explicit lifecycle owner is preserved, not automatically classified as garbage. Android is deferred.
+
+
+## Native single-path sync checks (2026-10-18)
+
+- [x] Inspect real files and folders with the canonical scan fingerprint/version; distinguish missing leaves/ancestors from permission, alias, symlink, malformed-path and cancellation failures.
+- [x] Inspect a directory containing 10,001 files without relaxing the complete-scan cap or retaining the directory listing.
+- [x] Revoke identity or remove the selected grant during final authorization; no successful observation or byte mutation may escape.
+- [x] Negotiate Mac 1.4.0/iOS 1.2.0, reject missing/breaking contracts, retain older-client and Photos fallback, and leave Android implementation deferred.
+- [x] Run twenty operations through each foreground runner with two full scans; reject stale, foreign and failed point observations before writes without falling back.
+- [x] Exercise real controls in isolated desktop/mobile Chromium: review both conflicts, retain versions, reload/retry without reupload, compare native request counters and retained journal records, scroll all states and inspect screenshots.
+- [x] Run 249 shared checks, 66 Apple tests, 16 Mac adapter tests, 13 Electron checks, focused lint and TypeScript baseline comparison (91 existing diagnostics).
+- [x] Compile the iOS simulator scheme with destination selection; do not force an iPhone SDK onto the Watch target using a global `-sdk` override.
+- [ ] Verify current signed installed Mac and iOS folder operations against real native/cloud bytes and revocation through the intended app controls.
+- [ ] Implement stable native/cloud paged producers and verify installed large-root traversal before lifting the live 10,000-path limit.
+
+
+## Native paged folder captures (Mac/iOS) — 2026-10-18
+
+- [x] Stream and reopen 10,001 actual files; verify exact entry set/digests, bounded pages, terminal count, later edits, owner/device/grant/generation refusal, cache eviction and metadata-only discard.
+- [x] Reject truncated/corrupt capture databases and cancellation; missing rows must never become an empty or complete inventory.
+- [x] Negotiate Mac 1.5.0 / iOS 1.3.0; reject incompatible/Android capabilities. Fence every capture/page reply with owner/origin/device/grant identity.
+- [x] Run 135-entry planning and checkpoint publication through native pages with the legacy scan set to throw. Reject missing, reordered, substituted, duplicate and orphan pages before writes; preserve the prior checkpoint.
+- [x] Regression: checkpoint captures retain their existing plain observation schema; cloud destination metadata is attached only to planning captures. Repeated runs and interrupted checkpoint imports recover normally.
+- [x] Inspect real controls with generated adapters in OS-isolated Chromium at desktop/390px through the bottom and open conflict review. Confirm captures/pages/discards and retained-version receipt reuse after reload, with zero legacy root scans.
+- [ ] Repeat capture/page/recovery through installed Mac/iOS picker grants and real providers. Complete stable cloud producers and worker integration before lifting the combined 10,000-path cap. Android remains deferred.
+
+
+### Streamed cloud sync inventory
+
+- Run `npm --prefix remix run test:files`, `test:file-sync`, and
+  `test:files:inventory-pages`. The last command owns a disposable isolated
+  replica and uses actual signup/Things/Files handlers; see README prerequisites.
+- Verify missing, repeated, out-of-order, mixed-generation and trailing-error
+  pages never seal or replace a complete baseline. Include incorrect physical
+  `folderId` links during the post-transfer checkpoint, then recover with a
+  fresh generation without duplicating writes.
+- Verify the built origin advertises `api.files` 1.5.0. In Mac and iOS controls,
+  exercise conflict review/retention and reload recovery; scroll the open popup
+  and full page at desktop/phone widths. The Mac proxy origin response marker is
+  mandatory for NDJSON as well as JSON. Refuse missing markers; never bypass it.
+- Installed-device and deployed streaming acceptance remain required. A 10,001
+  producer test is not proof that the live 10,000-path planner cap is removed.
+
+### Wide-folder cloud path observations — 2026-10-19
+
+- Run `npm --prefix remix run test:files`, `test:file-sync`,
+  `test:api-capabilities` and `test:files:inventory-pages`. The large fixture must
+  exceed both 10,000 siblings and 8 MiB; finding the requested item early must not
+  bypass an invalid or aliased sibling later in the scan.
+- Exercise an exact path, confirmed absence, case/NFC alias, duplicate identity
+  across levels, inaccessible sibling, missing root, file ancestor, cancellation,
+  changed plane, scratch exhaustion, failed scratch close and transaction retry.
+  Only a complete authorized snapshot can return `entry:null`.
+- The child-process crash check must leave no populated scratch file. Verify the
+  endpoint remains private/no-store and the built origin advertises `api.files`
+  1.6.0; older/missing/breaking capability versions must stop the client before a
+  path request. The production-handler fixture must use real signup and Things
+  writers and reject path reads after logout.
+- Installed Mac/iOS, deployed proxy/server behavior, real very-wide directories,
+  million-path throughput and complete large-root synchronization remain separate
+  acceptance gates. Keep Android deferred and the combined foreground cap until
+  bounded review and the remaining integration gates are ready.
+
+
+### Bounded conflict-review draft storage — 2026-10-19
+
+- [x] Run `pagedReviewDraft.test.ts`: interrupt indexing, reopen, save and clear
+  individual choices, reject stale row/header revisions, and prevent unsupported
+  source selections. Keep all unselectable conflicts visible.
+- [x] Preserve v9 run data on schema upgrade; reject reused capture instances and
+  foreign/stale cursors. Cancellation, account changes and quota failures must
+  stop/roll back writes without losing the prior draft.
+- [x] Verify long-path byte bounds, active-plan/input pins, independent root-head
+  protection with damaged pins, bounded release cleanup and legacy-write refusal.
+- [x] Import sealed pages into a fresh run. A changed final conflict must leave
+  every prepared operation unexecutable; unchanged pages must match all choices.
+- [x] Run `scripts/review-draft.browser.ts` in a task-owned Chromium profile under
+  the existing OS isolation fixture: close the whole browser after saving one
+  choice in 270 conflicts, relaunch, verify that exact choice, finish/seal/import
+  bounded pages, release/collect and prepare 270 operations with zero effects.
+- [ ] Connect the real foreground popup through editable Builder blocks, preserve
+  repeat-Ignore identity, and verify save/cancel/reopen on installed Mac/iOS.
+  Keep the live 10,000-path cap and Android deferral until their own gates pass.
+
+
+## Paged foreground conflict review (2026-10-19)
+
+- [ ] Use `test:file-sync` to verify sealed review recovery after partial import,
+  interrupted fresh scans, older draftless runs, explicit cancel, stale revisions,
+  closed callbacks and account/settings changes. No failure may start effects.
+- [ ] Add, remove or edit the final conflict on a multi-page fresh scan. The full
+  run must refuse before copying any earlier file and permit a fresh review.
+- [ ] Compare the streamed retention identity with the old whole-JSON SHA-256
+  for Unicode/escaped paths and 10,001 rows; repeated Ignore must reuse receipts.
+- [ ] Run `scripts/review-draft.browser.ts` in an isolated Chromium process,
+  close/reopen it and verify the saved choice, Web Crypto hash parity and bounded
+  import into 270 prepared operations with zero confirmed effects.
+- [ ] Product acceptance remains open: bind the paged adapter to individually
+  editable Builder blocks; edit nested labels, version controls and repeated
+  fields, save/reload, then exercise real Mac/iOS review, ignore and restore.
+  Keep the 10,000-path cap until this complete path passes. Android is deferred.
+
+### Paged conflict review controls
+
+- Navigate to the last review page, go Previous and Next, close/reopen the
+  review and verify exact saved choices and row ranges. Long paths must respect
+  the byte limit in both directions without retaining prior pages.
+- A stale choice, off-page field, repeated click or disposed view must not
+  overwrite a newer choice or complete a review. Failed reads retain the prior
+  page. Applying after another writer changes the header requires reload and
+  fresh review; incomplete or folder-blocked choices cannot apply.
+- Run `pagedReviewDraft.test.ts` and `test:file-sync`. The generated-data
+  `scripts/review-draft.browser.ts` proves controller/journal restart and bounded
+  handoff only. Actual editable Builder controls and installed acceptance remain
+  open; preserve Android deferral and the 10,000-path limit.
+
+### Editable conflict review acceptance
+
+- Run `scripts/check-editable-sync-review.mjs` from `remix`, with an installed
+  Playwright module. Check each row's numeric revision remains numeric through
+  authored action bindings; a string interpolation must not silently lose a choice.
+- Choose versions across pages, interrupt/restart the browser, and compare saved
+  choices with the journal. Fail a page read: preserve rows, disable completion,
+  reload, and verify Cancel, Resolve and Retain are distinct explicit outcomes.
+- In Builder, separately edit the grey message, repeated path, select option and
+  navigation button; save/reload. The private layout must contain no live paths,
+  review handles or saved choices. Scroll top to bottom on desktop and phone.
+- In installed Mac/iOS, verify the selected origin/account layout and actual
+  files/Timeline after Resolve and Ignore. This last native/data-path acceptance
+  remains open; synthetic UI evidence does not substitute for it.
+
+
+### Mac paged foreground acceptance
+
+- Run `pnpm --dir remix run test:files:mac-paged` after building the current
+  Nitro server and `MacFolderSyncFixture` (README runbook). Require paged native
+  and cloud observations, exact byte hashes, original operation receipts after
+  lost cloud/staging/publication replies, and saved conflict choices surviving
+  native/journal reopen. Confirm the paged baseline is published only after all
+  receipts and fresh scans; completed runs are no longer the active journal head.
+- Verify the disposable runner releases its two ports and child processes,
+  keeps its generated credentials private, and never touches the installed app.
+  Do not treat this native/API proof as installed UI or large-volume acceptance.
+
+
+### Wide native publication and complete paged roots
+
+- [ ] Run the Mac paged fixture with `-- --wide`: all cloud folders must be
+  created through the Things import API. Require complete 10,003-path local and
+  remote checkpoints, full byte hashes, accepted-reply recovery, and no repeated
+  transfers on the unchanged rerun. Keep installed/provider acceptance separate.
+- [ ] Verify native publication/lookup and Trash/restore with 10,001 siblings;
+  alternate case/Unicode paths must still refuse before a write. Reopen receipts
+  and compare the retained/restored bytes, including occupied destinations.
+- [ ] Native Mac access 1.5.0 and iOS 1.3.0 must keep bounded legacy behavior;
+  1.5.1/1.3.1 may use the complete paged path. A missing paged review or individual
+  path adapter must preserve the 10,000-path limit and the previous baseline.
+- [ ] Retired metadata cleanup must delete at most 128 keys per step, preserve
+  other scopes and current pins/baselines, and roll back retirement plus all
+  queued range deletions when storage fails before transaction completion.
+
+- [ ] Large-root cleanup: confirm each page starts at its first remaining key,
+  preserves the 128-key/byte bounds and active recovery, and finishes after
+  restart without repeatedly traversing the deleted prefix.
+
+
+### Saved native approval checks for background recovery
+
+- On Mac publication 1.2.0, `write-check` must never open a consent dialog or
+  write a new approval. Approve explicitly once, recreate the adapter, and
+  verify the exact account/origin/device/connection/revision/settings/Trash
+  binding survives. Missing or changed approval must refuse without fallback.
+- Revoke the account, selected grant or exact approval during the final native
+  identity verification. Both approval replies must fail rather than expose a
+  stale success. Retained bytes and other approvals must remain intact.
+- Revoke saved approval between target creation and staging, publication or
+  Trash. The shared target must stop before new effects; read-only receipt
+  recovery must continue through its normal authorization checks.
+- Run `mobileSyncTarget.test.ts`, `MacFolderSyncTests`, Electron folder-sync
+  tests and `test:files:mac-paged`. The HTTP fixture now explicitly grants once,
+  then uses only saved-consent checks across all lost-reply/process restarts.
+- Installed app/dialog acceptance and closing the connection screen while a
+  durable whole-folder worker runs remain separate, incomplete checks.
+
+
+### App-owned Mac sync lifecycle
+
+- Start a long transfer, leave Files, and reopen while a native scan is still
+  pending. Progress, Stop transfer and saved conflict choices must be available
+  immediately; host re-negotiation must not queue ahead of the controls.
+- Stop after reattaching: no aborted-host render exception or error-boundary
+  screen. Retry uses the existing operation IDs and unchanged data is not copied.
+- Close the Mac window during transfer, reopen from Dock, then Quit. Close keeps
+  the same live renderer; Quit stops it. Account/endpoint changes must cancel and
+  clear private task state. Verify in the installed signed app before acceptance.
+- `npm --prefix remix run test:files:desktop-lifecycle -- <evidence-directory>`
+  covers production views, task handoff and IndexedDB with synthetic API/native
+  adapters on isolated loopback 28188. Check desktop/phone and full-page scroll.
+- `npm --prefix electron run verify:folder-sync-host` restricts the real Electron
+  fixture to loopback 28421/28422. Fail closed if nested Chromium sandbox setup
+  fails; never use a permissive fallback. Unit window-lease tests do not prove
+  native Close/Quit acceptance. Full-quit automatic resume remains unimplemented.
+
+### Durable Mac sync admission and relaunch
+
+- Run `npm --prefix remix run test:file-sync` for admission migration, bounded
+  per-account discovery, stale-state refusal and durable Stop coverage.
+- Run `npm --prefix remix run test:files:desktop-lifecycle -- <evidence-dir>`.
+  Terminate the isolated browser after the synthetic cloud commit but before
+  the reply; reopen with Files absent and verify identical job/destination IDs.
+  Wrong account, changed origin and revoked grant must cause no scan or write.
+  A stopped job must remain paused on restart. Open conflict controls and scroll
+  desktop and phone views fully; preserve saved choices and both versions.
+- Installed acceptance remains required: signed Mac Close/Quit/relaunch/reboot,
+  offline-to-online and power changes, native approval revocation, real Files
+  targets, and independent exact bytes/Timeline receipts. The isolated UI
+  fixture cannot establish these installed/physical-provider behaviors.
+
+
+### Automatic Mac sync schedules
+
+- In the isolated lifecycle fixture, edit heading, help, interval option and
+  button separately in Builder, save/reload, then exercise the edited controls.
+- Start a one-minute schedule, leave Files, add a local folder, and verify no
+  copy before due time. Verify the next cycle copies it once, retains the
+  interval and rotates only the cycle ID. Restart the entire Chromium process
+  and verify a future cycle is not replayed early; advance to its due time.
+- Install the test clock before app timers are created. Read the scheduled job
+  as one exact IndexedDB snapshot, and fail if the next cycle never finishes.
+- Switch selected server: no scan and no idle window retention. Stop between
+  cycles, advance time, restart and verify no scans. Test completion racing
+  Stop, stale callbacks, quota failure and bounded competing revisions.
+- Repeat native installed Close/Quit/reopen, sleep/wake, offline/online and
+  permission loss with independent byte/Timeline checks before marking worker
+  acceptance complete. Android remains deferred.
+
+
+### iOS saved folder approval
+
+- Run `MobileWriteApprovalTests` and `MobileSyncStagingTests` on a task-owned
+  simulator. Recreate the native bridge and reuse exact saved consent without
+  opening a prompt or writing another grant. Missing consent must fail promptly.
+- Change owner, server, paired-device authority, configuration revision/hash or
+  Trash consent. Remove the folder or replace its approval during the final
+  asynchronous device check. Every case must fail without returning authority.
+- Verify publication 1.2.0 per writable folder; photo roots expose no publication
+  capability and reject write checks. Run the shared target suite for both Mac
+  and iOS: check saved consent before staging/publication/Trash; legacy iOS must
+  refuse automatic resume without silently opening a consent dialog.
+- Repeat with real pairing, picker grants and revocation on an installed iOS app
+  before claiming provider or background-worker acceptance. Synthetic bridge
+  authorization is not evidence of physical-device background execution.
+
+### App-owned iOS file sync recovery (2026-10-19)
+
+- Run `npm --prefix remix run test:files:ios-lifecycle` and the desktop lifecycle
+  regression. Navigate away during a native request, restart after an accepted
+  cloud write with an unobserved reply, and verify unchanged job/operation IDs.
+- Hide the iOS view with no native lease: no new native or API effects may start;
+  returning visible resumes the durable runnable job. End an accepted file lease
+  while still hidden and verify the next effect is fenced immediately.
+- Reopen Files during execution: progress/review/Stop reattach, while folder
+  selection and checks cannot compete for the native controller. Stop must remain
+  paused after restart. Changed account, origin, bridge, device or grant must not
+  borrow previous authority. Older iOS and deferred Android must not opt in.
+- Repeat on the intended signed physical iPhone using actual folder data and
+  independent byte hashes; simulator/browser fixtures alone do not close native
+  suspension, OS expiry or relaunch acceptance.
+
+
+### Paged selected-folder backups (2026-10-19)
+
+- Run `npm --prefix remix run test:backups` and the shared inventory decoder
+  tests. Capture 10,051 generated nodes plus the root using bounded pages, seal
+  the manifest in Thing-ID order and independently compare recovered file bytes.
+- Reject duplicate IDs across pages, normalized path aliases, missing or wrong
+  physical parents, selected-root cycles, truncated streams and trailing errors.
+  None may publish a durable header or plan. Scratch disk exhaustion and
+  cancellation must invalidate the workspace and remove its private files.
+- Older origins must refuse new paged captures. Frozen plans must retain their
+  existing format and resume without new inventory using Files 1.2.0.
+- Run `node remix/scripts/test-cloud-inventory-pages.mjs`: the OS-isolated
+  disposable replica uses production signup, Things, Files and auth handlers;
+  preserve 135 folders plus the root in a sealed vault after a later live edit.
+- Keep HTTP/installed-app acceptance, source retention leases, independent cloud
+  replicas, 100 GB–100 TB throughput and paged whole-tree restore open. This
+  worker change does not establish those behaviors.
+
+### Large selected-tree restore (2026-10-19)
+
+- Restore a three-level tree spanning folder pages with child IDs ordered before
+  their parents. Every descendant must resolve; completing one depth before
+  advancing prevents valid trees being misreported as disconnected cycles.
+- Run `test:backups`. Keep the 10,051-folder plus file restore/resume regression,
+  zero source reads for already published bytes, legacy v1 review-hash agreement,
+  and actual CLI review of over 32 MiB metadata with a 64 MiB V8 heap limit.
+- Verify scratch-budget exhaustion, cancellation, closed-plan use, missing and
+  non-folder parents, disconnected/root cycles and Unicode/case aliases refuse
+  before destination writes. Normal completion/errors must remove scratch.
+- Retain process-exit, lost-range acknowledgement, concurrent invocation,
+  unexpected output, newer edits, missing empty folders and symlink checks.
+  A completion marker requires the full inventory and final identity checks.
+- These generated/offline cases are not physical-device, whole-account or
+  100 GB–100 TB throughput acceptance. Re-run actual native/provider restore
+  acceptance when those adapters are connected.
+
+
+### iOS native bridge fixture lifecycle (2026-10-19)
+
+- Retain a real scene-backed window for every bridge WebView, and remove it in
+  teardown. Fail explicitly if no scene connects, UIApplication stays inactive
+  or the loaded page has the wrong origin; never skip or inject an active state.
+- Run the 66 selected `MobileDevicePairingTests`, `MobileFolderInventoryTests`,
+  `MobileSyncStagingTests`, `MobileSyncTrashTests`, `MobileWriteApprovalTests`
+  and `NativeUploadBackgroundTests` on a task-owned iOS 27 simulator. Verify
+  all 13 bridge cases complete and the non-bridge filesystem regressions pass.
+- Repeat on the signed physical test host before replacing the historical
+  53-pass/13-fail hardware result. Simulator success does not prove real picker
+  grants, physical background expiry, OS scheduling or installed recovery.
+
+### Independent S3 backup replica worker — 2026-10-19
+
+- Run `npm --prefix remix run test:backups`. The S3 suite uses the real AWS SDK
+  against an ephemeral loopback protocol fixture and only synthetic credentials.
+- Verify conditional immutable writes, identical concurrent retries, bounded 409
+  conflicts, a lost acknowledgement, scope separation, redirects, denied/missing
+  buckets, unsafe keys/destinations and oversized/truncated/corrupt response bytes.
+- Regression: the SDK must not mutate a vault-owned credential object; a reused
+  strict credential handoff must stay valid. If account scope changes while the
+  credential provider awaits, zero network effects may occur.
+- Kill the real `backup:replica upload` child after the first 8 MiB object is
+  accepted. No complete seal may exist. Resume the same snapshot: that object
+  must have one successful write, 8 MiB reused and only 17 additional bytes copied.
+- Remove the primary local vault; download into a new private vault and compare
+  SHA-256 with the original bytes. A second download copies zero new bytes.
+- Refuse wrong-account, expired-credential and non-opted-in HTTP handoffs before
+  any network request. No secret value may appear on stdout/stderr. Revoking
+  access in the progress callback before verification must prevent completion.
+- Live-provider IAM, retention/durability, encryption/key recovery, actual vault
+  selection, scheduled native jobs and UI remain unverified. Run those paths
+  before offering independent cloud backup; this fixture is not 100 TB evidence.
+
+### Backup retention and deletion races (2026-10-19)
+
+- Run `npm --prefix remix run test:attachments:retention`: real disposable Mongo
+  transactions/Request handlers must prove owner-only exact-version holds, atomic
+  batch refusal, concurrent renewals, no byte double-charge, no premature refund,
+  expired renewal refusal and exactly-once purge/refund. Object storage/expiry
+  clock are synthetic; do not count this as live provider acceptance.
+- Run the backup, attachment and capability suites. Refused holds must copy no
+  bytes; long captures renew; expiry/session revocation cannot return protected
+  bytes or publish completion; resumed complete receipts must not read lost sources.
+- Live acceptance remains required: upgrade/drain every deletion/reaper writer
+  sharing storage, verify provider lifecycle retention, begin a large snapshot,
+  request source deletion, interrupt/restart, verify its independent bytes, then
+  expire the hold and confirm exact quota reconciliation. Exercise installed
+  Mac/iOS job controls when connected; Android remains deferred.
+
+- Desktop snapshot retention: allow content POST only for the pinned server, exact actor, home data plane and same local origin; changed/missing scope or cross-site requests must fail before reading mutation bytes. Covered by `server/utils/apiFallback.test.ts`.
+
+### Home upload exclusions and hierarchical progress (2026-10-19)
+
+- Apply the Mac home-backup preset to an existing draft: retain selected roots
+  and custom exclusions, add Library/Applications/.Trash, set backup/paused and
+  disable delete propagation. Pending saves and Photos sources must refuse it.
+- Excluded native directories must be pruned before access, traversal or hashing;
+  an excluded unreadable directory must not fail an otherwise valid scan. Test
+  nested/case/Unicode boundaries, malformed/oversized policies and capture-ID
+  reuse with a changed policy after success or failure. Older hosts and leaked
+  excluded inventory rows must fail closed; Android behavior stays deferred.
+- Progress: unknown index totals remain indeterminate; verify empty/unchanged,
+  zero-byte files, nested mixed-size parents, partial bytes, pause/error, resume,
+  page boundaries and completed retained metadata against independent receipts.
+  Never count the final byte callback twice or show 100% before confirmation.
+  Account/origin/root changes and malformed cached descriptors must not leak or
+  crash. Completed display reads must not reactivate retired run writes.
+- Run the file-sync suite and the isolated home-upload/desktop-lifecycle browser
+  harnesses. In actual Builder, independently edit a heading, help, control and
+  repeated-row field, save/reload, then exercise expand/collapse, pagination and 13-level focused-folder/parent/root navigation.
+  Scroll desktop 1440/mobile 390 top to bottom and inspect overflow/stacking.
+- Before declaring ready for real upload, exercise the matching deployed API and
+  signed installed Mac with the reviewed home grant/exclusions; compare actual
+  transferred bytes and parent totals. Synthetic fixture success is not this
+  release acceptance. Retain Android's later-date status and original app data.
 
 ## Daily provider model availability (2026-10-17)
 
@@ -10389,3 +12351,26 @@ separate from deterministic discovery/lease tests.
 - Mac menu inventory: run the saved read Action with icon-bearing snapshots above 64 KiB; every device and thumbnail must survive the negotiated browser result budget. Check this on the installed app and production page, not only with renderer fixtures.
 
 - Commander Thingtime login: follow `Commander/docs/TESTING.md` callback registration recovery checks for native and registered-loopback handoff, fail-closed registration/capability errors, environment binding, and persisted account identity.
+
+### Transfer speed windows (2026-10-19)
+
+- Check each decimal bit unit and logical file/folder/inode unit independently
+  for upload and download, including non-aligned rolling-window boundaries,
+  large counters, idle zero, unknown byte telemetry, pause/resume, account change
+  and at least 24 hours of bounded history. Retried receipts and retained offsets
+  must not inflate either direction. Journal failure must not count a completion.
+- Add multiple trackers with different windows, apply and save their settings,
+  reload, remove one and save again. Invalid windows must remain rejected.
+  In actual Builder edit each tracker label, control and reading separately.
+  Check save-in-flight controls and desktop/mobile full-page overflow.
+- On the signed installed Mac, compare real transferred payload totals and
+  logical confirmations against the live readings. Verify native adapters that
+  omit telemetry show unavailable rather than a fabricated rate. Synthetic
+  fixture checks do not establish installed or provider throughput acceptance.
+## Renderer port and origin recovery
+
+- [ ] Verify explicit selected and recovered renderer ports are honored, an occupied selected port refuses startup before import, and automatic-origin history remains unchanged. `electron/test/renderer-server.test.cjs` passes 18/18.
+
+- Completed sync speed counters must say Complete, while explicitly paused runs say Paused; no-sample and unavailable telemetry remain explicit. Verify both directions after real confirmed operations.
+
+- Password AutoFill disconnect must fail closed when protected Keychain deletion returns locked, denied, missing-entitlement or unavailable; endpoint changes must wait for success and allow a retry. Run the injected-status Swift tests and Electron helper-failure tests without accessing user credentials.

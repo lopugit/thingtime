@@ -159,6 +159,30 @@ private final class OneShotReply: @unchecked Sendable {
     }
 }
 
+/// Stdout is a bounded sequence of frames, never one giant JSON response.
+/// Writes block for pipe backpressure before acknowledging the XPC frame.
+private final class ByteSink: NSObject, ThingtimeNodeByteSink {
+    private let lock = NSLock()
+    private var sent = 0
+    private var closed = false
+    func receive(_ data: Data, withReply reply: @escaping (Bool) -> Void) {
+        lock.lock(); defer { lock.unlock() }
+        guard !closed, !data.isEmpty, data.count <= 65_536, sent + data.count <= 32 * 1024 * 1024 else { reply(false); return }
+        do {
+            let frame: [String: Any] = ["type": "chunk", "offset": sent, "data": data.base64EncodedString()]
+            var bytes = try JSONSerialization.data(withJSONObject: frame); bytes.append(10)
+            try FileHandle.standardOutput.write(contentsOf: bytes)
+            sent += data.count; reply(true)
+        } catch { closed = true; reply(false) }
+    }
+    func finish(_ response: Data) {
+        lock.lock(); defer { lock.unlock() }; closed = true
+        guard let object = try? JSONSerialization.jsonObject(with: response),
+              var bytes = try? JSONSerialization.data(withJSONObject: ["type": "result", "response": object]) else { return }
+        bytes.append(10); try? FileHandle.standardOutput.write(contentsOf: bytes)
+    }
+}
+
 @main
 private enum ThingtimeNodeBridge {
     static func main() {
@@ -166,9 +190,14 @@ private enum ThingtimeNodeBridge {
             rejectUntrustedParent()
         }
 
-        let input = FileHandle.standardInput.readDataToEndOfFile()
+        let staging = CommandLine.arguments == [CommandLine.arguments[0], "--folder-stage-stream"]
+        let input: Data
         let request: NodeRequest
         do {
+            if staging {
+                guard let header = try NodeFolderStreamInput.header(.standardInput) else { throw ThingtimeNodeError.invalidRequest("Missing stream header.") }
+                input = header
+            } else { input = FileHandle.standardInput.readDataToEndOfFile() }
             request = try NodeWireCodec.decodeRequest(input)
         } catch let error as ThingtimeNodeError {
             write(.failure(id: "", code: error.code, message: error.localizedDescription))
@@ -180,7 +209,7 @@ private enum ThingtimeNodeBridge {
 
         let reply = OneShotReply()
         let connection = NSXPCConnection(machServiceName: ThingtimeNodeXPC.machServiceName)
-        connection.remoteObjectInterface = NSXPCInterface(with: ThingtimeNodeXPCProtocol.self)
+        connection.remoteObjectInterface = ThingtimeNodeXPC.interface()
         connection.interruptionHandler = {
             reply.finish(encoded(.failure(id: request.id, code: "node_interrupted", message: "Thingtime Node was interrupted.")))
         }
@@ -197,12 +226,31 @@ private enum ThingtimeNodeBridge {
             write(.failure(id: request.id, code: "node_unavailable", message: "Thingtime Node is unavailable."))
             return
         }
-        service.request(input) { data in reply.finish(data) }
+        let streaming: Bool
+        if request.method == "folder-sync.request", case .object(let fields) = request.parameters,
+           fields["action"] == .string("read-range") { streaming = true } else { streaming = false }
+        let sink = ByteSink()
+        var stageSource: NodeFolderStreamInput?
+        if staging {
+            guard request.method == "folder-sync.request", case .object(let fields) = request.parameters,
+                  fields["action"] == .string("stage-range"), case .number(let length) = fields["length"],
+                  length.rounded() == length, length > 0, length <= 32 * 1024 * 1024,
+                  let source = try? NodeFolderStreamInput(handle: .standardInput, length: Int(length)) else {
+                connection.invalidate(); write(.failure(id: request.id, code: "invalid_request", message: "Invalid staging stream.")); return
+            }
+            stageSource = source
+            service.stage(input, source: source) { data in reply.finish(data) }
+        } else if streaming { service.stream(input, sink: sink) { data in reply.finish(data) } }
+        else { service.request(input) { data in reply.finish(data) } }
 
-        let response = reply.wait(seconds: ThingtimeNodeXPCRequestPolicy.bridgeResponseTimeoutSeconds(for: request.method))
-            ?? encoded(.failure(id: request.id, code: "node_timeout", message: "Thingtime Node did not respond in time."))
+        let response = withExtendedLifetime(stageSource) {
+            reply.wait(seconds: ThingtimeNodeXPCRequestPolicy.bridgeResponseTimeoutSeconds(for: request.method))
+                ?? encoded(.failure(id: request.id, code: "node_timeout", message: "Thingtime Node did not respond in time."))
+        }
         connection.invalidate()
-        FileHandle.standardOutput.write(response)
+        if streaming {
+            sink.finish(response)
+        } else { FileHandle.standardOutput.write(response) }
     }
 
     private static func encoded(_ response: NodeResponse) -> Data {

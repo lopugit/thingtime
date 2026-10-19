@@ -79,6 +79,9 @@ test('current Things index plan keeps four slots free below MongoDB hard limit',
 	assert.equal(desired.has('things_ci_repository_updated'), false);
 	assert.equal(desired.has('things_vote_key_lookup'), true, 'poll legacy reads retain their index until a separately verified migration');
 	assert.equal(desired.has('thingtime_1_parentId_1_createdAt_-1_shareId_1'), false);
+	const snapshotIndex = fixture.options.find(index => index.name === 'ownerId_1_shareId_1');
+	assert.deepEqual(snapshotIndex?.keys, { ownerId: 1, shareId: 1 });
+	assert.deepEqual(snapshotIndex?.options.collation, { locale: 'simple' });
 });
 
 test('the five dead pre-Things indexes measured on production are retired by name', () => {
@@ -107,6 +110,7 @@ test('legacy-compatible bootstrap fits after retiring the pre-release Connection
 	assert.ok(fixture.actions.indexOf(`drop:${stale}`) < fixture.actions.findIndex((action) => action.startsWith('create:')));
 	assert.ok(1 + HOME_ONLY_THINGS_INDEXES + desired.size <= MONGODB_COLLECTION_INDEX_LIMIT);
 	assert.ok(desired.has('service_workspace_records'), 'new workspace lookups still fit beside compatibility indexes');
+	assert.equal(desired.has('ownerId_1_shareId_1'), false, 'account snapshots require the modern index plan');
 });
 
 test('v1-era kind indexes and the sandbox TTL are partial, and their unfiltered originals retire', async () => {

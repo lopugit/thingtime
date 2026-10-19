@@ -18,7 +18,17 @@ export type SettingsDocumentHostProps = {
   scopeKey: string;
   title?: string;
   persistence?: 'account' | 'device';
-  children: (render: { blocks: WebpageBlock[]; chrome: BuilderChrome | null; editing: boolean }) => React.ReactNode;
+  /** Native hosts provide their selected authenticated API transport. */
+  accountTransport?: { origin: string; fetch: typeof fetch; currentOrigin: () => string };
+  children: (render: SettingsDocumentControls) => React.ReactNode;
+};
+
+export type SettingsDocumentControls = {
+  blocks: WebpageBlock[]; chrome: BuilderChrome | null; editing: boolean;
+  /** Authored blocks only; the same validation, account scope and revision fence as Builder saves. */
+  setBlocks: (blocks: WebpageBlock[]) => void;
+  save: () => Promise<{ ok: boolean; error?: string; id?: string }>;
+  canSave: boolean; saving: boolean; dirty: boolean;
 };
 
 const OfflineContents = React.createContext<React.ReactNode>(null);
@@ -42,7 +52,7 @@ export function SettingsDocumentHost(props: SettingsDocumentHostProps) {
 function ScopedSettingsDocument(props: SettingsDocumentHostProps) {
   const user = useCurrentUser();
   const dataPlane = useDataPlane();
-  const origin = typeof window === 'undefined' ? 'http://localhost' : window.location.origin;
+  const origin = props.accountTransport?.origin ?? (typeof window === 'undefined' ? 'http://localhost' : window.location.origin);
   const ownerId = props.persistence === 'device' ? 'device' : user?.id || 'anonymous';
   const plane = props.persistence === 'device' ? props.scopeKey : dataPlane || 'unavailable';
   const scope = React.useMemo(() => ({ origin, ownerId, dataPlane: plane, documentKey: props.documentKey }), [origin, ownerId, plane, props.documentKey]);
@@ -51,7 +61,7 @@ function ScopedSettingsDocument(props: SettingsDocumentHostProps) {
     writable={props.persistence === 'device' || (!!user?.id && !!dataPlane && !user.temporary)} />;
 }
 
-function SettingsDocumentSession({ defaultDocument, title = 'Settings layout', persistence = 'account', children, documentScope, writable }: SettingsDocumentHostProps & {
+function SettingsDocumentSession({ defaultDocument, title = 'Settings layout', persistence = 'account', accountTransport, children, documentScope, writable }: SettingsDocumentHostProps & {
   documentScope: Parameters<typeof settingsDocumentKey>[0]; writable: boolean;
 }) {
   const key = settingsDocumentKey(documentScope);
@@ -75,7 +85,7 @@ function SettingsDocumentSession({ defaultDocument, title = 'Settings layout', p
   const dirtyRef = React.useRef(dirty); dirtyRef.current = dirty;
   const adapter = React.useMemo(() => typeof window === 'undefined' ? null : persistence === 'device'
     ? localSettingsDocumentAdapter(documentScope, window.localStorage, navigator.locks)
-    : accountSettingsDocumentAdapter(documentScope), [documentScope, persistence]);
+    : accountSettingsDocumentAdapter(documentScope, accountTransport), [documentScope, persistence, accountTransport]);
   React.useEffect(() => {
     if (controller.current.signal.aborted) controller.current = new AbortController();
     return () => controller.current.abort();
@@ -97,15 +107,17 @@ function SettingsDocumentSession({ defaultDocument, title = 'Settings layout', p
     return () => { active = false; };
   }, [adapter, reload, writable, cacheKey, defaults, persistence, title]);
   const update = (blocks: WebpageBlock[]) => {
+    if (saving.current) return;
     try { const safe = settingsDocumentBlocks(blocks); revision.current++; setDocument(previous => ({ ...previous, blocks: safe })); }
     catch (cause) { setError(cause instanceof Error ? cause.message : 'This layout change is unavailable.'); }
   };
   const saving = React.useRef(false);
+  const [saveBusy, setSaveBusy] = React.useState(false);
   const save = async () => {
     if (saving.current) return { ok: false, error: 'A layout save is already running.' };
     if (!writable || !ready || !adapter) return { ok: false, error: 'Reload the current account layout before saving.' };
     const signal = controller.current.signal;
-    saving.current = true;
+    saving.current = true; setSaveBusy(true);
     const snapshot = current.current;
     const edit = revision.current;
     try {
@@ -121,27 +133,27 @@ function SettingsDocumentSession({ defaultDocument, title = 'Settings layout', p
       const message = cause instanceof Error ? cause.message : 'The layout could not be saved.';
       if (!signal.aborted) setError(message);
       return { ok: false, error: message };
-    } finally { saving.current = false; }
+    } finally { saving.current = false; if (!signal.aborted) setSaveBusy(false); }
   };
   const draft: UseWebpageDraft = {
     loading: !ready, error: !!error, blocks: document.blocks, setBlocks: update, dirty,
     resolved: { page: { id: document.id || `local-${documentScope.documentKey}`, crystal: { name: document.name, blocks: document.blocks }, author: { id: documentScope.ownerId }, acl: ['tt:user'] }, source: 'user', componentsByRef: {} },
-    componentsByRef: {}, addComponent: () => setError('External component sources cannot run inside credential settings.'),
-    ensureComponent: async () => { throw new Error('Use intrinsic blocks in credential settings.'); }, markSaved: () => {},
+    componentsByRef: {}, addComponent: () => setError('External component sources cannot run inside this settings layout.'),
+    ensureComponent: async () => { throw new Error('Use intrinsic blocks in this settings layout.'); }, markSaved: () => {},
     save, resetToDefault: async () => { update(defaults); return { ok: true }; },
     discardDraft: () => { revision.current++; setDocument(saved); }, refresh: () => setReload(value => value + 1)
   };
   return <Box minW={0} data-settings-document={documentScope.documentKey}>
     <Flex gap={2} mb={2} align="center" flexWrap="wrap">
-      <Button size="xs" variant="ghost" onClick={() => setEditing(value => !value)}>{editing ? 'Done editing layout' : 'Edit layout'}</Button>
+      <Button size="xs" variant="ghost" isDisabled={saveBusy} onClick={() => setEditing(value => !value)}>{editing ? 'Done editing layout' : 'Edit layout'}</Button>
       {dirty && <Text fontSize="xs">Unsaved layout</Text>}
-      {editing && <Button size="xs" isDisabled={!ready || !writable || !dirty} onClick={() => void save()}>Save layout</Button>}
+      {editing && <Button size="xs" isDisabled={!ready || !writable || !dirty || saveBusy} onClick={() => void save()}>Save layout</Button>}
       {!writable && <Text fontSize="xs">Sign in to save a personal layout.</Text>}
     </Flex>
     {error && <Flex gap={2} align="center"><Text role="alert" fontSize="xs">{error}</Text><Button size="xs" onClick={() => setReload(value => value + 1)}>Retry</Button></Flex>}
-    {editing ? <SettingsEditor key="edit" draft={draft} name={document.name} onName={name => { revision.current++; setDocument(previous => ({ ...previous, name })); }}>
-      {chrome => children({ blocks: document.blocks, chrome, editing: true })}
-    </SettingsEditor> : <React.Fragment key="view">{children({ blocks: document.blocks, chrome: null, editing: false })}</React.Fragment>}
+    {editing ? <SettingsEditor key="edit" draft={draft} name={document.name} onName={name => { if (saving.current) return; revision.current++; setDocument(previous => ({ ...previous, name })); }}>
+      {chrome => children({ blocks: document.blocks, chrome, editing: true, setBlocks: update, save, canSave: ready && writable && !saveBusy, saving: saveBusy, dirty })}
+    </SettingsEditor> : <React.Fragment key="view">{children({ blocks: document.blocks, chrome: null, editing: false, setBlocks: update, save, canSave: ready && writable && !saveBusy, saving: saveBusy, dirty })}</React.Fragment>}
   </Box>;
 }
 
@@ -154,6 +166,6 @@ function SettingsEditor({ draft, name, onName, children }: { draft: UseWebpageDr
     {children(builder.chrome)}{builder.insertMenu}
     {open && <BuilderDrawer allowedBlockTypes={SETTINGS_BLOCK_TYPES} allowDataSources={false} title="Settings layout" mode="site" hideTransfer draft={draft} selectedId={builder.selectedId}
       onSelectBlock={id => builder.chrome.onSelect(id)} onDeselect={builder.deselect} onClose={() => setOpen(false)} pageName={name} onPageName={onName}
-      audienceAcl={['tt:user']} onAudienceAcl={() => {}} helpText="Edit this layout with normal Builder blocks. Live credential operations pause while editing. Save stores only the authored layout." />}
+      audienceAcl={['tt:user']} onAudienceAcl={() => {}} helpText="Edit this layout with normal Builder blocks. Live operations pause while editing. Save stores only the authored layout." />}
   </>;
 }

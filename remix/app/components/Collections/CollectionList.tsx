@@ -43,6 +43,7 @@ export function CollectionList<T>({
 	size: externalSize,
 	onSizeChange,
 	hideSize = false,
+	hideCount = false,
 	hasMore = false,
 	loadMore,
 	loading = false,
@@ -61,6 +62,7 @@ export function CollectionList<T>({
 	size?: CollectionSize;
 	onSizeChange?: (size: CollectionSize) => void;
 	hideSize?: boolean;
+	hideCount?: boolean;
 	hasMore?: boolean;
 	loadMore?: () => Promise<unknown>;
 	loading?: boolean;
@@ -193,14 +195,14 @@ export function CollectionList<T>({
 					</button>
 				)}
 			</div>
-			<div className="tt-collection-count" role="status" aria-live="polite">
+			{!hideCount && <div className="tt-collection-count" role="status" aria-live="polite">
 				{filtered.length
 					? `${window.start + 1}–${window.end} of ${filtered.length}${hasMore ? '+' : ''} results`
 					: loading || hasMore
 					? 'Looking for results…'
 					: '0 results'}
 				{filtering && hasMore && !error ? ' · Searching older records…' : ''}
-			</div>
+			</div>}
 			{filtered.length ? (
 				children(filtered.slice(window.start, window.end))
 			) : (

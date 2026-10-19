@@ -423,7 +423,21 @@ public enum ThingtimeNodeLog {
 }
 
 @MainActor
-public final class DeviceTelemetryCollector {
+public protocol DeviceTelemetryProviding: Sendable {
+    func snapshot(now: Date) -> DeviceTelemetry
+    func sessionSnapshot() -> SessionTelemetry
+    func batterySnapshot() -> BatteryTelemetry
+    func permissionPreflight() -> PermissionPreflight
+    func requestPermission(_ kind: ThingtimePermissionKind) -> PermissionPreflight
+    func setPreventIdleSleep(_ enabled: Bool) throws
+}
+
+public extension DeviceTelemetryProviding {
+    func snapshot() -> DeviceTelemetry { snapshot(now: Date()) }
+}
+
+@MainActor
+public final class DeviceTelemetryCollector: DeviceTelemetryProviding {
     private let sessionActivity: SessionActivityMonitor
     private let powerAssertions: PowerAssertionController
     private var menuBarSnapshot: MenuBarTelemetry?
@@ -473,7 +487,7 @@ public final class DeviceTelemetryCollector {
     }
 
     public func snapshot(now: Date = Date()) -> DeviceTelemetry {
-        let session = sessionTelemetry()
+        let session = sessionSnapshot()
         if session.isLocked {
             menuBarGeneration = UUID()
             menuBarSnapshot = SystemMenuBar.snapshot(now: now, locked: true)
@@ -489,7 +503,7 @@ public final class DeviceTelemetryCollector {
                 let snapshot = await Task.detached(priority: .utility) { await SystemMenuBar.snapshotWithIcons() }.value
                 guard let self else { return }
                 self.menuBarRead = nil
-                guard self.menuBarGeneration == generation, !self.sessionTelemetry().isLocked else { return }
+                guard self.menuBarGeneration == generation, !self.sessionSnapshot().isLocked else { return }
                 self.menuBarSnapshot = snapshot
             }
         }
@@ -507,7 +521,7 @@ public final class DeviceTelemetryCollector {
             soundEffectsOutputMuted: SystemAudio.soundEffectsOutputMuted(),
             audioDevices: SystemAudio.devices(),
             wifi: SystemWiFi.snapshot(),
-            session: sessionTelemetry(),
+            session: sessionSnapshot(),
             permissions: permissionPreflight(),
             runningApplications: NSWorkspace.shared.runningApplications
                 .map {
@@ -547,7 +561,8 @@ public final class DeviceTelemetryCollector {
         try powerAssertions.setPreventingIdleSleep(enabled)
     }
 
-    private func sessionTelemetry() -> SessionTelemetry {
+    /// Policy checks must not enumerate hardware or request unrelated privacy access.
+    public func sessionSnapshot() -> SessionTelemetry {
         let dictionary = CGSessionCopyCurrentDictionary() as? [String: Any]
         return SessionTelemetry(
             // NSWorkspace notifications are the public authority. The extra

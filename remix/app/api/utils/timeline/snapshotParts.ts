@@ -23,7 +23,7 @@ export function splitLargeThingSnapshot(snapshot: TimelineSnapshot | null, owner
  return { snapshot: { adapter: TIMELINE_SNAPSHOT_PARTS_ADAPTER, version: 1, value: reference } as TimelineSnapshot, parts };
 }
 
-function unpackPart(doc: any): TimelineSnapshotPart {
+export function timelineSnapshotPartFromDoc(doc: any): TimelineSnapshotPart {
  const bytes = binaryBytes(doc?.secure);
  if (!doc?.thingtime?.includes(TIMELINE_SNAPSHOT_PART_KIND) || doc.timelineSnapshotPartVersion !== 1 || !bytes || bytes > 512 * 1024) throw new Error('Invalid Timeline snapshot part envelope');
  const part = parseTimelineSnapshotPart(JSON.parse(fromBin(doc.secure)));
@@ -37,7 +37,7 @@ export async function storeTimelineSnapshotParts(things: any, parts: TimelineSna
  for (let offset = 0; offset < parts.length; offset += 64) {
   const batch = parts.slice(offset, offset + 64).map(parseTimelineSnapshotPart);
   const prior = await things.find({ ownerId: batch[0].ownerId, thingtime: TIMELINE_SNAPSHOT_PART_KIND, shareId: { $in: batch.map(part => timelineSnapshotPartThingId(part.ownerId, part.id)) } }, { session }).toArray();
-  const existing = new Map(prior.map((doc: any) => { const part = unpackPart(doc); return [part.id, JSON.stringify(part)]; }));
+  const existing = new Map(prior.map((doc: any) => { const part = timelineSnapshotPartFromDoc(doc); return [part.id, JSON.stringify(part)]; }));
   const insert = batch.filter(part => {
    if (!existing.has(part.id)) return true;
    if (existing.get(part.id) !== JSON.stringify(part)) throw new Error('Timeline snapshot part identity changed');
@@ -59,7 +59,7 @@ export async function readTimelineSnapshot(things: any, ownerId: string, eventId
   const ids = Array.from({ length: Math.min(64, reference.partCount - offset) }, (_, index) => timelineSnapshotPartId(eventId, side, offset + index));
   const docs = await things.find({ ownerId, thingtime: TIMELINE_SNAPSHOT_PART_KIND, shareId: { $in: ids.map(id => timelineSnapshotPartThingId(ownerId, id)) } }, session ? { session } : {}).toArray();
   if (docs.length !== ids.length) throw new Error('Timeline snapshot parts are unavailable');
-  const parts = new Map(docs.map((doc: any) => { const part = unpackPart(doc); return [part.id, part]; }));
+  const parts = new Map(docs.map((doc: any) => { const part = timelineSnapshotPartFromDoc(doc); return [part.id, part]; }));
   for (const id of ids) {
    const part = parts.get(id) as TimelineSnapshotPart | undefined;
    if (!part || part.ownerId !== ownerId || part.eventId !== eventId || part.side !== side || (part.ordinal < reference.partCount - 1 && part.data.length !== TIMELINE_SNAPSHOT_PART_CHARS)) throw new Error('Timeline snapshot parts are incomplete');

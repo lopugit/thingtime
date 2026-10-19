@@ -24,7 +24,7 @@ const validEnvelope = (doc: Envelope): boolean => {
 	return [1, 2, TIMELINE_ENVELOPE_VERSION].includes(doc.timelineEnvelopeVersion as number) && bytes !== null && bytes > 0 && bytes <= TIMELINE_EVENT_MAX_BYTES + 2048;
 };
 
-function readEnvelope(doc: Envelope) {
+export function readTimelineEnvelope(doc: Envelope) {
 	if (!Array.isArray(doc.thingtime) || !doc.thingtime.includes(TIMELINE_EVENT_KIND) || !validEnvelope(doc)) throw new Error('Invalid Timeline storage envelope');
 	const value = JSON.parse(fromBin(doc.secure));
 	if (doc.timelineEnvelopeVersion !== 3) return parseTimelineEntry(value);
@@ -45,7 +45,7 @@ export function timelinePayloadBytes(doc: Envelope): number | null {
 	if (!validEnvelope(doc)) return null;
 	if (doc.timelineEnvelopeVersion === 1) return binaryBytes(doc.secure);
 	try {
-		const { event } = readEnvelope(doc);
+		const { event } = readTimelineEnvelope(doc);
 		if (event.mode !== 'revision' || event.source === 'client') return Buffer.byteLength(JSON.stringify({ before: event.before, after: event.after }));
 		let total = 0;
 		for (const snapshot of [event.before, event.after]) {
@@ -70,7 +70,7 @@ export function timelinePayloadBytes(doc: Envelope): number | null {
 }
 
 export function unpackTimelineEntry(doc: Envelope, links: TimelineLink[] = []): TimelineEntry {
-	const entry = readEnvelope(doc);
+	const entry = readTimelineEnvelope(doc);
 	return doc.timelineEnvelopeVersion === 3 ? { event: joinTimelineEvent(entry.event as ReturnType<typeof parseTimelineEventRecord>, links), receipt: entry.receipt } : entry as TimelineEntry;
 }
 
