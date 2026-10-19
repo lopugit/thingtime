@@ -100,7 +100,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   cursors after reconnect or app restart. Bind the retained import to its exact
   reviewed job and preserve it through cleanup until a durable plan owns it.
   Existing matching native captures can adopt their already imported prefix.
-  Installed recovery and first payload acceptance remain pending. — Codex (AI)
+  Installed recovery and first payload acceptance remain pending. See
+  [PR1056 verification](../PRs/1056-sync-import-resume-resume-mac-backup-imports.md). — Codex (AI)
 
 - 2026-10-20: Preserve automatic file-sync admission when normal desktop Quit
   cancels an in-flight folder request before renderer shutdown. The host refuses
