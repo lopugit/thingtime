@@ -231,9 +231,10 @@ test('desktop excluded scans fail before dispatch on an older native host', asyn
 	assert.equal(f.calls.length, calls);
 });
 
-test('fixed native verification retry survives IPC redaction; arbitrary and authority failures remain terminal', async () => {
+test('fixed native verification and shutdown waits survive IPC redaction; arbitrary and authority failures remain terminal', async () => {
  const { SyncConnectionWait, isSyncConnectionFailure } = await import('./syncConnectionWait');
- const marker = '[folder_identity_retry] Folder identity verification is temporarily unavailable. Retry after reconnecting.';
+ for (const marker of ['[folder_identity_retry] Folder identity verification is temporarily unavailable. Retry after reconnecting.',
+  '[folder_sync_shutdown] Thingtime is closing. Saved sync work can resume when reopened.']) {
  for (const message of [marker, `Error invoking remote method 'thingtime-desktop:folder-sync': Error: ${marker}`,
   `private-prefix ${marker}`, `${marker} private-suffix`, 'Folder access changed. Reopen this device with the current account.']) {
   for (const initial of [true, false]) {
@@ -253,9 +254,10 @@ test('fixed native verification retry survives IPC redaction; arbitrary and auth
    await assert.rejects(attempt(), error => {
     assert.equal(error instanceof SyncConnectionWait, expected);
     assert.equal(isSyncConnectionFailure(error), expected);
-    assert.doesNotMatch((error as Error).message, /private-prefix|private-suffix|folder_identity_retry/);
+    assert.doesNotMatch((error as Error).message, /private-prefix|private-suffix|folder_identity_retry|folder_sync_shutdown/);
     return true;
    });
   }
+ }
  }
 });

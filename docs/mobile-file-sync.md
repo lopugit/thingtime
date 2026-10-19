@@ -3709,3 +3709,22 @@ a new Rust scan, but automatic restart entered attention and the old Retry path
 dropped its interval. The exact triggering failure was not retained across Quit.
 The fixes above address reproduced code paths; real automatic restart and cloud
 payload acceptance remain open. Index/import counts do not prove payload upload.
+
+## Desktop shutdown recovery — 2026-10-20
+
+The installed PR #1054 Quit/reopen check reproduced an attention-state job.
+Electron's `before-quit` cancels host folder requests while local services drain,
+before the renderer receives `pagehide`. That cancellation previously lost its
+lifecycle meaning through IPC and could be persisted as an access failure.
+
+The host now enters a closed state on Quit, refuses new work and emits a fixed
+shutdown wait for cancelled requests. The desktop adapter recognizes only that
+exact message; the existing typed-wait path keeps admission and sealed captures
+available. Account and endpoint invalidation remain separate terminal paths.
+An actual authority refusal racing Quit is not relabeled as cancellation.
+
+The five-minute automatic interval survived an explicit Retry in installed
+PR #1054, and the completed 3,653,988-entry Commander capture was reused. Signed
+installed Quit/reopen acceptance for this shutdown correction and actual cloud
+payload receipts remain pending. Inventory import currently restarts from the
+beginning after an interruption; retaining its page checkpoint is separate work.

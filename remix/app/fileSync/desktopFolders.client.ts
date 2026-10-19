@@ -94,6 +94,10 @@ export async function createDesktopFolderHost(input: {
 						// fields. Only recognize fixed host compatibility/retry messages;
 						// never display arbitrary native errors, paths or transport details.
 						const retry = '[folder_identity_retry] Folder identity verification is temporarily unavailable. Retry after reconnecting.';
+						const shutdown = '[folder_sync_shutdown] Thingtime is closing. Saved sync work can resume when reopened.';
+						if (error instanceof Error && (error.message === shutdown ||
+							error.message === `Error invoking remote method 'thingtime-desktop:folder-sync': Error: ${shutdown}`))
+							throw new SyncConnectionWait('Thingtime is closing. Saved sync work will resume when reopened.');
 						if (error instanceof Error && (error.message === retry ||
 							error.message === `Error invoking remote method 'thingtime-desktop:folder-sync': Error: ${retry}`))
 							throw new SyncConnectionWait('Waiting for folder access verification to reconnect.');
