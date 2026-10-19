@@ -94,8 +94,16 @@ public struct MobileFolderInventory: Sendable {
     public static let maximumCaptures = 8
     private typealias Failure = MobileFolderStore.Failure
     private let directory: URL
+    private let commanderIndexer: URL?
     public init(directory: URL = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
-        .appendingPathComponent("ThingtimeFolderInventories", isDirectory: true)) { self.directory = directory }
+        .appendingPathComponent("ThingtimeFolderInventories", isDirectory: true), commanderIndexer: URL? = nil) {
+        self.directory = directory
+        #if os(macOS)
+        self.commanderIndexer = commanderIndexer ?? Bundle.main.url(forAuxiliaryExecutable: "commander-indexer")
+        #else
+        self.commanderIndexer = nil
+        #endif
+    }
 
     private func location(_ scope: Scope, id: String) throws -> URL {
         guard UUID(uuidString: id) != nil, UUID(uuidString: scope.rootId) != nil,
@@ -212,7 +220,18 @@ public struct MobileFolderInventory: Sendable {
                 guard skipped < 9_007_199_254_740_991 else { throw Failure.limit }
                 try db.insertSkipped(Skipped(ordinal: skipped, gap: gap)); skipped += 1; progress(count, skipped)
             }
-            try MobileFolderReader.captureBackup(bookmark: bookmark, excludedPaths: excludedPaths, ignoreRules: rules,
+            func scan(ignored: () throws -> Void, append: (MobileFolderReader.Entry) throws -> Bool, skip: (MobileFolderReader.BackupGap) throws -> Void) throws {
+                #if os(macOS)
+                if let helper = commanderIndexer {
+                    try MobileFolderReader.captureBackupWithCommander(helper: helper, bookmark: bookmark, excludedPaths: exclusions,
+                        ignoreRules: rules, ignored: ignored, append: append, skip: skip)
+                    return
+                }
+                #endif
+                try MobileFolderReader.captureBackup(bookmark: bookmark, excludedPaths: exclusions, ignoreRules: rules,
+                    ignored: ignored, append: append, skip: skip)
+            }
+            try scan(
                 ignored: { ignoredCount += 1; ignored(ignoredCount) }, append: { row in
                 try Task.checkCancellation()
                 do {
@@ -235,6 +254,16 @@ public struct MobileFolderInventory: Sendable {
                 }
             }, skip: skip)
             try Task.checkCancellation()
+            #if os(macOS)
+            if commanderIndexer != nil {
+                try MobileFolderReader.recheckCommanderDirectories(bookmark: bookmark, replay: { visit in
+                    try db.rows(offset: 0) { _, data in
+                        if let gap = try visit(JSONDecoder().decode(MobileFolderReader.Entry.self, from: data)) { try skip(gap) }
+                        return true
+                    }
+                })
+            }
+            #endif
             // Removing ambiguous earlier entries leaves ordinal gaps. Compact
             // once on disk before publishing any final page/count.
             try db.execute("CREATE TABLE sealed_entries (ordinal INTEGER PRIMARY KEY, path TEXT NOT NULL UNIQUE, identity TEXT NOT NULL UNIQUE, data BLOB NOT NULL)")
@@ -371,8 +400,8 @@ public struct MobileFolderInventory: Sendable {
                 try execute("PRAGMA synchronous=FULL")
                 try execute("PRAGMA cache_size=-2048")
                 try execute("PRAGMA temp_store=FILE")
-                // A disk quota, not an in-memory or file-count ceiling.
-                try execute("PRAGMA max_page_count=262144")
+                // Metadata streams to disk; SQLite's bounded cache controls RAM.
+                // Do not impose a fixed inventory-size ceiling on large homes.
             }
         }
         deinit { sqlite3_close(handle) }

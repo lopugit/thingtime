@@ -190,6 +190,11 @@ public actor ThingtimeNodeController {
         do { return .success(id: request.id, result: try await folderSync.handle(request.parameters, stream: stream, receive: receive)) }
         catch let error as MobileFolderStore.Failure { return .failure(id: request.id, code: "folder_unavailable", message: error.localizedDescription) }
         catch is CancellationError { return .failure(id: request.id, code: "cancelled", message: "Folder access was cancelled.") }
+        catch where MacFolderSync.identityVerificationIsTransient(error) {
+            // Electron IPC preserves messages, but may drop custom Error fields.
+            // This fixed marker carries no upstream error text or private data.
+            return .failure(id: request.id, code: "folder_identity_retry", message: "[folder_identity_retry] Folder identity verification is temporarily unavailable. Retry after reconnecting.")
+        }
         catch { return .failure(id: request.id, code: "folder_unavailable", message: "Folder access could not be verified. Check pairing, consent and the selected account.") }
     }
 

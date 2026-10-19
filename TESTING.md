@@ -12480,3 +12480,18 @@ separate from deterministic discovery/lease tests.
 
 - [x] Native backup interruption diagnostics identify scan, monitor or request authorization and fixed failure categories without descriptions, file paths, account IDs, URLs or credentials. MacFolderSyncTests passes 30 tests, including redaction.
 - [ ] Capture an actual failure category in the installed app before claiming the real scan restart is resolved.
+
+### Commander Rust backup indexing and identity recovery — 2026-10-20
+
+- [x] Run `bash macos/ThingtimeNode/scripts/test-commander-backup.sh`: compare real
+  Rust and Swift rows including multipart hashes, empty files and Unicode bytes;
+  verify the shared Git-ignore oracle, excluded subtree pruning, no nested ignore
+  imports, duplicate-inode and special-file gaps, crash refusal and cancellation.
+- [x] Run native MacFolderSync/ThingtimeAPIClient, Electron folder-sync and shared
+  nativeInventory regressions: timeout/offline/408/429/5xx retain captures; actual
+  revocation/grant loss cancels, failed authorization exposes no rows/effects,
+  retry backoff is bounded and interrupted polls do not cancel the scanner.
+- [ ] Verify signed installed nested `commander-indexer`, saved home exclusions
+  and Git-ignore rules, real native capture completion, automatic reconnect and
+  at least one independently confirmed payload upload receipt. Index counts alone
+  do not establish upload success or a complete backup.

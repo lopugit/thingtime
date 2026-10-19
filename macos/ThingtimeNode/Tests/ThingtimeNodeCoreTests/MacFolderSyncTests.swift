@@ -61,6 +61,185 @@ final class MacFolderSyncTests: XCTestCase {
         }
         throw MobileFolderStore.Failure.unavailable
     }
+
+    func testTransientVerificationClassificationExcludesAuthorityAndTrustFailures() {
+        for error: Error in [URLError(.timedOut), URLError(.networkConnectionLost), URLError(.notConnectedToInternet),
+                             ThingtimeAPIClientError.rejected(status: 408), ThingtimeAPIClientError.rejected(status: 429), ThingtimeAPIClientError.rejected(status: 503)] {
+            XCTAssertTrue(MacFolderSync.identityVerificationIsTransient(error))
+        }
+        for error: Error in [CancellationError(), URLError(.cancelled), URLError(.serverCertificateUntrusted),
+                             ThingtimeAPIClientError.notPaired, ThingtimeAPIClientError.rejected(status: 401),
+                             ThingtimeAPIClientError.rejected(status: 403), ThingtimeAPIClientError.invalidResponse,
+                             MobileFolderStore.Failure.unavailable] {
+            XCTAssertFalse(MacFolderSync.identityVerificationIsTransient(error))
+        }
+    }
+
+    func testTransientSealMonitorAndRequestFailuresPreserveGenerationButDiscloseNothingUntilFreshAuthorization() async throws {
+        for failure: Error in [URLError(.timedOut), ThingtimeAPIClientError.rejected(status: 429), ThingtimeAPIClientError.rejected(status: 503)] {
+            var saved: [String: Data] = [:], checks = 0, online = true, retrying = false, observedMonitor = false
+            var retryGate: CheckedContinuation<Void, Never>?
+            let waiting = expectation(description: "seal awaits fresh identity")
+            let monitor = expectation(description: "monitor also survives unavailable identity")
+            let store = MobileFolderStore(load: { saved[$0.key] }, save: { saved[$0.key] = $1 })
+            let owner = try FileSyncOwnerScope(ownerId: "owner", url: origin)
+            let grant = try store.add(owner, selected: folder.appendingPathComponent("selected"))
+            let service = try MacFolderSync(origin: origin, store: store,
+                staging: MobileSyncStaging(directory: folder.appendingPathComponent(UUID().uuidString)),
+                verify: { _, _ in
+                    checks += 1
+                    if checks == 3 { online = false }
+                    if !online {
+                        if retrying && !observedMonitor { observedMonitor = true; monitor.fulfill() }
+                        throw failure
+                    }
+                }, choose: { nil }, approve: { _ in false },
+                inventories: MobileFolderInventory(directory: folder.appendingPathComponent(UUID().uuidString)))
+            service.backupMonitorInterval = .milliseconds(20)
+            service.backupRetrySleep = { duration in
+                XCTAssertEqual(duration, .seconds(5)); retrying = true
+                await withCheckedContinuation { retryGate = $0; waiting.fulfill() }
+            }
+            defer { retryGate?.resume(); service.suspend() }
+            let fields = backupFields(grant.id)
+            let begin = try await service.handle(request("scan-capture", fields)).decode([String: JSONValue].self)
+            let generation = try XCTUnwrap(begin["backupCapture"]).decode([String: JSONValue].self)["generation"]
+            await fulfillment(of: [waiting, monitor], timeout: 3)
+            // A failed polling/read request must neither return local data nor
+            // cancel the scanner's private, unsealed capture.
+            await rejects { try await service.handle(self.request("scan-status", fields)) }
+            await rejects { try await service.handle(self.request("inspect", ["rootId": .string(grant.id), "path": .string("private")])) }
+            online = true; retryGate?.resume(); retryGate = nil
+            let complete = try await awaitBackup(service, fields: fields)
+            let status = try XCTUnwrap(complete["backupCapture"]).decode([String: JSONValue].self)
+            XCTAssertEqual(status["state"], .string("complete")); XCTAssertEqual(status["generation"], generation)
+            XCTAssertGreaterThan(checks, 5)
+        }
+    }
+
+    func testSealRetryStopsOnCancellationRevocationGrantLossAndLifetime() async throws {
+        for stop in ["cancel", "unpair", "forbidden", "grant", "lifetime"] {
+            var saved: [String: Data] = [:], checks = 0, terminal = false, current = Date()
+            let checked = expectation(description: "private preparation waits")
+            let stopped = expectation(description: "retry finishes")
+            let store = MobileFolderStore(load: { saved[$0.key] }, save: { saved[$0.key] = $1 })
+            let owner = try FileSyncOwnerScope(ownerId: "owner", url: origin)
+            let grant = try store.add(owner, selected: folder.appendingPathComponent("selected"))
+            var retryGate: CheckedContinuation<Void, Never>?
+            let inventories = MobileFolderInventory(directory: folder.appendingPathComponent(UUID().uuidString))
+            let service = try MacFolderSync(origin: origin, store: store,
+                staging: MobileSyncStaging(directory: folder.appendingPathComponent(UUID().uuidString)),
+                verify: { _, _ in
+                    checks += 1
+                    if terminal { throw stop == "forbidden" ? ThingtimeAPIClientError.rejected(status: 403) : ThingtimeAPIClientError.notPaired }
+                    if checks >= 3 { throw URLError(.timedOut) }
+                }, choose: { nil }, approve: { _ in false }, inventories: inventories)
+            service.backupNow = { current }
+            service.backupRetrySleep = { _ in
+                await withCheckedContinuation { retryGate = $0; checked.fulfill() }
+                defer { stopped.fulfill() }
+                try Task.checkCancellation()
+            }
+            let fields = backupFields(grant.id)
+            _ = try await service.handle(request("scan-capture", fields))
+            await fulfillment(of: [checked], timeout: 3)
+            if stop == "cancel" { service.suspend() }
+            if stop == "unpair" || stop == "forbidden" { terminal = true }
+            if stop == "grant" { try store.remove(owner, id: grant.id) }
+            if stop == "lifetime" { current = current.addingTimeInterval(MacFolderSync.maximumBackupJobSeconds) }
+            retryGate?.resume(); retryGate = nil
+            await fulfillment(of: [stopped], timeout: 3)
+            // Let the scanner's actor task perform abandonment after the retry.
+            for _ in 0..<20 { await Task.yield() }
+            let id = try XCTUnwrap(fields["captureId"]).decode(String.self)
+            let scope = MobileFolderInventory.Scope(owner: owner, deviceId: "device", rootId: grant.id)
+            let status = try await Task.detached { try inventories.backupStatus(scope, id: id, bookmark: grant.bookmark) }.value
+            XCTAssertEqual(status?.state, "interrupted")
+            XCTAssertLessThanOrEqual(checks, 4, "A terminal authority failure must not retry")
+            service.suspend()
+        }
+    }
+
+    func testCancellationInterruptsActualSealRetrySleep() async throws {
+        var checks = 0, allow = false, saved: [String: Data] = [:]
+        let sleeping = expectation(description: "actual retry sleep")
+        let store = MobileFolderStore(load: { saved[$0.key] }, save: { saved[$0.key] = $1 })
+        let owner = try FileSyncOwnerScope(ownerId: "owner", url: origin)
+        let grant = try store.add(owner, selected: folder.appendingPathComponent("selected"))
+        let service = try MacFolderSync(origin: origin, store: store,
+            staging: MobileSyncStaging(directory: folder.appendingPathComponent("private")),
+            verify: { _, _ in checks += 1; if checks >= 3 && !allow { throw URLError(.timedOut) } },
+            choose: { nil }, approve: { _ in false }, inventories: MobileFolderInventory(directory: folder.appendingPathComponent("inventories")))
+        let fields = backupFields(grant.id)
+        service.backupRetrySleep = { duration in sleeping.fulfill(); try await Task.sleep(for: duration) }
+        _ = try await service.handle(request("scan-capture", fields))
+        await fulfillment(of: [sleeping], timeout: 3)
+        service.suspend()
+        // Suspending the whole service cancels both monitor and retry sleep;
+        // unlike polling transport cancellation, this ends the native job.
+        for _ in 0..<20 { await Task.yield() }
+        allow = true
+        let result = try await awaitBackup(service, fields: fields)
+        XCTAssertEqual(try XCTUnwrap(result["backupCapture"]).decode([String: JSONValue].self)["state"], .string("interrupted"))
+    }
+
+    func testPollingCancellationDuringNetworkVerificationDoesNotCancelPrivateBackup() async throws {
+        var saved: [String: Data] = [:], checks = 0, cancelPolling = false
+        var sealGate: CheckedContinuation<Void, Never>?
+        let sealing = expectation(description: "seal authorization pending")
+        let polling = expectation(description: "polling verification in flight")
+        let store = MobileFolderStore(load: { saved[$0.key] }, save: { saved[$0.key] = $1 })
+        let owner = try FileSyncOwnerScope(ownerId: "owner", url: origin)
+        let grant = try store.add(owner, selected: folder.appendingPathComponent("selected"))
+        let service = try MacFolderSync(origin: origin, store: store,
+            staging: MobileSyncStaging(directory: folder.appendingPathComponent("private")),
+            verify: { _, _ in
+                checks += 1
+                if checks == 3 { await withCheckedContinuation { sealGate = $0; sealing.fulfill() } }
+                else if cancelPolling {
+                    polling.fulfill()
+                    do { try await Task.sleep(for: .seconds(60)) }
+                    catch { throw URLError(.cancelled) } // URLSession's cancellation shape.
+                }
+            }, choose: { nil }, approve: { _ in false },
+            inventories: MobileFolderInventory(directory: folder.appendingPathComponent("inventories")))
+        defer { sealGate?.resume(); service.suspend() }
+        let fields = backupFields(grant.id)
+        _ = try await service.handle(request("scan-capture", fields))
+        await fulfillment(of: [sealing], timeout: 3)
+        cancelPolling = true
+        let read = Task { try await service.handle(request("scan-status", fields)) }
+        await fulfillment(of: [polling], timeout: 3)
+        read.cancel(); await rejects { try await read.value }
+        cancelPolling = false; sealGate?.resume(); sealGate = nil
+        let complete = try await awaitBackup(service, fields: fields)
+        XCTAssertEqual(complete["complete"], .bool(true))
+    }
+
+    func testSealRetryBackoffCapsAtOneMinuteAndEndsAtJobLifetime() async throws {
+        var saved: [String: Data] = [:], checks = 0, allow = false, current = Date(), delays: [Duration] = []
+        let expired = expectation(description: "retry budget expired")
+        let store = MobileFolderStore(load: { saved[$0.key] }, save: { saved[$0.key] = $1 })
+        let owner = try FileSyncOwnerScope(ownerId: "owner", url: origin)
+        let grant = try store.add(owner, selected: folder.appendingPathComponent("selected"))
+        let service = try MacFolderSync(origin: origin, store: store,
+            staging: MobileSyncStaging(directory: folder.appendingPathComponent("private")),
+            verify: { _, _ in checks += 1; if checks >= 3 && !allow { throw ThingtimeAPIClientError.rejected(status: 503) } },
+            choose: { nil }, approve: { _ in false }, inventories: MobileFolderInventory(directory: folder.appendingPathComponent("inventories")))
+        service.backupNow = { current }
+        service.backupRetrySleep = { delay in
+            delays.append(delay)
+            if delays.count == 7 { current = current.addingTimeInterval(MacFolderSync.maximumBackupJobSeconds); expired.fulfill() }
+        }
+        let fields = backupFields(grant.id)
+        _ = try await service.handle(request("scan-capture", fields))
+        await fulfillment(of: [expired], timeout: 3)
+        allow = true
+        let result = try await awaitBackup(service, fields: fields)
+        XCTAssertEqual(delays, [5, 10, 20, 40, 60, 60, 60].map { .seconds($0) })
+        XCTAssertEqual(try XCTUnwrap(result["backupCapture"]).decode([String: JSONValue].self)["state"], .string("interrupted"))
+        service.suspend()
+    }
     func testIgnoreRulesAreEchoedPrunedAndBoundAcrossBackupLifecycle() async throws {
         let selected = folder.appendingPathComponent("selected")
         try FileManager.default.createDirectory(at: selected.appendingPathComponent("node_modules"), withIntermediateDirectories: true)
@@ -594,6 +773,23 @@ final class MacFolderSyncTests: XCTestCase {
         XCTAssertFalse(leased.ok); XCTAssertEqual(calls, 0)
         let local = await controller.handleLocalFolderSync(NodeRequest(method: "folder-sync.request", parameters: request("list")))
         XCTAssertTrue(local.ok); XCTAssertEqual(calls, 2)
+    }
+
+    func testLocalDispatchPreservesOnlyRedactedTransientIdentityMarker() async throws {
+        for failure: Error in [URLError(.timedOut, userInfo: [NSLocalizedDescriptionKey: "private-secret-url"]),
+                               ThingtimeAPIClientError.rejected(status: 429), ThingtimeAPIClientError.rejected(status: 503),
+                               ThingtimeAPIClientError.notPaired, ThingtimeAPIClientError.rejected(status: 403)] {
+            let folderService = try service(verify: { _, _ in throw failure })
+            let telemetry = DeviceTelemetryCollector()
+            let controller = ThingtimeNodeController(
+                journal: try CommandJournal(fileURL: folder.appendingPathComponent(UUID().uuidString)), folderSync: folderService,
+                pairing: PairingManager(store: InMemoryDeviceCredentialStore()), connector: ConnectorRuntime(configuration: nil),
+                telemetry: telemetry, actionExecutor: SafeActionExecutor(telemetry: telemetry))
+            let result = await controller.handleLocalFolderSync(NodeRequest(method: "folder-sync.request", parameters: request("list")))
+            XCTAssertFalse(result.ok)
+            XCTAssertEqual(result.error?.code, MacFolderSync.identityVerificationIsTransient(failure) ? "folder_identity_retry" : "folder_unavailable")
+            XCTAssertFalse(result.error?.message.contains("private-secret-url") ?? true)
+        }
     }
 
     func testCallerCancellationClosesOnlyActiveDialog() async throws {
