@@ -221,3 +221,12 @@
       copy's signature, bundled executable, daemon health, and launcher search.
 - [ ] Confirm Recovery lists the GitHub build and commit in Commander and Recovery
       caches, preserves the previous app, and leaves Electron's cache unchanged.
+
+## Thingtime callback registration recovery
+
+- Verify the built daemon manifest reports its exact origin and every runtime operation; the UI must reject a missing, older or breaking login capability before posting a login request.
+
+- [ ] With a native callback registered, sign in from installed Commander and verify native handoff, the correct account, and Keychain persistence after relaunch.
+- [ ] With only Commander's exact loopback origin registered, sign in and verify browser consent succeeds, the loopback callback completes, and the same account persists after relaunch.
+- [ ] With neither callback registered, or with a suspended app, incompatible capability manifest, or unreachable server, verify Commander shows an actionable failure without opening a broken consent page or accepting another callback.
+- [ ] Change the selected environment during an outstanding login and send a mismatched callback; verify no code reaches another origin and the original state cannot be replayed.

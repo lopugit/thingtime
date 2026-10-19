@@ -178,12 +178,27 @@ Recovery never changes privacy toggles or resets grants.
 
 Commander uses the real Thingtime API; it never reads the database directly.
 
-Commander ships with its public Thingtime client registration for the exact loopback origin
-`http://127.0.0.1:47820` and its native callback
-`com.thingtime.commander://oauth/callback`. The latter is registered as an exact native redirect URI
-(not a web origin), so the user signs in with their normal browser session and the browser hands the
-one-time PKCE response straight back to Commander. The login requests `profile.username` and
-`app-data`; Advanced settings retain a client-ID override for another Thingtime deployment.
+The local daemon publishes `/.well-known/commander-capabilities.json`, generated from the
+same operation registry used for HTTP dispatch. Its origin-scoped feature versions cover
+every active route, including native callbacks and static assets, without exposing account
+data or credentials. Before sign-in the UI requires `commander.accounts-login` 1.1.0 or a
+compatible same-major update. That contract adds verified callback selection; callback
+contracts also enforce the original server, client and redirect binding. Add or change
+operations in `apps/daemon/src/services/httpRoutes.ts` and deliberately version their contracts.
+
+Commander ships with a public Thingtime client ID. Before opening browser sign-in, it negotiates
+the selected server's OAuth capabilities and checks the exact callback registration. It prefers
+`com.thingtime.commander://oauth/callback`. If the server explicitly reports that native callback
+as unregistered, Commander checks and uses its currently bound loopback callback, normally
+`http://127.0.0.1:47820/oauth/callback`. Both paths use one-time authorization codes and S256 PKCE;
+each attempt is bound to its original server, client ID and callback. Network errors, suspended apps
+and incompatible capabilities fail without switching callbacks.
+
+For another deployment, register your own app through Thingtime Apps, allow the exact loopback
+origin used by Commander, and optionally register the exact native callback under native redirect
+URIs (not web origins). Advanced settings retain the server/client-ID overrides. Do not assume a
+callback is registered merely because it appears in this README: the live server remains the
+authority. The login requests only `profile.username` and `app-data`.
 
 The browser login uses authorization code + PKCE. Access tokens are saved only through the native credential bridge:
 Keychain on macOS, Credential Manager on Windows, and Secret Service on Linux. Sync data is stored privately under
