@@ -21,8 +21,12 @@ Supported files can proceed while coverage remains explicitly partial.
 
 ## Validation
 
-- Native worker: 16 Apple inventory and 26 Mac adapter tests passed, including
+- Native worker: 16 Apple inventory and 27 Mac adapter tests passed, including
   unreadable subtrees, grant loss, cancellation during sealing and strict scans.
+- Final peer review found and fixed scoped RPC suspend cancelling a background
+  capture and provisional count retraction after a late path collision being
+  rejected by the client. The actual suspend wire path has a native regression;
+  17 native-inventory/partial-backup TypeScript tests pass after both fixes.
 - Shared worker: final 39 focused tests passed; broader 59-test and
   maintenance/runtime suites passed before the final restart changes.
 - Integrated canonical file-sync suite: 378 TypeScript tests and one module-mock

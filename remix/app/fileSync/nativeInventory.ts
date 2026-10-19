@@ -124,7 +124,10 @@ export async function* readNativeInventory(input: {
 				try { response = await request(ownerId, { action: 'scan-status', rootId, inventoryDeviceId, captureId, capturePolicy: 'backup-supported', excludedPaths }, signal); }
 				catch (error) { signal.throwIfAborted(); throw error; }
 				const next = parseNativeBackupStatus(response.backupCapture);
-				if (next.generation !== status.generation || next.totalEntries < status.totalEntries || next.totalSkipped < status.totalSkipped) throw Error('Native indexing generation or coverage changed.');
+				// Supported rows are provisional until sealing: a later case/Unicode
+				// collision can retract an earlier subtree into the skipped ledger.
+				// Pages below still pin the sealed descriptor and exact final count.
+				if (next.generation !== status.generation || next.totalSkipped < status.totalSkipped) throw Error('Native indexing generation or coverage changed.');
 				status = next;
 			}
 			let skipOffset = 0;

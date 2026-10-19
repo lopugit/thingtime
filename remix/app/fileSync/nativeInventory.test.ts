@@ -143,6 +143,27 @@ test('Mac 1.8 backup capture preserves coverage, polls one identity and pages ev
 	assert.equal(progress.length, 2); assert.equal(requests.at(-1)?.action, 'scan-discard');
 });
 
+test('late path collisions may retract provisional rows before the sealed count is pinned', async () => {
+	const current = { ...capture, coverage: 'partial' as const, consistency: 'per-entry' as const, totalSkipped: 2 };
+	const progress: number[] = [], frames = []; let polls = 0;
+	for await (const frame of readNativeInventory({ ownerId: 'owner', deviceId: 'device', rootId, captureId: current.id,
+		backupPolicy: { mode: 'backup', propagateDeletes: false }, signal: new AbortController().signal,
+		waitForPoll: async () => {}, onProgress: p => progress.push(p.totalEntries), request: async (_, request) => {
+			if (request.action === 'scan-capture') return { roots: [], backupCapture: { ...current, totalEntries: 200, totalSkipped: 0, state: 'running' } };
+			if (request.action === 'scan-status') return { roots: [], backupCapture: ++polls === 1
+				? { ...current, totalEntries: 100, totalSkipped: 1, state: 'running' }
+				: { ...current, state: 'complete' } };
+			if (request.action === 'scan-skips') return { roots: [], skippedPage: { capture: current, offset: 0, totalSkipped: 2,
+				skipped: ['Foo', 'foo'].map((path, ordinal) => ({ ordinal, path, reason: 'path-collision', scope: 'subtree' })), nextOffset: null } };
+			if (request.action === 'scan-page') return { roots: [], inventoryPage: { ...page, capture: current } };
+			return { roots: [] };
+		} })) frames.push(frame);
+	assert.deepEqual(progress, [200, 100, 1]);
+	assert.deepEqual(frames.flatMap(frame => frame.entries), [entry]);
+	assert.equal(frames.at(-1)?.totalEntries, 1);
+	assert.throws(() => parseNativeInventoryPage({ ...page, capture: { ...current, totalEntries: 200 } }, current, 0));
+});
+
 test('backup metadata cannot downgrade into strict capture or cross native pages', async () => {
 	const { parseNativeBackupCapture, parseNativeSkippedPage } = await import('./nativeInventory');
 	const partial = { ...capture, coverage: 'partial' as const, consistency: 'per-entry' as const, totalSkipped: 1 };

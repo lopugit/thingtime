@@ -107,6 +107,48 @@ final class MacFolderSyncTests: XCTestCase {
         _ = try await service.handle(request("scan-cancel", fields))
     }
 
+    func testScopedSuspendCancelsActiveRequestWithoutCancellingBackupJob() async throws {
+        var saved: [String: Data] = [:], checks = 0
+        var backupGate: CheckedContinuation<Void, Never>?
+        var pickerGate: CheckedContinuation<URL?, Never>?
+        let prepared = expectation(description: "backup waits at final authorization")
+        let pickerStarted = expectation(description: "scoped request opens picker")
+        let store = MobileFolderStore(load: { saved[$0.key] }, save: { saved[$0.key] = $1 })
+        let owner = try FileSyncOwnerScope(ownerId: "owner", url: origin)
+        let grant = try store.add(owner, selected: folder.appendingPathComponent("selected"))
+        let service = try MacFolderSync(origin: origin, store: store,
+            staging: MobileSyncStaging(directory: folder.appendingPathComponent("private")),
+            verify: { _, _ in
+                checks += 1
+                if checks == 3 {
+                    await withCheckedContinuation { backupGate = $0; prepared.fulfill() }
+                }
+            }, choose: {
+                await withCheckedContinuation { pickerGate = $0; pickerStarted.fulfill() }
+            }, approve: { _ in true },
+            inventories: MobileFolderInventory(directory: folder.appendingPathComponent("inventories")),
+            cancelDialog: { pickerGate?.resume(returning: nil); pickerGate = nil })
+        defer { backupGate?.resume(); pickerGate?.resume(returning: nil); service.suspend() }
+        let fields = backupFields(grant.id)
+        let begin = try await service.handle(request("scan-capture", fields)).decode([String: JSONValue].self)
+        let generation = try XCTUnwrap(begin["backupCapture"]).decode([String: JSONValue].self)["generation"]
+        await fulfillment(of: [prepared], timeout: 3)
+        let requestId = UUID().uuidString
+        let pending = Task { try await service.handle(request("choose", id: requestId)) }
+        await fulfillment(of: [pickerStarted], timeout: 3)
+        // This is the desktop transport's timeout message, with the active
+        // request's identity, rather than cancellation of a Swift caller task.
+        _ = try await service.handle(request("suspend", id: requestId))
+        await rejects { try await pending.value }
+        XCTAssertNil(pickerGate)
+        backupGate?.resume(); backupGate = nil
+        let completed = try await awaitBackup(service, fields: fields)
+        let status = try XCTUnwrap(completed["backupCapture"]).decode([String: JSONValue].self)
+        XCTAssertEqual(status["generation"], generation)
+        XCTAssertEqual(status["state"], .string("complete"))
+        XCTAssertEqual(completed["complete"], .bool(true))
+    }
+
     func testBackupRechecksAuthorityBeforeSealAfterPrivatePreparation() async throws {
         for revokeGrant in [false, true] {
             var saved: [String: Data] = [:], calls = 0

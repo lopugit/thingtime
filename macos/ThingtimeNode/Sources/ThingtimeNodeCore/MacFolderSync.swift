@@ -194,7 +194,7 @@ public final class MacFolderSync {
         } else if ["scan-status", "scan-cancel", "scan-skips"].contains(r.action) { throw MobileFolderStore.Failure.invalid }
         let owner = try FileSyncOwnerScope(ownerId: r.ownerId, url: origin)
         if r.action == "suspend" {
-            if let active, active.id == r.requestId, active.owner == r.ownerId, active.device == r.deviceId { suspend() }
+            if let active, active.id == r.requestId, active.owner == r.ownerId, active.device == r.deviceId { suspendRequest() }
             return .object([:])
         }
         guard active == nil else { throw ThingtimeNodeError.invalidRequest("Another folder request is running.") }
