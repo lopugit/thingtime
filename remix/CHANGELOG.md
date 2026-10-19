@@ -86,6 +86,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-19 — **Codex (AI)**: Add the reusable schema-parameterized agent work-graph read adapter (`api.agent-overview` 2.0.0) with ACL-checked paging, live streaming, and optional status classification. Dashboard pages and write flows are authored as saved Things; current Builder acceptance remains pending. [PR #1047 verification](../PRs/1047-agent-overview-builder-editable-live-agent-manager.md).
+
+- 2026-10-19 — **Codex (AI)**: Document the adapter's breaking response shape,
+  capability negotiation, unknown measurements, external authored-Thing fixture,
+  and pending live acceptance in the fork-safe runbook and manual checklist.
+  See [the adapter guide](../docs/agent-overview.md).
+
 - Commander login verification and API contract details: [PR #1044](../PRs/1044-commander-login-callback-fix-commander-thingtime-login-callback-registration.md).
 
 - 2026-10-19 — **Codex (AI)**: Check Commander OAuth capabilities and callback registration before browser login; recover an unregistered native callback through the explicitly registered loopback callback and bind PKCE attempts to their original server, app and redirect.

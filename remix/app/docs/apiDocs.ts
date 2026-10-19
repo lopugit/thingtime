@@ -646,6 +646,16 @@ const deviceEndpointDocs: ApiEndpointDoc[] = [
 
 export const apiEndpointDocs: ApiEndpointDoc[] = [
   endpoint({
+    id: 'agent-overview', contractVersion: '2.0.0', featureVersion: '2.0.0', group: 'things',
+    title: 'Agent project overview', endpoint: '/api/v1/agent-overview',
+    summary: 'Reads authorized project, task and agent Things as a live Builder data source.',
+    detail: 'GET accepts caller-selected schema names or IDs, view, projectId, taskId, status, q and cursor. Optional comma-separated activeStatuses, blockedStatuses and completeStatuses customize status classification; classifications are included in the cursor context. Depth is numeric and column status is raw data; labels and layout belong to saved Things. Normal responses contain hierarchy rows, kanban columns, reports, questions and measured usage. stream=1 returns server-sent snapshot events, heartbeat events and explicit access errors; reconnect to reconcile changes and deletions. Every read preserves the current session, Character, personal-token restrictions, app namespace and selected data plane. Unknown measurements remain null. Writes use the ordinary Things and saved Action APIs.',
+    auth: { mode: 'session-or-bearer', description: 'Authenticated viewer with things.read; private/no-store.' },
+    methods: ['GET'], steps: ['Negotiate api.agent-overview 2.0.0.', 'Read the selected schema-scoped work graph or connect its live stream.'],
+    requestExamples: [{ name: 'Overview', description: 'Read the installed task schema.', method: 'GET', query: { taskSchema: 'agent-tasks-task', view: 'hierarchy' } }],
+    responseExamples: [{ status: 200, description: 'Authorized overview snapshot or text/event-stream.' }, { status: 401, description: 'Authentication required.' }]
+  }),
+  endpoint({
     id: 'mail-google-callback', contractVersion: '1.0.0', featureVersion: '1.0.0', group: 'auth', title: 'Google mail consent callback', endpoint: '/api/v1/mail/google/callback',
     summary: 'Receive a one-use Google consent result for a pending Gmail connection.',
     detail: 'Opaque random state, S256 PKCE, fixed registered redirect origin, ten-minute expiry and originating live session bind this callback. The external browser receives only a static completion page. Linking requires confirmation of the verified address from the originating authenticated Thingtime session. No account is linked by this callback alone. No tokens, code or state are echoed.',
@@ -9316,8 +9326,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // owner-library files. The combined 1.27.0 contract adds shared
     // Thing discussions, linked references, display-metadata renames and
     // optional cursor-backed rich comment projections.
-    featureVersion: '1.35.1',
-    contractVersion: '1.35.1',
+    featureVersion: '1.36.0',
+    contractVersion: '1.36.0',
     group: 'things',
     // 1.33.1: placement and folder deletion share transactional ancestry fences.
     // 1.33.2: protected library display-title renames commit title-only history.
@@ -11323,8 +11333,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     id: 'things-update',
     // Builder SDK: action updates accept scoped lookup steps and literal Vault entry ids.
     // Stored component and page-block arguments use the same media-addition guard as render edits.
-    featureVersion: '1.10.0',
-    contractVersion: '1.10.0',
+    featureVersion: '1.11.0',
+    contractVersion: '1.11.0',
     group: 'things',
     title: 'Update thing',
     endpoint: '/api/v1/things/update',
@@ -12956,13 +12966,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     id: 'actions-run',
     // 1.34.0 adds owned XPath evaluator, compiled expression and result objects.
     // 1.34.1 retains trusted mutation provenance; 1.35.0 adds native traversal and reusable synchronous data callbacks.
-    featureVersion: '1.37.1',
-    contractVersion: '1.37.1',
+    featureVersion: '1.38.0',
+    contractVersion: '1.38.0',
     group: 'actions',
     title: 'Run an action',
     endpoint: '/api/v1/actions/run',
     summary: 'Execute one action thing inside its declared capability + budget envelope. OAuth callers must explicitly approve actions.run, including declared action side effects and costs.',
     detail:
+      'Version 1.38 preserves opaque pagination cursor query values up to the shared 16-KiB transport bound in local UI navigation. ' +
       'Version 1.37.1 fixes browser Action requests in the installed desktop shell: same-origin requests use the selected HTTPS account endpoint with actor and database preconditions preserved; incomplete web servers still fail closed. ' +
       'Version 1.37.0 adds history.recovery:{formatVersion:1,event,dataPlane,proof} when completion retries fail and configured signing keys can seal the exact immutable outcome. API clients should retain this bounded bundle and retry it through api.timeline 1.16.0; never rerun the Action to repair delivery. The first-party client durably queues the same event before reporting local retention, then synchronizes normally across reloads. A lost response or process death before sealing cannot supply a known outcome; incomplete without recovery remains explicit. ' +
       'Version 1.36.0 journals admitted ordinary server runs and outcomes in canonical Timeline, including read-only runs. A failed admission returns 507/503 before execution. Completed runs include history:{status:recorded|incomplete,startedEventId,outcomeEventId:string|null}; incomplete preserves the actual run result and warns that completion was not acknowledged after bounded receipt retries. Do not replay the Action to repair History. A process that stops after admission can leave only a started event. Outcomes omit runtime payloads, use the invoker account/data plane and survive Action deletion. Browser preparation and shared runs remain unrecorded. The bounded action-run records below remain a supplementary debug cache. ' +
@@ -13173,14 +13184,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'webpages-resolve',
-    contractVersion: '1.6.0',
-    featureVersion: '1.6.0',
+    contractVersion: '1.7.0',
+    featureVersion: '1.7.0',
     group: 'webpages',
     title: 'Resolve a webpage',
     endpoint: '/api/v1/webpages/resolve',
     summary: 'Resolve one block-based webpage plus every component thing its blocks reference — the read model behind /p/ pages, the builder, and site pages.',
     detail:
-      'Version 1.6 adds individually editable element, collection and condition blocks, any-block Action sources, transparent option repetition and Show all pagination. Element props/text and child templates use the existing safe binding language. Authored trees no longer have product block-count/depth limits; transport and storage constraints still apply. ' +
+      'Version 1.7 adds registered authenticated live SSE source bindings. Shared-root execution cannot borrow viewer stream authority. Version 1.6 adds individually editable element, collection and condition blocks, any-block Action sources, transparent option repetition and Show all pagination. Element props/text and child templates use the existing safe binding language. Authored trees no longer have product block-count/depth limits; transport and storage constraints still apply. ' +
       'In 1.5.0, authenticated POST with ownerId and dataPlane in the query and {blocks} in the body resolves current components for an unsaved or branch draft. It sanitizes block trees and uses a 192-KiB request cap and 4-MiB response cap. Returns {ok,components,refs}; it reads no live page, grants no inherited audience from caller-supplied blocks and writes nothing. Recheck the scope before adopting results. These are current component definitions, not a historical dependency checkout. All POST replies are private/no-store. ' +
       'Owner-created service workspaces add live membership-based read/comment access to enrolled records and the bound webpage; customer and B2B users are limited to their linked customer and properties. Inherited comments/media recheck membership on every request; app/PAT scopes, custom endpoints, explicit private ACL changes and moderation remain enforced. Webpage things (thingtime ["webpage"]) hold a bounded ordered block tree: component blocks reference ' +
       'component things by componentKey or shareId, container blocks lay children out, text blocks carry short ' +

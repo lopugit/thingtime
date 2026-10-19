@@ -1,3 +1,4 @@
+import { LIVE_SOURCES } from '~/schemas/liveSources';
 import { templateToBlocks } from './templateBlocks';
 import { collectBlockIds, newBlockId } from './webpageBlocks';
 import { HEIC_IMAGE_ACCEPT } from '../Attachments/heicImage';
@@ -489,7 +490,7 @@ const BlockInspector = ({
    </> : null}
    {allowDataSources ? block.source ? <>
     <FieldRow label="Data Action"><Input {...inputStyles} value={block.source.action} onChange={e=>patch({source:{...block.source!,action:e.target.value}})} /></FieldRow>
-    <FieldRow label="Refresh"><Select {...inputStyles} value={block.source.refresh || 'load'} onChange={e=>patch({source:{...block.source!,refresh:e.target.value as 'load'|'manual'|'interval'}})}><option value="load">After actions</option><option value="manual">On page load</option><option value="interval">Timed refresh</option></Select></FieldRow>
+    <FieldRow label="Refresh"><Select {...inputStyles} value={block.source.refresh || 'load'} onChange={e=>patch({source:{...block.source!,refresh:e.target.value as 'load'|'manual'|'interval'|'live',...(e.target.value==='live'&&!block.source!.stream?{stream:LIVE_SOURCES[0]}:{})}})}><option value="load">After actions</option><option value="manual">On page load</option><option value="interval">Timed refresh</option><option value="live">Live updates</option></Select></FieldRow>
     {block.source.refresh === 'interval' ? <FieldRow label="Refresh interval (ms)"><Input {...inputStyles} type="number" value={block.source.intervalMs || 15000} onChange={e=>patch({source:{...block.source!,intervalMs:Number(e.target.value)}})} /></FieldRow> : null}
    </> : <Button size="sm" onClick={()=>patch({source:{action:'',refresh:'load'}})}>Bind data Action</Button> : null}
 			{block.type === 'text' ? (

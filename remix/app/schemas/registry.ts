@@ -1,3 +1,4 @@
+import { validateLiveSource } from './liveSources';
 import { HTML_ALLOWED_TAGS } from '../components/Kinds/htmlRenderPolicy';
 import { PASSWORD_TYPES, FIELD_TYPES } from '../passwords/model';
 import { TIMELINE_SNAPSHOT_PART_KIND } from '../timeline/snapshotParts.ts';
@@ -1480,7 +1481,7 @@ const componentSchema: ThingtimeSchema = {
 			description: 'The design language this component follows; user-authored components default to custom.'
 		},
 		{ name: 'category', type: 'string', required: false, max: MAX_COMPONENT_CATEGORY_CHARS, description: 'Catalog category, e.g. buttons, forms, feedback, navigation, flow.' },
-		{ name: 'source', type: 'record', required: false, description: 'Viewer-owned Action binding: { action, inputs?, refresh?: load/manual/interval, intervalMs? }. Source values resolve into result/state/error; the page can override this binding.' },
+		{ name: 'source', type: 'record', required: false, description: 'Viewer-owned Action binding: { action, inputs?, refresh?: load/manual/interval/live, intervalMs? }. Source values resolve into result/state/error; the page can override this binding.' },
 		{ name: 'componentKey', type: 'string', required: false, max: MAX_COMPONENT_KEY_CHARS, description: 'Stable slug identity linking saved versions to their source component.' },
 		{ name: 'familyKey', type: 'string', required: false, max: MAX_COMPONENT_KEY_CHARS, description: 'Groups the library renditions (designs) of one functional component — /components shows one card per family.' },
 		{ name: 'version', type: 'number', required: false, min: 1, description: 'Version counter for saved instances of a componentKey.' },
@@ -5559,10 +5560,15 @@ const sanitizeSourceBinding = (input: unknown): { ok: true; source: Record<strin
 	// (once, on load), or 'interval' (also every intervalMs — a clock, a
 	// live tally; bounded so a page can never poll the executor hard)
 	if (rawSource.refresh !== undefined && rawSource.refresh !== null) {
-		if (rawSource.refresh !== 'load' && rawSource.refresh !== 'manual' && rawSource.refresh !== 'interval') {
-			return fail(400, `Component/page source.refresh must be load, manual, or interval`);
+		if (rawSource.refresh !== 'load' && rawSource.refresh !== 'manual' && rawSource.refresh !== 'interval' && rawSource.refresh !== 'live') {
+			return fail(400, `Component/page source.refresh must be load, manual, interval, or live`);
 		}
 		if (rawSource.refresh !== 'load') source.refresh = rawSource.refresh;
+	}
+	if (rawSource.stream !== undefined || rawSource.refresh === 'live') {
+		const stream = validateLiveSource(rawSource.stream);
+		if (!stream) return fail(400, 'Component/page live source must use a registered read-only stream adapter');
+		source.stream = stream;
 	}
 	if (rawSource.intervalMs !== undefined && rawSource.intervalMs !== null) {
 		const intervalMs = Number(rawSource.intervalMs);
