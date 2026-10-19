@@ -129,13 +129,14 @@ export function syncJobJournal(db: IDBDatabase, access: JournalAccess, keyRange?
 				try {
 					const previous = request.result ? validate(request.result) : null;
 					const unfinished = previous && previous.state !== 'complete' && previous.nextRunAt === undefined;
-					if (unfinished && JSON.stringify(previous.reviewed.configuration) !== JSON.stringify(reviewed.configuration))
+					const policyChanged = !!unfinished && JSON.stringify(previous.reviewed.configuration) !== JSON.stringify(reviewed.configuration);
+					if (policyChanged && previous.state !== 'paused')
 						throw Error('An unfinished sync job belongs to different settings. Restore its settings before retrying.');
 					const repeat = intervalMs ?? (previous && syncJobEnabled(previous) ? previous.intervalMs : undefined);
-					const job = validate({ version: 1, key: bound.key, id: unfinished ? previous.id : id,
+					const job = validate({ version: 1, key: bound.key, id: unfinished && !policyChanged ? previous.id : id,
 						revision: (previous?.revision ?? 0) + 1, scope: bound.scope, reviewed, state: 'runnable',
 						...(repeat === undefined ? {} : { intervalMs: repeat }),
-						...(unfinished && previous.nativeCaptureId && JSON.stringify(previous.reviewed) === JSON.stringify(reviewed) ? { nativeCaptureId: previous.nativeCaptureId, ...(previous.nativeCaptureGeneration ? { nativeCaptureGeneration: previous.nativeCaptureGeneration, nativeCaptureRestarts: previous.state === 'runnable' ? previous.nativeCaptureRestarts ?? 0 : 0 } : {}) } : {}) });
+						...(unfinished && !policyChanged && previous.nativeCaptureId && JSON.stringify(previous.reviewed) === JSON.stringify(reviewed) ? { nativeCaptureId: previous.nativeCaptureId, ...(previous.nativeCaptureGeneration ? { nativeCaptureGeneration: previous.nativeCaptureGeneration, nativeCaptureRestarts: previous.state === 'runnable' ? previous.nativeCaptureRestarts ?? 0 : 0 } : {}) } : {}) });
 					const count = store.index('account').count(accountRange());
 					count.onsuccess = () => {
 						if (!previous && count.result >= MAX_SYNC_JOBS_PER_ACCOUNT) { fail(Error('This account has reached its saved sync job limit.')); return; }

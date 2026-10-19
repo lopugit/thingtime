@@ -1,3 +1,4 @@
+import { createSyncIgnorePolicy } from './syncIgnore';
 import { openSyncJournal } from './journal.client';
 import type { InventoryCursor, InventoryIdentity } from './inventoryJournal';
 import { assertProgressScope, parseSyncProgressDescriptor, type SyncProgressDescriptor, type SyncProgressRow, type SyncProgressSource } from './progressProjection';
@@ -19,13 +20,13 @@ export function createJournalSyncProgressSource(descriptor: SyncProgressDescript
 			};
 			const left = entries(saved.run.plan.local), right = entries(saved.run.plan.remote);
 			let a = await left.next(), b = await right.next(), batch: SyncEntry[] = [];
-			const excluded = saved.run.plan.excludedPaths.map(syncPathKey);
+			const ignored = createSyncIgnorePolicy(saved.run.plan.ignoreRules, saved.run.plan.excludedPaths);
 			const flush = async () => {
 				const operations = await runs.operationsForPaths(saved.run, batch.map(entry => entry.path));
 				return batch.map((entry, i): SyncProgressRow => {
-					const operation = operations[i], path = syncPathKey(entry.path);
+					const operation = operations[i];
 					return { entry: operation?.mutation.kind === 'copy' ? operation.mutation.source : operation?.mutation.kind === 'trash' ? operation.mutation.expected : entry,
-						operation, excluded: excluded.some(prefix => path === prefix || path.startsWith(`${prefix}/`)) };
+						operation, excluded: ignored.ignored(entry.path, entry.kind) };
 				});
 			};
 			while (!a.done || !b.done) {

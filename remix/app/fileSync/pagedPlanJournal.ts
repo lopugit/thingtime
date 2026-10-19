@@ -1,3 +1,4 @@
+import { canonicalIgnoreRules, createSyncIgnorePolicy } from './syncIgnore';
 import { assertBackupCapturePolicy } from './nativeInventory';
 import { JOURNAL_RETENTION_STORE, registerJournalMetadata, forgetJournalMetadata } from './journalRetention';
 import { MAX_SYNC_EXCLUSIONS } from './configuration';
@@ -14,6 +15,7 @@ export type PagedPlanSpec = {
 	baseline: { local: InventoryIdentity; remote: InventoryIdentity };
 	policy: SyncPolicy;
 	excludedPaths: string[];
+	ignoreRules?: string;
 };
 export type PagedPlanProgress = { phase: 'indexing' | 'planning' | 'complete'; indexed: number; planned: number; decisions: number };
 export type PagedPlanCursor = { id: string; scope: SyncScope; after: string; read: number };
@@ -37,12 +39,13 @@ export function parsePagedPlanSpec(value: PagedPlanSpec): PagedPlanSpec {
 		!['two-way', 'upload', 'download', 'backup'].includes(value.policy.mode) || typeof value.policy.propagateDeletes !== 'boolean' ||
 		!Array.isArray(value.excludedPaths) || value.excludedPaths.length > MAX_SYNC_EXCLUSIONS || value.excludedPaths.some(p => !validSyncPath(p)) ||
 		value.excludedPaths.reduce((n, p) => n + encoder.encode(p).length, 0) > 16_384) throw Error('Invalid paged sync plan.');
+	const ignoreRules = canonicalIgnoreRules(value.ignoreRules);
 	const inputs = captures(value).map(inventoryIdentity);
 	if (inputs.some((input, i) => input.source !== (i % 2 ? 'remote' : 'local'))) throw Error('Sync plan replica changed.');
 	const exclusions = value.excludedPaths.map(syncPathKey);
 	if (new Set(exclusions).size !== exclusions.length) throw Error('Duplicate sync exclusion.');
 	return { id: value.id, local: inputs[0], remote: inputs[1], baseline: { local: inputs[2], remote: inputs[3] },
-		policy: { mode: value.policy.mode, propagateDeletes: value.policy.propagateDeletes }, excludedPaths: [...value.excludedPaths] };
+		policy: { mode: value.policy.mode, propagateDeletes: value.policy.propagateDeletes }, excludedPaths: [...value.excludedPaths], ...(ignoreRules ? { ignoreRules } : {}) };
 }
 
 export const validatePagedPlanHeader = (h: PagedPlanHeader, spec: PagedPlanSpec, key: string) => {
@@ -133,7 +136,8 @@ export function pagedPlanJournal(db: IDBDatabase, access: JournalAccess, keyRang
 		const positions = structuredClone(header.positions), offsets = [0, 0, 0, 0];
 		const rows: SyncPathObservation[] = [], flags: [string, number][] = [];
 		const exclusions = spec.excludedPaths.map(syncPathKey);
-		const included = (path: string) => !exclusions.some(p => syncPathKey(path) === p || syncPathKey(path).startsWith(p + '/'));
+		const ignore = createSyncIgnorePolicy(spec.ignoreRules, spec.excludedPaths);
+		const included = (row: SyncPathObservation) => !ignore.ignored(row.path, (row.local ?? row.remote ?? row.beforeLocal ?? row.beforeRemote)!.kind);
 		let usedBytes = 0;
 		while (rows.length < INVENTORY_PAGE_ENTRIES) {
 			// A consumed page might have an unseen next key, so stop before choosing
@@ -148,7 +152,11 @@ export function pagedPlanJournal(db: IDBDatabase, access: JournalAccess, keyRang
 			if (!sameSyncContent(entries[2], entries[3])) throw Error('Sync baseline must contain confirmed matching content.');
 			const row: SyncPathObservation = { path, local: entries[0], remote: entries[1], beforeLocal: entries[2], beforeRemote: entries[3] };
 			const rowFlags: [string, number][] = [];
-			if (header.phase === 'indexing' && included(path)) for (let side = 0; side < 2; side++) {
+			if (header.phase === 'indexing' && !included(row)) {
+				const parts = path.split('/');
+				for (let n = 1; n < parts.length; n++) rowFlags.push([syncPathKey(parts.slice(0, n).join('/')), 2]);
+			}
+			if (header.phase === 'indexing' && included(row)) for (let side = 0; side < 2; side++) {
 				if (!entries[side] || sameSyncStamp(entries[side], entries[side + 2])) continue;
 				const parts = path.split('/');
 				for (let n = 1; n < parts.length; n++) rowFlags.push([syncPathKey(parts.slice(0, n).join('/')), side]);
@@ -184,17 +192,17 @@ export function pagedPlanJournal(db: IDBDatabase, access: JournalAccess, keyRang
 				save(); return;
 			}
 			next.planned += rows.length;
-			const selected = rows.filter(row => included(row.path)); let pending = selected.length;
+			const selected = rows.filter(included); let pending = selected.length;
 			if (!pending) { save(); return; }
 			selected.forEach(row => {
-				const below = [false, false]; let waiting = 2;
-				[0, 1].forEach(side => {
+				const below = [false, false, false]; let waiting = 3;
+				[0, 1, 2].forEach(side => {
 					const request = tx.objectStore(STORES[1]).get([key, spec.id, syncPathKey(row.path), side]);
 					request.onsuccess = () => { try {
 						check(); below[side] = request.result === true;
 						if (--waiting) return;
 						let decision = decideSyncPath(row, spec.policy, below[0], below[1]);
-						if (decision.kind === 'trash' && exclusions.some(p => p.startsWith(syncPathKey(row.path) + '/'))) decision = {
+						if (decision.kind === 'trash' && (below[2] || exclusions.some(p => p.startsWith(syncPathKey(row.path) + '/')))) decision = {
 							kind: 'conflict', path: row.path, reason: 'excluded-descendants', local: row.local, remote: row.remote
 						};
 						tx.objectStore(STORES[2]).add(decision, [key, spec.id, syncPathKey(row.path)]); next.decisions++;
@@ -206,6 +214,19 @@ export function pagedPlanJournal(db: IDBDatabase, access: JournalAccess, keyRang
 	}
 	return {
 		begin, step,
+		async protectedPaths(value: PagedPlanSpec, paths: string[]): Promise<boolean[]> {
+			const spec = parsePagedPlanSpec(value);
+			if (!Array.isArray(paths) || paths.length > INVENTORY_PAGE_ENTRIES || paths.some(path => !validSyncPath(path))) throw Error('Invalid protected path page.');
+			return withHeader(spec, 'readonly', (header, tx, done, fail) => {
+				if (header.phase !== 'complete') throw Error('Sync plan is incomplete.');
+				const result = paths.map(() => false); let pending = paths.length;
+				if (!pending) { done(result); return; }
+				paths.forEach((path, i) => {
+					const request = tx.objectStore(STORES[1]).get([key, spec.id, syncPathKey(path), 2]);
+					request.onsuccess = () => { try { check(); result[i] = request.result === true; if (--pending === 0) done(result); } catch (error) { fail(error); } };
+				});
+			});
+		},
 		async build(value: PagedPlanSpec, changed?: (value: PagedPlanProgress) => void): Promise<PagedPlanProgress> {
 			const spec = parsePagedPlanSpec(value); let state = await begin(spec);
 			while (state.phase !== 'complete') { state = await step(spec); changed?.(state); }

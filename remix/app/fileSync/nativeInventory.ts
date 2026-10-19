@@ -1,3 +1,4 @@
+import { canonicalIgnoreRules, createSyncIgnorePolicy } from './syncIgnore';
 import { canonicalNativeScanExclusions, isNativeScanExcluded } from './nativeScanExclusions';
 import { validSyncEntry, validSyncPath, type SyncEntry, type SyncPolicy } from './reconcile';
 import type { FolderRequest, FolderResult } from './mobileFolders.client';
@@ -77,7 +78,7 @@ export function parseNativeInventoryPage(value: unknown, capture: NativeInventor
 /** Import only one sealed generation. Missing, reordered or substituted pages
  * never become an empty scan; the caller seals its journal after the final count. */
 export async function* readNativeInventory(input: {
-	ownerId: string; deviceId: string; rootId: string; signal: AbortSignal; excludedPaths?: string[];
+	ownerId: string; deviceId: string; rootId: string; signal: AbortSignal; excludedPaths?: string[]; ignoreRules?: string;
 	backupPolicy?: SyncPolicy; captureId?: string; onProgress?(progress: NativeIndexProgress): void;
 	/** Durable task adapter binds observed native generations and restart budget. */
 	onCaptureStatus?(status: NativeBackupStatus): Promise<void>;
@@ -97,13 +98,15 @@ export async function* readNativeInventory(input: {
 	};
 	const provided = input.excludedPaths === undefined ? [] : input.excludedPaths;
 	const exclusions = canonicalNativeScanExclusions(provided), excludedPaths = [...provided];
+	const ignoreRules = canonicalIgnoreRules(input.ignoreRules), ignore = createSyncIgnorePolicy(ignoreRules);
+	const ignoredPolicy = ignoreRules ? { ignoreRules } : {};
 	let capture: NativeInventoryCapture | undefined;
 	try {
 		signal.throwIfAborted();
 		const captureId = input.captureId ?? crypto.randomUUID();
 		if (!uuid.test(captureId)) throw Error('Invalid native capture identity.');
 		if (input.backupPolicy) assertBackupCapturePolicy(input.backupPolicy);
-		const begin = await request(ownerId, { action: 'scan-capture', rootId, inventoryDeviceId, captureId, ...(input.backupPolicy ? { capturePolicy: 'backup-supported' as const } : {}), ...(excludedPaths.length ? { excludedPaths } : {}) }, signal);
+		const begin = await request(ownerId, { action: 'scan-capture', ...ignoredPolicy, rootId, inventoryDeviceId, captureId, ...(input.backupPolicy ? { capturePolicy: 'backup-supported' as const } : {}), ...(excludedPaths.length ? { excludedPaths } : {}) }, signal);
 		if (input.backupPolicy) {
 			let status = parseNativeBackupStatus(begin.backupCapture);
 			while (true) {
@@ -121,7 +124,7 @@ export async function* readNativeInventory(input: {
 					signal.addEventListener('abort', abort, { once: true }); if (signal.aborted) abort();
 				});
 				let response: FolderResult;
-				try { response = await request(ownerId, { action: 'scan-status', rootId, inventoryDeviceId, captureId, capturePolicy: 'backup-supported', excludedPaths }, signal); }
+				try { response = await request(ownerId, { action: 'scan-status', ...ignoredPolicy, rootId, inventoryDeviceId, captureId, capturePolicy: 'backup-supported', excludedPaths }, signal); }
 				catch (error) { signal.throwIfAborted(); throw error; }
 				const next = parseNativeBackupStatus(response.backupCapture);
 				// Supported rows are provisional until sealing: a later case/Unicode
@@ -133,7 +136,7 @@ export async function* readNativeInventory(input: {
 			let skipOffset = 0;
 			do {
 				signal.throwIfAborted();
-				const response = await request(ownerId, { action: 'scan-skips', rootId, inventoryDeviceId, capture: capture as NativeBackupCapture, offset: skipOffset, capturePolicy: 'backup-supported' }, signal);
+				const response = await request(ownerId, { action: 'scan-skips', ...ignoredPolicy, rootId, inventoryDeviceId, capture: capture as NativeBackupCapture, offset: skipOffset, capturePolicy: 'backup-supported' }, signal);
 				const skippedPage = parseNativeSkippedPage(response.skippedPage, capture as NativeBackupCapture, skipOffset);
 				signal.throwIfAborted();
 				yield { generation: capture.generation, ordinal: 0, entries: [], backupCapture: capture as NativeBackupCapture, skippedPage };
@@ -145,10 +148,10 @@ export async function* readNativeInventory(input: {
 		let offset = 0, ordinal = 0;
 		while (true) {
 			signal.throwIfAborted();
-			const response = await request(ownerId, { action: 'scan-page', rootId, inventoryDeviceId, capture, offset, ...(input.backupPolicy ? { capturePolicy: 'backup-supported' as const } : {}) }, signal);
+			const response = await request(ownerId, { action: 'scan-page', ...ignoredPolicy, rootId, inventoryDeviceId, capture, offset, ...(input.backupPolicy ? { capturePolicy: 'backup-supported' as const } : {}) }, signal);
 			signal.throwIfAborted();
 			const page = parseNativeInventoryPage(response.inventoryPage, capture, offset);
-			if (page.entries.some(entry => isNativeScanExcluded(entry.path, exclusions))) throw Error('Native inventory included an excluded path.');
+			if (page.entries.some(entry => isNativeScanExcluded(entry.path, exclusions) || ignore.ignored(entry.path, entry.kind))) throw Error('Native inventory included an excluded path.');
 			yield { generation: capture.generation, ordinal: ordinal++, entries: page.entries, ...(input.backupPolicy ? { backupCapture: capture as NativeBackupCapture } : {}),
 				...(page.nextOffset === null ? { totalEntries: capture.totalEntries } : {}) };
 			if (page.nextOffset === null) return;
@@ -157,6 +160,6 @@ export async function* readNativeInventory(input: {
 	} finally {
 		// Owner changes/cancellation can refuse cleanup. The native cache evicts
 		// old captures under its scope lock, so an abandoned request stays bounded.
-		if (capture && !signal.aborted) await request(ownerId, { action: 'scan-discard', rootId, inventoryDeviceId, capture, ...(input.backupPolicy ? { capturePolicy: 'backup-supported' as const } : {}) }, signal).catch(() => {});
+		if (capture && !signal.aborted) await request(ownerId, { action: 'scan-discard', ...ignoredPolicy, rootId, inventoryDeviceId, capture, ...(input.backupPolicy ? { capturePolicy: 'backup-supported' as const } : {}) }, signal).catch(() => {});
 	}
 }

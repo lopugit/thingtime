@@ -7,6 +7,16 @@ const source = fs.readFileSync(path.join(__dirname, '../main.cjs'), 'utf8');
 const closeServices = source.match(/async function closeDesktopServices\(\) \{[\s\S]*?\n\}/)[0];
 const gate = () => { let finish; const promise = new Promise(resolve => { finish=resolve; }); return {promise, finish}; };
 
+test('activation during or after service shutdown cannot create another window', () => {
+ const create = source.match(/function createWindow\(\) \{[\s\S]*?\n\}/)[0];
+ for (const [desktopServicesClosing, desktopServicesClosed] of [[true, false], [true, true], [false, true]]) {
+  assert.doesNotThrow(() => vm.runInNewContext(create + '; createWindow()', {
+   desktopServicesClosing, desktopServicesClosed,
+   BrowserWindow: class { constructor() { throw new Error('Unexpected window during Quit'); } }
+  }));
+ }
+});
+
 test('quit waits for browser cleanup, OAuth shutdown and Mongo shutdown as one barrier', async () => {
  const browser = gate(), oauth = gate(), database = gate();
  const calls=[];

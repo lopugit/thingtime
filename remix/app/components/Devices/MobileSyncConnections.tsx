@@ -1,3 +1,4 @@
+import { SyncIgnoreRulesEditor } from './SyncIgnoreRulesEditor';
 import { readNativeInventory } from '~/fileSync/nativeInventory';
 import { nativeSyncTasks, startNativeSyncTask, supportsNativeSyncTasks } from '~/fileSync/nativeSyncTasks.client';
 import { nativeUploadMayContinue } from '~/fileSync/nativeUploadBackground';
@@ -36,6 +37,7 @@ import {
 	supportsNativePathInspection,
 	supportsNativeInventoryPages,
 	supportsNativeBackupCapture,
+	supportsNativeIgnoreRules,
 	supportsNativeBackgroundUploads
 } from '~/fileSync/mobileFolders.client';
 import { openSyncJournal, withSyncRootLock, syncScopeKey } from '~/fileSync/journal.client';
@@ -349,6 +351,8 @@ function Connections({
 							? await approveMobileSyncTarget(saved, syncScope, active.signal, requestFolders, capabilities)
 							: undefined;
 						assertActive();
+						if (saved.configuration.ignoreRules && !supportsNativeIgnoreRules(capabilities)) throw Error('Update Thingtime Mac before using this connection’s Gitignore rules.');
+						if (saved.configuration.ignoreRules) await requireCapability('api.things', '1.38.0');
 						const runSync = host || getNativeBridge()?.platform === 'ios' ? runPagedForegroundCloudSync : runForegroundCloudSync;
 						await runSync(
 							saved,
@@ -370,12 +374,12 @@ function Connections({
 								scanLocal: async () =>
 									(
 										await requestFolders(scope.ownerId, { action: 'scan', rootId: saved.configuration.localRootId,
-											...((host || capabilities?.platform === 'ios') && saved.configuration.excludedPaths.length ? { excludedPaths: saved.configuration.excludedPaths } : {}) }, active.signal)
+											...((host || capabilities?.platform === 'ios') && saved.configuration.excludedPaths.length ? { excludedPaths: saved.configuration.excludedPaths } : {}), ...(saved.configuration.ignoreRules ? { ignoreRules: saved.configuration.ignoreRules } : {}) }, active.signal)
 									).entries!,
 								...(inspectPaths && supportsNativeInventoryPages(capabilities) ? {
 									scanLocalPages: () => readNativeInventory({ ownerId: scope.ownerId, deviceId: scope.deviceId,
 										rootId: saved.configuration.localRootId, signal: active.signal, request: requestFolders,
-										excludedPaths: saved.configuration.excludedPaths,
+										excludedPaths: saved.configuration.excludedPaths, ...(saved.configuration.ignoreRules ? { ignoreRules: saved.configuration.ignoreRules } : {}),
                                         ...(supportsNativeBackupCapture(capabilities) && saved.configuration.mode === 'backup' && !saved.configuration.propagateDeletes ? {
                                             backupPolicy: { mode: 'backup' as const, propagateDeletes: false },
                                             onProgress: value => publish({ stage: 'scanning', confirmed: 0, total: 0, indexed: value.totalEntries,
@@ -520,6 +524,7 @@ function Connections({
 		void run(async (assertCurrent) => {
 			if (!draft || !ready) return;
 			const pending = { ...draft, configuration: canonicalDraftConfiguration(draft), pending: true };
+			if (pending.configuration.ignoreRules) await requireCapability('api.things', '1.38.0');
 			persist(pending); // Must succeed before even starting the first write attempt.
 			let dispatched = false;
 			let saved: SavedFileSyncConfiguration;
@@ -772,7 +777,7 @@ function Connections({
 				<Box marginTop={4} border="1px solid var(--tt-border, #ececef)" borderRadius="12px" padding={3}>
 					{host && <HomeBackupPreset draft={draft} disabled={busy || !ready} scopeKey={`${key}:${generation}:${draft.id}`}
 						onChange={edit} accountTransport={reviewTransport} />}
-					<SyncConfigurationForm draft={draft} roots={roots} folders={folders} disabled={busy || draft.pending || !ready} onChange={edit} />
+					<SyncConfigurationForm draft={draft} roots={roots} folders={folders} disabled={busy || draft.pending || !ready} scopeKey={`${key}:${generation}:${draft.id}`} accountTransport={reviewTransport} onChange={edit} />
 					{folderCursor && (
 						<Button size="sm" minHeight="40px" marginTop={2} isDisabled={busy} onClick={() => void run(() => load('folders', folderCursor))}>
 							More cloud folders
@@ -860,12 +865,16 @@ export function SyncConfigurationForm({
 	roots,
 	folders,
 	disabled,
+	scopeKey,
+	accountTransport,
 	onChange
 }: {
 	draft: ConfigurationDraft;
 	roots: MobileFolder[];
 	folders: { id: string; name: string }[];
 	disabled: boolean;
+	scopeKey?: string;
+	accountTransport?: Parameters<typeof SyncIgnoreRulesEditor>[0]['accountTransport'];
 	onChange(draft: ConfigurationDraft): void;
 }) {
 	const prefix = useId(),
@@ -986,6 +995,9 @@ export function SyncConfigurationForm({
 			<Text fontSize="12px" color="var(--tt-muted, #71717a)">
 				Paths are relative to the selected folder. A folder exclusion includes its contents. Wildcards are not supported.
 			</Text>
+			<SyncIgnoreRulesEditor rules={c.ignoreRules ?? ''} excludedPaths={draft.exclusions.split(/\r?\n/).filter(Boolean)} disabled={disabled || photos}
+				scopeKey={scopeKey ?? `${draft.id}:${c.deviceId}`} accountTransport={accountTransport}
+				onChange={ignoreRules => change({ configurationVersion: ignoreRules ? 2 : 1, ignoreRules })} />
 		</Stack>
 	);
 }

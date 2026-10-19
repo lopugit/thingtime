@@ -15,6 +15,7 @@ import { nativeSyncTasks } from '../app/fileSync/nativeSyncTasks.client';
 import { NativeSyncBootstrap } from '../app/fileSync/NativeSyncBootstrap';
 import { MobileFolderAccess } from '../app/components/Devices/MobileFolderAccess';
 import { nativeBridgeMessageEvent } from '../app/utils/nativeBridge';
+const ignoreQA = new URLSearchParams(location.search).has('ignore');
 const partialQA = new URLSearchParams(location.search).has('partial');
 const homeQA = new URLSearchParams(location.search).has('home');
 const inspectionQA = new URLSearchParams(location.search).has('inspect');
@@ -397,7 +398,7 @@ if (desktop) {
 				...request,
 				origin: canonicalOrigin,
 				roots,
-				...(manifest ? { capabilities: { fileAccessVersion: partialQA ? '1.8.0' : homeQA ? '1.6.0' : inspectionQA ? (inventoryQA ? '1.5.1' : '1.4.0') : '1.1.0' }, apiCapabilities: { ...manifest, origin: canonicalOrigin } } : {}),
+				...(manifest ? { capabilities: { fileAccessVersion: ignoreQA ? '1.9.0' : partialQA ? '1.8.0' : homeQA ? '1.6.0' : inspectionQA ? (inventoryQA ? '1.5.1' : '1.4.0') : '1.1.0' }, apiCapabilities: { ...manifest, origin: canonicalOrigin } } : {}),
 				...inventoryReply(request),
 				...(request.action === 'scan' ? { complete: true, entries: localEntries.filter(entry => !isNativeScanExcluded(entry.path, canonicalNativeScanExclusions(request.excludedPaths ?? []))), excludedPaths: canonicalNativeScanExclusions(request.excludedPaths ?? []) } : {}),
 				...(request.action === 'inspect' ? { complete: true, entry: localEntries.find(entry => entry.path === request.path) ?? null } : {}),

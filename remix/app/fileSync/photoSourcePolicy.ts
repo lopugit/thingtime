@@ -7,6 +7,7 @@ export function assertPhotoSourcePolicy(configuration: FileSyncConfiguration, ro
  if (!root) throw Error('Folder access is missing. Choose the source again.');
  if (configuration.sourceKind === 'photos' && root.sourceKind !== 'photos') throw Error('The selected photo source changed. Review this connection.');
  if (root.sourceKind !== 'photos') return;
+ if (configuration.ignoreRules) throw Error('Gitignore rules apply to folder sources. Remove the rules or choose a device folder.');
  if (configuration.mode !== 'backup' || configuration.propagateDeletes) throw Error('Photo libraries require backup mode with saved cloud copies retained.');
  if (root.photoAccess === 'unavailable') throw Error('Photo access is unavailable. Choose photo access again.');
 }

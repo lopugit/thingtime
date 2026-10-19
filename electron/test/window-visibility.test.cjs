@@ -2,7 +2,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { EventEmitter } = require('node:events');
-const { ensureWindowVisible } = require('../lib/window-visibility.cjs');
+const { ensureWindowVisible, loadWindow } = require('../lib/window-visibility.cjs');
 function fixture() {
  const window = new EventEmitter(); window.webContents = new EventEmitter();
  let shows = 0; let timer; let cleared = false;
@@ -32,4 +32,24 @@ test('quit cleanup never reads webContents from an already destroyed window', ()
   assert.equal(contents.listenerCount(event), 0); contents.emit(event);
  }
  f.fire(); assert.equal(f.shows(), 0); assert.equal(f.cleared(), true);
+});
+test('a pending navigation rejected during Quit cannot open a blocking error dialog', async () => {
+ let rejectLoad, closing = false, errors = 0;
+ const window = { loadURL: () => new Promise((_, reject) => { rejectLoad = reject; }), isDestroyed: () => false };
+ const pending = loadWindow(window, 'http://127.0.0.1:54000', { isClosing: () => closing, onError: () => errors++ });
+ closing = true;
+ rejectLoad(new Error('ERR_FAILED (-2)'));
+ await pending;
+ assert.equal(errors, 0);
+});
+test('closed windows suppress load errors while live window failures remain actionable', async () => {
+ const error = new Error('ERR_CONNECTION_REFUSED'), errors = [];
+ let destroyed = true;
+ const window = { loadURL: async () => { throw error; }, isDestroyed: () => destroyed };
+ const options = { isClosing: () => false, onError: error => errors.push(error) };
+ await loadWindow(window, 'http://127.0.0.1:54000', options);
+ assert.deepEqual(errors, []);
+ destroyed = false;
+ await loadWindow(window, 'http://127.0.0.1:54000', options);
+ assert.deepEqual(errors, [error]);
 });

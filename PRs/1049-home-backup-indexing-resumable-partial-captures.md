@@ -2,7 +2,8 @@
 
 The installed home backup failed before uploading because strict native scans
 reject links and special entries and large scans outlive a single request.
-Mac file access 1.8 adds a backup-only asynchronous capture with durable skips.
+Mac file access 1.9 adds Gitignore policies to the backup-only asynchronous
+capture with durable skips introduced in 1.8.
 Supported files can proceed while coverage remains explicitly partial.
 
 ## Contracts and recovery
@@ -42,8 +43,13 @@ Supported files can proceed while coverage remains explicitly partial.
   job and receipt without duplication. Strict captures show no coverage panel.
 - Full TypeScript checking has pre-existing diagnostics outside this change;
   the new coverage viewer ref typing was corrected and owned-file diagnostics
-  are clear in the integrated typecheck output. Electron host suite:227passed.
-  Final signed install remains pending.
+  are clear in the integrated typecheck output. The full Electron host suite
+  passes 231 tests after the final bridge and shutdown regressions.
+  Signed head933df88 was installed with stable signing identity. Further installed
+  shutdown acceptance found a late navigation-error dialog; load failures during
+  Quit and window recreation during service cleanup are now suppressed.
+  The desktop host now admits scan-status/cancel/skips with the same identity
+  fences; 21 focused host/window regressions pass.
 - Semantic graph refresh was attempted through the local proxy but returned
   hollow chunks and failed the semantic shrink guard. The previous semantic
   data is preserved; structural refresh is used and new prose is not claimed
@@ -51,9 +57,27 @@ Supported files can proceed while coverage remains explicitly partial.
 
 ## Open acceptance
 
-The currently installed release still predates these changes. Real home upload,
-automatic scheduling and reconnect acceptance are pending final signed install.
+The installed 933df88 release contains partial capture and reconnect changes,
+but clean Quit/reopen and the first real home upload remain unverified. The
+user additionally requested Gitignore-style rules and dependency defaults before
+that upload. This extends saved file-sync configuration to version 2 (older
+clients refuse it), `api.things` 1.38 and native Mac `fileAccess` 1.9. Shared/native
+matching, baseline retention and editable rule controls are implemented.
+The shared Git oracle corpus covers 16 groups; isolated browser acceptance
+passes all 10 checks, including no upload after Save, path explanations, custom
+rules/defaults and individual Builder editing at desktop/mobile sizes. The final combined file-sync suite passes 390 tests plus one module-mock test.
+Native final checks pass four matcher tests (including the 16-group shared
+corpus and a 61-path Git oracle) and two focused Mac cancellation/policy tests.
+Signed installed acceptance remains required.
 No successful home upload is claimed. Links remain skipped until canonical
 link-content and restore support is implemented. Upload-time changes still stop
 the run for review. Large-volume throughput and native cache capacity are not
 proven. Android is deferred.
+
+
+## Follow-up verification notes
+
+The standalone Electron pending-load fixture could not run under the enforced
+macOS network sandbox: Electron's nested sandbox initialization failed. No
+sandbox or network protection was disabled. The focused unit regression passed;
+final signed installed-app acceptance is still required.

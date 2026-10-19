@@ -30,10 +30,12 @@ public struct MobileFolderInventory: Sendable {
         public let id: String; public let generation: String; public let state: String
         public let coverage: String; public let consistency = "per-entry"
         public let totalEntries: Int; public let totalSkipped: Int
-        public init(capture: Capture, state: String) {
+        /// Count of pruned entries/subtree roots, never unseen descendants.
+        public let ignoredCount: Int
+        public init(capture: Capture, state: String, ignoredCount: Int = 0) {
             id = capture.id; generation = capture.generation; self.state = state
             coverage = state == "complete" ? (capture.coverage ?? "partial") : "partial"
-            totalEntries = capture.totalEntries; totalSkipped = capture.totalSkipped ?? 0
+            totalEntries = capture.totalEntries; totalSkipped = capture.totalSkipped ?? 0; self.ignoredCount = ignoredCount
         }
     }
     public struct Skipped: Codable, Sendable {
@@ -84,6 +86,8 @@ public struct MobileFolderInventory: Sendable {
         var retired: Bool? = nil
         var capturePolicy: String? = nil
         var prepared: Bool? = nil
+        var ignoreRules: String? = nil
+        var ignoredCount: Int? = nil
     }
     public static let maximumPageEntries = 128
     public static let maximumPageBytes = 512 * 1024
@@ -131,6 +135,7 @@ public struct MobileFolderInventory: Sendable {
     private func validate(_ record: Record, scope: Scope, id: String, bookmark: Data) throws {
         guard record.scope == scope, record.capture.id == id.lowercased(), record.bookmarkHash == Self.digest(bookmark),
               UUID(uuidString: record.capture.generation) != nil, record.capture.totalEntries >= 0 else { throw Failure.changed }
+        guard try MobileFolderIgnoreRules.sameText(MobileFolderIgnoreRules(record.ignoreRules).text, record.ignoreRules), (record.ignoredCount ?? 0) >= 0 else { throw Failure.changed }
         if record.capturePolicy == "backup-supported" {
             guard record.capture.consistency == "per-entry", let skipped = record.capture.totalSkipped, skipped >= 0,
                   ["full", "partial"].contains(record.capture.coverage ?? ""),
@@ -144,18 +149,18 @@ public struct MobileFolderInventory: Sendable {
 
     /// A caller-chosen ID survives a lost reply. Unsealed captures can be rebuilt;
     /// their server-generated generation changes and no pages were readable.
-    public func capture(_ scope: Scope, id: String, bookmark: Data, excludedPaths: [String] = []) throws -> Capture {
-        let exclusions = try MobileFolderReader.canonicalExclusions(excludedPaths)
+    public func capture(_ scope: Scope, id: String, bookmark: Data, excludedPaths: [String] = [], ignoreRules: String? = nil) throws -> Capture {
+        let exclusions = try MobileFolderReader.canonicalExclusions(excludedPaths), rules = try MobileFolderIgnoreRules(ignoreRules).text
         try MobileFolderReader.checkAccess(bookmark: bookmark)
         return try locked(scope, id: id, creating: true) { fd in
             if let old = try NativeFileJournal.read(fd, as: Record.self) {
                 try validate(old, scope: scope, id: id, bookmark: bookmark)
-                guard old.retired != true, old.capturePolicy == nil, (old.excludedPaths ?? []) == exclusions else { throw Failure.changed }
+                guard old.retired != true, old.capturePolicy == nil, (old.excludedPaths ?? []) == exclusions, MobileFolderIgnoreRules.sameText(old.ignoreRules, rules) else { throw Failure.changed }
                 if old.complete { return old.capture }
             }
             let generation = UUID().uuidString.lowercased(), key = Self.digest(bookmark)
             try NativeFileJournal.save(Record(scope: scope, bookmarkHash: key,
-                capture: Capture(id: id.lowercased(), generation: generation, totalEntries: 0), complete: false, excludedPaths: exclusions), fd)
+                capture: Capture(id: id.lowercased(), generation: generation, totalEntries: 0), complete: false, excludedPaths: exclusions, ignoreRules: rules), fd)
             for name in ["inventory.sqlite", "inventory.sqlite-journal"] {
                 if unlinkat(fd, name, 0) != 0 && errno != ENOENT { throw Failure.storage }
             }
@@ -163,7 +168,7 @@ public struct MobileFolderInventory: Sendable {
             try db.execute("CREATE TABLE entries (ordinal INTEGER PRIMARY KEY, path TEXT NOT NULL UNIQUE, identity TEXT NOT NULL UNIQUE, data BLOB NOT NULL)")
             try db.execute("BEGIN IMMEDIATE")
             var count = 0
-            try MobileFolderReader.capture(bookmark: bookmark, excludedPaths: excludedPaths, append: { entry in
+            try MobileFolderReader.capture(bookmark: bookmark, excludedPaths: excludedPaths, ignoreRules: rules, append: { entry in
                 guard count < 9_007_199_254_740_991 else { throw Failure.limit }
                 try db.insert(entry, ordinal: count); count += 1
             }, replay: { visit in
@@ -173,27 +178,27 @@ public struct MobileFolderInventory: Sendable {
             })
             try db.execute("COMMIT")
             let result = Capture(id: id.lowercased(), generation: generation, totalEntries: count)
-            try NativeFileJournal.save(Record(scope: scope, bookmarkHash: key, capture: result, complete: true, excludedPaths: exclusions), fd)
+            try NativeFileJournal.save(Record(scope: scope, bookmarkHash: key, capture: result, complete: true, excludedPaths: exclusions, ignoreRules: rules), fd)
             return result
         }
     }
 
     /// Private provisional rows are committed before the host's final live
     /// authorization check. Only sealBackup makes them readable.
-    public func prepareBackup(_ scope: Scope, id: String, generation: String, bookmark: Data, excludedPaths: [String] = [],
-                              progress: @Sendable (Int, Int) -> Void = { _, _ in }) throws -> Capture {
+    public func prepareBackup(_ scope: Scope, id: String, generation: String, bookmark: Data, excludedPaths: [String] = [], ignoreRules: String? = nil,
+                              ignored: @Sendable (Int) -> Void = { _ in }, progress: @Sendable (Int, Int) -> Void = { _, _ in }) throws -> Capture {
         guard UUID(uuidString: generation) != nil else { throw Failure.invalid }
-        let exclusions = try MobileFolderReader.canonicalExclusions(excludedPaths)
+        let exclusions = try MobileFolderReader.canonicalExclusions(excludedPaths), rules = try MobileFolderIgnoreRules(ignoreRules).text
         try MobileFolderReader.checkAccess(bookmark: bookmark)
         return try locked(scope, id: id, creating: true) { fd in
             if let old = try NativeFileJournal.read(fd, as: Record.self) {
                 try validate(old, scope: scope, id: id, bookmark: bookmark)
-                guard old.retired != true, old.capturePolicy == "backup-supported", (old.excludedPaths ?? []) == exclusions else { throw Failure.changed }
+                guard old.retired != true, old.capturePolicy == "backup-supported", (old.excludedPaths ?? []) == exclusions, MobileFolderIgnoreRules.sameText(old.ignoreRules, rules) else { throw Failure.changed }
                 if old.complete { return old.capture }
             }
             let initial = Capture(id: id.lowercased(), generation: generation.lowercased(), totalEntries: 0, coverage: "partial", consistency: "per-entry", totalSkipped: 0)
             try NativeFileJournal.save(Record(scope: scope, bookmarkHash: Self.digest(bookmark), capture: initial,
-                complete: false, excludedPaths: exclusions, capturePolicy: "backup-supported"), fd)
+                complete: false, excludedPaths: exclusions, capturePolicy: "backup-supported", ignoreRules: rules, ignoredCount: 0), fd)
             for name in ["inventory.sqlite", "inventory.sqlite-journal"] {
                 if unlinkat(fd, name, 0) != 0 && errno != ENOENT { throw Failure.storage }
             }
@@ -202,12 +207,13 @@ public struct MobileFolderInventory: Sendable {
             try db.execute("CREATE TABLE skipped (ordinal INTEGER PRIMARY KEY, data BLOB NOT NULL)")
             try db.execute("CREATE TABLE blocked_paths (path TEXT PRIMARY KEY)")
             try db.execute("BEGIN IMMEDIATE")
-            var count = 0, skipped = 0, nextOrdinal = 0
+            var count = 0, skipped = 0, nextOrdinal = 0, ignoredCount = 0
             func skip(_ gap: MobileFolderReader.BackupGap) throws {
                 guard skipped < 9_007_199_254_740_991 else { throw Failure.limit }
                 try db.insertSkipped(Skipped(ordinal: skipped, gap: gap)); skipped += 1; progress(count, skipped)
             }
-            try MobileFolderReader.captureBackup(bookmark: bookmark, excludedPaths: excludedPaths, append: { row in
+            try MobileFolderReader.captureBackup(bookmark: bookmark, excludedPaths: excludedPaths, ignoreRules: rules,
+                ignored: { ignoredCount += 1; ignored(ignoredCount) }, append: { row in
                 try Task.checkCancellation()
                 do {
                     if try db.blocked(row.path) {
@@ -239,7 +245,7 @@ public struct MobileFolderInventory: Sendable {
             let result = Capture(id: id.lowercased(), generation: generation.lowercased(), totalEntries: count,
                                  coverage: skipped == 0 ? "full" : "partial", consistency: "per-entry", totalSkipped: skipped)
             try NativeFileJournal.save(Record(scope: scope, bookmarkHash: Self.digest(bookmark), capture: result,
-                complete: false, excludedPaths: exclusions, capturePolicy: "backup-supported", prepared: true), fd)
+                complete: false, excludedPaths: exclusions, capturePolicy: "backup-supported", prepared: true, ignoreRules: rules, ignoredCount: ignoredCount), fd)
             return result
         }
     }
@@ -251,7 +257,7 @@ public struct MobileFolderInventory: Sendable {
             try validate(old, scope: scope, id: capture.id, bookmark: bookmark)
             try Task.checkCancellation()
             try NativeFileJournal.save(Record(scope: scope, bookmarkHash: old.bookmarkHash, capture: capture,
-                complete: true, excludedPaths: old.excludedPaths, capturePolicy: old.capturePolicy, prepared: true), fd)
+                complete: true, excludedPaths: old.excludedPaths, capturePolicy: old.capturePolicy, prepared: true, ignoreRules: old.ignoreRules, ignoredCount: old.ignoredCount), fd)
         }
     }
     /// Close a cancellation/seal race without reopening the source grant.
@@ -262,28 +268,28 @@ public struct MobileFolderInventory: Sendable {
                   old.capturePolicy == "backup-supported", old.retired != true else { throw Failure.changed }
             try validate(old, scope: scope, id: capture.id, bookmark: bookmark)
             try NativeFileJournal.save(Record(scope: scope, bookmarkHash: old.bookmarkHash, capture: capture,
-                complete: false, excludedPaths: old.excludedPaths, capturePolicy: old.capturePolicy, prepared: false), fd)
+                complete: false, excludedPaths: old.excludedPaths, capturePolicy: old.capturePolicy, prepared: false, ignoreRules: old.ignoreRules, ignoredCount: old.ignoredCount), fd)
         }
     }
     /// Call only when this scope has no active scanner holding its cache lock.
-    public func backupStatus(_ scope: Scope, id: String, bookmark: Data, excludedPaths: [String] = []) throws -> BackupStatus? {
-        let exclusions = try MobileFolderReader.canonicalExclusions(excludedPaths)
+    public func backupStatus(_ scope: Scope, id: String, bookmark: Data, excludedPaths: [String] = [], ignoreRules: String? = nil) throws -> BackupStatus? {
+        let exclusions = try MobileFolderReader.canonicalExclusions(excludedPaths), rules = try MobileFolderIgnoreRules(ignoreRules).text
         try MobileFolderReader.checkAccess(bookmark: bookmark)
         guard FileManager.default.fileExists(atPath: try location(scope, id: id).path) else { return nil }
         return try locked(scope, id: id) { fd in
             guard let old = try NativeFileJournal.read(fd, as: Record.self) else { return nil }
             try validate(old, scope: scope, id: id, bookmark: bookmark)
-            guard old.retired != true, old.capturePolicy == "backup-supported", (old.excludedPaths ?? []) == exclusions else { throw Failure.changed }
-            return BackupStatus(capture: old.capture, state: old.complete ? "complete" : "interrupted")
+            guard old.retired != true, old.capturePolicy == "backup-supported", (old.excludedPaths ?? []) == exclusions, MobileFolderIgnoreRules.sameText(old.ignoreRules, rules) else { throw Failure.changed }
+            return BackupStatus(capture: old.capture, state: old.complete ? "complete" : "interrupted", ignoredCount: old.ignoredCount ?? 0)
         }
     }
-    public func readSkipped(_ scope: Scope, capture: Capture, bookmark: Data, offset: Int) throws -> SkippedPage {
+    public func readSkipped(_ scope: Scope, capture: Capture, bookmark: Data, offset: Int, ignoreRules: String? = nil) throws -> SkippedPage {
         try MobileFolderReader.checkAccess(bookmark: bookmark)
         guard offset >= 0, let total = capture.totalSkipped, total >= 0,
               offset < total || (offset == 0 && total == 0) else { throw Failure.invalid }
         return try locked(scope, id: capture.id) { fd in
             guard let record = try NativeFileJournal.read(fd, as: Record.self), record.complete, record.retired != true,
-                  record.capturePolicy == "backup-supported", record.capture == capture else { throw Failure.changed }
+                  record.capturePolicy == "backup-supported", record.capture == capture, MobileFolderIgnoreRules.sameText(record.ignoreRules, try MobileFolderIgnoreRules(ignoreRules).text) else { throw Failure.changed }
             try validate(record, scope: scope, id: capture.id, bookmark: bookmark)
             let db = try Database(directory: fd, create: false)
             var rows: [Skipped] = [], bytes = 16_384, bounded = false
@@ -303,12 +309,12 @@ public struct MobileFolderInventory: Sendable {
 
     /// Sealed rows are immutable. The final offset and total count prove that
     /// the client received the whole capture, including an empty directory.
-    public func read(_ scope: Scope, capture: Capture, bookmark: Data, offset: Int) throws -> Page {
+    public func read(_ scope: Scope, capture: Capture, bookmark: Data, offset: Int, ignoreRules: String? = nil) throws -> Page {
         try MobileFolderReader.checkAccess(bookmark: bookmark)
         guard offset >= 0 else { throw Failure.invalid }
         return try locked(scope, id: capture.id) { fd in
             guard let record = try NativeFileJournal.read(fd, as: Record.self), record.complete, record.retired != true,
-                  record.capture == capture, offset < capture.totalEntries || (offset == 0 && capture.totalEntries == 0) else { throw Failure.changed }
+                  record.capture == capture, MobileFolderIgnoreRules.sameText(record.ignoreRules, try MobileFolderIgnoreRules(ignoreRules).text), offset < capture.totalEntries || (offset == 0 && capture.totalEntries == 0) else { throw Failure.changed }
             try validate(record, scope: scope, id: capture.id, bookmark: bookmark)
             let db = try Database(directory: fd, create: false)
             var entries: [MobileFolderReader.Entry] = [], bytes = 16_384, bounded = false
@@ -327,9 +333,9 @@ public struct MobileFolderInventory: Sendable {
 
     /// Removing metadata never removes a source file. Reusing an evicted ID
     /// produces a different generation, which every page request must pin.
-    public func discard(_ scope: Scope, capture: Capture, bookmark: Data) throws {
+    public func discard(_ scope: Scope, capture: Capture, bookmark: Data, ignoreRules: String? = nil) throws {
         try locked(scope, id: capture.id, removing: true) { fd in
-            guard var record = try NativeFileJournal.read(fd, as: Record.self), record.capture == capture else { throw Failure.changed }
+            guard var record = try NativeFileJournal.read(fd, as: Record.self), record.capture == capture, MobileFolderIgnoreRules.sameText(record.ignoreRules, try MobileFolderIgnoreRules(ignoreRules).text) else { throw Failure.changed }
             try validate(record, scope: scope, id: capture.id, bookmark: bookmark)
             record.retired = true
             try NativeFileJournal.save(record, fd)

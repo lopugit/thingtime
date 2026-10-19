@@ -13,6 +13,77 @@ final class MobileFolderInventoryTests: XCTestCase {
         return (source, try FolderBookmark.create(source), .init(owner: owner, deviceId: "fixture-device", rootId: UUID().uuidString.lowercased()), root.appendingPathComponent("journal"))
     }
 
+    func testIgnoreRulesPruneDependenciesBeforeOpenAndBindCapturePolicy() throws {
+        let (source, bookmark, scope, directory) = try fixture()
+        for name in ["project/node_modules", ".venv", "cache", "hard"] {
+            try FileManager.default.createDirectory(at: source.appendingPathComponent(name), withIntermediateDirectories: true)
+            try FileManager.default.createSymbolicLink(at: source.appendingPathComponent(name + "/blocked"), withDestinationURL: source.appendingPathComponent("outside"))
+        }
+        for name in ["project/cache", "NODE_MODULES"] {
+            try FileManager.default.createDirectory(at: source.appendingPathComponent(name), withIntermediateDirectories: true)
+            try Data().write(to: source.appendingPathComponent(name + "/kept"))
+        }
+        try Data("secret\n".utf8).write(to: source.appendingPathComponent(".gitignore"))
+        for name in ["secret", "drop.tmp", "keep.tmp"] { try Data().write(to: source.appendingPathComponent(name)) }
+        let venv = source.appendingPathComponent(".venv")
+        try FileManager.default.setAttributes([.posixPermissions: 0], ofItemAtPath: venv.path)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: venv.path) }
+        let rules = "node_modules/\n.venv/\n/cache/\n*.tmp\n!keep.tmp\n!hard/\n"
+        let expected: Set<String> = ["project", "project/cache", "project/cache/kept", "NODE_MODULES", "NODE_MODULES/kept", ".gitignore", "secret", "keep.tmp"]
+        let exclusions = ["hard"], store = MobileFolderInventory(directory: directory)
+        let scanned = try MobileFolderReader.scan(bookmark: bookmark, excludedPaths: exclusions, ignoreRules: rules)
+        XCTAssertEqual(Set(scanned.map(\.path)), expected)
+        let strictID = UUID().uuidString.lowercased()
+        let strict = try store.capture(scope, id: strictID, bookmark: bookmark, excludedPaths: exclusions, ignoreRules: rules)
+        XCTAssertEqual(Set(try store.read(scope, capture: strict, bookmark: bookmark, offset: 0, ignoreRules: rules).entries.map(\.path)), expected)
+        XCTAssertThrowsError(try store.read(scope, capture: strict, bookmark: bookmark, offset: 0))
+        XCTAssertThrowsError(try store.capture(scope, id: strictID, bookmark: bookmark, excludedPaths: exclusions, ignoreRules: rules + "# policy change"))
+        let id = UUID().uuidString.lowercased()
+        let backup = try store.prepareBackup(scope, id: id, generation: UUID().uuidString.lowercased(), bookmark: bookmark, excludedPaths: exclusions, ignoreRules: rules)
+        XCTAssertEqual(backup.coverage, "full"); XCTAssertEqual(backup.totalSkipped, 0)
+        try store.sealBackup(scope, capture: backup, bookmark: bookmark)
+        XCTAssertEqual(try store.backupStatus(scope, id: id, bookmark: bookmark, excludedPaths: exclusions, ignoreRules: rules)?.ignoredCount, 4)
+        XCTAssertEqual(Set(try store.read(scope, capture: backup, bookmark: bookmark, offset: 0, ignoreRules: rules).entries.map(\.path)), expected)
+        XCTAssertThrowsError(try store.backupStatus(scope, id: id, bookmark: bookmark, excludedPaths: exclusions))
+        XCTAssertThrowsError(try store.readSkipped(scope, capture: backup, bookmark: bookmark, offset: 0))
+        XCTAssertThrowsError(try store.discard(scope, capture: backup, bookmark: bookmark))
+        XCTAssertEqual(try store.readSkipped(scope, capture: backup, bookmark: bookmark, offset: 0, ignoreRules: rules).skipped.count, 0)
+        try store.discard(scope, capture: backup, bookmark: bookmark, ignoreRules: rules)
+    }
+
+    func testIgnoreMatchingAndEmittedInventoryPreserveDecomposedFilenameBytes() throws {
+        let (source, bookmark, scope, directory) = try fixture()
+        let nfd = "cafe\u{301}.txt", nfc = "café.txt"
+        try Data().write(to: source.appendingPathComponent(nfd))
+        let entries = try MobileFolderReader.scan(bookmark: bookmark, ignoreRules: "/" + nfc)
+        let entry = try XCTUnwrap(entries.first)
+        XCTAssertTrue(entry.path.utf8.elementsEqual(nfd.utf8), "Native inventory must preserve readdir spelling")
+        XCTAssertFalse(try MobileFolderIgnoreRules("/" + nfc).ignores(entry.path, isDirectory: false))
+        XCTAssertTrue(try MobileFolderIgnoreRules("/" + nfd).ignores(entry.path, isDirectory: false))
+        XCTAssertTrue(try MobileFolderReader.scan(bookmark: bookmark, ignoreRules: "/" + nfd).isEmpty)
+        let json = try JSONSerialization.jsonObject(with: JSONEncoder().encode(entry)) as! [String: Any]
+        XCTAssertTrue(try XCTUnwrap(json["path"] as? String).utf8.elementsEqual(nfd.utf8), "JSON transport must preserve matching bytes")
+        let store = MobileFolderInventory(directory: directory)
+        let capture = try store.capture(scope, id: UUID().uuidString.lowercased(), bookmark: bookmark, ignoreRules: "/" + nfc)
+        let page = try store.read(scope, capture: capture, bookmark: bookmark, offset: 0, ignoreRules: "/" + nfc)
+        XCTAssertTrue(try XCTUnwrap(page.entries.first).path.utf8.elementsEqual(nfd.utf8), "Folded identity keys must not rewrite emitted paths")
+    }
+
+    func testIgnorePolicyIdentityUsesExactUnicodeBytesAndValidatesBeforeGrantAccess() throws {
+        let (_, bookmark, scope, directory) = try fixture()
+        let store = MobileFolderInventory(directory: directory), id = UUID().uuidString.lowercased()
+        let composed = "café", decomposed = "cafe\u{301}"
+        XCTAssertEqual(composed, decomposed) // Swift equivalence must not bind rules.
+        XCTAssertFalse(MobileFolderIgnoreRules.sameText(composed, decomposed))
+        _ = try store.capture(scope, id: id, bookmark: bookmark, ignoreRules: composed)
+        XCTAssertThrowsError(try store.capture(scope, id: id, bookmark: bookmark, ignoreRules: decomposed))
+        for bad in ["\0"] {
+            XCTAssertThrowsError(try MobileFolderReader.scan(bookmark: Data(), ignoreRules: bad)) { error in
+                guard case MobileFolderStore.Failure.invalid = error else { return XCTFail("Invalid rules must fail before touching the grant") }
+            }
+        }
+    }
+
     func testBackupCaptureKeepsSupportedFilesAndPagesExplicitSkips() throws {
         let (source, bookmark, scope, directory) = try fixture()
         let outside = source.deletingLastPathComponent().appendingPathComponent("outside-pipe")

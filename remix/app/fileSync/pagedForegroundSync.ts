@@ -168,7 +168,7 @@ export async function runPagedForegroundCloudSync(reviewed: SavedFileSyncConfigu
 		const local = identity('local'), remote = identity('remote');
 		await importObservations(local, remote);
 		const spec: PagedPlanSpec = { id: crypto.randomUUID(), local, remote, baseline,
-			policy: { mode: configuration.mode, propagateDeletes: configuration.propagateDeletes }, excludedPaths: configuration.excludedPaths };
+			policy: { mode: configuration.mode, propagateDeletes: configuration.propagateDeletes }, excludedPaths: configuration.excludedPaths, ...(configuration.ignoreRules ? { ignoreRules: configuration.ignoreRules } : {}) };
 		const result = await plans.build(spec);
 		// Every whole-tree compatibility boundary must stay bounded. The native
 		// paged path can keep its plan, review and baseline on disk throughout.

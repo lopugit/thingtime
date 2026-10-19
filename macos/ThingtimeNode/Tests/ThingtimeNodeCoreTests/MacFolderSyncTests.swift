@@ -50,6 +50,47 @@ final class MacFolderSyncTests: XCTestCase {
         }
         throw MobileFolderStore.Failure.unavailable
     }
+    func testIgnoreRulesAreEchoedPrunedAndBoundAcrossBackupLifecycle() async throws {
+        let selected = folder.appendingPathComponent("selected")
+        try FileManager.default.createDirectory(at: selected.appendingPathComponent("node_modules"), withIntermediateDirectories: true)
+        try FileManager.default.createSymbolicLink(at: selected.appendingPathComponent("node_modules/blocked"), withDestinationURL: selected.appendingPathComponent("missing"))
+        try Data().write(to: selected.appendingPathComponent("kept"))
+        let service = try service(), id = try await root(service)
+        let rules = "# Explicit sync policy\r\nnode_modules/\r\n"
+        let fields = backupFields(id).merging(["ignoreRules": .string(rules)]) { _, v in v }
+        let begin = try await service.handle(request("scan-capture", fields)).decode([String: JSONValue].self)
+        XCTAssertEqual(begin["ignoreRules"], .string(rules))
+        let completed = try await awaitBackup(service, fields: fields)
+        XCTAssertEqual(completed["ignoreRules"], .string(rules))
+        let status = try XCTUnwrap(completed["backupCapture"]).decode([String: JSONValue].self)
+        XCTAssertEqual(status["coverage"], .string("full")); XCTAssertEqual(status["totalSkipped"], .number(0))
+        XCTAssertEqual(status["ignoredCount"], .number(1))
+        let descriptor = status.filter { ["id", "generation", "totalEntries", "coverage", "consistency", "totalSkipped"].contains($0.key) }
+        let pageFields: [String: JSONValue] = ["rootId": .string(id), "inventoryDeviceId": .string("device"),
+            "capturePolicy": .string("backup-supported"), "capture": .object(descriptor), "offset": .number(0), "ignoreRules": .string(rules)]
+        let page = try await service.handle(request("scan-page", pageFields)).decode([String: JSONValue].self)
+        XCTAssertEqual(page["ignoreRules"], .string(rules))
+        XCTAssertEqual(try XCTUnwrap(page["inventoryPage"]).decode(MobileFolderInventory.Page.self).entries.map(\.path), ["kept"])
+        let skipped = try await service.handle(request("scan-skips", pageFields)).decode([String: JSONValue].self)
+        XCTAssertEqual(skipped["ignoreRules"], .string(rules))
+        await rejects { try await service.handle(self.request("scan-page", pageFields.filter { $0.key != "ignoreRules" })) }
+        await rejects { try await service.handle(self.request("scan-status", fields.merging(["ignoreRules": .string(rules + "kept")]) { _, v in v })) }
+        await rejects { try await service.handle(self.request("scan-capture", fields.merging(["ignoreRules": .string(rules + "kept")]) { _, v in v })) }
+        let strict = try await service.handle(request("scan", ["rootId": .string(id), "ignoreRules": .string(rules)])).decode([String: JSONValue].self)
+        XCTAssertEqual(strict["ignoreRules"], .string(rules))
+        XCTAssertEqual(try XCTUnwrap(strict["entries"]).decode([MobileFolderReader.Entry].self).map(\.path), ["kept"])
+        let discarded = try await service.handle(request("scan-discard", pageFields)).decode([String: JSONValue].self)
+        XCTAssertEqual(discarded["ignoreRules"], .string(rules))
+        for invalid: JSONValue in [.null, .number(1), .string("\0")] {
+            await rejects { try await service.handle(self.request("scan", ["rootId": .string(id), "ignoreRules": invalid])) }
+        }
+        let empty = try await service.handle(request("scan", ["rootId": .string(id), "excludedPaths": .array([.string("node_modules")]), "ignoreRules": .string("")])).decode([String: JSONValue].self)
+        XCTAssertNil(empty["ignoreRules"])
+        let largerRules = String(repeating: "#", count: 16_385)
+        let larger = try await service.handle(request("scan", ["rootId": .string(id), "excludedPaths": .array([.string("node_modules")]), "ignoreRules": .string(largerRules)])).decode([String: JSONValue].self)
+        XCTAssertEqual(larger["ignoreRules"], .string(largerRules))
+    }
+
     func testBackupLifecycleReturnsQuicklySealsCoverageAndReusesLostReply() async throws {
         let selected = folder.appendingPathComponent("selected")
         try Data("kept".utf8).write(to: selected.appendingPathComponent("kept"))
@@ -147,6 +188,29 @@ final class MacFolderSyncTests: XCTestCase {
         XCTAssertEqual(status["generation"], generation)
         XCTAssertEqual(status["state"], .string("complete"))
         XCTAssertEqual(completed["complete"], .bool(true))
+    }
+
+    func testBackupCancellationOfEvictedCaptureIsIdempotentAndRemainsScoped() async throws {
+        let service = try service(), id = try await root(service), fields = backupFields(id)
+        for _ in 0..<2 {
+            let result = try await service.handle(request("scan-cancel", fields)).decode([String: JSONValue].self)
+            XCTAssertEqual(result["cancelled"], .bool(true)); XCTAssertEqual(result["complete"], .bool(false))
+            XCTAssertEqual(result["captureId"], fields["captureId"])
+            XCTAssertNil(result["capture"]); XCTAssertNil(result["backupCapture"])
+        }
+        for patch: [String: JSONValue] in [
+            ["ownerId": .string("foreign")], ["deviceId": .string("foreign")],
+            ["rootId": .string(UUID().uuidString)], ["captureId": .string("invalid")]
+        ] {
+            await rejects { try await service.handle(self.request("scan-cancel", fields.merging(patch) { _, v in v })) }
+        }
+        // An existing generation must still reject a caller's changed policy.
+        let withRules = fields.merging(["ignoreRules": .string("node_modules/")]) { _, v in v }
+        _ = try await service.handle(request("scan-capture", withRules))
+        _ = try await awaitBackup(service, fields: withRules)
+        await rejects { try await service.handle(self.request("scan-cancel", fields)) }
+        let cancelled = try await service.handle(request("scan-cancel", withRules)).decode([String: JSONValue].self)
+        XCTAssertEqual(cancelled["cancelled"], .bool(true))
     }
 
     func testBackupRechecksAuthorityBeforeSealAfterPrivatePreparation() async throws {
@@ -261,7 +325,7 @@ final class MacFolderSyncTests: XCTestCase {
         let context = try await service.handle(request("context")).decode([String: JSONValue].self)
         XCTAssertEqual(context["deviceId"], .string("device"))
         let capabilities = try XCTUnwrap(context["capabilities"]).decode([String: String].self)
-        XCTAssertEqual(capabilities, ["fileAccessVersion": "1.8.0", "fileStagingVersion": "1.1.0", "filePublicationVersion": "1.2.0"])
+        XCTAssertEqual(capabilities, ["fileAccessVersion": "1.9.0", "fileStagingVersion": "1.1.0", "filePublicationVersion": "1.2.0"])
         let result = try await service.handle(request("conditions")).decode([String: JSONValue].self)
         XCTAssertEqual(result["conditions"], .object(["network": .string("unknown"), "charging": .null]))
     }

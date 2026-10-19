@@ -11,7 +11,7 @@ import { runPagedForegroundCloudSync } from './pagedForegroundSync';
 import { readNativeInventory, NativeInventoryRetryWait, type LocalInventoryPage } from './nativeInventory';
 import { readCloudFolderInventoryPages } from './cloudInventoryPages.client';
 import { readCloudFolderInventory } from './cloudInventory.client';
-import { mobileFolderSource, supportsNativeInventoryPages, supportsNativePathInspection, supportsNativeBackupCapture } from './mobileFolders.client';
+import { mobileFolderSource, supportsNativeInventoryPages, supportsNativePathInspection, supportsNativeBackupCapture, supportsNativeIgnoreRules } from './mobileFolders.client';
 import { approveMobileSyncTarget } from './mobileSyncTarget.client';
 import { assertPhotoSourcePolicy } from './photoSourcePolicy';
 import { createConflictReviewController } from './conflictReviewController';
@@ -56,18 +56,19 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 			if (adapter.platform === 'macos') releaseWindow = await holdDesktopSyncWindow(adapter.bridge); check();
 			const host = await createNativeSyncHost({ ownerId: binding.ownerId, deviceId: binding.deviceId, adapter, signal, assertCurrent: check });
 			if (host.origin() !== binding.origin) throw Error('The selected sync server changed.');
-			await host.requireCapability('api.things', '1.36.0');
+			await host.requireCapability('api.things', reviewed.configuration.ignoreRules ? '1.38.0' : '1.36.0');
 			// Views may render once with their prior props during cancellation.
 			// The origin is display/binding metadata; every IO method and the
 			// explicit assertCurrent still use the live, abortable host checks.
 			update({ host: { ...host, origin: () => binding.origin } });
 			const request = host.request, capabilities = host.capabilities;
+			if (reviewed.configuration.ignoreRules && !supportsNativeIgnoreRules(capabilities)) throw Error('Update Thingtime Mac before using this connection’s Gitignore rules.');
 			const currentScope = () => { check(); host.assertCurrent(); return binding; };
 			const runtime = { currentScope, origin: host.origin, fetch: host.fetch, requireCapability: host.requireCapability };
 			cancelCapture = async () => {
 				if (!job?.nativeCaptureId) return;
 				await request(binding.ownerId, { action: 'scan-cancel', rootId: reviewed.configuration.localRootId, inventoryDeviceId: binding.deviceId,
-					captureId: job.nativeCaptureId, capturePolicy: 'backup-supported', excludedPaths: reviewed.configuration.excludedPaths }, signal);
+					captureId: job.nativeCaptureId, capturePolicy: 'backup-supported', excludedPaths: reviewed.configuration.excludedPaths, ...(reviewed.configuration.ignoreRules ? { ignoreRules: reviewed.configuration.ignoreRules } : {}) }, signal);
 			};
 			const nativePages = async function* (): AsyncGenerator<LocalInventoryPage> {
 				const backup = supportsNativeBackupCapture(capabilities) && reviewed.configuration.mode === 'backup' && !reviewed.configuration.propagateDeletes;
@@ -76,7 +77,7 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 					if (!changed) throw Error('The sync job changed before indexing.'); job = changed;
 				}
 				for await (const page of readNativeInventory({ ownerId: binding.ownerId, deviceId: binding.deviceId, rootId: reviewed.configuration.localRootId,
-					excludedPaths: reviewed.configuration.excludedPaths, signal, request, ...(backup ? { backupPolicy: reviewed.configuration, captureId: job!.nativeCaptureId,
+					excludedPaths: reviewed.configuration.excludedPaths, ...(reviewed.configuration.ignoreRules ? { ignoreRules: reviewed.configuration.ignoreRules } : {}), signal, request, ...(backup ? { backupPolicy: reviewed.configuration, captureId: job!.nativeCaptureId,
 						onCaptureStatus: async value => {
 							if (job!.nativeCaptureGeneration === value.generation) return;
 							const changed = await jobs!.observeCapture(job!, value.generation); check();
@@ -105,9 +106,9 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 					const prior = await jobs!.read(); check();
 					// A new approved revision cannot borrow the earlier native job.
 					// Cancel its same-connection scan before dropping that ticket.
-					if (prior?.nativeCaptureId && JSON.stringify(prior.reviewed.configuration) === JSON.stringify(reviewed.configuration) && prior.reviewed.updatedAt !== reviewed.updatedAt) {
+					if (prior?.nativeCaptureId && (prior.state === 'paused' || JSON.stringify(prior.reviewed.configuration) === JSON.stringify(reviewed.configuration)) && JSON.stringify(prior.reviewed) !== JSON.stringify(reviewed)) {
 						await request(binding.ownerId, { action: 'scan-cancel', rootId: prior.reviewed.configuration.localRootId, inventoryDeviceId: binding.deviceId,
-							captureId: prior.nativeCaptureId, capturePolicy: 'backup-supported', excludedPaths: prior.reviewed.configuration.excludedPaths }, signal); check();
+							captureId: prior.nativeCaptureId, capturePolicy: 'backup-supported', excludedPaths: prior.reviewed.configuration.excludedPaths, ...(prior.reviewed.configuration.ignoreRules ? { ignoreRules: prior.reviewed.configuration.ignoreRules } : {}) }, signal); check();
 					}
 				}
 				job = resume ? await jobs!.begin(resume, Date.now(), crypto.randomUUID()) : await jobs!.admit(reviewed, crypto.randomUUID(), intervalMs);
@@ -139,7 +140,7 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 						assertPhotoSourcePolicy(reviewed.configuration, (await request(binding.ownerId, { action: 'list' }, signal)).roots); check();
 					},
 					conditions: async () => (await request(binding.ownerId, { action: 'conditions' }, signal)).conditions!,
-					scanLocal: async () => (await request(binding.ownerId, { action: 'scan', rootId: reviewed.configuration.localRootId, excludedPaths: reviewed.configuration.excludedPaths }, signal)).entries!,
+					scanLocal: async () => (await request(binding.ownerId, { action: 'scan', rootId: reviewed.configuration.localRootId, excludedPaths: reviewed.configuration.excludedPaths, ...(reviewed.configuration.ignoreRules ? { ignoreRules: reviewed.configuration.ignoreRules } : {}) }, signal)).entries!,
 					...(inspect && supportsNativeInventoryPages(capabilities) ? {
 						scanLocalPages: nativePages
 					} : {}),

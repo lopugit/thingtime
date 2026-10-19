@@ -12433,3 +12433,31 @@ separate from deterministic discovery/lease tests.
 - Password AutoFill disconnect must fail closed when protected Keychain deletion returns locked, denied, missing-entitlement or unavailable; endpoint changes must wait for success and allow a retry. Run the injected-status Swift tests and Electron helper-failure tests without accessing user credentials.
 
 - [ ] File sync: after one completed transfer, force the next indexing attempt to fail. It must show Needs attention and Indexing stopped before completion, without reusing the old hierarchy or uploading additional entries.
+
+### Desktop shutdown with an unfinished page load
+
+- Quit while the bundled window is still loading and while closing its local
+  HTTP server rejects that load. No late URL error dialog may block process
+  exit. A Dock activation during cleanup must not recreate a blank window.
+- A genuine load failure in a live window must still display its actionable
+  error. Reopen the installed signed app and verify the same account and saved
+  sync connection survive; do not treat a forced termination as clean Quit.
+
+### Device sync ignore rules
+
+- Compare the shared TypeScript and Swift corpus with `git check-ignore` for
+  comments, escapes, ordered negation, parent-directory exclusions, anchored
+  patterns, globstars, character classes and UTF-8 names. Native enumeration
+  must prune ignored folders before opening or hashing descendants.
+- Save custom rules, add defaults twice, remove a default and reload. Defaults
+  must preserve user rules, and Save must not begin a transfer. Test both File
+  and Folder paths, including exact exclusions that negation cannot override.
+- Stop an admitted job, change its policy and explicitly start again. Reuse the
+  existing account/grant fences; cancel the old capture with its original
+  policy. Ignored baseline children must not disappear or cause parent deletion.
+- Verify older clients refuse configuration version 2, missing server/native
+  capabilities prevent work, and capture/status/page/cancel replies retain the
+  exact policy. Test missing cached captures without weakening scope checks.
+- Edit nested Builder controls separately, save/reload, and inspect the entire
+  editor at desktop/mobile sizes. On the signed installed Mac verify saved
+  home exclusions and dependency defaults before starting the real upload.

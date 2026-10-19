@@ -15,12 +15,15 @@ test('single-path inspection uses the same host account and origin fences', asyn
     assert.equal(f.calls.length, 1);
 });
 
-test('inventory capture, page and discard retain host identity fences before and after native work', async () => {
-    for (const action of ['scan-capture', 'scan-page', 'scan-discard']) {
-        const f = fixture(), input = f.input({ action, rootId: randomUUID(), inventoryDeviceId: 'device' });
+test('all inventory capture lifecycle operations retain policy and host identity fences', async () => {
+    for (const action of ['scan-capture', 'scan-status', 'scan-cancel', 'scan-skips', 'scan-page', 'scan-discard']) {
+        const f = fixture(), input = f.input({ action, rootId: randomUUID(), inventoryDeviceId: 'device',
+            capturePolicy: 'backup-supported', ignoreRules: 'node_modules/\n!keep/', excludedPaths: ['Library'] });
         f.run(async (_method, request) => ({ ...request, roots: [], complete: true }));
         assert.equal((await f.host.request(f.event, input)).complete, true);
         assert.equal(f.calls[0].action, action);
+        assert.equal(f.calls[0].ignoreRules, input.ignoreRules);
+        assert.deepEqual(f.calls[0].excludedPaths, ['Library']);
         f.run(async (_method, request) => { f.account('other'); return { ...request, roots: [], complete: true }; });
         await assert.rejects(f.host.request(f.event, f.input({ ...input, requestId: randomUUID() })));
         assert.equal(f.calls.length, 2);

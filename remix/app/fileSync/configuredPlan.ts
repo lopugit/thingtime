@@ -1,3 +1,4 @@
+import { createSyncIgnorePolicy } from './syncIgnore';
 import { parseFileSyncConfiguration, FILE_SYNC_KIND, type FileSyncConfiguration } from './configuration';
 import { planFileSync, syncPathKey, type SyncBaseline, type SyncPlan, type SyncScan, type SyncScope, sameSyncScope, validateSyncScope } from './reconcile';
 
@@ -43,16 +44,18 @@ export function planConfiguredFileSync(input: {
  if (c.chargingOnly && conditions.charging !== true) return { status: 'waiting', reason: 'charging' };
  // Validate full observations before filtering; exclusions never hide an invalid scan.
  const unfiltered = planFileSync(local, remote, baseline, c);
- if (!c.excludedPaths.length) return { status: 'ready', plan: unfiltered };
+ if (!c.excludedPaths.length && !c.ignoreRules) return { status: 'ready', plan: unfiltered };
  const exclusions = c.excludedPaths.map(syncPathKey);
- const included = (path: string) => { const key = syncPathKey(path); return !exclusions.some(excluded => key === excluded || key.startsWith(excluded + '/')); };
- const plan = planFileSync({ ...local, entries: local.entries.filter(e => included(e.path)) },
-  { ...remote, entries: remote.entries.filter(e => included(e.path)) }, { ...baseline, entries: baseline.entries.filter(e => included(e.path)) }, c);
+ const ignore = createSyncIgnorePolicy(c.ignoreRules, c.excludedPaths);
+ const included = (entry: { path: string; kind: 'file' | 'folder' }) => !ignore.ignored(entry.path, entry.kind);
+ const plan = planFileSync({ ...local, entries: local.entries.filter(included) },
+  { ...remote, entries: remote.entries.filter(included) }, { ...baseline, entries: baseline.entries.filter(e => included(e.local)) }, c);
  // A parent must not be removed while it contains (or is configured to protect)
  // an excluded child. Native emptiness checks remain required at publication.
  const localByPath = new Map(local.entries.map(e => [e.path, e]));
  const remoteByPath = new Map(remote.entries.map(e => [e.path, e]));
- plan.decisions = plan.decisions.map(decision => decision.kind === 'trash' && exclusions.some(path => path.startsWith(syncPathKey(decision.path) + '/')) ? {
+ const protectedDescendants = [...local.entries, ...remote.entries, ...baseline.entries.map(pair => pair.local)].filter(entry => !included(entry));
+ plan.decisions = plan.decisions.map(decision => decision.kind === 'trash' && (exclusions.some(path => path.startsWith(syncPathKey(decision.path) + '/')) || protectedDescendants.some(entry => entry.path.startsWith(decision.path + '/'))) ? {
   kind: 'conflict', path: decision.path, reason: 'excluded-descendants',
   local: localByPath.get(decision.path) ?? null,
   remote: remoteByPath.get(decision.path) ?? null

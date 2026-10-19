@@ -3641,3 +3641,31 @@ Symbolic-link content/restore, hard-link relationships, faithful special-entry
 metadata and full-home installed acceptance remain separate unfinished work.
 Android remains deferred. Existing grants, private destination selection and
 the home exclusions must be reviewed before real account transfer.
+
+## Sync ignore rules — 2026-10-19
+
+The connection editor at `/settings/things` exposes a separate root-relative
+Gitignore rule list. Exact excluded paths continue to take precedence. The
+common-exclusions action fills editable dependency/cache directory rules such
+as `node_modules/`, Python environments, Gradle/Maven caches, CocoaPods, Dart,
+Rust and Go module caches. It does not erase exact exclusions or start a run.
+
+Patterns follow [Git's ignore syntax](https://git-scm.com/docs/gitignore): one
+rule per line, comments with `#`, ordered `!` exceptions, root anchoring with
+`/`, directory-only trailing `/`, wildcards and escaped literals. An ignored
+parent must itself be included before a child exception can take effect. A
+path checker lets the user review the result. Repository `.gitignore` files
+are not automatically read; this list belongs to the selected sync connection.
+Matching is case-sensitive. Native traversal prunes ignored entries before
+opening or hashing their content. Intentionally excluded entries do not count
+as incomplete backup coverage, and previously saved copies are retained.
+
+Nonempty rules use saved `configurationVersion: 2`, negotiated through
+`api.things` 1.38.0 and Mac `fileAccess` 1.9.0. Older clients refuse version2
+instead of dropping the policy. Empty-rule configurations retain version1
+compatibility. Changing a policy requires stopping the current admission,
+saving the edited connection and explicitly starting it with new local
+approval; pending operation receipts remain separately protected. Rules and
+exact exclusions are part of capture identity and must survive retries with
+the same spelling. Installed home-upload acceptance is tracked in
+[PR1049](../PRs/1049-home-backup-indexing-resumable-partial-captures.md).

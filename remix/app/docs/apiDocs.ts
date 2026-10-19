@@ -9381,8 +9381,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // owner-library files. The combined 1.27.0 contract adds shared
     // Thing discussions, linked references, display-metadata renames and
     // optional cursor-backed rich comment projections.
-    featureVersion: '1.37.0',
-    contractVersion: '1.37.0',
+    featureVersion: '1.38.0',
+    contractVersion: '1.38.0',
     group: 'things',
     // 1.33.1: placement and folder deletion share transactional ancestry fences.
     // 1.33.2: protected library display-title renames commit title-only history.
@@ -9390,6 +9390,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     endpoint: '/api/v1/things',
     summary: 'One endpoint for every thing: create, read, update/upsert, and delete posts, comments, reactions, and shares. OAuth app tokens may use explicitly approved account Things permissions; legacy picker and app-storage grants retain their prior boundaries.',
     detail:
+      'Version 1.38 adds private file-sync configurationVersion 2 with bounded root-relative Gitignore rules. Rules prune native scans before hashing and filter both planning sides; ignored baseline facts are retained. Older clients must refuse version 2 rather than discard its policy. Empty-rule configurations keep version 1 compatibility. Native grants and exact-policy approval are still required. ' +
       'Version 1.37 adds registered authenticated live SSE source bindings on saved Components and page blocks; shared-root execution cannot borrow viewer stream authority. ' +
       'Version 1.36 combines file-sync configuration with individually editable element, collection and condition blocks, scalar DOM bindings and child templates. Authored trees have no product block-count/depth limit; transport and storage bounds remain. ' +
       'File-sync Things store bounded editable device/root/destination preferences with private defaults, explicit pause, direction, deletion, network, charging and exact-path exclusions. Native grants and execution approval remain device-local; these data records alone never authorize transfers. ' +

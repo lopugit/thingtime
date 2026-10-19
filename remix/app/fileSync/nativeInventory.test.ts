@@ -212,3 +212,26 @@ test('running backup coverage remains partial until sealing, including a scan wi
 		} })) frames.push(frame);
 	assert.equal(frames.at(-1)?.backupCapture?.coverage, 'full');
 });
+
+test('Gitignore policy is negotiated before all capture requests and every response echoes exact text', async () => {
+ const { supportsNativeIgnoreRules } = await import('./mobileFolders.client');
+ const ignoreRules = 'node_modules/\n!keep';
+ assert.equal(supportsNativeIgnoreRules({ platform: 'macos', fileAccessVersion: '1.9.0' }), true);
+ for (const bridge of [{ platform: 'macos' as const, fileAccessVersion: '1.8.0' }, { platform: 'ios' as const, fileAccessVersion: '1.9.0' }])
+  assert.throws(() => assertNativeScanExclusions({ action: 'scan', rootId, ignoreRules }, bridge), /Gitignore/);
+ const c = { ...capture, coverage: 'full' as const, consistency: 'per-entry' as const, totalSkipped: 0 };
+ const pairs: [FolderRequest, object][] = [
+  [{ action: 'scan', rootId, ignoreRules }, { entries: [entry] }],
+  [{ action: 'scan-capture', rootId, inventoryDeviceId: 'device', captureId: capture.id, ignoreRules }, { capture }],
+  [{ action: 'scan-page', rootId, inventoryDeviceId: 'device', capture, offset: 0, ignoreRules }, { inventoryPage: page }],
+  [{ action: 'scan-discard', rootId, inventoryDeviceId: 'device', capture, ignoreRules }, { discarded: true }],
+  [{ action: 'scan-status', rootId, inventoryDeviceId: 'device', captureId: capture.id, capturePolicy: 'backup-supported', ignoreRules }, { capturePolicy: 'backup-supported', backupCapture: { ...c, state: 'complete' } }],
+  [{ action: 'scan-cancel', rootId, inventoryDeviceId: 'device', captureId: capture.id, capturePolicy: 'backup-supported', ignoreRules }, { complete: false, capturePolicy: 'backup-supported', captureId: capture.id, cancelled: true }],
+  [{ action: 'scan-skips', rootId, inventoryDeviceId: 'device', capture: c, offset: 0, capturePolicy: 'backup-supported', ignoreRules }, { capturePolicy: 'backup-supported', skippedPage: { capture: c, offset: 0, totalSkipped: 0, skipped: [], nextOffset: null } }]
+ ];
+ for (const [request, fields] of pairs) {
+  const payload = { ...expected, roots: [], rootId, complete: true, ignoreRules, ...fields };
+  assert.ok(parseMobileFolderResult({ type: 'mobile-files-result', payload }, expected, request));
+  for (const changed of [undefined, '', 'other/']) assert.throws(() => parseMobileFolderResult({ type: 'mobile-files-result', payload: { ...payload, ignoreRules: changed } }, expected, request), /ignore rules changed/);
+ }
+});

@@ -1,3 +1,4 @@
+import { canonicalIgnoreRules, createSyncIgnorePolicy } from './syncIgnore';
 import { parseNativeBackupStatus, parseNativeSkippedPage, parseNativeInventoryCapture, parseNativeInventoryPage, type NativeBackupStatus, type NativeBackupCapture, type NativeSkippedPage, type NativeInventoryCapture, type NativeInventoryPage } from './nativeInventory';
 import { canonicalNativeScanExclusions, isNativeScanExcluded } from './nativeScanExclusions';
 import { trackNativeUploadBackground } from './nativeUploadBackground';
@@ -46,12 +47,12 @@ export type FolderRequest =
 	| { action: 'upload-part'; rootId: string; upload: NativePartUpload & { source: SyncEntry } }
 	| { action: 'list' | 'choose' | 'conditions' | 'prepare-upload' }
 	| { action: 'remove'; rootId: string }
-	| { action: 'scan'; rootId: string; excludedPaths?: string[] }
-	| { action: 'scan-capture'; rootId: string; inventoryDeviceId: string; captureId: string; excludedPaths?: string[]; capturePolicy?: 'backup-supported' }
-	| { action: 'scan-status' | 'scan-cancel'; rootId: string; inventoryDeviceId: string; captureId: string; capturePolicy: 'backup-supported'; excludedPaths?: string[] }
-	| { action: 'scan-skips'; rootId: string; inventoryDeviceId: string; capture: NativeBackupCapture; offset: number; capturePolicy: 'backup-supported' }
-	| { action: 'scan-page'; rootId: string; inventoryDeviceId: string; capture: NativeInventoryCapture; offset: number; capturePolicy?: 'backup-supported' }
-	| { action: 'scan-discard'; rootId: string; inventoryDeviceId: string; capture: NativeInventoryCapture; capturePolicy?: 'backup-supported' }
+	| { action: 'scan'; rootId: string; excludedPaths?: string[]; ignoreRules?: string }
+	| { action: 'scan-capture'; rootId: string; inventoryDeviceId: string; captureId: string; excludedPaths?: string[]; ignoreRules?: string; capturePolicy?: 'backup-supported' }
+	| { action: 'scan-status' | 'scan-cancel'; rootId: string; inventoryDeviceId: string; captureId: string; capturePolicy: 'backup-supported'; excludedPaths?: string[]; ignoreRules?: string }
+	| { action: 'scan-skips'; rootId: string; inventoryDeviceId: string; capture: NativeBackupCapture; offset: number; ignoreRules?: string; capturePolicy: 'backup-supported' }
+	| { action: 'scan-page'; rootId: string; inventoryDeviceId: string; capture: NativeInventoryCapture; offset: number; ignoreRules?: string; capturePolicy?: 'backup-supported' }
+	| { action: 'scan-discard'; rootId: string; inventoryDeviceId: string; capture: NativeInventoryCapture; ignoreRules?: string; capturePolicy?: 'backup-supported' }
 	| { action: 'inspect'; rootId: string; path: string }
 	| { action: 'version-list'; rootId: string; cursor?: string }
 	| { action: 'version-inspect'; rootId: string; versionId: string; expected: SyncEntry }
@@ -131,7 +132,11 @@ export const supportsNativeScanExclusions = (bridge: FolderCapabilities | undefi
 /** Mac 1.8 explicitly negotiates best-effort backup and its complete skip ledger. */
 export const supportsNativeBackupCapture = (bridge: FolderCapabilities | undefined = getNativeBridge()) =>
 	bridge?.platform === 'macos' && /^1\.\d+\.\d+$/.test(bridge.fileAccessVersion ?? '') && Number(bridge.fileAccessVersion!.split('.')[1]) >= 8;
+export const supportsNativeIgnoreRules = (bridge: FolderCapabilities | undefined = getNativeBridge()) =>
+	bridge?.platform === 'macos' && /^1\.\d+\.\d+$/.test(bridge.fileAccessVersion ?? '') && Number(bridge.fileAccessVersion!.split('.')[1]) >= 9;
 export function assertNativeScanExclusions(request: FolderRequest, bridge: FolderCapabilities | undefined) {
+	if ('ignoreRules' in request && canonicalIgnoreRules(request.ignoreRules) && !supportsNativeIgnoreRules(bridge))
+		throw Error('Update Thingtime Mac to apply Gitignore rules before scanning this folder.');
 	if ((('capturePolicy' in request && request.capturePolicy === 'backup-supported') || request.action === 'scan-skips' ||
 		('capture' in request && request.capture.coverage !== undefined)) && !supportsNativeBackupCapture(bridge))
 		throw Error('Update Thingtime Mac to index supported backup items and review skipped items.');
@@ -303,6 +308,10 @@ export function parseMobileFolderResult(
 			throw Error('Invalid native scan diagnostic.');
 		const location = failure.path === null ? '' : ` at “${failure.path}”`;
 		throw Error(`Indexing stopped${location}: ${reasons[failure.reason]}. Review this item and your exclusions before retrying.`);
+	}
+	if (['scan', 'scan-capture', 'scan-status', 'scan-cancel', 'scan-page', 'scan-skips', 'scan-discard'].includes(request.action)) {
+		const rules = canonicalIgnoreRules('ignoreRules' in request ? request.ignoreRules : undefined);
+		if (rules !== (payload.ignoreRules === undefined ? '' : payload.ignoreRules)) throw Error('Native scan ignore rules changed.');
 	}
 	if (request.action === 'upload-file') {
 		const file = payload.uploadedFile,
@@ -535,13 +544,13 @@ export function parseMobileFolderResult(
 			throw Error('Invalid native path observation.');
 		result.inspectedEntry = payload.entry === null ? null : structuredClone(payload.entry);
 	} else if (request.action === 'scan') {
-		const exclusions = verifyScanExclusions(request, payload.excludedPaths);
+		const exclusions = verifyScanExclusions(request, payload.excludedPaths), ignored = createSyncIgnorePolicy(request.ignoreRules);
 		if (
 			payload.rootId !== request.rootId ||
 			payload.complete !== true ||
 			!Array.isArray(payload.entries) ||
 			payload.entries.length > 10_000 ||
-			payload.entries.some((e: any) => !validSyncEntry(e) || isNativeScanExcluded(e.path, exclusions))
+			payload.entries.some((e: any) => !validSyncEntry(e) || isNativeScanExcluded(e.path, exclusions) || ignored.ignored(e.path, e.kind))
 		)
 			throw Error('Folder scan is incomplete. Keep the existing sync state.');
 		const scope = { ...expected, dataPlane: 'home', rootId: request.rootId, deviceId: 'native-scan' };

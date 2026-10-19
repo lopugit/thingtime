@@ -31,4 +31,12 @@ function ensureWindowVisible(window, { setTimer = setTimeout, clearTimer = clear
  timer?.unref?.();
  return cleanup;
 }
-module.exports = { ensureWindowVisible };
+// Closing a window or its local server rejects an in-flight loadURL. A modal
+// error dialog at that point can keep Quit alive after all services stop.
+async function loadWindow(window, url, { isClosing, onError }) {
+ try { await window.loadURL(url); }
+ catch (error) {
+  if (!isClosing() && !window.isDestroyed()) onError(error);
+ }
+}
+module.exports = { ensureWindowVisible, loadWindow };

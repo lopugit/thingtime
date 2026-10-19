@@ -108,6 +108,15 @@ public struct MobileFolderReader {
         let key = path.precomposedStringWithCanonicalMapping.lowercased()
         return keys.contains { key == $0 || key.hasPrefix($0 + "/") }
     }
+    private static func ignored(_ parent: Int32, name: String, path: String, rules: MobileFolderIgnoreRules) -> Bool {
+        guard rules.text != nil else { return false }
+        var attributes = stat()
+        // Only metadata on this directory entry: never follow a link to decide
+        // whether a directory-only rule applies. Failed metadata stays visible
+        // to the ordinary scan diagnostics instead of becoming an ignore.
+        guard fstatat(parent, name, &attributes, AT_SYMLINK_NOFOLLOW) == 0 else { return false }
+        return rules.ignoresEntry(path, isDirectory: attributes.st_mode & S_IFMT == S_IFDIR)
+    }
     static func info(_ fd: Int32) throws -> stat {
         var result = stat(); guard fstat(fd, &result) == 0 else { throw Failure.unavailable }; return result
     }
@@ -230,13 +239,16 @@ public struct MobileFolderReader {
             return value
         }
     }
-    public static func scan(bookmark: Data, excludedPaths: [String] = []) throws -> [Entry] {
-        let exclusions = try canonicalExclusions(excludedPaths)
+    public static func scan(bookmark: Data, excludedPaths: [String] = [], ignoreRules: String? = nil) throws -> [Entry] {
+        let exclusions = try canonicalExclusions(excludedPaths), rules = try MobileFolderIgnoreRules(ignoreRules)
         return try access(bookmark) { root in
             let initial = try stamp(info(root)); var entries: [Entry] = [], aliases = Set<String>(), identities = Set<String>(), byteBudget = 0
             func walk(_ parent: Int32, prefix: String) throws {
                 let initialDirectory = try stamp(info(parent))
-                for name in try names(parent, including: { !excluded(prefix.isEmpty ? $0 : "\(prefix)/\($0)", keys: exclusions) }) {
+                for name in try names(parent, including: { name in
+                    let path = prefix.isEmpty ? name : "\(prefix)/\(name)"
+                    return !excluded(path, keys: exclusions) && !ignored(parent, name: name, path: path, rules: rules)
+                }) {
                     try Task.checkCancellation(); let path = prefix.isEmpty ? name : "\(prefix)/\(name)"; _ = try scanAt(path) { try components(path) }
                     guard aliases.insert(path.precomposedStringWithCanonicalMapping.lowercased()).inserted else { throw ScanFailure(reason: .pathCollision, path: path) }
                     guard entries.count < maximumEntries else { throw Failure.limit }
@@ -265,16 +277,16 @@ public struct MobileFolderReader {
 
     /// The sink owns uniqueness checks and bounded, disk-backed retention. No
     /// provisional rows become a complete capture until the second pass succeeds.
-    static func capture(bookmark: Data, excludedPaths: [String] = [], append: (Entry) throws -> Void,
+    static func capture(bookmark: Data, excludedPaths: [String] = [], ignoreRules: String? = nil, append: (Entry) throws -> Void,
                         replay: ((Entry) throws -> Void) throws -> Void) throws {
-        let exclusions = try canonicalExclusions(excludedPaths)
+        let exclusions = try canonicalExclusions(excludedPaths), rules = try MobileFolderIgnoreRules(ignoreRules)
         try access(bookmark) { root in
             let initial = try stamp(info(root))
             func walk(_ parent: Int32, prefix: String) throws {
                 let before = try stamp(info(parent))
                 try visitNames(parent) { name in
                     let path = prefix.isEmpty ? name : "\(prefix)/\(name)"
-                    guard !excluded(path, keys: exclusions) else { return }
+                    guard !excluded(path, keys: exclusions), !ignored(parent, name: name, path: path, rules: rules) else { return }
                     _ = try scanAt(path) { try components(path) }
                     let fd = try scanOpen(parent, name: name, path: path); defer { close(fd) }
                     let row = try scanAt(path) { try entry(fd, path: path) }
@@ -316,9 +328,9 @@ public struct MobileFolderReader {
 
     /// Backup observations describe independently checked entries, never a
     /// snapshot or deletion authority. The sink keeps collision checks on disk.
-    static func captureBackup(bookmark: Data, excludedPaths: [String] = [],
-                              append: (Entry) throws -> Bool, skip: (BackupGap) throws -> Void) throws {
-        let exclusions = try canonicalExclusions(excludedPaths)
+    static func captureBackup(bookmark: Data, excludedPaths: [String] = [], ignoreRules: String? = nil,
+                              ignored: () throws -> Void = {}, append: (Entry) throws -> Bool, skip: (BackupGap) throws -> Void) throws {
+        let exclusions = try canonicalExclusions(excludedPaths), rules = try MobileFolderIgnoreRules(ignoreRules)
         try access(bookmark) { root in
             func gap(_ prefix: String, _ reason: ScanFailure.Reason) throws {
                 try skip(BackupGap(path: prefix.isEmpty ? nil : prefix, reason: reason, scope: prefix.isEmpty ? .root : .subtree))
@@ -332,6 +344,7 @@ public struct MobileFolderReader {
                         try Task.checkCancellation()
                         let path = prefix.isEmpty ? name : "\(prefix)/\(name)"
                         guard !excluded(path, keys: exclusions) else { return }
+                        if Self.ignored(parent, name: name, path: path, rules: rules) { try ignored(); return }
                         do {
                             _ = try scanAt(path) { try components(path) }
                             let fd = try scanOpen(parent, name: name, path: path, backup: true); defer { close(fd) }

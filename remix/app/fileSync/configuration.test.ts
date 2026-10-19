@@ -30,15 +30,15 @@ test('file sync is discoverable, independently copyable ordinary data with pause
  const copy = extendSchemaCopy(source, { name: 'My sync template', fields: [{ name: 'notes', type: 'string' }] });
  assert.equal(copy.ok, true);
  if (copy.ok) { assert.equal(copy.crystal.forkOf, 'schema-file-sync'); assert.equal(validateThingtimeCrystal(['schema'], copy.crystal).ok, true); }
- assert.equal(createApiCapabilitiesManifest(scope.origin).features['api.things'], '1.37.0');
- assert.equal(thingtimeCapabilityManifest(scope.origin).features['api.things'].version, '1.37.0');
+ assert.equal(createApiCapabilitiesManifest(scope.origin).features['api.things'], '1.38.0');
+ assert.equal(thingtimeCapabilityManifest(scope.origin).features['api.things'].version, '1.38.0');
  const valid = validateThingtimeCrystal(['file-sync'], { ...config(), treeUri: 'content://private', secret: 'never-store' });
  assert.equal(valid.ok, true); if (valid.ok) assert.deepEqual(valid.crystal, config());
  assert.equal(validateThingtimeCrystal(['file-sync', 'post'], config()).ok, false);
 });
 
 test('closed configuration bounds refuse invalid paths, URIs, unsupported policy and ambiguous exclusions', () => {
- for (const patch of [ { configurationVersion: 2 }, { paused: 'false' }, { propagateDeletes: undefined }, { chargingOnly: null },
+ for (const patch of [ { configurationVersion: 3 }, { paused: 'false' }, { propagateDeletes: undefined }, { chargingOnly: null },
   { name: 'x\nsecret' }, { deviceId: '' }, { localRootId: 'content://grant' }, { remoteFolderId: '../folder' }, { mode: 'mirror' },
   { mode: 'backup', propagateDeletes: true }, { network: 'sometimes' }, { excludedPaths: ['../outside'] },
   { excludedPaths: ['a\\b'] }, { excludedPaths: ['/absolute'] }, { excludedPaths: ['a', 'A'] },
@@ -116,4 +116,25 @@ test('sync configurations require the combined contract rather than the older Bu
  assert.equal(capabilitySatisfies('1.35.0', FILE_SYNC_REQUIREMENTS['api.things']), false);
  assert.equal(capabilitySatisfies('1.36.0', FILE_SYNC_REQUIREMENTS['api.things']), true);
  assert.equal(capabilitySatisfies('2.0.0', FILE_SYNC_REQUIREMENTS['api.things']), false);
+});
+
+test('nonempty Gitignore policy uses version2 so legacy clients cannot erase it; empty retains exact version1 hash input', () => {
+ const legacy = config(), text = 'node_modules/\n!keep.log';
+ assert.throws(() => parseFileSyncConfiguration({ ...legacy, ignoreRules: text }), /version 2/);
+ const next = parseFileSyncConfiguration({ ...legacy, configurationVersion: 2, ignoreRules: text });
+ assert.equal(next.configurationVersion, 2); assert.equal(next.ignoreRules, text); assert.notEqual(JSON.stringify(next), JSON.stringify(legacy));
+ assert.deepEqual(parseFileSyncConfiguration({ ...legacy, configurationVersion: 2, ignoreRules: '' }), legacy);
+ assert.deepEqual(parseFileSyncConfiguration({ ...legacy, ignoreRules: '' }), legacy);
+ // The deployed legacy parser's existing version gate refuses this contract.
+ const oldClient = (value: { configurationVersion: number }) => { if (value.configurationVersion !== 1) throw Error('Unsupported file sync configuration version.'); };
+ assert.throws(() => oldClient(next), /Unsupported/); assert.doesNotThrow(() => oldClient(legacy));
+ assert.equal(validateThingtimeCrystal(['file-sync'], next).ok, true);
+});
+
+test('Gitignore applies symmetrically and ignored descendants protect parent removal', () => {
+ const i = input(); for (const c of [i.saved.configuration, i.approval.configuration]) { c.configurationVersion = 2; c.ignoreRules = 'docs/*.txt\n!docs/keep.txt'; c.propagateDeletes = true; }
+ i.local.entries = [folder('docs')]; i.remote.entries = [folder('docs'), file('docs/secret.txt')];
+ i.baseline.entries = [{ path: 'docs', local: folder('docs'), remote: folder('docs') }, { path: 'docs/secret.txt', local: file('docs/secret.txt'), remote: file('docs/secret.txt') }];
+ const planned = planConfiguredFileSync(i); assert.equal(planned.status, 'ready');
+ if (planned.status === 'ready') assert.equal(planned.plan.decisions.some(d => d.path === 'docs/secret.txt'), false);
 });

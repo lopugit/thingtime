@@ -36,7 +36,7 @@ const identifier = (value: unknown): value is string => typeof value === 'string
 export const parsePagedRunSpec = (value: PagedRunSpec): PagedRunSpec => {
 	if (!value || !identifier(value.id)) throw Error('Invalid paged run identity.');
 	const plan = parsePagedPlanSpec(value.plan), configuration = value.configuration === undefined ? undefined : parseFileSyncConfiguration(value.configuration);
-	if (configuration && (configuration.mode !== plan.policy.mode || configuration.propagateDeletes !== plan.policy.propagateDeletes ||
+	if (configuration && (configuration.mode !== plan.policy.mode || configuration.propagateDeletes !== plan.policy.propagateDeletes || (configuration.ignoreRules ?? '') !== (plan.ignoreRules ?? '') ||
 		JSON.stringify(configuration.excludedPaths.map(syncPathKey).sort()) !== JSON.stringify(plan.excludedPaths.map(syncPathKey).sort()))) throw Error('Saved run settings do not match the plan.');
 	return { id: value.id, plan, ...(value.review === undefined ? {} : { review: parsePagedRunReview(value.review) }), ...(configuration ? { configuration } : {}) };
 };
@@ -60,7 +60,7 @@ const validateCloudConfiguration = (value: FileSyncConfiguration, spec: PagedRun
 	const c = parseFileSyncConfiguration(value);
 	if (spec.configuration && JSON.stringify(c) !== JSON.stringify(spec.configuration)) throw Error('Saved run settings changed.');
 	if (scope.dataPlane !== 'home' || c.deviceId !== scope.deviceId || c.remoteFolderId !== root.rootId ||
-		c.mode !== spec.plan.policy.mode || c.propagateDeletes !== spec.plan.policy.propagateDeletes ||
+		c.mode !== spec.plan.policy.mode || c.propagateDeletes !== spec.plan.policy.propagateDeletes || (c.ignoreRules ?? '') !== (spec.plan.ignoreRules ?? '') ||
 		JSON.stringify(c.excludedPaths.map(syncPathKey).sort()) !== JSON.stringify(spec.plan.excludedPaths.map(syncPathKey).sort()))
 		throw Error('Cloud configuration does not match the prepared sync plan.');
 	return c;
