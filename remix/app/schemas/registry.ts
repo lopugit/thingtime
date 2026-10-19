@@ -33,6 +33,9 @@ import { MAX_REACTION_EMOJIS, sanitizeReactionToken } from '../utils/reactionTok
 // @ts-ignore Node 24 executes TypeScript directly and requires the extension.
 import { blocksToText, isEditorJsDoc, isEditorJsDocSafeToEdit } from '../components/Editor/editorJsValue.ts';
 import { MAX_EXPRESSION_ARGS, catalogueSignature, isLambdaArg } from './actionExpressions.ts';
+// Pure password-manager vocabulary (no node/mongo imports), shared with the
+// password manager UI and API so the schema enum stays single-source.
+import { FIELD_TYPES, PASSWORD_TYPES } from '../passwords/model.ts';
 // Pure attachment metadata/envelope vocabulary shared with the server storage
 // layer. This module has no Node imports, so registry remains browser-safe.
 import {
