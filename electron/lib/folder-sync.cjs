@@ -6,6 +6,18 @@ const ACTIONS = new Set(['context', 'list', 'choose', 'conditions', 'remove', 's
 const UUID = /^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/iu;
 const identifier = value => typeof value === 'string' && value.length > 0 && Buffer.byteLength(value) <= 512 && !/[\p{Cc}\p{Cf}]/u.test(value);
 const unavailable = () => new Error('Folder access changed. Reopen this device with the current account.');
+const verificationRetry = () => new Error('[folder_identity_retry] Folder identity verification is temporarily unavailable. Retry after reconnecting.');
+const transientStatus = status => status === 408 || status === 429 || (status >= 500 && status <= 599);
+async function verificationFetch(context, url, options) {
+    try { return await context.window.webContents.session.fetch(url, options); }
+    catch (error) {
+        options.signal.throwIfAborted();
+        // Chromium network failures use net::ERR_* messages. Certificate,
+        // redirect and policy failures deliberately remain terminal.
+        if (error instanceof Error && /net::ERR_(?:TIMED_OUT|CONNECTION_(?:RESET|CLOSED|FAILED|ABORTED)|INTERNET_DISCONNECTED|NAME_NOT_RESOLVED|NETWORK_CHANGED|ADDRESS_UNREACHABLE)\b/.test(error.message)) throw verificationRetry();
+        throw error;
+    }
+}
 
 async function boundedJson(response, signal, limit) {
     if (!response.body) throw unavailable();
@@ -23,13 +35,14 @@ async function boundedJson(response, signal, limit) {
 }
 async function readAccount(context, signal) {
     const url = new URL('/api/v1/auth/me', context.appOrigin).href;
-    const response = await context.window.webContents.session.fetch(url, {
+    const response = await verificationFetch(context, url, {
         credentials: 'include', cache: 'no-store', redirect: 'error', bypassCustomProtocolHandlers: true, signal,
         headers: { Accept: 'application/json', 'X-Thingtime-Expected-Actor': context.ownerId, 'X-Thingtime-Expected-Data-Plane': 'home', 'X-Thingtime-Expected-Api-Origin': context.apiOrigin }
     });
     try {
         // Electron documents Response.url as unreliable. The literal host URL,
         // redirect:error and verified proxy-origin header pin this request.
+        if (transientStatus(response.status) && !response.redirected) throw verificationRetry();
         if (response.status !== 200 || response.redirected ||
             (context.appOrigin !== context.apiOrigin && response.headers.get('x-thingtime-api-fallback') !== context.apiOrigin)) throw unavailable();
         const value = await boundedJson(response, signal, 64 * 1024);
@@ -39,12 +52,13 @@ async function readAccount(context, signal) {
 async function readCapabilities(context, signal) {
     // Public negotiation must describe the selected server, not the bundled UI.
     // This fixed host-owned URL cannot read arbitrary network resources.
-    const response = await context.window.webContents.session.fetch(
+    const response = await verificationFetch(context,
         new URL('/.well-known/thingtime-capabilities.json', context.apiOrigin).href,
         { credentials: 'omit', redirect: 'error', cache: 'no-store', bypassCustomProtocolHandlers: true,
           headers: { Accept: 'application/json' }, signal }
     );
     try {
+        if (transientStatus(response.status) && !response.redirected) throw verificationRetry();
         if (response.status !== 200 || response.redirected) throw unavailable();
         const manifest = await boundedJson(response, signal, 1024 * 1024);
         if (manifest?.schemaVersion !== 1 || manifest.origin !== context.apiOrigin ||

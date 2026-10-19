@@ -7,6 +7,7 @@ private final class MockURLProtocol: URLProtocol, @unchecked Sendable {
     static let lock = NSLock()
     nonisolated(unsafe) static var retryAfter: String?
     nonisolated(unsafe) static var identityVersion: String?
+    nonisolated(unsafe) static var capabilityStatus = 200
     nonisolated(unsafe) static var featureOverrides: [String: String] = [:]
     nonisolated(unsafe) static var handler: ((URLRequest) throws -> (Int, Data))?
 
@@ -25,7 +26,7 @@ private final class MockURLProtocol: URLProtocol, @unchecked Sendable {
                 XCTAssertNil(request.value(forHTTPHeaderField: "Authorization"))
                 var origin = URLComponents(url: request.url!, resolvingAgainstBaseURL: false)!
                 origin.path = ""; origin.query = nil
-                status = 200
+                status = Self.capabilityStatus
                 var features = versions.mapValues { ["version": $0] }
                 if let identityVersion { features["api.devices-node-identity"] = ["version": identityVersion] }
                 data = try JSONSerialization.data(withJSONObject: ["schemaVersion": 1, "origin": origin.string!, "features": features])
@@ -59,6 +60,7 @@ final class ThingtimeAPIClientTests: XCTestCase {
         MockURLProtocol.lock.lock()
         MockURLProtocol.handler = nil; MockURLProtocol.identityVersion = nil; MockURLProtocol.retryAfter = nil
         MockURLProtocol.featureOverrides = [:]
+        MockURLProtocol.capabilityStatus = 200
         MockURLProtocol.lock.unlock()
         super.tearDown()
     }
@@ -79,6 +81,36 @@ final class ThingtimeAPIClientTests: XCTestCase {
         XCTAssertEqual(requests, 2)
         try await client.verifyFileSyncIdentity(ownerID: "owner", deviceID: "device")
         XCTAssertEqual(requests, 3, "Successful identity must not be cached")
+    }
+
+    func testIdentityCapabilityOutageRetainsHTTPFailureWithoutAcceptingCapabilities() async throws {
+        MockURLProtocol.identityVersion = "1.0.0"
+        let credential = DeviceCredential(deviceID: "device", refreshToken: "ttnode_test", signingPrivateKey: Data(), signingPublicKey: Data())
+        var identityRequests = 0
+        MockURLProtocol.handler = { _ in identityRequests += 1; return (200, Data(#"{"ok":true,"ownerId":"owner","deviceId":"device"}"#.utf8)) }
+        for status in [408, 429, 503, 401, 403] {
+            MockURLProtocol.capabilityStatus = status
+            let client = try ThingtimeAPIClient(baseURL: URL(string: "https://thingtime.test")!,
+                credentialStore: InMemoryDeviceCredentialStore(credential: credential), session: session())
+            do { try await client.verifyFileSyncIdentity(ownerID: "owner", deviceID: "device"); XCTFail("Unavailable capability accepted") }
+            catch { XCTAssertEqual(error as? ThingtimeAPIClientError, [408, 429, 503].contains(status) ? .rejected(status: status) : .incompatibleCapabilities) }
+            XCTAssertEqual(identityRequests, 0)
+            MockURLProtocol.capabilityStatus = 200
+            try await client.verifyFileSyncIdentity(ownerID: "owner", deviceID: "device")
+            identityRequests = 0
+        }
+    }
+
+    func testIdentityLargeErrorPagesPreserveStatusWhileLargeSuccessRemainsInvalid() async throws {
+        MockURLProtocol.identityVersion = "1.0.0"
+        let credential = DeviceCredential(deviceID: "device", refreshToken: "ttnode_test", signingPrivateKey: Data(), signingPublicKey: Data())
+        for status in [200, 429, 503, 401, 403] {
+            MockURLProtocol.handler = { _ in (status, Data(repeating: 32, count: 16_385)) }
+            let client = try ThingtimeAPIClient(baseURL: URL(string: "https://thingtime.test")!,
+                credentialStore: InMemoryDeviceCredentialStore(credential: credential), session: session())
+            do { try await client.verifyFileSyncIdentity(ownerID: "owner", deviceID: "device"); XCTFail("Oversized success accepted") }
+            catch { XCTAssertEqual(error as? ThingtimeAPIClientError, status == 200 ? .invalidResponse : .rejected(status: status)) }
+        }
     }
 
     func testFileSyncIdentityNeverRetriesAuthFailuresInvalidDelaysOrForever() async throws {

@@ -151,6 +151,54 @@ test('folder bridge allows native consent timeout without inheriting the short t
     assert.equal(nodeRequestTimeoutMs('node.status'), 17000);
 });
 
+test('host identity HTTP cooldowns retain a redacted retry marker but never dispatch or disclose without verification', async () => {
+    for (const status of [408, 429, 500, 503]) {
+        for (const afterDispatch of [false, true]) {
+            const f = fixture(); let reads = 0;
+            f.context.window.webContents.session = { fetch: async () => {
+                reads++;
+                return new Response(reads === 1 && afterDispatch ? JSON.stringify({ user: { id: 'owner', accountKind: 'user' } }) : 'private upstream body', {
+                    status: reads === 1 && afterDispatch ? 200 : status, headers: { 'x-thingtime-api-fallback': f.context.apiOrigin }
+                });
+            } };
+            f.host.verifyAccount = readAccount;
+            await assert.rejects(f.host.request(f.event, f.input({ action: 'scan-status' })), error => {
+                assert.match(error.message, /\[folder_identity_retry\]/);
+                assert.doesNotMatch(error.message, /private upstream body/); return true;
+            });
+            assert.equal(f.calls.length, afterDispatch ? 1 : 0);
+            assert.equal(f.host.active, null);
+        }
+    }
+    for (const status of [401, 403]) {
+        const f = fixture();
+        f.context.window.webContents.session = { fetch: async () => new Response('', { status }) };
+        await assert.rejects(readAccount(f.context, new AbortController().signal), error => !error.message.includes('[folder_identity_retry]'));
+    }
+});
+
+test('capability HTTP outages are retryable without accepting an unverified manifest', async () => {
+    const context = { apiOrigin: 'https://sync.test', window: { webContents: { session: {
+        fetch: async () => new Response('private body', { status: 503 })
+    } } } };
+    await assert.rejects(readCapabilities(context, new AbortController().signal), /\[folder_identity_retry\]/);
+});
+
+test('Chromium connection errors are retryable and redacted while certificate or redirect refusals remain terminal', async () => {
+    for (const code of ['TIMED_OUT', 'CONNECTION_RESET', 'INTERNET_DISCONNECTED', 'NAME_NOT_RESOLVED', 'CERT_AUTHORITY_INVALID', 'TOO_MANY_REDIRECTS', 'BLOCKED_BY_CLIENT']) {
+        for (const read of [readAccount, readCapabilities]) {
+            const f = fixture();
+            f.context.window.webContents.session = { fetch: async () => { throw Error(`net::ERR_${code} at private-url`); } };
+            await assert.rejects(read(f.context, new AbortController().signal), error => {
+                const retryable = !['CERT_AUTHORITY_INVALID', 'TOO_MANY_REDIRECTS', 'BLOCKED_BY_CLIENT'].includes(code);
+                assert.equal(error.message.includes('[folder_identity_retry]'), retryable);
+                if (retryable) assert.doesNotMatch(error.message, /private-url/);
+                return true;
+            });
+        }
+    }
+});
+
 
 test('server capability negotiation is anonymous, bounded, origin-bound and projected', async () => {
     let mode = 'valid';

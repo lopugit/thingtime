@@ -213,6 +213,53 @@ test('running backup coverage remains partial until sealing, including a scan wi
 	assert.equal(frames.at(-1)?.backupCapture?.coverage, 'full');
 });
 
+test('serialized native identity cooldown remains retryable while authority failures and aborts remain terminal', async () => {
+ const { NativeInventoryRetryWait } = await import('./nativeInventory');
+ for (const failure of ['Error invoking remote method: [folder_identity_retry] Folder identity verification is temporarily unavailable.',
+  'Folder access could not be verified. Check pairing, consent and the selected account.', 'Folder access changed. Reopen this device with the current account.']) {
+  for (const backup of [true, false]) {
+   await assert.rejects(async () => {
+    for await (const _ of readNativeInventory({ ownerId: 'owner', deviceId: 'device', rootId,
+     backupPolicy: backup ? { mode: 'backup', propagateDeletes: false } : undefined,
+     signal: new AbortController().signal, request: async () => { throw Error(failure); } })) {}
+   }, error => (error instanceof NativeInventoryRetryWait) === (backup && failure.includes('[folder_identity_retry]')));
+  }
+ }
+ const abort = new AbortController();
+ await assert.rejects(async () => {
+  for await (const _ of readNativeInventory({ ownerId: 'owner', deviceId: 'device', rootId,
+   backupPolicy: { mode: 'backup', propagateDeletes: false }, signal: abort.signal,
+   request: async () => { abort.abort(new Error('explicit cancellation')); throw Error('[folder_identity_retry]'); } })) {}
+ }, /explicit cancellation/);
+});
+
+test('retry after unavailable polling reuses the task capture and reads only freshly authorized sealed pages', async () => {
+ const { NativeInventoryRetryWait } = await import('./nativeInventory');
+ const c = { ...capture, coverage: 'full' as const, consistency: 'per-entry' as const, totalSkipped: 0 };
+ const calls: string[] = [], frames = [];
+ let offline = true;
+ const input = { ownerId: 'owner', deviceId: 'device', rootId, captureId: c.id,
+  backupPolicy: { mode: 'backup' as const, propagateDeletes: false }, signal: new AbortController().signal,
+  waitForPoll: async () => {}, request: async (_: string, r: FolderRequest) => {
+   calls.push(r.action);
+   if (r.action === 'scan-capture' || r.action === 'scan-status') {
+    assert.equal(r.captureId, c.id);
+    if (r.action === 'scan-status' && offline) throw Error('[folder_identity_retry]');
+    return { roots: [], backupCapture: offline ? { ...c, coverage: 'partial' as const, state: 'running' as const } : { ...c, state: 'complete' as const } };
+   }
+   if (r.action === 'scan-skips') return { roots: [], skippedPage: { capture: c, offset: 0, skipped: [], nextOffset: null, totalSkipped: 0 } };
+   if (r.action === 'scan-page') return { roots: [], inventoryPage: { ...page, capture: c } };
+   return { roots: [] };
+  } };
+ await assert.rejects(async () => { for await (const frame of readNativeInventory(input)) frames.push(frame); }, NativeInventoryRetryWait);
+ assert.deepEqual(calls, ['scan-capture', 'scan-status']); assert.equal(frames.length, 0);
+ offline = false;
+ for await (const frame of readNativeInventory(input)) frames.push(frame);
+ assert.equal(frames.at(-1)?.generation, c.generation);
+ assert.deepEqual(frames.at(-1)?.entries, [entry]);
+ assert.deepEqual(calls.slice(2), ['scan-capture', 'scan-skips', 'scan-page', 'scan-discard']);
+});
+
 test('Gitignore policy is negotiated before all capture requests and every response echoes exact text', async () => {
  const { supportsNativeIgnoreRules } = await import('./mobileFolders.client');
  const ignoreRules = 'node_modules/\n!keep';

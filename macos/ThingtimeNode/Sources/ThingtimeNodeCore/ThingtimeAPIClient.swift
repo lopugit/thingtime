@@ -115,7 +115,7 @@ public final class ThingtimeAPIClient: ControlPlaneClient, @unchecked Sendable {
     /// Identity is uncached, and local unpairing during the request also fails closed.
     public func verifyFileSyncIdentity(ownerID: String, deviceID: String) async throws {
         try Task.checkCancellation()
-        try await requireCapabilities(force: !(await capabilityCache.supportsFileSyncIdentity()))
+        try await requireCapabilities(force: !(await capabilityCache.supportsFileSyncIdentity()), preserveTransientHTTPFailures: true)
         guard await capabilityCache.supportsFileSyncIdentity() else { throw ThingtimeAPIClientError.incompatibleCapabilities }
         let matching = try await credentialStore.loadAll().filter { $0.deviceID == deviceID }
         guard matching.count == 1, let credential = matching.first else { throw ThingtimeAPIClientError.notPaired }
@@ -132,7 +132,7 @@ public final class ThingtimeAPIClient: ControlPlaneClient, @unchecked Sendable {
             }
             let (data, raw) = try await session.data(for: request)
             try Task.checkCancellation()
-            guard data.count <= 16_384, let response = raw as? HTTPURLResponse,
+            guard let response = raw as? HTTPURLResponse,
                   response.url == url else { throw ThingtimeAPIClientError.invalidResponse }
             // A single server-directed cooldown stays within the folder request
             // deadline. Never shorten a longer delay, retry auth failures, cache
@@ -145,6 +145,7 @@ public final class ThingtimeAPIClient: ControlPlaneClient, @unchecked Sendable {
                 continue
             }
             guard response.statusCode == 200 else { throw ThingtimeAPIClientError.rejected(status: response.statusCode) }
+            guard data.count <= 16_384 else { throw ThingtimeAPIClientError.invalidResponse }
             let identity = try decoder.decode(Identity.self, from: data)
             guard identity.ok, identity.ownerId == ownerID, identity.deviceId == deviceID,
                   try await credentialStore.loadAll().contains(credential) else { throw ThingtimeAPIClientError.notPaired }
@@ -152,12 +153,17 @@ public final class ThingtimeAPIClient: ControlPlaneClient, @unchecked Sendable {
         }
     }
 
-    private func requireCapabilities(force: Bool = false) async throws {
+    private func requireCapabilities(force: Bool = false, preserveTransientHTTPFailures: Bool = false) async throws {
         if !force, await capabilityCache.isFresh() { return }
         guard let url = URL(string: "/.well-known/thingtime-capabilities.json", relativeTo: baseURL)?.absoluteURL else { throw ThingtimeAPIClientError.invalidBaseURL }
         var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 20)
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         let (data, raw) = try await session.data(for: request)
+        if preserveTransientHTTPFailures, let response = raw as? HTTPURLResponse,
+           response.url?.scheme == baseURL.scheme, response.url?.host == baseURL.host, response.url?.port == baseURL.port,
+           response.statusCode == 408 || response.statusCode == 429 || (500...599).contains(response.statusCode) {
+            throw ThingtimeAPIClientError.rejected(status: response.statusCode)
+        }
         guard let response = raw as? HTTPURLResponse, response.statusCode == 200,
               response.url?.scheme == baseURL.scheme, response.url?.host == baseURL.host, response.url?.port == baseURL.port,
               data.count <= 2_097_152, Self.compatibleManifest(data, origin: baseURL) else { throw ThingtimeAPIClientError.incompatibleCapabilities }

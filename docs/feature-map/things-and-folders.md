@@ -530,3 +530,15 @@ Password migration coverage and encrypted file lifecycle: `passwords/onePassword
 `api/utils/passwords/files.ts`. Every original 1PUX member is retained as an
 encrypted attachment to a source archive entry; item editors preserve structured
 values, source context and password history. See [the password contract](../password-manager.md).
+
+## Mac backup scan implementation
+
+`Commander/crates/commander-indexer/src/backup.rs` adapts the shared bounded Rust
+walker to private JSONL backup observations. `backup_ignore.rs` matches the same
+Git oracle as the web/Apple adapters. `apple/FileSync/.../CommanderBackupCapture.swift`
+runs the bundled helper under the selected grant, validates returned metadata and
+feeds the existing `MobileFolderInventory` SQLite sink. MacFolderSync still gates
+sealing/reads on live authority; transient identity failures survive through
+`NodeController`, Electron `folder-sync.cjs` and `nativeInventory.ts` into the
+existing retry scheduler. Run `macos/ThingtimeNode/scripts/test-commander-backup.sh`,
+native MacFolderSync/ThingtimeAPIClient tests and `test:file-sync`.

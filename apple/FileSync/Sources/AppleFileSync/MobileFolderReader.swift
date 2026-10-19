@@ -123,7 +123,7 @@ public struct MobileFolderReader {
     static func stamp(_ s: stat) -> String {
         "\(s.st_dev):\(s.st_ino):\(s.st_size):\(s.st_mtimespec.tv_sec):\(s.st_mtimespec.tv_nsec):\(s.st_ctimespec.tv_sec):\(s.st_ctimespec.tv_nsec)"
     }
-    private static func openPath(_ root: Int32, path: String, directory: Bool = false) throws -> Int32 {
+    static func openPath(_ root: Int32, path: String, directory: Bool = false) throws -> Int32 {
         let parts = try components(path); var fd = dup(root); guard fd >= 0 else { throw Failure.unavailable }
         for (i, name) in parts.enumerated() {
             let next = openat(fd, name, O_RDONLY | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK | ((i < parts.count - 1 || directory) ? O_DIRECTORY : 0))
@@ -172,7 +172,7 @@ public struct MobileFolderReader {
         return Fingerprint(partSizeBytes: partSize, partCount: Int((size + partSize - 1) / partSize), sha256: hex(composite.finalize()))
     }
     private static func hex(_ hash: SHA256.Digest) -> String { hash.map { String(format: "%02x", $0) }.joined() }
-    private static func access<T>(_ bookmark: Data, work: (Int32) throws -> T) throws -> T {
+    static func access<T>(_ bookmark: Data, work: (Int32) throws -> T) throws -> T {
         var stale = false
         let url = try FolderBookmark.resolve(bookmark, stale: &stale)
         guard url.isFileURL, !stale else { throw Failure.unavailable }

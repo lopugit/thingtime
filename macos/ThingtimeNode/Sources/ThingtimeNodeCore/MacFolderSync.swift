@@ -48,6 +48,50 @@ public final class MacFolderSync {
     /// retention and a 24-hour execution lifetime. Transport failures do not
     /// cancel it; explicit cancel, authority loss or lifetime expiry do.
     public static let maximumBackupJobSeconds: TimeInterval = 24 * 60 * 60
+    // Testable timing only; production keeps one scanner and one sequential
+    // monitor, with no queued verification attempts or unbounded retry tasks.
+    var backupMonitorInterval: Duration = .seconds(15)
+    var backupLifetime: TimeInterval = maximumBackupJobSeconds
+    var backupNow: () -> Date = Date.init
+    var backupRetrySleep: (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
+
+    nonisolated static func identityVerificationIsTransient(_ error: Error) -> Bool {
+        if let network = error as? URLError {
+            switch network.code {
+            case .timedOut, .cannotFindHost, .cannotConnectToHost, .networkConnectionLost,
+                 .dnsLookupFailed, .notConnectedToInternet: return true
+            default: return false
+            }
+        }
+        if case ThingtimeAPIClientError.rejected(let status) = error {
+            return status == 408 || status == 429 || (500...599).contains(status)
+        }
+        return false
+    }
+
+    private func checkBackupAuthority(scope: MobileFolderInventory.Scope, grant: MobileFolderStore.Grant, started: Date) throws {
+        try Task.checkCancellation()
+        guard backupNow().timeIntervalSince(started) < backupLifetime,
+              try store.grant(scope.owner, id: grant.id).bookmark == grant.bookmark else { throw MobileFolderStore.Failure.changed }
+    }
+
+    private func awaitBackupAuthorization(scope: MobileFolderInventory.Scope, grant: MobileFolderStore.Grant, started: Date) async throws {
+        var delay = 5
+        while true {
+            try checkBackupAuthority(scope: scope, grant: grant, started: started)
+            do {
+                try await verify(scope.owner.ownerId, scope.deviceId)
+                try checkBackupAuthority(scope: scope, grant: grant, started: started)
+                return
+            } catch {
+                try checkBackupAuthority(scope: scope, grant: grant, started: started)
+                guard Self.identityVerificationIsTransient(error) else { throw error }
+                ThingtimeNodeLog.actions.error("Backup authorization waiting: phase=seal code=\(Self.backupDiagnosticCode(error), privacy: .public)")
+                try await backupRetrySleep(.seconds(delay))
+                delay = min(delay * 2, 60)
+            }
+        }
+    }
     // Diagnostics deliberately exclude localized descriptions, URL userInfo,
     // filenames, account IDs and native bookmark data.
     static func backupDiagnosticCode(_ error: Error) -> String {
@@ -143,6 +187,7 @@ public final class MacFolderSync {
         if let old, old.state == "complete" { return old }
         backupJob?.monitor.cancel()
         let progress = BackupProgress(id: id, generation: UUID().uuidString.lowercased())
+        let started = backupNow()
         let task = Task { @MainActor [weak self] in
             guard let self else { progress.finish(nil); return }
             var preparedCapture: MobileFolderInventory.Capture?
@@ -153,9 +198,7 @@ public final class MacFolderSync {
                 }
                 preparedCapture = prepared
                 try Task.checkCancellation()
-                try await self.verify(scope.owner.ownerId, scope.deviceId)
-                try Task.checkCancellation()
-                guard try self.store.grant(scope.owner, id: grant.id).bookmark == grant.bookmark else { throw MobileFolderStore.Failure.changed }
+                try await self.awaitBackupAuthorization(scope: scope, grant: grant, started: started)
                 try await self.worker { try inventories.sealBackup(scope, capture: prepared, bookmark: grant.bookmark) }
                 try Task.checkCancellation()
                 progress.finish(prepared)
@@ -169,17 +212,22 @@ public final class MacFolderSync {
                 progress.finish(nil)
             }
         }
-        let started = Date()
         let monitor = Task { @MainActor [weak self] in
             while !Task.isCancelled && progress.status().state == "running" {
-                do { try await Task.sleep(for: .seconds(15)) } catch { return }
+                do { try await Task.sleep(for: self?.backupMonitorInterval ?? .seconds(15)) } catch { return }
                 guard !Task.isCancelled, progress.status().state == "running" else { return }
                 guard let self else { task.cancel(); return }
                 do {
-                    guard Date().timeIntervalSince(started) < Self.maximumBackupJobSeconds else { throw MobileFolderStore.Failure.changed }
+                    try self.checkBackupAuthority(scope: scope, grant: grant, started: started)
                     try await self.verify(scope.owner.ownerId, scope.deviceId)
-                    guard try self.store.grant(scope.owner, id: grant.id).bookmark == grant.bookmark else { throw MobileFolderStore.Failure.changed }
+                    try self.checkBackupAuthority(scope: scope, grant: grant, started: started)
                 } catch {
+                    // A local revocation remains authoritative while offline.
+                    let locallyAuthorized = (try? self.checkBackupAuthority(scope: scope, grant: grant, started: started)) != nil
+                    if locallyAuthorized && Self.identityVerificationIsTransient(error) {
+                        ThingtimeNodeLog.actions.error("Backup authorization waiting: phase=monitor code=\(Self.backupDiagnosticCode(error), privacy: .public)")
+                        continue
+                    }
                     ThingtimeNodeLog.actions.error("Backup indexing stopped: phase=monitor code=\(Self.backupDiagnosticCode(error), privacy: .public)")
                     task.cancel(); return
                 }
@@ -264,10 +312,13 @@ public final class MacFolderSync {
         try Task.checkCancellation()
         do { try await verify(r.ownerId, r.deviceId) }
         catch {
-            if !(error is CancellationError), let job = backupJob,
+            if !Task.isCancelled, !(error is CancellationError), let job = backupJob,
                job.scope.owner.ownerId == r.ownerId, job.scope.deviceId == r.deviceId {
-                ThingtimeNodeLog.actions.error("Backup indexing stopped: phase=request-authorization code=\(Self.backupDiagnosticCode(error), privacy: .public)")
-                job.task.cancel(); job.monitor.cancel()
+                let grantUnchanged = (try? store.grant(job.scope.owner, id: job.grant.id).bookmark) == job.grant.bookmark
+                if !Self.identityVerificationIsTransient(error) || !grantUnchanged {
+                    ThingtimeNodeLog.actions.error("Backup indexing stopped: phase=request-authorization code=\(Self.backupDiagnosticCode(error), privacy: .public)")
+                    job.task.cancel(); job.monitor.cancel()
+                }
             }
             throw error
         }

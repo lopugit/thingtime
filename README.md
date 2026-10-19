@@ -6187,3 +6187,26 @@ Keychain group and AutoFill entitlements provisioned for the same team.
 and provisioning contracts. `CODE_SIGNING_ALLOWED=NO` is for isolated compilation
 only and does not establish installed AutoFill or Keychain acceptance. Never
 install an unsigned helper over a working signed app.
+
+### Commander-backed Mac backup indexing
+
+The signed macOS node bundles the repository's `commander-indexer` Rust binary.
+Install the stable Rust toolchain (including Cargo) before building the desktop
+app; `macos/ThingtimeNode/scripts/build-bundle.sh` builds it with `--locked`,
+packages it beside `ThingtimeNode`, and signs nested code before the app. No
+Commander installation, search database, account credentials or extra service is
+required. Swift-only/iOS hosts keep the existing native scanner.
+
+Run `bash macos/ThingtimeNode/scripts/test-commander-backup.sh` for the Rust suite
+and real Rust-to-Swift capture tests. Backup mode uses the shared bounded parallel
+walker, no-follow descriptor-relative hashing, the existing multipart fingerprint
+format and the saved sync ignore list. It does not read repository `.gitignore`
+files. Private JSONL protocol version 1 travels over task-owned pipes, with a
+required hello/completion and successful exit before the host can seal a capture.
+The private SQLite inventory, account/grant checks and upload worker stay canonical.
+Symlinks and special files remain explicitly reported skips until supported.
+
+A temporary identity timeout, offline connection, HTTP408/429 or server5xx leaves
+the private capture intact. Status/effects still require fresh authorization;
+sealing waits with capped backoff. Revocation, changed grants and cancellation
+still stop the job. Automatic sync can retry the same capture after reconnecting.
