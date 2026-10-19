@@ -144,6 +144,16 @@ export const withMongoTransaction = async <T>(work: (session: any) => Promise<T>
 export const withHomeMongoTransaction = async <T>(work: (session: any) => Promise<T>): Promise<T> =>
 	runMongoTransaction(await getClientCachedFor(getMongoUri(), true), work);
 
+/** Read-only worker boundary. Snapshot sessions pin every paged read to the
+ * first server-selected cluster timestamp without holding a write transaction.
+ * An expired snapshot must fail; callers must never continue in a new session. */
+export const withHomeMongoSnapshot = async <T>(work: (session: any) => Promise<T>): Promise<T> => {
+	const client = await getClientCachedFor(getMongoUri(), true);
+	const session = client.startSession({ snapshot: true, causalConsistency: false });
+	try { return await work(session); }
+	finally { await session.endSession(); }
+};
+
 // Issues the last adoption pass could not resolve (rename unsupported /
 // unauthorized). Surfaced through the admin migrations census so a split
 // (legacy collection still holding data beside its versioned successor) is
@@ -373,6 +383,7 @@ let indexesEnsured: Promise<void> | null = null;
 // sitting on it fails every createIndex with CannotCreateIndex (67), which is
 // why the swaps below degrade and why the twin prune has a cap escape hatch.
 export const MONGODB_COLLECTION_INDEX_LIMIT = 64;
+export const THINGS_OWNER_IDENTITY_INDEX = { ownerId: 1, shareId: 1 } as const;
 
 // createIndex with different options than an existing same-key index throws
 // IndexOptionsConflict (85) / IndexKeySpecsConflict (86). For indexes whose
@@ -804,6 +815,13 @@ export const createThingsDataIndexes = (db: any, { relationshipLookups = false, 
     // reach this namespace, which is why relationship invariants live here
     // instead of on user-writable crystal paths.
     col.createIndex({ uniqueKeys: 1 }, { unique: true, sparse: true }),
+    // Paged account snapshots: 128 results examined 2,560 shareId-only keys
+    // versus 128 with this prefix in the disposable 6,000-row replica fixture.
+    // Modern shared/home plan: 52/64 including _id. The legacy-compatible
+    // plan already fills 64 slots; snapshots remain unavailable until legacy
+    // migration releases those indexes. The producer explicitly hints this
+    // index, so an older database refuses instead of scanning every owner.
+    ...(!legacyLookups ? [col.createIndex(THINGS_OWNER_IDENTITY_INDEX, { collation: { locale: 'simple' } })] : []),
     // Service workspace record batches and live membership checks share one bounded owner index.
     col.createIndex({ ownerId: 1, 'crystal.workspaceId': 1, 'crystal.recordType': 1, 'crystal.values.userId': 1 }, { name: 'service_workspace_records', partialFilterExpression: { 'crystal.workspaceId': { $exists: true } } }),
     // login + people-search lookups on user things (thingtime is the only
@@ -1436,8 +1454,9 @@ export const thingsIndexPlanEntries = async (options: { legacyLookups?: boolean 
       dropIndex: async () => undefined
     })
   };
-  await ensureHomeThingsIndexPlan(recorder);
-  if (options.legacyLookups) await Promise.all(createThingsDataIndexes(recorder, options));
+  // Record the selected plan, not the union of mutually exclusive modern and
+  // legacy plans (the latter would incorrectly include the snapshot index).
+  await Promise.all([...createThingsDataIndexes(recorder, options), ...createHomeOnlyThingsIndexes(recorder)]);
   return [...entries.values()];
 };
 

@@ -6,6 +6,7 @@ const fsPromises = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
+const { FolderStream, stageRangeMetadata, encodeStageInput } = require('./folder-stream.cjs');
 
 const NODE_LABEL = 'com.thingtime.desktop.node';
 const NODE_BUNDLE_ID = 'com.thingtime.desktop.node';
@@ -148,6 +149,7 @@ function nodeRequest(method, parameters = {}, suppliedCommandId) {
 }
 
 function nodeRequestTimeoutMs(method) {
+	if (method === 'folder-sync.request') return 305_000;
 	if (method === 'pairing.claim' || method === 'pairing.resume') return PAIRING_BRIDGE_TIMEOUT_MS;
 	if (method === 'pairing.unpair' || method === 'permissions.request') return PRESENCE_BRIDGE_TIMEOUT_MS;
 	return BRIDGE_TIMEOUT_MS;
@@ -482,6 +484,7 @@ function runProcess(command, args, options = {}) {
 			if (settled) return;
 			settled = true;
 			clearTimeout(timer);
+			options.signal?.removeEventListener('abort', abort);
 			callback(value);
 		};
 
@@ -490,11 +493,20 @@ function runProcess(command, args, options = {}) {
 			finish(reject, new ThingtimeNodeBridgeError(code, message));
 		};
 
+		const abort = () => fail('cancelled', 'Folder access was cancelled.');
 		const timer = setTimeout(() => fail('node_timeout', 'Thingtime Node did not respond in time.'), timeoutMs);
 		timer.unref?.();
+		options.signal?.addEventListener('abort', abort, { once: true });
+		if (options.signal?.aborted) abort();
+		child.stdin.on('error', () => fail('node_unavailable', 'Thingtime Node input closed.'));
 
 		child.on('error', () => fail('node_unavailable', 'Thingtime Node could not be started.'));
 		child.stdout.on('data', (chunk) => {
+			if (settled) return;
+			if (options.onStdout) {
+				try { options.onStdout(chunk); } catch { fail('node_protocol_error', 'Thingtime Node returned an invalid stream.'); }
+				return;
+			}
 			stdout = Buffer.concat([stdout, chunk]);
 			if (stdout.length > maximumOutputBytes) fail('node_protocol_error', 'Thingtime Node returned an oversized response.');
 		});
@@ -944,16 +956,21 @@ class ThingtimeNodeIntegration {
 			: verifySignedArtifacts(paths, this.runner);
 	}
 
-	async request(method, parameters = {}, suppliedCommandId) {
+	async request(method, parameters = {}, suppliedCommandId, options = {}) {
 		const paths = this.paths();
 		await this.verify(paths);
-		const request = nodeRequest(method, parameters, suppliedCommandId);
-		const encoded = `${boundedJson(request, 'node request')}\n`;
-		const response = await this.runner(paths.bridgeExecutable, [], {
+		const staging = method === 'folder-sync.request' && parameters.action === 'stage-range';
+		const request = nodeRequest(method, staging ? stageRangeMetadata(parameters) : parameters, suppliedCommandId);
+		const encoded = staging ? encodeStageInput(request, parameters.bytes) : `${boundedJson(request, 'node request')}\n`;
+		const stream = method === 'folder-sync.request' && parameters.action === 'read-range' ? new FolderStream(request) : null;
+		options.signal?.throwIfAborted();
+		const response = await this.runner(paths.bridgeExecutable, staging ? ['--folder-stage-stream'] : [], {
 			env: this.bridgeEnvironment(),
 			input: encoded,
 			maximumOutputBytes: MAX_FRAME_BYTES,
-			timeoutMs: nodeRequestTimeoutMs(method)
+			timeoutMs: nodeRequestTimeoutMs(method),
+			signal: options.signal,
+			...(stream ? { onStdout: chunk => stream.write(chunk) } : {})
 		});
 		if (response.status !== 0) {
 			throw new ThingtimeNodeBridgeError('node_unavailable', 'Thingtime Node bridge exited unexpectedly.');
@@ -961,7 +978,7 @@ class ThingtimeNodeIntegration {
 
 		let decoded;
 		try {
-			decoded = JSON.parse(response.stdout);
+			decoded = stream ? stream.finish() : JSON.parse(response.stdout);
 		} catch {
 			throw new ThingtimeNodeBridgeError('node_protocol_error', 'Thingtime Node returned an invalid response.');
 		}

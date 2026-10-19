@@ -173,3 +173,12 @@ test('approval and screen projections expose lifecycle without inventing a media
 	assert.equal(runtimeScreen.status, 'starting');
 	assert.equal(runtimeScreen.controlEnabled, false);
 });
+
+for (const platform of ['ios', 'android'] as const) {
+ test(`${platform} survives the API to device runtime projection without gaining desktop powers`, () => {
+  const value = publicDeviceToRuntime({ ...device(), platform, capabilities: [], state: null, connectors: [] });
+  assert.equal(value.summary.platform, platform);
+  assert.equal(value.summary.id, 'macbook-pro');
+  assert.deepEqual(value.summary.capabilities, []);
+ });
+}
