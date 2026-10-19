@@ -12439,6 +12439,8 @@ separate from deterministic discovery/lease tests.
 - Quit while the bundled window is still loading and while closing its local
   HTTP server rejects that load. No late URL error dialog may block process
   exit. A Dock activation during cleanup must not recreate a blank window.
+- Repeat with already-idle services whose cleanup resolves immediately. The
+  second Quit request must run after Electron unwinds the first native dispatch.
 - A genuine load failure in a live window must still display its actionable
   error. Reopen the installed signed app and verify the same account and saved
   sync connection survive; do not treat a forced termination as clean Quit.

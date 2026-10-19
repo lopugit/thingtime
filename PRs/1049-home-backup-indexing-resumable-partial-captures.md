@@ -81,3 +81,12 @@ The standalone Electron pending-load fixture could not run under the enforced
 macOS network sandbox: Electron's nested sandbox initialization failed. No
 sandbox or network protection was disabled. The focused unit regression passed;
 final signed installed-app acceptance is still required.
+
+Installed 1f09356b6 passed signature and stable-requirement checks, retained the
+account, and reopened normally. Quit still left a windowless process after
+cleanup, both during startup and after loading. A later graceful quit signal
+exited successfully. The cleanup completion now schedules the second Quit on
+the next event-loop turn so it cannot be lost inside the prevented native Quit
+dispatch; a regression covers immediate cleanup. Final installed verification
+is pending. CI also found the builtin schema field fixture missing the new
+`ignoreRules` field; the fixture is updated without weakening schema validation.

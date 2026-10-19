@@ -107,7 +107,12 @@ app.on('before-quit', (event) => {
  event.preventDefault();
  if (desktopServicesClosing) return;
  desktopServicesClosing = true;
- void closeDesktopServices().finally(() => { desktopServicesClosed = true; app.quit(); });
+ void closeDesktopServices().finally(() => {
+  desktopServicesClosed = true;
+  // Electron may still be unwinding the prevented native Quit dispatch when
+  // cleanup resolves immediately. Retry on the next event-loop turn.
+  setImmediate(() => app.quit());
+ });
 });
 let desktopSettingsLastError = null;
 let endpointCompatibility = null;

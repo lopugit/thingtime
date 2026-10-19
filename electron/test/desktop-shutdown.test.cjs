@@ -7,6 +7,23 @@ const source = fs.readFileSync(path.join(__dirname, '../main.cjs'), 'utf8');
 const closeServices = source.match(/async function closeDesktopServices\(\) \{[\s\S]*?\n\}/)[0];
 const gate = () => { let finish; const promise = new Promise(resolve => { finish=resolve; }); return {promise, finish}; };
 
+test('immediate service cleanup retries Quit after the native quit dispatch unwinds', async () => {
+ const listener = source.match(/app\.on\('before-quit', \(event\) => \{[\s\S]*?\n\}\);/)[0];
+ let beforeQuit, nativeDispatch = true, completed = 0, prevented = false;
+ vm.runInNewContext(listener, {
+  app: { on: (_name, fn) => { beforeQuit = fn; }, quit: () => { if (!nativeDispatch) completed++; } },
+  desktopServicesClosed: false, desktopServicesClosing: false,
+  localRuntime: {}, agentBrowsersPromise: undefined,
+  closeDesktopServices: () => Promise.resolve(), setImmediate
+ });
+ beforeQuit({ preventDefault: () => { prevented = true; } });
+ await Promise.resolve(); await Promise.resolve();
+ assert.equal(prevented, true); assert.equal(completed, 0);
+ nativeDispatch = false;
+ await new Promise(resolve => setImmediate(resolve));
+ assert.equal(completed, 1);
+});
+
 test('activation during or after service shutdown cannot create another window', () => {
  const create = source.match(/function createWindow\(\) \{[\s\S]*?\n\}/)[0];
  for (const [desktopServicesClosing, desktopServicesClosed] of [[true, false], [true, true], [false, true]]) {
