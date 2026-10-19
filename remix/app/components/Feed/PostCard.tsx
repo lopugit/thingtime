@@ -225,6 +225,8 @@ export type PostCardProps = {
   onCommentAdded?: () => void | Promise<unknown>;
   // the /post/:id page opens with the conversation expanded
   defaultCommentsOpen?: boolean;
+  // Reveals every loaded comment; deeper pagination remains user initiated.
+  expandAllComments?: boolean;
   discussionOnly?: boolean;
   // Only a standalone Thing discussion supplies cursor-backed collection state.
   // Regular feed cards retain their existing sort and reveal behavior.
@@ -781,6 +783,7 @@ const buildPendingComment = (user: any, targetId: string, text: string): PostCom
 // window them top-down under a sort, and read a thread's own sorted page
 // (threadCache keys a sorted read apart from the default one).
 const CommentSortContext = React.createContext<CommentSort | null>(null);
+const ExpandCommentsContext = React.createContext(false);
 
 // The comments the viewer sent from one list (a post's level or a reply
 // thread): a pending id swaps to the server's on ack, a failed send drops out.
@@ -864,6 +867,7 @@ const CommentRow = (props: {
   // the card's Top / New / Old pick (null = default) — this row's replies
   // follow it: same order, same top-down window, same sorted thread read
   const commentSort = React.useContext(CommentSortContext);
+  const expandAllComments = React.useContext(ExpandCommentsContext);
   // at the cap, reveals hand over to the drill-down panel instead of nesting
   const atVisualCap = !!threadFocus && depth >= threadFocus.maxDepth;
   // Report to moderators 🚩 — logged-in non-mods on someone else's comment
@@ -893,7 +897,7 @@ const CommentRow = (props: {
     // copy still seeds (the rows re-order client-side) rather than a skeleton
     () => cursorReplies ? null : getCachedThread(comment.id, commentSort) ?? (commentSort ? getCachedThread(comment.id) : null) ?? (comment.comments?.length ? mergeReactionOverlays(0, comment.comments) : null)
   );
-  const [repliesOpen, setRepliesOpen] = React.useState((!cursorReplies && depth === 1 && !!comment.comments?.length) || !!defaultOpen);
+  const [repliesOpen, setRepliesOpen] = React.useState((expandAllComments && !atVisualCap) || (!cursorReplies && depth === 1 && !!comment.comments?.length) || !!defaultOpen);
   // the reply INPUT is separate from thread visibility: threads stay open,
   // but only one empty input exists at a time (ReplyFocusContext)
   const [replyInputOpen, setReplyInputOpen] = React.useState(false);
@@ -1083,6 +1087,16 @@ const CommentRow = (props: {
   // MOUNT with their thread open (the two-level ship, drill-panel roots)
   // force the refetch: a cache-complete thread would otherwise skip it and
   // freeze reply reactions/edits at the cached snapshot forever.
+  const previousExpansion = React.useRef(expandAllComments);
+  React.useEffect(() => {
+    if (previousExpansion.current === expandAllComments) return;
+    previousExpansion.current = expandAllComments;
+    setRepliesOpen(expandAllComments && !atVisualCap);
+    if (expandAllComments && !atVisualCap) fetchThread({ force: true });
+    // Only a preference transition changes manual thread expansion.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expandAllComments, atVisualCap]);
+
   const prefetchedRef = React.useRef(false);
   React.useEffect(() => {
     if (prefetchedRef.current) return;
@@ -1207,7 +1221,7 @@ const CommentRow = (props: {
   // (exact — a thread page is at most 20 wide) and windowed top-down with the
   // viewer's own fresh replies kept on screen
   const orderedReplies = cursorReplies ? sortCommentPage(replies || [], 'old') : commentSort ? sortCommentPage(replies || [], commentSort) : replies || [];
-  const shownReplies = windowCommentPage(orderedReplies, commentSort, visibleReplies, freshReplies.ids);
+  const shownReplies = expandAllComments ? orderedReplies : windowCommentPage(orderedReplies, commentSort, visibleReplies, freshReplies.ids);
 
   // parent comments carry the bigger avatar; replies step down (IG-style)
   const avatarSize = depth === 1 ? '28px' : '20px';
@@ -1471,7 +1485,7 @@ const CommentRow = (props: {
 // memoised: engagement telemetry re-renders the feed page frequently, and an
 // unchanged post reference should never re-render its card
 export const PostCard = React.memo(function PostCard(props: PostCardProps) {
-  return <SharedMediaProvider linkKey={props.post.audience?.linkKey || props.post.linkKey}><PostCardImpl {...props} /></SharedMediaProvider>;
+  return <ExpandCommentsContext.Provider value={!!props.expandAllComments}><SharedMediaProvider linkKey={props.post.audience?.linkKey || props.post.linkKey}><PostCardImpl {...props} /></SharedMediaProvider></ExpandCommentsContext.Provider>;
 });
 
 function PostCardImpl(props: PostCardProps) {
@@ -1497,7 +1511,15 @@ function PostCardImpl(props: PostCardProps) {
   const user = useCurrentUser();
   const lopu = useLopu();
 
-  const [commentsOpen, setCommentsOpen] = React.useState(!!defaultCommentsOpen);
+  const expandAllComments = React.useContext(ExpandCommentsContext);
+  const [commentsOpen, setCommentsOpen] = React.useState(!!defaultCommentsOpen || expandAllComments);
+  const previousExpansion = React.useRef(expandAllComments);
+  React.useEffect(() => {
+    if (previousExpansion.current !== expandAllComments) {
+      previousExpansion.current = expandAllComments;
+      setCommentsOpen(expandAllComments);
+    }
+  }, [expandAllComments]);
   // drill-down thread focus: the stack of comments the viewer zoomed into.
   // The top of the stack renders as the panel's top-level row (depth 1); the
   // back arrow pops one level. navDirRef picks the slide direction.
@@ -1999,7 +2021,7 @@ function PostCardImpl(props: PostCardProps) {
   // under a sort the viewer's own fresh comments stay on screen even when the
   // order puts them below the window (a new comment scores 0 and is the
   // newest — Top and Old would otherwise hide the comment they just posted)
-  const shownComments = windowCommentPage(orderedComments, commentSort, visibleComments, freshComments.ids);
+  const shownComments = expandAllComments ? orderedComments : windowCommentPage(orderedComments, commentSort, visibleComments, freshComments.ids);
 
   // Feed keyboard shortcuts (useFeedShortcuts): inside a shortcuts-enabled
   // page (feed/explore mount the provider) the card lends its OWN handlers —

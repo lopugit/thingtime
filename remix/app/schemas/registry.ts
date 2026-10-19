@@ -580,7 +580,7 @@ export const SUBSPACE_SLUG_HOLD_DAYS = 30;
 // Dedicated-endpoint kinds of the family (no generic crystal sanitizers, so
 // /api/v1/things refuses them; excluded from own-things listings + generic
 // DELETE the way the messenger family is).
-export const SUBSPACE_THINGTIME = ['subspace', 'subspace-member', 'subspace-modlog', 'subspace-tombstone', 'subspace-report'] as const;
+export const SUBSPACE_THINGTIME = ['subspace', 'subspace-member', 'subspace-modlog', 'subspace-tombstone', 'subspace-report', 'subspace-embed'] as const;
 export const UPDOWN_THINGTIME = 'updown';
 // Custom emoji: the image is an inline data URI stored on its own thing doc
 // (the avatar pattern, FUNDAMENTALS §3 relational rule) — ~512KB binary ≈
@@ -2140,6 +2140,23 @@ const subspaceReportSchema: ThingtimeSchema = {
     { name: 'reportKey', type: 'string', required: true, description: 'Unique `<postId>:<reporterId>` pair key.' }
   ],
   example: { postId: '4f6b2c1e-8f2a-4c3d-9e5b-2a1f0c9d8e7f', commentId: null, reason: 'No spam', note: 'Third ad this week from the same account', status: 'open', resolution: null, resolvedById: null, resolvedAt: null, reportKey: '4f6b2c1e…:5eed…' }
+};
+
+const subspaceEmbedSchema: ThingtimeSchema = {
+  id: 'subspace-embed', version: 1, kind: 'crystal', collection: null,
+  title: 'Subspace embedded Thing',
+  summary: 'One moderator-managed Thing reference in the sidebar or feed.',
+  detail: 'targetId is the subspace. Each ordered reference is an accounted relational Thing. ' +
+    'Only current moderators add, move or remove references through /api/v1/subspaces/embeds. ' +
+    'Reads reauthorize both the subspace and the referenced Thing for the current viewer; ' +
+    'embedding never changes the source audience or discloses management capabilities.',
+  createdVia: 'POST /api/v1/subspaces/embeds',
+  fields: [
+    { name: 'region', type: 'enum', required: true, values: ['sidebar', 'feed'], description: 'Where this reference appears.' },
+    { name: 'thingId', type: 'id', required: true, description: 'Referenced Thing shareId; independently authorized on read.' },
+    { name: 'order', type: 'number', required: true, description: 'Server-owned stable position within the region.' }
+  ],
+  example: { region: 'sidebar', thingId: 'example-thing', order: 0 }
 };
 
 const subscriptionSchema: ThingtimeSchema = {
@@ -4218,6 +4235,8 @@ export const PROTECTED_THINGTIME = [
   'mail-account', 'mail-folder', 'mail-message', 'mail-inbox', 'mail-operation',
   'password-manager-entry',
   'draft',
+  // Moderator-managed references; only the subspace embeds endpoint writes them.
+  'subspace-embed',
   TIMELINE_EVENT_KIND, TIMELINE_LINK_KIND, TIMELINE_BRANCH_KIND, TIMELINE_BRANCH_HEAD_KIND, TIMELINE_SNAPSHOT_PART_KIND, TIMELINE_NOTE_KIND, TIMELINE_VERSION_NAME_KIND,
   'post-discovery',
   ...CHAT_ARCHIVE_THINGTIME,
@@ -4527,6 +4546,7 @@ export const thingtimeSchemas: ThingtimeSchema[] = [
   subspaceModlogSchema,
   subspaceTombstoneSchema,
   subspaceReportSchema,
+  subspaceEmbedSchema,
   folderSchema,
   appSchema,
   appDataSchema,

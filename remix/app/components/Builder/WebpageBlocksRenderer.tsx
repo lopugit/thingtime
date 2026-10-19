@@ -1,4 +1,5 @@
 import { resolveBlockProps } from './templateBlocks';
+import { contentSlot } from './contentSlots';
 import { ComponentCollection } from './ComponentCollection';
 import { ComponentDataScope } from './ComponentSelect';
 import React from 'react';
@@ -944,6 +945,9 @@ const ComponentBlockView = ({
 };
 
 export type WebpageBlocksRendererProps = {
+  // Host-registered authorized data adapters inside ordinary editable elements.
+  // Authored blocks can only select a name from this explicit local map.
+  contentSlots?: Record<string, (context: { scope: Record<string, unknown>; editing: boolean }) => React.ReactNode>;
   // Inert addresses for caller-supplied draft crops; no behavior or authority.
   draftAddresses?: boolean;
 	// Keep the live DOM mounted as editor overlays appear or change modes.
@@ -1023,9 +1027,10 @@ const AuthoredBlock = (props: WebpageBlocksRendererProps & { block: WebpageBlock
   {editing ? <><small>List template · {String(attributes.label || 'Records')}</small>{children}</> :
    <ComponentCollection {...attributes} renderItem={() => children} />}
  </div>;
+ const slot = contentSlot(props.contentSlots, attributes['data-tt-content-slot']);
  const text = block.format ? resolveTemplate({ ttFormat: block.format }, scope) : resolveTemplate(block.text || '', scope);
  return <HtmlBlockElement tag={block.tag || 'div'} attributes={{ ...attributes, ...(editing && ['details', 'dialog'].includes(block.tag || '') ? { open: true } : {}) }} editorProps={editorProps}>
-  {typeof text === 'string' || typeof text === 'number' ? (editing && !text && block.text ? block.text : text) : null}{block.children ? children : null}
+  {typeof text === 'string' || typeof text === 'number' ? (editing && !text && block.text ? block.text : text) : null}{block.children ? children : null}{slot ? slot({ scope, editing }) : null}
  </HtmlBlockElement>;
 };
 

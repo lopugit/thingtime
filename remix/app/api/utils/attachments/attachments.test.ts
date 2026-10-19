@@ -2461,3 +2461,20 @@ test('internal password file adapter requires an active owned parent even for th
   assert.equal((await service.download({ id: 'different-owner' }, doc.shareId, true)).ok, false);
   assert.equal((await service.download({ id: doc.ownerId }, doc.shareId, true)).ok, true);
 });
+
+test('bound Messenger media rechecks target membership even for its uploader', async () => {
+  for (const attachmentPurpose of ['message', 'emoji'] as const) {
+    const doc = attachmentDoc({ attachmentPurpose, attachmentState: 'ready', targetId: `${attachmentPurpose}-1`,
+      objectVersionId: 'version-1', attachmentExpiresAt: undefined, moderation: { status: 'clean' } as any });
+    let allowed = true;
+    let signs = 0;
+    const service = createAttachmentService({ store: { getById: async () => doc } as any, now: () => now,
+      customMongoActive: () => false, canViewTarget: async () => allowed, canViewSharedTarget: async () => false,
+      getS3: () => noopS3({ signDownload: async () => { signs++; return { url: 'https://s3.example/private', expiresAt: now.toISOString() }; } }) });
+    assert.equal((await service.download({ id: doc.ownerId }, doc.shareId, false)).ok, true);
+    assert.equal(signs, 1);
+    allowed = false;
+    assert.equal((await service.download({ id: doc.ownerId }, doc.shareId, false)).ok, false);
+    assert.equal(signs, 1, 'revoked uploaders never reach S3');
+  }
+});
