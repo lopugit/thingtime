@@ -96,6 +96,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-20: Bound file-sync startup cleanup to one page and drain obsolete journal data after successful transfer/checkpoint publication, preventing old preparation rows from delaying the first upload. Added backlog and interrupted-checkpoint regressions; installed acceptance pending. — Codex (AI)
+
 - 2026-10-20: Initialize cached sync-screen lifetime guards before child reads,
   so upload priorities load automatically on first mount and StrictMode remount.
   Keep late work fenced after removal. Reuse bounded ignore-rule results during

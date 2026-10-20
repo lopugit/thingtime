@@ -10,6 +10,7 @@ import { foregroundFixture, scope, saved } from './foregroundSync.fixture';
 import { retentionFixture, scope as retainScope } from './conflictRetention.fixture';
 import type { JournalAccess } from './journalScope';
 import type { PagedPlanSpec } from './pagedPlanJournal';
+import type { ForegroundSyncInput } from './foregroundSync';
 
 const name = 'thingtime-file-sync-v1', signal = () => new AbortController().signal;
 const access = (current = scope): JournalAccess => ({ scope: current, currentScope: () => current, cleanup: 'foreground' });
@@ -38,6 +39,32 @@ async function capture(f: Awaited<ReturnType<typeof fixture>>, id: InventoryIden
 	}
 	await f.inventory.seal(id);
 }
+
+test('obsolete journal cleanup cannot delay the first transfer beyond one bounded page', async () => {
+	const f = await foregroundFixture(), orphan = identity('obsolete-before-upload');
+	const managed = await fixture(f.factory); await capture(managed, orphan, entries(1024)); managed.journal.close();
+	const remaining = async () => {
+		const db = await connect(f.factory);
+		try { return await new Promise<number>((resolve, reject) => {
+			const tx = db.transaction('inventory-entries', 'readonly');
+			const request = tx.objectStore('inventory-entries').count(IDBKeyRange.bound([syncScopeKey(scope), orphan.id], [syncScopeKey(scope), orphan.id, []]));
+			request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error);
+		}); } finally { db.close(); }
+	};
+	const input = f.input(), fetch = input.runtime.fetch; let first = true;
+	input.runtime = { ...input.runtime, fetch: async (url, init) => {
+		if (first && init.method === 'POST') {
+			first = false;
+			assert.ok(await remaining() >= 1024 - INVENTORY_PAGE_ENTRIES, 'upload starts before the obsolete backlog is drained');
+		}
+		return fetch(url, init);
+	} };
+	try {
+		await runPagedForegroundCloudSync(saved, scope, input, signal());
+		assert.equal(f.creates(), 1); assert.equal(first, false);
+		assert.equal(await remaining(), 0, 'successful checkpoint is followed by complete bounded-page cleanup');
+	} finally { f.journal().close(); }
+});
 
 test('cleanup seeks the remaining tail instead of reopening a deleted inventory prefix', async () => {
 	const f = await fixture(), id = identity('tail'); await capture(f, id);
@@ -139,7 +166,9 @@ test('cleanup preserves unfinished effects and the most recent retained conflict
 test('a retired run finishes cleanup even when its already-published checkpoint is collected between pages', async () => {
 	const f = await foregroundFixture(135), a = access();
 	const first = await runPagedForegroundCloudSync(saved, scope, f.input(), signal()); assert.ok('spec' in first);
-	await runPagedForegroundCloudSync(saved, scope, f.input(), signal());
+	const interrupted: ForegroundSyncInput = f.input();
+	interrupted.progress = p => { if (p.stage === 'complete') throw Error('quit after checkpoint'); };
+	await assert.rejects(runPagedForegroundCloudSync(saved, scope, interrupted, signal()), /quit after checkpoint/);
 	const maintenance = f.journal().maintenance(a), p = await maintenance.step({ scope: syncScopeKey(scope), kind: 'run', id: first.spec.id, inclusive: true });
 	assert.equal(p.retired, 1); assert.equal(p.deleted, 128);
 	const removed = await maintenance.step({ scope: syncScopeKey(scope), kind: 'checkpoint', id: first.spec.id, inclusive: true }); assert.equal(removed.retired, 1);

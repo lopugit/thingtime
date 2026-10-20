@@ -34,11 +34,22 @@ const identity = (source: 'local' | 'remote'): InventoryIdentity => ({ id: crypt
 /** Called inside the foreground root lock, including review and checkpoint
  * publication. Android keeps its existing runner while its work is deferred. */
 export async function runPagedForegroundCloudSync(reviewed: SavedFileSyncConfiguration, scope: SyncScope, input: ForegroundSyncInput, signal: AbortSignal) {
+	const result = await runPagedForegroundTransfer(reviewed, scope, input, signal);
+	// Drain obsolete observations only after the transfer has published its
+	// checkpoint or retained receipts. Every page still checks scope and pins;
+	// interruption leaves the retired cursor recoverable on the next run.
+	await input.journal.maintenance({ scope, currentScope: input.currentScope, signal, cleanup: 'foreground' }).collect();
+	return result;
+}
+
+async function runPagedForegroundTransfer(reviewed: SavedFileSyncConfiguration, scope: SyncScope, input: ForegroundSyncInput, signal: AbortSignal) {
 	const { configuration, check, authorize, scanCloud, readLocal, runtime, localTarget } = foregroundSyncContext(reviewed, scope, input, signal);
 	const access = { scope, currentScope: input.currentScope, signal, cleanup: 'foreground' as const }, inventory = input.journal.inventory(access),
 		plans = input.journal.plans(access), runs = input.journal.pagedRuns(access), checkpoints = input.journal.pagedCheckpoints(access), drafts = input.journal.reviewDrafts(access);
 	input.progress({ stage: 'checking', confirmed: 0, total: 0 }); await authorize();
-	await input.journal.maintenance(access).collect(); check();
+	// A previous interrupted plan can leave millions of obsolete rows. Bound
+	// startup cleanup so that backlog cannot starve the user's next transfer.
+	await input.journal.maintenance(access).step(); check();
 	let active = await runs.active(); check();
 	let draft = await drafts.active(); check();
 	let indexProgress: Pick<ForegroundSyncProgress, 'indexed' | 'indexTotal' | 'coverage' | 'skipped' | 'consistency'> = {};
