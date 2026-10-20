@@ -6,6 +6,7 @@ import {
 	parseMobileFolderResult,
 	assertNativeScanExclusions,
 	supportsFolderAccess,
+	supportsNativeAuthorizationContext,
 	supportsNativePathInspection,
 	supportsNativeInventoryPages,
 	type FolderCapabilities,
@@ -19,11 +20,13 @@ export type FolderHost = {
 	capabilities: FolderCapabilities | undefined;
 	request: typeof requestMobileFolders;
 	authorizeDevice(ownerId: string, deviceId: string, signal: AbortSignal): Promise<void>;
+	authorizeContext?(ownerId: string, deviceId: string, signal: AbortSignal): Promise<{ roots: FolderResult['roots']; conditions: NonNullable<FolderResult['conditions']> }>;
 	fetch: typeof fetch;
 	requireCapability(feature: string, minimumVersion: string): Promise<void>;
 	assertCurrent(): void;
 };
 type ContextReply = {
+	authorization?: { roots: FolderResult['roots']; conditions: NonNullable<FolderResult['conditions']> };
 	origin: string;
 	capabilities: FolderCapabilities;
 	apiCapabilities: { schemaVersion: 1; origin: string; features: Record<string, { version: string }> };
@@ -156,7 +159,10 @@ export async function createDesktopFolderHost(input: {
 			Array.isArray(manifest.features)
 		)
 			throw changed();
-		return { origin: expected.origin, capabilities, apiCapabilities: structuredClone(manifest) };
+		const parsed = supportsNativeAuthorizationContext(capabilities)
+			? parseMobileFolderResult({ type: 'mobile-files-result', payload: value }, expected, { action: 'conditions' }) : undefined;
+		return { origin: expected.origin, capabilities, apiCapabilities: structuredClone(manifest),
+			...(parsed ? { authorization: { roots: parsed.roots, conditions: parsed.conditions! } } : {}) };
 	};
 	let context = await negotiate(input.signal);
 	origin = context.origin;
@@ -182,6 +188,15 @@ export async function createDesktopFolderHost(input: {
 			if (!result) throw changed();
 			return result;
 		},
+		...(supportsNativeAuthorizationContext(context.capabilities) ? {
+			authorizeContext: async (expectedOwner: string, expectedDevice: string, signal: AbortSignal) => {
+				if (expectedOwner !== ownerId || expectedDevice !== deviceId) throw changed();
+				const next = await negotiate(signal);
+				if (JSON.stringify(next.capabilities) !== JSON.stringify(context.capabilities) || !next.authorization) throw changed();
+				context = next;
+				return structuredClone(next.authorization);
+			}
+		} : {}),
 		authorizeDevice: async (expectedOwner, expectedDevice, signal) => {
 			if (expectedOwner !== ownerId || expectedDevice !== deviceId) throw changed();
 			const next = await negotiate(signal);

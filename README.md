@@ -5573,6 +5573,18 @@ independent snapshots and large-volume export remain separate acceptance work.
 
 #### Mac streaming throughput
 
+Mac file-access capability 1.12.0 adds fresh conditions to the authorized context
+that already returns roots. Corrected Mac adapters use it at every mutation guard;
+read-only streaming preparation retains scope checks and independently authorized
+native inspections without repeating mutation approval. Public feature negotiation
+is bound to the exact live host window/generation/account/device/origins; account
+and native identity remain fresh for native requests. Old hosts retain the original
+path. No rate-limit, permission, configuration or credential setup changes are needed.
+A controlled parent-path streaming regression measures 40→13 native RPCs and
+184→72 HTTP requests, including preparation. This does not establish installed
+throughput; see [verification and limits](PRs/1075-codex-sync-operation-amplification-reduce-read-only-native-sync-preflight-overhead.md).
+
+
 Mac file-access capability 1.11.1 supports bounded 4096-change transport pages;
 the shared client keeps journal transactions and planner wakeups at 128 entries,
 including the first ready chunk. Older hosts retain 128-change requests. Native

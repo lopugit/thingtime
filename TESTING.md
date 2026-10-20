@@ -12731,3 +12731,14 @@ separate from deterministic discovery/lease tests.
 - [x] Encode real native SQLite change pages below 512 KiB including wrappers/separators/envelope, then parse both exported pages through the production renderer parser: 2000 contiguous entries, 507815/383295 encoded bytes.
 - [x] Run full shared fileSync (501 plus structural contract test), Electron bridge tests (32), focused streaming tests (15), native batch test (1), Mac folder tests (42) and parent policy/context tests (8). A bounded unchanged-installed-bundle sample measured initial full verification at 1136 ms/9 subprocesses and subsequent scoped verification at 531 ms/8; this is not end-to-end throughput acceptance.
 - [ ] Build/install the reviewed signed final head, preserve the same Home job and compare confirmed files/bytes over a fixed interval while indexing continues; independently download a newly uploaded file and compare bytes. Do not reset grants, receipts, settings or local data. Retain full signed-bundle verification before installation.
+
+
+### Native sync operation amplification — 2026-10-21
+
+- [x] Measure actual streaming preparation and execution, including an existing parent lookup, through production journal/executor/renderer source and Electron host/part upload: compatible fallback 40 RPC / 184 HTTP, updated Mac 13 RPC / 72 HTTP. Synthetic network/native boundaries do not prove installed speed.
+- [x] Fresh composite contexts validate roots and conditions; generic/old-host paths remain. Verify exact binding public feature reuse and invalidation without reusing native/account authorization.
+- [x] Preserve initial, native range/EOF pre/post-PUT, pre-complete and final-after-content source fences. Reject source drift at each retained fence and recover accepted commit reply loss by the original durable receipt without another upload.
+- [x] After preparation reads, change configuration/root/account/scope/network or abort: no start/PUT. Change configuration after start/accepted PUT/content lookup: block the next part/completion/canonical commit. Preserve native inspect authorization and every mutation policy guard.
+- [x] Assert closed native identity status/timing/attempt/cooldown diagnostics and unchanged bounded429 retry semantics. Fast successful identity checks stay quiet; no secrets, paths or identity fields are logged.
+- [x] Run full shared fileSync (511 plus structural contract test), Electron host/part (48) and native folder/API (62) tests. Focused ESLint has zero errors; raw TypeScript has no owned-file diagnostics.
+- [ ] Install the reviewed signed final source, verify actual running native file-access 1.12.0, preserve the same Home job, measure confirmed files/bytes over fixed intervals and independently download a newly uploaded file. Keep inadequate throughput open; never reset grants/receipts/local files for acceptance. Priority preparation of unplanned entries remains separate work.

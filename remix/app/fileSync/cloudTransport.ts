@@ -248,6 +248,7 @@ function cloudFileTransport(runtime: CloudTransportRuntime, saved: CloudWrite, s
 			const plan = contentPartPlan(source.size);
 			const nativeApproval = runtime.nativeUploadApproval && sameSyncScope(runtime.nativeUploadApproval.scope, scope) ? runtime.nativeUploadApproval : undefined;
 			const nativeUpload = nativeApproval ? source.uploadFile : undefined;
+			const checkedNativePart = source.nativePartSourceChecks === true && !!source.uploadPart && typeof source.verify === 'function' && !nativeUpload;
 			if (!nativeUpload && !source.uploadPart && plan.partSizeBytes > 32 * 1024 * 1024) throw Error('This file requires native streaming upload support.');
 			const sourceCheck = async () => {
 				check();
@@ -283,18 +284,20 @@ function cloudFileTransport(runtime: CloudTransportRuntime, saved: CloudWrite, s
 			} else if (upload.state !== 'ready') {
 				const digests = new Uint8Array(plan.partCount * 32);
 				for (let i = 0; i < plan.partCount; i++) {
-					await sourceCheck();
+					if (!checkedNativePart) await sourceCheck();
 					const offset = i * plan.partSizeBytes,
 						length = Math.min(plan.partSizeBytes, source.size - offset);
 					let digest: Uint8Array<ArrayBuffer>;
 					if (source.uploadPart) {
 						await runtime.authorizeMutation?.(signal);
-						await sourceCheck();
+						check();
+						if (!checkedNativePart) await sourceCheck();
 						const uploaded = await source.uploadPart(
 							{ uploadId: upload.id, requestId: write.operation.id, partNumber: i + 1, offset, length },
 							signal
 						);
-						await sourceCheck();
+						check();
+						if (!checkedNativePart) await sourceCheck();
 						if (typeof uploaded?.sha256 !== 'string' || !/^[a-f0-9]{64}$/.test(uploaded.sha256)) throw Error('Invalid native upload digest.');
 						digest = Uint8Array.from(uploaded.sha256.match(/../g)!, (value) => parseInt(value, 16));
 					} else {
@@ -361,9 +364,10 @@ function cloudFileTransport(runtime: CloudTransportRuntime, saved: CloudWrite, s
 			});
 			if (fingerprint.id !== upload.id || !sameSyncContent(cloudFileSyncEntry(candidate, m.path), m.source))
 				throw Error('Uploaded bytes do not match the planned fingerprint.');
-			await sourceCheck();
+			if (!checkedNativePart) await sourceCheck();
 			await source.verify?.();
-			await sourceCheck();
+			check();
+			if (!checkedNativePart) await sourceCheck();
 			return commit(content);
 		}
 	};

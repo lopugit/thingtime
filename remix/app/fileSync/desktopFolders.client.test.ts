@@ -381,3 +381,21 @@ test('real native bridge errors survive Electron43 string serialization as narro
   });
  }
 });
+
+
+test('composite authorization freshly returns roots and conditions with one context RPC; old hosts retain the legacy path', async () => {
+ const old = fixture(), oldHost = await old.create();
+ assert.equal(oldHost.authorizeContext, undefined);
+ const f = fixture(); f.patch({ capabilities: { fileAccessVersion: '1.12.0' }, conditions: { network: 'wifi', charging: true } });
+ const host = await f.create(), before = f.calls.length;
+ assert.deepEqual(await host.authorizeContext!('owner', 'device', f.lifetime.signal), {
+  roots: [{ id: rootId, name: 'Chosen', publicationVersion: '1.0.0' }], conditions: { network: 'wifi', charging: true }
+ });
+ assert.deepEqual(f.calls.slice(before).map(row => row.action), ['context']);
+ f.patch({ capabilities: { fileAccessVersion: '1.12.0' }, conditions: { network: 'offline', charging: null }, roots: [] });
+ assert.deepEqual(await host.authorizeContext!('owner', 'device', f.lifetime.signal), { roots: [], conditions: { network: 'offline', charging: null } });
+ f.patch({ capabilities: { fileAccessVersion: '1.12.0' }, conditions: { network: 'secret-network', charging: true } });
+ await assert.rejects(host.authorizeContext!('owner', 'device', f.lifetime.signal));
+ f.patch({ capabilities: { fileAccessVersion: '1.12.0' }, conditions: { network: 'wifi', charging: true }, ownerId: 'other' });
+ await assert.rejects(host.authorizeContext!('owner', 'device', f.lifetime.signal));
+});

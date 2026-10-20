@@ -2,7 +2,7 @@ import { cloudSyncHttpError, SyncConnectionWait, SYNC_RETRY_DELAY_MS, SYNC_RETRY
 import test, { mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { IDBFactory } from 'fake-indexeddb';
+import { IDBFactory, IDBKeyRange } from 'fake-indexeddb';
 import { createSyncRun, executeSyncRun, type SyncRun } from './execute';
 import { planFileSync, type SyncEntry, type SyncScope } from './reconcile';
 import { EMPTY_CONTENT_SHA256, fingerprintSource, type FingerprintSource } from './contentFingerprint';
@@ -393,4 +393,133 @@ test('temporary HTTP failure reason distinguishes bounded fixed upstream and pro
    assert.doesNotMatch(error.message,/private|secret|https:/);return true;
   });
  }
+});
+
+test('validated native parts retain initial, pre-complete and final source fences without duplicate wrapper reads', async () => {
+ for (const failure of ['none', 'initial', 'part', 'pre-complete', 'final'] as const) {
+  const f = await fixture(), run = f.make(); let checks = 0, verifies = 0, parts = 0;
+  const requests: string[] = []; f.hook((path, body) => { requests.push((body ? 'POST ' : 'GET ') + path); return null; });
+  const native: FingerprintSource = { size: bytes.length, nativePartSourceChecks: true,
+   read: async () => { throw Error('Native parts must own bytes'); },
+   check: async () => { checks++; if ((failure === 'initial' && checks === 1) || (failure === 'pre-complete' && checks === 2)) throw Error('Native source changed'); },
+   verify: async () => { verifies++; if (failure === 'final') throw Error('Native source changed'); },
+   uploadPart: async () => { parts++; if (failure === 'part') throw Error('Native source changed'); return { sha256: await crypto.subtle.digest('SHA-256', bytes).then(b => Buffer.from(b).toString('hex')) }; }
+  };
+  const port = createCloudSyncPort(run, { currentScope: () => scope, persist: async () => {}, readLocal: async () => f.entry, openSource: async () => native }, f.runtime);
+  if (failure === 'none') {
+   const done = await executeSyncRun(run, port); assert.ok(done.operations.every(op => op.confirmed));
+   assert.deepEqual({ checks, verifies, parts }, { checks: 2, verifies: 1, parts: 1 }); assert.equal(f.counts().commits, 1);
+  } else {
+   await assert.rejects(executeSyncRun(run, port), /source changed/); assert.equal(f.counts().commits, 0);
+   if (failure !== 'final') assert.ok(!requests.includes('POST /api/v1/attachments/uploads/complete'));
+   if (failure === 'initial') assert.equal(f.counts().starts, 0);
+  }
+ }
+});
+
+test('an accepted commit from a checked native source reopens by its original receipt without another part or source session', async () => {
+ const f = await fixture(), journal = await openSyncJournal(new IDBFactory()), run = f.make();
+ let checks = 0, parts = 0, opens = 0;
+ const native: FingerprintSource = { size: bytes.length, nativePartSourceChecks: true, read: async () => bytes,
+  check: () => { checks++; }, verify: () => { checks++; },
+  uploadPart: async () => { parts++; return { sha256: Buffer.from(await crypto.subtle.digest('SHA-256', bytes)).toString('hex') }; } };
+ const port = (saved: SyncRun) => createCloudSyncPort(saved, { currentScope: () => scope, persist: journal.persist,
+  readLocal: async () => f.entry, openSource: async () => { opens++; return native; } }, f.runtime);
+ f.lose(); await assert.rejects(executeSyncRun(run, port(run)), /response was lost/);
+ const restored = parseCloudSyncRun((await journal.read(scope))!);
+ const done = await executeSyncRun(restored, port(restored));
+ assert.ok(done.operations.every(op => op.confirmed));
+ assert.deepEqual({ checks, parts, opens, commits: f.counts().commits }, { checks: 3, parts: 1, opens: 1, commits: 1 }); journal.close();
+});
+
+async function nativeUploadAmplification(scenario: 'execute' | 'stream', trusted = true, failure?: { at: 'plan' | 'start' | 'part' | 'content'; kind: 'config' | 'root' | 'scope' | 'account' | 'network' | 'abort' }) {
+ const { foregroundSyncContext } = await import('./foregroundSyncContext');
+ const { newFileSyncConfiguration } = await import('./configuration');
+ const { mobileFolderSource } = await import('./mobileFolders.client');
+ const { createDesktopFolderHost } = await import('./desktopFolders.client');
+ const { DesktopFolderSync } = await import('../../../electron/lib/folder-sync.cjs');
+ const counts = { native: 0, account: 0, manifest: 0, configuration: 0, cloud: 0, sign: 0, put: 0 };
+ const controller = new AbortController(); let changed = false, completes = 0;
+ const mark = (at: string) => { if (failure?.at === at) { changed = true; if (failure.kind === 'abort') controller.abort(); } };
+ const f = await fixture(), root = randomUUID(), frame = { url: 'http://127.0.0.1:12555/settings' };
+ const sender = { mainFrame: frame, session: { fetch: async (_url: unknown, init: any) => {
+  counts.sign++; const body = JSON.parse(init.body);
+  return Response.json({ parts: [{ ...body.parts[0], url: 'https://storage.test/part', headers: { 'x-amz-checksum-sha256': body.parts[0].checksumSha256 } }] }, { headers: { 'x-thingtime-api-fallback': scope.origin } });
+ } } };
+ const native = new DesktopFolderSync({ context: () => ({ enabled: true, window: { isDestroyed: () => false, webContents: sender }, appOrigin: new URL(frame.url).origin, apiOrigin: scope.origin }),
+  verifyAccount: async () => { counts.account++; if (changed && failure?.kind === 'account') throw Error('Account revoked'); }, capabilities: async () => { counts.manifest++; return { schemaVersion: 1, origin: scope.origin, features: { 'api.devices-node-identity': { version: '1.0.0' }, 'api.attachment-upload-parts': { version: '1.1.0' } } }; },
+  fetchUpload: async () => { counts.put++; mark('part'); return new Response(null); },
+  requestNative: async (_method: unknown, request: any) => {
+   counts.native++;
+   return { ...request, complete: true, entry: f.entry, roots: [{ id: root, name: 'Fixture' }], conditions: { network: changed && failure?.kind === 'network' ? 'offline' : 'wifi', charging: true }, capabilities: { fileAccessVersion: trusted ? '1.12.0' : '1.11.1' },
+    chunk: { version: f.entry.version, size: bytes.length, offset: request.offset, length: request.length,
+     ...(request.action === 'read-range' ? { bytes } : { data: Buffer.from(bytes.slice(request.offset, request.offset + request.length)).toString('base64') }) } };
+  }
+ });
+ // A stable captured window object is part of the real host's authorization fence.
+ const captured = { isDestroyed: () => false, webContents: sender };
+ native.context = () => ({ enabled: true, window: captured, appOrigin: new URL(frame.url).origin, apiOrigin: scope.origin });
+ const signal = controller.signal, host = await createDesktopFolderHost({ ownerId: scope.ownerId, deviceId: scope.deviceId!, signal,
+  rendererOrigin: () => new URL(frame.url).origin, assertCurrent: () => {}, bridge: { folderSyncRequest: (request: any) => native.request({ sender, senderFrame: frame }, request) } });
+ counts.native = counts.account = counts.manifest = 0; // Exclude initial session setup.
+ const saved = { id: scope.rootId, updatedAt: '2026-10-20T00:00:00Z', configuration: { ...newFileSyncConfiguration({ name: 'Fixture', deviceId: scope.deviceId!, localRootId: root, remoteFolderId: 'cloud-root' }), mode: 'backup' as const, paused: false } };
+ const originalFetch = f.runtime.fetch; f.runtime.fetch = async (url, init) => { counts.cloud++; const path = new URL(String(url)).pathname; if (path.endsWith('/complete')) completes++; const result = await originalFetch(url, init); if (path === '/api/v1/attachments/uploads') mark('start'); if (path === '/api/v1/attachments/content') mark('content'); return result; };
+ const input: any = { currentScope: () => changed && failure?.kind === 'scope' ? { ...scope, ownerId: 'other' } : scope, runtime: f.runtime, ...(trusted ? { nativeOperationGuards: true } : {}),
+  readConfiguration: async () => { counts.configuration++; return { id: saved.id, updatedAt: changed && failure?.kind === 'config' ? 'changed' : saved.updatedAt, crystal: changed && failure?.kind === 'root' ? { ...saved.configuration, localRootId: 'other-root' } : saved.configuration, author: { id: scope.ownerId }, thingtime: ['file-sync'], acl: ['tt:user'] }; },
+  authorizeDevice: async () => { if (trusted) throw Error('redundant legacy authorization'); await host.authorizeDevice(scope.ownerId, scope.deviceId!, signal); await host.request(scope.ownerId, { action: 'list' }, signal); },
+  conditions: async () => { if (trusted) throw Error('redundant conditions read'); return (await host.request(scope.ownerId, { action: 'conditions' }, signal)).conditions; },
+  ...(trusted ? { authorizeContext: async () => (await host.authorizeContext!(scope.ownerId, scope.deviceId!, signal)).conditions } : {}),
+  inspectLocal: async () => f.entry,
+  source: async () => mobileFolderSource(scope.ownerId, root, f.entry, signal, host.request, host.capabilities) };
+ if (scenario === 'stream') {
+  const { streamOneWayForegroundSync } = await import('./streamingForegroundSync');
+  f.entry.path = 'Parent/file.bin';
+  const previousFetch = f.runtime.fetch;
+  f.runtime.fetch = async (url, init) => {
+   const target = new URL(String(url)), path = target.searchParams.get('path');
+   if (target.pathname === '/api/v1/files' && target.searchParams.has('rootId')) {
+    counts.cloud++; mark('plan');
+    return Response.json({ ok: true, observation: { version: 1, complete: true, rootId: 'cloud-root', rootRevision: 'root1', path,
+     entry: path === 'Parent' ? { path, id: 'parent-folder', version: 'parent1', kind: 'folder', size: 0, sha256: null } : null } });
+   }
+   return previousFetch(url, init);
+  };
+  input.inspectLocal = async (path: string) => (await host.request(scope.ownerId, { action: 'inspect', rootId: root, path }, signal)).inspectedEntry;
+  input.journal = await openSyncJournal(new IDBFactory(), 'amplification', IDBKeyRange); input.progress = () => {};
+  input.streamLocalChanges = async function* (id: string) {
+   yield { id, generation: id, state: 'complete', revision: 1, nextSequence: 1, hasMore: false, changes: [{ sequence: 1, revision: f.entry.version, entry: f.entry }] };
+  };
+  try {
+   if (failure) {
+    await assert.rejects(streamOneWayForegroundSync(saved, scope, input, signal)); assert.equal(f.counts().commits, 0);
+    if (failure.at === 'plan') assert.equal(f.counts().starts, 0);
+    if (failure.at === 'plan' || failure.at === 'start') assert.equal(counts.put, 0);
+    if (failure.at !== 'content') assert.equal(completes, 0);
+   } else { await streamOneWayForegroundSync(saved, scope, input, signal); assert.equal(f.counts().commits, 1); }
+  }
+  finally { input.journal.close(); }
+ } else {
+ const context = foregroundSyncContext(saved, scope, input, signal), run = f.make();
+ const done = await executeSyncRun(run, createCloudSyncPort(run, { currentScope: () => scope, persist: async () => {}, readLocal: async () => {
+  // Production inspect also crosses this authenticated host boundary.
+  await host.request(scope.ownerId, { action: 'inspect', rootId: root, path: f.entry.path }, signal); return f.entry;
+ }, openSource: context.openSource }, context.runtime));
+ assert.ok(done.operations.every(op => op.confirmed));
+ }
+ return counts;
+}
+test('updated Mac native upload coalesces authorization and source fences across real renderer and host boundaries', async () => {
+ assert.deepEqual(await nativeUploadAmplification('execute'), { native: 11, account: 26, manifest: 0, configuration: 4, cloud: 7, sign: 1, put: 1 });
+});
+test('streaming preparation and execution include parent lookups in the measured native authorization count', async () => {
+ assert.deepEqual(await nativeUploadAmplification('stream'), { native: 13, account: 30, manifest: 0, configuration: 5, cloud: 9, sign: 1, put: 1 });
+});
+
+
+test('generic old-host streaming retains full preparation and source guards', async () => {
+ assert.deepEqual(await nativeUploadAmplification('stream', false), { native: 40, account: 84, manifest: 0, configuration: 9, cloud: 9, sign: 1, put: 1 });
+});
+test('read-only preparation cannot authorize later effects after configuration/root/account/scope/network/cancellation changes', async () => {
+ for (const kind of ['config', 'root', 'account', 'scope', 'network', 'abort'] as const) await nativeUploadAmplification('stream', true, { at: 'plan', kind });
+ for (const at of ['start', 'part', 'content'] as const) await nativeUploadAmplification('stream', true, { at, kind: 'config' });
 });

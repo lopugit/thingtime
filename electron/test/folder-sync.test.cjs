@@ -455,3 +455,29 @@ test('authority drift wins over a concurrent native transport interruption and d
     fresh.run(async()=>{throw new ThingtimeNodeBridgeError('node_timeout','private');});
     await assert.rejects(fresh.host.request(fresh.event,fresh.input()),/\[folder_transport_retry\]/);
 });
+
+test('public capabilities negotiate once per exact live binding while every native request freshly verifies account', async () => {
+ const f = fixture(); let capabilities = 0, accounts = 0;
+ f.host.capabilities = async context => { capabilities++; return { schemaVersion: 1, origin: context.apiOrigin, features: { 'api.devices-node-identity': { version: '1.0.0' } } }; };
+ f.host.verifyAccount = async () => { accounts++; };
+ f.run(async (_method, request) => ({ ...request, roots: [], capabilities: { fileAccessVersion: '1.12.0' }, conditions: { network: 'wifi', charging: true } }));
+ await f.host.request(f.event, f.input({ action: 'context' }));
+ await f.host.request(f.event, f.input({ action: 'context' }));
+ assert.equal(capabilities, 1); assert.equal(accounts, 5); assert.equal(f.calls.length, 2);
+ f.host.invalidate();
+ await f.host.request(f.event, f.input({ action: 'context' }));
+ assert.equal(capabilities, 2); assert.equal(accounts, 8);
+ await f.host.request(f.event, f.input({ action: 'context', deviceId: 'other-device' }));
+ assert.equal(capabilities, 3); assert.equal(accounts, 11);
+ await f.host.request(f.event, f.input({ action: 'context', deviceId: 'other-device', ownerId: 'other-owner' }));
+ assert.equal(capabilities, 4); assert.equal(accounts, 14);
+ f.context.apiOrigin = 'https://new.test';
+ await f.host.request(f.event, f.input({ action: 'context', origin: 'https://new.test' }));
+ assert.equal(capabilities, 5); assert.equal(accounts, 17);
+ f.context.window = { ...f.context.window };
+ await f.host.request(f.event, f.input({ action: 'context', origin: 'https://new.test' }));
+ assert.equal(capabilities, 6); assert.equal(accounts, 20);
+ f.host.verifyAccount = async () => { throw Error('Account revoked'); };
+ await assert.rejects(f.host.request(f.event, f.input({ action: 'context', origin: 'https://new.test' })), /revoked/);
+ assert.equal(f.calls.length, 7);
+});

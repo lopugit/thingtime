@@ -189,7 +189,10 @@ class DesktopFolderSync {
     rememberPageCapability(context, input, value) {
         this.nativePageCapability = { window: context.window, generation: context.generation, appOrigin: context.appOrigin,
             apiOrigin: context.apiOrigin, ownerId: input.ownerId, deviceId: input.deviceId,
-            supported: supportsBatchPages(value?.capabilities?.fileAccessVersion) };
+            supported: supportsBatchPages(value?.capabilities?.fileAccessVersion),
+            // Public feature negotiation belongs to this exact live binding,
+            // never to an authorization TTL or an account/device grant.
+            apiCapabilities: value?.apiCapabilities ? structuredClone(value.apiCapabilities) : this.samePageCapability(context, input)?.apiCapabilities };
     }
     admit(state) {
         if (state.lane === 'streamWaiter') {
@@ -252,8 +255,11 @@ class DesktopFolderSync {
             let apiCapabilities;
             if (state.input.action === 'context') {
                 state.phase = 'capability-verification';
-                apiCapabilities = await this.capabilities(context, AbortSignal.any([state.abort.signal, AbortSignal.timeout(20_000)]));
-                await verify();
+                apiCapabilities = this.samePageCapability(context, state.input)?.apiCapabilities;
+                if (!apiCapabilities) {
+                    apiCapabilities = await this.capabilities(context, AbortSignal.any([state.abort.signal, AbortSignal.timeout(20_000)]));
+                    await verify();
+                }
                 if (!/^1\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/.test(apiCapabilities?.features?.['api.devices-node-identity']?.version ?? '')) {
                     throw new Error('The selected server does not support this version of folder sync.');
                 }
@@ -275,8 +281,11 @@ class DesktopFolderSync {
             }
             if (state.input.action === 'upload-part') {
                 state.phase = 'capability-verification';
-                const manifest = await this.capabilities(context, AbortSignal.any([state.abort.signal, AbortSignal.timeout(20_000)]));
-                await verify();
+                let manifest = this.samePageCapability(context, state.input)?.apiCapabilities;
+                if (!manifest) {
+                    manifest = await this.capabilities(context, AbortSignal.any([state.abort.signal, AbortSignal.timeout(20_000)]));
+                    await verify();
+                }
                 if (!/^1\.([1-9][0-9]*)\.(0|[1-9][0-9]*)$/.test(manifest?.features?.['api.attachment-upload-parts']?.version ?? ''))
                     throw new Error('The selected server does not support this version of folder sync.');
             }
