@@ -4,6 +4,7 @@ const { uploadFolderPart, uploadRetry, retryableUploadFailure } = require('./fol
 const { stageRangeMetadata } = require('./folder-stream.cjs');
 const { normalizeEndpointUrl } = require('./desktop-settings.cjs');
 const { randomUUID } = require('node:crypto');
+const { performance } = require('node:perf_hooks');
 const ACTIONS = new Set(['context', 'upload-part', 'list', 'choose', 'conditions', 'remove', 'scan', 'scan-stream', 'scan-stream-finish', 'scan-changes', 'scan-capture', 'scan-status', 'scan-cancel', 'scan-skips', 'scan-page', 'scan-discard', 'inspect', 'read', 'read-range', 'stage-begin', 'stage-append', 'stage-range', 'stage-finish', 'write-approve', 'write-check', 'publication-lookup', 'publish', 'trash', 'trash-lookup', 'trash-expected', 'trash-inspect', 'trash-restore', 'trash-list', 'trash-restore-reviewed', 'suspend']);
 const supportsBatchPages = version => {
     const parts = typeof version === 'string' && version.length <= 32 && /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/.exec(version);
@@ -141,10 +142,45 @@ async function signDesktopUploadPart(context, body, signal, timeoutMs = 20_000, 
     } finally { if (!response.body?.locked) await response.body?.cancel().catch(() => {}); }
 }
 
+// Host request phases are observations, never authority. Totals may overlap:
+// reply validation includes its account check, and upload/native waits can nest.
+function requestTiming(action, clock, diagnostic) {
+    let valid = true, flushed = false;
+    const now = () => { try { const n = clock(); if (Number.isFinite(n) && n >= 0) return n; } catch {} valid = false; return 0; };
+    const started = now(), totals = { queue: 0, account: 0, capability: 0, native: 0, reply: 0 };
+    const counts = { account: 0, capability: 0, native: 0 };
+    const begin = phase => {
+        const began = now(); if (phase in counts) counts[phase]++;
+        let ended = false;
+        return () => {
+            if (ended) return; ended = true;
+            const elapsed = now() - began; if (elapsed < 0) valid = false; totals[phase] += elapsed;
+        };
+    };
+    return {
+        begin,
+        async measure(phase, work) {
+            const end = begin(phase);
+            try { return await work(); } finally { end(); }
+        },
+        flush(outcome) {
+            if (flushed) return; flushed = true;
+            const total = now() - started;
+            if (!valid || total < 0) return;
+            const row = { phase: 'folder-timing', action, outcome, totalMs: Math.floor(total),
+                queueMs: Math.floor(totals.queue), accountMs: Math.floor(totals.account), accountCount: counts.account,
+                capabilityMs: Math.floor(totals.capability), capabilityCount: counts.capability,
+                nativeMs: Math.floor(totals.native), nativeCount: counts.native, replyMs: Math.floor(totals.reply) };
+            // The transfer never awaits log IO or a rejected diagnostic Promise.
+            queueMicrotask(() => { try { Promise.resolve(diagnostic(row)).catch(() => {}); } catch {} });
+        }
+    };
+}
+
 class DesktopFolderSync {
-    constructor({ context, requestNative, verifyAccount = readAccount, capabilities = readCapabilities, fetchUpload = globalThis.fetch, timeoutMs = 300_000, diagnostic = () => {} }) {
+    constructor({ context, requestNative, verifyAccount = readAccount, capabilities = readCapabilities, fetchUpload = globalThis.fetch, timeoutMs = 300_000, diagnostic = () => {}, now = () => performance.now() }) {
         this.context = context; this.requestNative = requestNative; this.fetchUpload = fetchUpload; this.verifyAccount = verifyAccount;
-        this.capabilities = capabilities; this.timeoutMs = timeoutMs; this.diagnostic = diagnostic; this.generation = 0; this.active = null; this.streamWaiter = null; this.ordinaryQueue = []; this.quitting = false;
+        this.now = now; this.capabilities = capabilities; this.timeoutMs = timeoutMs; this.diagnostic = diagnostic; this.generation = 0; this.active = null; this.streamWaiter = null; this.ordinaryQueue = []; this.quitting = false;
     }
     capture(event, input) {
         const context = this.context(), window = context.window;
@@ -226,7 +262,7 @@ class DesktopFolderSync {
     }
     reportFailure(action, step, error) {
         if (!ACTIONS.has(action)) return;
-        try { this.diagnostic({ phase: 'folder-request', action, step, code: requestFailureCode(error) }); } catch {}
+        try { Promise.resolve(this.diagnostic({ phase: 'folder-request', action, step, code: requestFailureCode(error) })).catch(() => {}); } catch {}
     }
     async request(event, input) {
         let context;
@@ -238,6 +274,8 @@ class DesktopFolderSync {
             if (state) this.cancel(state);
             return {};
         }
+        const timing = requestTiming(input.action, this.now, row => this.diagnostic(row));
+        let outcome = 'failed', endReply;
         const lane = input.action === 'scan-changes' ? 'streamWaiter' : 'active';
         const state = { context, input: structuredClone(input), abort: new AbortController(), dispatched: false, lane, phase: 'admission' };
         const timer = setTimeout(() => this.cancel(state), this.timeoutMs); timer.unref?.();
@@ -246,18 +284,19 @@ class DesktopFolderSync {
             state.phase = 'account-verification';
             this.assertCurrent(state);
             const signal = AbortSignal.any([state.abort.signal, AbortSignal.timeout(20_000)]);
-            await this.verifyAccount(context, signal); this.assertCurrent(state);
+            await timing.measure('account', () => this.verifyAccount(context, signal)); this.assertCurrent(state);
             state.phase = previousPhase;
         };
+        const nativeRequest = request => timing.measure('native', () => this.requestNative('folder-sync.request', request, { signal: state.abort.signal }));
         try {
-            await this.admit(state);
+            await timing.measure('queue', () => this.admit(state));
             await verify();
             let apiCapabilities;
             if (state.input.action === 'context') {
                 state.phase = 'capability-verification';
                 apiCapabilities = this.samePageCapability(context, state.input)?.apiCapabilities;
                 if (!apiCapabilities) {
-                    apiCapabilities = await this.capabilities(context, AbortSignal.any([state.abort.signal, AbortSignal.timeout(20_000)]));
+                    apiCapabilities = await timing.measure('capability', () => this.capabilities(context, AbortSignal.any([state.abort.signal, AbortSignal.timeout(20_000)])));
                     await verify();
                 }
                 if (!/^1\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/.test(apiCapabilities?.features?.['api.devices-node-identity']?.version ?? '')) {
@@ -269,7 +308,7 @@ class DesktopFolderSync {
                     const negotiation = { requestId: randomUUID(), ownerId: context.ownerId, deviceId: state.input.deviceId,
                         origin: context.apiOrigin, action: 'context' };
                     state.phase = 'native-request';
-                    const nativeContext = await this.requestNative('folder-sync.request', negotiation, { signal: state.abort.signal });
+                    const nativeContext = await nativeRequest(negotiation);
                     await verify();
                     if (!nativeContext || nativeContext.requestId !== negotiation.requestId || nativeContext.ownerId !== negotiation.ownerId ||
                         nativeContext.deviceId !== negotiation.deviceId || nativeContext.origin !== negotiation.origin ||
@@ -283,7 +322,7 @@ class DesktopFolderSync {
                 state.phase = 'capability-verification';
                 let manifest = this.samePageCapability(context, state.input)?.apiCapabilities;
                 if (!manifest) {
-                    manifest = await this.capabilities(context, AbortSignal.any([state.abort.signal, AbortSignal.timeout(20_000)]));
+                    manifest = await timing.measure('capability', () => this.capabilities(context, AbortSignal.any([state.abort.signal, AbortSignal.timeout(20_000)])));
                     await verify();
                 }
                 if (!/^1\.([1-9][0-9]*)\.(0|[1-9][0-9]*)$/.test(manifest?.features?.['api.attachment-upload-parts']?.version ?? ''))
@@ -293,9 +332,10 @@ class DesktopFolderSync {
             state.dispatched = true;
             const value = state.input.action === 'upload-part' ? await uploadFolderPart({ input: state.input, context,
                 signal: state.abort.signal, authorize: verify, fetchUpload: this.fetchUpload,
-                requestNative: request => this.requestNative('folder-sync.request', request, { signal: state.abort.signal }),
+                requestNative: nativeRequest,
                 signPart: async body => { await verify(); return signDesktopUploadPart(context, body, state.abort.signal, 20_000, this.diagnostic); }
-            }) : await this.requestNative('folder-sync.request', { ...state.input, origin: context.apiOrigin }, { signal: state.abort.signal });
+            }) : await nativeRequest({ ...state.input, origin: context.apiOrigin });
+            endReply = timing.begin('reply');
             state.phase = 'reply-verification';
             if (!value || typeof value !== 'object') throw unavailable();
             if (state.input.action === 'context') {
@@ -317,7 +357,7 @@ class DesktopFolderSync {
                 const metadata = { ...value, chunk: { ...c, bytes: undefined } };
                 if (Buffer.byteLength(JSON.stringify(metadata)) > 900_000) throw unavailable();
             } else if (Buffer.byteLength(JSON.stringify(value)) > 900_000) throw unavailable();
-            return value;
+            outcome = 'ok'; return value;
         } catch (error) {
             if (!state.abort.signal.aborted) {
                 try { this.assertCurrent(state); }
@@ -339,7 +379,7 @@ class DesktopFolderSync {
                     (error?.name === 'ThingtimeNodeBridgeError' && error.code === 'cancelled')))
                 throw state.abort.signal.reason;
             throw error;
-        } finally { clearTimeout(timer); this.release(state); }
+        } finally { endReply?.(); clearTimeout(timer); this.release(state); timing.flush(state.abort.signal.aborted ? 'cancelled' : outcome); }
     }
 }
 module.exports = { DesktopFolderSync, readAccount, readCapabilities, signDesktopUploadPart };

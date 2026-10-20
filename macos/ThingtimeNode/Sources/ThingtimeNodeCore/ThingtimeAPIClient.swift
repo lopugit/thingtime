@@ -114,12 +114,12 @@ public final class ThingtimeAPIClient: ControlPlaneClient, @unchecked Sendable {
     /// Select the exact native credential; never infer the owner from renderer input.
     // Closed scalar diagnostics only. Fast successful checks stay quiet; no
     // owner/device/session IDs, headers, URLs, body text or throwable messages.
-    static func fileSyncIdentityDiagnostic(status: Int, elapsedMilliseconds: Int, attempt: Int, cooldownSeconds: Int?) -> String? {
-        guard (100...599).contains(status), (0...120_000).contains(elapsedMilliseconds), (0...1).contains(attempt),
+    static func fileSyncIdentityDiagnostic(status: Int, elapsedMilliseconds: Int, attempt: Int, cooldownSeconds: Int?, admissionMilliseconds: Int = 0) -> String? {
+        guard (100...599).contains(status), (0...120_000).contains(elapsedMilliseconds), (0...300_000).contains(admissionMilliseconds), (0...1).contains(attempt),
               cooldownSeconds == nil || (status == 429 && attempt == 0 && (1...60).contains(cooldownSeconds!)),
-              status != 200 || elapsedMilliseconds > 1000 || attempt > 0 else { return nil }
+              status != 200 || elapsedMilliseconds > 1000 || admissionMilliseconds > 1000 || attempt > 0 else { return nil }
         let retry = cooldownSeconds != nil ? "cooldown" : attempt == 1 ? "after-cooldown" : "none"
-        return "File-sync identity: status=\(status) elapsedMilliseconds=\(elapsedMilliseconds) attempt=\(attempt) retry=\(retry) cooldownSeconds=\(cooldownSeconds ?? 0)"
+        return "File-sync identity: status=\(status) elapsedMilliseconds=\(elapsedMilliseconds) attempt=\(attempt) retry=\(retry) cooldownSeconds=\(cooldownSeconds ?? 0) admissionMs=\(admissionMilliseconds)"
     }
 
     // The canonical limiter emits only integer Retry-After (no limit/remaining
@@ -131,6 +131,13 @@ public final class ThingtimeAPIClient: ControlPlaneClient, @unchecked Sendable {
               text.range(of: "^[1-9][0-9]{0,4}$", options: .regularExpression) != nil,
               let seconds = Int(text), seconds <= 86_400 else { return nil }
         return seconds
+    }
+
+    // A malformed injected clock disables only diagnostics, never identity checks.
+    static func fileSyncDiagnosticMilliseconds(from start: Double, to end: Double) -> Int? {
+        let elapsed = (end - start) * 1000
+        guard start.isFinite, end.isFinite, start >= 0, elapsed.isFinite, (0...300_000).contains(elapsed) else { return nil }
+        return Int(elapsed)
     }
 
     /// Identity is uncached, and local unpairing during the request also fails closed.
@@ -147,8 +154,10 @@ public final class ThingtimeAPIClient: ControlPlaneClient, @unchecked Sendable {
         request.setValue("Bearer \(credential.refreshToken)", forHTTPHeaderField: "Authorization")
         let admissionScope = FileSyncIdentityAdmission.scope(origin: baseURL, credential: credential)
         for attempt in 0...1 {
+            let admissionBegan = fileSyncNow()
             let permit = try await identityAdmission.acquire(admissionScope)
-            let data: Data, response: HTTPURLResponse, elapsed: Int
+            let admission = Self.fileSyncDiagnosticMilliseconds(from: admissionBegan, to: fileSyncNow())
+            let data: Data, response: HTTPURLResponse, elapsed: Int?
             do {
                 try Task.checkCancellation()
                 // Admission can wait behind another lane or a shared cooldown.
@@ -158,13 +167,13 @@ public final class ThingtimeAPIClient: ControlPlaneClient, @unchecked Sendable {
                 try Task.checkCancellation()
                 try await identityAdmission.willSend(permit)
                 try Task.checkCancellation()
-                let began = ProcessInfo.processInfo.systemUptime
+                let began = fileSyncNow()
                 let received = try await session.data(for: request)
                 guard let http = received.1 as? HTTPURLResponse, http.url == url else {
                     throw ThingtimeAPIClientError.invalidResponse
                 }
                 response = http; data = received.0
-                elapsed = Int(max(0, ProcessInfo.processInfo.systemUptime - began) * 1000)
+                elapsed = Self.fileSyncDiagnosticMilliseconds(from: began, to: fileSyncNow())
                 // Publish the response's cooldown before another queued lane runs,
                 // even if this caller was cancelled as the response arrived.
                 await identityAdmission.finish(permit, cooldownSeconds: Self.identityCooldown(response))
@@ -174,9 +183,10 @@ public final class ThingtimeAPIClient: ControlPlaneClient, @unchecked Sendable {
                 throw error
             }
             let cooldown = attempt == 0 ? Self.identityCooldown(response).flatMap { $0 <= 60 ? $0 : nil } : nil
-            if let diagnostic = Self.fileSyncIdentityDiagnostic(status: response.statusCode, elapsedMilliseconds: elapsed,
-                                                                attempt: attempt, cooldownSeconds: cooldown) {
-                ThingtimeNodeLog.actions.notice("\(diagnostic, privacy: .public)")
+            if let elapsed, let admission,
+               let diagnostic = Self.fileSyncIdentityDiagnostic(status: response.statusCode, elapsedMilliseconds: elapsed,
+                                                                attempt: attempt, cooldownSeconds: cooldown, admissionMilliseconds: admission) {
+                fileSyncIdentityLog(diagnostic)
             }
             // A single server-directed cooldown stays within the folder request
             // deadline. Never shorten a longer delay, retry auth failures, cache
@@ -396,6 +406,8 @@ public final class ThingtimeAPIClient: ControlPlaneClient, @unchecked Sendable {
     private let credentialStore: any DeviceCredentialStore
     private let identityAdmission: FileSyncIdentityAdmission
     private let fileSyncRetrySleep: @Sendable (UInt64) async throws -> Void
+    private let fileSyncNow: @Sendable () -> Double
+    private let fileSyncIdentityLog: @Sendable (String) -> Void
     private let session: URLSession
     private let encoder: JSONEncoder
     private let decoder: JSONDecoder
@@ -414,11 +426,15 @@ public final class ThingtimeAPIClient: ControlPlaneClient, @unchecked Sendable {
 
     init(baseURL: URL, credentialStore: any DeviceCredentialStore, session: URLSession? = nil,
          identityAdmission: FileSyncIdentityAdmission,
+         fileSyncNow: @escaping @Sendable () -> Double = { ProcessInfo.processInfo.systemUptime },
+         fileSyncIdentityLog: @escaping @Sendable (String) -> Void = { diagnostic in ThingtimeNodeLog.actions.notice("\(diagnostic, privacy: .public)") },
          fileSyncRetrySleep: @escaping @Sendable (UInt64) async throws -> Void = { seconds in
              try await Task.sleep(nanoseconds: seconds * 1_000_000_000)
          }) throws {
         guard Self.allowed(baseURL) else { throw ThingtimeAPIClientError.invalidBaseURL }
         self.identityAdmission = identityAdmission
+        self.fileSyncNow = fileSyncNow
+        self.fileSyncIdentityLog = fileSyncIdentityLog
         self.baseURL = baseURL
         self.credentialStore = credentialStore
         self.fileSyncRetrySleep = fileSyncRetrySleep
