@@ -96,6 +96,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-20: Initialize cached sync-screen lifetime guards before child reads,
+  so upload priorities load automatically on first mount and StrictMode remount.
+  Keep late work fenced after removal. Reuse bounded ignore-rule results during
+  planning and skip a new conflict-review scan only when a complete, instance-bound
+  initial-upload plan proves there can be no conflicts. Existing drafts and all
+  transfer durability checks remain intact. Signed installed acceptance is
+  pending. — Codex (AI)
+
 - 2026-10-20: Add persistent device upload priorities with editable path ordering
   and file-tree Upload next controls. Preserve in-flight operations and receipts
   across priority changes/restarts, and keep parent-first uploads and safe Trash

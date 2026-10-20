@@ -31,6 +31,10 @@ if (!process.env.TT_PROGRESS_WORKER) {
 		page = context.pages()[0]; const errors = []; page.on('pageerror', error => errors.push(String(error)));
 		await page.setViewportSize({ width: 1440, height: 1000 }); await page.goto(`http://127.0.0.1:${port}`);
 		await page.getByRole('heading', { name: 'Sync progress', exact: true }).waitFor();
+		// Cached connections can mount this child before the parent passive effect.
+		// Read priorities on first mount (including StrictMode), without Reload.
+		await page.getByText('Saved priorities loaded.', { exact: true }).waitFor();
+		assert.equal(await page.getByText('The account or storage destination changed. Your draft is preserved.', { exact: true }).count(), 0);
 		await page.getByText(/^50\.5%/).waitFor();
 		assert.equal(await page.locator('[data-block-id="sync-node-bar-fill"]').first().evaluate(element => getComputedStyle(element).backgroundColor), 'rgb(113, 113, 122)');
 		await page.getByRole('button', { name: 'Save upload priorities', exact: true }).waitFor();

@@ -57,3 +57,32 @@ test('dependency defaults preserve Git history, worktree metadata and pointer fi
  assert.equal(policy.ignored('things/code/project/.git', 'folder'), false);
  assert.equal(policy.ignored('things/code/project/node_modules/dependency/index.js'), true);
 });
+
+test('cached folder explanations preserve negation, ancestor barriers, case, kinds and caller isolation', () => {
+ const rules = 'dir/\n!dir/\ndir/*.tmp\n!dir/keep.tmp\n**/blocked/\n!**/blocked/keep\ncache/\nParent/\n!parent/';
+ const excluded = ['Private']; const policy = createSyncIgnorePolicy(rules, excluded);
+ const paths: [string, 'file' | 'folder'][] = [
+  ['dir', 'folder'], ['dir/plain', 'file'], ['dir/drop.tmp', 'file'], ['dir/keep.tmp', 'file'],
+  ['dir/blocked', 'folder'], ['dir/blocked/keep', 'file'], ['cache', 'file'], ['cache', 'folder'], ['cache/keep', 'file'],
+  ['Parent/x', 'file'], ['parent/x', 'file'], ['Private', 'folder'], ['private/child', 'file'],
+  ['unicode/é/name', 'file'], ['unicode/é/name', 'file']
+ ];
+ for (const [path, kind] of [...paths, ...[...paths].reverse(), ...paths]) {
+  const expected = createSyncIgnorePolicy(rules, ['Private']).explain(path, kind);
+  const observed = policy.explain(path, kind); assert.deepEqual(observed, expected);
+  observed.ignored = !observed.ignored; observed.rule = 'caller mutation';
+  assert.deepEqual(policy.explain(path, kind), expected);
+ }
+ excluded[0] = 'Changed'; assert.equal(policy.explain('private/child').rule, 'Private');
+ assert.equal(createSyncIgnorePolicy('!cache/').ignored('cache/x'), false);
+});
+
+test('bounded folder cache eviction preserves the same rule and explanation results', () => {
+ const rules = '**/drop/\n!**/drop/keep\n*.tmp\n!keep.tmp', policy = createSyncIgnorePolicy(rules);
+ const samples: [string, 'file' | 'folder'][] = [['saved/drop/keep', 'file'], ['saved/keep.tmp', 'file'], ['saved/plain', 'file']];
+ const expected = samples.map(([path, kind]) => createSyncIgnorePolicy(rules).explain(path, kind));
+ samples.forEach(([path, kind], i) => assert.deepEqual(policy.explain(path, kind), expected[i]));
+ // More unique folder prefixes and UTF-8 payload than either cache budget.
+ for (let i = 0; i < 3500; i++) assert.equal(policy.ignored('bulk/' + i + '-é'.repeat(110) + '/plain'), false);
+ [...samples].reverse().forEach(([path, kind]) => assert.deepEqual(policy.explain(path, kind), createSyncIgnorePolicy(rules).explain(path, kind)));
+});
