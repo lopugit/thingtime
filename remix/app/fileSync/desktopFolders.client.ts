@@ -29,6 +29,9 @@ type ContextReply = {
 	apiCapabilities: { schemaVersion: 1; origin: string; features: Record<string, { version: string }> };
 };
 const queues = new WeakMap<object, Promise<unknown>>();
+// Match Electron/native lanes: long polls must not hold ordinary file IO.
+// Each lane remains serialized across hosts sharing the same bridge.
+const streamWaiterQueues = new WeakMap<object, Promise<unknown>>();
 const changed = () => Error('The account, device or sync server changed. Reopen folder access.');
 const canonicalOrigin = (value: unknown): string => {
 	if (typeof value !== 'string') throw changed();
@@ -83,7 +86,8 @@ export async function createDesktopFolderHost(input: {
 				abort();
 				return;
 			}
-			const queued = (queues.get(input.bridge) ?? Promise.resolve())
+			const queue = payload.action === 'scan-changes' ? streamWaiterQueues : queues;
+			const queued = (queue.get(input.bridge) ?? Promise.resolve())
 				.catch(() => {})
 				.then(() => {
 					combined.throwIfAborted();
@@ -108,7 +112,7 @@ export async function createDesktopFolderHost(input: {
 						throw Error('Folder access could not be verified. Check the connection, pairing and selected account.');
 					});
 				});
-			queues.set(
+			queue.set(
 				input.bridge,
 				queued.catch(() => {})
 			);

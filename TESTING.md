@@ -12480,6 +12480,7 @@ separate from deterministic discovery/lease tests.
 - [ ] Verify a complete real home index and the first cloud payload receipt. A count reset or partial scan alone is not successful backup acceptance.
 
 - [x] Native backup interruption diagnostics identify scan, monitor or request authorization and fixed failure categories without descriptions, file paths, account IDs, URLs or credentials. MacFolderSyncTests passes 30 tests, including redaction.
+- [x] 2026-10-20: Hold a renderer `scan-changes` request and verify conditions, inspect and binary reads dispatch in ordinary FIFO; cancel one waiter by request ID without canceling the scan, then abort the task and suspend both lanes. Privacy-test native slow-request diagnostics with sensitive descriptions/URLs and reject non-allowlisted actions; expected index waits log no slow-request event.
 - [x] 2026-10-20: Cancel ordinary and long-poll identity requests with both `CancellationError` and URLSession-style cancellation; the independent streaming capture retains its running state and generation. A subsequent real 403 still interrupts it. Full `MacFolderSyncTests`: 41 passed; stream diagnostics use fixed phase/error codes only.
 - [ ] Capture an actual failure category in the installed app before claiming the real scan restart is resolved.
 

@@ -138,6 +138,21 @@ final class MacFolderSyncTests: XCTestCase {
         }
     }
 
+    func testSlowRequestDiagnosticsContainOnlyValidatedActionsElapsedTimeAndFixedCodes() {
+        let sensitive = "secret-token /private/home/file https://private.test"
+        let error = URLError(.timedOut, userInfo: [NSLocalizedDescriptionKey: sensitive, NSURLErrorFailingURLStringErrorKey: sensitive])
+        XCTAssertNil(MacFolderSync.slowRequestDiagnostic(action: "inspect", elapsedMilliseconds: 10_000, error: error))
+        XCTAssertNil(MacFolderSync.slowRequestDiagnostic(action: sensitive, elapsedMilliseconds: 10_001, error: error))
+        XCTAssertNil(MacFolderSync.slowRequestDiagnostic(action: "scan-changes", elapsedMilliseconds: 25_000, error: error))
+        XCTAssertEqual(MacFolderSync.slowRequestDiagnostic(action: "inspect", elapsedMilliseconds: 10_001, error: error),
+                       "Slow file-sync request: action=inspect elapsedMilliseconds=10001 code=network--1001")
+        XCTAssertEqual(MacFolderSync.slowRequestDiagnostic(action: "read-range", elapsedMilliseconds: 12_345),
+                       "Slow file-sync request: action=read-range elapsedMilliseconds=12345 code=ok")
+        XCTAssertEqual(MacFolderSync.slowRequestDiagnostic(action: "inspect", elapsedMilliseconds: 10_001,
+                       error: NSError(domain: sensitive, code: 7, userInfo: [NSLocalizedDescriptionKey: sensitive])),
+                       "Slow file-sync request: action=inspect elapsedMilliseconds=10001 code=unexpected")
+    }
+
     func testBackupDiagnosticsNeverExposeErrorDescriptionsOrURLs() {
         let sensitive = "secret-token /private/home/filename"
         let network = URLError(.timedOut, userInfo: [NSLocalizedDescriptionKey: sensitive, NSURLErrorFailingURLStringErrorKey: sensitive])

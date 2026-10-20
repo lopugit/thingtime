@@ -6,6 +6,7 @@ import Foundation
 @MainActor
 public final class MacFolderSync {
     public static let version = "1.11.0"
+    private static let supportedActions: Set<String> = ["context", "conditions", "list", "choose", "remove", "scan", "scan-stream", "scan-stream-finish", "scan-changes", "scan-capture", "scan-status", "scan-cancel", "scan-skips", "scan-page", "scan-discard", "inspect", "read", "read-range", "stage-begin", "stage-append", "stage-range", "stage-finish", "write-approve", "write-check", "publication-lookup", "publish", "trash", "trash-lookup", "trash-expected", "trash-inspect", "trash-restore", "trash-restore-reviewed", "trash-list"]
     public enum SourceSelection { case folder(URL), photos }
     public struct Conditions: Codable, Sendable {
         public let network: String
@@ -404,9 +405,20 @@ public final class MacFolderSync {
         }
         let waiting = r.action == "scan-changes"
         guard waiting ? streamWaiter == nil : active == nil else { throw ThingtimeNodeError.invalidRequest("Another folder request is running.") }
-        guard ["context", "conditions", "list", "choose", "remove", "scan", "scan-stream", "scan-stream-finish", "scan-changes", "scan-capture", "scan-status", "scan-cancel", "scan-skips", "scan-page", "scan-discard", "inspect", "read", "read-range", "stage-begin", "stage-append", "stage-range", "stage-finish", "write-approve", "write-check", "publication-lookup", "publish", "trash", "trash-lookup", "trash-expected", "trash-inspect", "trash-restore", "trash-restore-reviewed", "trash-list"].contains(r.action) else { throw MobileFolderStore.Failure.invalid }
+        guard Self.supportedActions.contains(r.action) else { throw MobileFolderStore.Failure.invalid }
         guard (r.action == "read-range") == (stream != nil), (r.action == "stage-range") == (receive != nil) else { throw MobileFolderStore.Failure.invalid }
-        let task = Task { try await self.execute(r, owner: owner, stream: stream, receive: receive) }
+        let task = Task {
+            let began = ProcessInfo.processInfo.systemUptime
+            var failure: Error?
+            defer {
+                let elapsed = Int(max(0, ProcessInfo.processInfo.systemUptime - began) * 1000)
+                if !waiting, let diagnostic = Self.slowRequestDiagnostic(action: r.action, elapsedMilliseconds: elapsed, error: failure) {
+                    ThingtimeNodeLog.actions.notice("\(diagnostic, privacy: .public)")
+                }
+            }
+            do { return try await self.execute(r, owner: owner, stream: stream, receive: receive) }
+            catch { failure = error; throw error }
+        }
         if waiting { streamWaiter = (r.requestId, r.ownerId, r.deviceId, task) }
         else { active = (r.requestId, r.ownerId, r.deviceId, task) }
         let timeout = Task {
@@ -426,6 +438,14 @@ public final class MacFolderSync {
                 else if self?.active?.id == r.requestId { self?.suspendRequest() }
             }
         })
+    }
+
+    // Only validated action names, monotonic elapsed time and fixed categories
+    // may enter diagnostics; never serialize request fields or error userInfo.
+    static func slowRequestDiagnostic(action: String, elapsedMilliseconds: Int, error: Error? = nil) -> String? {
+        guard elapsedMilliseconds > 10_000, action != "scan-changes", supportedActions.contains(action) else { return nil }
+        let code = error.map { backupDiagnosticCode($0) } ?? "ok"
+        return "Slow file-sync request: action=\(action) elapsedMilliseconds=\(elapsedMilliseconds) code=\(code)"
     }
 
     private func authorized(_ r: Request) async throws {
