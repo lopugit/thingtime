@@ -12669,3 +12669,10 @@ separate from deterministic discovery/lease tests.
 - [x] Fixed signer phase/status diagnostics omit raw messages, identities, bodies, paths and URLs; logs rotate with bounded storage and private file permissions.
 - [ ] `node electron/scripts/test-folder-upload-origin.mjs`: real Electron session fixture retains the OS loopback network boundary. Currently blocked by nested Chromium sandbox initialization, not evidence of runtime success; never use a permissive fallback.
 - [ ] Installed signed acceptance: preserve the existing automatic job, verify a nonempty uploaded file via independent download/hash, and observe continued streaming progress.
+
+### Desktop native upload source proof — 2026-10-20
+
+- [x] Run `npm --prefix electron run verify:folder-upload-native`: real native zero-length reads reject, positive-length EOF reads return no data with the pinned size/version/offset, and complete `uploadFolderPart` sends exact nonempty native bytes through HTTP with the correct digest receipt.
+- [x] With the same native-backed helper, change the source before PUT and after PUT; refuse bytes before the first fence and refuse a success receipt after the second. Retain the pre-fix failure where the native reader rejects the adapter's zero-length recheck.
+- [x] Strict JavaScript fixtures reject invalid zero-length reads; corrupted EOF offsets/nonempty data fail both source fences. Run the focused folder-upload/folder-sync/diagnostic suite.
+- [ ] In the signed installed app, recover the same saved job, independently download its first nonempty cloud file and compare its hash, then verify continued indexing/upload progress. No manual-upload substitution or local deletion.

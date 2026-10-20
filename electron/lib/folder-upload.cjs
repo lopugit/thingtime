@@ -24,15 +24,18 @@ async function uploadFolderPart({ input, context, signal, authorize, requestNati
         origin: context.apiOrigin, rootId: input.rootId, path: source.path, version: source.version };
     const read = async (range) => {
         await authorize(); signal.throwIfAborted();
+        // A positive-length read at EOF returns no bytes while the native
+        // reader still reopens the path and validates version/size. Zero-length
+        // requests are invalid in the shared native reader contract.
         const value = await requestNative({ ...binding, action: range ? 'read-range' : 'read',
-            offset: range ? upload.offset : 0, length: range ? upload.length : 0 });
+            offset: range ? upload.offset : source.size, length: range ? upload.length : 1 });
         signal.throwIfAborted(); await authorize();
         const chunk = value?.chunk;
         if (!value || value.requestId !== binding.requestId || value.ownerId !== binding.ownerId ||
             value.deviceId !== binding.deviceId || value.origin !== binding.origin || value.rootId !== binding.rootId ||
             value.path !== source.path || chunk?.version !== source.version || chunk.size !== source.size ||
             (range ? !(chunk.bytes instanceof Uint8Array) || chunk.bytes.length !== upload.length ||
-                chunk.offset !== upload.offset || chunk.length !== upload.length : chunk.data !== '')) throw invalid();
+                chunk.offset !== upload.offset || chunk.length !== upload.length : chunk.offset !== source.size || chunk.data !== '')) throw invalid();
         return chunk.bytes;
     };
     const bytes = await read(true), digest = createHash('sha256').update(bytes).digest(), checksum = digest.toString('base64');

@@ -61,8 +61,11 @@ function fixture() {
         authorize: async () => { events.push('authorize'); },
         requestNative: async request => {
             events.push(request.action);
+            assert.ok(request.length > 0, 'The native reader rejects zero-length read requests');
+            assert.ok(request.offset >= 0 && request.offset <= bytes.length);
             return { ...request, chunk: { size: bytes.length, version: 'v1', offset: request.offset, length: request.length,
-                ...(request.action === 'read-range' ? { bytes: new Uint8Array(bytes) } : { data: '' }) } };
+                ...(request.action === 'read-range' ? { bytes: new Uint8Array(bytes) } : {
+                    data: bytes.subarray(request.offset, request.offset + request.length).toString('base64') }) } };
         },
         signPart: async body => { events.push('sign'); return { parts: [{ ...body.parts[0],
             url: 'https://bucket.s3.ap-southeast-2.amazonaws.com/objects/fixture?partNumber=1&uploadId=opaque&x-id=UploadPart',
@@ -80,6 +83,21 @@ test('host-issued part signing retains exact native source and digest receipt', 
     assert.equal(result.uploadedPart.sha256, hash); assert.equal(result.uploadedPart.requestId, f.input.upload.requestId);
     assert.equal(result.requestId, f.input.requestId); assert.equal(result.rootId, f.input.rootId);
     assert.deepEqual(events.filter(x => x !== 'authorize'), ['read-range', 'sign', 'read', 'put', 'read']);
+});
+test('EOF revalidation rejects mismatched offsets or nonempty returned data before publication', async () => {
+    for (const phase of ['before-put', 'after-put']) for (const field of ['offset', 'data']) {
+        const { f, events } = fixture(), native = f.requestNative;
+        let checks = 0;
+        f.requestNative = async request => {
+            const result = await native(request);
+            if (request.action === 'read' && ++checks === (phase === 'before-put' ? 1 : 2)) {
+                result.chunk[field] = field === 'offset' ? 0 : 'YQ==';
+            }
+            return result;
+        };
+        await assert.rejects(uploadFolderPart(f));
+        assert.equal(events.includes('put'), phase === 'after-put');
+    }
 });
 test('invalid part bounds and source receipts cannot sign or send bytes', async () => {
     for (const patch of [{ partNumber: 0 }, { offset: 1 }, { length: bytes.length - 1 }, { uploadId: 'bad/id' },
