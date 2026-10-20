@@ -24,6 +24,7 @@ import { getNativeBridge } from '~/utils/nativeBridge';
 import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { useDataPlane } from '~/hooks/useDataPlane';
+import { useMountedRef } from '~/hooks/useMountedRef';
 import { readStampedCache, writeStampedCache, pruneCacheNamespace } from '~/hooks/localCache';
 import { rootIdentity } from '~/utils/rootIdentity';
 import {
@@ -174,7 +175,7 @@ function Connections({
 		[folderCursor, setFolderCursor] = useState<string | null>(null);
 	const preparingUpload = useRef(false);
 	const controller = useRef<AbortController | null>(null),
-		mounted = useRef(false);
+		mounted = useMountedRef();
 	const assertCurrent = () => {
 		if (!mounted.current || rootIdentity.read().pending || rootIdentity.read().generation !== generation || runtimeOrigin() !== scope.origin)
 			throw Error('The account or storage destination changed.');
@@ -254,7 +255,6 @@ function Connections({
 		}
 	};
 	useEffect(() => {
-		mounted.current = true;
 		void run(async () => {
 			await load('connections');
 			await load('folders');
@@ -274,7 +274,6 @@ function Connections({
 		document.addEventListener('visibilitychange', hidden);
 		window.addEventListener('storage', changed);
 		return () => {
-			mounted.current = false;
 			controller.current?.abort();
 			controller.current = null;
 			window.removeEventListener('storage', changed);

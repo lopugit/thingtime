@@ -4,6 +4,7 @@ import { createRoot } from 'react-dom/client';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { ChakraProvider, Box, Button, Text } from '@chakra-ui/react';
 import { SyncProgressViewer } from '../app/components/Devices/SyncProgressViewer';
+import { useMountedRef } from '../app/hooks/useMountedRef';
 import type { SyncProgressRow, SyncProgressSource, SyncProgressState } from '../app/fileSync/progressProjection';
 import type { ForegroundSyncProgress } from '../app/fileSync/foregroundSync';
 import { thingtimeCapabilityManifest } from '../app/api/utils/capabilities/thingtimeCapabilities';
@@ -41,6 +42,7 @@ window.fetch = async function(input, init) {
 	return originalFetch(input, init);
 };
 function Fixture() {
+	const mounted = useMountedRef();
 	const [status, setStatus] = useState<SyncProgressState>('running');
 	const [progress, setProgress] = useState<ForegroundSyncProgress>({ stage: 'transferring', total: rows.length, confirmed: 4,
 		path: rows.find(r => r.entry.size === 990)!.entry.path, bytes: 495, size: 990 });
@@ -53,9 +55,12 @@ function Fixture() {
 			preparation: { phase: 'cloud', completed: 1000000, total: 3653988 } }); }}>Prepare fixture</Button>
 		<Button onClick={() => setProgress({ stage: 'transferring', total: rows.length, confirmed: 4, path: rows.find(r => r.entry.size === 990)!.entry.path, bytes: 495, size: 990 })}>Transfer fixture</Button>
 		<Button onClick={() => { for (const row of rows) row.operation!.confirmed = true; setStatus('complete'); setProgress({ stage: 'complete', total: rows.length, confirmed: rows.length }); }}>Complete fixture</Button>
-		<SyncProgressViewer scopeKey="synthetic-progress" source={progress.stage === 'scanning' ? undefined : source} currentScope={() => scope} uploadPriorities={{ scope, excludedPaths: ['Private'], ignoreRules: 'node_modules/' }} progress={progress} status={status} />
+		<SyncProgressViewer scopeKey="synthetic-progress" source={progress.stage === 'scanning' ? undefined : source} currentScope={() => {
+			if (!mounted.current) throw Error('The account or storage destination changed.');
+			return scope;
+		}} uploadPriorities={{ scope, excludedPaths: ['Private'], ignoreRules: 'node_modules/' }} progress={progress} status={status} />
 	</Box></ChakraProvider>;
 }
 const router = createMemoryRouter([{ id: 'root', path: '*', element: <Fixture /> }], { hydrationData: { loaderData: { root: { user: { id: scope.ownerId, username: 'synthetic-progress' }, dataPlane: 'home' } } } });
-createRoot(document.getElementById('root')!).render(<RouterProvider router={router} />);
+createRoot(document.getElementById('root')!).render(<React.StrictMode><RouterProvider router={router} /></React.StrictMode>);
 Object.assign(window, { progressFixture: { total: rows.length, layout: () => Object.values(JSON.parse(localStorage.getItem(layoutKey) || '{}')).find((page: any) => JSON.stringify(page.crystal.blocks).includes('sync-progress-title')) } });

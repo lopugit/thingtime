@@ -3,10 +3,10 @@ import test from 'node:test';
 import { IDBFactory, IDBKeyRange, IDBObjectStore } from 'fake-indexeddb';
 import { openSyncJournal } from './journal.client';
 import { newFileSyncConfiguration } from './configuration';
-import { INVENTORY_PIN_STORE, INVENTORY_PAGE_BYTES, INVENTORY_PAGE_ENTRIES } from './inventoryJournal';
-import { PLAN_PIN_STORE } from './pagedPlanJournal';
+import { INVENTORY_PIN_STORE, INVENTORY_STORES, INVENTORY_PAGE_BYTES, INVENTORY_PAGE_ENTRIES } from './inventoryJournal';
+import { PLAN_PIN_STORE, PLAN_STORES } from './pagedPlanJournal';
 import { REVIEW_DRAFT_STORES, type ReviewDraftSpec, type ReviewDraftCursor } from './pagedReviewDraft';
-import { type SyncEntry, type SyncScope } from './reconcile';
+import { syncScopeKey, type SyncEntry, type SyncScope } from './reconcile';
 import { createSyncRun } from './execute';
 import { createConflictReviewController } from './conflictReviewController';
 import type { PagedConflictReviewResult, PagedConflictReviewSession } from './pagedForegroundReview';
@@ -322,4 +322,106 @@ test('review controller preserves the page on read failure and gates incomplete 
 		else { await c.finish('retain'); assert.deepEqual(results, [{ action: 'retain', revision: page!.progress.revision }]); }
 		f.journal.close();
 	}
+});
+
+
+async function seedReviewStreams(f: Fixture, s: ReviewDraftSpec, streams: SyncEntry[][], complete = true) {
+	for (const [i, capture] of [s.plan.local, s.plan.remote, s.plan.baseline.local, s.plan.baseline.remote].entries()) {
+		const rows = streams[i]; await f.inventory.begin(capture);
+		for (let offset = 0, ordinal = 0; offset < rows.length || ordinal === 0; offset += 128, ordinal++) {
+			const entries = rows.slice(offset, offset + 128);
+			await f.inventory.append(capture, { ordinal, entries, ...(offset + entries.length === rows.length ? { totalEntries: rows.length } : {}) });
+		}
+		await f.inventory.seal(capture);
+	}
+	if (complete) await f.plans.build(s.plan); else await f.plans.begin(s.plan);
+}
+const initialSpec = (id: string, mode: 'backup' | 'upload' | 'download' | 'two-way' = 'backup', deletes = false) => {
+	const s = spec(id); s.configuration.mode = mode; s.configuration.propagateDeletes = deletes; s.plan.policy = { mode, propagateDeletes: deletes }; return s;
+};
+
+test('a new sealed initial-upload review proves zero conflicts without reading decisions and retains all run guards', async t => {
+	for (const mode of ['backup', 'upload'] as const) {
+		const f = await fixture(), s = initialSpec('proof-' + mode, mode);
+		s.plan.ignoreRules = '*.tmp'; s.configuration.configurationVersion = 2; s.configuration.ignoreRules = '*.tmp';
+		s.plan.excludedPaths = ['excluded']; s.configuration.excludedPaths = ['excluded'];
+		const local = [...Array.from({ length: 270 }, (_, i) => file('file-' + String(i).padStart(5, '0'), 'local')), file('drop.tmp', 'local'), file('excluded', 'local')];
+		await seedReviewStreams(f, s, [local, [], [], []]);
+		let cursor: Parameters<typeof f.plans.read>[1], total = 0, conflicts = 0;
+		do { const page = await f.plans.read(s.plan, cursor); total += page.decisions.length; conflicts += page.decisions.filter(d => d.kind === 'conflict').length; cursor = page.next ?? undefined; } while (cursor);
+		assert.equal(conflicts, 0); assert.equal(total, 270);
+		const getAll = IDBObjectStore.prototype.getAll; let decisionReads = 0;
+		const mock = t.mock.method(IDBObjectStore.prototype, 'getAll', function (this: IDBObjectStore, ...args: Parameters<typeof getAll>) {
+			if (this.name === PLAN_STORES[2]) decisionReads++; return getAll.apply(this, args);
+		});
+		const review = await f.drafts.build(s); assert.equal(review.phase, 'reviewing'); assert.equal(review.read, total); assert.equal(review.count, conflicts);
+		assert.equal(decisionReads, 0); mock.mock.restore();
+		assert.equal((await f.drafts.active())!.spec.id, s.id);
+		await assert.rejects(f.inventory.discard(s.plan.local), /pinned/); await assert.rejects(f.plans.discard(s.plan), /pinned/);
+		await assert.rejects(f.drafts.begin(initialSpec('another')), /existing conflict review/);
+		await assert.rejects(f.journal.persist(createSyncRun({ scope, decisions: [] })), /Resume the paged sync journal/);
+		const runs = f.journal.pagedRuns(f.access), run = { id: s.id, plan: s.plan, configuration: s.configuration };
+		await runs.begin(run); await assert.rejects(runs.start(run), /incomplete/); await assert.rejects(runs.claimNext(run), /Start/);
+		await f.drafts.release(s); await assert.rejects(f.plans.discard(s.plan), /pinned/); f.journal.close();
+	}
+});
+
+test('initial-upload review shortcut refuses incomplete plans, missing bindings, replaced inputs and changed counts', async () => {
+	for (const fault of ['incomplete', 'missing-instance', 'replaced', 'same-instance-count']) {
+		const f = await fixture(), s = initialSpec('proof-reject');
+		await seedReviewStreams(f, s, [[file('file', 'local')], [], [], []], fault !== 'incomplete');
+		if (fault === 'missing-instance') await new Promise<void>((resolve, reject) => {
+			const request = f.factory.open('review-drafts'); request.onerror = () => reject(request.error);
+			request.onsuccess = () => { const db = request.result, tx = db.transaction(PLAN_STORES[0], 'readwrite'), store = tx.objectStore(PLAN_STORES[0]);
+				const get = store.get([syncScopeKey(scope), s.plan.id]); get.onsuccess = () => { const h = get.result; delete h.inputInstances; store.put(h, [syncScopeKey(scope), s.plan.id]); };
+				tx.oncomplete = () => { db.close(); resolve(); }; tx.onabort = () => { db.close(); reject(tx.error); };
+			};
+		});
+		if (fault === 'same-instance-count') await new Promise<void>((resolve, reject) => {
+			const request = f.factory.open('review-drafts'); request.onerror = () => reject(request.error);
+			request.onsuccess = () => { const db = request.result, tx = db.transaction(INVENTORY_STORES[0], 'readwrite'), store = tx.objectStore(INVENTORY_STORES[0]);
+				const get = store.get([syncScopeKey(scope), s.plan.remote.id]); get.onsuccess = () => {
+					const h = get.result; h.entries = h.validatedEntries = 1; h.validatedThrough = 'unexpected';
+					store.put(h, [syncScopeKey(scope), s.plan.remote.id]);
+				};
+				tx.oncomplete = () => { db.close(); resolve(); }; tx.onabort = () => { db.close(); reject(tx.error); };
+			};
+		});
+		if (fault === 'replaced') {
+			await f.inventory.discard(s.plan.local); await f.inventory.begin(s.plan.local);
+			await f.inventory.append(s.plan.local, { ordinal: 0, entries: [file('file', 'local')], totalEntries: 1 }); await f.inventory.seal(s.plan.local);
+		}
+		await assert.rejects(f.drafts.begin(s), /complete unchanged plan|inventory changed/);
+		assert.equal(await f.drafts.active(), null); f.journal.close();
+	}
+});
+
+test('review shortcut conservatively scans other policies or populated destination and baseline', async () => {
+	const local = file('file', 'local'), remote = { ...local, id: 'remote-copy' }, old = file('old', 'local');
+	for (const [mode, deletes, streams] of [
+		['two-way', false, [[local], [], [], []]], ['download', false, [[local], [], [], []]],
+		['upload', true, [[local], [], [], []]], ['backup', true, [[local], [], [], []]],
+		['backup', false, [[local], [remote], [], []]], ['backup', false, [[local], [], [old], [old]]]
+	] as const) {
+		const f = await fixture(), s = initialSpec('proof-fallback', mode, deletes);
+		await seedReviewStreams(f, s, streams.map(rows => [...rows]));
+		if (mode === 'backup' && deletes) { await assert.rejects(f.drafts.begin(s), /Backup always retains/); f.journal.close(); continue; }
+		const begun = await f.drafts.begin(s); assert.equal(begun.phase, 'indexing'); assert.equal(begun.read, 0);
+		assert.equal((await f.drafts.build(s)).phase, 'reviewing'); f.journal.close();
+	}
+});
+
+test('an existing indexing review keeps its durable scan even when its completed plan now proves no conflicts', async () => {
+	const f = await fixture(), s = initialSpec('proof-existing');
+	await seedReviewStreams(f, s, [[...Array.from({ length: 270 }, (_, i) => file('file-' + i, 'local'))], [], [], []]);
+	await f.drafts.begin(s);
+	await new Promise<void>((resolve, reject) => {
+		const request = f.factory.open('review-drafts'); request.onerror = () => reject(request.error);
+		request.onsuccess = () => { const db = request.result, tx = db.transaction(REVIEW_DRAFT_STORES[0], 'readwrite'), store = tx.objectStore(REVIEW_DRAFT_STORES[0]);
+			const get = store.get([syncScopeKey(scope), s.id]); get.onsuccess = () => { const h = get.result; h.phase = 'indexing'; h.read = 0; store.put(h, [syncScopeKey(scope), s.id]); };
+			tx.oncomplete = () => { db.close(); resolve(); }; tx.onabort = () => { db.close(); reject(tx.error); };
+		};
+	});
+	assert.equal((await f.drafts.begin(s)).phase, 'indexing'); assert.equal((await f.drafts.step(s)).read, 128);
+	assert.equal((await f.drafts.build(s)).read, 270); f.journal.close();
 });

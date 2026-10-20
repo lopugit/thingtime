@@ -12588,3 +12588,21 @@ separate from deterministic discovery/lease tests.
   upload order and cloud receipts after restart. No local deletion is justified
   by a queued priority or by partial coverage. Independently prove complete remote
   content, including Git/worktree dependencies, before local offload.
+
+### Cached sync-screen startup and preparation throughput — 2026-10-20
+
+- [x] Mount cached connection progress with a parent lifecycle scope guard,
+  including React StrictMode. Saved upload priorities must load automatically
+  without Reload or a false account-change alert. The old passive-effect guard
+  reproduces the failure; the committed-lifetime guard passes the complete
+  isolated desktop/mobile progress and Builder suite.
+- [x] Verify ignore-rule caching against fresh uncached decisions, including
+  negation, excluded parents, Unicode/case boundaries, eviction and rule changes.
+  Compare a repeated-sibling synthetic benchmark before and after the change.
+- [x] Prove the completed initial-upload plan cannot contain conflicts before
+  skipping its new review scan. All other plans and legacy unbound inputs must
+  retain the existing path. Confirm input replacement and incomplete plans fail.
+- [ ] Upgrade the signed installed app and reopen the cached sync screen without
+  pressing Reload. Confirm preparation resumes at the saved cursor and measure
+  its progress. Actual payload receipts and independently downloaded bytes remain
+  required before declaring the home upload working.

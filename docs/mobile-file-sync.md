@@ -3756,6 +3756,13 @@ remote backup verification and local removal are separate unfinished work;
 this feature never removes local files. Isolated editable UI checks pass;
 installed priority-order and complete-upload acceptance remain pending.
 
+The connection screen activates its mounted scope guard in the layout commit
+before child passive effects read priorities. Cleanup invalidates that guard
+synchronously; real identity/origin changes still reject reads. This avoids a
+false account-change error when cached connection data renders immediately.
+Isolated StrictMode checks exercise first-load and saved-layout reload without
+requiring the user to press Reload saved priorities.
+
 For an initial upload/backup with deletes disabled and sealed empty destination
 and baseline inventories, planning skips the changed-ancestor pass. The sealed
 local inventory already proves path uniqueness and folder ancestry. Decisions
@@ -3764,3 +3771,18 @@ ancestor flags for checkpoint protection. An older indexing pass may migrate
 only after revalidating every input instance, count, sealed state and plan pin.
 All other plans retain the two-pass path. This reduces preparation work; it is
 not evidence of uploaded content or a complete backup.
+
+Planning evaluates exclusion eligibility once per candidate and reuses one
+compiled policy across pages. Its folder-prefix LRU is bounded to 2,048 records
+and 1 MiB of accounted key/result payload; eviction changes only computation.
+Changing rules or explicit exclusions discards the previous policy cache.
+File rows, authority, confirmations and operation receipts are never cached by
+this optimization. Gitignore negation and ignored-parent behavior remain the
+same, including the default inclusion of `.git` data.
+
+A new review draft may skip reading every decision only when its exact completed
+plan proves an initial backup/upload with no destination or baseline entries and
+deletes disabled. Admission rechecks all four sealed inventory instances and
+counts, then publishes review/input pins atomically. Older unbound plans do not
+qualify; already-started review drafts retain their existing scan. Preparing
+operations and cloud bindings still validates every row before execution.

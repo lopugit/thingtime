@@ -99,19 +99,41 @@ function parse(text: string): Rule[] {
 }
 export type SyncIgnoreExplanation = { ignored: boolean; source: 'exact' | 'rule' | 'none'; path: string; rule?: string; line?: number; parent?: string };
 export function createSyncIgnorePolicy(ignoreRules?: string, excludedPaths: readonly string[] = []) {
-	const text = canonicalIgnoreRules(ignoreRules), rules = parse(text), exact = excludedPaths.map(syncPathKey);
+	const text = canonicalIgnoreRules(ignoreRules), rules = parse(text), excluded = [...excludedPaths], exact = excluded.map(syncPathKey);
+	// Folder results depend only on this immutable policy and exact path. Keep
+	// both payload and entry count bounded; eviction changes only CPU work.
+	const folderCache = new Map<string, { result: Omit<SyncIgnoreExplanation, 'path' | 'parent'>; bytes: number }>();
+	const encoder = new TextEncoder(); let cachedBytes = 0;
+	const rememberFolder = (path: string, result: SyncIgnoreExplanation) => {
+		const detail = { ignored: result.ignored, source: result.source, ...(result.source === 'rule' ? { rule: result.rule!, line: result.line! } : {}) };
+		const bytes = encoder.encode(path).length + encoder.encode(JSON.stringify(detail)).length + 128;
+		if (bytes > 1024 * 1024) return;
+		while (folderCache.size >= 2048 || cachedBytes + bytes > 1024 * 1024) {
+			const oldest = folderCache.keys().next().value!;
+			cachedBytes -= folderCache.get(oldest)!.bytes; folderCache.delete(oldest);
+		}
+		folderCache.set(path, { result: detail, bytes }); cachedBytes += bytes;
+	};
 	const explain = (path: string, kind: 'file' | 'folder' = 'file'): SyncIgnoreExplanation => {
 		if (!validSyncPath(path)) throw Error('Test a relative path inside the selected folder.');
 		const key = syncPathKey(path), hard = exact.find(prefix => key === prefix || key.startsWith(prefix + '/'));
-		if (hard) return { ignored: true, source: 'exact', path, rule: excludedPaths[exact.indexOf(hard)] };
+		if (hard) return { ignored: true, source: 'exact', path, rule: excluded[exact.indexOf(hard)] };
 		if (!rules.length) return { ignored: false, source: 'none', path };
 		const parts = path.split('/'); let result: SyncIgnoreExplanation = { ignored: false, source: 'none', path };
 		for (let n = 1; n <= parts.length; n++) {
 			const current = parts.slice(0, n).join('/'), directory = n < parts.length || kind === 'folder';
+			const cached = directory ? folderCache.get(current) : undefined;
+			if (cached) {
+				folderCache.delete(current); folderCache.set(current, cached);
+				result = { ...cached.result, path, ...(cached.result.source === 'rule' && n < parts.length ? { parent: current } : {}) };
+				if (result.ignored) return result;
+				continue;
+			}
 			let winner: Rule | undefined;
 			for (const rule of rules) if ((!rule.directory || directory) && match(rule.tokens, rule.basename ? parts[n - 1] : current)) winner = rule;
 			if (winner) result = { ignored: !winner.negative, source: 'rule', path, rule: winner.pattern, line: winner.line, ...(n < parts.length ? { parent: current } : {}) };
 			else result = { ignored: false, source: 'none', path };
+			if (directory) rememberFolder(current, result);
 			// Git cannot reinclude a child while its parent directory is ignored.
 			if (result.ignored && directory) return result;
 		}

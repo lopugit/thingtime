@@ -65,6 +65,13 @@ export const validatePagedPlanHeader = (h: PagedPlanHeader, spec: PagedPlanSpec,
 		throw Error('Sync plan changed or is unavailable.');
 };
 
+/** Structural proof over an exact, fully completed, instance-bound plan. No
+ * optional conflict counter from an older journal participates in this proof. */
+export function provesConflictFreeInitialUpload(h: PagedPlanHeader, spec: PagedPlanSpec, key: string): boolean {
+	validatePagedPlanHeader(h, spec, key);
+	return h.phase === 'complete' && !!h.inputInstances && initialUpload(spec, h.totals) && h.indexed === h.totals[0];
+}
+
 export function upgradePagedPlanJournal(db: IDBDatabase) {
 	for (const store of [...STORES, PLAN_PIN_STORE]) if (!db.objectStoreNames.contains(store)) db.createObjectStore(store);
 }
@@ -78,6 +85,12 @@ export function upgradePagedPlanJournal(db: IDBDatabase) {
 export function pagedPlanJournal(db: IDBDatabase, access: JournalAccess, keyRange?: typeof IDBKeyRange) {
 	const { scope, key, check, range, transaction, readPage } = journalScope(db, access, keyRange);
 	const inventory = inventoryJournal(db, access, keyRange);
+	let cachedIgnore: { key: string; policy: ReturnType<typeof createSyncIgnorePolicy> } | undefined;
+	const ignorePolicy = (spec: PagedPlanSpec) => {
+		const key = JSON.stringify([spec.ignoreRules ?? '', spec.excludedPaths]);
+		if (cachedIgnore?.key !== key) cachedIgnore = { key, policy: createSyncIgnorePolicy(spec.ignoreRules, spec.excludedPaths) };
+		return cachedIgnore.policy;
+	};
 	const validate = (h: Header, spec: PagedPlanSpec) => validatePagedPlanHeader(h, spec, key);
 	const withHeader = <T>(spec: PagedPlanSpec, mode: IDBTransactionMode,
 		work: (header: Header, tx: IDBTransaction, done: (result: T) => void, fail: (error: unknown) => void) => void) =>
@@ -169,9 +182,9 @@ export function pagedPlanJournal(db: IDBDatabase, access: JournalAccess, keyRang
 		}));
 		check();
 		const positions = structuredClone(header.positions), offsets = [0, 0, 0, 0];
-		const rows: SyncPathObservation[] = [], flags: [string, number][] = [];
+		const rows: SyncPathObservation[] = [], includedRows: boolean[] = [], flags: [string, number][] = [];
 		const exclusions = spec.excludedPaths.map(syncPathKey);
-		const ignore = createSyncIgnorePolicy(spec.ignoreRules, spec.excludedPaths);
+		const ignore = ignorePolicy(spec);
 		const included = (row: SyncPathObservation) => !ignore.ignored(row.path, (row.local ?? row.remote ?? row.beforeLocal ?? row.beforeRemote)!.kind);
 		let usedBytes = 0;
 		while (rows.length < INVENTORY_PAGE_ENTRIES) {
@@ -186,12 +199,12 @@ export function pagedPlanJournal(db: IDBDatabase, access: JournalAccess, keyRang
 			if (entries.some(e => e && e.path !== path)) throw Error('Case or Unicode filename collision requires review.');
 			if (!sameSyncContent(entries[2], entries[3])) throw Error('Sync baseline must contain confirmed matching content.');
 			const row: SyncPathObservation = { path, local: entries[0], remote: entries[1], beforeLocal: entries[2], beforeRemote: entries[3] };
-			const rowFlags: [string, number][] = [];
-			if ((header.phase === 'indexing' || firstUpload) && !included(row)) {
+			const rowFlags: [string, number][] = [], include = included(row);
+			if ((header.phase === 'indexing' || firstUpload) && !include) {
 				const parts = path.split('/');
 				for (let n = 1; n < parts.length; n++) rowFlags.push([syncPathKey(parts.slice(0, n).join('/')), 2]);
 			}
-			if (header.phase === 'indexing' && included(row)) for (let side = 0; side < 2; side++) {
+			if (header.phase === 'indexing' && include) for (let side = 0; side < 2; side++) {
 				if (!entries[side] || sameSyncStamp(entries[side], entries[side + 2])) continue;
 				const parts = path.split('/');
 				for (let n = 1; n < parts.length; n++) rowFlags.push([syncPathKey(parts.slice(0, n).join('/')), side]);
@@ -201,7 +214,7 @@ export function pagedPlanJournal(db: IDBDatabase, access: JournalAccess, keyRang
 				if (!rows.length) throw Error('Sync plan row exceeds its byte bound.');
 				break;
 			}
-			rows.push(row); flags.push(...rowFlags); usedBytes += size;
+			rows.push(row); includedRows.push(include); flags.push(...rowFlags); usedBytes += size;
 			entries.forEach((entry, i) => { if (entry) { offsets[i]++; positions[i] = { after: pathKey, read: positions[i].read + 1 }; } });
 		}
 		const finished = positions.every((p, i) => p.read === header.totals[i]);
@@ -232,7 +245,7 @@ export function pagedPlanJournal(db: IDBDatabase, access: JournalAccess, keyRang
 				save(); return;
 			}
 			next.planned += rows.length;
-			const selected = rows.filter(included); let pending = selected.length;
+			const selected = rows.filter((_row, index) => includedRows[index]); let pending = selected.length;
 			if (!pending) { save(); return; }
 			if (firstUpload) {
 				for (const row of selected) {

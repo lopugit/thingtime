@@ -2,7 +2,7 @@ import { canRetainFileConflicts, conflictCopySides, type SyncConflict } from './
 import { INVENTORY_PIN_STORE, INVENTORY_PAGE_BYTES, INVENTORY_PAGE_ENTRIES, INVENTORY_STORES, validateInventoryHeader, type InventoryHeader } from './inventoryJournal';
 import { journalScope, type JournalAccess } from './journalScope';
 import { JOURNAL_RETENTION_STORE, metadataKey, registerJournalMetadata } from './journalRetention';
-import { pagedPlanJournal, PLAN_PIN_STORE, PLAN_STORES, validSyncDecision, validatePagedPlanHeader, type PagedPlanHeader, type PagedPlanCursor } from './pagedPlanJournal';
+import { pagedPlanJournal, provesConflictFreeInitialUpload, PLAN_PIN_STORE, PLAN_STORES, validSyncDecision, validatePagedPlanHeader, type PagedPlanHeader, type PagedPlanCursor } from './pagedPlanJournal';
 import { parsePagedRunSpec, type PagedRunSpec } from './pagedRunJournal';
 import { parseReviewedConflict, type PagedRunReview, type ReviewedSyncConflict } from './pagedRunReview';
 import { sameSyncScope, syncScopeKey, syncPathKey, validSyncPath, validSyncPathKey, type SyncScope, type SyncSide } from './reconcile';
@@ -107,14 +107,15 @@ export function reviewDraftJournal(db: IDBDatabase, access: JournalAccess, keyRa
 						check(); const p: PagedPlanHeader = plan.result; validatePagedPlanHeader(p, s.plan, key);
 						if (p.phase !== 'complete' || !p.inputInstances || (existing && (existing.planInstance !== p.instance || existing.total !== p.decisions))) throw Error('A conflict review requires a complete unchanged plan.');
 						if (existing) { done(progress(existing)); return; }
+						const conflictFree = provesConflictFreeInitialUpload(p, s.plan, key);
 						const h: ReviewDraftHeader = { spec: s, scope: key, instance: crypto.randomUUID(), planInstance: p.instance,
-							phase: 'indexing', read: 0, total: p.decisions, count: 0, selected: 0, blocked: 0, retentionBlocked: 0, revision: 0, next: null };
+							phase: conflictFree ? 'reviewing' : 'indexing', read: conflictFree ? p.decisions : 0, total: p.decisions, count: 0, selected: 0, blocked: 0, retentionBlocked: 0, revision: 0, next: null };
 						let remaining = 4;
 						inputs(s).forEach((input, i) => {
 							const get = tx.objectStore(INVENTORY_STORES[0]).get([key, input.id]);
 							get.onsuccess = () => { try {
 								check(); const capture: InventoryHeader = get.result; validateInventoryHeader(capture, input, key);
-								if (capture.phase !== 'complete' || capture.instance !== p.inputInstances![i]) throw Error('Reviewed inventory changed.');
+								if (capture.phase !== 'complete' || capture.instance !== p.inputInstances![i] || capture.entries !== p.totals[i]) throw Error('Reviewed inventory changed.');
 								tx.objectStore(INVENTORY_PIN_STORE).put(true, [key, input.id, s.id, 'review']);
 								if (--remaining) return;
 								validate(h, s); tx.objectStore(REVIEW_DRAFT_STORES[0]).add(h, [key, s.id]);

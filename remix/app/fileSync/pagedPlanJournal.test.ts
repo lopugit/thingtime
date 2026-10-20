@@ -336,3 +336,17 @@ test('initial empty-target shortcut falls back for other modes, deletion policy 
 		assert.equal((await f.plans.begin(s)).phase, 'indexing'); f.journal.close();
 	}
 });
+
+
+test('planner policy caches preserve decisions when immutable plan rules and exclusions change', async () => {
+	const f = await fixture(), first = spec('cached-first', { mode: 'backup', propagateDeletes: false });
+	first.ignoreRules = 'dir/\n!dir/\n*.tmp';
+	const local = [folder('dir'), file('dir/keep.tmp'), file('dir/drop.tmp'), ...Array.from({ length: 260 }, (_, i) => file('dir/file-' + i))];
+	await seed(f, first, local, []); await f.plans.build(first);
+	assert.ok(!(await decisions(f, first)).some(d => d.path === 'dir/keep.tmp'));
+	const next = { ...first, id: 'cached-next', ignoreRules: first.ignoreRules + '\n!keep.tmp' };
+	await f.plans.build(next); assert.ok((await decisions(f, next)).some(d => d.path === 'dir/keep.tmp'));
+	const excluded = { ...next, id: 'cached-excluded', excludedPaths: ['dir/keep.tmp'] };
+	await f.plans.build(excluded); assert.ok(!(await decisions(f, excluded)).some(d => d.path === 'dir/keep.tmp'));
+	assert.ok(!(await decisions(f, first)).some(d => d.path === 'dir/keep.tmp')); f.journal.close();
+});
