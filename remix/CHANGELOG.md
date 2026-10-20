@@ -80,6 +80,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-19 — Combined installed build preserves native Passwords disconnect-before-authority-change and private-service proxy behavior alongside editable ChatGPT/runtime settings. Integration PR #1035 remains separate from the feature promotion.
+
 - 2026-10-19 — **Codex (AI)**: Installed ChatGPT-plan acceptance passed fresh text, same-chat follow-up, a read-only Things tool roundtrip and saved model/conversation/Builder layout persistence; retain local execution placement and idempotent settings updates. [PR #1034 evidence](../PRs/1034-chatgpt-plan-usage-local-runtime-and-encrypted-connection-moves.md).
 
 - 2026-10-19 — **Codex (AI)**: Desktop connection, local runtime and session recovery now use editable Builder documents with offline persistence, private account webpage adapters, revision/origin fences and transient native controls. Focused persistence/SSR tests, isolated desktop/mobile fixtures and installed account-owned Builder edit-save-reload checks pass.
@@ -133,6 +135,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 
 - 2026-10-18: Fix incident cleanup to recognize the automatic logout history entry, bound to the revoked test session; retain strict content and actor checks. Production dry-run caught this mismatch before any deletion.
+
+- 2026-10-18: Restore installed desktop password/mail requests by preserving Nitro request interfaces during the selected-origin handoff; add Passwords to sidebar and Commander navigation. See [PR #996 notes](../PRs/996-codex-password-manager--encrypted-password-manager-and-apple-credential-providers.md).
+
+- **2026-10-18 · Native password provider:** repair Developer ID archive/export, verify the exact signer and bundle-specific AutoFill profiles, and wrap the setup instructions. Signed macOS installation now succeeds; the provider is enabled and connected; OS credential ceremonies require user verification. [PR #996 evidence](../PRs/996-codex-password-manager--encrypted-password-manager-and-apple-credential-providers.md). — **Codex (AI)**
 
 
 - 2026-10-18 — **Codex (AI)**: Remove implicit production API forwarding from
@@ -204,18 +210,25 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   account with draft requests blocked; no production account data changed.
   Details: [PR #999](../PRs/999-codex-independent-post-draft-saving--fix-posting-blocked-by-draft-saving-failures.md).
 
+- 2026-10-15 — **Codex (AI)**: Native Password AutoFill explicitly uses the
+  data-protection Keychain so macOS enforces the shared access group and
+  device-only accessibility. Missing signing-group configuration fails closed.
+  See [PR #996](../PRs/996-codex-password-manager--encrypted-password-manager-and-apple-credential-providers.md).
+
 - 2026-10-15 — **Codex (AI)**: Add isolated no-login native draft previews and the stdio MCP `thingtime_render_and_export` tool, reusing canonical transfers, schema validation and native renderers. Return bounded JSON/PNG artifacts with diagnostics, rejecting transparent CSS Color 4 text and zero-size fonts; keep Actions, account data, assets and publishing unavailable. Local clean-browser and disposable importer verification: [PR #998 evidence](../PRs/998-codex-anonymous-render-export--no-login-native-draft-rendering.md).
 
+- 2026-10-15 — **Codex (AI)**: Deliver the web password vault separately from native Apple provisioning; reject internal Action principals at the vault boundary even with a bearer header. [Web release #997](../PRs/997-codex-password-manager-web--encrypted-web-password-manager.md); native providers remain in #996.
 
-- 2026-10-15 — **Codex (AI)**: Add a private password library using reusable
-  Thing field mods, account/session encryption and server-assisted recovery,
-  TOTP QR imports and capture cleanup, and 1Password/Chrome/Apple import/export.
-  Reject internal Action principals at the vault boundary even when they carry
-  an Authorization header.
-  Keep native providers in a separate release so Apple provisioning does not
-  block the web vault or existing native packaging. Correct managed worktree
-  port identity and prune non-target image binaries from Vercel functions.
-  [Setup and security model](../docs/password-manager.md); [PR #997 validation](../PRs/997-codex-password-manager-web--encrypted-web-password-manager.md).
+- 2026-10-15 — **Codex (AI)**: Password-manager preview QA confirms encrypted HTTPS/native persistence and responsive layout; cancel pending QR scans on editor closure and refresh native credential catalogs after edits. Native identity updates are ordered through logout; iOS background sync preserves active connections for the same owner. Native signing remains gated by the Apple agreement/profiles. [PR #996 details](../PRs/996-codex-password-manager--encrypted-password-manager-and-apple-credential-providers.md).
+
+- 2026-10-15 — **Codex (AI)**: Add a private password library using Thing field
+  mods, account/session encryption with approved server-assisted recovery,
+  TOTP QR imports, 1Password/Chrome/Apple transfer and shared Apple credential
+  provider targets. Restrict desktop credential forwarding to the selected
+  HTTPS account endpoint; distinguish managed worktree names to prevent PM2
+  collisions. Prune non-target image binaries from server packages so local
+  cross-platform installs fit Vercel function limits. Setup: [password manager](../docs/password-manager.md).
+  Validation and remaining native gates: [PR #996](../PRs/996-codex-password-manager--encrypted-password-manager-and-apple-credential-providers.md).
 
 - 2026-10-13 — **Claude (AI)**: Unified Timeline named versions, undo this
   change, compare with now and version export (`api.timeline` 1.18.0): new

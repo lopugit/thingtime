@@ -84,6 +84,8 @@ fences and secret-free native catalog projections; `auth/vaultEnvelope.ts` and
 intentionally bypasses general request diagnostics and automatic origin fallback
 so decrypted fields never enter shared client history/cache. The reusable
 `Thingtime` fields mod renders the entry without global Thing persistence.
+Native integrations live in `apple/Passwords`, `apple/PasswordProvider`,
+`iOS/Thingtime/Web/PasswordBridge.swift` and `electron/lib/password-provider.cjs`.
 Native provider implementation and signed release are tracked separately in
 [PR #996](https://github.com/lopugit/thingtime/pull/996); this release exposes the
 private catalog and negotiates an optional supported native bridge.

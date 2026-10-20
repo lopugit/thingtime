@@ -1,3 +1,4 @@
+import { verifyPasswordProvider } from './verify-password-provider.mjs';
 import { existsSync } from 'node:fs';
 import { access, readdir } from 'node:fs/promises';
 import path from 'node:path';
@@ -37,8 +38,8 @@ function parseArguments(values) {
 	let requireAgentBrowser = false;
 	for (let index = 0; index < values.length; index += 1) {
 		const value = values[index];
-		if (value === '--require-agent-browser') { requireAgentBrowser = true; continue; }
 		if (value === '--require-bundled-mongo') { requireBundledMongo = true; continue; }
+		if (value === '--require-agent-browser') { requireAgentBrowser = true; continue; }
 		if (value === '--mode') {
 			mode = values[index + 1] || '';
 			index += 1;
@@ -52,7 +53,7 @@ function parseArguments(values) {
 	if (!['local', 'production', 'runtime'].includes(mode)) {
 		throw new Error('Signature verification mode must be local, production, or runtime.');
 	}
-	return { requireBundledMongo, requireAgentBrowser, appArgument, mode };
+	return { requireBundledMongo, appArgument, mode, requireAgentBrowser };
 }
 
 function run(command, args, label) {
@@ -64,7 +65,7 @@ function run(command, args, label) {
 	return `${result.stdout || ''}\n${result.stderr || ''}`;
 }
 
-const { requireBundledMongo, requireAgentBrowser, appArgument, mode } = parseArguments(process.argv.slice(2));
+const { requireBundledMongo, appArgument, mode, requireAgentBrowser } = parseArguments(process.argv.slice(2));
 const appPath = appArgument ? path.resolve(appArgument) : await findBuiltApp();
 const helperApp = path.join(appPath, 'Contents', 'Helpers', 'Thingtime Node.app');
 const helperExecutable = path.join(helperApp, 'Contents', 'MacOS', 'ThingtimeNode');
@@ -80,6 +81,8 @@ const signature = await verifySignedArtifacts({
 	runtimePath
 }, undefined, { mode });
 
+await verifyPasswordProvider(path.join(appPath, 'Contents/Helpers/Thingtime Passwords.app'), { teamIdentifier: signature.teamIdentifier });
+
 const desktopDisplay = run('/usr/bin/codesign', ['--display', '--verbose=4', appPath], 'Thingtime signing detail check');
 const desktop = parseCodeSignatureDetails(desktopDisplay);
 const desktopRequirement = run('/usr/bin/codesign', ['--display', '--requirements', '-', appPath], 'Thingtime designated-requirement check');
@@ -92,13 +95,13 @@ if (mode === 'production') {
 	run('/usr/bin/xcrun', ['stapler', 'validate', appPath], 'Thingtime notarization staple validation');
 }
 
+verifyAgentPackage(appPath, undefined, { required: requireAgentBrowser });
 // Never execute candidate code before signature/Gatekeeper verification.
 // New builds enforce this pin and execute it; old release restoration accepts
 // its own signed resources and works on macOS 13 with local DB disabled.
 const mongoRoot = path.join(appPath, 'Contents', 'Resources', 'database', 'mongodb');
 if (requireBundledMongo || existsSync(mongoRoot))
 	await verifyBundledMongo(mongoRoot, { pinned: requireBundledMongo, execute: requireBundledMongo });
-verifyAgentPackage(appPath, undefined, { required: requireAgentBrowser });
 console.log(`Verified ${appPath}`);
 console.log(`Identifier: ${desktop.identifier}`);
 console.log(`SignatureMode: ${signature.identityClass}`);

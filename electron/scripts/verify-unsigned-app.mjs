@@ -1,4 +1,5 @@
 import { existsSync } from 'node:fs';
+import { verifyPasswordProvider } from './verify-password-provider.mjs';
 import { access } from 'node:fs/promises';
 import path from 'node:path';
 import { createRequire } from 'node:module';
@@ -29,8 +30,9 @@ await verifyUnsignedArtifacts({
     outerApp: appPath,
     runtimePath
 });
+await verifyPasswordProvider(path.join(contentsPath, 'Helpers/Thingtime Passwords.app'), { unsigned: true });
+verifyAgentPackage(appPath, undefined, { required: true });
 const mongoRoot = path.join(contentsPath, 'Resources', 'database', 'mongodb');
 if (requireBundledMongo || existsSync(mongoRoot))
     await verifyBundledMongo(mongoRoot, { pinned: requireBundledMongo, execute: requireBundledMongo });
-verifyAgentPackage(appPath, undefined, { required: true });
 console.log(`Verified unsigned Thingtime app ${appPath}`);

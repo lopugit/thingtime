@@ -1,3 +1,4 @@
+import { DesktopSessionSettings } from './DesktopSessionSettings';
 import React from 'react';
 import type { ThingtimeDesktopInfo } from '~/utils/electronBridge';
 import { WebpageBlocksRenderer } from '../Builder/WebpageBlocksRenderer';

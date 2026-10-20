@@ -118,5 +118,10 @@ macos/ThingtimeWidgets/release-upload/
 .claude/launch.json
 .claude/settings.local.json
 
+# Credential provider generated projects and build output
+apple/Passwords/.build/
+apple/Passwords/.swiftpm/
+macos/ThingtimePasswords/*.xcodeproj/
+macos/ThingtimePasswords/build/
 # Query stamps are local even when a query targets a portable snapshot.
 graphify-out/snapshots/**/cache/last_query_stamp

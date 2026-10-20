@@ -161,6 +161,27 @@ test('development cleanup terminates a stubborn owned process group before retur
 	}
 });
 
+
+test('authority transition clears native credentials before durable settings and fails closed', () =>
+ fixture(async (runtime, root) => {
+  await runtime.initialize();
+  await runtime.configure({enabled:false,databaseMode:'managed'});
+  const previous = await fs.readFile(runtime.file);
+  const request = {enabled:true,databaseMode:'external',mongoUri:'mongodb://fixture:synthetic@127.0.0.1:19882/thingtime'};
+  await assert.rejects(runtime.configure(request, async () => { throw new Error('native clear failed'); }), /native clear failed/);
+  assert.deepEqual(await fs.readFile(runtime.file),previous);
+  assert.equal(runtime.snapshot().enabled,false);
+  let called = false;
+  await runtime.configure(request, async () => {
+   called=true; assert.deepEqual(await fs.readFile(runtime.file),previous);
+  });
+  assert.equal(called,true);
+  assert.equal(runtime.snapshot().enabled,true);
+  let invalidCallback=false;
+  await assert.rejects(runtime.configure({...request,mongoUri:'https://invalid.test'},async()=>{invalidCallback=true;}));
+  assert.equal(invalidCallback,false);
+ }));
+
 test('fresh local setup prefers bundled MongoDB while saved executable and database are preserved', () =>
  fixture(async (_runtime, root) => {
   const bundled = path.join(root, 'bundled', 'mongod');

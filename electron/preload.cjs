@@ -1,6 +1,8 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('thingtimeDesktop', {
+	passwordsVersion: process.platform === 'darwin' ? '1.0.0' : undefined,
+	passwordProvider: (request) => ipcRenderer.invoke('thingtime-desktop:password-provider', request),
 	agentBrowserVersion: process.platform === 'darwin' ? '1.0.0' : undefined,
 	agentBrowsers: request => ipcRenderer.invoke('thingtime-desktop:agent-browsers', request),
 	mailSyncVersion: '1.0.0',

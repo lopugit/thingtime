@@ -1026,6 +1026,7 @@ async function initializeDesktopSettings() {
   }
  });
  await localRuntime.initialize();
+ if (localRuntime.snapshot().enabled) await passwordProvider.disconnect();
 	desktopSettings = new DesktopSettingsStore({
 		filePath: path.join(app.getPath('userData'), 'desktop-settings.json'),
 		metadata: readWebBuildMetadata()
@@ -1438,10 +1439,11 @@ async function switchDesktopEndpointGuarded(endpointId, { confirm = true } = {})
  // Keep the running server pinned to its old endpoint until it exits.
  // Changing global proxy state in-place could redirect queued old-account
  // requests into the new API even after stopping the renderer.
+ await passwordProvider.disconnect();
  await settings.selectEndpoint(target.id);
  mainWindow?.webContents.stop();
  desktopSpeech.stop(); desktopMail.stop();
- restartDesktopRuntime();
+ await restartDesktopRuntime();
  return getDesktopInfo();
 }
 
@@ -1551,8 +1553,10 @@ async function desktopUploadMenuBarIcon(event) {
 	return { cancelled: false, settings: await selectMenuBarIcon('custom', targetPath) };
 }
 
-function restartDesktopRuntime() {
+async function restartDesktopRuntime() {
  mainWindow?.webContents.stop();
+ await passwordProvider.disconnect();
+ authorityTransition.retainUntilRestart();
  if (parallelDevMode) {
   if (!process.connected || typeof process.send !== 'function') throw new Error('Restart this development app through the parallel development launcher.');
   process.send({ type: 'thingtime-dev-restart' }, () => app.quit());
@@ -1572,7 +1576,7 @@ async function configureLocalRuntime(event, request) {
 }
 async function configureLocalRuntimeGuarded(event, request) {
  requireLocalRuntimeSender(event);
- await localRuntime.configure(request);
+ await localRuntime.configure(request, () => passwordProvider.disconnect());
  return getDesktopInfo();
 }
 async function changeDesktopSession(event, request, legacy) {
@@ -1597,7 +1601,7 @@ async function changeDesktopSessionGuarded(event, request, legacy) {
    detail: legacy ? `Only continue if ${previousContent} was the previous app address for this exact account API. Its cookies, local storage and IndexedDB will be reused in place. The newer workspace remains separate. Other historical app addresses are not merged. Thingtime will restart.` : 'The newer endpoint-specific workspace will be reopened. The previous workspace remains preserved and associated with this API. Thingtime will restart.'
   });
   if (result.response !== 1) return getDesktopInfo();
-  const beforeCommit = async () => { validateAuthority(); };
+  const beforeCommit = async () => { validateAuthority(); await passwordProvider.disconnect(); validateAuthority(); };
   if (legacy) await sessionAuthority.recover({ apiOrigin, contentOrigin: previousContent }, beforeCommit);
   else await sessionAuthority.useCurrent(apiOrigin, beforeCommit);
   authorityTransition.retainUntilRestart();
@@ -1817,6 +1821,9 @@ ipcMain.handle('thingtime-desktop:speech-stop', (event, request) => {
 	return desktopSpeech.stop(request.sessionId);
 });
 
+const passwordProvider = require('./lib/password-provider.cjs').createPasswordProvider({ app, root: __dirname, origin: () => appOrigin, endpoint: activeAccountEndpoint });
+ipcMain.handle('thingtime-desktop:password-provider', (event, request) => passwordProvider(event, request));
+
 ipcMain.handle('thingtime-desktop:mail-sync', (event, request) => desktopMail.sync(event, request));
 ipcMain.handle('thingtime-desktop:mail-cancel', (event, request) => desktopMail.cancel(event, request));
 ipcMain.handle('thingtime-desktop:get-info', () => getDesktopInfo());
@@ -1839,7 +1846,7 @@ ipcMain.handle('thingtime-desktop:configure-local-runtime', configureLocalRuntim
 ipcMain.handle('thingtime-desktop:recover-session', (event, request) => changeDesktopSession(event, request, true));
 ipcMain.handle('thingtime-desktop:use-current-session', (event, request) => changeDesktopSession(event, request, false));
 ipcMain.handle('thingtime-desktop:choose-local-mongod', chooseLocalMongod);
-ipcMain.handle('thingtime-desktop:restart-runtime', (event) => { requireLocalRuntimeSender(event); mainWindow?.webContents.stop(); restartDesktopRuntime(); });
+ipcMain.handle('thingtime-desktop:restart-runtime', async (event) => { requireLocalRuntimeSender(event); await restartDesktopRuntime(); });
 ipcMain.handle('thingtime-desktop:select-endpoint', (event, request) => desktopSelectEndpoint(event, request));
 ipcMain.handle('thingtime-desktop:check-endpoint-compatibility', (event) => desktopCheckEndpointCompatibility(event));
 ipcMain.handle('thingtime-desktop:select-menu-bar-icon', (event, request) => desktopSelectMenuBarIcon(event, request));
