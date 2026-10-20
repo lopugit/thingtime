@@ -65,6 +65,18 @@ final class ThingtimeAPIClientTests: XCTestCase {
         super.tearDown()
     }
 
+    func testFileSyncIdentityDiagnosticsContainOnlyBoundedStatusTimingAndCooldown() {
+        XCTAssertNil(ThingtimeAPIClient.fileSyncIdentityDiagnostic(status: 200, elapsedMilliseconds: 100, attempt: 0, cooldownSeconds: nil))
+        XCTAssertEqual(ThingtimeAPIClient.fileSyncIdentityDiagnostic(status: 429, elapsedMilliseconds: 321, attempt: 0, cooldownSeconds: 12),
+                       "File-sync identity: status=429 elapsedMilliseconds=321 attempt=0 retry=cooldown cooldownSeconds=12")
+        XCTAssertEqual(ThingtimeAPIClient.fileSyncIdentityDiagnostic(status: 200, elapsedMilliseconds: 14000, attempt: 1, cooldownSeconds: nil),
+                       "File-sync identity: status=200 elapsedMilliseconds=14000 attempt=1 retry=after-cooldown cooldownSeconds=0")
+        XCTAssertNil(ThingtimeAPIClient.fileSyncIdentityDiagnostic(status: 200, elapsedMilliseconds: 100, attempt: 0, cooldownSeconds: 12))
+        XCTAssertNil(ThingtimeAPIClient.fileSyncIdentityDiagnostic(status: 429, elapsedMilliseconds: -1, attempt: 0, cooldownSeconds: 12))
+        XCTAssertNil(ThingtimeAPIClient.fileSyncIdentityDiagnostic(status: 429, elapsedMilliseconds: 1, attempt: 0, cooldownSeconds: 61))
+        XCTAssertNil(ThingtimeAPIClient.fileSyncIdentityDiagnostic(status: 999, elapsedMilliseconds: 1, attempt: 0, cooldownSeconds: nil))
+    }
+
     func testFileSyncIdentityHonorsOneBoundedCooldownAndRevalidatesLive() async throws {
         MockURLProtocol.identityVersion = "1.0.0"; MockURLProtocol.retryAfter = "60"
         let credential = DeviceCredential(deviceID: "device", refreshToken: "ttnode_test", signingPrivateKey: Data(), signingPublicKey: Data())

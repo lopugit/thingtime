@@ -48,6 +48,10 @@ export type ForegroundSyncInput = {
 	currentScope(): SyncScope;
 	readConfiguration(): Promise<unknown>;
 	authorizeDevice(): Promise<void>;
+	/** Fresh native composite request; preserves the same authorization boundary. */
+	authorizeContext?(): Promise<SyncConditions>;
+	/** Trusted native adapter: IO authenticates independently; mutation policy stays fresh. Source construction performs no IO. */
+	nativeOperationGuards?: true;
 	conditions(): Promise<SyncConditions>;
 	scanLocal(): Promise<SyncEntry[]>;
 	/** Native durable revision feed; negotiated separately from sealed captures. */
@@ -89,7 +93,7 @@ export async function runForegroundCloudSync(
 	input: ForegroundSyncInput,
 	signal: AbortSignal
 ) {
-	const { configuration, approved, check, authorize, scan, readLocal, runtime, localTarget } = foregroundSyncContext(reviewed, scope, input, signal);
+	const { configuration, approved, check, authorize, scan, readLocal, openSource, runtime, localTarget } = foregroundSyncContext(reviewed, scope, input, signal);
 	const ignore = createSyncIgnorePolicy(configuration.ignoreRules, configuration.excludedPaths);
 	input.progress({ stage: 'checking', confirmed: 0, total: 0 });
 	await authorize();
@@ -255,10 +259,7 @@ export async function runForegroundCloudSync(
 				report(value);
 			},
 			readLocal,
-			openSource: async (entry) => {
-				await authorize();
-				return input.source(entry);
-			},
+			openSource,
 			localTarget,
 			signal,
 			transfer: input.transfer,

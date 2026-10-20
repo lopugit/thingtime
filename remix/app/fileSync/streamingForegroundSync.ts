@@ -35,7 +35,7 @@ export async function streamOneWayForegroundSync(
 		return;
 	const controller = new AbortController(),
 		signal = AbortSignal.any([outerSignal, controller.signal]);
-	const { check, authorize, runtime, readLocal, localTarget } = foregroundSyncContext(reviewed, scope, input, signal);
+	const { check, authorize, runtime, readLocal, openSource, localTarget } = foregroundSyncContext(reviewed, scope, input, signal);
 	const access = { scope, currentScope: input.currentScope, signal, cleanup: 'foreground' as const };
 	const runs = input.journal.pagedRuns(access),
 		inventory = input.journal.inventory(access),
@@ -95,10 +95,7 @@ export async function streamOneWayForegroundSync(
 			localTarget,
 			readLocal,
 			transfer: input.transfer,
-			openSource: async (entry) => {
-				await authorize();
-				return input.source(entry);
-			},
+			openSource,
 			progress: (path, bytes, size) => {
 				check();
 				input.progress({ stage: 'transferring', confirmed: state.confirmed, total: state.operations, indexed, path, bytes, size, ...coverage() });
@@ -133,7 +130,8 @@ export async function streamOneWayForegroundSync(
 		});
 	};
 	const cloudNode = async (path: string): Promise<CloudInventoryNode | null> => {
-		await authorize();
+		if (!input.nativeOperationGuards) await authorize();
+		check();
 		const entry = await readCloudPathEntry(runtime, scope, configuration.remoteFolderId, path, signal);
 		check();
 		if (!entry) return null;
@@ -161,7 +159,8 @@ export async function streamOneWayForegroundSync(
 				await wait(observed);
 				continue;
 			}
-			await authorize();
+			if (!input.nativeOperationGuards) await authorize();
+			check();
 			const source = local
 				? await readLocal(change.entry.path)
 				: await readCloudPathEntry(runtime, scope, configuration.remoteFolderId, change.entry.path, signal);

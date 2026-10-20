@@ -1,7 +1,7 @@
 import { parseFileSyncConfiguration, FILE_SYNC_IGNORE_REQUIREMENTS } from './configuration';
 import { planConfiguredFileSync, readOwnedFileSyncConfiguration, type SavedFileSyncConfiguration } from './configuredPlan';
 import { inventorySyncEntry, parseCloudInventory } from './cloudInventory';
-import { sameSyncScope, validSyncEntry, validSyncPath, type SyncScope } from './reconcile';
+import { sameSyncScope, validSyncEntry, validSyncPath, type SyncScope, type SyncEntry } from './reconcile';
 import type { CloudTransportRuntime } from './cloudTransport';
 import type { ForegroundSyncInput } from './foregroundSync';
 
@@ -33,9 +33,9 @@ export function foregroundSyncContext(reviewed: SavedFileSyncConfiguration, scop
 		check();
 		const current = readOwnedFileSyncConfiguration(await input.readConfiguration(), scope.ownerId);
 		check();
-		await input.authorizeDevice();
-		check();
-		const conditions = await input.conditions();
+		const conditions = input.authorizeContext ? await input.authorizeContext() : await (async () => {
+			await input.authorizeDevice(); check(); return input.conditions();
+		})();
 		check();
 		const result = planConfiguredFileSync({
 			saved: current,
@@ -74,6 +74,14 @@ export function foregroundSyncContext(reviewed: SavedFileSyncConfiguration, scop
 		if (entry !== null && (!validSyncEntry(entry) || entry.path !== path)) throw Error('Native path observation changed.');
 		return entry === null ? null : structuredClone(entry);
 	};
+	const openSource = async (entry: SyncEntry) => {
+		check();
+		if (!input.nativeOperationGuards) await authorize();
+		check();
+		const source = await input.source(entry);
+		check();
+		return source;
+	};
 	const runtime: CloudTransportRuntime = {
 		...input.runtime,
 		// Custom mutation policies must remain in the shared per-part path.
@@ -104,5 +112,5 @@ export function foregroundSyncContext(reviewed: SavedFileSyncConfiguration, scop
 		stage: async (...args: Parameters<typeof input.localTarget.stage>) => { await authorize(); return input.localTarget!.stage(...args); },
 		publish: async (...args: Parameters<typeof input.localTarget.publish>) => { await authorize(); return input.localTarget!.publish(...args); }
 	} : undefined;
-	return { configuration, approved, check, authorize, scan, scanCloud, readLocal, runtime, localTarget };
+	return { configuration, approved, check, authorize, scan, scanCloud, readLocal, openSource, runtime, localTarget };
 }

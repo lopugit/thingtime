@@ -158,6 +158,15 @@ requires full verification again. Explicit verification, status, service
 registration and release/install verification retain full outer checks. No TTL,
 mtime or filesystem-watcher cache authorizes launching a child.
 
+Folder-sync public capabilities are negotiated once for an exact live window,
+generation, selected/local origins, owner and device. Invalidation or a changed
+binding renegotiates. This feature snapshot never replaces fresh account checks
+before/after native requests or the helper's paired-device authorization. Mac
+file-access 1.12.0 combines authorized roots and conditions; its part source retains
+native pinned range and pre/post-PUT validation while the shared transport retains
+initial, pre-complete and final source verification. No whole-file capability is
+advertised by this part adapter.
+
 Electron invokes the signed `ThingtimeNodeBridge` as a bounded one-shot process.
 That bridge is the only process that talks to the node's Mach-service XPC
 endpoint. The node independently requires the same macOS user, an Apple-generic

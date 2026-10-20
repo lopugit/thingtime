@@ -142,6 +142,9 @@ export const supportsNativeIgnoreRules = (bridge: FolderCapabilities | undefined
 /** Mac 1.10 adds opt-in byte-bounded inventory batches. */
 export const supportsNativeInventoryBatches = (bridge: FolderCapabilities | undefined = getNativeBridge()) =>
 	bridge?.platform === 'macos' && /^1\.\d+\.\d+$/.test(bridge.fileAccessVersion ?? '') && Number(bridge.fileAccessVersion!.split('.')[1]) >= 10;
+/** Composite roots/conditions are sampled inside one freshly authorized native request. */
+export const supportsNativeAuthorizationContext = (bridge: FolderCapabilities | undefined) =>
+ bridge?.platform === 'macos' && /^1\.\d+\.\d+$/.test(bridge.fileAccessVersion ?? '') && Number(bridge.fileAccessVersion!.split('.')[1]) >= 12;
 export const supportsNativeStreamingIndex = (bridge: FolderCapabilities | undefined = getNativeBridge()) =>
 	bridge?.platform === 'macos' && /^1\.\d+\.\d+$/.test(bridge.fileAccessVersion ?? '') && Number(bridge.fileAccessVersion!.split('.')[1]) >= 11;
 /** 1.11.1 bounds the complete change envelope, including repeated revisions. */
@@ -958,7 +961,8 @@ export function mobileFolderSource(
 			: {}),
 		...(entry.size > 0 && supportsNativePartUploads(bridge)
 			? {
-					uploadPart: async (upload: NativePartUpload, callerSignal?: AbortSignal) => {
+					...(supportsNativeAuthorizationContext(bridge) ? { nativePartSourceChecks: true as const } : {}),
+				uploadPart: async (upload: NativePartUpload, callerSignal?: AbortSignal) => {
 						const active = callerSignal ? AbortSignal.any([signal, callerSignal]) : signal;
 						active.throwIfAborted();
 						const result = await request(ownerId, { action: 'upload-part', rootId, upload: { ...upload, source: entry } }, active);

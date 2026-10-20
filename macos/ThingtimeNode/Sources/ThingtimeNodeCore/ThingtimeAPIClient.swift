@@ -112,6 +112,16 @@ public final class ThingtimeAPIClient: ControlPlaneClient, @unchecked Sendable {
     }
 
     /// Select the exact native credential; never infer the owner from renderer input.
+    // Closed scalar diagnostics only. Fast successful checks stay quiet; no
+    // owner/device/session IDs, headers, URLs, body text or throwable messages.
+    static func fileSyncIdentityDiagnostic(status: Int, elapsedMilliseconds: Int, attempt: Int, cooldownSeconds: Int?) -> String? {
+        guard (100...599).contains(status), (0...120_000).contains(elapsedMilliseconds), (0...1).contains(attempt),
+              cooldownSeconds == nil || (status == 429 && attempt == 0 && (1...60).contains(cooldownSeconds!)),
+              status != 200 || elapsedMilliseconds > 1000 || attempt > 0 else { return nil }
+        let retry = cooldownSeconds != nil ? "cooldown" : attempt == 1 ? "after-cooldown" : "none"
+        return "File-sync identity: status=\(status) elapsedMilliseconds=\(elapsedMilliseconds) attempt=\(attempt) retry=\(retry) cooldownSeconds=\(cooldownSeconds ?? 0)"
+    }
+
     /// Identity is uncached, and local unpairing during the request also fails closed.
     public func verifyFileSyncIdentity(ownerID: String, deviceID: String) async throws {
         try Task.checkCancellation()
@@ -130,18 +140,28 @@ public final class ThingtimeAPIClient: ControlPlaneClient, @unchecked Sendable {
                 let current = try await credentialStore.loadAll().filter { $0.deviceID == deviceID }
                 guard current == [credential] else { throw ThingtimeAPIClientError.notPaired }
             }
+            let began = ProcessInfo.processInfo.systemUptime
             let (data, raw) = try await session.data(for: request)
             try Task.checkCancellation()
             guard let response = raw as? HTTPURLResponse,
                   response.url == url else { throw ThingtimeAPIClientError.invalidResponse }
+            let elapsed = Int(max(0, ProcessInfo.processInfo.systemUptime - began) * 1000)
+            let cooldown: Int? = {
+                guard response.statusCode == 429, attempt == 0,
+                      let text = response.value(forHTTPHeaderField: "Retry-After"),
+                      text.range(of: "^[1-9][0-9]?$", options: .regularExpression) != nil,
+                      let seconds = Int(text), seconds <= 60 else { return nil }
+                return seconds
+            }()
+            if let diagnostic = Self.fileSyncIdentityDiagnostic(status: response.statusCode, elapsedMilliseconds: elapsed,
+                                                                attempt: attempt, cooldownSeconds: cooldown) {
+                ThingtimeNodeLog.actions.notice("\(diagnostic, privacy: .public)")
+            }
             // A single server-directed cooldown stays within the folder request
             // deadline. Never shorten a longer delay, retry auth failures, cache
             // identity, or use a replacement credential after local unpairing.
-            if response.statusCode == 429, attempt == 0,
-               let text = response.value(forHTTPHeaderField: "Retry-After"),
-               text.range(of: "^[1-9][0-9]?$", options: .regularExpression) != nil,
-               let seconds = UInt64(text), seconds <= 60 {
-                try await fileSyncRetrySleep(seconds)
+            if let cooldown {
+                try await fileSyncRetrySleep(UInt64(cooldown))
                 continue
             }
             guard response.statusCode == 200 else { throw ThingtimeAPIClientError.rejected(status: response.statusCode) }

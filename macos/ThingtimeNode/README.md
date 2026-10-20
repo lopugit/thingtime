@@ -224,6 +224,22 @@ the `devices.read` rate limit can stop sustained transfers. Native streaming and
 measured throughput, durable restart journals despite Desktop's ephemeral local
 origin, and real installed cloud transfers remain required before release.
 
+### Composite authorization and identity diagnostics
+
+Mac file-access 1.12.0 returns current conditions with the authorized context and
+roots. The same fresh paired identity checks surround that native request. Updated
+clients combine the former context/list/conditions reads and retain actual mutation
+configuration/device/network checks. Older clients and hosts keep the existing path.
+
+The `com.thingtime.desktop.node` / `actions` OSLog category records `File-sync
+identity:` only for slow (>1 second), non-200 or retried identity requests. Closed
+fields are HTTP status, elapsed milliseconds, attempt and validated cooldown seconds;
+no account/device/session identifiers, URLs, credentials or response text enter it.
+This distinguishes a slow response from a server-directed 429 wait on a later
+installed attempt. `Slow file-sync request:` continues to report bounded action,
+elapsed time and category for requests exceeding 10 seconds. Neither log changes
+retry, authentication or lease behavior.
+
 ### Bounded streaming transport batches
 
 Mac `fileAccessVersion` 1.11.1 corrects the streaming response byte bound to count

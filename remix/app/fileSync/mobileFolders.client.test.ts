@@ -442,3 +442,11 @@ test('empty native sources retain exact-version checks and bypass positive-only 
     assert.equal(calls.length, 2); assert.ok(calls.every(call => call.action === 'read' && call.length === 1));
     stale = true; await assert.rejects(async () => { await source.check(); }, /Native file changed/);
 });
+
+test('only updated Mac part adapters advertise validated native source fences', () => {
+ const entry = { id: 'file', path: 'file.bin', version: 'v1', kind: 'file' as const, size: 4, sha256: 'a'.repeat(64) };
+ for (const [platform, fileAccessVersion, expected] of [['macos', '1.11.1', undefined], ['macos', '1.12.0', true], ['ios', '1.12.0', undefined], ['android', '1.12.0', undefined]] as const) {
+  const source = mobileFolderSource('owner', 'root', entry, new AbortController().signal, async () => { throw Error('construction performs no IO'); }, { platform, fileAccessVersion, fileUploadVersion: '1.0.1' });
+  assert.equal(source.nativePartSourceChecks, expected);
+ }
+});
