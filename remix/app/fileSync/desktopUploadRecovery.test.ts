@@ -38,6 +38,7 @@ if (!process.execArgv.includes('--experimental-test-module-mocks')) {
 			receipt: SyncReceipt | null = null,
 			failure: unknown;
 		let cloudStatus: number | undefined;
+		let cloudCode: string | undefined, cloudRetryable: boolean | undefined;
 		let attempts: string[] = [];
 		let now = Date.UTC(2026, 9, 20);
 		const clock = mock.method(Date, 'now', () => now);
@@ -65,7 +66,7 @@ if (!process.execArgv.includes('--experimental-test-module-mocks')) {
 								},
 								read: async (side) => (side === 'local' ? entry : null),
 								apply: async (op) => {
-									if (cloudStatus) return (await cloudRequests(input.runtime, binding, signal).json('/api/v1/files', { operationId: op.id })).receipt;
+									if (cloudStatus) return (await cloudRequests(input.runtime, binding, signal).json(cloudStatus === 409 ? '/api/v1/attachments/uploads' : '/api/v1/files', { operationId: op.id })).receipt;
 									const source = await input.source(entry);
 									assert.ok(source.uploadPart, 'production desktop adapter must negotiate native upload parts');
 									await source.uploadPart({ uploadId: 'upload-original', requestId: op.id, partNumber: 1, offset: 0, length: 3 }, signal);
@@ -102,12 +103,18 @@ if (!process.execArgv.includes('--experimental-test-module-mocks')) {
 				{ message: 'TLS certificate verification failed' },
 				{ message: 'Source file changed.' },
 				{ status: 503 },
+				{ status: 409, code: 'upload_initializing', retryable: true, wait: true },
+				{ status: 409, code: 'finalization_in_progress', retryable: true, wait: true },
+				{ status: 409, code: 'finalization_settling', retryable: true, wait: true },
+				{ status: 409, code: 'upload_unavailable', retryable: false },
+				{ status: 409, code: 'finalization_in_progress', retryable: false },
 				{ status: 401 },
 				{ status: 403 }
 			]) {
 				cloudStatus = scenario.status;
+				cloudCode = scenario.code; cloudRetryable = scenario.retryable;
 				attempts = [];
-				const transient = cloudStatus === 503 || !!scenario.message?.includes(retry);
+				const transient = cloudStatus === 503 || scenario.wait === true || !!scenario.message?.includes(retry);
 				failure = Error(scenario.message ?? 'fixture HTTP failure');
 				receipt = null;
 				runnerCalls = publications = 0;
@@ -145,7 +152,7 @@ if (!process.execArgv.includes('--experimental-test-module-mocks')) {
 							receipt = { operationId: body.operationId, scope, entry: { ...entry, id: 'cloud-file', version: 'cloud-1' } };
 						}
 						return failure
-							? Response.json({ ok: false }, { status: cloudStatus, headers: { 'Retry-After': '120' } })
+							? Response.json({ ok: false, code: cloudCode, retryable: cloudRetryable }, { status: cloudStatus, headers: { 'Retry-After': '120' } })
 							: Response.json({ ok: true, receipt });
 					}
 				});
@@ -189,7 +196,7 @@ if (!process.execArgv.includes('--experimental-test-module-mocks')) {
 				assert.equal((await jobs.read())?.state, transient ? 'runnable' : 'attention');
 				assert.equal((await journal.read(scope))?.operations[0].confirmed, false);
 				const waitingJob = await jobs.read();
-				if (transient) assert.equal(waitingJob?.retryAt, now + (cloudStatus ? 120_000 : 30_000));
+				if (transient) assert.equal(waitingJob?.retryAt, now + (cloudStatus === 503 ? 120_000 : 30_000));
 				failure = undefined;
 				for (const wake of ['online', 'pageshow', 'job-event']) {
 					await resumeNativeSyncJobs(scope.ownerId, 0, new AbortController().signal);
@@ -203,7 +210,7 @@ if (!process.execArgv.includes('--experimental-test-module-mocks')) {
 				await resumeNativeSyncJobs(scope.ownerId, 0, new AbortController().signal);
 				assert.equal(runnerCalls, transient ? 2 : 1);
 				assert.equal(publications, transient ? 1 : 0);
-				assert.deepEqual(attempts, transient && !cloudStatus ? ['operation-original', 'operation-original'] : ['operation-original']);
+				assert.deepEqual(attempts, transient && cloudStatus !== 503 ? ['operation-original', 'operation-original'] : ['operation-original']);
 				assert.equal((await journal.read(scope))?.operations[0].confirmed, transient);
 				assert.equal((await jobs.read())?.id, admitted.id);
 				assert.equal((await jobs.read())?.state, transient ? 'scheduled' : 'attention');
@@ -213,7 +220,7 @@ if (!process.execArgv.includes('--experimental-test-module-mocks')) {
 				nativeSyncTasks.invalidate();
 				journal.close();
 			}
-			assert.deepEqual([...enteredHttp].sort(), [401, 403, 503], 'all real HTTP coordinator scenarios must execute');
+			assert.deepEqual([...enteredHttp].sort(), [401, 403, 409, 503], 'all real HTTP coordinator scenarios must execute');
 		} finally {
 			nativeSyncTasks.invalidate();
 			clock.mock.restore();

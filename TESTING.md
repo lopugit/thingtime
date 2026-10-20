@@ -12690,3 +12690,10 @@ separate from deterministic discovery/lease tests.
 - [x] Accept a real transport commit and then return HTTP503; reopen the durable operation and recover its original receipt without another byte upload or committed file version.
 - [x] Exercise the production automatic coordinator with actual HTTP503/401/403 paths. Assert HTTP503 executes, persists its 120-second deadline, rejects early online/pageshow/job-event discovery passes, survives reopen, and recovers the original operation once. Stop and newer-attempt CAS reject stale deferrals. Planner/byte-pipeline and native/network boundaries remain synthetic in this coordinator regression.
 - [ ] In the signed installed app, explicitly retry the existing attention job once, preserve its IDs/cursors/receipts, and verify continued transfers plus independent downloaded-byte equality. A status503 alone does not establish the backend cause.
+
+### Upload-start finalization recovery — 2026-10-20
+
+- [x] Reproduce a nonempty file whose MPU completed but ready persistence failed: exact start returns `upload_unavailable` before the fix; afterward a live lease waits and an expired lease adopts the original version, with one MPU/Complete and unchanged owner/request fingerprint/expiry guards.
+- [x] Exercise real renderer transport/coordinator backoff and reopen for `upload_initializing`, `finalization_in_progress`, and `finalization_settling` only when `retryable:true`. Reject early wakes, unknown codes, false flags, unrelated endpoints, mismatch and unavailable conflicts. Preserve original operation IDs and accepted-write receipt recovery.
+- [x] Bound conflict diagnostics to 4 KiB and fixed operation/code vocabulary; discard arbitrary text, paths, IDs, oversized/malformed bodies. Require upload-start 1.6.1 and reject older/breaking origins before network mutations.
+- [ ] Verify the installed saved backup continues beyond upload-start 409 with retained receipts/versions. The source-proven nonempty finalization recovery gap is not yet the confirmed live cause. Parent independently verified a 13-byte canonical cloud-to-device download; continued upload acceptance remains open.

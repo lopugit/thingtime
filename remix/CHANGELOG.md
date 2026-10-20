@@ -98,6 +98,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-20: Resume exact nonempty file upload requests interrupted during finalization through the original fenced lease and object version. Back off only for three explicit retryable upload lease/settling codes; retain other conflicts with bounded, fixed diagnostics. `api.attachment-uploads` advances to 1.6.1. Installed upload-start 409 cause and recovery remain unverified. — Codex (AI)
+
 - 2026-10-20: Keep transient cloud sync HTTP 408/429/5xx failures resumable with original operation receipts. Persist a bounded retry deadline across restarts and noisy wake events; keep permission, identity, integrity and explicit Stop behavior unchanged. Signed installed recovery remains pending. — Codex (AI)
 
 - 2026-10-20: Preserve the final verified native roots in desktop upload receipts (fileUploadVersion 1.0.1), so production response parsers accept completed parts. Extend native/HTTP regression through the desktop host and real client parser/source adapter; installed cloud completion and downloaded-byte acceptance remain pending. — Codex (AI)

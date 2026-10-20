@@ -19,7 +19,7 @@ import { EXPECTED_DATA_PLANE_HEADER } from '../utils/dataPlane';
 
 export const CLOUD_TRANSFER_REQUIREMENTS = {
 	...CLOUD_FILE_REQUIREMENTS,
-	'api.attachment-uploads': '1.5.0',
+	'api.attachment-uploads': '1.6.1',
 	'api.attachment-upload-parts': '1.1.0',
 	'api.attachment-upload-complete': '1.4.0',
 	'api.actions-run': '1.7.0'
@@ -39,6 +39,38 @@ const hash = async (bytes: Uint8Array<ArrayBuffer>) => new Uint8Array(await cryp
 const hex = (bytes: Uint8Array) => [...bytes].map((n) => n.toString(16).padStart(2, '0')).join('');
 const base64 = (bytes: Uint8Array) => btoa(String.fromCharCode(...bytes));
 const identifier = (id: unknown): id is string => typeof id === 'string' && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(id);
+
+const uploadWaitCodes = new Set(['upload_initializing', 'finalization_in_progress', 'finalization_settling']);
+/** Diagnostics are fixed vocabulary only; never retain arbitrary response text. */
+async function cloudConflict(response: Response, url: URL, mutation: boolean, check: () => void): Promise<Error> {
+	const operation = url.pathname === '/api/v1/attachments/uploads' && mutation ? 'upload-start' :
+		url.pathname === '/api/v1/attachments/uploads/complete' && mutation ? 'upload-complete' : 'cloud-request';
+	let code = 'conflict_unknown', retryable = false;
+	const reader = response.body?.getReader();
+	if (reader) {
+		try {
+			const chunks: Uint8Array[] = []; let total = 0;
+			for (;;) {
+				const next = await reader.read(); check(); if (next.done) break;
+				total += next.value.length; if (total > 4096) break;
+				chunks.push(next.value);
+			}
+			if (total <= 4096) {
+				const bytes = new Uint8Array(total); let offset = 0;
+				for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.length; }
+				const value = JSON.parse(new TextDecoder().decode(bytes));
+				if (value?.ok === false) {
+					if (uploadWaitCodes.has(value.code) || value.code === 'upload_unavailable') code = value.code;
+					else if (value.error === 'Attachment request id is already in use') code = 'upload_request_mismatch';
+					retryable = value.retryable === true;
+				}
+			}
+		} catch { check(); } finally { await reader.cancel().catch(() => {}); reader.releaseLock(); }
+	}
+	check();
+	const message = `Cloud sync request failed (409; ${operation}; ${code}); retain this run for retry or reconciliation.`;
+	return operation !== 'cloud-request' && uploadWaitCodes.has(code) && retryable ? new SyncConnectionWait(message) : Error(message);
+}
 
 /** Authenticated JSON stays on one origin with server-enforced expected actor
  * and data-plane headers. Signed part requests carry no account credentials. */
@@ -80,6 +112,7 @@ export function cloudRequests(runtime: CloudTransportRuntime, scope: SyncScope, 
 			return null;
 		}
 		if (!response.ok) {
+			if (response.status === 409) throw await cloudConflict(response, url, body !== undefined, check);
 			await response.body?.cancel().catch(() => {});
 			throw cloudSyncHttpError(response.status, response.headers.get('retry-after'));
 		}
@@ -131,7 +164,7 @@ function cloudFileTransport(runtime: CloudTransportRuntime, saved: CloudWrite, s
 	const { check, json, negotiate: negotiateRequirements } = cloudRequests(runtime, scope, signal);
 	const empty = (m.kind === 'copy' && m.source.size === 0) || write.before?.content.size === 0;
 	const negotiate = () => negotiateRequirements({ ...CLOUD_TRANSFER_REQUIREMENTS, ...(retained ? CLOUD_FILE_RETENTION_REQUIREMENTS : {}),
-		...(empty ? { 'api.files': '1.8.0', 'api.attachment-uploads': '1.6.0',
+		...(empty ? { 'api.files': '1.8.0',
 			'api.attachment-upload-complete': '1.5.0', 'api.attachment-content': '1.16.0' } : {}) });
 	const fileId = write.before?.id ?? write.operation.id;
 	const receipt = (value: unknown): SyncReceipt => {

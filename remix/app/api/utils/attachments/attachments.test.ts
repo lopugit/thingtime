@@ -2575,6 +2575,64 @@ test('empty object finalization preserves lease fencing and never publishes afte
     assert.equal(marked, 0); assert.equal(deleted, 0); assert.equal(doc.attachmentState, 'finalizing');
 });
 
+test('same nonempty file start resumes interrupted completion through the original finalization lease and MPU', async () => {
+    let clock = new Date(now), doc: AttachmentDoc | null = null, creates = 0, completions = 0, marks = 0;
+    const store: any = {
+        listExpiredOwned: async () => [], getById: async () => doc, getOwned: async () => doc,
+        reservePending: async (input: any) => doc = attachmentDoc({ shareId: input.id, ownerId: input.ownerId,
+            crystal: input.crystal, objectKey: input.objectKey, objectSizeBytes: input.crystal.size,
+            attachmentRequestFingerprint: input.requestFingerprint, attachmentPurpose: input.purpose,
+            attachmentExpiresAt: input.expiresAt, uploadId: undefined, updatedAt: clock }),
+        setUploadId: async (_owner: string, _id: string, uploadId: string) => Object.assign(doc!, { uploadId }),
+        claimFinalizing: async (_owner: string, _id: string, lease: string) => {
+            if (doc!.attachmentState === 'finalizing' && clock.getTime() - doc!.updatedAt.getTime() < ATTACHMENT_FINALIZATION_LEASE_MS)
+                return { doc, acquired: false };
+            Object.assign(doc!, { attachmentState: 'finalizing', attachmentFinalizationLeaseId: lease, updatedAt: clock });
+            return { doc, acquired: true };
+        },
+        renewFinalizing: async (_owner: string, _id: string, lease: string) => doc!.attachmentFinalizationLeaseId === lease ? doc : null,
+        markReady: async (_owner: string, _id: string, crystal: any, version: string, _expiry: Date, lease: string) => {
+            marks++; assert.equal(doc!.attachmentFinalizationLeaseId, lease);
+            if (marks === 1) throw Error('ready persistence unavailable after accepted multipart completion');
+            Object.assign(doc!, { crystal, objectVersionId: version, attachmentState: 'ready' });
+            delete doc!.attachmentExpiresAt; return doc;
+        }
+    };
+    const noUpload = new Error('NoSuchUpload');
+    const service = createAttachmentService({ store, now: () => clock, customMongoActive: () => false,
+        getS3: () => noopS3({
+            createMultipartUpload: async () => { creates++; return { uploadId: 'original-mpu' }; },
+            listParts: async ({ uploadId }) => {
+                assert.equal(uploadId, 'original-mpu'); if (completions) throw noUpload;
+                return [{ partNumber: 1, etag: 'part-etag', sizeBytes: 3, checksumSha256: checksum(1) }];
+            },
+            completeMultipartUpload: async () => { completions++; return { versionId: 'original-version' }; },
+            headObject: async () => ({ attachmentId: doc!.shareId, versionId: 'original-version', sizeBytes: 3,
+                checksumSha256: checksum(2), checksumType: 'COMPOSITE' }),
+            isNoSuchUpload: error => error === noUpload
+        }) });
+    const input = { requestId: 'multipart-recovery', purpose: 'file', filename: 'file.bin', contentType: 'application/octet-stream', sizeBytes: 3 };
+    assert.ok((await service.start('user-1', input)).ok);
+    const identity = doc!.shareId;
+    const interrupted = await service.complete('user-1', { uploadId: identity });
+    assert.equal(interrupted.ok, false); if (!interrupted.ok) assert.equal(interrupted.status, 503);
+    const active = await service.start('user-1', input);
+    assert.equal(active.ok, false); if (!active.ok) assert.equal(active.code, 'finalization_in_progress');
+    assert.equal(completions, 1); assert.equal(marks, 1);
+    const mismatch = await service.start('user-1', { ...input, filename: 'changed.bin' });
+    assert.equal(mismatch.ok, false); if (!mismatch.ok) { assert.equal(mismatch.status, 409); assert.equal(mismatch.retryable, undefined); }
+    const expiry = doc!.attachmentExpiresAt; doc!.attachmentExpiresAt = new Date(clock.getTime() - 1);
+    const expired = await service.start('user-1', input);
+    assert.equal(expired.ok, false); if (!expired.ok) { assert.equal(expired.code, 'upload_unavailable'); assert.equal(expired.retryable, false); }
+    doc!.attachmentExpiresAt = expiry;
+    clock = new Date(clock.getTime() + ATTACHMENT_FINALIZATION_LEASE_MS + 1);
+    const recovered = await service.start('user-1', input); assert.ok(recovered.ok);
+    if (recovered.ok) assert.equal(recovered.upload.state, 'ready');
+    assert.equal(doc!.shareId, identity); assert.equal(doc!.objectVersionId, 'original-version');
+    assert.equal(creates, 1); assert.equal(completions, 1); assert.equal(marks, 2);
+    assert.equal((await service.start('user-1', { ...input, sizeBytes: 4 })).ok, false);
+});
+
 test('same empty start resumes a failed finalization only through active and expired lease fences', async () => {
     const { mkdtemp, rm, readdir } = await import('node:fs/promises');
     const { tmpdir } = await import('node:os'); const { join } = await import('node:path');
