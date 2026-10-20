@@ -363,8 +363,8 @@ test('Lopu network SDK contract exists on both manifests and refuses missing/bre
 });
 
 test('upload burst correction is published by both manifests and rejects old or breaking origins', () => {
-	assert.equal(createApiCapabilitiesManifest().features['api.attachment-uploads'], '1.6.1');
-	assert.equal(thingtimeCapabilityManifest('https://uploads.test').features['api.attachment-uploads'].version, '1.6.1');
+	assert.equal(createApiCapabilitiesManifest().features['api.attachment-uploads'], '1.6.2');
+	assert.equal(thingtimeCapabilityManifest('https://uploads.test').features['api.attachment-uploads'].version, '1.6.2');
 	for (const version of [undefined, '1.4.0', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.4.1'), false);
 	for (const version of ['1.4.1', '1.4.2', '1.5.0']) assert.equal(capabilitySatisfies(version, '1.4.1'), true);
 });
@@ -487,4 +487,17 @@ test('sync ignore rules require the additive saved-policy contract on both manif
   assert.equal(thingtimeCapabilityManifest('https://sync.test').features['api.things'].version, '1.38.0');
   for (const version of [undefined, '1.37.0', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.38.0'), false);
   for (const version of ['1.38.0', '1.38.1', '1.39.0']) assert.equal(capabilitySatisfies(version, '1.38.0'), true);
+});
+
+
+test('object-only empty finalization corrections remain compatible with shipped clients', () => {
+    for (const [feature, version, minimum] of [
+        ['api.attachment-uploads', '1.6.2', '1.6.1'],
+        ['api.attachment-upload-complete', '1.5.1', '1.5.0']
+    ]) {
+        assert.equal(createApiCapabilitiesManifest().features[feature], version);
+        assert.equal(thingtimeCapabilityManifest('https://uploads.test').features[feature].version, version);
+        assert.equal(capabilitySatisfies(version, minimum), true);
+        assert.equal(capabilitySatisfies('2.0.0', minimum), false);
+    }
 });

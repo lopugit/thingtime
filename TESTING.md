@@ -12715,3 +12715,10 @@ separate from deterministic discovery/lease tests.
 - [x] Run full shared fileSync suite (498 tests), host/diagnostic tests (33), and existing AppleFileSync recovery tests (4): interrupted publication, reopened multipart staging, interrupted staged tail, and Trash reply loss preserve original effects/receipts.
 - [ ] Run the isolated Electron host harness on a supported sandbox-capable runner. This machine refused Chromium sandbox initialization with EPERM; no sandbox was disabled. Test-owned process/listeners exited.
 - [ ] Signed installed acceptance: preserve the current Home job and prove a natural temporary native verification failure waits and automatically resumes instead of entering attention. Confirm closed on-disk request diagnostics, retained cloud code/proxy reason, continued new payloads and independent byte equality. The live recurring failure code is still unconfirmed.
+
+### Empty attachment creation without ListBucket — 2026-10-20
+
+- [x] Reproduce a fresh empty object whose HEAD returns AWS's missing-key 403 under an object-only role. Fail before the correction; conditional PUT-first then exact identity/version/size/full-checksum verification succeeds without an absence probe or broader permissions.
+- [x] Recover accepted conditional PUT reply loss and an existing matching immutable object without a second successful write. Refuse wrong identity, checksum or pinned version, occupied mismatches, and read/write 403; no failed verification may mark or tag ready. Preserve active/expired lease fencing and one stored version across persistence failure/replay.
+- [x] Run attachment suites (321/321) and capability/docs suites (110/110); confirm upload-start 1.6.2 and completion 1.5.1 remain compatible with shipped client minimums 1.6.1/1.5.0. Focused ESLint and diff checks pass.
+- [ ] Deploy the server correction, preserve the installed Home job and verify sustained new confirmed payloads with independent downloaded-byte equality. The attributed production failure was HEAD verification 403; its empty/nonempty branch remains unconfirmed until acceptance. Do not grant ListBucket or treat 403 as absence.
