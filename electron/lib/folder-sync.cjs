@@ -92,43 +92,55 @@ async function readCapabilities(context, signal) {
 
 /** Only the bundled main frame may request local files. Its current account is
  * read by the host's own network stack; renderer identity is only an expectation. */
-async function signDesktopUploadPart(context, body, signal, timeoutMs = 20_000) {
+async function signDesktopUploadPart(context, body, signal, timeoutMs = 20_000, diagnostic = () => {}) {
+    const report = (code, status = 0) => diagnostic({ phase: 'upload-sign', code, status });
     const partSignal = AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]);
     let response;
     try {
         response = await verificationFetch(context, new URL('/api/v1/attachments/uploads/parts', context.appOrigin).href, {
             method: 'POST', credentials: 'include', cache: 'no-store', redirect: 'error', bypassCustomProtocolHandlers: true,
             signal: partSignal, headers: { 'Content-Type': 'application/json', Accept: 'application/json',
+                // The local expected-actor proxy requires same-origin mutation
+                // proof. Only the captured trusted window may supply it.
+                Origin: context.appOrigin,
                 'X-Thingtime-Expected-Actor': context.ownerId, 'X-Thingtime-Expected-Data-Plane': 'home',
                 'X-Thingtime-Expected-Api-Origin': context.apiOrigin }, body: JSON.stringify(body)
         });
     } catch (error) {
         signal.throwIfAborted();
-        if (retryableUploadFailure(error)) throw uploadRetry();
-        if (error instanceof Error && error.message === verificationRetry().message) throw error;
+        if (retryableUploadFailure(error)) { report('transport-retry'); throw uploadRetry(); }
+        if (error instanceof Error && error.message === verificationRetry().message) { report('transport-retry'); throw error; }
+        report('transport-refused');
         throw unavailable();
     }
     try {
         const fallback = response.headers.get('x-thingtime-api-fallback');
-        if (response.redirected || (context.appOrigin !== context.apiOrigin && fallback !== null && fallback !== context.apiOrigin)) throw unavailable();
+        if (response.redirected || (context.appOrigin !== context.apiOrigin && fallback !== null && fallback !== context.apiOrigin)) {
+            report('response-origin', response.status); throw unavailable();
+        }
         // As with account verification, an upstream cooldown/outage remains a
         // recoverable wait even when the proxy could not add its origin header.
-        if (transientStatus(response.status)) throw uploadRetry();
+        if (transientStatus(response.status)) { report('http-retry', response.status); throw uploadRetry(); }
         if (response.status !== 200 ||
-            (context.appOrigin !== context.apiOrigin && response.headers.get('x-thingtime-api-fallback') !== context.apiOrigin)) throw unavailable();
+            (context.appOrigin !== context.apiOrigin && response.headers.get('x-thingtime-api-fallback') !== context.apiOrigin)) {
+            report('http-rejected', response.status); throw unavailable();
+        }
         try { return await boundedJson(response, partSignal, 64 * 1024); }
         catch (error) {
             signal.throwIfAborted();
-            if ((partSignal.aborted && partSignal.reason?.name === 'TimeoutError') || retryableUploadFailure(error)) throw uploadRetry();
+            if ((partSignal.aborted && partSignal.reason?.name === 'TimeoutError') || retryableUploadFailure(error)) {
+                report('transport-retry'); throw uploadRetry();
+            }
+            report('response-invalid', response.status);
             throw unavailable();
         }
     } finally { if (!response.body?.locked) await response.body?.cancel().catch(() => {}); }
 }
 
 class DesktopFolderSync {
-    constructor({ context, requestNative, verifyAccount = readAccount, capabilities = readCapabilities, fetchUpload = globalThis.fetch, timeoutMs = 300_000 }) {
+    constructor({ context, requestNative, verifyAccount = readAccount, capabilities = readCapabilities, fetchUpload = globalThis.fetch, timeoutMs = 300_000, diagnostic = () => {} }) {
         this.context = context; this.requestNative = requestNative; this.fetchUpload = fetchUpload; this.verifyAccount = verifyAccount;
-        this.capabilities = capabilities; this.timeoutMs = timeoutMs; this.generation = 0; this.active = null; this.streamWaiter = null; this.ordinaryQueue = []; this.quitting = false;
+        this.capabilities = capabilities; this.timeoutMs = timeoutMs; this.diagnostic = diagnostic; this.generation = 0; this.active = null; this.streamWaiter = null; this.ordinaryQueue = []; this.quitting = false;
     }
     capture(event, input) {
         const context = this.context(), window = context.window;
@@ -256,7 +268,7 @@ class DesktopFolderSync {
             const value = state.input.action === 'upload-part' ? await uploadFolderPart({ input: state.input, context,
                 signal: state.abort.signal, authorize: verify, fetchUpload: this.fetchUpload,
                 requestNative: request => this.requestNative('folder-sync.request', request, { signal: state.abort.signal }),
-                signPart: async body => { await verify(); return signDesktopUploadPart(context, body, state.abort.signal); }
+                signPart: async body => { await verify(); return signDesktopUploadPart(context, body, state.abort.signal, 20_000, this.diagnostic); }
             }) : await this.requestNative('folder-sync.request', { ...state.input, origin: context.apiOrigin }, { signal: state.abort.signal });
             if (!value || typeof value !== 'object') throw unavailable();
             if (state.input.action === 'context') {

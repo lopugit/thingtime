@@ -6,8 +6,52 @@ const { createServer } = require('node:http');
 const { once } = require('node:events');
 const { uploadFolderPart } = require('../lib/folder-upload.cjs');
 const { DesktopFolderSync } = require('../lib/folder-sync.cjs');
+const { signDesktopUploadPart } = require('../lib/folder-sync.cjs');
 const bytes = Buffer.from('real nonempty fixture bytes');
 const hash = createHash('sha256').update(bytes).digest('hex');
+test('desktop signing POST passes the loopback expected-actor origin fence using only the trusted context', async () => {
+    let origin, accepted = 0;
+    const diagnostics = [];
+    const server = createServer((request, response) => {
+        // Same guard as the desktop Nitro expected-actor proxy. No CORS or
+        // permissive fallback: absent and mismatched origins must fail closed.
+        if (request.headers['sec-fetch-site'] === 'cross-site' ||
+            (request.method !== 'GET' && request.headers.origin !== origin)) {
+            response.writeHead(403, { 'Content-Type': 'application/json' }); response.end('{}'); return;
+        }
+        assert.equal(request.url, '/api/v1/attachments/uploads/parts');
+        assert.equal(request.headers['x-thingtime-expected-actor'], 'fixture-owner');
+        assert.equal(request.headers['x-thingtime-expected-api-origin'], 'https://fixture.invalid');
+        accepted++;
+        response.writeHead(200, { 'Content-Type': 'application/json', 'x-thingtime-api-fallback': 'https://fixture.invalid' });
+        response.end('{"parts":[]}');
+    });
+    server.listen(0, '127.0.0.1'); await once(server, 'listening');
+    origin = `http://127.0.0.1:${server.address().port}`;
+    const context = { ownerId: 'fixture-owner', appOrigin: origin, apiOrigin: 'https://fixture.invalid',
+        window: { webContents: { session: { fetch: (url, options) => fetch(url, options) } } } };
+    try {
+        for (const badOrigin of [undefined, 'https://untrusted.invalid']) {
+            const headers = badOrigin ? { Origin: badOrigin } : {};
+            assert.equal((await fetch(origin + '/api/v1/attachments/uploads/parts', { method: 'POST', headers })).status, 403);
+        }
+        assert.deepEqual(await signDesktopUploadPart(context, { uploadId: 'fixture', parts: [], origin: 'https://untrusted.invalid' },
+            new AbortController().signal, 20_000, value => diagnostics.push(value)), { parts: [] });
+        assert.equal(accepted, 1); assert.deepEqual(diagnostics, []);
+    } finally { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }
+});
+
+test('signer diagnostics contain fixed phase/status only, including bodies and transport messages with private values', async () => {
+    const records = [], signal = new AbortController().signal;
+    const context = { ownerId: 'private-owner', appOrigin: 'http://127.0.0.1:54000', apiOrigin: 'https://private.invalid',
+        window: { webContents: { session: { fetch: async () => new Response('private-body-secret', { status: 403 }) } } } };
+    await assert.rejects(signDesktopUploadPart(context, {}, signal, 20_000, value => records.push(value)));
+    context.window.webContents.session.fetch = async () => { throw Error('https://private.invalid/path?credential=secret'); };
+    await assert.rejects(signDesktopUploadPart(context, {}, signal, 20_000, value => records.push(value)));
+    assert.deepEqual(records, [ { phase: 'upload-sign', code: 'http-rejected', status: 403 },
+        { phase: 'upload-sign', code: 'transport-refused', status: 0 } ]);
+    assert.ok(!/private|secret|credential|https|owner/.test(JSON.stringify(records)));
+});
 function fixture() {
     const controller = new AbortController(), events = [];
     const input = { requestId: randomUUID(), ownerId: 'owner', deviceId: 'device', rootId: randomUUID(),

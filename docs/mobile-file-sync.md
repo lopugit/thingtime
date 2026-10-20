@@ -3861,6 +3861,14 @@ and maps it to a recoverable connection wait; normal coordinator discovery
 resumes the original durable job/operation. Auth, TLS, redirect, origin, source
 and checksum failures remain terminal and redacted.
 
+The authenticated signing POST carries `Origin` derived from the trusted
+desktop window origin. The loopback expected-actor proxy requires that exact
+origin before forwarding any mutation; renderer/body origin values cannot
+replace it. The S3 PUT still carries no Origin or account credentials.
+Signer failures record only timestamp, fixed phase/category and HTTP status in
+`~/Library/Logs/Thingtime/folder-sync.log`, bounded to 128 KiB plus one rotated
+file. No request/response body, identity, source path or signed URL is recorded.
+
 This avoids browser CORS failure for the bundled UI's dynamic loopback origin;
 it does not disable browser security or broaden bucket CORS/access. Empty files
 continue through the canonical zero-part path. The signed installed app must
