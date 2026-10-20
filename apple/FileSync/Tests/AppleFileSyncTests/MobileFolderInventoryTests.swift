@@ -42,6 +42,41 @@ final class MobileFolderInventoryTests: XCTestCase {
         }
     }
 
+    func testStreamBatchesBoundEncodedChangesAndResumeExactSequence() throws {
+        let (source, bookmark, scope, directory) = try fixture()
+        try Data().write(to: source.appendingPathComponent("fixture"))
+        let sample = try XCTUnwrap(MobileFolderReader.scan(bookmark: bookmark).first)
+        let store = MobileFolderInventory(directory: directory), id = UUID().uuidString.lowercased()
+        _ = try store.beginStream(scope, id: id, bookmark: bookmark, excludedPaths: [], ignoreRules: nil)
+        let bucket = try XCTUnwrap(FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil).first)
+        try NativeFileJournal.locked(directory: bucket.appendingPathComponent(id)) { fd in
+            let db = try MobileFolderInventory.Database(directory: fd, create: false, writable: true)
+            try db.execute("BEGIN IMMEDIATE")
+            for index in 1...2000 {
+                var row = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(sample)) as? [String: Any])
+                row["path"] = "file-\(index)"; row["id"] = "entry-\(index)"; row["version"] = String(repeating: "v", count: 128)
+                let entry = try JSONDecoder().decode(MobileFolderReader.Entry.self, from: JSONSerialization.data(withJSONObject: row))
+                XCTAssertTrue(try db.insertChange(entry, sequence: index))
+            }
+            try db.execute("COMMIT")
+        }
+        var after = 0, pages = 0
+        repeat {
+            let page = try store.streamChanges(scope, id: id, bookmark: bookmark, excludedPaths: [], ignoreRules: nil, afterSequence: after, pageSize: 4096)
+            let encoded = try JSONEncoder().encode(page)
+            XCTAssertLessThanOrEqual(encoded.count, MobileFolderInventory.maximumPageBytes)
+            XCTAssertFalse(page.changes.isEmpty)
+            XCTAssertEqual(page.changes.first?.sequence, after + 1)
+            XCTAssertEqual(page.nextSequence, after + page.changes.count)
+            if let export = ProcessInfo.processInfo.environment["THINGTIME_STREAM_PAGE_FIXTURE_DIRECTORY"] {
+                try encoded.write(to: URL(fileURLWithPath: export).appendingPathComponent("page-\(pages).json"))
+            }
+            after = page.nextSequence; pages += 1
+            if !page.hasMore { break }
+        } while true
+        XCTAssertEqual(after, 2000); XCTAssertGreaterThan(pages, 1); XCTAssertLessThan(pages, 2000 / 128)
+    }
+
     func testIgnoreRulesPruneDependenciesBeforeOpenAndBindCapturePolicy() throws {
         let (source, bookmark, scope, directory) = try fixture()
         for name in ["project/node_modules", ".venv", "cache", "hard"] {

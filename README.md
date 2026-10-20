@@ -5571,6 +5571,19 @@ Removing a grant, uninstalling the app and device loss are not recovery paths;
 independent snapshots and large-volume export remain separate acceptance work.
 
 
+#### Mac streaming throughput
+
+Mac file-access capability 1.11.1 supports bounded 4096-change transport pages;
+the shared client keeps journal transactions and planner wakeups at 128 entries,
+including the first ready chunk. Older hosts retain 128-change requests. Native
+JSON responses remain capped at 512 KiB. Runtime bridge launches retain fresh
+child signature checks and current parent authentication while avoiding repeated
+full outer-bundle resource traversal after an initial successful verification;
+explicit status/service/release verification stays complete. See the
+[desktop trust boundary](electron/README.md) and
+[native batch contract](macos/ThingtimeNode/README.md#bounded-streaming-transport-batches).
+This changes no sync configuration, grant, root scheduling or remote API contract.
+
 #### iOS native multipart uploads
 
 Updated iOS hosts upload selected folder and photo originals from private,

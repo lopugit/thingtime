@@ -147,6 +147,17 @@ the pairing secret, key, nonce, credential, or proof to web code. The signed
 claim provides integrity/key continuity and replay fencing, not platform
 attestation.
 
+Runtime requests first verify the entire signed outer app and both native children.
+Later requests in that same integration instance still fully verify the helper and
+bridge before each launch, and freshly compare the outer app's signed identity,
+team and entitlements at the exact resolved installation path. They skip only
+repeated outer resource traversal: the native bridge independently validates its
+actual live parent with strict Apple signature validation before decoding a request.
+Any verification failure clears that initial proof; changing installation paths
+requires full verification again. Explicit verification, status, service
+registration and release/install verification retain full outer checks. No TTL,
+mtime or filesystem-watcher cache authorizes launching a child.
+
 Electron invokes the signed `ThingtimeNodeBridge` as a bounded one-shot process.
 That bridge is the only process that talks to the node's Mach-service XPC
 endpoint. The node independently requires the same macOS user, an Apple-generic

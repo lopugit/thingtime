@@ -224,6 +224,18 @@ the `devices.read` rate limit can stop sustained transfers. Native streaming and
 measured throughput, durable restart journals despite Desktop's ephemeral local
 origin, and real installed cloud transfers remain required before release.
 
+### Bounded streaming transport batches
+
+Mac `fileAccessVersion` 1.11.1 corrects the streaming response byte bound to count
+complete change rows, commas and a reserved 16 KiB envelope within 512 KiB.
+Compatible clients request up to 4096 changes per native RPC, then persist and
+wake the planner in independent 128-entry journal chunks. The first durable chunk
+can transfer while later chunks spool. The durable cursor resumes at the last
+committed chunk after interruption; 1.11.0 hosts keep 128-entry requests. Root
+execution remains serialized with existing authority, source and receipt checks.
+No new settings, secrets or service permissions are required. Installed throughput
+acceptance remains separate from the bounded synthetic and signature measurements.
+
 ## Photo library backup
 
 The local folder adapter advertises `fileAccessVersion` 1.3.0. **Choose folder**

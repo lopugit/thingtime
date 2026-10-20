@@ -13,6 +13,8 @@ import { decideSyncPath, sameSyncStamp, type SyncEntry, type SyncScope } from '.
 import { createSyncIgnorePolicy } from './syncIgnore';
 import { parseNativeIndexChangesPage, type NativeIndexChangesPage } from './streamingIndex';
 import type { PagedRunProgress, PagedRunSpec } from './pagedRunJournal';
+import { NATIVE_INVENTORY_BATCH_ENTRIES } from './nativeInventory';
+import { INVENTORY_PAGE_ENTRIES } from './inventoryJournal';
 
 /** Streaming uses the existing durable run, scheduler and guarded transports.
  * A terminal feed releases no baseline: sealed reconciliation owns that proof. */
@@ -303,14 +305,21 @@ export async function streamOneWayForegroundSync(
 			: cloudChanges(after);
 		for await (const raw of source) {
 			check();
-			const page = parseNativeIndexChangesPage(raw, spec.streaming!.captureId, status.indexedSequence ?? status.sequence);
+			const page = parseNativeIndexChangesPage(raw, spec.streaming!.captureId, status.indexedSequence ?? status.sequence, local ? NATIVE_INVENTORY_BATCH_ENTRIES : undefined);
 			if (status.generation !== null && status.generation !== page.generation) throw Error('Streaming source generation changed.');
 			const terminal = page.state === 'complete' && !page.hasMore;
-			await runs.appendStreamInput(spec, page.generation, page.changes, terminal);
-			check();
-			indexed = page.nextSequence;
-			skipped = page.totalSkipped;
-			indexState = page.state === 'complete' ? 'complete' : page.state === 'indexed' ? 'watching' : 'indexing';
+			// Large native transport batches amortize host authentication and code
+			// verification; durable writes and first-ready wakes remain bounded.
+			for (let offset = 0; offset < Math.max(1, page.changes.length); offset += INVENTORY_PAGE_ENTRIES) {
+				const chunk = page.changes.slice(offset, offset + INVENTORY_PAGE_ENTRIES), last = offset + chunk.length === page.changes.length;
+				await runs.appendStreamInput(spec, page.generation, chunk, terminal && last);
+				check();
+				indexed = chunk.at(-1)?.sequence ?? page.nextSequence;
+				skipped = page.totalSkipped;
+				if (last) indexState = terminal ? 'complete' : ['indexed', 'complete'].includes(page.state) ? 'watching' : 'indexing';
+				wake();
+				if (offset === 0 || last) report();
+			}
 			status = await runs.streamState(spec);
 			check();
 			wake();

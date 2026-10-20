@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readNativeIndexChanges, type NativeIndexChangesPage } from './streamingIndex';
-import { assertNativeScanExclusions, parseMobileFolderResult, supportsNativeStreamingIndex, type FolderRequest } from './mobileFolders.client';
+import { assertNativeScanExclusions, parseMobileFolderResult, supportsNativeStreamingIndex, supportsNativeStreamingBatches, type FolderRequest } from './mobileFolders.client';
 const id = crypto.randomUUID(),
 	entry = { path: 'file', id: 'inode', version: '1', kind: 'file' as const, size: 0, sha256: 'a'.repeat(64) };
 const page = (sequence: number, state: NativeIndexChangesPage['state'], changes: NativeIndexChangesPage['changes'] = []): NativeIndexChangesPage => ({
@@ -88,4 +88,23 @@ test('initial indexing completion keeps subscription active until consumers drai
 	assert.equal((await iterator.next()).value?.state, 'complete');
 	assert.equal((await iterator.next()).done, true);
 	assert.deepEqual(actions, ['scan-stream', 'scan-changes', 'scan-changes', 'scan-stream-finish', 'scan-changes', 'scan-stream-finish']);
+});
+test('corrected hosts batch feed RPCs while legacy hosts retain their128-entry fallback', async () => {
+	const rows = Array.from({ length: 1024 }, (_, i) => ({ sequence: i + 1, revision: '1', entry: { ...entry, path: `file-${i}` } }));
+	const calls: number[] = [];
+	for (const version of ['1.11.0', '1.11.1']) {
+		let reads = 0, observed = 0;
+		for await (const result of readNativeIndexChanges({ ownerId: 'owner', deviceId: 'device', rootId: 'root', captureId: id,
+			afterSequence: 0, signal: new AbortController().signal,
+			...(supportsNativeStreamingBatches({ platform: 'macos', fileAccessVersion: version }) ? { pageSize: 4096 } : {}),
+			request: async (_owner, request) => {
+				if (request.action === 'scan-stream') return { roots: [], changesPage: page(0, 'running') };
+				assert.equal(request.action, 'scan-changes'); reads++;
+				const changes = rows.slice(request.afterSequence, request.afterSequence + request.pageSize!);
+				const next = request.afterSequence + changes.length;
+				return { roots: [], changesPage: { ...page(next, 'complete', changes), revision: rows.length, hasMore: next < rows.length } };
+			} })) observed += result.changes.length;
+		assert.equal(observed, rows.length); calls.push(reads);
+	}
+	assert.deepEqual(calls, [8, 1]);
 });

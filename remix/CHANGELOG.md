@@ -98,6 +98,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-21: Reduce repeated full-bundle verification and native streaming RPC overhead while retaining fresh child/parent authentication, bounded journal chunks and restart cursors. Mac file-access 1.11.1 fixes full response byte accounting; installed throughput acceptance remains pending. See [PR 1074](../PRs/1074-codex-sync-throughput-reduce-native-verification-and-feed-overhead.md). — Codex (AI)
+
 - 2026-10-20: Create empty attachments with a conditional PUT before HEAD verification, preserving the object-only S3 role, immutable recovery and integrity checks. Upload-start/completion advertise compatible PATCH corrections; live saved-job acceptance remains open. See [PR 1073](../PRs/1073-codex-sync-empty-object-finalization-create-empty-objects-without-listbucket.md). — Codex (AI)
 
 - 2026-10-20: Preserve exact native identity retry markers across Electron error serialization, resume only known native transport interruptions, and retain closed cloud status/code/proxy reasons in the sync UI. Persist redacted folder-request diagnostics beside signer logs. Installed automatic retry and sustained uploads remain pending; see [PR verification note](../PRs/1072-codex-sync-native-failure-recovery-preserve-native-sync-retries-across-electron-ipc.md). — Codex (AI)
