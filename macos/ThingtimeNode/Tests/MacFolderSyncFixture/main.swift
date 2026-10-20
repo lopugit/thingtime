@@ -11,6 +11,7 @@ struct Configuration: Decodable {
     let credential: String
     let directory: URL
     let photoFixture: Bool?
+    let batchFixture: Bool?
 }
 /// Deterministic files stand in for PhotoKit only in this non-shipping fixture.
 struct FixturePhotoResources: PhotoResourceProvider {
@@ -89,6 +90,20 @@ final class StreamWriter: @unchecked Sendable {
             choose: { selected }, approve: { _ in true },
             chooseSource: config.photoFixture == true ? { .photos } : nil,
             photos: PhotoLibraryReader(provider: FixturePhotoResources(directory: selected)), approveTrash: { _ in true }, approveRestore: { _, _ in true }, conditions: { .init(network: "wifi", charging: true) })
+        if config.batchFixture == true {
+            guard let input = try NodeFolderStreamInput.header(.standardInput, maximumBytes: 600_000) else { throw MobileFolderStore.Failure.invalid }
+            let request = try JSONDecoder().decode(JSONValue.self, from: input)
+            guard case .object(let fields) = request, fields["action"] == .string("upload-batch"), case .string(let id) = fields["requestId"] else { throw MobileFolderStore.Failure.invalid }
+            let duplex = NodeBatchDuplex(input: .standardInput, output: .standardOutput); duplex.start()
+            let response: [String: Any]
+            do {
+                let result = try await service.handle(request, batchCallback: { frame, timeout in
+                    try await NodeBatchCallback.exchange(duplex, frame: frame, timeout: timeout)
+                })
+                response = ["id": id, "ok": true, "result": try JSONSerialization.jsonObject(with: JSONEncoder().encode(result))]
+            } catch { response = ["id": id, "ok": false, "error": ["code": "fixture-refused", "message": "Fixture batch refused"]] }
+            duplex.finish(try JSONSerialization.data(withJSONObject: response)); return
+        }
         while let input = try NodeFolderStreamInput.header(.standardInput) {
             let response: JSONValue
             do {

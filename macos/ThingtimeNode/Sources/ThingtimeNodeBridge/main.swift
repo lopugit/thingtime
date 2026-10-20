@@ -191,11 +191,12 @@ private enum ThingtimeNodeBridge {
         }
 
         let staging = CommandLine.arguments == [CommandLine.arguments[0], "--folder-stage-stream"]
+        let batching = CommandLine.arguments == [CommandLine.arguments[0], "--folder-batch-stream"]
         let input: Data
         let request: NodeRequest
         do {
-            if staging {
-                guard let header = try NodeFolderStreamInput.header(.standardInput) else { throw ThingtimeNodeError.invalidRequest("Missing stream header.") }
+            if staging || batching {
+                guard let header = try NodeFolderStreamInput.header(.standardInput, maximumBytes: batching ? 600_000 : 131_072) else { throw ThingtimeNodeError.invalidRequest("Missing stream header.") }
                 input = header
             } else { input = FileHandle.standardInput.readDataToEndOfFile() }
             request = try NodeWireCodec.decodeRequest(input)
@@ -231,6 +232,7 @@ private enum ThingtimeNodeBridge {
            fields["action"] == .string("read-range") { streaming = true } else { streaming = false }
         let sink = ByteSink()
         var stageSource: NodeFolderStreamInput?
+        var batchDuplex: NodeBatchDuplex?
         if staging {
             guard request.method == "folder-sync.request", case .object(let fields) = request.parameters,
                   fields["action"] == .string("stage-range"), case .number(let length) = fields["length"],
@@ -240,6 +242,14 @@ private enum ThingtimeNodeBridge {
             }
             stageSource = source
             service.stage(input, source: source) { data in reply.finish(data) }
+        } else if batching {
+            guard request.method == "folder-sync.request", case .object(let fields) = request.parameters,
+                  fields["action"] == .string("upload-batch") else {
+                connection.invalidate(); write(.failure(id: request.id, code: "invalid_request", message: "Invalid folder batch.")); return
+            }
+            let duplex = NodeBatchDuplex(input: .standardInput, output: .standardOutput)
+            batchDuplex = duplex; duplex.start()
+            service.bulk(input, callback: duplex) { data in reply.finish(data) }
         } else if streaming { service.stream(input, sink: sink) { data in reply.finish(data) } }
         else { service.request(input) { data in reply.finish(data) } }
 
@@ -248,7 +258,8 @@ private enum ThingtimeNodeBridge {
                 ?? encoded(.failure(id: request.id, code: "node_timeout", message: "Thingtime Node did not respond in time."))
         }
         connection.invalidate()
-        if streaming {
+        if let batchDuplex { batchDuplex.finish(response) }
+        else if streaming {
             sink.finish(response)
         } else { FileHandle.standardOutput.write(response) }
     }

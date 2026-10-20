@@ -31,6 +31,9 @@ final class FolderStreamXPCTests: XCTestCase {
                 reply(Data("complete".utf8))
             }
         }
+        func bulk(_ data: Data, callback: ThingtimeNodeBatchCallback, withReply reply: @escaping (Data) -> Void) {
+            callback.exchange(data, withReply: reply)
+        }
         func stage(_ data: Data, source: ThingtimeNodeByteSource, withReply reply: @escaping (Data) -> Void) {
             DispatchQueue.global().async {
                 var hash = SHA256()
@@ -81,6 +84,44 @@ final class FolderStreamXPCTests: XCTestCase {
         XCTAssertEqual(result, Data(SHA256.hash(data: data)))
         let refused: Data = await withCheckedContinuation { reply in source.read(0, length: 1) { reply.resume(returning: $0) } }
         XCTAssertTrue(refused.isEmpty)
+    }
+    func testIndexedBulkCallbackCrossesRealXPCAndDuplexPipeWithAcknowledgement() async throws {
+        let service = Service(), listener = NSXPCListener.anonymous()
+        listener.delegate = service; listener.resume(); defer { listener.invalidate() }
+        let connection = NSXPCConnection(listenerEndpoint: listener.endpoint)
+        connection.remoteObjectInterface = ThingtimeNodeXPC.interface(); connection.resume(); defer { connection.invalidate() }
+        let proxy = try XCTUnwrap(connection.remoteObjectProxy as? ThingtimeNodeXPCProtocol)
+        let input = Pipe(), output = Pipe(), duplex = NodeBatchDuplex(input: input.fileHandleForReading, output: output.fileHandleForWriting)
+        duplex.start(); defer { try? input.fileHandleForWriting.close(); try? output.fileHandleForReading.close() }
+        let bytes = Data(repeating: 42, count: 65_536)
+        let frame: [String: Any] = ["kind": "chunk", "ordinal": 7, "offset": 0, "data": bytes.base64EncodedString()]
+        let frameData = try JSONSerialization.data(withJSONObject: frame)
+        let consumer = Task.detached { () throws -> Void in
+            var line = Data()
+            while let byte = try output.fileHandleForReading.read(upToCount: 1), !byte.isEmpty, byte[0] != 10 { line.append(byte) }
+            let object = try XCTUnwrap(JSONSerialization.jsonObject(with: line) as? [String: Any])
+            XCTAssertEqual(object["callbackId"] as? Int, 1)
+            let received = try XCTUnwrap(object["frame"] as? [String: Any])
+            XCTAssertEqual(received["ordinal"] as? Int, 7); XCTAssertEqual(Data(base64Encoded: received["data"] as! String), bytes)
+            var ack = try JSONSerialization.data(withJSONObject: ["callbackId": 1, "reply": ["accepted": true]]); ack.append(10)
+            try input.fileHandleForWriting.write(contentsOf: ack)
+        }
+        let response: Data = await withCheckedContinuation { reply in proxy.bulk(frameData, callback: duplex) { reply.resume(returning: $0) } }
+        try await consumer.value
+        XCTAssertEqual(try JSONSerialization.jsonObject(with: response) as? [String: Bool], ["accepted": true])
+        duplex.finish(try NodeWireCodec.encodeResponse(.success(id: "wire", result: .object([:]))))
+    }
+
+    func testBulkDuplexRejectsUnknownReplyIDsAndClosesPendingCallbacks() async throws {
+        let input = Pipe(), output = Pipe(), duplex = NodeBatchDuplex(input: input.fileHandleForReading, output: output.fileHandleForWriting)
+        duplex.start(); defer { try? input.fileHandleForWriting.close() }
+        let completed = expectation(description: "Rejected callback")
+        duplex.exchange(Data(#"{"kind":"verify-ready","uploads":[]}"#.utf8)) { value in XCTAssertTrue(value.isEmpty); completed.fulfill() }
+        try input.fileHandleForWriting.write(contentsOf: Data(#"{"callbackId":99,"reply":{"accepted":true}}"#.utf8) + Data([10]))
+        await fulfillment(of: [completed], timeout: 2)
+        let refused = expectation(description: "Closed callback")
+        duplex.exchange(Data(#"{"kind":"verify-ready","uploads":[]}"#.utf8)) { value in XCTAssertTrue(value.isEmpty); refused.fulfill() }
+        await fulfillment(of: [refused], timeout: 2)
     }
     func testStreamInputRejectsOversizeHeadersOutOfOrderReadsAndTruncation() throws {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)

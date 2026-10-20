@@ -1,4 +1,6 @@
 import type { PriorityReadiness } from './priorityReadiness';
+import { executeCloudUploadBatch, uploadBatchFailure } from './cloudUploadBatch.client';
+import { eligibleUploadBatchEntry, parseUploadBatchObservations, UPLOAD_BATCH_FILES, UPLOAD_BATCH_METADATA_BYTES } from './uploadBatch';
 import type { SavedFileSyncConfiguration } from './configuredPlan';
 import type { ForegroundSyncInput, ForegroundSyncProgress } from './foregroundSync';
 import { foregroundSyncContext } from './foregroundSyncContext';
@@ -89,6 +91,7 @@ export async function streamOneWayForegroundSync(
 	});
 	const ignore = createSyncIgnorePolicy(configuration.ignoreRules, configuration.excludedPaths);
 	const report = () => publishProgress({ stage: 'transferring', confirmed: state.confirmed, total: state.operations, indexed, ...coverage() });
+	const bulk = local && input.nativeOperationGuards && input.uploadBatch && !input.runtime.authorizeMutation ? input.uploadBatch : undefined;
 	let readinessRefresh: Promise<void> | undefined;
 	let readinessAgain = false;
 	const refreshReadiness = (): Promise<void> => {
@@ -154,7 +157,44 @@ export async function streamOneWayForegroundSync(
 			if (signal.aborted) abort();
 		});
 	};
-	const cloudNode = async (path: string): Promise<CloudInventoryNode | null> => {
+	let observationSequences = new Map<string, number>();
+	let observationNodes = new Map<string, CloudInventoryNode | null>();
+	const observeBatch = async (change: NativeIndexChangesPage['changes'][number]) => {
+		if (observationSequences.get(change.entry.path) === change.sequence) return observationNodes;
+		const candidates = await runs.peekUploadBatchInputs(spec);
+		check();
+		const pathsSeen = new Set<string>();
+		const inputs = [change, ...candidates].filter(input => {
+			const path = syncPathKey(input.entry.path);
+			if (!eligibleUploadBatchEntry(input.entry) || pathsSeen.has(path)) return false;
+			pathsSeen.add(path); return true;
+		}).slice(0, UPLOAD_BATCH_FILES);
+		const paths = inputs.map(input => input.entry.path);
+		// This specific POST observes metadata only. Server auth/config/root
+		// checks stay fresh; no native mutation authorization is borrowed/cached.
+		const { json } = cloudRequests({ ...runtime, authorizeMutation: undefined }, scope, signal, UPLOAD_BATCH_METADATA_BYTES);
+		const result = parseUploadBatchObservations(await json('/api/v1/files/batches', {
+			phase: 'observe', scope, configuration: reviewed, paths
+		}), paths);
+		check();
+		observationSequences = new Map(inputs.map(input => [input.entry.path, input.sequence]));
+		observationNodes = new Map();
+		const cacheNode = (path: string, node: CloudInventoryNode | null) => {
+			if (observationNodes.has(path) && JSON.stringify(observationNodes.get(path)) !== JSON.stringify(node))
+				throw Error('Batch parent observations changed.');
+			observationNodes.set(path, node);
+		};
+		for (const o of result.observations) {
+			cacheNode(o.path, o.node);
+			const parent = o.path.split('/').slice(0, -1).join('/');
+			if (parent) {
+				cacheNode(parent, o.parent);
+			}
+		}
+		return observationNodes;
+	};
+	const cloudNode = async (path: string, observed?: Map<string, CloudInventoryNode | null>): Promise<CloudInventoryNode | null> => {
+		if (observed?.has(path)) { check(); return structuredClone(observed.get(path)!); }
 		if (!input.nativeOperationGuards) await authorize();
 		check();
 		const entry = await readCloudPathEntry(runtime, scope, configuration.remoteFolderId, path, signal);
@@ -182,12 +222,15 @@ export async function streamOneWayForegroundSync(
 			check();
 			if (previous && !previous.operation.confirmed) {
 				await wait(observed);
+				observationSequences.delete(change.entry.path);
 				continue;
 			}
 			if (!input.nativeOperationGuards) await authorize();
 			check();
+			const observations = bulk && eligibleUploadBatchEntry(change.entry) ? await observeBatch(change) : undefined;
+			const provisional = observations?.has(change.entry.path) && observations.get(change.entry.path) === null;
 			const source = local
-				? await readLocal(change.entry.path)
+				? provisional ? structuredClone(change.entry) : await readLocal(change.entry.path)
 				: await readCloudPathEntry(runtime, scope, configuration.remoteFolderId, change.entry.path, signal);
 			check();
 			const event = { ...change, generation };
@@ -196,7 +239,7 @@ export async function streamOneWayForegroundSync(
 				wake();
 				return;
 			}
-			const node = await cloudNode(change.entry.path),
+			const node = await cloudNode(change.entry.path, provisional ? observations : undefined),
 				target = local ? node && inventorySyncEntry(node) : await readLocal(change.entry.path);
 			check();
 			let beforeLocal: SyncEntry | null = null,
@@ -229,7 +272,7 @@ export async function streamOneWayForegroundSync(
 			}
 			const operation: SyncOperation = { id: crypto.randomUUID(), mutation: decision, confirmed: false };
 			const binding = await prepareCloudOperationBinding(operation, scope, configuration.remoteFolderId, {
-				node: (path) => (path === change.entry.path ? Promise.resolve(node) : cloudNode(path)),
+				node: (path) => (path === change.entry.path ? Promise.resolve(node) : cloudNode(path, provisional ? observations : undefined)),
 				operation: (path) => runs.find(spec, path),
 				previousTrash: async () => undefined
 			});
@@ -284,7 +327,30 @@ export async function streamOneWayForegroundSync(
 		for (;;) {
 			const observed = wakeRevision;
 			check();
-			const operation = await runs.claimNext(spec, input.nativeOperationGuards === true);
+			if (bulk) {
+				const batch = await runs.claimUploadBatch(spec, reviewed);
+				if (batch) {
+					try {
+						const failures = await executeCloudUploadBatch(batch, bulk, runtime, signal, {
+							markCommit: ordinals => runs.markUploadBatchCommit(spec, batch.batchId, ordinals),
+							confirm: async receipt => { state = await runs.confirm(spec, receipt); check(); },
+							transfer: input.transfer
+						});
+						if (failures.length) {
+							await runs.recoverUploadBatch(spec);
+							const stop = failures.find(f => f.retryable || f.code === 'authority-changed' || f.code === 'invalid-member' || f.code === 'cancelled');
+							if (stop) throw uploadBatchFailure(stop);
+						}
+					} catch (error) {
+						// Never regroup effects with lost replies. The durable per-member
+						// dispatch fence follows them into receipt-first single recovery.
+						if (!signal.aborted) await runs.recoverUploadBatch(spec);
+						throw error;
+					}
+					wake(); report(); continue;
+				}
+			} else await runs.recoverUploadBatch(spec);
+			const operation = await runs.claimNext(spec, input.nativeOperationGuards === true, bulk ? 512 : 128, !!bulk);
 			await refreshReadiness();
 			check();
 			if (!operation) {
@@ -367,7 +433,7 @@ export async function streamOneWayForegroundSync(
 			if (status.terminal) return;
 			// Select only after a slot opens: priorities may have changed while
 			// waiting, and the durable producer keeps indexing independently.
-			while (state.operations - state.confirmed >= 128) {
+			while (state.operations - state.confirmed >= (bulk ? 512 : 128)) {
 				const observed = wakeRevision;
 				await wait(observed);
 			}

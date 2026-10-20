@@ -5,8 +5,8 @@ import Foundation
 /// commands. The desktop host must also verify its active browser account.
 @MainActor
 public final class MacFolderSync {
-    public static let version = "1.12.0"
-    private static let supportedActions: Set<String> = ["context", "conditions", "list", "choose", "remove", "scan", "scan-stream", "scan-stream-finish", "scan-changes", "scan-capture", "scan-status", "scan-cancel", "scan-skips", "scan-page", "scan-discard", "inspect", "read", "read-range", "stage-begin", "stage-append", "stage-range", "stage-finish", "write-approve", "write-check", "publication-lookup", "publish", "trash", "trash-lookup", "trash-expected", "trash-inspect", "trash-restore", "trash-restore-reviewed", "trash-list"]
+    public static let version = "1.13.0"
+    private static let supportedActions: Set<String> = ["upload-batch", "context", "conditions", "list", "choose", "remove", "scan", "scan-stream", "scan-stream-finish", "scan-changes", "scan-capture", "scan-status", "scan-cancel", "scan-skips", "scan-page", "scan-discard", "inspect", "read", "read-range", "stage-begin", "stage-append", "stage-range", "stage-finish", "write-approve", "write-check", "publication-lookup", "publish", "trash", "trash-lookup", "trash-expected", "trash-inspect", "trash-restore", "trash-restore-reviewed", "trash-list"]
     public enum SourceSelection { case folder(URL), photos }
     public struct Conditions: Codable, Sendable {
         public let network: String
@@ -30,6 +30,7 @@ public final class MacFolderSync {
         let transfer: MobileSyncStaging.Request?; let stage: MobileSyncStaging.Stage?; let approval: MobileFolderStore.WriteApproval?
         let captureId: String?; let capture: MobileFolderInventory.Capture?; let inventoryDeviceId: String?
         let trash: MobileSyncTrash.Request?; let restore: MobileSyncTrash.Restore?; let cursor: String?
+        let batch: JSONValue?
     }
     private let origin: URL
     private let store: MobileFolderStore
@@ -359,9 +360,10 @@ public final class MacFolderSync {
         let photos = photos; Task.detached { photos.discard() }
     }
 
-    public func handle(_ payload: JSONValue, stream: (@Sendable (Data) throws -> Void)? = nil, receive: (@Sendable (Int) throws -> Data)? = nil) async throws -> JSONValue {
+    public func handle(_ payload: JSONValue, stream: (@Sendable (Data) throws -> Void)? = nil, receive: (@Sendable (Int) throws -> Data)? = nil, batchCallback: (@Sendable (JSONValue, TimeInterval) async throws -> JSONValue)? = nil) async throws -> JSONValue {
         let encoded = try JSONEncoder().encode(payload)
-        guard encoded.count <= 131_072 else { throw MobileFolderStore.Failure.limit }
+        let isBatch = { if case .object(let fields) = payload { return fields["action"] == .string("upload-batch") }; return false }()
+        guard encoded.count <= (isBatch ? 600_000 : 131_072) else { throw MobileFolderStore.Failure.limit }
         let r = try JSONDecoder().decode(Request.self, from: encoded)
         guard UUID(uuidString: r.requestId) != nil, !r.deviceId.isEmpty, r.deviceId.utf8.count <= 512,
               r.origin == origin.absoluteString else { throw MobileFolderStore.Failure.invalid }
@@ -406,7 +408,7 @@ public final class MacFolderSync {
         let waiting = r.action == "scan-changes"
         guard waiting ? streamWaiter == nil : active == nil else { throw ThingtimeNodeError.invalidRequest("Another folder request is running.") }
         guard Self.supportedActions.contains(r.action) else { throw MobileFolderStore.Failure.invalid }
-        guard (r.action == "read-range") == (stream != nil), (r.action == "stage-range") == (receive != nil) else { throw MobileFolderStore.Failure.invalid }
+        guard (r.action == "read-range") == (stream != nil), (r.action == "stage-range") == (receive != nil), (r.action == "upload-batch") == (batchCallback != nil) else { throw MobileFolderStore.Failure.invalid }
         let task = Task {
             let began = ProcessInfo.processInfo.systemUptime
             var failure: Error?
@@ -416,13 +418,13 @@ public final class MacFolderSync {
                     ThingtimeNodeLog.actions.notice("\(diagnostic, privacy: .public)")
                 }
             }
-            do { return try await self.execute(r, owner: owner, stream: stream, receive: receive) }
+            do { return try await self.execute(r, owner: owner, stream: stream, receive: receive, batchCallback: batchCallback, started: began) }
             catch { failure = error; throw error }
         }
         if waiting { streamWaiter = (r.requestId, r.ownerId, r.deviceId, task) }
         else { active = (r.requestId, r.ownerId, r.deviceId, task) }
         let timeout = Task {
-            try await Task.sleep(for: .seconds(270))
+            try await Task.sleep(for: .seconds(isBatch ? 180 : 270))
             if waiting { if streamWaiter?.id == r.requestId { streamWaiter?.task.cancel(); streamJob?.wake.signal() } }
             else if active?.id == r.requestId { suspendRequest() }
         }
@@ -481,13 +483,14 @@ public final class MacFolderSync {
     }
     private func value<T: Encodable>(_ input: T) throws -> JSONValue { try JSONValue.from(input) }
 
-    private func execute(_ r: Request, owner: FileSyncOwnerScope, stream: (@Sendable (Data) throws -> Void)?, receive: (@Sendable (Int) throws -> Data)?) async throws -> JSONValue {
+    private func execute(_ r: Request, owner: FileSyncOwnerScope, stream: (@Sendable (Data) throws -> Void)?, receive: (@Sendable (Int) throws -> Data)?, batchCallback: (@Sendable (JSONValue, TimeInterval) async throws -> JSONValue)?, started: TimeInterval) async throws -> JSONValue {
         try await authorized(r)
         var result: [String: JSONValue] = ["requestId": .string(r.requestId), "ownerId": .string(r.ownerId), "deviceId": .string(r.deviceId), "origin": .string(r.origin)]
         var inspectedGrant: MobileFolderStore.Grant?
         var checkedApproval: MobileFolderStore.WriteApproval?
         if r.action == "context" {
             var capabilities: [String: JSONValue] = ["fileAccessVersion": .string(Self.version), "fileStagingVersion": .string("1.1.0"), "filePublicationVersion": .string("1.2.0")]
+            capabilities["fileUploadBatchVersion"] = .string("1.0.0")
             if trash != nil, approveTrash != nil { capabilities["fileTrashVersion"] = .string(approveRestore == nil ? "1.1.1" : "1.2.1") }
             result["capabilities"] = .object(capabilities)
             result["conditions"] = try value(conditions())
@@ -526,6 +529,26 @@ public final class MacFolderSync {
                     }
                     throw error
                 }
+                if r.action == "upload-batch" {
+                    guard let raw = r.batch, let batchCallback, grant.sourceKind == nil else { throw MobileFolderStore.Failure.invalid }
+                    let batch = try MacUploadBatchDescriptor(raw)
+                    guard batch.origin == r.origin, batch.ownerId == r.ownerId, batch.deviceId == r.deviceId,
+                          batch.localRootId == root else { throw MobileFolderStore.Failure.invalid }
+                    let bookmark = grant.bookmark
+                    func current() throws {
+                        try Task.checkCancellation()
+                        let current = try store.grant(owner, id: root), status = conditions()
+                        guard current.bookmark == bookmark, current.sourceKind == nil,
+                              batch.network != "wifi" || status.network == "wifi",
+                              batch.network != "unmetered" || ["wifi", "ethernet"].contains(status.network),
+                              !batch.chargingOnly || status.charging == true else { throw MobileFolderStore.Failure.changed }
+                    }
+                    try current()
+                    result["uploadedBatch"] = try await MacUploadBatchOperation.run(batch, started: started, bookmark: bookmark,
+                        check: { try await MainActor.run { try current() } }, callback: batchCallback)
+                    try current(); inspectedGrant = grant
+                }
+                else {
                 let staging = staging, photos = photos
                 let photoScope = owner.key + ":" + root
                 guard grant.sourceKind != "photos" || ["scan", "read", "read-range"].contains(r.action) else { throw MobileFolderStore.Failure.invalid }
@@ -715,6 +738,7 @@ public final class MacFolderSync {
                     }
                 }
             }
+        }
         }
         if let rules = r.ignoreRules, !rules.isEmpty { result["ignoreRules"] = .string(rules) }
         if let exclusions = r.excludedPaths { result["excludedPaths"] = try value(exclusions) }

@@ -20,6 +20,7 @@ export const routeModules: Record<string, () => Promise<RouteModule>> = {
   ...actionDataRoutes,
   'v1/devices/node/identity': () => import('../../../app/routes/api/v1/devices/node/identity/_identity'),
   'v1/devices/disconnect': () => import('../../../app/routes/api/v1/devices/disconnect/_disconnect'),
+  'v1/files/batches': () => import('../../../app/routes/api/v1/files/batches/_batches'),
   'v1/files': () => import('../../../app/routes/api/v1/files/_files'),
   'v1/lopu/network': () => import('../../../app/routes/api/v1/lopu/network/_network'),
   'v1/lopu/tasks': () => import('../../../app/routes/api/v1/lopu/tasks/_tasks'),

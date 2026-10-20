@@ -6356,6 +6356,54 @@ origin, source and revocation fences. Scope eviction cannot forget live rolling
 history, token debt or cooldown. Installed throughput after this scheduling
 correction remains unverified.
 
+### Bounded small-file upload batches — 2026-10-21
+
+Trusted Mac upload/backup streams negotiate `fileAccessVersion` 1.13.0,
+`fileUploadBatchVersion` 1.0.0 and selected-origin `api.file-sync-batches` 1.0.0.
+Independent absent-target regular files of 1–256 KiB can share a batch of at
+most 256 files and 32 MiB. The first eligible file starts immediately; folders,
+existing targets/conflicts, empty/large files and older adapters retain the
+existing executor. Hardlink paths remain queued under their original IDs and
+are split across batches. No extra secrets or fork-specific setup are needed
+beyond existing private attachment storage, paired devices and folder grants.
+
+Preparation uses a bounded metadata observation and provisional durable index
+entries; those entries grant no source access. One explicit native operation
+checks current identity before/after the batch and validates each local grant,
+path, pinned descriptor and revision before disclosure/PUT, after PUT, and after
+stored fingerprint verification. Electron alone holds authenticated API access
+and signed URLs; no cookies, tokens or network destinations cross XPC. New
+payload dispatch expires after 30 seconds, total operation/callback lifetime is
+180 seconds, and payload workers are capped at 16. Already-issued storage grants
+can stage bytes until expiry after remote revocation; fresh final server and
+configuration checks still gate canonical visibility.
+
+The five bounded control phases are metadata observe, receipt-only prepare
+probe, checksum prepare, stored-content verify and canonical commit. Descriptors
+are capped at 320 KiB, control requests at 512 KiB, and host-only signed-URL
+responses at 2 MiB. Server work uses at most eight provider slots per owner per
+process and fresh authority/namespace checks in bounded waves. The separate
+bulk policy charges 65,536 weighted units/minute plus 512 MiB prepared payload
+bytes/minute; it does not raise existing identity/global limits. These limits
+are feasibility ceilings, not measured upload speed.
+
+Every member retains its original operation/upload identity, CAS, Timeline and
+receipt. A durable dispatch marker precedes canonical POST. Partial or unknown
+outcomes enter original-ID individual receipt-first recovery before regrouping;
+a missing receipt cannot retire a possibly in-flight canonical write. Active
+batch claims survive restart and capability fallback. Journal version 14 blocks
+older clients from silently ignoring these claims. Root serialization, priority
+ancestry and contiguous source/baseline proof remain unchanged; trusted bulk
+preparation is bounded to 512 operations (other modes retain 128).
+
+Controlled planner/journal/service tests and isolated real native/HTTP fixtures
+measure distinct portions of this path. Practical installed throughput and
+byte-identical same-job recovery remain acceptance requirements; neither test
+establishes 100 files/second. A transient native identity timeout on scan-changes
+alone resumes its original cursor with existing backoff, without cancelling an
+independent safe payload. Revocation, account changes and other actions remain
+terminal under their existing policy.
+
 ### Upload priority readiness — 2026-10-21
 
 The existing file-sync progress view includes an individually editable priority

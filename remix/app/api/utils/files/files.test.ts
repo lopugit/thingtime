@@ -9,7 +9,7 @@ import { COLLECTION_SCHEMA_VERSIONS, isProtectedThingtime } from '../../../schem
 import { contentPartPlan } from '../../../fileSync/contentFingerprint';
 import { cloudFileSyncEntry, parseCloudFileCommit } from '../../../fileSync/cloudFile';
 function fixture() {
- let docs = new Map<string, any>(), events = new Map<string, any>(), charged = 0, failAppend = false, fingerprints = 0;
+ let docs = new Map<string, any>(), events = new Map<string, any>(), charged = 0, failAppend = false, fingerprints = 0, receiptReads = 0;
  const now = new Date('2026-10-17T00:00:00Z');
  const matches = (doc: any, filter: any) => Object.entries(filter).every(([k, v]: any) => {
   if (v && typeof v === 'object' && '$in' in v) return v.$in.some((x: any) => x == null ? doc[k] == null : doc[k] === x);
@@ -24,7 +24,7 @@ function fixture() {
   fingerprint: async (_viewer, id) => { fingerprints++; const doc = docs.get(String(id)); if (!doc || doc.ownerId !== 'owner') return { ok: false, status: 404, error: 'missing' };
    return { ok: true, id: doc.shareId, version: attachmentContentVersion(doc.shareId, doc.objectKey, doc.objectVersionId), size: 2,
     fingerprint: { algorithm: 'sha256-parts-v1', ...contentPartPlan(2), sha256: doc.shareId.endsWith('1') ? 'a'.repeat(64) : 'b'.repeat(64) } }; },
-  entries: async (_things, _owner, ids) => ids.filter(id => events.has(id)).map(id => ({ event: structuredClone(events.get(id)) } as any)),
+  entries: async (_things, _owner, ids) => { receiptReads++; assert.ok(ids.length<=128); return ids.filter(id => events.has(id)).map(id => ({ event: structuredClone(events.get(id)) } as any)); },
   append: async (_things, event) => { if (failAppend) throw Error('append failed'); events.set(event.id, structuredClone(event)); return { event } as any; },
   debit: async (_owner, bytes) => { charged += bytes; }, lockFolder: async () => null
  });
@@ -33,7 +33,7 @@ function fixture() {
   attachmentState: 'ready', attachmentPurpose: 'file', attachmentEnvelopeVersion: 1, objectKey: 'objects/'+id, objectVersionId: 'version-'+id, objectSizeBytes: 2,
   storageClass: 'content', storageAccountingVersion: USER_STORAGE_ACCOUNTING_VERSION, createdAt: now, updatedAt: now, ...patch };
   try { doc.sizeBytes = thingStorageSizeBytes(doc); } catch { doc.sizeBytes = 0; } docs.set(id, doc); return attachmentContentVersion(id, doc.objectKey, doc.objectVersionId); }
- return { service, upload, docs: () => docs, events: () => events, charged: () => charged, fingerprints: () => fingerprints, failAppend: () => { failAppend = true; } };
+ return { service, upload, receiptReads: () => receiptReads, docs: () => docs, events: () => events, charged: () => charged, fingerprints: () => fingerprints, failAppend: () => { failAppend = true; } };
 }
 const input = (contentVersion: string) => ({ id: randomUUID(), operationId: randomUUID(), expectedRevision: null, name: 'fixture.bin', folderId: null, attachmentId: 'att1', contentVersion, trashed: false });
 test('stable identity, exact retries, retained versions, trash and restore share Timeline', async () => {
@@ -150,4 +150,17 @@ test('retention uses the same attachment authorization and rejects forged effect
  f.events().get(retained.file.revision).source = 'client';
  assert.equal((await f.service.commit('owner', keep)).ok, false);
  assert.equal((await f.service.read('owner', create.id, keep.operationId, true)).ok, false);
+});
+
+
+test('bounded aggregate receipts reuse canonical validation without provider calls', async () => {
+ const f=fixture(), create=input(f.upload('att1'));
+ const first:any=await f.service.commit('owner',create);assert.equal(first.ok,true);
+ const before=f.fingerprints();
+ const read:any=await f.service.readReceipts('owner',[{id:create.id,operationId:create.operationId},{id:randomUUID(),operationId:randomUUID()}]);
+ assert.equal(read.ok,true);assert.deepEqual(read.receipts[0].file,first.file);assert.equal(read.receipts[1],null);assert.equal(f.fingerprints(),before);
+ const beforeReads=f.receiptReads(); const many:any=await f.service.readReceipts('owner',Array.from({length:256},()=>({id:create.id,operationId:create.operationId})));assert.equal(many.ok,true);assert.equal(many.receipts.length,256);assert.equal(f.receiptReads()-beforeReads,2);
+ const e=f.events().get(first.file.revision);e.source='client';
+ assert.equal((await f.service.readReceipts('owner',[{id:create.id,operationId:create.operationId}])).ok,false);
+ assert.equal((await f.service.readReceipts('owner',Array.from({length:257},()=>({id:create.id,operationId:create.operationId})))).ok,false);
 });

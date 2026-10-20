@@ -3,6 +3,7 @@ import { nativeInventoryPageSize, NativeInventoryRetryWait } from './nativeInven
 import { canonicalIgnoreRules, createSyncIgnorePolicy } from './syncIgnore';
 import { canonicalNativeScanExclusions, isNativeScanExcluded } from './nativeScanExclusions';
 import type { FolderRequest, FolderResult } from './mobileFolders.client';
+import { SyncConnectionWait, SYNC_RETRY_DELAY_MS, SYNC_RETRY_MAX_MS } from './syncConnectionWait';
 
 export type NativeIndexChange = { sequence: number; revision: string; entry: SyncEntry; sourcePosition?: number; sourceKind?: 'snapshot' | 'delta' };
 /** Remote provenance orders concurrent snapshot rows against durable deltas. */
@@ -89,13 +90,32 @@ export async function* readNativeIndexChanges(input: {
 		input.signal.throwIfAborted();
 		const finish = indexed && !pollAfterFinish && !!input.readyToFinish && (await input.readyToFinish());
 		pollAfterFinish = finish;
-		const result = await input.request(
-			input.ownerId,
-			finish
-				? { action: 'scan-stream-finish', ...common, afterSequence }
-				: { action: 'scan-changes', ...common, afterSequence, pageSize, waitMilliseconds: indexed ? 2_000 : 25_000 },
-			input.signal
-		);
+		let result: FolderResult;
+		try {
+			result = await input.request(
+				input.ownerId,
+				finish
+					? { action: 'scan-stream-finish', ...common, afterSequence }
+					: { action: 'scan-changes', ...common, afterSequence, pageSize, waitMilliseconds: indexed ? 2_000 : 25_000 },
+				input.signal
+			);
+		} catch (error) {
+			input.signal.throwIfAborted();
+			// Only the exact trusted host identity marker gets this typed reason.
+			// Keep the consumer alive while this read retries its unchanged cursor;
+			// start/finish, authority and page-validation failures still escape.
+			if (finish || !(error instanceof SyncConnectionWait) || error.reason !== 'folder-identity') throw error;
+			const delay = Number.isFinite(error.retryAfterMs)
+				? Math.max(SYNC_RETRY_DELAY_MS, Math.min(SYNC_RETRY_MAX_MS, error.retryAfterMs)) : SYNC_RETRY_DELAY_MS;
+			await new Promise<void>((resolve, reject) => {
+				const done = () => { input.signal.removeEventListener('abort', abort); resolve(); };
+				const timer = setTimeout(done, delay);
+				const abort = () => { clearTimeout(timer); input.signal.removeEventListener('abort', abort); reject(input.signal.reason); };
+				input.signal.addEventListener('abort', abort, { once: true });
+				if (input.signal.aborted) abort();
+			});
+			continue;
+		}
 		input.signal.throwIfAborted();
 		const page = parseNativeIndexChangesPage(result.changesPage, input.captureId, afterSequence, pageSize);
 		if (generation !== undefined && page.generation !== generation) throw Error('Native streaming generation changed.');

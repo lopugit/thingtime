@@ -1,11 +1,12 @@
 'use strict';
 
 const { uploadFolderPart, uploadRetry, retryableUploadFailure } = require('./folder-upload.cjs');
+const { uploadFolderBatch } = require('./folder-upload-batch.cjs');
 const { stageRangeMetadata } = require('./folder-stream.cjs');
 const { normalizeEndpointUrl } = require('./desktop-settings.cjs');
 const { randomUUID } = require('node:crypto');
 const { performance } = require('node:perf_hooks');
-const ACTIONS = new Set(['context', 'upload-part', 'list', 'choose', 'conditions', 'remove', 'scan', 'scan-stream', 'scan-stream-finish', 'scan-changes', 'scan-capture', 'scan-status', 'scan-cancel', 'scan-skips', 'scan-page', 'scan-discard', 'inspect', 'read', 'read-range', 'stage-begin', 'stage-append', 'stage-range', 'stage-finish', 'write-approve', 'write-check', 'publication-lookup', 'publish', 'trash', 'trash-lookup', 'trash-expected', 'trash-inspect', 'trash-restore', 'trash-list', 'trash-restore-reviewed', 'suspend']);
+const ACTIONS = new Set(['upload-batch', 'context', 'upload-part', 'list', 'choose', 'conditions', 'remove', 'scan', 'scan-stream', 'scan-stream-finish', 'scan-changes', 'scan-capture', 'scan-status', 'scan-cancel', 'scan-skips', 'scan-page', 'scan-discard', 'inspect', 'read', 'read-range', 'stage-begin', 'stage-append', 'stage-range', 'stage-finish', 'write-approve', 'write-check', 'publication-lookup', 'publish', 'trash', 'trash-lookup', 'trash-expected', 'trash-inspect', 'trash-restore', 'trash-list', 'trash-restore-reviewed', 'suspend']);
 const supportsBatchPages = version => {
     const parts = typeof version === 'string' && version.length <= 32 && /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/.exec(version);
     return !!parts && parts[1] === '1' && Number.isSafeInteger(Number(parts[2])) && Number.isSafeInteger(Number(parts[3])) && Number(parts[2]) >= 10;
@@ -83,7 +84,7 @@ async function readCapabilities(context, signal) {
         // Only sync requirements are exposed. Never return arbitrary upstream data.
         const features = {};
         for (const key of ['api.devices-node-identity', 'api.things', 'api.files', 'api.attachment-uploads', 'api.attachment-upload-parts',
-            'api.attachment-upload-complete', 'api.attachment-content', 'api.actions-run', 'api.mongodb-endpoint']) {
+            'api.attachment-upload-complete', 'api.attachment-content', 'api.file-sync-batches', 'api.actions-run', 'api.mongodb-endpoint']) {
             const version = manifest.features[key]?.version;
             if (typeof version === 'string' && /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/.test(version) && version.length <= 32) features[key] = { version };
         }
@@ -190,7 +191,7 @@ class DesktopFolderSync {
         const apiOrigin = new URL(normalizeEndpointUrl(context.apiOrigin)).origin;
         if (!input || typeof input !== 'object' || Array.isArray(input) || !UUID.test(input.requestId) ||
             !identifier(input.ownerId) || !identifier(input.deviceId) || !ACTIONS.has(input.action) ||
-            (input.action !== 'context' && !(input.action === 'suspend' && input.origin === undefined) && input.origin !== apiOrigin) || Buffer.byteLength(JSON.stringify(stageRangeMetadata(input))) > 131_072) throw unavailable();
+            (input.action !== 'context' && !(input.action === 'suspend' && input.origin === undefined) && input.origin !== apiOrigin) || Buffer.byteLength(JSON.stringify(stageRangeMetadata(input))) > (input.action === 'upload-batch' ? 600_000 : 131_072)) throw unavailable();
         if (Object.prototype.hasOwnProperty.call(input, 'pageSize') &&
             (!['scan-page', 'scan-skips', 'scan-changes', 'scan-stream-finish'].includes(input.action) || !Number.isSafeInteger(input.pageSize) || input.pageSize < 1 || input.pageSize > 4096)) throw unavailable();
         if (this.quitting) throw shutdownWait();
@@ -226,6 +227,7 @@ class DesktopFolderSync {
         this.nativePageCapability = { window: context.window, generation: context.generation, appOrigin: context.appOrigin,
             apiOrigin: context.apiOrigin, ownerId: input.ownerId, deviceId: input.deviceId,
             supported: supportsBatchPages(value?.capabilities?.fileAccessVersion),
+            bulk: /^1\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/.test(value?.capabilities?.fileUploadBatchVersion ?? ''),
             // Public feature negotiation belongs to this exact live binding,
             // never to an authorization TTL or an account/device grant.
             apiCapabilities: value?.apiCapabilities ? structuredClone(value.apiCapabilities) : this.samePageCapability(context, input)?.apiCapabilities };
@@ -287,7 +289,7 @@ class DesktopFolderSync {
             await timing.measure('account', () => this.verifyAccount(context, signal)); this.assertCurrent(state);
             state.phase = previousPhase;
         };
-        const nativeRequest = request => timing.measure('native', () => this.requestNative('folder-sync.request', request, { signal: state.abort.signal }));
+        const nativeRequest = (request, extra = {}) => timing.measure('native', () => this.requestNative('folder-sync.request', request, { ...extra, signal: extra.signal ?? state.abort.signal }));
         try {
             await timing.measure('queue', () => this.admit(state));
             await verify();
@@ -328,9 +330,16 @@ class DesktopFolderSync {
                 if (!/^1\.([1-9][0-9]*)\.(0|[1-9][0-9]*)$/.test(manifest?.features?.['api.attachment-upload-parts']?.version ?? ''))
                     throw new Error('The selected server does not support this version of folder sync.');
             }
+            if (state.input.action === 'upload-batch') {
+                const capability = this.samePageCapability(context, state.input);
+                if (!capability?.bulk || !/^1\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/.test(capability.apiCapabilities?.features?.['api.file-sync-batches']?.version ?? ''))
+                    throw new Error('This native host or server does not support bounded upload batches.');
+            }
             state.phase = 'native-request';
             state.dispatched = true;
-            const value = state.input.action === 'upload-part' ? await uploadFolderPart({ input: state.input, context,
+            const value = state.input.action === 'upload-batch' ? await uploadFolderBatch({ input: state.input, context, signal: state.abort.signal,
+                assertCurrent: () => this.assertCurrent(state), requestNative: nativeRequest, fetchUpload: this.fetchUpload }) :
+                state.input.action === 'upload-part' ? await uploadFolderPart({ input: state.input, context,
                 signal: state.abort.signal, authorize: verify, fetchUpload: this.fetchUpload,
                 requestNative: nativeRequest,
                 signPart: async body => { await verify(); return signDesktopUploadPart(context, body, state.abort.signal, 20_000, this.diagnostic); }

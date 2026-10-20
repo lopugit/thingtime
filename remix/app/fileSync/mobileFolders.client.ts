@@ -1,4 +1,5 @@
 import { parseNativeIndexChangesPage, type NativeIndexChangesPage } from './streamingIndex';
+import { parseNativeUploadBatchResult } from './uploadBatch';
 import { canonicalIgnoreRules, createSyncIgnorePolicy } from './syncIgnore';
 import { nativeInventoryPageSize, parseNativeBackupStatus, parseNativeSkippedPage, parseNativeInventoryCapture, parseNativeInventoryPage, type NativeBackupStatus, type NativeBackupCapture, type NativeSkippedPage, type NativeInventoryCapture, type NativeInventoryPage } from './nativeInventory';
 import { canonicalNativeScanExclusions, isNativeScanExcluded } from './nativeScanExclusions';
@@ -44,6 +45,7 @@ export type MobileStageRequest = { scope: SyncScope; rootId: string; operation: 
 export type MobileTrashRequest = MobileStageRequest & LocalTrashContext;
 export type MobileWriteApproval = { scope: SyncScope; configurationRevision: string; configurationHash: string; allowTrash?: boolean };
 export type FolderRequest =
+	| { action: 'upload-batch'; rootId: string; batch: import('./uploadBatch').NativeUploadBatchInput }
 	| { action: 'upload-file'; rootId: string; upload: NativeFileUpload & { source: SyncEntry } }
 	| { action: 'upload-part'; rootId: string; upload: NativePartUpload & { source: SyncEntry } }
 	| { action: 'list' | 'choose' | 'conditions' | 'prepare-upload' }
@@ -81,6 +83,7 @@ export type FolderRequest =
 			approval: MobileWriteApproval;
 	  };
 export type FolderResult = {
+	uploadedBatch?: import('./uploadBatch').NativeUploadBatchResult;
 	uploadedFile?: { fingerprint: ContentFingerprint };
 	uploadedPart?: { sha256: string; payloadBytes?: number };
 	writeApproval?: MobileWriteApproval;
@@ -111,6 +114,7 @@ export type FolderCapabilities = Pick<
 	ThingtimeNativeBridge,
 	| 'platform'
 	| 'fileUploadVersion'
+	| 'fileUploadBatchVersion'
 	| 'fileAccessVersion'
 	| 'fileStagingVersion'
 	| 'filePublicationVersion'
@@ -122,6 +126,8 @@ export const supportsNativePartUploads = (bridge: FolderCapabilities | undefined
 /** Additive Mac 1.1 receipt telemetry; mobile whole-file versions are independent. */
 export const supportsNativePartPayloadBytes = (bridge: FolderCapabilities | undefined = getNativeBridge()) =>
 	bridge?.platform === 'macos' && supportsNativePartUploads(bridge) && Number(bridge.fileUploadVersion!.split('.')[1]) >= 1;
+export const supportsNativeUploadBatches = (bridge: FolderCapabilities | undefined) =>
+	bridge?.platform === 'macos' && supportsNativeAuthorizationContext(bridge) && /^1\.\d+\.\d+$/.test(bridge.fileUploadBatchVersion ?? '');
 /** These native access contracts independently add exact single-path inspection. */
 export const supportsNativeInventoryPages = (bridge: FolderCapabilities | undefined = getNativeBridge()) => {
 	const minimum = bridge?.platform === 'macos' ? 5 : bridge?.platform === 'ios' ? 3 : undefined;
@@ -313,6 +319,11 @@ export function parseMobileFolderResult(
 			...(r.sourceKind === 'photos' ? { sourceKind: r.sourceKind, photoAccess: r.photoAccess } : {})
 		}))
 	};
+	if (request.action === 'upload-batch') {
+		if (payload.rootId !== request.rootId || request.rootId !== request.batch.descriptor.configuration.configuration.localRootId)
+			throw Error('Native upload batch changed its source root.');
+		result.uploadedBatch = parseNativeUploadBatchResult(payload.uploadedBatch, request.batch);
+	}
 	if (payload.scanFailure !== undefined) {
 		const reasons: Record<string, string> = {
 			symlink: 'symbolic links are not supported',

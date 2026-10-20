@@ -4,6 +4,13 @@ import Foundation
     func request(_ data: Data, withReply reply: @escaping (Data) -> Void)
     func stream(_ data: Data, sink: ThingtimeNodeByteSink, withReply reply: @escaping (Data) -> Void)
     func stage(_ data: Data, source: ThingtimeNodeByteSource, withReply reply: @escaping (Data) -> Void)
+    func bulk(_ data: Data, callback: ThingtimeNodeBatchCallback, withReply reply: @escaping (Data) -> Void)
+}
+
+@objc public protocol ThingtimeNodeBatchCallback {
+    /// Fixed indexed upload callbacks only. Cookies and signed URLs never cross
+    /// this boundary; each reply is bounded and owned by this one operation.
+    func exchange(_ frame: Data, withReply reply: @escaping (Data) -> Void)
 }
 
 @objc public protocol ThingtimeNodeByteSink {
@@ -23,6 +30,8 @@ public enum ThingtimeNodeXPC {
             for: #selector(ThingtimeNodeXPCProtocol.stream(_:sink:withReply:)), argumentIndex: 1, ofReply: false)
         interface.setInterface(NSXPCInterface(with: ThingtimeNodeByteSource.self),
             for: #selector(ThingtimeNodeXPCProtocol.stage(_:source:withReply:)), argumentIndex: 1, ofReply: false)
+        interface.setInterface(NSXPCInterface(with: ThingtimeNodeBatchCallback.self),
+            for: #selector(ThingtimeNodeXPCProtocol.bulk(_:callback:withReply:)), argumentIndex: 1, ofReply: false)
         return interface
     }
     public static let machServiceName = "com.thingtime.desktop.node.xpc"
