@@ -17,15 +17,19 @@ use std::io::{BufRead, BufWriter, Read, Write};
 use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use std::sync::{
-    atomic::{AtomicBool, Ordering},
-    mpsc, Arc,
+    atomic::{AtomicBool, AtomicU64, Ordering},
+    mpsc, Arc, Mutex,
 };
+use std::time::Duration;
 use unicode_normalization::UnicodeNormalization;
+mod streaming;
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Request {
     pub version: u32,
+    #[serde(default)]
+    pub streaming: bool,
     pub root: PathBuf,
     pub root_identity: String,
     #[serde(default)]
@@ -67,11 +71,39 @@ pub struct Gap {
 #[derive(Debug, Serialize)]
 #[serde(tag = "event", rename_all = "lowercase")]
 pub enum Event {
-    Hello { version: u32 },
-    Entry { entry: Entry },
-    Skipped { gap: Gap },
+    Hello {
+        version: u32,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        streaming: Option<bool>,
+    },
+    Entry {
+        entry: Entry,
+    },
+    Skipped {
+        gap: Gap,
+    },
     Ignored,
+    Indexed,
     Complete,
+}
+
+#[derive(Clone)]
+struct EventSender {
+    inner: mpsc::SyncSender<Event>,
+    sequence: Arc<AtomicU64>,
+}
+impl EventSender {
+    fn send(&self, event: Event) -> Result<(), mpsc::SendError<Event>> {
+        if matches!(event, Event::Entry { .. } | Event::Skipped { .. }) {
+            self.sequence.fetch_add(1, Ordering::SeqCst);
+        }
+        self.inner.send(event)
+    }
+}
+#[derive(Default)]
+struct WatchControl {
+    requested: Mutex<Option<u64>>,
+    disconnected: AtomicBool,
 }
 
 fn failure(code: &'static str) -> IndexerError {
@@ -234,6 +266,13 @@ fn observe(
 /// Each run reads the live root using bounded workers and streams to the host.
 pub fn capture(
     request: Request,
+    emit: impl FnMut(Event) -> Result<(), IndexerError>,
+) -> Result<(), IndexerError> {
+    capture_inner(request, None, emit)
+}
+fn capture_inner(
+    request: Request,
+    control: Option<Arc<WatchControl>>,
     mut emit: impl FnMut(Event) -> Result<(), IndexerError>,
 ) -> Result<(), IndexerError> {
     if request.version != 1
@@ -279,13 +318,53 @@ pub fn capture(
     builder.same_file_system(false);
     let walker = builder.build_parallel();
     let (sender, receiver) = mpsc::sync_channel(governor.effective().channel_capacity);
+    let sender = EventSender {
+        inner: sender,
+        sequence: Arc::new(AtomicU64::new(0)),
+    };
     let cancelled = Arc::new(AtomicBool::new(false));
-    emit(Event::Hello { version: 1 })?;
+    let streaming = request
+        .streaming
+        .then(streaming::State::new)
+        .transpose()?
+        .map(|s| Arc::new(Mutex::new(s)));
+    let changes = if streaming.is_some() {
+        Some(streaming::watch(&request.root)?)
+    } else {
+        None
+    };
+    emit(Event::Hello {
+        version: 1,
+        streaming: request.streaming.then_some(true),
+    })?;
     std::thread::scope(|scope| -> Result<(), IndexerError> {
         let cancel_worker = cancelled.clone();
         let governor_worker = governor.clone();
         let root_worker = root.clone();
         let source_path = &request.root;
+        let finished = Arc::new(AtomicBool::new(false));
+        let policy = Arc::new(streaming::Policy {
+            ignores: ignores.clone(),
+            exclusions: exclusions.clone(),
+            invalid: invalid.clone(),
+        });
+        if let Some(state) = streaming.clone() {
+            let root = root.clone();
+            let governor = governor.clone();
+            let cancelled = cancelled.clone();
+            let finished = finished.clone();
+            let sender = sender.clone();
+            let changes = changes.as_ref().unwrap();
+            let control = control.clone();
+            let policy = policy.clone();
+            scope.spawn(move || {
+                streaming::monitor(
+                    state, root, governor, cancelled, finished, sender, changes, control, policy,
+                )
+            });
+        }
+        let streaming_worker = streaming.clone();
+        let changes_worker = changes.as_ref();
         scope.spawn(move || {
             walker.run(|| {
                 let sender = sender.clone();
@@ -295,6 +374,7 @@ pub fn capture(
                 let ignores = ignores.clone();
                 let exclusions = &exclusions;
                 let invalid = invalid.clone();
+                let streaming = streaming_worker.clone();
                 Box::new(move |candidate| {
                     if cancelled.load(Ordering::Relaxed) {
                         return WalkState::Quit;
@@ -342,8 +422,53 @@ pub fn capture(
                         send(Event::Ignored);
                         return WalkState::Skip;
                     }
+                    if is_dir {
+                        if let Some(changes) = changes_worker {
+                            if let Err(reason) = changes.track_directory(candidate.path()) {
+                                send(gap(Some(relative), reason, "subtree"));
+                                return WalkState::Skip;
+                            }
+                        }
+                    }
+                    if let Some(state) = &streaming {
+                        if let Err(reason) = state
+                            .lock()
+                            .unwrap()
+                            .validate(&root, relative, &governor, &cancelled)
+                        {
+                            send(gap(Some(relative), reason, "subtree"));
+                            return WalkState::Skip;
+                        }
+                    }
                     match observe(&root, relative, &governor, &cancelled) {
-                        Ok(entry) => send(Event::Entry { entry }),
+                        Ok(entry) => {
+                            if let Some(state) = &streaming {
+                                let mut state = state.lock().unwrap();
+                                if let Err(reason) =
+                                    state.validate(&root, relative, &governor, &cancelled)
+                                {
+                                    send(gap(Some(relative), reason, "subtree"));
+                                    return WalkState::Skip;
+                                }
+                                if open_path(&root, relative)
+                                    .and_then(|f| f.metadata().map_err(|_| "unreadable"))
+                                    .map(|m| stamp(&m))
+                                    .ok()
+                                    .as_ref()
+                                    != Some(&entry.version)
+                                {
+                                    send(gap(Some(relative), "changed", "subtree"));
+                                    return WalkState::Skip;
+                                }
+                                if state.remember(&entry).is_err() {
+                                    send(gap(Some(relative), "duplicate-identity", "subtree"));
+                                    return WalkState::Skip;
+                                }
+                                send(Event::Entry { entry });
+                            } else {
+                                send(Event::Entry { entry });
+                            }
+                        }
                         Err("cancelled") => {
                             cancelled.store(true, Ordering::Relaxed);
                             return WalkState::Quit;
@@ -364,6 +489,10 @@ pub fn capture(
                     WalkState::Continue
                 })
             });
+            if streaming_worker.is_some() {
+                let _ = sender.send(Event::Indexed);
+            }
+            finished.store(true, Ordering::Relaxed);
         });
         // Drain even after a sink failure so blocked workers can exit/join.
         let mut failure = None;
@@ -397,25 +526,59 @@ pub fn capture(
     {
         return Err(failure("source_changed"));
     }
-    if stamp(&root.metadata().map_err(|_| failure("source_changed"))?) != root_stamp {
+    // A streaming subscription has already accounted for root namespace edits
+    // (including gaps for removal/loss). Legacy captures still invalidate the
+    // root on any namespace stamp change.
+    if !request.streaming
+        && stamp(&root.metadata().map_err(|_| failure("source_changed"))?) != root_stamp
+    {
         emit(gap(None, "changed", "root"))?;
     }
     emit(Event::Complete)
 }
 
-pub fn serve(mut input: impl BufRead, output: impl Write) -> Result<(), IndexerError> {
+pub fn serve(
+    mut input: impl BufRead + Send + 'static,
+    output: impl Write,
+) -> Result<(), IndexerError> {
     let mut line = String::new();
     input
         .read_line(&mut line)
         .map_err(|_| failure("invalid_request"))?;
-    let request = serde_json::from_str(&line).map_err(|_| failure("invalid_request"))?;
+    let request: Request = serde_json::from_str(&line).map_err(|_| failure("invalid_request"))?;
+    let streaming = request.streaming;
     let mut output = BufWriter::with_capacity(65_536, output);
-    capture(request, |event| {
+    let control = streaming.then(|| Arc::new(WatchControl::default()));
+    if let Some(control) = control.clone() {
+        std::thread::spawn(move || loop {
+            let mut line = String::new();
+            match input.read_line(&mut line) {
+                Ok(0) | Err(_) => {
+                    control.disconnected.store(true, Ordering::Relaxed);
+                    break;
+                }
+                Ok(_) => {
+                    if let Ok(value) = serde_json::from_str::<serde_json::Value>(&line) {
+                        if value.get("event").and_then(|v| v.as_str()) == Some("stop") {
+                            if let Some(sequence) =
+                                value.get("afterSequence").and_then(|v| v.as_u64())
+                            {
+                                *control.requested.lock().unwrap() = Some(sequence);
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+    capture_inner(request, control, |event| {
         serde_json::to_writer(&mut output, &event).map_err(|_| failure("output_closed"))?;
         output
             .write_all(b"\n")
             .map_err(|_| failure("output_closed"))?;
-        if matches!(event, Event::Hello { .. } | Event::Complete) {
+        // Flush each row: first eligible content must wake the host even while
+        // a later directory/hash is blocked. BufWriter still batches each JSON row.
+        if matches!(event, Event::Hello { .. } | Event::Complete) || streaming {
             output.flush().map_err(|_| failure("output_closed"))?;
         }
         Ok(())

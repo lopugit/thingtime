@@ -64,8 +64,10 @@ export function journalMaintenance(db: IDBDatabase, access: JournalAccess, keyRa
 					case 'checkpoint': next(row.id !== active && row.id !== baseline?.runId && h.phase === 'published'); return;
 					case 'run': {
 						const run = h as PagedRunHeader;
-						if (row.id === active || row.id === retained || row.id === baseline?.runId || run.phase !== 'complete') { next(false); return; }
-						if (row.retiring || run.retained) { next(true); return; }
+						if (row.id === active || row.id === retained || row.id === baseline?.runId) { next(false); return; }
+						if (row.retiring) { next(true); return; }
+						if (run.phase !== 'complete') { next(false); return; }
+						if (run.retained) { next(true); return; }
 						get<PagedCheckpointHeader | undefined>(PAGED_CHECKPOINT_DRAFTS, [key, row.id], c => {
 							if (!c) { next(false); return; }
 							validatePagedCheckpointHeader(c, c.spec, key);

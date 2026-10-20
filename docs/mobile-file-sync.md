@@ -3797,3 +3797,41 @@ plans and input inventories independently of pins, so completed progress views
 remain readable after publication releases the ordinary consumer pins. Cancellation preserves retiring metadata for the next attempt. This
 changes cleanup scheduling only; it grants no new authority and never deletes
 user files or cloud payloads. Installed large-backlog acceptance is pending.
+
+
+## Concurrent indexing and one-way transfers — 2026-10-20
+
+Implementation and acceptance are in progress. The intended contract is that
+one-way upload/backup or download with deletion propagation disabled can begin
+transferring the first eligible indexed entry while the rest of the source is
+indexed. Existing two-way conflict and deletion reconciliation retains its
+complete-inventory requirements; an incomplete index never establishes absence.
+
+Native `fileAccessVersion` 1.11.0 introduces an explicitly negotiated change
+feed. The shared durable run journal consumes committed, ordered observations
+and schedules eligible work without preparing the entire tree first. Indexing
+and transfer workers retain independent progress, bounded queues, authorization
+checks and recoverable operation identities. Filesystem notifications must
+cover new and updated files, including already-visited folders and the time
+while the transfer backlog drains. Completion of the initial traversal is
+separate from stopping the change subscription.
+
+Each changed source revision must preserve uncertain earlier effects until their
+receipts resolve. A content reversion A → B → A is a new observation; an old A
+receipt must not suppress the last transfer. Directory namespace validation
+precedes publication, while skipped or ambiguous entries remain explicit gaps.
+Saved exclusions, Gitignore rules, Git metadata inclusion and upload priorities
+continue to apply. The feed does not authorize local removal or imply that a
+complete recoverable home backup exists.
+
+An upgrade may replace an older initial run only when its durable state proves
+that no effect was attempted or reserved and its scope/configuration match.
+Executed or uncertain runs keep their original recovery path. Retired metadata
+is cleaned in bounded pages; it must not block first transfer. A fresh streaming
+scan may be needed to establish current revisions; retained old observations
+are not silently treated as current files.
+
+Release acceptance requires a nonempty real upload while indexing is active,
+a remote receipt and an independently downloaded byte/hash comparison. The
+checklist below remains open until the relevant evidence is recorded. Android
+is deferred; these changes do not claim new special-file restoration support.

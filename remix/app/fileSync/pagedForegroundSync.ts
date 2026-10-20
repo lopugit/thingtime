@@ -1,3 +1,4 @@
+import { streamOneWayForegroundSync } from './streamingForegroundSync';
 import { assertBackupCapturePolicy, parseNativeBackupCapture, type NativeBackupCapture } from './nativeInventory';
 import { foregroundSyncContext } from './foregroundSyncContext';
 import { runForegroundCloudSync, type ForegroundSyncInput, type ForegroundSyncProgress } from './foregroundSync';
@@ -34,10 +35,13 @@ const identity = (source: 'local' | 'remote'): InventoryIdentity => ({ id: crypt
 /** Called inside the foreground root lock, including review and checkpoint
  * publication. Android keeps its existing runner while its work is deferred. */
 export async function runPagedForegroundCloudSync(reviewed: SavedFileSyncConfiguration, scope: SyncScope, input: ForegroundSyncInput, signal: AbortSignal) {
+	const streamed = await streamOneWayForegroundSync(reviewed, scope, input, signal);
+	if (streamed) await input.releaseLocalImport?.(streamed.plan.local);
 	const result = await runPagedForegroundTransfer(reviewed, scope, input, signal);
 	// Drain obsolete observations only after the transfer has published its
 	// checkpoint or retained receipts. Every page still checks scope and pins;
 	// interruption leaves the retired cursor recoverable on the next run.
+	if (streamed) await input.journal.pagedRuns({ scope, currentScope: input.currentScope, signal, cleanup: 'foreground' }).retireCompletedStream(streamed);
 	await input.journal.maintenance({ scope, currentScope: input.currentScope, signal, cleanup: 'foreground' }).collect();
 	return result;
 }

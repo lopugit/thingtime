@@ -9,6 +9,7 @@ import { CLOUD_INVENTORY_PAGE_BYTES, CLOUD_INVENTORY_PAGE_ENTRIES, CLOUD_INVENTO
 	parseCloudInventoryPage, type CloudInventoryPage } from '../../../fileSync/cloudInventoryPages';
 import { cloudInventoryAccess as access, readCloudInventoryRoot, readCloudInventoryNode } from './inventory';
 import { openInventoryQueue } from './inventoryQueue';
+import { resolveCloudChangeTarget } from './inventoryChanges';
 
 /** One read-only Mongo snapshot, with backpressure all the way from the client
  * to the cursor. This is a fresh observation, not a durable server job. Expired
@@ -23,9 +24,9 @@ export function createCloudInventoryPagesService(overrides: Partial<{
 	const deps = { collection: getHomeThingsCollection, snapshot: withHomeMongoSnapshot,
 		workspace: openInventoryQueue, customPlane: isCustomMongoEndpointActive, now: Date.now, ...overrides };
 	let active = 0;
-	return async (ownerId: string, rootId: unknown, emit: (page: CloudInventoryPage) => Promise<void>, signal?: AbortSignal) => {
+	return async (ownerId: string, rootId: unknown, emit: (page: CloudInventoryPage) => Promise<void>, signal?: AbortSignal, subtreeId?: string) => {
 		const fail = (status: number, message: string): never => { throw new StorageMutationError(status, 'storage_conflict', message); };
-		if (!access.identity(ownerId) || !access.identity(rootId)) fail(400, 'Choose a cloud folder root');
+		if (!access.identity(ownerId) || !access.identity(rootId) || (subtreeId !== undefined && !access.identity(subtreeId))) fail(400, 'Choose a cloud folder root');
 		if (deps.customPlane()) fail(409, 'Files currently require the home data plane');
 		const started = deps.now();
 		const check = () => {
@@ -55,7 +56,11 @@ export function createCloudInventoryPagesService(overrides: Partial<{
 						check(); await emit(parseCloudInventoryPage({ ...identity, ordinal, nodes }, identity.rootId)); check();
 						ordinal++; nodes = []; bytes = 4096;
 					};
-					await queue.append({ id: identity.rootId, path: '', depth: 0 });
+					if (subtreeId !== undefined) {
+                        const subtree = await resolveCloudChangeTarget(things, session, ownerId, identity.rootId, subtreeId, budget, signal);
+                        if (!subtree || subtree.node.kind !== 'folder') fail(409, 'The changed subtree is unavailable; retry reconciliation.');
+                        await queue.append({ id: subtreeId, path: subtree.node.path, depth: subtree.node.path.split('/').length });
+                    } else await queue.append({ id: identity.rootId, path: '', depth: 0 });
 					for (;;) {
 						check(); const parents = await queue.read(CLOUD_INVENTORY_PAGE_ENTRIES);
 						if (!parents.length) break;

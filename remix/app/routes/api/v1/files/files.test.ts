@@ -57,8 +57,8 @@ test('file routes use private full-account access, bounded same-origin JSON and 
 
 test('file capability registers the real read and commit route', () => {
 	const manifest = thingtimeCapabilityManifest('https://example.test');
-	assert.equal(manifest.features['api.files'].version, '1.6.0');
-	assert.equal(createApiCapabilitiesManifest().features['api.files'], '1.6.0');
+	assert.equal(manifest.features['api.files'].version, '1.7.0');
+	assert.equal(createApiCapabilitiesManifest().features['api.files'], '1.7.0');
 	assert.ok(manifest.operations.some((op) => op.path === '/api/v1/files' && op.methods.includes('GET') && op.methods.includes('POST')));
 });
 
@@ -191,4 +191,24 @@ test('paged inventories retain private authentication/rate guards and strict sel
 		assert.equal((await handlers.loader({ request: request() })).status, 401); }
 	user = { id: 'owner', accountKind: 'user' }; allowed = false;
 	assert.equal((await handlers.loader({ request: request() })).status, 503); assert.equal(calls, 1);
+});
+
+test('live cloud changes keep private guards and reject mixed, duplicate and malformed cursors', async () => {
+    let user: any = { id: 'owner', accountKind: 'user' }, allowed = true, calls = 0;
+    const handlers = createFilesHandlers({ getUser: async () => user, limit: async () => ({ allowed, unavailable: !allowed } as any),
+        inventory: async () => { throw Error('snapshot not requested'); }, folders: {} as any, service: {} as any,
+        changes: async (owner, root, after, wait) => { calls++; assert.equal(owner, 'owner'); assert.equal(root, 'root');
+            assert.equal(after, 42); assert.equal(wait, true);
+            return { ok: true, feed: { version: 1, rootId: 'root', rootRevision: 'rev', cursor: 42, changes: [], hasMore: false } }; } });
+    const request = (query: string) => new Request('https://example.test/api/v1/files?' + query);
+    const response = await handlers.loader({ request: request('rootId=root&changes=1&after=42&wait=1') });
+    assert.equal(response.status, 200); assert.match(response.headers.get('cache-control')!, /private.*no-store/);
+    for (const query of ['rootId=root&changes=1&pages=1', 'rootId=root&changes=1&changes=1', 'rootId=root&changes=1&after=1&after=2',
+        'rootId=root&changes=1&after=-1', 'rootId=root&changes=1&after=1.5', 'rootId=root&changes=1&after=01', 'rootId=root&changes=1&wait=0',
+        'rootId=root&changes=1&path=secret', 'rootId=root&changes=1&subtreeId=folder'])
+        assert.equal((await handlers.loader({ request: request(query) })).status, 400, query);
+    assert.equal(calls, 1);
+    user = { id: 'scoped', accountKind: 'service' }; assert.equal((await handlers.loader({ request: request('rootId=root&changes=1') })).status, 401);
+    user = { id: 'owner', accountKind: 'user' }; allowed = false;
+    assert.equal((await handlers.loader({ request: request('rootId=root&changes=1') })).status, 503); assert.equal(calls, 1);
 });

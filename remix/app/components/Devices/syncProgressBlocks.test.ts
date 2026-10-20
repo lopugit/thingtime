@@ -42,12 +42,43 @@ test('preparation identifies its actual phase and counts separately from uploade
 	assert.doesNotMatch(unknown.indexDescription, /128 \/|%/);
 });
 
+test('streaming transfers remain active before a sealed index and totals may grow', () => {
+	for (const direction of ['upload', 'download'] as const) {
+		const progress = { stage: 'transferring' as const, direction, indexState: 'indexing' as const, indexed: 3, confirmed: 1, total: 2 };
+		for (const hasIndex of [false, true]) {
+			const display = syncProgressDisplay({}, progress, 'running', hasIndex).sync;
+			assert.match(display.indexDescription, /Indexing while files transfer/);
+			assert.match(display.indexDescription, /3 index observations saved/);
+			assert.match(display.uploadDescription, direction === 'upload' ? /^Uploading/ : /^Downloading/);
+			assert.match(display.uploadDescription, /1 \/ 2 operations confirmed so far · Total may grow/);
+			assert.equal(display.transferTitle, `2. ${direction === 'upload' ? 'Upload' : 'Download'} files and folders`);
+		}
+		const stopped = syncProgressDisplay({}, progress, 'paused', true).sync;
+		assert.match(stopped.indexDescription, /^Indexing paused before completion/);
+	}
+});
+
+test('watching a drained stream is distinct from completed sync', () => {
+	const progress = { stage: 'transferring' as const, indexState: 'watching' as const, indexed: 3, confirmed: 2, total: 2 };
+	const watching = syncProgressDisplay({}, progress, 'running', true).sync;
+	assert.match(watching.indexDescription, /Watching for new and changed files/);
+	assert.match(watching.uploadDescription, /^Waiting for new indexed files/);
+	assert.doesNotMatch(watching.uploadDescription, /^Complete/);
+	const complete = syncProgressDisplay({}, { ...progress, indexState: 'complete', stage: 'complete' }, 'complete', true).sync;
+	assert.match(complete.uploadDescription, /^Complete/);
+	assert.doesNotMatch(complete.uploadDescription, /Total may grow/);
+	const planning = syncProgressDisplay({}, { ...progress, indexState: 'complete', totalFinal: false }, 'running', true).sync;
+	assert.match(planning.indexDescription, /Preparing remaining indexed entries/);
+	assert.match(planning.uploadDescription, /Total may grow/);
+});
+
 test('folder rows count cumulative child folders while preserving source totals', () => {
 	const totals = { path: 'Documents', kind: 'folder' as const, files: 1, folders: 2, indexedBytes: 10, excluded: 0, unchanged: 0,
 		operations: 3, confirmed: 3, transferFiles: 1, confirmedFiles: 1, bytesTotal: 10, bytesConfirmed: 10 };
 	assert.match(syncProgressNodeDisplay(totals, undefined, 'complete').counts, /1 files · 1 subfolders/);
 	assert.equal(totals.folders, 2);
 	assert.match(syncProgressNodeDisplay({ ...totals, path: '' }, undefined, 'complete').counts, /2 folders/);
+	assert.equal(syncProgressNodeDisplay({ ...totals, confirmed: 0, activeFile: { path: 'Documents/file', size: 10 } }, { stage: 'transferring', direction: 'download', confirmed: 0, total: 3, path: 'Documents/file', size: 10, bytes: 5 }, 'running').status, 'Downloading');
 });
 
 test('focused folder navigation renders its children and retains global indexed totals', () => {

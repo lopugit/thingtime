@@ -16,9 +16,9 @@ test('single-path inspection uses the same host account and origin fences', asyn
 });
 
 test('all inventory capture lifecycle operations retain policy and host identity fences', async () => {
-    for (const action of ['scan-capture', 'scan-status', 'scan-cancel', 'scan-skips', 'scan-page', 'scan-discard']) {
+    for (const action of ['scan-stream', 'scan-changes', 'scan-capture', 'scan-status', 'scan-cancel', 'scan-skips', 'scan-page', 'scan-discard']) {
         const f = fixture(), input = f.input({ action, rootId: randomUUID(), inventoryDeviceId: 'device',
-            capturePolicy: 'backup-supported', ignoreRules: 'node_modules/\n!keep/', excludedPaths: ['Library'] });
+            capturePolicy: ['scan-stream', 'scan-changes'].includes(action) ? 'one-way-supported' : 'backup-supported', ignoreRules: 'node_modules/\n!keep/', excludedPaths: ['Library'] });
         f.run(async (_method, request) => ({ ...request, roots: [], complete: true }));
         assert.equal((await f.host.request(f.event, input)).complete, true);
         assert.equal(f.calls[0].action, action);
@@ -30,6 +30,47 @@ test('all inventory capture lifecycle operations retain policy and host identity
         await assert.rejects(f.host.request(f.event, f.input({ ...input, requestId: randomUUID() })));
         assert.equal(f.calls.length, 2);
     }
+});
+
+test('streaming long-poll has a separate lane while ordinary reads queue and retain identity fences', async () => {
+    const f = fixture();
+    let releaseWait, releaseInspect, enteredWait, enteredInspect;
+    const waiting = new Promise(resolve => { enteredWait = resolve; });
+    const inspecting = new Promise(resolve => { enteredInspect = resolve; });
+    const waitGate = new Promise(resolve => { releaseWait = resolve; });
+    const inspectGate = new Promise(resolve => { releaseInspect = resolve; });
+    f.run(async (_method, request) => {
+        if (request.action === 'scan-changes') { enteredWait(); await waitGate; }
+        if (request.action === 'inspect') { enteredInspect(); await inspectGate; }
+        return request.action === 'read-range' ? { ...request, chunk: { bytes: new Uint8Array(1), length: 1, offset: 0, version: 'v1' } } : { ...request, roots: [] };
+    });
+    const pendingWait = f.host.request(f.event, f.input({ action: 'scan-changes', waitMilliseconds: 25_000, afterSequence: 0, pageSize: 128 }));
+    await waiting;
+    const pendingInspect = f.host.request(f.event, f.input({ action: 'inspect' }));
+    await inspecting;
+    const range = f.host.request(f.event, f.input({ action: 'read-range', rootId: randomUUID(), path: 'file', version: 'v1', offset: 0, length: 1 }));
+    assert.deepEqual(f.calls.map(call => call.action), ['scan-changes', 'inspect']);
+    releaseInspect(); await pendingInspect;
+    assert.equal((await range).chunk.bytes.length, 1);
+    assert.equal(f.host.streamWaiter?.input.action, 'scan-changes');
+    releaseWait(); await pendingWait;
+    assert.equal(f.host.active, null); assert.equal(f.host.streamWaiter, null);
+});
+
+test('host invalidation aborts queued ordinary requests before native dispatch', async () => {
+    const f = fixture(); let entered, release;
+    const started = new Promise(resolve => { entered = resolve; });
+    f.run(async (_method, request) => {
+        if (request.action === 'suspend') { release(); return {}; }
+        entered(); await new Promise(resolve => { release = resolve; }); return { ...request, roots: [] };
+    });
+    const active = f.host.request(f.event, f.input({ action: 'inspect' })); await started;
+    const queued = f.host.request(f.event, f.input({ action: 'read' }));
+    const rejected = [assert.rejects(active), assert.rejects(queued)];
+    f.context.apiOrigin = 'https://other.test'; f.host.invalidate();
+    await Promise.all(rejected);
+    assert.deepEqual(f.calls.map(call => call.action), ['inspect', 'suspend']);
+    assert.equal(f.host.ordinaryQueue.length, 0);
 });
 
 function fixture() {

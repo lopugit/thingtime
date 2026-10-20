@@ -32,6 +32,11 @@ export type ForegroundSyncProgress = {
 	size?: number;
 	/** Persisted discovered entries; an absent total stays indeterminate. */
 	indexed?: number;
+	/** Streaming observations can grow while the independent transfer worker runs. */
+	indexState?: 'indexing' | 'watching' | 'complete';
+	direction?: 'upload' | 'download';
+	/** True only after the source closes and every durable observation is planned. */
+	totalFinal?: boolean;
 	indexTotal?: number;
 	skipped?: number;
 	coverage?: 'full' | 'partial';
@@ -45,6 +50,12 @@ export type ForegroundSyncInput = {
 	authorizeDevice(): Promise<void>;
 	conditions(): Promise<SyncConditions>;
 	scanLocal(): Promise<SyncEntry[]>;
+	/** Native durable revision feed; negotiated separately from sealed captures. */
+	streamLocalChanges?(captureId: string, afterSequence: number, signal?: AbortSignal, readyToFinish?: () => Promise<boolean>): AsyncIterable<import('./streamingIndex').NativeIndexChangesPage>;
+	/** Origin-negotiated durable remote revisions, using the same run cursor contract. */
+	streamRemoteChanges?(captureId: string, afterSequence: number, signal?: AbortSignal, readyToFinish?: () => Promise<boolean>, resume?: { cursor?: string; snapshotComplete?: boolean; checkpoint(cursor: string, snapshotComplete: boolean): Promise<void> }): AsyncIterable<import('./streamingIndex').NativeIndexChangesPage>;
+	/** Set only by the native adapter with exact path inspection and staging. */
+	streamCloudChanges?: boolean;
 	scanLocalPages?(options?: {
 		resume?(capture: import('./nativeInventory').NativeBackupCapture): Promise<import('./nativeInventory').NativeInventoryResume>;
 		retainCaptureUntilHandoff?: boolean;
@@ -53,7 +64,7 @@ export type ForegroundSyncInput = {
 	releaseLocalImport?(inventory: InventoryIdentity): Promise<void>;
 	inspectLocal?(path: string): Promise<SyncEntry | null>;
 	inventory(): Promise<CloudInventory>;
-	inventoryPages?(): AsyncIterable<CloudInventoryPage>;
+	inventoryPages?(options?: { signal?: AbortSignal }): AsyncIterable<CloudInventoryPage>;
 	source(entry: SyncEntry): Promise<FingerprintSource>;
 	localTarget?: LocalSyncTarget;
 	journal: Awaited<ReturnType<typeof openSyncJournal>>;

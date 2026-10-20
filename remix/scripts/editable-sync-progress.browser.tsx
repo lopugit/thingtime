@@ -54,6 +54,10 @@ function Fixture() {
 		<Button onClick={() => { setStatus('running'); setProgress({ stage: 'scanning', total: 0, confirmed: 0, indexed: 3653988, indexTotal: 3653988,
 			preparation: { phase: 'cloud', completed: 1000000, total: 3653988 } }); }}>Prepare fixture</Button>
 		<Button onClick={() => setProgress({ stage: 'transferring', total: rows.length, confirmed: 4, path: rows.find(r => r.entry.size === 990)!.entry.path, bytes: 495, size: 990 })}>Transfer fixture</Button>
+		{(['upload', 'download'] as const).map(direction => <Button key={direction} onClick={() => { setStatus('running'); setProgress({ stage: 'transferring', direction, indexState: 'indexing', indexed: rows.length,
+			total: rows.length, confirmed: 4, path: rows.find(r => r.entry.size === 990)!.entry.path, bytes: 495, size: 990 }); }}>Stream {direction} fixture</Button>)}
+		<Button onClick={() => { setStatus('running'); setProgress({ stage: 'transferring', direction: 'upload', indexState: 'watching', indexed: rows.length, total: rows.length, confirmed: rows.length }); }}>Watch fixture</Button>
+		<Button onClick={() => { setStatus('running'); setProgress({ stage: 'transferring', direction: 'download', indexState: 'complete', totalFinal: false, indexed: rows.length, total: 4, confirmed: 3 }); }}>Indexed backlog fixture</Button>
 		<Button onClick={() => { for (const row of rows) row.operation!.confirmed = true; setStatus('complete'); setProgress({ stage: 'complete', total: rows.length, confirmed: rows.length }); }}>Complete fixture</Button>
 		<SyncProgressViewer scopeKey="synthetic-progress" source={progress.stage === 'scanning' ? undefined : source} currentScope={() => {
 			if (!mounted.current) throw Error('The account or storage destination changed.');

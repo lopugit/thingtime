@@ -3,7 +3,7 @@
 const { stageRangeMetadata } = require('./folder-stream.cjs');
 const { normalizeEndpointUrl } = require('./desktop-settings.cjs');
 const { randomUUID } = require('node:crypto');
-const ACTIONS = new Set(['context', 'list', 'choose', 'conditions', 'remove', 'scan', 'scan-capture', 'scan-status', 'scan-cancel', 'scan-skips', 'scan-page', 'scan-discard', 'inspect', 'read', 'read-range', 'stage-begin', 'stage-append', 'stage-range', 'stage-finish', 'write-approve', 'write-check', 'publication-lookup', 'publish', 'trash', 'trash-lookup', 'trash-expected', 'trash-inspect', 'trash-restore', 'trash-list', 'trash-restore-reviewed', 'suspend']);
+const ACTIONS = new Set(['context', 'list', 'choose', 'conditions', 'remove', 'scan', 'scan-stream', 'scan-stream-finish', 'scan-changes', 'scan-capture', 'scan-status', 'scan-cancel', 'scan-skips', 'scan-page', 'scan-discard', 'inspect', 'read', 'read-range', 'stage-begin', 'stage-append', 'stage-range', 'stage-finish', 'write-approve', 'write-check', 'publication-lookup', 'publish', 'trash', 'trash-lookup', 'trash-expected', 'trash-inspect', 'trash-restore', 'trash-list', 'trash-restore-reviewed', 'suspend']);
 const supportsBatchPages = version => {
     const parts = typeof version === 'string' && version.length <= 32 && /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/.exec(version);
     return !!parts && parts[1] === '1' && Number.isSafeInteger(Number(parts[2])) && Number.isSafeInteger(Number(parts[3])) && Number(parts[2]) >= 10;
@@ -94,7 +94,7 @@ async function readCapabilities(context, signal) {
 class DesktopFolderSync {
     constructor({ context, requestNative, verifyAccount = readAccount, capabilities = readCapabilities, timeoutMs = 300_000 }) {
         this.context = context; this.requestNative = requestNative; this.verifyAccount = verifyAccount;
-        this.capabilities = capabilities; this.timeoutMs = timeoutMs; this.generation = 0; this.active = null; this.quitting = false;
+        this.capabilities = capabilities; this.timeoutMs = timeoutMs; this.generation = 0; this.active = null; this.streamWaiter = null; this.ordinaryQueue = []; this.quitting = false;
     }
     capture(event, input) {
         const context = this.context(), window = context.window;
@@ -106,7 +106,7 @@ class DesktopFolderSync {
             !identifier(input.ownerId) || !identifier(input.deviceId) || !ACTIONS.has(input.action) ||
             (input.action !== 'context' && !(input.action === 'suspend' && input.origin === undefined) && input.origin !== apiOrigin) || Buffer.byteLength(JSON.stringify(stageRangeMetadata(input))) > 131_072) throw unavailable();
         if (Object.prototype.hasOwnProperty.call(input, 'pageSize') &&
-            (!['scan-page', 'scan-skips'].includes(input.action) || !Number.isSafeInteger(input.pageSize) || input.pageSize < 1 || input.pageSize > 4096)) throw unavailable();
+            (!['scan-page', 'scan-skips', 'scan-changes', 'scan-stream-finish'].includes(input.action) || !Number.isSafeInteger(input.pageSize) || input.pageSize < 1 || input.pageSize > 4096)) throw unavailable();
         if (this.quitting) throw shutdownWait();
         return { ...context, apiOrigin, ownerId: input.ownerId, event, generation: this.generation };
     }
@@ -117,7 +117,7 @@ class DesktopFolderSync {
             current.apiOrigin !== state.context.apiOrigin || current.appOrigin !== state.context.appOrigin) throw unavailable();
     }
     cancel(state = this.active, reason) {
-        if (!state || this.active !== state || state.abort.signal.aborted) return;
+        if (!state || (this[state.lane ?? 'active'] !== state && !this.ordinaryQueue.some(item => item.state === state)) || state.abort.signal.aborted) return;
         state.abort.abort(reason);
         // Cancel the native request with its original binding, including after an
         // account/endpoint switch. Never retarget it using the new renderer input.
@@ -126,10 +126,10 @@ class DesktopFolderSync {
             origin: state.context.apiOrigin, action: 'suspend'
         }).catch(() => {});
     }
-    invalidate() { this.generation += 1; this.nativePageCapability = null; this.cancel(); }
+    invalidate() { this.generation += 1; this.nativePageCapability = null; this.cancel(); this.cancel(this.streamWaiter); for (const item of [...this.ordinaryQueue]) this.cancel(item.state); }
     // before-quit can precede renderer pagehide while local services drain.
     // Preserve admission through that interval, but permit no further IO.
-    quit() { this.quitting = true; this.generation += 1; this.nativePageCapability = null; this.cancel(this.active, shutdownWait()); }
+    quit() { this.quitting = true; this.generation += 1; this.nativePageCapability = null; this.cancel(this.active, shutdownWait()); this.cancel(this.streamWaiter, shutdownWait()); for (const item of [...this.ordinaryQueue]) this.cancel(item.state, shutdownWait()); }
     samePageCapability(context, input) {
         const cached = this.nativePageCapability;
         return cached && cached.window === context.window && cached.generation === context.generation &&
@@ -141,17 +141,46 @@ class DesktopFolderSync {
             apiOrigin: context.apiOrigin, ownerId: input.ownerId, deviceId: input.deviceId,
             supported: supportsBatchPages(value?.capabilities?.fileAccessVersion) };
     }
+    admit(state) {
+        if (state.lane === 'streamWaiter') {
+            if (this.streamWaiter) throw new Error('Another streaming wait is running.');
+            this.streamWaiter = state; return Promise.resolve();
+        }
+        if (!this.active) { this.active = state; return Promise.resolve(); }
+        if (this.active.input.action === 'choose' || state.input.action === 'choose') throw new Error('Another folder request is running.');
+        // Resource backpressure bounds pending RPCs, independent of file count.
+        if (this.ordinaryQueue.length >= 128) throw new Error('Folder requests are busy. Retry after pending work settles.');
+        return new Promise((resolve, reject) => {
+            const item = { state, resolve, reject, abort: null };
+            item.abort = () => {
+                const index = this.ordinaryQueue.indexOf(item);
+                if (index >= 0) this.ordinaryQueue.splice(index, 1);
+                reject(state.abort.signal.reason);
+            };
+            state.abort.signal.addEventListener('abort', item.abort, { once: true });
+            this.ordinaryQueue.push(item);
+        });
+    }
+    release(state) {
+        if (this[state.lane] !== state) return;
+        this[state.lane] = null;
+        if (state.lane !== 'active') return;
+        const next = this.ordinaryQueue.shift();
+        if (next) {
+            next.state.abort.signal.removeEventListener('abort', next.abort);
+            this.active = next.state; next.resolve();
+        }
+    }
     async request(event, input) {
         const context = this.capture(event, input);
         if (input.action === 'suspend') {
-            const state = this.active;
-            if (state && state.context.event.senderFrame === event.senderFrame && state.input.requestId === input.requestId &&
-                state.input.ownerId === input.ownerId && state.input.deviceId === input.deviceId) this.cancel(state);
+            const state = [this.active, this.streamWaiter, ...this.ordinaryQueue.map(item => item.state)].find(value => value && value.context.event.senderFrame === event.senderFrame &&
+                value.input.requestId === input.requestId && value.input.ownerId === input.ownerId && value.input.deviceId === input.deviceId);
+            if (state) this.cancel(state);
             return {};
         }
-        if (this.active) throw new Error('Another folder request is running.');
-        const state = { context, input: structuredClone(input), abort: new AbortController(), dispatched: false };
-        this.active = state;
+        const lane = input.action === 'scan-changes' ? 'streamWaiter' : 'active';
+        const state = { context, input: structuredClone(input), abort: new AbortController(), dispatched: false, lane };
         const timer = setTimeout(() => this.cancel(state), this.timeoutMs); timer.unref?.();
         const verify = async () => {
             this.assertCurrent(state);
@@ -159,6 +188,7 @@ class DesktopFolderSync {
             await this.verifyAccount(context, signal); this.assertCurrent(state);
         };
         try {
+            await this.admit(state);
             await verify();
             let apiCapabilities;
             if (state.input.action === 'context') {
@@ -168,7 +198,7 @@ class DesktopFolderSync {
                     throw new Error('The selected server does not support this version of folder sync.');
                 }
             }
-            if (state.input.pageSize !== undefined) {
+            if (state.input.pageSize !== undefined && state.input.action !== 'scan-changes') {
                 if (!this.samePageCapability(context, state.input)) {
                     const negotiation = { requestId: randomUUID(), ownerId: context.ownerId, deviceId: state.input.deviceId,
                         origin: context.apiOrigin, action: 'context' };
@@ -211,7 +241,7 @@ class DesktopFolderSync {
                     (error?.name === 'ThingtimeNodeBridgeError' && error.code === 'cancelled')))
                 throw state.abort.signal.reason;
             throw error;
-        } finally { clearTimeout(timer); if (this.active === state) this.active = null; }
+        } finally { clearTimeout(timer); this.release(state); }
     }
 }
 module.exports = { DesktopFolderSync, readAccount, readCapabilities };

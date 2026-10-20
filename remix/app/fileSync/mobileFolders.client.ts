@@ -1,3 +1,4 @@
+import { parseNativeIndexChangesPage, type NativeIndexChangesPage } from './streamingIndex';
 import { canonicalIgnoreRules, createSyncIgnorePolicy } from './syncIgnore';
 import { nativeInventoryPageSize, parseNativeBackupStatus, parseNativeSkippedPage, parseNativeInventoryCapture, parseNativeInventoryPage, type NativeBackupStatus, type NativeBackupCapture, type NativeSkippedPage, type NativeInventoryCapture, type NativeInventoryPage } from './nativeInventory';
 import { canonicalNativeScanExclusions, isNativeScanExcluded } from './nativeScanExclusions';
@@ -48,8 +49,11 @@ export type FolderRequest =
 	| { action: 'list' | 'choose' | 'conditions' | 'prepare-upload' }
 	| { action: 'remove'; rootId: string }
 	| { action: 'scan'; rootId: string; excludedPaths?: string[]; ignoreRules?: string }
+	| { action: 'scan-stream'; rootId: string; inventoryDeviceId: string; captureId: string; excludedPaths?: string[]; ignoreRules?: string; capturePolicy: 'one-way-supported' }
+	| { action: 'scan-stream-finish'; rootId: string; inventoryDeviceId: string; captureId: string; afterSequence: number; excludedPaths?: string[]; ignoreRules?: string; capturePolicy: 'one-way-supported' }
+	| { action: 'scan-changes'; rootId: string; inventoryDeviceId: string; captureId: string; afterSequence: number; pageSize?: number; waitMilliseconds?: number; excludedPaths?: string[]; ignoreRules?: string; capturePolicy: 'one-way-supported' }
 	| { action: 'scan-capture'; rootId: string; inventoryDeviceId: string; captureId: string; excludedPaths?: string[]; ignoreRules?: string; capturePolicy?: 'backup-supported' }
-	| { action: 'scan-status' | 'scan-cancel'; rootId: string; inventoryDeviceId: string; captureId: string; capturePolicy: 'backup-supported'; excludedPaths?: string[]; ignoreRules?: string }
+	| { action: 'scan-status' | 'scan-cancel'; rootId: string; inventoryDeviceId: string; captureId: string; capturePolicy: 'backup-supported' | 'one-way-supported'; excludedPaths?: string[]; ignoreRules?: string }
 	| { action: 'scan-skips'; rootId: string; inventoryDeviceId: string; capture: NativeBackupCapture; offset: number; pageSize?: number; ignoreRules?: string; capturePolicy: 'backup-supported' }
 	| { action: 'scan-page'; rootId: string; inventoryDeviceId: string; capture: NativeInventoryCapture; offset: number; pageSize?: number; ignoreRules?: string; capturePolicy?: 'backup-supported' }
 	| { action: 'scan-discard'; rootId: string; inventoryDeviceId: string; capture: NativeInventoryCapture; ignoreRules?: string; capturePolicy?: 'backup-supported' }
@@ -99,6 +103,7 @@ export type FolderResult = {
 	cancelled?: true;
 	capture?: NativeInventoryCapture;
 	inventoryPage?: NativeInventoryPage;
+	changesPage?: NativeIndexChangesPage;
 	chunk?: { version: string; size: number; offset: number; data: string };
 	range?: { version: string; size: number; offset: number; bytes: Uint8Array<ArrayBuffer> };
 };
@@ -137,22 +142,25 @@ export const supportsNativeIgnoreRules = (bridge: FolderCapabilities | undefined
 /** Mac 1.10 adds opt-in byte-bounded inventory batches. */
 export const supportsNativeInventoryBatches = (bridge: FolderCapabilities | undefined = getNativeBridge()) =>
 	bridge?.platform === 'macos' && /^1\.\d+\.\d+$/.test(bridge.fileAccessVersion ?? '') && Number(bridge.fileAccessVersion!.split('.')[1]) >= 10;
+export const supportsNativeStreamingIndex = (bridge: FolderCapabilities | undefined = getNativeBridge()) =>
+	bridge?.platform === 'macos' && /^1\.\d+\.\d+$/.test(bridge.fileAccessVersion ?? '') && Number(bridge.fileAccessVersion!.split('.')[1]) >= 11;
 export function assertNativeScanExclusions(request: FolderRequest, bridge: FolderCapabilities | undefined) {
+	if ((['scan-stream', 'scan-changes', 'scan-stream-finish'].includes(request.action) || ('capturePolicy' in request && request.capturePolicy === 'one-way-supported')) && !supportsNativeStreamingIndex(bridge)) throw Error('Update Thingtime Mac to transfer while indexing.');
 	if ('pageSize' in request && request.pageSize !== undefined) {
-		if (!['scan-page', 'scan-skips'].includes(request.action)) throw Error('Invalid native inventory page size action.');
+		if (!['scan-page', 'scan-skips', 'scan-changes'].includes(request.action)) throw Error('Invalid native inventory page size action.');
 		nativeInventoryPageSize(request.pageSize);
 		if (!supportsNativeInventoryBatches(bridge)) throw Error('Update Thingtime Mac to import larger inventory batches.');
 	}
 	if ('ignoreRules' in request && canonicalIgnoreRules(request.ignoreRules) && !supportsNativeIgnoreRules(bridge))
 		throw Error('Update Thingtime Mac to apply Gitignore rules before scanning this folder.');
-	if ((('capturePolicy' in request && request.capturePolicy === 'backup-supported') || request.action === 'scan-skips' ||
+	if ((('capturePolicy' in request && request.capturePolicy === 'backup-supported') ||
 		('capture' in request && request.capture.coverage !== undefined)) && !supportsNativeBackupCapture(bridge))
 		throw Error('Update Thingtime Mac to index supported backup items and review skipped items.');
-	if (request.action !== 'scan' && request.action !== 'scan-capture' && request.action !== 'scan-status' && request.action !== 'scan-cancel') return;
+	if (request.action !== 'scan' && request.action !== 'scan-capture' && request.action !== 'scan-status' && request.action !== 'scan-cancel' && request.action !== 'scan-stream' && request.action !== 'scan-changes' && request.action !== 'scan-stream-finish') return;
 	const keys = canonicalNativeScanExclusions(request.excludedPaths === undefined ? [] : request.excludedPaths);
 	if (keys.length && !supportsNativeScanExclusions(bridge)) throw Error('Update Thingtime to exclude paths before scanning this folder.');
 }
-function verifyScanExclusions(request: Extract<FolderRequest, { action: 'scan' | 'scan-capture' | 'scan-status' | 'scan-cancel' }>, echoed: unknown): string[] {
+function verifyScanExclusions(request: Extract<FolderRequest, { action: 'scan' | 'scan-capture' | 'scan-status' | 'scan-cancel' | 'scan-stream' | 'scan-changes' | 'scan-stream-finish' }>, echoed: unknown): string[] {
 	const keys = canonicalNativeScanExclusions(request.excludedPaths === undefined ? [] : request.excludedPaths);
 	if (keys.length && JSON.stringify(keys) !== JSON.stringify(canonicalNativeScanExclusions(echoed)))
 		throw Error('Native scan exclusions changed.');
@@ -317,7 +325,7 @@ export function parseMobileFolderResult(
 		const location = failure.path === null ? '' : ` at “${failure.path}”`;
 		throw Error(`Indexing stopped${location}: ${reasons[failure.reason]}. Review this item and your exclusions before retrying.`);
 	}
-	if (['scan', 'scan-capture', 'scan-status', 'scan-cancel', 'scan-page', 'scan-skips', 'scan-discard'].includes(request.action)) {
+	if (['scan', 'scan-capture', 'scan-status', 'scan-cancel', 'scan-page', 'scan-skips', 'scan-discard', 'scan-stream', 'scan-changes', 'scan-stream-finish'].includes(request.action)) {
 		const rules = canonicalIgnoreRules('ignoreRules' in request ? request.ignoreRules : undefined);
 		if (rules !== (payload.ignoreRules === undefined ? '' : payload.ignoreRules)) throw Error('Native scan ignore rules changed.');
 	}
@@ -522,7 +530,12 @@ export function parseMobileFolderResult(
 		if (!c || !['wifi', 'cellular', 'ethernet', 'offline', 'unknown'].includes(c.network) || (c.charging !== null && typeof c.charging !== 'boolean'))
 			throw Error('Native transfer conditions are unavailable.');
 		result.conditions = { network: c.network, charging: c.charging };
-	} else if ((request.action === 'scan-capture' && request.capturePolicy === 'backup-supported') || request.action === 'scan-status') {
+	} else if (request.action === 'scan-stream' || request.action === 'scan-changes' || request.action === 'scan-stream-finish' || (request.action === 'scan-cancel' && request.capturePolicy === 'one-way-supported')) {
+		if (payload.rootId !== request.rootId || payload.capturePolicy !== 'one-way-supported') throw Error('Native streaming scope or policy changed.');
+		verifyScanExclusions(request, payload.excludedPaths);
+		result.changesPage = parseNativeIndexChangesPage(payload.changesPage, request.captureId, 'afterSequence' in request ? request.afterSequence : 0, request.action === 'scan-changes' ? request.pageSize : undefined);
+		if (request.action === 'scan-cancel') { if (!['interrupted', 'complete'].includes(result.changesPage.state)) throw Error('Native streaming cancellation was not confirmed.'); result.cancelled = true; }
+	} else if (request.action === 'scan-status') {
 		if (payload.rootId !== request.rootId || payload.capturePolicy !== 'backup-supported' || payload.capture !== undefined || payload.entries !== undefined)
 			throw Error('Native backup capture scope or policy changed.');
 		verifyScanExclusions(request, payload.excludedPaths);
@@ -538,8 +551,14 @@ export function parseMobileFolderResult(
 		result.skippedPage = parseNativeSkippedPage(payload.skippedPage, request.capture, request.offset, request.pageSize);
 	} else if (request.action === 'scan-capture' || request.action === 'scan-page' || request.action === 'scan-discard') {
 		if ('capture' in request && request.capture.coverage !== undefined && (request.capturePolicy !== 'backup-supported' || payload.capturePolicy !== 'backup-supported')) throw Error('Native backup policy changed.');
-		if (payload.rootId !== request.rootId || payload.complete !== true) throw Error('Native inventory is incomplete or belongs to another root.');
+		if (payload.rootId !== request.rootId || (payload.complete !== true && !(request.action === 'scan-capture' && request.capturePolicy === 'backup-supported'))) throw Error('Native inventory is incomplete or belongs to another root.');
 		if (request.action === 'scan-capture') {
+			if (((value: FolderRequest) => 'capturePolicy' in value && value.capturePolicy === 'backup-supported')(request)) {
+				if (payload.capturePolicy !== 'backup-supported' || payload.capture !== undefined || payload.entries !== undefined) throw Error('Native backup capture scope or policy changed.');
+				verifyScanExclusions(request, payload.excludedPaths); result.backupCapture = parseNativeBackupStatus(payload.backupCapture);
+				if (result.backupCapture.id !== request.captureId || payload.complete !== (result.backupCapture.state === 'complete')) throw Error('Native backup capture identity or completion changed.');
+				return result;
+			}
 			verifyScanExclusions(request, payload.excludedPaths);
 			result.capture = parseNativeInventoryCapture(payload.capture);
 			if (result.capture.coverage !== undefined) throw Error('Partial inventory requires the negotiated backup policy.');

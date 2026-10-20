@@ -14,6 +14,16 @@ export function createJournalSyncProgressSource(descriptor: SyncProgressDescript
 		const journal = await open();
 		try {
 			const access = { scope: saved.scope, currentScope, signal }, inventory = journal.inventory(access), runs = journal.pagedRuns(access);
+			if (saved.run.streaming) {
+				let next: string | null = null;
+				do {
+					const page = await runs.streamEntries(saved.run, next ?? undefined);
+					const operations = await runs.operationsForPaths(saved.run, page.entries.map(entry => entry.path));
+					for (const [i, entry] of page.entries.entries()) yield { entry, operation: operations[i] };
+					next = page.next;
+				} while (next);
+				return;
+			}
 			const entries = async function* (capture: InventoryIdentity): AsyncGenerator<SyncEntry> {
 				let next: InventoryCursor | null = null;
 				do { const page = await inventory.read(capture, next ?? undefined); for (const entry of page.entries) yield entry; next = page.next; } while (next);

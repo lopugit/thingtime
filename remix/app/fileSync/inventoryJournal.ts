@@ -217,6 +217,22 @@ export function inventoryJournal(db: IDBDatabase, access: JournalAccess, keyRang
 		});
 	};
 	return {
+		/** Exact bounded observations from a sealed baseline; no missing whole
+		 * inventory or failed access is ever interpreted as path absence. */
+		async entriesForPaths(value: InventoryIdentity, paths: readonly string[]): Promise<(SyncEntry | null)[]> {
+			const requested = [...paths];
+			if (requested.length > INVENTORY_PAGE_ENTRIES || requested.some(path => !validSyncPath(path))) throw Error('Invalid inventory path page.');
+			return withHeader(value, 'readonly', (header, tx, done, fail) => {
+				if (header.phase !== 'complete') throw Error('A complete baseline is required.');
+				const result: (SyncEntry | null)[] = new Array(requested.length); let waiting = requested.length;
+				if (!waiting) { done([]); return; }
+				requested.forEach((path, i) => { const id = [key, header.id, syncPathKey(path)], get = tx.objectStore(INVENTORY_STORES[2]).get(id);
+					get.onsuccess = () => { try { check(); const row = get.result === undefined ? null : validateRow(get.result, header, id);
+						if (row && row.path !== path) throw Error('Case or Unicode baseline collision requires review.'); result[i] = row; if (!--waiting) done(result);
+					} catch (error) { fail(error); } }; });
+			});
+		},
+
 		setCoverage: (value: InventoryIdentity, capture: NativeBackupCapture, policy: SyncPolicy) => setCoverage(value, capture, policy), appendSkips, readSkips,
 		importState: (value: InventoryIdentity) => withHeader<InventoryProgress & { skipped: number; derived: boolean; coverage: NativeBackupCapture | null }>(value, 'readonly', (header, _tx, done) => done({
 			...progress(header), skipped: header.skippedEntries ?? 0, derived: header.derivedCoverage === true,

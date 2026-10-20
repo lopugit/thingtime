@@ -80,7 +80,7 @@ public struct MobileFolderInventory: Sendable {
     private struct Record: Codable {
         let scope: Scope
         let bookmarkHash: String
-        let capture: Capture
+        var capture: Capture
         let complete: Bool
         var excludedPaths: [String]? = nil
         var retired: Bool? = nil
@@ -88,6 +88,7 @@ public struct MobileFolderInventory: Sendable {
         var prepared: Bool? = nil
         var ignoreRules: String? = nil
         var ignoredCount: Int? = nil
+        var streamState: String? = nil
     }
     public static let maximumPageEntries = 128
     public static let maximumBatchPageEntries = 4096
@@ -150,7 +151,9 @@ public struct MobileFolderInventory: Sendable {
         guard record.scope == scope, record.capture.id == id.lowercased(), record.bookmarkHash == Self.digest(bookmark),
               UUID(uuidString: record.capture.generation) != nil, record.capture.totalEntries >= 0 else { throw Failure.changed }
         guard try MobileFolderIgnoreRules.sameText(MobileFolderIgnoreRules(record.ignoreRules).text, record.ignoreRules), (record.ignoredCount ?? 0) >= 0 else { throw Failure.changed }
-        if record.capturePolicy == "backup-supported" {
+        if record.capturePolicy == "one-way-supported" {
+            guard ["running", "indexed", "complete", "interrupted"].contains(record.streamState ?? ""), record.capture.consistency == "per-entry" else { throw Failure.changed }
+        } else if record.capturePolicy == "backup-supported" {
             guard record.capture.consistency == "per-entry", let skipped = record.capture.totalSkipped, skipped >= 0,
                   ["full", "partial"].contains(record.capture.coverage ?? ""),
                   record.capture.coverage != "full" || skipped == 0,
@@ -284,6 +287,164 @@ public struct MobileFolderInventory: Sendable {
             return result
         }
     }
+    public struct Change: Encodable, Sendable {
+        public let sequence: Int
+        public let entry: MobileFolderReader.Entry
+        public let revision: String
+    }
+    public struct ChangesPage: Encodable, Sendable {
+        public let id: String; public let generation: String; public let state: String
+        public let revision: Int; public let changes: [Change]; public let nextSequence: Int; public let hasMore: Bool
+        public let totalEntries: Int; public let totalSkipped: Int
+    }
+    /// Streaming has its own policy and log. The legacy sealed inventory never
+    /// exposes provisional rows. Each short commit is visible between callbacks.
+    public func beginStream(_ scope: Scope, id: String, bookmark: Data, excludedPaths: [String], ignoreRules: String?) throws -> ChangesPage {
+        let exclusions = try MobileFolderReader.canonicalExclusions(excludedPaths), rules = try MobileFolderIgnoreRules(ignoreRules).text
+        try MobileFolderReader.checkAccess(bookmark: bookmark)
+        try locked(scope, id: id, creating: true) { fd in
+            if var old = try NativeFileJournal.read(fd, as: Record.self) {
+                try validate(old, scope: scope, id: id, bookmark: bookmark)
+                guard old.capturePolicy == "one-way-supported", old.retired != true, old.excludedPaths == exclusions,
+                      MobileFolderIgnoreRules.sameText(old.ignoreRules, rules) else { throw Failure.changed }
+                if old.streamState != "complete" { old.streamState = "running"; try NativeFileJournal.save(old, fd) }
+                return
+            }
+            let db = try Database(directory: fd, create: true)
+            try db.execute("PRAGMA journal_mode=WAL")
+            try db.execute("PRAGMA synchronous=FULL")
+            try db.execute("CREATE TABLE changes (ordinal INTEGER PRIMARY KEY, data BLOB NOT NULL, path TEXT NOT NULL, revision TEXT NOT NULL)")
+            try db.execute("CREATE TABLE current_entries (path TEXT PRIMARY KEY, revision TEXT NOT NULL)")
+            try db.execute("CREATE TABLE stream_metadata (skipped INTEGER NOT NULL, totalEntries INTEGER NOT NULL)")
+            try db.execute("INSERT INTO stream_metadata VALUES (0, 0)")
+            let capture = Capture(id: id.lowercased(), generation: UUID().uuidString.lowercased(), totalEntries: 0,
+                                  coverage: "partial", consistency: "per-entry", totalSkipped: 0)
+            try NativeFileJournal.save(Record(scope: scope, bookmarkHash: Self.digest(bookmark), capture: capture, complete: false,
+                excludedPaths: exclusions, capturePolicy: "one-way-supported", ignoreRules: rules, streamState: "running"), fd)
+        }
+        return try streamChanges(scope, id: id, bookmark: bookmark, excludedPaths: exclusions, ignoreRules: rules, afterSequence: 0)
+    }
+    public func streamChanges(_ scope: Scope, id: String, bookmark: Data, excludedPaths: [String], ignoreRules: String?, afterSequence: Int, pageSize: Int? = nil) throws -> ChangesPage {
+        guard afterSequence >= 0, afterSequence <= 9_007_199_254_740_991 else { throw Failure.invalid }
+        let limit = try Self.pageLimit(pageSize), exclusions = try MobileFolderReader.canonicalExclusions(excludedPaths), rules = try MobileFolderIgnoreRules(ignoreRules).text
+        try MobileFolderReader.checkAccess(bookmark: bookmark)
+        return try locked(scope, id: id) { fd in
+            guard let record = try NativeFileJournal.read(fd, as: Record.self), record.retired != true,
+                  record.capturePolicy == "one-way-supported", record.excludedPaths == exclusions,
+                  MobileFolderIgnoreRules.sameText(record.ignoreRules, rules) else { throw Failure.changed }
+            try validate(record, scope: scope, id: id, bookmark: bookmark)
+            let db = try Database(directory: fd, create: false)
+            var changes: [Change] = [], bytes = 16_384
+            try db.rows(offset: afterSequence + 1, table: "changes") { ordinal, data in
+                if changes.count == limit || bytes + data.count > Self.maximumPageBytes { return false }
+                guard ordinal == afterSequence + changes.count + 1 else { throw Failure.storage }
+                let entry = try JSONDecoder().decode(MobileFolderReader.Entry.self, from: data)
+                changes.append(Change(sequence: ordinal, entry: entry, revision: entry.version)); bytes += data.count; return true
+            }
+            let revision = try db.lastSequence()
+            guard afterSequence <= revision else { throw Failure.changed }
+            let next = changes.last?.sequence ?? afterSequence
+            return ChangesPage(id: record.capture.id, generation: record.capture.generation, state: record.streamState ?? "interrupted",
+                revision: revision, changes: changes, nextSequence: next, hasMore: next < revision,
+                totalEntries: try db.streamTotal(), totalSkipped: try db.streamSkipped())
+        }
+    }
+    public func finishStream(_ scope: Scope, id: String, bookmark: Data, state: String) throws {
+        guard ["indexed", "complete", "interrupted"].contains(state) else { throw Failure.invalid }
+        try locked(scope, id: id) { fd in
+            guard var record = try NativeFileJournal.read(fd, as: Record.self), record.capturePolicy == "one-way-supported" else { throw Failure.changed }
+            try validate(record, scope: scope, id: id, bookmark: bookmark)
+            let db = try Database(directory: fd, create: false)
+            record.capture = Capture(id: record.capture.id, generation: record.capture.generation, totalEntries: try db.streamTotal(),
+                coverage: "partial", consistency: "per-entry", totalSkipped: try db.streamSkipped())
+            record.streamState = state
+            try NativeFileJournal.save(record, fd)
+        }
+    }
+    public final class StreamControl: @unchecked Sendable {
+        private let lock = NSLock()
+        private var revision: Int?
+        public init() {}
+        public func finish(afterSequence: Int) { lock.lock(); revision = afterSequence; lock.unlock() }
+        func take() -> Int? { lock.lock(); defer { lock.unlock() }; let value = revision; revision = nil; return value }
+    }
+    /// Only the app-owned metadata directory is hidden from a live source.
+    /// Resolve the pinned grant and cache physically; never omit a broad parent
+    /// such as Library, or reinterpret a user-selected exclusion.
+    private func streamInternalExclusions(bookmark: Data) throws -> [String] {
+        try MobileFolderReader.access(bookmark) { root in
+            var rootPath = [CChar](repeating: 0, count: Int(MAXPATHLEN))
+            guard fcntl(root, F_GETPATH, &rootPath) == 0 else { throw Failure.unavailable }
+            let cache = Darwin.open(directory.resolvingSymlinksInPath().path, O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW)
+            guard cache >= 0 else { throw Failure.storage }; defer { close(cache) }
+            var cachePath = [CChar](repeating: 0, count: Int(MAXPATHLEN))
+            guard fcntl(cache, F_GETPATH, &cachePath) == 0 else { throw Failure.storage }
+            let source = String(cString: rootPath), owned = String(cString: cachePath)
+            guard source != owned else { throw Failure.invalid }
+            let prefix = source == "/" ? "/" : source + "/"
+            guard owned.hasPrefix(prefix) else { return [] }
+            return try MobileFolderReader.canonicalExclusions([String(owned.dropFirst(prefix.count))])
+        }
+    }
+    /// The helper validates each directory namespace before emitting eligible
+    /// entries. It remains the only scanner, with host path/version revalidation.
+    public func runStream(_ scope: Scope, id: String, bookmark: Data, excludedPaths: [String], ignoreRules: String?, control: StreamControl? = nil, wake: @Sendable () -> Void, authorize: @Sendable () throws -> Void = {}) throws {
+        #if os(macOS)
+        _ = try streamChanges(scope, id: id, bookmark: bookmark, excludedPaths: excludedPaths, ignoreRules: ignoreRules, afterSequence: 0)
+        // Keep one writer open for the scan. Closing the final WAL connection
+        // after every entry would checkpoint and recreate its journal each time.
+        let writer = try locked(scope, id: id) { fd in try Database(directory: fd, create: false, writable: true) }
+        try writer.execute("PRAGMA synchronous=FULL")
+        try writer.execute("PRAGMA wal_autocheckpoint=1000")
+        var pending: [MobileFolderReader.Entry] = [], skipped = 0, first = true, autoFinish = false
+        var committed = Date()
+        func flush() throws {
+            guard !pending.isEmpty || skipped > 0 else { return }
+            try Task.checkCancellation()
+            try authorize()
+            try locked(scope, id: id) { fd in
+                guard let record = try NativeFileJournal.read(fd, as: Record.self), record.capturePolicy == "one-way-supported", ["running", "indexed"].contains(record.streamState ?? "") else { throw Failure.changed }
+                try validate(record, scope: scope, id: id, bookmark: bookmark)
+                let db = writer
+                try db.execute("BEGIN IMMEDIATE")
+                var count = try db.lastSequence()
+                for entry in pending {
+                    guard count < 9_007_199_254_740_991 else { throw Failure.limit }
+                    if try db.insertChange(entry, sequence: count + 1) { count += 1 }
+                }
+                try db.execute("UPDATE stream_metadata SET skipped = skipped + \(skipped)")
+                try db.execute("COMMIT")
+            }
+            if !pending.isEmpty { first = false }
+            pending.removeAll(keepingCapacity: true); skipped = 0; committed = Date(); wake()
+        }
+        guard let helper = commanderIndexer else { throw Failure.unavailable }
+        let internalExclusions = try streamInternalExclusions(bookmark: bookmark)
+        try MobileFolderReader.captureBackupWithCommander(helper: helper, bookmark: bookmark, excludedPaths: excludedPaths,
+            ignoreRules: ignoreRules, streaming: true, internalExclusions: internalExclusions, ignored: {}, append: { entry in
+                pending.append(entry)
+                // A WAL commit makes each ready result visible without waiting for
+                // the next file hash; SQLite checkpoints bound its journal.
+                if first || pending.count >= 128 || Date().timeIntervalSince(committed) >= 0.1 { try flush() }
+                return true
+            }, skip: { _ in skipped += 1; if skipped >= 128 { try flush() } }, indexed: {
+                try flush(); try finishStream(scope, id: id, bookmark: bookmark, state: "indexed"); wake()
+                if control == nil { autoFinish = true }
+            }, tick: {
+                if Date().timeIntervalSince(committed) >= 0.1 { try flush() }
+                if autoFinish { autoFinish = false; return true }
+                if let expected = control?.take() {
+                    try flush()
+                    if try writer.lastSequence() == expected { return true }
+                    wake()
+                }
+                return false
+            })
+        try flush()
+        #else
+        throw Failure.unavailable
+        #endif
+    }
     public func sealBackup(_ scope: Scope, capture: Capture, bookmark: Data) throws {
         try MobileFolderReader.checkAccess(bookmark: bookmark)
         try locked(scope, id: capture.id) { fd in
@@ -382,9 +543,9 @@ public struct MobileFolderInventory: Sendable {
         }
     }
 
-    private final class Database {
+    final class Database {
         private var handle: OpaquePointer?
-        init(directory: Int32, create: Bool) throws {
+        init(directory: Int32, create: Bool, writable: Bool = false) throws {
             let file = openat(directory, "inventory.sqlite", O_RDWR | O_NOFOLLOW | O_CLOEXEC | O_NONBLOCK | (create ? O_CREAT | O_EXCL : 0), 0o600)
             guard file >= 0 else { throw Failure.storage }; defer { close(file) }
             let info = try MobileFolderReader.info(file)
@@ -393,7 +554,7 @@ public struct MobileFolderInventory: Sendable {
             // already-open private cache file; no caller supplies a path.
             var path = [CChar](repeating: 0, count: Int(MAXPATHLEN))
             guard fcntl(file, F_GETPATH, &path) == 0 else { throw Failure.storage }
-            let flags = (create ? SQLITE_OPEN_READWRITE : SQLITE_OPEN_READONLY) | SQLITE_OPEN_NOFOLLOW
+            let flags = ((create || writable) ? SQLITE_OPEN_READWRITE : SQLITE_OPEN_READONLY) | SQLITE_OPEN_NOFOLLOW
             guard sqlite3_open_v2(String(cString: path), &handle, flags, nil) == SQLITE_OK else {
                 sqlite3_close(handle); handle = nil; throw Failure.storage
             }
@@ -438,6 +599,51 @@ public struct MobileFolderInventory: Sendable {
                 guard status == SQLITE_ROW || status == SQLITE_DONE else { throw Failure.storage }
                 throw MobileFolderReader.ScanFailure(reason: status == SQLITE_ROW ? .pathCollision : .duplicateIdentity, path: entry.path)
             }
+        }
+        func streamTotal() throws -> Int { try streamCount(column: "totalEntries") }
+        func streamSkipped() throws -> Int { try streamCount(column: "skipped") }
+        private func streamCount(column: String) throws -> Int {
+            var statement: OpaquePointer?
+            guard sqlite3_prepare_v2(handle, "SELECT " + column + " FROM stream_metadata", -1, &statement, nil) == SQLITE_OK else { throw Failure.storage }
+            defer { sqlite3_finalize(statement) }
+            guard sqlite3_step(statement) == SQLITE_ROW else { throw Failure.storage }
+            return Int(sqlite3_column_int64(statement, 0))
+        }
+        func lastSequence() throws -> Int {
+            var statement: OpaquePointer?
+            guard sqlite3_prepare_v2(handle, "SELECT COALESCE(MAX(ordinal), 0) FROM changes", -1, &statement, nil) == SQLITE_OK else { throw Failure.storage }
+            defer { sqlite3_finalize(statement) }
+            guard sqlite3_step(statement) == SQLITE_ROW else { throw Failure.storage }
+            return Int(sqlite3_column_int64(statement, 0))
+        }
+        @discardableResult
+        func insertChange(_ entry: MobileFolderReader.Entry, sequence: Int) throws -> Bool {
+            let copy = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
+            var current: OpaquePointer?
+            guard sqlite3_prepare_v2(handle, "SELECT revision FROM current_entries WHERE path = ?", -1, &current, nil) == SQLITE_OK else { throw Failure.storage }
+            defer { sqlite3_finalize(current) }
+            guard sqlite3_bind_text(current, 1, entry.path, -1, copy) == SQLITE_OK else { throw Failure.storage }
+            let status = sqlite3_step(current)
+            guard status == SQLITE_ROW || status == SQLITE_DONE else { throw Failure.storage }
+            if status == SQLITE_ROW, let revision = sqlite3_column_text(current, 0), String(cString: revision) == entry.version { return false }
+            let data = try JSONEncoder().encode(entry)
+            guard data.count <= 65_536 else { throw Failure.limit }
+            var statement: OpaquePointer?
+            guard sqlite3_prepare_v2(handle, "INSERT INTO changes VALUES (?, ?, ?, ?)", -1, &statement, nil) == SQLITE_OK else { throw Failure.storage }
+            defer { sqlite3_finalize(statement) }
+            guard sqlite3_bind_int64(statement, 1, Int64(sequence)) == SQLITE_OK,
+                  data.withUnsafeBytes({ sqlite3_bind_blob(statement, 2, $0.baseAddress, Int32(data.count), copy) }) == SQLITE_OK,
+                  sqlite3_bind_text(statement, 3, entry.path, -1, copy) == SQLITE_OK,
+                  sqlite3_bind_text(statement, 4, entry.version, -1, copy) == SQLITE_OK,
+                  sqlite3_step(statement) == SQLITE_DONE else { throw Failure.storage }
+            var save: OpaquePointer?
+            guard sqlite3_prepare_v2(handle, "INSERT INTO current_entries VALUES (?, ?) ON CONFLICT(path) DO UPDATE SET revision = excluded.revision", -1, &save, nil) == SQLITE_OK else { throw Failure.storage }
+            defer { sqlite3_finalize(save) }
+            guard sqlite3_bind_text(save, 1, entry.path, -1, copy) == SQLITE_OK,
+                  sqlite3_bind_text(save, 2, entry.version, -1, copy) == SQLITE_OK,
+                  sqlite3_step(save) == SQLITE_DONE else { throw Failure.storage }
+            if status == SQLITE_DONE { try execute("UPDATE stream_metadata SET totalEntries = totalEntries + 1") }
+            return true
         }
         func insertSkipped(_ row: Skipped) throws {
             let data = try JSONEncoder().encode(row)
@@ -492,7 +698,7 @@ public struct MobileFolderInventory: Sendable {
         }
         func rows(offset: Int, table: String = "entries", visit: (Int, Data) throws -> Bool) throws {
             var statement: OpaquePointer?
-            guard ["entries", "skipped"].contains(table) else { throw Failure.invalid }
+            guard ["entries", "skipped", "changes"].contains(table) else { throw Failure.invalid }
             guard sqlite3_prepare_v2(handle, "SELECT ordinal, data FROM " + table + " WHERE ordinal >= ? ORDER BY ordinal", -1, &statement, nil) == SQLITE_OK else { throw Failure.storage }
             defer { sqlite3_finalize(statement) }
             guard sqlite3_bind_int64(statement, 1, Int64(offset)) == SQLITE_OK else { throw Failure.storage }

@@ -1,5 +1,5 @@
 import { SYNC_PRIORITY_STORE, parseSyncPriorityPreferences } from './syncPriorityJournal';
-import { JOURNAL_RETENTION_STORE, registerJournalMetadata, forgetJournalMetadata } from './journalRetention';
+import { JOURNAL_RETENTION_STORE, registerJournalMetadata, forgetJournalMetadata, retireJournalMetadata } from './journalRetention';
 import { parsePagedRunReview, parseReviewedConflict, resolveReviewedPage, type PagedRunReview, type PagedReviewProgress, type ReviewedSyncConflict } from './pagedRunReview';
 import { parseFileSyncConfiguration, type FileSyncConfiguration } from './configuration';
 import { parseCloudInventoryRoot, type CloudInventoryRoot, type CloudInventoryNode } from './cloudInventory';
@@ -10,9 +10,9 @@ import { PAGED_CHECKPOINT_HEADS, validatePagedCheckpointHead } from './checkpoin
 import { syncMutationOrderKey, validateSyncOperation, validateSyncReceipt, validateSyncRun, type SyncOperation, type SyncReceipt } from './execute';
 import { INVENTORY_PAGE_BYTES, INVENTORY_PAGE_ENTRIES, INVENTORY_PIN_STORE, INVENTORY_STORES, inventoryJournal, validateInventoryHeader, type InventoryHeader } from './inventoryJournal';
 import { journalScope, type JournalAccess } from './journalScope';
-import { pagedPlanJournal, parsePagedPlanSpec, PLAN_PIN_STORE, PLAN_STORES, validatePagedPlanHeader,
+import { pagedPlanJournal, parsePagedPlanSpec, provesConflictFreeInitialUpload, PLAN_PIN_STORE, PLAN_STORES, validatePagedPlanHeader,
 	type PagedPlanCursor, type PagedPlanHeader, type PagedPlanSpec } from './pagedPlanJournal';
-import { sameSyncScope, syncPathKey, validSyncPath, validSyncPathKey, syncScopeKey, type SyncEntry, type SyncScope } from './reconcile';
+import { sameSyncScope, sameSyncStamp, syncPathKey, validSyncPath, validSyncEntry, validSyncPathKey, syncScopeKey, type SyncEntry, type SyncScope } from './reconcile';
 
 export const RETAINED_HEADS = 'sync-retained-run-heads';
 export const REVIEW_STORE = 'sync-run-reviews';
@@ -20,13 +20,13 @@ export const CLOUD_PARENTS = 'sync-cloud-trash-parents';
 export const PAGED_RUN_HEADS = 'sync-paged-run-heads';
 export const PAGED_RUN_STORES = ['sync-paged-runs', 'sync-paged-operations'] as const;
 const stores = [SYNC_PRIORITY_STORE, JOURNAL_RETENTION_STORE, RETAINED_HEADS, REVIEW_STORE, CLOUD_PARENTS, ...PAGED_RUN_STORES, PAGED_RUN_HEADS, PLAN_STORES[0], PLAN_PIN_STORE, INVENTORY_STORES[0], INVENTORY_PIN_STORE, PAGED_CHECKPOINT_HEADS, 'runs'];
-export type PagedRunSpec = { id: string; plan: PagedPlanSpec; review?: PagedRunReview; configuration?: FileSyncConfiguration };
+export type PagedRunSpec = { id: string; plan: PagedPlanSpec; review?: PagedRunReview; configuration?: FileSyncConfiguration; streaming?: { source: 'local' | 'remote'; captureId: string } };
 export type PagedRunProgress = { phase: 'preparing' | 'ready' | 'running' | 'complete'; read: number; total: number; operations: number; confirmed: number };
 type SortKey = [number, number, string];
 export type CloudBindingProgress = { prepared: number; total: number; phase: 'preparing' | 'ready' };
 type CloudPreparation = { configuration: FileSyncConfiguration; root: CloudInventoryRoot; prepared: number; after: SortKey | null };
 export type PagedRunHeader = PagedRunProgress & { spec: PagedRunSpec; scope: string; instance: string; retired?: true; planInstance: string;
-	next: PagedPlanCursor | null; revision: number; confirmedThrough: SortKey | null; cloud?: CloudPreparation; review?: PagedReviewProgress; retained?: true; scheduling?: Scheduling };
+	next: PagedPlanCursor | null; revision: number; confirmedThrough: SortKey | null; cloud?: CloudPreparation; review?: PagedReviewProgress; retained?: true; scheduling?: Scheduling; stream?: { sequence: number; generation: string | null; terminal: boolean; conflicts: number; sourceCursor?: string; snapshotComplete?: boolean; indexedSequence?: number; sourceTerminal?: boolean } };
 type Scheduling = { canonical: boolean; legacy: boolean; revision: number; index: number; after: string | null; reserved: string | null };
 const freshScheduling = (legacy = false): Scheduling => ({ canonical: false, legacy, revision: 0, index: 0, after: null, reserved: null });
 type Header = PagedRunHeader;
@@ -41,7 +41,8 @@ export const parsePagedRunSpec = (value: PagedRunSpec): PagedRunSpec => {
 	const plan = parsePagedPlanSpec(value.plan), configuration = value.configuration === undefined ? undefined : parseFileSyncConfiguration(value.configuration);
 	if (configuration && (configuration.mode !== plan.policy.mode || configuration.propagateDeletes !== plan.policy.propagateDeletes || (configuration.ignoreRules ?? '') !== (plan.ignoreRules ?? '') ||
 		JSON.stringify(configuration.excludedPaths.map(syncPathKey).sort()) !== JSON.stringify(plan.excludedPaths.map(syncPathKey).sort()))) throw Error('Saved run settings do not match the plan.');
-	return { id: value.id, plan, ...(value.review === undefined ? {} : { review: parsePagedRunReview(value.review) }), ...(configuration ? { configuration } : {}) };
+	if (value.streaming && (!configuration || value.review || plan.policy.propagateDeletes || !['upload', 'download', 'backup'].includes(plan.policy.mode) || !identifier(value.streaming.captureId) || value.streaming.source !== (plan.policy.mode === 'download' ? 'remote' : 'local'))) throw Error('Streaming requires an approved one-way connection without deletions.');
+	return { id: value.id, plan, ...(value.streaming ? { streaming: { source: value.streaming.source, captureId: value.streaming.captureId } } : {}), ...(value.review === undefined ? {} : { review: parsePagedRunReview(value.review) }), ...(configuration ? { configuration } : {}) };
 };
 const inputs = (spec: PagedRunSpec) => [spec.plan.local, spec.plan.remote, spec.plan.baseline.local, spec.plan.baseline.remote];
 const progress = ({ phase, read, total, operations, confirmed }: Header): PagedRunProgress => ({ phase, read, total, operations, confirmed });
@@ -82,6 +83,16 @@ export const validatePagedRunHeader = (h: Header, spec: PagedRunSpec, scope: Syn
 		(h.scheduling ? (after !== null && !validOrder(after)) : h.confirmed === 0 ? after !== null : !Array.isArray(after) || after.length !== 3 || ![0, 1].includes(after[0]) ||
 			!Number.isInteger(after[1]) || !validSyncPath(after[2]) || after[1] !== after[2].split('/').length * (after[0] === 0 ? 1 : -1)))
 		throw Error('Paged sync run changed or is unavailable.');
+	if (!!spec.streaming !== !!h.stream) throw Error('Invalid streaming sync progress.');
+	if (h.stream) {
+		const stream = h.stream;
+		if (!nonnegative(stream.sequence) || stream.sequence !== h.total || !nonnegative(stream.conflicts) || stream.conflicts > h.read ||
+			typeof stream.terminal !== 'boolean' || (stream.generation !== null && !identifier(stream.generation)) ||
+			(stream.sourceCursor !== undefined && (!/^(0|[1-9][0-9]{0,15})$/.test(stream.sourceCursor) || !Number.isSafeInteger(Number(stream.sourceCursor)))) ||
+			(stream.indexedSequence !== undefined && (!nonnegative(stream.indexedSequence) || stream.indexedSequence < stream.sequence)) ||
+			(stream.sourceTerminal !== undefined && typeof stream.sourceTerminal !== 'boolean') || (stream.snapshotComplete !== undefined && typeof stream.snapshotComplete !== 'boolean') || (h.phase === 'complete' && !stream.terminal))
+			throw Error('Invalid streaming sync progress.');
+	}
 	if (h.scheduling) {
 		const s = h.scheduling;
 		if (typeof s.canonical !== 'boolean' || typeof s.legacy !== 'boolean' || ![s.revision, s.index].every(nonnegative) ||
@@ -135,6 +146,7 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 				const get = tx.objectStore(PAGED_RUN_STORES[0]).get([key, spec.id]);
 				get.onsuccess = () => { try { check(); validate(get.result, spec);
 					if (head.result !== spec.id && get.result.phase !== 'complete') throw Error('Sync progress run is not active.');
+					if (spec.streaming) { work(get.result, tx, done, fail); return; }
 					const plan = tx.objectStore(PLAN_STORES[0]).get([key, spec.plan.id]);
 					plan.onsuccess = () => { try {
 						check(); validatePagedPlanHeader(plan.result, spec.plan, key);
@@ -154,8 +166,31 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 		else if (value.receipt !== null) throw Error('Unconfirmed operation has a receipt.');
 		return value;
 	};
+	/** A streaming run shares operation IDs, receipts, scheduling, scope fencing
+	 * and retention with sealed runs. It never publishes a baseline. */
+	const beginStreaming = async (spec: PagedRunSpec): Promise<PagedRunProgress> => transaction(stores, 'readwrite', (tx, done, fail) => {
+		const head = tx.objectStore(PAGED_RUN_HEADS).get(key);
+		head.onsuccess = () => { try {
+			check(); if (head.result !== undefined && head.result !== spec.id) throw Error('Resume the active paged sync run.');
+			const get = tx.objectStore(PAGED_RUN_STORES[0]).get([key, spec.id]);
+			get.onsuccess = () => { try {
+				check(); if (get.result) { validate(get.result, spec); if (head.result !== spec.id) throw Error('Streaming run lost its active root.'); done(progress(get.result)); return; }
+				const old = tx.objectStore('runs').get(key);
+				old.onsuccess = () => { try {
+					check(); if (old.result) { validateSyncRun(old.result); if (old.result.operations.some((op: SyncOperation) => !op.confirmed)) throw Error('Resume the unfinished sync run.'); }
+					const root = { rootId: spec.configuration!.remoteFolderId, rootRevision: 'per-entry' };
+					validateCloudConfiguration(spec.configuration!, spec, scope, root);
+					const h: Header = { spec, scope: key, instance: crypto.randomUUID(), planInstance: 'streaming', phase: 'running', read: 0, total: 0,
+						operations: 0, confirmed: 0, next: null, revision: 0, confirmedThrough: null, scheduling: freshScheduling(),
+						cloud: { configuration: spec.configuration!, root, prepared: 0, after: null }, stream: { sequence: 0, generation: null, terminal: false, conflicts: 0 } };
+					tx.objectStore(PAGED_RUN_HEADS).add(spec.id, key); registerJournalMetadata(tx, access, key, 'run', spec.id, h.instance); save(h, tx); done(progress(h));
+				} catch (error) { fail(error); } };
+			} catch (error) { fail(error); } };
+		} catch (error) { fail(error); } };
+	});
 	const begin = async (value: PagedRunSpec): Promise<PagedRunProgress> => {
 		const spec = parsePagedRunSpec(value);
+		if (spec.streaming) return beginStreaming(spec);
 		return transaction(stores, 'readwrite', (tx, done, fail) => {
 			const head = tx.objectStore(PAGED_RUN_HEADS).get(key);
 			head.onsuccess = () => { try {
@@ -306,6 +341,7 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 	};
 	const beginCloud = async (value: PagedRunSpec, supplied: FileSyncConfiguration): Promise<CloudBindingProgress> => {
 		const spec = parsePagedRunSpec(value), requested = parseFileSyncConfiguration(supplied);
+		if (spec.streaming) return withHeader(spec, 'readonly', (h, _tx, done) => { if (JSON.stringify(h.cloud!.configuration) !== JSON.stringify(requested)) throw Error('Saved cloud binding configuration changed.'); done(cloudProgress(h)); });
 		return withHeader(spec, 'readwrite', (h, tx, done, fail) => {
 			const get = tx.objectStore(INVENTORY_STORES[0]).get([key, spec.plan.remote.id]);
 			get.onsuccess = () => { try {
@@ -395,6 +431,178 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 	return {
 		get scope() { return structuredClone(scope); },
 		begin, step, read, beginCloud, stepCloud,
+		/** Upgrade only structural initial uploads that could never execute.
+		 * Retire metadata atomically; large operation rows are collected later. */
+		async retireUnstartedInitialUpload(value: PagedRunSpec, expected: FileSyncConfiguration): Promise<boolean> {
+			const spec = parsePagedRunSpec(value), configuration = parseFileSyncConfiguration(expected);
+			return withHeader(spec, 'readwrite', (h, tx, done, fail) => {
+				if (spec.streaming || spec.review || JSON.stringify(spec.configuration) !== JSON.stringify(configuration) || !['preparing', 'ready'].includes(h.phase) || h.confirmed !== 0 || h.scheduling || h.confirmedThrough !== null) { done(false); return; }
+				const get = tx.objectStore(PLAN_STORES[0]).get([key, spec.plan.id]);
+				get.onsuccess = () => { try { check();
+					if (!provesConflictFreeInitialUpload(get.result, spec.plan, key)) { done(false); return; }
+					// Keep source/plan evidence. Remove only this run's ownership pins;
+					// maintenance deletes its retired children in bounded pages.
+					retireJournalMetadata(tx, key, 'run', spec.id, PAGED_RUN_STORES[0], h);
+					tx.objectStore(PAGED_RUN_HEADS).delete(key); tx.objectStore(PLAN_PIN_STORE).delete([key, spec.plan.id, spec.id]);
+					for (const capture of inputs(spec)) tx.objectStore(INVENTORY_PIN_STORE).delete([key, capture.id, spec.id, 'run']);
+					done(true);
+				} catch (error) { fail(error); } };
+			});
+		},
+
+		streamState: (value: PagedRunSpec) => withHeader(parsePagedRunSpec(value), 'readonly', (h, _tx, done) => {
+			if (!h.stream) throw Error('This run is not streaming.'); done(structuredClone(h.stream));
+		}) as Promise<NonNullable<Header['stream']>>,
+		/** Cursor catch-up and transfer drain must come from ONE transaction;
+		 * separate reads can falsely stop a watcher across a planner commit. */
+		streamReadyToFinish: (value: PagedRunSpec) => withHeader<boolean>(parsePagedRunSpec(value), 'readonly', (h, _tx, done) => {
+			if (!h.stream) throw Error('This run is not streaming.');
+			done((h.stream.indexedSequence ?? h.stream.sequence) === h.stream.sequence && h.confirmed === h.operations);
+		}),
+
+		/** Commit one fully prepared revision and its feed cursor atomically.
+		 * The prior version's receipt remains retained before replacing a path. */
+		async appendStream(value: PagedRunSpec, change: { generation: string; sequence: number; revision: string; entry: SyncEntry }, binding: CloudOperationBinding | null, conflict = false) {
+			const spec = parsePagedRunSpec(value), event = structuredClone(change), prepared = binding && structuredClone(binding);
+			if (!spec.streaming || !identifier(event.generation) || !nonnegative(event.sequence) || event.sequence === 0 || event.revision !== event.entry?.version || !validSyncEntry(event.entry)) throw Error('Invalid streaming index change.');
+			if (prepared) { const write = parseCloudWrite(prepared.write), m = write.operation.mutation;
+				if (!sameSyncScope(write.scope, scope) || write.cloudRootId !== spec.configuration!.remoteFolderId || m.kind !== 'copy' || m.from !== spec.streaming.source || !sameSyncStamp(m.source, event.entry) || write.operation.confirmed || write.operation.id === spec.id) throw Error('Streaming operation does not match the indexed revision.'); }
+			if (bytes({ event, prepared }) > INVENTORY_PAGE_BYTES) throw Error('Streaming change exceeds its byte bound.');
+			return withHeader<PagedRunProgress>(spec, 'readwrite', (h, tx, done, fail) => {
+				const stream = h.stream!, events = tx.objectStore(REVIEW_STORE), token = [key, spec.id, 'event', event.sequence], get = events.get(token);
+				get.onsuccess = () => { try {
+					check(); if (get.result) { if (JSON.stringify(get.result.event) !== JSON.stringify(event)) throw Error('Streaming revision retry changed.'); done(progress(h)); return; }
+					if (stream.terminal || event.sequence !== stream.sequence + 1 || (stream.generation !== null && stream.generation !== event.generation)) throw Error('Streaming generation or sequence changed.');
+					if (stream.indexedSequence !== undefined) {
+						const staged = events.get([key, spec.id, 'input', event.sequence]);
+						staged.onsuccess = () => { try { check(); const source = staged.result;
+							if (!source || !validSyncEntry(source.entry) || source.sequence !== event.sequence || source.generation !== event.generation || source.revision !== event.revision || !sameSyncStamp(source.entry, event.entry)) throw Error('Durable streaming input changed before preparation.');
+						} catch (error) { fail(error); } };
+					}
+					const ops = tx.objectStore(PAGED_RUN_STORES[1]), previous = ops.index('path').get([key, spec.id, syncPathKey(event.entry.path)]);
+					previous.onsuccess = () => { try {
+						check(); const prior: Row | undefined = previous.result;
+						if (prior && (!row(prior, spec).operation.confirmed || h.scheduling!.reserved === prior.operation.id)) throw Error('Finish the prior path revision before replacing it.');
+						if (prepared) {
+							if (prior) { events.add(prior, [key, spec.id, 'history', prior.operation.id]); ops.delete([key, spec.id, ...orderKey(prior.operation)]); }
+							const operation = prepared.write.operation; validateSyncOperation(operation);
+							events.add(true, [key, spec.id, 'used-operation', operation.id]);
+							ops.add({ scope: key, run: spec.id, path: syncPathKey(operation.mutation.path), operation, receipt: null, cloud: prepared } satisfies Row, [key, spec.id, ...orderKey(operation)]);
+							events.add(operation.id, [key, spec.id, 'pending', ...orderKey(operation)]); events.add(operation.id, [key, spec.id, 'pending-path', syncPathKey(operation.mutation.path)]);
+							h.operations++; h.cloud!.prepared++; h.cloud!.after = orderKey(operation); h.confirmedThrough = null;
+							h.scheduling!.index = 0; h.scheduling!.after = null;
+						}
+						events.add({ event, conflict, operationId: prepared?.write.operation.id ?? null }, token);
+						events.delete([key, spec.id, 'input', event.sequence]);
+						events.put(event.entry, [key, spec.id, 'source', syncPathKey(event.entry.path)]);
+						stream.sequence = event.sequence; stream.generation = event.generation; if (conflict) stream.conflicts++;
+						h.read++; h.total++; h.revision++; save(h, tx); done(progress(h));
+					} catch (error) { fail(error); } };
+				} catch (error) { fail(error); } };
+			});
+		},
+		/** Drain producer pages to disk independently of network binding and byte
+		 * transfers. A quota/transaction failure leaves its source watermark intact. */
+		async appendStreamInput(value: PagedRunSpec, generation: string, changes: readonly { sequence: number; revision: string; entry: SyncEntry }[], terminal: boolean) {
+			const spec = parsePagedRunSpec(value), rows = structuredClone(changes);
+			if (!spec.streaming || !identifier(generation) || !Array.isArray(rows) || rows.length > INVENTORY_PAGE_ENTRIES || typeof terminal !== 'boolean' ||
+				rows.some(row => !nonnegative(row.sequence) || row.sequence === 0 || !validSyncEntry(row.entry) || row.revision !== row.entry.version) || bytes(rows) > INVENTORY_PAGE_BYTES) throw Error('Invalid streaming input page.');
+			return withHeader<void>(spec, 'readwrite', (h, tx, done) => {
+				const stream = h.stream!, after = stream.indexedSequence ?? stream.sequence;
+				if (stream.sourceTerminal || stream.terminal || (stream.generation !== null && stream.generation !== generation) || rows.some((row, i) => row.sequence !== after + i + 1)) throw Error('Streaming input generation or watermark changed.');
+				for (const row of rows) tx.objectStore(REVIEW_STORE).add({ ...row, generation }, [key, spec.id, 'input', row.sequence]);
+				stream.indexedSequence = after + rows.length; stream.generation = generation; stream.sourceTerminal = terminal; h.revision++; save(h, tx); done(undefined);
+			});
+		},
+		async nextStreamInput(value: PagedRunSpec): Promise<{ generation: string; sequence: number; revision: string; entry: SyncEntry } | null> {
+			const spec = parsePagedRunSpec(value);
+			return withHeader(spec, 'readonly', (h, tx, done, fail) => {
+				if (!h.stream) throw Error('This run is not streaming.');
+				if (h.stream.sequence === (h.stream.indexedSequence ?? h.stream.sequence)) { done(null); return; }
+				const get = tx.objectStore(REVIEW_STORE).get([key, spec.id, 'input', h.stream.sequence + 1]);
+				get.onsuccess = () => { try { check(); const row = get.result;
+					if (!row || row.sequence !== h.stream!.sequence + 1 || row.generation !== h.stream!.generation || !validSyncEntry(row.entry) || row.revision !== row.entry.version) throw Error('Durable streaming input is missing or changed.'); done(row);
+				} catch (error) { fail(error); } };
+			});
+		},
+
+		async streamEntries(value: PagedRunSpec, after?: string): Promise<{ entries: SyncEntry[]; next: string | null }> {
+			const spec = parsePagedRunSpec(value);
+			if (!spec.streaming || (after !== undefined && !validSyncPathKey(after))) throw Error('Invalid streaming progress page.');
+			return withHeader(spec, 'readonly', (_h, tx, done, fail) => {
+				const prefix = [key, spec.id, 'source'], range = (keyRange ?? globalThis.IDBKeyRange).bound(after === undefined ? prefix : [...prefix, after], [...prefix, []], after !== undefined);
+				const entries: SyncEntry[] = []; let used = 2;
+				readPage<SyncEntry>(tx.objectStore(REVIEW_STORE), range, INVENTORY_PAGE_ENTRIES + 1, (values, keys) => {
+					for (const [i, item] of values.entries()) {
+						if (!validSyncEntry(item) || JSON.stringify(keys[i]) !== JSON.stringify([...prefix, syncPathKey(item.path)])) throw Error('Streaming progress changed.');
+						const size = bytes(item) + 1;
+						if (entries.length === INVENTORY_PAGE_ENTRIES || used + size > INVENTORY_PAGE_BYTES) { if (!entries.length) throw Error('Streaming progress exceeds its byte bound.'); done({ entries, next: syncPathKey(entries.at(-1)!.path) }); return; }
+						entries.push(item); used += size;
+					} done({ entries, next: null });
+				}, fail);
+			}, true);
+		},
+
+		streamPrevious: (value: PagedRunSpec, path: string) => withHeader<{ operation: SyncOperation; receipt: SyncReceipt | null } | null>(parsePagedRunSpec(value), 'readonly', (_h, tx, done, fail) => {
+			if (!validSyncPath(path)) throw Error('Invalid stream path.');
+			const get = tx.objectStore(PAGED_RUN_STORES[1]).index('path').get([key, value.id, syncPathKey(path)]);
+			get.onsuccess = () => { try { check(); const r = get.result === undefined ? null : row(get.result, value); if (r && r.operation.mutation.path !== path) throw Error('Streaming path collision.'); done(r && { operation: r.operation, receipt: r.receipt }); } catch (error) { fail(error); } };
+		}),
+
+		/** Only for an executor's preflight failure AFTER receipt lookup returned
+		 * missing. Pending/uncertain publications must retain the original ID. */
+		async skipUnpublishedStreamOperation(value: PagedRunSpec, operationId: string, conflict: boolean) {
+			const spec = parsePagedRunSpec(value);
+			return withHeader<PagedRunProgress>(spec, 'readwrite', (h, tx, done, fail) => {
+				if (!h.stream || h.scheduling?.reserved !== operationId) throw Error('Only the reserved unpublished streaming operation can be superseded.');
+				const ops = tx.objectStore(PAGED_RUN_STORES[1]), get = ops.index('operation').get([key, operationId]);
+				get.onsuccess = () => { try { check(); const r = row(get.result, spec);
+					if (r.operation.confirmed || r.receipt !== null) throw Error('Preserve the published revision receipt.');
+					tx.objectStore(REVIEW_STORE).add({ ...r, unpublished: true, conflict }, [key, spec.id, 'history', operationId]);
+					ops.delete([key, spec.id, ...orderKey(r.operation)]);
+					tx.objectStore(REVIEW_STORE).delete([key, spec.id, 'pending', ...orderKey(r.operation)]); tx.objectStore(REVIEW_STORE).delete([key, spec.id, 'pending-path', r.path]); h.operations--; h.cloud!.prepared--; if (!h.operations) h.cloud!.after = null;
+					h.scheduling!.reserved = null; h.scheduling!.canonical = false; h.confirmedThrough = null; if (conflict) h.stream.conflicts++;
+					if (h.stream.terminal && h.operations === h.confirmed) h.phase = 'complete'; h.revision++; save(h, tx); done(progress(h));
+				} catch (error) { fail(error); } };
+			});
+		},
+
+		/** Commit the canonical remote Timeline position only after the adapter's
+		 * snapshot/delta page has reached this exact durable observation cursor. */
+		async checkpointStreamSource(value: PagedRunSpec, sequence: number, cursor: string, snapshotComplete: boolean) {
+			const spec = parsePagedRunSpec(value);
+			if (!/^(0|[1-9][0-9]{0,15})$/.test(cursor) || !Number.isSafeInteger(Number(cursor)) || typeof snapshotComplete !== 'boolean') throw Error('Invalid remote streaming cursor.');
+			return withHeader<void>(spec, 'readwrite', (h, tx, done) => {
+				if (spec.streaming?.source !== 'remote' || !h.stream || h.stream.terminal || (h.stream.indexedSequence ?? h.stream.sequence) !== sequence || (h.stream.sourceCursor !== undefined && Number(cursor) < Number(h.stream.sourceCursor)) || (h.stream.snapshotComplete && !snapshotComplete)) throw Error('Remote source checkpoint changed.');
+				h.stream.sourceCursor = cursor; h.stream.snapshotComplete = snapshotComplete; h.revision++; save(h, tx); done(undefined);
+			});
+		},
+
+		async sealStream(value: PagedRunSpec, generation: string, sequence: number) {
+			const spec = parsePagedRunSpec(value);
+			return withHeader<PagedRunProgress>(spec, 'readwrite', (h, tx, done) => {
+				if (!h.stream || (h.stream.indexedSequence !== undefined && (!h.stream.sourceTerminal || h.stream.indexedSequence !== h.stream.sequence)) || sequence !== h.stream.sequence || (h.stream.generation !== null && h.stream.generation !== generation) || !identifier(generation)) throw Error('Streaming completion changed.');
+				h.stream.generation = generation; h.stream.terminal = true; if (h.operations === h.confirmed) h.phase = 'complete'; h.revision++; save(h, tx); done(progress(h));
+			});
+		},
+		async finishStream(value: PagedRunSpec) {
+			const spec = parsePagedRunSpec(value);
+			return withHeader<void>(spec, 'readwrite', (h, tx, done) => {
+				if (!h.stream?.terminal || h.phase !== 'complete') throw Error('Finish every indexed revision before releasing its stream.');
+				// A complete feed establishes no whole-tree agreement. A subsequent
+				// sealed reconciliation owns review and the checkpoint publication.
+				tx.objectStore(PAGED_RUN_HEADS).delete(key); done(undefined);
+			});
+		},
+
+		async retireCompletedStream(value: PagedRunSpec) {
+			const spec = parsePagedRunSpec(value);
+			return withHeader<void>(spec, 'readwrite', (h, tx, done) => {
+				if (!h.stream?.terminal || h.phase !== 'complete') throw Error('Preserve unfinished streaming receipts.');
+				retireJournalMetadata(tx, key, 'run', spec.id, PAGED_RUN_STORES[0], h); done(undefined);
+			}, true);
+		},
+
 		/** A bounded display-only join. This never starts or confirms work. All
 		 * paths share one scope-fenced readonly transaction rather than one
 		 * transaction per rendered inventory row. */
@@ -547,6 +755,29 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 						if (schedule.revision !== preferences.revision) {
 							schedule.revision = preferences.revision; schedule.index = 0; schedule.after = null;
 						}
+						if (h.stream) {
+							// Stream readiness is indexed separately from retained receipts.
+							// Never rescan millions of confirmed rows for a new early path.
+							const queue = tx.objectStore(REVIEW_STORE), ranges = keyRange ?? globalThis.IDBKeyRange;
+							const choose = (id: unknown) => {
+								if (!identifier(id)) throw Error('Invalid streaming readiness pointer.');
+								const get = ops.index('operation').get([key, id]); get.onsuccess = () => { try { check(); const r = row(get.result, spec);
+									if (r.operation.confirmed) throw Error('Streaming readiness points to a confirmed receipt.'); reserve(r);
+								} catch (error) { fail(error); } };
+							};
+							const canonical = () => {
+								const prefix = [key, spec.id, 'pending'], cursor = queue.openCursor(ranges.bound(prefix, [...prefix, []]));
+								cursor.onsuccess = () => { try { check(); if (!cursor.result) { if (h.confirmed !== h.operations) throw Error('Streaming readiness ended before its pending count.'); done(null); return; } choose(cursor.result.value); } catch (error) { fail(error); } };
+							};
+							const priority = (index: number) => {
+								if (spec.streaming!.source !== 'local' || index === preferences.paths.length) { canonical(); return; }
+								const requested = preferences.paths[index], path = syncPathKey(requested), prefix = [key, spec.id, 'pending-path'];
+								const exact = queue.get([...prefix, path]); exact.onsuccess = () => { try { check(); if (exact.result !== undefined) { choose(exact.result); return; }
+									const cursor = queue.openCursor(ranges.bound([...prefix, path + '/'], [...prefix, path + '0'], false, true));
+									cursor.onsuccess = () => { try { check(); if (cursor.result) choose(cursor.result.value); else priority(index + 1); } catch (error) { fail(error); } };
+								} catch (error) { fail(error); } };
+							}; priority(0); return;
+						}
 						if (!schedule.legacy && schedule.index < preferences.paths.length) {
 							const requested = preferences.paths[schedule.index], prefix = syncPathKey(requested);
 							const advancePriority = () => { schedule.index++; schedule.after = null; persist(); done('continue'); };
@@ -582,7 +813,7 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 						const request = ops.openCursor(operationRange(spec.id, h.confirmedThrough)); let scanned = 0;
 						request.onsuccess = () => { try {
 							check(); const cursor = request.result;
-							if (!cursor) throw Error('Sync operations ended before their declared count.');
+							if (!cursor) { if (h.stream && h.confirmed === h.operations) { persist(); done(null); return; } throw Error('Sync operations ended before their declared count.'); }
 							const r = row(cursor.value, spec, cursor.primaryKey);
 							if (!r.operation.confirmed) { reserve(r, undefined, true); return; }
 							h.confirmedThrough = orderKey(r.operation);
@@ -618,13 +849,14 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 					}
 					const commit = (primaryKey: IDBValidKey, scheduled: boolean) => {
 						op.confirmed = true; r.receipt = saved; ops.put(r, primaryKey);
+						if (h.stream) { tx.objectStore(REVIEW_STORE).delete([key, spec.id, 'pending', ...orderKey(op)]); tx.objectStore(REVIEW_STORE).delete([key, spec.id, 'pending-path', r.path]); }
 						h.confirmed++; h.revision++;
 						if (scheduled) {
 							if (h.scheduling!.canonical) h.confirmedThrough = orderKey(op);
 							h.scheduling!.reserved = null; h.scheduling!.canonical = false;
 						}
 						else h.confirmedThrough = orderKey(op);
-						if (h.confirmed === h.operations) h.phase = 'complete';
+						if (h.confirmed === h.operations && (!h.stream || h.stream.terminal)) h.phase = 'complete';
 						save(h, tx); done(progress(h));
 					};
 					if (h.scheduling?.reserved) {

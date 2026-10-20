@@ -13,6 +13,35 @@ final class MobileFolderInventoryTests: XCTestCase {
         return (source, try FolderBookmark.create(source), .init(owner: owner, deviceId: "fixture-device", rootId: UUID().uuidString.lowercased()), root.appendingPathComponent("journal"))
     }
 
+    func testCurrentRevisionDedupeRetainsReversionsAndContiguousSequencesAcrossRestart() throws {
+        let (source, bookmark, _, directory) = try fixture()
+        try Data("fixture".utf8).write(to: source.appendingPathComponent("file"))
+        let a = try XCTUnwrap(MobileFolderReader.scan(bookmark: bookmark).first)
+        var object = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(a)) as? [String: Any])
+        object["version"] = "fixture-B"
+        let b = try JSONDecoder().decode(MobileFolderReader.Entry.self, from: JSONSerialization.data(withJSONObject: object))
+        try NativeFileJournal.locked(directory: directory) { fd in
+            do {
+                let db = try MobileFolderInventory.Database(directory: fd, create: true)
+                try db.execute("CREATE TABLE changes (ordinal INTEGER PRIMARY KEY, data BLOB NOT NULL, path TEXT NOT NULL, revision TEXT NOT NULL)")
+                try db.execute("CREATE TABLE current_entries (path TEXT PRIMARY KEY, revision TEXT NOT NULL)")
+                try db.execute("CREATE TABLE stream_metadata (skipped INTEGER NOT NULL, totalEntries INTEGER NOT NULL)")
+                try db.execute("INSERT INTO stream_metadata VALUES (0, 0)")
+                var cursor = 0
+                for entry in [a, b, a, a] { if try db.insertChange(entry, sequence: cursor + 1) { cursor += 1 } }
+                XCTAssertEqual(cursor, 3)
+                var versions: [String] = [], sequences: [Int] = []
+                try db.rows(offset: 1, table: "changes") { sequence, data in
+                    sequences.append(sequence); versions.append(try JSONDecoder().decode(MobileFolderReader.Entry.self, from: data).version); return true
+                }
+                XCTAssertEqual(sequences, [1, 2, 3]); XCTAssertEqual(versions, [a.version, b.version, a.version])
+            }
+            let reopened = try MobileFolderInventory.Database(directory: fd, create: false, writable: true)
+            XCTAssertFalse(try reopened.insertChange(a, sequence: 4))
+            XCTAssertEqual(try reopened.lastSequence(), 3); XCTAssertEqual(try reopened.streamTotal(), 1)
+        }
+    }
+
     func testIgnoreRulesPruneDependenciesBeforeOpenAndBindCapturePolicy() throws {
         let (source, bookmark, scope, directory) = try fixture()
         for name in ["project/node_modules", ".venv", "cache", "hard"] {

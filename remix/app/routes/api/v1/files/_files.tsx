@@ -7,10 +7,11 @@ import { streamCloudInventoryPages } from '~/api/utils/files/inventoryPages';
 import { cloudInventoryResponse } from '~/api/utils/files/inventoryStream';
 import { cloudFolders } from '~/api/utils/files/folders';
 import { cloudFiles } from '~/api/utils/files/files';
+import { readCloudInventoryChanges } from '~/api/utils/files/inventoryChanges';
 
 export const createFilesHandlers = (
 	deps: { getUser: typeof getCurrentUser; limit: typeof enforceRateLimit; service: typeof cloudFiles; inventory: typeof readCloudInventory;
-		folders: typeof cloudFolders; path?: typeof readCloudPath; pages?: typeof streamCloudInventoryPages } =
+		folders: typeof cloudFolders; path?: typeof readCloudPath; pages?: typeof streamCloudInventoryPages; changes?: typeof readCloudInventoryChanges } =
 		{ getUser: getCurrentUser, limit: enforceRateLimit, service: cloudFiles, inventory: readCloudInventory, folders: cloudFolders, path: readCloudPath }
 ) => {
 	const handle =
@@ -32,11 +33,21 @@ export const createFilesHandlers = (
 					);
 				const url = new URL(request.url);
 				if (!mutation && url.searchParams.has('rootId')) {
+                    if (url.searchParams.has('changes')) {
+                        const params = url.searchParams, rawAfter = params.get('after');
+                        if (params.getAll('rootId').length !== 1 || params.getAll('changes').length !== 1 || params.get('changes') !== '1' ||
+                            params.getAll('after').length > 1 || params.getAll('wait').length > 1 || (params.has('wait') && params.get('wait') !== '1') ||
+                            (rawAfter !== null && !/^(0|[1-9][0-9]{0,15})$/.test(rawAfter)) ||
+                            [...params.keys()].some(key => !['rootId', 'changes', 'after', 'wait'].includes(key)))
+                            return json({ ok: false, error: 'Use one rootId, changes=1, optional after cursor and wait=1.' }, { status: 400 });
+                        const result = await (deps.changes ?? readCloudInventoryChanges)(user.id, params.get('rootId'), rawAfter === null ? undefined : Number(rawAfter), params.has('wait'), request.signal);
+                        return result.ok === false ? json({ ok: false, error: result.error }, { status: result.status }) : json(result);
+                    }
 					if (url.searchParams.has('pages')) {
 						if (url.searchParams.getAll('rootId').length !== 1 || url.searchParams.getAll('pages').length !== 1 ||
-							url.searchParams.get('pages') !== '1' || [...url.searchParams.keys()].some(key => !['rootId', 'pages'].includes(key)))
+							url.searchParams.get('pages') !== '1' || url.searchParams.getAll('subtreeId').length > 1 || [...url.searchParams.keys()].some(key => !['rootId', 'pages', 'subtreeId'].includes(key)))
 							return json({ ok: false, error: 'Use one rootId and pages=1 for streamed inventory' }, { status: 400 });
-						return cloudInventoryResponse(user.id, url.searchParams.get('rootId'), request, deps.pages ?? streamCloudInventoryPages);
+						return cloudInventoryResponse(user.id, url.searchParams.get('rootId'), request, deps.pages ?? streamCloudInventoryPages, url.searchParams.get('subtreeId') ?? undefined);
 					}
 					if (url.searchParams.getAll('rootId').length !== 1 || url.searchParams.getAll('path').length > 1 ||
 						[...url.searchParams.keys()].some((key) => !['rootId', 'path'].includes(key)))

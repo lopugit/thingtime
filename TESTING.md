@@ -12619,3 +12619,30 @@ separate from deterministic discovery/lease tests.
   progress after cleanup and verify its original hierarchy and 100% receipts.
 - [ ] In the signed installed app, reopen the saved home job and confirm that
   preparation resumes despite obsolete rows. Verify real cloud bytes separately.
+
+
+## Concurrent indexing and one-way transfers (2026-10-20)
+
+- [ ] Upload/backup and download with deletion propagation disabled transfer a nonempty first eligible file before the producer finishes; pause a later source page to prove the transfer is independent of traversal.
+- [ ] Create a new file in an already-visited folder, change an indexed file while scanning and again while a slow transfer leaves a backlog; verify notification-driven delivery without another full scan.
+- [ ] Change one path A → B → A; verify three ordered observations, the final destination A, retry reuse of the same operation identity and no suppression by historical receipts.
+- [ ] Keep sibling/ancestor collisions, renamed paths, skipped entries and watcher overflow explicit; no unsafe first-wins overwrite, false full-coverage claim or inferred deletion from partial data.
+- [ ] Commit the first eligible entry immediately and flush later bounded batches while the producer pauses; verify bounded memory/transactions and event-based wake-up without busy polling.
+- [ ] Interrupt indexing and transfers, reopen and reconnect; preserve committed cursors, pending/uncertain operation identities and receipts. Refuse substituted owner, origin, root, policy, generation or cursor.
+- [ ] Migrate only a provably never-executed initial one-way run with matching scope/configuration. Reject migration after reservation, attempt, confirmation or uncertain completion; retain required source observations.
+- [ ] Confirm saved ignore rules, Library/Applications/.Trash exclusions, .git inclusion and priority paths still govern the streamed queue.
+- [ ] Exercise actual desktop/mobile progress states: simultaneous indexing/transfers, unknown/growing totals, idle watcher, interrupted source, partial coverage and completion; compare cumulative parent stats with independent child receipts. Verify editable Builder blocks and open controls without clipping/overflow.
+- [ ] Install the canonical signed build after required checks; confirm a real home file reaches the intended @lopu destination while indexing, then independently download and compare bytes/hash. Record remaining gaps honestly; no local offload/deletion before complete backup verification.
+
+### Streaming verification checkpoint (2026-10-20, before signed installation)
+
+- [x] Mac native suite: 198 tests, 2 platform skips, no failures; overlap regression proves a waiting index subscription does not block file inspection or reads.
+- [x] Commander: 39 library, 8 backup integration and 1 smoke test passed, including notifications during backlog and stale stop rejection.
+- [x] Editable progress: 8 unit tests and isolated desktop/mobile browser acceptance passed, including Builder save/reload, simultaneous upload/download indexing, growing totals, watcher and stopped states.
+- [x] Electron unit suite: 244/245 passed initially; the unrelated process-group cleanup test passed its focused rerun. The 28 folder-sync tests are included.
+- [ ] Electron host fixture: outer network-isolation preflight passes, but Chromium child sandbox initialization fails on both bounded attempts. A checksum-verified official Electron 43.1.0 archive has the same signature condition, so no dependency replacement was made. The installed app remains untouched. This fixture/runtime limitation is open, not installed-app evidence.
+- [ ] Final shared sync/API checks, graph refresh, PR/CI, signed build/install and independent real uploaded/downloaded byte proof.
+
+- [x] Cloud feed service: 56 file tests, 108 capability tests and 15 focused route/feed tests; real disposable Mongo replica acceptance verified updates during a snapshot, scoped subtree enumeration and native change-stream wake. Network-isolation preflight covered redirected, hostname and direct-IP denial.
+
+- 2026-10-20 streaming checkpoint: shared file-sync suite passed 468 tests (467 TypeScript tests and one mocked module test). The typecheck ratchet completed with 92 errors against baseline 89; no changed file-sync errors. Signed installed payload acceptance remains open.
