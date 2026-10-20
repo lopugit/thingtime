@@ -6362,3 +6362,14 @@ unmeasured scheduling check. These are observations, never uploaded-file counts
 or proof that a priority folder is fully backed up. Paused/reopened views label
 retained observations. No new setup or permission is required; scheduling,
 receipts, authorization and migration algorithms are unchanged.
+
+### File-sync phase timing — 2026-10-21
+
+Desktop file sync writes closed request timing rows to the existing application
+logs `folder-sync.log` (128 KiB plus one rotated previous file). No setup or
+credentials are required. Writes use a bounded asynchronous queue; rotation,
+queue overflow or abrupt shutdown can make a capture partial. These are host
+request observations, not a file-operation or HTTP request census. See
+[the timing field definitions](docs/mobile-file-sync.md#closed-host-phase-timing--2026-10-21)
+before interpreting a bounded installed capture. No authorization, source check,
+rate-limit, receipt or native request/response contract changes.

@@ -77,6 +77,13 @@ private final class IdentityRequestCount: @unchecked Sendable {
     var value: Int { lock.withLock { count } }
 }
 
+private final class IdentityTimingRows: @unchecked Sendable {
+    private let lock = NSLock()
+    private var rows: [String] = []
+    func append(_ value: String) { lock.withLock { rows.append(value) } }
+    func snapshot() -> [String] { lock.withLock { rows } }
+}
+
 final class ThingtimeAPIClientTests: XCTestCase {
     override func tearDown() {
         MockURLProtocol.lock.lock()
@@ -183,12 +190,52 @@ final class ThingtimeAPIClientTests: XCTestCase {
         }
     }
 
+    func testIdentityTimingSeparatesQueuedAdmissionFromHTTPWithoutChangingFreshVerification() async throws {
+        MockURLProtocol.identityVersion = "1.0.0"
+        let clock = IdentityAdmissionTestClock(), rows = IdentityTimingRows()
+        let credential = DeviceCredential(deviceID: "device", refreshToken: "ttnode_timing", signingPrivateKey: Data(), signingPublicKey: Data())
+        let admission = FileSyncIdentityAdmission.instantForTests()
+        let scope = FileSyncIdentityAdmission.scope(origin: URL(string: "https://thingtime.test")!, credential: credential)
+        let held = try await admission.acquire(scope)
+        MockURLProtocol.handler = { _ in
+            clock.advance(to: 2.375)
+            return (200, Data(#"{"ok":true,"ownerId":"owner","deviceId":"device"}"#.utf8))
+        }
+        let client = try ThingtimeAPIClient(baseURL: URL(string: "https://thingtime.test")!,
+            credentialStore: InMemoryDeviceCredentialStore(credential: credential), session: session(), identityAdmission: admission,
+            fileSyncNow: { clock.now() }, fileSyncIdentityLog: { rows.append($0) })
+        let pending = Task { try await client.verifyFileSyncIdentity(ownerID: "owner", deviceID: "device") }
+        try await waitForIdentityQueue(admission)
+        clock.advance(to: 2.25); await admission.finish(held)
+        try await pending.value
+        XCTAssertEqual(rows.snapshot(), ["File-sync identity: status=200 elapsedMilliseconds=125 attempt=0 retry=none cooldownSeconds=0 admissionMs=2250"])
+        let malformed = IdentityTimingRows()
+        let invalidClockClient = try ThingtimeAPIClient(baseURL: URL(string: "https://thingtime.test")!,
+            credentialStore: InMemoryDeviceCredentialStore(credential: credential), session: session(), identityAdmission: .instantForTests(),
+            fileSyncNow: { .nan }, fileSyncIdentityLog: { malformed.append($0) })
+        try await invalidClockClient.verifyFileSyncIdentity(ownerID: "owner", deviceID: "device")
+        XCTAssertEqual(malformed.snapshot(), [], "Clock failures disable diagnostics only")
+    }
+
+    func testIdentityAdmissionTimingBoundsAndFastSuccessSuppression() {
+        XCTAssertNil(ThingtimeAPIClient.fileSyncIdentityDiagnostic(status: 200, elapsedMilliseconds: 100, attempt: 0, cooldownSeconds: nil, admissionMilliseconds: 1000))
+        XCTAssertEqual(ThingtimeAPIClient.fileSyncIdentityDiagnostic(status: 200, elapsedMilliseconds: 100, attempt: 0, cooldownSeconds: nil, admissionMilliseconds: 1001),
+            "File-sync identity: status=200 elapsedMilliseconds=100 attempt=0 retry=none cooldownSeconds=0 admissionMs=1001")
+        for n in [-1, 300001] {
+            XCTAssertNil(ThingtimeAPIClient.fileSyncIdentityDiagnostic(status: 429, elapsedMilliseconds: 100, attempt: 0, cooldownSeconds: nil, admissionMilliseconds: n))
+        }
+        for (start, end) in [(Double.nan, 1.0), (0.0, .infinity), (2.0, 1.0), (-1.0, 0.0), (0.0, 301.0)] {
+            XCTAssertNil(ThingtimeAPIClient.fileSyncDiagnosticMilliseconds(from: start, to: end))
+        }
+        XCTAssertEqual(ThingtimeAPIClient.fileSyncDiagnosticMilliseconds(from: 2.25, to: 2.375), 125)
+    }
+
     func testFileSyncIdentityDiagnosticsContainOnlyBoundedStatusTimingAndCooldown() {
         XCTAssertNil(ThingtimeAPIClient.fileSyncIdentityDiagnostic(status: 200, elapsedMilliseconds: 100, attempt: 0, cooldownSeconds: nil))
         XCTAssertEqual(ThingtimeAPIClient.fileSyncIdentityDiagnostic(status: 429, elapsedMilliseconds: 321, attempt: 0, cooldownSeconds: 12),
-                       "File-sync identity: status=429 elapsedMilliseconds=321 attempt=0 retry=cooldown cooldownSeconds=12")
+                       "File-sync identity: status=429 elapsedMilliseconds=321 attempt=0 retry=cooldown cooldownSeconds=12 admissionMs=0")
         XCTAssertEqual(ThingtimeAPIClient.fileSyncIdentityDiagnostic(status: 200, elapsedMilliseconds: 14000, attempt: 1, cooldownSeconds: nil),
-                       "File-sync identity: status=200 elapsedMilliseconds=14000 attempt=1 retry=after-cooldown cooldownSeconds=0")
+                       "File-sync identity: status=200 elapsedMilliseconds=14000 attempt=1 retry=after-cooldown cooldownSeconds=0 admissionMs=0")
         XCTAssertNil(ThingtimeAPIClient.fileSyncIdentityDiagnostic(status: 200, elapsedMilliseconds: 100, attempt: 0, cooldownSeconds: 12))
         XCTAssertNil(ThingtimeAPIClient.fileSyncIdentityDiagnostic(status: 429, elapsedMilliseconds: -1, attempt: 0, cooldownSeconds: 12))
         XCTAssertNil(ThingtimeAPIClient.fileSyncIdentityDiagnostic(status: 429, elapsedMilliseconds: 1, attempt: 0, cooldownSeconds: 61))

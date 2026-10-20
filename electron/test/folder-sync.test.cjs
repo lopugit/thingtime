@@ -434,7 +434,7 @@ test('native transport interruptions remain resumable and record only closed req
             assert.equal(error.message.includes('[folder_transport_retry]'), ['node_timeout', 'node_unavailable'].includes(code));
             return true;
         });
-        assert.deepEqual(diagnostics, [{ phase: 'folder-request', action: 'inspect', step: 'native-request', code }]);
+        assert.deepEqual(diagnostics.filter(row => row.phase === 'folder-request'), [{ phase: 'folder-request', action: 'inspect', step: 'native-request', code }]);
         assert.doesNotMatch(JSON.stringify(diagnostics), /private|credential|never-log|owner|device/);
     }
 });
@@ -480,4 +480,93 @@ test('public capabilities negotiate once per exact live binding while every nati
  f.host.verifyAccount = async () => { throw Error('Account revoked'); };
  await assert.rejects(f.host.request(f.event, f.input({ action: 'context', origin: 'https://new.test' })), /revoked/);
  assert.equal(f.calls.length, 7);
+});
+
+test('request timing measures repeated account calls and nested reply validation without changing results', async () => {
+    const f = fixture(), rows = []; let clock = 0;
+    f.host.now = () => clock; f.host.diagnostic = row => rows.push(row);
+    f.host.verifyAccount = async () => { clock += 3; };
+    const capability = f.host.capabilities;
+    f.host.capabilities = async (...args) => { clock += 5; return capability(...args); };
+    f.run(async (_method, request) => { clock += 7; return { ...request, roots: [] }; });
+    await f.host.request(f.event, f.input({ action: 'context' }));
+    assert.deepEqual(rows, [{ phase: 'folder-timing', action: 'context', outcome: 'ok', totalMs: 21,
+        queueMs: 0, accountMs: 9, accountCount: 3, capabilityMs: 5, capabilityCount: 1,
+        nativeMs: 7, nativeCount: 1, replyMs: 3 }]);
+    await f.host.request(f.event, f.input({ action: 'context' }));
+    assert.equal(rows[1].totalMs, 13); assert.equal(rows[1].accountCount, 2);
+    assert.equal(rows[1].capabilityCount, 0); assert.equal(rows[1].nativeCount, 1);
+    assert.equal(f.calls.length, 2);
+});
+
+test('timing keeps the long-poll lane independent and includes ordinary admission wait exactly once', async () => {
+    const f = fixture(), rows = [], releases = {}; let clock = 0;
+    f.host.now = () => clock; f.host.diagnostic = row => rows.push(row);
+    f.run((_method, request) => new Promise(resolve => { releases[request.action] = () => resolve({ ...request, roots: [] }); }));
+    const started = async action => { for (let i = 0; i < 20 && !releases[action]; i++) await new Promise(setImmediate); assert.ok(releases[action]); };
+    const waiter = f.host.request(f.event, f.input({ action: 'scan-changes' })); await started('scan-changes');
+    clock = 10; const ordinary = f.host.request(f.event, f.input({ action: 'inspect' })); await started('inspect');
+    clock = 20; const queued = f.host.request(f.event, f.input({ action: 'read' })); await new Promise(setImmediate);
+    assert.equal(releases.read, undefined);
+    clock = 40; releases.inspect(); await ordinary; await started('read');
+    clock = 60; releases.read(); await queued;
+    clock = 100; releases['scan-changes'](); await waiter;
+    assert.deepEqual(rows.map(row => [row.action, row.queueMs, row.nativeMs, row.totalMs]),
+        [['inspect', 0, 30, 30], ['read', 20, 20, 40], ['scan-changes', 0, 100, 100]]);
+    assert.ok(rows.every(row => row.nativeCount === 1 && row.outcome === 'ok'));
+});
+
+test('cancel and failure flush one timing row; unavailable clocks and rejected sinks cannot change a request', async () => {
+    const f = fixture(), rows = []; let clock = 0, began;
+    const entered = new Promise(resolve => { began = resolve; });
+    f.host.now = () => clock; f.host.diagnostic = row => rows.push(row);
+    f.host.requestNative = (_method, request, { signal } = {}) => request.action === 'suspend' ? Promise.resolve({}) : new Promise((_resolve, reject) => {
+        began(); signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+    });
+    const pending = f.host.request(f.event, f.input({ action: 'inspect' }));
+    await entered; clock = 40; f.host.invalidate(); await assert.rejects(pending);
+    assert.equal(rows.filter(row => row.phase === 'folder-timing').length, 1);
+    assert.equal(rows[0].outcome, 'cancelled'); assert.equal(rows[0].totalMs, 40);
+    const failure = fixture(), failed = [];
+    failure.host.diagnostic = row => failed.push(row);
+    failure.run(async (_method, request) => ({ ...request, ownerId: 'wrong' }));
+    await assert.rejects(failure.host.request(failure.event, failure.input()));
+    assert.equal(failed.filter(row => row.phase === 'folder-timing').length, 1);
+    assert.equal(failed.find(row => row.phase === 'folder-timing').outcome, 'failed');
+    for (const now of [() => NaN, () => { throw Error('private clock'); }]) {
+        const safe = fixture(), logged = []; safe.host.now = now; safe.host.diagnostic = row => logged.push(row);
+        assert.ok(await safe.host.request(safe.event, safe.input())); assert.deepEqual(logged, []);
+    }
+    for (const diagnostic of [() => Promise.reject(Error('private sink')), () => new Promise(() => {})]) {
+        const safe = fixture(); safe.host.diagnostic = diagnostic;
+        assert.ok(await safe.host.request(safe.event, safe.input()));
+        safe.run(async () => { throw Error('original failure'); });
+        await assert.rejects(safe.host.request(safe.event, safe.input()), /original failure/);
+    }
+});
+
+test('real upload-part path sums every repeated authorization and child native call, while PUT remains in total', async () => {
+    const f = fixture(), rows = [], bytes = Buffer.from('timed part'); let clock = 0;
+    f.host.now = () => clock; f.host.diagnostic = row => rows.push(row);
+    f.host.verifyAccount = async () => { clock += 2; };
+    f.host.capabilities = async () => { clock += 5; return { features: { 'api.attachment-upload-parts': { version: '1.1.0' } } }; };
+    f.context.window.webContents.session = { fetch: async (_url, options) => {
+        clock += 13; const body = JSON.parse(options.body), part = body.parts[0];
+        return new Response(JSON.stringify({ parts: [{ partNumber: part.partNumber, url: 'https://bucket.test/part',
+            headers: { 'x-amz-checksum-sha256': part.checksumSha256 } }] }),
+            { headers: { 'Content-Type': 'application/json', 'x-thingtime-api-fallback': f.context.apiOrigin } });
+    } };
+    f.host.fetchUpload = async () => { clock += 17; return new Response(null, { status: 200 }); };
+    f.run(async (_method, request) => { clock += 7; return { ...request, roots: [], chunk: {
+        size: bytes.length, version: 'v1', offset: request.offset, length: request.length,
+        ...(request.action === 'read-range' ? { bytes: new Uint8Array(bytes) } : { data: '' }) } }; });
+    const result = await f.host.request(f.event, f.input({ action: 'upload-part', rootId: randomUUID(), upload: {
+        uploadId: 'att_fixture', requestId: randomUUID(), partNumber: 1, offset: 0, length: bytes.length,
+        source: { id: 'inode', kind: 'file', path: 'file', version: 'v1', size: bytes.length } } }));
+    assert.equal(result.uploadedPart.payloadBytes, bytes.length);
+    const row = rows.find(row => row.phase === 'folder-timing');
+    assert.equal(row.accountCount, 11); assert.equal(row.accountMs, 22);
+    assert.equal(row.nativeCount, 3); assert.equal(row.nativeMs, 21);
+    assert.equal(row.capabilityMs, 5); assert.equal(row.replyMs, 2); assert.equal(row.totalMs, 78);
+    assert.equal(rows.filter(row => row.phase === 'folder-timing').length, 1);
 });

@@ -12791,3 +12791,12 @@ separate from deterministic discovery/lease tests.
 - [x] Correct native fixture assertions for additive Mac upload 1.1.0 and exact successful-PUT payloadBytes; syntax-check without running a production/native fixture blindly.
 - [x] OS-isolated Chromium desktop/mobile: inspect each readiness state, all individually editable labels, full scrolling/overflow, save/reload custom layout and paused/reopened saved observations. Existing custom progress layouts must stay intact.
 - [ ] Installed acceptance on the existing Home run: read the trusted gate, saved count/revision, validation cursor/cutoff and candidate/blocker. Distinguish unsupported/missing preferences, proof lag, no eligible pending input and an active reserved operation before proposing another optimization. Do not infer complete backup or actual throughput from these diagnostics.
+
+
+## Closed file-sync phase timing — 2026-10-21
+
+- [x] Deterministic monotonic clocks measure repeated account calls, actual child RPC counts, nested reply validation, and ordinary admission independently of a held streaming waiter. Real upload-part fixture retains all source/auth checks and accepted payload receipt.
+- [x] Success, failure and cancellation flush at most one timing row; malformed clocks and throwing/rejected/unfinished diagnostic sinks do not change request results. Native queued admission is distinct from HTTP duration and malformed timing disables diagnostics only.
+- [x] Reject unknown actions/outcomes, non-own/getter fields, unsafe counts/durations and arbitrary metadata. Async logging retains 128-row capacity, 128 KiB rotation, closed redaction and best-effort IO failure handling.
+- [x] Focused Electron host/upload/log suite: 55/55. Native API-client/admission: 33/33; existing Mac folder/source/authority/recovery suite: 42/42.
+- [ ] Installed acceptance: capture one bounded natural sync window with closed rows only; report per-action phase distributions and native admission/HTTP observations. Treat missing/rotated/dropped records as partial, suppress no actual auth checks, and make no throughput restoration claim from unit timings.

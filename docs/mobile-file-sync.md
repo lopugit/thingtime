@@ -3932,3 +3932,41 @@ search. Existing source/authority checks, receipts, operation IDs, ordering,
 editable settings-document section inside the progress viewer avoids overwriting
 previously saved custom progress layouts. Runtime observations stay in progress,
 not in the saved Builder layout; paused/reopened views identify saved data.
+
+## Closed host phase timing — 2026-10-21
+
+Each admitted Electron folder request can emit one `folder-timing` row to the
+existing `folder-sync.log`: closed action/outcome and monotonic `totalMs`,
+`queueMs`, `accountMs`/`accountCount`, `capabilityMs`/`capabilityCount`,
+`nativeMs`/`nativeCount`, and `replyMs`. Durations are bounded integer milliseconds
+(0–600000); counts are bounded at 128. Capture refusals retain existing closed failure diagnostics; `suspend` control
+messages emit no timing row. `nativeCount` counts dispatched work RPCs (excluding
+out-of-band cancellation), so an upload-part request can contain multiple calls. Missing/malformed timing data is dropped only from logging.
+
+`queueMs` measures the Electron ordinary-lane admission wait; `scan-changes`
+uses its independent waiter lane. `accountMs` sums every fresh Electron account
+check, including repeated upload authorizations. `capabilityMs` measures actual
+public-manifest calls. `nativeMs` sums awaited child RPC durations (including
+bridge verification/launch, service authorization/work and streaming waits),
+not native CPU or filesystem time alone. `replyMs` includes final validation
+and its account check, which is also in `accountMs`. Phases may overlap/nest:
+**do not add them together or subtract their sum from total as wall attribution**.
+Upload signing/PUT work remains inside `totalMs`; renderer planning and cloud
+start/complete/commit outside this host request are not measured. Long-poll
+wait duration is expected and is not evidence of upload contention.
+
+The native `File-sync identity:` log retains HTTP `status`, `elapsedMilliseconds`,
+attempt and cooldown fields, appending `admissionMs` measured from before
+identity admission through receiving its permit. This native queue is distinct
+from Electron `queueMs`; HTTP elapsed starts after admission. Fast first-attempt
+HTTP 200 checks stay suppressed unless admission or HTTP exceeds one second.
+Native log rows are therefore **not a request census**; failures before an HTTP
+response have no invented status/timing row.
+
+Logging serializes only closed own data scalars, never request/response bodies,
+paths, URLs, owner/device/request IDs, credentials or raw errors. A 128-row
+asynchronous FIFO bounds pending disk work, with 128 KiB rotation plus one prior
+file; full queues, failed writes, rotation and shutdown can lose observations.
+A bounded capture is partial and not proven job-correlated. Compare distributions
+by action/phase in one natural installed window; asynchronous stack sample
+counts and overlapping phase totals cannot establish per-file wall-time shares.
