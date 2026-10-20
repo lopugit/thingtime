@@ -1103,13 +1103,12 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 
             if (doc.objectSizeBytes === 0) {
                 // A conditional single PUT is valid for empty content. Never
-                // complete an MPU with zero parts. HEAD recovers ambiguous PUT
-                // responses without creating another version on request replay.
-                let head: AttachmentObjectHead;
-                stage = 'verify-object';
-                try { head = await verifiedHeadForDoc(s3, doc, doc.objectVersionId); }
-                catch (error) {
-                    if (!s3.isNotFound(error)) throw error;
+                // complete an MPU with zero parts. The object-only runtime role
+                // has no ListBucket permission, so HEAD of a missing key is 403.
+                // Conditional creation needs no absence probe and cannot replace
+                // an existing version. HEAD still verifies identity and checksum
+                // after creation or an ambiguous/already-accepted PUT response.
+                if (!doc.objectVersionId) {
                     try {
                         stage = 'store-empty';
                         const empty = await s3.putEmptyObject({ objectKey: doc.objectKey, attachmentId: doc.shareId });
@@ -1120,11 +1119,15 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
                         // Only the expected identity and exact empty checksum
                         // can recover; arbitrary occupied keys fail below.
                         stage = 'verify-object';
-                        try { await verifiedHeadForDoc(s3, doc); } catch { stage = 'store-empty'; throw writeError; }
+                        try { await verifiedHeadForDoc(s3, doc); }
+                        catch (verificationError) {
+                            if (verificationError instanceof AttachmentServiceError) throw verificationError;
+                            stage = 'store-empty'; throw writeError;
+                        }
                     }
-                    stage = 'verify-object';
-                    head = await verifiedHeadForDoc(s3, doc, doc.objectVersionId);
                 }
+                stage = 'verify-object';
+                const head = await verifiedHeadForDoc(s3, doc, doc.objectVersionId);
                 const lost = await renewFinalizationLease(head.versionId); if (lost) return lost;
                 if (!fingerprintFromVerifiedHead(head)) return fail(409, 'Empty object failed integrity verification');
                 const crystal: AttachmentCrystal = { ...doc.crystal, contentType: 'application/octet-stream', mediaKind: 'file' };

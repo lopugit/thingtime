@@ -2575,6 +2575,76 @@ test('empty object finalization preserves lease fencing and never publishes afte
     assert.equal(marked, 0); assert.equal(deleted, 0); assert.equal(doc.attachmentState, 'finalizing');
 });
 
+test('empty finalization needs no missing-object HEAD permission and recovers a lost conditional PUT reply', async (t) => {
+    const { HeadObjectCommand, PutObjectCommand, PutObjectTaggingCommand } = await import('@aws-sdk/client-s3');
+    const { createPrivateS3 } = await import('./privateS3');
+    t.mock.method(console, 'error', () => {});
+    for (const scenario of ['fresh', 'lost-reply', 'existing', 'read-denied', 'write-denied', 'wrong-checksum', 'wrong-identity', 'wrong-version', 'occupied-wrong-identity', 'occupied-read-denied', 'occupied-wrong-checksum']) {
+        const doc = attachmentDoc({ objectSizeBytes: 0,
+            crystal: { name: 'empty', size: 0, contentType: 'application/octet-stream', mediaKind: 'file' },
+            uploadId: undefined, attachmentPurpose: 'file', attachmentState: 'pending' });
+        let exists = scenario === 'existing' || scenario.startsWith('occupied-'), writes = 0, heads = 0, marks = 0, tags = 0;
+        const version = 'immutable-empty-version';
+        const sha = '47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=';
+        const s3 = createPrivateS3({ region: 'us-east-1', bucket: 'fixture-private-bucket',
+            expectedBucketOwner: '123456789012', roleArn: 'arn:aws:iam::123456789012:role/fixture' }, {
+            send: async (command: any) => {
+                if (command instanceof HeadObjectCommand) {
+                    heads++;
+                    // S3 conceals missing keys with 403 when the object-only
+                    // runtime role deliberately has no s3:ListBucket grant.
+                    if (!exists || scenario.endsWith('read-denied')) throw Object.assign(new Error('no response body'), {
+                        name: 'Unknown', $metadata: { httpStatusCode: 403, attempts: 1 }, $fault: 'client' });
+                    if (command.input.VersionId) assert.equal(command.input.VersionId, version);
+                    return { ContentLength: 0, VersionId: scenario === 'wrong-version' ? 'other-version' : version,
+                        ChecksumSHA256: scenario.endsWith('wrong-checksum') ? checksum(3) : sha,
+                        ChecksumType: 'FULL_OBJECT', Metadata: { 'attachment-id': scenario.endsWith('wrong-identity') ? 'other-attachment' : doc.shareId } };
+                }
+                if (command instanceof PutObjectCommand) {
+                    assert.equal(command.input.IfNoneMatch, '*');
+                    assert.equal(command.input.Metadata?.['attachment-id'], doc.shareId);
+                    assert.equal(command.input.ChecksumSHA256, sha);
+                    if (scenario === 'write-denied') throw Object.assign(new Error('denied'), { name: 'AccessDenied', $metadata: { httpStatusCode: 403 } });
+                    if (exists) throw Object.assign(new Error('already stored'), { name: 'PreconditionFailed' });
+                    exists = true; writes++;
+                    if (scenario === 'lost-reply') throw Object.assign(new Error('accepted reply lost'), { name: 'TimeoutError' });
+                    return { VersionId: version };
+                }
+                assert.ok(command instanceof PutObjectTaggingCommand);
+                tags++;
+                assert.equal(command.input.VersionId, version);
+                return {};
+            }
+        } as any);
+        const service = createAttachmentService({ now: () => now, customMongoActive: () => false,
+            getS3: () => s3, store: {
+                getOwned: async () => doc,
+                claimFinalizing: async (_owner: string, _id: string, lease: string) => {
+                    doc.attachmentState = 'finalizing'; doc.attachmentFinalizationLeaseId = lease;
+                    return { doc, acquired: true };
+                },
+                renewFinalizing: async (_owner: string, _id: string, lease: string) =>
+                    doc.attachmentFinalizationLeaseId === lease ? doc : null,
+                markReady: async (_owner: string, _id: string, crystal: any, objectVersionId: string, _expires: Date, lease: string) => {
+                    assert.equal(doc.attachmentFinalizationLeaseId, lease); assert.equal(objectVersionId, version);
+                    marks++; Object.assign(doc, { crystal, objectVersionId, attachmentState: 'ready' }); return doc;
+                }
+            } as any });
+        const result = await service.complete('user-1', { uploadId: doc.shareId });
+        if (['fresh', 'lost-reply', 'existing'].includes(scenario)) {
+            assert.equal(result.ok, true, `${scenario}: missing-key 403 must not prevent conditional creation`);
+            assert.equal(doc.objectVersionId, version); assert.equal(writes, scenario === 'existing' ? 0 : 1); assert.equal(marks, 1);
+            assert.equal(tags, 1);
+        } else {
+            assert.equal(result.ok, false, scenario);
+            if (!result.ok) assert.equal(result.status, scenario.endsWith('denied') ? 503 : 409);
+            assert.equal(marks, 0); assert.equal(tags, 0); assert.equal(doc.attachmentState, 'finalizing');
+            if (scenario.startsWith('occupied-')) assert.equal(writes, 0);
+        }
+        assert.ok(heads >= 1);
+    }
+});
+
 test('completion failures log fixed stages and closed throwable diagnostics without changing the HTTP contract', async (t) => {
     const logs: unknown[][] = [];
     t.mock.method(console, 'error', (...args: unknown[]) => { logs.push(args); });
@@ -2722,7 +2792,9 @@ test('same empty start resumes a failed finalization only through active and exp
         const recovered = await service.start('user-1', input); assert.ok(recovered.ok);
         if (recovered.ok) { assert.equal(recovered.upload.id, identity); assert.equal(recovered.upload.state, 'ready'); }
         assert.equal((doc! as AttachmentDoc).objectKey, key); assert.equal((doc! as AttachmentDoc).objectVersionId, storedVersion);
-        assert.equal(reserves, 1); assert.equal(puts, 1); assert.equal(marks, 2);
+        // The second conditional PUT cannot replace the stored version; its
+        // precondition failure is reconciled through immutable HEAD metadata.
+        assert.equal(reserves, 1); assert.equal(puts, 2); assert.equal(marks, 2);
         assert.equal((await readdir(join(directory, 'objects', identity))).filter(name => name.endsWith('.bin')).length, 1);
         assert.equal((await service.start('user-1', { ...input, filename: 'different.txt' })).ok, false);
     } finally { await rm(directory, { recursive: true, force: true }); }

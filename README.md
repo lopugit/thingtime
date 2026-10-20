@@ -6249,7 +6249,12 @@ negotiate `api.attachment-uploads` 1.6, `api.attachment-upload-complete` 1.5,
 returns a ready zero-part object; it never needs a native multipart loop. The
 private versioned bucket must permit the existing server PutObject operation
 with checksum and conditional-write headers. No new secret or public bucket
-access is required. The local object adapter stores an actual immutable empty
+access is required. Upload-start 1.6.2 and completion 1.5.1 conditionally PUT a
+new empty object before HEAD verification: S3 masks a missing key as 403 when
+the runtime role correctly lacks ListBucket. Do not add ListBucket or interpret
+403 as absence. Conditional conflicts and lost replies still require the exact
+attachment identity, immutable version, size and empty checksum before ready.
+The local object adapter stores an actual immutable empty
 object too. Run `node remix/scripts/test-cloud-inventory-pages.mjs --empty-files`
 for a disposable Mongo/store proof covering real authenticated upload, read,
 commit and restore handlers. It never reads the app environment or real data.
