@@ -9,12 +9,14 @@ const path = require('node:path');
 const http = require('node:http');
 const { randomUUID } = require('node:crypto');
 const { app, BrowserWindow, ipcMain } = require('electron');
+const { ThingtimeNodeBridgeError } = require('../../lib/thingtime-node-bridge.cjs');
 const { DesktopFolderSync } = require('../../lib/folder-sync.cjs');
 const { SyncWindowLease } = require('../../lib/sync-window.cjs');
 const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'thingtime-folder-host-'));
 app.setName('Thingtime Folder Host Verification'); app.setPath('userData', profile);
 let window, server, upstream, origin, apiOrigin, host;
 let account = 'owner', proxyHeader = true, authRequests = 0, nativeRequests = 0, publicRequests = 0, hold;
+let nativeFailure;
 let listenerOrdinal = 0;
 const listen = value => new Promise(resolve => value.listen(process.env.TT_FOLDER_HOST_PORT ? Number(process.env.TT_FOLDER_HOST_PORT) + listenerOrdinal++ : 0,
     '127.0.0.1', () => resolve(`http://127.0.0.1:${value.address().port}`)));
@@ -49,6 +51,7 @@ app.whenReady().then(async () => {
         requestNative: async (_method, request) => {
             if (request.action === 'suspend') { hold?.({ ...request, roots: [] }); return {}; }
             nativeRequests++;
+            if (nativeFailure) throw nativeFailure;
             if (request.action === 'choose') return await new Promise(resolve => { hold = resolve; });
             if (request.action === 'stage-range') {
                 assert.ok(request.bytes instanceof Uint8Array); assert.ok(request.bytes.every(byte => byte === 61));
@@ -81,6 +84,12 @@ app.whenReady().then(async () => {
     assert.equal(context.origin, apiOrigin); assert.deepEqual(context.apiCapabilities.features, { 'api.devices-node-identity': { version: '1.0.0' }, 'api.files': { version: '1.4.0' } });
     assert.equal(authRequests, 3); assert.equal(publicRequests, 1); assert.equal(nativeRequests, 1);
     await request(input()); assert.equal(nativeRequests, 2);
+    for (const [code, marker] of [['folder_identity_retry', '[folder_identity_retry] Folder identity verification is temporarily unavailable. Retry after reconnecting.'],
+        ['node_unavailable', '[folder_transport_retry] Folder service is temporarily unavailable. Retry after reconnecting.']]) {
+        nativeFailure = new ThingtimeNodeBridgeError(code, code === 'folder_identity_retry' ? marker : 'fixture transport closed');
+        await assert.rejects(request(input()), error => error.message === `Error invoking remote method 'fixture:folder-sync': Error: ${marker}`);
+    }
+    nativeFailure = undefined; nativeRequests = 2;
     account = 'other'; await assert.rejects(request(input())); assert.equal(nativeRequests, 2); account = 'owner';
     proxyHeader = false; await assert.rejects(request(input())); assert.equal(nativeRequests, 2); proxyHeader = true;
     // A real subframe cannot impersonate the main frame even with its sender.
@@ -105,7 +114,7 @@ app.whenReady().then(async () => {
     await window.webContents.session.cookies.remove(origin, 'fixture_session');
     await failed; window.webContents.session.cookies.removeListener('changed', changed);
     assert.equal(host.active, null);
-    console.log(JSON.stringify({ ok: true, checks: ['active-window-close-hides', 'hidden-renderer-continues', 'reopen-same-renderer', 'idle-restores-throttling', 'real-session-cookie-auth', 'anonymous-server-capabilities', 'account-switch', 'proxy-destination', 'subframe-denial', 'cookie-change-cancellation', 'binary-range-IPC', 'stream-account-revocation', 'binary-stage-IPC'], nativeDispatch: 'fixture-only' }));
+    console.log(JSON.stringify({ ok: true, checks: ['fixed-native-retry-real-IPC', 'active-window-close-hides', 'hidden-renderer-continues', 'reopen-same-renderer', 'idle-restores-throttling', 'real-session-cookie-auth', 'anonymous-server-capabilities', 'account-switch', 'proxy-destination', 'subframe-denial', 'cookie-change-cancellation', 'binary-range-IPC', 'stream-account-revocation', 'binary-stage-IPC'], nativeDispatch: 'fixture-only' }));
 }).catch(error => { process.exitCode = 1; console.error(error); }).finally(async () => {
     clearTimeout(timer); ipcMain.removeHandler('fixture:folder-sync'); host?.invalidate(); window?.destroy();
     await Promise.all([server, upstream].filter(Boolean).map(value => new Promise(resolve => value.close(resolve))));

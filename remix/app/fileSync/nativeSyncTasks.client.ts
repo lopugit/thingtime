@@ -225,7 +225,8 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 			if (failed && jobs && !signal.aborted && isSyncConnectionFailure(error)) {
 				const delay = error instanceof SyncConnectionWait ? error.retryAfterMs : undefined;
 				await jobs.defer(failed, Date.now(), delay);
-				throw new SyncConnectionWait('Waiting for the connection to return. Saved transfer progress will continue automatically.', delay);
+				throw new SyncConnectionWait(error instanceof SyncConnectionWait ? error.message :
+					'Waiting for the connection to return. Saved transfer progress will continue automatically.', delay);
 			}
 			if (failed && jobs && !signal.aborted && !(error instanceof SyncConditionsWait) && !(error instanceof NativeInventoryRetryWait)) await jobs.attention(failed);
 			throw error;

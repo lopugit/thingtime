@@ -22,3 +22,17 @@ test('bounded signer log rejects unknown categories and omits arbitrary metadata
         assert.ok(!/private|secret|credential/.test(fs.readFileSync(file, 'utf8')));
     } finally { fs.rmSync(directory, { recursive: true, force: true }); }
 });
+
+test('request failures persist only closed action, step and native code, never error text or bindings', () => {
+    const directory=fs.mkdtempSync(path.join(os.tmpdir(),'folder-request-diagnostic-')), file=path.join(directory,'folder-sync.log');
+    try {
+        for(const patch of [{action:'/private/secret'}, {step:'private-secret'}, {code:'private-secret'}])
+            recordFolderSyncDiagnostic(file,{phase:'folder-request',action:'inspect',step:'native-request',code:'node_unavailable',...patch});
+        assert.equal(fs.existsSync(file),false);
+        recordFolderSyncDiagnostic(file,{phase:'folder-request',action:'inspect',step:'native-request',code:'node_unavailable',
+            path:'/private/secret',ownerId:'private-owner',error:Error('private-secret')});
+        const row=JSON.parse(fs.readFileSync(file,'utf8'));
+        assert.deepEqual(Object.keys(row),['time','phase','action','step','code']);
+        assert.equal(row.code,'node_unavailable');assert.doesNotMatch(JSON.stringify(row),/private|secret|owner/);
+    } finally {fs.rmSync(directory,{recursive:true,force:true});}
+});
