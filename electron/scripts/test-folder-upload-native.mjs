@@ -16,6 +16,7 @@ const root = resolve(import.meta.dirname, '..'), port = 28451;
 const clean = { PATH: process.env.PATH, HOME: process.env.HOME, TMPDIR: process.env.TMPDIR || tmpdir() };
 const require = createRequire(import.meta.url);
 const { uploadFolderPart } = require('../lib/folder-upload.cjs');
+const { DesktopFolderSync } = require('../lib/folder-sync.cjs');
 const { FolderStream } = require('../lib/folder-stream.cjs');
 if (!process.env.TT_NATIVE_UPLOAD_WORKER) {
     await verifyAccountBackupIsolation(port, clean);
@@ -46,12 +47,25 @@ if (!process.env.TT_NATIVE_UPLOAD_WORKER) {
         if (request.url === '/.well-known/thingtime-capabilities.json') {
             response.end(JSON.stringify({ schemaVersion: 1, origin, features: Object.fromEntries(Object.entries({
                 'api.devices-pairing-claim': '1.0.0', 'api.devices-node-state': '1.9.0', 'api.devices-node-commands': '1.9.0',
-                'api.devices-node-live-sync': '1.0.0', 'api.devices-node-identity': '1.0.0'
+                'api.devices-node-live-sync': '1.0.0', 'api.devices-node-identity': '1.0.0', 'api.attachment-upload-parts': '1.1.0'
             }).map(([key, version]) => [key, { version }])) })); return;
         }
         if (request.url === '/api/v1/devices/node/identity') {
             assert.equal(request.headers.authorization, 'Bearer disposable-fixture-credential');
             response.end(JSON.stringify({ ok: true, ownerId: owner, deviceId: device })); return;
+        }
+        if (request.url === '/api/v1/auth/me') {
+            assert.equal(request.headers['x-thingtime-expected-actor'], owner);
+            response.end(JSON.stringify({ user: { id: owner, accountKind: 'user' } })); return;
+        }
+        if (request.url === '/api/v1/attachments/uploads/parts') {
+            assert.equal(request.method, 'POST'); assert.equal(request.headers.origin, origin);
+            assert.equal(request.headers['x-thingtime-expected-actor'], owner);
+            const chunks = []; for await (const chunk of request) chunks.push(chunk);
+            const body = JSON.parse(Buffer.concat(chunks));
+            assert.equal(body.parts[0].checksumSha256, createHash('sha256').update(data).digest('base64'));
+            response.end(JSON.stringify({ parts: [{ partNumber: body.parts[0].partNumber, url: origin + '/fixture-part',
+                headers: { 'x-amz-checksum-sha256': body.parts[0].checksumSha256 } }] })); return;
         }
         assert.equal(request.method, 'PUT'); assert.equal(request.url, '/fixture-part');
         assert.equal(request.headers.authorization, undefined); assert.equal(request.headers.cookie, undefined);
@@ -104,6 +118,27 @@ if (!process.env.TT_NATIVE_UPLOAD_WORKER) {
             fetchUpload: globalThis.fetch });
         const receipt = await uploadFolderPart(options());
         assert.equal(receipt.uploadedPart.sha256, createHash('sha256').update(data).digest('hex')); assert.equal(puts, 1);
+        // Exercise the assembled host envelope through the same production
+        // parser and source adapter used by installed desktop sync. The IPC
+        // frame/session binding and HTTP auth service are synthetic; native IO,
+        // host negotiation/signing HTTP, part bytes and all receipt parsers run.
+        const { tsImport } = createRequire(resolve(root, '../remix/package.json'))('tsx/esm/api');
+        const tsOptions = { parentURL: import.meta.url, tsconfig: resolve(root, '../remix/tsconfig.json') };
+        const { createDesktopFolderHost } = await tsImport(resolve(root, '../remix/app/fileSync/desktopFolders.client.ts'), tsOptions);
+        const { mobileFolderSource } = await tsImport(resolve(root, '../remix/app/fileSync/mobileFolders.client.ts'), tsOptions);
+        const frame = { url: origin + '/settings/things' }, sender = { mainFrame: frame, session: { fetch: globalThis.fetch } };
+        const window = { webContents: sender, isDestroyed: () => false };
+        const host = new DesktopFolderSync({ context: () => ({ enabled: true, window, appOrigin: origin, apiOrigin: origin }),
+            requestNative: (_method, request) => send(request) });
+        const lifetime = new AbortController();
+        const desktop = await createDesktopFolderHost({ ownerId: owner, deviceId: device, signal: lifetime.signal,
+            bridge: { folderSyncRequest: request => host.request({ sender, senderFrame: frame }, request) },
+            rendererOrigin: () => origin, assertCurrent: () => {}, fetch: globalThis.fetch });
+        assert.equal(desktop.capabilities.fileUploadVersion, '1.0.1');
+        const nativeSource = mobileFolderSource(owner, rootId, entry, lifetime.signal, desktop.request, desktop.capabilities);
+        const accepted = await nativeSource.uploadPart({ uploadId: 'fixture-upload', requestId: 'fixture-operation', partNumber: 1, offset: 0, length: data.length });
+        assert.deepEqual(accepted, { sha256: createHash('sha256').update(data).digest('hex') }); assert.equal(puts, 2);
+        console.log('DESKTOP_UPLOAD_RECEIPT_BOUNDARY_PASS production host/parser/source adapter accepted digest');
         for (const phase of ['before-put', 'after-put']) {
             await writeFile(source, data);
             const current = (await send({ ...input('inspect'), rootId, path: entry.path })).entry;

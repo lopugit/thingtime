@@ -3839,7 +3839,7 @@ is deferred; these changes do not claim new special-file restoration support.
 
 ## Desktop checksum-locked part uploads — 2026-10-20
 
-The Mac folder host advertises `fileUploadVersion` **1.0.0** only with compatible
+The Mac folder host advertises `fileUploadVersion` **1.0.1** only with compatible
 native binary range reads (file access 1.2 or later). This reuses the existing
 `upload-part` request and exact source/upload/part receipt contract used by mobile;
 it does not advertise whole-file or background upload versions 1.2/1.3.
@@ -3880,6 +3880,13 @@ produce a success receipt.
 part helper through the production Mac reader/stream framing and a real HTTP
 receiver. Its disposable signed native fixture and synthetic identity run under
 the verified OS loopback boundary, without installed grants or user credentials.
+The regression also passes the host's assembled receipt through production
+desktop/mobile parsers and `mobileFolderSource.uploadPart`, requiring the
+accepted digest. HTTP auth services and the IPC frame/session binding are
+synthetic; actual Electron IPC and real-account cloud completion remain separate
+installed checks. The compatible 1.0.1 correction preserves mandatory `roots`
+from the final identity/version-verified native EOF response, never a fabricated
+empty fallback.
 
 This avoids browser CORS failure for the bundled UI's dynamic loopback origin;
 it does not disable browser security or broaden bucket CORS/access. Empty files
