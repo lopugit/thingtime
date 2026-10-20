@@ -12742,3 +12742,29 @@ separate from deterministic discovery/lease tests.
 - [x] Assert closed native identity status/timing/attempt/cooldown diagnostics and unchanged bounded429 retry semantics. Fast successful identity checks stay quiet; no secrets, paths or identity fields are logged.
 - [x] Run full shared fileSync (511 plus structural contract test), Electron host/part (48) and native folder/API (62) tests. Focused ESLint has zero errors; raw TypeScript has no owned-file diagnostics.
 - [ ] Install the reviewed signed final source, verify actual running native file-access 1.12.0, preserve the same Home job, measure confirmed files/bytes over fixed intervals and independently download a newly uploaded file. Keep inadequate throughput open; never reset grants/receipts/local files for acceptance. Priority preparation of unplanned entries remains separate work.
+
+
+### Priority-aware streaming preparation — 2026-10-21
+
+- [x] Reproduce the original failure: with 129 retained ordinary operations and a
+  later priority subtree, preparation selected ordinary input instead of its ancestor.
+- [x] With exactly 128 pending operations, free one ordinary slot; prepare and
+  execute priority ancestors outside the requested prefix before the prioritized
+  file. Lose an accepted reply, reopen, and reconcile the same reserved operation ID.
+- [x] Change priorities while the actual planner waits for capacity: the next
+  ordinary-free slot produces the new priority effect. Missing/blocked priorities
+  and older adapters must continue ordinary/FIFO work without deadlock.
+- [x] Upgrade real v12 retained inputs, resume 128-row normalized-key backfill,
+  preserve Unicode/NFC/casefold selection, and reject foreign scope/generation rows.
+- [x] Hold legacy migration while the queue is full: ordinary effects continue.
+  Grow the source watermark without moving the migration cutoff; completing relevant
+  proof wakes priority selection. Cancellation retains the last committed cursor.
+- [x] Restart with over 128 processed-ahead markers. Advance only through contiguous
+  valid markers; changed/missing input or markers must refuse terminal completion.
+  File A→B→A publishes three distinct revisions and retains final A bytes; fresh
+  configuration, network and scope checks still deny mutation after preparation.
+- [ ] In the signed installed app, retain the same Home job, receipts, exclusions
+  and five saved priorities. Confirm their already indexed ancestor/path operations
+  jump ahead of the ordinary backlog without a reset; independently export a newly
+  uploaded priority file and compare bytes. Verify restart continuity. Index counts
+  alone are insufficient; native live upload-speed telemetry remains incomplete.

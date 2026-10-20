@@ -9,7 +9,7 @@ import { inventorySyncEntry, type CloudInventoryNode } from './cloudInventory';
 import { parseCloudInventoryPage } from './cloudInventoryPages';
 import { prepareCloudOperationBinding } from './cloudBinding';
 import { executeSyncOperation, SyncObservationChangedError, type SyncOperation } from './execute';
-import { decideSyncPath, sameSyncStamp, type SyncEntry, type SyncScope } from './reconcile';
+import { decideSyncPath, sameSyncStamp, syncPathKey, type SyncEntry, type SyncScope } from './reconcile';
 import { createSyncIgnorePolicy } from './syncIgnore';
 import { parseNativeIndexChangesPage, type NativeIndexChangesPage } from './streamingIndex';
 import type { PagedRunProgress, PagedRunSpec } from './pagedRunJournal';
@@ -75,6 +75,7 @@ export async function streamOneWayForegroundSync(
 		indexed = (await runs.streamState(spec)).indexedSequence ?? (await runs.streamState(spec)).sequence,
 		indexState: 'indexing' | 'watching' | 'complete' = 'indexing',
 		skipped: number | undefined;
+	if (local && input.nativeOperationGuards && state.phase !== 'complete') await runs.enableStreamPriorities(spec);
 	const coverage = () => ({
 		indexState,
 		totalFinal: indexState === 'complete' && indexed === state.read,
@@ -259,7 +260,7 @@ export async function streamOneWayForegroundSync(
 		for (;;) {
 			const observed = wakeRevision;
 			check();
-			const operation = await runs.claimNext(spec);
+			const operation = await runs.claimNext(spec, input.nativeOperationGuards === true);
 			check();
 			if (!operation) {
 				const status = await runs.streamState(spec);
@@ -304,13 +305,19 @@ export async function streamOneWayForegroundSync(
 			: cloudChanges(after);
 		for await (const raw of source) {
 			check();
-			const page = parseNativeIndexChangesPage(raw, spec.streaming!.captureId, status.indexedSequence ?? status.sequence, local ? NATIVE_INVENTORY_BATCH_ENTRIES : undefined);
+			const page = parseNativeIndexChangesPage(
+				raw,
+				spec.streaming!.captureId,
+				status.indexedSequence ?? status.sequence,
+				local ? NATIVE_INVENTORY_BATCH_ENTRIES : undefined
+			);
 			if (status.generation !== null && status.generation !== page.generation) throw Error('Streaming source generation changed.');
 			const terminal = page.state === 'complete' && !page.hasMore;
 			// Large native transport batches amortize host authentication and code
 			// verification; durable writes and first-ready wakes remain bounded.
 			for (let offset = 0; offset < Math.max(1, page.changes.length); offset += INVENTORY_PAGE_ENTRIES) {
-				const chunk = page.changes.slice(offset, offset + INVENTORY_PAGE_ENTRIES), last = offset + chunk.length === page.changes.length;
+				const chunk = page.changes.slice(offset, offset + INVENTORY_PAGE_ENTRIES),
+					last = offset + chunk.length === page.changes.length;
 				await runs.appendStreamInput(spec, page.generation, chunk, terminal && last);
 				check();
 				indexed = chunk.at(-1)?.sequence ?? page.nextSequence;
@@ -333,11 +340,18 @@ export async function streamOneWayForegroundSync(
 				status = await runs.streamState(spec);
 			check();
 			if (status.terminal) return;
-			const change = await runs.nextStreamInput(spec);
+			// Select only after a slot opens: priorities may have changed while
+			// waiting, and the durable producer keeps indexing independently.
+			while (state.operations - state.confirmed >= 128) {
+				const observed = wakeRevision;
+				await wait(observed);
+			}
+			const change = await runs.nextStreamInput(spec, input.nativeOperationGuards === true);
 			check();
 			if (!change) {
 				if (status.sourceTerminal) {
-					state = await runs.sealStream(spec, status.generation!, status.indexedSequence ?? status.sequence);
+					const caughtUp = await runs.streamState(spec);
+					state = await runs.sealStream(spec, caughtUp.generation!, caughtUp.indexedSequence ?? caughtUp.sequence);
 					check();
 					wake();
 					return;
@@ -345,14 +359,32 @@ export async function streamOneWayForegroundSync(
 				await wait(observed);
 				continue;
 			}
-			while (state.operations - state.confirmed >= 128) {
-				const observed = wakeRevision;
-				await wait(observed);
-			}
 			await prepare(change, change.generation);
 			check();
 			wake();
 			report();
+		}
+	};
+
+	const migratePriorityInputs = async () => {
+		if (!local || !input.nativeOperationGuards) return;
+		const priorities = input.journal.priorities(access);
+		for (;;) {
+			check();
+			const page = await runs.backfillStreamInputs(spec);
+			check();
+			const preferences = await priorities.read();
+			const relevant = page.paths.some((path) =>
+				preferences.paths.some((requested) => {
+					const prefix = syncPathKey(requested);
+					return path === prefix || path.startsWith(prefix + '/');
+				})
+			);
+			if (page.complete || relevant) wake();
+			if (page.complete) return;
+			// Yield between bounded, resumable local pages. Uploads and the source
+			// producer remain independent; no network or model observer is involved.
+			await new Promise<void>((resolve) => setTimeout(resolve, 0));
 		}
 	};
 
@@ -366,7 +398,7 @@ export async function streamOneWayForegroundSync(
 				throw error;
 			}
 		};
-		const results = await Promise.allSettled([guarded(consume), guarded(plan), guarded(produce)]);
+		const results = await Promise.allSettled([guarded(consume), guarded(plan), guarded(produce), guarded(migratePriorityInputs)]);
 		const failed = results.find((r): r is PromiseRejectedResult => r.status === 'rejected');
 		if (failed) throw failed.reason;
 		check();

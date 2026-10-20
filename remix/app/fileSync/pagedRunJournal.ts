@@ -17,6 +17,8 @@ import { sameSyncScope, sameSyncStamp, syncPathKey, validSyncPath, validSyncEntr
 
 export const RETAINED_HEADS = 'sync-retained-run-heads';
 export const REVIEW_STORE = 'sync-run-reviews';
+const INPUT_PATH = 'stream-input-path';
+type StreamInput = NativeIndexChange & { generation: string; inputScope?: string; inputRun?: string; inputPath?: string };
 export const CLOUD_PARENTS = 'sync-cloud-trash-parents';
 export const PAGED_RUN_HEADS = 'sync-paged-run-heads';
 export const PAGED_RUN_STORES = ['sync-paged-runs', 'sync-paged-operations'] as const;
@@ -27,8 +29,8 @@ type SortKey = [number, number, string];
 export type CloudBindingProgress = { prepared: number; total: number; phase: 'preparing' | 'ready' };
 type CloudPreparation = { configuration: FileSyncConfiguration; root: CloudInventoryRoot; prepared: number; after: SortKey | null };
 export type PagedRunHeader = PagedRunProgress & { spec: PagedRunSpec; scope: string; instance: string; retired?: true; planInstance: string;
-	next: PagedPlanCursor | null; revision: number; confirmedThrough: SortKey | null; cloud?: CloudPreparation; review?: PagedReviewProgress; retained?: true; scheduling?: Scheduling; stream?: { sequence: number; generation: string | null; terminal: boolean; conflicts: number; sourceCursor?: string; snapshotComplete?: boolean; indexedSequence?: number; sourceTerminal?: boolean } };
-type Scheduling = { canonical: boolean; legacy: boolean; revision: number; index: number; after: string | null; reserved: string | null };
+	next: PagedPlanCursor | null; revision: number; confirmedThrough: SortKey | null; cloud?: CloudPreparation; review?: PagedReviewProgress; retained?: true; scheduling?: Scheduling; stream?: { sequence: number; generation: string | null; terminal: boolean; conflicts: number; sourceCursor?: string; snapshotComplete?: boolean; indexedSequence?: number; sourceTerminal?: boolean; priorityPreparation?: true; preparedAhead?: number; inputBackfillSequence?: number; inputBackfillThrough?: number } };
+type Scheduling = { canonical: boolean; legacy: boolean; revision: number; index: number; after: string | null; reserved: string | null; streamScan?: { index: number; ancestor: number; phase: 0 | 1 | 2 } };
 const freshScheduling = (legacy = false): Scheduling => ({ canonical: false, legacy, revision: 0, index: 0, after: null, reserved: null });
 type Header = PagedRunHeader;
 export type ConfirmedSyncOperation = { operation: SyncOperation; receipt: SyncReceipt };
@@ -87,10 +89,14 @@ export const validatePagedRunHeader = (h: Header, spec: PagedRunSpec, scope: Syn
 	if (!!spec.streaming !== !!h.stream) throw Error('Invalid streaming sync progress.');
 	if (h.stream) {
 		const stream = h.stream;
-		if (!nonnegative(stream.sequence) || stream.sequence !== h.total || !nonnegative(stream.conflicts) || stream.conflicts > h.read ||
+		if (!nonnegative(stream.sequence) || (stream.sequence + (stream.preparedAhead ?? 0)) !== h.total || !nonnegative(stream.conflicts) || stream.conflicts > h.read ||
 			typeof stream.terminal !== 'boolean' || (stream.generation !== null && !identifier(stream.generation)) ||
 			(stream.sourceCursor !== undefined && (!/^(0|[1-9][0-9]{0,15})$/.test(stream.sourceCursor) || !Number.isSafeInteger(Number(stream.sourceCursor)))) ||
-			(stream.indexedSequence !== undefined && (!nonnegative(stream.indexedSequence) || stream.indexedSequence < stream.sequence)) ||
+			(stream.indexedSequence !== undefined && (!nonnegative(stream.indexedSequence) || stream.indexedSequence < stream.sequence || h.total > stream.indexedSequence)) ||
+			(stream.preparedAhead !== undefined && (!nonnegative(stream.preparedAhead) || !stream.priorityPreparation)) ||
+			(stream.priorityPreparation !== undefined && (stream.priorityPreparation !== true || spec.streaming?.source !== 'local' || stream.inputBackfillThrough === undefined || stream.inputBackfillSequence === undefined)) ||
+			(stream.inputBackfillSequence !== undefined && (!nonnegative(stream.inputBackfillSequence) || stream.inputBackfillSequence > (stream.inputBackfillThrough ?? stream.indexedSequence ?? stream.sequence))) ||
+			(stream.inputBackfillThrough !== undefined && (!nonnegative(stream.inputBackfillThrough) || stream.inputBackfillThrough > (stream.indexedSequence ?? stream.sequence))) ||
 			(stream.sourceTerminal !== undefined && typeof stream.sourceTerminal !== 'boolean') || (stream.snapshotComplete !== undefined && typeof stream.snapshotComplete !== 'boolean') || (h.phase === 'complete' && !stream.terminal))
 			throw Error('Invalid streaming sync progress.');
 	}
@@ -98,6 +104,7 @@ export const validatePagedRunHeader = (h: Header, spec: PagedRunSpec, scope: Syn
 		const s = h.scheduling;
 		if (typeof s.canonical !== 'boolean' || typeof s.legacy !== 'boolean' || ![s.revision, s.index].every(nonnegative) ||
 			(s.after !== null && !validSyncPathKey(s.after)) || (s.reserved !== null && !identifier(s.reserved)) ||
+			(s.streamScan !== undefined && (!h.stream || !nonnegative(s.streamScan.index) || !nonnegative(s.streamScan.ancestor) || s.streamScan.ancestor > 128 || ![0, 1, 2].includes(s.streamScan.phase))) ||
 			(h.phase === 'complete' && s.reserved !== null)) throw Error('Invalid upload scheduling progress.');
 	}
 	if (h.retained !== undefined && (h.retained !== true || h.phase !== 'complete' || spec.review?.kind !== 'retain')) throw Error('Invalid retained run.');
@@ -118,14 +125,18 @@ export const validatePagedRunHeader = (h: Header, spec: PagedRunSpec, scope: Syn
 	}
 };
 
-export function upgradePagedRunJournal(db: IDBDatabase) {
+export function upgradePagedRunJournal(db: IDBDatabase, tx?: IDBTransaction) {
+	let review: IDBObjectStore | undefined;
 	for (const name of [RETAINED_HEADS, REVIEW_STORE, CLOUD_PARENTS, PAGED_RUN_HEADS, ...PAGED_RUN_STORES]) if (!db.objectStoreNames.contains(name)) {
 		const store = db.createObjectStore(name);
+		if (name === REVIEW_STORE) review = store;
 		if (name === PAGED_RUN_STORES[1]) {
 			store.createIndex('operation', ['scope', 'operation.id'], { unique: true });
 			store.createIndex('path', ['scope', 'run', 'path'], { unique: true });
 		}
 	}
+	review ??= tx?.objectStore(REVIEW_STORE);
+	if (review && !review.indexNames.contains(INPUT_PATH)) review.createIndex(INPUT_PATH, ['inputScope', 'inputRun', 'inputPath', 'sequence']);
 }
 
 /** Bounded durable operation recovery, not Timeline/history or device approval.
@@ -166,6 +177,107 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 		if (value.operation.confirmed) validateSyncReceipt(value.operation, scope, value.receipt!);
 		else if (value.receipt !== null) throw Error('Unconfirmed operation has a receipt.');
 		return value;
+	};
+	const ranges = keyRange ?? globalThis.IDBKeyRange;
+	const inputRow = (value: StreamInput, spec: PagedRunSpec, generation: string | null, primaryKey: IDBValidKey): StreamInput => {
+		if (!value || !nonnegative(value.sequence) || value.sequence === 0 || value.generation !== generation ||
+			!validSyncEntry(value.entry) || value.revision !== value.entry.version || !validIndexProvenance(value) ||
+			JSON.stringify(primaryKey) !== JSON.stringify([key, spec.id, 'input', value.sequence]) ||
+			(value.inputScope !== undefined && (value.inputScope !== key || value.inputRun !== spec.id || value.inputPath !== syncPathKey(value.entry.path))))
+			throw Error('Durable streaming input is missing or changed.');
+		return value;
+	};
+	// Events are relational immutable preparation receipts. Only contiguous
+	// receipts advance the source watermark; the count never substitutes for it.
+	const advanceStream = (h: Header, tx: IDBTransaction, done: (full: boolean, advanced: number) => void, fail: (e: unknown) => void) => {
+		let scanned = 0;
+		const next = () => {
+			const stream = h.stream!;
+			if (!(stream.preparedAhead ?? 0) || scanned === INVENTORY_PAGE_ENTRIES) { done(scanned === INVENTORY_PAGE_ENTRIES, scanned); return; }
+			const sequence = stream.sequence + 1, get = tx.objectStore(REVIEW_STORE).get([key, h.spec.id, 'event', sequence]);
+			get.onsuccess = () => { try {
+				check(); if (!get.result) { done(false, scanned); return; }
+				const event = get.result.event;
+				if (!event || event.sequence !== sequence || event.generation !== stream.generation || !validSyncEntry(event.entry) || event.revision !== event.entry.version || !validIndexProvenance(event))
+					throw Error('Streaming preparation receipt changed.');
+				stream.sequence = sequence; stream.preparedAhead!--; scanned++; next();
+			} catch (error) { fail(error); } };
+		}; next();
+	};
+	const drainStream = async (spec: PagedRunSpec) => {
+		for (;;) {
+			const full = await withHeader<boolean>(spec, 'readwrite', (h, tx, done, fail) => {
+				if (!h.stream?.priorityPreparation || !h.stream.preparedAhead) { done(false); return; }
+				advanceStream(h, tx, (full, advanced) => { if (advanced) { h.revision++; save(h, tx); } done(full); }, fail);
+			});
+			if (!full) return;
+		}
+	};
+	const backfillInputs = (spec: PagedRunSpec) => withHeader<{ complete: boolean; paths: string[] }>(spec, 'readwrite', (h, tx, done, fail) => {
+		const stream = h.stream!;
+		if (!stream.priorityPreparation) { done({ complete: true, paths: [] }); return; }
+		const after = stream.inputBackfillSequence ?? stream.sequence, indexed = stream.inputBackfillThrough ?? stream.sequence;
+		if (after === indexed) { done({ complete: true, paths: [] }); return; }
+		const prefix = [key, spec.id, 'input'], request = tx.objectStore(REVIEW_STORE).openCursor(ranges.bound([...prefix, after], [...prefix, indexed], true));
+		let scanned = 0; const paths: string[] = [];
+		const finish = (complete: boolean) => { if (complete) stream.inputBackfillSequence = indexed; h.revision++; save(h, tx); done({ complete, paths }); };
+		request.onsuccess = () => { try {
+			check(); const cursor = request.result;
+			if (!cursor) { finish(true); return; }
+			const value = inputRow(cursor.value, spec, stream.generation, cursor.primaryKey);
+			if (value.inputScope === undefined) cursor.update({ ...value, inputScope: key, inputRun: spec.id, inputPath: syncPathKey(value.entry.path) });
+			stream.inputBackfillSequence = value.sequence; paths.push(syncPathKey(value.entry.path));
+			if (++scanned === INVENTORY_PAGE_ENTRIES) { finish(value.sequence === indexed); return; }
+			cursor.continue();
+		} catch (error) { fail(error); } };
+	});
+	const indexedInput = (spec: PagedRunSpec, path: string, descendants: boolean) => withHeader<StreamInput | null>(spec, 'readonly', (h, tx, done, fail) => {
+		const stream = h.stream!, store = tx.objectStore(REVIEW_STORE), folded = syncPathKey(path);
+		if (!stream.generation) { done(null); return; }
+		const prefix = [key, spec.id], lower = [...prefix, descendants ? folded + '/' : folded],
+			upper = descendants ? [...prefix, folded + '0'] : [...lower, []];
+		const cursor = store.index(INPUT_PATH).openCursor(ranges.bound(lower, upper, false, descendants));
+		cursor.onsuccess = () => { try {
+			check(); const found = cursor.result;
+			if (!found) { done(null); return; }
+			const primary = found.primaryKey;
+
+			const input = inputRow(found.value, spec, stream.generation, primary);
+			if (input.sequence <= stream.sequence || input.sequence > (stream.indexedSequence ?? stream.sequence)) throw Error('Streaming input cursor changed.');
+			done(input);
+		} catch (error) { fail(error); } };
+	});
+	const priorityInput = async (spec: PagedRunSpec): Promise<{ input: StreamInput; revision: number } | null> => {
+		if (spec.streaming?.source !== 'local') return null;
+		const preferences = await withHeader<{ revision: number; paths: string[] } | null>(spec, 'readonly', (h, tx, done, fail) => {
+			if (!h.stream?.priorityPreparation || h.stream.terminal) { done(null); return; }
+			const get = tx.objectStore(SYNC_PRIORITY_STORE).get(key);
+			get.onsuccess = () => { try { check(); done(get.result === undefined ? { revision: 0, paths: [] } : parseSyncPriorityPreferences(get.result)); } catch (error) { fail(error); } };
+		});
+		if (!preferences?.paths.length) return null;
+		for (const requested of preferences.paths) {
+			check();
+			let candidate = await indexedInput(spec, requested, false) ?? await indexedInput(spec, requested, true);
+			if (!candidate) continue;
+			const parts = candidate.entry.path.split('/');
+			for (let depth = 1; depth < parts.length; depth++) {
+				const ancestor = await indexedInput(spec, parts.slice(0, depth).join('/'), false);
+				if (ancestor) { candidate = ancestor; break; }
+			}
+			// Prove the ACTUAL selected observation after any ancestor substitution.
+			// Producer inserts cannot make us switch to an unproven newer row.
+			const eligible = await withHeader<boolean>(spec, 'readonly', (h, _tx, done) => {
+				const stream = h.stream!;
+				done((stream.inputBackfillSequence ?? stream.sequence) >= Math.min(candidate!.sequence, stream.inputBackfillThrough ?? 0));
+			});
+			if (!eligible) continue;
+			const pending = await withHeader<boolean>(spec, 'readonly', (h, tx, done, fail) => {
+				const get = tx.objectStore(PAGED_RUN_STORES[1]).index('path').get([key, spec.id, syncPathKey(candidate!.entry.path)]);
+				get.onsuccess = () => { try { check(); done(get.result !== undefined && !row(get.result, spec).operation.confirmed); } catch (error) { fail(error); } };
+			});
+			if (!pending) return { input: candidate, revision: preferences.revision };
+		}
+		return null;
 	};
 	/** A streaming run shares operation IDs, receipts, scheduling, scope fencing
 	 * and retention with sealed runs. It never publishes a baseline. */
@@ -473,11 +585,18 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 				const stream = h.stream!, events = tx.objectStore(REVIEW_STORE), token = [key, spec.id, 'event', event.sequence], get = events.get(token);
 				get.onsuccess = () => { try {
 					check(); if (get.result) { if (JSON.stringify(get.result.event) !== JSON.stringify(event)) throw Error('Streaming revision retry changed.'); done(progress(h)); return; }
-					if (stream.terminal || event.sequence !== stream.sequence + 1 || (stream.generation !== null && stream.generation !== event.generation)) throw Error('Streaming generation or sequence changed.');
+					if (stream.terminal || (event.sequence !== stream.sequence + 1 && !(stream.priorityPreparation && spec.streaming!.source === 'local' && stream.indexedSequence !== undefined && event.sequence > stream.sequence && event.sequence <= stream.indexedSequence && (stream.inputBackfillSequence ?? 0) >= Math.min(event.sequence, stream.inputBackfillThrough ?? 0))) || (stream.generation !== null && stream.generation !== event.generation)) throw Error('Streaming generation or sequence changed.');
 					if (stream.indexedSequence !== undefined) {
 						const staged = events.get([key, spec.id, 'input', event.sequence]);
 						staged.onsuccess = () => { try { check(); const source = staged.result;
 							if (!source || !validSyncEntry(source.entry) || source.sequence !== event.sequence || source.generation !== event.generation || source.revision !== event.revision || !sameSyncStamp(source.entry, event.entry) || source.sourcePosition !== event.sourcePosition || source.sourceKind !== event.sourceKind) throw Error('Durable streaming input changed before preparation.');
+						} catch (error) { fail(error); } };
+					}
+					if (event.sequence !== stream.sequence + 1) {
+						const prefix = [key, spec.id, syncPathKey(event.entry.path)], first = events.index(INPUT_PATH).openCursor(ranges.bound(prefix, [...prefix, []]));
+						first.onsuccess = () => { try {
+							check(); const cursor = first.result;
+							if (!cursor || inputRow(cursor.value, spec, stream.generation, cursor.primaryKey).sequence !== event.sequence) throw Error('Prepare the earliest source path revision first.');
 						} catch (error) { fail(error); } };
 					}
 					let effective = prepared, observed = observe;
@@ -498,13 +617,16 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 							ops.add({ scope: key, run: spec.id, path: syncPathKey(operation.mutation.path), operation, receipt: null, cloud: effective } satisfies Row, [key, spec.id, ...orderKey(operation)]);
 							events.add(operation.id, [key, spec.id, 'pending', ...orderKey(operation)]); events.add(operation.id, [key, spec.id, 'pending-path', syncPathKey(operation.mutation.path)]);
 							h.operations++; h.cloud!.prepared++; h.cloud!.after = orderKey(operation); h.confirmedThrough = null;
-							h.scheduling!.index = 0; h.scheduling!.after = null;
+							h.scheduling!.index = 0; h.scheduling!.after = null; delete h.scheduling!.streamScan;
 						}
 						events.add({ event, conflict: conflict && observed, operationId: effective?.write.operation.id ?? null }, token);
 						events.delete([key, spec.id, 'input', event.sequence]);
 						if (observed) events.put(event.entry, [key, spec.id, 'source', syncPathKey(event.entry.path)]);
-						stream.sequence = event.sequence; stream.generation = event.generation; if (conflict && observed) stream.conflicts++;
-						h.read++; h.total++; h.revision++; save(h, tx); done(progress(h));
+						stream.generation = event.generation; if (conflict && observed) stream.conflicts++;
+						h.read++; h.total++;
+						const finish = () => { h.revision++; save(h, tx); done(progress(h)); };
+						if (stream.priorityPreparation) { stream.preparedAhead = (stream.preparedAhead ?? 0) + 1; advanceStream(h, tx, finish, fail); }
+						else { stream.sequence = event.sequence; finish(); }
 					} catch (error) { fail(error); } };
 				} catch (error) { fail(error); } };
 			});
@@ -520,7 +642,7 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 				if (stream.sourceTerminal || stream.terminal || (stream.generation !== null && stream.generation !== generation) || rows.some((row, i) => row.sequence !== after + i + 1)) throw Error('Streaming input generation or watermark changed.');
 				for (const row of rows) {
 					const events = tx.objectStore(REVIEW_STORE);
-					events.add({ ...row, generation }, [key, spec.id, 'input', row.sequence]);
+					events.add({ ...row, generation, inputScope: key, inputRun: spec.id, inputPath: syncPathKey(row.entry.path) }, [key, spec.id, 'input', row.sequence]);
 					if (row.sourceKind === 'delta') {
 						const token = [key, spec.id, 'delta', syncPathKey(row.entry.path)], previous = events.get(token);
 						previous.onsuccess = () => { try { check(); events.put(Math.max(previous.result ?? 0, row.sourcePosition!), token); } catch (error) { fail(error); } };
@@ -529,15 +651,25 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 				stream.indexedSequence = after + rows.length; stream.generation = generation; stream.sourceTerminal = terminal; h.revision++; save(h, tx); done(undefined);
 			});
 		},
-		async nextStreamInput(value: PagedRunSpec): Promise<(NativeIndexChange & { generation: string }) | null> {
+		/** One resumable local migration page; no network work or embedded path set. */
+		backfillStreamInputs: (value: PagedRunSpec) => backfillInputs(parsePagedRunSpec(value)),
+		/** Only the trusted native local adapter enables preparation hints. This
+		 * changes scheduling, never the approved connection or mutation guards. */
+		enableStreamPriorities: (value: PagedRunSpec) => withHeader<void>(parsePagedRunSpec(value), 'readwrite', (h, tx, done) => {
+			if (h.spec.streaming?.source !== 'local' || !h.stream || h.stream.terminal) throw Error('Only a live local stream supports priority preparation.');
+			if (!h.stream.priorityPreparation) { h.stream.priorityPreparation = true; h.stream.preparedAhead = 0; h.stream.inputBackfillSequence = h.stream.sequence; h.stream.inputBackfillThrough = h.stream.indexedSequence ?? h.stream.sequence; h.revision++; save(h, tx); }
+			done(undefined);
+		}),
+		async nextStreamInput(value: PagedRunSpec, preparePriorities = true): Promise<(NativeIndexChange & { generation: string }) | null> {
 			const spec = parsePagedRunSpec(value);
+			await drainStream(spec);
+			const preferred = preparePriorities ? await priorityInput(spec) : null;
+			if (preferred) return preferred.input;
 			return withHeader(spec, 'readonly', (h, tx, done, fail) => {
 				if (!h.stream) throw Error('This run is not streaming.');
 				if (h.stream.sequence === (h.stream.indexedSequence ?? h.stream.sequence)) { done(null); return; }
-				const get = tx.objectStore(REVIEW_STORE).get([key, spec.id, 'input', h.stream.sequence + 1]);
-				get.onsuccess = () => { try { check(); const row = get.result;
-					if (!row || row.sequence !== h.stream!.sequence + 1 || row.generation !== h.stream!.generation || !validSyncEntry(row.entry) || row.revision !== row.entry.version) throw Error('Durable streaming input is missing or changed.'); done(row);
-				} catch (error) { fail(error); } };
+				const sequence = h.stream.sequence + 1, token = [key, spec.id, 'input', sequence], get = tx.objectStore(REVIEW_STORE).get(token);
+				get.onsuccess = () => { try { check(); done(inputRow(get.result, spec, h.stream!.generation, token)); } catch (error) { fail(error); } };
 			});
 		},
 
@@ -595,6 +727,7 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 
 		async sealStream(value: PagedRunSpec, generation: string, sequence: number) {
 			const spec = parsePagedRunSpec(value);
+			await drainStream(spec);
 			return withHeader<PagedRunProgress>(spec, 'readwrite', (h, tx, done) => {
 				if (!h.stream || (h.stream.indexedSequence !== undefined && (!h.stream.sourceTerminal || h.stream.indexedSequence !== h.stream.sequence)) || sequence !== h.stream.sequence || (h.stream.generation !== null && h.stream.generation !== generation) || !identifier(generation)) throw Error('Streaming completion changed.');
 				h.stream.generation = generation; h.stream.terminal = true; if (h.operations === h.confirmed) h.phase = 'complete'; h.revision++; save(h, tx); done(progress(h));
@@ -719,10 +852,12 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 		},
 		/** Reserve one immutable effect before receipt lookup/publication. Each
 		 * transaction scans at most 128 rows; cursors survive interruption. */
-		async claimNext(value: PagedRunSpec): Promise<SyncOperation | null> {
+		async claimNext(value: PagedRunSpec, preparePriorities = true): Promise<SyncOperation | null> {
 			const spec = parsePagedRunSpec(value);
 			for (;;) {
 				check();
+				const canPrepare = spec.streaming ? await withHeader<boolean>(spec, 'readonly', (h, _tx, done) => done(h.scheduling?.reserved == null && h.operations - h.confirmed < INVENTORY_PAGE_ENTRIES)) : false;
+				const preparingPriority = preparePriorities && canPrepare && spec.streaming?.source === 'local' ? await priorityInput(spec) : null;
 				const selected = await withHeader<SyncOperation | null | 'continue'>(spec, 'readwrite', (h, tx, done, fail) => {
 					if (h.phase === 'complete') { done(null); return; }
 					if (h.phase !== 'running') throw Error('Start the durable sync run before selecting an operation.');
@@ -736,7 +871,7 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 						const parts = chosen.mutation.path.split('/'), ancestors = parts.slice(0, -1).map((_, i) => parts.slice(0, i + 1).join('/'));
 						const finish = (operation: SyncOperation) => {
 							if (operation.id === chosen.id) advance?.();
-							schedule.reserved = operation.id; schedule.canonical = canonical; schedule.legacy = false; persist(); done(operation);
+							schedule.reserved = operation.id; schedule.canonical = canonical; delete schedule.streamScan; schedule.legacy = false; persist(); done(operation);
 						};
 						// Canonical order already proves every ancestor operation was confirmed.
 						if (canonical || chosen.mutation.kind !== 'copy' || !ancestors.length) { finish(chosen); return; }
@@ -767,8 +902,9 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 					const get = tx.objectStore(SYNC_PRIORITY_STORE).get(key);
 					get.onsuccess = () => { try {
 						check(); const preferences = get.result === undefined ? { revision: 0, paths: [] } : parseSyncPriorityPreferences(get.result);
+						if (preparingPriority && preparingPriority.revision !== preferences.revision) { done('continue'); return; }
 						if (schedule.revision !== preferences.revision) {
-							schedule.revision = preferences.revision; schedule.index = 0; schedule.after = null;
+							schedule.revision = preferences.revision; schedule.index = 0; schedule.after = null; delete schedule.streamScan;
 						}
 						if (h.stream) {
 							// Stream readiness is indexed separately from retained receipts.
@@ -784,14 +920,33 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 								const prefix = [key, spec.id, 'pending'], cursor = queue.openCursor(ranges.bound(prefix, [...prefix, []]));
 								cursor.onsuccess = () => { try { check(); if (!cursor.result) { if (h.confirmed !== h.operations) throw Error('Streaming readiness ended before its pending count.'); done(null); return; } choose(cursor.result.value); } catch (error) { fail(error); } };
 							};
-							const priority = (index: number) => {
-								if (spec.streaming!.source !== 'local' || index === preferences.paths.length) { canonical(); return; }
-								const requested = preferences.paths[index], path = syncPathKey(requested), prefix = [key, spec.id, 'pending-path'];
-								const exact = queue.get([...prefix, path]); exact.onsuccess = () => { try { check(); if (exact.result !== undefined) { choose(exact.result); return; }
-									const cursor = queue.openCursor(ranges.bound([...prefix, path + '/'], [...prefix, path + '0'], false, true));
-									cursor.onsuccess = () => { try { check(); if (cursor.result) choose(cursor.result.value); else priority(index + 1); } catch (error) { fail(error); } };
+							let reads = 0;
+							const scan = schedule.streamScan ?? { index: 0, ancestor: 1, phase: 0 as 0 | 1 | 2 };
+							const priority = () => {
+								if (spec.streaming!.source !== 'local' || scan.index >= preferences.paths.length) {
+									delete schedule.streamScan;
+									// Exactly one ordinary operation can free a full queue. An
+									// available slot then belongs to eligible priority preparation.
+									if (preparingPriority && h.operations - h.confirmed < INVENTORY_PAGE_ENTRIES) { done(null); return; }
+									canonical(); return;
+								}
+								if (reads === INVENTORY_PAGE_ENTRIES) { schedule.streamScan = scan; persist(); done('continue'); return; }
+								const path = syncPathKey(preferences.paths[scan.index]), prefix = [key, spec.id, 'pending-path'], parts = path.split('/');
+								if (scan.phase === 0 && (!preparePriorities || !h.stream!.priorityPreparation || scan.ancestor >= parts.length)) scan.phase = 1;
+								reads++;
+								if (scan.phase < 2) {
+									const requested = scan.phase === 0 ? parts.slice(0, scan.ancestor++).join('/') : path;
+									if (scan.phase === 1) scan.phase = 2;
+									const get = queue.get([...prefix, requested]);
+									get.onsuccess = () => { try { check(); if (get.result !== undefined) choose(get.result); else priority(); } catch (error) { fail(error); } };
+									return;
+								}
+								const cursor = queue.openCursor(ranges.bound([...prefix, path + '/'], [...prefix, path + '0'], false, true));
+								cursor.onsuccess = () => { try {
+									check(); if (cursor.result) { choose(cursor.result.value); return; }
+									scan.index++; scan.ancestor = 1; scan.phase = 0; priority();
 								} catch (error) { fail(error); } };
-							}; priority(0); return;
+							}; priority(); return;
 						}
 						if (!schedule.legacy && schedule.index < preferences.paths.length) {
 							const requested = preferences.paths[schedule.index], prefix = syncPathKey(requested);
