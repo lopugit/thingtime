@@ -132,10 +132,19 @@ export const fixtureFiles = (count) =>
 		return { name: `fixture-${index + 1}.png`, contentType: 'image/png', bytes: makePng(size, size, index + 1) };
 	});
 
+// Test fixtures never target personal/production origins or follow redirects.
+// This is a client guard; the test backend still needs its own network boundary.
+export const localFixtureUrl = (value, base) => {
+  const url = new URL(value, base);
+  if (url.protocol !== 'http:' || !['127.0.0.1', '[::1]'].includes(url.hostname) || url.username || url.password ||
+      (base && url.origin !== new URL(base).origin)) throw new Error('Fixtures require one explicit loopback HTTP origin and local attachment storage.');
+  return url;
+};
+
 // --- minimal cookie jar + JSON client -------------------------------------
-class Session {
+export class Session {
 	constructor(base) {
-		this.base = base.replace(/\/$/, '');
+		this.base = localFixtureUrl(base).origin;
 		this.cookies = new Map();
 	}
 	absorb(response) {
@@ -149,7 +158,8 @@ class Session {
 		return [...this.cookies.entries()].map(([key, value]) => `${key}=${value}`).join('; ');
 	}
 	async json(method, route, body) {
-		const response = await fetch(`${this.base}${route}`, {
+		const response = await fetch(localFixtureUrl(route, this.base), {
+			redirect: 'error',
 			method,
 			headers: { 'Content-Type': 'application/json', Accept: 'application/json', Origin: this.base, ...(this.cookies.size ? { Cookie: this.cookieHeader() } : {}) },
 			body: body === undefined ? undefined : JSON.stringify(body)
@@ -171,8 +181,8 @@ class Session {
 		return payload;
 	}
 	async put(url, bytes, headers) {
-		const target = /^https?:/i.test(url) ? url : `${this.base}${url}`;
-		const response = await fetch(target, { method: 'PUT', headers: { ...headers, 'Content-Length': String(bytes.byteLength) }, body: bytes });
+		const target = localFixtureUrl(url, this.base);
+		const response = await fetch(target, { redirect: 'error', method: 'PUT', headers: { ...headers, 'Content-Length': String(bytes.byteLength) }, body: bytes });
 		if (!response.ok) throw new Error(`PUT part → ${response.status}: ${(await response.text()).slice(0, 200)}`);
 	}
 }

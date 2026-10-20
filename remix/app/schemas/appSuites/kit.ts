@@ -65,7 +65,7 @@ export const el = (tag: string, style: Style = {}, children: unknown[] = [], pro
 
 export const whenState = (state: string, then: unknown, otherwise?: unknown): Node => ({ ttIf: { arg: 'state', equals: state, then, ...(otherwise !== undefined ? { else: otherwise } : {}) } });
 export const ifTruthy = (arg: string, then: unknown, otherwise?: unknown): Node => ({ ttIf: { arg, then, ...(otherwise !== undefined ? { else: otherwise } : {}) } });
-export const ifEquals = (arg: string, value: string | number | boolean, then: unknown, otherwise?: unknown): Node => ({ ttIf: { arg, equals: value, then, ...(otherwise !== undefined ? { else: otherwise } : {}) } });
+export const ifEquals = (arg: string, value: string | number | boolean | null, then: unknown, otherwise?: unknown): Node => ({ ttIf: { arg, equals: value, then, ...(otherwise !== undefined ? { else: otherwise } : {}) } });
 export const ifOp = (arg: string, op: 'eq' | 'ne' | 'gt' | 'gte' | 'lt' | 'lte' | 'in' | 'includes' | 'empty' | 'notEmpty', value: unknown, then: unknown, otherwise?: unknown): Node => ({
 	ttIf: { arg, op, value, then, ...(otherwise !== undefined ? { else: otherwise } : {}) }
 });
@@ -204,7 +204,7 @@ export const componentBlock = (ctx: DemoBlockCtx, refs: SuiteRefs, id: string, c
 // every app page: the nav component (an `active` arg) above the page body,
 // centred in a readable column
 export const appShell = (ctx: DemoBlockCtx, refs: SuiteRefs, navKey: string, active: string, body: DemoBlock[], options: { maxWidth?: number; gap?: number } = {}): DemoBlock[] => [
-	demoBlockKit.container(ctx, 'shell', 'column', [componentBlock(ctx, refs, 'nav', navKey, { active }), ...body], { gap: options.gap ?? 3, maxWidth: options.maxWidth ?? 820, css: { padding: '8px 0 40px' } })
+	demoBlockKit.container(ctx, 'shell', 'column', [componentBlock(ctx, refs, 'nav', navKey, { active }), ...body], { gap: options.gap ?? 3, maxWidth: options.maxWidth ?? 820, css: { width: '100%', 'margin-inline': 'auto', 'box-sizing': 'border-box', padding: '8px 16px 40px' } })
 ];
 
 // the nav bar shared by every app: brand link + one pill per page

@@ -1,3 +1,4 @@
+import { CharacterComposer } from '~/components/Characters/CharacterComposer';
 import { useAccountDraft } from '~/drafts/useAccountDraft';
 import { DraftPicker, DraftSaveStatus } from '~/drafts/DraftPicker';
 import { PostThingPicker } from './PostThingPicker';
@@ -163,7 +164,8 @@ const Eyebrow = ({ children }: { children: React.ReactNode }) => (
 
 export const PostComposer = (props: PostComposerProps) => {
   const user = useCurrentUser();
-  return <AccountPostComposer key={`${user?.id || 'guest'}:${props.editPost?.id || props.parentId || 'new'}:${props.subspace?.id || ''}`} {...props} />;
+  const composer = <AccountPostComposer key={`${user?.id || 'guest'}:${props.editPost?.id || props.parentId || 'new'}:${props.subspace?.id || ''}`} {...props} />;
+  return props.editPost ? composer : <CharacterComposer key={user?.id || 'guest'}>{composer}</CharacterComposer>;
 };
 const AccountPostComposer = (props: PostComposerProps) => {
   const { onPosted, parentId, onClose, editPost, subspace } = props;

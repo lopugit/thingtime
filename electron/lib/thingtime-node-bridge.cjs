@@ -6,6 +6,7 @@ const fsPromises = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
+const { FolderStream, stageRangeMetadata, encodeStageInput } = require('./folder-stream.cjs');
 
 const NODE_LABEL = 'com.thingtime.desktop.node';
 const NODE_BUNDLE_ID = 'com.thingtime.desktop.node';
@@ -148,6 +149,7 @@ function nodeRequest(method, parameters = {}, suppliedCommandId) {
 }
 
 function nodeRequestTimeoutMs(method) {
+	if (method === 'folder-sync.request') return 305_000;
 	if (method === 'pairing.claim' || method === 'pairing.resume') return PAIRING_BRIDGE_TIMEOUT_MS;
 	if (method === 'pairing.unpair' || method === 'permissions.request') return PRESENCE_BRIDGE_TIMEOUT_MS;
 	return BRIDGE_TIMEOUT_MS;
@@ -482,6 +484,7 @@ function runProcess(command, args, options = {}) {
 			if (settled) return;
 			settled = true;
 			clearTimeout(timer);
+			options.signal?.removeEventListener('abort', abort);
 			callback(value);
 		};
 
@@ -490,11 +493,20 @@ function runProcess(command, args, options = {}) {
 			finish(reject, new ThingtimeNodeBridgeError(code, message));
 		};
 
+		const abort = () => fail('cancelled', 'Folder access was cancelled.');
 		const timer = setTimeout(() => fail('node_timeout', 'Thingtime Node did not respond in time.'), timeoutMs);
 		timer.unref?.();
+		options.signal?.addEventListener('abort', abort, { once: true });
+		if (options.signal?.aborted) abort();
+		child.stdin.on('error', () => fail('node_unavailable', 'Thingtime Node input closed.'));
 
 		child.on('error', () => fail('node_unavailable', 'Thingtime Node could not be started.'));
 		child.stdout.on('data', (chunk) => {
+			if (settled) return;
+			if (options.onStdout) {
+				try { options.onStdout(chunk); } catch { fail('node_protocol_error', 'Thingtime Node returned an invalid stream.'); }
+				return;
+			}
 			stdout = Buffer.concat([stdout, chunk]);
 			if (stdout.length > maximumOutputBytes) fail('node_protocol_error', 'Thingtime Node returned an oversized response.');
 		});
@@ -533,12 +545,14 @@ function parseEntitlementKeys(output) {
 	return [...keys].sort();
 }
 
-async function signatureDetails(targetPath, runner = runProcess) {
-	const verification = await runner('/usr/bin/codesign', ['--verify', '--deep', '--strict', targetPath], {
-		maximumOutputBytes: MAX_ERROR_BYTES
-	});
-	if (verification.status !== 0) {
-		throw new ThingtimeNodeBridgeError('invalid_signature', 'Thingtime Node has an invalid code signature.');
+async function signatureDetails(targetPath, runner = runProcess, verifyResources = true) {
+	if (verifyResources) {
+		const verification = await runner('/usr/bin/codesign', ['--verify', '--deep', '--strict', targetPath], {
+			maximumOutputBytes: MAX_ERROR_BYTES
+		});
+		if (verification.status !== 0) {
+			throw new ThingtimeNodeBridgeError('invalid_signature', 'Thingtime Node has an invalid code signature.');
+		}
 	}
 	const display = await runner('/usr/bin/codesign', ['--display', '--verbose=4', targetPath], {
 		maximumOutputBytes: MAX_ERROR_BYTES
@@ -598,11 +612,15 @@ function assertExpectedEntitlements(details, expectedKeys, label) {
 
 async function verifySignedArtifacts(paths, runner = runProcess, options = {}) {
 	const mode = options.mode || 'runtime';
+	const runningHost = options.runningHost;
 	if (!ALLOWED_SIGNATURE_MODES.has(mode)) {
 		throw new ThingtimeNodeBridgeError('invalid_request', 'Thingtime signature verification mode is invalid.');
 	}
 	if (mode === 'production' && !paths.outerApp) {
 		throw new ThingtimeNodeBridgeError('invalid_installation', 'Production verification requires the outer Thingtime application.');
+	}
+	if (runningHost && (mode !== 'runtime' || !paths.outerApp || runningHost.outerApp !== await fsPromises.realpath(paths.outerApp))) {
+		throw new ThingtimeNodeBridgeError('invalid_installation', 'The running Thingtime installation changed.');
 	}
 	for (const requiredPath of [paths.helperApp, paths.helperExecutable, paths.bridgeExecutable, paths.runtimePath]) {
 		let stat;
@@ -624,7 +642,7 @@ async function verifySignedArtifacts(paths, runner = runProcess, options = {}) {
 	];
 	if (paths.outerApp) {
 		signed.push({
-			details: await signatureDetails(paths.outerApp, runner),
+			details: await signatureDetails(paths.outerApp, runner, !runningHost),
 			expectedIdentifier: DESKTOP_BUNDLE_ID,
 			label: 'Thingtime',
 			targetPath: paths.outerApp
@@ -655,6 +673,9 @@ async function verifySignedArtifacts(paths, runner = runProcess, options = {}) {
 	}
 	if (teams.size !== 1 || identityClasses.size !== 1) {
 		throw new ThingtimeNodeBridgeError('invalid_signature', 'Thingtime and Thingtime Node are signed by different teams.');
+	}
+	if (runningHost && (runningHost.teamIdentifier !== [...teams][0] || runningHost.identityClass !== [...identityClasses][0])) {
+		throw new ThingtimeNodeBridgeError('invalid_signature', 'The running Thingtime signing identity changed.');
 	}
 	const requireExactLeafCertificate = options.requireExactLeafCertificate ?? mode !== 'runtime';
 	if (requireExactLeafCertificate) {
@@ -915,6 +936,7 @@ class ThingtimeNodeIntegration {
 		this.environment = environment;
 		this.runner = runner;
 		this.serviceOperation = Promise.resolve();
+		this.runningHostVerification = null;
 	}
 
 	paths() {
@@ -936,24 +958,56 @@ class ThingtimeNodeIntegration {
 	}
 
 	async verify(paths = this.paths()) {
-		// Do not cache this result. The helper and bridge are executable trust
-		// boundaries, so every execution and service registration must verify the
-		// artifacts that are about to be used.
-		return this.isUnsignedDistribution()
-			? verifyUnsignedArtifacts(paths, this.runner)
-			: verifySignedArtifacts(paths, this.runner);
+		// Explicit verification, status and service registration always validate
+		// the complete installation. No executable verification result is cached.
+		try {
+			return await (this.isUnsignedDistribution()
+				? verifyUnsignedArtifacts(paths, this.runner)
+				: verifySignedArtifacts(paths, this.runner));
+		} catch (error) {
+			this.runningHostVerification = null;
+			throw error;
+		}
 	}
 
-	async request(method, parameters = {}, suppliedCommandId) {
+	async verifyForRequest(paths) {
+		if (this.isUnsignedDistribution() || !paths.outerApp) return this.verify(paths);
+		try {
+			const locations = await Promise.all([paths.outerApp, paths.helperApp, paths.bridgeExecutable, paths.runtimePath].map(value => fsPromises.realpath(value)));
+			const locationKey = JSON.stringify([paths.outerApp, ...locations]);
+			if (!this.runningHostVerification || this.runningHostVerification.locationKey !== locationKey) {
+				this.runningHostVerification = null;
+				const identity = await this.verify(paths);
+				this.runningHostVerification = { ...identity, outerApp: locations[0], locationKey };
+				return identity;
+			}
+			// Children about to execute still receive fresh full verification. The
+			// bridge authenticates this already-running process with strict dynamic
+			// SecCode validity and a kernel-derived, twice-sampled parent PID before
+			// decoding any request. Re-read outer signed identity/entitlements; do
+			// not rescan its unrelated web/database resources for every RPC.
+			return await verifySignedArtifacts(paths, this.runner, { runningHost: this.runningHostVerification });
+		} catch (error) {
+			this.runningHostVerification = null;
+			throw error;
+		}
+	}
+
+	async request(method, parameters = {}, suppliedCommandId, options = {}) {
 		const paths = this.paths();
-		await this.verify(paths);
-		const request = nodeRequest(method, parameters, suppliedCommandId);
-		const encoded = `${boundedJson(request, 'node request')}\n`;
-		const response = await this.runner(paths.bridgeExecutable, [], {
+		await this.verifyForRequest(paths);
+		const staging = method === 'folder-sync.request' && parameters.action === 'stage-range';
+		const request = nodeRequest(method, staging ? stageRangeMetadata(parameters) : parameters, suppliedCommandId);
+		const encoded = staging ? encodeStageInput(request, parameters.bytes) : `${boundedJson(request, 'node request')}\n`;
+		const stream = method === 'folder-sync.request' && parameters.action === 'read-range' ? new FolderStream(request) : null;
+		options.signal?.throwIfAborted();
+		const response = await this.runner(paths.bridgeExecutable, staging ? ['--folder-stage-stream'] : [], {
 			env: this.bridgeEnvironment(),
 			input: encoded,
 			maximumOutputBytes: MAX_FRAME_BYTES,
-			timeoutMs: nodeRequestTimeoutMs(method)
+			timeoutMs: nodeRequestTimeoutMs(method),
+			signal: options.signal,
+			...(stream ? { onStdout: chunk => stream.write(chunk) } : {})
 		});
 		if (response.status !== 0) {
 			throw new ThingtimeNodeBridgeError('node_unavailable', 'Thingtime Node bridge exited unexpectedly.');
@@ -961,7 +1015,7 @@ class ThingtimeNodeIntegration {
 
 		let decoded;
 		try {
-			decoded = JSON.parse(response.stdout);
+			decoded = stream ? stream.finish() : JSON.parse(response.stdout);
 		} catch {
 			throw new ThingtimeNodeBridgeError('node_protocol_error', 'Thingtime Node returned an invalid response.');
 		}

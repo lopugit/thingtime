@@ -10,7 +10,7 @@ const matches = (doc: Record<string, any>, query: Record<string, any>): boolean 
   if (key === '$or') return value.some((part: any) => matches(doc, part));
   if (key === '$and') return value.every((part: any) => matches(doc, part));
   if (key === '$expr') return doc[value.$eq[0].slice(1)] === doc[value.$eq[1].slice(1)];
-  const actual = doc[key];
+  const actual = key.split('.').reduce((value, part) => value?.[part], doc);
   if (value === null) return actual == null;
   if (value && typeof value === 'object' && !Array.isArray(value)) {
     return Object.entries(value).every(([op, operand]) => {
@@ -87,4 +87,14 @@ test('recording library query composes with root/folder, kind and token visibili
   assert.equal(matches(recording, { $and: [own, { folderId: 'folder-a' }] }), false);
   assert.equal(matches(recording, { $and: [own, { thingtime: { $in: ['post'] } }] }), false);
   assert.equal(matches({ ...recording, acl: ['tt:user'] }, { $and: [own, { acl: { $in: ['tt:all'] } }] }), false);
+});
+
+
+test('stable files appear once in the owner library; Trash and retained attachments stay out', () => {
+ const query = ownerLibraryMatch('alice', PROTECTED_THINGTIME);
+ const file = { ownerId: 'alice', thingtime: ['file'], crystal: { trashed: false } };
+ assert.equal(matches(file, query), true);
+ assert.equal(matches({ ...file, crystal: { trashed: true } }, query), false);
+ assert.equal(matches({ ...file, ownerId: 'bob' }, query), false);
+ assert.equal(matches({ ...recording, attachmentPurpose: 'file', targetId: 'stable-file' }, query), false);
 });

@@ -19,7 +19,7 @@ const DAILY_INTERVAL = 23 * 60 * 60_000;
 const COOLDOWN = 5 * 60_000;
 const LEASE = 2 * 60_000;
 export type ModelSyncReason = 'scheduled' | 'unavailable' | 'admin';
-export type ModelSyncResult = { provider: AiModelProviderId; status: 'synced' | 'skipped' | 'failed'; count?: number; reason?: string };
+export type ModelSyncResult = { provider: AiModelProviderId; status: 'synced' | 'skipped' | 'failed'; count?: number; source?: 'public-docs' | 'authenticated'; reason?: string };
 export type ModelSyncClaim = { token: string; startedAt: Date };
 export type ModelSyncStore = {
 	claim(provider: AiModelProviderId, reason: ModelSyncReason): Promise<ModelSyncClaim | null>;
@@ -37,7 +37,7 @@ export function createAiModelSync(deps: {
 		const current = pending.get(provider);
 		if (current) return current;
 		const run = (async (): Promise<ModelSyncResult> => {
-			if (!deps.configured(provider)) return { provider, status: 'skipped' };
+			if (provider !== 'anthropic' && !deps.configured(provider)) return { provider, status: 'skipped' };
 			let claim: ModelSyncClaim | null = null;
 			try {
 				claim = await deps.store.claim(provider, reason);
@@ -45,7 +45,7 @@ export function createAiModelSync(deps: {
 				const models = await deps.discover(provider);
 				if (!models.length) throw new Error('Empty catalogue');
 				const published = await deps.store.publish(provider, claim, models);
-				return published ? { provider, status: 'synced', count: models.length } : { provider, status: 'skipped' };
+				return published ? { provider, status: 'synced', count: models.length, source: models.every((model) => model.source === 'public-docs') ? 'public-docs' : 'authenticated' } : { provider, status: 'skipped' };
 			} catch (error) {
 				if (claim) await deps.store.fail(provider, claim).catch(() => {});
 				return {
@@ -106,6 +106,7 @@ export const createMongoModelSyncStore = (
 		return claimed.modifiedCount ? { token, startedAt } : null;
 	},
 	async publish(provider, claim, models) {
+		const publicDocs = models.every((model) => model.source === 'public-docs');
 		const things = await dependencies.getThings();
 		const settings = await dependencies.getSettings();
 		return dependencies.transaction(async (session) => {
@@ -117,6 +118,7 @@ export const createMongoModelSyncStore = (
 				{
 					$set: {
 						lastSyncedAt: claim.startedAt,
+						source: publicDocs ? 'public-docs' : 'authenticated',
 						status: 'synced',
 						count: models.length,
 						leaseUntil: new Date(0),
@@ -188,13 +190,20 @@ export const createMongoModelSyncStore = (
 						'crystal.provider': provider
 					},
 					update: {
-						$set: { 'crystal.providerAvailable': true, 'crystal.lastSyncedAt': claim.startedAt, updatedAt: claim.startedAt }
+						$set: publicDocs ? {
+							'crystal.publicCatalogAvailable': model.lifecycle !== 'retired',
+							'crystal.catalogSource': 'public-docs', 'crystal.catalogCheckedAt': claim.startedAt,
+							updatedAt: claim.startedAt
+						} : { 'crystal.providerAvailable': true, 'crystal.lastSyncedAt': claim.startedAt,
+							'crystal.publicCatalogAvailable': true, 'crystal.catalogSource': 'authenticated', 'crystal.catalogCheckedAt': claim.startedAt,
+							updatedAt: claim.startedAt }
 					}
 				}
 			}));
 			const written = await things.bulkWrite(available, { session });
 			if (written.matchedCount !== models.length) throw new Error('Foreign model identity collision');
-			await things.updateMany(
+			// Absence from public documentation is not evidence of retirement or lost account access.
+			if (!publicDocs) await things.updateMany(
 				{ ownerId: 'system', thingtime: AI_MODEL_THINGTIME, 'crystal.provider': provider, 'crystal.modelId': { $nin: ids } },
 				{
 					$set: { 'crystal.providerAvailable': false, 'crystal.lastSyncedAt': claim.startedAt, updatedAt: claim.startedAt }
@@ -226,7 +235,7 @@ export async function readAiModelProviderPolicies() {
 		.find(
 			{ key: { $in: AI_MODEL_PROVIDER_IDS.map(key) } },
 			{
-				projection: { key: 1, autoAllowNewModels: 1, lastSyncedAt: 1, status: 1 }
+				projection: { key: 1, autoAllowNewModels: 1, lastSyncedAt: 1, status: 1, source: 1 }
 			}
 		)
 		.toArray();
@@ -237,6 +246,7 @@ export async function readAiModelProviderPolicies() {
 				provider,
 				{
 					autoAllowNewModels: row?.autoAllowNewModels === true,
+					source: row?.source === 'public-docs' ? 'public-docs' : row?.source === 'authenticated' ? 'authenticated' : null,
 					lastSyncedAt: row?.lastSyncedAt instanceof Date ? row.lastSyncedAt.toISOString() : null,
 					status: ['synced', 'failed'].includes(row?.status) ? row.status : null
 				}

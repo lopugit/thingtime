@@ -14,7 +14,7 @@ for (let i = 0; i < 2; i++) {
  const result = await api('auth/register', null, { username, email, password }); if (!result.body.ok) console.log({ status: result.status, error: result.body.error }); check(result.body.ok && result.cookie, `register synthetic owner ${i + 1}`); users.push({ username, email, password, cookie: result.cookie, id: result.body.user.id });
 }
 const [owner, other] = users, id = randomUUID(), writeId = randomUUID(), secret = `fixture-only-${randomUUID()}`;
-const entry = { title: 'Password manager QA', passwordType: 'login', fields: [{ id: 'username', label: 'Username', type: 'text', value: 'fixture@example.test' }, { id: 'password', label: 'Password', type: 'password', value: secret }, { id: 'totp', label: 'Code', type: 'totp', value: 'otpauth://totp/QA?secret=GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ' }] };
+const entry = { title: 'Facebook QA [literal].*', passwordType: 'login', fields: [{ id: 'username', label: 'Username', type: 'text', value: 'fixture@example.test' }, { id: 'password', label: 'Password', type: 'password', value: secret }, { id: 'totp', label: 'Code', type: 'totp', value: 'otpauth://totp/QA?secret=GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ' }] };
 const save = { operation: 'save', expectedOwnerId: owner.id, id, writeId, revision: 0, entry };
 const result = await api('passwords', owner.cookie, save); if (!result.body.ok) console.log({ status: result.status, error: result.body.error }); check(result.body.ok, 'save encrypted entry through real API');
 check((await api('passwords', owner.cookie, save)).body.record.revision === 1, 'same save retry is idempotent');
@@ -41,6 +41,27 @@ for (let i = 0; i < 51; i++) {
 let cursor, listed = [];
 do { const page = await api(`passwords${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`, owner.cookie); listed.push(...page.body.entries.map(item => item.id)); cursor = page.body.nextCursor; } while (cursor);
 check(listed.length === 52 && new Set(listed).size === 52 && ids.every(value => listed.includes(value)), 'stable creation cursors page every account exactly once');
+// The only initial Facebook match is older than a full page of nonmatches.
+check(!(await api('passwords', owner.cookie)).body.entries.some(item => item.id === id), 'search target is beyond the initial unfiltered page');
+for (const q of ['facebook', 'FACEBOOK', ' facebook ', '[literal].*']) {
+ const result = await api(`passwords?q=${encodeURIComponent(q)}`, owner.cookie);
+ check(result.body.entries.length === 1 && result.body.entries[0].id === id && !result.body.nextCursor, 'whole-vault title search: ' + q);
+ check(!JSON.stringify(result.body).includes(secret), 'search returns metadata only');
+}
+check((await api('passwords?q=facebook', other.cookie)).body.entries.length === 0, 'title search remains owner-private');
+check((await api(`passwords?q=${encodeURIComponent(secret)}`, owner.cookie)).body.entries.length === 0, 'search never searches encrypted field values');
+check((await api('passwords?q=no-such-title', owner.cookie)).body.entries.length === 0, 'missing title yields an empty successful page');
+const matchingIds = [id];
+for (let i = 0; i < 51; i++) {
+ const nextId = randomUUID(); matchingIds.push(nextId);
+ assert.equal((await api('passwords', owner.cookie, { ...save, id: nextId, writeId: randomUUID(), entry: { ...entry, title: `Facebook additional ${i}` } })).status, 200);
+}
+let searchCursor, matches = [];
+do {
+ const page = await api(`passwords?q=facebook${searchCursor ? `&cursor=${encodeURIComponent(searchCursor)}` : ''}`, owner.cookie);
+ assert.equal(page.status, 200); matches.push(...page.body.entries.map(item => item.id)); searchCursor = page.body.nextCursor;
+} while (searchCursor);
+check(matches.length === matchingIds.length && new Set(matches).size === matches.length && matchingIds.every(id => matches.includes(id)), 'filtered pagination contains all matches once, with no nonmatches');
 const catalog = await api('passwords', owner.cookie, { operation: 'catalog', expectedOwnerId: owner.id });
 check(catalog.body.catalog.length === 50 && !!catalog.body.nextCursor && !JSON.stringify(catalog.body).includes(secret) && !JSON.stringify(catalog.body).includes('GEZDGNBV'), 'native catalog pages names without passwords or TOTP seeds');
 const exported = await api('passwords', owner.cookie, { operation: 'export', expectedOwnerId: owner.id });

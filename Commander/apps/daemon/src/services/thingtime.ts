@@ -6,6 +6,7 @@ import {
   NETWORK_PROBE_PACKET_BYTES,
   networkProbeUploadChunks,
 } from './networkProbe.js';
+import { registeredLoginRedirect } from './loginRegistration.js';
 const NETWORK_PROBE_TIMEOUT_MS = 90_000;
 
 interface LoginStart {
@@ -15,7 +16,45 @@ interface LoginStart {
 }
 
 export class ThingtimeService {
-  #pending = new Map<string, { verifier: string; createdAt: number }>();
+  #pending = new Map<
+    string,
+    { verifier: string; createdAt: number; origin: string; clientId: string; redirectUri: string }
+  >();
+
+  async beginRegisteredLogin(
+    settings: CommanderSettings,
+    nativeRedirect: string,
+    loopbackRedirect: string,
+  ): Promise<LoginStart> {
+    // Capture settings before awaiting discovery; callers may change servers
+    // while the registration requests are in flight.
+    const snapshot = { ...settings };
+    if (!snapshot.thingtimeClientId)
+      throw new Error('Set a Thingtime client ID in Commander before signing in');
+    const baseUrl = validatedThingtimeBaseUrl(snapshot.thingtimeBaseUrl);
+    const redirectUri = await registeredLoginRedirect(
+      baseUrl,
+      snapshot.thingtimeClientId,
+      nativeRedirect,
+      loopbackRedirect,
+    );
+    return this.beginLogin(snapshot, redirectUri);
+  }
+
+  #matchingPending(settings: CommanderSettings, state: string, redirectUri: string) {
+    const pending = this.#pending.get(state);
+    if (!pending || Date.now() - pending.createdAt > 10 * 60_000) {
+      this.#pending.delete(state);
+      throw new Error('Thingtime login expired; start again');
+    }
+    if (
+      pending.origin !== validatedThingtimeBaseUrl(settings.thingtimeBaseUrl).origin ||
+      pending.clientId !== settings.thingtimeClientId ||
+      pending.redirectUri !== redirectUri
+    )
+      throw new Error('Thingtime sign-in environment or callback changed; start again');
+    return pending;
+  }
   #networkCapabilities: { origin: string; expiresAt: number; manifest: unknown } | undefined;
   #speedProbe: { origin: string; identity: string; result: Promise<ThingtimeNetworkProbe> } | undefined;
 
@@ -26,7 +65,16 @@ export class ThingtimeService {
     const state = randomBytes(24).toString('base64url');
     const verifier = randomBytes(48).toString('base64url');
     const challenge = createHash('sha256').update(verifier).digest('base64url');
-    this.#pending.set(state, { verifier, createdAt: Date.now() });
+    for (const [key, pending] of this.#pending) {
+      if (Date.now() - pending.createdAt > 10 * 60_000) this.#pending.delete(key);
+    }
+    this.#pending.set(state, {
+      verifier,
+      createdAt: Date.now(),
+      origin: baseUrl.origin,
+      clientId: settings.thingtimeClientId,
+      redirectUri,
+    });
     const url = new URL('/authorize', baseUrl);
     url.searchParams.set('client_id', settings.thingtimeClientId);
     url.searchParams.set('redirect_uri', redirectUri);
@@ -43,13 +91,13 @@ export class ThingtimeService {
     code: string,
     redirectUri: string,
   ): Promise<{ account: CommanderAccount; token: string }> {
-    const pending = this.#pending.get(state);
+    const pending = this.#matchingPending(settings, state, redirectUri);
     this.#pending.delete(state);
-    if (!pending || Date.now() - pending.createdAt > 10 * 60_000)
-      throw new Error('Thingtime login expired; start again');
     const baseUrl = validatedThingtimeBaseUrl(settings.thingtimeBaseUrl);
     const response = await fetch(new URL('/api/v1/oauth/token', baseUrl), {
       method: 'POST',
+      redirect: 'error',
+      signal: AbortSignal.timeout(15_000),
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         grantType: 'authorization_code',
@@ -69,6 +117,8 @@ export class ThingtimeService {
     if (!response.ok || !session.accessToken)
       throw new Error(session.error ?? 'Thingtime token exchange failed');
     const profileResponse = await fetch(new URL('/api/v1/oauth/userinfo', baseUrl), {
+      redirect: 'error',
+      signal: AbortSignal.timeout(15_000),
       headers: { authorization: `Bearer ${session.accessToken}` },
     });
     const profile = (await profileResponse.json()) as {
@@ -103,10 +153,10 @@ export class ThingtimeService {
     };
   }
 
-  cancel(state: string): boolean {
-    const pending = this.#pending.get(state);
+  cancel(settings: CommanderSettings, state: string, redirectUri: string): boolean {
+    this.#matchingPending(settings, state, redirectUri);
     this.#pending.delete(state);
-    return Boolean(pending && Date.now() - pending.createdAt <= 10 * 60_000);
+    return true;
   }
 
   async sync(token: string, settings: CommanderSettings): Promise<CommanderSettings> {

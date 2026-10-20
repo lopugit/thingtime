@@ -177,7 +177,7 @@ export const LopuModelsEditor = () => {
 		const usable = providerUsable(catalog.providers[model.provider], model.available);
 		const previous = { enabled: model.enabled, available: model.available };
 		// optimistic — the switch flips now and reverts if the server refuses
-		patchModel(model.id, { enabled, available: enabled && usable && model.providerAvailable !== false });
+		patchModel(model.id, { enabled, available: enabled && usable && model.providerAvailable !== false && model.publicCatalogAvailable !== false });
 		setBusyId(model.id);
 		try {
 			const resp = await apiRef.current.v1.admin.setAiModel({ id: model.id, enabled });
@@ -208,7 +208,7 @@ export const LopuModelsEditor = () => {
 					? {
 							...model,
 							enabled: patch.allowAll,
-							available: patch.allowAll && model.providerAvailable !== false && providerUsable(catalog.providers[provider], model.available)
+							available: patch.allowAll && model.providerAvailable !== false && model.publicCatalogAvailable !== false && providerUsable(catalog.providers[provider], model.available)
 					  }
 					: model
 			),
@@ -355,7 +355,7 @@ export const LopuModelsEditor = () => {
 		<Flex flexDirection="column" rowGap={4} minW={0}>
 			<SettingsSection
 				eyebrow="Provider access"
-				description="Check provider credentials and discover the models available to Thingtime."
+				description="Refresh model information and check provider credentials. Claude public model information needs no API key."
 				summary={
 					hasCatalog
 						? `${providerRows.filter(([, info]) => info?.configured).length} configured · ${providerRows.length} providers`
@@ -369,7 +369,7 @@ export const LopuModelsEditor = () => {
 					isLoading={busyId === 'sync'}
 					onClick={() => void syncModels()}
 				>
-					Sync available models
+					Sync model catalog
 				</Button>
 				<Flex flexDirection="column" rowGap={1}>
 					{providerRows.map(([provider, info]) => {
@@ -427,6 +427,7 @@ export const LopuModelsEditor = () => {
 											Catalogue{' '}
 											{catalog.policies?.[provider]?.lastSyncedAt ? describeCheckedAt(catalog.policies[provider].lastSyncedAt) : 'not yet synced'}
 											{catalog.policies[provider].status === 'failed' ? ' · latest sync failed' : ''}
+											{catalog.policies[provider].source === 'public-docs' ? ' · public documentation; account access is not verified' : ''}
 										</Text>
 									)}
 								</Flex>
@@ -502,7 +503,9 @@ export const LopuModelsEditor = () => {
 										</Text>
 										<Chip>{providerLabel(model.provider)}</Chip>
 										{model.isDefault && <Chip tone="ink">default</Chip>}
-										{model.providerAvailable === false && <Chip>not offered by provider</Chip>}
+										{model.providerAvailable === false && <Chip>not offered to configured account</Chip>}
+										{model.publicCatalogAvailable === false && <Chip>retired</Chip>}
+										{model.catalogSource === 'public-docs' && <Chip>public catalog · access unverified</Chip>}
 										{(keyState === 'missing' || (!keyInfo && model.enabled && !model.available)) && (
 											<Chip tone="danger">needs {model.provider === 'anthropic' ? 'Claude OAuth' : `${providerLabel(model.provider)} key`}</Chip>
 										)}

@@ -6,6 +6,7 @@
 // import the codes and copy. The async gate that reads the settings singleton
 // and the account lives in ./access.ts.
 
+import { ownsPlanAdmission, type OwnedPlanAdmission } from '../ai/chatgptPlanAdmissionCore';
 import type { LopuBilling, LopuChatProvider } from './chatEvents';
 
 // Who pays for a turn: Thingtime's server keys (credits), the viewer's own
@@ -52,12 +53,12 @@ export const lopuUserVerified = (user: Partial<LopuAccessUser> | null | undefine
 // the async gate, starter credits included, before this runs).
 export const evaluateLopuAccess = (
   user: LopuAccessUser | null | undefined,
-  input: { billing: LopuBilling; settings: LopuAccessRules; balanceMicros?: number | null }
+  input: { billing: LopuBilling; settings: LopuAccessRules; balanceMicros?: number | null; ownedPlan?: OwnedPlanAdmission | null }
 ): LopuAccessVerdict => {
   if (!user) return { ok: false, status: 403, code: LOPU_GUEST_CODE, error: LOPU_GUEST_ERROR };
   if (user.temporary === true) return { ok: false, status: 403, code: LOPU_GUEST_CODE, error: LOPU_GUEST_ERROR };
   if (input.settings.requireVerification && !lopuUserVerified(user)) {
-    const byoAllowed = input.billing === 'byo' && input.settings.allowByoUnverified;
+    const byoAllowed = input.billing === 'byo' && (input.settings.allowByoUnverified || ownsPlanAdmission(input.ownedPlan, user.id));
     if (!byoAllowed) return { ok: false, status: 403, code: LOPU_UNVERIFIED_CODE, error: LOPU_UNVERIFIED_ERROR };
   }
   if (input.billing === 'thingtime') {
