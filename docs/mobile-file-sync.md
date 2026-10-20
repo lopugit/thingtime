@@ -3869,6 +3869,18 @@ Signer failures record only timestamp, fixed phase/category and HTTP status in
 `~/Library/Logs/Thingtime/folder-sync.log`, bounded to 128 KiB plus one rotated
 file. No request/response body, identity, source path or signed URL is recorded.
 
+Desktop part source rechecks use a native `read` of length 1 at the pinned
+source size (EOF), and require the same size/version, exact EOF offset and empty
+data. The shared reader rejects zero-length requests. A valid EOF read returns
+no content while reopening and verifying both the original descriptor and the
+current physical path. Checks run before and after PUT; a changed source cannot
+produce a success receipt.
+
+`npm --prefix electron run verify:folder-upload-native` exercises the complete
+part helper through the production Mac reader/stream framing and a real HTTP
+receiver. Its disposable signed native fixture and synthetic identity run under
+the verified OS loopback boundary, without installed grants or user credentials.
+
 This avoids browser CORS failure for the bundled UI's dynamic loopback origin;
 it does not disable browser security or broaden bucket CORS/access. Empty files
 continue through the canonical zero-part path. The signed installed app must

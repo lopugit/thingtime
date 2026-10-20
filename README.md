@@ -6262,6 +6262,11 @@ pass the unchanged desktop expected-actor mutation fence. Signer diagnostics
 use only fixed categories/status codes in `~/Library/Logs/Thingtime/folder-sync.log`
 (128 KiB plus one rotated file); no credentials or signed destinations are logged.
 
+Part source revalidation uses a positive-length native read at EOF, preserving
+the size/version and physical-path fences without reading extra content. Run
+`npm --prefix electron run verify:folder-upload-native` for real Mac reader/stream
+and HTTP-byte regression coverage in a disposable, network-isolated fixture.
+
 The bundled Mac UI uses a dynamic loopback origin. With the desktop folder
 host's `fileUploadVersion` 1.0.0 capability, shared sync sends checksum-locked
 parts through the authenticated host adapter rather than cross-origin browser

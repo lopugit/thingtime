@@ -23,6 +23,7 @@
 		"start": "electron .",
 		"test": "node --test test/**/*.test.cjs",
 		"verify:folder-sync-host": "node scripts/test-folder-sync-host.mjs",
+		"verify:folder-upload-native": "node scripts/test-folder-upload-native.mjs",
 		"verify:native": "node scripts/verify-native-node.mjs",
 		"verify:release-shim": "node scripts/release-workflow-contract.cjs shim ../.github/workflows/electron-release.yml",
 		"verify:signed": "node scripts/verify-signed-app.mjs",
