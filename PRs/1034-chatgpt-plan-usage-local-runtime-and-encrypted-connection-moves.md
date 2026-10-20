@@ -26,7 +26,7 @@ The final documentation semantic-index refresh returned incomplete output and wa
 
 ## Public contracts
 
-`api.capabilities` 1.2.0; `api.ai-chatgpt-plan` 1.1.1; `api.ai-models` 1.8.0; `api.lopu-chats` 1.7.0; `api.lopu-chats-update` 1.6.0; `api.lopu-chats-reply` 1.21.0. Setup and key ownership are documented in README and acceptance cases in TESTING.
+`api.capabilities` 1.2.0; `api.ai-chatgpt-plan` 1.1.1; `api.ai-models` 1.8.0; `api.lopu-chats` 1.7.0; `api.lopu-chats-update` 1.6.1; `api.lopu-chats-reply` 1.21.1. Setup and key ownership are documented in README and acceptance cases in TESTING.
 
 ## References
 
@@ -87,3 +87,15 @@ Three observed failures remain tracked: the initial server-management default at
 The installed Builder selected a nested local-runtime legend, changed and saved its account-owned layout, and retained the change after reload. The original wording was restored and saved; endpoints and credentials were unchanged.
 
 The second combined CI run reached the schemas suite and exposed a stale requirement that every suite page contain component blocks. The menu now intentionally uses individually editable elements. Its regression validates direct control and source references against the same suite’s declared Actions, while all other suites retain the component requirement and every component reference remains constrained to its suite. All 271 schema tests pass.
+
+
+Source `97858a77f` addresses those three failures: owned-plan placement defaults to the local client path, repeated explicit provider pins succeed only after live ownership validation, and Responses uses finalized stream items when a successful terminal envelope omits its output list. The transport retains namespace/identifier/batch validation, refusal of incomplete/dropped streams and private reasoning replay. Its synthetic regression reproduces the observed empty successful turn; the actual provider wire shape was not captured, so installed tool-roundtrip acceptance remains pending.
+
+Final combined validation after these corrections: plan suite 42 passed (one optional storage skip) plus eight route/persistence tests; Lopu backend 189 + 170; Lopu UI 239; capabilities 102; schemas 271; focused shared-composition tests 14; streaming 82 under an OS network boundary. The remaining 25 unit-test families passed 1,403 tests. TypeScript still has 91 baseline diagnostics and zero new diagnostic messages. Rebuilt Nitro manifests expose the patched reply/update contracts and passed the explicit OS-sandbox smoke that denies unrelated loopback and direct Internet traffic. Real composer fixtures passed at 1280/375. These checks do not waive the final installed retry.
+
+
+## 2026-10-19 final installed acceptance and main synchronization
+
+Installed runtime source `1f073a3b8` passed the final real saved-plan path: a fresh text turn returned “LOCAL PLAN READY”; the same-chat follow-up executed `list_my_things` with `{kind:"data",limit:1}`, received `{ok:true,things:[],nextCursor:null}`, and returned “PLAN TOOL OK 0”. Both used the saved GPT-6.1-Sol ChatGPT-plan connection. The selected-provider header is correct, and the installed manifest advertises reply 1.21.1/update 1.6.1. The installed bundle retains the stable Developer ID signature. The earlier workflow-default, identical-update and missing-tool-result acceptance failures are resolved on the installed build. Model/conversation persistence and account-owned nested Builder layout persistence were verified in the preceding installed checks.
+
+Main `180df638807faa45ca93bf77bb63f09450b2bb97` (PR #1042) was integrated afterward. Its shared Builder product changes were already included in the installed assembly. Merge conflicts were limited to combined testing/release notes, a capability test expectation and generated graph snapshots; both feature checklists were preserved and the newer compatible Actions/Things-update contract assertions retained. No executable source conflict required hand resolution. The final source graph and exact-head CI remain the publication gate.
