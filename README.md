@@ -6318,10 +6318,34 @@ the size/version and physical-path fences without reading extra content. Run
 and HTTP-byte regression coverage in a disposable, network-isolated fixture.
 
 The bundled Mac UI uses a dynamic loopback origin. With the desktop folder
-host's `fileUploadVersion` 1.0.1 capability, shared sync sends checksum-locked
+host's `fileUploadVersion` 1.1.0 capability, shared sync sends checksum-locked
 parts through the authenticated host adapter rather than cross-origin browser
 PUTs. Forks require the selected API's `api.attachment-upload-parts` >=1.1.0
 (with matching major 1), existing attachment storage/signing configuration and
 native range-read support. No bucket CORS exception, embedded credentials or
 browser security override is required. Parts are bounded to 32 MiB; empty files
 retain their zero-part API path. See [the contract](docs/mobile-file-sync.md#desktop-checksum-locked-part-uploads--2026-10-20).
+
+### Native upload speed measurement — 2026-10-21
+
+Mac folder upload 1.1.0 adds exact completed-PUT `payloadBytes` receipts. Transfer
+speed trackers show acknowledged payload samples and shorter per-direction
+measurement coverage, with native updates on completed-part acknowledgment.
+These are not continuous network/wire measurements. Old hosts stay unknown;
+ready uploads add zero, retained offsets and canonical receipt replays add no
+new payload. Unknown intervals can recover without resetting saved units/windows
+or logical entry counts. No additional private setup is required beyond the
+existing paired-device/native upload configuration. Signed installed acceptance
+must verify displayed values against accepted payload sizes before this feature
+is considered complete.
+
+Native identity checks used by indexing, transfers and monitoring now share a
+bounded scheduling gate for the same origin/device credential. It spaces fresh
+HTTP checks by at least 334 ms from completion (at most three per second, below
+the default 240/minute limit) and shares bounded server Retry-After cooldowns.
+It does not cache identity responses or reduce the number of authorization
+checks. Queued callers recheck cancellation and reload current credentials;
+rotation, owner/origin mismatch and revocation remain fail-closed. A bounded live
+10-minute diagnostic window contained eight logged identity HTTP 429 events;
+that count is not total traffic. Practical installed throughput after this
+change remains unverified.

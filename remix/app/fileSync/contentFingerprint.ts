@@ -40,12 +40,15 @@ export type FingerprintSource = {
 
 	/** Native file-backed multipart upload. Resolves only after authenticated
 	 * signing, bounded storage upload and source checks; returns the part hash. */
-	uploadPart?(request: NativePartUpload, signal?: AbortSignal): Promise<{ sha256: string }>;
+	uploadPart?(request: NativePartUpload, signal?: AbortSignal): Promise<{ sha256: string; payloadBytes?: number }>;
 
 	/** Trusted native-part adapter validates the expected source before/after PUT.
 	 * Only removes duplicate wrapper checks; initial, pre-complete and final
 	 * source verification remain mandatory. Never supplied by cloud metadata. */
 	nativePartSourceChecks?: true;
+
+	/** Negotiated trusted Mac receipt measures only completed PUT payloads. */
+	nativePartPayloadBytes?: true;
 
 	/** Pinned descriptor for native byte transport, reauthorized by the host. */
 	nativeCloud?: { scope: SyncScope; file: CloudFile };

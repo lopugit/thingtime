@@ -67,6 +67,6 @@ async function uploadFolderPart({ input, context, signal, authorize, requestNati
     if (!Array.isArray(roots)) throw invalid();
     return { ...binding, roots, uploadedPart: { uploadId: upload.uploadId, requestId: upload.requestId,
         partNumber: upload.partNumber, offset: upload.offset, length: upload.length,
-        version: source.version, size: source.size, sha256: digest.toString('hex') } };
+        version: source.version, size: source.size, sha256: digest.toString('hex'), payloadBytes: bytes.length } };
 }
 module.exports = { uploadFolderPart, uploadRetry, retryableUploadFailure };

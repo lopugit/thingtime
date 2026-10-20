@@ -34,6 +34,9 @@ export function speedReadingLabel(reading: SpeedReading | undefined, state: Sync
  if (reading.status === 'unknown') return reading.reason === 'unavailable' ? 'Unavailable' : 'Collecting samples…';
  return `${reading.value.toLocaleString(undefined, { maximumFractionDigits: 3 })} ${reading.unit}`;
 }
+export function observedSeconds(reading: SpeedReading | undefined, windowMs: number) {
+ return (Math.min(reading?.observedDurationMs || 0, windowMs) / 1000).toLocaleString(undefined, { maximumFractionDigits: 1 });
+}
 function TrackerDocument({ scopeKey, series, state, stage, document }: TransferSpeedTrackersProps & { document: SettingsDocumentControls }) {
  const [, tick] = React.useReducer(value => value + 1, 0);
  React.useEffect(() => { const timer = setInterval(tick, 1000); return () => clearInterval(timer); }, []);
@@ -44,9 +47,8 @@ function TrackerDocument({ scopeKey, series, state, stage, document }: TransferS
   const windowMs = toWindowMs(tracker.windowValue, tracker.windowUnit);
   const upload = series?.read({ direction: 'upload', unit: tracker.unit, windowMs });
   const download = series?.read({ direction: 'download', unit: tracker.unit, windowMs });
-  const observed = Math.max(upload?.observedDurationMs || 0, download?.observedDurationMs || 0);
   readings[tracker.id] = { upload: speedReadingLabel(upload, state, stage), download: speedReadingLabel(download, state, stage),
-   window: `Averaging over ${tracker.windowValue} ${tracker.windowValue === 1 ? tracker.windowUnit.slice(0, -1) : tracker.windowUnit} · ${Math.min(observed / 1000, windowMs / 1000).toLocaleString(undefined, { maximumFractionDigits: 1 })} seconds observed${!series ? ' · Live transfer counters unavailable.' : ''}` };
+   window: `Averaging over ${tracker.windowValue} ${tracker.windowValue === 1 ? tracker.windowUnit.slice(0, -1) : tracker.windowUnit} · Upload ${observedSeconds(upload, windowMs)}s / Download ${observedSeconds(download, windowMs)}s measured${['Kbps', 'Mbps', 'Gbps'].includes(tracker.unit) ? ' · Acknowledged payload samples; native uploads update on completed-part acknowledgment, not continuous wire progress.' : ''}${!series ? ' · Live transfer counters unavailable.' : ''}` };
  }
  const actions: TransientBlockActions = {
   add: () => {

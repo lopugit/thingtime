@@ -82,7 +82,7 @@ export type FolderRequest =
 	  };
 export type FolderResult = {
 	uploadedFile?: { fingerprint: ContentFingerprint };
-	uploadedPart?: { sha256: string };
+	uploadedPart?: { sha256: string; payloadBytes?: number };
 	writeApproval?: MobileWriteApproval;
 	publication?: SyncReceiptLookup;
 	trash?: SyncReceiptLookup;
@@ -119,6 +119,9 @@ export type FolderCapabilities = Pick<
 >;
 export const supportsNativePartUploads = (bridge: FolderCapabilities | undefined = getNativeBridge()) =>
 	(bridge?.platform === 'ios' || bridge?.platform === 'android' || bridge?.platform === 'macos') && /^1\.\d+\.\d+$/.test(bridge.fileUploadVersion ?? '');
+/** Additive Mac 1.1 receipt telemetry; mobile whole-file versions are independent. */
+export const supportsNativePartPayloadBytes = (bridge: FolderCapabilities | undefined = getNativeBridge()) =>
+	bridge?.platform === 'macos' && supportsNativePartUploads(bridge) && Number(bridge.fileUploadVersion!.split('.')[1]) >= 1;
 /** These native access contracts independently add exact single-path inspection. */
 export const supportsNativeInventoryPages = (bridge: FolderCapabilities | undefined = getNativeBridge()) => {
 	const minimum = bridge?.platform === 'macos' ? 5 : bridge?.platform === 'ios' ? 3 : undefined;
@@ -370,7 +373,11 @@ export function parseMobileFolderResult(
 			!/^[a-f0-9]{64}$/.test(part.sha256)
 		)
 			throw Error('Invalid native upload receipt.');
-		result.uploadedPart = { sha256: part.sha256 };
+		// Optional telemetry cannot invalidate an otherwise exact authenticated receipt.
+		result.uploadedPart = {
+			sha256: part.sha256,
+			...(Number.isSafeInteger(part.payloadBytes) && part.payloadBytes === upload.length ? { payloadBytes: part.payloadBytes } : {})
+		};
 	}
 	if (request.action.startsWith('version-')) {
 		if (payload.rootId !== ('rootId' in request && request.rootId)) throw Error('Native version folder changed.');
@@ -962,13 +969,18 @@ export function mobileFolderSource(
 		...(entry.size > 0 && supportsNativePartUploads(bridge)
 			? {
 					...(supportsNativeAuthorizationContext(bridge) ? { nativePartSourceChecks: true as const } : {}),
-				uploadPart: async (upload: NativePartUpload, callerSignal?: AbortSignal) => {
+					...(supportsNativePartPayloadBytes(bridge) ? { nativePartPayloadBytes: true as const } : {}),
+					uploadPart: async (upload: NativePartUpload, callerSignal?: AbortSignal) => {
 						const active = callerSignal ? AbortSignal.any([signal, callerSignal]) : signal;
 						active.throwIfAborted();
 						const result = await request(ownerId, { action: 'upload-part', rootId, upload: { ...upload, source: entry } }, active);
 						active.throwIfAborted();
 						if (!result.uploadedPart) throw Error('Native upload receipt is missing.');
-						return result.uploadedPart;
+						return {
+							sha256: result.uploadedPart.sha256,
+							...(supportsNativePartPayloadBytes(bridge) && result.uploadedPart.payloadBytes === upload.length
+								? { payloadBytes: upload.length } : {})
+						};
 					}
 			  }
 			: {}),

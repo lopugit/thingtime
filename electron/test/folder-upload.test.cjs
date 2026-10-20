@@ -80,7 +80,7 @@ function fixture() {
 }
 test('host-issued part signing retains exact native source and digest receipt', async () => {
     const { f, events } = fixture(); const result = await uploadFolderPart(f);
-    assert.equal(result.uploadedPart.sha256, hash); assert.equal(result.uploadedPart.requestId, f.input.upload.requestId);
+    assert.equal(result.uploadedPart.payloadBytes, bytes.length); assert.equal(result.uploadedPart.sha256, hash); assert.equal(result.uploadedPart.requestId, f.input.upload.requestId);
     assert.equal(result.requestId, f.input.requestId); assert.equal(result.rootId, f.input.rootId);
     assert.deepEqual(events.filter(x => x !== 'authorize'), ['read-range', 'sign', 'read', 'put', 'read']);
 });
@@ -186,7 +186,7 @@ test('dynamic desktop loopback origin uploads S3-shaped part without browser COR
             return fetch(appOrigin + target.pathname + target.search, options);
         } });
     const result = await host.request({ sender, senderFrame: frame }, { ...f.input, action: 'upload-part', origin: context.apiOrigin });
-    assert.equal(result.uploadedPart.sha256, hash); assert.deepEqual(received.bytes, bytes);
+    assert.equal(result.uploadedPart.payloadBytes, bytes.length); assert.equal(result.uploadedPart.sha256, hash); assert.deepEqual(received.bytes, bytes);
     assert.equal(received.origin, undefined); assert.equal(received.cookie, undefined);
     assert.equal(received.checksum, createHash('sha256').update(bytes).digest('base64'));
     assert.match(received.path, /x-id=UploadPart/);
@@ -203,7 +203,7 @@ test('host part capability requires compatible binary reads and missing signing 
             requestNative: async (_method, request) => ({ ...request, capabilities: { fileAccessVersion: version } }) });
         const event = { sender, senderFrame: frame };
         const result = await host.request(event, { ...f.input, action: 'context', origin: undefined });
-        assert.equal(result.capabilities.fileUploadVersion, ['1.2.0', '1.11.0'].includes(version) ? '1.0.1' : undefined);
+        assert.equal(result.capabilities.fileUploadVersion, ['1.2.0', '1.11.0'].includes(version) ? '1.1.0' : undefined);
         host.requestNative = async () => { throw Error('must not read before signing capability negotiation'); };
         await assert.rejects(host.request(event, { ...f.input, action: 'upload-part', origin: context.apiOrigin }),
             /selected server does not support/);

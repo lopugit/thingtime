@@ -12768,3 +12768,18 @@ separate from deterministic discovery/lease tests.
   jump ahead of the ordinary backlog without a reset; independently export a newly
   uploaded priority file and compare bytes. Verify restart continuity. Index counts
   alone are insufficient; native live upload-speed telemetry remains incomplete.
+
+## Completed native PUT payload telemetry — 2026-10-21
+
+- [x] Host receipts measure the exact successful PUT body after final source/auth checks; existing changed-source, authority, cancellation and retry tests still pass. Mac upload 1.1.0 is additive; whole-file/background minima remain 1.2/1.3.
+- [x] Negotiate only trusted Mac 1.1+ measurement; missing, malformed, zero, wrong-length and old/mobile-host measurements remain unknown without relaxing digest/identity checks.
+- [x] Verify multipart samples count positive part lengths rather than cumulative offsets; server-ready adds zero, receipt replay adds nothing, and a lost reply retries original IDs without inventing unobserved bytes.
+- [x] Unknown-to-known coverage excludes the first unmeasured interval and shows the shorter measured duration. Preserve logical entries, opposite-direction history and pause/restart behavior.
+- [x] Run the OS-isolated editable tracker browser check on desktop/mobile: coverage text wraps, no overflow through full scroll; save/reload retains independent units/windows and nested Builder fields remain editable.
+- [ ] Install the reviewed signed source and independently compare native acknowledged payload samples/rates and displayed coverage with actual accepted PUT payloads. Confirm updates occur at completed-part acknowledgment; continuous in-flight/wire speed is not claimed.
+
+## Shared fresh native identity admission — 2026-10-21
+
+- [x] Native focused suite: 73/73 pass, including completion-based 334 ms spacing, same-credential FIFO, shared bounded Retry-After, isolated scopes and capacity bounds. No cached identity response or reduced authentication requirement.
+- [x] Queue cancellation, credential rotation, timeout and stale/cancelled/failed wake timers cannot strand callers or discard a live cooldown. Every actual HTTP request reloads current credentials and preserves existing owner/origin/device checks.
+- [ ] Installed acceptance: preserve the same Home run; compare fixed-interval confirmed payload/file deltas and safe identity status diagnostics. The prior bounded 10-minute window had eight logged identity HTTP 429 events, not a measured total request count. Do not claim throughput restored from scheduling tests alone.

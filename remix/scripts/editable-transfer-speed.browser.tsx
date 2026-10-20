@@ -51,7 +51,14 @@ function Fixture() {
 		path: rows.find(r => r.entry.size === 990)!.entry.path, bytes: 495, size: 990 });
 	return <ChakraProvider><Box maxW="760px" mx="auto" p={4}>
 		<Text as="h1">Editable progress acceptance</Text>
-		<Button onClick={() => { series.pause(); setStatus('paused'); }}>Pause fixture</Button>
+		<Button onClick={() => {
+            const entries = { files: 20, folders: 10 }, download = { bytes: 2_500_000, files: 40, folders: 20 };
+            clock = 11000; series.observe({ upload: { bytes: null, ...entries }, download });
+            clock = 20000; series.observe({ upload: { bytes: 0, ...entries }, download });
+            clock = 21000; series.observe({ upload: { bytes: 125000, ...entries }, download });
+            setProgress(value => ({ ...value }));
+        }}>Recover byte coverage</Button>
+        <Button onClick={() => { series.pause(); setStatus('paused'); }}>Pause fixture</Button>
 		<Button onClick={() => setStatus('error')}>Fail fixture</Button>
 		<Button onClick={() => setProgress({ stage: 'scanning', total: 0, confirmed: 0, indexed: 128 })}>Index fixture</Button>
 		<Button onClick={() => setProgress({ stage: 'transferring', total: rows.length, confirmed: 4, path: rows.find(r => r.entry.size === 990)!.entry.path, bytes: 495, size: 990 })}>Transfer fixture</Button>

@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
 	parseMobileFolderResult,
+	supportsNativePartPayloadBytes,
 	mobileFolderSource,
 	requestMobileFolders,
 	supportsMobileFolders,
@@ -448,5 +449,33 @@ test('only updated Mac part adapters advertise validated native source fences', 
  for (const [platform, fileAccessVersion, expected] of [['macos', '1.11.1', undefined], ['macos', '1.12.0', true], ['ios', '1.12.0', undefined], ['android', '1.12.0', undefined]] as const) {
   const source = mobileFolderSource('owner', 'root', entry, new AbortController().signal, async () => { throw Error('construction performs no IO'); }, { platform, fileAccessVersion, fileUploadVersion: '1.0.1' });
   assert.equal(source.nativePartSourceChecks, expected);
+ }
+});
+
+test('Mac payload receipt telemetry is additive, exact-length and independently negotiated', () => {
+ for (const [platform, version, supported] of [
+  ['macos', '1.0.1', false], ['macos', '1.1.0', true], ['macos', '1.2.0', true],
+  ['macos', '2.1.0', false], ['ios', '1.3.0', false], ['android', '1.1.0', false]
+ ] as const) assert.equal(supportsNativePartPayloadBytes({ platform, fileUploadVersion: version }), supported);
+ const upload = { uploadId: 'attachment', requestId: 'operation', partNumber: 1, offset: 0, length: 3, source: entry };
+ const part = { ...upload, version: entry.version, size: entry.size, sha256: 'a'.repeat(64) };
+ const parse = (patch: object) => parseMobileFolderResult(response({ rootId, uploadedPart: { ...part, ...patch } }), expected, { action: 'upload-part', rootId, upload })!.uploadedPart;
+ assert.deepEqual(parse({ payloadBytes: 3 }), { sha256: part.sha256, payloadBytes: 3 });
+ for (const payloadBytes of [undefined, null, 0, 2, 4, -1, 0.5, NaN, '3', Infinity])
+  assert.deepEqual(parse({ payloadBytes }), { sha256: part.sha256 });
+ for (const patch of [{ sha256: 'bad' }, { requestId: 'wrong' }, { length: 4 }, { version: 'changed' }])
+  assert.throws(() => parse({ payloadBytes: 3, ...patch }), /receipt/);
+});
+
+test('only negotiated Mac sources propagate exact accepted payload measurements', async () => {
+ for (const [platform, fileUploadVersion, known] of [['macos', '1.0.1', false], ['macos', '1.1.0', true], ['ios', '1.3.0', false]] as const) {
+  for (const payloadBytes of [undefined, 0, 3, 4]) {
+   const source = mobileFolderSource('owner', rootId, entry, new AbortController().signal,
+    async () => ({ roots: [root], uploadedPart: { sha256: 'a'.repeat(64), payloadBytes } }),
+    { platform, fileUploadVersion, fileAccessVersion: '1.12.0' });
+   assert.equal(source.nativePartPayloadBytes, known ? true : undefined);
+   assert.deepEqual(await source.uploadPart!({ uploadId: 'attachment', requestId: 'operation', partNumber: 1, offset: 0, length: 3 }),
+    { sha256: 'a'.repeat(64), ...(known && payloadBytes === 3 ? { payloadBytes: 3 } : {}) });
+  }
  }
 });
