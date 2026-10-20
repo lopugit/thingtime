@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { IDBFactory } from 'fake-indexeddb';
-import { fingerprintSource } from './contentFingerprint';
+import { EMPTY_CONTENT_SHA256, fingerprintSource } from './contentFingerprint';
 import { createSyncRun, executeSyncRun } from './execute';
 import { planFileSync, sameSyncStamp } from './reconcile';
 import { inventorySyncEntry } from './cloudInventory';
@@ -9,16 +9,15 @@ import { prepareCloudInventoryRun } from './cloudWrite';
 import { createCloudSyncPort } from './cloudSyncPort.client';
 import { openSyncJournal } from './journal.client';
 const scope = { origin: 'https://sync.test', ownerId: 'owner', dataPlane: 'home', deviceId: 'device', rootId: 'config' };
-async function fixture() {
-	const bytes = new Uint8Array([1, 2, 3]),
-		fingerprint = await fingerprintSource({ size: 3, read: async (o, n) => bytes.slice(o, o + n), check: () => {} });
+async function fixture(bytes = new Uint8Array([1, 2, 3])) {
+	const fingerprint = await fingerprintSource({ size: bytes.length, read: async (o, n) => bytes.slice(o, o + n), check: () => {} });
 	const file = {
 		id: 'file',
 		revision: 'cloud-v1',
 		name: 'file.bin',
 		folderId: 'cloud-subfolder',
 		trashed: false,
-		content: { attachmentId: 'attachment', version: 'a'.repeat(64), size: 3, fingerprint }
+		content: { attachmentId: 'attachment', version: 'a'.repeat(64), size: bytes.length, fingerprint }
 	};
 	const folder = { id: 'cloud-subfolder', revision: 'folder-v1', folderId: 'cloud-root', name: 'nested' };
 	const inventory = {
@@ -70,13 +69,14 @@ async function fixture() {
 					entry: node && folder.name === 'nested' ? inventorySyncEntry(node) : null } });
 			}
 			if (u.pathname === '/api/v1/files') return Response.json({ ok: true, ...(u.searchParams.has('folderId') ? { folder } : { file }) });
+			assert.ok(bytes.length, 'Empty restores must not request content ranges');
 			const offset = Number(u.searchParams.get('offset')),
 				length = Number(u.searchParams.get('length'));
 			return new Response(bytes.slice(offset, offset + length), {
 				status: 206,
 				headers: {
 					ETag: '"' + file.content.version + '"',
-					'Content-Range': `bytes ${offset}-${offset + length - 1}/3`,
+					'Content-Range': `bytes ${offset}-${offset + length - 1}/${bytes.length}`,
 					'Content-Length': String(length)
 				}
 			});
@@ -88,7 +88,7 @@ async function fixture() {
 			stages++;
 			const m = op.mutation;
 			if (source) {
-				assert.deepEqual(await source.read(0, 3), bytes);
+				assert.deepEqual(await source.read(0, bytes.length), bytes);
 				assert.deepEqual(await fingerprintSource(source), fingerprint);
 			} else assert.equal(m.source.kind, 'folder');
 			if (changeAncestor && source) folder.name = 'moved';
@@ -209,4 +209,18 @@ test('legacy runs retain receipt recovery but cannot publish without their origi
  for (const write of f.run.cloudWrites) delete write.cloudRootId;
  await assert.rejects(executeSyncRun(f.run, f.port()), /no pinned cloud root/);
  assert.equal(f.counts().publishes, 0); f.journal().close();
+});
+
+
+test('empty cloud files restore with the native empty digest and recover a lost publication reply', async () => {
+ const f = await fixture(new Uint8Array());
+ await assert.rejects(executeSyncRun(f.run, f.port()), /lost local publication reply/);
+ assert.equal(f.local.get('nested/file.bin').size, 0);
+ assert.equal(f.local.get('nested/file.bin').sha256, EMPTY_CONTENT_SHA256);
+ assert.equal(f.local.get('nested/file.bin').fingerprint, undefined);
+ const before = f.counts(); await f.reopen();
+ const restored = (await f.journal().read(scope))!;
+ assert.ok((await executeSyncRun(restored, f.port())).operations.every(op => op.confirmed));
+ assert.equal(f.counts().stages, before.stages); assert.equal(f.counts().publishes, before.publishes);
+ f.journal().close();
 });

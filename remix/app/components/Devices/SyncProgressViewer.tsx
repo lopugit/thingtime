@@ -25,7 +25,7 @@ export function SyncProgressViewer(props: SyncProgressViewerProps) {
 		invalidDescriptor={parsed.invalid} />;
 }
 function SyncProgressSession({ scopeKey, series, descriptor, progress, currentScope, uploadPriorities, status = 'running', message, accountTransport, source: suppliedSource, invalidDescriptor }: SyncProgressViewerProps & { invalidDescriptor?: boolean }) {
-	const priorities = useUploadPriorities(uploadPriorities, currentScope);
+	const priorities = useUploadPriorities(progress?.direction === 'download' ? undefined : uploadPriorities, currentScope);
 	const scopeRef = React.useRef(currentScope); scopeRef.current = currentScope;
 	const progressRef = React.useRef(progress); progressRef.current = progress;
 	const source = React.useMemo(() => suppliedSource || (descriptor ? createJournalSyncProgressSource(descriptor, () => scopeRef.current()) : null), [descriptor, suppliedSource]);

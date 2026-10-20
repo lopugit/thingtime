@@ -4,7 +4,7 @@ import { streamCloudInventoryPages } from './inventoryPages';
 
 /** A successful HTTP response starts an observation, not a completed scan.
  * Only a terminal page followed by clean EOF proves transport completion. */
-export function cloudInventoryResponse(ownerId: string, rootId: unknown, request: Request, service = streamCloudInventoryPages) {
+export function cloudInventoryResponse(ownerId: string, rootId: unknown, request: Request, service = streamCloudInventoryPages, subtreeId?: string) {
 	const stream = new TransformStream<Uint8Array, Uint8Array>(), writer = stream.writable.getWriter();
 	const encoder = new TextEncoder(), controller = new AbortController();
 	const abort = () => controller.abort(request.signal.reason);
@@ -14,7 +14,7 @@ export function cloudInventoryResponse(ownerId: string, rootId: unknown, request
 	const timer = setTimeout(() => controller.abort(new DOMException('Cloud inventory timed out', 'TimeoutError')), CLOUD_INVENTORY_TIMEOUT_MS);
 	controller.signal.addEventListener('abort', abortWriter, { once: true });
 	if (request.signal.aborted) abort(); else request.signal.addEventListener('abort', abort, { once: true });
-	void service(ownerId, rootId, page => writer.write(encoder.encode(JSON.stringify(page) + '\n')), controller.signal)
+	void service(ownerId, rootId, page => writer.write(encoder.encode(JSON.stringify(page) + '\n')), controller.signal, subtreeId)
 		.then(() => writer.close(), async error => {
 			try {
 				if (!controller.signal.aborted) await writer.write(encoder.encode(JSON.stringify({ ok: false,

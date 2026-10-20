@@ -7,6 +7,8 @@ import { createServer } from 'node:net';
 import { once } from 'node:events';
 import assert from 'node:assert/strict';
 
+const emptyFiles = process.argv.slice(2).includes('--empty-files');
+assert.ok(process.argv.slice(2).every(arg => arg === '--empty-files'), 'Unknown fixture mode');
 const port = 28241;
 const probe = createServer();
 await new Promise((resolve, reject) => {
@@ -94,7 +96,7 @@ try {
 	assert.equal(cancelled, false, 'Fixture was cancelled');
 	child = isolatedAccountBackupProcess(
 		process.execPath,
-		['--import', 'tsx', 'scripts/cloud-inventory-pages.integration.mts'],
+		['--import', 'tsx', emptyFiles ? 'scripts/empty-files.integration.mts' : 'scripts/cloud-inventory-pages.integration.mts'],
 		{
 			cwd: resolve(import.meta.dirname, '..'),
 			stdio: ['ignore', 'pipe', 'pipe'],

@@ -12,6 +12,10 @@ import {
 	type SyncSide
 } from './reconcile';
 
+/** Raised only after receipt lookup proved no published or pending effect. */
+export class SyncObservationChangedError extends Error {
+	constructor(readonly sourceChanged: boolean, readonly targetChanged: boolean) { super('Sync file changed; preserve this run and reconcile before retrying.'); }
+}
 export type SyncMutation = Extract<SyncDecision, { kind: 'copy' | 'trash' }>;
 export type SyncOperation = { id: string; mutation: SyncMutation; confirmed: boolean };
 export type SyncRun = { version: 1 | 2; intent?: 'retain-conflicts'; id: string; scope: SyncScope; operations: SyncOperation[] };
@@ -187,7 +191,7 @@ export async function executeSyncOperation(saved: SyncOperation, savedScope: Syn
 				!sameSyncStamp(mutation.source, mutation.from === 'local' ? local : remote) ||
 				!sameSyncStamp(mutation.expectedTarget, mutation.from === 'local' ? remote : local)
 			)
-				throw new Error('Sync file changed; preserve this run and reconcile before retrying.');
+				throw new SyncObservationChangedError(!sameSyncStamp(mutation.source, mutation.from === 'local' ? local : remote), !sameSyncStamp(mutation.expectedTarget, mutation.from === 'local' ? remote : local));
 		} else if (!sameSyncStamp(expected, mutation.side === 'local' ? local : remote) || (mutation.side === 'local' ? remote : local) !== null)
 			throw new Error('Sync deletion changed; preserve the file and reconcile before retrying.');
 		receipt = await port.apply(structuredClone(operation), scope);

@@ -5,6 +5,7 @@ import Darwin
 extension MobileFolderReader {
     private struct CommanderRequest: Encodable {
         let version = 1
+        let streaming: Bool?
         let root: String
         let rootIdentity: String
         let excludedPaths: [String]
@@ -18,6 +19,7 @@ extension MobileFolderReader {
     private struct CommanderEvent: Decodable {
         let event: String
         let version: Int?
+        let streaming: Bool?
         let entry: Entry?
         let gap: Gap?
         struct Gap: Decodable { let path: String?; let reason: ScanFailure.Reason; let scope: BackupGap.Scope }
@@ -27,8 +29,9 @@ extension MobileFolderReader {
     /// database. Private pipes provide backpressure; the host keeps the bookmark
     /// scoped and revalidates returned paths before retaining provisional rows.
     static func captureBackupWithCommander(helper: URL, bookmark: Data, excludedPaths: [String], ignoreRules: String?,
-                                          ignored: () throws -> Void, append: (Entry) throws -> Bool, skip: (BackupGap) throws -> Void) throws {
-        let exclusions = try canonicalExclusions(excludedPaths), rules = try MobileFolderIgnoreRules(ignoreRules)
+                                          streaming: Bool = false, internalExclusions: [String] = [], ignored: () throws -> Void, append: (Entry) throws -> Bool, skip: (BackupGap) throws -> Void, indexed: () throws -> Void = {}, tick: () throws -> Bool = { false }) throws {
+        let supplied = try canonicalExclusions(excludedPaths), internalPaths = try internalExclusions.flatMap { try canonicalExclusions([$0]) }
+        let exclusions = Array(Set(supplied + internalPaths)).sorted(), rules = try MobileFolderIgnoreRules(ignoreRules)
         try access(bookmark) { root in
             var path = [CChar](repeating: 0, count: Int(MAXPATHLEN))
             guard fcntl(root, F_GETPATH, &path) == 0 else { throw Failure.unavailable }
@@ -49,23 +52,25 @@ extension MobileFolderReader {
                     if process.isRunning { kill(process.processIdentifier, SIGKILL) }
                 }
             }
-            let request = CommanderRequest(root: String(cString: path), rootIdentity: "\(rootInfo.st_dev):\(rootInfo.st_ino)",
+            let request = CommanderRequest(streaming: streaming ? true : nil, root: String(cString: path), rootIdentity: "\(rootInfo.st_dev):\(rootInfo.st_ino)",
                 excludedPaths: exclusions, ignoreRules: rules.text)
             var requestData = try JSONEncoder().encode(request); requestData.append(10)
-            try input.fileHandleForWriting.write(contentsOf: requestData); try input.fileHandleForWriting.close()
+            try input.fileHandleForWriting.write(contentsOf: requestData)
+            if !streaming { try input.fileHandleForWriting.close() }
             let fd = output.fileHandleForReading.fileDescriptor
             guard fcntl(fd, F_SETFL, O_NONBLOCK) == 0 else { throw Failure.storage }
-            var bytes = Data(), buffer = [UInt8](repeating: 0, count: 65_536), hello = false, complete = false
+            var bytes = Data(), buffer = [UInt8](repeating: 0, count: 65_536), hello = false, complete = false, helperSequence = 0
             func consume(_ data: Data) throws {
                 try Task.checkCancellation()
                 let event = try JSONDecoder().decode(CommanderEvent.self, from: data)
                 guard !complete else { throw Failure.storage }
                 if !hello {
-                    guard event.event == "hello", event.version == 1 else { throw Failure.storage }
+                    guard event.event == "hello", event.version == 1, !streaming || event.streaming == true else { throw Failure.storage }
                     hello = true; return
                 }
                 switch event.event {
                 case "entry":
+                    helperSequence += 1
                     guard let entry = event.entry else { throw Failure.storage }
                     _ = try components(entry.path)
                     let key = entry.path.precomposedStringWithCanonicalMapping.lowercased()
@@ -81,17 +86,24 @@ extension MobileFolderReader {
                     } catch Failure.unavailable { try skip(.init(path: entry.path, reason: .unreadable, scope: .subtree)) }
                     catch Failure.changed { try skip(.init(path: entry.path, reason: .changed, scope: .subtree)) }
                 case "skipped":
+                    helperSequence += 1
                     guard let gap = event.gap else { throw Failure.storage }
                     let value = BackupGap(path: gap.path, reason: gap.reason, scope: gap.scope)
                     guard value.path == gap.path, value.reason == gap.reason, value.scope == gap.scope else { throw Failure.storage }
                     try skip(value)
                 case "ignored": try ignored()
+                case "indexed":
+                    guard streaming else { throw Failure.storage }; try indexed()
                 case "complete": complete = true
                 default: throw Failure.storage
                 }
             }
             while true {
                 try Task.checkCancellation()
+                if streaming, !complete, try tick() {
+                    let stop = Data("{\"event\":\"stop\",\"afterSequence\":\(helperSequence)}\n".utf8)
+                    try input.fileHandleForWriting.write(contentsOf: stop)
+                }
                 var ready = pollfd(fd: fd, events: Int16(POLLIN | POLLHUP), revents: 0)
                 let polled = poll(&ready, 1, 100)
                 if polled < 0 { if errno == EINTR { continue }; throw Failure.storage }

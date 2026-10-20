@@ -52,6 +52,7 @@ for (let i = 0; i < 135; i++) {
 	const row = (await call(things.action, '/api/v1/things', { thingtime: ['folder'], acl: ['tt:user'], folderId: root.id, crystal: { name } })).data.thing;
 	expected.set(name, row.id); lastId = row.id;
 }
+const changeWatermark = (await call(files.loader, '/api/v1/files?rootId=' + root.id + '&changes=1')).data.feed.cursor;
 const scope = { origin: base, ownerId: registered.data.user.id, dataPlane: 'home', deviceId: 'fixture', rootId: 'connection' };
 const journal = await openSyncJournal(new IDBFactory(), 'cloud-inventory-integration', IDBKeyRange);
 const inventory = journal.inventory({ scope, currentScope: () => scope });
@@ -88,6 +89,23 @@ try {
 	assert.equal((await call(files.loader, '/api/v1/files?rootId=' + root.id + '&path=Folder-134')).data.observation.entry, null);
 	assert.equal((await files.loader({ request: request('/api/v1/files?rootId=' + root.id + '&path=later%20name') })).status, 409);
 
+    // Replay the canonical Timeline mutation committed during the still-open
+    // inventory snapshot, then exercise a real Mongo change-stream wake.
+    const delta = (await call(files.loader, '/api/v1/files?rootId=' + root.id + '&changes=1&after=' + changeWatermark)).data.feed;
+    assert.ok(delta.changes.some((change: any) => change.entry.id === lastId && change.entry.path === 'Later name' && change.subtree === lastId));
+    assert.equal(delta.hasMore, false);
+    const subset = await files.loader({ request: request('/api/v1/files?rootId=' + root.id + '&pages=1&subtreeId=' + lastId) });
+    assert.equal(subset.status, 200);
+    const subsetPages = (await subset.text()).trim().split('\n').map(line => JSON.parse(line));
+    assert.equal(subsetPages.at(-1).totalEntries, 0);
+    const waiting = files.loader({ request: request('/api/v1/files?rootId=' + root.id + '&changes=1&after=' + delta.cursor + '&wait=1') });
+    await call(things.action, '/api/v1/things', { id: lastId, crystal: { name: 'Wake name' } }, 'PATCH');
+    const woken = await waiting; assert.equal(woken.status, 200);
+    const live = (await woken.json()).feed;
+    assert.ok(live.changes.some((change: any) => change.entry.id === lastId && change.entry.path === 'Wake name'));
+    await call(things.action, '/api/v1/things', { id: lastId, crystal: { name: 'Later name' } }, 'PATCH');
+
+
 	const backupScope = { apiOrigin: base, ownerId: scope.ownerId, dataPlane: 'home' };
 	const vault = await openLocalBackupStore(join(actual, 'backup-vault')), snapshotId = randomUUID();
 	let backupInventories = 0;
@@ -118,8 +136,8 @@ try {
 	await call(logout.action, '/api/v1/auth/logout', {});
 	assert.equal((await files.loader({ request: request('/api/v1/files?rootId=' + root.id + '&pages=1') })).status, 401);
 	assert.equal((await files.loader({ request: request('/api/v1/files?rootId=' + root.id + '&path=Later%20name') })).status, 401);
-	console.log(JSON.stringify({ cloudInventoryPagesProof: true, pages, capturedEntries: 135, backupItems,
-		checks: ['real-signup-and-Things-writers', 'private-Files-handler', 'single-snapshot-concurrent-rename', 'sealed-journal', 'disk-indexed-path-found-absent-alias', 'paged-backup-vault-retains-pre-edit-metadata', 'logout-refusal'],
+	console.log(JSON.stringify({ cloudInventoryPagesProof: true, cloudChangeFeedProof: true, pages, capturedEntries: 135, backupItems,
+		checks: ['real-signup-and-Things-writers', 'private-Files-handler', 'single-snapshot-concurrent-rename', 'durable-Timeline-delta-during-snapshot', 'affected-subtree-stream', 'native-Mongo-change-stream-wake', 'sealed-journal', 'disk-indexed-path-found-absent-alias', 'paged-backup-vault-retains-pre-edit-metadata', 'logout-refusal'],
 		boundary: 'Production Request handlers and Mongo replica; not HTTP/browser, installed-device or byte-transfer acceptance' }));
 } finally { journal.close(); }
 process.exit(0);

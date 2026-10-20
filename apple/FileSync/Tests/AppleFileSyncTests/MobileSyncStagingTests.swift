@@ -33,6 +33,28 @@ final class MobileSyncStagingTests: XCTestCase {
         for offset in stride(from: 0, to: bytes.count, by: 65_536) { _ = try staging.append(request, owner: owner, offset: Int64(offset), bytes: bytes.subdata(in: offset..<min(bytes.count, offset + 65_536))) }
         return (storage, selected, owner, request, bookmark, try XCTUnwrap(staging.finish(request, owner: owner).stage))
     }
+    func testEmptyRegularFileRestoresWithoutBytesAndRecoversExactReceipt() throws {
+        for prior: Data? in [nil, Data("prior content".utf8)] {
+            let (storage, selected, owner, request, bookmark, stage) = try publicationFixture(Data(), prior: prior)
+            XCTAssertEqual(stage.entry.kind, "file"); XCTAssertEqual(stage.entry.size, 0)
+            XCTAssertNil(stage.entry.fingerprint)
+            XCTAssertEqual(stage.entry.sha256, "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855")
+            let staging = MobileSyncStaging(directory: storage)
+            let receipt = try staging.publish(request, owner: owner, bookmark: bookmark, stage: stage)
+            let destination = selected.appendingPathComponent(request.operation.mutation.path)
+            XCTAssertEqual(try destination.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile, true)
+            XCTAssertEqual(try Data(contentsOf: destination), Data())
+            XCTAssertEqual(receipt.operationId, request.operation.id); XCTAssertEqual(receipt.scope, request.scope)
+            let checked = try MobileFolderReader.read(bookmark: bookmark, path: receipt.entry.path, version: receipt.entry.version, offset: 0, length: 1)
+            XCTAssertEqual(checked.size, 0); XCTAssertEqual(checked.data, "")
+            XCTAssertThrowsError(try MobileFolderReader.read(bookmark: bookmark, path: receipt.entry.path, version: "stale-version", offset: 0, length: 1))
+            let restarted = MobileSyncStaging(directory: storage)
+            XCTAssertEqual(try restarted.lookup(request, owner: owner, bookmark: bookmark).receipt, receipt)
+            try Data("later user edit".utf8).write(to: destination)
+            XCTAssertEqual(try restarted.publish(request, owner: owner, bookmark: bookmark, stage: stage), receipt)
+            XCTAssertEqual(try Data(contentsOf: destination), Data("later user edit".utf8))
+        }
+    }
     func testPublicationCreatesAndReplacesAtomicallyRetainingPriorBytes() throws {
         for prior: Data? in [nil, Data("original".utf8)] {
             let bytes = Data(repeating: 42, count: 131_079)

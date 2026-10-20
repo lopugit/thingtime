@@ -405,7 +405,7 @@ export const attachmentStore: AttachmentStore = {
 				attachmentState: 'pending',
 				targetId: { $exists: false },
 				attachmentExpiresAt: { $gt: now },
-				uploadId: { $type: 'string' }
+				$or: [{ uploadId: { $type: 'string' } }, { objectSizeBytes: 0, attachmentPurpose: 'file' }]
 			} as any,
 			{ $set: { attachmentState: 'finalizing', attachmentFinalizationLeaseId: leaseId, updatedAt: now } },
 			{ returnDocument: 'after' }
@@ -499,7 +499,9 @@ export const attachmentStore: AttachmentStore = {
 				// Quarantine every newly durable object until analysis either clears/
 				// flags it or deliberately marks it skipped. This lands before complete
 				// returns, so a fast bind cannot expose unscreened bytes during outage.
-				moderation: { status: before.attachmentPurpose === 'password' ? 'skipped' as const : 'pending' as const },
+				moderation: before.objectSizeBytes === 0 && before.attachmentPurpose === 'file'
+                    ? { status: 'skipped' as const, provider: 'verified-empty-object', categories: ['empty-content'], analyzedAt: new Date() }
+                    : { status: before.attachmentPurpose === 'password' ? 'skipped' as const : 'pending' as const },
 				attachmentExpiresAt: expiresAt,
 				updatedAt: new Date()
 			};

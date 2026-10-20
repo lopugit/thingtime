@@ -5,7 +5,7 @@ import Foundation
 /// commands. The desktop host must also verify its active browser account.
 @MainActor
 public final class MacFolderSync {
-    public static let version = "1.10.0"
+    public static let version = "1.11.0"
     public enum SourceSelection { case folder(URL), photos }
     public struct Conditions: Codable, Sendable {
         public let network: String
@@ -24,6 +24,7 @@ public final class MacFolderSync {
         let ignoreRules: String?
         let capturePolicy: String?
         let pageSize: Int?
+        let afterSequence: Int?; let waitMilliseconds: Int?
         let rootId: String?; let path: String?; let version: String?; let offset: Int64?; let length: Int?; let data: String?
         let transfer: MobileSyncStaging.Request?; let stage: MobileSyncStaging.Stage?; let approval: MobileFolderStore.WriteApproval?
         let captureId: String?; let capture: MobileFolderInventory.Capture?; let inventoryDeviceId: String?
@@ -43,7 +44,9 @@ public final class MacFolderSync {
     private let approveRestore: ((MobileFolderStore.Grant, MobileSyncTrash.Restore) async throws -> Bool)?
     private let cancelDialog: () -> Void
     private let conditions: () -> Conditions
-    private var active: (id: String, owner: String, device: String, task: Task<JSONValue, Error>)?
+    private typealias RequestTask = (id: String, owner: String, device: String, task: Task<JSONValue, Error>)
+    private var active: RequestTask?
+    private var streamWaiter: RequestTask?
 
     /// One task-owned scanner, 64 KiB read buffers, existing eight-capture disk
     /// retention and a 24-hour execution lifetime. Transport failures do not
@@ -156,6 +159,7 @@ public final class MacFolderSync {
         job.scope == scope && job.grant.bookmark == grant.bookmark && job.progress.status().id == id.lowercased() && job.exclusions == exclusions && MobileFolderIgnoreRules.sameText(job.ignoreRules, ignoreRules)
     }
     private func backup(_ r: Request, scope: MobileFolderInventory.Scope, grant: MobileFolderStore.Grant) async throws -> MobileFolderInventory.BackupStatus {
+        guard streamJob == nil else { throw MobileFolderStore.Failure.changed }
         guard let rawId = r.captureId, UUID(uuidString: rawId) != nil else { throw MobileFolderStore.Failure.invalid }
         let id = rawId.lowercased(), exclusions = try MobileFolderReader.canonicalExclusions(r.excludedPaths ?? []), rules = try MobileFolderIgnoreRules(r.ignoreRules).text
         if let job = backupJob, backupMatches(job, scope: scope, grant: grant, id: id, exclusions: exclusions, ignoreRules: rules),
@@ -238,6 +242,93 @@ public final class MacFolderSync {
         return progress.status()
     }
 
+    private final class StreamWake: @unchecked Sendable {
+        private let condition = NSCondition()
+        private var revision = 0
+        func snapshot() -> Int { condition.lock(); defer { condition.unlock() }; return revision }
+        func signal() { condition.lock(); revision += 1; condition.broadcast(); condition.unlock() }
+        func wait(after: Int, milliseconds: Int) {
+            condition.lock(); defer { condition.unlock() }
+            let deadline = Date().addingTimeInterval(Double(milliseconds) / 1000)
+            while revision == after && !Task.isCancelled {
+                if !condition.wait(until: deadline) { break }
+            }
+        }
+    }
+    private struct StreamJob {
+        let scope: MobileFolderInventory.Scope; let grant: MobileFolderStore.Grant
+        let id: String; let exclusions: [String]; let rules: String?
+        let control: MobileFolderInventory.StreamControl; let wake: StreamWake; let task: Task<Void, Never>; let monitor: Task<Void, Never>
+    }
+    private var streamJob: StreamJob?
+    private func stream(_ r: Request, scope: MobileFolderInventory.Scope, grant: MobileFolderStore.Grant) async throws -> MobileFolderInventory.ChangesPage {
+        guard let id = r.captureId, UUID(uuidString: id) != nil else { throw MobileFolderStore.Failure.invalid }
+        let exclusions = try MobileFolderReader.canonicalExclusions(r.excludedPaths ?? []), rules = try MobileFolderIgnoreRules(r.ignoreRules).text
+        let inventories = inventories
+        if let job = streamJob {
+            guard job.scope == scope, job.grant.bookmark == grant.bookmark, job.id == id,
+                  job.exclusions == exclusions, MobileFolderIgnoreRules.sameText(job.rules, rules) else { throw MobileFolderStore.Failure.changed }
+        }
+        if r.action == "scan-cancel", let job = streamJob { job.task.cancel(); job.monitor.cancel(); job.wake.signal(); await job.task.value }
+        if r.action == "scan-stream", streamJob == nil {
+            guard backupJob?.progress.status().state != "running" else { throw MobileFolderStore.Failure.changed }
+            let initial = try await worker { try inventories.beginStream(scope, id: id, bookmark: grant.bookmark, excludedPaths: exclusions, ignoreRules: rules) }
+            if initial.state == "complete" { return initial }
+            // A persisted running job without a live scanner is interrupted.
+            // Explicit restart keeps its generation and append-only cursor.
+            let wake = StreamWake(), control = MobileFolderInventory.StreamControl(), started = backupNow()
+            let task = Task { @MainActor [weak self] in
+                guard let self else { return }
+                do {
+                    try self.checkBackupAuthority(scope: scope, grant: grant, started: started)
+                    try await self.worker { try inventories.runStream(scope, id: id, bookmark: grant.bookmark, excludedPaths: exclusions, ignoreRules: rules, control: control, wake: { wake.signal() }) }
+                    try await self.awaitBackupAuthorization(scope: scope, grant: grant, started: started)
+                    try await self.worker { try inventories.finishStream(scope, id: id, bookmark: grant.bookmark, state: "complete") }
+                } catch {
+                    await Task.detached { try? inventories.finishStream(scope, id: id, bookmark: grant.bookmark, state: "interrupted") }.value
+                }
+                wake.signal()
+                if self.streamJob?.id == id { self.streamJob?.monitor.cancel(); self.streamJob = nil }
+            }
+            let monitor = Task { @MainActor [weak self] in
+                while !Task.isCancelled {
+                    do { try await Task.sleep(for: self?.backupMonitorInterval ?? .seconds(15)) } catch { return }
+                    guard let self, !Task.isCancelled else { task.cancel(); wake.signal(); return }
+                    do {
+                        try self.checkBackupAuthority(scope: scope, grant: grant, started: started)
+                        try await self.verify(scope.owner.ownerId, scope.deviceId)
+                        try self.checkBackupAuthority(scope: scope, grant: grant, started: started)
+                    } catch {
+                        let local = (try? self.checkBackupAuthority(scope: scope, grant: grant, started: started)) != nil
+                        if local && Self.identityVerificationIsTransient(error) { continue }
+                        task.cancel(); wake.signal(); return
+                    }
+                }
+            }
+            streamJob = .init(scope: scope, grant: grant, id: id, exclusions: exclusions, rules: rules, control: control, wake: wake, task: task, monitor: monitor)
+        }
+        if streamJob == nil, r.action != "scan-stream" {
+            let retained = try await worker { try inventories.streamChanges(scope, id: id, bookmark: grant.bookmark, excludedPaths: exclusions, ignoreRules: rules, afterSequence: r.afterSequence ?? 0, pageSize: r.pageSize) }
+            if ["running", "indexed"].contains(retained.state) { try await worker { try inventories.finishStream(scope, id: id, bookmark: grant.bookmark, state: "interrupted") } }
+        }
+        let after = r.afterSequence ?? 0
+        guard after >= 0, (0...25_000).contains(r.waitMilliseconds ?? 0) else { throw MobileFolderStore.Failure.invalid }
+        let wake = streamJob?.wake, observed = wake?.snapshot()
+        var page = try await worker { try inventories.streamChanges(scope, id: id, bookmark: grant.bookmark, excludedPaths: exclusions, ignoreRules: rules, afterSequence: after, pageSize: r.pageSize) }
+        if ["running", "indexed"].contains(page.state), page.changes.isEmpty, let wake, let observed, let wait = r.waitMilliseconds, wait > 0 {
+            await withTaskCancellationHandler(operation: {
+                await Task.detached { wake.wait(after: observed, milliseconds: wait) }.value
+            }, onCancel: { wake.signal() })
+            try await authorized(r)
+            guard try store.grant(scope.owner, id: grant.id).bookmark == grant.bookmark else { throw MobileFolderStore.Failure.changed }
+            page = try await worker { try inventories.streamChanges(scope, id: id, bookmark: grant.bookmark, excludedPaths: exclusions, ignoreRules: rules, afterSequence: after, pageSize: r.pageSize) }
+        }
+        if r.action == "scan-stream-finish", page.state == "indexed", page.revision == after {
+            streamJob?.control.finish(afterSequence: after)
+        }
+        return page
+    }
+
     public init(origin: URL, store: MobileFolderStore, staging: MobileSyncStaging, trash: MobileSyncTrash? = nil,
                 verify: @escaping (String, String) async throws -> Void,
                 choose: @escaping () async throws -> URL?, approve: @escaping (MobileFolderStore.Grant) async throws -> Bool,
@@ -256,7 +347,8 @@ public final class MacFolderSync {
     }
 
     public func suspend() {
-        backupJob?.task.cancel(); backupJob?.monitor.cancel()
+        backupJob?.task.cancel(); backupJob?.monitor.cancel(); streamJob?.task.cancel(); streamJob?.monitor.cancel(); streamJob?.wake.signal()
+        streamWaiter?.task.cancel(); streamJob?.wake.signal()
         suspendRequest()
     }
     private func suspendRequest() {
@@ -274,41 +366,62 @@ public final class MacFolderSync {
             throw MobileFolderStore.Failure.invalid
         }
         if let exclusions = r.excludedPaths {
-            guard ["scan", "scan-capture", "scan-status", "scan-cancel"].contains(r.action) else { throw MobileFolderStore.Failure.invalid }
+            guard ["scan", "scan-stream", "scan-stream-finish", "scan-changes", "scan-capture", "scan-status", "scan-cancel"].contains(r.action) else { throw MobileFolderStore.Failure.invalid }
             _ = try MobileFolderReader.canonicalExclusions(exclusions)
         }
         if case .object(let fields) = payload, fields["capturePolicy"] != nil, r.capturePolicy == nil { throw MobileFolderStore.Failure.invalid }
         if let policy = r.capturePolicy {
-            guard policy == "backup-supported", ["scan-capture", "scan-status", "scan-cancel", "scan-page", "scan-skips", "scan-discard"].contains(r.action) else { throw MobileFolderStore.Failure.invalid }
+            if policy == "one-way-supported" {
+                guard ["scan-stream", "scan-stream-finish", "scan-changes", "scan-cancel"].contains(r.action) else { throw MobileFolderStore.Failure.invalid }
+            } else if ["scan-stream", "scan-stream-finish", "scan-changes"].contains(r.action) { throw MobileFolderStore.Failure.invalid }
+            guard ["backup-supported", "one-way-supported"].contains(policy), ["scan-stream", "scan-stream-finish", "scan-changes", "scan-capture", "scan-status", "scan-cancel", "scan-page", "scan-skips", "scan-discard"].contains(r.action) else { throw MobileFolderStore.Failure.invalid }
         } else if ["scan-status", "scan-cancel", "scan-skips"].contains(r.action) { throw MobileFolderStore.Failure.invalid }
         if case .object(let fields) = payload, fields["ignoreRules"] != nil, r.ignoreRules == nil { throw MobileFolderStore.Failure.invalid }
         if let text = r.ignoreRules {
-            guard ["scan", "scan-capture", "scan-status", "scan-cancel", "scan-page", "scan-skips", "scan-discard"].contains(r.action) else { throw MobileFolderStore.Failure.invalid }
+            guard ["scan", "scan-stream", "scan-stream-finish", "scan-changes", "scan-capture", "scan-status", "scan-cancel", "scan-page", "scan-skips", "scan-discard"].contains(r.action) else { throw MobileFolderStore.Failure.invalid }
             _ = try MobileFolderIgnoreRules(text)
         }
         if case .object(let fields) = payload, fields["pageSize"] != nil {
-            guard ["scan-page", "scan-skips"].contains(r.action), let pageSize = r.pageSize,
+            guard ["scan-page", "scan-skips", "scan-changes", "scan-stream-finish"].contains(r.action), let pageSize = r.pageSize,
                   (1...MobileFolderInventory.maximumBatchPageEntries).contains(pageSize) else { throw MobileFolderStore.Failure.invalid }
+        }
+        if case .object(let fields) = payload {
+            if fields["afterSequence"] != nil {
+                guard ["scan-stream", "scan-stream-finish", "scan-changes", "scan-cancel"].contains(r.action), let after = r.afterSequence,
+                      after >= 0, after <= 9_007_199_254_740_991 else { throw MobileFolderStore.Failure.invalid }
+            }
+            if fields["waitMilliseconds"] != nil {
+                guard r.action == "scan-changes", let wait = r.waitMilliseconds, (0...25_000).contains(wait) else { throw MobileFolderStore.Failure.invalid }
+            }
         }
         let owner = try FileSyncOwnerScope(ownerId: r.ownerId, url: origin)
         if r.action == "suspend" {
             if let active, active.id == r.requestId, active.owner == r.ownerId, active.device == r.deviceId { suspendRequest() }
+            if let waiter = streamWaiter, waiter.id == r.requestId, waiter.owner == r.ownerId, waiter.device == r.deviceId { waiter.task.cancel(); streamJob?.wake.signal() }
             return .object([:])
         }
-        guard active == nil else { throw ThingtimeNodeError.invalidRequest("Another folder request is running.") }
-        guard ["context", "conditions", "list", "choose", "remove", "scan", "scan-capture", "scan-status", "scan-cancel", "scan-skips", "scan-page", "scan-discard", "inspect", "read", "read-range", "stage-begin", "stage-append", "stage-range", "stage-finish", "write-approve", "write-check", "publication-lookup", "publish", "trash", "trash-lookup", "trash-expected", "trash-inspect", "trash-restore", "trash-restore-reviewed", "trash-list"].contains(r.action) else { throw MobileFolderStore.Failure.invalid }
+        let waiting = r.action == "scan-changes"
+        guard waiting ? streamWaiter == nil : active == nil else { throw ThingtimeNodeError.invalidRequest("Another folder request is running.") }
+        guard ["context", "conditions", "list", "choose", "remove", "scan", "scan-stream", "scan-stream-finish", "scan-changes", "scan-capture", "scan-status", "scan-cancel", "scan-skips", "scan-page", "scan-discard", "inspect", "read", "read-range", "stage-begin", "stage-append", "stage-range", "stage-finish", "write-approve", "write-check", "publication-lookup", "publish", "trash", "trash-lookup", "trash-expected", "trash-inspect", "trash-restore", "trash-restore-reviewed", "trash-list"].contains(r.action) else { throw MobileFolderStore.Failure.invalid }
         guard (r.action == "read-range") == (stream != nil), (r.action == "stage-range") == (receive != nil) else { throw MobileFolderStore.Failure.invalid }
         let task = Task { try await self.execute(r, owner: owner, stream: stream, receive: receive) }
-        active = (r.requestId, r.ownerId, r.deviceId, task)
+        if waiting { streamWaiter = (r.requestId, r.ownerId, r.deviceId, task) }
+        else { active = (r.requestId, r.ownerId, r.deviceId, task) }
         let timeout = Task {
             try await Task.sleep(for: .seconds(270))
-            if active?.id == r.requestId { suspendRequest() }
+            if waiting { if streamWaiter?.id == r.requestId { streamWaiter?.task.cancel(); streamJob?.wake.signal() } }
+            else if active?.id == r.requestId { suspendRequest() }
         }
-        defer { timeout.cancel(); if active?.id == r.requestId { active = nil } }
+        defer {
+            timeout.cancel()
+            if waiting { if streamWaiter?.id == r.requestId { streamWaiter = nil } }
+            else if active?.id == r.requestId { active = nil }
+        }
         return try await withTaskCancellationHandler(operation: { try await task.value }, onCancel: {
             task.cancel()
             Task { @MainActor [weak self] in
-                if self?.active?.id == r.requestId { self?.suspendRequest() }
+                if waiting { if self?.streamWaiter?.id == r.requestId { self?.streamWaiter?.task.cancel(); self?.streamJob?.wake.signal() } }
+                else if self?.active?.id == r.requestId { self?.suspendRequest() }
             }
         })
     }
@@ -317,6 +430,10 @@ public final class MacFolderSync {
         try Task.checkCancellation()
         do { try await verify(r.ownerId, r.deviceId) }
         catch {
+            if let job = streamJob, job.scope.owner.ownerId == r.ownerId, job.scope.deviceId == r.deviceId {
+                let unchanged = (try? store.grant(job.scope.owner, id: job.grant.id).bookmark) == job.grant.bookmark
+                if !Self.identityVerificationIsTransient(error) || !unchanged { job.task.cancel(); job.monitor.cancel(); job.wake.signal() }
+            }
             if !Task.isCancelled, !(error is CancellationError), let job = backupJob,
                job.scope.owner.ownerId == r.ownerId, job.scope.deviceId == r.deviceId {
                 let grantUnchanged = (try? store.grant(job.scope.owner, id: job.grant.id).bookmark) == job.grant.bookmark
@@ -362,6 +479,7 @@ public final class MacFolderSync {
             guard let root = r.rootId, UUID(uuidString: root) != nil else { throw MobileFolderStore.Failure.invalid }
             result["rootId"] = .string(root)
             if r.action == "remove" {
+                if let job = streamJob, job.scope.owner == owner, job.scope.rootId == root { job.task.cancel(); job.monitor.cancel(); job.wake.signal(); await job.task.value }
                 if let job = backupJob, job.scope.owner == owner, job.scope.rootId == root {
                     job.task.cancel(); job.monitor.cancel(); await job.task.value
                 }
@@ -372,6 +490,7 @@ public final class MacFolderSync {
                 let grant: MobileFolderStore.Grant
                 do { grant = try store.grant(owner, id: root) }
                 catch {
+                    if let job = streamJob, job.scope.owner == owner, job.scope.rootId == root { job.task.cancel(); job.monitor.cancel(); job.wake.signal() }
                     if let job = backupJob, job.scope.owner == owner, job.scope.rootId == root {
                         job.task.cancel(); job.monitor.cancel()
                     }
@@ -439,6 +558,11 @@ public final class MacFolderSync {
                         }
                         result["trash"] = try value(lookup)
                     }
+                } else if r.action == "scan-stream" || r.action == "scan-stream-finish" || r.action == "scan-changes" || (r.action == "scan-cancel" && r.capturePolicy == "one-way-supported") {
+                    guard r.capturePolicy == "one-way-supported", r.inventoryDeviceId == r.deviceId else { throw MobileFolderStore.Failure.invalid }
+                    inspectedGrant = grant
+                    result["capturePolicy"] = .string("one-way-supported")
+                    result["changesPage"] = try value(await self.stream(r, scope: .init(owner: owner, deviceId: r.deviceId, rootId: root), grant: grant))
                 } else if ["scan-capture", "scan-status", "scan-cancel", "scan-skips", "scan-page", "scan-discard"].contains(r.action) {
                     guard r.inventoryDeviceId == r.deviceId else { throw MobileFolderStore.Failure.invalid }
                     inspectedGrant = grant
@@ -456,7 +580,7 @@ public final class MacFolderSync {
                     } else {
                         // No cache-lock waiter may turn a short polling RPC into
                         // a second whole-scan request while this worker owns it.
-                        guard backupJob?.progress.status().state != "running" else { throw ThingtimeNodeError.invalidRequest("A backup scan is already running.") }
+                        guard streamJob == nil, backupJob?.progress.status().state != "running" else { throw ThingtimeNodeError.invalidRequest("A backup scan is already running.") }
                         if r.action == "scan-capture" {
                             guard let id = r.captureId else { throw MobileFolderStore.Failure.invalid }
                             do {

@@ -10,10 +10,11 @@ export type ContentFingerprint = {
 	partCount: number;
 	sha256: string;
 };
+export const EMPTY_CONTENT_SHA256 = 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
 export const MIN_CONTENT_PART_BYTES = 8 * 1024 * 1024;
 export const MAX_CONTENT_PART_BYTES = 5 * 1024 * 1024 * 1024;
 export function contentPartPlan(size: number): { partSizeBytes: number; partCount: number } {
-	if (!Number.isSafeInteger(size) || size <= 0) throw new Error('A stored attachment must contain at least one byte.');
+	if (!Number.isSafeInteger(size) || size < 0) throw new Error('A stored attachment must have a nonnegative exact byte size.');
 	const oneMiB = 1024 * 1024;
 	const partSizeBytes = Math.ceil(Math.max(MIN_CONTENT_PART_BYTES, Math.ceil(size / 10_000)) / oneMiB) * oneMiB;
 	if (partSizeBytes > MAX_CONTENT_PART_BYTES) throw new Error('Attachment is too large.');
@@ -24,7 +25,7 @@ export function validContentFingerprint(value: unknown, size: number): value is 
 	const f = value as ContentFingerprint;
 	try {
 		const plan = contentPartPlan(size);
-		return f.algorithm === 'sha256-parts-v1' && f.partCount === plan.partCount && f.partSizeBytes === plan.partSizeBytes && /^[a-f0-9]{64}$/.test(f.sha256);
+		return f.algorithm === 'sha256-parts-v1' && f.partCount === plan.partCount && f.partSizeBytes === plan.partSizeBytes && /^[a-f0-9]{64}$/.test(f.sha256) && (size !== 0 || f.sha256 === EMPTY_CONTENT_SHA256);
 	} catch { return false; }
 }
 export const equalContentFingerprints = (a: ContentFingerprint, b: ContentFingerprint): boolean =>
@@ -62,7 +63,7 @@ export async function fingerprintSource(source: FingerprintSource, options: {
 } = {}): Promise<ContentFingerprint> {
 	const size = source.size, plan = contentPartPlan(size);
 	const maxPartBytes = options.maxPartBytes ?? 32 * 1024 * 1024;
-	if (!Number.isSafeInteger(maxPartBytes) || maxPartBytes <= 0 || plan.partSizeBytes > maxPartBytes) throw new Error('This file requires native streaming fingerprint support.');
+	if (!Number.isSafeInteger(maxPartBytes) || maxPartBytes <= 0 || (plan.partCount > 0 && plan.partSizeBytes > maxPartBytes)) throw new Error('This file requires native streaming fingerprint support.');
 	const hash = options.hash ?? (async bytes => new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)));
 	const check = async () => { options.signal?.throwIfAborted(); await source.check(); options.signal?.throwIfAborted(); if (source.size !== size) throw new Error('File changed while computing its fingerprint.'); };
 	const parts = new Uint8Array(plan.partCount * 32);

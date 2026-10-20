@@ -29,6 +29,7 @@ sha2 = "0.10"
 unicode-normalization = "0.1"
 
 [target.'cfg(unix)'.dependencies]
+notify = "=6.1.1"
 rustix = { version = "1", features = ["fs"] }
 
 [dev-dependencies]

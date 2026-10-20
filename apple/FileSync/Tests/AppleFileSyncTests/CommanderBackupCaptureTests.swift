@@ -18,6 +18,79 @@ final class CommanderBackupCaptureTests: XCTestCase {
         let owner = try FileSyncOwnerScope(ownerId: "fixture", url: URL(string: "https://fixture.invalid")!)
         return (base, source, try FolderBookmark.create(source), .init(owner: owner, deviceId: "fixture", rootId: UUID().uuidString.lowercased()))
     }
+    func testStreamingFirstPageIsDurableWhileIndexerPausedAndLegacyPagesStayPrivate() async throws {
+        let (base, source, bookmark, scope) = try fixture()
+        try Data("first".utf8).write(to: source.appendingPathComponent("first"))
+        try Data("pending".utf8).write(to: source.appendingPathComponent("pending"))
+        let scanned = try MobileFolderReader.scan(bookmark: bookmark)
+        let entry = try XCTUnwrap(scanned.first { $0.path == "first" })
+        let queued = try XCTUnwrap(scanned.first { $0.path == "pending" })
+        let queuedEvent = String(decoding: try JSONEncoder().encode(queued), as: UTF8.self)
+        let event = String(decoding: try JSONEncoder().encode(entry), as: UTF8.self)
+        let gate = base.appendingPathComponent("continue"), script = base.appendingPathComponent("stream-helper")
+        let text = "#!/bin/sh\n/usr/bin/read request\nprintf '%s\\n' '{\"event\":\"hello\",\"version\":1,\"streaming\":true}' '{\"event\":\"entry\",\"entry\":\(event)}' '{\"event\":\"entry\",\"entry\":\(queuedEvent)}'\nwhile [ ! -f '\(gate.path)' ]; do /bin/sleep 0.05; done\n/bin/cat '\(gate.path)'\nprintf '%s\\n' '{\"event\":\"complete\"}'\n"
+        try Data(text.utf8).write(to: script)
+        try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: script.path)
+        let inventory = MobileFolderInventory(directory: base.appendingPathComponent("stream-cache"), commanderIndexer: script)
+        let id = UUID().uuidString.lowercased()
+        let initial = try inventory.beginStream(scope, id: id, bookmark: bookmark, excludedPaths: [], ignoreRules: nil)
+        XCTAssertEqual(initial.revision, 0)
+        let ready = expectation(description: "first eligible row committed")
+        ready.expectedFulfillmentCount = 2 // First entry + timer-flushed pending entry before helper resumes.
+        ready.assertForOverFulfill = false
+        let scanner = Task.detached {
+            try inventory.runStream(scope, id: id, bookmark: bookmark, excludedPaths: [], ignoreRules: nil, wake: { ready.fulfill() })
+        }
+        defer { try? Data().write(to: gate); scanner.cancel() }
+        await fulfillment(of: [ready], timeout: 5)
+        // Reopen the cache, proving this is committed disk state, not a callback buffer.
+        let reopened = MobileFolderInventory(directory: base.appendingPathComponent("stream-cache"), commanderIndexer: script)
+        let page = try reopened.streamChanges(scope, id: id, bookmark: bookmark, excludedPaths: [], ignoreRules: nil, afterSequence: 0)
+        XCTAssertEqual(page.state, "running"); XCTAssertEqual(page.generation, initial.generation)
+        XCTAssertEqual(page.changes.map(\.entry.path), ["first", "pending"]); XCTAssertEqual(page.nextSequence, 2)
+        XCTAssertThrowsError(try reopened.streamChanges(scope, id: id, bookmark: bookmark, excludedPaths: ["first"], ignoreRules: nil, afterSequence: 0))
+        try Data("updated".utf8).write(to: source.appendingPathComponent("first"))
+        let updated = try XCTUnwrap(MobileFolderReader.scan(bookmark: bookmark).first { $0.path == "first" })
+        let update = String(decoding: try JSONEncoder().encode(updated), as: UTF8.self)
+        try Data(("{\"event\":\"entry\",\"entry\":\(update)}\n").utf8).write(to: gate)
+        try await scanner.value
+        let next = try inventory.streamChanges(scope, id: id, bookmark: bookmark, excludedPaths: [], ignoreRules: nil, afterSequence: 2)
+        XCTAssertEqual(next.changes.count, 1); XCTAssertEqual(next.nextSequence, 3)
+        XCTAssertEqual(next.totalEntries, 2)
+        XCTAssertNotEqual(next.changes.first?.revision, page.changes.first?.revision)
+        try inventory.finishStream(scope, id: id, bookmark: bookmark, state: "interrupted")
+        XCTAssertEqual(try inventory.streamChanges(scope, id: id, bookmark: bookmark, excludedPaths: [], ignoreRules: nil, afterSequence: 3).state, "interrupted")
+    }
+    func testRealRustStreamingFeedRetainsGenerationAndSkipsUnsupportedEntries() throws {
+        let helper = try helper(), (base, source, bookmark, scope) = try fixture()
+        try FileManager.default.createDirectory(at: source.appendingPathComponent("folder"), withIntermediateDirectories: true)
+        try Data("payload".utf8).write(to: source.appendingPathComponent("folder/file"))
+        try FileManager.default.createSymbolicLink(at: source.appendingPathComponent("outside"), withDestinationURL: base)
+        let inventory = MobileFolderInventory(directory: base.appendingPathComponent("feed"), commanderIndexer: helper)
+        let id = UUID().uuidString.lowercased()
+        let initial = try inventory.beginStream(scope, id: id, bookmark: bookmark, excludedPaths: [], ignoreRules: nil)
+        try inventory.runStream(scope, id: id, bookmark: bookmark, excludedPaths: [], ignoreRules: nil, wake: {})
+        try inventory.finishStream(scope, id: id, bookmark: bookmark, state: "complete")
+        let page = try inventory.streamChanges(scope, id: id, bookmark: bookmark, excludedPaths: [], ignoreRules: nil, afterSequence: 0)
+        XCTAssertEqual(page.generation, initial.generation); XCTAssertEqual(page.state, "complete")
+        XCTAssertEqual(Set(page.changes.map(\.entry.path)), ["folder", "folder/file"])
+        XCTAssertEqual(page.totalEntries, 2); XCTAssertEqual(page.totalSkipped, 1)
+        XCTAssertEqual(page.nextSequence, 2); XCTAssertFalse(page.hasMore)
+        XCTAssertEqual(try inventory.beginStream(scope, id: id, bookmark: bookmark, excludedPaths: [], ignoreRules: nil).generation, initial.generation)
+    }
+    func testLiveIndexExcludesOnlyItsPhysicallyNestedPrivateCache() throws {
+        let helper = try helper(), (_, source, bookmark, scope) = try fixture()
+        try FileManager.default.createDirectory(at: source.appendingPathComponent("Library"), withIntermediateDirectories: true)
+        try Data("user data".utf8).write(to: source.appendingPathComponent("Library/keep"))
+        let inventory = MobileFolderInventory(directory: source.appendingPathComponent("Library/private-inventory"), commanderIndexer: helper)
+        let id = UUID().uuidString.lowercased()
+        _ = try inventory.beginStream(scope, id: id, bookmark: bookmark, excludedPaths: [], ignoreRules: nil)
+        try inventory.runStream(scope, id: id, bookmark: bookmark, excludedPaths: [], ignoreRules: nil, wake: {})
+        let page = try inventory.streamChanges(scope, id: id, bookmark: bookmark, excludedPaths: [], ignoreRules: nil, afterSequence: 0)
+        XCTAssertEqual(Set(page.changes.map(\.entry.path)), ["Library", "Library/keep"])
+        XCTAssertEqual(page.totalEntries, 2)
+        XCTAssertFalse(page.changes.contains { $0.entry.path.contains("private-inventory") })
+    }
     func testRealRustCaptureMatchesSwiftContentAndGitignorePolicy() throws {
         let helper = try helper(), (base, source, bookmark, scope) = try fixture()
         for name in ["project/node_modules/deep", "Library", "keep/sub", "NODE_MODULES"] {

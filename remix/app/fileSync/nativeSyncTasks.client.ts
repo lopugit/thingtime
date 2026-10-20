@@ -1,3 +1,5 @@
+import { readCloudIndexChanges } from './cloudIndexChanges.client';
+import { readNativeIndexChanges } from './streamingIndex';
 import { SyncConditionsWait } from './foregroundSyncContext';
 import { SyncConnectionWait, isSyncConnectionFailure } from './syncConnectionWait';
 import { pauseSyncJobAdmission, type SyncJob } from './syncJobJournal';
@@ -13,7 +15,7 @@ import type { ForegroundSyncInput } from './foregroundSync';
 import type { InventoryIdentity } from './inventoryJournal';
 import { readCloudFolderInventoryPages } from './cloudInventoryPages.client';
 import { readCloudFolderInventory } from './cloudInventory.client';
-import { mobileFolderSource, supportsNativeInventoryPages, supportsNativePathInspection, supportsNativeBackupCapture, supportsNativeIgnoreRules, supportsNativeInventoryBatches } from './mobileFolders.client';
+import { mobileFolderSource, supportsNativeInventoryPages, supportsNativePathInspection, supportsNativeBackupCapture, supportsNativeIgnoreRules, supportsNativeInventoryBatches, supportsNativeStreamingIndex } from './mobileFolders.client';
 import { approveMobileSyncTarget } from './mobileSyncTarget.client';
 import { assertPhotoSourcePolicy } from './photoSourcePolicy';
 import { createConflictReviewController } from './conflictReviewController';
@@ -92,6 +94,9 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 				return structuredClone(job.localImport!.inventory);
 			};
 			cancelCapture = async () => {
+				const streaming = await journal!.pagedRuns({ scope: binding, currentScope }).active();
+				if (streaming?.spec.streaming?.source === 'local') await request(binding.ownerId, { action: 'scan-cancel', rootId: reviewed.configuration.localRootId, inventoryDeviceId: binding.deviceId,
+					captureId: streaming.spec.streaming.captureId, capturePolicy: 'one-way-supported', excludedPaths: reviewed.configuration.excludedPaths, ignoreRules: reviewed.configuration.ignoreRules }, signal);
 				if (!job?.nativeCaptureId) return;
 				await request(binding.ownerId, { action: 'scan-cancel', rootId: reviewed.configuration.localRootId, inventoryDeviceId: binding.deviceId,
 					captureId: job.nativeCaptureId, capturePolicy: 'backup-supported', excludedPaths: reviewed.configuration.excludedPaths, ...(reviewed.configuration.ignoreRules ? { ignoreRules: reviewed.configuration.ignoreRules } : {}) }, signal);
@@ -145,6 +150,14 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 				check();
 				await runPagedForegroundCloudSync(reviewed, binding, {
 					currentScope, localTarget, journal: journal!, runtime, progress: publish,
+					...(inspect && supportsNativeStreamingIndex(capabilities) && !reviewed.configuration.propagateDeletes ? {
+						streamLocalChanges: (captureId: string, afterSequence: number, streamSignal?: AbortSignal, readyToFinish?: () => Promise<boolean>) => readNativeIndexChanges({ ownerId: binding.ownerId, deviceId: binding.deviceId,
+							rootId: reviewed.configuration.localRootId, captureId, afterSequence, readyToFinish, signal: streamSignal ?? signal, request, excludedPaths: reviewed.configuration.excludedPaths, ignoreRules: reviewed.configuration.ignoreRules }),
+						streamRemoteChanges: (captureId: string, afterSequence: number, streamSignal?: AbortSignal, readyToFinish?: () => Promise<boolean>, resume?: { cursor?: string; snapshotComplete?: boolean; checkpoint(cursor: string, snapshotComplete: boolean): Promise<void> }) => {
+							if (!readyToFinish || !resume) throw Error('The durable cloud index consumer is unavailable.');
+							return readCloudIndexChanges(binding, reviewed.configuration.remoteFolderId, { ...runtime, signal: streamSignal ?? signal }, captureId, afterSequence, readyToFinish, resume);
+						}
+					} : {}),
 					inventorySession: descriptor => {
 						check(); update({ inventoryDescriptor: descriptor });
 						const key = 'tt:sync-inventory:' + syncScopeKey(binding);
@@ -175,7 +188,7 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 					...(inspect ? { inspectLocal: async (path: string) => (await request(binding.ownerId,
 						{ action: 'inspect', rootId: reviewed.configuration.localRootId, path }, signal)).inspectedEntry! } : {}),
 					inventory: () => readCloudFolderInventory(binding, reviewed.configuration.remoteFolderId, { ...runtime, signal }),
-					inventoryPages: () => readCloudFolderInventoryPages(binding, reviewed.configuration.remoteFolderId, { ...runtime, signal }),
+					inventoryPages: (options?: { signal?: AbortSignal }) => readCloudFolderInventoryPages(binding, reviewed.configuration.remoteFolderId, { ...runtime, signal: options?.signal ?? signal }),
 					source: async entry => mobileFolderSource(binding.ownerId, reviewed.configuration.localRootId, entry, signal, request, capabilities),
 					reviewPagedConflicts: session => new Promise<PagedConflictReviewResult>((resolve, reject) => {
 						let settled = false;

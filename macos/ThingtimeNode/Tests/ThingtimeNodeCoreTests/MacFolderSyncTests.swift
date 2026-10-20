@@ -7,6 +7,92 @@ import AppleFileSync
 @MainActor
 final class MacFolderSyncTests: XCTestCase {
     private let origin = URL(string: "https://sync.test")!
+    func testStreamingLifecycleRetainsGenerationAndRejectsPolicyOrGrantChanges() async throws {
+        var saved: [String: Data] = [:]
+        let store = MobileFolderStore(load: { saved[$0.key] }, save: { saved[$0.key] = $1 })
+        let owner = try FileSyncOwnerScope(ownerId: "owner", url: origin)
+        let grant = try store.add(owner, selected: folder.appendingPathComponent("selected"))
+        let helper = folder.appendingPathComponent("paused-helper")
+        try Data("#!/bin/sh\nread request\nprintf '%s\\n' '{\"event\":\"hello\",\"version\":1,\"streaming\":true}'\nexec /bin/sleep 20\n".utf8).write(to: helper)
+        try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: helper.path)
+        let waitEntered = expectation(description: "long-poll entered its own lane")
+        var observeWait = false
+        let service = try MacFolderSync(origin: origin, store: store, staging: MobileSyncStaging(directory: folder.appendingPathComponent("stage")),
+            verify: { _, _ in if observeWait { observeWait = false; waitEntered.fulfill() } }, choose: { nil }, approve: { _ in false },
+            inventories: MobileFolderInventory(directory: folder.appendingPathComponent("stream"), commanderIndexer: helper))
+        defer { service.suspend() }
+        var fields = backupFields(grant.id)
+        fields["capturePolicy"] = .string("one-way-supported")
+        let started = try await service.handle(request("scan-stream", fields)).decode([String: JSONValue].self)
+        let initial = try XCTUnwrap(started["changesPage"]).decode([String: JSONValue].self)
+        XCTAssertEqual(initial["state"], .string("running"))
+        var longPoll = fields; longPoll["afterSequence"] = .number(0); longPoll["waitMilliseconds"] = .number(25_000)
+        observeWait = true
+        let pending = Task { try await service.handle(self.request("scan-changes", longPoll)) }
+        await fulfillment(of: [waitEntered], timeout: 2)
+        try Data("read during indexing".utf8).write(to: folder.appendingPathComponent("selected/read"))
+        let inspected = try await service.handle(request("inspect", ["rootId": .string(grant.id), "path": .string("read")])).decode([String: JSONValue].self)
+        let observed = try XCTUnwrap(inspected["entry"]).decode([String: JSONValue].self)
+        let range = try await service.handle(request("read", ["rootId": .string(grant.id), "path": .string("read"), "version": try XCTUnwrap(observed["version"]), "offset": .number(0), "length": .number(1)])).decode([String: JSONValue].self)
+        XCTAssertNotNil(range["chunk"])
+        pending.cancel()
+        do { _ = try await pending.value; XCTFail("Cancelled waiter disclosed a result") } catch { }
+        var waiting = fields; waiting["afterSequence"] = .number(0); waiting["waitMilliseconds"] = .number(10)
+        let response = try await service.handle(request("scan-changes", waiting)).decode([String: JSONValue].self)
+        let page = try XCTUnwrap(response["changesPage"]).decode([String: JSONValue].self)
+        XCTAssertEqual(page["generation"], initial["generation"])
+        var foreign = fields; foreign["captureId"] = .string(UUID().uuidString.lowercased())
+        await rejects { try await service.handle(self.request("scan-cancel", foreign)) }
+        let retained = try await service.handle(request("scan-changes", fields)).decode([String: JSONValue].self)
+        XCTAssertEqual(try retained["changesPage"]?.decode([String: JSONValue].self)["state"], .string("running"))
+        var changed = fields; changed["ignoreRules"] = .string("*.txt")
+        await rejects { try await service.handle(self.request("scan-changes", changed)) }
+        let stopped = try await service.handle(request("scan-cancel", fields)).decode([String: JSONValue].self)
+        XCTAssertEqual(try stopped["changesPage"]?.decode([String: JSONValue].self)["state"], .string("interrupted"))
+        try store.remove(owner, id: grant.id)
+        await rejects { try await service.handle(self.request("scan-changes", fields)) }
+    }
+
+    func testIndexedWatcherOnlyFinishesAfterConsumerAcknowledgesCurrentSequence() async throws {
+        var saved: [String: Data] = [:]
+        let store = MobileFolderStore(load: { saved[$0.key] }, save: { saved[$0.key] = $1 })
+        let owner = try FileSyncOwnerScope(ownerId: "owner", url: origin)
+        let selected = folder.appendingPathComponent("selected")
+        try Data("content".utf8).write(to: selected.appendingPathComponent("file"))
+        let grant = try store.add(owner, selected: selected)
+        let entry = try XCTUnwrap(MobileFolderReader.scan(bookmark: grant.bookmark).first)
+        let event = String(decoding: try JSONEncoder().encode(entry), as: UTF8.self)
+        let helper = folder.appendingPathComponent("indexed-helper")
+        let text = "#!/bin/sh\nread request\nprintf '%s\\n' '{\"event\":\"hello\",\"version\":1,\"streaming\":true}' '{\"event\":\"entry\",\"entry\":\(event)}' '{\"event\":\"indexed\"}'\nread stop\nprintf '%s\\n' '{\"event\":\"complete\"}'\n"
+        try Data(text.utf8).write(to: helper)
+        try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: helper.path)
+        let service = try MacFolderSync(origin: origin, store: store, staging: MobileSyncStaging(directory: folder.appendingPathComponent("stage")),
+            verify: { _, _ in }, choose: { nil }, approve: { _ in false },
+            inventories: MobileFolderInventory(directory: folder.appendingPathComponent("stream"), commanderIndexer: helper))
+        defer { service.suspend() }
+        var fields = backupFields(grant.id); fields["capturePolicy"] = .string("one-way-supported")
+        _ = try await service.handle(request("scan-stream", fields))
+        var reading = fields; reading["afterSequence"] = .number(0); reading["waitMilliseconds"] = .number(1000)
+        var result = try await service.handle(request("scan-changes", reading)).decode([String: JSONValue].self)
+        var page = try XCTUnwrap(result["changesPage"]).decode([String: JSONValue].self)
+        if page["state"] != .string("indexed") {
+            reading["afterSequence"] = page["revision"]
+            result = try await service.handle(request("scan-changes", reading)).decode([String: JSONValue].self)
+            page = try XCTUnwrap(result["changesPage"]).decode([String: JSONValue].self)
+        }
+        XCTAssertEqual(page["state"], .string("indexed")); XCTAssertEqual(page["revision"], .number(1))
+        var stale = fields; stale["afterSequence"] = .number(0)
+        let refused = try await service.handle(request("scan-stream-finish", stale)).decode([String: JSONValue].self)
+        let refusedPage = try XCTUnwrap(refused["changesPage"]).decode([String: JSONValue].self)
+        XCTAssertEqual(refusedPage["state"], .string("indexed"))
+        XCTAssertEqual(try refusedPage["changes"]?.decode([JSONValue].self).count, 1)
+        var caughtUp = fields; caughtUp["afterSequence"] = .number(1)
+        _ = try await service.handle(request("scan-stream-finish", caughtUp))
+        caughtUp["waitMilliseconds"] = .number(2000)
+        let finished = try await service.handle(request("scan-changes", caughtUp)).decode([String: JSONValue].self)
+        XCTAssertEqual(try finished["changesPage"]?.decode([String: JSONValue].self)["state"], .string("complete"))
+    }
+
     func testBackupDiagnosticsNeverExposeErrorDescriptionsOrURLs() {
         let sensitive = "secret-token /private/home/filename"
         let network = URLError(.timedOut, userInfo: [NSLocalizedDescriptionKey: sensitive, NSURLErrorFailingURLStringErrorKey: sensitive])
@@ -568,7 +654,7 @@ final class MacFolderSyncTests: XCTestCase {
         let context = try await service.handle(request("context")).decode([String: JSONValue].self)
         XCTAssertEqual(context["deviceId"], .string("device"))
         let capabilities = try XCTUnwrap(context["capabilities"]).decode([String: String].self)
-        XCTAssertEqual(capabilities, ["fileAccessVersion": "1.10.0", "fileStagingVersion": "1.1.0", "filePublicationVersion": "1.2.0"])
+        XCTAssertEqual(capabilities, ["fileAccessVersion": "1.11.0", "fileStagingVersion": "1.1.0", "filePublicationVersion": "1.2.0"])
         let result = try await service.handle(request("conditions")).decode([String: JSONValue].self)
         XCTAssertEqual(result["conditions"], .object(["network": .string("unknown"), "charging": .null]))
     }

@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { IDBFactory } from 'fake-indexeddb';
 import { createSyncRun, executeSyncRun, type SyncRun } from './execute';
 import { planFileSync, type SyncEntry, type SyncScope } from './reconcile';
-import { fingerprintSource, type FingerprintSource } from './contentFingerprint';
+import { EMPTY_CONTENT_SHA256, fingerprintSource, type FingerprintSource } from './contentFingerprint';
 import { cloudFileSyncEntry, type CloudFile } from './cloudFile';
 import { prepareCloudSyncRun, parseCloudSyncRun } from './cloudWrite';
 import { createCloudSyncPort } from './cloudSyncPort.client';
@@ -14,9 +14,11 @@ import type { TransferActivity } from './transferActivity';
 const scope: SyncScope = { origin: 'https://sync.test', ownerId: 'owner', dataPlane: 'home', rootId: 'root', deviceId: 'phone' };
 const bytes = new Uint8Array([1, 2, 3, 4]);
 const source = (): FingerprintSource => ({ size: bytes.length, read: async (offset, size) => bytes.slice(offset, offset + size), check: () => {} });
-async function fixture() {
+async function fixture(payload = bytes) {
+ const bytes = payload;
+ const source = (): FingerprintSource => ({ size: bytes.length, read: async (offset, size) => { assert.ok(bytes.length, 'Empty files must not issue byte reads'); return bytes.slice(offset, offset + size); }, check: () => {} });
  const fingerprint = await fingerprintSource(source());
- const entry: SyncEntry = { id: 'local-file', version: 'v1', path: 'file.bin', kind: 'file', size: bytes.length, fingerprint, sha256: null };
+ const entry: SyncEntry = { id: 'local-file', version: 'v1', path: 'file.bin', kind: 'file', size: bytes.length, ...(bytes.length ? { fingerprint, sha256: null } : { sha256: EMPTY_CONTENT_SHA256 }) };
  let current = { ...scope }, file: CloudFile | null = null, puts = 0, starts = 0, commits = 0, lost = false, ready = false, opens = 0;
  const receipts = new Map<string, { body: string; file: CloudFile }>();
  let hook: ((path: string, body: any) => Response | null) | undefined;
@@ -40,7 +42,7 @@ async function fixture() {
     if (lost) { lost = false; throw Error('Accepted commit response was lost'); }
     return Response.json({ ok: true, file, replayed: false });
    }
-   if (u.pathname === '/api/v1/attachments/uploads') { starts++; return Response.json({ ok: true, upload: { id: 'att1', partSizeBytes: fingerprint.partSizeBytes, partCount: 1, ...(ready ? { state: 'ready' } : {}) } }); }
+   if (u.pathname === '/api/v1/attachments/uploads') { starts++; return Response.json({ ok: true, upload: { id: 'att1', partSizeBytes: fingerprint.partSizeBytes, partCount: fingerprint.partCount, ...(ready || bytes.length === 0 ? { state: 'ready' } : {}) } }); }
    if (u.pathname.endsWith('/parts')) return Response.json({ ok: true, parts: [{ partNumber: 1, url: 'https://storage.test/part', headers: { 'x-amz-checksum-sha256': body.parts[0].checksumSha256 } }] });
    if (u.pathname.endsWith('/complete')) { ready = true; return Response.json({ ok: true }); }
    if (u.pathname.endsWith('/content')) return Response.json({ ok: true, id: 'att1', version: 'a'.repeat(64), size: bytes.length, fingerprint });
@@ -233,4 +235,39 @@ test('ready attachment reuse and failed journal confirmations do not inflate thr
  assert.deepEqual(events, [{ direction: 'upload', bytes: 4 }]); events.length = 0;
  await assert.rejects(executeSyncRun(run, f.port(run, async value => { if (value.operations.every(op => op.confirmed)) throw Error('journal full'); }, event => events.push(event))), /journal full/);
  assert.deepEqual(events, [], 'ready attachment has no new bytes and failed journal has no confirmed file');
+});
+
+
+test('native empty files publish a durable cloud receipt and replay a lost reply without multipart IO', async () => {
+ const f = await fixture(new Uint8Array()), factory = new IDBFactory(); let journal = await openSyncJournal(factory);
+ const run = f.make(); f.lose();
+ await assert.rejects(executeSyncRun(run, f.port(run, journal.persist)), /response was lost/);
+ assert.deepEqual(f.counts(), { puts: 0, starts: 1, commits: 1, opens: 1 });
+ assert.deepEqual(cloudFileSyncEntry(f.file(), 'file.bin'), { ...f.entry, id: run.operations[0].id, version: f.file()!.revision });
+ journal.close(); journal = await openSyncJournal(factory);
+ const restored = parseCloudSyncRun((await journal.read(scope))!);
+ assert.ok((await executeSyncRun(restored, f.port(restored, journal.persist))).operations.every(op => op.confirmed));
+ assert.deepEqual(f.counts(), { puts: 0, starts: 1, commits: 1, opens: 1 }); journal.close();
+});
+
+test('empty uploads require a ready stored object and a canonical content digest', async () => {
+ for (const bad of ['unready', 'digest'] as const) {
+  const f = await fixture(new Uint8Array()), run = f.make();
+  f.hook((path) => bad === 'unready' && path.endsWith('/uploads')
+   ? Response.json({ ok: true, upload: { id: 'att1', partSizeBytes: 8388608, partCount: 0, state: 'uploading' } })
+   : bad === 'digest' && path.endsWith('/content')
+    ? Response.json({ ok: true, id: 'att1', version: 'a'.repeat(64), size: 0, fingerprint: { algorithm: 'sha256-parts-v1', partSizeBytes: 8388608, partCount: 0, sha256: 'a'.repeat(64) } }) : null);
+  await assert.rejects(executeSyncRun(run, f.port(run, async () => {})), bad === 'unready' ? /durably stored/ : /Invalid cloud file/);
+  assert.equal(f.counts().puts, 0); assert.equal(f.counts().commits, 0);
+ }
+});
+
+
+test('empty-file uploads negotiate the new storage contract before any network request', async () => {
+ const f = await fixture(new Uint8Array()), run = f.make();
+ const seen: string[] = [];
+ f.runtime.requireCapability = async (feature, minimum) => { seen.push(feature + '@' + minimum); if (feature === 'api.files') throw Error('Empty files need the updated server'); };
+ await assert.rejects(executeSyncRun(run, f.port(run, async () => {})), /updated server/);
+ assert.ok(seen.includes('api.files@1.8.0'));
+ assert.deepEqual(f.counts(), { puts: 0, starts: 0, commits: 0, opens: 0 });
 });

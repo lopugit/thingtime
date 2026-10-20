@@ -1,4 +1,4 @@
-import { validContentFingerprint, type ContentFingerprint } from './contentFingerprint';
+import { EMPTY_CONTENT_SHA256, validContentFingerprint, type ContentFingerprint } from './contentFingerprint';
 import { validSyncPath, type SyncEntry } from './reconcile';
 
 export const CLOUD_FILE_KIND = 'file';
@@ -43,5 +43,6 @@ export function parseCloudFile(value: unknown): CloudFile {
 export function cloudFileSyncEntry(value: unknown, path: string): SyncEntry {
 	const file = parseCloudFile(value);
 	if (!validSyncPath(path) || file.trashed) throw Error('A trashed or invalid file cannot become a live sync entry');
-	return { path, id: file.id, version: file.revision, kind: 'file', size: file.content.size, sha256: null, fingerprint: file.content.fingerprint };
+	return { path, id: file.id, version: file.revision, kind: 'file', size: file.content.size,
+		...(file.content.size === 0 ? { sha256: EMPTY_CONTENT_SHA256 } : { sha256: null, fingerprint: file.content.fingerprint }) };
 }

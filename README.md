@@ -6219,3 +6219,37 @@ batch into the existing 128-row journal format. Each request still checks the
 account, selected origin, device and grant before and after native IO. No new
 service, secret or database migration is required, and saved sealed captures
 remain compatible with the signed update.
+
+### Live cloud file changes (api.files 1.7)
+
+The existing home Mongo replica set must support read-only snapshot sessions
+and collection change streams for `/api/v1/files?rootId=...&changes=1`. Use the
+existing `things` index `{thingtime:1,ownerId:1,createdAt:-1,shareId:1}` and
+canonical Timeline history; no new collection, secret, public channel, or
+background process is required. Grant the application Mongo user its normal
+read/change-stream rights on the home Things collection. An unavailable native
+subscription returns 503 and preserves the client cursor. Never substitute a
+full-tree polling loop. Fork tests use private synthetic data; run
+`npm --prefix remix run test:files` and `test:api-capabilities`.
+
+Acquire the Timeline watermark before streaming the initial inventory, retain
+that watermark through restart, then consume bounded deltas with `after` and
+optional `wait=1`. Folder changes carry a subtree invalidation; expand only that
+subtree with the original root plus `pages=1&subtreeId=...`. Checkpoint the delta
+cursor only after its entries and descendant pages are durable. The source
+queue must drain independently of slow transfers; a tree snapshot is not a live
+subscription, and a missing/invalidated cursor is an explicit reconciliation
+failure rather than absence or permission to delete.
+
+### Empty stored files
+
+Zero-byte uploads are supported for `file` and `file-import` only. Clients
+negotiate `api.attachment-uploads` 1.6, `api.attachment-upload-complete` 1.5,
+`api.attachment-content` 1.16 and `api.files` 1.8 before using this path. Start
+returns a ready zero-part object; it never needs a native multipart loop. The
+private versioned bucket must permit the existing server PutObject operation
+with checksum and conditional-write headers. No new secret or public bucket
+access is required. The local object adapter stores an actual immutable empty
+object too. Run `node remix/scripts/test-cloud-inventory-pages.mjs --empty-files`
+for a disposable Mongo/store proof covering real authenticated upload, read,
+commit and restore handlers. It never reads the app environment or real data.

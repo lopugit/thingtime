@@ -21,7 +21,9 @@ export function createCloudDownloadSource(
 	if (scope.dataPlane !== 'home' || file.trashed) throw Error('Download source is unavailable.');
 	const { check: checkContext, json, negotiate } = cloudRequests(runtime, scope, signal);
 	const check = async () => {
-		await negotiate({ 'api.files': '1.0.0', 'api.attachment-content': '1.14.0' });
+		await negotiate(file.content.size === 0
+			? { 'api.files': '1.8.0', 'api.attachment-content': '1.16.0' }
+			: { 'api.files': '1.0.0', 'api.attachment-content': '1.14.0' });
 		const current = parseCloudFile((await json('/api/v1/files?' + new URLSearchParams({ id: file.id }))).file);
 		if (
 			current.trashed ||

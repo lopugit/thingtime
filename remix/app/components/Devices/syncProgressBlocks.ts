@@ -16,7 +16,7 @@ export const syncProgressBlocks: WebpageBlock[] = [{ id: 'sync-progress', type: 
 		element('sync-progress-title', 'h3', 'Sync progress', {}, { 'font-weight': '600' }),
 		element('sync-index-title', 'h4', '1. Index file structure', {}, { 'font-weight': '600', 'margin-top': '8px' }),
 		element('sync-index-description', 'p', '{sync.indexDescription}', { 'aria-live': 'polite' }),
-		element('sync-upload-title', 'h4', '2. Upload files and folders', {}, { 'font-weight': '600', 'margin-top': '12px' }),
+		element('sync-upload-title', 'h4', '{sync.transferTitle}', {}, { 'font-weight': '600', 'margin-top': '12px' }),
 		element('sync-upload-description', 'p', '{sync.uploadDescription}', { 'aria-live': 'polite' }),
 		element('sync-progress-current', 'p', '{sync.current}', {}, { 'font-size': '12px', 'overflow-wrap': 'anywhere' }),
 		element('sync-progress-help', 'p', 'Folder totals include their children. Bytes count file copies only; unchanged and excluded items are shown separately.', {}, { 'font-size': '12px', color: 'var(--tt-muted, #71717a)' }),
@@ -43,7 +43,7 @@ export const syncProgressBlocks: WebpageBlock[] = [{ id: 'sync-progress', type: 
 					element('sync-node-path', 'p', '{item.path}', {}, { 'font-size': '11px', 'overflow-wrap': 'anywhere', color: 'var(--tt-muted, #71717a)' }),
 					element('sync-node-percent', 'p', '{item.percentLabel}', {}, { 'font-size': '12px' }),
 					when('sync-node-bar-state', 'item.showPercent', [{ ...element('sync-node-bar', 'div', '', { role: 'progressbar', 'aria-valuenow': { ttArg: 'item.percent' }, 'aria-valuemin': 0, 'aria-valuemax': 100,
-						'aria-label': 'Upload progress for {item.path}' }, { width: '100%', height: '8px', background: '#e4e4e7', 'border-radius': '4px', overflow: 'hidden' }),
+						'aria-label': 'Transfer progress for {item.path}' }, { width: '100%', height: '8px', background: '#e4e4e7', 'border-radius': '4px', overflow: 'hidden' }),
 						children: [element('sync-node-bar-fill', 'div', '', { 'aria-hidden': true, style: { width: '{item.percent}%' } }, { height: '100%', background: '#71717a' })] }]),
 					element('sync-node-counts', 'p', '{item.counts}', {}, { 'font-size': '12px' }),
 					element('sync-node-bytes', 'p', '{item.bytes}', {}, { 'font-size': '12px' })
@@ -70,7 +70,7 @@ export const progressBytes = (bytes: number) => {
 export function syncProgressNodeDisplay(value: SyncProgressTotals, progress: ForegroundSyncProgress | undefined, state: SyncProgressState) {
 	const result = syncProgressMetrics(value, progress, state);
 	const folders = value.kind === 'folder' && value.path ? Math.max(0, value.folders - 1) : value.folders;
-	return { percent: result.percent ?? 0, showPercent: result.percent !== null, status: result.status,
+	return { percent: result.percent ?? 0, showPercent: result.percent !== null, status: result.status === 'Uploading' && progress?.direction === 'download' ? 'Downloading' : result.status,
 		percentLabel: result.percent === null ? 'Excluded from this sync' : `${result.percent.toLocaleString(undefined, { maximumFractionDigits: 1 })}% · ${value.confirmed.toLocaleString()} / ${value.operations.toLocaleString()} operations confirmed`,
 		counts: `${value.files.toLocaleString()} files · ${folders.toLocaleString()} ${value.kind === 'folder' && value.path ? 'subfolders' : 'folders'} · ${value.unchanged.toLocaleString()} unchanged · ${value.excluded.toLocaleString()} excluded`,
 		bytes: `${progressBytes(result.bytes)} / ${progressBytes(value.bytesTotal)} to copy · ${value.confirmedFiles.toLocaleString()} / ${value.transferFiles.toLocaleString()} files confirmed · ${progressBytes(value.indexedBytes)} indexed` };
@@ -92,7 +92,10 @@ export function syncProgressDisplay(branches: Record<string, SyncProgressBranch>
 	const root = branches[''], summary = root?.page?.parent, busy = Object.values(branches).some(branch => branch.busy);
 	const focused = branches[focusedFolder]?.page?.parent;
 	const focusDisplay = focused ? syncProgressNodeDisplay(focused, progress, state) : null;
-	const stoppedIndex = !hasIndex && ['error', 'paused', 'cancelled'].includes(state);
+	const liveIndex = progress?.indexState === 'indexing' || progress?.indexState === 'watching';
+	const growingTotal = liveIndex || progress?.totalFinal === false;
+	const stoppedIndex = (liveIndex || !hasIndex) && ['error', 'paused', 'cancelled'].includes(state);
+	const download = progress?.direction === 'download';
 	const preparation = progress?.preparation;
 	const preparationLabels: Record<NonNullable<ForegroundSyncProgress['preparation']>['phase'], string> = {
 		'validate-local': 'Validating device structure', 'read-remote': 'Reading cloud structure', 'validate-remote': 'Validating cloud structure',
@@ -100,16 +103,21 @@ export function syncProgressDisplay(branches: Record<string, SyncProgressBranch>
 	};
 	const preparationText = preparation ? `${preparationLabels[preparation.phase]}${preparation.completed === undefined ? '…' :
 		` · ${preparation.completed.toLocaleString()}${preparation.total === undefined ? ' items processed' : ` / ${preparation.total.toLocaleString()} items processed`}.`}` : '';
-	const indexed = stoppedIndex ? `Indexing ${state === 'error' ? 'stopped' : state} before completion.${progress?.indexed !== undefined ? ` ${progress.indexed.toLocaleString()} entries observed.` : ''}` : hasIndex ? summary ? `${summary.files.toLocaleString()} files and ${summary.folders.toLocaleString()} folders indexed.` : 'Structure indexed. Reading saved totals…'
+	const indexed = stoppedIndex ? `Indexing ${state === 'error' ? 'stopped' : state} before completion.${progress?.indexed !== undefined ? ` ${progress.indexed.toLocaleString()} entries observed.` : ''}`
+		: liveIndex ? `${progress?.indexState === 'watching' ? 'Initial scan finished. Watching for new and changed files.' : 'Indexing while files transfer. Total still being discovered.'}${progress?.indexed === undefined ? '' : ` ${progress.indexed.toLocaleString()} index observations saved.`}`
+		: progress?.indexState === 'complete' && progress.totalFinal === false ? 'Initial scan finished. Preparing remaining indexed entries while files transfer.'
+		: hasIndex ? summary ? `${summary.files.toLocaleString()} files and ${summary.folders.toLocaleString()} folders indexed.` : 'Structure indexed. Reading saved totals…'
 		: progress?.indexed !== undefined ? `${progress.indexed.toLocaleString()} entries indexed${progress.indexTotal === undefined ? ' · Total still being discovered.' : ` of ${progress.indexTotal.toLocaleString()}.${preparation ? '' : ' Validating structure…'}`}`
 		: preparation ? 'Preparing saved index.'
 		: progress?.stage === 'checking' ? 'Checking access…' : 'Indexing files… Total still being discovered.';
 	const coverage = progress?.coverage === 'partial' ? ` Partial backup · ${(progress.skipped ?? 0).toLocaleString()} skipped observations. Review backup coverage below.` : '';
 	const globalState = state === 'error' ? 'Error' : state === 'cancelled' ? 'Cancelled' : state === 'paused' ? 'Paused' : progress?.stage === 'complete' || state === 'complete' ? progress?.coverage === 'partial' ? 'Supported items complete · Partial backup' : 'Complete'
-		: preparation ? 'Preparing upload' : progress?.stage === 'verifying' ? 'Verifying uploaded files' : hasIndex ? 'Uploading' : 'Waiting for indexed structure';
-	return { sync: { prioritiesEnabled, prioritiesDisabled, indexDescription: indexed + (!stoppedIndex && preparationText ? ` ${preparationText}` : '') + coverage, uploadDescription: `${globalState}${progress ? ` · ${progress.confirmed.toLocaleString()} / ${progress.total.toLocaleString()} operations confirmed` : ''}${summary ? ` · ${syncProgressNodeDisplay(summary, progress, state).bytes}` : ''}`,
+		: preparation ? `Preparing ${download ? 'download' : 'upload'}` : progress?.stage === 'verifying' ? `Verifying ${download ? 'downloaded' : 'uploaded'} files`
+		: progress?.indexState === 'watching' && progress.confirmed === progress.total && !progress.path ? 'Waiting for new indexed files'
+		: progress?.stage === 'transferring' || hasIndex ? download ? 'Downloading' : 'Uploading' : 'Waiting for the first indexed file';
+	return { sync: { prioritiesEnabled, prioritiesDisabled, transferTitle: `2. ${download ? 'Download' : 'Upload'} files and folders`, indexDescription: indexed + (!stoppedIndex && preparationText ? ` ${preparationText}` : '') + coverage, uploadDescription: `${globalState}${progress ? ` · ${progress.confirmed.toLocaleString()} / ${progress.total.toLocaleString()} operations confirmed${growingTotal ? ' so far · Total may grow' : ''}` : ''}${summary ? ` · ${syncProgressNodeDisplay(summary, progress, state).bytes}` : ''}`,
 		currentFolder: focusedFolder || 'Root folder', atRoot: !focusedFolder,
-		folderSummary: focusDisplay ? `${focusDisplay.percentLabel} · ${focusDisplay.counts} · ${focusDisplay.bytes}` : 'Reading folder totals…',
+		folderSummary: focusDisplay ? `${focusDisplay.percentLabel} · ${focusDisplay.counts} · ${focusDisplay.bytes}${growingTotal ? ' · Based on files prepared so far' : ''}` : hasIndex ? 'Reading folder totals…' : 'Folder totals become available as files are indexed.',
 		current: progress?.path ? `Current file: ${progress.path}${progress.bytes !== undefined && progress.size !== undefined ? ` · ${progressBytes(progress.bytes)} / ${progressBytes(progress.size)}` : ''}` : message,
 		hasError: !!root?.error, error: root?.error || '', busy, refreshLabel: busy ? 'Refreshing progress…' : 'Refresh progress', rows } };
 }

@@ -36,3 +36,12 @@ test('invalid partition, version, identity or path is not a successful cloud inv
 	for (const changed of [{ ...response, id: 'other' }, { ...response, version: 'internal-object-version' }, { ...response, fingerprint: { ...fingerprint, partCount: 2 } }, { ...response, ok: false }]) assert.throws(() => attachmentFingerprintEntry(changed, 'file', 'photo.raw'));
 	assert.throws(() => attachmentFingerprintEntry(response, 'file', '../photo.raw'));
 });
+
+test('empty files use the canonical zero-part digest without reading bytes', async () => {
+    const result = await fingerprintSource({ size: 0, check() {}, async read() { throw Error('zero-byte files have no parts'); } }, { hash, maxPartBytes: 1 });
+    assert.deepEqual(result, { algorithm: 'sha256-parts-v1', partSizeBytes: 8 * 1024 * 1024, partCount: 0,
+        sha256: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855' });
+    assert.equal(validContentFingerprint(result, 0), true);
+    assert.equal(validContentFingerprint({ ...result, sha256: 'a'.repeat(64) }, 0), false);
+    assert.equal(validContentFingerprint({ ...result, partCount: 1 }, 0), false);
+});
