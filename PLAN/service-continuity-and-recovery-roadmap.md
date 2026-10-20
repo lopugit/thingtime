@@ -184,6 +184,41 @@ environment and demonstrate semantic correctness within approved objectives.
 **Gate:** the first critical recovery profile meets owner-approved semantic,
 security, deletion, and timing criteria twice from clean environments.
 
+#### Native small-file backup integration gate
+
+This is a focused acceptance slice of M3, not a second backup architecture.
+As of 2026-10-21 Australia/Melbourne, [PR #1081](https://github.com/lopugit/thingtime/pull/1081)
+had merged to `main`, while [PR #1022](https://github.com/lopugit/thingtime/pull/1022)
+to synchronize `main` into `develop` was still open. These statuses and the
+implementation's exact server capability must be rechecked before execution.
+
+1. **Fence the release:** confirm the implementation is present in the chosen
+   `develop` commit and its capability is published by the exact selected
+   origin before installing or enabling the batch path. Missing or incompatible
+   capability must fail closed to the supported per-file path without losing
+   operation identity or receipts.
+2. **Measure the installed path:** with an approved synthetic account and
+   fixed, non-sensitive fixture, compare the intended installed same-Home run
+   with an approved matched baseline. Record source SHA, app/server versions,
+   file and byte counts, elapsed time, and per-file terminal outcomes. Agree on
+   the comparison method and any performance threshold before interpreting the
+   result; publish neither an SLO nor a throughput promise from a single run.
+3. **Prove partial recovery separately:** interrupt after durable dispatch but
+   before all per-file receipts, then repeat with capability loss. On restart,
+   reconcile attempted, confirmed, fallback, and unknown files to the original
+   operation/upload identities. Require no missing file, duplicate finalization,
+   false completion, or silent conversion of unknown into failure/success.
+4. **Keep evidence privacy-safe:** retain no user filenames, file contents,
+   credentials, signed URLs, or stable account/device identifiers in the
+   acceptance record. A fixture result is not evidence for personal-file
+   throughput, production recovery, or a 100-files/second claim.
+
+**Gate:** integration and capability are verified at the exact release SHA;
+the installed matched comparison and both independent recovery cases pass;
+each outcome reconciles to its receipt; and an owner records the approved
+threshold, limitations, and rollback path. Otherwise keep the batch rollout
+pending and retain the supported safe fallback.
+
 ### M4 — Operate and communicate incidents
 
 **Outcome:** a small team can coordinate real incidents without heroics,

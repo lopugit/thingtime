@@ -209,6 +209,14 @@ purchase before approval.
 - [ ] Add continuity gates to release review: selected journey health, current
       exercise receipts, no unresolved P0/P1 data-safety action, and error-
       budget consequence.
+- [ ] Before treating native small-file backup as validated, complete the
+      [attachment-backup release gate](../../PLAN/service-continuity-and-recovery-roadmap.md#native-small-file-backup-integration-gate):
+      verify integration into the intended `develop` head and the exact server
+      capability, then exercise the intended installed same-Home path with a
+      synthetic fixed fixture, an approved matched baseline, and separate
+      interruption/capability-loss recovery runs. Reconcile every file outcome
+      to its durable receipt; keep any performance target owner-approved and
+      do not infer one from a synthetic run.
 - [ ] Review objectives, receipts, owners, provider assumptions, support load,
       and cost on an approved cadence; expire stale evidence visibly.
 - [ ] Keep truthful status, baseline safety, export/delete, and tested recovery
