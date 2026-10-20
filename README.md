@@ -6268,7 +6268,7 @@ the size/version and physical-path fences without reading extra content. Run
 and HTTP-byte regression coverage in a disposable, network-isolated fixture.
 
 The bundled Mac UI uses a dynamic loopback origin. With the desktop folder
-host's `fileUploadVersion` 1.0.0 capability, shared sync sends checksum-locked
+host's `fileUploadVersion` 1.0.1 capability, shared sync sends checksum-locked
 parts through the authenticated host adapter rather than cross-origin browser
 PUTs. Forks require the selected API's `api.attachment-upload-parts` >=1.1.0
 (with matching major 1), existing attachment storage/signing configuration and

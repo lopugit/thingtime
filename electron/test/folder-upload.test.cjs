@@ -63,7 +63,7 @@ function fixture() {
             events.push(request.action);
             assert.ok(request.length > 0, 'The native reader rejects zero-length read requests');
             assert.ok(request.offset >= 0 && request.offset <= bytes.length);
-            return { ...request, chunk: { size: bytes.length, version: 'v1', offset: request.offset, length: request.length,
+            return { ...request, roots: [{ id: input.rootId, name: 'Fixture grant' }], chunk: { size: bytes.length, version: 'v1', offset: request.offset, length: request.length,
                 ...(request.action === 'read-range' ? { bytes: new Uint8Array(bytes) } : {
                     data: bytes.subarray(request.offset, request.offset + request.length).toString('base64') }) } };
         },
@@ -83,6 +83,22 @@ test('host-issued part signing retains exact native source and digest receipt', 
     assert.equal(result.uploadedPart.sha256, hash); assert.equal(result.uploadedPart.requestId, f.input.upload.requestId);
     assert.equal(result.requestId, f.input.requestId); assert.equal(result.rootId, f.input.rootId);
     assert.deepEqual(events.filter(x => x !== 'authorize'), ['read-range', 'sign', 'read', 'put', 'read']);
+});
+test('upload receipt carries only final verified native roots and never fabricates a missing envelope', async () => {
+    const { f } = fixture(), native = f.requestNative;
+    let reads = 0;
+    f.requestNative = async request => {
+        const value = await native(request);
+        value.roots = [{ id: f.input.rootId, name: 'Verified grant ' + ++reads }];
+        return value;
+    };
+    const result = await uploadFolderPart(f);
+    assert.deepEqual(result.roots, [{ id: f.input.rootId, name: 'Verified grant 3' }]);
+    for (const roots of [undefined, null, {}]) {
+        const { f } = fixture(), native = f.requestNative;
+        f.requestNative = async request => ({ ...await native(request), roots });
+        await assert.rejects(uploadFolderPart(f));
+    }
 });
 test('EOF revalidation rejects mismatched offsets or nonempty returned data before publication', async () => {
     for (const phase of ['before-put', 'after-put']) for (const field of ['offset', 'data']) {
@@ -187,7 +203,7 @@ test('host part capability requires compatible binary reads and missing signing 
             requestNative: async (_method, request) => ({ ...request, capabilities: { fileAccessVersion: version } }) });
         const event = { sender, senderFrame: frame };
         const result = await host.request(event, { ...f.input, action: 'context', origin: undefined });
-        assert.equal(result.capabilities.fileUploadVersion, ['1.2.0', '1.11.0'].includes(version) ? '1.0.0' : undefined);
+        assert.equal(result.capabilities.fileUploadVersion, ['1.2.0', '1.11.0'].includes(version) ? '1.0.1' : undefined);
         host.requestNative = async () => { throw Error('must not read before signing capability negotiation'); };
         await assert.rejects(host.request(event, { ...f.input, action: 'upload-part', origin: context.apiOrigin }),
             /selected server does not support/);

@@ -36,7 +36,7 @@ async function uploadFolderPart({ input, context, signal, authorize, requestNati
             value.path !== source.path || chunk?.version !== source.version || chunk.size !== source.size ||
             (range ? !(chunk.bytes instanceof Uint8Array) || chunk.bytes.length !== upload.length ||
                 chunk.offset !== upload.offset || chunk.length !== upload.length : chunk.offset !== source.size || chunk.data !== '')) throw invalid();
-        return chunk.bytes;
+        return range ? chunk.bytes : value.roots;
     };
     const bytes = await read(true), digest = createHash('sha256').update(bytes).digest(), checksum = digest.toString('base64');
     const signed = await signPart({ uploadId: upload.uploadId, parts: [{ partNumber: upload.partNumber, checksumSha256: checksum }] });
@@ -63,8 +63,9 @@ async function uploadFolderPart({ input, context, signal, authorize, requestNati
         if (!response.ok) throw invalid();
     }
     finally { await response.body?.cancel().catch(() => {}); }
-    await read(false); signal.throwIfAborted();
-    return { ...binding, uploadedPart: { uploadId: upload.uploadId, requestId: upload.requestId,
+    const roots = await read(false); signal.throwIfAborted();
+    if (!Array.isArray(roots)) throw invalid();
+    return { ...binding, roots, uploadedPart: { uploadId: upload.uploadId, requestId: upload.requestId,
         partNumber: upload.partNumber, offset: upload.offset, length: upload.length,
         version: source.version, size: source.size, sha256: digest.toString('hex') } };
 }
