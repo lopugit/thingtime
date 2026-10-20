@@ -96,6 +96,15 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-20: Add persistent device upload priorities with editable path ordering
+  and file-tree Upload next controls. Preserve in-flight operations and receipts
+  across priority changes/restarts, and keep parent-first uploads and safe Trash
+  order. Regression checks retain `.git` objects and worktree metadata under
+  dependency ignores. Skip redundant ancestor work for sealed first uploads to
+  an empty destination, preserving excluded-parent protection and pinned-input
+  migration checks. Installed priority and complete-backup acceptance remain
+  pending. See [PR1059](../PRs/1059-codex-sync-upload-priorities-add-upload-priorities-and-accelerate-initial-backups.md). — Codex (AI)
+
 - 2026-10-20: Read bounded inventory, plan and operation pages in bulk while
   preserving stored-key, ancestry, byte/count, scope and cancellation checks.
   Deduplicate sibling ancestor work and show the actual preparation phase and

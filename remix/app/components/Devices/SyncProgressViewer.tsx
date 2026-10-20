@@ -1,4 +1,5 @@
 import React from 'react';
+import { SyncUploadPriorities, useUploadPriorities, type UploadPriorityOptions } from './SyncUploadPriorities';
 import { TransferSpeedTrackers, type TransferSpeedTrackersProps } from './TransferSpeedTrackers';
 import type { ForegroundSyncProgress } from '~/fileSync/foregroundSync';
 import { parseSyncProgressDescriptor, projectSyncProgress, type SyncProgressDescriptor, type SyncProgressSource, type SyncProgressState } from '~/fileSync/progressProjection';
@@ -11,7 +12,7 @@ import { syncProgressBlocks, syncProgressDisplay, type SyncProgressBranch } from
 
 export type SyncProgressViewerProps = {
 	scopeKey: string; series?: TransferSpeedTrackersProps['series']; descriptor?: SyncProgressDescriptor | null; progress?: ForegroundSyncProgress;
-	currentScope(): SyncScope; status?: SyncProgressState; message?: string;
+	uploadPriorities?: UploadPriorityOptions; currentScope(): SyncScope; status?: SyncProgressState; message?: string;
 	accountTransport?: SettingsDocumentHostProps['accountTransport'];
 	/** Isolated fixtures may supply bounded synthetic metadata. */
 	source?: SyncProgressSource;
@@ -23,7 +24,8 @@ export function SyncProgressViewer(props: SyncProgressViewerProps) {
 	return <SyncProgressSession key={`${props.scopeKey}:${parsed.descriptor?.run.id ?? 'indexing'}`} {...props} descriptor={parsed.descriptor}
 		invalidDescriptor={parsed.invalid} />;
 }
-function SyncProgressSession({ scopeKey, series, descriptor, progress, currentScope, status = 'running', message, accountTransport, source: suppliedSource, invalidDescriptor }: SyncProgressViewerProps & { invalidDescriptor?: boolean }) {
+function SyncProgressSession({ scopeKey, series, descriptor, progress, currentScope, uploadPriorities, status = 'running', message, accountTransport, source: suppliedSource, invalidDescriptor }: SyncProgressViewerProps & { invalidDescriptor?: boolean }) {
+	const priorities = useUploadPriorities(uploadPriorities, currentScope);
 	const scopeRef = React.useRef(currentScope); scopeRef.current = currentScope;
 	const progressRef = React.useRef(progress); progressRef.current = progress;
 	const source = React.useMemo(() => suppliedSource || (descriptor ? createJournalSyncProgressSource(descriptor, () => scopeRef.current()) : null), [descriptor, suppliedSource]);
@@ -81,6 +83,9 @@ function SyncProgressSession({ scopeKey, series, descriptor, progress, currentSc
 	const visibleFolder = (path: unknown): path is string => typeof path === 'string' &&
 		Object.values(latest.current).some(branch => branch.page?.rows.some(row => row.path === path && row.kind === 'folder'));
 	const actions = {
+		prioritize: async ({ inputs }: { inputs: Readonly<Record<string, string | number | boolean>> }) => {
+			if (priorities.enabled && !priorities.disabled && typeof inputs.path === 'string' && Object.values(latest.current).some(branch => branch.page?.rows.some(row => row.path === inputs.path))) await priorities.moveFirst(inputs.path);
+		},
 		refresh: async () => { for (const parent of Object.keys(latest.current)) await read(parent); },
 		root: () => focus(''),
 		up: () => focus(focusRef.current.split('/').slice(0, -1).join('/')),
@@ -109,8 +114,8 @@ function SyncProgressSession({ scopeKey, series, descriptor, progress, currentSc
 		}
 	};
 	const displayBranches = invalidDescriptor ? { ...branches, '': { ...branches[''], error: 'Saved sync progress metadata is invalid. Resume sync to read its current journal.' } } : branches;
-	return <><SettingsDocumentHost documentKey="file-sync-progress" defaultDocument={syncProgressBlocks} scopeKey={scopeKey} title="File sync progress" accountTransport={accountTransport}>
-		{({ blocks, chrome, editing }) => <TransientBlockHost scopeKey={scopeKey} scope={syncProgressDisplay(displayBranches, progress, status, !!source, message, focusedFolder)} actions={actions} enabled={!editing}>
+	return <><SyncUploadPriorities controller={priorities} scopeKey={scopeKey} accountTransport={accountTransport} /><SettingsDocumentHost documentKey="file-sync-progress" defaultDocument={syncProgressBlocks} scopeKey={scopeKey} title="File sync progress" accountTransport={accountTransport}>
+		{({ blocks, chrome, editing }) => <TransientBlockHost scopeKey={scopeKey} scope={syncProgressDisplay(displayBranches, progress, status, !!source, message, focusedFolder, priorities.enabled, priorities.disabled)} actions={actions} enabled={!editing}>
 			<WebpageBlocksRenderer blocks={blocks} componentsByRef={{}} chrome={chrome} />
 		</TransientBlockHost>}
 	</SettingsDocumentHost><TransferSpeedTrackers scopeKey={scopeKey} stage={progress?.stage} state={status === 'running' && progress?.stage === 'complete' ? 'complete' : status} series={series} accountTransport={accountTransport} /></>;

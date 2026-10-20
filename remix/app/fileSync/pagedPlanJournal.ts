@@ -33,6 +33,10 @@ const captures = (s: PagedPlanSpec) => [s.local, s.remote, s.baseline.local, s.b
 const initialPositions = (): Position[] => Array.from({ length: 4 }, () => ({ after: null, read: 0 }));
 const progress = ({ phase, indexed, planned, decisions }: Header): PagedPlanProgress => ({ phase, indexed, planned, decisions });
 const nonnegative = (n: number) => Number.isSafeInteger(n) && n >= 0;
+// Sealing has already validated this one populated stream's paths and parents.
+// With no destination or baseline, descendant changes cannot affect a decision.
+const initialUpload = (spec: PagedPlanSpec, totals: readonly number[]) =>
+	['backup', 'upload'].includes(spec.policy.mode) && !spec.policy.propagateDeletes && totals[0] > 0 && totals.slice(1).every(n => n === 0);
 
 export function parsePagedPlanSpec(value: PagedPlanSpec): PagedPlanSpec {
 	if (!value || !identifier(value.id) || !value.baseline || !value.policy ||
@@ -65,10 +69,12 @@ export function upgradePagedPlanJournal(db: IDBDatabase) {
 	for (const store of [...STORES, PLAN_PIN_STORE]) if (!db.objectStoreNames.contains(store)) db.createObjectStore(store);
 }
 
-/** Two bounded passes over immutable observations. The first validates the
- * complete union and indexes changed ancestors; only then can the second make
- * decisions. No decision is readable until that second pass is durable.
- * This is a plan, never device approval, an operation receipt or a baseline. */
+/** Bounded passes over immutable observations. Normally the first validates
+ * the complete union and indexes changed ancestors before the decision pass.
+ * A sealed initial upload with empty destination/baseline needs only the
+ * decision pass, which still retains excluded-parent checkpoint protection.
+ * Decisions remain unreadable until the complete plan is durable. This is a
+ * plan, never device approval, an operation receipt or a baseline. */
 export function pagedPlanJournal(db: IDBDatabase, access: JournalAccess, keyRange?: typeof IDBKeyRange) {
 	const { scope, key, check, range, transaction, readPage } = journalScope(db, access, keyRange);
 	const inventory = inventoryJournal(db, access, keyRange);
@@ -88,7 +94,34 @@ export function pagedPlanJournal(db: IDBDatabase, access: JournalAccess, keyRang
 			const store = tx.objectStore(STORES[0]), request = store.get([key, spec.id]);
 			request.onsuccess = () => { try {
 				check();
-				if (request.result) { validate(request.result, spec); done(progress(request.result)); return; }
+				if (request.result) {
+					const h: Header = request.result; validate(h, spec);
+					if (h.phase !== 'indexing' || !h.inputInstances || !initialUpload(spec, h.totals)) { done(progress(h)); return; }
+					if (h.indexed !== h.positions[0].read) throw Error('Initial upload indexing count changed.');
+					// Resume an older indexing pass only while its original sealed
+					// inputs are still pinned. Never adopt a recreated public ID.
+					let remaining = 4;
+					captures(spec).forEach((capture, i) => {
+						const read = tx.objectStore(INVENTORY_STORES[0]).get([key, capture.id]);
+						read.onsuccess = () => { try {
+							check(); validateInventoryHeader(read.result, capture, key);
+							const input: InventoryHeader = read.result;
+							if (input.phase !== 'complete' || input.instance !== h.inputInstances![i] || input.entries !== h.totals[i])
+								throw Error('Initial upload input was replaced or is incomplete.');
+							if (i < 2 && input.backupCapture) {
+								if (i !== 0 || input.derivedCoverage) throw Error('A native source capture is required for backup planning.');
+								assertBackupCapturePolicy(spec.policy);
+							}
+							const pin = tx.objectStore(INVENTORY_PIN_STORE).get([key, capture.id, spec.id]);
+							pin.onsuccess = () => { try {
+								check(); if (pin.result !== true) throw Error('Initial upload input lost its plan pin.');
+								if (--remaining) return;
+								const next: Header = { ...h, phase: 'planning', indexed: h.totals[0], positions: initialPositions(), revision: h.revision + 1 };
+								validate(next, spec); store.put(next, [key, spec.id]); done(progress(next));
+							} catch (error) { fail(error); } };
+						} catch (error) { fail(error); } };
+					}); return;
+				}
 				const totals: number[] = [], inputInstances: string[] = [], instances = new Map<string, string>(); let remaining = 4;
 				captures(spec).forEach((capture, i) => {
 					const read = tx.objectStore(INVENTORY_STORES[0]).get([key, capture.id]);
@@ -110,7 +143,7 @@ export function pagedPlanJournal(db: IDBDatabase, access: JournalAccess, keyRang
 						if (--remaining) return;
 						if (!Number.isSafeInteger(totals.reduce((a, b) => a + b, 0))) throw Error('Sync inventory count exceeds its safe range.');
 						const h: Header = { scope: key, instance: crypto.randomUUID(), spec, totals, inputInstances, positions: initialPositions(), revision: 0,
-							phase: 'indexing', indexed: 0, planned: 0, decisions: 0 };
+							phase: initialUpload(spec, totals) ? 'planning' : 'indexing', indexed: initialUpload(spec, totals) ? totals[0] : 0, planned: 0, decisions: 0 };
 						store.add(h, [key, spec.id]); registerJournalMetadata(tx, access, key, 'plan', spec.id, h.instance); done(progress(h));
 					} catch (error) { fail(error); } };
 				});
@@ -119,10 +152,12 @@ export function pagedPlanJournal(db: IDBDatabase, access: JournalAccess, keyRang
 	};
 	const step = async (value: PagedPlanSpec): Promise<PagedPlanProgress> => {
 		const spec = parsePagedPlanSpec(value), header = await withHeader<Header>(spec, 'readonly', (h, _tx, done) => done(h));
+		if (header.phase === 'indexing' && header.inputInstances && initialUpload(spec, header.totals)) return begin(spec);
 		return advance(spec, header);
 	};
 	async function advance(spec: PagedPlanSpec, header: Header): Promise<PagedPlanProgress> {
 		if (header.phase === 'complete') return progress(header);
+		const firstUpload = !!header.inputInstances && initialUpload(spec, header.totals);
 		// Each stream contributes at most one bounded page. Persist only consumed
 		// positions; unused suffixes are read again after restart, never skipped.
 		const pages = await Promise.all(captures(spec).map(async (capture, i) => {
@@ -152,7 +187,7 @@ export function pagedPlanJournal(db: IDBDatabase, access: JournalAccess, keyRang
 			if (!sameSyncContent(entries[2], entries[3])) throw Error('Sync baseline must contain confirmed matching content.');
 			const row: SyncPathObservation = { path, local: entries[0], remote: entries[1], beforeLocal: entries[2], beforeRemote: entries[3] };
 			const rowFlags: [string, number][] = [];
-			if (header.phase === 'indexing' && !included(row)) {
+			if ((header.phase === 'indexing' || firstUpload) && !included(row)) {
 				const parts = path.split('/');
 				for (let n = 1; n < parts.length; n++) rowFlags.push([syncPathKey(parts.slice(0, n).join('/')), 2]);
 			}
@@ -185,13 +220,13 @@ export function pagedPlanJournal(db: IDBDatabase, access: JournalAccess, keyRang
 				}
 				validate(next, spec); tx.objectStore(STORES[0]).put(next, [key, spec.id]); done(progress(next));
 			};
+			// Also retain excluded-parent protection during the single-pass
+			// initial upload; the checkpoint consumes these side-2 flags.
+			const written = [new Set<string>(), new Set<string>(), new Set<string>()];
+			for (const [path, side] of flags) if (!written[side].has(path)) {
+				written[side].add(path); tx.objectStore(STORES[1]).put(true, [key, spec.id, path, side]);
+			}
 			if (header.phase === 'indexing') {
-				// Siblings repeatedly mark the same ancestors. Each flag is an
-				// idempotent true value, so write it once per bounded page.
-				const written = [new Set<string>(), new Set<string>(), new Set<string>()];
-				for (const [path, side] of flags) if (!written[side].has(path)) {
-					written[side].add(path); tx.objectStore(STORES[1]).put(true, [key, spec.id, path, side]);
-				}
 				next.indexed += rows.length;
 				if (finished) { next.phase = 'planning'; next.positions = initialPositions(); }
 				save(); return;
@@ -199,6 +234,13 @@ export function pagedPlanJournal(db: IDBDatabase, access: JournalAccess, keyRang
 			next.planned += rows.length;
 			const selected = rows.filter(included); let pending = selected.length;
 			if (!pending) { save(); return; }
+			if (firstUpload) {
+				for (const row of selected) {
+					const decision = decideSyncPath(row, spec.policy, false, false);
+					tx.objectStore(STORES[2]).add(decision, [key, spec.id, syncPathKey(row.path)]); next.decisions++;
+				}
+				save(); return;
+			}
 			selected.forEach(row => {
 				const below = [false, false, false]; let waiting = 3;
 				[0, 1, 2].forEach(side => {

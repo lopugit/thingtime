@@ -542,3 +542,10 @@ sealing/reads on live authority; transient identity failures survive through
 `NodeController`, Electron `folder-sync.cjs` and `nativeInventory.ts` into the
 existing retry scheduler. Run `macos/ThingtimeNode/scripts/test-commander-backup.sh`,
 native MacFolderSync/ThingtimeAPIClient tests and `test:file-sync`.
+
+Upload order preferences use `fileSync/syncPriorityJournal.ts` and the existing
+paged execution journal, with editable `SyncUploadPriorities` blocks and file-tree
+controls in `SyncProgressViewer`. Preferences are device-local scheduling hints,
+not API grants or deletion permission. `syncPriorityJournal.test.ts`,
+`uploadPriorityEditor.test.ts` and the editable sync progress browser check cover
+recovery, parent ordering, scope, persistence and nested Builder controls.

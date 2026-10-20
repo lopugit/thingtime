@@ -3728,3 +3728,39 @@ PR #1054, and the completed 3,653,988-entry Commander capture was reused. Signed
 installed Quit/reopen acceptance for this shutdown correction and actual cloud
 payload receipts remain pending. Inventory import currently restarts from the
 beginning after an interruption; retaining its page checkpoint is separate work.
+
+## Device-local upload priorities — 2026-10-20
+
+The progress viewer exposes an editable priority list and an **Upload next**
+control on file/folder rows. Paths are relative to the selected connection;
+folders include descendants. Saved priorities belong to the exact device,
+account, origin, data plane and connection, survive restart, and may be edited
+while preparation or transfer is active. They affect scheduling only: native
+approval, immutable planned operations, conflict review and exclusions continue
+unchanged. Downloads retain their normal order.
+
+The version-12 recovery journal stores priorities separately from native policy.
+Before each effect the runner reserves its operation durably. A changed priority
+waits for that operation's receipt, including after a lost reply or restart.
+Planned copy ancestors execute first; Trash stays in canonical children-first
+order. Existing running journals first resolve their potentially uncertain next
+operation. Already confirmed work is skipped through bounded persisted cursors,
+without rewriting millions of operation rows. Older clients cannot open the
+upgraded IndexedDB version.
+
+Default dependency ignores do not exclude `.git`; Commander backup explicitly
+includes hidden paths and does not read repository/global Gitignore files.
+Worktree pointer files and Git metadata are included, but a pointer does not
+prove its referenced working directory or object store is covered. Complete
+remote backup verification and local removal are separate unfinished work;
+this feature never removes local files. Isolated editable UI checks pass;
+installed priority-order and complete-upload acceptance remain pending.
+
+For an initial upload/backup with deletes disabled and sealed empty destination
+and baseline inventories, planning skips the changed-ancestor pass. The sealed
+local inventory already proves path uniqueness and folder ancestry. Decisions
+still use bounded pages, remain unreadable until completion, and write excluded
+ancestor flags for checkpoint protection. An older indexing pass may migrate
+only after revalidating every input instance, count, sealed state and plan pin.
+All other plans retain the two-pass path. This reduces preparation work; it is
+not evidence of uploaded content or a complete backup.

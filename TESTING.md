@@ -12565,3 +12565,26 @@ separate from deterministic discovery/lease tests.
 - [ ] Upgrade the signed installed Mac app. Confirm the retained home inventory
   resumes automatically and preparation counts advance. Verify an actual file
   receipt and downloaded bytes before declaring uploads working.
+
+### Upload priorities and Git preservation — 2026-10-20
+
+- [x] Keep `.git` directories, objects, refs, reflogs, worktree metadata and
+  worktree `.git` pointer files under default dependency rules. Exercise the
+  actual Rust backup walker with hidden Git files and an ignored repository
+  `.gitignore`; saved connection rules remain the only ignore policy.
+- [x] In isolated Chromium, save and reorder paths, reload, select Upload next
+  from the file tree, remove a priority and preserve an unsaved draft on invalid
+  or excluded paths. Edit nested priority headings, repeated labels and controls
+  separately in Builder, save/reload, and scroll desktop/mobile to the bottom.
+- [x] Verify priority changes after a current operation, exact-file ancestors,
+  overlapping folder prefixes, lost replies, legacy-run migration, cancellation,
+  scope changes and bounded reads; preserved receipts must prevent duplicate work.
+- [x] Compare the sealed, empty-destination initial-upload shortcut with the
+  normal planner, including `.git`, ignore rules and protected parents. Confirm
+  zero ancestor reads, bounded cancellation/reopen, atomic older-plan migration,
+  and rejection of replaced, unsealed, recounted or unpinned inputs. Keep other
+  modes, deletion propagation and nonempty companion inventories on the full path.
+- [ ] In the signed installed app, save the user's chosen paths and verify actual
+  upload order and cloud receipts after restart. No local deletion is justified
+  by a queued priority or by partial coverage. Independently prove complete remote
+  content, including Git/worktree dependencies, before local offload.

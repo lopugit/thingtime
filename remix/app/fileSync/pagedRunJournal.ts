@@ -1,3 +1,4 @@
+import { SYNC_PRIORITY_STORE, parseSyncPriorityPreferences } from './syncPriorityJournal';
 import { JOURNAL_RETENTION_STORE, registerJournalMetadata, forgetJournalMetadata } from './journalRetention';
 import { parsePagedRunReview, parseReviewedConflict, resolveReviewedPage, type PagedRunReview, type PagedReviewProgress, type ReviewedSyncConflict } from './pagedRunReview';
 import { parseFileSyncConfiguration, type FileSyncConfiguration } from './configuration';
@@ -18,14 +19,16 @@ export const REVIEW_STORE = 'sync-run-reviews';
 export const CLOUD_PARENTS = 'sync-cloud-trash-parents';
 export const PAGED_RUN_HEADS = 'sync-paged-run-heads';
 export const PAGED_RUN_STORES = ['sync-paged-runs', 'sync-paged-operations'] as const;
-const stores = [JOURNAL_RETENTION_STORE, RETAINED_HEADS, REVIEW_STORE, CLOUD_PARENTS, ...PAGED_RUN_STORES, PAGED_RUN_HEADS, PLAN_STORES[0], PLAN_PIN_STORE, INVENTORY_STORES[0], INVENTORY_PIN_STORE, PAGED_CHECKPOINT_HEADS, 'runs'];
+const stores = [SYNC_PRIORITY_STORE, JOURNAL_RETENTION_STORE, RETAINED_HEADS, REVIEW_STORE, CLOUD_PARENTS, ...PAGED_RUN_STORES, PAGED_RUN_HEADS, PLAN_STORES[0], PLAN_PIN_STORE, INVENTORY_STORES[0], INVENTORY_PIN_STORE, PAGED_CHECKPOINT_HEADS, 'runs'];
 export type PagedRunSpec = { id: string; plan: PagedPlanSpec; review?: PagedRunReview; configuration?: FileSyncConfiguration };
 export type PagedRunProgress = { phase: 'preparing' | 'ready' | 'running' | 'complete'; read: number; total: number; operations: number; confirmed: number };
 type SortKey = [number, number, string];
 export type CloudBindingProgress = { prepared: number; total: number; phase: 'preparing' | 'ready' };
 type CloudPreparation = { configuration: FileSyncConfiguration; root: CloudInventoryRoot; prepared: number; after: SortKey | null };
 export type PagedRunHeader = PagedRunProgress & { spec: PagedRunSpec; scope: string; instance: string; retired?: true; planInstance: string;
-	next: PagedPlanCursor | null; revision: number; confirmedThrough: SortKey | null; cloud?: CloudPreparation; review?: PagedReviewProgress; retained?: true };
+	next: PagedPlanCursor | null; revision: number; confirmedThrough: SortKey | null; cloud?: CloudPreparation; review?: PagedReviewProgress; retained?: true; scheduling?: Scheduling };
+type Scheduling = { canonical: boolean; legacy: boolean; revision: number; index: number; after: string | null; reserved: string | null };
+const freshScheduling = (legacy = false): Scheduling => ({ canonical: false, legacy, revision: 0, index: 0, after: null, reserved: null });
 type Header = PagedRunHeader;
 export type ConfirmedSyncOperation = { operation: SyncOperation; receipt: SyncReceipt };
 export type ConfirmedSyncCursor = { id: string; instance: string; scope: SyncScope; after: string; read: number };
@@ -76,9 +79,15 @@ export const validatePagedRunHeader = (h: Header, spec: PagedRunSpec, scope: Syn
 			!h.next.scope || !sameSyncScope(h.next.scope, scope) || !validSyncPathKey(h.next.after) || h.next.read !== h.read)) ||
 		(h.phase !== 'preparing' && (h.read !== h.total || h.next !== null)) ||
 		(['preparing', 'ready'].includes(h.phase) && h.confirmed !== 0) || (h.phase === 'complete' && h.confirmed !== h.operations) ||
-		(h.confirmed === 0 ? after !== null : !Array.isArray(after) || after.length !== 3 || ![0, 1].includes(after[0]) ||
+		(h.scheduling ? (after !== null && !validOrder(after)) : h.confirmed === 0 ? after !== null : !Array.isArray(after) || after.length !== 3 || ![0, 1].includes(after[0]) ||
 			!Number.isInteger(after[1]) || !validSyncPath(after[2]) || after[1] !== after[2].split('/').length * (after[0] === 0 ? 1 : -1)))
 		throw Error('Paged sync run changed or is unavailable.');
+	if (h.scheduling) {
+		const s = h.scheduling;
+		if (typeof s.canonical !== 'boolean' || typeof s.legacy !== 'boolean' || ![s.revision, s.index].every(nonnegative) ||
+			(s.after !== null && !validSyncPathKey(s.after)) || (s.reserved !== null && !identifier(s.reserved)) ||
+			(h.phase === 'complete' && s.reserved !== null)) throw Error('Invalid upload scheduling progress.');
+	}
 	if (h.retained !== undefined && (h.retained !== true || h.phase !== 'complete' || spec.review?.kind !== 'retain')) throw Error('Invalid retained run.');
 	if (spec.configuration && spec.configuration.deviceId !== scope.deviceId) throw Error('Saved run device changed.');
 	if (!!spec.review !== !!h.review) throw Error('Sync conflict review changed.');
@@ -236,25 +245,35 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 		});
 	};
 	const read = async (value: PagedRunSpec): Promise<{ operations: SyncOperation[]; progress: PagedRunProgress }> => {
-		const spec = parsePagedRunSpec(value);
-		return withHeader(spec, 'readonly', (h, tx, done, fail) => {
-			if (h.phase === 'preparing') throw Error('Paged sync run is incomplete.');
-			const operations: SyncOperation[] = []; let size = 2;
-			readPage<Row>(tx.objectStore(PAGED_RUN_STORES[1]), operationRange(spec.id, h.confirmedThrough), INVENTORY_PAGE_ENTRIES + 1, (rows, keys) => {
-				for (const [i, value] of rows.entries()) {
-					const op = row(value, spec, keys[i]).operation;
-					if (op.confirmed || h.confirmed + operations.length >= h.operations) throw Error('Invalid sync operation confirmation order.');
-					const length = bytes(op) + 1;
-					if (operations.length === INVENTORY_PAGE_ENTRIES || size + length > INVENTORY_PAGE_BYTES) {
-						if (!operations.length) throw Error('Sync operation exceeds its byte bound.');
-						done({ operations, progress: progress(h) }); return;
+		const spec = parsePagedRunSpec(value), operations: SyncOperation[] = [];
+		let after: SortKey | null | undefined, instance: string | undefined, revision: number | undefined, size = 2;
+		for (;;) {
+			const page = await withHeader<{ more: boolean; progress: PagedRunProgress }>(spec, 'readonly', (h, tx, done, fail) => {
+				if (h.phase === 'preparing') throw Error('Paged sync run is incomplete.');
+				if (instance !== undefined && (h.instance !== instance || h.revision !== revision)) throw Error('Sync operation page changed; retry.');
+				instance = h.instance; revision = h.revision; after ??= h.confirmedThrough;
+				if (h.phase === 'complete') { done({ more: false, progress: progress(h) }); return; }
+				readPage<Row>(tx.objectStore(PAGED_RUN_STORES[1]), operationRange(spec.id, after), INVENTORY_PAGE_ENTRIES + 1, (rows, keys) => {
+					for (const [i, value] of rows.entries()) {
+						const op = row(value, spec, keys[i]).operation;
+						if (!op.confirmed) {
+							if (h.confirmed + operations.length >= h.operations) throw Error('Invalid sync operation confirmation count.');
+							const length = bytes(op) + 1;
+							if (operations.length === INVENTORY_PAGE_ENTRIES || size + length > INVENTORY_PAGE_BYTES) {
+								if (!operations.length) throw Error('Sync operation exceeds its byte bound.');
+								done({ more: false, progress: progress(h) }); return;
+							}
+							operations.push(op); size += length;
+						}
+						after = orderKey(op);
 					}
-					operations.push(op); size += length;
-				}
-				if (h.confirmed + operations.length !== h.operations) throw Error('Sync operations ended before their declared count.');
-				done({ operations, progress: progress(h) });
-			}, fail);
-		});
+					const more = rows.length === INVENTORY_PAGE_ENTRIES + 1;
+					if (!more && h.confirmed + operations.length !== h.operations) throw Error('Sync operations ended before their declared count.');
+					done({ more, progress: progress(h) });
+				}, fail);
+			});
+			if (!page.more) return { operations, progress: page.progress };
+		}
 	};
 	const find = async (spec: PagedRunSpec, path: string): Promise<SyncOperation | null> => {
 		if (!validSyncPath(path)) throw Error('Invalid sync path.');
@@ -475,12 +494,112 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 			while (state.phase === 'preparing') { state = await step(spec); changed?.(state); }
 			return state;
 		},
+		/** Reserve one immutable effect before receipt lookup/publication. Each
+		 * transaction scans at most 128 rows; cursors survive interruption. */
+		async claimNext(value: PagedRunSpec): Promise<SyncOperation | null> {
+			const spec = parsePagedRunSpec(value);
+			for (;;) {
+				check();
+				const selected = await withHeader<SyncOperation | null | 'continue'>(spec, 'readwrite', (h, tx, done, fail) => {
+					if (h.phase === 'complete') { done(null); return; }
+					if (h.phase !== 'running') throw Error('Start the durable sync run before selecting an operation.');
+					const schedule = h.scheduling ?? (h.scheduling = freshScheduling(true));
+					const ops = tx.objectStore(PAGED_RUN_STORES[1]), paths = ops.index('path');
+					const persist = () => { h.revision++; save(h, tx); };
+					const reserve = (candidate: Row, advance?: () => void, canonical = false) => {
+						const chosen = candidate.operation;
+						if (bytes(chosen) + 2 > INVENTORY_PAGE_BYTES) throw Error('Sync operation exceeds its byte bound.');
+						// Planned ancestor copies must be acknowledged before their child.
+						const parts = chosen.mutation.path.split('/'), ancestors = parts.slice(0, -1).map((_, i) => parts.slice(0, i + 1).join('/'));
+						const finish = (operation: SyncOperation) => {
+							if (operation.id === chosen.id) advance?.();
+							schedule.reserved = operation.id; schedule.canonical = canonical; schedule.legacy = false; persist(); done(operation);
+						};
+						// Canonical order already proves every ancestor operation was confirmed.
+						if (canonical || chosen.mutation.kind !== 'copy' || !ancestors.length) { finish(chosen); return; }
+						const from = chosen.mutation.from;
+						let pending = ancestors.length; const parents: (SyncOperation | null)[] = new Array(pending);
+						ancestors.forEach((path, i) => {
+							const get = paths.get([key, spec.id, syncPathKey(path)]);
+							get.onsuccess = () => { try {
+								check(); const parent = get.result === undefined ? null : row(get.result, spec).operation;
+								if (parent && parent.mutation.path !== path) throw Error('Upload ancestor path collision.');
+								parents[i] = parent;
+								if (--pending) return;
+								const first = parents.find(op => op && !op.confirmed);
+								if (first && (first.mutation.kind !== 'copy' || first.mutation.from !== from || first.mutation.source.kind !== 'folder'))
+									throw Error('Upload ancestor requires canonical sync order.');
+								finish(first ?? chosen);
+							} catch (error) { fail(error); } };
+						});
+					};
+					if (schedule.reserved !== null) {
+						const get = ops.index('operation').get([key, schedule.reserved]);
+						get.onsuccess = () => { try {
+							check(); const r = row(get.result, spec);
+							if (r.operation.confirmed) throw Error('Reserved operation is already confirmed.');
+							done(r.operation);
+						} catch (error) { fail(error); } }; return;
+					}
+					const get = tx.objectStore(SYNC_PRIORITY_STORE).get(key);
+					get.onsuccess = () => { try {
+						check(); const preferences = get.result === undefined ? { revision: 0, paths: [] } : parseSyncPriorityPreferences(get.result);
+						if (schedule.revision !== preferences.revision) {
+							schedule.revision = preferences.revision; schedule.index = 0; schedule.after = null;
+						}
+						if (!schedule.legacy && schedule.index < preferences.paths.length) {
+							const requested = preferences.paths[schedule.index], prefix = syncPathKey(requested);
+							const advancePriority = () => { schedule.index++; schedule.after = null; persist(); done('continue'); };
+							const eligible = (r: Row) => {
+								const m = r.operation.mutation;
+								if (m.path !== requested && !m.path.startsWith(requested + '/')) throw Error('Upload priority path collision.');
+								return !r.operation.confirmed && m.kind === 'copy' && m.from === 'local';
+							};
+							if (schedule.after === null) {
+								const exact = paths.get([key, spec.id, prefix]);
+								exact.onsuccess = () => { try {
+									check(); if (exact.result !== undefined) {
+										const r = row(exact.result, spec);
+										if (eligible(r)) { reserve(r, () => { schedule.after = prefix; }); return; }
+									}
+									schedule.after = prefix; persist(); done('continue');
+								} catch (error) { fail(error); } }; return;
+							}
+							if (schedule.after !== prefix && !schedule.after.startsWith(prefix + '/')) throw Error('Upload priority cursor changed.');
+							const lower = schedule.after === prefix ? prefix + '/' : schedule.after;
+							const range = (keyRange ?? globalThis.IDBKeyRange).bound([key, spec.id, lower], [key, spec.id, prefix + '0'], schedule.after !== prefix, true);
+							const request = paths.openCursor(range); let scanned = 0;
+							request.onsuccess = () => { try {
+								check(); const cursor = request.result;
+								if (!cursor) { advancePriority(); return; }
+								const r = row(cursor.value, spec, cursor.primaryKey);
+								if (eligible(r)) { reserve(r, () => { schedule.after = r.path; }); return; }
+								schedule.after = r.path;
+								if (++scanned === INVENTORY_PAGE_ENTRIES) { persist(); done('continue'); return; }
+								cursor.continue();
+							} catch (error) { fail(error); } }; return;
+						}
+						const request = ops.openCursor(operationRange(spec.id, h.confirmedThrough)); let scanned = 0;
+						request.onsuccess = () => { try {
+							check(); const cursor = request.result;
+							if (!cursor) throw Error('Sync operations ended before their declared count.');
+							const r = row(cursor.value, spec, cursor.primaryKey);
+							if (!r.operation.confirmed) { reserve(r, undefined, true); return; }
+							h.confirmedThrough = orderKey(r.operation);
+							if (++scanned === INVENTORY_PAGE_ENTRIES) { persist(); done('continue'); return; }
+							cursor.continue();
+						} catch (error) { fail(error); } };
+					} catch (error) { fail(error); } };
+				});
+				if (selected !== 'continue') return selected;
+			}
+		},
 		async start(value: PagedRunSpec): Promise<PagedRunProgress> {
 			const spec = parsePagedRunSpec(value);
 			return withHeader(spec, 'readwrite', (h, tx, done) => {
 				if (h.phase === 'preparing') throw Error('Paged sync run is incomplete.');
 				if (h.cloud && cloudProgress(h).phase !== 'ready') throw Error('Complete cloud bindings before starting the run.');
-				if (h.phase === 'ready') { h.phase = h.operations ? 'running' : 'complete'; h.revision++; save(h, tx); }
+				if (h.phase === 'ready') { h.scheduling = freshScheduling(); h.phase = h.operations ? 'running' : 'complete'; h.revision++; save(h, tx); }
 				done(progress(h));
 			});
 		},
@@ -497,14 +616,27 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 						if (JSON.stringify(r.receipt) !== JSON.stringify(saved)) throw Error('Sync receipt retry changed.');
 						done(progress(h)); return;
 					}
+					const commit = (primaryKey: IDBValidKey, scheduled: boolean) => {
+						op.confirmed = true; r.receipt = saved; ops.put(r, primaryKey);
+						h.confirmed++; h.revision++;
+						if (scheduled) {
+							if (h.scheduling!.canonical) h.confirmedThrough = orderKey(op);
+							h.scheduling!.reserved = null; h.scheduling!.canonical = false;
+						}
+						else h.confirmedThrough = orderKey(op);
+						if (h.confirmed === h.operations) h.phase = 'complete';
+						save(h, tx); done(progress(h));
+					};
+					if (h.scheduling?.reserved) {
+						if (h.scheduling.reserved !== op.id) throw Error('Confirm the reserved sync operation first.');
+						commit([key, spec.id, ...orderKey(op)], true); return;
+					}
 					const next = ops.openCursor(operationRange(spec.id, h.confirmedThrough));
 					next.onsuccess = () => { try {
 						check(); const cursor = next.result;
+						if (cursor && row(cursor.value, spec, cursor.primaryKey).operation.confirmed) { cursor.continue(); return; }
 						if (!cursor || row(cursor.value, spec, cursor.primaryKey).operation.id !== op.id) throw Error('Confirm sync operations in order.');
-						op.confirmed = true; r.receipt = saved; ops.put(r, cursor.primaryKey);
-						h.confirmed++; h.confirmedThrough = orderKey(op); h.revision++;
-						if (h.confirmed === h.operations) h.phase = 'complete';
-						save(h, tx); done(progress(h));
+						commit(cursor.primaryKey, false);
 					} catch (e) { fail(e); } };
 				} catch (e) { fail(e); } };
 			});
