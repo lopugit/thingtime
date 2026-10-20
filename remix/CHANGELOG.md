@@ -98,6 +98,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-20: Add server-only attachment completion diagnostics with fixed stages and closed error class/code/status fields, preserving HTTP responses and finalization leases. No error messages, paths, IDs or provider request IDs are logged by this diagnostic. Continued upload recovery remains open; see [diagnostic verification](../PRs/1071-codex-attachment-finalization-diagnostics-log-safe-attachment-completion-stages.md). — Codex (AI)
+
 - 2026-10-20: Resume exact nonempty file upload requests interrupted during finalization through the original fenced lease and object version. Back off only for three explicit retryable upload lease/settling codes; retain other conflicts with bounded, fixed diagnostics. `api.attachment-uploads` advances to 1.6.1. Installed upload-start 409 cause and recovery remain unverified. — Codex (AI)
 
 - 2026-10-20: Keep transient cloud sync HTTP 408/429/5xx failures resumable with original operation receipts. Persist a bounded retry deadline across restarts and noisy wake events; keep permission, identity, integrity and explicit Stop behavior unchanged. Signed installed recovery remains pending. — Codex (AI)

@@ -2575,6 +2575,43 @@ test('empty object finalization preserves lease fencing and never publishes afte
     assert.equal(marked, 0); assert.equal(deleted, 0); assert.equal(doc.attachmentState, 'finalizing');
 });
 
+test('completion failures log fixed stages and closed throwable diagnostics without changing the HTTP contract', async (t) => {
+    const logs: unknown[][] = [];
+    t.mock.method(console, 'error', (...args: unknown[]) => { logs.push(args); });
+    for (const stage of ['list-parts', 'complete-multipart', 'verify-object', 'detect-content', 'persist-ready', 'tag-ready']) {
+        for (const plain of [false, true]) {
+            logs.length = 0;
+            const sensitive = 'private-message/path?credential=never-log';
+            const failure = plain
+                ? { name: 'Unknown', Code: 'InvalidPart', message: sensitive, $metadata: { httpStatusCode: 400, attempts: 3 }, objectKey: sensitive }
+                : Object.assign(new Error(sensitive), { name: 'Unknown', code: 'ECONNRESET', $metadata: { httpStatusCode: 503, attempts: 3 } });
+            let doc = attachmentDoc({ objectSizeBytes: 3, attachmentPurpose: 'file' });
+            const step = async <T>(name: string, value: T): Promise<T> => { if (stage === name) throw failure; return value; };
+            const service = createAttachmentService({ now: () => now, customMongoActive: () => false,
+                store: {
+                    getOwned: async () => doc,
+                    claimFinalizing: async (_owner: string, _id: string, lease: string) => ({ acquired: true, doc: doc = { ...doc, attachmentState: 'finalizing', attachmentFinalizationLeaseId: lease } }),
+                    renewFinalizing: async () => doc, revertFinalizing: async () => doc,
+                    markReady: async () => { await step('persist-ready', undefined); return doc = { ...doc, attachmentState: 'ready', objectVersionId: 'version-1' }; }
+                } as any,
+                getS3: () => noopS3({
+                    listParts: async () => step('list-parts', [{ partNumber: 1, etag: 'etag', sizeBytes: 3, checksumSha256: checksum(1) }]),
+                    completeMultipartUpload: async () => step('complete-multipart', { versionId: 'version-1' }),
+                    headObject: async () => step('verify-object', { attachmentId: doc.shareId, sizeBytes: 3, versionId: 'version-1', checksumSha256: checksum(2), checksumType: 'COMPOSITE' }),
+                    detectContentType: async () => step('detect-content', undefined),
+                    markObjectReady: async () => step('tag-ready', undefined)
+                }) });
+            assert.deepEqual(await service.complete('user-1', { uploadId: doc.shareId }),
+                { ok: false, status: 503, error: 'Attachment storage is temporarily unavailable', code: 'storage_unavailable', retryable: true });
+            assert.equal(logs.length, 1); assert.equal(logs[0][0], '[attachments] complete failed (Unknown)');
+            assert.equal(typeof logs[0][1], 'string');
+            const diagnostic = JSON.parse(logs[0][1] as string);
+            assert.deepEqual(diagnostic, { stage, thrownKind: plain ? 'object' : 'error', errorClass: 'Unknown', errorCode: plain ? 'InvalidPart' : 'ECONNRESET', upstreamStatus: plain ? 400 : 503, attempts: 3 });
+            assert.doesNotMatch(JSON.stringify(logs), /private-message|credential|never-log|objects\/|etag|version-1|attachment-1/);
+        }
+    }
+});
+
 test('same nonempty file start resumes interrupted completion through the original finalization lease and MPU', async () => {
     let clock = new Date(now), doc: AttachmentDoc | null = null, creates = 0, completions = 0, marks = 0;
     const store: any = {
