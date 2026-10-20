@@ -148,22 +148,29 @@ export function journalMaintenance(db: IDBDatabase, access: JournalAccess, keyRa
 				} catch (e) { fail(e); } };
 			};
 			const scanRun = () => {
-				if (!active) { scanRows(); return; }
-				// Root ownership protects recovery even if a pin index is damaged.
-				get<PagedRunHeader>(PAGED_RUN_STORES[0], [key, active], run => {
-					validatePagedRunHeader(run, parsePagedRunSpec(run?.spec), scope);
-					if (run.spec.id !== active) throw Error('Active sync run identity changed.');
-					const plan = run.spec.plan; activePlans.add(plan.id);
-					for (const input of [plan.local, plan.remote, plan.baseline.local, plan.baseline.remote]) activeInputs.add(input.id);
-					get<PagedCheckpointHeader | undefined>(PAGED_CHECKPOINT_DRAFTS, [key, active], draft => {
-						if (draft) {
-							validatePagedCheckpointHeader(draft, draft.spec, key);
-							if (draft.runInstance !== run.instance || JSON.stringify(draft.spec.run) !== JSON.stringify(run.spec)) throw Error('Active checkpoint changed.');
-							for (const input of [draft.after.local, draft.after.remote, draft.baseline.local, draft.baseline.remote]) activeInputs.add(input.id);
-						}
-						scanRows();
+				// Durable roots protect both recovery and the latest completed
+				// progress view, even after publication releases input pins.
+				const roots = [...new Set([active, baseline?.runId, retained].filter((id): id is string => !!id))];
+				const visit = (index: number) => {
+					const id = roots[index]; if (!id) { scanRows(); return; }
+					get<PagedRunHeader>(PAGED_RUN_STORES[0], [key, id], run => {
+						validatePagedRunHeader(run, parsePagedRunSpec(run?.spec), scope);
+						if (run.spec.id !== id || (id === baseline?.runId && run.phase !== 'complete') || (id === retained && !run.retained))
+							throw Error('Protected sync run identity changed.');
+						const plan = run.spec.plan; activePlans.add(plan.id);
+						for (const input of [plan.local, plan.remote, plan.baseline.local, plan.baseline.remote]) activeInputs.add(input.id);
+						if (id !== active) { visit(index + 1); return; }
+						get<PagedCheckpointHeader | undefined>(PAGED_CHECKPOINT_DRAFTS, [key, id], draft => {
+							if (draft) {
+								validatePagedCheckpointHeader(draft, draft.spec, key);
+								if (draft.runInstance !== run.instance || JSON.stringify(draft.spec.run) !== JSON.stringify(run.spec)) throw Error('Active checkpoint changed.');
+								for (const input of [draft.after.local, draft.after.remote, draft.baseline.local, draft.baseline.remote]) activeInputs.add(input.id);
+							}
+							visit(index + 1);
+						});
 					});
-				});
+				};
+				visit(0);
 			};
 			const scan = () => {
 				if (--ready) return;

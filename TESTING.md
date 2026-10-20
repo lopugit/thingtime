@@ -12615,6 +12615,7 @@ separate from deterministic discovery/lease tests.
   obsolete rows must be collected without touching the new baseline.
 - [x] Interrupt immediately after checkpoint publication and resume cleanup
   across retired run/checkpoint page boundaries. Retained receipts and active
-  inputs remain protected even when pin indexes are damaged.
+  inputs remain protected even when pin indexes are damaged. Reopen completed
+  progress after cleanup and verify its original hierarchy and 100% receipts.
 - [ ] In the signed installed app, reopen the saved home job and confirm that
   preparation resumes despite obsolete rows. Verify real cloud bytes separately.

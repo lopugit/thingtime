@@ -158,6 +158,9 @@ test('cleanup preserves unfinished effects and the most recent retained conflict
 	await f.reload(); await runPagedForegroundCloudSync(saved, scope, f.input(), signal()); assert.equal(f.creates(), 135); f.journal().close();
 	const g = await retentionFixture(); await runPagedForegroundCloudSync(g.saved, retainScope, g.input(), signal());
 	const a = access(retainScope), retained = await g.journal().pagedRuns(a).retained(), first = g.counts();
+	assert.ok(retained);
+	for (const id of [retained.spec.plan.local, retained.spec.plan.remote, retained.spec.plan.baseline.local, retained.spec.plan.baseline.remote])
+		await g.journal().inventory(a).read(id);
 	for (let i = 0; i < 4; i++) { await g.reload(); await runPagedForegroundCloudSync(g.saved, retainScope, g.input(), signal()); }
 	assert.deepEqual(await g.journal().pagedRuns(a).retained(), retained); assert.equal(g.counts().uploads, first.uploads); assert.equal(g.counts().puts, first.puts);
 	assert.equal((await counts(g.factory))['sync-paged-runs'], 1); assert.deepEqual(g.live(), g.original); g.journal().close();

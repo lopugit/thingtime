@@ -3792,7 +3792,8 @@ Startup performs one bounded journal-maintenance page after authorization,
 rather than draining every obsolete capture or interrupted plan before any
 transfer can begin. A successful checkpoint or retained-receipt result is
 followed by complete cleanup through the same bounded, scope-checked pages.
-Active inputs, current baselines, and retained receipts keep their existing
-pins. Cancellation preserves retiring metadata for the next attempt. This
+The active run, latest checkpoint run and retained-conflict run protect their
+plans and input inventories independently of pins, so completed progress views
+remain readable after publication releases the ordinary consumer pins. Cancellation preserves retiring metadata for the next attempt. This
 changes cleanup scheduling only; it grants no new authority and never deletes
 user files or cloud payloads. Installed large-backlog acceptance is pending.
