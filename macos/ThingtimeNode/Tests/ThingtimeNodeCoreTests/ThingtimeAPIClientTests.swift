@@ -94,9 +94,9 @@ final class ThingtimeAPIClientTests: XCTestCase {
         super.tearDown()
     }
 
-    private func waitForIdentityQueue(_ admission: FileSyncIdentityAdmission) async throws {
+    private func waitForIdentityQueue(_ admission: FileSyncIdentityAdmission, count: Int = 1) async throws {
         for _ in 0..<10_000 {
-            if await admission.queuedForTesting == 1 { return }
+            if await admission.queuedForTesting == count { return }
             await Task.yield()
         }
         XCTFail("Identity did not reach admission"); throw CancellationError()
@@ -174,12 +174,15 @@ final class ThingtimeAPIClientTests: XCTestCase {
         // across clients, not only when a test injects one coordinator.
         let first = try ThingtimeAPIClient(baseURL: URL(string: "https://thingtime.test")!, credentialStore: store, session: session())
         let second = try ThingtimeAPIClient(baseURL: URL(string: "https://thingtime.test/")!, credentialStore: store, session: session())
-        async let a: Void = first.verifyFileSyncIdentity(ownerID: "owner", deviceID: "device")
-        async let b: Void = second.verifyFileSyncIdentity(ownerID: "owner", deviceID: "device")
-        _ = try await (a, b)
-        let times = count.startTimes
-        XCTAssertEqual(times.count, 2)
-        XCTAssertGreaterThanOrEqual(times[1] - times[0], 0.30)
+        let scope = FileSyncIdentityAdmission.scope(origin: URL(string: "https://thingtime.test")!, credential: credential)
+        let held = try await FileSyncIdentityAdmission.shared.acquire(scope)
+        let a = Task { try await first.verifyFileSyncIdentity(ownerID: "owner", deviceID: "device") }
+        let b = Task { try await second.verifyFileSyncIdentity(ownerID: "owner", deviceID: "device") }
+        try await waitForIdentityQueue(.shared, count: 2)
+        XCTAssertEqual(count.value, 0, "Both public clients must wait on the same live coordinator")
+        await FileSyncIdentityAdmission.shared.finish(held)
+        try await a.value; try await b.value
+        XCTAssertEqual(count.value, 2, "Every admitted client still performs fresh HTTP")
     }
 
     func testIdentityCooldownUsesOnlyCanonicalIntegerRetryAfterAndRetainsLongerWindows() {

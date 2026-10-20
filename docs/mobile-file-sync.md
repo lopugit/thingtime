@@ -3970,3 +3970,43 @@ file; full queues, failed writes, rotation and shutdown can lose observations.
 A bounded capture is partial and not proven job-correlated. Compare distributions
 by action/phase in one natural installed window; asynchronous stack sample
 counts and overlapping phase totals cannot establish per-file wall-time shares.
+
+## Conservative fresh identity burst budget — 2026-10-21
+
+Closed installed timings measured the native contribution above Electron queue
+or public-manifest time: upload-part median 6040 ms total/5211 ms native
+(11 rows); context 1670/1541 ms (45); inspect 1773/1623 ms (21); read 1852/1724 ms
+(31). Median host queue and capability time were zero in these groups. Suppressed
+native identity logs separately showed ordinary HTTP 46–531 ms and admission
+1046–1680 ms, with one 11950 ms admission. These are captured, overlapping,
+non-job-correlated samples, not a traffic census or additive wall-time shares.
+
+Scheduling retains one in-flight attempt and FIFO waiters per opaque
+origin/credential scope, but replaces the fixed completion gap with BOTH a
+12-token burst bucket refilling at three tokens/second AND at most 180 charged
+attempts in every rolling 60 seconds. The documented server default is 240/min;
+its actual deployment configuration was not inspected. Lower/custom limits
+remain authoritative through the existing shared canonical Retry-After policy.
+No server rate limit, capability, native payload or authentication contract changes.
+
+A permit reserves capacity without consuming it. After `willSend`, completion
+consumes one token and stores a conservative completion timestamp (not a permit
+timestamp). A caller delayed before URLSession cannot refill then spend an extra
+burst token; one active permit also reserves the rolling slot. Completion is
+necessarily after any actual HTTP start, so retained completions cannot omit a
+prior actual start still inside the 60-second window. Cancellation before
+`willSend` consumes nothing; cancellation after it remains charged because an
+attempt cannot safely be ruled out. No API-client send flag or fence changes.
+
+At most 180 timestamps per scope, 64 scopes and 128 queued callers are retained.
+Eviction requires no active/queued work, expired rolling history and cooldown,
+and completely refilled tokens—even if a scope is already eligible for another
+request. A failed/stale/cancelled timer cannot reset budget or strand waiters;
+full-window/depleted-token guards wait rather than letting floating-point
+boundary arithmetic admit an extra attempt. Credential reloads and every actual
+account/device/source/signature check remain fresh and unchanged.
+
+An actual old/new fake-clock fixture (26 attempts, 100 ms synthetic HTTP each)
+measured 10.95 s versus 4.866668 s. This demonstrates removal of the fixed gap
+while the new budgets still bind; it predicts no installed throughput gain.
+The existing closed timing logs support the next bounded natural acceptance window.

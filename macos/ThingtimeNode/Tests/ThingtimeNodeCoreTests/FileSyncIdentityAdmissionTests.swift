@@ -54,7 +54,35 @@ final class FileSyncIdentityAdmissionTests: XCTestCase {
         }
         XCTFail("Admission queue did not reach expected state"); throw CancellationError()
     }
-    func testConcurrentLanesRemainFIFOAndThreeFreshStartsPerSecond() async throws {
+    func testInitialBurstHasNoForcedPostCompletionGapAndThirteenthWaitsForRefill() async throws {
+        let clock = IdentityAdmissionTestClock(automatic: true)
+        let admission = FileSyncIdentityAdmission(now: { clock.now() }, sleep: { try await clock.sleep($0) })
+        for _ in 0..<12 {
+            let permit = try await admission.acquire("scope"); try await admission.willSend(permit)
+            await admission.finish(permit)
+        }
+        XCTAssertEqual(clock.now(), 0, "Initial burst must not impose a post-response gap")
+        let next = try await admission.acquire("scope")
+        XCTAssertGreaterThanOrEqual(clock.now(), 1.0 / 3)
+        XCTAssertLessThan(clock.now(), 1.0 / 3 + 0.00001)
+        try await admission.willSend(next); await admission.finish(next)
+    }
+    func testRepresentativeRPCScheduleTimingProof() async throws {
+        let clock = IdentityAdmissionTestClock(automatic: true)
+        let admission = FileSyncIdentityAdmission(now: { clock.now() }, sleep: { try await clock.sleep($0) })
+        var starts: [Double] = []
+        // Deterministic fixture: 13 RPCs, two fresh identity attempts per RPC,
+        // each HTTP response takes 100ms. This is not a live speed prediction.
+        for _ in 0..<26 {
+            let permit = try await admission.acquire("scope"); try await admission.willSend(permit)
+            starts.append(clock.now()); clock.advance(to: clock.now() + 0.1)
+            await admission.finish(permit)
+        }
+        XCTAssertEqual(starts.count, 26)
+        print("ADMISSION_SCHEDULE attempts=26 syntheticHTTPSeconds=0.1 elapsedSeconds=\(clock.now())")
+    }
+
+    func testConcurrentLanesRemainFIFOInsideTheBoundedBurst() async throws {
         let clock = IdentityAdmissionTestClock(automatic: true)
         let admission = FileSyncIdentityAdmission(now: { clock.now() }, sleep: { try await clock.sleep($0) })
         let first = try await admission.acquire("scope")
@@ -74,22 +102,97 @@ final class FileSyncIdentityAdmissionTests: XCTestCase {
         for task in tasks { try await task.value }
         let values = await starts.values
         XCTAssertEqual(values.map(\.0), ["transfer-pre", "index", "monitor", "transfer-post", "index-next", "transfer-next"])
-        for pair in zip(values, values.dropFirst()) { XCTAssertGreaterThanOrEqual(pair.1.1 - pair.0.1, 0.3339) }
-        for index in 0..<(values.count - 3) { XCTAssertGreaterThan(values[index + 3].1 - values[index].1, 1) }
+        XCTAssertTrue(values.allSatisfy { $0.1 == 0 }, "FIFO does not require artificial post-response gaps")
     }
-    func testDelayedHTTPStartCannotCompressFollowingStartsIntoABurst() async throws {
-        let clock = IdentityAdmissionTestClock()
+    func testDelayedHTTPStartCannotRefillThenSpendAThirteenthBurstToken() async throws {
+        let clock = IdentityAdmissionTestClock(automatic: true)
         let admission = FileSyncIdentityAdmission(now: { clock.now() }, sleep: { try await clock.sleep($0) })
-        let first = try await admission.acquire("scope"); try await admission.willSend(first)
-        let next = Task { try await admission.acquire("scope") }; try await queued(1, admission)
-        // Simulate the HTTP caller being descheduled after admission, so actual
-        // HTTP starts and completes much later than willSend's timestamp.
-        clock.advance(to: 1); await admission.finish(first); await settle()
-        clock.advance(to: 1.1); await settle(); try await queued(1, admission)
-        clock.advance(to: 1.334); await settle()
-        let second = try await next.value; try await admission.willSend(second)
-        XCTAssertGreaterThanOrEqual(clock.now(), 1.334)
-        await admission.finish(second)
+        for _ in 0..<11 {
+            let permit = try await admission.acquire("scope"); try await admission.willSend(permit); await admission.finish(permit)
+        }
+        let delayed = try await admission.acquire("scope"); try await admission.willSend(delayed)
+        // Deschedule before HTTP really starts. Charging at permit/willSend
+        // would refill a complete 12-token burst and forget this late start.
+        clock.advance(to: 10); await admission.finish(delayed)
+        for _ in 0..<11 {
+            let permit = try await admission.acquire("scope"); try await admission.willSend(permit)
+            XCTAssertEqual(clock.now(), 10); await admission.finish(permit)
+        }
+        let last = try await admission.acquire("scope")
+        XCTAssertGreaterThanOrEqual(clock.now(), 10 + 1.0 / 3)
+        try await admission.willSend(last); await admission.finish(last)
+    }
+
+    func testRollingWindowCapsEveryOneHundredEightyFirstAttemptEvenWhenTokensRefill() async throws {
+        let clock = IdentityAdmissionTestClock(automatic: true)
+        let admission = FileSyncIdentityAdmission(now: { clock.now() }, sleep: { try await clock.sleep($0) })
+        var starts: [Double] = []
+        for _ in 0..<240 {
+            let permit = try await admission.acquire("scope"); try await admission.willSend(permit)
+            starts.append(clock.now()); await admission.finish(permit)
+        }
+        XCTAssertGreaterThanOrEqual(starts[180], 60)
+        for (i, time) in starts.enumerated() {
+            XCTAssertLessThanOrEqual(starts.prefix(i + 1).filter { $0 > time - 60 }.count, 180)
+            for earlier in 0...i {
+                XCTAssertLessThanOrEqual(Double(i - earlier + 1), 12 + 3 * (time - starts[earlier]) + 0.00001)
+            }
+        }
+    }
+
+    func testUnsentCancellationConsumesNoBudgetButWillSendCancellationIsConservativelyCharged() async throws {
+        let clock = IdentityAdmissionTestClock(automatic: true)
+        let admission = FileSyncIdentityAdmission(now: { clock.now() }, sleep: { try await clock.sleep($0) })
+        let held = try await admission.acquire("scope")
+        let cancelled = Task { try await admission.acquire("scope") }; try await queued(1, admission)
+        cancelled.cancel()
+        do { _ = try await cancelled.value; XCTFail("Cancelled waiter acquired") } catch { XCTAssertTrue(error is CancellationError) }
+        await admission.finish(held)
+        for _ in 0..<200 {
+            let unsent = try await admission.acquire("scope"); await admission.finish(unsent)
+        }
+        XCTAssertEqual(clock.now(), 0)
+        for _ in 0..<12 {
+            let permit = try await admission.acquire("scope"); try await admission.willSend(permit)
+            // Even cancellation before URLSession must charge after willSend:
+            // the actor cannot prove that no HTTP attempt reached the server.
+            await admission.finish(permit)
+        }
+        XCTAssertEqual(clock.now(), 0)
+        let next = try await admission.acquire("scope")
+        XCTAssertGreaterThanOrEqual(clock.now(), 1.0 / 3); await admission.finish(next)
+    }
+
+    func testEligibleScopeCannotBeEvictedWhileAnyRollingBudgetIsLive() async throws {
+        let clock = IdentityAdmissionTestClock()
+        let admission = FileSyncIdentityAdmission(now: { clock.now() }, sleep: { try await clock.sleep($0) }, maximumScopes: 1)
+        let sent = try await admission.acquire("one"); try await admission.willSend(sent); await admission.finish(sent)
+        // Tokens are fully refilled and another request is already eligible,
+        // but deleting the scope here would reset its live rolling history.
+        for time in [1.0, 59.999] {
+            clock.advance(to: time)
+            do { _ = try await admission.acquire("two"); XCTFail("Live rolling budget evicted") }
+            catch { XCTAssertEqual(error as? FileSyncIdentityAdmission.Failure, .capacity) }
+        }
+        clock.advance(to: 60)
+        let replacement = try await admission.acquire("two"); await admission.finish(replacement)
+        // Truly unused/idle scopes retain no token debt/history/cooldown.
+        let idleReplacement = try await admission.acquire("three"); await admission.finish(idleReplacement)
+    }
+
+    func testTimerFailureRetainsTokenDebtAndRecoversOnlyAfterRefill() async throws {
+        struct TimerFailure: Error {}
+        let clock = IdentityAdmissionTestClock()
+        let admission = FileSyncIdentityAdmission(now: { clock.now() }, sleep: { _ in throw TimerFailure() })
+        for _ in 0..<12 {
+            let permit = try await admission.acquire("scope"); try await admission.willSend(permit); await admission.finish(permit)
+        }
+        for _ in 0..<2 {
+            do { _ = try await admission.acquire("scope"); XCTFail("Timer failure discarded token debt") }
+            catch { XCTAssertEqual(error as? FileSyncIdentityAdmission.Failure, .timer) }
+        }
+        clock.advance(to: 1)
+        let recovered = try await admission.acquire("scope"); await admission.finish(recovered)
     }
 
     func testQueuedLanesRespectSharedCooldownWithoutRetryHerdAndCancellationUnblocksHead() async throws {

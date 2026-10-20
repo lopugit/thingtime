@@ -6339,16 +6339,22 @@ existing paired-device/native upload configuration. Signed installed acceptance
 must verify displayed values against accepted payload sizes before this feature
 is considered complete.
 
-Native identity checks used by indexing, transfers and monitoring now share a
-bounded scheduling gate for the same origin/device credential. It spaces fresh
-HTTP checks by at least 334 ms from completion (at most three per second, below
-the default 240/minute limit) and shares bounded server Retry-After cooldowns.
-It does not cache identity responses or reduce the number of authorization
-checks. Queued callers recheck cancellation and reload current credentials;
-rotation, owner/origin mismatch and revocation remain fail-closed. A bounded live
-10-minute diagnostic window contained eight logged identity HTTP 429 events;
-that count is not total traffic. Practical installed throughput after this
-change remains unverified.
+Native identity checks used by indexing, transfers and monitoring share one
+FIFO/in-flight gate per origin/device credential. Its conservative budget allows
+an initial 12-attempt burst, refills three tokens per second and caps charged
+attempts at 180 in every rolling 60 seconds. This replaces the fixed 334 ms
+post-completion gap. Tokens and rolling timestamps are charged at completion
+after `willSend`, reserving one active permit so a delayed HTTP start cannot
+refill then exceed a later burst. Cancellation before `willSend` costs nothing;
+after that boundary it is conservatively charged even if no HTTP was sent.
+
+The documented server default is 240/minute; the live deployment's actual
+configured limit was not read. Shared valid Retry-After cooldowns still enforce
+custom lower limits. No response caching or authentication reduction: queued
+callers recheck cancellation and current credentials, with unchanged owner,
+origin, source and revocation fences. Scope eviction cannot forget live rolling
+history, token debt or cooldown. Installed throughput after this scheduling
+correction remains unverified.
 
 ### Upload priority readiness — 2026-10-21
 

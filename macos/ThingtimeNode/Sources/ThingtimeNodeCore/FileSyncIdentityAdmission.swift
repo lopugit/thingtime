@@ -4,6 +4,10 @@ import Foundation
 /// Scheduling only: permits never contain or reuse an authorization response.
 actor FileSyncIdentityAdmission {
     static let shared = FileSyncIdentityAdmission()
+    private static let burst = 12.0
+    private static let refillPerSecond = 3.0
+    private static let window = 60.0
+    private static let maximumAttempts = 180
     struct Permit: Sendable { let scope: String; let id: UUID }
     enum Failure: Error { case capacity, timer }
     private struct Waiter {
@@ -14,7 +18,10 @@ actor FileSyncIdentityAdmission {
         var active: UUID?
         var sent = false
         var queue: [Waiter] = []
-        var nextStart = 0.0
+        var tokens = FileSyncIdentityAdmission.burst
+        var refilledAt = 0.0
+        // Completion is a conservative upper bound on an actual HTTP start.
+        var completedAttempts: [Double] = []
         var cooldown = 0.0
         var used = 0.0
         var wake: Task<Void, Never>?
@@ -49,14 +56,13 @@ actor FileSyncIdentityAdmission {
     func acquire(_ key: String) async throws -> Permit {
         try Task.checkCancellation()
         let time = now()
-        // Never evict an active scope or a still-live pacing/cooldown deadline.
-        for (key, state) in scopes where state.active == nil && state.queue.isEmpty &&
-            max(state.nextStart, state.cooldown) <= time && time - state.used >= 300 {
+        // Eligibility for one more request does not make retained budget safe
+        // to discard. Eviction requires all history/debt/cooldown to expire.
+        for (key, state) in scopes where Self.canEvict(state, at: time) && time - state.used >= 300 {
             state.wake?.cancel(); scopes.removeValue(forKey: key)
         }
         if scopes[key] == nil, scopes.count >= maximumScopes {
-            if let idle = scopes.filter({ $0.value.active == nil && $0.value.queue.isEmpty &&
-                max($0.value.nextStart, $0.value.cooldown) <= time }).min(by: { $0.value.used < $1.value.used }) {
+            if let idle = scopes.filter({ Self.canEvict($0.value, at: time) }).min(by: { $0.value.used < $1.value.used }) {
                 idle.value.wake?.cancel(); scopes.removeValue(forKey: idle.key)
             } else { throw Failure.capacity }
         }
@@ -73,23 +79,29 @@ actor FileSyncIdentityAdmission {
 
     /// Called after the credential is reloaded, immediately before fresh HTTP.
     func willSend(_ permit: Permit) throws {
-        guard var state = scopes[permit.scope], state.active == permit.id else { throw CancellationError() }
-        state.nextStart = now() + 0.334
+        guard var state = scopes[permit.scope], state.active == permit.id, !state.sent else { throw CancellationError() }
         state.sent = true
         state.used = now(); scopes[permit.scope] = state
     }
 
     func finish(_ permit: Permit, cooldownSeconds: Int? = nil) {
         guard var state = scopes[permit.scope], state.active == permit.id else { return }
-        // Space from completion as well: a caller can be descheduled between
-        // willSend and URLSession. Completion is necessarily after its actual
-        // HTTP start, so that scheduler race cannot create a later burst.
-        if state.sent { state.nextStart = max(state.nextStart, now() + 0.334) }
+        let time = now()
+        Self.refresh(&state, at: time)
+        // Charge after completion, not permit/willSend time: a caller can be
+        // descheduled before URLSession. One in-flight permit reserves capacity
+        // until this later charge, preventing delayed starts plus a fresh burst.
+        // Once willSend ran, cancellation remains a conservatively charged
+        // attempt; a permit cancelled before willSend consumes no budget.
+        if state.sent {
+            state.tokens -= 1
+            state.completedAttempts.append(time)
+        }
         state.sent = false
         if let seconds = cooldownSeconds, (1...86_400).contains(seconds) {
-            state.cooldown = max(state.cooldown, now() + Double(seconds))
+            state.cooldown = max(state.cooldown, time + Double(seconds))
         }
-        state.active = nil; state.used = now(); scopes[permit.scope] = state; schedule(permit.scope)
+        state.active = nil; state.used = time; scopes[permit.scope] = state; schedule(permit.scope)
     }
 
     private func cancel(_ key: String, id: UUID) {
@@ -114,15 +126,35 @@ actor FileSyncIdentityAdmission {
         for waiter in waiters { waiter.continuation.resume(throwing: Failure.timer) }
     }
 
+    private static func refresh(_ state: inout Scope, at time: Double) {
+        state.tokens = min(burst, state.tokens + max(0, time - state.refilledAt) * refillPerSecond)
+        state.refilledAt = max(state.refilledAt, time)
+        state.completedAttempts.removeAll { $0 <= time - window }
+    }
+
+    private static func canEvict(_ state: Scope, at time: Double) -> Bool {
+        guard state.active == nil, state.queue.isEmpty, state.cooldown <= time,
+              state.completedAttempts.last.map({ $0 <= time - window }) ?? true else { return false }
+        return min(burst, state.tokens + max(0, time - state.refilledAt) * refillPerSecond) >= burst
+    }
+
     private func schedule(_ key: String) {
         guard var state = scopes[key], state.active == nil else { return }
         state.wake?.cancel(); state.wake = nil
         guard !state.queue.isEmpty else { scopes[key] = state; return }
-        let delay = max(state.nextStart, state.cooldown) - now()
+        let time = now()
+        Self.refresh(&state, at: time)
+        var delay = max(0, state.cooldown - time)
+        // A depleted bucket/full window always blocks, even when floating
+        // deadline arithmetic would round a tiny positive delay down to now.
+        if state.tokens < 1 { delay = max(delay, max((1 - state.tokens) / Self.refillPerSecond, 0.000001)) }
+        if state.completedAttempts.count >= Self.maximumAttempts {
+            delay = max(delay, max(state.completedAttempts[0] + Self.window - time, 0.000001))
+        }
         if delay > 0 {
             let generation = UUID(); state.generation = generation
             state.wake = Task {
-                do { try await sleep(delay); try Task.checkCancellation(); self.wake(key, generation: generation) }
+                do { try await sleep(max(delay, 0.000001)); try Task.checkCancellation(); self.wake(key, generation: generation) }
                 catch { self.wakeFailed(key, generation: generation) }
             }
             scopes[key] = state; return
