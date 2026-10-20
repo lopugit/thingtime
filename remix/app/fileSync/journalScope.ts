@@ -14,6 +14,17 @@ export function journalScope(db: IDBDatabase, access: JournalAccess, keyRange?: 
 	const range = (id: string, after?: string) => (keyRange ?? globalThis.IDBKeyRange).bound(
 		after === undefined ? [key, id] : [key, id, after], [key, id, []], after !== undefined, false
 	);
+	/** Read bounded values and their actual keys in one transaction. Requests
+	 * complete in order, so the key callback observes both matching snapshots. */
+	const readPage = <T>(store: IDBObjectStore, query: IDBKeyRange, count: number,
+		consume: (rows: T[], keys: IDBValidKey[]) => void, fail: (error: unknown) => void) => {
+		if (!Number.isSafeInteger(count) || count < 1 || count > 129) throw Error('Invalid journal page bound.');
+		const rows = store.getAll(query, count), keys = store.getAllKeys(query, count);
+		keys.onsuccess = () => { try {
+			check(); if (rows.result.length !== keys.result.length) throw Error('Journal entry keys changed.');
+			consume(rows.result, keys.result);
+		} catch (error) { fail(error); } };
+	};
 	const transaction = <T>(stores: readonly string[], mode: IDBTransactionMode,
 		work: (tx: IDBTransaction, done: (value: T) => void, fail: (error: unknown) => void) => void): Promise<T> => {
 		check();
@@ -26,5 +37,5 @@ export function journalScope(db: IDBDatabase, access: JournalAccess, keyRange?: 
 			try { work(tx, value => { result = value; }, fail); } catch (error) { fail(error); }
 		});
 	};
-	return { scope, key, check, range, transaction };
+	return { scope, key, check, range, transaction, readPage };
 }

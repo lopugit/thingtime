@@ -70,7 +70,7 @@ export function upgradePagedPlanJournal(db: IDBDatabase) {
  * decisions. No decision is readable until that second pass is durable.
  * This is a plan, never device approval, an operation receipt or a baseline. */
 export function pagedPlanJournal(db: IDBDatabase, access: JournalAccess, keyRange?: typeof IDBKeyRange) {
-	const { scope, key, check, range, transaction } = journalScope(db, access, keyRange);
+	const { scope, key, check, range, transaction, readPage } = journalScope(db, access, keyRange);
 	const inventory = inventoryJournal(db, access, keyRange);
 	const validate = (h: Header, spec: PagedPlanSpec) => validatePagedPlanHeader(h, spec, key);
 	const withHeader = <T>(spec: PagedPlanSpec, mode: IDBTransactionMode,
@@ -186,7 +186,12 @@ export function pagedPlanJournal(db: IDBDatabase, access: JournalAccess, keyRang
 				validate(next, spec); tx.objectStore(STORES[0]).put(next, [key, spec.id]); done(progress(next));
 			};
 			if (header.phase === 'indexing') {
-				for (const [path, side] of flags) tx.objectStore(STORES[1]).put(true, [key, spec.id, path, side]);
+				// Siblings repeatedly mark the same ancestors. Each flag is an
+				// idempotent true value, so write it once per bounded page.
+				const written = [new Set<string>(), new Set<string>(), new Set<string>()];
+				for (const [path, side] of flags) if (!written[side].has(path)) {
+					written[side].add(path); tx.objectStore(STORES[1]).put(true, [key, spec.id, path, side]);
+				}
 				next.indexed += rows.length;
 				if (finished) { next.phase = 'planning'; next.positions = initialPositions(); }
 				save(); return;
@@ -238,24 +243,21 @@ export function pagedPlanJournal(db: IDBDatabase, access: JournalAccess, keyRang
 			return withHeader(spec, 'readonly', (h, tx, done, fail) => {
 				if (h.phase !== 'complete') throw Error('Sync plan is incomplete.');
 				if (token && token.read >= h.decisions) throw Error('Invalid sync plan continuation count.');
-				const request = tx.objectStore(STORES[2]).openCursor(range(spec.id, token?.after));
 				const decisions: SyncDecision[] = []; let size = 2;
-				request.onsuccess = () => { try {
-					check(); const cursor = request.result;
-					if (!cursor) {
-						if ((token?.read ?? 0) + decisions.length !== h.decisions) throw Error('Sync decisions ended before their declared count.');
-						done({ decisions, next: null, totalDecisions: h.decisions }); return;
+				readPage<SyncDecision>(tx.objectStore(STORES[2]), range(spec.id, token?.after), INVENTORY_PAGE_ENTRIES + 1, (rows, keys) => {
+					for (const [i, d] of rows.entries()) {
+						if (!validSyncDecision(d) || JSON.stringify(keys[i]) !== JSON.stringify([key, spec.id, syncPathKey(d.path)])) throw Error('Invalid saved sync decision.');
+						const length = bytes(d) + 1;
+						if (decisions.length === INVENTORY_PAGE_ENTRIES || size + length > INVENTORY_PAGE_BYTES) {
+							if (!decisions.length) throw Error('Sync decision exceeds its byte bound.');
+							done({ decisions, totalDecisions: h.decisions, next: { id: spec.id, scope: structuredClone(scope),
+								after: syncPathKey(decisions.at(-1)!.path), read: (token?.read ?? 0) + decisions.length } }); return;
+						}
+						decisions.push(d); size += length;
 					}
-					const d: SyncDecision = cursor.value;
-					if (!validSyncDecision(d) || JSON.stringify(cursor.primaryKey) !== JSON.stringify([key, spec.id, syncPathKey(d.path)])) throw Error('Invalid saved sync decision.');
-					const length = bytes(d) + 1;
-					if (decisions.length === INVENTORY_PAGE_ENTRIES || size + length > INVENTORY_PAGE_BYTES) {
-						if (!decisions.length) throw Error('Sync decision exceeds its byte bound.');
-						done({ decisions, totalDecisions: h.decisions, next: { id: spec.id, scope: structuredClone(scope),
-							after: syncPathKey(decisions.at(-1)!.path), read: (token?.read ?? 0) + decisions.length } }); return;
-					}
-					decisions.push(d); size += length; cursor.continue();
-				} catch (error) { fail(error); } };
+					if ((token?.read ?? 0) + decisions.length !== h.decisions) throw Error('Sync decisions ended before their declared count.');
+					done({ decisions, next: null, totalDecisions: h.decisions });
+				}, fail);
 			});
 		},
 		async discard(value: PagedPlanSpec): Promise<void> {

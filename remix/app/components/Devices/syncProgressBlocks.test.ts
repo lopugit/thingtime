@@ -27,6 +27,21 @@ test('indexing with unknown totals remains indeterminate and stopped state is ex
 	assert.match(stopped.uploadDescription, /Cancelled.*3 \/ 9/);
 });
 
+test('preparation identifies its actual phase and counts separately from uploaded receipts', () => {
+	const progress = { stage: 'scanning' as const, indexed: 1000, indexTotal: 1000, confirmed: 0, total: 0,
+		preparation: { phase: 'cloud' as const, completed: 128, total: 900 } };
+	const display = syncProgressDisplay({}, progress, 'running', false).sync;
+	assert.match(display.indexDescription, /1,000 entries indexed of 1,000/);
+	assert.match(display.indexDescription, /Preparing cloud destinations · 128 \/ 900 items processed/);
+	assert.doesNotMatch(display.indexDescription, /Validating structure/);
+	assert.match(display.uploadDescription, /Preparing upload · 0 \/ 0 operations confirmed/);
+	const stopped = syncProgressDisplay({}, progress, 'paused', false).sync;
+	assert.doesNotMatch(stopped.indexDescription, /Preparing cloud/); assert.match(stopped.uploadDescription, /^Paused/);
+	const unknown = syncProgressDisplay({}, { ...progress, preparation: { phase: 'index-plan', completed: 128 } }, 'running', false).sync;
+	assert.match(unknown.indexDescription, /Checking changed folders · 128 items processed/);
+	assert.doesNotMatch(unknown.indexDescription, /128 \/|%/);
+});
+
 test('folder rows count cumulative child folders while preserving source totals', () => {
 	const totals = { path: 'Documents', kind: 'folder' as const, files: 1, folders: 2, indexedBytes: 10, excluded: 0, unchanged: 0,
 		operations: 3, confirmed: 3, transferFiles: 1, confirmedFiles: 1, bytesTotal: 10, bytesConfirmed: 10 };

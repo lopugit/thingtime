@@ -12552,3 +12552,16 @@ separate from deterministic discovery/lease tests.
   reopen without Start or Retry and verify the prefix is retained.
 - [ ] Independently verify a real payload receipt and downloaded sample bytes;
   scan/import counts alone do not establish an uploaded or complete backup.
+
+### Bounded inventory preparation — 2026-10-20
+
+- [x] Run file-sync regressions, including bounded value/key reads, long Unicode
+  paths crossing byte pages, corrupted primary keys, missing/aliased ancestors,
+  cancelled validation recovery and one ancestor flag write per page.
+- [x] Exercise the editable progress viewer in isolated Chromium at desktop and
+  mobile sizes, including top-to-bottom scrolling, nested Builder fields and
+  save/reload. Preparation labels/counts must describe their actual phase and
+  remain distinct from confirmed upload receipts.
+- [ ] Upgrade the signed installed Mac app. Confirm the retained home inventory
+  resumes automatically and preparation counts advance. Verify an actual file
+  receipt and downloaded bytes before declaring uploads working.

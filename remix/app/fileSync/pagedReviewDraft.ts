@@ -193,7 +193,10 @@ export function reviewDraftJournal(db: IDBDatabase, access: JournalAccess, keyRa
 	};
 	return {
 		begin, step, read,
-		async build(s: ReviewDraftSpec) { let p = await begin(s); while (p.phase === 'indexing') p = await step(s); return p; },
+		async build(s: ReviewDraftSpec, changed?: (value: ReviewDraftProgress) => void) {
+			let p = await begin(s); changed?.(p);
+			while (p.phase === 'indexing') { p = await step(s); changed?.(p); } return p;
+		},
 		async active(): Promise<{ spec: ReviewDraftSpec; progress: ReviewDraftProgress } | null> {
 			const id = await transaction<string | undefined>([REVIEW_DRAFT_HEADS], 'readonly', (tx, done) => {
 				const get = tx.objectStore(REVIEW_DRAFT_HEADS).get(key); get.onsuccess = () => done(get.result);

@@ -76,12 +76,25 @@ if (!process.env.TT_PROGRESS_WORKER) {
 			await page.screenshot({ path: join(evidence, `${name}-bottom.png`) }); await page.evaluate(() => scrollTo(0, 0)); await page.screenshot({ path: join(evidence, `${name}.png`) });
 		}
 		await page.getByRole('button', { name: 'Index fixture', exact: true }).click(); await page.getByText(/^128 entries indexed.*still being discovered/).waitFor();
+		await page.getByRole('button', { name: 'Prepare fixture', exact: true }).click();
+		await page.getByText(/Preparing cloud destinations · 1,000,000 \/ 3,653,988 items processed/).waitFor();
+		await page.getByText(/^Preparing upload · 0 \/ 0 operations confirmed/).waitFor();
+		for (const [name, width, height] of [['desktop', 1440, 1000], ['mobile', 390, 844]]) {
+			await page.setViewportSize({ width, height }); await page.evaluate(() => scrollTo(0, 0)); let steps = 0;
+			for (;;) {
+				const b = await page.evaluate(() => ({ y: scrollY, height: innerHeight, total: document.documentElement.scrollHeight, width: innerWidth, scrollWidth: document.documentElement.scrollWidth }));
+				assert.ok(b.scrollWidth <= b.width, JSON.stringify(b)); if (b.y + b.height >= b.total - 1) break;
+				assert.ok(++steps < 100); await page.evaluate(() => scrollBy(0, innerHeight * 0.8));
+			}
+			await page.screenshot({ path: join(evidence, `${name}-preparation-bottom.png`) });
+			await page.evaluate(() => scrollTo(0, 0)); await page.screenshot({ path: join(evidence, `${name}-preparation.png`) });
+		}
 		await page.getByRole('button', { name: 'Transfer fixture', exact: true }).click();
 		await page.getByRole('button', { name: 'Fail fixture', exact: true }).click(); await page.getByText(/^Error ·/).waitFor();
 		await page.getByRole('button', { name: 'Pause fixture', exact: true }).click(); await page.getByText(/^Paused ·/).waitFor();
 		await page.getByRole('button', { name: 'Complete fixture', exact: true }).click(); await page.getByText(/^Complete ·/).waitFor();
 		await page.waitForFunction(() => [...document.querySelectorAll('[role="progressbar"]')].every(element => element.getAttribute('aria-valuenow') === '100'));
-		assert.deepEqual(errors, []); await writeFile(join(evidence, 'result.json'), JSON.stringify({ ok: true, isolated: true, viewports: [1440, 390], nestedBlocksEdited: true, savedAndReloaded: true, focusedDepth: 13, parentAndRootNavigation: true, states: ['partial-bytes', 'index-unknown-total', 'error', 'paused', 'complete'] }));
+		assert.deepEqual(errors, []); await writeFile(join(evidence, 'result.json'), JSON.stringify({ ok: true, isolated: true, viewports: [1440, 390], nestedBlocksEdited: true, savedAndReloaded: true, focusedDepth: 13, parentAndRootNavigation: true, states: ['partial-bytes', 'index-unknown-total', 'preparation-counts', 'error', 'paused', 'complete'] }));
 		console.log(`EDITABLE_SYNC_PROGRESS_OK ${evidence}`);
 	} catch (error) {
 		if (page) { await page.screenshot({ path: join(evidence, 'failed.png') }).catch(() => {}); await writeFile(join(evidence, 'failed-dom.txt'), await page.locator('body').innerText()).catch(() => {}); }
