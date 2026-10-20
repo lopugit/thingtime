@@ -858,10 +858,12 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 				}
 				return { ok: true, upload: { ...uploadPlan(reserved), state: 'ready' } };
 			}
-            const resumableEmptyFinalization = sizeBytes === 0 && intent.purpose === 'file' &&
-                reserved.objectSizeBytes === 0 && reserved.attachmentPurpose === 'file' && reserved.attachmentState === 'finalizing';
+			// Exact file starts recover interrupted completion through the same
+			// fenced finalizer, including a completed MPU whose ready write was lost.
+			const resumableFileFinalization = intent.purpose === 'file' && reserved.objectSizeBytes === sizeBytes &&
+				reserved.attachmentPurpose === 'file' && reserved.attachmentState === 'finalizing';
 			if (
-				(reserved.attachmentState !== 'pending' && !resumableEmptyFinalization) ||
+				(reserved.attachmentState !== 'pending' && !resumableFileFinalization) ||
 				!reserved.attachmentExpiresAt ||
 				reserved.attachmentExpiresAt.getTime() <= dependencies.now().getTime()
 			) {
@@ -870,11 +872,11 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 					retryable: false
 				});
 			}
-            if (sizeBytes === 0) {
+			if (sizeBytes === 0 || resumableFileFinalization) {
                 const completed = await complete(ownerId, { uploadId: id });
                 if (completed.ok === false) return completed;
                 const ready = await dependencies.store.getOwned(ownerId, id);
-                if (!ready || ready.attachmentState !== 'ready') return fail(409, 'Empty attachment finalization changed; retry the same request id');
+                if (!ready || ready.attachmentState !== 'ready') return fail(409, 'Attachment finalization changed; retry the same request id');
                 return { ok: true, upload: { ...uploadPlan(ready), state: 'ready' } };
             }
 			if (reserved.uploadId) return { ok: true, upload: uploadPlan(reserved) };

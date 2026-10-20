@@ -10,6 +10,7 @@ import { cloudFileSyncEntry, type CloudFile } from './cloudFile';
 import { prepareCloudSyncRun, parseCloudSyncRun } from './cloudWrite';
 import { createCloudSyncPort } from './cloudSyncPort.client';
 import { cloudRequests, createCloudFileTransport, type CloudTransportRuntime } from './cloudTransport';
+import { capabilitySatisfies } from '../api/utils/capabilities/capabilityContract';
 import { openSyncJournal } from './journal.client';
 import type { TransferActivity } from './transferActivity';
 const scope: SyncScope = { origin: 'https://sync.test', ownerId: 'owner', dataPlane: 'home', rootId: 'root', deviceId: 'phone' };
@@ -60,6 +61,44 @@ test('real transport joins executor and durable journal, recovering a lost commi
  journal = await openSyncJournal(factory); const restored = parseCloudSyncRun((await journal.read(scope))!);
  const result = await executeSyncRun(restored, f.port(restored, journal.persist)); assert.ok(result.operations.every(op => op.confirmed));
  assert.deepEqual(f.counts(), { puts: 1, starts: 1, commits: 1, opens: 1 }); assert.equal(f.file()!.id, run.operations[0].id); journal.close();
+});
+test('upload lease conflicts wait and resume the original durable operation without publishing twice', async () => {
+ const f = await fixture(), factory = new IDBFactory(); let journal = await openSyncJournal(factory); const run = f.make();
+ const requestIds: string[] = []; let held = true;
+ f.hook((path, body) => {
+  if (path !== '/api/v1/attachments/uploads') return null;
+  requestIds.push(body.requestId);
+  return held ? Response.json({ ok: false, code: 'finalization_in_progress', retryable: true }, { status: 409 }) : null;
+ });
+ await assert.rejects(executeSyncRun(run, f.port(run, journal.persist)), error => error instanceof SyncConnectionWait && /upload-start; finalization_in_progress/.test(error.message));
+ assert.equal(f.counts().commits, 0); journal.close(); held = false;
+ journal = await openSyncJournal(factory); const restored = parseCloudSyncRun((await journal.read(scope))!);
+ const result = await executeSyncRun(restored, f.port(restored, journal.persist));
+ assert.ok(result.operations.every(op => op.confirmed)); assert.deepEqual(requestIds, [run.operations[0].id, run.operations[0].id]);
+ assert.equal(f.counts().commits, 1); assert.equal(f.counts().puts, 1); journal.close();
+});
+test('409 recovery requires the exact allowlisted code, retryable flag and upload endpoint; diagnostics discard arbitrary text', async () => {
+ const f = await fixture();
+ for (const [path, value, waits, diagnostic] of [
+  ['/api/v1/attachments/uploads', { ok: false, code: 'upload_initializing', retryable: true }, true, 'upload_initializing'],
+  ['/api/v1/attachments/uploads/complete', { ok: false, code: 'finalization_settling', retryable: true }, true, 'finalization_settling'],
+  ['/api/v1/attachments/uploads', { ok: false, code: 'finalization_in_progress', retryable: false }, false, 'finalization_in_progress'],
+  ['/api/v1/attachments/uploads', { ok: false, code: 'upload_unavailable', retryable: true }, false, 'upload_unavailable'],
+  ['/api/v1/attachments/uploads', { ok: false, error: 'Attachment request id is already in use' }, false, 'upload_request_mismatch'],
+  ['/api/v1/files', { ok: false, code: 'finalization_settling', retryable: true }, false, 'finalization_settling'],
+  ['/api/v1/attachments/uploads', { ok: false, code: 'secret-code', error: 'private-path-or-token', retryable: true }, false, 'conflict_unknown'],
+  ['/api/v1/attachments/uploads', { ok: false, code: 'upload_initializing', retryable: true, oversized: 'x'.repeat(4096) }, false, 'conflict_unknown']
+ ] as const) {
+  f.runtime.fetch = async () => Response.json(value, { status: 409 });
+  await assert.rejects(cloudRequests(f.runtime, scope).json(path + '?private-id=never-retain', {}), error => {
+   assert.ok(error instanceof Error); assert.equal(error instanceof SyncConnectionWait, waits);
+   assert.match(error.message, new RegExp(diagnostic)); assert.doesNotMatch(error.message, /secret-code|private-path-or-token|private-id|never-retain/);
+   return true;
+  });
+ }
+ const controller = new AbortController();
+ f.runtime.fetch = async () => { controller.abort(); return Response.json({ ok: false, code: 'upload_initializing', retryable: true }, { status: 409 }); };
+ await assert.rejects(cloudRequests(f.runtime, scope, controller.signal).json('/api/v1/attachments/uploads', {}), error => (error as Error).name === 'AbortError');
 });
 test('a failed durable write prevents every network request; pinned destinations cannot be changed on retry', async () => {
  const f = await fixture(), run = f.make();
@@ -264,6 +303,18 @@ test('empty uploads require a ready stored object and a canonical content digest
 });
 
 
+test('uploads negotiate finalization recovery before any network request on older or breaking origins', async () => {
+ for (const version of [undefined, '1.6.0', '2.0.0']) {
+  const f = await fixture(), run = f.make(); let negotiated = false;
+  f.runtime.requireCapability = async (feature, minimum) => {
+   if (feature !== 'api.attachment-uploads') return;
+   negotiated = true; assert.equal(minimum, '1.6.1');
+   if (!capabilitySatisfies(version, minimum)) throw Error('Finalization recovery needs the updated server');
+  };
+  await assert.rejects(executeSyncRun(run, f.port(run, async () => {})), /updated server/);
+  assert.ok(negotiated); assert.deepEqual(f.counts(), { puts: 0, starts: 0, commits: 0, opens: 0 });
+ }
+});
 test('empty-file uploads negotiate the new storage contract before any network request', async () => {
  const f = await fixture(new Uint8Array()), run = f.make();
  const seen: string[] = [];
