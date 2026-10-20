@@ -166,7 +166,7 @@ export async function streamOneWayForegroundSync(
 			check();
 			const event = { ...change, generation };
 			if (!sameSyncStamp(source, change.entry) || ignore.ignored(change.entry.path, change.entry.kind)) {
-				state = await runs.appendStream(spec, event, null);
+				state = await runs.appendStream(spec, event, null, false, false);
 				wake();
 				return;
 			}
@@ -343,7 +343,8 @@ export async function streamOneWayForegroundSync(
 			}
 			await prepare(change, change.generation);
 			check();
-			wake(); report();
+			wake();
+			report();
 		}
 	};
 

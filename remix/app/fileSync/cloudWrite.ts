@@ -3,6 +3,10 @@ import { parseCloudInventory, inventorySyncEntry, type CloudInventoryNode, type 
 import { cloudFileSyncEntry, parseCloudFile, parseCloudFileCommit, type CloudFile, type CloudFileCommit } from './cloudFile';
 import { sameSyncScope, sameSyncStamp, validateSyncScope, type SyncScope } from './reconcile';
 import { validateSyncOperation, validateSyncRun, type SyncOperation, type SyncRun } from './execute';
+import { EMPTY_CONTENT_SHA256 } from './contentFingerprint';
+
+const hasStoredContentIdentity = (source: import('./reconcile').SyncEntry): boolean =>
+	!!source.fingerprint || (source.kind === 'file' && source.size === 0 && source.sha256 === EMPTY_CONTENT_SHA256);
 
 /** Queue metadata only. File bytes remain attachments; history stays in Timeline. */
 export type CloudWrite = { operation: SyncOperation; scope: SyncScope; folderId: string | null; before: CloudFile | null; cloudRootId?: string };
@@ -32,7 +36,7 @@ export function parseCloudWrite(value: CloudWrite): CloudWrite {
 				row.before.trashed ||
 				row.before.folderId !== row.folderId ||
 				row.before.name !== m.path.split('/').at(-1) ||
-				!m.source.fingerprint ||
+				!hasStoredContentIdentity(m.source) ||
 				!sameSyncStamp(m.source, cloudFileSyncEntry(row.before, m.path))
 			)
 				throw Error('Cloud download source changed before preparing the run.');
@@ -47,7 +51,7 @@ export function parseCloudWrite(value: CloudWrite): CloudWrite {
 	}
 	if (
 		!m ||
-		(m.kind === 'copy' ? m.from !== 'local' || m.source.kind !== 'file' || !m.source.fingerprint : m.side !== 'remote' || m.expected.kind !== 'file')
+		(m.kind === 'copy' ? m.from !== 'local' || m.source.kind !== 'file' || !hasStoredContentIdentity(m.source) : m.side !== 'remote' || m.expected.kind !== 'file')
 	)
 		throw Error('This cloud writer requires a file upload or remote Trash operation.');
 	const expected = m.kind === 'copy' ? m.expectedTarget : m.expected;

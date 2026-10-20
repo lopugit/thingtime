@@ -12646,3 +12646,9 @@ separate from deterministic discovery/lease tests.
 - [x] Cloud feed service: 56 file tests, 108 capability tests and 15 focused route/feed tests; real disposable Mongo replica acceptance verified updates during a snapshot, scoped subtree enumeration and native change-stream wake. Network-isolation preflight covered redirected, hostname and direct-IP denial.
 
 - 2026-10-20 streaming checkpoint: shared file-sync suite passed 468 tests (467 TypeScript tests and one mocked module test). The typecheck ratchet completed with 92 errors against baseline 89; no changed file-sync errors. Signed installed payload acceptance remains open.
+
+- [ ] Empty regular files: a canonical native zero-byte entry must not block preparation of later nonempty payloads. Verify durable zero-byte cloud storage, download restoration, missing-capability refusal before mutation, and lost-reply receipt recovery without multipart upload or byte-range requests.
+
+- 2026-10-20 final shared streaming/empty-file suite: 484 TypeScript tests plus one mocked module test passed (485 total). Native empty create/replace/restart receipt acceptance and two source/staging adapter regressions passed. Real backend and installed-home payload acceptance remain separate gates.
+
+- 2026-10-20 (PR #1062): isolated real Mongo empty-file acceptance passed through upload, zero-byte object download, fingerprint, commit/replay, restore and immutable receipt/access checks; live S3 and installed home-upload acceptance remain pending.

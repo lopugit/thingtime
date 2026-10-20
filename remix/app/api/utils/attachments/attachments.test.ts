@@ -11,6 +11,7 @@ import {
 	validateCompletedAttachmentParts
 } from './attachments';
 import {
+    ATTACHMENT_FINALIZATION_LEASE_MS,
 	assertUnboundPostAnnotation,
 	attachmentDeleteClaimFence,
 	attachmentDeletingRetryAt,
@@ -56,6 +57,7 @@ const attachmentDoc = (overrides: Partial<AttachmentDoc> = {}): AttachmentDoc =>
 });
 
 const noopS3 = (overrides: Partial<AttachmentS3> = {}): AttachmentS3 => ({
+    putEmptyObject: async () => ({ versionId: 'version-1' }),
 	copyUploadPart: async () => {},
 	createMultipartUpload: async () => ({ uploadId: 'mpu-1' }),
 	signUploadPart: async ({ partNumber, checksumSha256 }) => ({
@@ -276,7 +278,7 @@ test('start reserves billed pending metadata before creating the S3 MPU', async 
 	}
 });
 
-test('start rejects zero-byte files before reserving quota or creating an MPU', async () => {
+test('non-file starts reject zero bytes before reserving quota or creating an MPU', async () => {
 	let touched = false;
 	const service = createAttachmentService({
 		store: {
@@ -2501,4 +2503,132 @@ test('bound Messenger media rechecks target membership even for its uploader', a
     assert.equal((await service.download({ id: doc.ownerId }, doc.shareId, false)).ok, false);
     assert.equal(signs, 1, 'revoked uploaders never reach S3');
   }
+});
+
+test('zero-byte file starts finalize a real stored object and replay the same request without MPU or duplicate quota', async () => {
+    const { mkdtemp, rm } = await import('node:fs/promises');
+    const { tmpdir } = await import('node:os'); const { join } = await import('node:path');
+    const { createLocalAttachmentStorage } = await import('./localAttachmentStorage');
+    const directory = await mkdtemp(join(tmpdir(), 'tt-empty-file-service-'));
+    try {
+        const stored = new Map<string, AttachmentDoc>(); let reserves = 0, emptyPuts = 0, multipart = 0;
+        const local = createLocalAttachmentStorage({ directory });
+        const s3: AttachmentS3 = { ...local, putEmptyObject: async input => { emptyPuts++; await local.putEmptyObject(input); throw Error('lost empty-object PUT response'); },
+            createMultipartUpload: async () => { multipart++; throw Error('empty files must not use multipart'); } };
+        const store: any = {
+            listExpiredOwned: async () => [], getById: async (id: string) => stored.get(id) || null,
+            getOwned: async (owner: string, id: string) => stored.get(id)?.ownerId === owner ? stored.get(id)! : null,
+            reservePending: async (input: any) => { reserves++;
+                const doc = attachmentDoc({ shareId: input.id, ownerId: input.ownerId, crystal: input.crystal, objectSizeBytes: 0,
+                    sizeBytes: 100, objectKey: input.objectKey, attachmentRequestFingerprint: input.requestFingerprint,
+                    attachmentPurpose: input.purpose, uploadId: undefined, attachmentExpiresAt: input.expiresAt });
+                stored.set(input.id, doc); return doc;
+            },
+            claimFinalizing: async (owner: string, id: string, lease: string) => {
+                const doc = stored.get(id); if (!doc || doc.ownerId !== owner) return null;
+                if (doc.attachmentState === 'ready') return { doc, acquired: false };
+                doc.attachmentState = 'finalizing'; doc.attachmentFinalizationLeaseId = lease; return { doc, acquired: true };
+            },
+            renewFinalizing: async (_owner: string, id: string, lease: string) => stored.get(id)?.attachmentFinalizationLeaseId === lease ? stored.get(id)! : null,
+            markReady: async (_owner: string, id: string, crystal: any, version: string, _expires: Date, lease: string) => {
+                const doc = stored.get(id)!; assert.equal(doc.attachmentFinalizationLeaseId, lease);
+                Object.assign(doc, { crystal, objectVersionId: version, attachmentState: 'ready', moderation: { status: 'skipped' } });
+                delete doc.attachmentExpiresAt; delete doc.attachmentFinalizationLeaseId; return doc;
+            }
+        };
+        const service = createAttachmentService({ store, getS3: () => s3, customMongoActive: () => false, now: () => now });
+        const input = { requestId: 'empty-backup-1', purpose: 'file', filename: 'empty.txt', contentType: 'application/octet-stream', sizeBytes: 0 };
+        const first = await service.start('user-1', input); assert.ok(first.ok);
+        if (!first.ok) return;
+        assert.equal(first.upload.state, 'ready'); assert.equal(first.upload.partCount, 0);
+        const id = first.upload.id as string, doc = stored.get(id)!;
+        assert.equal(doc.objectSizeBytes, 0); assert.ok(doc.objectVersionId); assert.equal(doc.attachmentExpiresAt, undefined);
+        const receipt = await service.fingerprint({ id: 'user-1' }, id); assert.ok(receipt.ok);
+        if (receipt.ok) { assert.equal(receipt.size, 0); assert.equal(receipt.fingerprint.partCount, 0);
+            assert.equal(receipt.fingerprint.sha256, 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'); }
+        const download = await service.download({ id: 'user-1' }, id, false); assert.ok(download.ok);
+        if (download.ok) { const response = await local.handleRequest(new Request('http://empty-test.invalid' + download.url));
+            assert.equal(response.status, 200); assert.equal((await response.arrayBuffer()).byteLength, 0); }
+        assert.deepEqual(await service.start('user-1', input), first);
+        assert.equal((await service.complete('user-1', { uploadId: id })).ok, true);
+        assert.equal((await service.start('user-1', { ...input, filename: 'different.txt' })).ok, false);
+        assert.equal((await service.fingerprint({ id: 'other' }, id)).ok, false);
+        assert.equal(reserves, 1); assert.equal(emptyPuts, 1); assert.equal(multipart, 0);
+    } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
+test('empty object finalization preserves lease fencing and never publishes after lease loss', async () => {
+    const doc = attachmentDoc({ objectSizeBytes: 0, crystal: { name: 'empty', size: 0, contentType: 'application/octet-stream', mediaKind: 'file' },
+        uploadId: undefined, attachmentPurpose: 'file', attachmentState: 'finalizing' });
+    let exists = false, marked = 0, deleted = 0;
+    const service = createAttachmentService({ now: () => now, customMongoActive: () => false,
+        store: { getOwned: async () => doc, claimFinalizing: async () => ({ doc, acquired: true }), renewFinalizing: async () => null,
+            markReady: async () => { marked++; return doc; } } as any,
+        getS3: () => noopS3({
+            headObject: async () => { if (!exists) throw Object.assign(Error('missing'), { name: 'NotFound' });
+                return { sizeBytes: 0, attachmentId: doc.shareId, versionId: 'empty-version', checksumType: 'FULL_OBJECT', checksumSha256: '47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=' }; },
+            isNotFound: error => (error as Error).name === 'NotFound',
+            putEmptyObject: async () => { exists = true; return { versionId: 'empty-version' }; }, deleteObject: async () => { deleted++; }
+        }) });
+    const result = await service.complete('user-1', { uploadId: doc.shareId });
+    assert.equal(result.ok, false); if (!result.ok) { assert.equal(result.status, 409); assert.equal(result.retryable, true); }
+    assert.equal(marked, 0); assert.equal(deleted, 0); assert.equal(doc.attachmentState, 'finalizing');
+});
+
+test('same empty start resumes a failed finalization only through active and expired lease fences', async () => {
+    const { mkdtemp, rm, readdir } = await import('node:fs/promises');
+    const { tmpdir } = await import('node:os'); const { join } = await import('node:path');
+    const { createLocalAttachmentStorage } = await import('./localAttachmentStorage');
+    const directory = await mkdtemp(join(tmpdir(), 'tt-empty-file-resume-'));
+    try {
+        let clock = new Date(now), reserves = 0, puts = 0, heads = 0, marks = 0;
+        let doc: AttachmentDoc | null = null;
+        const local = createLocalAttachmentStorage({ directory });
+        const store: any = {
+            listExpiredOwned: async () => [], getById: async (id: string) => doc?.shareId === id ? doc : null,
+            getOwned: async (owner: string, id: string) => doc?.ownerId === owner && doc.shareId === id ? doc : null,
+            reservePending: async (input: any) => {
+                reserves++;
+                doc = attachmentDoc({ shareId: input.id, ownerId: input.ownerId, crystal: input.crystal, objectKey: input.objectKey,
+                    objectSizeBytes: 0, sizeBytes: 100, attachmentRequestFingerprint: input.requestFingerprint, attachmentPurpose: input.purpose,
+                    attachmentExpiresAt: input.expiresAt, uploadId: undefined, updatedAt: clock });
+                return doc;
+            },
+            claimFinalizing: async (owner: string, id: string, lease: string) => {
+                if (!doc || doc.ownerId !== owner || doc.shareId !== id) return null;
+                if (doc.attachmentState === 'ready') return { doc, acquired: false };
+                if (doc.attachmentState === 'finalizing' && clock.getTime() - doc.updatedAt.getTime() < ATTACHMENT_FINALIZATION_LEASE_MS)
+                    return { doc, acquired: false };
+                doc.attachmentState = 'finalizing'; doc.attachmentFinalizationLeaseId = lease; doc.updatedAt = clock;
+                return { doc, acquired: true };
+            },
+            renewFinalizing: async (_owner: string, _id: string, lease: string) => doc?.attachmentFinalizationLeaseId === lease ? doc : null,
+            markReady: async (_owner: string, _id: string, crystal: any, version: string, _expiry: Date, lease: string) => {
+                marks++; assert.equal(doc!.attachmentFinalizationLeaseId, lease);
+                if (marks === 1) throw Error('transient ready persistence failure after stored empty PUT');
+                Object.assign(doc!, { crystal, objectVersionId: version, attachmentState: 'ready', moderation: { status: 'skipped' } });
+                delete doc!.attachmentExpiresAt; delete doc!.attachmentFinalizationLeaseId; return doc;
+            }
+        };
+        const service = createAttachmentService({ store, now: () => clock, customMongoActive: () => false,
+            getS3: () => ({ ...local, putEmptyObject: async input => { puts++; return local.putEmptyObject(input); },
+                headObject: async input => { heads++; return local.headObject(input); } }) });
+        const input = { requestId: 'empty-recovery-request', purpose: 'file', filename: 'empty.txt', contentType: 'application/octet-stream', sizeBytes: 0 };
+        const failed = await service.start('user-1', input);
+        assert.equal(failed.ok, false); if (!failed.ok) assert.equal(failed.status, 503);
+        const reserved = doc! as AttachmentDoc, identity = reserved.shareId, key = reserved.objectKey;
+        assert.equal(reserved.attachmentState, 'finalizing');
+        const storedVersion = (await local.headObject({ objectKey: key })).versionId;
+        const beforeRetryHeads = heads;
+        const active = await service.start('user-1', input);
+        assert.equal(active.ok, false); if (!active.ok) { assert.equal(active.status, 409); assert.equal(active.retryable, true); assert.equal(active.code, 'finalization_in_progress'); }
+        assert.equal(heads, beforeRetryHeads); assert.equal(puts, 1); assert.equal(reserves, 1);
+        clock = new Date(clock.getTime() + ATTACHMENT_FINALIZATION_LEASE_MS + 1);
+        const recovered = await service.start('user-1', input); assert.ok(recovered.ok);
+        if (recovered.ok) { assert.equal(recovered.upload.id, identity); assert.equal(recovered.upload.state, 'ready'); }
+        assert.equal((doc! as AttachmentDoc).objectKey, key); assert.equal((doc! as AttachmentDoc).objectVersionId, storedVersion);
+        assert.equal(reserves, 1); assert.equal(puts, 1); assert.equal(marks, 2);
+        assert.equal((await readdir(join(directory, 'objects', identity))).filter(name => name.endsWith('.bin')).length, 1);
+        assert.equal((await service.start('user-1', { ...input, filename: 'different.txt' })).ok, false);
+    } finally { await rm(directory, { recursive: true, force: true }); }
 });

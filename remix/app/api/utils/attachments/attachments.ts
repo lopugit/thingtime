@@ -764,7 +764,7 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 			const requestedId = raw.requestId === undefined ? null : normalizeId(raw.requestId);
 			if (raw.requestId !== undefined && !requestedId) return fail(400, 'Invalid attachment request id');
 			const sizeBytes = Number(raw.sizeBytes);
-			if (!Number.isSafeInteger(sizeBytes) || sizeBytes < 1 || sizeBytes > ATTACHMENT_MAX_OBJECT_BYTES) {
+			if (!Number.isSafeInteger(sizeBytes) || sizeBytes < 0 || (sizeBytes === 0 && (intent.purpose !== 'file' || raw.sizeBytes !== 0)) || sizeBytes > ATTACHMENT_MAX_OBJECT_BYTES) {
 				return fail(400, 'Attachment size must be between 1 byte and 5 TiB');
 			}
 			const sanitized = sanitizeAttachmentPublicMetadata({
@@ -858,8 +858,10 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 				}
 				return { ok: true, upload: { ...uploadPlan(reserved), state: 'ready' } };
 			}
+            const resumableEmptyFinalization = sizeBytes === 0 && intent.purpose === 'file' &&
+                reserved.objectSizeBytes === 0 && reserved.attachmentPurpose === 'file' && reserved.attachmentState === 'finalizing';
 			if (
-				reserved.attachmentState !== 'pending' ||
+				(reserved.attachmentState !== 'pending' && !resumableEmptyFinalization) ||
 				!reserved.attachmentExpiresAt ||
 				reserved.attachmentExpiresAt.getTime() <= dependencies.now().getTime()
 			) {
@@ -868,6 +870,13 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 					retryable: false
 				});
 			}
+            if (sizeBytes === 0) {
+                const completed = await complete(ownerId, { uploadId: id });
+                if (completed.ok === false) return completed;
+                const ready = await dependencies.store.getOwned(ownerId, id);
+                if (!ready || ready.attachmentState !== 'ready') return fail(409, 'Empty attachment finalization changed; retry the same request id');
+                return { ok: true, upload: { ...uploadPlan(ready), state: 'ready' } };
+            }
 			if (reserved.uploadId) return { ok: true, upload: uploadPlan(reserved) };
 			if (!ownsInitialization) {
 				const claimed = await dependencies.store.claimUploadInitialization(
@@ -1066,7 +1075,7 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 			if (!finalizationClaim.acquired) {
 				return finalizationInProgress();
 			}
-			if (!doc.uploadId) {
+			if (!doc.uploadId && !(doc.objectSizeBytes === 0 && doc.attachmentPurpose === 'file')) {
 				await dependencies.store.revertFinalizing(ownerId, id, finalizationLeaseId);
 				return fail(409, 'Attachment upload is not ready to finalize', {
 					code: 'upload_not_ready',
@@ -1074,6 +1083,36 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 				});
 			}
 
+            if (doc.objectSizeBytes === 0) {
+                // A conditional single PUT is valid for empty content. Never
+                // complete an MPU with zero parts. HEAD recovers ambiguous PUT
+                // responses without creating another version on request replay.
+                let head: AttachmentObjectHead;
+                try { head = await verifiedHeadForDoc(s3, doc, doc.objectVersionId); }
+                catch (error) {
+                    if (!s3.isNotFound(error)) throw error;
+                    try {
+                        const empty = await s3.putEmptyObject({ objectKey: doc.objectKey, attachmentId: doc.shareId });
+                        if (empty.versionId && !isAttachmentObjectVersionId(empty.versionId)) return fail(409, 'Empty object did not receive a valid version id');
+                        if (empty.versionId) doc = { ...doc, objectVersionId: empty.versionId };
+                    } catch (writeError) {
+                        // Includes conditional-write races and lost responses.
+                        // Only the expected identity and exact empty checksum
+                        // can recover; arbitrary occupied keys fail below.
+                        try { await verifiedHeadForDoc(s3, doc); } catch { throw writeError; }
+                    }
+                    head = await verifiedHeadForDoc(s3, doc, doc.objectVersionId);
+                }
+                const lost = await renewFinalizationLease(head.versionId); if (lost) return lost;
+                if (!fingerprintFromVerifiedHead(head)) return fail(409, 'Empty object failed integrity verification');
+                const crystal: AttachmentCrystal = { ...doc.crystal, contentType: 'application/octet-stream', mediaKind: 'file' };
+                try { doc = await dependencies.store.markReady(ownerId, id, crystal, head.versionId,
+                    new Date(dependencies.now().getTime() + ATTACHMENT_READY_DRAFT_TTL_MS), finalizationLeaseId); }
+                catch (error) { if (!(error instanceof AttachmentStoreConflictError)) throw error; return settleLostFinalizationLease(head.versionId); }
+                if (!isAttachmentObjectVersionId(doc.objectVersionId)) return fail(409, 'Empty object version is unavailable');
+                await s3.markObjectReady({ objectKey: doc.objectKey, versionId: doc.objectVersionId });
+                return { ok: true, attachment: attachmentPublicProjection(doc.shareId, doc.crystal) };
+            }
 			let uploadStillOpen = true;
 			let parts: AttachmentUploadedPart[] = [];
 			try {

@@ -1,4 +1,4 @@
-import { equalContentFingerprints, validContentFingerprint, type ContentFingerprint } from './contentFingerprint';
+import { EMPTY_CONTENT_SHA256, equalContentFingerprints, validContentFingerprint, type ContentFingerprint } from './contentFingerprint';
 /** Transport-independent reconciliation for the native and cloud file adapters.
  * Observations are not authority: executors must condition writes on the exact
  * source and destination stamps and use canonical upload/ACL/quota writers.
@@ -45,8 +45,11 @@ export const sameSyncScope = (a: SyncScope, b: SyncScope): boolean =>
 	a.origin === b.origin && a.ownerId === b.ownerId && a.dataPlane === b.dataPlane && a.rootId === b.rootId && a.deviceId === b.deviceId;
 
 /** A digest is byte equality, never a substitute for an exact mutation guard. */
+const emptyContentIdentity = (entry: SyncEntry): boolean =>
+	entry.size === 0 && (entry.fingerprint ? validContentFingerprint(entry.fingerprint, 0) : entry.sha256 === EMPTY_CONTENT_SHA256);
 export const sameSyncContent = (a: SyncEntry | null, b: SyncEntry | null): boolean =>
 	a === null || b === null ? a === b : a.kind === b.kind && (a.kind === 'folder' || (a.size === b.size && (
+		a.size === 0 ? emptyContentIdentity(a) && emptyContentIdentity(b) :
 		a.fingerprint && b.fingerprint ? equalContentFingerprints(a.fingerprint, b.fingerprint) :
 		!a.fingerprint && !b.fingerprint && typeof a.sha256 === 'string' && a.sha256 === b.sha256)));
 

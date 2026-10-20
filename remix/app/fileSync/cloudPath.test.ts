@@ -2,9 +2,18 @@ import { capabilitySatisfies } from '../api/utils/capabilities/capabilityContrac
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readCloudPathEntry } from './cloudPath.client';
+import { parseCloudPathObservation } from './cloudPath';
+import { EMPTY_CONTENT_SHA256 } from './contentFingerprint';
 
 const scope = { origin: 'https://sync.test', ownerId: 'owner', dataPlane: 'home', deviceId: 'device', rootId: 'connection' };
 const observation = { version: 1, complete: true, rootId: 'cloud-root', rootRevision: 'r1', path: 'nested/file', entry: null };
+
+test('empty cloud paths accept only the canonical empty digest without multipart identity', () => {
+	const entry = { path: observation.path, id: 'file', version: 'r1', kind: 'file', size: 0, sha256: EMPTY_CONTENT_SHA256 };
+	assert.deepEqual(parseCloudPathObservation({ ...observation, entry }, observation.rootId, observation.path).entry, entry);
+	for (const patch of [{ size: 1 }, { sha256: 'a'.repeat(64) }])
+		assert.throws(() => parseCloudPathObservation({ ...observation, entry: { ...entry, ...patch } }, observation.rootId, observation.path), /complete observation/);
+});
 
 test('fresh cloud path absence requires a complete response, home identity and current capability', async () => {
 	let current = scope, response = () => Response.json({ ok: true, observation });

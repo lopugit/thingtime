@@ -122,7 +122,10 @@ function cloudFileTransport(runtime: CloudTransportRuntime, saved: CloudWrite, s
 	if (retained && (!write.before || m.kind !== 'copy' || m.from !== 'local' || m.source.kind !== 'file' || m.expectedTarget?.kind !== 'file'))
 		throw Error('Retaining conflicts requires two existing file versions.');
 	const { check, json, negotiate: negotiateRequirements } = cloudRequests(runtime, scope, signal);
-	const negotiate = () => negotiateRequirements({ ...CLOUD_TRANSFER_REQUIREMENTS, ...(retained ? CLOUD_FILE_RETENTION_REQUIREMENTS : {}) });
+	const empty = (m.kind === 'copy' && m.source.size === 0) || write.before?.content.size === 0;
+	const negotiate = () => negotiateRequirements({ ...CLOUD_TRANSFER_REQUIREMENTS, ...(retained ? CLOUD_FILE_RETENTION_REQUIREMENTS : {}),
+		...(empty ? { 'api.files': '1.8.0', 'api.attachment-uploads': '1.6.0',
+			'api.attachment-upload-complete': '1.5.0', 'api.attachment-content': '1.16.0' } : {}) });
 	const fileId = write.before?.id ?? write.operation.id;
 	const receipt = (value: unknown): SyncReceipt => {
 		const file = parseCloudFile(value);
@@ -201,6 +204,10 @@ function cloudFileTransport(runtime: CloudTransportRuntime, saved: CloudWrite, s
 			const upload = started.upload;
 			if (!identifier(upload?.id) || upload.partSizeBytes !== plan.partSizeBytes || upload.partCount !== plan.partCount)
 				throw Error('Invalid cloud upload plan.');
+			// Empty objects are stored and verified by the start endpoint. Never
+			// send them into a native multipart loop or complete an empty MPU.
+			if (source.size === 0 && upload.state !== 'ready')
+				throw Error('The server has not durably stored the empty file; retain this run.');
 			if (upload.state !== 'ready' && nativeUpload && nativeApproval) {
 				// Older native whole-file progress includes already-retained bytes.
 				// Do not turn those completion offsets into invented network traffic.

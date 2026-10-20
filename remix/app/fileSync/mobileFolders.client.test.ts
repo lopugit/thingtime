@@ -427,3 +427,18 @@ test('Android 1.4 source selects binary reads while retaining full final verific
 	assert.equal((calls[0] as any).verifiedChunks, true);
 	assert.equal((calls[2] as any).verifiedChunks, undefined);
 });
+
+test('empty native sources retain exact-version checks and bypass positive-only native upload adapters', async () => {
+    const empty = { ...entry, size: 0, sha256: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855' };
+    const calls: FolderRequest[] = []; let stale = false;
+    const send = async (_owner: string, input: FolderRequest) => {
+        calls.push(input); assert.equal(input.action, 'read');
+        return parseMobileFolderResult(response({ rootId, path: empty.path, chunk: { version: stale ? 'changed' : empty.version, offset: 0, size: 0, data: '' } }), expected, input)!;
+    };
+    const source = mobileFolderSource('owner', rootId, empty, new AbortController().signal, send, { platform: 'ios', fileAccessVersion: '1.3.0', fileUploadVersion: '1.3.0' });
+    assert.equal(source.size, 0); assert.equal(source.uploadFile, undefined); assert.equal(source.uploadPart, undefined);
+    await source.check(); await source.verify!();
+    assert.deepEqual(await source.read(0, 0), new Uint8Array());
+    assert.equal(calls.length, 2); assert.ok(calls.every(call => call.action === 'read' && call.length === 1));
+    stale = true; await assert.rejects(async () => { await source.check(); }, /Native file changed/);
+});

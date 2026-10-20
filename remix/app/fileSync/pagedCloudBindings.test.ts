@@ -4,7 +4,7 @@ import { IDBFactory, IDBKeyRange, IDBObjectStore, IDBDatabase } from 'fake-index
 import { openSyncJournal } from './journal.client';
 import { newFileSyncConfiguration, type FileSyncConfiguration } from './configuration';
 import { inventorySyncEntry, type CloudInventoryNode } from './cloudInventory';
-import { fingerprintSource } from './contentFingerprint';
+import { EMPTY_CONTENT_SHA256, fingerprintSource } from './contentFingerprint';
 import { prepareCloudInventoryRun } from './cloudWrite';
 import { localTrashContexts } from './localTrash';
 import { createPagedCloudSyncPort } from './cloudSyncPort.client';
@@ -195,4 +195,17 @@ test('an aborted binding page does not publish partial destinations or progress'
 	try { await assert.rejects(f.runs.stepCloud(s), /Synthetic quota/); } finally { IDBObjectStore.prototype.put = original; }
 	assert.equal((await f.runs.beginCloud(s, c)).prepared, 0); await assert.rejects(f.runs.start(s), /Complete cloud bindings/);
 	assert.equal((await f.runs.prepareCloud(s, c)).prepared, 3); f.journal.close();
+});
+
+
+test('native empty files do not block durable cloud-binding preparation for the entire backup', async () => {
+ const f = await fixture(), c = config('upload'), s = spec(c);
+ const empty: SyncEntry = { path: '.empty', id: 'empty', kind: 'file', version: 'one', size: 0, sha256: EMPTY_CONTENT_SHA256 };
+ await seed(f, s, [empty, file('payload')], []);
+ await f.runs.beginCloud(s, c);
+ assert.equal((await f.runs.prepareCloud(s, c)).phase, 'ready');
+ const binding = await f.runs.cloudBinding(s, c, { path: '.empty' });
+ assert.equal(binding?.write.operation.mutation.kind, 'copy');
+ assert.equal((await f.runs.cloudBinding(s, c, { path: 'payload' }))?.write.operation.mutation.kind, 'copy');
+ f.journal.close();
 });

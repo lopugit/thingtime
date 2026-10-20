@@ -7,6 +7,7 @@ import {
 	HeadObjectCommand,
 	ListPartsCommand,
 	PutObjectTaggingCommand,
+    PutObjectCommand,
 	S3Client,
 	UploadPartCommand,
 	UploadPartCopyCommand,
@@ -35,6 +36,7 @@ export type AttachmentObjectHead = {
 };
 
 export type AttachmentS3 = {
+    putEmptyObject(input: { objectKey: string; attachmentId: string }): Promise<{ versionId: string }>;
 	copyUploadPart(input: {
 		objectKey: string; uploadId: string; partNumber: number;
 		sourceObjectKey: string; sourceVersionId: string;
@@ -99,6 +101,15 @@ export const createPrivateS3 = (config: PrivateS3Config, client = makeClient(con
 	const common = { Bucket: config.bucket, ExpectedBucketOwner: config.expectedBucketOwner } as const;
 
 	return {
+        async putEmptyObject({ objectKey, attachmentId }) {
+            if (!/^objects\/[A-Za-z0-9_-]+$/.test(objectKey) || objectKey !== `objects/${attachmentId}` || /[\p{Cc}]/u.test(attachmentId)) throw new Error('Invalid empty attachment object');
+            const result = await client.send(new PutObjectCommand({ ...common, Key: objectKey,
+                Body: new Uint8Array(0), ContentLength: 0, ContentType: 'application/octet-stream',
+                ServerSideEncryption: 'AES256', ChecksumAlgorithm: 'SHA256',
+                ChecksumSHA256: '47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=',
+                Metadata: { 'attachment-id': attachmentId }, Tagging: 'thingtime-state=pending', IfNoneMatch: '*' }));
+            return { versionId: String(result.VersionId || '') };
+        },
 		async copyUploadPart({ objectKey, uploadId, partNumber, sourceObjectKey, sourceVersionId, range, signal }) {
 			// Only protected same-bucket keys are accepted, never a URL supplied by
 			// a client. Pin both bucket owners and the exact authorized source version.

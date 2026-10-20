@@ -4,7 +4,11 @@ import { canonicalIgnoreRules, createSyncIgnorePolicy } from './syncIgnore';
 import { canonicalNativeScanExclusions, isNativeScanExcluded } from './nativeScanExclusions';
 import type { FolderRequest, FolderResult } from './mobileFolders.client';
 
-export type NativeIndexChange = { sequence: number; revision: string; entry: SyncEntry };
+export type NativeIndexChange = { sequence: number; revision: string; entry: SyncEntry; sourcePosition?: number; sourceKind?: 'snapshot' | 'delta' };
+/** Remote provenance orders concurrent snapshot rows against durable deltas. */
+export const validIndexProvenance = (change: Pick<NativeIndexChange, 'sourcePosition' | 'sourceKind'>) =>
+	(change.sourcePosition === undefined && change.sourceKind === undefined) ||
+	(Number.isSafeInteger(change.sourcePosition) && change.sourcePosition! >= 0 && ['snapshot', 'delta'].includes(change.sourceKind!));
 export type NativeIndexChangesPage = {
 	id: string;
 	generation: string;
@@ -43,7 +47,7 @@ export function parseNativeIndexChangesPage(value: unknown, id: string, afterSeq
 	)
 		throw Error('Native streaming index changed.');
 	for (const [i, c] of p.changes.entries())
-		if (!c || c.sequence !== afterSequence + i + 1 || !validSyncEntry(c.entry) || c.revision !== c.entry.version)
+		if (!c || c.sequence !== afterSequence + i + 1 || !validSyncEntry(c.entry) || c.revision !== c.entry.version || !validIndexProvenance(c))
 			throw Error('Native streaming revision changed.');
 	const result = structuredClone(p);
 	if (new TextEncoder().encode(JSON.stringify(result)).length > 512 * 1024) throw Error('Native streaming page exceeds its byte bound.');

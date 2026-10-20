@@ -6240,3 +6240,16 @@ cursor only after its entries and descendant pages are durable. The source
 queue must drain independently of slow transfers; a tree snapshot is not a live
 subscription, and a missing/invalidated cursor is an explicit reconciliation
 failure rather than absence or permission to delete.
+
+### Empty stored files
+
+Zero-byte uploads are supported for `file` and `file-import` only. Clients
+negotiate `api.attachment-uploads` 1.6, `api.attachment-upload-complete` 1.5,
+`api.attachment-content` 1.16 and `api.files` 1.8 before using this path. Start
+returns a ready zero-part object; it never needs a native multipart loop. The
+private versioned bucket must permit the existing server PutObject operation
+with checksum and conditional-write headers. No new secret or public bucket
+access is required. The local object adapter stores an actual immutable empty
+object too. Run `node remix/scripts/test-cloud-inventory-pages.mjs --empty-files`
+for a disposable Mongo/store proof covering real authenticated upload, read,
+commit and restore handlers. It never reads the app environment or real data.

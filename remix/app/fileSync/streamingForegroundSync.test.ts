@@ -331,3 +331,134 @@ test(
 		f.journal().close();
 	}
 );
+
+test('live cloud download transfers updates and new paths during traversal, then ignores a stale snapshot row', { timeout: 10000 }, async () => {
+	const { streamingFileFixture } = await import('./streamingFile.fixture');
+	const { readCloudIndexChanges } = await import('./cloudIndexChanges.client');
+	const { cloudFileSyncEntry } = await import('./cloudFile');
+	const f = await streamingFileFixture(),
+		firstPublished = deferred(),
+		updatesPublished = deferred();
+	const download = { ...saved, configuration: { ...saved.configuration, mode: 'download' as const } };
+	const original = {
+		id: crypto.randomUUID(),
+		revision: 'remote-1',
+		name: 'first.bin',
+		folderId: 'cloud-root',
+		trashed: false,
+		content: { attachmentId: 'original', version: 'a'.repeat(64), size: 3, fingerprint: f.entry().fingerprint! }
+	};
+	f.files.set(original.id, original);
+	f.objects.set('original', new Uint8Array([1, 2, 3]));
+	await f.revise([4, 5, 6]);
+	const revised = {
+		...original,
+		revision: 'remote-2',
+		content: { ...original.content, attachmentId: 'revised', fingerprint: f.entry().fingerprint! }
+	};
+	const added = { ...revised, id: crypto.randomUUID(), name: 'new.bin', content: { ...revised.content, attachmentId: 'new' } };
+	f.objects.set('revised', new Uint8Array([4, 5, 6]));
+	f.objects.set('new', new Uint8Array([4, 5, 6]));
+	const local = new Map<string, import('./reconcile').SyncEntry>(),
+		receipts = new Map<string, import('./execute').SyncReceipt>();
+	const published: [string, number[]][] = [],
+		staged = new Map<string, Uint8Array>();
+	let snapshotFinished = false;
+	const read = f.input.readConfiguration;
+	f.input.readConfiguration = async () => ({ ...((await read()) as object), crystal: download.configuration });
+	f.input.inspectLocal = async (path) => local.get(path) ?? null;
+	f.input.localTarget = {
+		lookup: async (op) => (receipts.has(op.id) ? { status: 'complete', receipt: receipts.get(op.id)! } : { status: 'missing' }),
+		stage: async (op, binding, source) => {
+			if (op.mutation.kind !== 'copy') throw Error('copy');
+			staged.set(op.id, await source!.read(0, source!.size));
+			return { operationId: op.id, scope: binding, token: op.id, entry: { ...op.mutation.source, id: 'local-' + op.id, version: 'local-' + op.id } };
+		},
+		publish: async (op, binding, stage) => {
+			assert.equal(snapshotFinished, false);
+			published.push([stage.entry.path, [...staged.get(op.id)!]]);
+			local.set(stage.entry.path, stage.entry);
+			const receipt = { operationId: op.id, scope: binding, entry: stage.entry };
+			receipts.set(op.id, receipt);
+			if (published.length === 1) {
+				f.files.set(revised.id, revised);
+				f.files.set(added.id, added);
+				firstPublished.resolve();
+			}
+			if (published.length === 3) updatesPublished.resolve();
+			return receipt;
+		}
+	};
+	const runtime = {
+		...f.input.runtime,
+		fetch: async (target: Parameters<typeof fetch>[0], init?: RequestInit) => {
+			const url = new URL(String(target));
+			if (!url.searchParams.has('changes')) return f.input.runtime.fetch(target, init);
+			const after = url.searchParams.get('after');
+			if (after === '10') await firstPublished.promise;
+			if (after === '12') await updatesPublished.promise;
+			return Response.json({
+				ok: true,
+				feed: {
+					version: 1,
+					rootId: 'cloud-root',
+					rootRevision: 'root',
+					cursor: after === null ? 10 : 12,
+					changes:
+						after === '10'
+							? [
+									{ position: 11, entry: cloudFileSyncEntry(revised, revised.name), subtree: null },
+									{ position: 12, entry: cloudFileSyncEntry(added, added.name), subtree: null }
+							  ]
+							: [],
+					hasMore: false
+				}
+			});
+		}
+	};
+	f.input.streamRemoteChanges = (id, after, signal, ready, resume) =>
+		readCloudIndexChanges(
+			scope,
+			'cloud-root',
+			{
+				...runtime,
+				signal,
+				snapshot: async function* () {
+					yield {
+						version: 1,
+						generation: 'snapshot',
+						ordinal: 0,
+						rootId: 'cloud-root',
+						rootRevision: 'root',
+						nodes: [{ kind: 'file', path: original.name, file: original }]
+					};
+					await updatesPublished.promise;
+					yield {
+						version: 1,
+						generation: 'snapshot',
+						ordinal: 1,
+						rootId: 'cloud-root',
+						rootRevision: 'root',
+						nodes: [{ kind: 'file', path: original.name, file: original }],
+						totalEntries: 2
+					};
+					snapshotFinished = true;
+				}
+			},
+			id,
+			after,
+			ready!,
+			resume!
+		);
+	const completed = await streamOneWayForegroundSync(download, scope, f.input, new AbortController().signal);
+	assert.deepEqual(published, [
+		['first.bin', [1, 2, 3]],
+		['first.bin', [4, 5, 6]],
+		['new.bin', [4, 5, 6]]
+	]);
+	assert.equal(receipts.size, 3);
+	assert.ok(completed);
+	const retained = await f.journal().pagedRuns(access(f.input)).streamEntries(completed);
+	assert.equal(retained.entries.find((row) => row.path === 'first.bin')?.version, 'remote-2');
+	f.journal().close();
+});

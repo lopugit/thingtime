@@ -12,6 +12,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 > When you make a manual change, add a bullet under `[Unreleased]` ending with
 
+- 2026-10-20: Streaming file sync implementation and verification details: [PR 1062](../PRs/1062-codex-streaming-file-sync-stream-device-file-transfers-as-indexing-produces-entries.md).
+
 - 2026-10-19: Cloud snapshot workers acquire renewable source-version holds;
   attachment deletion defers physical purge/refund and retained byte reads stay
   owner-only. Added isolated Mongo race/accounting proof and 1.15.0 content /

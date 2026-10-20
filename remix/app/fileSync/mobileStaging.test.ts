@@ -250,3 +250,18 @@ test('download telemetry excludes retained offsets and repeated completed stages
  await stageMobileCopy(scope, rootId, f.operation, f.source, signal, f.request, bridge, record);
  assert.deepEqual(transferred, [0]);
 });
+
+test('empty regular-file staging checks the source and finishes without a byte request', async () => {
+    const operation = { id: 'f877a2c5-1aaf-4e45-a39d-bf1250bc0419', confirmed: false, mutation: {
+        kind: 'copy', from: 'remote', path: 'empty', expectedTarget: null, source: { path: 'empty', id: 'cloud-empty', version: 'r1', kind: 'file', size: 0,
+            sha256: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855' } } } satisfies SyncOperation;
+    const stage: LocalStagedCopy = { scope, operationId: operation.id, token: 'private-empty-stage', entry: { ...operation.mutation.source, id: 'native-empty', version: 'native-v1' } };
+    const calls: FolderRequest[] = []; let checks = 0;
+    const source = { size: 0, check: () => { checks++; }, read: async () => { throw Error('An empty restore must never request bytes'); } };
+    const result = await stageMobileCopy(scope, rootId, operation, source, new AbortController().signal, async (_owner, input) => {
+        calls.push(input);
+        return parseMobileFolderResult({ type: 'mobile-files-result', payload: { requestId: 'empty', ownerId: scope.ownerId, origin: scope.origin, roots: [], rootId,
+            staging: { received: 0, ...(input.action === 'stage-finish' ? { stage } : {}) } } }, { requestId: 'empty', ownerId: scope.ownerId, origin: scope.origin }, input)!;
+    }, { platform: 'macos', fileAccessVersion: '1.11.0', fileStagingVersion: '1.1.0' });
+    assert.deepEqual(result, stage); assert.deepEqual(calls.map(call => call.action), ['stage-begin', 'stage-finish']); assert.ok(checks >= 3);
+});

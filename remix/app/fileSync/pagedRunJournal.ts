@@ -1,3 +1,4 @@
+import { validIndexProvenance, type NativeIndexChange } from './streamingIndex';
 import { SYNC_PRIORITY_STORE, parseSyncPriorityPreferences } from './syncPriorityJournal';
 import { JOURNAL_RETENTION_STORE, registerJournalMetadata, forgetJournalMetadata, retireJournalMetadata } from './journalRetention';
 import { parsePagedRunReview, parseReviewedConflict, resolveReviewedPage, type PagedRunReview, type PagedReviewProgress, type ReviewedSyncConflict } from './pagedRunReview';
@@ -462,9 +463,9 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 
 		/** Commit one fully prepared revision and its feed cursor atomically.
 		 * The prior version's receipt remains retained before replacing a path. */
-		async appendStream(value: PagedRunSpec, change: { generation: string; sequence: number; revision: string; entry: SyncEntry }, binding: CloudOperationBinding | null, conflict = false) {
+		async appendStream(value: PagedRunSpec, change: NativeIndexChange & { generation: string }, binding: CloudOperationBinding | null, conflict = false, observe = true) {
 			const spec = parsePagedRunSpec(value), event = structuredClone(change), prepared = binding && structuredClone(binding);
-			if (!spec.streaming || !identifier(event.generation) || !nonnegative(event.sequence) || event.sequence === 0 || event.revision !== event.entry?.version || !validSyncEntry(event.entry)) throw Error('Invalid streaming index change.');
+			if (!spec.streaming || !identifier(event.generation) || !nonnegative(event.sequence) || event.sequence === 0 || event.revision !== event.entry?.version || !validSyncEntry(event.entry) || !validIndexProvenance(event) || (event.sourceKind !== undefined && spec.streaming.source !== 'remote')) throw Error('Invalid streaming index change.');
 			if (prepared) { const write = parseCloudWrite(prepared.write), m = write.operation.mutation;
 				if (!sameSyncScope(write.scope, scope) || write.cloudRootId !== spec.configuration!.remoteFolderId || m.kind !== 'copy' || m.from !== spec.streaming.source || !sameSyncStamp(m.source, event.entry) || write.operation.confirmed || write.operation.id === spec.id) throw Error('Streaming operation does not match the indexed revision.'); }
 			if (bytes({ event, prepared }) > INVENTORY_PAGE_BYTES) throw Error('Streaming change exceeds its byte bound.');
@@ -476,26 +477,33 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 					if (stream.indexedSequence !== undefined) {
 						const staged = events.get([key, spec.id, 'input', event.sequence]);
 						staged.onsuccess = () => { try { check(); const source = staged.result;
-							if (!source || !validSyncEntry(source.entry) || source.sequence !== event.sequence || source.generation !== event.generation || source.revision !== event.revision || !sameSyncStamp(source.entry, event.entry)) throw Error('Durable streaming input changed before preparation.');
+							if (!source || !validSyncEntry(source.entry) || source.sequence !== event.sequence || source.generation !== event.generation || source.revision !== event.revision || !sameSyncStamp(source.entry, event.entry) || source.sourcePosition !== event.sourcePosition || source.sourceKind !== event.sourceKind) throw Error('Durable streaming input changed before preparation.');
 						} catch (error) { fail(error); } };
+					}
+					let effective = prepared, observed = observe;
+					// Request order within this transaction resolves provenance before
+					// the operation callback; a later snapshot can never replace a delta.
+					if (event.sourceKind === 'snapshot') {
+						const delta = events.get([key, spec.id, 'delta', syncPathKey(event.entry.path)]);
+						delta.onsuccess = () => { if (delta.result > event.sourcePosition!) { effective = null; observed = false; } };
 					}
 					const ops = tx.objectStore(PAGED_RUN_STORES[1]), previous = ops.index('path').get([key, spec.id, syncPathKey(event.entry.path)]);
 					previous.onsuccess = () => { try {
 						check(); const prior: Row | undefined = previous.result;
 						if (prior && (!row(prior, spec).operation.confirmed || h.scheduling!.reserved === prior.operation.id)) throw Error('Finish the prior path revision before replacing it.');
-						if (prepared) {
+						if (effective) {
 							if (prior) { events.add(prior, [key, spec.id, 'history', prior.operation.id]); ops.delete([key, spec.id, ...orderKey(prior.operation)]); }
-							const operation = prepared.write.operation; validateSyncOperation(operation);
+							const operation = effective.write.operation; validateSyncOperation(operation);
 							events.add(true, [key, spec.id, 'used-operation', operation.id]);
-							ops.add({ scope: key, run: spec.id, path: syncPathKey(operation.mutation.path), operation, receipt: null, cloud: prepared } satisfies Row, [key, spec.id, ...orderKey(operation)]);
+							ops.add({ scope: key, run: spec.id, path: syncPathKey(operation.mutation.path), operation, receipt: null, cloud: effective } satisfies Row, [key, spec.id, ...orderKey(operation)]);
 							events.add(operation.id, [key, spec.id, 'pending', ...orderKey(operation)]); events.add(operation.id, [key, spec.id, 'pending-path', syncPathKey(operation.mutation.path)]);
 							h.operations++; h.cloud!.prepared++; h.cloud!.after = orderKey(operation); h.confirmedThrough = null;
 							h.scheduling!.index = 0; h.scheduling!.after = null;
 						}
-						events.add({ event, conflict, operationId: prepared?.write.operation.id ?? null }, token);
+						events.add({ event, conflict: conflict && observed, operationId: effective?.write.operation.id ?? null }, token);
 						events.delete([key, spec.id, 'input', event.sequence]);
-						events.put(event.entry, [key, spec.id, 'source', syncPathKey(event.entry.path)]);
-						stream.sequence = event.sequence; stream.generation = event.generation; if (conflict) stream.conflicts++;
+						if (observed) events.put(event.entry, [key, spec.id, 'source', syncPathKey(event.entry.path)]);
+						stream.sequence = event.sequence; stream.generation = event.generation; if (conflict && observed) stream.conflicts++;
 						h.read++; h.total++; h.revision++; save(h, tx); done(progress(h));
 					} catch (error) { fail(error); } };
 				} catch (error) { fail(error); } };
@@ -503,18 +511,25 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 		},
 		/** Drain producer pages to disk independently of network binding and byte
 		 * transfers. A quota/transaction failure leaves its source watermark intact. */
-		async appendStreamInput(value: PagedRunSpec, generation: string, changes: readonly { sequence: number; revision: string; entry: SyncEntry }[], terminal: boolean) {
+		async appendStreamInput(value: PagedRunSpec, generation: string, changes: readonly NativeIndexChange[], terminal: boolean) {
 			const spec = parsePagedRunSpec(value), rows = structuredClone(changes);
 			if (!spec.streaming || !identifier(generation) || !Array.isArray(rows) || rows.length > INVENTORY_PAGE_ENTRIES || typeof terminal !== 'boolean' ||
-				rows.some(row => !nonnegative(row.sequence) || row.sequence === 0 || !validSyncEntry(row.entry) || row.revision !== row.entry.version) || bytes(rows) > INVENTORY_PAGE_BYTES) throw Error('Invalid streaming input page.');
-			return withHeader<void>(spec, 'readwrite', (h, tx, done) => {
+				rows.some(row => !nonnegative(row.sequence) || row.sequence === 0 || !validSyncEntry(row.entry) || row.revision !== row.entry.version || !validIndexProvenance(row) || (row.sourceKind !== undefined && spec.streaming.source !== 'remote')) || bytes(rows) > INVENTORY_PAGE_BYTES) throw Error('Invalid streaming input page.');
+			return withHeader<void>(spec, 'readwrite', (h, tx, done, fail) => {
 				const stream = h.stream!, after = stream.indexedSequence ?? stream.sequence;
 				if (stream.sourceTerminal || stream.terminal || (stream.generation !== null && stream.generation !== generation) || rows.some((row, i) => row.sequence !== after + i + 1)) throw Error('Streaming input generation or watermark changed.');
-				for (const row of rows) tx.objectStore(REVIEW_STORE).add({ ...row, generation }, [key, spec.id, 'input', row.sequence]);
+				for (const row of rows) {
+					const events = tx.objectStore(REVIEW_STORE);
+					events.add({ ...row, generation }, [key, spec.id, 'input', row.sequence]);
+					if (row.sourceKind === 'delta') {
+						const token = [key, spec.id, 'delta', syncPathKey(row.entry.path)], previous = events.get(token);
+						previous.onsuccess = () => { try { check(); events.put(Math.max(previous.result ?? 0, row.sourcePosition!), token); } catch (error) { fail(error); } };
+					}
+				}
 				stream.indexedSequence = after + rows.length; stream.generation = generation; stream.sourceTerminal = terminal; h.revision++; save(h, tx); done(undefined);
 			});
 		},
-		async nextStreamInput(value: PagedRunSpec): Promise<{ generation: string; sequence: number; revision: string; entry: SyncEntry } | null> {
+		async nextStreamInput(value: PagedRunSpec): Promise<(NativeIndexChange & { generation: string }) | null> {
 			const spec = parsePagedRunSpec(value);
 			return withHeader(spec, 'readonly', (h, tx, done, fail) => {
 				if (!h.stream) throw Error('This run is not streaming.');

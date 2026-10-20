@@ -930,7 +930,7 @@ export function mobileFolderSource(
 		if (result.chunk!.size !== entry.size) throw Error('Native source changed.');
 	};
 	return {
-		...(supportsNativeFileUploads(bridge)
+		...(entry.size > 0 && supportsNativeFileUploads(bridge)
 			? {
 					uploadFile: async (upload: NativeFileUpload, callerSignal?: AbortSignal, progress?: (bytes: number, total: number) => void) => {
 						const active = callerSignal ? AbortSignal.any([signal, callerSignal]) : signal;
@@ -953,7 +953,7 @@ export function mobileFolderSource(
 					}
 			  }
 			: {}),
-		...(supportsNativePartUploads(bridge)
+		...(entry.size > 0 && supportsNativePartUploads(bridge)
 			? {
 					uploadPart: async (upload: NativePartUpload, callerSignal?: AbortSignal) => {
 						const active = callerSignal ? AbortSignal.any([signal, callerSignal]) : signal;

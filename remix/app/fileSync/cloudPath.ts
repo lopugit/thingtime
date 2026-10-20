@@ -1,4 +1,5 @@
 import { validSyncEntry, validSyncPath, type SyncEntry } from './reconcile';
+import { EMPTY_CONTENT_SHA256 } from './contentFingerprint';
 
 export const CLOUD_PATH_REQUIREMENTS = { 'api.files': '1.6.0', 'api.actions-run': '1.7.0', 'api.mongodb-endpoint': '1.1.0' } as const;
 export type CloudPathObservation = {
@@ -18,7 +19,8 @@ export function parseCloudPathObservation(value: unknown, rootId: string, path: 
 	if (!identifier(rootId) || !validSyncPath(path) || !row || row.version !== 1 || row.complete !== true ||
 		row.rootId !== rootId || row.path !== path || !identifier(row.rootRevision) ||
 		(row.entry !== null && (!validSyncEntry(row.entry) || row.entry.path !== path || !identifier(row.entry.id) ||
-			!identifier(row.entry.version) || row.entry.id === rootId || (row.entry.kind === 'file' && !row.entry.fingerprint))))
+			!identifier(row.entry.version) || row.entry.id === rootId || (row.entry.kind === 'file' && !row.entry.fingerprint &&
+				!(row.entry.size === 0 && row.entry.sha256 === EMPTY_CONTENT_SHA256)))))
 		throw Error('A complete observation of this cloud path was not returned.');
 	return { version: 1, complete: true, rootId, rootRevision: row.rootRevision, path, entry: row.entry === null ? null : structuredClone(row.entry) };
 }

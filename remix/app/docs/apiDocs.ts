@@ -5739,14 +5739,15 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
 	endpoint({
 		id: 'attachment-uploads',
-		contractVersion: '1.5.0',
-		featureVersion: '1.5.0',
+		contractVersion: '1.6.0',
+		featureVersion: '1.6.0',
 		group: 'attachments',
 		title: 'Start attachment upload',
 		endpoint: '/api/v1/attachments/uploads',
 		summary: 'Reserves account storage and starts a private, checksummed S3 multipart upload.',
 		detail:
-			'File purpose creates a standalone, private, quota-accounted attachment Thing. File-import creates an expiring file-purpose import draft, committed through the existing Things transfer workflow. Both require private-upload access and preserve original bytes. ' +
+			'Version 1.6 accepts exact sizeBytes=0 only for file/file-import. It reserves the same owner/request metadata and quota, conditionally stores an encrypted zero-byte object, verifies its exact-version size/identity/full SHA-256, and returns partCount=0 plus upload.state=ready. Do not issue part URLs or native multipart work. An ambiguous/repeated request reuses the same ready object; other upload purposes still require positive size. ' +
+            'File purpose creates a standalone, private, quota-accounted attachment Thing. File-import creates an expiring file-purpose import draft, committed through the existing Things transfer workflow. Both require private-upload access and preserve original bytes. ' +
       'Upload starts default to 60 requests per minute per account, including retries. The exact legacy 30/hour default is upgraded; custom and disabled rules are preserved. On 429, honor Retry-After and reuse the same requestId and metadata; never start an unbounded retry loop. ' +
 			'Creates a billable pending attachment before S3 accepts any bytes, preventing concurrent uploads from oversubscribing the account storage tier. ' +
 			'A client-generated requestId makes ambiguous starts idempotent for the same owner, exact metadata, and purpose. The server derives an owner-scoped opaque attachment id, so another account using the same requestId neither collides nor learns that it exists. The object key and multipart id remain private. Request presigned URLs in bounded batches from /uploads/parts.',
@@ -5866,14 +5867,15 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 	}),
 	endpoint({
 		id: 'attachment-upload-complete',
-		contractVersion: '1.4.0',
-		featureVersion: '1.4.0',
+		contractVersion: '1.5.0',
+		featureVersion: '1.5.0',
 		group: 'attachments',
 		title: 'Complete attachment upload',
 		endpoint: '/api/v1/attachments/uploads/complete',
 		summary: 'Verifies every S3 part and publishes canonical attachment metadata idempotently.',
 		detail:
-			'Completed file-purpose uploads are durable owner-private Things. File-import drafts remain expiring until an atomic dedicated import commit. ' +
+			'Version 1.5 supports idempotent zero-byte file completion through a single-object PUT under the existing finalization lease. It never submits an empty multipart completion. Only server-verified empty file content is stamped moderation-skipped; other objects preserve quarantine and analysis. ' +
+            'Completed file-purpose uploads are durable owner-private Things. File-import drafts remain expiring until an atomic dedicated import commit. ' +
       'The server lists parts itself, requires consecutive numbers, exact expected sizes, ETags, and SHA-256 checksums, then completes and HEAD-verifies the object. ' +
 			'It reads only a small prefix to detect an inline-safe raster/video type (AVIF/GIF/JPEG/PNG/WebP images; MP4, WebM, QuickTime, M4V, Ogg, 3GPP, 3GPP2, and Matroska video). ' +
 			'Active and generic formats stay application/octet-stream downloads, with the sniffed container preserved as detectedContentType display metadata when one was recognized. Repeating a successful request is safe.',
@@ -6102,11 +6104,12 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		responseExamples: [{ status: 200, description: 'Attachment absent.', body: { ok: true } }]
 	}),
 	endpoint({
-    id: 'files', contractVersion: '1.7.0', featureVersion: '1.7.0', group: 'attachments', title: 'Inventory folders and recover file versions',
+    id: 'files', contractVersion: '1.8.0', featureVersion: '1.8.0', group: 'attachments', title: 'Inventory folders and recover file versions',
     endpoint: '/api/v1/files', summary: 'Inventory a private folder, read file revisions or conditionally commit a stable file Thing.',
     detail: 'Complete private folder inventories use a bounded snapshot read and never return partial success. One file identity points at an immutable attachment version. Commits atomically bind owned durable file uploads, update metadata/accounting and append a private Timeline revision. Prior byte versions remain charged and recoverable. No overwrite occurs on revision mismatch. Home data plane only.',
     auth: { mode: 'session-or-bearer', description: 'Full owning user sessions only; scoped PAT, app, device and service credentials are rejected.' }, methods: ['GET', 'POST'],
     steps: [
+      'In 1.8.0, stable files, conditional commits, retained versions and inventories accept size zero with the canonical verified zero-part fingerprint. No noncanonical digest is accepted for an empty file. Authorization, operation receipts, expected revisions and prior-version retention are unchanged.',
       'In 1.7.0, GET rootId&changes=1 returns {ok:true,feed:{version:1,rootId,rootRevision,cursor,changes:[],hasMore:false}} with an owner-serialized durable Timeline watermark. Acquire this BEFORE the initial inventory. Resume with after=<cursor> to observe commits during traversal and transfer backlog; each delta is {position,entry,subtree:null|folderId}. Pages inspect at most 32 private Timeline headers and return at most eight current eligible entries and 128 KiB. Cursor advances over unrelated owner events too; persist it only after the full delta page and affected subtree pages are durable. The cursor is a safe integer, zero for an empty history. Missing retained cursor/watermark history, ancestry, uniqueness, snapshot, capacity or storage failures are explicit errors, never idle success or inferred deletion. No parallel feed storage or new mutation authority is introduced.',
       'Optional wait=1 with after uses a Mongo change-stream wake, primed before the snapshot read, for at most 15 seconds (20-second request budget). Reconnect with the same durable cursor; backend change-stream failure returns 503 rather than polling the whole tree. Root ownership, private access and ancestry are checked in every snapshot. Changed paths reuse the bounded-memory sibling/ancestor collision gate. Current metadata is read from the same home snapshot; client-authored Timeline payloads never supply content. Deletions and moves out of the selected root do not authorize absence or deletion.',
       'A folder delta has subtree=folderId: inventory that affected subtree with GET rootId=<originalRoot>&pages=1&subtreeId=<folderId>, including after folder rename or movement into the root. This bounded stream retains paths relative to the original root and revalidates the folder membership and namespace in the same snapshot. It contains descendants only; the folder itself is in the delta. totalEntries seals only this requested subtree, never the entire original tree. Resume the Timeline cursor only after this subtree observation is retained; a stale or inaccessible subtree fails explicitly. Initial snapshot and later deltas can overlap and should deduplicate by stable identity and version.',
@@ -6125,14 +6128,15 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
 	endpoint({
 		id: 'attachment-content',
-		contractVersion: '1.15.0',
-		featureVersion: '1.15.0',
+		contractVersion: '1.16.0',
+		featureVersion: '1.16.0',
 		group: 'attachments',
 		title: 'Read attachment content',
 		endpoint: '/api/v1/attachments/content',
 		summary: 'Authorizes a stable same-origin attachment URL and redirects to short-lived private S3 content.',
 		detail:
-			'Optional character=<id> selects an owned Character for media elements; unauthorized identities return 401. Standalone file-purpose attachments use the same exact-owner access checks as saved recordings, including moderation, object-version and storage gates. ' +
+			'Version 1.16 fingerprints stored empty file content with algorithm sha256-parts-v1, partSizeBytes=8388608, partCount=0 and the exact SHA-256 of empty input. Verification requires an exact-version FULL_OBJECT storage checksum, size zero and the canonical attachment identity. Ordinary authorized GET returns the real stored zero-byte object; no placeholder bytes or absent-object inference is used. ' +
+            'Optional character=<id> selects an owned Character for media elements; unauthorized identities return 401. Standalone file-purpose attachments use the same exact-owner access checks as saved recordings, including moderation, object-version and storage gates. ' +
 			'Owner-created service workspaces add live membership-based read/comment access to enrolled records and the bound webpage; customer and B2B users are limited to their linked customer and properties. Inherited comments/media recheck membership on every request; app/PAT scopes, custom endpoints, explicit private ACL changes and moderation remain enforced. Inherited comment media also enforce moderation on every intervening ancestor, including comments on media. ' +
 			'Unlisted post/page/comment media opens by canonical attachment id without a secret key. Current parent ACL, moderation and storage gates are rechecked on every request. Saved profile discoveries remain tied to the account or anonymous browser identity; IP metadata never grants access. ' +
 			'Comment galleries follow canonical visibility inheritance through parent comments and media items, including after copying. ' +

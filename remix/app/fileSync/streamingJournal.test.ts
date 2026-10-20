@@ -112,11 +112,43 @@ test('raw index pages survive reopen independently of prepared operations and so
 	assert.equal(status.sequence, 0);
 	assert.equal(status.sourceCursor, '101');
 	assert.equal((await runs.nextStreamInput(s))!.entry.path, 'file');
-	await assert.rejects(runs.appendStream(s, { generation: s.streaming!.captureId, sequence: 1, revision: 'changed', entry: { ...entry, version: 'changed' } }, null), /input changed/);
+	await assert.rejects(
+		runs.appendStream(s, { generation: s.streaming!.captureId, sequence: 1, revision: 'changed', entry: { ...entry, version: 'changed' } }, null),
+		/input changed/
+	);
 	assert.equal((await runs.streamState(s)).sequence, 0);
 	assert.equal((await runs.nextStreamInput(s))!.entry.version, '1');
 	await assert.rejects(runs.checkpointStreamSource(s, 1, '99', true), /changed/);
 	await assert.rejects(runs.checkpointStreamSource(s, 1, '102', false), /changed/);
 	await assert.rejects(runs.sealStream(s, s.streaming!.captureId, 0), /changed/);
+	f.journal().close();
+});
+
+test('durable remote delta provenance survives reopen and suppresses a later stale snapshot projection', async () => {
+	const f = await foregroundFixture(),
+		access = { scope, currentScope: () => scope },
+		s = spec();
+	s.streaming!.source = 'remote';
+	s.plan.policy.mode = 'download';
+	s.configuration = { ...s.configuration!, mode: 'download' };
+	let runs = f.journal().pagedRuns(access);
+	await runs.begin(s);
+	const latest: SyncEntry = { path: 'file', id: 'remote', version: 'B', kind: 'folder', size: 0, sha256: null };
+	const delta = { sequence: 1, revision: 'B', entry: latest, sourcePosition: 11, sourceKind: 'delta' as const };
+	await runs.appendStreamInput(s, s.streaming!.captureId, [delta], false);
+	await runs.appendStream(s, (await runs.nextStreamInput(s))!, null);
+	await f.reload();
+	runs = f.journal().pagedRuns(access);
+	const stale = { sequence: 2, revision: 'A', entry: { ...latest, version: 'A' }, sourcePosition: 10, sourceKind: 'snapshot' as const };
+	await runs.appendStreamInput(s, s.streaming!.captureId, [stale], false);
+	await assert.rejects(runs.appendStream(s, { ...(await runs.nextStreamInput(s))!, sourcePosition: 12 }, null), /input changed/);
+	await runs.appendStream(s, (await runs.nextStreamInput(s))!, null, true);
+	assert.equal((await runs.streamEntries(s)).entries[0].version, 'B');
+	assert.equal((await runs.streamState(s)).sequence, 2);
+	assert.equal((await runs.streamState(s)).conflicts, 0);
+	await assert.rejects(
+		runs.appendStreamInput(s, s.streaming!.captureId, [{ ...stale, sequence: 3, sourcePosition: -1 }], false),
+		/Invalid streaming input/
+	);
 	f.journal().close();
 });

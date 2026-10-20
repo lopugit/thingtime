@@ -1,3 +1,4 @@
+import { readCloudIndexChanges } from './cloudIndexChanges.client';
 import { readNativeIndexChanges } from './streamingIndex';
 import { SyncConditionsWait } from './foregroundSyncContext';
 import { SyncConnectionWait, isSyncConnectionFailure } from './syncConnectionWait';
@@ -152,7 +153,10 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 					...(inspect && supportsNativeStreamingIndex(capabilities) && !reviewed.configuration.propagateDeletes ? {
 						streamLocalChanges: (captureId: string, afterSequence: number, streamSignal?: AbortSignal, readyToFinish?: () => Promise<boolean>) => readNativeIndexChanges({ ownerId: binding.ownerId, deviceId: binding.deviceId,
 							rootId: reviewed.configuration.localRootId, captureId, afterSequence, readyToFinish, signal: streamSignal ?? signal, request, excludedPaths: reviewed.configuration.excludedPaths, ignoreRules: reviewed.configuration.ignoreRules }),
-						streamCloudChanges: true
+						streamRemoteChanges: (captureId: string, afterSequence: number, streamSignal?: AbortSignal, readyToFinish?: () => Promise<boolean>, resume?: { cursor?: string; snapshotComplete?: boolean; checkpoint(cursor: string, snapshotComplete: boolean): Promise<void> }) => {
+							if (!readyToFinish || !resume) throw Error('The durable cloud index consumer is unavailable.');
+							return readCloudIndexChanges(binding, reviewed.configuration.remoteFolderId, { ...runtime, signal: streamSignal ?? signal }, captureId, afterSequence, readyToFinish, resume);
+						}
 					} : {}),
 					inventorySession: descriptor => {
 						check(); update({ inventoryDescriptor: descriptor });
