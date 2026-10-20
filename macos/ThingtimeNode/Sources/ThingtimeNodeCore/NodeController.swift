@@ -183,11 +183,11 @@ public actor ThingtimeNodeController {
         self.pairingScopeChanged = pairingScopeChanged
     }
 
-    public func handleLocalFolderSync(_ request: NodeRequest, stream: (@Sendable (Data) throws -> Void)? = nil, receive: (@Sendable (Int) throws -> Data)? = nil) async -> NodeResponse {
+    public func handleLocalFolderSync(_ request: NodeRequest, stream: (@Sendable (Data) throws -> Void)? = nil, receive: (@Sendable (Int) throws -> Data)? = nil, batchCallback: (@Sendable (JSONValue, TimeInterval) async throws -> JSONValue)? = nil) async -> NodeResponse {
         guard request.method == "folder-sync.request", let folderSync else {
             return .failure(id: request.id, code: "unsupported_feature", message: "This node does not support local folder sync.")
         }
-        do { return .success(id: request.id, result: try await folderSync.handle(request.parameters, stream: stream, receive: receive)) }
+        do { return .success(id: request.id, result: try await folderSync.handle(request.parameters, stream: stream, receive: receive, batchCallback: batchCallback)) }
         catch let error as MobileFolderStore.Failure { return .failure(id: request.id, code: "folder_unavailable", message: error.localizedDescription) }
         catch is CancellationError { return .failure(id: request.id, code: "cancelled", message: "Folder access was cancelled.") }
         catch where MacFolderSync.identityVerificationIsTransient(error) {

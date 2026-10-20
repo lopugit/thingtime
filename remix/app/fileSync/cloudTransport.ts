@@ -94,7 +94,8 @@ async function cloudTemporaryFailure(response: Response, url: URL, mutation: boo
 
 /** Authenticated JSON stays on one origin with server-enforced expected actor
  * and data-plane headers. Signed part requests carry no account credentials. */
-export function cloudRequests(runtime: CloudTransportRuntime, scope: SyncScope, signal?: AbortSignal) {
+export function cloudRequests(runtime: CloudTransportRuntime, scope: SyncScope, signal?: AbortSignal, maximumResponseBytes = 64 * 1024) {
+	if (![64 * 1024, 512 * 1024].includes(maximumResponseBytes)) throw Error('Invalid bounded cloud response size.');
 	const check = () => {
 		signal?.throwIfAborted();
 		if (runtime.origin() !== scope.origin || !sameSyncScope(scope, runtime.currentScope())) throw Error('Sync context changed.');
@@ -148,7 +149,7 @@ export function cloudRequests(runtime: CloudTransportRuntime, scope: SyncScope, 
 				check();
 				if (next.done) break;
 				total += next.value.length;
-				if (total > 64 * 1024) throw Error('Cloud sync response is too large.');
+				if (total > maximumResponseBytes) throw Error('Cloud sync response is too large.');
 				chunks.push(next.value);
 			}
 		} catch (error) { transportFailure(error); } finally {

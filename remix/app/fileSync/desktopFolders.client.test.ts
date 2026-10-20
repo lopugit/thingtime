@@ -1,5 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { uploadBatchDigest } from './uploadBatch';
 import { createDesktopFolderHost } from './desktopFolders.client';
 import { mobileFolderSource } from './mobileFolders.client';
 const origin = 'https://sync.test';
@@ -255,6 +257,7 @@ test('fixed native verification and shutdown waits survive IPC redaction; arbitr
    await assert.rejects(attempt(), error => {
     assert.equal(error instanceof SyncConnectionWait, expected);
     assert.equal(isSyncConnectionFailure(error), expected);
+    assert.equal((error as InstanceType<typeof SyncConnectionWait>).reason, expected && marker.startsWith('[folder_identity_retry]') ? 'folder-identity' : undefined);
     assert.doesNotMatch((error as Error).message, /private-prefix|private-suffix|folder_identity_retry|folder_sync_shutdown/);
     return true;
    });
@@ -398,4 +401,31 @@ test('composite authorization freshly returns roots and conditions with one cont
  await assert.rejects(host.authorizeContext!('owner', 'device', f.lifetime.signal));
  f.patch({ capabilities: { fileAccessVersion: '1.12.0' }, conditions: { network: 'wifi', charging: true }, ownerId: 'other' });
  await assert.rejects(host.authorizeContext!('owner', 'device', f.lifetime.signal));
+});
+
+
+test('desktop bulk runner requires both trusted native and selected-origin API capability and binds exact scope', async () => {
+	const capabilities = { fileAccessVersion: '1.13.0', fileUploadBatchVersion: '1.0.0' };
+	for (const patch of [
+		{ capabilities },
+		{ capabilities: { fileAccessVersion: '1.13.0' }, apiCapabilities: { schemaVersion: 1, origin, features: { 'api.file-sync-batches': { version: '1.0.0' } } } }
+	]) {
+		const f = fixture(); f.patch({ ...patch, conditions: { network: 'wifi', charging: true } });
+		assert.equal((await f.create()).uploadBatch, undefined);
+	}
+	const f = fixture(), descriptor = JSON.parse(readFileSync(new URL('./fixtures/uploadBatchDigest.v1.json', import.meta.url), 'utf8')).vectors[0].descriptor;
+	descriptor.configuration.configuration.localRootId = rootId;
+	const digest = await uploadBatchDigest(descriptor);
+	f.patch({ capabilities, conditions: { network: 'wifi', charging: true }, apiCapabilities: { schemaVersion: 1, origin, features: { 'api.file-sync-batches': { version: '1.0.0' } } },
+		uploadedBatch: { ok: true, version: 1, batchId: descriptor.batchId, digest,
+			results: [{ ordinal: 0, status: 'failed', statusCode: 409, code: 'source-changed', retryable: false }], payloads: [{ ordinal: 0, bytes: 0 }] } });
+	const host = await f.create();
+	assert.ok(host.uploadBatch);
+	const result = await host.uploadBatch({ descriptor, digest }, {}, f.lifetime.signal);
+	assert.equal(result.batchId, descriptor.batchId);
+	assert.equal(f.calls.at(-1).action, 'upload-batch');
+	assert.equal(f.calls.at(-1).rootId, rootId);
+	const before = f.calls.length, foreign = structuredClone(descriptor); foreign.scope.ownerId = 'foreign';
+	await assert.rejects(host.uploadBatch({ descriptor: foreign, digest }, {}, f.lifetime.signal));
+	assert.equal(f.calls.length, before, 'scope drift is rejected before native dispatch');
 });

@@ -1,4 +1,6 @@
 import type { PriorityReadiness } from './priorityReadiness';
+import { eligibleUploadBatchWrite, parseUploadBatchDescriptor, UPLOAD_BATCH_FILES, UPLOAD_BATCH_BYTES, UPLOAD_BATCH_DESCRIPTOR_BYTES, type UploadBatchDescriptor } from './uploadBatch';
+import type { SavedFileSyncConfiguration } from './configuredPlan';
 import { validIndexProvenance, type NativeIndexChange } from './streamingIndex';
 import { SYNC_PRIORITY_STORE, parseSyncPriorityPreferences } from './syncPriorityJournal';
 import { JOURNAL_RETENTION_STORE, registerJournalMetadata, forgetJournalMetadata, retireJournalMetadata } from './journalRetention';
@@ -31,7 +33,9 @@ export type CloudBindingProgress = { prepared: number; total: number; phase: 'pr
 type CloudPreparation = { configuration: FileSyncConfiguration; root: CloudInventoryRoot; prepared: number; after: SortKey | null };
 export type PagedRunHeader = PagedRunProgress & { spec: PagedRunSpec; scope: string; instance: string; retired?: true; planInstance: string;
 	next: PagedPlanCursor | null; revision: number; confirmedThrough: SortKey | null; cloud?: CloudPreparation; review?: PagedReviewProgress; retained?: true; scheduling?: Scheduling; stream?: { sequence: number; generation: string | null; terminal: boolean; conflicts: number; sourceCursor?: string; snapshotComplete?: boolean; indexedSequence?: number; sourceTerminal?: boolean; priorityPreparation?: true; preparedAhead?: number; inputBackfillSequence?: number; inputBackfillThrough?: number } };
-type Scheduling = { canonical: boolean; legacy: boolean; revision: number; index: number; after: string | null; reserved: string | null; streamScan?: { index: number; ancestor: number; phase: 0 | 1 | 2 } };
+type BatchReservation = { id: string; count: number; remaining: number; next: number };
+type Scheduling = { canonical: boolean; legacy: boolean; revision: number; index: number; after: string | null; reserved: string | null;
+	batch?: BatchReservation; recovery?: BatchReservation; streamScan?: { index: number; ancestor: number; phase: 0 | 1 | 2 } };
 const freshScheduling = (legacy = false): Scheduling => ({ canonical: false, legacy, revision: 0, index: 0, after: null, reserved: null });
 type Header = PagedRunHeader;
 export type ConfirmedSyncOperation = { operation: SyncOperation; receipt: SyncReceipt };
@@ -105,6 +109,9 @@ export const validatePagedRunHeader = (h: Header, spec: PagedRunSpec, scope: Syn
 		const s = h.scheduling;
 		if (typeof s.canonical !== 'boolean' || typeof s.legacy !== 'boolean' || ![s.revision, s.index].every(nonnegative) ||
 			(s.after !== null && !validSyncPathKey(s.after)) || (s.reserved !== null && !identifier(s.reserved)) ||
+			(!!s.batch && !!s.recovery) || [s.batch, s.recovery].some(b => b !== undefined &&
+				(!h.stream || spec.streaming?.source !== 'local' || !identifier(b.id) || !Number.isInteger(b.count) || b.count < 1 || b.count > UPLOAD_BATCH_FILES ||
+				!Number.isInteger(b.remaining) || b.remaining < 1 || b.remaining > b.count || !Number.isInteger(b.next) || b.next < 0 || b.next >= b.count || h.phase !== 'running')) ||
 			(s.streamScan !== undefined && (!h.stream || !nonnegative(s.streamScan.index) || !nonnegative(s.streamScan.ancestor) || s.streamScan.ancestor > 128 || ![0, 1, 2].includes(s.streamScan.phase))) ||
 			(h.phase === 'complete' && s.reserved !== null)) throw Error('Invalid upload scheduling progress.');
 	}
@@ -180,6 +187,42 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 		return value;
 	};
 	const ranges = keyRange ?? globalThis.IDBKeyRange;
+	const batchMembersRange = (spec: PagedRunSpec, id: string) => {
+		const prefix = [key, spec.id, 'batch-member', id];
+		return ranges.bound(prefix, [...prefix, []]);
+	};
+	const readBatch = (h: Header, tx: IDBTransaction, spec: PagedRunSpec, done: (d: UploadBatchDescriptor) => void, fail: (e: unknown) => void) => {
+		const batch = h.scheduling?.batch;
+		if (!batch) throw Error('No reserved upload batch.');
+		const review = tx.objectStore(REVIEW_STORE), meta = review.get([key, spec.id, 'batch-meta', batch.id]);
+		meta.onsuccess = () => { try {
+			check(); const saved = meta.result;
+			if (!saved || saved.instance !== h.instance || saved.scope !== key || saved.run !== spec.id || saved.batchId !== batch.id)
+				throw Error('Upload batch metadata changed.');
+			const members: UploadBatchDescriptor['members'] = new Array(batch.count);
+			let pending = batch.count, remaining = 0;
+			for (let ordinal = 0; ordinal < batch.count; ordinal++) {
+				const marker = review.get([key, spec.id, 'batch-member', batch.id, ordinal]);
+				marker.onsuccess = () => { try {
+					check(); const m = marker.result;
+					if (!m || m.instance !== h.instance || m.scope !== key || m.run !== spec.id || m.batchId !== batch.id || m.ordinal !== ordinal || !identifier(m.operationId))
+						throw Error('Upload batch member changed.');
+					const get = tx.objectStore(PAGED_RUN_STORES[1]).index('operation').get([key, m.operationId]);
+					get.onsuccess = () => { try {
+						check(); const r = row(get.result, spec);
+						if (!r.cloud || r.operation.id !== m.operationId || r.operation.confirmed !== m.confirmed ||
+							JSON.stringify({ ...r.operation, confirmed: false }) !== JSON.stringify({ ...r.cloud.write.operation, confirmed: false }))
+							throw Error('Upload batch lost its original operation.');
+						if (!r.operation.confirmed) remaining++;
+						members[ordinal] = { ordinal, write: { ...r.cloud.write, operation: { ...r.cloud.write.operation, confirmed: false } } };
+						if (--pending) return;
+						if (remaining !== batch.remaining) throw Error('Upload batch confirmation count changed.');
+						done(parseUploadBatchDescriptor({ version: 1, batchId: batch.id, scope, configuration: saved.configuration, members }));
+					} catch (error) { fail(error); } };
+				} catch (error) { fail(error); } };
+			}
+		} catch (error) { fail(error); } };
+	};
 	const inputRow = (value: StreamInput, spec: PagedRunSpec, generation: string | null, primaryKey: IDBValidKey): StreamInput => {
 		if (!value || !nonnegative(value.sequence) || value.sequence === 0 || value.generation !== generation ||
 			!validSyncEntry(value.entry) || value.revision !== value.entry.version || !validIndexProvenance(value) ||
@@ -590,7 +633,7 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 				const result: PriorityReadiness = { gate: trusted ? 'enabled' : 'unsupported', preferencesCount: preferences.paths.length,
 					preferencesRevision: preferences.revision, proofCursor: stream.inputBackfillSequence ?? null, proofCutoff: stream.inputBackfillThrough ?? null,
 					candidateOrdinal: null, candidateSequence: null, blocker: 'none', measured: !trusted || preferences.paths.length === 0,
-					reserved: h.scheduling?.reserved != null };
+					reserved: h.scheduling?.reserved != null || !!h.scheduling?.batch || !!h.scheduling?.recovery };
 				const sample = priorityObservation;
 				if (!trusted || !sample || sample.run !== spec.id || sample.generation !== stream.generation || sample.revision !== preferences.revision) { done(result); return; }
 				result.candidateOrdinal = sample.ordinal; result.candidateSequence = sample.sequence;
@@ -761,11 +804,34 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 				const ops = tx.objectStore(PAGED_RUN_STORES[1]), get = ops.index('operation').get([key, operationId]);
 				get.onsuccess = () => { try { check(); const r = row(get.result, spec);
 					if (r.operation.confirmed || r.receipt !== null) throw Error('Preserve the published revision receipt.');
+					if (h.scheduling?.batch) throw Error('Recover the reserved batch before replanning a member.');
+					const retire = () => {
 					tx.objectStore(REVIEW_STORE).add({ ...r, unpublished: true, conflict }, [key, spec.id, 'history', operationId]);
 					ops.delete([key, spec.id, ...orderKey(r.operation)]);
 					tx.objectStore(REVIEW_STORE).delete([key, spec.id, 'pending', ...orderKey(r.operation)]); tx.objectStore(REVIEW_STORE).delete([key, spec.id, 'pending-path', r.path]); h.operations--; h.cloud!.prepared--; if (!h.operations) h.cloud!.after = null;
 					h.scheduling!.reserved = null; h.scheduling!.canonical = false; h.confirmedThrough = null; if (conflict) h.stream.conflicts++;
 					if (h.stream.terminal && h.operations === h.confirmed) h.phase = 'complete'; h.revision++; save(h, tx); done(progress(h));
+					};
+					const recovery = h.scheduling?.recovery;
+					if (!recovery) { retire(); return; }
+					const review = tx.objectStore(REVIEW_STORE), pointer = review.get([key, spec.id, 'batch-operation', operationId]);
+					pointer.onsuccess = () => { try {
+						check(); const p = pointer.result;
+						if (!p || p.instance !== h.instance || p.batchId !== recovery.id || !Number.isInteger(p.ordinal) || p.ordinal < 0 || p.ordinal >= recovery.count)
+							throw Error('Unpublished member lost its recovery evidence.');
+						const memberKey = [key, spec.id, 'batch-member', recovery.id, p.ordinal], get = review.get(memberKey);
+						get.onsuccess = () => { try {
+							check(); const m = get.result;
+							if (!m || m.scope !== key || m.run !== spec.id || m.instance !== h.instance || m.operationId !== operationId || m.ordinal !== p.ordinal || m.batchId !== recovery.id || m.confirmed || m.retired)
+								throw Error('Unpublished member recovery evidence changed.');
+							if (m.canonicalDispatched) throw Error('A canonical write may still be in flight. Preserve its original operation for reconciliation.');
+							m.retired = true; review.put(m, memberKey); review.delete([key, spec.id, 'batch-operation', operationId]); recovery.remaining--;
+							if (!recovery.remaining) {
+								review.delete(batchMembersRange(spec, recovery.id)); review.delete([key, spec.id, 'batch-meta', recovery.id]); delete h.scheduling!.recovery;
+							}
+							retire();
+						} catch (error) { fail(error); } };
+					} catch (error) { fail(error); } };
 				} catch (error) { fail(error); } };
 			});
 		},
@@ -908,11 +974,188 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 		},
 		/** Reserve one immutable effect before receipt lookup/publication. Each
 		 * transaction scans at most 128 rows; cursors survive interruption. */
-		async claimNext(value: PagedRunSpec, preparePriorities = true): Promise<SyncOperation | null> {
+		/** Read-only metadata prefetch. It claims nothing and advances no source
+		 * cursor; appendStream still validates the exact immutable input. */
+		async peekUploadBatchInputs(value: PagedRunSpec): Promise<StreamInput[]> {
 			const spec = parsePagedRunSpec(value);
+			if (spec.streaming?.source !== 'local') return [];
+			const preferred = await priorityInput(spec);
+			return withHeader(spec, 'readonly', (h, tx, done, fail) => {
+				const stream = h.stream!;
+				if (!stream.generation) { done([]); return; }
+				const review = tx.objectStore(REVIEW_STORE), get = tx.objectStore(SYNC_PRIORITY_STORE).get(key);
+				get.onsuccess = () => { try {
+					check(); const prefs = get.result === undefined ? { revision: 0, paths: [] } : parseSyncPriorityPreferences(get.result);
+					const selected = preferred?.revision === prefs.revision ? preferred.input : null;
+					const prefixPath = selected ? prefs.paths.map(syncPathKey).find(p => syncPathKey(selected.entry.path) === p || syncPathKey(selected.entry.path).startsWith(p + '/')) : null;
+					const lower = prefixPath ? [key, spec.id, prefixPath] : [key, spec.id, 'input', stream.sequence + 1];
+					const upper = prefixPath ? [key, spec.id, prefixPath + '\uffff'] : [key, spec.id, 'input', []];
+					const range = ranges.bound(lower, upper), store = prefixPath ? review.index(INPUT_PATH) : review;
+					const values = store.getAll(range, UPLOAD_BATCH_FILES), keys = store.getAllKeys(range, UPLOAD_BATCH_FILES);
+					let pending = 2;
+					const finish = () => { try {
+						if (--pending) return;
+						check(); const found: StreamInput[] = [], paths = new Set<string>();
+						for (const [i, value] of values.result.entries()) {
+							const input = inputRow(value, spec, stream.generation, keys.result[i]);
+							if (input.sequence <= stream.sequence || input.sequence > (stream.indexedSequence ?? stream.sequence)) throw Error('Prefetched source cursor changed.');
+							const path = syncPathKey(input.entry.path);
+							if (prefixPath && path !== prefixPath && !path.startsWith(prefixPath + '/')) continue;
+							if (prefixPath && (stream.inputBackfillSequence ?? 0) < Math.min(input.sequence, stream.inputBackfillThrough ?? input.sequence)) continue;
+							if (paths.has(path)) continue;
+							paths.add(path); found.push(structuredClone(input));
+						}
+						if (selected && !found.some(input => input.sequence === selected.sequence) && found.length < UPLOAD_BATCH_FILES) {
+							const actual = review.get([key, spec.id, 'input', selected.sequence]);
+							actual.onsuccess = () => { try {
+								check(); const input = inputRow(actual.result, spec, stream.generation, [key, spec.id, 'input', selected.sequence]);
+								if (!sameSyncStamp(input.entry, selected.entry)) throw Error('Selected source changed during metadata prefetch.');
+								if ((stream.inputBackfillSequence ?? 0) >= Math.min(input.sequence, stream.inputBackfillThrough ?? input.sequence)) found.unshift(structuredClone(input));
+								done(found);
+							} catch (error) { fail(error); } }; return;
+						}
+						done(found);
+					} catch (error) { fail(error); } };
+					values.onsuccess = finish; keys.onsuccess = finish;
+				} catch (error) { fail(error); } };
+			});
+		},
+		async markUploadBatchCommit(value: PagedRunSpec, batchId: string, ordinals: number[]): Promise<void> {
+			const spec = parsePagedRunSpec(value);
+			if (!ordinals.length || ordinals.length > UPLOAD_BATCH_FILES || new Set(ordinals).size !== ordinals.length) throw Error('Invalid batch commit members.');
+			return withHeader(spec, 'readwrite', (h, tx, done, fail) => {
+				const batch = h.scheduling?.batch;
+				if (!batch || batch.id !== batchId) throw Error('Upload batch changed before canonical dispatch.');
+				const review = tx.objectStore(REVIEW_STORE); let pending = ordinals.length;
+				for (const ordinal of ordinals) {
+					if (!Number.isInteger(ordinal) || ordinal < 0 || ordinal >= batch.count) throw Error('Invalid batch commit ordinal.');
+					const memberKey = [key, spec.id, 'batch-member', batchId, ordinal], get = review.get(memberKey);
+					get.onsuccess = () => { try {
+						check(); const m = get.result;
+						if (!m || m.scope !== key || m.run !== spec.id || m.instance !== h.instance || m.batchId !== batchId || m.ordinal !== ordinal || m.confirmed)
+							throw Error('Canonical dispatch lost its reserved member.');
+						m.canonicalDispatched = true; review.put(m, memberKey);
+						if (!--pending) { h.revision++; save(h, tx); done(undefined); }
+					} catch (error) { fail(error); } };
+				}
+			});
+		},
+		async recoverUploadBatch(value: PagedRunSpec): Promise<void> {
+			const spec = parsePagedRunSpec(value);
+			return withHeader(spec, 'readwrite', (h, tx, done) => {
+				const schedule = h.scheduling;
+				if (!schedule?.batch) { done(undefined); return; }
+				// All original claims/effect evidence remain relational. This durable
+				// mode prevents immediately regrouping a failed or unsupported batch.
+				schedule.recovery = schedule.batch; delete schedule.batch;
+				h.revision++; save(h, tx); done(undefined);
+			});
+		},
+		async claimUploadBatch(value: PagedRunSpec, configuration: SavedFileSyncConfiguration): Promise<UploadBatchDescriptor | null> {
+			const spec = parsePagedRunSpec(value);
+			if (spec.streaming?.source !== 'local' || !spec.configuration || JSON.stringify(configuration.configuration) !== JSON.stringify(spec.configuration)) return null;
+			const existing = await withHeader<UploadBatchDescriptor | 'reserved' | null>(spec, 'readonly', (h, tx, done, fail) => {
+				if (h.scheduling?.reserved || h.scheduling?.recovery || (!h.scheduling?.batch && h.operations - h.confirmed >= 512)) { done('reserved'); return; }
+				if (!h.scheduling?.batch) { done(null); return; }
+				readBatch(h, tx, spec, done, fail);
+			});
+			if (existing === 'reserved') return null; // Recover every earlier uncertain single operation first.
+			if (existing) {
+				if (JSON.stringify(existing.configuration) !== JSON.stringify(configuration)) throw Error('Reserved upload batch configuration changed.');
+				return existing;
+			}
+			const preferenceRevision = await withHeader<number>(spec, 'readonly', (_h, tx, done, fail) => {
+				const get = tx.objectStore(SYNC_PRIORITY_STORE).get(key);
+				get.onsuccess = () => { try { check(); done(get.result === undefined ? 0 : parseSyncPriorityPreferences(get.result).revision); } catch (error) { fail(error); } };
+			});
+			const first = await this.claimNext(spec, true, 512);
+			if (!first) return null;
+			return withHeader(spec, 'readwrite', (h, tx, done, fail) => {
+				const schedule = h.scheduling!;
+				if (schedule.batch || schedule.reserved !== first.id) throw Error('Upload reservation changed.');
+				const ops = tx.objectStore(PAGED_RUN_STORES[1]), review = tx.objectStore(REVIEW_STORE);
+				const get = ops.index('operation').get([key, first.id]);
+				get.onsuccess = () => { try {
+					check(); const initial = row(get.result, spec);
+					if (!initial.cloud || !eligibleUploadBatchWrite(initial.cloud.write, scope)) { done(null); return; }
+					const batchId = crypto.randomUUID(), selected: Row[] = [], names = new Set<string>(), sourceIds = new Set<string>(), destinations = new Set<string>();
+					let payload = 0, metadata = bytes({ version: 1, batchId, scope, configuration, members: [] }) + 2, examined = 0, ancestorReads = 0;
+					const ancestors = new Map<string, boolean>();
+					const add = (r: Row) => {
+						if (!r.cloud || !eligibleUploadBatchWrite(r.cloud.write, scope)) return false;
+						const write = r.cloud.write, m = write.operation.mutation;
+						if (m.kind !== 'copy') return false;
+						const name = syncPathKey(m.path), destination = JSON.stringify([write.folderId, syncPathKey(m.path.split('/').at(-1)!)]);
+						const size = bytes({ ordinal: selected.length, write }) + 1;
+						if (names.has(name) || sourceIds.has(m.source.id) || destinations.has(destination) || payload + m.source.size > UPLOAD_BATCH_BYTES || metadata + size > UPLOAD_BATCH_DESCRIPTOR_BYTES) return false;
+						selected.push(r); names.add(name); sourceIds.add(m.source.id); destinations.add(destination); payload += m.source.size; metadata += size; return true;
+					};
+					if (!add(initial)) { done(null); return; }
+					const finish = () => {
+						const descriptor = parseUploadBatchDescriptor({ version: 1, batchId, scope, configuration,
+							members: selected.map((r, ordinal) => ({ ordinal, write: r.cloud!.write })) });
+						schedule.batch = { id: batchId, count: selected.length, remaining: selected.length, next: 0 };
+						schedule.reserved = null; schedule.canonical = false; delete schedule.streamScan;
+						review.add({ scope: key, run: spec.id, instance: h.instance, batchId, configuration }, [key, spec.id, 'batch-meta', batchId]);
+						for (const [ordinal, r] of selected.entries()) {
+							review.add({ scope: key, run: spec.id, instance: h.instance, batchId, ordinal, operationId: r.operation.id, confirmed: false },
+								[key, spec.id, 'batch-member', batchId, ordinal]);
+							review.add({ batchId, ordinal, instance: h.instance }, [key, spec.id, 'batch-operation', r.operation.id]);
+							review.delete([key, spec.id, 'pending', ...orderKey(r.operation)]);
+							review.delete([key, spec.id, 'pending-path', r.path]);
+						}
+						h.revision++; save(h, tx); done(descriptor);
+					};
+					const preference = tx.objectStore(SYNC_PRIORITY_STORE).get(key);
+					preference.onsuccess = () => { try {
+						check(); const preferences = preference.result === undefined ? { revision: 0, paths: [] } : parseSyncPriorityPreferences(preference.result);
+						// Finish only the already-reserved operation if preferences changed
+						// while selection awaited; do not expand ahead of the new priority.
+						if (preferences.revision !== preferenceRevision) { done(null); return; }
+						const priorities = preferences.paths;
+						const prefixPath = priorities.map(syncPathKey).find(p => initial.path === p || initial.path.startsWith(p + '/'));
+						const prefix = [key, spec.id, prefixPath ? 'pending-path' : 'pending'];
+						const range = prefixPath ? ranges.bound([...prefix, prefixPath], [...prefix, prefixPath + '\uffff']) : ranges.bound(prefix, [...prefix, []]);
+						const cursor = review.openCursor(range);
+						cursor.onsuccess = () => { try {
+							check(); const c = cursor.result;
+							if (!c || selected.length === UPLOAD_BATCH_FILES || examined++ === 512) { finish(); return; }
+							if (c.value === first.id) { c.continue(); return; }
+							if (!identifier(c.value)) throw Error('Invalid batch readiness pointer.');
+							const candidate = ops.index('operation').get([key, c.value]);
+							candidate.onsuccess = () => { try {
+								check(); const r = row(candidate.result, spec);
+								if (prefixPath && r.path !== prefixPath && !r.path.startsWith(prefixPath + '/')) { c.continue(); return; }
+								if (r.operation.confirmed || !r.cloud || !eligibleUploadBatchWrite(r.cloud.write, scope)) { c.continue(); return; }
+								const parts = r.operation.mutation.path.split('/'), parents = parts.slice(0, -1).map((_, i) => parts.slice(0, i + 1).join('/'));
+								const inspect = (i: number) => {
+									if (i === parents.length) { add(r); c.continue(); return; }
+									const path = parents[i], cached = ancestors.get(path);
+									if (cached === false) { c.continue(); return; }
+									if (cached === true) { inspect(i + 1); return; }
+									if (ancestorReads++ === 512) { finish(); return; }
+									const parent = ops.index('path').get([key, spec.id, syncPathKey(path)]);
+									parent.onsuccess = () => { try {
+										check(); const p = parent.result === undefined ? null : row(parent.result, spec);
+										if (p && p.operation.mutation.path !== path) throw Error('Batch ancestor path collision.');
+										const ready = p === null || p.operation.confirmed;
+										ancestors.set(path, ready);
+										if (ready) inspect(i + 1); else c.continue();
+									} catch (error) { fail(error); } };
+								};
+								inspect(0);
+							} catch (error) { fail(error); } };
+						} catch (error) { fail(error); } };
+					} catch (error) { fail(error); } };
+				} catch (error) { fail(error); } };
+			});
+		},
+		async claimNext(value: PagedRunSpec, preparePriorities = true, preparationCapacity = INVENTORY_PAGE_ENTRIES, deferBatchEligible = false): Promise<SyncOperation | null> {
+			const spec = parsePagedRunSpec(value);
+			if (![128, 512].includes(preparationCapacity)) throw Error('Invalid bounded preparation capacity.');
 			for (;;) {
 				check();
-				const canPrepare = spec.streaming ? await withHeader<boolean>(spec, 'readonly', (h, _tx, done) => done(h.scheduling?.reserved == null && h.operations - h.confirmed < INVENTORY_PAGE_ENTRIES)) : false;
+				const canPrepare = spec.streaming ? await withHeader<boolean>(spec, 'readonly', (h, _tx, done) => done(h.scheduling?.reserved == null && !h.scheduling?.batch && !h.scheduling?.recovery && h.operations - h.confirmed < preparationCapacity)) : false;
 				const preparingPriority = preparePriorities && canPrepare && spec.streaming?.source === 'local' ? await priorityInput(spec) : null;
 				const selected = await withHeader<SyncOperation | null | 'continue'>(spec, 'readwrite', (h, tx, done, fail) => {
 					if (h.phase === 'complete') { done(null); return; }
@@ -926,6 +1169,11 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 						// Planned ancestor copies must be acknowledged before their child.
 						const parts = chosen.mutation.path.split('/'), ancestors = parts.slice(0, -1).map((_, i) => parts.slice(0, i + 1).join('/'));
 						const finish = (operation: SyncOperation) => {
+							// A new input may arrive between the bulk probe and this fallback
+							// claim. Leave eligible unreserved work for the next bulk probe.
+							// A full preparation queue still frees one ordinary slot.
+							if (deferBatchEligible && operation.id === chosen.id && h.operations - h.confirmed < preparationCapacity &&
+								candidate.cloud && eligibleUploadBatchWrite(candidate.cloud.write, scope)) { done(null); return; }
 							if (operation.id === chosen.id) advance?.();
 							schedule.reserved = operation.id; schedule.canonical = canonical; delete schedule.streamScan; schedule.legacy = false; persist(); done(operation);
 						};
@@ -953,6 +1201,28 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 							check(); const r = row(get.result, spec);
 							if (r.operation.confirmed) throw Error('Reserved operation is already confirmed.');
 							done(r.operation);
+						} catch (error) { fail(error); } }; return;
+					}
+					if (schedule.batch || schedule.recovery) {
+						// Capability loss never abandons a batch: recover the original
+						// reservations individually through the receipt-first executor.
+						const batch = (schedule.batch ?? schedule.recovery)!;
+						const prefix = [key, spec.id, 'batch-member', batch.id];
+						const cursor = tx.objectStore(REVIEW_STORE).openCursor(ranges.bound([...prefix, batch.next], [...prefix, []]));
+						let examined = 0;
+						cursor.onsuccess = () => { try {
+							check(); const c = cursor.result;
+							if (!c || examined++ === batch.count) throw Error('Upload batch lost its remaining reservation.');
+							const m = c.value;
+							if (!m || m.scope !== key || m.run !== spec.id || m.instance !== h.instance || m.batchId !== batch.id ||
+								!Number.isInteger(m.ordinal) || m.ordinal < 0 || m.ordinal >= batch.count || !identifier(m.operationId)) throw Error('Invalid upload batch reservation.');
+							if (m.confirmed || m.retired) { batch.next = m.ordinal; c.continue(); return; }
+							const get = ops.index('operation').get([key, m.operationId]);
+							get.onsuccess = () => { try {
+								check(); const r = row(get.result, spec);
+								if (r.operation.confirmed) throw Error('Upload batch receipt changed.');
+								batch.next = m.ordinal; schedule.reserved = r.operation.id; persist(); done(r.operation);
+							} catch (error) { fail(error); } };
 						} catch (error) { fail(error); } }; return;
 					}
 					const get = tx.objectStore(SYNC_PRIORITY_STORE).get(key);
@@ -1085,6 +1355,30 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 						if (h.confirmed === h.operations && (!h.stream || h.stream.terminal)) h.phase = 'complete';
 						save(h, tx); done(progress(h));
 					};
+						if (h.scheduling?.batch || h.scheduling?.recovery) {
+							const schedule = h.scheduling, batch = (schedule.batch ?? schedule.recovery)!;
+							if (schedule.reserved !== null && schedule.reserved !== op.id) throw Error('Recover the reserved batch member first.');
+							const review = tx.objectStore(REVIEW_STORE), pointer = review.get([key, spec.id, 'batch-operation', op.id]);
+							pointer.onsuccess = () => { try {
+								check(); const p = pointer.result;
+								if (!p || p.instance !== h.instance || p.batchId !== batch.id || !Number.isInteger(p.ordinal) || p.ordinal < 0 || p.ordinal >= batch.count)
+									throw Error('Receipt does not belong to the reserved upload batch.');
+								const memberKey = [key, spec.id, 'batch-member', batch.id, p.ordinal], get = review.get(memberKey);
+								get.onsuccess = () => { try {
+								check(); const member = get.result;
+								if (!member || member.scope !== key || member.run !== spec.id || member.instance !== h.instance || member.batchId !== batch.id ||
+									member.ordinal !== p.ordinal || member.operationId !== op.id) throw Error('Invalid batch receipt reservation.');
+								if (member.confirmed !== false) throw Error('Batch member receipt changed.');
+								member.confirmed = true; review.put(member, memberKey); batch.remaining--;
+								review.delete([key, spec.id, 'batch-operation', op.id]);
+								if (!batch.remaining) {
+									review.delete(batchMembersRange(spec, batch.id)); review.delete([key, spec.id, 'batch-meta', batch.id]); delete schedule.batch; delete schedule.recovery;
+								}
+								schedule.canonical = false;
+								commit([key, spec.id, ...orderKey(op)], true);
+								} catch (error) { fail(error); } };
+							} catch (error) { fail(error); } }; return;
+						}
 					if (h.scheduling?.reserved) {
 						if (h.scheduling.reserved !== op.id) throw Error('Confirm the reserved sync operation first.');
 						commit([key, spec.id, ...orderKey(op)], true); return;

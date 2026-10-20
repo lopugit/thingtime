@@ -7,6 +7,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
 const { FolderStream, stageRangeMetadata, encodeStageInput } = require('./folder-stream.cjs');
+const { FolderBatchStream, encodeBatchInput } = require('./folder-batch-stream.cjs');
 
 const NODE_LABEL = 'com.thingtime.desktop.node';
 const NODE_BUNDLE_ID = 'com.thingtime.desktop.node';
@@ -524,7 +525,10 @@ function runProcess(command, args, options = {}) {
 			});
 		});
 
-		if (input) child.stdin.end(input);
+		if (options.onInput) {
+			options.onInput(bytes => { if (!settled) child.stdin.write(bytes); });
+			if (input) child.stdin.write(input);
+		} else if (input) child.stdin.end(input);
 		else child.stdin.end();
 	});
 }
@@ -997,18 +1001,29 @@ class ThingtimeNodeIntegration {
 		const paths = this.paths();
 		await this.verifyForRequest(paths);
 		const staging = method === 'folder-sync.request' && parameters.action === 'stage-range';
+		const batching = method === 'folder-sync.request' && parameters.action === 'upload-batch';
 		const request = nodeRequest(method, staging ? stageRangeMetadata(parameters) : parameters, suppliedCommandId);
-		const encoded = staging ? encodeStageInput(request, parameters.bytes) : `${boundedJson(request, 'node request')}\n`;
-		const stream = method === 'folder-sync.request' && parameters.action === 'read-range' ? new FolderStream(request) : null;
+		if (batching && typeof options.onBatchFrame !== 'function') throw new ThingtimeNodeBridgeError('invalid_request', 'Missing batch callback.');
+		const encoded = staging ? encodeStageInput(request, parameters.bytes) : batching ? encodeBatchInput(request) : `${boundedJson(request, 'node request')}\n`;
+		const batchAbort = new AbortController();
+		const batchSignal = AbortSignal.any([...(options.signal ? [options.signal] : []), batchAbort.signal]);
+		const stream = batching ? new FolderBatchStream(request, frame => options.onBatchFrame(frame, batchSignal), error => batchAbort.abort(error)) :
+			method === 'folder-sync.request' && parameters.action === 'read-range' ? new FolderStream(request) : null;
+		try {
 		options.signal?.throwIfAborted();
-		const response = await this.runner(paths.bridgeExecutable, staging ? ['--folder-stage-stream'] : [], {
+		let response;
+		try { response = await this.runner(paths.bridgeExecutable, batching ? ['--folder-batch-stream'] : staging ? ['--folder-stage-stream'] : [], {
 			env: this.bridgeEnvironment(),
 			input: encoded,
 			maximumOutputBytes: MAX_FRAME_BYTES,
-			timeoutMs: nodeRequestTimeoutMs(method),
-			signal: options.signal,
+			timeoutMs: batching ? 185_000 : nodeRequestTimeoutMs(method),
+			signal: batching ? batchSignal : options.signal,
+			...(batching ? { onInput: write => stream.connect(write) } : {}),
 			...(stream ? { onStdout: chunk => stream.write(chunk) } : {})
-		});
+		}); } catch (error) {
+			if (batching) { stream.close(); batchAbort.abort(); if (stream.error) throw stream.error; }
+			throw error;
+		}
 		if (response.status !== 0) {
 			throw new ThingtimeNodeBridgeError('node_unavailable', 'Thingtime Node bridge exited unexpectedly.');
 		}
@@ -1016,6 +1031,7 @@ class ThingtimeNodeIntegration {
 		let decoded;
 		try {
 			decoded = stream ? stream.finish() : JSON.parse(response.stdout);
+			if (batching) { stream.close(); batchAbort.abort(); }
 		} catch {
 			throw new ThingtimeNodeBridgeError('node_protocol_error', 'Thingtime Node returned an invalid response.');
 		}
@@ -1028,6 +1044,9 @@ class ThingtimeNodeIntegration {
 			throw new ThingtimeNodeBridgeError(code, message);
 		}
 		return decoded.result ?? {};
+		} finally {
+			if (batching) { stream.close(); batchAbort.abort(); }
+		}
 	}
 
 	async registrationStatus() {

@@ -39,10 +39,8 @@ export function createCloudFileService(overrides: Partial<{
 			throw new StorageMutationError(404, 'storage_conflict', 'File not found');
 		return doc;
 	};
-	const receipt = async (things: any, ownerId: string, id: string, operationId: string, session?: any, retained = false) => {
+	const validateReceipt = (entry: any, ownerId: string, id: string, operationId: string, retained = false) => {
 		const eid = eventId(ownerId, id, operationId, retained);
-		const entry = (await deps.entries(things, ownerId, [eid], session))[0];
-		if (!entry) return null;
 		const e = entry.event;
 		if (e.id !== eid || e.ownerId !== ownerId || e.actorId !== ownerId || e.thingId !== id || e.operationId !== operationId ||
 			e.source !== 'api' || e.mode !== (retained ? 'effect' : 'revision') || (retained && e.operation !== 'effect') || e.branchId !== 'main' || e.after?.adapter !== CLOUD_FILE_ADAPTER || e.after.version !== 1)
@@ -53,9 +51,33 @@ export function createCloudFileService(overrides: Partial<{
 		if (file.id !== id || file.revision !== eid) conflict('File operation receipt changed identity');
 		return { file, requestHash: value.requestHash as string };
 	};
+	const receipt = async (things: any, ownerId: string, id: string, operationId: string, session?: any, retained = false) => {
+		const eid = eventId(ownerId, id, operationId, retained);
+		const entry = (await deps.entries(things, ownerId, [eid], session))[0];
+		if (!entry) return null;
+		return validateReceipt(entry, ownerId, id, operationId, retained);
+	};
 	const errorResult = (error: unknown) => error instanceof StorageMutationError ? failure(error.status, error.message) :
 		(error as any)?.code === 11000 ? failure(409, 'File changed before publication; reconcile and retry with the original operation') : failure(503, 'File storage is temporarily unavailable');
 	return {
+        async readReceipts(ownerId: string, requests: { id: string; operationId: string }[], signal?: AbortSignal) {
+            if (deps.customPlane()) return failure(409, 'Files currently require the home data plane');
+            if (!ownerId || !Array.isArray(requests) || requests.length > 256 || requests.some(r => !identity(r.id) || !identity(r.operationId))) return failure(400, 'Invalid receipt identities');
+            try {
+                const things = await deps.collection();
+                signal?.throwIfAborted();
+                const boundedThings = signal ? new Proxy(things, { get(target, key) { if (key === 'find') return (filter: any, options: any) => target.find(filter, { ...options, maxTimeMS: 5000, signal }); const value = target[key]; return typeof value === 'function' ? value.bind(target) : value; } }) : things;
+                const ids = requests.map(r => eventId(ownerId, r.id, r.operationId));
+                const entries = [];
+                for (let offset = 0; offset < ids.length; offset += 128) { signal?.throwIfAborted(); entries.push(...await deps.entries(boundedThings, ownerId, ids.slice(offset, offset + 128))); }
+                const byId = new Map(entries.map(entry => [entry.event.id, entry]));
+                const receipts = requests.map((r, i) => {
+                    const entry = byId.get(ids[i]);
+                    return entry ? validateReceipt(entry, ownerId, r.id, r.operationId) : null;
+                });
+                return { ok: true as const, receipts };
+            } catch (error) { return errorResult(error); }
+        },
 		async read(ownerId: string, id: unknown, operationId?: unknown, retained = false) {
 			if (deps.customPlane()) return failure(409, 'Files currently require the home data plane');
 			if (!ownerId || !identity(id) || (operationId !== undefined && !identity(operationId)) || (retained && operationId === undefined)) return failure(400, 'Invalid file identity');

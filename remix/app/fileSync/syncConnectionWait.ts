@@ -3,7 +3,7 @@
 export const SYNC_RETRY_DELAY_MS = 30_000;
 export const SYNC_RETRY_MAX_MS = 300_000;
 export class SyncConnectionWait extends Error {
-	constructor(message: string, readonly retryAfterMs = SYNC_RETRY_DELAY_MS) {
+	constructor(message: string, readonly retryAfterMs = SYNC_RETRY_DELAY_MS, readonly reason?: 'folder-identity') {
 		super(message);
 	}
 }

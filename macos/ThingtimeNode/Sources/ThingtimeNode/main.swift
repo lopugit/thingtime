@@ -81,6 +81,19 @@ private final class XPCService: NSObject, ThingtimeNodeXPCProtocol {
         }
     }
 
+    func bulk(_ data: Data, callback: ThingtimeNodeBatchCallback, withReply reply: @escaping (Data) -> Void) {
+        guard let request = try? NodeWireCodec.decodeRequest(data), request.method == "folder-sync.request",
+              case .object(let fields) = request.parameters, fields["action"] == .string("upload-batch") else {
+            reply(Self.encoded(.failure(id: "", code: "invalid_request", message: "Invalid folder batch."))); return
+        }
+        Task {
+            let response = await controller.handleLocalFolderSync(request, batchCallback: { frame, seconds in
+                try await NodeBatchCallback.exchange(callback, frame: frame, timeout: seconds)
+            })
+            reply(Self.encoded(response))
+        }
+    }
+
     private static func encoded(_ response: NodeResponse) -> Data {
         (try? NodeWireCodec.encodeResponse(response))
             ?? Data(#"{"error":{"code":"encoding_error","message":"The node response could not be encoded."},"id":"","ok":false}"#.utf8)

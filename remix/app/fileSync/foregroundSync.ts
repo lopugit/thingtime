@@ -55,6 +55,8 @@ export type ForegroundSyncInput = {
 	authorizeContext?(): Promise<SyncConditions>;
 	/** Trusted native adapter: IO authenticates independently; mutation policy stays fresh. Source construction performs no IO. */
 	nativeOperationGuards?: true;
+	/** Explicit negotiated bounded operation, never inferred from cloud metadata. */
+	uploadBatch?: import('./uploadBatch').NativeUploadBatch;
 	conditions(): Promise<SyncConditions>;
 	scanLocal(): Promise<SyncEntry[]>;
 	/** Native durable revision feed; negotiated separately from sealed captures. */

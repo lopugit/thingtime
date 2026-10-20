@@ -22,11 +22,11 @@ public final class NodeFolderStreamInput: NSObject, ThingtimeNodeByteSource, @un
         }
         return result
     }
-    public static func header(_ handle: FileHandle) throws -> Data? {
+    public static func header(_ handle: FileHandle, maximumBytes: Int = 131_072) throws -> Data? {
         guard let first = try handle.read(upToCount: 1), !first.isEmpty else { return nil }
         let prefix = first + (try exact(handle, 3))
         let length = prefix.reduce(0) { ($0 << 8) | Int($1) }
-        guard length > 0, length <= 131_072 else { throw ThingtimeNodeError.invalidRequest("Invalid stream header.") }
+        guard length > 0, length <= maximumBytes, maximumBytes <= 600_000 else { throw ThingtimeNodeError.invalidRequest("Invalid stream header.") }
         return try exact(handle, length)
     }
     public func next(offset expected: Int64, length wanted: Int) throws -> Data {

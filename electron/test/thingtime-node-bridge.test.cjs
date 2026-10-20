@@ -703,3 +703,23 @@ test('concurrent node commands are serialized and invalid controls cannot mutate
 		assert.equal(fixture.state.bootstrapCalls, 1);
 	} finally { await rm(fixture.root, { recursive: true, force: true }); }
 });
+
+test('batch child failure cancels callbacks and suppresses late acknowledgements', async () => {
+    const fixture = await makeSignedNodeFixture();
+    try {
+        fixture.integration.verifyForRequest = async () => {};
+        let callbackSignal, resolveCallback, writes = 0;
+        fixture.integration.runner = async (_command, _args, options) => {
+            options.onInput(() => { writes++; });
+            options.onStdout(Buffer.from(JSON.stringify({ type: 'batch', callbackId: 1,
+                frame: { kind: 'prepare-ready', checksums: [] } }) + '\n'));
+            await new Promise(setImmediate);
+            return { status: 1, stdout: '', stderr: '' };
+        };
+        await assert.rejects(fixture.integration.request('folder-sync.request', { action: 'upload-batch' }, undefined, {
+            onBatchFrame: (_frame, signal) => { callbackSignal = signal; return new Promise(resolve => { resolveCallback = resolve; }); }
+        }), error => error.code === 'node_unavailable');
+        assert.equal(callbackSignal.aborted, true);
+        resolveCallback({ results: [] }); await new Promise(setImmediate); assert.equal(writes, 0);
+    } finally { await rm(fixture.root, { recursive: true, force: true }); }
+});

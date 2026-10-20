@@ -78,6 +78,27 @@ final class CommanderBackupCaptureTests: XCTestCase {
         XCTAssertEqual(page.nextSequence, 2); XCTAssertFalse(page.hasMore)
         XCTAssertEqual(try inventory.beginStream(scope, id: id, bookmark: bookmark, excludedPaths: [], ignoreRules: nil).generation, initial.generation)
     }
+    func testProductionCommanderStreamEntryPassesBulkReaderAndStaleSourceFails() throws {
+        let helper = try helper(), (base, source, bookmark, scope) = try fixture()
+        let bytes = Data(repeating: 71, count: 131_073), file = source.appendingPathComponent("payload")
+        try bytes.write(to: file)
+        let inventory = MobileFolderInventory(directory: base.appendingPathComponent("bulk-feed"), commanderIndexer: helper)
+        let id = UUID().uuidString.lowercased()
+        let initial = try inventory.beginStream(scope, id: id, bookmark: bookmark, excludedPaths: [], ignoreRules: nil)
+        try inventory.runStream(scope, id: id, bookmark: bookmark, excludedPaths: [], ignoreRules: nil, wake: {})
+        try inventory.finishStream(scope, id: id, bookmark: bookmark, state: "complete")
+        let page = try inventory.streamChanges(scope, id: id, bookmark: bookmark, excludedPaths: [], ignoreRules: nil, afterSequence: 0)
+        XCTAssertEqual(page.generation, initial.generation); XCTAssertEqual(page.nextSequence, 1)
+        let entry = try XCTUnwrap(page.changes.first?.entry)
+        XCTAssertEqual(entry.path, "payload"); XCTAssertEqual(entry.size, Int64(bytes.count))
+        XCTAssertNil(entry.sha256); XCTAssertEqual(entry.fingerprint?.partSizeBytes, 8_388_608); XCTAssertEqual(entry.fingerprint?.partCount, 1)
+        // Expected metadata comes only from the production Rust feed. The bulk
+        // reader independently checks inode/stamp and both raw/composite hashes.
+        let payload = try MobileFolderBulkReader.read(bookmark: bookmark, expected: entry)
+        XCTAssertEqual(payload.bytes, bytes)
+        try Data("changed".utf8).write(to: file, options: .atomic)
+        XCTAssertThrowsError(try MobileFolderBulkReader.read(bookmark: bookmark, expected: entry, sha256: payload.sha256))
+    }
     func testLiveIndexExcludesOnlyItsPhysicallyNestedPrivateCache() throws {
         let helper = try helper(), (_, source, bookmark, scope) = try fixture()
         try FileManager.default.createDirectory(at: source.appendingPathComponent("Library"), withIntermediateDirectories: true)

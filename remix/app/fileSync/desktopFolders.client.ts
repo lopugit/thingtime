@@ -9,6 +9,7 @@ import {
 	supportsNativeAuthorizationContext,
 	supportsNativePathInspection,
 	supportsNativeInventoryPages,
+	supportsNativeUploadBatches,
 	type FolderCapabilities,
 	type FolderRequest,
 	type FolderResult,
@@ -21,6 +22,7 @@ export type FolderHost = {
 	request: typeof requestMobileFolders;
 	authorizeDevice(ownerId: string, deviceId: string, signal: AbortSignal): Promise<void>;
 	authorizeContext?(ownerId: string, deviceId: string, signal: AbortSignal): Promise<{ roots: FolderResult['roots']; conditions: NonNullable<FolderResult['conditions']> }>;
+	uploadBatch?: import('./uploadBatch').NativeUploadBatch;
 	fetch: typeof fetch;
 	requireCapability(feature: string, minimumVersion: string): Promise<void>;
 	assertCurrent(): void;
@@ -115,7 +117,7 @@ export async function createDesktopFolderHost(input: {
 							throw new SyncConnectionWait('Thingtime is closing. Saved sync work will resume when reopened.');
 						if (error instanceof Error && (error.message === retry ||
 							error.message === `Error invoking remote method 'thingtime-desktop:folder-sync': Error: ${retry}`))
-							throw new SyncConnectionWait('Waiting for folder access verification to reconnect.');
+							throw new SyncConnectionWait('Waiting for folder access verification to reconnect.', undefined, 'folder-identity');
 						const unsupported = 'The selected server does not support this version of folder sync.';
 						if (error instanceof Error && (error.message === unsupported ||
 							error.message === `Error invoking remote method 'thingtime-desktop:folder-sync': Error: ${unsupported}`))
@@ -176,12 +178,27 @@ export async function createDesktopFolderHost(input: {
 		capabilities: context.capabilities,
 		assertCurrent: check,
 		fetch: fetchBound,
+		...(supportsNativeUploadBatches(context.capabilities) && capabilitySatisfies(context.apiCapabilities.features['api.file-sync-batches']?.version, '1.0.0') ? {
+			uploadBatch: async (batch: import('./uploadBatch').NativeUploadBatchInput, _callbacks: import('./uploadBatch').NativeUploadBatchCallbacks, signal: AbortSignal) => {
+				check();
+				if (batch.descriptor.scope.ownerId !== ownerId || batch.descriptor.scope.deviceId !== deviceId || batch.descriptor.scope.origin !== origin)
+					throw changed();
+				const request: FolderRequest = { action: 'upload-batch', rootId: batch.descriptor.configuration.configuration.localRootId, batch };
+				const { value, expected } = await send(request, signal);
+				const result = parseMobileFolderResult({ type: 'mobile-files-result', payload: value }, expected, request);
+				if (!result?.uploadedBatch) throw changed();
+				return result.uploadedBatch;
+			}
+		} : {}),
 		request: async (expectedOwner, request, signal) => {
 			if (expectedOwner !== ownerId) throw changed();
 			assertNativeScanExclusions(request, context.capabilities);
 			if (['scan-capture', 'scan-page', 'scan-discard'].includes(request.action) && !supportsNativeInventoryPages(context.capabilities))
 				throw Error('Inventory pages require an updated Mac app.');
 			if (request.action === 'inspect' && !supportsNativePathInspection(context.capabilities)) throw Error('Update Thingtime Desktop to inspect individual sync paths.');
+			if (request.action === 'upload-batch' && (!supportsNativeUploadBatches(context.capabilities) ||
+				!capabilitySatisfies(context.apiCapabilities.features['api.file-sync-batches']?.version, '1.0.0')))
+				throw Error('Native upload batches require a compatible desktop host and selected server.');
 			const payload = structuredClone(request);
 			const { value, expected } = await send(payload, signal);
 			const result = parseMobileFolderResult({ type: 'mobile-files-result', payload: value }, expected, payload);

@@ -308,7 +308,7 @@ test('v12 retained inputs gain a scoped path index and resumable folded backfill
 	journal = await openSyncJournal(factory, 'thingtime-file-sync-v1', IDBKeyRange);
 	runs = journal.pagedRuns(access);
 	await database(factory, async (db) => {
-		assert.equal(db.version, 13);
+		assert.equal(db.version, 14);
 		assert.equal(db.transaction(REVIEW_STORE).objectStore(REVIEW_STORE).indexNames.length, 1);
 	});
 	await runs.enableStreamPriorities(s);

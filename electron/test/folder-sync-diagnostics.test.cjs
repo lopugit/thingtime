@@ -59,5 +59,8 @@ test('timing rows contain only bounded own scalars, rotate, and drop malformed d
         await Promise.all(writes);
         assert.equal(fs.readFileSync(file, 'utf8').trim().split('\n').length, 129, 'Only 128 queued writes admitted');
         await recordFolderSyncDiagnostic(path.join(file, 'cannot-write'), row);
+        await recordFolderSyncDiagnostic(file, { ...row, action: 'upload-batch', signedUrl: 'private-secret' });
+        const batch = JSON.parse(fs.readFileSync(file, 'utf8').trim().split('\n').at(-1));
+        assert.equal(batch.action, 'upload-batch'); assert.doesNotMatch(JSON.stringify(batch), /private|secret|signedUrl/);
     } finally { fs.rmSync(directory, { recursive: true, force: true }); }
 });
