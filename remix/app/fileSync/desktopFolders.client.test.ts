@@ -322,3 +322,31 @@ test('cancelled stream waiter suspends only its request; task cancellation still
 		assert.deepEqual(f.calls.filter(call => call.action === 'suspend').map(call => call.requestId).sort(), [waitId, ordinaryId, nextWaitId].sort());
 	} finally { f.releaseAll(); await Promise.allSettled(pending); }
 });
+
+test('negotiated Mac part upload stays on scoped native IPC rather than cross-origin browser PUT', async () => {
+    const lifetime = new AbortController(), calls: any[] = [];
+    let badReceipt = false;
+    const bridge = { folderSyncRequest: async (input: any) => {
+        calls.push(input);
+        return { ...input, origin, roots: [], capabilities: { fileAccessVersion: '1.11.0', fileUploadVersion: '1.0.0' },
+            apiCapabilities: { schemaVersion: 1, origin, features: {} },
+            ...(input.action === 'upload-part' ? { uploadedPart: { ...input.upload, source: undefined,
+                version: badReceipt ? 'changed' : input.upload.source.version, size: input.upload.source.size, sha256: 'b'.repeat(64) } } : {}) };
+    } };
+    const host = await createDesktopFolderHost({ ownerId: 'owner', deviceId: 'device', bridge, signal: lifetime.signal,
+        rendererOrigin: () => 'http://127.0.0.1:54321', assertCurrent: () => {},
+        fetch: async () => { throw Error('A browser S3 PUT would be blocked by CORS'); } });
+    const entry = { id: 'inode', path: '.composer/.htaccess', kind: 'file' as const, version: 'v1', size: 13, sha256: null,
+        fingerprint: { algorithm: 'sha256-parts-v1' as const, partSizeBytes: 8388608, partCount: 1, sha256: 'a'.repeat(64) } };
+    const source = mobileFolderSource('owner', rootId, entry, lifetime.signal, host.request, host.capabilities);
+    assert.equal(source.uploadFile, undefined);
+    assert.equal(typeof source.uploadPart, 'function');
+    const part = { uploadId: 'att_fixture', requestId: 'operation', partNumber: 1, offset: 0, length: 13 };
+    assert.deepEqual(await source.uploadPart!(part, lifetime.signal), { sha256: 'b'.repeat(64) });
+    assert.deepEqual(calls.map(call => call.action), ['context', 'upload-part']);
+    assert.equal(calls[1].upload.requestId, 'operation');
+    assert.equal(calls[1].upload.source.version, 'v1');
+    badReceipt = true;
+    await assert.rejects(source.uploadPart!(part, lifetime.signal), /Invalid native upload receipt/);
+    lifetime.abort();
+});

@@ -3835,3 +3835,34 @@ Release acceptance requires a nonempty real upload while indexing is active,
 a remote receipt and an independently downloaded byte/hash comparison. The
 checklist below remains open until the relevant evidence is recorded. Android
 is deferred; these changes do not claim new special-file restoration support.
+
+
+## Desktop checksum-locked part uploads — 2026-10-20
+
+The Mac folder host advertises `fileUploadVersion` **1.0.0** only with compatible
+native binary range reads (file access 1.2 or later). This reuses the existing
+`upload-part` request and exact source/upload/part receipt contract used by mobile;
+it does not advertise whole-file or background upload versions 1.2/1.3.
+
+The Electron host binds each part to the current main frame, selected API origin,
+account, device, root and source version. It reads one native range (at most
+32 MiB), computes its SHA-256, negotiates the selected origin's
+`api.attachment-upload-parts` 1.1.0 contract and obtains a checksum-locked URL
+through the existing authenticated API fallback. The renderer cannot provide an
+outgoing destination. The host validates the returned part number/checksum,
+rechecks source and authority, and sends the exact part with no cookies,
+authorization header, referrer or redirects. Native source/version checks repeat
+after the PUT. Existing shared fingerprint comparison, server-side issued-part
+checksum/ETag validation, finalization and immutable sync receipts remain in use.
+Cancellation and account/device/origin changes fence the original request.
+Temporary host transport/deadline and HTTP 408/429/5xx failures use the fixed
+`folder_upload_retry` IPC marker. The renderer recognizes only the exact marker
+and maps it to a recoverable connection wait; normal coordinator discovery
+resumes the original durable job/operation. Auth, TLS, redirect, origin, source
+and checksum failures remain terminal and redacted.
+
+This avoids browser CORS failure for the bundled UI's dynamic loopback origin;
+it does not disable browser security or broaden bucket CORS/access. Empty files
+continue through the canonical zero-part path. The signed installed app must
+still demonstrate a real nonempty automatic backup, independent cloud download
+and matching bytes/hash before acceptance can be claimed.

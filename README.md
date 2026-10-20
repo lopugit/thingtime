@@ -6253,3 +6253,15 @@ access is required. The local object adapter stores an actual immutable empty
 object too. Run `node remix/scripts/test-cloud-inventory-pages.mjs --empty-files`
 for a disposable Mongo/store proof covering real authenticated upload, read,
 commit and restore handlers. It never reads the app environment or real data.
+
+
+### Mac folder-upload transport
+
+The bundled Mac UI uses a dynamic loopback origin. With the desktop folder
+host's `fileUploadVersion` 1.0.0 capability, shared sync sends checksum-locked
+parts through the authenticated host adapter rather than cross-origin browser
+PUTs. Forks require the selected API's `api.attachment-upload-parts` >=1.1.0
+(with matching major 1), existing attachment storage/signing configuration and
+native range-read support. No bucket CORS exception, embedded credentials or
+browser security override is required. Parts are bounded to 32 MiB; empty files
+retain their zero-part API path. See [the contract](docs/mobile-file-sync.md#desktop-checksum-locked-part-uploads--2026-10-20).
