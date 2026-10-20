@@ -12662,3 +12662,10 @@ separate from deterministic discovery/lease tests.
 - [x] Run Electron folder-upload/folder-sync tests: a real dynamic-loopback receiver with no CORS allowance receives exact nonempty bytes on an S3-shaped UploadPart path, no Origin/cookies, and the expected checksum. Validate native source proofs, API capability negotiation, part bounds, server-issued destinations, retry identity, cancellation, authority loss and changed sources before/after PUT.
 - [x] Verify actual automatic discovery/task/journal recovery: transient raw/IPC-wrapped upload markers preserve the runnable job, the next discovery resumes the same operation exactly once, and auth/TLS/source failures require attention. Exercise signer response-stream deadlines that throw AbortError while the composed signal records TimeoutError; explicit outer cancellation keeps its original identity.
 - [ ] In the signed installed app, let the existing automatic backup upload a nonempty file during indexing, independently download it from cloud Files and compare bytes/hash with the original. Preserve the existing job, exclusions, priorities, cursors and receipts.
+
+### Desktop signing Origin fence — 2026-10-20
+
+- [x] A real dynamic-loopback HTTP signer with the desktop expected-actor mutation guard rejects absent/mismatched Origin; production `signDesktopUploadPart` passes using trusted `context.appOrigin`, ignoring a body-supplied origin. Regression fails without the header.
+- [x] Fixed signer phase/status diagnostics omit raw messages, identities, bodies, paths and URLs; logs rotate with bounded storage and private file permissions.
+- [ ] `node electron/scripts/test-folder-upload-origin.mjs`: real Electron session fixture retains the OS loopback network boundary. Currently blocked by nested Chromium sandbox initialization, not evidence of runtime success; never use a permissive fallback.
+- [ ] Installed signed acceptance: preserve the existing automatic job, verify a nonempty uploaded file via independent download/hash, and observe continued streaming progress.

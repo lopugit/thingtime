@@ -98,6 +98,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-20: Pin the desktop upload-signing POST Origin to the trusted local window, preserving the proxy's mutation fence. Add bounded, redacted signer phase/status diagnostics and a real loopback guard regression; signed installed byte acceptance remains pending. See [PR 1065](../PRs/1065-codex-desktop-sync-signer-origin-preserve-the-trusted-desktop-origin-when-signing-sync-upload-parts.md). — Codex (AI)
+
 - 2026-10-20: Add the checksum-locked desktop part-upload adapter so bundled loopback origins use host uploads instead of browser S3 PUTs rejected by CORS. Keep source/version, scope, checksums, finalization and receipt checks; no browser security or bucket access changes. Signed installed byte acceptance remains pending; see [PR 1064](../PRs/1064-codex-desktop-sync-upload-transport-upload-mac-sync-parts-through-the-scoped-desktop-host.md). — Codex (AI)
 
 - 2026-10-20: Give renderer index long-polls a separate queue so conditions and file reads continue; preserve independent native indexing when request authorization is canceled. Keep real authority loss fail-closed and add privacy-tested interruption/slow-request diagnostics. Installed payload acceptance remains open; see [PR 1063](../PRs/1063-codex-sync-indexer-recovery-preserve-streaming-indexing-when-identity-requests-are-canceled.md). — Codex (AI)

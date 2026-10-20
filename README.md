@@ -6257,6 +6257,11 @@ commit and restore handlers. It never reads the app environment or real data.
 
 ### Mac folder-upload transport
 
+The host signing POST derives `Origin` from its pinned local window origin to
+pass the unchanged desktop expected-actor mutation fence. Signer diagnostics
+use only fixed categories/status codes in `~/Library/Logs/Thingtime/folder-sync.log`
+(128 KiB plus one rotated file); no credentials or signed destinations are logged.
+
 The bundled Mac UI uses a dynamic loopback origin. With the desktop folder
 host's `fileUploadVersion` 1.0.0 capability, shared sync sends checksum-locked
 parts through the authenticated host adapter rather than cross-origin browser

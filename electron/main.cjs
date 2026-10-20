@@ -132,7 +132,9 @@ const syncWindowLease = new SyncWindowLease(() => ({ window: mainWindow, origin:
 const desktopFolderSync = new DesktopFolderSync({
     context: () => ({ enabled: process.platform === 'darwin' && !parallelDevMode, window: mainWindow, appOrigin,
         apiOrigin: desktopSettings?.snapshot().selectedEndpoint.url }),
-    requestNative: (method, parameters, options) => thingtimeNode.request(method, parameters, undefined, options)
+    requestNative: (method, parameters, options) => thingtimeNode.request(method, parameters, undefined, options),
+    diagnostic: value => require('./lib/folder-sync-diagnostics.cjs').recordFolderSyncDiagnostic(
+        path.join(app.getPath('logs'), 'folder-sync.log'), value)
 });
 const desktopFileExport = new DesktopFileExport({
     context: () => ({ enabled: process.platform === 'darwin', window: mainWindow, appOrigin,
