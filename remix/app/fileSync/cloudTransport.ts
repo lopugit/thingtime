@@ -68,7 +68,7 @@ async function cloudConflict(response: Response, url: URL, mutation: boolean, ch
 		} catch { check(); } finally { await reader.cancel().catch(() => {}); reader.releaseLock(); }
 	}
 	check();
-	const message = `Cloud sync conflict (409; ${operation}; ${code}); retain this run for retry or reconciliation.`;
+	const message = `Cloud sync request failed (409; ${operation}; ${code}); retain this run for retry or reconciliation.`;
 	return operation !== 'cloud-request' && uploadWaitCodes.has(code) && retryable ? new SyncConnectionWait(message) : Error(message);
 }
 
