@@ -143,10 +143,34 @@ async function signDesktopUploadPart(context, body, signal, timeoutMs = 20_000, 
     } finally { if (!response.body?.locked) await response.body?.cancel().catch(() => {}); }
 }
 
+// Disk-only observations from the already validated batch result. Verified
+// outcomes passed stored/source fences but are NOT canonical cloud commits.
+// Receipts are earlier commits; payload counters are an overlapping dimension.
+function batchTimingCounts(value) {
+    try {
+        const members = value.results.length;
+        if (!Number.isSafeInteger(members) || members < 1 || members > 256 || value.payloads.length !== members) return null;
+        const row = { batchMemberCount: members, batchVerifiedCount: 0, batchReceiptCount: 0, batchFailedCount: 0,
+            batchPayloadAcknowledgedCount: 0, batchPayloadUnknownCount: 0, batchPayloadAcknowledgedBytes: 0 };
+        for (let ordinal = 0; ordinal < members; ordinal++) {
+            const result = value.results[ordinal], payload = value.payloads[ordinal];
+            if (result.ordinal !== ordinal || payload.ordinal !== ordinal) return null;
+            if (result.status === 'verified') row.batchVerifiedCount++;
+            else if (result.status === 'confirmed') row.batchReceiptCount++;
+            else if (result.status === 'failed') row.batchFailedCount++;
+            else return null;
+            if (payload.bytes === null) row.batchPayloadUnknownCount++;
+            else if (!Number.isSafeInteger(payload.bytes) || payload.bytes < 0 || payload.bytes > 262_144) return null;
+            else if (payload.bytes > 0) { row.batchPayloadAcknowledgedCount++; row.batchPayloadAcknowledgedBytes += payload.bytes; }
+        }
+        return row.batchPayloadAcknowledgedBytes <= 33_554_432 ? row : null;
+    } catch { return null; }
+}
+
 // Host request phases are observations, never authority. Totals may overlap:
 // reply validation includes its account check, and upload/native waits can nest.
 function requestTiming(action, clock, diagnostic) {
-    let valid = true, flushed = false;
+    let valid = true, flushed = false, batch = null;
     const now = () => { try { const n = clock(); if (Number.isFinite(n) && n >= 0) return n; } catch {} valid = false; return 0; };
     const started = now(), totals = { queue: 0, account: 0, capability: 0, native: 0, reply: 0 };
     const counts = { account: 0, capability: 0, native: 0 };
@@ -160,6 +184,7 @@ function requestTiming(action, clock, diagnostic) {
     };
     return {
         begin,
+        recordBatch(value) { if (action === 'upload-batch') batch = batchTimingCounts(value); },
         async measure(phase, work) {
             const end = begin(phase);
             try { return await work(); } finally { end(); }
@@ -171,7 +196,8 @@ function requestTiming(action, clock, diagnostic) {
             const row = { phase: 'folder-timing', action, outcome, totalMs: Math.floor(total),
                 queueMs: Math.floor(totals.queue), accountMs: Math.floor(totals.account), accountCount: counts.account,
                 capabilityMs: Math.floor(totals.capability), capabilityCount: counts.capability,
-                nativeMs: Math.floor(totals.native), nativeCount: counts.native, replyMs: Math.floor(totals.reply) };
+                nativeMs: Math.floor(totals.native), nativeCount: counts.native, replyMs: Math.floor(totals.reply),
+                ...(outcome === 'ok' && batch ? batch : {}) };
             // The transfer never awaits log IO or a rejected diagnostic Promise.
             queueMicrotask(() => { try { Promise.resolve(diagnostic(row)).catch(() => {}); } catch {} });
         }
@@ -366,6 +392,7 @@ class DesktopFolderSync {
                 const metadata = { ...value, chunk: { ...c, bytes: undefined } };
                 if (Buffer.byteLength(JSON.stringify(metadata)) > 900_000) throw unavailable();
             } else if (Buffer.byteLength(JSON.stringify(value)) > 900_000) throw unavailable();
+            if (input.action === 'upload-batch') timing.recordBatch(value.uploadedBatch);
             outcome = 'ok'; return value;
         } catch (error) {
             if (!state.abort.signal.aborted) {

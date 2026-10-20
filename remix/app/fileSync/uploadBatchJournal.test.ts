@@ -151,18 +151,110 @@ test('partial source failure forces individual recovery and unknown canonical di
 	f.f.journal().close();
 });
 
-test('fallback cannot steal a newly eligible bulk member, while a full512queue frees one ordinary slot', async () => {
-	const first = await setup(1);
-	assert.equal(await first.runs().claimNext(first.s, true, 512, true), null);
-	assert.equal((await first.runs().claimUploadBatch(first.s, saved))!.members[0].write.operation.id, first.operations[0].id);
-	first.f.journal().close();
-	const full = await setup(512);
-	assert.equal(await full.runs().claimUploadBatch(full.s, saved), null);
-	const ordinary = await full.runs().claimNext(full.s, true, 512, true);
-	assert.equal(ordinary!.id, full.operations[0].id);
-	await full.runs().confirm(full.s, receipt(ordinary!));
-	assert.equal((await full.runs().claimUploadBatch(full.s, saved))!.members.length, 256);
-	full.f.journal().close();
+test('fallback cannot steal a newly eligible bulk member', async () => {
+	const f = await setup(1);
+	assert.equal(await f.runs().claimNext(f.s, true, 512, true), null);
+	assert.equal((await f.runs().claimUploadBatch(f.s, saved))!.members[0].write.operation.id, f.operations[0].id);
+	f.f.journal().close();
+});
+
+test('512 eligible operations keep batching when the producer refills every confirmed slot across restart', async () => {
+	const f = await setup(512);
+	let sequence = 512;
+	const confirmed = new Set<string>();
+	for (let cycle = 0; cycle < 3; cycle++) {
+		await f.reopen();
+		assert.equal((await f.runs().active())!.progress.operations - (await f.runs().active())!.progress.confirmed, 512);
+		const batch = (await f.runs().claimUploadBatch(f.s, saved))!;
+		assert.ok(batch, 'a producer-filled queue must not force scalar execution');
+		assert.equal(batch.members.length, 256);
+		const digest = await uploadBatchDigest(batch);
+		for (const [index, member] of batch.members.entries()) {
+			assert.equal(confirmed.has(member.write.operation.id), false, 'never reuse an accepted operation');
+			await f.runs().confirm(f.s, receipt(member.write.operation));
+			confirmed.add(member.write.operation.id);
+			const source = make(`refill-${++sequence}`, sequence);
+			const operation: SyncOperation = {
+				id: crypto.randomUUID(), confirmed: false,
+				mutation: { kind: 'copy', from: 'local', path: source.path, source, expectedTarget: null }
+			};
+			await f.runs().appendStream(f.s, { generation: f.s.streaming!.captureId, sequence, revision: source.version, entry: source },
+				{ write: prepareCloudInventoryWrite(operation, scope, 'cloud-root', null, 'cloud-root') });
+			if (index === 127) {
+				await f.reopen();
+				assert.equal(await uploadBatchDigest(await f.runs().claimUploadBatch(f.s, saved)), digest, 'restart retains the in-flight batch IDs');
+			}
+		}
+	}
+	assert.equal(confirmed.size, 768);
+	assert.equal((await f.runs().streamState(f.s)).terminal, false);
+	f.f.journal().close();
+});
+
+test('full512queue frees only one ordinary slot for a proven priority, then runs its outside-prefix ancestors', async () => {
+	const f = await setup(512), access = { scope, currentScope: () => scope };
+	await f.runs().enableStreamPriorities(f.s);
+	const inputs = ['Z', 'Z/sub', 'Z/sub/target'].map((path, index) => {
+		const entry: SyncEntry = index === 2 ? make(path, 513 + index) : { path, id: 'folder-' + path, version: '1', kind: 'folder', size: 0, sha256: null };
+		return { sequence: 513 + index, revision: entry.version, entry };
+	});
+	await f.runs().appendStreamInput(f.s, f.s.streaming!.captureId, inputs, false);
+	await f.f.journal().priorities(access).save(['Z/sub/target'], 0);
+	assert.equal(await f.runs().claimUploadBatch(f.s, saved), null, 'ordinary work cannot expand into a batch before priority preparation');
+	const ordinary = (await f.runs().claimNext(f.s, true, 512, true))!;
+	assert.equal(ordinary.id, f.operations[0].id);
+	await f.runs().confirm(f.s, receipt(ordinary));
+	await f.reopen();
+	for (const input of inputs) {
+		assert.equal(await f.runs().claimUploadBatch(f.s, saved), null, 'an ordinary batch cannot take the available priority preparation slot');
+		assert.equal(await f.runs().claimNext(f.s, true, 512, true), null, '511 pending holds the available priority slot, using the actual capacity');
+		const selected = (await f.runs().nextStreamInput(f.s))!;
+		assert.equal(selected.entry.path, input.entry.path);
+		const operation: SyncOperation = {
+			id: crypto.randomUUID(), confirmed: false,
+			mutation: { kind: 'copy', from: 'local', path: selected.entry.path, source: selected.entry, expectedTarget: null }
+		};
+		await f.runs().appendStream(f.s, selected, { write: prepareCloudInventoryWrite(operation, scope, 'cloud-root', null, 'cloud-root') });
+		if (input.entry.kind === 'folder') {
+			assert.equal(await f.runs().claimUploadBatch(f.s, saved), null);
+			const ancestor = (await f.runs().claimNext(f.s, true, 512, true))!;
+			assert.equal(ancestor.id, operation.id, 'the outside-prefix ancestor must execute before ordinary work');
+			await f.runs().confirm(f.s, receipt(ancestor));
+		} else {
+			const batch = (await f.runs().claimUploadBatch(f.s, saved))!;
+			assert.deepEqual(batch.members.map(member => member.write.operation.id), [operation.id]);
+			await f.runs().confirm(f.s, receipt(batch.members[0].write.operation));
+		}
+		await f.reopen();
+	}
+	assert.equal((await f.runs().streamState(f.s)).sequence, 515);
+	f.f.journal().close();
+});
+
+test('an absent priority does not hold an otherwise eligible full queue', async () => {
+	const f = await setup(512), access = { scope, currentScope: () => scope };
+	await f.runs().enableStreamPriorities(f.s);
+	await f.f.journal().priorities(access).save(['not-indexed'], 0);
+	assert.equal((await f.runs().claimUploadBatch(f.s, saved))!.members.length, 256);
+	f.f.journal().close();
+});
+
+test('reserved and recovery IDs still run first at full capacity', async () => {
+	const f = await setup(512), access = { scope, currentScope: () => scope };
+	await f.runs().enableStreamPriorities(f.s);
+	await f.f.journal().priorities(access).save(['not-indexed'], 0);
+	const reserved = (await f.runs().claimNext(f.s, true, 512))!;
+	await f.reopen();
+	assert.equal(await f.runs().claimUploadBatch(f.s, saved), null);
+	assert.equal((await f.runs().claimNext(f.s, true, 512))!.id, reserved.id);
+	await f.runs().confirm(f.s, receipt(reserved));
+	const batch = (await f.runs().claimUploadBatch(f.s, saved))!;
+	assert.equal(batch.members.length, 256);
+	await f.runs().recoverUploadBatch(f.s);
+	await f.reopen();
+	assert.equal(await f.runs().claimUploadBatch(f.s, saved), null);
+	assert.equal((await f.runs().claimNext(f.s, true, 512))!.id, batch.members[0].write.operation.id);
+	f.f.journal().close();
 });
 
 test('hardlink paths remain durable with original IDs but never share one native batch', async () => {
@@ -185,7 +277,7 @@ test('hardlink paths remain durable with original IDs but never share one native
 });
 
 test('priority change during initial claim preserves only reserved member before new preference', async () => {
-	const f = await setup(3, ['first', 'ordinary', 'priority']);
+	const f = await setup(512, ['a-first', 'b-ordinary', 'z-priority']);
 	const runs = f.runs(),
 		original = runs.claimNext;
 	runs.claimNext = async (...args) => {
@@ -193,7 +285,7 @@ test('priority change during initial claim preserves only reserved member before
 		await f.f
 			.journal()
 			.priorities({ scope, currentScope: () => scope })
-			.save(['priority'], 0);
+			.save(['z-priority'], 0);
 		return result;
 	};
 	assert.equal(await runs.claimUploadBatch(f.s, saved), null);

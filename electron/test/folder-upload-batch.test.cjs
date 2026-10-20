@@ -57,6 +57,24 @@ function fixture(count = 1) {
     };
     return { d, digest, payloads, phases, nativeFrames, requestPhase, input, context, native };
 }
+async function batchHost(f, options = {}) {
+    const rows = [], mainFrame = { url: f.context.appOrigin }, contents = { mainFrame }, window = { webContents: contents, isDestroyed: () => false };
+    contents.session = { fetch: async (_url, init) => Response.json(await f.requestPhase(JSON.parse(init.body)), {
+        headers: { 'x-thingtime-api-fallback': f.context.apiOrigin } }) };
+    const host = new DesktopFolderSync({ context: () => ({ ...f.context, enabled: true, window }),
+        verifyAccount: options.verifyAccount ?? (async () => {}), requestNative: async (_method, request, nativeOptions) => {
+            if (request.action === 'context') return { ...request, roots: [], capabilities: { fileAccessVersion: '1.13.0', fileUploadBatchVersion: '1.0.0' } };
+            if (request.action === 'suspend') return {};
+            return (options.native ?? f.native)(request, nativeOptions);
+        }, capabilities: async () => ({ schemaVersion: 1, origin: f.context.apiOrigin, features: {
+            'api.devices-node-identity': { version: '1.0.0' }, 'api.file-sync-batches': { version: '1.0.0' } } }),
+        fetchUpload: options.fetchUpload ?? (async () => new Response(null, { status: 200 })), diagnostic: row => rows.push(row) });
+    const event = { sender: contents, senderFrame: mainFrame };
+    await host.request(event, { ...f.input, action: 'context', batch: undefined });
+    return { rows, run: () => host.request(event, f.input), cancel: () => host.cancel() };
+}
+const batchTiming = rows => rows.find(row => row.phase === 'folder-timing' && row.action === 'upload-batch');
+const batchCounts = row => Object.fromEntries(Object.entries(row).filter(([key]) => key.startsWith('batch')));
 test('Electron matches both shared canonical digest vectors and rejects changed members', () => {
     for (const v of vectors.vectors) {
         const bytes = batchCanonicalBytes(v.descriptor); assert.equal(bytes.length, v.canonicalBytes); assert.equal(bytes.toString('base64'), v.canonicalBase64); assert.equal(hex(bytes), v.digest);
@@ -98,11 +116,14 @@ test('production DesktopFolderSync handles256 members with one native operation 
     assert.ok(!/storage\.test|X-Amz-Signature|cookie/i.test(JSON.stringify(f.nativeFrames)));
     const timing = rows.filter(r => r.phase === 'folder-timing' && r.action === 'upload-batch');
     assert.equal(timing.length, 1); assert.equal(timing[0].accountCount, 2); assert.equal(timing[0].nativeCount, 1);
+    assert.deepEqual(batchCounts(timing[0]), { batchMemberCount: 256, batchVerifiedCount: 256, batchReceiptCount: 0, batchFailedCount: 0,
+        batchPayloadAcknowledgedCount: 256, batchPayloadUnknownCount: 0, batchPayloadAcknowledgedBytes: f.payloads.reduce((sum, b) => sum + b.length, 0) });
 });
 test('lost PUT responses remain unknown and retain original upload IDs through stored verification', async () => {
     const f = fixture(); let puts = 0;
-    const result = await uploadFolderBatch({ ...f, signal: new AbortController().signal, assertCurrent: () => {}, requestNative: f.native,
-        fetchUpload: async () => { puts++; throw Object.assign(Error('redacted'), { code: 'ECONNRESET' }); } });
+    const h = await batchHost(f, { fetchUpload: async () => { puts++; throw Object.assign(Error('redacted'), { code: 'ECONNRESET' }); } });
+    const result = await h.run();
+    assert.deepEqual(batchCounts(batchTiming(h.rows)), { batchMemberCount: 1, batchVerifiedCount: 1, batchReceiptCount: 0, batchFailedCount: 0, batchPayloadAcknowledgedCount: 0, batchPayloadUnknownCount: 1, batchPayloadAcknowledgedBytes: 0 });
     assert.equal(puts, 1); assert.deepEqual(result.uploadedBatch.payloads, [{ ordinal: 0, bytes: null }]);
     assert.equal(result.uploadedBatch.results[0].content.uploadId, 'upload-0');
 });
@@ -156,8 +177,26 @@ test('mixed receipt, ready, failed source and PUT outcomes verify only the selec
             payloads: f.payloads.map((b, ordinal) => ({ ordinal, bytes: ordinal === 3 ? b.length : 0 })) } };
     };
     let puts = 0;
-    const result = await uploadFolderBatch({ ...f, requestPhase, requestNative: native, signal: new AbortController().signal, assertCurrent() {},
-        fetchUpload: async () => { puts++; return new Response(null, { status: 200 }); } });
+    const h = await batchHost({ ...f, requestPhase }, { native, fetchUpload: async () => { puts++; return new Response(null, { status: 200 }); } });
+    const result = await h.run();
+    assert.deepEqual(batchCounts(batchTiming(h.rows)), { batchMemberCount: 4, batchVerifiedCount: 2, batchReceiptCount: 1, batchFailedCount: 1,
+        batchPayloadAcknowledgedCount: 1, batchPayloadUnknownCount: 0, batchPayloadAcknowledgedBytes: f.payloads[3].length });
     assert.equal(puts, 1); assert.deepEqual(result.uploadedBatch.results[0].file, confirmedFile);
     assert.deepEqual(result.uploadedBatch.results.map(r => r.status), ['confirmed', 'verified', 'failed', 'verified']);
+});
+
+
+test('batch timing omits result counters after final account refusal or invalid response binding', async () => {
+    for (const mode of ['post-account', 'binding', 'cancelled']) {
+        const f = fixture(); let finished = false; let h;
+        h = await batchHost(f, { verifyAccount: async () => { if (finished && mode === 'post-account') throw Error('authority-refused'); },
+            native: async (request, options) => {
+                const result = await f.native(request, options); finished = true;
+                if (mode === 'binding') result.ownerId = 'wrong-owner';
+                if (mode === 'cancelled') { h.cancel(); options.signal.throwIfAborted(); }
+                return result;
+            } });
+        await assert.rejects(h.run());
+        const row = batchTiming(h.rows); assert.ok(row); assert.equal(row.outcome, mode === 'cancelled' ? 'cancelled' : 'failed'); assert.deepEqual(batchCounts(row), {});
+    }
 });

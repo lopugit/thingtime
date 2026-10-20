@@ -7,6 +7,7 @@ const steps = new Set(['capture', 'admission', 'account-verification', 'capabili
 const failureCodes = new Set(['node_timeout', 'node_unavailable', 'node_protocol_error', 'folder_unavailable', 'folder_identity_retry', 'cancelled', 'unsupported_feature', 'host-refused', 'unclassified']);
 const milliseconds = ['totalMs', 'queueMs', 'accountMs', 'capabilityMs', 'nativeMs', 'replyMs'];
 const counts = ['accountCount', 'capabilityCount', 'nativeCount'];
+const batchCounts = ['batchMemberCount', 'batchVerifiedCount', 'batchReceiptCount', 'batchFailedCount', 'batchPayloadAcknowledgedCount', 'batchPayloadUnknownCount', 'batchPayloadAcknowledgedBytes'];
 const scalar = (value, key) => Object.getOwnPropertyDescriptor(value, key)?.value;
 // Own data scalars only: getters/proxies, arbitrary errors and caller metadata
 // cannot enter the log. Invalid diagnostics never affect a folder request.
@@ -31,6 +32,19 @@ function closedRow(value) {
             const n = scalar(value, name), maximum = counts.includes(name) ? 128 : 600_000;
             if (!Number.isSafeInteger(n) || n < 0 || n > maximum) return null;
             row[name] = n;
+        }
+        const hasBatch = batchCounts.some(name => Object.prototype.hasOwnProperty.call(value, name));
+        if (hasBatch) {
+            if (action !== 'upload-batch' || outcome !== 'ok') return null;
+            for (const name of batchCounts) {
+                const n = scalar(value, name), maximum = name === 'batchPayloadAcknowledgedBytes' ? 33_554_432 : 256;
+                if (!Number.isSafeInteger(n) || n < 0 || n > maximum) return null;
+                row[name] = n;
+            }
+            if (row.batchMemberCount < 1 || row.batchVerifiedCount + row.batchReceiptCount + row.batchFailedCount !== row.batchMemberCount ||
+                row.batchPayloadAcknowledgedCount + row.batchPayloadUnknownCount > row.batchMemberCount ||
+                row.batchPayloadAcknowledgedBytes < row.batchPayloadAcknowledgedCount ||
+                row.batchPayloadAcknowledgedBytes > row.batchPayloadAcknowledgedCount * 262_144) return null;
         }
         return row;
     } catch { return null; }

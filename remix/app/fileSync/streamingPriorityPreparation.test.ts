@@ -82,14 +82,14 @@ const acknowledge = async (
 	});
 };
 
-test('exactly 128 pending frees one ordinary slot then executes priority ancestors outside the prefix', async () => {
+for (const capacity of [128, 512]) test(`exactly ${capacity} pending frees one ordinary slot then executes priority ancestors outside the prefix`, async () => {
 	const f = await foregroundFixture(),
 		access = { scope, currentScope: () => scope },
 		s = spec();
 	let runs = f.journal().pagedRuns(access);
 	await runs.begin(s);
 	await runs.enableStreamPriorities(s);
-	for (let sequence = 1; sequence <= 128; sequence++) {
+	for (let sequence = 1; sequence <= capacity; sequence++) {
 		const change = { generation: s.streaming!.captureId, sequence, revision: '1', entry: folder('a-' + sequence) };
 		await runs.appendStream(s, change, binding(s, change));
 	}
@@ -103,14 +103,14 @@ test('exactly 128 pending frees one ordinary slot then executes priority ancesto
 		await runs.appendStreamInput(
 			s,
 			s.streaming!.captureId,
-			entries.slice(offset, offset + 128).map((entry, i) => ({ sequence: 129 + offset + i, revision: entry.version, entry })),
+			entries.slice(offset, offset + 128).map((entry, i) => ({ sequence: capacity + 1 + offset + i, revision: entry.version, entry })),
 			offset + 128 >= entries.length
 		);
 	await f.journal().priorities(access).save(['Z/sub/target'], 0);
-	const ordinary = (await runs.claimNext(s))!;
+	const ordinary = (await runs.claimNext(s, true, capacity))!;
 	assert.match(ordinary.mutation.path, /^a-/);
 	await acknowledge(runs, s, ordinary);
-	assert.equal(await runs.claimNext(s), null, 'ordinary claiming waits for the priority preparation slot');
+	assert.equal(await runs.claimNext(s, true, capacity), null, 'ordinary claiming waits for the priority preparation slot');
 	const prepared = new Map<string, string>(),
 		executed: string[] = [],
 		receipts = new Map<string, SyncReceipt>(),
@@ -147,31 +147,31 @@ test('exactly 128 pending frees one ordinary slot then executes priority ancesto
 			write = binding(s, change, parent ? prepared.get(parent)! : 'cloud-root');
 		prepared.set(path, write.write.operation.id);
 		await runs.appendStream(s, change, write);
-		assert.equal((await runs.streamState(s)).sequence, 128, 'ahead work cannot bypass ordinary input');
+		assert.equal((await runs.streamState(s)).sequence, capacity, 'ahead work cannot bypass ordinary input');
 		await f.reload();
 		runs = f.journal().pagedRuns(access);
 		assert.equal((await runs.find(s, path))!.id, write.write.operation.id);
-		const op = (await runs.claimNext(s))!;
+		const op = (await runs.claimNext(s, true, capacity))!;
 		assert.equal(op.mutation.path, path);
 		if (path === 'Z') {
 			await assert.rejects(executeSyncOperation(op, scope, port), /lost accepted/);
 			await f.reload();
 			runs = f.journal().pagedRuns(access);
-			assert.equal((await runs.claimNext(s))!.id, op.id, 'uncertain acceptance keeps its reserved ID');
+			assert.equal((await runs.claimNext(s, true, capacity))!.id, op.id, 'uncertain acceptance keeps its reserved ID');
 		}
 		await runs.confirm(s, await executeSyncOperation(op, scope, port));
 	}
 	assert.deepEqual(executed, ['Z', 'Z/sub', 'Z/sub/target']);
 	assert.equal((await runs.streamState(s)).preparedAhead, 3);
 	assert.equal((await runs.nextStreamInput(s))!.entry.path, 'b-0');
-	await assert.rejects(runs.sealStream(s, s.streaming!.captureId, 391), /completion changed/);
+	await assert.rejects(runs.sealStream(s, s.streaming!.captureId, capacity + 263), /completion changed/);
 	for (let i = 0; i < 260; i++) {
 		const change = (await runs.nextStreamInput(s))!;
 		assert.equal(change.entry.path, 'b-' + i);
 		await runs.appendStream(s, change, null);
 	}
 	assert.equal(await runs.nextStreamInput(s), null);
-	assert.equal((await runs.streamState(s)).sequence, 391);
+	assert.equal((await runs.streamState(s)).sequence, capacity + 263);
 	assert.equal((await runs.streamState(s)).preparedAhead, 0);
 	assert.equal(await runs.streamReadyToFinish(s), false, 'ordinary operations still need their receipts');
 	f.journal().close();
