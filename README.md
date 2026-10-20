@@ -5613,7 +5613,8 @@ observations retain individual durable markers; the contiguous source watermark
 cannot cross an unprocessed gap, and streaming never publishes a complete baseline.
 Old/generic adapters and remote-source preparation retain FIFO behavior. This does
 not prioritize files the native indexer has not discovered, add transfer concurrency,
-or provide native upload-speed telemetry. Installed priority acceptance remains open.
+or provide native upload-speed telemetry. Installed priority acceptance remains open;
+see [the migration and verification note](PRs/1076-codex-sync-priority-preparation-prepare-saved-upload-priorities-before-ordinary-indexed-input.md).
 
 #### iOS native multipart uploads
 

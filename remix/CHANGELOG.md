@@ -98,7 +98,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
-- 2026-10-21: Prepare eligible saved upload priorities ahead of ordinary durable index rows while preserving ancestry, reserved receipts and contiguous watermarks. Journal v13 migrates legacy normalized keys in independent bounded pages; ordinary uploads continue during migration. Installed priority acceptance and native live-speed telemetry remain incomplete. — Codex (AI)
+- 2026-10-21: Prepare eligible saved upload priorities ahead of ordinary durable index rows while preserving ancestry, reserved receipts and contiguous watermarks. Journal v13 migrates legacy normalized keys in independent bounded pages; ordinary uploads continue during migration. Installed priority acceptance and native live-speed telemetry remain incomplete. See [PR 1076](../PRs/1076-codex-sync-priority-preparation-prepare-saved-upload-priorities-before-ordinary-indexed-input.md). — Codex (AI)
 
 - 2026-10-21: Remove redundant read-only native sync preparation guards, combine Mac context/roots/conditions and retain every mutation/source/receipt fence. Controlled streaming calls drop 184→72 HTTP and 40→13 native RPCs; installed throughput remains unverified. File-access 1.12.0 and closed identity timing/cooldown diagnostics support acceptance. See [PR 1075](../PRs/1075-codex-sync-operation-amplification-reduce-read-only-native-sync-preflight-overhead.md). — Codex (AI)
 
