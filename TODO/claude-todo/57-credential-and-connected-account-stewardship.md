@@ -45,6 +45,13 @@ mistaking one lifecycle for another.
   [#1014](https://github.com/lopugit/thingtime/pull/1014), and
   [#1015](https://github.com/lopugit/thingtime/pull/1015); merged PR narratives
   are leads, not present-day implementation proof.
+- [ ] Recheck [PR #1018](https://github.com/lopugit/thingtime/pull/1018)'s
+  admin credential-import route and `PlatformCredentials` UI. Its delivery
+  record reports focused tests/build/lint passing, but production import,
+  browser acceptance of the new control, and the live vault write were still
+  unverified. Prove the end-to-end path only with a synthetic non-production
+  credential and isolated vault; a capability version or unit test alone is
+  not acceptance evidence.
 - [ ] Name product, storage/API, platform, privacy/security, accessibility,
   reliability, and support owners plus an independent stop authority.
 
@@ -67,6 +74,10 @@ mistaking one lifecycle for another.
   caches, partial deletion, and retries.
 - [ ] Verify no cross-account projection, message/credential logging, false
   success receipt, stale overwrite, or duplicate consequential action.
+- [ ] For the admin credential-import slice, verify authorization, exact target,
+  encrypted persistence, redacted readback, retry behavior, and failure
+  recovery with a synthetic key; never import a real configured key as part of
+  this rehearsal.
 - [ ] Select one evidence-backed gap for implementation only after owner and
   qualified review; specify rollback, support remedy, accessibility, and exact
   platform validation before changing behavior.
@@ -77,6 +88,9 @@ mistaking one lifecycle for another.
 
 - A person can tell what resides on-device, in Thingtime, at a provider, or only
   in transit, and can distinguish unlink, revoke, and delete.
+- A synthetic credential-import run is reported complete only after the
+  intended browser control and real API path both succeed in an isolated
+  non-production environment, with the stored value never returned or logged.
 - Current authority is rechecked before sync or external effects; retries do
   not duplicate actions and uncertain outcomes remain explicitly uncertain.
 - Synthetic tests demonstrate account isolation, least-scope consent, cleanup,

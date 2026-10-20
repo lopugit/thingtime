@@ -44,7 +44,7 @@ engineering decisions in [`../DECISIONS.md`](../DECISIONS.md).
 | [Measurement agency and privacy-respecting telemetry roadmap](./measurement-agency-and-privacy-respecting-telemetry-roadmap.md)     | Purpose-specific measurement through separated planes, minimum signals, useful-baseline choice, bounded retention, metric truth, and one synthetic rehearsal               | Proposed |
 | [Temporal agency and humane time-semantics roadmap](./temporal-agency-and-humane-time-semantics-roadmap.md)                         | Explicit temporal types and authority through civil-time rules, accessible formatters, DST/skew fixtures, honest receipts, and one low-risk date-filter slice              | Proposed |
 | [Unified Thing history roadmap](./unified-thing-history-roadmap.md)                                                                 | Design concept through a durable editor journal, one contextual History panel, account-synced history Things, the /history timeline browser, versions with review-and-combine, and every writer emitting events | Proposed (M0 delivered) |
-| [Credential and connected-account stewardship roadmap](./credential-and-connected-account-stewardship-roadmap.md)                 | Inventory provider grants, local/cloud/native credential paths, imported archives, revocation, cleanup, synthetic rehearsal, and a qualified bounded improvement         | Proposed |
+| [Credential and connected-account stewardship roadmap](./credential-and-connected-account-stewardship-roadmap.md)                 | Inventory provider grants, local/cloud/native credential paths, imported archives, revocation, cleanup, and synthetic acceptance of admin credential import               | Proposed |
 
 ## Conventions
 

@@ -46,7 +46,7 @@ actionable item in [`../TODO/`](../TODO/TODO.md) when it is ready to execute.
 | [Unified Thing history and timeline browser baseline](./unified-thing-history-timeline-baseline.md)                                         | Evidence on the in-memory editor journal, current-state-only Things, the notifications list engine, base Thing verbs, local-first primitives, adjacent epics, and the delivered timeline design concept | 2026-09-27    |
 | [Experience checkpoints and the unified Timeline](./experience-checkpoints-and-unified-timeline.md)                                   | Distinguishes durable Thing-change history from feed/search view snapshots and records the shared-sync boundary for TODO 20                                             | 2026-10-02    |
 | [Device-state snapshots and the measurement boundary](./device-state-snapshots-and-measurement-boundary.md)                           | Separates user-requested device status from analytics; records merged PR #990, reported installed-app checks, and remaining detailed-reading acceptance gates              | 2026-10-14    |
-| [Credential and connected-account stewardship baseline](./credential-and-connected-account-stewardship-baseline.md)                  | Maps mail OAuth, local/cloud/native relay, encrypted account storage, and password imports; records revocation, cleanup, and evidence gaps without conflating them         | 2026-10-18    |
+| [Credential and connected-account stewardship baseline](./credential-and-connected-account-stewardship-baseline.md)                  | Maps mail OAuth, local/cloud/native relay, encrypted account storage, password imports, and the still-unverified admin credential-import acceptance path                    | 2026-10-20    |
 
 ## Conventions
 

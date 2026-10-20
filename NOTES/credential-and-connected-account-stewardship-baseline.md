@@ -1,6 +1,6 @@
 # Credential and connected-account stewardship baseline
 
-**Grounded:** 2026-10-18, Australia/Melbourne
+**Grounded:** 2026-10-20, Australia/Melbourne
 
 **Confidence:** implementation facts below are grounded in merged PR records
 and repository code; lifecycle gaps remain questions until checked against the
@@ -26,6 +26,7 @@ surface or migration has been approved.
 | [PR #1013](https://github.com/lopugit/thingtime/pull/1013) | Electron native mail and an authenticated API relay are distinct modes; relay does not save a cloud mail account. | Full signed-in iOS mailbox sync was not verified in that delivery. |
 | [PR #1014](https://github.com/lopugit/thingtime/pull/1014) | Gmail OAuth, message actions, device-default message storage, explicit review before send, durable action receipts, and protections against stale sync overwriting completed actions. | No real Google authorization or send was exercised; OAuth verification/configuration remains an external prerequisite. |
 | [PR #1015](https://github.com/lopugit/thingtime/pull/1015) | 1PUX import preserves known and unknown structures and original ZIP members in the encrypted vault; attachment handling uses a private multipart lifecycle. | Mongo document/deployment transport limits and browser memory still bound large final downloads; unknown data may lack a specialised editor. |
+| [PR #1018](https://github.com/lopugit/thingtime/pull/1018) | Admin UI and API support importing the configured OpenAI key into the platform credential vault; its record reports 98 focused vault/API-capability tests plus production-build/output verification and targeted lint passing. | The PR record explicitly leaves production import, browser acceptance of the new control, and the live vault write unverified. The advertised credential capability and passing tests do not establish end-to-end acceptance. |
 | [`userVault.ts`](../remix/app/api/utils/lopu/userVault.ts) | Owner-scoped vault records encrypt secret/provider values and expose read helpers that avoid loading encrypted fields. | This single module does not establish complete provider revocation, retention, export, or incident behavior across every credential path. |
 | [`connections.ts`](../remix/app/api/utils/connections/connections.ts) | Linked account records and per-user links are separate; unlinking a member can retain shared account material for other live links, and last-link retirement has targeted tests. | Recheck concurrent unlink, revoke, account deletion, sync, and retry behavior when these paths change. |
 
@@ -33,6 +34,10 @@ surface or migration has been approved.
 
 - Can a person see, per connected account, what is stored locally, in Thingtime,
   or only transiently relayed—and which data classes each choice covers?
+- For admin credential import, has the intended UI control been exercised
+  against the exact deployed API in an isolated environment using a synthetic
+  key, with authorization, encrypted storage, redacted readback, and failure
+  recovery independently verified?
 - Do disconnect, provider-side revocation, logout, account closure, device loss,
   and credential rotation have distinct, truthful outcomes and complete cleanup
   receipts across mail, OAuth, and imported vault data?

@@ -48,8 +48,10 @@
 - **Make connected-account and credential lifecycles understandable and safe.**
   Distinguish provider consent, Thingtime storage, device cache, transient relay,
   imported secrets, revocation, unlink, deletion, and external-action outcomes.
-  Start with an evidence inventory and synthetic rehearsal; no new scopes or
-  production migration are approved. [Evidence](../NOTES/credential-and-connected-account-stewardship-baseline.md),
+  Include the bounded admin credential-import flow in the evidence inventory:
+  its API tests and capability version do not prove browser acceptance or a
+  successful vault write. Rehearse only with synthetic credentials; no real
+  production import, new scopes, or migration is approved. [Evidence](../NOTES/credential-and-connected-account-stewardship-baseline.md),
   [phases](../PLAN/credential-and-connected-account-stewardship-roadmap.md),
   [TODO 57](claude-todo/57-credential-and-connected-account-stewardship.md).
 

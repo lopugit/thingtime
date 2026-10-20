@@ -2,7 +2,7 @@
 
 **Status:** Proposed; owner and qualified privacy/security review required
 
-**Grounded:** 2026-10-18, Australia/Melbourne
+**Grounded:** 2026-10-20, Australia/Melbourne
 
 **Evidence:** [Credential and connected-account stewardship baseline](../NOTES/credential-and-connected-account-stewardship-baseline.md)
 
@@ -38,6 +38,10 @@ data, or external side effects.
   and imported secret; record what each can authorize and how it expires.
 - Review disconnect, OAuth revoke, last-link retirement, logout, device loss,
   account closure, and import deletion independently.
+- Review [PR #1018](https://github.com/lopugit/thingtime/pull/1018)'s admin
+  credential-import route and UI separately from its passing focused tests;
+  its delivery record says browser acceptance and the live vault write remain
+  unverified.
 - **Gate:** every data class and side effect has an evidence owner and explicit
   unknowns; no design assumes that unlink means revoke or purge.
 
@@ -62,6 +66,9 @@ data, or external side effects.
   provider revoke, local purge, export, and restore as separate cases.
 - Inject token expiry/rotation, stale sync, duplicate action, transient provider
   response, interrupted multipart transfer, offline cache, and partial cleanup.
+- Exercise the admin credential-import UI and API only with a synthetic key in
+  an isolated non-production vault; verify the exact target, authorization,
+  encrypted persistence, redacted readback, retries, and failure recovery.
 - **Gate:** zero cross-account disclosure, stale overwrite, duplicate external
   effect, credential leakage, or false completion receipt; cleanup is evidenced.
 
@@ -69,6 +76,10 @@ data, or external side effects.
 
 - Select one observed gap and one provider/data class; document current behavior,
   compatibility, migration, rollback, support, and accessibility before coding.
+- Do not treat production credential import as verified by API version, tests,
+  or deployment status alone. Production use of a real configured key remains
+  outside this documentation rehearsal and requires a separately authorized,
+  secure acceptance path.
 - Add tests at the real API/provider boundary with synthetic data and verify
   encryption and public projections independently.
 - Recheck all affected account, data, and capability contracts; qualify launch
