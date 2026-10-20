@@ -64,3 +64,27 @@ test('timing rows contain only bounded own scalars, rotate, and drop malformed d
         assert.equal(batch.action, 'upload-batch'); assert.doesNotMatch(JSON.stringify(batch), /private|secret|signedUrl/);
     } finally { fs.rmSync(directory, { recursive: true, force: true }); }
 });
+
+test('optional batch timing counters are closed, bounded, atomic and absent on legacy rows', async () => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'folder-batch-diagnostic-')), file = path.join(directory, 'folder-sync.log');
+    const base = { phase: 'folder-timing', action: 'upload-batch', outcome: 'ok', totalMs: 20, queueMs: 0,
+        accountMs: 2, accountCount: 2, capabilityMs: 0, capabilityCount: 0, nativeMs: 15, nativeCount: 1, replyMs: 3 };
+    const counts = { batchMemberCount: 4, batchVerifiedCount: 2, batchReceiptCount: 1, batchFailedCount: 1,
+        batchPayloadAcknowledgedCount: 1, batchPayloadUnknownCount: 1, batchPayloadAcknowledgedBytes: 7 };
+    try {
+        for (const patch of [{ batchMemberCount: 0 }, { batchMemberCount: 257 }, { batchVerifiedCount: 3 }, { batchFailedCount: -1 },
+            { batchReceiptCount: 0.5 }, { batchPayloadUnknownCount: 5 }, { batchPayloadAcknowledgedBytes: 33_554_433 },
+            { batchPayloadAcknowledgedBytes: NaN }, { batchPayloadAcknowledgedCount: 0 }, { outcome: 'failed' }, { outcome: 'cancelled' }, { action: 'inspect' }])
+            await recordFolderSyncDiagnostic(file, { ...base, ...counts, ...patch });
+        const incomplete = { ...base, ...counts }; delete incomplete.batchReceiptCount;
+        await recordFolderSyncDiagnostic(file, incomplete);
+        let getterCalls = 0;
+        await recordFolderSyncDiagnostic(file, { ...base, ...counts, get batchMemberCount() { getterCalls++; throw Error('secret'); } });
+        assert.equal(getterCalls, 0); assert.equal(fs.existsSync(file), false);
+        await recordFolderSyncDiagnostic(file, base);
+        const legacy = JSON.parse(fs.readFileSync(file, 'utf8')); delete legacy.time; assert.deepEqual(legacy, base);
+        await recordFolderSyncDiagnostic(file, { ...base, ...counts, path: 'private-path', signedUrl: 'private-secret', ownerId: 'private-owner' });
+        const row = JSON.parse(fs.readFileSync(file, 'utf8').trim().split('\n').at(-1)); delete row.time;
+        assert.deepEqual(row, { ...base, ...counts }); assert.doesNotMatch(JSON.stringify(row), /private|secret|owner|signedUrl|path/);
+    } finally { fs.rmSync(directory, { recursive: true, force: true }); }
+});

@@ -1055,7 +1055,7 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 			const spec = parsePagedRunSpec(value);
 			if (spec.streaming?.source !== 'local' || !spec.configuration || JSON.stringify(configuration.configuration) !== JSON.stringify(spec.configuration)) return null;
 			const existing = await withHeader<UploadBatchDescriptor | 'reserved' | null>(spec, 'readonly', (h, tx, done, fail) => {
-				if (h.scheduling?.reserved || h.scheduling?.recovery || (!h.scheduling?.batch && h.operations - h.confirmed >= 512)) { done('reserved'); return; }
+				if (h.scheduling?.reserved || h.scheduling?.recovery) { done('reserved'); return; }
 				if (!h.scheduling?.batch) { done(null); return; }
 				readBatch(h, tx, spec, done, fail);
 			});
@@ -1068,7 +1068,10 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 				const get = tx.objectStore(SYNC_PRIORITY_STORE).get(key);
 				get.onsuccess = () => { try { check(); done(get.result === undefined ? 0 : parseSyncPriorityPreferences(get.result).revision); } catch (error) { fail(error); } };
 			});
-			const first = await this.claimNext(spec, true, 512);
+			// Capacity alone must not force a scalar transfer: the planner can refill
+			// every released slot. Yield only ordinary work needed to make room for
+			// a proven unprepared priority; prepared priorities/ancestors still win.
+			const first = await this.claimNext(spec, true, 512, false, true);
 			if (!first) return null;
 			return withHeader(spec, 'readwrite', (h, tx, done, fail) => {
 				const schedule = h.scheduling!;
@@ -1150,12 +1153,12 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 				} catch (error) { fail(error); } };
 			});
 		},
-		async claimNext(value: PagedRunSpec, preparePriorities = true, preparationCapacity = INVENTORY_PAGE_ENTRIES, deferBatchEligible = false): Promise<SyncOperation | null> {
+		async claimNext(value: PagedRunSpec, preparePriorities = true, preparationCapacity = INVENTORY_PAGE_ENTRIES, deferBatchEligible = false, deferOrdinaryForPriority = false): Promise<SyncOperation | null> {
 			const spec = parsePagedRunSpec(value);
 			if (![128, 512].includes(preparationCapacity)) throw Error('Invalid bounded preparation capacity.');
 			for (;;) {
 				check();
-				const canPrepare = spec.streaming ? await withHeader<boolean>(spec, 'readonly', (h, _tx, done) => done(h.scheduling?.reserved == null && !h.scheduling?.batch && !h.scheduling?.recovery && h.operations - h.confirmed < preparationCapacity)) : false;
+				const canPrepare = spec.streaming ? await withHeader<boolean>(spec, 'readonly', (h, _tx, done) => done(h.scheduling?.reserved == null && !h.scheduling?.batch && !h.scheduling?.recovery && (deferOrdinaryForPriority || h.operations - h.confirmed < preparationCapacity))) : false;
 				const preparingPriority = preparePriorities && canPrepare && spec.streaming?.source === 'local' ? await priorityInput(spec) : null;
 				const selected = await withHeader<SyncOperation | null | 'continue'>(spec, 'readwrite', (h, tx, done, fail) => {
 					if (h.phase === 'complete') { done(null); return; }
@@ -1253,7 +1256,7 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 									delete schedule.streamScan;
 									// Exactly one ordinary operation can free a full queue. An
 									// available slot then belongs to eligible priority preparation.
-									if (preparingPriority && h.operations - h.confirmed < INVENTORY_PAGE_ENTRIES) { done(null); return; }
+									if (preparingPriority && (deferOrdinaryForPriority || h.operations - h.confirmed < preparationCapacity)) { done(null); return; }
 									canonical(); return;
 								}
 								if (reads === INVENTORY_PAGE_ENTRIES) { schedule.streamScan = scan; persist(); done('continue'); return; }
