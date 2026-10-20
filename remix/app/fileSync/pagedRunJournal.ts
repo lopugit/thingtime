@@ -1,7 +1,7 @@
 import { JOURNAL_RETENTION_STORE, registerJournalMetadata, forgetJournalMetadata } from './journalRetention';
 import { parsePagedRunReview, parseReviewedConflict, resolveReviewedPage, type PagedRunReview, type PagedReviewProgress, type ReviewedSyncConflict } from './pagedRunReview';
 import { parseFileSyncConfiguration, type FileSyncConfiguration } from './configuration';
-import { parseCloudInventoryRoot, type CloudInventoryRoot } from './cloudInventory';
+import { parseCloudInventoryRoot, type CloudInventoryRoot, type CloudInventoryNode } from './cloudInventory';
 import { parseCloudWrite } from './cloudWrite';
 import { prepareCloudOperationBinding, type CloudOperationBinding } from './cloudBinding';
 import { parseLocalTrashContext } from './localTrash';
@@ -269,6 +269,24 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 			} catch (e) { fail(e); } };
 		});
 	};
+	const operationsForPaths = async (value: PagedRunSpec, paths: readonly string[], releasedDisplay = false): Promise<(SyncOperation | null)[]> => {
+		const spec = parsePagedRunSpec(value), requested = [...paths];
+		if (requested.length > INVENTORY_PAGE_ENTRIES || requested.some(path => !validSyncPath(path)) ||
+			new Set(requested.map(syncPathKey)).size !== requested.length) throw Error('Invalid sync progress page.');
+		return withHeader(spec, 'readonly', (h, tx, done, fail) => {
+			if (h.phase === 'preparing') throw Error('Sync progress is not prepared.');
+			if (!requested.length) { done([]); return; }
+			const result: (SyncOperation | null)[] = new Array(requested.length); let pending = requested.length;
+			requested.forEach((path, index) => {
+				const get = tx.objectStore(PAGED_RUN_STORES[1]).index('path').get([key, spec.id, syncPathKey(path)]);
+				get.onsuccess = () => { try {
+					check(); const operation = get.result === undefined ? null : row(get.result, spec).operation;
+					if (operation && operation.mutation.path !== path) throw Error('Sync progress path changed.');
+					result[index] = operation; if (!--pending) done(result);
+				} catch (error) { fail(error); } };
+			});
+		}, releasedDisplay);
+	};
 	const beginCloud = async (value: PagedRunSpec, supplied: FileSyncConfiguration): Promise<CloudBindingProgress> => {
 		const spec = parsePagedRunSpec(value), requested = parseFileSyncConfiguration(supplied);
 		return withHeader(spec, 'readwrite', (h, tx, done, fail) => {
@@ -313,6 +331,18 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 		});
 		const h = snapshot.header;
 		if (h.cloud!.prepared === h.operations) return cloudProgress(h);
+		// Prefetch only this bounded page's immutable inputs. Each batch retains
+		// the same scope, capture, active-run and exact-path checks as a single read.
+		// The commit below still fences the complete page against run replacement.
+		const parents = [...new Set(snapshot.rows.map(r => r.operation.mutation.path.split('/').slice(0, -1).join('/')).filter(Boolean))];
+		const paths = [...new Set([...snapshot.rows.map(r => r.operation.mutation.path), ...parents])];
+		const nodes = new Map<string, CloudInventoryNode | null>();
+		for (let offset = 0; offset < paths.length; offset += INVENTORY_PAGE_ENTRIES) {
+			const batch = paths.slice(offset, offset + INVENTORY_PAGE_ENTRIES), values = await inventory.cloudNodes(spec.plan.remote, batch);
+			check(); batch.forEach((path, index) => nodes.set(path, values[index]!));
+		}
+		const parentOperations = parents.length ? await operationsForPaths(spec, parents) : [];
+		const operations = new Map(parents.map((path, index) => [path, parentOperations[index]!]));
 		const previous = new Map<string, string | undefined>(), changes = new Map<string, string>();
 		const previousTrash = async (path: string): Promise<string | undefined> => {
 			if (changes.has(path)) return changes.get(path);
@@ -326,7 +356,8 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 		const prepared: Row[] = []; let size = 2;
 		for (const r of snapshot.rows) {
 			const cloud = await prepareCloudOperationBinding(r.operation, scope, h.cloud!.root.rootId, {
-				node: path => inventory.cloudNode(spec.plan.remote, path), operation: path => find(spec, path), previousTrash
+				node: async path => { if (!nodes.has(path)) throw Error('Cloud binding input is missing.'); return nodes.get(path)!; },
+				operation: async path => { if (!operations.has(path)) throw Error('Cloud parent operation is missing.'); return operations.get(path)!; }, previousTrash
 			}); check();
 			const bound = { ...r, cloud }, length = bytes(bound) + 1;
 			if (size + length > INVENTORY_PAGE_BYTES) {
@@ -352,24 +383,7 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 		/** A bounded display-only join. This never starts or confirms work. All
 		 * paths share one scope-fenced readonly transaction rather than one
 		 * transaction per rendered inventory row. */
-		async operationsForPaths(value: PagedRunSpec, paths: readonly string[]): Promise<(SyncOperation | null)[]> {
-			const spec = parsePagedRunSpec(value), requested = [...paths];
-			if (requested.length > INVENTORY_PAGE_ENTRIES || requested.some(path => !validSyncPath(path)) ||
-				new Set(requested.map(syncPathKey)).size !== requested.length) throw Error('Invalid sync progress page.');
-			return withHeader(spec, 'readonly', (h, tx, done, fail) => {
-				if (h.phase === 'preparing') throw Error('Sync progress is not prepared.');
-				if (!requested.length) { done([]); return; }
-				const result: (SyncOperation | null)[] = new Array(requested.length); let pending = requested.length;
-				requested.forEach((path, index) => {
-					const get = tx.objectStore(PAGED_RUN_STORES[1]).index('path').get([key, spec.id, syncPathKey(path)]);
-					get.onsuccess = () => { try {
-						check(); const operation = get.result === undefined ? null : row(get.result, spec).operation;
-						if (operation && operation.mutation.path !== path) throw Error('Sync progress path changed.');
-						result[index] = operation; if (!--pending) done(result);
-					} catch (error) { fail(error); } };
-				});
-			}, true);
-		},
+		operationsForPaths: (value: PagedRunSpec, paths: readonly string[]) => operationsForPaths(value, paths, true),
 		async appendReview(value: PagedRunSpec, page: { ordinal: number; rows: ReviewedSyncConflict[]; complete?: boolean }): Promise<PagedReviewProgress> {
 			const spec = parsePagedRunSpec(value);
 			if (!spec.review || !page || !nonnegative(page.ordinal) || !Array.isArray(page.rows) || !page.rows.length ||
