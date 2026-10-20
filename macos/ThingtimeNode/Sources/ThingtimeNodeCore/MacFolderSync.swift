@@ -6,6 +6,7 @@ import Foundation
 @MainActor
 public final class MacFolderSync {
     public static let version = "1.11.0"
+    private static let supportedActions: Set<String> = ["context", "conditions", "list", "choose", "remove", "scan", "scan-stream", "scan-stream-finish", "scan-changes", "scan-capture", "scan-status", "scan-cancel", "scan-skips", "scan-page", "scan-discard", "inspect", "read", "read-range", "stage-begin", "stage-append", "stage-range", "stage-finish", "write-approve", "write-check", "publication-lookup", "publish", "trash", "trash-lookup", "trash-expected", "trash-inspect", "trash-restore", "trash-restore-reviewed", "trash-list"]
     public enum SourceSelection { case folder(URL), photos }
     public struct Conditions: Codable, Sendable {
         public let network: String
@@ -285,6 +286,7 @@ public final class MacFolderSync {
                     try await self.awaitBackupAuthorization(scope: scope, grant: grant, started: started)
                     try await self.worker { try inventories.finishStream(scope, id: id, bookmark: grant.bookmark, state: "complete") }
                 } catch {
+                    ThingtimeNodeLog.actions.error("Streaming indexing stopped: phase=scan code=\(Self.backupDiagnosticCode(error), privacy: .public)")
                     await Task.detached { try? inventories.finishStream(scope, id: id, bookmark: grant.bookmark, state: "interrupted") }.value
                 }
                 wake.signal()
@@ -301,6 +303,7 @@ public final class MacFolderSync {
                     } catch {
                         let local = (try? self.checkBackupAuthority(scope: scope, grant: grant, started: started)) != nil
                         if local && Self.identityVerificationIsTransient(error) { continue }
+                        ThingtimeNodeLog.actions.error("Streaming indexing stopped: phase=monitor code=\(Self.backupDiagnosticCode(error), privacy: .public)")
                         task.cancel(); wake.signal(); return
                     }
                 }
@@ -402,9 +405,20 @@ public final class MacFolderSync {
         }
         let waiting = r.action == "scan-changes"
         guard waiting ? streamWaiter == nil : active == nil else { throw ThingtimeNodeError.invalidRequest("Another folder request is running.") }
-        guard ["context", "conditions", "list", "choose", "remove", "scan", "scan-stream", "scan-stream-finish", "scan-changes", "scan-capture", "scan-status", "scan-cancel", "scan-skips", "scan-page", "scan-discard", "inspect", "read", "read-range", "stage-begin", "stage-append", "stage-range", "stage-finish", "write-approve", "write-check", "publication-lookup", "publish", "trash", "trash-lookup", "trash-expected", "trash-inspect", "trash-restore", "trash-restore-reviewed", "trash-list"].contains(r.action) else { throw MobileFolderStore.Failure.invalid }
+        guard Self.supportedActions.contains(r.action) else { throw MobileFolderStore.Failure.invalid }
         guard (r.action == "read-range") == (stream != nil), (r.action == "stage-range") == (receive != nil) else { throw MobileFolderStore.Failure.invalid }
-        let task = Task { try await self.execute(r, owner: owner, stream: stream, receive: receive) }
+        let task = Task {
+            let began = ProcessInfo.processInfo.systemUptime
+            var failure: Error?
+            defer {
+                let elapsed = Int(max(0, ProcessInfo.processInfo.systemUptime - began) * 1000)
+                if !waiting, let diagnostic = Self.slowRequestDiagnostic(action: r.action, elapsedMilliseconds: elapsed, error: failure) {
+                    ThingtimeNodeLog.actions.notice("\(diagnostic, privacy: .public)")
+                }
+            }
+            do { return try await self.execute(r, owner: owner, stream: stream, receive: receive) }
+            catch { failure = error; throw error }
+        }
         if waiting { streamWaiter = (r.requestId, r.ownerId, r.deviceId, task) }
         else { active = (r.requestId, r.ownerId, r.deviceId, task) }
         let timeout = Task {
@@ -426,13 +440,28 @@ public final class MacFolderSync {
         })
     }
 
+    // Only validated action names, monotonic elapsed time and fixed categories
+    // may enter diagnostics; never serialize request fields or error userInfo.
+    static func slowRequestDiagnostic(action: String, elapsedMilliseconds: Int, error: Error? = nil) -> String? {
+        guard elapsedMilliseconds > 10_000, action != "scan-changes", supportedActions.contains(action) else { return nil }
+        let code = error.map { backupDiagnosticCode($0) } ?? "ok"
+        return "Slow file-sync request: action=\(action) elapsedMilliseconds=\(elapsedMilliseconds) code=\(code)"
+    }
+
     private func authorized(_ r: Request) async throws {
         try Task.checkCancellation()
         do { try await verify(r.ownerId, r.deviceId) }
         catch {
-            if let job = streamJob, job.scope.owner.ownerId == r.ownerId, job.scope.deviceId == r.deviceId {
+            // The request owns its verification task, not the independent scan.
+            // URLSession cancellation can arrive as URLError.cancelled; the
+            // task flag also covers that form without weakening auth failures.
+            if !Task.isCancelled, !(error is CancellationError), let job = streamJob,
+               job.scope.owner.ownerId == r.ownerId, job.scope.deviceId == r.deviceId {
                 let unchanged = (try? store.grant(job.scope.owner, id: job.grant.id).bookmark) == job.grant.bookmark
-                if !Self.identityVerificationIsTransient(error) || !unchanged { job.task.cancel(); job.monitor.cancel(); job.wake.signal() }
+                if !Self.identityVerificationIsTransient(error) || !unchanged {
+                    ThingtimeNodeLog.actions.error("Streaming indexing stopped: phase=request-authorization code=\(Self.backupDiagnosticCode(error), privacy: .public)")
+                    job.task.cancel(); job.monitor.cancel(); job.wake.signal()
+                }
             }
             if !Task.isCancelled, !(error is CancellationError), let job = backupJob,
                job.scope.owner.ownerId == r.ownerId, job.scope.deviceId == r.deviceId {

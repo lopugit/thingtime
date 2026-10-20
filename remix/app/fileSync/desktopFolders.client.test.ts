@@ -261,3 +261,64 @@ test('fixed native verification and shutdown waits survive IPC redaction; arbitr
  }
  }
 });
+
+async function streamLaneFixture() {
+	const lifetime = new AbortController(), calls: any[] = [], holds = new Set<string>(), releases = new Map<string, () => void>();
+	const bridge = { folderSyncRequest: async (input: any) => {
+		calls.push(input);
+		if (input.action === 'suspend') return {};
+		if (holds.has(input.action)) await new Promise<void>(resolve => releases.set(input.action, resolve));
+		return { ...input, origin, roots: [], capabilities: { fileAccessVersion: '1.11.0' },
+			apiCapabilities: { schemaVersion: 1, origin, features: {} },
+			conditions: { network: 'wifi', charging: true }, complete: true, entry: null,
+			changesPage: { id: input.captureId, generation: input.captureId, state: 'running', revision: 0, changes: [], nextSequence: 0, hasMore: false },
+			chunk: { version: input.version, size: 1, offset: input.offset, length: input.length, bytes: new Uint8Array([7]) }
+		};
+	} };
+	const host = await createDesktopFolderHost({ ownerId: 'owner', deviceId: 'device', bridge, signal: lifetime.signal,
+		rendererOrigin: () => 'http://127.0.0.1:12001', assertCurrent: () => {} });
+	const wait = (signal = lifetime.signal) => host.request('owner', { action: 'scan-changes', rootId, inventoryDeviceId: 'device',
+		captureId: rootId, afterSequence: 0, waitMilliseconds: 25000, capturePolicy: 'one-way-supported' }, signal);
+	return { host, lifetime, calls, holds, wait,
+		release(action: string) { holds.delete(action); releases.get(action)?.(); },
+		releaseAll() { holds.clear(); for (const resolve of releases.values()) resolve(); }
+	};
+}
+const nextTurn = () => new Promise<void>(resolve => setImmediate(resolve));
+
+test('held scan-changes never blocks ordinary conditions, inspect and read-range; ordinary dispatch stays FIFO', async () => {
+	const f = await streamLaneFixture(), pending: Promise<unknown>[] = [];
+	f.holds.add('scan-changes'); f.holds.add('inspect');
+	try {
+		pending.push(f.wait()); await nextTurn();
+		pending.push(f.host.request('owner', { action: 'inspect', rootId, path: 'file' }, f.lifetime.signal));
+		pending.push(f.host.request('owner', { action: 'conditions' }, f.lifetime.signal));
+		pending.push(f.host.request('owner', { action: 'read-range', rootId, path: 'file', version: '1', offset: 0, length: 1 }, f.lifetime.signal));
+		await nextTurn();
+		assert.deepEqual(f.calls.map(call => call.action), ['context', 'scan-changes', 'inspect']);
+		f.release('inspect'); await Promise.all(pending.slice(1));
+		assert.deepEqual(f.calls.map(call => call.action), ['context', 'scan-changes', 'inspect', 'conditions', 'read-range']);
+		assert.equal((await pending[3] as any).range.bytes[0], 7);
+	} finally { f.releaseAll(); await Promise.allSettled(pending); }
+});
+
+test('cancelled stream waiter suspends only its request; task cancellation still suspends both lanes', async () => {
+	const f = await streamLaneFixture(), waiter = new AbortController(), pending: Promise<unknown>[] = [];
+	f.holds.add('scan-changes'); f.holds.add('inspect');
+	try {
+		const wait = f.wait(waiter.signal); pending.push(wait); void wait.catch(() => {}); await nextTurn();
+		const ordinary = f.host.request('owner', { action: 'inspect', rootId, path: 'file' }, f.lifetime.signal); pending.push(ordinary); void ordinary.catch(() => {}); await nextTurn();
+		const waitId = f.calls.find(call => call.action === 'scan-changes').requestId;
+		const ordinaryId = f.calls.find(call => call.action === 'inspect')?.requestId;
+		assert.ok(ordinaryId, 'ordinary request must dispatch while waiter is held');
+		waiter.abort(); await assert.rejects(wait);
+		assert.deepEqual(f.calls.filter(call => call.action === 'suspend').map(call => call.requestId), [waitId]);
+		assert.equal(f.calls.some(call => call.action === 'scan-cancel'), false);
+		f.release('scan-changes'); await nextTurn();
+		const nextWait = f.wait(); pending.push(nextWait); void nextWait.catch(() => {});
+		f.holds.add('scan-changes'); await nextTurn();
+		const nextWaitId = f.calls.filter(call => call.action === 'scan-changes').at(-1).requestId;
+		f.lifetime.abort(); await Promise.all([assert.rejects(ordinary), assert.rejects(nextWait)]);
+		assert.deepEqual(f.calls.filter(call => call.action === 'suspend').map(call => call.requestId).sort(), [waitId, ordinaryId, nextWaitId].sort());
+	} finally { f.releaseAll(); await Promise.allSettled(pending); }
+});

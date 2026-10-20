@@ -93,6 +93,66 @@ final class MacFolderSyncTests: XCTestCase {
         XCTAssertEqual(try finished["changesPage"]?.decode([String: JSONValue].self)["state"], .string("complete"))
     }
 
+    func testCancelledIdentityRequestsPreserveIndependentStreamingCapture() async throws {
+        for action in ["list", "scan-changes"] {
+            for networkCancellation in [false, true] {
+                var saved: [String: Data] = [:], blockVerification = false, rejectIdentity = false
+                let entered = expectation(description: "request identity verification entered")
+                let store = MobileFolderStore(load: { saved[$0.key] }, save: { saved[$0.key] = $1 })
+                let owner = try FileSyncOwnerScope(ownerId: "owner", url: origin)
+                let grant = try store.add(owner, selected: folder.appendingPathComponent("selected"))
+                let helper = folder.appendingPathComponent("cancel-helper")
+                try Data("#!/bin/sh\nread request\nprintf '%s\\n' '{\"event\":\"hello\",\"version\":1,\"streaming\":true}'\nexec /bin/sleep 20\n".utf8).write(to: helper)
+                try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: helper.path)
+                let service = try MacFolderSync(origin: origin, store: store,
+                    staging: MobileSyncStaging(directory: folder.appendingPathComponent(UUID().uuidString)),
+                    verify: { _, _ in
+                        if rejectIdentity { rejectIdentity = false; throw ThingtimeAPIClientError.rejected(status: 403) }
+                        if blockVerification {
+                            blockVerification = false; entered.fulfill()
+                            do { try await Task.sleep(for: .seconds(20)) }
+                            catch { if networkCancellation { throw URLError(.cancelled) }; throw CancellationError() }
+                        }
+                    }, choose: { nil }, approve: { _ in false },
+                    inventories: MobileFolderInventory(directory: folder.appendingPathComponent(UUID().uuidString), commanderIndexer: helper))
+                defer { service.suspend() }
+                var fields = backupFields(grant.id); fields["capturePolicy"] = .string("one-way-supported")
+                let start = try await service.handle(request("scan-stream", fields)).decode([String: JSONValue].self)
+                let generation = try start["changesPage"]?.decode([String: JSONValue].self)["generation"]
+                var reading = fields; reading["afterSequence"] = .number(0); reading["waitMilliseconds"] = .number(500)
+                blockVerification = true
+                let pending = Task { try await service.handle(self.request(action, action == "list" ? [:] : reading)) }
+                await fulfillment(of: [entered], timeout: 2)
+                pending.cancel()
+                do { _ = try await pending.value; XCTFail("Cancelled request succeeded") } catch { }
+                let result = try await service.handle(request("scan-changes", reading)).decode([String: JSONValue].self)
+                let page = try XCTUnwrap(result["changesPage"]).decode([String: JSONValue].self)
+                XCTAssertEqual(page["state"], .string("running"), "\(action), network cancellation: \(networkCancellation)")
+                XCTAssertEqual(page["generation"], generation)
+                // Actual authorization loss must still stop the independent producer.
+                rejectIdentity = true
+                await rejects { try await service.handle(self.request("list")) }
+                let stopped = try await service.handle(request("scan-changes", reading)).decode([String: JSONValue].self)
+                XCTAssertEqual(try stopped["changesPage"]?.decode([String: JSONValue].self)["state"], .string("interrupted"))
+            }
+        }
+    }
+
+    func testSlowRequestDiagnosticsContainOnlyValidatedActionsElapsedTimeAndFixedCodes() {
+        let sensitive = "secret-token /private/home/file https://private.test"
+        let error = URLError(.timedOut, userInfo: [NSLocalizedDescriptionKey: sensitive, NSURLErrorFailingURLStringErrorKey: sensitive])
+        XCTAssertNil(MacFolderSync.slowRequestDiagnostic(action: "inspect", elapsedMilliseconds: 10_000, error: error))
+        XCTAssertNil(MacFolderSync.slowRequestDiagnostic(action: sensitive, elapsedMilliseconds: 10_001, error: error))
+        XCTAssertNil(MacFolderSync.slowRequestDiagnostic(action: "scan-changes", elapsedMilliseconds: 25_000, error: error))
+        XCTAssertEqual(MacFolderSync.slowRequestDiagnostic(action: "inspect", elapsedMilliseconds: 10_001, error: error),
+                       "Slow file-sync request: action=inspect elapsedMilliseconds=10001 code=network--1001")
+        XCTAssertEqual(MacFolderSync.slowRequestDiagnostic(action: "read-range", elapsedMilliseconds: 12_345),
+                       "Slow file-sync request: action=read-range elapsedMilliseconds=12345 code=ok")
+        XCTAssertEqual(MacFolderSync.slowRequestDiagnostic(action: "inspect", elapsedMilliseconds: 10_001,
+                       error: NSError(domain: sensitive, code: 7, userInfo: [NSLocalizedDescriptionKey: sensitive])),
+                       "Slow file-sync request: action=inspect elapsedMilliseconds=10001 code=unexpected")
+    }
+
     func testBackupDiagnosticsNeverExposeErrorDescriptionsOrURLs() {
         let sensitive = "secret-token /private/home/filename"
         let network = URLError(.timedOut, userInfo: [NSLocalizedDescriptionKey: sensitive, NSURLErrorFailingURLStringErrorKey: sensitive])
