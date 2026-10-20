@@ -12555,10 +12555,10 @@ separate from deterministic discovery/lease tests.
 
 ### Bounded inventory preparation — 2026-10-20
 
-- [ ] Run file-sync regressions, including bounded value/key reads, long Unicode
+- [x] Run file-sync regressions, including bounded value/key reads, long Unicode
   paths crossing byte pages, corrupted primary keys, missing/aliased ancestors,
   cancelled validation recovery and one ancestor flag write per page.
-- [ ] Exercise the editable progress viewer in isolated Chromium at desktop and
+- [x] Exercise the editable progress viewer in isolated Chromium at desktop and
   mobile sizes, including top-to-bottom scrolling, nested Builder fields and
   save/reload. Preparation labels/counts must describe their actual phase and
   remain distinct from confirmed upload receipts.
