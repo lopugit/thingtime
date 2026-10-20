@@ -6349,3 +6349,16 @@ rotation, owner/origin mismatch and revocation remain fail-closed. A bounded liv
 10-minute diagnostic window contained eight logged identity HTTP 429 events;
 that count is not total traffic. Practical installed throughput after this
 change remains unverified.
+
+### Upload priority readiness — 2026-10-21
+
+The existing file-sync progress view includes an individually editable priority
+readiness section. It shows whether the trusted native adapter supports
+preparing priorities, the saved preference count/revision, the legacy validation
+cursor and fixed cutoff, and the last checked candidate's saved-list position
+and input sequence. Closed explanations distinguish missing eligible input,
+validation still pending, prepared/in-flight work, ready candidates and an
+unmeasured scheduling check. These are observations, never uploaded-file counts
+or proof that a priority folder is fully backed up. Paused/reopened views label
+retained observations. No new setup or permission is required; scheduling,
+receipts, authorization and migration algorithms are unchanged.

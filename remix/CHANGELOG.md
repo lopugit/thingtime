@@ -98,6 +98,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-21: Show supported upload-priority readiness through existing saved progress: trusted adapter gate, preference revision, legacy proof cursor and last checked candidate/blocker. Individually editable labels preserve custom progress layouts; scheduling/migration and installed Home cause remain unchanged/unverified. See [PR 1078](../PRs/1078-codex-sync-priority-readiness-show-saved-upload-priority-readiness.md). — Codex (AI)
+
 - 2026-10-21: Expose exact completed-PUT payload samples through Mac upload 1.1.0 and share conservative fresh identity admission/cooldowns across native sync callers. Trackers recover per-direction coverage without counting retained offsets and label acknowledgment-based updates; installed speed accuracy and practical throughput remain unverified. See [PR 1077](../PRs/1077-codex-sync-payload-telemetry-measure-native-payload-speed-and-pace-fresh-identity-checks.md). — Codex (AI)
 
 - 2026-10-21: Prepare eligible saved upload priorities ahead of ordinary durable index rows while preserving ancestry, reserved receipts and contiguous watermarks. Journal v13 migrates legacy normalized keys in independent bounded pages; ordinary uploads continue during migration. Installed priority acceptance and native live-speed telemetry remain incomplete. See [PR 1076](../PRs/1076-codex-sync-priority-preparation-prepare-saved-upload-priorities-before-ordinary-indexed-input.md). — Codex (AI)

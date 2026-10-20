@@ -3912,3 +3912,23 @@ it does not disable browser security or broaden bucket CORS/access. Empty files
 continue through the canonical zero-part path. The signed installed app must
 still demonstrate a real nonempty automatic backup, independent cloud download
 and matching bytes/hash before acceptance can be claimed.
+
+## Visible priority readiness observations — 2026-10-21
+
+One-way native upload progress optionally carries `priorityReadiness` through
+the existing saved progress cache. It is a closed, path-free diagnostic projection
+of the scheduler's last bounded selection and a readonly current header/candidate
+validation. It includes the trusted gate, saved preference count/revision, legacy
+proof cursor/fixed cutoff, candidate ordinal/sequence, measured/reserved flags and
+one of `none`, `not-indexed`, `proof-pending`, `reserved-or-in-flight`, `ready`.
+No native wire or HTTP contract changes. Unsupported and unmeasured states are
+explicit; missing input can also mean already processed and never proves full
+backup. Crossing a migration fence does not fabricate a fresh ready selection.
+
+Publishing coalesces concurrent requests, runs after actual scheduling decisions
+and every 4096 migrated rows/completion, and adds no timer or render-time priority
+search. Existing source/authority checks, receipts, operation IDs, ordering,
+128-row migration transactions and source watermarks are unchanged. The separate
+editable settings-document section inside the progress viewer avoids overwriting
+previously saved custom progress layouts. Runtime observations stay in progress,
+not in the saved Builder layout; paused/reopened views identify saved data.

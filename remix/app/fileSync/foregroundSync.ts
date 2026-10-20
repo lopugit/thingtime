@@ -1,3 +1,4 @@
+import type { PriorityReadiness } from './priorityReadiness';
 import { createSyncIgnorePolicy } from './syncIgnore';
 import type { InventoryIdentity } from './inventoryJournal';
 import type { LocalInventoryPage } from './nativeInventory';
@@ -37,6 +38,8 @@ export type ForegroundSyncProgress = {
 	direction?: 'upload' | 'download';
 	/** True only after the source closes and every durable observation is planned. */
 	totalFinal?: boolean;
+	/** Path-free last scheduler observation, retained with ordinary progress. */
+	priorityReadiness?: PriorityReadiness;
 	indexTotal?: number;
 	skipped?: number;
 	coverage?: 'full' | 'partial';

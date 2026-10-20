@@ -1,5 +1,6 @@
+import type { PriorityReadiness } from './priorityReadiness';
 import type { SavedFileSyncConfiguration } from './configuredPlan';
-import type { ForegroundSyncInput } from './foregroundSync';
+import type { ForegroundSyncInput, ForegroundSyncProgress } from './foregroundSync';
 import { foregroundSyncContext } from './foregroundSyncContext';
 import { createPagedCloudSyncPort } from './cloudSyncPort.client';
 import { cloudRequests } from './cloudTransport';
@@ -76,15 +77,38 @@ export async function streamOneWayForegroundSync(
 		indexState: 'indexing' | 'watching' | 'complete' = 'indexing',
 		skipped: number | undefined;
 	if (local && input.nativeOperationGuards && state.phase !== 'complete') await runs.enableStreamPriorities(spec);
+	let priorityReadiness: PriorityReadiness | undefined;
+	let lastProgress: ForegroundSyncProgress | undefined;
+	const publishProgress = (value: ForegroundSyncProgress) => { lastProgress = value; input.progress(value); };
 	const coverage = () => ({
+		...(priorityReadiness ? { priorityReadiness } : {}),
 		indexState,
 		totalFinal: indexState === 'complete' && indexed === state.read,
 		direction: local ? ('upload' as const) : ('download' as const),
 		...(skipped === undefined ? {} : { skipped, coverage: 'partial' as const, consistency: 'per-entry' as const })
 	});
 	const ignore = createSyncIgnorePolicy(configuration.ignoreRules, configuration.excludedPaths);
-	const report = () => input.progress({ stage: 'transferring', confirmed: state.confirmed, total: state.operations, indexed, ...coverage() });
-	report();
+	const report = () => publishProgress({ stage: 'transferring', confirmed: state.confirmed, total: state.operations, indexed, ...coverage() });
+	let readinessRefresh: Promise<void> | undefined;
+	let readinessAgain = false;
+	const refreshReadiness = (): Promise<void> => {
+		if (!local) return Promise.resolve();
+		if (readinessRefresh) { readinessAgain = true; return readinessRefresh; }
+		readinessRefresh = (async () => {
+			do {
+				readinessAgain = false;
+				const next = await runs.streamPriorityReadiness(spec, input.nativeOperationGuards === true);
+				check();
+				if (JSON.stringify(next) !== JSON.stringify(priorityReadiness)) {
+					priorityReadiness = next;
+					if (lastProgress) publishProgress({ ...lastProgress, priorityReadiness }); else report();
+				}
+			} while (readinessAgain);
+		})().finally(() => { readinessRefresh = undefined; });
+		return readinessRefresh;
+	};
+	await refreshReadiness();
+	if (!local) report();
 	input.progressSession?.({ scope: structuredClone(scope), run: structuredClone(spec) });
 	const port = await createPagedCloudSyncPort(
 		spec,
@@ -99,7 +123,7 @@ export async function streamOneWayForegroundSync(
 			openSource,
 			progress: (path, bytes, size) => {
 				check();
-				input.progress({ stage: 'transferring', confirmed: state.confirmed, total: state.operations, indexed, path, bytes, size, ...coverage() });
+				publishProgress({ stage: 'transferring', confirmed: state.confirmed, total: state.operations, indexed, path, bytes, size, ...coverage() });
 			}
 		},
 		runtime
@@ -261,6 +285,7 @@ export async function streamOneWayForegroundSync(
 			const observed = wakeRevision;
 			check();
 			const operation = await runs.claimNext(spec, input.nativeOperationGuards === true);
+			await refreshReadiness();
 			check();
 			if (!operation) {
 				const status = await runs.streamState(spec);
@@ -347,6 +372,7 @@ export async function streamOneWayForegroundSync(
 				await wait(observed);
 			}
 			const change = await runs.nextStreamInput(spec, input.nativeOperationGuards === true);
+			await refreshReadiness();
 			check();
 			if (!change) {
 				if (status.sourceTerminal) {
@@ -369,10 +395,13 @@ export async function streamOneWayForegroundSync(
 	const migratePriorityInputs = async () => {
 		if (!local || !input.nativeOperationGuards) return;
 		const priorities = input.journal.priorities(access);
+		let unpublished = 0;
 		for (;;) {
 			check();
 			const page = await runs.backfillStreamInputs(spec);
 			check();
+			unpublished += page.paths.length;
+			if (page.complete || unpublished >= 4096) { await refreshReadiness(); unpublished = 0; }
 			const preferences = await priorities.read();
 			const relevant = page.paths.some((path) =>
 				preferences.paths.some((requested) => {

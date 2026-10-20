@@ -134,10 +134,10 @@ if (!process.env.TT_NATIVE_UPLOAD_WORKER) {
         const desktop = await createDesktopFolderHost({ ownerId: owner, deviceId: device, signal: lifetime.signal,
             bridge: { folderSyncRequest: request => host.request({ sender, senderFrame: frame }, request) },
             rendererOrigin: () => origin, assertCurrent: () => {}, fetch: globalThis.fetch });
-        assert.equal(desktop.capabilities.fileUploadVersion, '1.0.1');
+        assert.equal(desktop.capabilities.fileUploadVersion, '1.1.0');
         const nativeSource = mobileFolderSource(owner, rootId, entry, lifetime.signal, desktop.request, desktop.capabilities);
         const accepted = await nativeSource.uploadPart({ uploadId: 'fixture-upload', requestId: 'fixture-operation', partNumber: 1, offset: 0, length: data.length });
-        assert.deepEqual(accepted, { sha256: createHash('sha256').update(data).digest('hex') }); assert.equal(puts, 2);
+        assert.deepEqual(accepted, { sha256: createHash('sha256').update(data).digest('hex'), payloadBytes: data.length }); assert.equal(puts, 2);
         console.log('DESKTOP_UPLOAD_RECEIPT_BOUNDARY_PASS production host/parser/source adapter accepted digest');
         for (const phase of ['before-put', 'after-put']) {
             await writeFile(source, data);
