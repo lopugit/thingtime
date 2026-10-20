@@ -12480,6 +12480,7 @@ separate from deterministic discovery/lease tests.
 - [ ] Verify a complete real home index and the first cloud payload receipt. A count reset or partial scan alone is not successful backup acceptance.
 
 - [x] Native backup interruption diagnostics identify scan, monitor or request authorization and fixed failure categories without descriptions, file paths, account IDs, URLs or credentials. MacFolderSyncTests passes 30 tests, including redaction.
+- [x] 2026-10-20: Cancel ordinary and long-poll identity requests with both `CancellationError` and URLSession-style cancellation; the independent streaming capture retains its running state and generation. A subsequent real 403 still interrupts it. Full `MacFolderSyncTests`: 41 passed; stream diagnostics use fixed phase/error codes only.
 - [ ] Capture an actual failure category in the installed app before claiming the real scan restart is resolved.
 
 ### Commander Rust backup indexing and identity recovery — 2026-10-20

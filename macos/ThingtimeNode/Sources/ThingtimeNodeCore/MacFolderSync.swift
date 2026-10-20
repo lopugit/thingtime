@@ -285,6 +285,7 @@ public final class MacFolderSync {
                     try await self.awaitBackupAuthorization(scope: scope, grant: grant, started: started)
                     try await self.worker { try inventories.finishStream(scope, id: id, bookmark: grant.bookmark, state: "complete") }
                 } catch {
+                    ThingtimeNodeLog.actions.error("Streaming indexing stopped: phase=scan code=\(Self.backupDiagnosticCode(error), privacy: .public)")
                     await Task.detached { try? inventories.finishStream(scope, id: id, bookmark: grant.bookmark, state: "interrupted") }.value
                 }
                 wake.signal()
@@ -301,6 +302,7 @@ public final class MacFolderSync {
                     } catch {
                         let local = (try? self.checkBackupAuthority(scope: scope, grant: grant, started: started)) != nil
                         if local && Self.identityVerificationIsTransient(error) { continue }
+                        ThingtimeNodeLog.actions.error("Streaming indexing stopped: phase=monitor code=\(Self.backupDiagnosticCode(error), privacy: .public)")
                         task.cancel(); wake.signal(); return
                     }
                 }
@@ -430,9 +432,16 @@ public final class MacFolderSync {
         try Task.checkCancellation()
         do { try await verify(r.ownerId, r.deviceId) }
         catch {
-            if let job = streamJob, job.scope.owner.ownerId == r.ownerId, job.scope.deviceId == r.deviceId {
+            // The request owns its verification task, not the independent scan.
+            // URLSession cancellation can arrive as URLError.cancelled; the
+            // task flag also covers that form without weakening auth failures.
+            if !Task.isCancelled, !(error is CancellationError), let job = streamJob,
+               job.scope.owner.ownerId == r.ownerId, job.scope.deviceId == r.deviceId {
                 let unchanged = (try? store.grant(job.scope.owner, id: job.grant.id).bookmark) == job.grant.bookmark
-                if !Self.identityVerificationIsTransient(error) || !unchanged { job.task.cancel(); job.monitor.cancel(); job.wake.signal() }
+                if !Self.identityVerificationIsTransient(error) || !unchanged {
+                    ThingtimeNodeLog.actions.error("Streaming indexing stopped: phase=request-authorization code=\(Self.backupDiagnosticCode(error), privacy: .public)")
+                    job.task.cancel(); job.monitor.cancel(); job.wake.signal()
+                }
             }
             if !Task.isCancelled, !(error is CancellationError), let job = backupJob,
                job.scope.owner.ownerId == r.ownerId, job.scope.deviceId == r.deviceId {
