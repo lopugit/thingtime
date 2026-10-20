@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { IDBFactory, IDBKeyRange } from 'fake-indexeddb';
+import { IDBFactory, IDBKeyRange, IDBObjectStore } from 'fake-indexeddb';
 import { openSyncJournal } from './journal.client';
 import { type InventoryIdentity, INVENTORY_PAGE_ENTRIES, INVENTORY_STORES } from './inventoryJournal';
 import { type PagedPlanSpec, type PagedPlanCursor } from './pagedPlanJournal';
@@ -31,6 +31,18 @@ async function capture(f: Awaited<ReturnType<typeof fixture>>, id: InventoryIden
 async function seed(f: Awaited<ReturnType<typeof fixture>>, s: PagedPlanSpec, local: SyncEntry[], remote: SyncEntry[], beforeLocal: SyncEntry[] = [], beforeRemote = beforeLocal) {
 	for (const [i, id] of [s.local, s.remote, s.baseline.local, s.baseline.remote].entries()) await capture(f, id, [local, remote, beforeLocal, beforeRemote][i]);
 }
+
+test('planning siblings writes each ancestor flag once per bounded page', async t => {
+	const f = await fixture(), s = spec();
+	await seed(f, s, [folder('parent'), ...Array.from({ length: 129 }, (_, i) => file(`parent/${i}`))], []);
+	let writes = 0; const put = IDBObjectStore.prototype.put;
+	t.mock.method(IDBObjectStore.prototype, 'put', function (this: IDBObjectStore, ...args: Parameters<typeof put>) {
+		if (this.name === 'sync-plan-ancestors') writes++; return put.apply(this, args);
+	});
+	const result = await f.plans.build(s);
+	assert.equal(writes, 2); assert.equal(result.decisions, 130);
+	assert.equal((await decisions(f, s)).length, 130); f.journal.close();
+});
 async function decisions(f: Awaited<ReturnType<typeof fixture>>, s: PagedPlanSpec) {
 	const result: SyncDecision[] = []; let next: PagedPlanCursor | undefined;
 	do {

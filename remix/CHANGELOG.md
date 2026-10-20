@@ -96,6 +96,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-20: Read bounded inventory, plan and operation pages in bulk while
+  preserving stored-key, ancestry, byte/count, scope and cancellation checks.
+  Deduplicate sibling ancestor work and show the actual preparation phase and
+  counts before uploads. Signed home-upload acceptance remains open. — Codex (AI)
+
 - 2026-10-20: Batch bounded cloud-binding metadata and parent-operation reads
   before large file-sync uploads. Keep exact capture/account/path checks,
   active-run admission and revision-guarded commits while avoiding separate

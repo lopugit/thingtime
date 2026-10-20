@@ -82,6 +82,8 @@ export function inventoryJournal(db: IDBDatabase, access: JournalAccess, keyRang
 	const validateCloudParent = (row: Row, header: InventoryHeader, parentId: string) => {
 		if (header.cloud && (row.cloud!.kind === 'file' ? row.cloud!.file.folderId : row.cloud!.folderId) !== parentId) throw Error('Cloud inventory ancestry changed.');
 	};
+	const readRows = (store: IDBObjectStore, query: IDBKeyRange, consume: (rows: Row[], keys: IDBValidKey[]) => void, fail: (error: unknown) => void) =>
+		scoped.readPage(store, query, INVENTORY_PAGE_ENTRIES + 1, consume, fail);
 	const transaction = <T>(mode: IDBTransactionMode, work: (tx: IDBTransaction, done: (value: T) => void, fail: (error: unknown) => void) => void) =>
 		scoped.transaction([...INVENTORY_STORES, INVENTORY_PIN_STORE, JOURNAL_RETENTION_STORE], mode, work);
 	const withHeader = <T>(value: InventoryIdentity, mode: IDBTransactionMode,
@@ -303,32 +305,39 @@ export function inventoryJournal(db: IDBDatabase, access: JournalAccess, keyRang
 					if (header.backupCapture && (header.skippedEntries !== header.backupCapture.totalSkipped ||
 						(!header.derivedCoverage && header.entries !== header.backupCapture.totalEntries))) throw Error('Backup entries or skipped inventory are incomplete.');
 					if (header.phase === 'complete') { done(progress(header)); return; }
-					const entries = tx.objectStore(INVENTORY_STORES[2]), request = entries.openCursor(range(header.id, header.validatedThrough ?? undefined));
-					let count = header.validatedEntries, through = header.validatedThrough, processed = 0;
+					const entries = tx.objectStore(INVENTORY_STORES[2]);
+					let count = header.validatedEntries, through = header.validatedThrough;
 					const save = (complete: boolean) => {
 						if (complete && count !== header.entries) throw Error('Inventory entry count changed.');
 						const next: InventoryHeader = { ...header, phase: complete ? 'complete' : 'captured', validatedEntries: count, validatedThrough: through };
 						tx.objectStore(INVENTORY_STORES[0]).put(next, [key, header.id]); done(progress(next));
 					};
-					request.onsuccess = () => { try {
-						check();
-						const cursor = request.result;
-						if (!cursor) { save(true); return; }
-						if (processed === INVENTORY_PAGE_ENTRIES) { save(false); return; }
-						const row: Row = cursor.value, item = validateRow(row, header, cursor.primaryKey);
-						if (count >= header.entries) throw Error('Inventory entry count changed.');
-						count++; processed++; through = row.path;
-						const parent = item.path.split('/').slice(0, -1).join('/');
-						if (!parent) { if (header.cloud) validateCloudParent(row, header, header.cloud.rootId); cursor.continue(); return; }
-						const ancestor = entries.get([key, header.id, syncPathKey(parent)]);
-						ancestor.onsuccess = () => { try {
-							check();
-							const folder = ancestor.result?.entry;
-							if (!folder || !validSyncEntry(folder) || folder.path !== parent || folder.kind !== 'folder') throw Error('Inventory has a missing, aliased or non-folder ancestor.');
-							validateCloudParent(row, header, folder.id);
-							cursor.continue();
-						} catch (error) { fail(error); } };
-					} catch (error) { fail(error); } };
+					readRows(entries, range(header.id, header.validatedThrough ?? undefined), (rows, keys) => {
+						const page = rows.slice(0, INVENTORY_PAGE_ENTRIES), parents = new Map<string, Row[]>();
+						for (const [i, row] of page.entries()) {
+							const item = validateRow(row, header, keys[i]);
+							if (count >= header.entries) throw Error('Inventory entry count changed.');
+							count++; through = row.path;
+							const parent = item.path.split('/').slice(0, -1).join('/');
+							if (!parent) { if (header.cloud) validateCloudParent(row, header, header.cloud.rootId); continue; }
+							const children = parents.get(parent) ?? []; children.push(row); parents.set(parent, children);
+						}
+						let pending = parents.size;
+						if (!pending) { save(rows.length <= INVENTORY_PAGE_ENTRIES); return; }
+						// Siblings share a single parent lookup; enqueue independent parents
+						// together instead of waiting for each child before requesting the next.
+						for (const [parent, children] of parents) {
+							const primaryKey = [key, header.id, syncPathKey(parent)], ancestor = entries.get(primaryKey);
+							ancestor.onsuccess = () => { try {
+								check();
+								if (!ancestor.result) throw Error('Inventory has a missing, aliased or non-folder ancestor.');
+								const folder = validateRow(ancestor.result, header, primaryKey);
+								if (folder.path !== parent || folder.kind !== 'folder') throw Error('Inventory has a missing, aliased or non-folder ancestor.');
+								for (const row of children) validateCloudParent(row, header, folder.id);
+								if (--pending === 0) save(rows.length <= INVENTORY_PAGE_ENTRIES);
+							} catch (error) { fail(error); } };
+						}
+					}, fail);
 				});
 				changed?.(result);
 				if (result.phase === 'complete') return result;
@@ -341,24 +350,21 @@ export function inventoryJournal(db: IDBDatabase, access: JournalAccess, keyRang
 			return withHeader(expected, 'readonly', (header, tx, done, fail) => {
 				if (header.phase !== 'complete') throw Error('Inventory is incomplete; keep the last complete scan.');
 				if (token && token.read >= header.entries) throw Error('Invalid inventory continuation count.');
-				const request = tx.objectStore(INVENTORY_STORES[2]).openCursor(range(header.id, token?.after));
 				const result: SyncEntry[] = [];
 				let bytes = 2;
-				request.onsuccess = () => { try {
-					check();
-					const cursor = request.result;
-					if (!cursor) {
-						if ((token?.read ?? 0) + result.length !== header.entries) throw Error('Inventory ended before its declared entry count.');
-						done({ entries: result, next: null, totalEntries: header.entries }); return;
+				readRows(tx.objectStore(INVENTORY_STORES[2]), range(header.id, token?.after), (rows, keys) => {
+					for (const [i, row] of rows.entries()) {
+						const item = validateRow(row, header, keys[i]), size = encoder.encode(JSON.stringify(item)).length + 1;
+						if (bytes + size > INVENTORY_PAGE_BYTES || result.length === INVENTORY_PAGE_ENTRIES) {
+							if (!result.length) throw Error('Inventory entry exceeds its byte bound.');
+							done({ entries: result, next: { ...expected, scope: structuredClone(scope), after: syncPathKey(result.at(-1)!.path),
+								read: (token?.read ?? 0) + result.length }, totalEntries: header.entries }); return;
+						}
+						result.push(item); bytes += size;
 					}
-					const row: Row = cursor.value, item = validateRow(row, header, cursor.primaryKey), size = encoder.encode(JSON.stringify(item)).length + 1;
-					if (bytes + size > INVENTORY_PAGE_BYTES || result.length === INVENTORY_PAGE_ENTRIES) {
-						if (!result.length) throw Error('Inventory entry exceeds its byte bound.');
-						done({ entries: result, next: { ...expected, scope: structuredClone(scope), after: syncPathKey(result.at(-1)!.path),
-							read: (token?.read ?? 0) + result.length }, totalEntries: header.entries }); return;
-					}
-					result.push(item); bytes += size; cursor.continue();
-				} catch (error) { fail(error); } };
+					if ((token?.read ?? 0) + result.length !== header.entries) throw Error('Inventory ended before its declared entry count.');
+					done({ entries: result, next: null, totalEntries: header.entries });
+				}, fail);
 			});
 		},
 		async cloudRoot(value: InventoryIdentity): Promise<CloudInventoryRoot> {

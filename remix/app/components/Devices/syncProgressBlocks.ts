@@ -92,13 +92,21 @@ export function syncProgressDisplay(branches: Record<string, SyncProgressBranch>
 	const focused = branches[focusedFolder]?.page?.parent;
 	const focusDisplay = focused ? syncProgressNodeDisplay(focused, progress, state) : null;
 	const stoppedIndex = !hasIndex && ['error', 'paused', 'cancelled'].includes(state);
+	const preparation = progress?.preparation;
+	const preparationLabels: Record<NonNullable<ForegroundSyncProgress['preparation']>['phase'], string> = {
+		'validate-local': 'Validating device structure', 'read-remote': 'Reading cloud structure', 'validate-remote': 'Validating cloud structure',
+		'index-plan': 'Checking changed folders', plan: 'Planning changes', review: 'Checking conflicts', operations: 'Preparing file operations', cloud: 'Preparing cloud destinations'
+	};
+	const preparationText = preparation ? `${preparationLabels[preparation.phase]}${preparation.completed === undefined ? '…' :
+		` · ${preparation.completed.toLocaleString()}${preparation.total === undefined ? ' items processed' : ` / ${preparation.total.toLocaleString()} items processed`}.`}` : '';
 	const indexed = stoppedIndex ? `Indexing ${state === 'error' ? 'stopped' : state} before completion.${progress?.indexed !== undefined ? ` ${progress.indexed.toLocaleString()} entries observed.` : ''}` : hasIndex ? summary ? `${summary.files.toLocaleString()} files and ${summary.folders.toLocaleString()} folders indexed.` : 'Structure indexed. Reading saved totals…'
-		: progress?.indexed !== undefined ? `${progress.indexed.toLocaleString()} entries indexed${progress.indexTotal === undefined ? ' · Total still being discovered.' : ` of ${progress.indexTotal.toLocaleString()}. Validating structure…`}`
+		: progress?.indexed !== undefined ? `${progress.indexed.toLocaleString()} entries indexed${progress.indexTotal === undefined ? ' · Total still being discovered.' : ` of ${progress.indexTotal.toLocaleString()}.${preparation ? '' : ' Validating structure…'}`}`
+		: preparation ? 'Preparing saved index.'
 		: progress?.stage === 'checking' ? 'Checking access…' : 'Indexing files… Total still being discovered.';
 	const coverage = progress?.coverage === 'partial' ? ` Partial backup · ${(progress.skipped ?? 0).toLocaleString()} skipped observations. Review backup coverage below.` : '';
 	const globalState = state === 'error' ? 'Error' : state === 'cancelled' ? 'Cancelled' : state === 'paused' ? 'Paused' : progress?.stage === 'complete' || state === 'complete' ? progress?.coverage === 'partial' ? 'Supported items complete · Partial backup' : 'Complete'
-		: progress?.stage === 'verifying' ? 'Verifying uploaded files' : hasIndex ? 'Uploading' : 'Waiting for indexed structure';
-	return { sync: { indexDescription: indexed + coverage, uploadDescription: `${globalState}${progress ? ` · ${progress.confirmed.toLocaleString()} / ${progress.total.toLocaleString()} operations confirmed` : ''}${summary ? ` · ${syncProgressNodeDisplay(summary, progress, state).bytes}` : ''}`,
+		: preparation ? 'Preparing upload' : progress?.stage === 'verifying' ? 'Verifying uploaded files' : hasIndex ? 'Uploading' : 'Waiting for indexed structure';
+	return { sync: { indexDescription: indexed + (!stoppedIndex && preparationText ? ` ${preparationText}` : '') + coverage, uploadDescription: `${globalState}${progress ? ` · ${progress.confirmed.toLocaleString()} / ${progress.total.toLocaleString()} operations confirmed` : ''}${summary ? ` · ${syncProgressNodeDisplay(summary, progress, state).bytes}` : ''}`,
 		currentFolder: focusedFolder || 'Root folder', atRoot: !focusedFolder,
 		folderSummary: focusDisplay ? `${focusDisplay.percentLabel} · ${focusDisplay.counts} · ${focusDisplay.bytes}` : 'Reading folder totals…',
 		current: progress?.path ? `Current file: ${progress.path}${progress.bytes !== undefined && progress.size !== undefined ? ` · ${progressBytes(progress.bytes)} / ${progressBytes(progress.size)}` : ''}` : message,

@@ -4,7 +4,7 @@ import { runPagedForegroundCloudSync } from './pagedForegroundSync';
 import { runForegroundCloudSync } from './foregroundSync';
 import { foregroundFixture, saved, scope } from './foregroundSync.fixture';
 import { retentionFixture, scope as retentionScope } from './conflictRetention.fixture';
-import type { ForegroundSyncInput } from './foregroundSync';
+import type { ForegroundSyncInput, ForegroundSyncProgress } from './foregroundSync';
 import type { PagedConflictReviewSession } from './pagedForegroundReview';
 
 const signal = () => new AbortController().signal;
@@ -12,6 +12,7 @@ const access = (input: ForegroundSyncInput) => ({ scope: input.currentScope(), c
 
 test('native pages drive planning and checkpoint publication without a legacy root scan', async () => {
 	const f = await foregroundFixture(135), input: ForegroundSyncInput = f.input(); let captures = 0;
+	const progress: ForegroundSyncProgress[] = []; input.progress = value => progress.push(structuredClone(value));
 	input.scanLocal = async () => { throw Error('legacy root scan must not run'); };
 	input.inspectLocal = async path => structuredClone(f.local.find(row => row.path === path) ?? null);
 	input.scanLocalPages = async function* () {
@@ -23,6 +24,14 @@ test('native pages drive planning and checkpoint publication without a legacy ro
 	};
 	await runPagedForegroundCloudSync(saved, scope, input, signal());
 	assert.equal(captures, 2); assert.equal(f.creates(), 135);
+	assert.deepEqual([...new Set(progress.flatMap(p => p.preparation ? [p.preparation.phase] : []))],
+		['validate-local', 'read-remote', 'validate-remote', 'index-plan', 'plan', 'review', 'operations', 'cloud']);
+	for (const phase of ['validate-local', 'plan', 'review', 'operations', 'cloud']) {
+		const done = [...progress].reverse().find(p => p.preparation?.phase === phase)!;
+		assert.equal(done.preparation!.completed, 135, phase); assert.equal(done.preparation!.total, 135, phase);
+		assert.equal(done.indexed, 135); assert.equal(done.confirmed, 0);
+	}
+	assert.ok(progress.some(p => p.stage === 'transferring' && !p.preparation));
 	const head = (await f.journal().pagedCheckpoints(access(input)).current())!;
 	assert.equal((await f.journal().inventory(access(input)).read(head.baseline.local)).totalEntries, 135);
 	await runPagedForegroundCloudSync(saved, scope, input, signal());

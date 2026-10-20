@@ -111,7 +111,7 @@ export function upgradePagedRunJournal(db: IDBDatabase) {
  * The active root and plan remain pinned after completion until the paged
  * checkpoint handoff verifies fresh observations. Never discard uncertain work. */
 export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange?: typeof IDBKeyRange) {
-	const { scope, key, check, transaction } = journalScope(db, access, keyRange);
+	const { scope, key, check, transaction, readPage } = journalScope(db, access, keyRange);
 	const plans = pagedPlanJournal(db, access, keyRange), inventory = inventoryJournal(db, access, keyRange);
 	const operationRange = (id: string, after: SortKey | null = null) => (keyRange ?? globalThis.IDBKeyRange).bound(
 		after ? [key, id, ...after] : [key, id], [key, id, []], after !== null, false);
@@ -239,23 +239,21 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 		const spec = parsePagedRunSpec(value);
 		return withHeader(spec, 'readonly', (h, tx, done, fail) => {
 			if (h.phase === 'preparing') throw Error('Paged sync run is incomplete.');
-			const request = tx.objectStore(PAGED_RUN_STORES[1]).openCursor(operationRange(spec.id, h.confirmedThrough));
 			const operations: SyncOperation[] = []; let size = 2;
-			request.onsuccess = () => { try {
-				check(); const cursor = request.result;
-				if (!cursor) {
-					if (h.confirmed + operations.length !== h.operations) throw Error('Sync operations ended before their declared count.');
-					done({ operations, progress: progress(h) }); return;
+			readPage<Row>(tx.objectStore(PAGED_RUN_STORES[1]), operationRange(spec.id, h.confirmedThrough), INVENTORY_PAGE_ENTRIES + 1, (rows, keys) => {
+				for (const [i, value] of rows.entries()) {
+					const op = row(value, spec, keys[i]).operation;
+					if (op.confirmed || h.confirmed + operations.length >= h.operations) throw Error('Invalid sync operation confirmation order.');
+					const length = bytes(op) + 1;
+					if (operations.length === INVENTORY_PAGE_ENTRIES || size + length > INVENTORY_PAGE_BYTES) {
+						if (!operations.length) throw Error('Sync operation exceeds its byte bound.');
+						done({ operations, progress: progress(h) }); return;
+					}
+					operations.push(op); size += length;
 				}
-				const op = row(cursor.value, spec, cursor.primaryKey).operation;
-				if (op.confirmed || h.confirmed + operations.length >= h.operations) throw Error('Invalid sync operation confirmation order.');
-				const length = bytes(op) + 1;
-				if (operations.length === INVENTORY_PAGE_ENTRIES || size + length > INVENTORY_PAGE_BYTES) {
-					if (!operations.length) throw Error('Sync operation exceeds its byte bound.');
-					done({ operations, progress: progress(h) }); return;
-				}
-				operations.push(op); size += length; cursor.continue();
-			} catch (e) { fail(e); } };
+				if (h.confirmed + operations.length !== h.operations) throw Error('Sync operations ended before their declared count.');
+				done({ operations, progress: progress(h) });
+			}, fail);
 		});
 	};
 	const find = async (spec: PagedRunSpec, path: string): Promise<SyncOperation | null> => {
@@ -312,22 +310,20 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 		const snapshot = await withHeader<{ header: Header; rows: Row[] }>(spec, 'readonly', (h, tx, done, fail) => {
 			cloudProgress(h);
 			if (h.cloud!.prepared === h.operations) { done({ header: h, rows: [] }); return; }
-			const request = tx.objectStore(PAGED_RUN_STORES[1]).openCursor(operationRange(spec.id, h.cloud!.after));
 			const rows: Row[] = []; let size = 2;
-			request.onsuccess = () => { try {
-				check(); const cursor = request.result;
-				if (!cursor) {
-					if (h.cloud!.prepared + rows.length !== h.operations) throw Error('Cloud operations ended early.');
-					done({ header: h, rows }); return;
+			readPage<Row>(tx.objectStore(PAGED_RUN_STORES[1]), operationRange(spec.id, h.cloud!.after), INVENTORY_PAGE_ENTRIES + 1, (values, keys) => {
+				for (const [i, value] of values.entries()) {
+					const r = row(value, spec, keys[i]), length = bytes(r) + 1;
+					if (r.operation.confirmed || r.cloud || h.cloud!.prepared + rows.length >= h.operations) throw Error('Cloud preparation order changed.');
+					if (rows.length === INVENTORY_PAGE_ENTRIES || size + length > INVENTORY_PAGE_BYTES) {
+						if (!rows.length) throw Error('Cloud operation exceeds its byte bound.');
+						done({ header: h, rows }); return;
+					}
+					rows.push(r); size += length;
 				}
-				const r = row(cursor.value, spec, cursor.primaryKey), length = bytes(r) + 1;
-				if (r.operation.confirmed || r.cloud || h.cloud!.prepared + rows.length >= h.operations) throw Error('Cloud preparation order changed.');
-				if (rows.length === INVENTORY_PAGE_ENTRIES || size + length > INVENTORY_PAGE_BYTES) {
-					if (!rows.length) throw Error('Cloud operation exceeds its byte bound.');
-					done({ header: h, rows }); return;
-				}
-				rows.push(r); size += length; cursor.continue();
-			} catch (e) { fail(e); } };
+				if (h.cloud!.prepared + rows.length !== h.operations) throw Error('Cloud operations ended early.');
+				done({ header: h, rows });
+			}, fail);
 		});
 		const h = snapshot.header;
 		if (h.cloud!.prepared === h.operations) return cloudProgress(h);

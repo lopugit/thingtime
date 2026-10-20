@@ -36,6 +36,8 @@ export type ForegroundSyncProgress = {
 	skipped?: number;
 	coverage?: 'full' | 'partial';
 	consistency?: 'per-entry';
+	/** Preparation counts describe this phase, never uploaded files or receipts. */
+	preparation?: { phase: 'validate-local' | 'read-remote' | 'validate-remote' | 'index-plan' | 'plan' | 'review' | 'operations' | 'cloud'; completed?: number; total?: number };
 };
 export type ForegroundSyncInput = {
 	currentScope(): SyncScope;

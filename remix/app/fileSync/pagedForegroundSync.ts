@@ -41,6 +41,21 @@ export async function runPagedForegroundCloudSync(reviewed: SavedFileSyncConfigu
 	await input.journal.maintenance(access).collect(); check();
 	let active = await runs.active(); check();
 	let draft = await drafts.active(); check();
+	let indexProgress: Pick<ForegroundSyncProgress, 'indexed' | 'indexTotal' | 'coverage' | 'skipped' | 'consistency'> = {};
+	const indexing = (value: ForegroundSyncProgress) => {
+		const { indexed, indexTotal, coverage, skipped, consistency } = value;
+		indexProgress = { indexed, indexTotal, coverage, skipped, consistency }; input.progress(value);
+	};
+	let lastPreparation: ForegroundSyncProgress['preparation'], lastReport = 0;
+	const preparing = (phase: NonNullable<ForegroundSyncProgress['preparation']>['phase'], completed?: number, total?: number) => {
+		check(); const now = Date.now();
+		// Keep page processing independent of rendering speed, while always
+		// publishing phase changes and a known final count.
+		if (lastPreparation?.phase === phase && now - lastReport < 1000 && (total === undefined || completed !== total)) return;
+		lastReport = now; lastPreparation = { phase, completed, total };
+		input.progress({ stage: 'scanning', confirmed: active?.progress.confirmed ?? 0, total: active?.progress.operations ?? 0,
+			...indexProgress, preparation: lastPreparation });
+	};
 	const previousHead = await checkpoints.current(), legacy = await input.journal.read(scope), legacyCheckpoint = previousHead ? null : await input.journal.checkpoint(scope); check();
 	// Finish legacy uncertain work and lost checkpoints using its original IDs,
 	// receipts and approval contract before migrating a connection's baseline.
@@ -75,14 +90,14 @@ export async function runPagedForegroundCloudSync(reviewed: SavedFileSyncConfigu
 			const entries = await input.scanLocal(); check();
 			planFileSync({ scope, complete: true, entries }, { scope, complete: true, entries: [] }, { scope, entries: [] }, { mode: 'backup', propagateDeletes: false });
 			await importEntries(id, entries);
-			if (reportIndex) input.progress({ stage: 'scanning', confirmed: 0, total: 0, indexed: entries.length, indexTotal: entries.length });
+			if (reportIndex) indexing({ stage: 'scanning', confirmed: 0, total: 0, indexed: entries.length, indexTotal: entries.length });
 			return;
 		}
 		await inventory.begin(id);
 		if (reportIndex) await inventory.retainLatest(id);
 		let generation: string | undefined, ordinal = 0, terminal = false, indexed = 0, skipped = 0;
 		let coverage: NativeBackupCapture | undefined;
-		const report = () => { if (reportIndex) input.progress({ stage: 'scanning', confirmed: 0, total: 0, indexed,
+		const report = () => { if (reportIndex) indexing({ stage: 'scanning', confirmed: 0, total: 0, indexed,
 			...(coverage ? { indexTotal: coverage.totalEntries, skipped, coverage: coverage.coverage, consistency: coverage.consistency } : {}) }); };
 		if (resumable) {
 			const state = await inventory.importState(id); check();
@@ -119,7 +134,7 @@ export async function runPagedForegroundCloudSync(reviewed: SavedFileSyncConfigu
 			if (page.skippedPage) {
 				if (!coverage || ordinal !== 0 || page.entries.length !== 0 || page.totalEntries !== undefined) throw Error('Invalid skipped inventory frame.');
 				await inventory.appendSkips(id, page.skippedPage); skipped += page.skippedPage.skipped.length;
-				if (reportIndex) input.progress({ stage: 'scanning', confirmed: 0, total: 0, indexed, indexTotal: coverage.totalEntries,
+				if (reportIndex) indexing({ stage: 'scanning', confirmed: 0, total: 0, indexed, indexTotal: coverage.totalEntries,
 					skipped, coverage: coverage.coverage, consistency: coverage.consistency });
 				continue;
 			}
@@ -128,19 +143,21 @@ export async function runPagedForegroundCloudSync(reviewed: SavedFileSyncConfigu
 			await inventory.append(id, { ordinal: page.ordinal, entries: page.entries,
 				...(page.totalEntries === undefined ? {} : { totalEntries: page.totalEntries }) });
 			indexed += page.entries.length;
-			if (reportIndex) input.progress({ stage: 'scanning', confirmed: 0, total: 0, indexed,
+			if (reportIndex) indexing({ stage: 'scanning', confirmed: 0, total: 0, indexed,
 				...(coverage ? { indexTotal: coverage.totalEntries } : page.totalEntries === undefined ? {} : { indexTotal: page.totalEntries }), ...(coverage ? { skipped, coverage: coverage.coverage, consistency: coverage.consistency } : {}) });
 			terminal = page.totalEntries !== undefined;
 		}
 		check();
 		if (!terminal) throw Error('Native inventory has no final page. Keep the last complete scan.');
-		await inventory.seal(id); check();
+		if (reportIndex) preparing('validate-local');
+		await inventory.seal(id, value => { if (reportIndex) preparing('validate-local', value.validatedEntries, value.entries); }); check();
 		// Publish only once coverage and every skip page are durable. A viewer
 		// mounted earlier could mistake an unfilled capture for strict coverage.
 		if (reportIndex && coverage) input.inventorySession?.({ scope: structuredClone(scope), inventory: structuredClone(id) });
 	};
 	const importObservations = async (local: InventoryIdentity, remote: InventoryIdentity, checkpoint = false, resumable = false) => {
 		await importLocal(local, !checkpoint, resumable);
+		if (!checkpoint) preparing('read-remote');
 		if (input.inventoryPages) {
 			// A checkpoint stores stamps, but must first validate the complete physical tree.
 			const observed = checkpoint ? identity('remote') : remote;
@@ -156,10 +173,12 @@ export async function runPagedForegroundCloudSync(reviewed: SavedFileSyncConfigu
 					throw Error('Cloud inventory completion count changed.');
 				const metadata = { ordinal: page.ordinal, ...(page.totalEntries === undefined ? {} : { totalEntries: page.totalEntries }) };
 				await inventory.appendCloud(observed, { ...metadata, nodes: page.nodes });
+				if (!checkpoint) preparing('read-remote', count, page.totalEntries);
 				terminal = page.totalEntries !== undefined;
 			}
 			check(); if (!terminal) throw Error('Cloud inventory has no final page. Keep the last complete scan.');
-			await inventory.seal(observed); check();
+			if (!checkpoint) preparing('validate-remote');
+			await inventory.seal(observed, value => { if (!checkpoint) preparing('validate-remote', value.validatedEntries, value.entries); }); check();
 			if (checkpoint) {
 				await inventory.begin(remote);
 				let next: InventoryCursor | null = null, pageOrdinal = 0;
@@ -181,16 +200,20 @@ export async function runPagedForegroundCloudSync(reviewed: SavedFileSyncConfigu
 		await pages<CloudInventoryNode>(observed.nodes,
 			(nodes, ordinal, final) => inventory.appendCloud(remote, { ordinal, nodes, ...(final ? { totalEntries: observed.nodes.length } : {}) }),
 			node => size(node) * 2 + 1024);
-		await inventory.seal(remote); check();
+		preparing('validate-remote');
+		await inventory.seal(remote, value => preparing('validate-remote', value.validatedEntries, value.entries)); check();
 	};
 	const capture = async (baseline: PagedPlanSpec['baseline'], purpose: 'initial' | 'review' = 'initial') => {
+		indexProgress = {}; lastPreparation = undefined;
 		input.progress({ stage: 'scanning', confirmed: 0, total: 0 });
 		await authorize();
 		const local = input.beginLocalImport ? await input.beginLocalImport(purpose) : identity('local'), remote = identity('remote');
 		await importObservations(local, remote, false, !!input.beginLocalImport);
 		const spec: PagedPlanSpec = { id: crypto.randomUUID(), local, remote, baseline,
 			policy: { mode: configuration.mode, propagateDeletes: configuration.propagateDeletes }, excludedPaths: configuration.excludedPaths, ...(configuration.ignoreRules ? { ignoreRules: configuration.ignoreRules } : {}) };
-		const result = await plans.build(spec);
+		preparing('index-plan');
+		const result = await plans.build(spec, value => preparing(value.phase === 'indexing' ? 'index-plan' : 'plan',
+			value.phase === 'indexing' ? value.indexed : value.planned, value.phase === 'indexing' ? undefined : value.indexed));
 		// Every whole-tree compatibility boundary must stay bounded. The native
 		// paged path can keep its plan, review and baseline on disk throughout.
 		if (result.indexed > MAX_SYNC_SCAN_ENTRIES &&
@@ -202,7 +225,8 @@ export async function runPagedForegroundCloudSync(reviewed: SavedFileSyncConfigu
 		await drafts.release(saved); if (!keepPlan) await plans.discard(saved.plan); draft = null;
 	};
 	const reviewDraft = async (saved: ReviewDraftSpec) => {
-		let state = await drafts.build(saved); check();
+		preparing('review');
+		let state = await drafts.build(saved, value => preparing('review', value.read, value.total)); check();
 		if (state.phase === 'sealed' || !state.count) return state;
 		if (!input.reviewPagedConflicts && !input.reviewConflicts) throw Error(`${state.count} sync conflicts need review. Both copies were preserved.`);
 		input.progress({ stage: 'reviewing', confirmed: state.selected, total: state.count });
@@ -290,7 +314,10 @@ export async function runPagedForegroundCloudSync(reviewed: SavedFileSyncConfigu
 		await releaseDraft(saved, !review);
 	}
 	await input.releaseLocalImport?.(spec.plan.local); check();
-	await runs.prepare(spec); await runs.prepareCloud(spec, configuration); check();
+	preparing('operations');
+	await runs.prepare(spec, value => preparing('operations', value.read, value.total));
+	preparing('cloud');
+	await runs.prepareCloud(spec, configuration, value => preparing('cloud', value.prepared, value.total)); check();
 	input.progressSession?.({ scope: structuredClone(scope), run: structuredClone(spec) });
 	const planningCoverage = await inventory.coverage(spec.plan.local);
 	let state = await runs.begin(spec); const retain = spec.review?.kind === 'retain';

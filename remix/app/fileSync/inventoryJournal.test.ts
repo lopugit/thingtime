@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { IDBFactory, IDBKeyRange } from 'fake-indexeddb';
+import { IDBFactory, IDBKeyRange, IDBObjectStore } from 'fake-indexeddb';
 import { openSyncJournal } from './journal.client';
-import { INVENTORY_PAGE_ENTRIES, type InventoryIdentity, type InventoryCursor } from './inventoryJournal';
+import { INVENTORY_PAGE_ENTRIES, INVENTORY_PAGE_BYTES, type InventoryIdentity, type InventoryCursor } from './inventoryJournal';
 import { syncScopeKey, type SyncEntry, type SyncScope } from './reconcile';
 const scope: SyncScope = { origin: 'https://inventory.test', ownerId: 'owner', dataPlane: 'home', rootId: 'connection', deviceId: 'device' };
 const capture: InventoryIdentity = { id: 'capture', source: 'local', generation: 'generation-1' };
@@ -13,6 +13,68 @@ async function fixture(factory = new IDBFactory()) {
 	let current = { ...scope };
 	return { factory, journal, inventory: journal.inventory({ scope, currentScope: () => current }), switchTo: (value: SyncScope) => { current = value; } };
 }
+
+test('bounded inventory pages validate siblings with one parent lookup per page and no entry cursors', async t => {
+	const f = await fixture(), rows = [folder('parent'), ...Array.from({ length: 257 }, (_, i) => file(`parent/${String(i).padStart(3, '0')}`))];
+	await f.inventory.begin(capture);
+	for (let offset = 0; offset < rows.length; offset += 128) await f.inventory.append(capture, {
+		ordinal: offset / 128, entries: rows.slice(offset, offset + 128), ...(offset + 128 >= rows.length ? { totalEntries: rows.length } : {})
+	});
+	let parentReads = 0, batches = 0;
+	const get = IDBObjectStore.prototype.get, getAll = IDBObjectStore.prototype.getAll, cursor = IDBObjectStore.prototype.openCursor;
+	t.mock.method(IDBObjectStore.prototype, 'get', function (this: IDBObjectStore, ...args: Parameters<typeof get>) {
+		if (this.name === 'inventory-entries') parentReads++; return get.apply(this, args);
+	});
+	t.mock.method(IDBObjectStore.prototype, 'getAll', function (this: IDBObjectStore, ...args: Parameters<typeof getAll>) {
+		if (this.name === 'inventory-entries') { batches++; assert.equal(args[1], 129); } return getAll.apply(this, args);
+	});
+	t.mock.method(IDBObjectStore.prototype, 'openCursor', function (this: IDBObjectStore, ...args: Parameters<typeof cursor>) {
+		assert.notEqual(this.name, 'inventory-entries'); return cursor.apply(this, args);
+	});
+	await f.inventory.seal(capture);
+	assert.equal(parentReads, 3); assert.equal(batches, 3);
+	let next: InventoryCursor | undefined, seen = 0;
+	do { const page = await f.inventory.read(capture, next); seen += page.entries.length; next = page.next ?? undefined; } while (next);
+	assert.equal(seen, rows.length); assert.equal(batches, 6); f.journal.close();
+});
+
+test('bulk inventory reads retain byte pagination for long Unicode paths', async () => {
+	const f = await fixture(), parts = Array.from({ length: 15 }, (_, i) => `${i}-${'界'.repeat(240)}`);
+	const rows = parts.map((_, i) => ({ ...folder(parts.slice(0, i + 1).join('/')), id: `parent-${i}` }));
+	for (let i = 0; i < 150; i++) rows.push(file(`${parts.join('/')}/${i}`, `id-${i}`));
+	await f.inventory.begin(capture);
+	for (let offset = 0; offset < rows.length; offset += 32) await f.inventory.append(capture, {
+		ordinal: offset / 32, entries: rows.slice(offset, offset + 32), ...(offset + 32 >= rows.length ? { totalEntries: rows.length } : {})
+	});
+	await f.inventory.seal(capture);
+	let next: InventoryCursor | undefined; const seen = new Set<string>(); let byteBoundPage = false;
+	do {
+		const page = await f.inventory.read(capture, next);
+		assert.ok(Buffer.byteLength(JSON.stringify(page.entries)) <= INVENTORY_PAGE_BYTES);
+		if (page.next && page.entries.length < INVENTORY_PAGE_ENTRIES) byteBoundPage = true;
+		for (const row of page.entries) { assert.ok(!seen.has(row.path)); seen.add(row.path); }
+		next = page.next ?? undefined;
+	} while (next);
+	assert.ok(byteBoundPage); assert.equal(seen.size, rows.length); f.journal.close();
+});
+
+test('bulk inventory pages reject a valid row moved under a different primary key', async () => {
+	for (const sealed of [false, true]) {
+		const f = await fixture(); await f.inventory.begin(capture);
+		await f.inventory.append(capture, { ordinal: 0, entries: [file('a')], totalEntries: 1 });
+		if (sealed) await f.inventory.seal(capture);
+		const db = await new Promise<IDBDatabase>((resolve, reject) => {
+			const request = f.factory.open('inventory-test'); request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error);
+		});
+		await new Promise<void>((resolve, reject) => {
+			const tx = db.transaction('inventory-entries', 'readwrite');
+			tx.objectStore('inventory-entries').put({ scope: syncScopeKey(scope), capture: capture.id, path: 'b', identity: 'b', entry: file('b') }, [syncScopeKey(scope), capture.id, 'a']);
+			tx.oncomplete = () => resolve(); tx.onerror = tx.onabort = () => reject(tx.error);
+		}); db.close();
+		await assert.rejects(sealed ? f.inventory.read(capture) : f.inventory.seal(capture), /identity changed/);
+		f.journal.close();
+	}
+});
 
 test('100,000 paths survive bounded pages and reopening without treating a partial scan as complete', async () => {
 	let f = await fixture();
