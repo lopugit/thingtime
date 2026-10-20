@@ -12780,7 +12780,7 @@ separate from deterministic discovery/lease tests.
 
 ## Shared fresh native identity admission — 2026-10-21
 
-- [x] Native focused suite: 73/73 pass, including completion-based 334 ms spacing, same-credential FIFO, shared bounded Retry-After, isolated scopes and capacity bounds. No cached identity response or reduced authentication requirement.
+- [x] Native focused suite: 73/73 pass, including the original completion-based 334 ms spacing (superseded by the conservative burst-budget checks below), same-credential FIFO, shared bounded Retry-After, isolated scopes and capacity bounds. No cached identity response or reduced authentication requirement.
 - [x] Queue cancellation, credential rotation, timeout and stale/cancelled/failed wake timers cannot strand callers or discard a live cooldown. Every actual HTTP request reloads current credentials and preserves existing owner/origin/device checks.
 - [ ] Installed acceptance: preserve the same Home run; compare fixed-interval confirmed payload/file deltas and safe identity status diagnostics. The prior bounded 10-minute window had eight logged identity HTTP 429 events, not a measured total request count. Do not claim throughput restored from scheduling tests alone.
 
@@ -12800,3 +12800,13 @@ separate from deterministic discovery/lease tests.
 - [x] Reject unknown actions/outcomes, non-own/getter fields, unsafe counts/durations and arbitrary metadata. Async logging retains 128-row capacity, 128 KiB rotation, closed redaction and best-effort IO failure handling.
 - [x] Focused Electron host/upload/log suite: 55/55. Native API-client/admission: 33/33; existing Mac folder/source/authority/recovery suite: 42/42.
 - [ ] Installed acceptance: capture one bounded natural sync window with closed rows only; report per-action phase distributions and native admission/HTTP observations. Treat missing/rotated/dropped records as partial, suppress no actual auth checks, and make no throughput restoration claim from unit timings.
+
+
+## Conservative native identity burst budget — 2026-10-21
+
+- [x] Initial 12 attempts have no forced post-response gap; the 13th waits for three-token/second refill. FIFO lanes and one in-flight scope remain intact.
+- [x] At least 240 fake-clock attempts verify every rolling 60-second window contains at most 180; full/depleted floating-point boundary guards cannot admit an extra attempt. A delayed `willSend`→HTTP start cannot refill and spend a thirteenth burst token.
+- [x] Unsent permits/cancelled waiters consume no budget; cancellation after `willSend` is conservatively charged. Public clients still share one coordinator and every admitted client performs fresh HTTP; revoked/rotated credentials and owner drift remain rejected.
+- [x] Eligible scopes retain live rolling history, token debt and cooldown under capacity pressure. Truly idle scopes can be evicted; timer failure retains debt/cooldown and later refill/deadline recovery works. Existing malformed Retry-After tests pass.
+- [x] Focused admission/API-client tests: 39/39. Full native package: 220 tests, two skipped, zero failures. Controlled old/new 26×100 ms schedule: 10.95 s→4.866668 s; the initial-burst regression fails against the old scheduler.
+- [ ] Installed same-job acceptance: compare one bounded closed timing window and confirmed file/payload deltas. Document native-log suppression/partial coverage and deployment limit uncertainty; no live performance claim from the synthetic schedule.
