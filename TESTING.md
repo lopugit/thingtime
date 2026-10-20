@@ -11673,6 +11673,7 @@ resume unfinished Android gates only when requested.
 
 ## Paged cloud binding recovery (2026-10-18)
 
+- [x] Batched preparation (2026-10-20): a page of 128 uploads with distinct parents uses at most five database transactions. Preserve exact prepared parent IDs, ordered missing-node results, capture/account fences, case-alias rejection, restart cursors, expanded byte limits and atomic cancellation. Real home-upload throughput remains an installed acceptance gate.
 - [x] Retain cloud nodes and reconciliation stamps in the same bounded page; refuse changed attachments on exact retry even when their stamps match. Validate physical ancestry, aliases and metadata-free legacy capture migration.
 - [x] Reopen partial cloud preparation, preserve original parent operation IDs and exact configuration, and refuse starting until every binding is durable. Reject metadata attachment after execution begins.
 - [x] Compare native Trash receipt chains across multiple pages with the original whole-run derivation, including deep descendants and wide siblings.

@@ -96,6 +96,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-20: Batch bounded cloud-binding metadata and parent-operation reads
+  before large file-sync uploads. Keep exact capture/account/path checks,
+  active-run admission and revision-guarded commits while avoiding separate
+  database transactions for every file lookup. — Codex (AI)
+
 - 2026-10-20: Resume Mac backup imports from committed entry, skip and validation
   cursors after reconnect or app restart. Bind the retained import to its exact
   reviewed job and preserve it through cleanup until a durable plan owns it.

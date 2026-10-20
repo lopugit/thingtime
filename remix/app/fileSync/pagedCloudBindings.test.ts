@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test, { before } from 'node:test';
-import { IDBFactory, IDBKeyRange, IDBObjectStore } from 'fake-indexeddb';
+import { IDBFactory, IDBKeyRange, IDBObjectStore, IDBDatabase } from 'fake-indexeddb';
 import { openSyncJournal } from './journal.client';
 import { newFileSyncConfiguration, type FileSyncConfiguration } from './configuration';
 import { inventorySyncEntry, type CloudInventoryNode } from './cloudInventory';
@@ -50,6 +50,38 @@ async function seed(f: Awaited<ReturnType<typeof fixture>>, s: PagedRunSpec, loc
 	}
 	await f.inventory.seal(s.plan.remote); await f.plans.build(s.plan); await f.runs.prepare(s);
 }
+
+test('upload preparation batches file and distinct parent reads instead of opening transactions per file', async () => {
+	const f = await fixture(), c = config('upload'), s = spec(c);
+	const parents = Array.from({ length: 128 }, (_, i) => 'folder-' + String(i).padStart(3, '0'));
+	await seed(f, s, [...parents.map(folder), ...parents.map(path => file(path + '/file'))], []);
+	await f.runs.beginCloud(s, c);
+	assert.equal((await f.runs.stepCloud(s)).prepared, 128);
+	const original = IDBDatabase.prototype.transaction; let transactions = 0;
+	IDBDatabase.prototype.transaction = function (...args) { transactions++; return original.apply(this, args); };
+	try { assert.deepEqual(await f.runs.stepCloud(s), { prepared: 256, total: 256, phase: 'ready' }); }
+	finally { IDBDatabase.prototype.transaction = original; }
+	assert.ok(transactions > 0 && transactions <= 5, `128 files with distinct parents used ${transactions} transactions`);
+	for (const path of [parents[0], parents[64], parents[127]]) {
+		const parent = (await f.runs.find(s, path))!;
+		const binding = await f.runs.cloudBinding(s, c, { path: path + '/file' });
+		const expected = prepareCloudInventoryRun({ version: 1, id: s.id, scope,
+			operations: [parent, (await f.runs.find(s, path + '/file'))!] }, { version: 1, complete: true, ...root, nodes: [] });
+		assert.deepEqual(binding?.write, expected.cloudWrites.find(write => write.operation.mutation.path === path + '/file'));
+	}
+	f.journal.close();
+});
+
+test('batched cloud reads preserve order, missing nodes, exact names, bounds and account isolation', async () => {
+	const f = await fixture(), s = spec(config()); const remote = node('A');
+	await seed(f, s, [], [remote]);
+	assert.deepEqual(await f.inventory.cloudNodes(s.plan.remote, ['missing', 'A']), [null, remote]);
+	await assert.rejects(f.inventory.cloudNodes(s.plan.remote, ['a']), /collision requires review/);
+	await assert.rejects(f.inventory.cloudNodes(s.plan.remote, ['A', 'a']), /Invalid cloud inventory path/);
+	await assert.rejects(f.inventory.cloudNodes(s.plan.remote, Array.from({ length: 129 }, (_, i) => 'file-' + i)), /Invalid cloud inventory path/);
+	f.changeAccount(); await assert.rejects(f.inventory.cloudNodes(s.plan.remote, ['A']), /account or root/);
+	f.journal.close();
+});
 
 test('paged upload bindings preserve prepared parent IDs and immutable configuration across restarts', async () => {
 	let f = await fixture(); const c = config('upload'), s = spec(c);

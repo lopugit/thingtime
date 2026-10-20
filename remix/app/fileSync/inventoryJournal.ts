@@ -191,6 +191,29 @@ export function inventoryJournal(db: IDBDatabase, access: JournalAccess, keyRang
 			} catch (error) { fail(error); } };
 		});
 	};
+	const cloudNodes = async (value: InventoryIdentity, paths: readonly string[]): Promise<(CloudInventoryNode | null)[]> => {
+		const requested = [...paths];
+		if (requested.length > INVENTORY_PAGE_ENTRIES || requested.some(path => !validSyncPath(path)) ||
+			new Set(requested.map(syncPathKey)).size !== requested.length) throw Error('Invalid cloud inventory path.');
+		return withHeader(value, 'readonly', (header, tx, done, fail) => {
+			if (!header.cloud || header.phase !== 'complete') throw Error('A complete cloud metadata capture is required.');
+			if (!requested.length) { done([]); return; }
+			const result: (CloudInventoryNode | null)[] = new Array(requested.length); let pending = requested.length;
+			requested.forEach((path, index) => {
+				const id = [key, header.id, syncPathKey(path)], get = tx.objectStore(INVENTORY_STORES[2]).get(id);
+				get.onsuccess = () => { try {
+					check();
+					if (get.result === undefined) result[index] = null;
+					else {
+						const item = validateRow(get.result, header, id);
+						if (item.path !== path) throw Error('Case or Unicode filename collision requires review.');
+						result[index] = parseCloudInventoryNode(get.result.cloud);
+					}
+					if (!--pending) done(result);
+				} catch (error) { fail(error); } };
+			});
+		});
+	};
 	return {
 		setCoverage: (value: InventoryIdentity, capture: NativeBackupCapture, policy: SyncPolicy) => setCoverage(value, capture, policy), appendSkips, readSkips,
 		importState: (value: InventoryIdentity) => withHeader<InventoryProgress & { skipped: number; derived: boolean; coverage: NativeBackupCapture | null }>(value, 'readonly', (header, _tx, done) => done({
@@ -344,19 +367,8 @@ export function inventoryJournal(db: IDBDatabase, access: JournalAccess, keyRang
 				done(parseCloudInventoryRoot(header.cloud));
 			});
 		},
-		async cloudNode(value: InventoryIdentity, path: string): Promise<CloudInventoryNode | null> {
-			if (!validSyncPath(path)) throw Error('Invalid cloud inventory path.');
-			return withHeader(value, 'readonly', (header, tx, done, fail) => {
-				if (!header.cloud || header.phase !== 'complete') throw Error('A complete cloud metadata capture is required.');
-				const id = [key, header.id, syncPathKey(path)], get = tx.objectStore(INVENTORY_STORES[2]).get(id);
-				get.onsuccess = () => { try {
-					check(); if (get.result === undefined) { done(null); return; }
-					const item = validateRow(get.result, header, id);
-					if (item.path !== path) throw Error('Case or Unicode filename collision requires review.');
-					done(parseCloudInventoryNode(get.result.cloud));
-				} catch (error) { fail(error); } };
-			});
-		},
+		cloudNodes,
+		cloudNode: async (value: InventoryIdentity, path: string) => (await cloudNodes(value, [path]))[0]!,
 		async discard(value: InventoryIdentity): Promise<void> {
 			return withHeader(value, 'readwrite', (header, tx, done, fail) => {
 				const request = tx.objectStore(INVENTORY_PIN_STORE).count(range(header.id));
