@@ -12682,3 +12682,11 @@ separate from deterministic discovery/lease tests.
 - [x] Run `npm --prefix electron run verify:folder-upload-native` through the production desktop host, real native IO/stream framing and HTTP signing/PUT, then production desktop/mobile parser and `mobileFolderSource.uploadPart`; assert the accepted digest. Auth services and IPC frame/session binding are synthetic; actual Electron IPC/real-account completion remain installed checks.
 - [x] Preserve `roots` only from the final verified native response. Different intermediate roots cannot leak into the receipt; missing/non-array final roots fail closed. Verify compatible Mac `fileUploadVersion` 1.0.1 negotiation and all required response envelope/part fields.
 - [ ] Signed installed acceptance: recover the same saved job and independently download a nonempty cloud file with source-matching bytes/hash, then observe continued transfer progress.
+
+
+### Cloud sync transient HTTP recovery — 2026-10-20
+
+- [x] Run `cloudTransport.test.ts`, `syncJobJournal.test.ts`, `desktopUploadRecovery.test.ts`, `syncTaskRuntime.test.ts` and `desktopFolders.client.test.ts`: temporary 408/429/5xx responses remain resumable; Retry-After is bounded; explicit cancellation, identity/capability failures, 401/403, malformed responses and changed sources remain terminal.
+- [x] Accept a real transport commit and then return HTTP503; reopen the durable operation and recover its original receipt without another byte upload or committed file version.
+- [x] Exercise the production automatic coordinator with actual HTTP503/401/403 paths. Assert HTTP503 executes, persists its 120-second deadline, rejects early online/pageshow/job-event discovery passes, survives reopen, and recovers the original operation once. Stop and newer-attempt CAS reject stale deferrals. Planner/byte-pipeline and native/network boundaries remain synthetic in this coordinator regression.
+- [ ] In the signed installed app, explicitly retry the existing attention job once, preserve its IDs/cursors/receipts, and verify continued transfers plus independent downloaded-byte equality. A status503 alone does not establish the backend cause.

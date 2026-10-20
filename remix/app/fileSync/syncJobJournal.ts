@@ -1,3 +1,4 @@
+import { SYNC_RETRY_DELAY_MS, SYNC_RETRY_MAX_MS } from './syncConnectionWait';
 import { parseFileSyncConfiguration } from './configuration';
 import type { SavedFileSyncConfiguration } from './configuredPlan';
 import { journalScope, type JournalAccess } from './journalScope';
@@ -16,6 +17,8 @@ export type SyncJob = {
 	/** Absent on existing one-shot admissions. Editable Things cannot opt in. */
 	intervalMs?: number;
 	nextRunAt?: number;
+	/** Durable not-before time for an unfinished transiently interrupted attempt. */
+	retryAt?: number;
 	/** Bound by this job's full scope and immutable reviewed revision/settings. */
 	nativeCaptureId?: string;
 	nativeCaptureGeneration?: string;
@@ -25,8 +28,8 @@ export type SyncJob = {
 };
 export const syncJobCanPause = (job: SyncJob | null) => !!job && ['runnable', 'scheduled', 'attention'].includes(job.state);
 export const syncJobEnabled = (job: SyncJob) => job.intervalMs !== undefined && ['runnable', 'scheduled'].includes(job.state);
-export const syncJobDue = (job: SyncJob, now: number) => job.state === 'runnable' ||
-	(job.state === 'scheduled' && Number.isSafeInteger(now) && now >= job.nextRunAt!);
+export const syncJobDue = (job: SyncJob, now: number) => Number.isSafeInteger(now) &&
+	(job.state === 'runnable' ? job.retryAt === undefined || now >= job.retryAt : job.state === 'scheduled' && now >= job.nextRunAt!);
 
 /** Stop the admitted cycle even when completion just scheduled its next run.
  * A newer cycle/admission has a different ID and cannot be stopped by this
@@ -59,6 +62,7 @@ function validate(value: SyncJob): SyncJob {
 		(value.intervalMs !== undefined && !SYNC_INTERVALS.some(interval => interval === value.intervalMs)) ||
 		(value.nextRunAt !== undefined && (!Number.isSafeInteger(value.nextRunAt) || value.nextRunAt < 0 || !['scheduled', 'paused', 'attention'].includes(value.state))) ||
 		(value.state === 'scheduled' && (value.intervalMs === undefined || value.nextRunAt === undefined)) ||
+		(value.retryAt !== undefined && (!Number.isSafeInteger(value.retryAt) || value.retryAt < 0)) ||
 		(value.nativeCaptureId !== undefined && (typeof value.nativeCaptureId !== 'string' || !/^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/.test(value.nativeCaptureId) || value.reviewed?.configuration.mode !== 'backup' || value.reviewed?.configuration.propagateDeletes !== false)) ||
 		(value.nativeCaptureGeneration !== undefined && (!value.nativeCaptureId || typeof value.nativeCaptureGeneration !== 'string' || !/^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/.test(value.nativeCaptureGeneration))) ||
 		(value.nativeCaptureRestarts !== undefined && (!value.nativeCaptureGeneration || !Number.isSafeInteger(value.nativeCaptureRestarts) || value.nativeCaptureRestarts < 0 || value.nativeCaptureRestarts > 1)) ||
@@ -107,6 +111,15 @@ export function syncJobJournal(db: IDBDatabase, access: JournalAccess, keyRange?
 		}).then(value => value ? changed(value) : value);
 	return {
 		read,
+		/** This attempt may defer only its own unchanged runnable admission. Stop,
+		 * reapproval and a newer attempt all win through the existing revision CAS. */
+		defer: (expected: SyncJob, now: number, delay = SYNC_RETRY_DELAY_MS) => change(expected, current => {
+			if (!Number.isSafeInteger(now) || now < 0 || !Number.isFinite(delay)) throw Error('Invalid sync retry deadline.');
+			if (current.state !== 'runnable') return null;
+			const retryAt = now + Math.round(Math.max(SYNC_RETRY_DELAY_MS, Math.min(SYNC_RETRY_MAX_MS, delay)));
+			if (!Number.isSafeInteger(retryAt)) throw Error('Invalid sync retry deadline.');
+			return { ...current, retryAt };
+		}),
 		beginImport: (expected: SyncJob, purpose: 'initial' | 'review', inventory: InventoryIdentity) => change(expected, current => {
 			if (current.state !== 'runnable') return null;
 			if (current.localImport?.purpose === purpose) return current;
@@ -182,13 +195,13 @@ export function syncJobJournal(db: IDBDatabase, access: JournalAccess, keyRange?
 			}),
 		begin: (expected: SyncJob, now: number, id: string) => change(expected, current => {
 			if (!syncJobDue(current, now)) return null;
-			const { nextRunAt: _due, nativeCaptureId, nativeCaptureGeneration, nativeCaptureRestarts, localImport, ...rest } = current;
+			const { retryAt: _retry, nextRunAt: _due, nativeCaptureId, nativeCaptureGeneration, nativeCaptureRestarts, localImport, ...rest } = current;
 			return { ...rest, id: current.state === 'scheduled' ? id : current.id, state: 'runnable', ...(current.state === 'runnable' && localImport ? { localImport } : {}), ...(current.state === 'runnable' && nativeCaptureId ? { nativeCaptureId, ...(nativeCaptureGeneration ? { nativeCaptureGeneration, nativeCaptureRestarts: nativeCaptureRestarts ?? 0 } : {}) } : {}) };
 		}),
 		finish: (expected: SyncJob, now: number) => change(expected, current => {
 			if (current.state !== 'runnable') return null;
 			if (!Number.isSafeInteger(now) || now < 0) throw Error('Invalid sync completion time.');
-			const { nativeCaptureId: _capture, nativeCaptureGeneration: _generation, nativeCaptureRestarts: _restarts, localImport: _import, ...rest } = current;
+			const { retryAt: _retry, nativeCaptureId: _capture, nativeCaptureGeneration: _generation, nativeCaptureRestarts: _restarts, localImport: _import, ...rest } = current;
 			return current.intervalMs === undefined ? { ...rest, state: 'complete' } :
 				{ ...rest, state: 'scheduled', nextRunAt: now + current.intervalMs };
 		}),

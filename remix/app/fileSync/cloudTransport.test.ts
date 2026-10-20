@@ -1,4 +1,5 @@
-import test from 'node:test';
+import { cloudSyncHttpError, SyncConnectionWait, SYNC_RETRY_DELAY_MS, SYNC_RETRY_MAX_MS } from './syncConnectionWait';
+import test, { mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { IDBFactory } from 'fake-indexeddb';
@@ -8,7 +9,7 @@ import { EMPTY_CONTENT_SHA256, fingerprintSource, type FingerprintSource } from 
 import { cloudFileSyncEntry, type CloudFile } from './cloudFile';
 import { prepareCloudSyncRun, parseCloudSyncRun } from './cloudWrite';
 import { createCloudSyncPort } from './cloudSyncPort.client';
-import { createCloudFileTransport, type CloudTransportRuntime } from './cloudTransport';
+import { cloudRequests, createCloudFileTransport, type CloudTransportRuntime } from './cloudTransport';
 import { openSyncJournal } from './journal.client';
 import type { TransferActivity } from './transferActivity';
 const scope: SyncScope = { origin: 'https://sync.test', ownerId: 'owner', dataPlane: 'home', rootId: 'root', deviceId: 'phone' };
@@ -19,7 +20,7 @@ async function fixture(payload = bytes) {
  const source = (): FingerprintSource => ({ size: bytes.length, read: async (offset, size) => { assert.ok(bytes.length, 'Empty files must not issue byte reads'); return bytes.slice(offset, offset + size); }, check: () => {} });
  const fingerprint = await fingerprintSource(source());
  const entry: SyncEntry = { id: 'local-file', version: 'v1', path: 'file.bin', kind: 'file', size: bytes.length, ...(bytes.length ? { fingerprint, sha256: null } : { sha256: EMPTY_CONTENT_SHA256 }) };
- let current = { ...scope }, file: CloudFile | null = null, puts = 0, starts = 0, commits = 0, lost = false, ready = false, opens = 0;
+ let current = { ...scope }, file: CloudFile | null = null, puts = 0, starts = 0, commits = 0, lost: boolean | number = false, ready = false, opens = 0;
  const receipts = new Map<string, { body: string; file: CloudFile }>();
  let hook: ((path: string, body: any) => Response | null) | undefined;
  const runtime: CloudTransportRuntime = { currentScope: () => current, origin: () => scope.origin, requireCapability: async () => {},
@@ -39,7 +40,7 @@ async function fixture(payload = bytes) {
     if (body.expectedRevision !== (file?.revision ?? null)) return Response.json({ ok: false }, { status: 409 });
     file = { id: body.id, name: body.name, folderId: body.folderId, revision: randomUUID(), trashed: body.trashed, content: { attachmentId: 'att1', version: 'a'.repeat(64), size: bytes.length, fingerprint } };
     receipts.set(body.operationId, { body: JSON.stringify(body), file: structuredClone(file) }); commits++;
-    if (lost) { lost = false; throw Error('Accepted commit response was lost'); }
+    if (lost) { const failure = lost; lost = false; if (typeof failure === 'number') return Response.json({ ok: false }, { status: failure, headers: { 'Retry-After': '120' } }); throw Error('Accepted commit response was lost'); }
     return Response.json({ ok: true, file, replayed: false });
    }
    if (u.pathname === '/api/v1/attachments/uploads') { starts++; return Response.json({ ok: true, upload: { id: 'att1', partSizeBytes: fingerprint.partSizeBytes, partCount: fingerprint.partCount, ...(ready || bytes.length === 0 ? { state: 'ready' } : {}) } }); }
@@ -50,7 +51,7 @@ async function fixture(payload = bytes) {
   } };
  const make = () => prepareCloudSyncRun(createSyncRun(planFileSync({ scope, complete: true, entries: [entry] }, { scope, complete: true, entries: [] }, { scope, entries: [] }, { mode: 'backup', propagateDeletes: false })), [{ before: null, folderId: null }]);
  const port = (run: SyncRun, persist: (run: SyncRun) => Promise<void>, transfer?: (value: TransferActivity) => void) => createCloudSyncPort(run, { transfer, currentScope: () => current, persist, readLocal: async () => entry, openSource: async () => { opens++; return source(); } }, runtime);
- return { make, port, runtime, entry, file: () => file, counts: () => ({ puts, starts, commits, opens }), lose: () => { lost = true; }, context: (next: SyncScope) => { current = next; }, hook: (next: typeof hook) => { hook = next; } };
+ return { make, port, runtime, entry, file: () => file, counts: () => ({ puts, starts, commits, opens }), lose: (status?: number) => { lost = status ?? true; }, context: (next: SyncScope) => { current = next; }, hook: (next: typeof hook) => { hook = next; } };
 }
 test('real transport joins executor and durable journal, recovering a lost commit without rereading or uploading bytes', async () => {
  const f = await fixture(), factory = new IDBFactory(); let journal = await openSyncJournal(factory); const run = f.make(); f.lose();
@@ -270,4 +271,60 @@ test('empty-file uploads negotiate the new storage contract before any network r
  await assert.rejects(executeSyncRun(run, f.port(run, async () => {})), /updated server/);
  assert.ok(seen.includes('api.files@1.8.0'));
  assert.deepEqual(f.counts(), { puts: 0, starts: 0, commits: 0, opens: 0 });
+});
+
+
+test('an accepted commit followed by HTTP503 preserves its durable receipt and never uploads or commits again on resume', async () => {
+ const f = await fixture(), factory = new IDBFactory(), run = f.make();
+ let journal = await openSyncJournal(factory);
+ f.lose(503);
+ await assert.rejects(executeSyncRun(run, f.port(run, journal.persist)), error => {
+  assert.ok(error instanceof SyncConnectionWait); assert.equal(error.retryAfterMs, 120_000); return true;
+ });
+ assert.equal((await journal.read(scope))!.operations[0].confirmed, false);
+ assert.deepEqual(f.counts(), { puts: 1, starts: 1, commits: 1, opens: 1 });
+ journal.close(); journal = await openSyncJournal(factory);
+ const restored = parseCloudSyncRun((await journal.read(scope))!);
+ assert.equal(restored.operations[0].id, run.operations[0].id);
+ const completed = await executeSyncRun(restored, f.port(restored, journal.persist));
+ assert.equal(completed.operations[0].confirmed, true);
+ assert.deepEqual(f.counts(), { puts: 1, starts: 1, commits: 1, opens: 1 }); journal.close();
+});
+
+test('cloud HTTP retry classification is status-only and Retry-After is bounded', () => {
+ for (const status of [408, 429, 500, 502, 503, 504, 599]) assert.ok(cloudSyncHttpError(status) instanceof SyncConnectionWait);
+ for (const status of [400, 401, 403, 404, 409, 412, 413, 422]) assert.equal(cloudSyncHttpError(status) instanceof SyncConnectionWait, false);
+ const now = Date.UTC(2026, 9, 20);
+ for (const [header, delay] of [[null, SYNC_RETRY_DELAY_MS], ['invalid', SYNC_RETRY_DELAY_MS], ['0', SYNC_RETRY_DELAY_MS], ['1', SYNC_RETRY_DELAY_MS],
+  ['120', 120_000], [new Date(now + 90_000).toUTCString(), 90_000], ['999999999999999999999999', SYNC_RETRY_MAX_MS], ['9'.repeat(129), SYNC_RETRY_DELAY_MS]] as const)
+  assert.equal((cloudSyncHttpError(503, header, now) as SyncConnectionWait).retryAfterMs, delay);
+});
+
+
+test('temporary responses never hide context changes, explicit cancellation, malformed content or capability failures', async () => {
+ for (const kind of ['cancel', 'identity', 'malformed', 'capability', 'authority'] as const) {
+  const controller = new AbortController(); let current = scope;
+  const runtime: CloudTransportRuntime = { origin: () => scope.origin, currentScope: () => current,
+   requireCapability: async () => { if (kind === 'capability') throw Error('Capability mismatch'); },
+   fetch: async () => {
+    if (kind === 'cancel') controller.abort(Error('Explicit Stop'));
+    if (kind === 'identity') current = { ...scope, ownerId: 'other' };
+    return kind === 'malformed' ? new Response('{invalid') : new Response('private response must not appear', { status: kind === 'authority' ? 403 : 503 });
+   } };
+  const transport = cloudRequests(runtime, scope, controller.signal);
+  await assert.rejects(async () => { await transport.negotiate({ 'api.files': '1.8.0' }); await transport.json('/api/v1/files'); }, error => {
+   assert.equal(error instanceof SyncConnectionWait, false, kind);
+   assert.doesNotMatch((error as Error).message, /private response/); return true;
+  });
+ }
+});
+
+test('an internal request deadline is resumable even when fetch reports generic AbortError', async () => {
+ const deadline = new DOMException('Timed out', 'TimeoutError');
+ const timeout = mock.method(AbortSignal, 'timeout', () => AbortSignal.abort(deadline));
+ try {
+  const runtime: CloudTransportRuntime = { origin: () => scope.origin, currentScope: () => scope, requireCapability: async () => {},
+   fetch: async () => { throw new DOMException('Aborted', 'AbortError'); } };
+  await assert.rejects(cloudRequests(runtime, scope).json('/api/v1/files'), SyncConnectionWait);
+ } finally { timeout.mock.restore(); }
 });
