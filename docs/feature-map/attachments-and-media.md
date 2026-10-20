@@ -1,5 +1,13 @@
 # Attachments and media
 
+Cloud JSON sync requests classify HTTP 408/429/5xx as temporary transport waits.
+`syncJobJournal.ts` persists an optional, revision-guarded `retryAt`; automatic
+discovery respects it across restart and repeated wake events. Retry-After is
+bounded to 30 seconds through five minutes. The next attempt retains its
+operation ID and checks receipts before publishing; explicit Retry can clear
+the delay, while Stop, authority and integrity failures retain their safeguards.
+
+
 iOS publication 1.2 hosts now use the same app-owned runner and durable admissions
 as Mac. `nativeSyncHost.client.ts` binds the device/session; `folderHostFetch.client.ts`
 shares the strict account transport. `nativeSyncVisibility.ts` preserves runnable

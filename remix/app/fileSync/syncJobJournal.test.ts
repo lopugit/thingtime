@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { IDBFactory, IDBKeyRange } from 'fake-indexeddb';
 import { openSyncJournal } from './journal.client';
-import { MAX_SYNC_JOBS_PER_ACCOUNT, SYNC_JOB_PAGE_SIZE, pauseSyncJobAdmission, syncJobCanPause } from './syncJobJournal';
+import { MAX_SYNC_JOBS_PER_ACCOUNT, SYNC_JOB_PAGE_SIZE, pauseSyncJobAdmission, syncJobCanPause, syncJobDue } from './syncJobJournal';
 import { newFileSyncConfiguration } from './configuration';
 import type { SyncScope } from './reconcile';
 const scope: SyncScope = { origin: 'https://sync.example', ownerId: 'owner', dataPlane: 'home', deviceId: 'device', rootId: 'connection' };
@@ -226,5 +226,32 @@ test('retrying automatic attention preserves its interval and sealed capture; ex
  assert.equal(finished.state, 'scheduled'); assert.equal(finished.nextRunAt, 300_100);
  await jobs.pause(finished);
  assert.equal((await jobs.admit(configuration, 'explicit-one-shot')).intervalMs, undefined);
+ journal.close();
+});
+
+
+test('transient retry deadlines survive restart, reject noisy early wakes, and preserve explicit Stop/newer-attempt CAS', async () => {
+ const factory = new IDBFactory(); let journal = await open(factory), jobs = jobsFor(journal);
+ const first = await jobs.admit(saved(), 'original', 60_000);
+ assert.equal(syncJobDue(first, 100), true, 'legacy jobs without a deadline stay compatible');
+ const deferred = (await jobs.defer(first, 100, 120_000))!;
+ assert.equal(deferred.retryAt, 120_100); assert.equal(deferred.id, first.id);
+ journal.close(); journal = await open(factory); jobs = jobsFor(journal);
+ const restored = (await jobs.read())!; assert.equal(restored.retryAt, deferred.retryAt);
+ for (const wake of ['online', 'pageshow', 'job-event']) {
+  assert.equal(syncJobDue(restored, 120_099), false, wake);
+  assert.equal(await jobs.begin(restored, 120_099, 'unrelated'), null, wake);
+ }
+ const resumed = (await jobs.begin(restored, 120_100, 'unrelated'))!;
+ assert.equal(resumed.id, first.id); assert.equal(resumed.retryAt, undefined);
+ assert.equal(await jobs.defer(restored, 120_101), null, 'late failure cannot defer a newer attempt');
+ const stopped = (await jobs.pause(resumed))!;
+ assert.equal(await jobs.defer(resumed, 120_102), null, 'late failure cannot overwrite Stop');
+ assert.equal((await jobs.read())!.state, 'paused');
+ const manual = await jobs.admit(saved(), 'ignored');
+ assert.equal(manual.id, first.id); assert.equal(manual.retryAt, undefined, 'explicit retry deliberately clears delay');
+ assert.equal(await jobs.defer(stopped, 120_103), null);
+ await assert.rejects(jobs.defer(manual, 0, Infinity), /deadline/);
+ const bounded = (await jobs.defer(manual, 100, 999999999))!; assert.equal(bounded.retryAt, 300_100);
  journal.close();
 });

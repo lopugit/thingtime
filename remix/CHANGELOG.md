@@ -98,6 +98,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-20: Keep transient cloud sync HTTP 408/429/5xx failures resumable with original operation receipts. Persist a bounded retry deadline across restarts and noisy wake events; keep permission, identity, integrity and explicit Stop behavior unchanged. Signed installed recovery remains pending. — Codex (AI)
+
 - 2026-10-20: Preserve the final verified native roots in desktop upload receipts (fileUploadVersion 1.0.1), so production response parsers accept completed parts. Extend native/HTTP regression through the desktop host and real client parser/source adapter; installed cloud completion and downloaded-byte acceptance remain pending. — Codex (AI)
 
 - 2026-10-20: Revalidate Mac upload sources with valid positive-length EOF reads instead of rejected zero-length requests. Verify the full part helper against actual native reads/stream framing and HTTP bytes, including source changes before/after PUT. Signed installed byte acceptance remains pending. — Codex (AI)

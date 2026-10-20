@@ -1,3 +1,4 @@
+import { cloudSyncHttpError, SyncConnectionWait } from './syncConnectionWait';
 import type { FileSyncApproval } from './configuredPlan';
 import { fileRetentionEventId } from './fileVersions';
 import { CLOUD_FOLDER_REQUIREMENTS, parseCloudFolder, parseCloudFolderCreate, cloudFolderSyncEntry } from './cloudFolder';
@@ -53,6 +54,12 @@ export function cloudRequests(runtime: CloudTransportRuntime, scope: SyncScope, 
 		if (body !== undefined) await runtime.authorizeMutation?.(signal);
 		check();
 		const requestSignal = signal ? AbortSignal.any([signal, AbortSignal.timeout(30_000)]) : AbortSignal.timeout(30_000);
+		const transportFailure = (error: unknown): never => {
+			check(); // Explicit cancellation and identity changes always take precedence.
+			if (requestSignal.aborted && requestSignal.reason?.name === 'TimeoutError')
+				throw new SyncConnectionWait('Cloud sync request timed out; retain this run for automatic recovery.');
+			throw error;
+		};
 		const response = await runtime.fetch(url, {
 			method: body === undefined ? 'GET' : 'POST',
 			credentials: 'same-origin',
@@ -66,15 +73,15 @@ export function cloudRequests(runtime: CloudTransportRuntime, scope: SyncScope, 
 				...(body === undefined ? {} : { 'Content-Type': 'application/json' })
 			},
 			...(bodyText === undefined ? {} : { body: bodyText })
-		});
-		check();
+		}).catch(transportFailure);
+		try { check(); } catch (error) { await response.body?.cancel().catch(() => {}); throw error; }
 		if (missing && response.status === 404) {
-			await response.body?.cancel();
+			await response.body?.cancel().catch(() => {});
 			return null;
 		}
 		if (!response.ok) {
-			await response.body?.cancel();
-			throw Error(`Cloud sync request failed (${response.status}); retain this run for retry or reconciliation.`);
+			await response.body?.cancel().catch(() => {});
+			throw cloudSyncHttpError(response.status, response.headers.get('retry-after'));
 		}
 		if (!response.body) throw Error('Missing cloud sync response.');
 		const reader = response.body.getReader();
@@ -89,8 +96,8 @@ export function cloudRequests(runtime: CloudTransportRuntime, scope: SyncScope, 
 				if (total > 64 * 1024) throw Error('Cloud sync response is too large.');
 				chunks.push(next.value);
 			}
-		} finally {
-			await reader.cancel();
+		} catch (error) { transportFailure(error); } finally {
+			await reader.cancel().catch(() => {});
 			reader.releaseLock();
 		}
 		const bytes = new Uint8Array(total);
@@ -274,7 +281,7 @@ function cloudFileTransport(runtime: CloudTransportRuntime, saved: CloudWrite, s
 							body: bytes,
 							signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(120_000)]) : AbortSignal.timeout(120_000)
 						});
-						await response.body?.cancel();
+						await response.body?.cancel().catch(() => {});
 						await sourceCheck();
 						if (!response.ok) throw Error(`Cloud upload part failed (${response.status}); retain this run.`);
 					}

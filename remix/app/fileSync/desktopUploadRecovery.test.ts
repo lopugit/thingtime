@@ -6,6 +6,7 @@ import { IDBFactory, IDBKeyRange } from 'fake-indexeddb';
 import { openSyncJournal } from './journal.client';
 import { newFileSyncConfiguration } from './configuration';
 import { executeSyncOperation, type SyncRun, type SyncReceipt } from './execute';
+import { cloudRequests } from './cloudTransport';
 import { SyncConnectionWait } from './syncConnectionWait';
 import type { ForegroundSyncInput } from './foregroundSync';
 
@@ -36,6 +37,10 @@ if (!process.execArgv.includes('--experimental-test-module-mocks')) {
 		let journal!: Awaited<ReturnType<typeof openSyncJournal>>,
 			receipt: SyncReceipt | null = null,
 			failure: unknown;
+		let cloudStatus: number | undefined;
+		let attempts: string[] = [];
+		let now = Date.UTC(2026, 9, 20);
+		const clock = mock.method(Date, 'now', () => now);
 		let runnerCalls = 0,
 			publications = 0,
 			runnerError: unknown;
@@ -52,9 +57,15 @@ if (!process.execArgv.includes('--experimental-test-module-mocks')) {
 							binding,
 							{
 								currentScope: () => binding,
-								lookup: async () => (receipt ? { status: 'complete', receipt } : { status: 'missing' }),
+								lookup: async () => {
+									const known = cloudStatus
+										? (await cloudRequests(input.runtime, binding, signal).json('/api/v1/files?operationId=' + operation.id)).receipt
+										: receipt;
+									return known ? { status: 'complete', receipt: known } : { status: 'missing' };
+								},
 								read: async (side) => (side === 'local' ? entry : null),
 								apply: async (op) => {
+									if (cloudStatus) return (await cloudRequests(input.runtime, binding, signal).json('/api/v1/files', { operationId: op.id })).receipt;
 									const source = await input.source(entry);
 									assert.ok(source.uploadPart, 'production desktop adapter must negotiate native upload parts');
 									await source.uploadPart({ uploadId: 'upload-original', requestId: op.id, partNumber: 1, offset: 0, length: 3 }, signal);
@@ -83,16 +94,21 @@ if (!process.execArgv.includes('--experimental-test-module-mocks')) {
 		const originals = new Map(globals.map((name) => [name, Object.getOwnPropertyDescriptor(globalThis, name)]));
 		const install = (name: string, value: unknown) => Object.defineProperty(globalThis, name, { configurable: true, writable: true, value });
 		try {
-			for (const hostMessage of [
-				retry,
-				`Error invoking remote method 'thingtime-desktop:folder-sync': Error: ${retry}`,
-				'Upload rejected (403)',
-				'TLS certificate verification failed',
-				'Source file changed.'
+			const enteredHttp = new Set<number>();
+			for (const scenario of [
+				{ message: retry },
+				{ message: `Error invoking remote method 'thingtime-desktop:folder-sync': Error: ${retry}` },
+				{ message: 'Upload rejected (403)' },
+				{ message: 'TLS certificate verification failed' },
+				{ message: 'Source file changed.' },
+				{ status: 503 },
+				{ status: 401 },
+				{ status: 403 }
 			]) {
-				const transient = hostMessage.includes(retry),
-					attempts: string[] = [];
-				failure = Error(hostMessage);
+				cloudStatus = scenario.status;
+				attempts = [];
+				const transient = cloudStatus === 503 || !!scenario.message?.includes(retry);
+				failure = Error(scenario.message ?? 'fixture HTTP failure');
 				receipt = null;
 				runnerCalls = publications = 0;
 				runnerError = undefined;
@@ -115,7 +131,24 @@ if (!process.execArgv.includes('--experimental-test-module-mocks')) {
 						};
 					}
 				};
-				const window = Object.assign(new EventTarget(), { location: { origin }, thingtimeDesktop: bridge });
+				const window = Object.assign(new EventTarget(), {
+					location: { origin },
+					thingtimeDesktop: bridge,
+					fetch: async (_target: unknown, init?: RequestInit) => {
+						if (init?.method !== 'POST') return Response.json({ ok: true, receipt });
+						const body = JSON.parse(init.body as string);
+						assert.ok(cloudStatus);
+						enteredHttp.add(cloudStatus);
+						attempts.push(body.operationId);
+						if (cloudStatus === 503 || !failure) {
+							if (!receipt) publications++;
+							receipt = { operationId: body.operationId, scope, entry: { ...entry, id: 'cloud-file', version: 'cloud-1' } };
+						}
+						return failure
+							? Response.json({ ok: false }, { status: cloudStatus, headers: { 'Retry-After': '120' } })
+							: Response.json({ ok: true, receipt });
+					}
+				});
 				install('window', window);
 				install('document', Object.assign(new EventTarget(), { visibilityState: 'visible' }));
 				install('navigator', { locks: { request: async (_name: string, _options: unknown, work: () => Promise<unknown>) => work() } });
@@ -131,7 +164,7 @@ if (!process.execArgv.includes('--experimental-test-module-mocks')) {
 						paused: false
 					}
 				};
-				const jobs = journal.jobs({ scope, currentScope: () => scope });
+				let jobs = journal.jobs({ scope, currentScope: () => scope });
 				const admitted = await jobs.admit(saved, 'job-original', 60_000);
 				const run: SyncRun = {
 					version: 1,
@@ -155,11 +188,22 @@ if (!process.execArgv.includes('--experimental-test-module-mocks')) {
 				assert.equal(nativeSyncTasks.read()?.waiting, transient);
 				assert.equal((await jobs.read())?.state, transient ? 'runnable' : 'attention');
 				assert.equal((await journal.read(scope))?.operations[0].confirmed, false);
+				const waitingJob = await jobs.read();
+				if (transient) assert.equal(waitingJob?.retryAt, now + (cloudStatus ? 120_000 : 30_000));
 				failure = undefined;
+				for (const wake of ['online', 'pageshow', 'job-event']) {
+					await resumeNativeSyncJobs(scope.ownerId, 0, new AbortController().signal);
+					assert.equal(runnerCalls, 1, `${wake} cannot bypass durable backoff`);
+				}
+				journal.close();
+				journal = await openSyncJournal();
+				jobs = journal.jobs({ scope, currentScope: () => scope });
+				if (transient) assert.equal((await journal.jobs({ scope, currentScope: () => scope }).read())?.retryAt, waitingJob!.retryAt);
+				now = (waitingJob?.retryAt ?? now) + 1;
 				await resumeNativeSyncJobs(scope.ownerId, 0, new AbortController().signal);
 				assert.equal(runnerCalls, transient ? 2 : 1);
 				assert.equal(publications, transient ? 1 : 0);
-				assert.deepEqual(attempts, transient ? ['operation-original', 'operation-original'] : ['operation-original']);
+				assert.deepEqual(attempts, transient && !cloudStatus ? ['operation-original', 'operation-original'] : ['operation-original']);
 				assert.equal((await journal.read(scope))?.operations[0].confirmed, transient);
 				assert.equal((await jobs.read())?.id, admitted.id);
 				assert.equal((await jobs.read())?.state, transient ? 'scheduled' : 'attention');
@@ -169,8 +213,10 @@ if (!process.execArgv.includes('--experimental-test-module-mocks')) {
 				nativeSyncTasks.invalidate();
 				journal.close();
 			}
+			assert.deepEqual([...enteredHttp].sort(), [401, 403, 503], 'all real HTTP coordinator scenarios must execute');
 		} finally {
 			nativeSyncTasks.invalidate();
+			clock.mock.restore();
 			journal?.close();
 			for (const [name, descriptor] of originals) {
 				if (descriptor) Object.defineProperty(globalThis, name, descriptor);
