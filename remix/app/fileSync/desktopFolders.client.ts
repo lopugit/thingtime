@@ -98,6 +98,10 @@ export async function createDesktopFolderHost(input: {
 						// fields. Only recognize fixed host compatibility/retry messages;
 						// never display arbitrary native errors, paths or transport details.
 						const retry = '[folder_identity_retry] Folder identity verification is temporarily unavailable. Retry after reconnecting.';
+						const uploadRetry = '[folder_upload_retry] Folder upload is temporarily unavailable. Retry after reconnecting.';
+						if (error instanceof Error && (error.message === uploadRetry ||
+							error.message === `Error invoking remote method 'thingtime-desktop:folder-sync': Error: ${uploadRetry}`))
+							throw new SyncConnectionWait('Waiting for upload transport to reconnect. Saved transfer progress will continue automatically.');
 						const shutdown = '[folder_sync_shutdown] Thingtime is closing. Saved sync work can resume when reopened.';
 						if (error instanceof Error && (error.message === shutdown ||
 							error.message === `Error invoking remote method 'thingtime-desktop:folder-sync': Error: ${shutdown}`))

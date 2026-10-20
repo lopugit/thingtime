@@ -98,6 +98,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-20: Add the checksum-locked desktop part-upload adapter so bundled loopback origins use host uploads instead of browser S3 PUTs rejected by CORS. Keep source/version, scope, checksums, finalization and receipt checks; no browser security or bucket access changes. Signed installed byte acceptance remains pending. — Codex (AI)
+
 - 2026-10-20: Give renderer index long-polls a separate queue so conditions and file reads continue; preserve independent native indexing when request authorization is canceled. Keep real authority loss fail-closed and add privacy-tested interruption/slow-request diagnostics. Installed payload acceptance remains open; see [PR 1063](../PRs/1063-codex-sync-indexer-recovery-preserve-streaming-indexing-when-identity-requests-are-canceled.md). — Codex (AI)
 
 - 2026-10-20: Stream eligible one-way file transfers from the durable native index while traversal continues, retaining version receipts and revision-aware wake-ups. Show concurrent indexing/transfer progress and growing totals in editable blocks. Native concurrency, cloud changes and signed installed acceptance remain under verification. — Codex (AI)

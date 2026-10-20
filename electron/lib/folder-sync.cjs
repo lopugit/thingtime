@@ -1,9 +1,10 @@
 'use strict';
 
+const { uploadFolderPart, uploadRetry, retryableUploadFailure } = require('./folder-upload.cjs');
 const { stageRangeMetadata } = require('./folder-stream.cjs');
 const { normalizeEndpointUrl } = require('./desktop-settings.cjs');
 const { randomUUID } = require('node:crypto');
-const ACTIONS = new Set(['context', 'list', 'choose', 'conditions', 'remove', 'scan', 'scan-stream', 'scan-stream-finish', 'scan-changes', 'scan-capture', 'scan-status', 'scan-cancel', 'scan-skips', 'scan-page', 'scan-discard', 'inspect', 'read', 'read-range', 'stage-begin', 'stage-append', 'stage-range', 'stage-finish', 'write-approve', 'write-check', 'publication-lookup', 'publish', 'trash', 'trash-lookup', 'trash-expected', 'trash-inspect', 'trash-restore', 'trash-list', 'trash-restore-reviewed', 'suspend']);
+const ACTIONS = new Set(['context', 'upload-part', 'list', 'choose', 'conditions', 'remove', 'scan', 'scan-stream', 'scan-stream-finish', 'scan-changes', 'scan-capture', 'scan-status', 'scan-cancel', 'scan-skips', 'scan-page', 'scan-discard', 'inspect', 'read', 'read-range', 'stage-begin', 'stage-append', 'stage-range', 'stage-finish', 'write-approve', 'write-check', 'publication-lookup', 'publish', 'trash', 'trash-lookup', 'trash-expected', 'trash-inspect', 'trash-restore', 'trash-list', 'trash-restore-reviewed', 'suspend']);
 const supportsBatchPages = version => {
     const parts = typeof version === 'string' && version.length <= 32 && /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/.exec(version);
     return !!parts && parts[1] === '1' && Number.isSafeInteger(Number(parts[2])) && Number.isSafeInteger(Number(parts[3])) && Number(parts[2]) >= 10;
@@ -91,9 +92,42 @@ async function readCapabilities(context, signal) {
 
 /** Only the bundled main frame may request local files. Its current account is
  * read by the host's own network stack; renderer identity is only an expectation. */
+async function signDesktopUploadPart(context, body, signal, timeoutMs = 20_000) {
+    const partSignal = AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]);
+    let response;
+    try {
+        response = await verificationFetch(context, new URL('/api/v1/attachments/uploads/parts', context.appOrigin).href, {
+            method: 'POST', credentials: 'include', cache: 'no-store', redirect: 'error', bypassCustomProtocolHandlers: true,
+            signal: partSignal, headers: { 'Content-Type': 'application/json', Accept: 'application/json',
+                'X-Thingtime-Expected-Actor': context.ownerId, 'X-Thingtime-Expected-Data-Plane': 'home',
+                'X-Thingtime-Expected-Api-Origin': context.apiOrigin }, body: JSON.stringify(body)
+        });
+    } catch (error) {
+        signal.throwIfAborted();
+        if (retryableUploadFailure(error)) throw uploadRetry();
+        if (error instanceof Error && error.message === verificationRetry().message) throw error;
+        throw unavailable();
+    }
+    try {
+        const fallback = response.headers.get('x-thingtime-api-fallback');
+        if (response.redirected || (context.appOrigin !== context.apiOrigin && fallback !== null && fallback !== context.apiOrigin)) throw unavailable();
+        // As with account verification, an upstream cooldown/outage remains a
+        // recoverable wait even when the proxy could not add its origin header.
+        if (transientStatus(response.status)) throw uploadRetry();
+        if (response.status !== 200 ||
+            (context.appOrigin !== context.apiOrigin && response.headers.get('x-thingtime-api-fallback') !== context.apiOrigin)) throw unavailable();
+        try { return await boundedJson(response, partSignal, 64 * 1024); }
+        catch (error) {
+            signal.throwIfAborted();
+            if ((partSignal.aborted && partSignal.reason?.name === 'TimeoutError') || retryableUploadFailure(error)) throw uploadRetry();
+            throw unavailable();
+        }
+    } finally { if (!response.body?.locked) await response.body?.cancel().catch(() => {}); }
+}
+
 class DesktopFolderSync {
-    constructor({ context, requestNative, verifyAccount = readAccount, capabilities = readCapabilities, timeoutMs = 300_000 }) {
-        this.context = context; this.requestNative = requestNative; this.verifyAccount = verifyAccount;
+    constructor({ context, requestNative, verifyAccount = readAccount, capabilities = readCapabilities, fetchUpload = globalThis.fetch, timeoutMs = 300_000 }) {
+        this.context = context; this.requestNative = requestNative; this.fetchUpload = fetchUpload; this.verifyAccount = verifyAccount;
         this.capabilities = capabilities; this.timeoutMs = timeoutMs; this.generation = 0; this.active = null; this.streamWaiter = null; this.ordinaryQueue = []; this.quitting = false;
     }
     capture(event, input) {
@@ -212,12 +246,24 @@ class DesktopFolderSync {
                 if (!this.samePageCapability(context, state.input)?.supported)
                     throw new Error('This native host does not support larger inventory pages. Update Thingtime and reconnect.');
             }
+            if (state.input.action === 'upload-part') {
+                const manifest = await this.capabilities(context, AbortSignal.any([state.abort.signal, AbortSignal.timeout(20_000)]));
+                await verify();
+                if (!/^1\.([1-9][0-9]*)\.(0|[1-9][0-9]*)$/.test(manifest?.features?.['api.attachment-upload-parts']?.version ?? ''))
+                    throw new Error('The selected server does not support this version of folder sync.');
+            }
             state.dispatched = true;
-            const value = await this.requestNative('folder-sync.request', { ...state.input, origin: context.apiOrigin }, { signal: state.abort.signal });
+            const value = state.input.action === 'upload-part' ? await uploadFolderPart({ input: state.input, context,
+                signal: state.abort.signal, authorize: verify, fetchUpload: this.fetchUpload,
+                requestNative: request => this.requestNative('folder-sync.request', request, { signal: state.abort.signal }),
+                signPart: async body => { await verify(); return signDesktopUploadPart(context, body, state.abort.signal); }
+            }) : await this.requestNative('folder-sync.request', { ...state.input, origin: context.apiOrigin }, { signal: state.abort.signal });
             if (!value || typeof value !== 'object') throw unavailable();
             if (state.input.action === 'context') {
                 this.assertCurrent(state);
                 value.apiCapabilities = apiCapabilities;
+                if (/^1\.([2-9]|[1-9][0-9]+)\.(0|[1-9][0-9]*)$/.test(value.capabilities?.fileAccessVersion ?? ''))
+                    value.capabilities = { ...value.capabilities, fileUploadVersion: '1.0.0' };
             }
             await verify();
             if (!value || typeof value !== 'object' || value.requestId !== input.requestId || value.ownerId !== input.ownerId ||
@@ -244,4 +290,4 @@ class DesktopFolderSync {
         } finally { clearTimeout(timer); this.release(state); }
     }
 }
-module.exports = { DesktopFolderSync, readAccount, readCapabilities };
+module.exports = { DesktopFolderSync, readAccount, readCapabilities, signDesktopUploadPart };

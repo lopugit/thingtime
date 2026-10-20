@@ -118,7 +118,7 @@ export type FolderCapabilities = Pick<
 	| 'fileVersionsVersion'
 >;
 export const supportsNativePartUploads = (bridge: FolderCapabilities | undefined = getNativeBridge()) =>
-	(bridge?.platform === 'ios' || bridge?.platform === 'android') && /^1\.\d+\.\d+$/.test(bridge.fileUploadVersion ?? '');
+	(bridge?.platform === 'ios' || bridge?.platform === 'android' || bridge?.platform === 'macos') && /^1\.\d+\.\d+$/.test(bridge.fileUploadVersion ?? '');
 /** These native access contracts independently add exact single-path inspection. */
 export const supportsNativeInventoryPages = (bridge: FolderCapabilities | undefined = getNativeBridge()) => {
 	const minimum = bridge?.platform === 'macos' ? 5 : bridge?.platform === 'ios' ? 3 : undefined;
