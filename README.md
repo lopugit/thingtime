@@ -5596,6 +5596,25 @@ explicit status/service/release verification stays complete. See the
 [native batch contract](macos/ThingtimeNode/README.md#bounded-streaming-transport-batches).
 This changes no sync configuration, grant, root scheduling or remote API contract.
 
+#### Priorities before streaming preparation
+
+On the trusted native Mac path, selected upload paths can be prepared from the
+already durable index before ordinary earlier observations. The queue stays at
+128 pending operations: one ordinary operation can free a full queue, then an
+eligible priority binding uses that slot. Required ancestor folders are prepared
+and acknowledged before their child, including ancestors outside the selected
+prefix. Reserved or uncertain operations keep their original IDs.
+
+Journal version 13 adds a scoped path index over retained input rows. A separate local task
+backfills normalized keys in resumable 128-row transactions through a fixed legacy
+cutoff; indexing and uploads continue while it runs. A priority becomes eligible
+only after its NFC/casefold and earliest-revision proof exists. Processed-ahead
+observations retain individual durable markers; the contiguous source watermark
+cannot cross an unprocessed gap, and streaming never publishes a complete baseline.
+Old/generic adapters and remote-source preparation retain FIFO behavior. This does
+not prioritize files the native indexer has not discovered, add transfer concurrency,
+or provide native upload-speed telemetry. Installed priority acceptance remains open.
+
 #### iOS native multipart uploads
 
 Updated iOS hosts upload selected folder and photo originals from private,
