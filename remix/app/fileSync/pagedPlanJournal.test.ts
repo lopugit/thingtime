@@ -3,7 +3,9 @@ import test from 'node:test';
 import { IDBFactory, IDBKeyRange, IDBObjectStore } from 'fake-indexeddb';
 import { openSyncJournal } from './journal.client';
 import { type InventoryIdentity, INVENTORY_PAGE_ENTRIES, INVENTORY_STORES } from './inventoryJournal';
-import { type PagedPlanSpec, type PagedPlanCursor } from './pagedPlanJournal';
+import { PLAN_STORES, type PagedPlanHeader, type PagedPlanSpec, type PagedPlanCursor } from './pagedPlanJournal';
+import { INVENTORY_PIN_STORE } from './inventoryJournal';
+import { createSyncIgnorePolicy } from './syncIgnore';
 import { planFileSync, syncScopeKey, type SyncDecision, type SyncEntry, type SyncScope, type SyncPolicy } from './reconcile';
 
 const scope: SyncScope = { origin: 'https://paged-planner.test', ownerId: 'owner', dataPlane: 'home', rootId: 'connection', deviceId: 'device' };
@@ -218,4 +220,119 @@ test('20,000 paths plan and reopen with bounded decisions beyond the live whole-
 	} while (next);
 	assert.equal(seen, count);
 	await f.plans.discard(s); await f.inventory.discard(s.local); f.journal.close();
+});
+
+
+async function editStoredPlan(f: Awaited<ReturnType<typeof fixture>>, names: string[], work: (tx: IDBTransaction) => void) {
+	await new Promise<void>((resolve, reject) => {
+		const request = f.factory.open('paged-plan-test'); request.onerror = () => reject(request.error);
+		request.onsuccess = () => {
+			const db = request.result, tx = db.transaction(names, 'readwrite'); work(tx);
+			tx.oncomplete = () => { db.close(); resolve(); };
+			tx.onabort = tx.onerror = () => { db.close(); reject(tx.error); };
+		};
+	});
+}
+async function oldInitialIndex(f: Awaited<ReturnType<typeof fixture>>, s: PagedPlanSpec, read = 0, after: string | null = null) {
+	await editStoredPlan(f, [PLAN_STORES[0]], tx => {
+		const store = tx.objectStore(PLAN_STORES[0]), get = store.get([syncScopeKey(scope), s.id]);
+		get.onsuccess = () => {
+			const h: PagedPlanHeader = get.result;
+			h.phase = 'indexing'; h.indexed = read; h.positions[0] = { read, after }; h.revision++;
+			store.put(h, [syncScopeKey(scope), s.id]);
+		};
+	});
+}
+
+test('initial empty-target upload skips ancestor reads but preserves .git, ignores and protected parents', async t => {
+	for (const mode of ['backup', 'upload'] as const) {
+		const f = await fixture(), s = spec('first-' + mode, { mode, propagateDeletes: false });
+		s.excludedPaths = ['folder/exact']; s.ignoreRules = 'cache/\n*.tmp\n!keep.tmp';
+		const local = [folder('.git'), file('.git/HEAD'), folder('folder'), file('folder/exact'), folder('folder/cache'), file('folder/cache/data'),
+			file('folder/drop.tmp'), file('folder/keep.tmp'), ...Array.from({ length: 265 }, (_, i) => file('folder/file-' + String(i).padStart(3, '0')))];
+		await seed(f, s, local, []);
+		let reads = 0; const sides: unknown[] = [], get = IDBObjectStore.prototype.get, put = IDBObjectStore.prototype.put;
+		const getMock = t.mock.method(IDBObjectStore.prototype, 'get', function (this: IDBObjectStore, ...args: Parameters<typeof get>) {
+			if (this.name === PLAN_STORES[1]) reads++; return get.apply(this, args);
+		});
+		const putMock = t.mock.method(IDBObjectStore.prototype, 'put', function (this: IDBObjectStore, ...args: Parameters<typeof put>) {
+			if (this.name === PLAN_STORES[1]) sides.push((args[1] as IDBValidKey[])[3]); return put.apply(this, args);
+		});
+		assert.deepEqual(await f.plans.begin(s), { phase: 'planning', indexed: local.length, planned: 0, decisions: 0 });
+		await assert.rejects(f.plans.read(s), /incomplete/); await f.plans.build(s);
+		assert.equal(reads, 0); assert.ok(sides.length > 0); assert.ok(sides.every(side => side === 2));
+		getMock.mock.restore(); putMock.mock.restore();
+		const ignore = createSyncIgnorePolicy(s.ignoreRules, s.excludedPaths);
+		const expected = planFileSync({ scope, complete: true, entries: local }, { scope, complete: true, entries: [] }, { scope, entries: [] }, s.policy)
+			.decisions.filter(d => !ignore.ignored(d.path, local.find(e => e.path === d.path)!.kind));
+		assert.deepEqual((await decisions(f, s)).sort((a, b) => a.path.localeCompare(b.path)), expected.sort((a, b) => a.path.localeCompare(b.path)));
+		assert.ok((await decisions(f, s)).some(d => d.path === '.git/HEAD'));
+		assert.deepEqual(await f.plans.protectedPaths(s, ['folder', '.git']), [true, false]); f.journal.close();
+	}
+});
+
+test('initial empty-target planning resumes bounded pages across cancellation and reopen', async () => {
+	let f = await fixture(); const s = spec('first-resume', { mode: 'backup', propagateDeletes: false });
+	const local = Array.from({ length: 270 }, (_, i) => file('file-' + String(i).padStart(3, '0')));
+	await seed(f, s, local, []); const controller = new AbortController();
+	const plans = f.journal.plans({ scope, currentScope: () => scope, signal: controller.signal });
+	await assert.rejects(plans.build(s, p => { if (p.planned === 128) controller.abort(); }), { name: 'AbortError' });
+	assert.deepEqual(await f.plans.begin(s), { phase: 'planning', indexed: 270, planned: 128, decisions: 128 });
+	await assert.rejects(f.plans.read(s), /incomplete/); await assert.rejects(f.inventory.discard(s.local), /pinned/);
+	f.journal.close(); f = await fixture(f.factory);
+	assert.equal((await f.plans.build(s)).planned, 270); assert.equal((await decisions(f, s)).length, 270);
+	await f.inventory.discard(s.local); f.journal.close();
+});
+
+test('initial upload migrates a partially indexed older plan atomically and keeps existing pins', async () => {
+	let f = await fixture(); const s = spec('first-migrate', { mode: 'upload', propagateDeletes: false });
+	await seed(f, s, Array.from({ length: 270 }, (_, i) => file('file-' + String(i).padStart(3, '0'))), []);
+	await f.plans.begin(s); await oldInitialIndex(f, s, 128, 'file-127');
+	f.journal.close(); f = await fixture(f.factory);
+	const results = await Promise.all([f.plans.begin(s), f.plans.begin(s)]);
+	for (const state of results) assert.deepEqual(state, { phase: 'planning', indexed: 270, planned: 0, decisions: 0 });
+	await assert.rejects(f.inventory.discard(s.local), /pinned/); await assert.rejects(f.plans.read(s), /incomplete/);
+	assert.equal((await f.plans.build(s)).decisions, 270); assert.equal((await decisions(f, s)).length, 270); f.journal.close();
+});
+
+test('initial upload migration rejects rebound, unsealed, recounted or unpinned input without partial changes', async () => {
+	for (const fault of ['instance', 'unsealed', 'count', 'pin']) {
+		const f = await fixture(), s = spec('first-reject', { mode: 'backup', propagateDeletes: false });
+		await seed(f, s, [file('a'), file('b')], []); await f.plans.begin(s); await oldInitialIndex(f, s);
+		await editStoredPlan(f, [INVENTORY_STORES[0], INVENTORY_PIN_STORE], tx => {
+			if (fault === 'pin') { tx.objectStore(INVENTORY_PIN_STORE).delete([syncScopeKey(scope), s.local.id, s.id]); return; }
+			const store = tx.objectStore(INVENTORY_STORES[0]), get = store.get([syncScopeKey(scope), s.local.id]);
+			get.onsuccess = () => {
+				const h = get.result;
+				if (fault === 'instance') h.instance = crypto.randomUUID();
+				if (fault === 'unsealed') h.phase = 'captured';
+				if (fault === 'count') { h.entries++; h.validatedEntries++; }
+				store.put(h, [syncScopeKey(scope), s.local.id]);
+			};
+		});
+		await assert.rejects(f.plans.begin(s), /replaced|incomplete|pin/);
+		// Direct read remains unavailable: migration did not publish decisions.
+		await assert.rejects(f.plans.read(s), /incomplete/);
+		await editStoredPlan(f, [PLAN_STORES[0]], tx => {
+			const get = tx.objectStore(PLAN_STORES[0]).get([syncScopeKey(scope), s.id]);
+			get.onsuccess = () => { assert.equal(get.result.phase, 'indexing'); assert.equal(get.result.indexed, 0); assert.equal(get.result.decisions, 0); };
+		}); f.journal.close();
+	}
+});
+
+test('initial empty-target shortcut falls back for other modes, deletion policy or populated companion streams', async () => {
+	const cases: [SyncPolicy, SyncEntry[], SyncEntry[], SyncEntry[], SyncEntry[]][] = [
+		[{ mode: 'two-way', propagateDeletes: false }, [file('a')], [], [], []],
+		[{ mode: 'download', propagateDeletes: false }, [file('a')], [], [], []],
+		[{ mode: 'upload', propagateDeletes: true }, [file('a')], [], [], []],
+		[{ mode: 'backup', propagateDeletes: true }, [file('a')], [], [], []],
+		[{ mode: 'backup', propagateDeletes: false }, [], [], [], []],
+		[{ mode: 'backup', propagateDeletes: false }, [file('a')], [file('remote')], [], []],
+		[{ mode: 'backup', propagateDeletes: false }, [file('a')], [], [file('old')], []],
+		[{ mode: 'backup', propagateDeletes: false }, [file('a')], [], [], [file('old')]]
+	];
+	for (const [policy, local, remote, oldLocal, oldRemote] of cases) {
+		const f = await fixture(), s = spec('fallback', policy); await seed(f, s, local, remote, oldLocal, oldRemote);
+		assert.equal((await f.plans.begin(s)).phase, 'indexing'); f.journal.close();
+	}
 });

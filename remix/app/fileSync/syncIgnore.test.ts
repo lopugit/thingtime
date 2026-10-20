@@ -45,3 +45,15 @@ test('alternating star patterns use bounded NFA states rather than exponential b
  assert.equal(policy.ignored('a'.repeat(200) + 'q'), false);
  assert.equal(policy.ignored('a'.repeat(200) + 'z'), true);
 });
+
+test('dependency defaults preserve Git history, worktree metadata and pointer files', () => {
+ const policy = createSyncIgnorePolicy(DEFAULT_SYNC_IGNORE_RULES, ['Library', 'Applications', '.Trash']);
+ for (const path of ['things/code/project/.git', 'things/code/project/.git/objects/pack/saved.pack',
+  'things/code/project/.git/worktrees/feature/HEAD', 'things/code/project/.git/worktrees/feature/index',
+  'things/code/project/.git/worktrees/feature/gitdir', 'things/code/project/.git/refs/stash',
+  'things/code/project/.git/logs/HEAD', 'things/code/feature/.git']) {
+  assert.equal(policy.ignored(path, 'file'), false, path);
+ }
+ assert.equal(policy.ignored('things/code/project/.git', 'folder'), false);
+ assert.equal(policy.ignored('things/code/project/node_modules/dependency/index.js'), true);
+});

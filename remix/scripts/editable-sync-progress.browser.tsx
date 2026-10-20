@@ -27,15 +27,15 @@ window.fetch = async function(input, init) {
 	const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url, location.origin);
 	if (url.pathname.includes('thingtime-capabilities')) return Response.json(thingtimeCapabilityManifest(location.origin));
 	if (url.pathname === '/api/v1/webpages/resolve') {
-		const page = JSON.parse(localStorage.getItem(layoutKey) || 'null');
-		const selected = page?.crystal?.pageKey === url.searchParams.get('id') ? page : null;
+		const pages = JSON.parse(localStorage.getItem(layoutKey) || '{}');
+		const selected = pages[url.searchParams.get('id') || ''] ?? null;
         return Response.json(selected ? { ok: true, page: selected, source: 'user' } : { ok: false }, { status: selected ? 200 : 404 });
 	}
 	if (url.pathname === '/api/v1/things' && ['POST', 'PATCH'].includes(init?.method || '')) {
-		const input = JSON.parse(String(init?.body)), old = JSON.parse(localStorage.getItem(layoutKey) || 'null');
+		const input = JSON.parse(String(init?.body)), pages = JSON.parse(localStorage.getItem(layoutKey) || '{}'), old = pages[input.crystal.pageKey];
 		if (old && input.expectedUpdatedAt !== old.updatedAt) return Response.json({ ok: false }, { status: 409 });
 		const page = { id: old?.id || input.shareId, crystal: input.crystal, acl: input.acl || old.acl, author: { id: scope.ownerId }, updatedAt: new Date().toISOString() };
-		localStorage.setItem(layoutKey, JSON.stringify(page)); return Response.json({ ok: true, thing: page });
+		localStorage.setItem(layoutKey, JSON.stringify({ ...pages, [page.crystal.pageKey]: page })); return Response.json({ ok: true, thing: page });
 	}
 	if (url.pathname.startsWith('/api/')) return Response.json({ ok: true, things: [], items: [], components: [] });
 	return originalFetch(input, init);
@@ -53,9 +53,9 @@ function Fixture() {
 			preparation: { phase: 'cloud', completed: 1000000, total: 3653988 } }); }}>Prepare fixture</Button>
 		<Button onClick={() => setProgress({ stage: 'transferring', total: rows.length, confirmed: 4, path: rows.find(r => r.entry.size === 990)!.entry.path, bytes: 495, size: 990 })}>Transfer fixture</Button>
 		<Button onClick={() => { for (const row of rows) row.operation!.confirmed = true; setStatus('complete'); setProgress({ stage: 'complete', total: rows.length, confirmed: rows.length }); }}>Complete fixture</Button>
-		<SyncProgressViewer scopeKey="synthetic-progress" source={progress.stage === 'scanning' ? undefined : source} currentScope={() => scope} progress={progress} status={status} />
+		<SyncProgressViewer scopeKey="synthetic-progress" source={progress.stage === 'scanning' ? undefined : source} currentScope={() => scope} uploadPriorities={{ scope, excludedPaths: ['Private'], ignoreRules: 'node_modules/' }} progress={progress} status={status} />
 	</Box></ChakraProvider>;
 }
 const router = createMemoryRouter([{ id: 'root', path: '*', element: <Fixture /> }], { hydrationData: { loaderData: { root: { user: { id: scope.ownerId, username: 'synthetic-progress' }, dataPlane: 'home' } } } });
 createRoot(document.getElementById('root')!).render(<RouterProvider router={router} />);
-Object.assign(window, { progressFixture: { total: rows.length, layout: () => JSON.parse(localStorage.getItem(layoutKey) || 'null') } });
+Object.assign(window, { progressFixture: { total: rows.length, layout: () => Object.values(JSON.parse(localStorage.getItem(layoutKey) || '{}')).find((page: any) => JSON.stringify(page.crystal.blocks).includes('sync-progress-title')) } });

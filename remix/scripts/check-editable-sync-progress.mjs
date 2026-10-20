@@ -33,6 +33,37 @@ if (!process.env.TT_PROGRESS_WORKER) {
 		await page.getByRole('heading', { name: 'Sync progress', exact: true }).waitFor();
 		await page.getByText(/^50\.5%/).waitFor();
 		assert.equal(await page.locator('[data-block-id="sync-node-bar-fill"]').first().evaluate(element => getComputedStyle(element).backgroundColor), 'rgb(113, 113, 122)');
+		await page.getByRole('button', { name: 'Save upload priorities', exact: true }).waitFor();
+		await page.getByRole('textbox', { name: 'Priority paths', exact: true }).fill('Documents\nDeep');
+		await page.getByRole('button', { name: 'Save upload priorities', exact: true }).click();
+		await page.getByText('1. Documents', { exact: true }).waitFor();
+		await page.getByRole('button', { name: 'Move Deep up', exact: true }).click();
+		await page.getByText('1. Deep', { exact: true }).waitFor();
+		await page.reload(); await page.getByText('1. Deep', { exact: true }).waitFor();
+		assert.equal(await page.getByRole('textbox', { name: 'Priority paths', exact: true }).inputValue(), 'Deep\nDocuments');
+		await page.getByRole('button', { name: 'Upload Documents next', exact: true }).click();
+		await page.getByText('1. Documents', { exact: true }).waitFor();
+		await page.getByRole('textbox', { name: 'Priority paths', exact: true }).fill('Private/unsaved.txt');
+		await page.getByRole('button', { name: 'Save upload priorities', exact: true }).click();
+		await page.getByText(/This path is excluded by the saved sync rules/).waitFor();
+		assert.equal(await page.getByRole('textbox', { name: 'Priority paths', exact: true }).inputValue(), 'Private/unsaved.txt');
+		await page.getByRole('button', { name: 'Upload Deep next', exact: true }).click();
+		await page.getByText('Save your priority draft before choosing another file.', { exact: true }).waitFor();
+		await page.getByRole('button', { name: 'Reload saved priorities', exact: true }).click();
+		await page.getByText('Saved priorities loaded.', { exact: true }).waitFor();
+		await page.getByRole('button', { name: 'Remove priority Deep', exact: true }).click();
+		await page.getByRole('button', { name: 'Remove priority Deep', exact: true }).waitFor({ state: 'hidden' });
+		await page.locator('[data-settings-document="file-sync-upload-priorities"]').getByRole('button', { name: 'Edit layout', exact: true }).click();
+		await page.locator('[data-block-id="priority-title"]').click();
+		for (const [id, text] of [['priority-title', 'Upload priorities'], ['priority-row-label', 'Priority {item.position}: {item.path}'], ['priority-up', 'Move up']]) {
+			await page.getByRole('combobox', { name: 'Select block', exact: true }).selectOption(id);
+			await page.getByRole('textbox', { name: 'Block text', exact: true }).fill(text);
+		}
+		await page.getByRole('button', { name: 'Close builder', exact: true }).click();
+		await page.locator('[data-settings-document="file-sync-upload-priorities"]').getByRole('button', { name: 'Save layout', exact: true }).click();
+		await page.getByText('Unsaved layout', { exact: true }).waitFor({ state: 'hidden' });
+		await page.locator('[data-settings-document="file-sync-upload-priorities"]').getByRole('button', { name: 'Done editing layout', exact: true }).click();
+		await page.reload(); await page.getByText('Priority 1: Documents', { exact: true }).waitFor();
 		await page.getByRole('button', { name: 'Open Deep', exact: true }).click();
 		let deep = 'Deep';
 		for (let index = 1; index <= 12; index++) {

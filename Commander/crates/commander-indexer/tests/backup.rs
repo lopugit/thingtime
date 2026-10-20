@@ -82,6 +82,35 @@ fn streams_real_content_prunes_dependencies_and_does_not_import_gitignore() {
 }
 
 #[test]
+fn backup_includes_hidden_git_objects_worktree_metadata_and_pointer_files() {
+    let root = TempDir::new().unwrap();
+    let files = [
+        "project/.git/objects/pack/saved.pack",
+        "project/.git/worktrees/feature/HEAD",
+        "project/.git/worktrees/feature/index",
+        "project/.git/worktrees/feature/gitdir",
+        "project/.git/refs/stash",
+        "project/.git/logs/HEAD",
+        "feature/.git",
+        "feature/uncommitted.txt",
+    ];
+    for path in files {
+        let destination = root.path().join(path);
+        fs::create_dir_all(destination.parent().unwrap()).unwrap();
+        fs::write(destination, format!("retained content: {path}")).unwrap();
+    }
+    fs::write(root.path().join(".gitignore"), "project/\nfeature/\n").unwrap();
+    let values = events(root.path(), "node_modules/\n.venv/\n.cargo/git/");
+    let rows: Vec<_> = values.iter().filter_map(|v| v.get("entry")).collect();
+    assert!(rows.iter().any(|r| r["path"] == "project/.git"));
+    for path in files {
+        assert!(rows.iter().any(|r| r["path"] == path && r["kind"] == "file"), "missing {path}");
+    }
+    assert!(!values.iter().any(|v| v.get("gap").is_some()));
+    assert_eq!(values.last().unwrap()["event"], "complete");
+}
+
+#[test]
 fn refuses_replaced_root_and_sink_failure_without_completion() {
     let root = TempDir::new().unwrap();
     fs::write(root.path().join("one"), "data").unwrap();

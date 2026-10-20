@@ -37,7 +37,8 @@ export const syncProgressBlocks: WebpageBlock[] = [{ id: 'sync-progress', type: 
 						when('sync-folder-open-state', 'item.folder', [button('sync-folder-open', 'Open folder', 'open', { path: '{item.path}' }, { 'aria-label': 'Open {item.path}' })]),
 						element('sync-node-icon', 'span', '{item.icon}', { 'aria-hidden': true }),
 						element('sync-node-name', 'span', '{item.name}', {}, { 'font-weight': '600', 'overflow-wrap': 'anywhere', 'min-width': '0' }),
-						element('sync-node-status', 'span', '{item.status}', {}, { 'font-size': '12px' })
+						element('sync-node-status', 'span', '{item.status}', {}, { 'font-size': '12px' }),
+						when('sync-priority-enabled', 'sync.prioritiesEnabled', [button('sync-priority-next', 'Upload next', 'prioritize', { path: '{item.path}' }, { 'aria-label': 'Upload {item.path} next', disabled: '{sync.prioritiesDisabled}' })])
 					] },
 					element('sync-node-path', 'p', '{item.path}', {}, { 'font-size': '11px', 'overflow-wrap': 'anywhere', color: 'var(--tt-muted, #71717a)' }),
 					element('sync-node-percent', 'p', '{item.percentLabel}', {}, { 'font-size': '12px' }),
@@ -74,7 +75,7 @@ export function syncProgressNodeDisplay(value: SyncProgressTotals, progress: For
 		counts: `${value.files.toLocaleString()} files · ${folders.toLocaleString()} ${value.kind === 'folder' && value.path ? 'subfolders' : 'folders'} · ${value.unchanged.toLocaleString()} unchanged · ${value.excluded.toLocaleString()} excluded`,
 		bytes: `${progressBytes(result.bytes)} / ${progressBytes(value.bytesTotal)} to copy · ${value.confirmedFiles.toLocaleString()} / ${value.transferFiles.toLocaleString()} files confirmed · ${progressBytes(value.indexedBytes)} indexed` };
 }
-export function syncProgressDisplay(branches: Record<string, SyncProgressBranch>, progress: ForegroundSyncProgress | undefined, state: SyncProgressState, hasIndex: boolean, message = '', focusedFolder = '') {
+export function syncProgressDisplay(branches: Record<string, SyncProgressBranch>, progress: ForegroundSyncProgress | undefined, state: SyncProgressState, hasIndex: boolean, message = '', focusedFolder = '', prioritiesEnabled = false, prioritiesDisabled = false) {
 	const rows: Record<string, unknown>[] = [];
 	const append = (parent: string, depth: number) => {
 		const branch = branches[parent]; if (!branch) return;
@@ -106,7 +107,7 @@ export function syncProgressDisplay(branches: Record<string, SyncProgressBranch>
 	const coverage = progress?.coverage === 'partial' ? ` Partial backup · ${(progress.skipped ?? 0).toLocaleString()} skipped observations. Review backup coverage below.` : '';
 	const globalState = state === 'error' ? 'Error' : state === 'cancelled' ? 'Cancelled' : state === 'paused' ? 'Paused' : progress?.stage === 'complete' || state === 'complete' ? progress?.coverage === 'partial' ? 'Supported items complete · Partial backup' : 'Complete'
 		: preparation ? 'Preparing upload' : progress?.stage === 'verifying' ? 'Verifying uploaded files' : hasIndex ? 'Uploading' : 'Waiting for indexed structure';
-	return { sync: { indexDescription: indexed + (!stoppedIndex && preparationText ? ` ${preparationText}` : '') + coverage, uploadDescription: `${globalState}${progress ? ` · ${progress.confirmed.toLocaleString()} / ${progress.total.toLocaleString()} operations confirmed` : ''}${summary ? ` · ${syncProgressNodeDisplay(summary, progress, state).bytes}` : ''}`,
+	return { sync: { prioritiesEnabled, prioritiesDisabled, indexDescription: indexed + (!stoppedIndex && preparationText ? ` ${preparationText}` : '') + coverage, uploadDescription: `${globalState}${progress ? ` · ${progress.confirmed.toLocaleString()} / ${progress.total.toLocaleString()} operations confirmed` : ''}${summary ? ` · ${syncProgressNodeDisplay(summary, progress, state).bytes}` : ''}`,
 		currentFolder: focusedFolder || 'Root folder', atRoot: !focusedFolder,
 		folderSummary: focusDisplay ? `${focusDisplay.percentLabel} · ${focusDisplay.counts} · ${focusDisplay.bytes}` : 'Reading folder totals…',
 		current: progress?.path ? `Current file: ${progress.path}${progress.bytes !== undefined && progress.size !== undefined ? ` · ${progressBytes(progress.bytes)} / ${progressBytes(progress.size)}` : ''}` : message,
