@@ -1,3 +1,4 @@
+import { logFinalizationFailure, type AttachmentFinalizationStage } from './finalizationDiagnostic';
 import { activeAttachmentRetention, attachmentRetention } from './attachmentRetention';
 import { fingerprintFromVerifiedHead, attachmentContentVersion } from './contentFingerprint';
 import { contentPartPlan, MIN_CONTENT_PART_BYTES, MAX_CONTENT_PART_BYTES, type ContentFingerprint } from '../../../fileSync/contentFingerprint';
@@ -219,14 +220,17 @@ const knownFailure = (error: unknown): AttachmentFail | null => {
 	return null;
 };
 
-const unavailable = (operation: string, error: unknown): AttachmentFail => {
-	const name = String((error as any)?.name || 'Error')
-		.replace(/[^A-Za-z0-9_.-]/g, '')
-		.slice(0, 80);
-	const requestId = String((error as any)?.$metadata?.requestId || '')
-		.replace(/[^A-Za-z0-9-]/g, '')
-		.slice(0, 80);
-	console.error(`[attachments] ${operation} failed (${name || 'Error'}${requestId ? `, request ${requestId}` : ''})`);
+const unavailable = (operation: string, error: unknown, stage?: AttachmentFinalizationStage): AttachmentFail => {
+	if (stage) logFinalizationFailure(stage, error);
+	else {
+		const name = String((error as any)?.name || 'Error')
+			.replace(/[^A-Za-z0-9_.-]/g, '')
+			.slice(0, 80);
+		const requestId = String((error as any)?.$metadata?.requestId || '')
+			.replace(/[^A-Za-z0-9-]/g, '')
+			.slice(0, 80);
+		console.error(`[attachments] ${operation} failed (${name || 'Error'}${requestId ? `, request ${requestId}` : ''})`);
+	}
 	if (error instanceof PrivateS3ConfigError) {
 		return fail(503, 'Private attachment storage is not configured', {
 			code: 'storage_unconfigured',
@@ -988,18 +992,22 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 	};
 
 	const complete = async (ownerId: string, input: unknown): Promise<AttachmentResult<{ attachment: Record<string, unknown> }>> => {
+		let stage: AttachmentFinalizationStage = 'validate-request';
 		try {
 			if (!input || typeof input !== 'object' || Array.isArray(input)) return fail(400, 'Invalid completion request');
 			const raw = input as Record<string, unknown>;
 			if (Object.keys(raw).some((key) => key !== 'uploadId')) return fail(400, 'Invalid completion request');
 			const id = normalizeId(raw.uploadId);
 			if (!id) return fail(400, 'Invalid attachment upload id');
+			stage = 'load-upload';
 			const candidate = await dependencies.store.getOwned(ownerId, id);
 			if (candidate?.attachmentPurpose === 'password' && !dependencies.passwordVault) return fail(404, 'Attachment upload not found');
 			const finalizationLeaseId = dependencies.uuid();
+			stage = 'claim-lease';
 			const finalizationClaim = await dependencies.store.claimFinalizing(ownerId, id, finalizationLeaseId);
 			if (!finalizationClaim) return fail(404, 'Attachment upload not found');
 			let doc = finalizationClaim.doc;
+			stage = 'create-client';
 			const s3 = dependencies.getS3();
 
 			const finalizationInProgress = (): AttachmentFail =>
@@ -1012,6 +1020,7 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 			// durable lease. Never let that old request publish, revert, or delete
 			// the exact version the new lease holder may be adopting.
 			const settleLostFinalizationLease = async (completedVersionId?: string): Promise<AttachmentResult<{ attachment: Record<string, unknown> }>> => {
+				stage = 'reconcile-lease';
 				let raced = await dependencies.store.getOwned(ownerId, id);
 				if (raced?.attachmentState === 'ready') {
 					if (!raced.objectVersionId) {
@@ -1059,18 +1068,24 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 				});
 			};
 
-			const renewFinalizationLease = async (completedVersionId?: string): Promise<AttachmentResult<{ attachment: Record<string, unknown> }> | null> =>
-				(await dependencies.store.renewFinalizing(ownerId, id, finalizationLeaseId)) ? null : settleLostFinalizationLease(completedVersionId);
+			const renewFinalizationLease = async (completedVersionId?: string): Promise<AttachmentResult<{ attachment: Record<string, unknown> }> | null> => {
+				stage = 'renew-lease';
+				return (await dependencies.store.renewFinalizing(ownerId, id, finalizationLeaseId)) ? null : settleLostFinalizationLease(completedVersionId);
+			};
 
 			if (doc.attachmentState === 'ready') {
 				if (!doc.objectVersionId) {
+					stage = 'verify-object';
 					const recovered = await verifiedHeadForDoc(s3, doc);
+					stage = 'persist-version';
 					doc = await dependencies.store.setObjectVersionId(ownerId, id, recovered.versionId);
 				}
 				if (!isAttachmentObjectVersionId(doc.objectVersionId)) {
 					return fail(409, 'Attachment object version is unavailable');
 				}
+				stage = 'tag-ready';
 				await s3.markObjectReady({ objectKey: doc.objectKey, versionId: doc.objectVersionId });
+				stage = 'queue-moderation';
 				if (doc.attachmentPurpose !== 'password') dependencies.queueModeration?.(doc.shareId);
 				return { ok: true, attachment: attachmentPublicProjection(doc.shareId, doc.crystal) };
 			}
@@ -1078,6 +1093,7 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 				return finalizationInProgress();
 			}
 			if (!doc.uploadId && !(doc.objectSizeBytes === 0 && doc.attachmentPurpose === 'file')) {
+				stage = 'revert-lease';
 				await dependencies.store.revertFinalizing(ownerId, id, finalizationLeaseId);
 				return fail(409, 'Attachment upload is not ready to finalize', {
 					code: 'upload_not_ready',
@@ -1090,10 +1106,12 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
                 // complete an MPU with zero parts. HEAD recovers ambiguous PUT
                 // responses without creating another version on request replay.
                 let head: AttachmentObjectHead;
+                stage = 'verify-object';
                 try { head = await verifiedHeadForDoc(s3, doc, doc.objectVersionId); }
                 catch (error) {
                     if (!s3.isNotFound(error)) throw error;
                     try {
+                        stage = 'store-empty';
                         const empty = await s3.putEmptyObject({ objectKey: doc.objectKey, attachmentId: doc.shareId });
                         if (empty.versionId && !isAttachmentObjectVersionId(empty.versionId)) return fail(409, 'Empty object did not receive a valid version id');
                         if (empty.versionId) doc = { ...doc, objectVersionId: empty.versionId };
@@ -1101,27 +1119,34 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
                         // Includes conditional-write races and lost responses.
                         // Only the expected identity and exact empty checksum
                         // can recover; arbitrary occupied keys fail below.
-                        try { await verifiedHeadForDoc(s3, doc); } catch { throw writeError; }
+                        stage = 'verify-object';
+                        try { await verifiedHeadForDoc(s3, doc); } catch { stage = 'store-empty'; throw writeError; }
                     }
+                    stage = 'verify-object';
                     head = await verifiedHeadForDoc(s3, doc, doc.objectVersionId);
                 }
                 const lost = await renewFinalizationLease(head.versionId); if (lost) return lost;
                 if (!fingerprintFromVerifiedHead(head)) return fail(409, 'Empty object failed integrity verification');
                 const crystal: AttachmentCrystal = { ...doc.crystal, contentType: 'application/octet-stream', mediaKind: 'file' };
+                stage = 'persist-ready';
                 try { doc = await dependencies.store.markReady(ownerId, id, crystal, head.versionId,
                     new Date(dependencies.now().getTime() + ATTACHMENT_READY_DRAFT_TTL_MS), finalizationLeaseId); }
                 catch (error) { if (!(error instanceof AttachmentStoreConflictError)) throw error; return settleLostFinalizationLease(head.versionId); }
                 if (!isAttachmentObjectVersionId(doc.objectVersionId)) return fail(409, 'Empty object version is unavailable');
+                stage = 'tag-ready';
                 await s3.markObjectReady({ objectKey: doc.objectKey, versionId: doc.objectVersionId });
                 return { ok: true, attachment: attachmentPublicProjection(doc.shareId, doc.crystal) };
             }
 			let uploadStillOpen = true;
 			let parts: AttachmentUploadedPart[] = [];
 			try {
+				stage = 'list-parts';
 				parts = await s3.listParts({ objectKey: doc.objectKey, uploadId: doc.uploadId });
 			} catch (error) {
 				if (!s3.isNoSuchUpload(error)) {
+					stage = 'revert-lease';
 					await dependencies.store.revertFinalizing(ownerId, id, finalizationLeaseId);
+					stage = 'list-parts';
 					throw error;
 				}
 				uploadStillOpen = false;
@@ -1133,6 +1158,7 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 			if (uploadStillOpen) {
 				const verified = validateCompletedAttachmentParts(doc.objectSizeBytes, parts);
 				if (verified.ok === false) {
+					stage = 'revert-lease';
 					const reverted = await dependencies.store.revertFinalizing(ownerId, id, finalizationLeaseId);
 					if (!reverted) return fail(409, 'Attachment changed — try again');
 					return {
@@ -1142,6 +1168,7 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 					};
 				}
 				try {
+					stage = 'complete-multipart';
 					const completed = await s3.completeMultipartUpload({
 						objectKey: doc.objectKey,
 						uploadId: doc.uploadId,
@@ -1161,6 +1188,7 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 
 			let head: AttachmentObjectHead;
 			try {
+				stage = 'verify-object';
 				head = await verifiedHeadForDoc(s3, doc, doc.objectVersionId);
 			} catch (error) {
 				if (s3.isNotFound(error)) {
@@ -1187,11 +1215,13 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 				return fail(409, 'Uploaded object failed integrity verification');
 			}
 
+			stage = 'detect-content';
 			const detected = doc.attachmentPurpose === 'password' ? { contentType: 'application/octet-stream', mediaKind: 'file' as const } : detectedAttachmentType(await s3.detectContentType({ objectKey: doc.objectKey, versionId: head.versionId }), doc.crystal.name);
 			const lostAfterDetection = await renewFinalizationLease(head.versionId);
 			if (lostAfterDetection) return lostAfterDetection;
 			const readyCrystal: AttachmentCrystal = { ...doc.crystal, ...detected };
 			try {
+				stage = 'persist-ready';
 				doc = await dependencies.store.markReady(
 					ownerId,
 					id,
@@ -1207,14 +1237,21 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 			if (!isAttachmentObjectVersionId(doc.objectVersionId)) {
 				return fail(409, 'Attachment object version is unavailable');
 			}
+			stage = 'tag-ready';
 			await s3.markObjectReady({ objectKey: doc.objectKey, versionId: doc.objectVersionId });
 			// Moderation runs AFTER the upload is durable and never affects the
 			// response — the analyzer stamps the protected root field async and the
 			// admin sweep retries anything that misses this kickoff.
+			stage = 'queue-moderation';
 			if (doc.attachmentPurpose !== 'password') dependencies.queueModeration?.(doc.shareId);
 			return { ok: true, attachment: attachmentPublicProjection(doc.shareId, doc.crystal) };
 		} catch (error) {
-			return knownFailure(error) || unavailable('complete', error);
+			const known = knownFailure(error);
+			if (known) {
+				if (known.status >= 500) logFinalizationFailure(stage, error);
+				return known;
+			}
+			return unavailable('complete', error, stage);
 		}
 	};
 

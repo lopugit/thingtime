@@ -12697,3 +12697,11 @@ separate from deterministic discovery/lease tests.
 - [x] Exercise real renderer transport/coordinator backoff and reopen for `upload_initializing`, `finalization_in_progress`, and `finalization_settling` only when `retryable:true`. Reject early wakes, unknown codes, false flags, unrelated endpoints, mismatch and unavailable conflicts. Preserve original operation IDs and accepted-write receipt recovery.
 - [x] Bound conflict diagnostics to 4 KiB and fixed operation/code vocabulary; discard arbitrary text, paths, IDs, oversized/malformed bodies. Require upload-start 1.6.1 and reject older/breaking origins before network mutations.
 - [ ] Verify the installed saved backup continues beyond upload-start 409 with retained receipts/versions. The source-proven nonempty finalization recovery gap is not yet the confirmed live cause. Parent independently verified a 13-byte canonical cloud-to-device download; continued upload acceptance remains open.
+
+
+### Attachment completion stage diagnostics — 2026-10-20
+
+- [x] Inject AWS-like `Unknown` Errors and plain-object code/status failures at ListParts, CompleteMultipartUpload, HEAD verification, content detection, ready persistence and ready tagging. Assert the original exact HTTP503 service result while logs identify only the fixed stage and closed scalar metadata.
+- [x] Assert no error messages, stacks, user paths, object/version/attachment IDs or provider request IDs are emitted. Guard throwing getters, prototype fields, revoked proxies, reflection traps and failed logging sinks; reject unknown names/codes and out-of-range SDK metadata.
+- [x] Run the attachment service and diagnostic suites (72 tests) and focused ESLint. Preserve finalization lease, owner/fingerprint/expiry, pinned-version, checksum and reconciliation behavior.
+- [ ] After server deployment, use the existing authorized runtime-log surface to identify the next natural completion failure stage without manually retrying, changing leases or resetting the saved job. The underlying live503 cause and continued upload progress remain unverified.
