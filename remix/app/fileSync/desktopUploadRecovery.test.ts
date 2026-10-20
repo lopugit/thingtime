@@ -98,6 +98,7 @@ if (!process.execArgv.includes('--experimental-test-module-mocks')) {
 			const enteredHttp = new Set<number>();
 			for (const scenario of [
 				{ message: retry },
+                { message: '[folder_transport_retry] Folder service is temporarily unavailable. Retry after reconnecting.' },
 				{ message: `Error invoking remote method 'thingtime-desktop:folder-sync': Error: ${retry}` },
 				{ message: 'Upload rejected (403)' },
 				{ message: 'TLS certificate verification failed' },
@@ -114,7 +115,7 @@ if (!process.execArgv.includes('--experimental-test-module-mocks')) {
 				cloudStatus = scenario.status;
 				cloudCode = scenario.code; cloudRetryable = scenario.retryable;
 				attempts = [];
-				const transient = cloudStatus === 503 || scenario.wait === true || !!scenario.message?.includes(retry);
+				const transient = cloudStatus === 503 || scenario.wait === true || !!scenario.message?.includes(retry) || !!scenario.message?.startsWith('[folder_transport_retry]');
 				failure = Error(scenario.message ?? 'fixture HTTP failure');
 				receipt = null;
 				runnerCalls = publications = 0;
@@ -193,6 +194,11 @@ if (!process.execArgv.includes('--experimental-test-module-mocks')) {
 				assert.equal(runnerError instanceof SyncConnectionWait, transient);
 				assert.equal(nativeSyncTasks.read()?.status, transient ? 'paused' : 'error');
 				assert.equal(nativeSyncTasks.read()?.waiting, transient);
+                if (transient) {
+                    assert.equal(nativeSyncTasks.read()?.progress.message, (runnerError as Error).message);
+                    if (cloudStatus === 503) assert.match(nativeSyncTasks.read()!.progress.message!, /503; cloud-request; response_unknown; proxy-missing/);
+                    if (scenario.message?.startsWith('[folder_transport_retry]')) assert.match(nativeSyncTasks.read()!.progress.message!, /local folder service/);
+                }
 				assert.equal((await jobs.read())?.state, transient ? 'runnable' : 'attention');
 				assert.equal((await journal.read(scope))?.operations[0].confirmed, false);
 				const waitingJob = await jobs.read();

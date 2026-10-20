@@ -379,3 +379,18 @@ test('an internal request deadline is resumable even when fetch reports generic 
   await assert.rejects(cloudRequests(runtime, scope).json('/api/v1/files'), SyncConnectionWait);
  } finally { timeout.mock.restore(); }
 });
+
+test('temporary HTTP failure reason distinguishes bounded fixed upstream and proxy codes without exposing response data', async () => {
+ for(const [code,header,label] of [
+  ['storage_unavailable',scope.origin,'storage_unavailable; proxy-selected-origin'],
+  ['LOCAL_API_NOT_CONFIGURED',null,'LOCAL_API_NOT_CONFIGURED; proxy-missing'],
+  ['private-path?secret', 'https://private.invalid/secret','response_unknown; proxy-mismatch']
+ ] as const) {
+  const runtime={currentScope:()=>scope,origin:()=>scope.origin,requireCapability:async()=>{},fetch:async()=>Response.json({ok:false,code,error:'/private/secret'},
+   {status:503,headers:header?{'x-thingtime-api-fallback':header}:{}})};
+  await assert.rejects(cloudRequests(runtime,scope).json('/api/v1/attachments/uploads',{requestId:'fixture'}),error=>{
+   assert.ok(error instanceof SyncConnectionWait);assert.match(error.message,new RegExp(`503; upload-start; ${label}`));
+   assert.doesNotMatch(error.message,/private|secret|https:/);return true;
+  });
+ }
+});

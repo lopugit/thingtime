@@ -14,6 +14,10 @@ const identifier = value => typeof value === 'string' && value.length > 0 && Buf
 const unavailable = () => new Error('Folder access changed. Reopen this device with the current account.');
 const verificationRetry = () => new Error('[folder_identity_retry] Folder identity verification is temporarily unavailable. Retry after reconnecting.');
 const shutdownWait = () => new Error('[folder_sync_shutdown] Thingtime is closing. Saved sync work can resume when reopened.');
+const transportRetry = () => new Error('[folder_transport_retry] Folder service is temporarily unavailable. Retry after reconnecting.');
+const nativeFailureCodes = new Set(['node_timeout', 'node_unavailable', 'node_protocol_error', 'folder_unavailable', 'folder_identity_retry', 'cancelled', 'unsupported_feature']);
+const requestFailureCode = error => error?.name === 'ThingtimeNodeBridgeError' && nativeFailureCodes.has(error.code) ? error.code :
+    error?.message === verificationRetry().message ? 'folder_identity_retry' : error?.message === unavailable().message ? 'host-refused' : 'unclassified';
 const transientStatus = status => status === 408 || status === 429 || (status >= 500 && status <= 599);
 async function verificationFetch(context, url, options) {
     try { return await context.window.webContents.session.fetch(url, options); }
@@ -217,8 +221,14 @@ class DesktopFolderSync {
             this.active = next.state; next.resolve();
         }
     }
+    reportFailure(action, step, error) {
+        if (!ACTIONS.has(action)) return;
+        try { this.diagnostic({ phase: 'folder-request', action, step, code: requestFailureCode(error) }); } catch {}
+    }
     async request(event, input) {
-        const context = this.capture(event, input);
+        let context;
+        try { context = this.capture(event, input); }
+        catch (error) { this.reportFailure(input?.action, 'capture', error); throw error; }
         if (input.action === 'suspend') {
             const state = [this.active, this.streamWaiter, ...this.ordinaryQueue.map(item => item.state)].find(value => value && value.context.event.senderFrame === event.senderFrame &&
                 value.input.requestId === input.requestId && value.input.ownerId === input.ownerId && value.input.deviceId === input.deviceId);
@@ -226,18 +236,22 @@ class DesktopFolderSync {
             return {};
         }
         const lane = input.action === 'scan-changes' ? 'streamWaiter' : 'active';
-        const state = { context, input: structuredClone(input), abort: new AbortController(), dispatched: false, lane };
+        const state = { context, input: structuredClone(input), abort: new AbortController(), dispatched: false, lane, phase: 'admission' };
         const timer = setTimeout(() => this.cancel(state), this.timeoutMs); timer.unref?.();
         const verify = async () => {
+            const previousPhase = state.phase;
+            state.phase = 'account-verification';
             this.assertCurrent(state);
             const signal = AbortSignal.any([state.abort.signal, AbortSignal.timeout(20_000)]);
             await this.verifyAccount(context, signal); this.assertCurrent(state);
+            state.phase = previousPhase;
         };
         try {
             await this.admit(state);
             await verify();
             let apiCapabilities;
             if (state.input.action === 'context') {
+                state.phase = 'capability-verification';
                 apiCapabilities = await this.capabilities(context, AbortSignal.any([state.abort.signal, AbortSignal.timeout(20_000)]));
                 await verify();
                 if (!/^1\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/.test(apiCapabilities?.features?.['api.devices-node-identity']?.version ?? '')) {
@@ -248,6 +262,7 @@ class DesktopFolderSync {
                 if (!this.samePageCapability(context, state.input)) {
                     const negotiation = { requestId: randomUUID(), ownerId: context.ownerId, deviceId: state.input.deviceId,
                         origin: context.apiOrigin, action: 'context' };
+                    state.phase = 'native-request';
                     const nativeContext = await this.requestNative('folder-sync.request', negotiation, { signal: state.abort.signal });
                     await verify();
                     if (!nativeContext || nativeContext.requestId !== negotiation.requestId || nativeContext.ownerId !== negotiation.ownerId ||
@@ -259,17 +274,20 @@ class DesktopFolderSync {
                     throw new Error('This native host does not support larger inventory pages. Update Thingtime and reconnect.');
             }
             if (state.input.action === 'upload-part') {
+                state.phase = 'capability-verification';
                 const manifest = await this.capabilities(context, AbortSignal.any([state.abort.signal, AbortSignal.timeout(20_000)]));
                 await verify();
                 if (!/^1\.([1-9][0-9]*)\.(0|[1-9][0-9]*)$/.test(manifest?.features?.['api.attachment-upload-parts']?.version ?? ''))
                     throw new Error('The selected server does not support this version of folder sync.');
             }
+            state.phase = 'native-request';
             state.dispatched = true;
             const value = state.input.action === 'upload-part' ? await uploadFolderPart({ input: state.input, context,
                 signal: state.abort.signal, authorize: verify, fetchUpload: this.fetchUpload,
                 requestNative: request => this.requestNative('folder-sync.request', request, { signal: state.abort.signal }),
                 signPart: async body => { await verify(); return signDesktopUploadPart(context, body, state.abort.signal, 20_000, this.diagnostic); }
             }) : await this.requestNative('folder-sync.request', { ...state.input, origin: context.apiOrigin }, { signal: state.abort.signal });
+            state.phase = 'reply-verification';
             if (!value || typeof value !== 'object') throw unavailable();
             if (state.input.action === 'context') {
                 this.assertCurrent(state);
@@ -292,6 +310,19 @@ class DesktopFolderSync {
             } else if (Buffer.byteLength(JSON.stringify(value)) > 900_000) throw unavailable();
             return value;
         } catch (error) {
+            if (!state.abort.signal.aborted) {
+                try { this.assertCurrent(state); }
+                catch (authorityError) { this.reportFailure(input.action, 'reply-verification', authorityError); throw authorityError; }
+                this.reportFailure(input.action, state.phase, error);
+                // Only fixed, trusted native transport codes may retry. Source,
+                // account, capability and protocol refusals remain terminal.
+                if (state.phase === 'native-request' && error?.name === 'ThingtimeNodeBridgeError' &&
+                    ['node_timeout', 'node_unavailable'].includes(error.code)) throw transportRetry();
+                // Electron serializes Error.name in its rejection text. Normalize
+                // this exact native marker to the renderer's existing contract.
+                if (error?.name === 'ThingtimeNodeBridgeError' && error.code === 'folder_identity_retry' &&
+                    error.message === verificationRetry().message) throw verificationRetry();
+            }
             // The native bridge reports cancellation with its own fixed code.
             // A genuine authority/protocol refusal still keeps its diagnosis.
             if (this.quitting && state.abort.signal.aborted &&

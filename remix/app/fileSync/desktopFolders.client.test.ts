@@ -233,7 +233,8 @@ test('desktop excluded scans fail before dispatch on an older native host', asyn
 
 test('fixed native verification and shutdown waits survive IPC redaction; arbitrary and authority failures remain terminal', async () => {
  const { SyncConnectionWait, isSyncConnectionFailure } = await import('./syncConnectionWait');
- for (const marker of ['[folder_identity_retry] Folder identity verification is temporarily unavailable. Retry after reconnecting.',
+ for (const marker of ['[folder_transport_retry] Folder service is temporarily unavailable. Retry after reconnecting.',
+  '[folder_identity_retry] Folder identity verification is temporarily unavailable. Retry after reconnecting.',
   '[folder_sync_shutdown] Thingtime is closing. Saved sync work can resume when reopened.']) {
  for (const message of [marker, `Error invoking remote method 'thingtime-desktop:folder-sync': Error: ${marker}`,
   `private-prefix ${marker}`, `${marker} private-suffix`, 'Folder access changed. Reopen this device with the current account.']) {
@@ -349,4 +350,34 @@ test('negotiated Mac part upload stays on scoped native IPC rather than cross-or
     badReceipt = true;
     await assert.rejects(source.uploadPart!(part, lifetime.signal), /Invalid native upload receipt/);
     lifetime.abort();
+});
+
+test('real native bridge errors survive Electron43 string serialization as narrowly classified renderer waits', async () => {
+ const { createRequire } = await import('node:module');
+ const require=createRequire(import.meta.url);
+ const { DesktopFolderSync }=require('../../../electron/lib/folder-sync.cjs');
+ const { ThingtimeNodeBridgeError }=require('../../../electron/lib/thingtime-node-bridge.cjs');
+ const { SyncConnectionWait }=await import('./syncConnectionWait');
+ for(const code of ['folder_identity_retry','node_timeout','node_unavailable','folder_unavailable','node_protocol_error','cancelled']) {
+  const localOrigin='http://127.0.0.1:12001',frame={url:localOrigin},sender={mainFrame:frame};
+  const window={webContents:sender,isDestroyed:()=>false};
+  const main=new DesktopFolderSync({context:()=>({enabled:true,window,appOrigin:localOrigin,apiOrigin:origin}),
+   verifyAccount:async()=>{},capabilities:async()=>({schemaVersion:1,origin,features:{'api.devices-node-identity':{version:'1.0.0'}}}),
+   requestNative:async(_method:unknown,input:any)=>{
+    if(input.action==='list')throw new ThingtimeNodeBridgeError(code,code==='folder_identity_retry'?
+     '[folder_identity_retry] Folder identity verification is temporarily unavailable. Retry after reconnecting.':'private-source?credential=never-log');
+    return {...input,capabilities:{fileAccessVersion:'1.11.0'},roots:[]};
+   }});
+  const bridge={folderSyncRequest:async(input:any)=>{
+   try{return await main.request({sender,senderFrame:frame},input);}
+   // Electron43.1 ipc-dispatch.ts:88 and ipc-renderer.ts:22 preserve Error.toString(), not custom fields.
+   catch(error){throw Error(`Error invoking remote method 'thingtime-desktop:folder-sync': ${String(error)}`);}
+  }};
+  const host=await createDesktopFolderHost({ownerId:'owner',deviceId:'device',bridge,signal:new AbortController().signal,
+   rendererOrigin:()=>localOrigin,assertCurrent:()=>{}});
+  await assert.rejects(host.request('owner',{action:'list'},new AbortController().signal),error=>{
+   assert.equal(error instanceof SyncConnectionWait,['folder_identity_retry','node_timeout','node_unavailable'].includes(code));
+   assert.doesNotMatch((error as Error).message,/private|credential|never-log|ThingtimeNodeBridgeError/);return true;
+  });
+ }
 });

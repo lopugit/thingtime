@@ -12705,3 +12705,13 @@ separate from deterministic discovery/lease tests.
 - [x] Assert no error messages, stacks, user paths, object/version/attachment IDs or provider request IDs are emitted. Guard throwing getters, prototype fields, revoked proxies, reflection traps and failed logging sinks; reject unknown names/codes and out-of-range SDK metadata.
 - [x] Run the attachment service and diagnostic suites (72 tests) and focused ESLint. Preserve finalization lease, owner/fingerprint/expiry, pinned-version, checksum and reconciliation behavior.
 - [ ] After server deployment, use the existing authorized runtime-log surface to identify the next natural completion failure stage without manually retrying, changing leases or resetting the saved job. The underlying live503 cause and continued upload progress remain unverified.
+
+
+### Native sync IPC retry classification — 2026-10-20
+
+- [x] Reproduce the native `ThingtimeNodeBridgeError` identity marker retaining its custom name before IPC; normalize only the exact trusted identity retry code/message to plain Error. Exercise the actual host/bridge classes through Electron43.1's source-defined `error.toString()` serialization and production renderer classification.
+- [x] Retry only existing native `node_timeout`/`node_unavailable` errors during native dispatch, after current authority checks. Keep source/grant refusal, protocol mismatch, capability refusal, cancellation and account/origin drift terminal. Exercise automatic saved-job reopen/backoff with original operation IDs and receipt reconciliation.
+- [x] Persist only closed request action/step/code fields in bounded, mode0600 `folder-sync.log`; reject arbitrary error text, paths, identities and unsupported fields. Preserve fixed cloud HTTP code/proxy-origin diagnostics in the waiting UI without retaining body text, URLs or secrets.
+- [x] Run full shared fileSync suite (498 tests), host/diagnostic tests (33), and existing AppleFileSync recovery tests (4): interrupted publication, reopened multipart staging, interrupted staged tail, and Trash reply loss preserve original effects/receipts.
+- [ ] Run the isolated Electron host harness on a supported sandbox-capable runner. This machine refused Chromium sandbox initialization with EPERM; no sandbox was disabled. Test-owned process/listeners exited.
+- [ ] Signed installed acceptance: preserve the current Home job and prove a natural temporary native verification failure waits and automatically resumes instead of entering attention. Confirm closed on-disk request diagnostics, retained cloud code/proxy reason, continued new payloads and independent byte equality. The live recurring failure code is still unconfirmed.

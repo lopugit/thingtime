@@ -423,3 +423,35 @@ test('a concurrent deadline cannot turn a verified HTTP authority refusal into a
         await assert.rejects(readAccount(f.context, signal), error => !error.message.includes('[folder_identity_retry]'));
     }
 });
+
+test('native transport interruptions remain resumable and record only closed request diagnostics', async () => {
+    const { ThingtimeNodeBridgeError } = require('../lib/thingtime-node-bridge.cjs');
+    for (const code of ['node_timeout', 'node_unavailable', 'folder_unavailable', 'node_protocol_error', 'cancelled', 'unsupported_feature']) {
+        const f = fixture(), diagnostics = [];
+        f.host.diagnostic = value => diagnostics.push(value);
+        f.run(async () => { throw new ThingtimeNodeBridgeError(code, '/private/source?credential=never-log'); });
+        await assert.rejects(f.host.request(f.event, f.input({ action: 'inspect' })), error => {
+            assert.equal(error.message.includes('[folder_transport_retry]'), ['node_timeout', 'node_unavailable'].includes(code));
+            return true;
+        });
+        assert.deepEqual(diagnostics, [{ phase: 'folder-request', action: 'inspect', step: 'native-request', code }]);
+        assert.doesNotMatch(JSON.stringify(diagnostics), /private|credential|never-log|owner|device/);
+    }
+});
+
+test('native identity retry crosses Electron as a plain fixed Error while authority failures remain terminal', async () => {
+    const { ThingtimeNodeBridgeError } = require('../lib/thingtime-node-bridge.cjs');
+    const f = fixture(), marker = '[folder_identity_retry] Folder identity verification is temporarily unavailable. Retry after reconnecting.';
+    f.run(async () => { throw new ThingtimeNodeBridgeError('folder_identity_retry', marker); });
+    await assert.rejects(f.host.request(f.event, f.input()), error => error.name === 'Error' && error.message === marker);
+});
+
+test('authority drift wins over a concurrent native transport interruption and diagnostics never break a request', async () => {
+    const { ThingtimeNodeBridgeError }=require('../lib/thingtime-node-bridge.cjs');
+    const f=fixture(); f.host.diagnostic=()=>{throw Error('diagnostic sink unavailable');};
+    f.run(async()=>{f.context.apiOrigin='https://other.test';throw new ThingtimeNodeBridgeError('node_unavailable','private');});
+    await assert.rejects(f.host.request(f.event,f.input()),error=>!error.message.includes('[folder_transport_retry]'));
+    const fresh=fixture(); fresh.host.diagnostic=()=>{throw Error('diagnostic sink unavailable');};
+    fresh.run(async()=>{throw new ThingtimeNodeBridgeError('node_timeout','private');});
+    await assert.rejects(fresh.host.request(fresh.event,fresh.input()),/\[folder_transport_retry\]/);
+});

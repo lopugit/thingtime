@@ -41,35 +41,55 @@ const base64 = (bytes: Uint8Array) => btoa(String.fromCharCode(...bytes));
 const identifier = (id: unknown): id is string => typeof id === 'string' && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(id);
 
 const uploadWaitCodes = new Set(['upload_initializing', 'finalization_in_progress', 'finalization_settling']);
+const cloudOperation = (url: URL, mutation: boolean) => !mutation ? 'cloud-request' :
+    url.pathname === '/api/v1/attachments/uploads' ? 'upload-start' :
+    url.pathname === '/api/v1/attachments/uploads/parts' ? 'upload-parts' :
+    url.pathname === '/api/v1/attachments/uploads/complete' ? 'upload-complete' : 'cloud-request';
+/** Inspect at most4 KiB; only callers' closed scalar vocabulary may escape. */
+async function readCloudFailure(response: Response, check: () => void): Promise<any> {
+    const reader = response.body?.getReader();
+    if (!reader) return;
+    try {
+        const chunks: Uint8Array[] = []; let total = 0;
+        for (;;) {
+            const next = await reader.read(); check(); if (next.done) break;
+            total += next.value.length; if (total > 4096) return;
+            chunks.push(next.value);
+        }
+        const bytes = new Uint8Array(total); let offset = 0;
+        for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.length; }
+        return JSON.parse(new TextDecoder().decode(bytes));
+    } catch { check(); } finally { await reader.cancel().catch(() => {}); reader.releaseLock(); }
+}
 /** Diagnostics are fixed vocabulary only; never retain arbitrary response text. */
 async function cloudConflict(response: Response, url: URL, mutation: boolean, check: () => void): Promise<Error> {
-	const operation = url.pathname === '/api/v1/attachments/uploads' && mutation ? 'upload-start' :
-		url.pathname === '/api/v1/attachments/uploads/complete' && mutation ? 'upload-complete' : 'cloud-request';
-	let code = 'conflict_unknown', retryable = false;
-	const reader = response.body?.getReader();
-	if (reader) {
-		try {
-			const chunks: Uint8Array[] = []; let total = 0;
-			for (;;) {
-				const next = await reader.read(); check(); if (next.done) break;
-				total += next.value.length; if (total > 4096) break;
-				chunks.push(next.value);
-			}
-			if (total <= 4096) {
-				const bytes = new Uint8Array(total); let offset = 0;
-				for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.length; }
-				const value = JSON.parse(new TextDecoder().decode(bytes));
-				if (value?.ok === false) {
-					if (uploadWaitCodes.has(value.code) || value.code === 'upload_unavailable') code = value.code;
-					else if (value.error === 'Attachment request id is already in use') code = 'upload_request_mismatch';
-					retryable = value.retryable === true;
-				}
-			}
-		} catch { check(); } finally { await reader.cancel().catch(() => {}); reader.releaseLock(); }
-	}
-	check();
-	const message = `Cloud sync request failed (409; ${operation}; ${code}); retain this run for retry or reconciliation.`;
-	return operation !== 'cloud-request' && uploadWaitCodes.has(code) && retryable ? new SyncConnectionWait(message) : Error(message);
+    const label = cloudOperation(url, mutation);
+    const operation = label === 'upload-parts' ? 'cloud-request' : label;
+    const value = await readCloudFailure(response, check);
+    let code = 'conflict_unknown', retryable = false;
+    if (value?.ok === false) {
+        if (uploadWaitCodes.has(value.code) || value.code === 'upload_unavailable') code = value.code;
+        else if (value.error === 'Attachment request id is already in use') code = 'upload_request_mismatch';
+        retryable = value.retryable === true;
+    }
+    check();
+    const message = `Cloud sync request failed (409; ${operation}; ${code}); retain this run for retry or reconciliation.`;
+    return operation !== 'cloud-request' && uploadWaitCodes.has(code) && retryable ? new SyncConnectionWait(message) : Error(message);
+}
+const failureCodes = new Set(['storage_unavailable', 'storage_unconfigured', 'accounting_unavailable', 'LOCAL_API_NOT_CONFIGURED', 'API_ENDPOINT_CHANGED', 'API_ORIGIN_CHANGED']);
+async function cloudTemporaryFailure(response: Response, url: URL, mutation: boolean, scope: SyncScope, check: () => void) {
+    const error = cloudSyncHttpError(response.status, response.headers.get('retry-after'));
+    const value = await readCloudFailure(response, check);
+    let code = 'response_unknown';
+    if (value?.ok === false) {
+        if (failureCodes.has(value.code)) code = value.code;
+        else if (value.error === 'Selected desktop API is unavailable') code = 'desktop_api_unavailable';
+        else if (value.error === 'Configure private account services on this deployment.') code = 'local_account_services_unconfigured';
+    }
+    const fallback = response.headers.get('x-thingtime-api-fallback');
+    const proxy = fallback === null ? 'missing' : fallback === scope.origin ? 'selected-origin' : 'mismatch';
+    error.message = `Cloud sync request failed (${response.status}; ${cloudOperation(url, mutation)}; ${code}; proxy-${proxy}); retain this run for retry or reconciliation.`;
+    check(); return error;
 }
 
 /** Authenticated JSON stays on one origin with server-enforced expected actor
@@ -113,6 +133,8 @@ export function cloudRequests(runtime: CloudTransportRuntime, scope: SyncScope, 
 		}
 		if (!response.ok) {
 			if (response.status === 409) throw await cloudConflict(response, url, body !== undefined, check);
+            if (response.status === 408 || response.status === 429 || (response.status >= 500 && response.status <= 599))
+                throw await cloudTemporaryFailure(response, url, body !== undefined, scope, check);
 			await response.body?.cancel().catch(() => {});
 			throw cloudSyncHttpError(response.status, response.headers.get('retry-after'));
 		}
