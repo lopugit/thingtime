@@ -8,7 +8,7 @@ import type { SyncScope } from '~/fileSync/reconcile';
 import { TransientBlockHost } from '../Builder/TransientBlockHost';
 import { WebpageBlocksRenderer } from '../Builder/WebpageBlocksRenderer';
 import { SettingsDocumentHost, type SettingsDocumentHostProps } from '../Settings/SettingsDocumentHost';
-import { syncProgressBlocks, syncProgressDisplay, type SyncProgressBranch } from './syncProgressBlocks';
+import { priorityReadinessBlocks, priorityReadinessDisplay, syncProgressBlocks, syncProgressDisplay, type SyncProgressBranch } from './syncProgressBlocks';
 
 export type SyncProgressViewerProps = {
 	scopeKey: string; series?: TransferSpeedTrackersProps['series']; descriptor?: SyncProgressDescriptor | null; progress?: ForegroundSyncProgress;
@@ -118,5 +118,17 @@ function SyncProgressSession({ scopeKey, series, descriptor, progress, currentSc
 		{({ blocks, chrome, editing }) => <TransientBlockHost scopeKey={scopeKey} scope={syncProgressDisplay(displayBranches, progress, status, !!source, message, focusedFolder, priorities.enabled, priorities.disabled)} actions={actions} enabled={!editing}>
 			<WebpageBlocksRenderer blocks={blocks} componentsByRef={{}} chrome={chrome} />
 		</TransientBlockHost>}
-	</SettingsDocumentHost><TransferSpeedTrackers scopeKey={scopeKey} stage={progress?.stage} state={status === 'running' && progress?.stage === 'complete' ? 'complete' : status} series={series} accountTransport={accountTransport} /></>;
+	</SettingsDocumentHost><PriorityReadinessViewer scopeKey={scopeKey} progress={progress} state={status} accountTransport={accountTransport} /><TransferSpeedTrackers scopeKey={scopeKey} stage={progress?.stage} state={status === 'running' && progress?.stage === 'complete' ? 'complete' : status} series={series} accountTransport={accountTransport} /></>;
+}
+
+function PriorityReadinessViewer({ scopeKey, progress, state, accountTransport }: {
+ scopeKey: string; progress?: ForegroundSyncProgress; state: SyncProgressState; accountTransport?: SettingsDocumentHostProps['accountTransport'];
+}) {
+ const display = priorityReadinessDisplay(progress, state);
+ if (!display.hasPriorityReadiness) return null;
+ return <SettingsDocumentHost documentKey="file-sync-priority-readiness" defaultDocument={priorityReadinessBlocks} scopeKey={scopeKey} title="Upload priority readiness" accountTransport={accountTransport}>
+  {({ blocks, chrome, editing }) => <TransientBlockHost scopeKey={scopeKey} enabled={!editing} actions={{}} scope={{ sync: display }}>
+   <WebpageBlocksRenderer blocks={blocks} componentsByRef={{}} chrome={chrome} />
+  </TransientBlockHost>}
+ </SettingsDocumentHost>;
 }

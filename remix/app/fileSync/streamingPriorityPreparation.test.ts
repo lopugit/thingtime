@@ -711,6 +711,9 @@ test(
 				};
 			}
 		};
+		const diagnostics: NonNullable<Parameters<typeof input.progress>[0]['priorityReadiness']>[] = [];
+		const publish = input.progress;
+		input.progress = value => { if (value.priorityReadiness) diagnostics.push(value.priorityReadiness); publish(value); };
 		const fetch = input.runtime.fetch;
 		input.runtime.fetch = async (url, init) => {
 			if (init?.method === 'POST') {
@@ -737,6 +740,8 @@ test(
 			effects.indexOf('priority') >= 2 && effects.indexOf('priority') < 128,
 			'newly proven priority must wake/reselect ahead of the ordinary backlog'
 		);
+		assert.ok(diagnostics.some(value => value.gate === 'enabled' && value.preferencesCount === 2 && value.proofCutoff === 385));
+		assert.ok(diagnostics.some(value => value.proofCursor === 385 && value.proofCutoff === 385), 'migration completion reaches the visible saved progress path');
 		assert.equal(migrationComplete, true);
 		f.journal().close();
 	}

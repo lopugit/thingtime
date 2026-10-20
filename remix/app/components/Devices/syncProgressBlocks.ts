@@ -1,3 +1,4 @@
+import { parsePriorityReadiness } from '~/fileSync/priorityReadiness';
 import type { WebpageBlock } from '../Builder/webpageBlocks';
 import type { ForegroundSyncProgress } from '~/fileSync/foregroundSync';
 import { syncProgressMetrics, type SyncProgressPage, type SyncProgressState, type SyncProgressTotals } from '~/fileSync/progressProjection';
@@ -115,9 +116,38 @@ export function syncProgressDisplay(branches: Record<string, SyncProgressBranch>
 		: preparation ? `Preparing ${download ? 'download' : 'upload'}` : progress?.stage === 'verifying' ? `Verifying ${download ? 'downloaded' : 'uploaded'} files`
 		: progress?.indexState === 'watching' && progress.confirmed === progress.total && !progress.path ? 'Waiting for new indexed files'
 		: progress?.stage === 'transferring' || hasIndex ? download ? 'Downloading' : 'Uploading' : 'Waiting for the first indexed file';
-	return { sync: { prioritiesEnabled, prioritiesDisabled, transferTitle: `2. ${download ? 'Download' : 'Upload'} files and folders`, indexDescription: indexed + (!stoppedIndex && preparationText ? ` ${preparationText}` : '') + coverage, uploadDescription: `${globalState}${progress ? ` · ${progress.confirmed.toLocaleString()} / ${progress.total.toLocaleString()} operations confirmed${growingTotal ? ' so far · Total may grow' : ''}` : ''}${summary ? ` · ${syncProgressNodeDisplay(summary, progress, state).bytes}` : ''}`,
+	return { sync: { ...priorityReadinessDisplay(progress, state), prioritiesEnabled, prioritiesDisabled, transferTitle: `2. ${download ? 'Download' : 'Upload'} files and folders`, indexDescription: indexed + (!stoppedIndex && preparationText ? ` ${preparationText}` : '') + coverage, uploadDescription: `${globalState}${progress ? ` · ${progress.confirmed.toLocaleString()} / ${progress.total.toLocaleString()} operations confirmed${growingTotal ? ' so far · Total may grow' : ''}` : ''}${summary ? ` · ${syncProgressNodeDisplay(summary, progress, state).bytes}` : ''}`,
 		currentFolder: focusedFolder || 'Root folder', atRoot: !focusedFolder,
 		folderSummary: focusDisplay ? `${focusDisplay.percentLabel} · ${focusDisplay.counts} · ${focusDisplay.bytes}${growingTotal ? ' · Based on files prepared so far' : ''}` : hasIndex ? 'Reading folder totals…' : 'Folder totals become available as files are indexed.',
 		current: progress?.path ? `Current file: ${progress.path}${progress.bytes !== undefined && progress.size !== undefined ? ` · ${progressBytes(progress.bytes)} / ${progressBytes(progress.size)}` : ''}` : message,
 		hasError: !!root?.error, error: root?.error || '', busy, refreshLabel: busy ? 'Refreshing progress…' : 'Refresh progress', rows } };
+}
+
+/** Separate editable layout keeps diagnostics visible without replacing any
+ * previously saved custom file-progress document. Runtime data stays in progress. */
+export const priorityReadinessBlocks: WebpageBlock[] = [{ id: 'sync-priority-readiness', type: 'element', tag: 'section',
+ props: { 'aria-label': 'Upload priority readiness' }, css: { 'min-width': '0', 'margin-top': '12px', padding: '12px', border: '1px solid var(--tt-border, #ddd)', 'border-radius': '12px', 'overflow-wrap': 'anywhere' }, children: [
+ element('sync-priority-readiness-title', 'h4', 'Upload priority readiness', {}, { 'font-weight': '600' }),
+ element('sync-priority-readiness-gate', 'p', '{sync.priorityGate}', {}, { 'font-size': '12px' }),
+ element('sync-priority-readiness-proof', 'p', '{sync.priorityProof}', {}, { 'font-size': '12px' }),
+ element('sync-priority-readiness-candidate', 'p', '{sync.priorityCandidate}', {}, { 'font-size': '12px' }),
+ element('sync-priority-readiness-status', 'p', '{sync.priorityStatus}', { role: 'status' }, { 'font-size': '12px' })
+]}];
+export function priorityReadinessDisplay(progress: ForegroundSyncProgress | undefined, state: SyncProgressState) {
+	const readiness = parsePriorityReadiness(progress?.priorityReadiness);
+	const savedObservation = state !== 'running' ? 'Saved observation · ' : '';
+	const readinessStatus = !readiness ? '' : readiness.gate === 'unsupported'
+		? 'Preparing unplanned priorities requires a supported trusted native adapter. Existing prepared operations keep their normal scheduler.'
+		: !readiness.measured ? 'Waiting for the scheduler to check priority readiness. No completion is inferred.'
+		: readiness.blocker === 'proof-pending' ? 'Priority preparation is waiting for legacy index validation to reach the candidate.'
+		: readiness.blocker === 'not-indexed' ? 'The last check found no eligible unprepared input. It may not be indexed yet or may already be processed; this does not prove backup completion.'
+		: readiness.blocker === 'reserved-or-in-flight' ? 'A prepared or active operation must finish safely before another priority revision can run.'
+		: readiness.blocker === 'ready' ? 'The last checked priority candidate is ready for preparation.'
+		: readiness.preferencesCount === 0 ? 'No upload priorities are saved for this connection.' : 'No candidate was selected by the last scheduling check.';
+	return { hasPriorityReadiness: !!readiness,
+		priorityGate: readiness ? `${savedObservation}Priority preparation ${readiness.gate === 'enabled' ? 'enabled by the trusted native adapter' : 'unsupported by this adapter'} · ${readiness.preferencesCount.toLocaleString()} saved priorities · revision ${readiness.preferencesRevision.toLocaleString()}.` : '',
+		priorityProof: readiness ? readiness.proofCursor === null || readiness.proofCutoff === null ? 'Legacy index validation has not been measured.' : `Legacy index validation: ${readiness.proofCursor.toLocaleString()} / ${readiness.proofCutoff.toLocaleString()} fixed observations checked. This is not an upload count.` : '',
+		priorityCandidate: readiness ? `Last checked candidate: ${readiness.candidateOrdinal === null ? 'not measured' : `saved priority ${readiness.candidateOrdinal.toLocaleString()}`}${readiness.candidateSequence === null ? '' : ` · input observation ${readiness.candidateSequence.toLocaleString()}`}.${readiness.reserved ? ' An operation is reserved or in flight.' : ''}` : '',
+		priorityStatus: savedObservation + readinessStatus,
+ };
 }

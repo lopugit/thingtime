@@ -1,4 +1,5 @@
 // Synthetic metadata only; the checker enforces an OS-level loopback boundary.
+import { readStampedCache, writeStampedCache } from '../app/hooks/localCache';
 import React, { useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { createMemoryRouter, RouterProvider } from 'react-router';
@@ -46,11 +47,22 @@ const series = new TransferSpeedSeries({ now: () => clock });
 series.observe({ upload: { bytes: 0, files: 0, folders: 0 }, download: { bytes: 0, files: 0, folders: 0 } });
 for (let second = 1; second <= 10; second++) { clock = second * 1000; series.observe({ upload: { bytes: second * 125_000, files: second * 2, folders: second }, download: { bytes: second * 250_000, files: second * 4, folders: second * 2 } }); }
 function Fixture() {
-	const [status, setStatus] = useState<SyncProgressState>('running');
-	const [progress, setProgress] = useState<ForegroundSyncProgress>({ stage: 'transferring', total: rows.length, confirmed: 4,
-		path: rows.find(r => r.entry.size === 990)!.entry.path, bytes: 495, size: 990 });
+	const restored = readStampedCache<{ status: SyncProgressState; progress: ForegroundSyncProgress }>('synthetic-priority-progress');
+	const [status, setStatus] = useState<SyncProgressState>(restored?.status || 'running');
+	const [progress, setProgress] = useState<ForegroundSyncProgress>(restored?.progress || { stage: 'transferring', total: rows.length, confirmed: 4,
+		path: rows.find(r => r.entry.size === 990)!.entry.path, bytes: 495, size: 990,
+        priorityReadiness: { gate: 'enabled', preferencesCount: 5, preferencesRevision: 3, proofCursor: 0, proofCutoff: 100000, candidateOrdinal: 1, candidateSequence: 80000, blocker: 'proof-pending', measured: true, reserved: false } });
+	React.useEffect(() => writeStampedCache('synthetic-priority-progress', { status, progress }), [status, progress]);
 	return <ChakraProvider><Box maxW="760px" mx="auto" p={4}>
 		<Text as="h1">Editable progress acceptance</Text>
+        {(['partial', 'ready', 'reserved', 'unsupported', 'unmeasured', 'not-indexed'] as const).map(state => <Button key={state} onClick={() => setProgress(value => ({ ...value,
+            priorityReadiness: { gate: state === 'unsupported' ? 'unsupported' : 'enabled', preferencesCount: 5, preferencesRevision: 3,
+                proofCursor: state === 'unsupported' ? null : state === 'partial' ? 4096 : 100000, proofCutoff: state === 'unsupported' ? null : 100000,
+                candidateOrdinal: state === 'unsupported' || state === 'unmeasured' ? null : 1,
+                candidateSequence: state === 'unsupported' || state === 'unmeasured' || state === 'not-indexed' ? null : 80000,
+                blocker: state === 'partial' ? 'proof-pending' : state === 'reserved' ? 'reserved-or-in-flight' : state === 'not-indexed' ? 'not-indexed' : state === 'ready' ? 'ready' : 'none',
+                measured: state !== 'unmeasured', reserved: state === 'reserved' }
+        }))}>Priority {state}</Button>)}
 		<Button onClick={() => {
             const entries = { files: 20, folders: 10 }, download = { bytes: 2_500_000, files: 40, folders: 20 };
             clock = 11000; series.observe({ upload: { bytes: null, ...entries }, download });
@@ -68,4 +80,4 @@ function Fixture() {
 }
 const router = createMemoryRouter([{ id: 'root', path: '*', element: <Fixture /> }], { hydrationData: { loaderData: { root: { user: { id: scope.ownerId, username: 'synthetic-progress' }, dataPlane: 'home' } } } });
 createRoot(document.getElementById('root')!).render(<RouterProvider router={router} />);
-Object.assign(window, { progressFixture: { total: rows.length, layout: () => JSON.parse(localStorage.getItem(layoutKey + ':settings-file-sync-speed-trackers') || 'null') } });
+Object.assign(window, { progressFixture: { total: rows.length, layout: (document = 'file-sync-speed-trackers') => JSON.parse(localStorage.getItem(layoutKey + ':settings-' + document) || 'null') } });

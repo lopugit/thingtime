@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { syncProgressBlocks, syncProgressDisplay, syncProgressNodeDisplay } from './syncProgressBlocks';
+import { priorityReadinessBlocks, priorityReadinessDisplay, syncProgressBlocks, syncProgressDisplay, syncProgressNodeDisplay } from './syncProgressBlocks';
 import { settingsDocumentBlocks } from '../Settings/settingsDocument';
 import { findBlock } from '../Builder/webpageBlocks';
 import { resolveBlockProps } from '../Builder/templateBlocks';
@@ -100,3 +100,23 @@ test('focused folder navigation renders its children and retains global indexed 
     assert.match(display.uploadDescription, /^Error/);
     assert.equal(display.current, 'Unreadable entry');
  });
+
+
+test('priority readiness fields stay individually editable and explain saved observations without claiming completion', () => {
+ const blocks = settingsDocumentBlocks(priorityReadinessBlocks);
+ for (const field of ['title', 'gate', 'proof', 'candidate', 'status']) assert.ok(findBlock(blocks, 'sync-priority-readiness-' + field));
+ const progress = { stage: 'transferring' as const, total: 128, confirmed: 0,
+  priorityReadiness: { gate: 'enabled' as const, preferencesCount: 5, preferencesRevision: 3, proofCursor: 128, proofCutoff: 300, candidateOrdinal: 2, candidateSequence: 280, blocker: 'proof-pending' as const, measured: true, reserved: true } };
+ const running = priorityReadinessDisplay(progress, 'running');
+ assert.match(running.priorityGate, /enabled.*5 saved priorities.*revision 3/);
+ assert.match(running.priorityProof, /128 \/ 300.*not an upload count/);
+ assert.match(running.priorityCandidate, /priority 2.*observation 280.*reserved/);
+ assert.match(running.priorityStatus, /waiting for legacy index validation/);
+ const paused = priorityReadinessDisplay(JSON.parse(JSON.stringify(progress)), 'paused');
+ assert.match(paused.priorityStatus, /^Saved observation/);
+ const unsupported = priorityReadinessDisplay({ ...progress, priorityReadiness: { ...progress.priorityReadiness, gate: 'unsupported' } }, 'running');
+ assert.match(unsupported.priorityGate, /unsupported/); assert.doesNotMatch(unsupported.priorityStatus, /complete|ready/);
+ const unknown = priorityReadinessDisplay({ ...progress, priorityReadiness: { ...progress.priorityReadiness, measured: false } }, 'running');
+ assert.match(unknown.priorityStatus, /Waiting for the scheduler.*No completion is inferred/);
+ assert.equal(priorityReadinessDisplay(undefined, 'running').hasPriorityReadiness, false);
+});

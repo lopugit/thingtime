@@ -1,3 +1,4 @@
+import type { PriorityReadiness } from './priorityReadiness';
 import { validIndexProvenance, type NativeIndexChange } from './streamingIndex';
 import { SYNC_PRIORITY_STORE, parseSyncPriorityPreferences } from './syncPriorityJournal';
 import { JOURNAL_RETENTION_STORE, registerJournalMetadata, forgetJournalMetadata, retireJournalMetadata } from './journalRetention';
@@ -247,18 +248,27 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 			done(input);
 		} catch (error) { fail(error); } };
 	});
+	// A bounded last-selection observation, never a journal field or path log.
+	let priorityObservation: { run: string; generation: string | null; revision: number; indexed: number;
+		ordinal: number | null; sequence: number | null; path?: string; entry?: SyncEntry; blocker: PriorityReadiness['blocker'] } | undefined;
 	const priorityInput = async (spec: PagedRunSpec): Promise<{ input: StreamInput; revision: number } | null> => {
 		if (spec.streaming?.source !== 'local') return null;
+		let generation: string | null = null, indexed = 0;
 		const preferences = await withHeader<{ revision: number; paths: string[] } | null>(spec, 'readonly', (h, tx, done, fail) => {
 			if (!h.stream?.priorityPreparation || h.stream.terminal) { done(null); return; }
+			generation = h.stream.generation; indexed = h.stream.indexedSequence ?? h.stream.sequence;
 			const get = tx.objectStore(SYNC_PRIORITY_STORE).get(key);
 			get.onsuccess = () => { try { check(); done(get.result === undefined ? { revision: 0, paths: [] } : parseSyncPriorityPreferences(get.result)); } catch (error) { fail(error); } };
 		});
-		if (!preferences?.paths.length) return null;
-		for (const requested of preferences.paths) {
+		if (!preferences) return null;
+		const observation = (blocker: PriorityReadiness['blocker'], ordinal: number | null, candidate?: StreamInput) =>
+			({ run: spec.id, generation, indexed, revision: preferences.revision, ordinal, sequence: candidate?.sequence ?? null,
+				...(candidate ? { path: candidate.entry.path, entry: entry(candidate.entry) } : {}), blocker });
+		let blocked: ReturnType<typeof observation> | undefined;
+		for (const [index, requested] of preferences.paths.entries()) {
 			check();
 			let candidate = await indexedInput(spec, requested, false) ?? await indexedInput(spec, requested, true);
-			if (!candidate) continue;
+			if (!candidate) { blocked ??= observation('not-indexed', index + 1); continue; }
 			const parts = candidate.entry.path.split('/');
 			for (let depth = 1; depth < parts.length; depth++) {
 				const ancestor = await indexedInput(spec, parts.slice(0, depth).join('/'), false);
@@ -270,13 +280,15 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 				const stream = h.stream!;
 				done((stream.inputBackfillSequence ?? stream.sequence) >= Math.min(candidate!.sequence, stream.inputBackfillThrough ?? 0));
 			});
-			if (!eligible) continue;
+			if (!eligible) { if (!blocked?.sequence) blocked = observation('proof-pending', index + 1, candidate); continue; }
 			const pending = await withHeader<boolean>(spec, 'readonly', (h, tx, done, fail) => {
 				const get = tx.objectStore(PAGED_RUN_STORES[1]).index('path').get([key, spec.id, syncPathKey(candidate!.entry.path)]);
 				get.onsuccess = () => { try { check(); done(get.result !== undefined && !row(get.result, spec).operation.confirmed); } catch (error) { fail(error); } };
 			});
-			if (!pending) return { input: candidate, revision: preferences.revision };
+			if (!pending) { priorityObservation = observation('ready', index + 1, candidate); return { input: candidate, revision: preferences.revision }; }
+			if (!blocked?.sequence) blocked = observation('reserved-or-in-flight', index + 1, candidate);
 		}
+		priorityObservation = blocked ?? observation('none', null);
 		return null;
 	};
 	/** A streaming run shares operation IDs, receipts, scheduling, scope fencing
@@ -566,6 +578,50 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 		streamState: (value: PagedRunSpec) => withHeader(parsePagedRunSpec(value), 'readonly', (h, _tx, done) => {
 			if (!h.stream) throw Error('This run is not streaming.'); done(structuredClone(h.stream));
 		}) as Promise<NonNullable<Header['stream']>>,
+		/** Read only: reuse the scheduler's last bounded search, then validate its
+		 * exact candidate/pending row. No render-time preference/tree search. */
+		streamPriorityReadiness: (value: PagedRunSpec, enabled: boolean) => withHeader<PriorityReadiness>(parsePagedRunSpec(value), 'readonly', (h, tx, done, fail) => {
+			const spec = h.spec, stream = h.stream;
+			if (!stream) throw Error('This run is not streaming.');
+			const get = tx.objectStore(SYNC_PRIORITY_STORE).get(key);
+			get.onsuccess = () => { try {
+				check(); const preferences = get.result === undefined ? { revision: 0, paths: [] } : parseSyncPriorityPreferences(get.result);
+				const trusted = enabled && spec.streaming?.source === 'local';
+				const result: PriorityReadiness = { gate: trusted ? 'enabled' : 'unsupported', preferencesCount: preferences.paths.length,
+					preferencesRevision: preferences.revision, proofCursor: stream.inputBackfillSequence ?? null, proofCutoff: stream.inputBackfillThrough ?? null,
+					candidateOrdinal: null, candidateSequence: null, blocker: 'none', measured: !trusted || preferences.paths.length === 0,
+					reserved: h.scheduling?.reserved != null };
+				const sample = priorityObservation;
+				if (!trusted || !sample || sample.run !== spec.id || sample.generation !== stream.generation || sample.revision !== preferences.revision) { done(result); return; }
+				result.candidateOrdinal = sample.ordinal; result.candidateSequence = sample.sequence;
+				if (sample.sequence === null) {
+					result.measured = sample.indexed === (stream.indexedSequence ?? stream.sequence);
+					result.blocker = result.measured ? sample.blocker : 'none'; done(result); return;
+				}
+				const pending = tx.objectStore(PAGED_RUN_STORES[1]).index('path').get([key, spec.id, syncPathKey(sample.path!)]);
+				pending.onsuccess = () => { try {
+					check(); const operation = pending.result === undefined ? null : row(pending.result, spec).operation;
+					if (operation && !operation.confirmed) {
+						const mutation = operation.mutation;
+						if (sample.entry && mutation.kind === 'copy' && mutation.from === 'local' && mutation.path === sample.path && sameSyncStamp(mutation.source, sample.entry)) {
+							result.measured = true; result.blocker = 'reserved-or-in-flight';
+						}
+						done(result); return;
+					}
+					const token = [key, spec.id, 'input', sample.sequence], input = tx.objectStore(REVIEW_STORE).get(token);
+					input.onsuccess = () => { try {
+						check(); if (input.result === undefined) { done(result); return; }
+						const candidate = inputRow(input.result, spec, stream.generation, token);
+						if (!sample.entry || !sameSyncStamp(candidate.entry, sample.entry)) { done(result); return; }
+						const proven = (stream.inputBackfillSequence ?? stream.sequence) >= Math.min(sample.sequence!, stream.inputBackfillThrough ?? 0);
+						// Crossing proof wakes selection; it does not fabricate a new ready decision.
+						if (sample.blocker === 'proof-pending' && proven) { done(result); return; }
+						result.measured = true; result.blocker = !proven ? 'proof-pending' : result.reserved ? 'reserved-or-in-flight' : sample.blocker;
+						done(result);
+					} catch (error) { fail(error); } };
+				} catch (error) { fail(error); } };
+			} catch (error) { fail(error); } };
+		}),
 		/** Cursor catch-up and transfer drain must come from ONE transaction;
 		 * separate reads can falsely stop a watcher across a planner commit. */
 		streamReadyToFinish: (value: PagedRunSpec) => withHeader<boolean>(parsePagedRunSpec(value), 'readonly', (h, _tx, done) => {
