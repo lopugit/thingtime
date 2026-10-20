@@ -122,6 +122,17 @@ public final class ThingtimeAPIClient: ControlPlaneClient, @unchecked Sendable {
         return "File-sync identity: status=\(status) elapsedMilliseconds=\(elapsedMilliseconds) attempt=\(attempt) retry=\(retry) cooldownSeconds=\(cooldownSeconds ?? 0)"
     }
 
+    // The canonical limiter emits only integer Retry-After (no limit/remaining
+    // pacing headers). Longer custom windows still fence other queued callers;
+    // this individual RPC retains its existing single <=60-second retry bound.
+    static func identityCooldown(_ response: HTTPURLResponse) -> Int? {
+        guard response.statusCode == 429,
+              let text = response.value(forHTTPHeaderField: "Retry-After"),
+              text.range(of: "^[1-9][0-9]{0,4}$", options: .regularExpression) != nil,
+              let seconds = Int(text), seconds <= 86_400 else { return nil }
+        return seconds
+    }
+
     /// Identity is uncached, and local unpairing during the request also fails closed.
     public func verifyFileSyncIdentity(ownerID: String, deviceID: String) async throws {
         try Task.checkCancellation()
@@ -134,25 +145,35 @@ public final class ThingtimeAPIClient: ControlPlaneClient, @unchecked Sendable {
         var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 20)
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.setValue("Bearer \(credential.refreshToken)", forHTTPHeaderField: "Authorization")
+        let admissionScope = FileSyncIdentityAdmission.scope(origin: baseURL, credential: credential)
         for attempt in 0...1 {
-            try Task.checkCancellation()
-            if attempt > 0 {
+            let permit = try await identityAdmission.acquire(admissionScope)
+            let data: Data, response: HTTPURLResponse, elapsed: Int
+            do {
+                try Task.checkCancellation()
+                // Admission can wait behind another lane or a shared cooldown.
+                // Never send a credential that was revoked/rotated while queued.
                 let current = try await credentialStore.loadAll().filter { $0.deviceID == deviceID }
                 guard current == [credential] else { throw ThingtimeAPIClientError.notPaired }
+                try Task.checkCancellation()
+                try await identityAdmission.willSend(permit)
+                try Task.checkCancellation()
+                let began = ProcessInfo.processInfo.systemUptime
+                let received = try await session.data(for: request)
+                guard let http = received.1 as? HTTPURLResponse, http.url == url else {
+                    throw ThingtimeAPIClientError.invalidResponse
+                }
+                response = http; data = received.0
+                elapsed = Int(max(0, ProcessInfo.processInfo.systemUptime - began) * 1000)
+                // Publish the response's cooldown before another queued lane runs,
+                // even if this caller was cancelled as the response arrived.
+                await identityAdmission.finish(permit, cooldownSeconds: Self.identityCooldown(response))
+                try Task.checkCancellation()
+            } catch {
+                await identityAdmission.finish(permit)
+                throw error
             }
-            let began = ProcessInfo.processInfo.systemUptime
-            let (data, raw) = try await session.data(for: request)
-            try Task.checkCancellation()
-            guard let response = raw as? HTTPURLResponse,
-                  response.url == url else { throw ThingtimeAPIClientError.invalidResponse }
-            let elapsed = Int(max(0, ProcessInfo.processInfo.systemUptime - began) * 1000)
-            let cooldown: Int? = {
-                guard response.statusCode == 429, attempt == 0,
-                      let text = response.value(forHTTPHeaderField: "Retry-After"),
-                      text.range(of: "^[1-9][0-9]?$", options: .regularExpression) != nil,
-                      let seconds = Int(text), seconds <= 60 else { return nil }
-                return seconds
-            }()
+            let cooldown = attempt == 0 ? Self.identityCooldown(response).flatMap { $0 <= 60 ? $0 : nil } : nil
             if let diagnostic = Self.fileSyncIdentityDiagnostic(status: response.statusCode, elapsedMilliseconds: elapsed,
                                                                 attempt: attempt, cooldownSeconds: cooldown) {
                 ThingtimeNodeLog.actions.notice("\(diagnostic, privacy: .public)")
@@ -168,7 +189,7 @@ public final class ThingtimeAPIClient: ControlPlaneClient, @unchecked Sendable {
             guard data.count <= 16_384 else { throw ThingtimeAPIClientError.invalidResponse }
             let identity = try decoder.decode(Identity.self, from: data)
             guard identity.ok, identity.ownerId == ownerID, identity.deviceId == deviceID,
-                  try await credentialStore.loadAll().contains(credential) else { throw ThingtimeAPIClientError.notPaired }
+                  try await credentialStore.loadAll().filter({ $0.deviceID == deviceID }) == [credential] else { throw ThingtimeAPIClientError.notPaired }
             return
         }
     }
@@ -373,12 +394,13 @@ public final class ThingtimeAPIClient: ControlPlaneClient, @unchecked Sendable {
 
     private let baseURL: URL
     private let credentialStore: any DeviceCredentialStore
+    private let identityAdmission: FileSyncIdentityAdmission
     private let fileSyncRetrySleep: @Sendable (UInt64) async throws -> Void
     private let session: URLSession
     private let encoder: JSONEncoder
     private let decoder: JSONDecoder
 
-    public init(
+    public convenience init(
         baseURL: URL,
         credentialStore: any DeviceCredentialStore,
         session: URLSession? = nil,
@@ -386,7 +408,17 @@ public final class ThingtimeAPIClient: ControlPlaneClient, @unchecked Sendable {
             try await Task.sleep(nanoseconds: seconds * 1_000_000_000)
         }
     ) throws {
+        try self.init(baseURL: baseURL, credentialStore: credentialStore, session: session,
+                      identityAdmission: .shared, fileSyncRetrySleep: fileSyncRetrySleep)
+    }
+
+    init(baseURL: URL, credentialStore: any DeviceCredentialStore, session: URLSession? = nil,
+         identityAdmission: FileSyncIdentityAdmission,
+         fileSyncRetrySleep: @escaping @Sendable (UInt64) async throws -> Void = { seconds in
+             try await Task.sleep(nanoseconds: seconds * 1_000_000_000)
+         }) throws {
         guard Self.allowed(baseURL) else { throw ThingtimeAPIClientError.invalidBaseURL }
+        self.identityAdmission = identityAdmission
         self.baseURL = baseURL
         self.credentialStore = credentialStore
         self.fileSyncRetrySleep = fileSyncRetrySleep

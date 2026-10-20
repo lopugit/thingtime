@@ -302,7 +302,7 @@ class DesktopFolderSync {
                 this.assertCurrent(state);
                 value.apiCapabilities = apiCapabilities;
                 if (/^1\.([2-9]|[1-9][0-9]+)\.(0|[1-9][0-9]*)$/.test(value.capabilities?.fileAccessVersion ?? ''))
-                    value.capabilities = { ...value.capabilities, fileUploadVersion: '1.0.1' };
+                    value.capabilities = { ...value.capabilities, fileUploadVersion: '1.1.0' };
             }
             await verify();
             if (!value || typeof value !== 'object' || value.requestId !== input.requestId || value.ownerId !== input.ownerId ||

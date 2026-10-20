@@ -91,6 +91,24 @@ if (!process.env.TT_SPEED_WORKER) {
 				assert.ok(bounds.scrollWidth <= bounds.width, JSON.stringify(bounds)); if (bounds.y + bounds.height >= bounds.total - 1) break; assert.ok(++steps < 100); await page.evaluate(() => scrollBy(0, innerHeight * 0.8)); }
 			await page.screenshot({ path: join(evidence, `${name}-bottom.png`) }); await page.evaluate(() => scrollTo(0, 0)); await page.screenshot({ path: join(evidence, `${name}.png`) });
 		}
+        await cards.nth(0).getByRole('spinbutton', { name: 'Averaging timeframe', exact: true }).fill('10');
+        await cards.nth(0).getByRole('combobox', { name: 'Transfer rate unit', exact: true }).selectOption('Mbps');
+        await cards.nth(0).getByRole('button', { name: 'Apply custom tracker', exact: true }).click();
+        await page.getByRole('button', { name: 'Recover byte coverage', exact: true }).click();
+        await host.getByText('Sent: 1 Mbps', { exact: true }).waitFor();
+        await host.getByText(/Upload 1s \/ Download 10s measured/).waitFor();
+        await host.getByText(/native uploads update on completed-part acknowledgment, not continuous wire progress/).waitFor();
+        for (const [name, width, height] of [['desktop', 1440, 1000], ['mobile', 390, 844]]) {
+            await page.setViewportSize({ width, height }); await page.evaluate(() => scrollTo(0, 0));
+            let steps = 0;
+            for (;;) {
+                const bounds = await page.evaluate(() => ({ y: scrollY, height: innerHeight, total: document.documentElement.scrollHeight, width: innerWidth, scrollWidth: document.documentElement.scrollWidth }));
+                assert.ok(bounds.scrollWidth <= bounds.width, JSON.stringify(bounds));
+                if (bounds.y + bounds.height >= bounds.total - 1) break;
+                assert.ok(++steps < 100); await page.evaluate(() => scrollBy(0, innerHeight * 0.8));
+            }
+            await page.screenshot({ path: join(evidence, `${name}-payload-coverage.png`) });
+        }
         await page.getByRole('button', { name: 'Pause fixture', exact: true }).click();
         await host.getByText('Sent: Paused', { exact: true }).waitFor();
         await host.getByText('Received: Paused', { exact: true }).waitFor();

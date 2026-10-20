@@ -173,3 +173,37 @@ test('retains no more than one sample per second across the 24-hour bound', () =
 	const rate = series.read({ direction: 'upload', unit: 'Files/ps', windowMs: MAX_TRANSFER_WINDOW_MS });
 	assert.equal(rate.status, 'known');
 });
+
+test('subsecond known coverage starts at its own baseline and excludes earlier unknown samples', () => {
+ let now = 0; const series = new TransferSpeedSeries({ now: () => now });
+ const read = (windowMs = 10000) => series.read({ direction: 'upload', unit: 'Mbps', windowMs });
+ series.observe(counters({ upload: { bytes: null } }));
+ now = 100; series.observe(counters({ upload: { bytes: 32 * 1024 * 1024 } }));
+ assert.equal(unknownReason(read()), 'insufficient-duration');
+ now = 150; series.observe(counters({ upload: { bytes: 32 * 1024 * 1024 + 6250 } }));
+ assert.equal(knownValue(read()), 1);
+ assert.equal(read().observedDurationMs, 50);
+ now = 1200;
+ // The requested window crosses the unknown period, so only known coverage counts.
+ assert.equal(read().observedDurationMs, 1100);
+ now = 2500;
+ assert.equal(read(1000).observedDurationMs, 1000);
+ assert.equal(knownValue(read(1000)), 0, 'Old acknowledgment ages out rather than becoming an ongoing wire rate');
+});
+
+test('repeated unknown episodes and pause resume preserve other-direction and inode histories', () => {
+ let now = 0; const series = new TransferSpeedSeries({ now: () => now });
+ const observe = (bytes: number | null, files: number, downloaded: number) => series.observe(counters({ upload: { bytes, files }, download: { bytes: downloaded } }));
+ const read = (direction: 'upload' | 'download', unit: 'Mbps' | 'INodes/ps' = 'Mbps') => series.read({ direction, unit, windowMs: 10000 });
+ observe(0, 0, 0); now = 1000; observe(null, 1, 125000);
+ now = 1500; observe(0, 1, 125000); now = 2000; observe(62500, 2, 250000);
+ assert.equal(knownValue(read('upload')), 1); assert.equal(read('upload').observedDurationMs, 500);
+ assert.equal(knownValue(read('download')), 1); assert.equal(knownValue(read('upload', 'INodes/ps')), 1);
+ now = 2500; observe(null, 2, 250000); assert.equal(unknownReason(read('upload')), 'unavailable');
+ now = 3000; observe(0, 2, 375000); now = 4000; observe(125000, 3, 500000);
+ assert.equal(knownValue(read('upload')), 1); assert.equal(read('upload').observedDurationMs, 1000);
+ assert.equal(read('download').observedDurationMs, 4000);
+ series.pause(); now = 100000; series.resume();
+ assert.equal(unknownReason(read('upload')), 'insufficient-duration');
+ now += 1000; assert.equal(knownValue(read('upload')), 0); assert.equal(read('upload').observedDurationMs, 1000);
+});

@@ -3839,10 +3839,29 @@ is deferred; these changes do not claim new special-file restoration support.
 
 ## Desktop checksum-locked part uploads — 2026-10-20
 
-The Mac folder host advertises `fileUploadVersion` **1.0.1** only with compatible
+The Mac folder host advertises `fileUploadVersion` **1.1.0** only with compatible
 native binary range reads (file access 1.2 or later). This reuses the existing
 `upload-part` request and exact source/upload/part receipt contract used by mobile;
 it does not advertise whole-file or background upload versions 1.2/1.3.
+
+Mac 1.1 adds optional `uploadedPart.payloadBytes`: the exact positive request
+body length of this successfully completed PUT, after the existing final source
+and authority checks. This host always sends the part; it has no cached-part
+reuse branch. The trusted renderer accepts this measurement only for negotiated
+Mac 1.1+ receipts and only when it exactly equals the requested part length.
+Missing, malformed or unsupported measurement remains unknown without weakening
+any receipt/digest checks. Whole-file 1.2 and background 1.3 minima are unchanged.
+
+Speed trackers measure acknowledged payload samples. Native upload values update
+on completed-part acknowledgment, not continuously during a PUT and not as wire
+bytes. A known-zero baseline is established before a measured part starts;
+unknown intervals (including lost replies) are excluded and each direction shows
+its actual shorter measured coverage. A server-ready upload adds zero new bytes;
+retained completion offsets and canonical receipt replays add no payload. An
+actual repeated PUT measures its newly acknowledged body again, while a lost
+reply's unobserved payload is never reconstructed. Byte coverage can recover
+without clearing file/folder/inode counts, opposite-direction history or saved
+tracker units/timeframes. Paused time remains excluded.
 
 The Electron host binds each part to the current main frame, selected API origin,
 account, device, root and source version. It reads one native range (at most

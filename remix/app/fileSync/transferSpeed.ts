@@ -102,6 +102,7 @@ function defaultNow(): number {
 export class TransferSpeedSeries {
 	private samples: Sample[] = [];
 	private previous: TransferCounters | null = null;
+	private byteCoverage: Partial<Record<TransferDirection, Sample>> = {};
 	private paused = false;
 	private lastClockAt: number | null = null;
 	private readonly now: () => number;
@@ -128,6 +129,14 @@ export class TransferSpeedSeries {
 			// event's increment enters the series.
 			this.materializeActiveTime(at);
 		}
+		let coverageChanged = false;
+		for (const direction of ['upload', 'download'] as const) {
+			if (next[direction].bytes === null) delete this.byteCoverage[direction];
+			else if (!this.previous || this.previous[direction].bytes === null) {
+				this.byteCoverage[direction] = { at, counters: next };
+				coverageChanged = true;
+			}
+		}
 		this.previous = next;
 		if (this.paused) return;
 		const lastSample = this.samples.at(-1);
@@ -135,7 +144,7 @@ export class TransferSpeedSeries {
 			lastSample.counters = next;
 			return;
 		}
-		if (lastSample && at - lastSample.at < SAMPLE_INTERVAL_MS) return;
+		if (!coverageChanged && lastSample && at - lastSample.at < SAMPLE_INTERVAL_MS) return;
 		this.pushSample({ at, counters: next });
 	}
 
@@ -178,7 +187,13 @@ export class TransferSpeedSeries {
 		// than the last retained 1Hz point without adding another history sample.
 		const latest: Sample = { at: now, counters: this.previous ?? lastSample.counters };
 		const windowStart = now - windowMs;
-		const first = this.samples[0];
+		const byteUnit = unit === 'Kbps' || unit === 'Mbps' || unit === 'Gbps';
+		if (byteUnit && latest.counters[direction].bytes === null)
+			return { status: 'unknown', reason: 'unavailable', requestedWindowMs: windowMs, observedDurationMs: 0 };
+		// A direction may regain measurement during a run. Exclude its unknown
+		// interval without discarding the other direction or logical entry history.
+		const coverage = byteUnit ? this.byteCoverage[direction] : undefined;
+		const first = coverage && coverage.at > this.samples[0].at ? coverage : this.samples[0];
 		let low = 0, high = this.samples.length;
 		while (low < high) {
 			const middle = low + ((high - low) >> 1);
@@ -229,7 +244,12 @@ export class TransferSpeedSeries {
 		if (!this.paused) return;
 		this.paused = false;
 		this.samples = [];
-		if (this.previous) this.pushSample({ at, counters: this.previous });
+		if (this.previous) {
+			const baseline = { at, counters: this.previous };
+			this.pushSample(baseline);
+			for (const direction of ['upload', 'download'] as const)
+				if (this.previous[direction].bytes !== null) this.byteCoverage[direction] = baseline;
+		}
 	}
 
 	/** Start a fresh run. The next observation establishes its baseline. */
@@ -237,6 +257,7 @@ export class TransferSpeedSeries {
 		this.clock();
 		this.samples = [];
 		this.previous = null;
+		this.byteCoverage = {};
 		this.paused = false;
 	}
 }

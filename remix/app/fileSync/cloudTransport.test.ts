@@ -274,7 +274,7 @@ test('ready attachment reuse and failed journal confirmations do not inflate thr
  await assert.rejects(executeSyncRun(run, f.port(run, async () => {}, event => events.push(event))), /before publication/);
  assert.deepEqual(events, [{ direction: 'upload', bytes: 4 }]); events.length = 0;
  await assert.rejects(executeSyncRun(run, f.port(run, async value => { if (value.operations.every(op => op.confirmed)) throw Error('journal full'); }, event => events.push(event))), /journal full/);
- assert.deepEqual(events, [], 'ready attachment has no new bytes and failed journal has no confirmed file');
+ assert.deepEqual(events, [{ direction: 'upload', bytes: 0 }], 'ready attachment measures zero new bytes and failed journal has no confirmed file');
 });
 
 
@@ -522,4 +522,51 @@ test('generic old-host streaming retains full preparation and source guards', as
 test('read-only preparation cannot authorize later effects after configuration/root/account/scope/network/cancellation changes', async () => {
  for (const kind of ['config', 'root', 'account', 'scope', 'network', 'abort'] as const) await nativeUploadAmplification('stream', true, { at: 'plan', kind });
  for (const at of ['start', 'part', 'content'] as const) await nativeUploadAmplification('stream', true, { at, kind: 'config' });
+});
+
+test('trusted completed native PUT payload samples exclude unknown telemetry, retained offsets and receipt replays', async () => {
+ const digest = Buffer.from(await crypto.subtle.digest('SHA-256', bytes)).toString('hex');
+ for (const [trusted, payloadBytes, expected] of [[true, 4, [0, 4]], [true, undefined, [0, null]],
+  [true, 0, [0, null]], [true, 5, [0, null]], [false, 4, [null, null]]] as const) {
+  const f = await fixture(), write = f.make().cloudWrites[0], samples: (number | null)[] = [];
+  const native: FingerprintSource = { ...source(), ...(trusted ? { nativePartPayloadBytes: true as const } : {}),
+   uploadPart: async () => ({ sha256: digest, payloadBytes }) };
+  await createCloudFileTransport(f.runtime, write).apply(native, undefined, value => samples.push(value));
+  assert.deepEqual(samples, expected);
+  await createCloudFileTransport(f.runtime, write).apply(native, undefined, value => samples.push(value));
+  assert.deepEqual(samples, expected, 'Receipt replay reports no new transfer');
+ }
+ const f = await fixture(), run = f.make(), requests: unknown[] = [], samples: (number | null)[] = [], factory = new IDBFactory();
+ let journal = await openSyncJournal(factory);
+ const native: FingerprintSource = { ...source(), nativePartPayloadBytes: true, uploadPart: async request => {
+  requests.push(request); if (requests.length === 1) throw Error('Accepted PUT reply lost'); return { sha256: digest, payloadBytes: 4 };
+ } };
+ const port = (current: SyncRun) => createCloudSyncPort(current, { currentScope: () => scope, persist: journal.persist,
+  readLocal: async () => f.entry, openSource: async () => native,
+  transfer: event => { if ('bytes' in event) samples.push(event.bytes); } }, f.runtime);
+ await assert.rejects(executeSyncRun(run, port(run)), /reply lost/);
+ assert.deepEqual(samples, [0, null]); journal.close();
+ journal = await openSyncJournal(factory);
+ const restored = parseCloudSyncRun((await journal.read(scope))!);
+ const done = await executeSyncRun(restored, port(restored));
+ assert.deepEqual(requests[0], requests[1]); assert.deepEqual(samples, [0, null, 0, 4]);
+ assert.equal(f.counts().commits, 1);
+ await executeSyncRun(done, port(done)); assert.deepEqual(samples, [0, null, 0, 4]); journal.close();
+ const ready = await fixture(new Uint8Array()), readySamples: (number | null)[] = [];
+ await createCloudFileTransport(ready.runtime, ready.make().cloudWrites[0]).apply({ ...source(), size: 0 }, undefined, value => readySamples.push(value));
+ assert.deepEqual(readySamples, [0]);
+});
+
+test('multipart telemetry measures each accepted payload rather than logical completion offsets', async () => {
+ const payload = new Uint8Array(8 * 1024 * 1024 + 3).fill(7), f = await fixture(payload), write = f.make().cloudWrites[0];
+ const samples: (number | null)[] = [], offsets: number[] = [];
+ const native: FingerprintSource = { size: payload.length, nativePartPayloadBytes: true, check() {}, read: async () => { throw Error('No renderer payload'); },
+  uploadPart: async part => {
+   assert.equal(part.requestId, write.operation.id); assert.equal(part.uploadId, 'att1');
+   return { sha256: Buffer.from(await crypto.subtle.digest('SHA-256', payload.slice(part.offset, part.offset + part.length))).toString('hex'), payloadBytes: part.length };
+  } };
+ await createCloudFileTransport(f.runtime, write).apply(native, value => offsets.push(value), value => samples.push(value));
+ assert.deepEqual(samples, [0, 8 * 1024 * 1024, 0, 3]);
+ assert.deepEqual(offsets, [8 * 1024 * 1024, payload.length]);
+ assert.equal(samples.reduce<number>((sum, value) => sum + (value || 0), 0), payload.length);
 });

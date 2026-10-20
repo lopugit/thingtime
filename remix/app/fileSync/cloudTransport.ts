@@ -271,6 +271,7 @@ function cloudFileTransport(runtime: CloudTransportRuntime, saved: CloudWrite, s
 			// send them into a native multipart loop or complete an empty MPU.
 			if (source.size === 0 && upload.state !== 'ready')
 				throw Error('The server has not durably stored the empty file; retain this run.');
+			if (upload.state === 'ready') transferred?.(0);
 			if (upload.state !== 'ready' && nativeUpload && nativeApproval) {
 				// Older native whole-file progress includes already-retained bytes.
 				// Do not turn those completion offsets into invented network traffic.
@@ -288,14 +289,25 @@ function cloudFileTransport(runtime: CloudTransportRuntime, saved: CloudWrite, s
 					const offset = i * plan.partSizeBytes,
 						length = Math.min(plan.partSizeBytes, source.size - offset);
 					let digest: Uint8Array<ArrayBuffer>;
+					let payloadBytes: number | null = length;
 					if (source.uploadPart) {
 						await runtime.authorizeMutation?.(signal);
 						check();
 						if (!checkedNativePart) await sourceCheck();
-						const uploaded = await source.uploadPart(
-							{ uploadId: upload.id, requestId: write.operation.id, partNumber: i + 1, offset, length },
-							signal
-						);
+						// Establish known coverage before this PUT, never from a retained offset.
+						transferred?.(source.nativePartPayloadBytes ? 0 : null);
+						let uploaded: Awaited<ReturnType<NonNullable<FingerprintSource['uploadPart']>>>;
+						try {
+							uploaded = await source.uploadPart(
+								{ uploadId: upload.id, requestId: write.operation.id, partNumber: i + 1, offset, length },
+								signal
+							);
+						} catch (error) {
+							// A lost reply can hide accepted bytes. Do not invent zero traffic.
+							transferred?.(null);
+							throw error;
+						}
+						payloadBytes = source.nativePartPayloadBytes && uploaded?.payloadBytes === length ? length : null;
 						check();
 						if (!checkedNativePart) await sourceCheck();
 						if (typeof uploaded?.sha256 !== 'string' || !/^[a-f0-9]{64}$/.test(uploaded.sha256)) throw Error('Invalid native upload digest.');
@@ -344,7 +356,7 @@ function cloudFileTransport(runtime: CloudTransportRuntime, saved: CloudWrite, s
 						if (!response.ok) throw Error(`Cloud upload part failed (${response.status}); retain this run.`);
 					}
 					digests.set(digest, i * 32);
-					transferred?.(source.uploadPart ? null : length);
+					transferred?.(payloadBytes);
 					progress?.(offset + length, source.size);
 				}
 				if (!equalContentFingerprints({ algorithm: 'sha256-parts-v1', ...plan, sha256: hex(await hash(digests)) }, m.source.fingerprint!))
