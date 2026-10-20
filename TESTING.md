@@ -12606,3 +12606,16 @@ separate from deterministic discovery/lease tests.
   pressing Reload. Confirm preparation resumes at the saved cursor and measure
   its progress. Actual payload receipts and independently downloaded bytes remain
   required before declaring the home upload working.
+
+
+### Cleanup backlog and transfer startup — 2026-10-20
+
+- [x] Seed a multi-page obsolete inventory and prove that the first cloud effect
+  starts after at most one cleanup page. After checkpoint publication, all
+  obsolete rows must be collected without touching the new baseline.
+- [x] Interrupt immediately after checkpoint publication and resume cleanup
+  across retired run/checkpoint page boundaries. Retained receipts and active
+  inputs remain protected even when pin indexes are damaged. Reopen completed
+  progress after cleanup and verify its original hierarchy and 100% receipts.
+- [ ] In the signed installed app, reopen the saved home job and confirm that
+  preparation resumes despite obsolete rows. Verify real cloud bytes separately.
