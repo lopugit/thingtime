@@ -79,3 +79,17 @@ server capability before installing so generation-scoped feature negotiation
 cannot silently exercise fallback during rollout. Preserve the user's live job,
 receipts, local files and settings; no reset or manual retry loop is part of this
 change.
+
+
+## Built-server smoke harness follow-up
+
+The actual signed c92c4f7 bundle passes both public manifests, registered batch
+route/docs (four phase discriminators) and same-origin unauthenticated POST401.
+The harness now checks its private scratch against the parent's canonical temp
+root independently of child TMPDIR, and supplies a credential-free synthetic
+loopback Mongo URI solely to satisfy the runtime configuration-presence guard.
+The unchanged OS boundary denies that DB port; no database, real account or
+credential is used. Child HOME/TMPDIR/cwd stay private, scratch stays0700, and
+all owned listeners are removed. Four runner regressions pass. This is a
+harness-only follow-up; the bundled product behavior is unchanged. The final
+signed build still must embed the final published head.

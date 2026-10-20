@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /** Run AFTER the canonical build. Imports only the supplied compiled Nitro
- * node_middleware entry; never starts Vite, builds, loads .env or opens a DB. */
+ * node_middleware entry; never starts Vite, builds, loads .env or starts/reaches a DB. */
 import assert from 'node:assert/strict';
 import { mkdtemp, chmod, realpath, stat, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -12,6 +12,9 @@ import { randomUUID } from 'node:crypto';
 import { isolatedAccountBackupProcess, verifyAccountBackupIsolation } from './account-backup-isolation.mjs';
 
 export const BUILT_BATCH_SMOKE_PORT = 28164;
+// Configuration presence unlocks local route dispatch. This literal endpoint
+// has no listener and is denied by the unchanged sandbox allow-only28164 rule.
+export const BUILT_BATCH_SMOKE_MONGO_URI = 'mongodb://127.0.0.1:28165/thingtime-built-smoke?serverSelectionTimeoutMS=500';
 const PUBLIC_MANIFEST = '/.well-known/thingtime-capabilities.json';
 const ENDPOINT = '/api/v1/files/batches';
 
@@ -46,14 +49,25 @@ export function assertBuiltBatchManifest(manifest, origin) {
 	);
 }
 
-async function worker(entry, directory) {
+export async function assertWorkerScratch(
+	directory,
+	parentTemporaryRoot,
+	{ temporaryDirectory = tmpdir(), home = process.env.HOME, cwd = process.cwd() } = {}
+) {
 	const actual = await realpath(directory);
-	assert.equal(dirname(actual), await realpath(tmpdir()));
+	// TMPDIR is deliberately the child scratch, not the parent's temp root.
+	// Bind both independently; neither check substitutes for the OS sandbox.
+	assert.equal(dirname(actual), await realpath(parentTemporaryRoot));
 	assert.ok(basename(actual).startsWith('thingtime-built-batch-smoke-'));
 	assert.equal((await stat(actual)).mode & 0o077, 0);
-	assert.equal(process.env.HOME, actual);
-	assert.equal(process.cwd(), actual);
-	assert.equal(process.env.MONGODB_CONNECTION_STRING, undefined);
+	assert.equal(await realpath(temporaryDirectory), actual);
+	assert.equal(home, actual);
+	assert.equal(cwd, actual);
+}
+
+async function worker(entry, directory, parentTemporaryRoot) {
+	await assertWorkerScratch(directory, parentTemporaryRoot);
+	assert.equal(process.env.MONGODB_CONNECTION_STRING, BUILT_BATCH_SMOKE_MONGO_URI);
 	// Same adapter contract as electron/lib/renderer-server.cjs. No guessed
 	// handler/default exports or alternate HTTP startup for unsupported presets.
 	const application = await import(pathToFileURL(entry).href);
@@ -101,9 +115,15 @@ async function worker(entry, directory) {
 			redirect: 'error',
 			signal: AbortSignal.timeout(8000)
 		});
-		assert.equal(denied.status, 401, 'Unauthenticated same-origin route must execute its local full-session gate without DB/remote auth');
+		const deniedPayload = await denied.json();
+		assert.equal(
+			denied.status,
+			401,
+			'Unauthenticated same-origin route must execute its local full-session gate without DB/remote auth: ' +
+				JSON.stringify(deniedPayload).slice(0, 512)
+		);
 		assert.match(denied.headers.get('cache-control') || '', /no-store/);
-		assert.equal((await denied.json()).ok, false);
+		assert.equal(deniedPayload.ok, false);
 		console.log(
 			JSON.stringify({
 				builtBatchManifestProof: true,
@@ -114,7 +134,9 @@ async function worker(entry, directory) {
 				postRegistered: true,
 				docsPhases: 4,
 				unauthenticatedStatus: 401,
-				databaseConfigured: false
+				runtimeConfigured: true,
+				syntheticDatabaseUri: true,
+				databaseReachable: false
 			})
 		);
 	} finally {
@@ -126,7 +148,8 @@ async function worker(entry, directory) {
 export async function runBuiltBatchSmoke(bundle) {
 	const entry = await resolveCompiledEntry(bundle);
 	const deadline = Date.now() + 60_000;
-	const directory = await realpath(await mkdtemp(join(tmpdir(), 'thingtime-built-batch-smoke-')));
+	const parentTemporaryRoot = await realpath(tmpdir());
+	const directory = await realpath(await mkdtemp(join(parentTemporaryRoot, 'thingtime-built-batch-smoke-')));
 	await chmod(directory, 0o700);
 	const origin = `http://127.0.0.1:${BUILT_BATCH_SMOKE_PORT}`;
 	const env = {
@@ -139,6 +162,7 @@ export async function runBuiltBatchSmoke(bundle) {
 		PORT: String(BUILT_BATCH_SMOKE_PORT),
 		NITRO_PORT: String(BUILT_BATCH_SMOKE_PORT),
 		APP_URL: origin,
+		MONGODB_CONNECTION_STRING: BUILT_BATCH_SMOKE_MONGO_URI,
 		JWT_SECRET: randomUUID() + randomUUID(),
 		THINGTIME_DESKTOP_API_MODE: 'local'
 	};
@@ -165,7 +189,7 @@ export async function runBuiltBatchSmoke(bundle) {
 		assert.ok(!cancelled && Date.now() < deadline, 'Smoke cancelled or deadline expired before bundle admission');
 		child = isolatedAccountBackupProcess(
 			process.execPath,
-			[import.meta.filename, '--isolated-worker', entry, directory],
+			[import.meta.filename, '--isolated-worker', entry, directory, parentTemporaryRoot],
 			{ cwd: directory, env, stdio: ['ignore', 'pipe', 'pipe'] },
 			BUILT_BATCH_SMOKE_PORT,
 			true
@@ -205,7 +229,7 @@ export async function runBuiltBatchSmoke(bundle) {
 if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.meta.url) {
 	try {
 		if (process.argv[2] === '--isolated-worker') {
-			await worker(process.argv[3], process.argv[4]);
+			await worker(process.argv[3], process.argv[4], process.argv[5]);
 			process.exit(0);
 		} else {
 			assert.equal(

@@ -4,7 +4,13 @@ import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, writeFile, rm, realpath } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { assertBuiltBatchManifest, resolveCompiledEntry, BUILT_BATCH_SMOKE_PORT } from './smoke-built-file-sync-batches.mjs';
+import {
+	assertWorkerScratch,
+	assertBuiltBatchManifest,
+	resolveCompiledEntry,
+	BUILT_BATCH_SMOKE_PORT,
+	BUILT_BATCH_SMOKE_MONGO_URI
+} from './smoke-built-file-sync-batches.mjs';
 const origin = 'http://127.0.0.1:' + BUILT_BATCH_SMOKE_PORT;
 const manifest = () => ({
 	schemaVersion: 1,
@@ -43,4 +49,30 @@ test('bundle resolver accepts output/server/entry paths without executing module
 	} finally {
 		await rm(root, { recursive: true, force: true });
 	}
+});
+
+test('worker validates parent temp root separately from its intentionally isolated TMPDIR', async () => {
+	const parent = await realpath(tmpdir()),
+		scratch = await realpath(await mkdtemp(join(parent, 'thingtime-built-batch-smoke-')));
+	try {
+		const context = { temporaryDirectory: scratch, home: scratch, cwd: scratch };
+		await assertWorkerScratch(scratch, parent, context);
+		await assert.rejects(assertWorkerScratch(scratch, scratch, context));
+		await assert.rejects(assertWorkerScratch(scratch, parent, { ...context, temporaryDirectory: parent }));
+		await assert.rejects(assertWorkerScratch(scratch, parent, { ...context, home: parent }));
+	} finally {
+		await rm(scratch, { recursive: true, force: true });
+	}
+});
+
+test('synthetic runtime URI is credential-free literal loopback on a sandbox-denied distinct port', () => {
+	const uri = new URL(BUILT_BATCH_SMOKE_MONGO_URI);
+	assert.equal(uri.protocol, 'mongodb:');
+	assert.equal(uri.hostname, '127.0.0.1');
+	assert.equal(uri.port, '28165');
+	assert.notEqual(Number(uri.port), BUILT_BATCH_SMOKE_PORT);
+	assert.equal(uri.username, '');
+	assert.equal(uri.password, '');
+	assert.equal(uri.pathname, '/thingtime-built-smoke');
+	assert.equal(uri.searchParams.get('serverSelectionTimeoutMS'), '500');
 });
