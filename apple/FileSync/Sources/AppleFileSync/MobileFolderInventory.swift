@@ -336,10 +336,12 @@ public struct MobileFolderInventory: Sendable {
             let db = try Database(directory: fd, create: false)
             var changes: [Change] = [], bytes = 16_384
             try db.rows(offset: afterSequence + 1, table: "changes") { ordinal, data in
-                if changes.count == limit || bytes + data.count > Self.maximumPageBytes { return false }
                 guard ordinal == afterSequence + changes.count + 1 else { throw Failure.storage }
                 let entry = try JSONDecoder().decode(MobileFolderReader.Entry.self, from: data)
-                changes.append(Change(sequence: ordinal, entry: entry, revision: entry.version)); bytes += data.count; return true
+                let change = Change(sequence: ordinal, entry: entry, revision: entry.version)
+                let encodedBytes = try JSONEncoder().encode(change).count + 1 // comma; envelope reserves16KiB above
+                if changes.count == limit || bytes + encodedBytes > Self.maximumPageBytes { return false }
+                changes.append(change); bytes += encodedBytes; return true
             }
             let revision = try db.lastSequence()
             guard afterSequence <= revision else { throw Failure.changed }

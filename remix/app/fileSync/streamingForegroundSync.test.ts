@@ -35,6 +35,41 @@ function streaming(f: Awaited<ReturnType<typeof foregroundFixture>>): Foreground
 	};
 	return input;
 }
+test('a native transport batch wakes the first transfer before later bounded spool chunks persist', { timeout: 60000 }, async () => {
+	const f = await foregroundFixture(300), input = streaming(f), first = deferred(), chunks: number[] = [];
+	const original = input.journal.pagedRuns.bind(input.journal);
+	input.journal = { ...input.journal, pagedRuns: (...args) => {
+		const journal = original(...args);
+		return { ...journal, appendStreamInput: async (...values) => {
+			chunks.push(values[2].length);
+			if (values[2][0]?.sequence === 129) { await first.promise; assert.ok(f.creates() > 0); }
+			return journal.appendStreamInput(...values);
+		} };
+	} };
+	input.transfer = () => first.resolve();
+	input.streamLocalChanges = async function* (id) { yield page(id, f.local, 0, true); };
+	await streamOneWayForegroundSync(saved, scope, input, new AbortController().signal);
+	assert.deepEqual(chunks, [128, 128, 44]); assert.equal(f.creates(), 300); f.journal().close();
+});
+test('a partial batch spool resumes exactly its durable cursor after a later chunk fails', { timeout: 60000 }, async () => {
+	const f = await foregroundFixture(260), input = streaming(f), original = input.journal.pagedRuns.bind(input.journal);
+	input.journal = { ...input.journal, pagedRuns: (...args) => {
+		const journal = original(...args);
+		return { ...journal, appendStreamInput: async (...values) => {
+			if (values[2][0]?.sequence === 129) throw Error('spool quota fixture');
+			return journal.appendStreamInput(...values);
+		} };
+	} };
+	input.streamLocalChanges = async function* (id) { yield page(id, f.local, 0, true); };
+	await assert.rejects(streamOneWayForegroundSync(saved, scope, input, new AbortController().signal), /spool quota/);
+	const runs = f.journal().pagedRuns(access(input)), active = (await runs.active())!;
+	assert.equal((await runs.streamState(active.spec)).indexedSequence, 128);
+	assert.equal((await runs.streamState(active.spec)).sourceTerminal, false);
+	await f.reload(); const next = streaming(f);
+	next.streamLocalChanges = async function* (id, after) { assert.equal(after, 128); yield page(id, f.local.slice(after), after, true); };
+	await streamOneWayForegroundSync(saved, scope, next, new AbortController().signal);
+	assert.equal(f.creates(), 260); f.journal().close();
+});
 test('first eligible mutation confirms while source is still indexing, without publishing a baseline', { timeout: 5000 }, async () => {
 	const f = await foregroundFixture(2),
 		input = streaming(f),

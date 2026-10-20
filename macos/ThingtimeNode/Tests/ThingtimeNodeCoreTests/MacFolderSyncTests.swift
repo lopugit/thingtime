@@ -714,7 +714,7 @@ final class MacFolderSyncTests: XCTestCase {
         let context = try await service.handle(request("context")).decode([String: JSONValue].self)
         XCTAssertEqual(context["deviceId"], .string("device"))
         let capabilities = try XCTUnwrap(context["capabilities"]).decode([String: String].self)
-        XCTAssertEqual(capabilities, ["fileAccessVersion": "1.11.0", "fileStagingVersion": "1.1.0", "filePublicationVersion": "1.2.0"])
+        XCTAssertEqual(capabilities, ["fileAccessVersion": "1.11.1", "fileStagingVersion": "1.1.0", "filePublicationVersion": "1.2.0"])
         let result = try await service.handle(request("conditions")).decode([String: JSONValue].self)
         XCTAssertEqual(result["conditions"], .object(["network": .string("unknown"), "charging": .null]))
     }

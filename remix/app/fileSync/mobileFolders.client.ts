@@ -144,6 +144,9 @@ export const supportsNativeInventoryBatches = (bridge: FolderCapabilities | unde
 	bridge?.platform === 'macos' && /^1\.\d+\.\d+$/.test(bridge.fileAccessVersion ?? '') && Number(bridge.fileAccessVersion!.split('.')[1]) >= 10;
 export const supportsNativeStreamingIndex = (bridge: FolderCapabilities | undefined = getNativeBridge()) =>
 	bridge?.platform === 'macos' && /^1\.\d+\.\d+$/.test(bridge.fileAccessVersion ?? '') && Number(bridge.fileAccessVersion!.split('.')[1]) >= 11;
+/** 1.11.1 bounds the complete change envelope, including repeated revisions. */
+export const supportsNativeStreamingBatches = (bridge: FolderCapabilities | undefined = getNativeBridge()) =>
+	supportsNativeStreamingIndex(bridge) && (Number(bridge!.fileAccessVersion!.split('.')[1]) > 11 || Number(bridge!.fileAccessVersion!.split('.')[2]) >= 1);
 export function assertNativeScanExclusions(request: FolderRequest, bridge: FolderCapabilities | undefined) {
 	if ((['scan-stream', 'scan-changes', 'scan-stream-finish'].includes(request.action) || ('capturePolicy' in request && request.capturePolicy === 'one-way-supported')) && !supportsNativeStreamingIndex(bridge)) throw Error('Update Thingtime Mac to transfer while indexing.');
 	if ('pageSize' in request && request.pageSize !== undefined) {
