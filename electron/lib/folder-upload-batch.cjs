@@ -1,4 +1,6 @@
 'use strict';
+const { governorFor } = require('./folder-resource-governor.cjs');
+const { governedFetch, governedHash } = require('./folder-transfer-process.cjs');
 const { createHash } = require('node:crypto');
 const { performance } = require('node:perf_hooks');
 const { uploadRetry, retryableUploadFailure } = require('./folder-upload.cjs');
@@ -14,17 +16,26 @@ function batchCanonicalBytes(d) {
     closed(d, ['version', 'batchId', 'scope', 'configuration', 'members']);
     const s = closed(d.scope, ['origin', 'ownerId', 'dataPlane', 'rootId', 'deviceId']);
     const saved = closed(d.configuration, ['id', 'updatedAt', 'configuration']);
-    const c = closed(saved.configuration, ['configurationVersion', 'name', 'deviceId', 'localRootId', 'sourceKind', 'remoteFolderId', 'mode', 'paused', 'propagateDeletes', 'network', 'chargingOnly', 'excludedPaths', 'ignoreRules']);
+    const c = closed(saved.configuration, ['configurationVersion', 'name', 'deviceId', 'localRootId', 'sourceKind', 'remoteFolderId', 'mode', 'paused', 'propagateDeletes', 'network', 'chargingOnly', 'excludedPaths', 'ignoreRules', 'resourceLimits']);
     if (d.version !== 1 || !uuid(d.batchId) || s.dataPlane !== 'home' || saved.id !== s.rootId || c.deviceId !== s.deviceId ||
-        ![1, 2].includes(c.configurationVersion) || !['backup', 'upload'].includes(c.mode) || c.paused !== false || c.propagateDeletes !== false ||
+        ![1, 2, 3].includes(c.configurationVersion) || !['backup', 'upload'].includes(c.mode) || c.paused !== false || c.propagateDeletes !== false ||
         (c.sourceKind !== undefined && c.sourceKind !== 'folder') || !Array.isArray(c.excludedPaths) || c.excludedPaths.length > 100 ||
         typeof c.chargingOnly !== 'boolean' || (c.ignoreRules !== undefined && typeof c.ignoreRules !== 'string') ||
         !Array.isArray(d.members) || !d.members.length || d.members.length > 256 || Buffer.byteLength(JSON.stringify(d)) > 327680) throw invalid();
     const ignoreRules = (c.ignoreRules ?? '').replace(/\r\n/g, '\n');
-    if (ignoreRules && c.configurationVersion !== 2) throw invalid();
-    const fields = ['thingtime-upload-batch-v1', d.batchId, s.origin, s.ownerId, s.dataPlane, s.rootId, s.deviceId,
-        saved.id, saved.updatedAt, ignoreRules ? '2' : '1', c.name.trim(), c.deviceId, c.localRootId, c.sourceKind ?? 'folder', c.remoteFolderId,
-        c.mode, '0', '0', c.network, c.chargingOnly ? '1' : '0', String(c.excludedPaths.length), ...c.excludedPaths, ignoreRules, String(d.members.length)];
+    if (ignoreRules && c.configurationVersion === 1) throw invalid();
+    const resourceKeys = ['uploadBytesPerSecond', 'downloadBytesPerSecond', 'transferConcurrency', 'indexingConcurrency', 'cpuPercent'];
+    const limits = c.resourceLimits === undefined ? undefined : closed(c.resourceLimits, resourceKeys);
+    const limitFields = resourceKeys.map(key => {
+        const n = limits?.[key]; if (n === undefined) return '';
+        if (typeof n !== 'number' || !Number.isFinite(n) || n <= 0 || (['transferConcurrency', 'indexingConcurrency'].includes(key) && !Number.isSafeInteger(n)) || (key === 'cpuPercent' && (!Number.isInteger(n) || n < 1 || n > 100))) throw invalid();
+        const bytes = Buffer.alloc(8); bytes.writeDoubleBE(n); return bytes.toString('hex');
+    });
+    const hasLimits = limitFields.some(Boolean);
+    if ((hasLimits && c.configurationVersion !== 3) || (!hasLimits && c.configurationVersion === 3)) throw invalid();
+    const fields = [hasLimits ? 'thingtime-upload-batch-v2' : 'thingtime-upload-batch-v1', d.batchId, s.origin, s.ownerId, s.dataPlane, s.rootId, s.deviceId,
+        saved.id, saved.updatedAt, hasLimits ? '3' : ignoreRules ? '2' : '1', c.name.trim(), c.deviceId, c.localRootId, c.sourceKind ?? 'folder', c.remoteFolderId,
+        c.mode, '0', '0', c.network, c.chargingOnly ? '1' : '0', String(c.excludedPaths.length), ...c.excludedPaths, ignoreRules, ...(hasLimits ? limitFields : []), String(d.members.length)];
     let total = 0; const paths = new Set(), ids = new Set(), inodes = new Set(), destinations = new Set();
     for (const [index, member] of d.members.entries()) {
         closed(member, ['ordinal', 'write']); const w = closed(member.write, ['operation', 'scope', 'folderId', 'before', 'cloudRootId']);
@@ -75,6 +86,7 @@ async function uploadFolderBatch({ input, context, signal, assertCurrent, reques
     if (!sha(digest) || createHash('sha256').update(batchCanonicalBytes(descriptor)).digest('hex') !== digest ||
         descriptor.scope.origin !== context.apiOrigin || descriptor.scope.ownerId !== context.ownerId || descriptor.scope.deviceId !== input.deviceId ||
         descriptor.configuration.configuration.localRootId !== input.rootId) throw invalid();
+    const governor = governorFor(input, context);
     const started = now(), deadline = started + 30000, lifetime = new AbortController();
     const combined = AbortSignal.any([signal, lifetime.signal, AbortSignal.timeout(180000)]);
     const states = descriptor.members.map(member => ({ member, prepared: null, confirmed: null, content: null, bytes: null, received: 0, put: 'none', payload: 0, checksum: null }));
@@ -143,13 +155,13 @@ async function uploadFolderBatch({ input, context, signal, assertCurrent, reques
         if (frame.kind === 'put-ready') {
             closed(frame, ['kind', 'ordinal', 'sha256']);
             if (!s?.prepared || s.put !== 'none' || frame.sha256 !== s.checksum || !s.bytes || s.received !== s.bytes.length ||
-                createHash('sha256').update(s.bytes).digest('hex') !== s.checksum || active >= 16 || verified) throw invalid();
+                await governedHash(governor, s.bytes, combined) !== s.checksum || active >= 16 || verified) throw invalid();
             if (now() >= deadline) { s.bytes.fill(0); s.bytes = null; s.put = 'deadline'; return { status: 'failed', code: 'deadline' }; }
             check(callbackSignal); s.put = 'pending'; active++;
             const putSignal = AbortSignal.any([combined, callbackSignal, AbortSignal.timeout(60000)]); let response;
             try {
-                response = await fetchUpload(s.prepared.target, { method: 'PUT', credentials: 'omit', redirect: 'error', referrerPolicy: 'no-referrer',
-                    signal: putSignal, headers: s.prepared.headers, body: s.bytes });
+                response = await governedFetch(governor, fetchUpload, s.prepared.target, { method: 'PUT', credentials: 'omit', redirect: 'error', referrerPolicy: 'no-referrer',
+                    signal: putSignal, headers: s.prepared.headers, body: s.bytes }, () => check(callbackSignal));
                 check(callbackSignal);
                 if (response.redirected) throw invalid();
                 if (!response.ok) { s.put = 'failed'; return { status: 'failed', code: [408, 429].includes(response.status) || response.status >= 500 ? 'temporarily-unavailable' : 'invalid-member' }; }
@@ -190,7 +202,7 @@ async function uploadFolderBatch({ input, context, signal, assertCurrent, reques
             return { ordinal, status: 'verified', content: s.content };
         });
         for (const [ordinal, row] of result.payloads.entries()) if (row.ordinal !== ordinal || row.bytes !== states[ordinal].payload) throw invalid();
-        return { ...reply, uploadedBatch: { ...result, results } };
+        return { ...reply, ...(governor ? { resources: governor.snapshot() } : {}), uploadedBatch: { ...result, results } };
     } finally { lifetime.abort(); states.forEach(s => { s.bytes?.fill(0); s.bytes = null; s.prepared = null; }); }
 }
 module.exports = { batchCanonicalBytes, requestBatchPhase, uploadFolderBatch };

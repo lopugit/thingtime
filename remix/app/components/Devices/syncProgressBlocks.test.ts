@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { priorityReadinessBlocks, priorityReadinessDisplay, syncProgressBlocks, syncProgressDisplay, syncProgressNodeDisplay } from './syncProgressBlocks';
+import { syncResourceStatusBlocks, syncResourceStatusDisplay, priorityReadinessBlocks, priorityReadinessDisplay, syncProgressBlocks, syncProgressDisplay, syncProgressNodeDisplay } from './syncProgressBlocks';
 import { settingsDocumentBlocks } from '../Settings/settingsDocument';
 import { findBlock } from '../Builder/webpageBlocks';
 import { resolveBlockProps } from '../Builder/templateBlocks';
@@ -131,4 +131,17 @@ test('existing readiness text distinguishes negotiated gates, exact recovery cou
  assert.match(text,/^Saved observation/); assert.match(text,/negotiated and enabled.*original file-batch recovery.*89 original operations remaining/);
  assert.match(text,/New batches wait for original-operation recovery/); assert.match(text,/not uploaded counts/);
  for(const gate of ['not-negotiated','custom-policy'] as const) assert.match(priorityReadinessDisplay({...known,priorityReadiness:{...known.priorityReadiness,folderBatchGate:gate}},'running').priorityStatus,gate==='not-negotiated'?/not negotiated/:/custom mutation policy/);
+});
+
+test('resource status keeps effective fields individually editable and distinguishes saved or unavailable CPU from live measurement', () => {
+ const blocks = settingsDocumentBlocks(syncResourceStatusBlocks);
+ for (const field of ['cpu', 'transfers', 'indexing', 'upload', 'download', 'help']) assert.ok(findBlock(blocks, 'sync-resource-status-' + field));
+ const progress = { stage: 'transferring' as const, confirmed: 0, total: 1, resources: { version: 1 as const, cpuPercent: 12, cpuStatus: 'measured' as const, effectiveTransferConcurrency: 2, effectiveIndexingConcurrency: 3, uploadBytesPerSecond: 125000 } };
+ const current = syncResourceStatusDisplay(progress, 'running').syncResources;
+ assert.match(current.cpu, /12% of total CPU/); assert.match(current.transfers, /transfers: 2/); assert.match(current.indexing, /workers: 3/);
+ assert.match(current.upload, /125,000 bytes\/s cap/); assert.match(current.download, /No reported rate cap/); assert.match(current.help, /not measured throughput/);
+ const saved = syncResourceStatusDisplay(progress, 'paused').syncResources; assert.match(saved.cpu, /Last reported/); assert.match(saved.help, /not a current CPU measurement/);
+ const unknown = syncResourceStatusDisplay({ ...progress, resources: { ...progress.resources, cpuPercent: null, cpuStatus: 'unavailable' } }, 'running').syncResources;
+ assert.match(unknown.cpu, /unavailable/); assert.doesNotMatch(unknown.cpu, /0%/);
+ assert.match(syncResourceStatusDisplay(undefined, 'running').syncResources.transfers, /unavailable/);
 });

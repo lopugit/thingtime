@@ -1,3 +1,4 @@
+import { supportsSyncUploadStreaming, SYNC_STREAM_UPLOAD_UNAVAILABLE } from './browserSyncUpload';
 import { readCloudPathEntry } from './cloudPath.client';
 import { cloudSyncHttpError, SyncConnectionWait } from './syncConnectionWait';
 import type { FileSyncApproval } from './configuredPlan';
@@ -26,6 +27,7 @@ export const CLOUD_TRANSFER_REQUIREMENTS = {
 	'api.actions-run': '1.7.0'
 } as const;
 export type CloudTransportRuntime = {
+	resources?: import('./resourceGovernor').SyncResourceGovernor;
 	/** Offload only when native configuration/device/network checks cover the runtime policy. */
 	nativeUploadApproval?: FileSyncApproval;
 	currentScope(): SyncScope;
@@ -250,6 +252,8 @@ function cloudFileTransport(runtime: CloudTransportRuntime, saved: CloudWrite, s
 			const plan = contentPartPlan(source.size);
 			const nativeApproval = runtime.nativeUploadApproval && sameSyncScope(runtime.nativeUploadApproval.scope, scope) ? runtime.nativeUploadApproval : undefined;
 			const nativeUpload = nativeApproval ? source.uploadFile : undefined;
+			const pacedUploads = !!runtime.resources && !!(runtime.resources.limits.uploadBytesPerSecond || runtime.resources.limits.cpuPercent);
+			if (source.size > 0 && pacedUploads && !nativeUpload && !source.uploadPart && !supportsSyncUploadStreaming()) throw Error(SYNC_STREAM_UPLOAD_UNAVAILABLE);
 			const checkedNativePart = source.nativePartSourceChecks === true && !!source.uploadPart && typeof source.verify === 'function' && !nativeUpload;
 			if (!nativeUpload && !source.uploadPart && plan.partSizeBytes > 32 * 1024 * 1024) throw Error('This file requires native streaming upload support.');
 			const sourceCheck = async () => {
@@ -344,15 +348,21 @@ function cloudFileTransport(runtime: CloudTransportRuntime, saved: CloudWrite, s
 						await sourceCheck();
 						await runtime.authorizeMutation?.(signal);
 						await sourceCheck();
-						const response = await runtime.fetch(target, {
+						const transferAbort = new AbortController();
+						const uploadSignal = AbortSignal.any([transferAbort.signal, ...(signal ? [signal] : []), ...(pacedUploads ? [] : [AbortSignal.timeout(120_000)])]);
+						let response: Response;
+						try { response = await runtime.fetch(target, {
 							method: 'PUT',
 							credentials: 'omit',
 							redirect: 'error',
 							referrerPolicy: 'no-referrer',
 							headers: part.headers,
-							body: bytes,
-							signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(120_000)]) : AbortSignal.timeout(120_000)
-						});
+							body: pacedUploads ? runtime.resources!.stream('upload', new Blob([bytes]).stream(), uploadSignal) : bytes,
+							...(pacedUploads ? { duplex: 'half' } : {}),
+							signal: uploadSignal
+						}); } catch (error) {
+							check(); if (pacedUploads && error instanceof TypeError) throw Error(SYNC_STREAM_UPLOAD_UNAVAILABLE); throw error;
+						} finally { transferAbort.abort(); }
 						await response.body?.cancel().catch(() => {});
 						await sourceCheck();
 						if (!response.ok) throw Error(`Cloud upload part failed (${response.status}); retain this run.`);

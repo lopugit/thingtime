@@ -1,3 +1,4 @@
+import { CLOUD_NATIVE_DOWNLOAD_REQUIREMENTS, parseSignedDownloadTarget } from './signedDownloadTarget';
 import { cloudRequests, type CloudTransportRuntime } from './cloudTransport';
 import { cloudFileSyncEntry, parseCloudFile, type CloudFile } from './cloudFile';
 import { sameSyncStamp, validateSyncScope, type SyncScope } from './reconcile';
@@ -36,6 +37,15 @@ export function createCloudDownloadSource(
 	};
 	return {
 		nativeCloud: structuredClone({ scope, file }),
+		downloadTarget: async (offset, length, callerSignal) => {
+			callerSignal?.throwIfAborted();
+			if (!Number.isSafeInteger(offset) || offset < 0 || !Number.isSafeInteger(length) || length < 1 || length > MAX_ATTACHMENT_RANGE_BYTES || !Number.isSafeInteger(offset + length) || offset + length > file.content.size) throw Error('Invalid native download range.');
+			const active = AbortSignal.any([...(signal ? [signal] : []), ...(callerSignal ? [callerSignal] : [])]), targetRequests = cloudRequests(runtime, scope, active);
+			await targetRequests.negotiate(CLOUD_NATIVE_DOWNLOAD_REQUIREMENTS); await check(); active.throwIfAborted();
+			const value = await targetRequests.json('/api/v1/attachments/content?' + new URLSearchParams({ id: file.content.attachmentId, target: '1', range: '1', version: file.content.version, offset: String(offset), length: String(length) }));
+			callerSignal?.throwIfAborted(); await check();
+			return parseSignedDownloadTarget(value.target, scope.ownerId, file, offset, length);
+		},
 		size: file.content.size,
 		check,
 		verify: check,
@@ -90,7 +100,8 @@ export function createCloudDownloadSource(
 					await response.body?.cancel();
 					throw Error('Cloud range version is unavailable or changed.');
 				}
-				bytes.set(await readExactRange(response, range, file.content.size, guard), at);
+				const paced = runtime.resources && response.body ? new Response(runtime.resources.stream('download', response.body, active), { status: response.status, headers: response.headers }) : response;
+				bytes.set(await readExactRange(paced, range, file.content.size, guard), at);
 				guard();
 			}
 			await check();

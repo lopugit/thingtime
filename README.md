@@ -4825,6 +4825,37 @@ production editor with synthetic API/native responses and never accesses files.
 Native approval persistence and transfer workers remain in the
 [full sync acceptance ledger](docs/mobile-file-sync.md).
 
+Optional per-connection resource limits use configuration version 3. Negotiate
+`api.things` 1.39.0 and `api.file-sync-batches` 1.2.0 against the selected origin
+before saving/activating them, and require the native `fileResourceLimitsVersion`
+1.0.0 capability before execution. Upload/download ceilings are decimal bit rates
+in the editor (Kbps/Mbps/Gbps), stored as bytes per second and shared across that
+connection's transfers. Transfer and index concurrency are maximums, not promises
+of parallelism; host safety and CPU backpressure can lower the effective values.
+Blank controls preserve existing defaults. CPU percent is an averaged upper
+budget normalized to total available machine CPU, attributed to this connection's
+indexer, source IO and transport; it does not change other apps' priorities.
+The initial implementation conservatively allocates one third of that CPU budget
+to each scope and does not borrow unused shares. Unsupported native clients fail
+closed rather than silently ignoring limits. CPU-limited downloads and two-way
+sync additionally negotiate `api.attachment-content` 1.17.0 and native
+`fileDownloadVersion` 1.0.0 before admission. The authenticated content endpoint
+returns a private, no-store, 60-second signed target for the exact stored object
+version and signed byte range. The host resolves that target independently and
+the task-owned transport downloads directly without copying account cookies or
+processing payload bytes in the renderer. Targets are ephemeral and never saved
+in progress or journals. Custom storage providers must implement the optional
+`signDownloadRange` adapter; unsupported providers fail closed. The S3 adapter
+reuses the configured credentials and existing versioned GetObject permission.
+No new secret or provider setting is
+needed. Direct object transfers retain existing scoped upload authorization.
+
+Pause cancels current work immediately and saves a per-connection stop independently
+of progress refreshes. Resume is explicit. A failed pause save is reported; the
+current process blocks automatic restart, but reopening may recover the old saved
+job. Keep the device folder selected to resume its journaled progress.
+
+
 
 ### Running a foreground mobile folder upload
 

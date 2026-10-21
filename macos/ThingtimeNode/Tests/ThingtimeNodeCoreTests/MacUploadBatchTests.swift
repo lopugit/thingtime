@@ -44,6 +44,23 @@ final class MacUploadBatchTests: XCTestCase {
             XCTAssertThrowsError(try MacUploadBatchDescriptor(value))
         }
     }
+    func testSharedResourceV3IEEE754CanonicalVectors() throws {
+        var root = URL(fileURLWithPath: #filePath)
+        for _ in 0..<5 { root.deleteLastPathComponent() }
+        let file = try Data(contentsOf: root.appendingPathComponent("remix/app/fileSync/fixtures/resourceLimits.v3.json"))
+        let rows = try XCTUnwrap((JSONSerialization.jsonObject(with: file) as? [String: Any])?["vectors"] as? [[String: Any]])
+        XCTAssertEqual(rows.count, 6)
+        for row in rows {
+            var envelope: [String: Any] = ["descriptor": row["descriptor"]!, "digest": row["sha256"]!]
+            if row["kind"] as? String == "folder" { envelope["ordinals"] = [0] }
+            let encoded = try JSONSerialization.data(withJSONObject: envelope)
+            let raw = try JSONDecoder().decode(JSONValue.self, from: encoded)
+            let actual: Data
+            if row["kind"] as? String == "upload" { actual = try MacUploadBatchDescriptor(raw).canonicalBytes }
+            else { actual = try MacFolderBatchDescriptor(raw).canonicalBytes }
+            XCTAssertEqual(actual.base64EncodedString(), row["canonicalBase64"] as? String)
+        }
+    }
     private final class SilentCallback: NSObject, ThingtimeNodeBatchCallback {
         func exchange(_ frame: Data, withReply reply: @escaping (Data) -> Void) { }
     }

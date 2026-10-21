@@ -163,11 +163,13 @@ public struct MobileFolderReader {
         var buffer = [UInt8](repeating: 0, count: maximumReadBytes)
         while offset < size {
             try Task.checkCancellation()
-            let wanted = Int(min(Int64(buffer.count), size - offset, partSize - inPart))
-            let n = pread(fd, &buffer, wanted, off_t(offset))
-            guard n > 0 else { throw Failure.changed }
-            part.update(data: Data(buffer.prefix(n))); offset += Int64(n); inPart += Int64(n)
-            if inPart == partSize || offset == size { composite.update(data: Data(part.finalize())); part = SHA256(); inPart = 0 }
+            try SyncResourceCpuContext.chunk {
+                let wanted = Int(min(Int64(buffer.count), size - offset, partSize - inPart))
+                let n = pread(fd, &buffer, wanted, off_t(offset))
+                guard n > 0 else { throw Failure.changed }
+                part.update(data: Data(buffer.prefix(n))); offset += Int64(n); inPart += Int64(n)
+                if inPart == partSize || offset == size { composite.update(data: Data(part.finalize())); part = SHA256(); inPart = 0 }
+            }
         }
         return Fingerprint(partSizeBytes: partSize, partCount: Int((size + partSize - 1) / partSize), sha256: hex(composite.finalize()))
     }

@@ -6,6 +6,7 @@ import {
 	parseMobileFolderResult,
 	assertNativeScanExclusions,
 	supportsFolderAccess,
+	supportsNativeResourceLimits,
 	supportsNativeAuthorizationContext,
 	supportsNativePathInspection,
 	supportsNativeInventoryPages,
@@ -64,6 +65,7 @@ export async function createDesktopFolderHost(input: {
 	rendererOrigin(): string;
 	assertCurrent(): void;
 	fetch?: typeof fetch;
+	resourcePolicy?: { resourceLimits: import('./configuration').FileSyncResourceLimits; resourceScope: string; observe(value: import('./resourceGovernor').SyncResourceStatus): void };
 }): Promise<FolderHost> {
 	const invoke = input.bridge.folderSyncRequest,
 		ownerId = input.ownerId,
@@ -80,6 +82,7 @@ export async function createDesktopFolderHost(input: {
 		check();
 		signal.throwIfAborted();
 		const payload = structuredClone(request);
+		if ('rootId' in payload && input.resourcePolicy) Object.assign(payload, { resourceLimits: input.resourcePolicy.resourceLimits, resourceScope: input.resourcePolicy.resourceScope });
 		const expected = { requestId: crypto.randomUUID(), ownerId, deviceId, ...(origin ? { origin } : {}) };
 		const combined = AbortSignal.any([input.signal, signal, AbortSignal.timeout(300_000)]);
 		return await new Promise<any>((resolve, reject) => {
@@ -170,6 +173,7 @@ export async function createDesktopFolderHost(input: {
 	};
 	let context = await negotiate(input.signal);
 	origin = context.origin;
+	if (input.resourcePolicy && !supportsNativeResourceLimits(context.capabilities)) throw Error('Update Thingtime before using sync resource limits.');
 	const fetchBound = createFolderHostFetch({ origin, localOrigin, ownerId, signal: input.signal, check,
 		fetch: input.fetch ?? ((target, options) => window.fetch(target, options)) });
 	return {
@@ -189,6 +193,7 @@ export async function createDesktopFolderHost(input: {
 				const { value, expected } = await send(request, signal);
 				const result = parseMobileFolderResult({ type: 'mobile-files-result', payload: value }, expected, request);
 				if (!result?.uploadedBatch) throw changed();
+				if (result.resources) input.resourcePolicy?.observe(result.resources);
 				return result.uploadedBatch;
 			}
 		} : {}),
@@ -201,6 +206,7 @@ export async function createDesktopFolderHost(input: {
 				const { value: reply, expected } = await send(request, signal);
 				const parsed = parseMobileFolderResult({ type: 'mobile-files-result', payload: reply }, expected, request);
 				if (!parsed?.validatedFolderBatch) throw changed();
+				if (parsed.resources) input.resourcePolicy?.observe(parsed.resources);
 				return parsed.validatedFolderBatch;
 			}
 		} : {}),
@@ -218,6 +224,7 @@ export async function createDesktopFolderHost(input: {
 			const { value, expected } = await send(payload, signal);
 			const result = parseMobileFolderResult({ type: 'mobile-files-result', payload: value }, expected, payload);
 			if (!result) throw changed();
+			if (result.resources) input.resourcePolicy?.observe(result.resources);
 			return result;
 		},
 		...(supportsNativeAuthorizationContext(context.capabilities) ? {

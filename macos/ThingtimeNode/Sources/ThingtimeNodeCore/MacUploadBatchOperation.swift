@@ -11,7 +11,14 @@ enum MacUploadBatchOperation {
                  "code": .string(code), "retryable": .bool(["temporarily-unavailable", "deadline"].contains(code))])
     }
     private static func read(_ bookmark: Data, _ member: MacUploadBatchDescriptor.Member, _ sha: String? = nil) async throws -> MobileFolderBulkReader.Payload {
-        let task = Task.detached { try MobileFolderBulkReader.read(bookmark: bookmark, expected: member.source, sha256: sha) }
+        let resources = MacSyncResources.current
+        let task = Task.detached {
+            try resources?.source.checkpoint()
+            let value: MobileFolderBulkReader.Payload
+            if let resources { value = try SyncResourceCpuContext.$current.withValue(resources.source) { try resources.source.measure { try MobileFolderBulkReader.read(bookmark: bookmark, expected: member.source, sha256: sha) } } }
+            else { value = try MobileFolderBulkReader.read(bookmark: bookmark, expected: member.source, sha256: sha) }
+            try resources?.source.checkpoint(); return value
+        }
         return try await withTaskCancellationHandler(operation: { try await task.value }, onCancel: { task.cancel() })
     }
 
@@ -128,7 +135,7 @@ enum MacUploadBatchOperation {
                     return Outcome(ordinal: ordinal, result: .null, uploadId: uploadIDs[ordinal], payload: payload)
                 }
             }
-            while next < min(16, selected.count) { add(selected[next]); next += 1 }
+            while next < min(batch.resourceLimits?.transferConcurrency ?? 16, 16, selected.count) { add(selected[next]); next += 1 }
             for try await outcome in group {
                 results[outcome.ordinal] = outcome.result
                 if let id = outcome.uploadId { verifyUploads[outcome.ordinal] = id }
