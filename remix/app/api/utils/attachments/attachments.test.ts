@@ -2799,3 +2799,22 @@ test('same empty start resumes a failed finalization only through active and exp
         assert.equal((await service.start('user-1', { ...input, filename: 'different.txt' })).ok, false);
     } finally { await rm(directory, { recursive: true, force: true }); }
 });
+
+test('signed native download targets are owner-only, version/range/fingerprint bound and fail closed without provider support', async () => {
+ const { attachmentContentVersion } = await import('./contentFingerprint');
+ const original = attachmentDoc({ attachmentPurpose: 'file', attachmentState: 'ready', attachmentExpiresAt: undefined, objectVersionId: 'version-1' }); let doc = original, signs = 0, supported = true, expiry = new Date(now.getTime() + 60000).toISOString();
+ const provider = () => noopS3({ headObject: async () => ({ sizeBytes: original.objectSizeBytes, checksumSha256: `${checksum(3)}-2`, checksumType: 'COMPOSITE', attachmentId: original.shareId, versionId: 'version-1' }),
+ ...(supported ? { signDownloadRange: async (input: any) => { signs++; assert.deepEqual(input, { objectKey: original.objectKey, versionId: 'version-1', offset: 0, length: 100 }); return { url: 'https://s3.example/signed-range', expiresAt: expiry }; } } : {}) });
+ const service = createAttachmentService({ store: { getById: async () => doc } as any, now: () => now, customMongoActive: () => false, canViewTarget: async () => true, getS3: provider });
+ const range = { version: attachmentContentVersion(doc.shareId, doc.objectKey, 'version-1'), offset: 0, length: 100 };
+ const result = await service.downloadTarget({ id: doc.ownerId }, doc.shareId, range); assert.equal(result.ok, true);
+ if (result.ok) { assert.equal(result.target.ownerId, doc.ownerId); assert.equal(result.target.contentVersion, range.version); assert.equal(result.target.fingerprint.partCount, 2); assert.equal(result.target.headers.Range, 'bytes=0-99'); assert.equal(result.target.size, doc.objectSizeBytes); }
+ const before = signs;
+ for (const viewer of [null, { id: 'other' }]) { const denied = await service.downloadTarget(viewer, doc.shareId, range); assert.equal(denied.ok, false); }
+ assert.equal(signs, before);
+ assert.equal((await service.downloadTarget({ id: doc.ownerId }, doc.shareId, { ...range, version: 'a'.repeat(64) })).ok, false);
+ assert.equal((await service.downloadTarget({ id: doc.ownerId }, doc.shareId, { ...range, offset: doc.objectSizeBytes })).ok, false);
+ supported = false; assert.equal((await service.downloadTarget({ id: doc.ownerId }, doc.shareId, range)).ok, false); supported = true;
+ expiry = new Date(now.getTime() + 61000).toISOString(); assert.equal((await service.downloadTarget({ id: doc.ownerId }, doc.shareId, range)).ok, false);
+ doc = { ...original, attachmentState: 'deleting' }; assert.equal((await service.downloadTarget({ id: doc.ownerId }, doc.shareId, range)).ok, false);
+});

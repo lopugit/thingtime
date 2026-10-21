@@ -285,14 +285,16 @@ public final class MobileSyncStaging: @unchecked Sendable {
             var bytes = [UInt8](repeating: 0, count: MobileFolderReader.maximumReadBytes), offset: Int64 = 0
             while offset < source.size {
                 try Task.checkCancellation()
-                let n = pread(file, &bytes, Int(min(Int64(bytes.count), source.size - offset)), off_t(offset))
-                guard n > 0 else { throw Failure.changed }
-                var written = 0
-                while written < n {
-                    let count = bytes.withUnsafeBytes { pwrite(candidate, $0.baseAddress!.advanced(by: written), n - written, off_t(offset) + off_t(written)) }
-                    guard count > 0 else { throw Failure.storage }; written += count
+                try SyncResourceCpuContext.chunk {
+                    let n = pread(file, &bytes, Int(min(Int64(bytes.count), source.size - offset)), off_t(offset))
+                    guard n > 0 else { throw Failure.changed }
+                    var written = 0
+                    while written < n {
+                        let count = bytes.withUnsafeBytes { pwrite(candidate, $0.baseAddress!.advanced(by: written), n - written, off_t(offset) + off_t(written)) }
+                        guard count > 0 else { throw Failure.storage }; written += count
+                    }
+                    offset += Int64(n)
                 }
-                offset += Int64(n)
             }
         }
         try verifyContent(candidate, source: source)

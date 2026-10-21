@@ -570,3 +570,46 @@ test('multipart telemetry measures each accepted payload rather than logical com
  assert.deepEqual(offsets, [8 * 1024 * 1024, payload.length]);
  assert.equal(samples.reduce<number>((sum, value) => sum + (value || 0), 0), payload.length);
 });
+
+test('configured browser upload passes a paced stream to the real scalar publication path', async () => {
+ const { SyncResourceGovernor } = await import('./resourceGovernor');
+ const f = await fixture(), fetcher = f.runtime.fetch; let now = 0, streams = 0;
+ f.runtime.resources = new SyncResourceGovernor({ uploadBytesPerSecond: 4, transferConcurrency: 1 }, () => now, async ms => { now += ms; });
+ f.runtime.fetch = async (url, init) => {
+  if (init?.body instanceof ReadableStream) {
+   streams++; assert.equal((init as RequestInit & { duplex?: string }).duplex, 'half');
+   const data = new Uint8Array(await new Response(init.body).arrayBuffer());
+   return fetcher(url, { ...init, body: data });
+  }
+  return fetcher(url, init);
+ };
+ const journal = await openSyncJournal(new IDBFactory());
+ try { const run = f.make(); await executeSyncRun(run, f.port(run, journal.persist));
+  assert.equal(streams, 1); assert.equal(f.counts().commits, 1); assert.ok(now >= 1000);
+ } finally { journal.close(); }
+});
+
+test('concurrency-only limits retain portable scalar PUT bodies; streaming failures preserve an actionable retry', async () => {
+ const { SyncResourceGovernor } = await import('./resourceGovernor');
+ const { SYNC_STREAM_UPLOAD_UNAVAILABLE } = await import('./browserSyncUpload');
+ const portable = await fixture(); portable.runtime.resources = new SyncResourceGovernor({ transferConcurrency: 2 });
+ const journal = await openSyncJournal(new IDBFactory());
+ try { const run = portable.make(); await executeSyncRun(run, portable.port(run, journal.persist)); assert.equal(portable.counts().puts, 1); } finally { journal.close(); }
+ const limited = await fixture(), fetcher = limited.runtime.fetch;
+ limited.runtime.resources = new SyncResourceGovernor({ uploadBytesPerSecond: 4 });
+ limited.runtime.fetch = async (url, init) => { if (new URL(String(url)).origin === 'https://storage.test') throw new TypeError('HTTP/1 or CORS streaming refusal'); return fetcher(url, init); };
+ const saved = limited.make();
+ await assert.rejects(createCloudFileTransport(limited.runtime, saved.cloudWrites[0]).apply(source()), { message: SYNC_STREAM_UPLOAD_UNAVAILABLE });
+ assert.equal(limited.counts().commits, 0); assert.equal(limited.counts().puts, 0);
+});
+test('native scoped part uploads bypass unsupported browser stream APIs', async () => {
+ const { SyncResourceGovernor } = await import('./resourceGovernor'); const f = await fixture();
+ f.runtime.resources = new SyncResourceGovernor({ uploadBytesPerSecond: 4 });
+ const original = globalThis.Request; globalThis.Request = class { constructor() { throw Error('WK has no request streams'); } } as unknown as typeof Request;
+ try {
+  const digest = Buffer.from(await crypto.subtle.digest('SHA-256', bytes)).toString('hex');
+  const nativeSource = { size: bytes.length, check() {}, read: async () => { throw Error('Native bytes must not enter browser fallback'); }, uploadPart: async () => ({ sha256: digest }) };
+  await createCloudFileTransport(f.runtime, f.make().cloudWrites[0]).apply(nativeSource);
+  assert.equal(f.counts().puts, 0); assert.equal(f.counts().commits, 1);
+ } finally { globalThis.Request = original; }
+});

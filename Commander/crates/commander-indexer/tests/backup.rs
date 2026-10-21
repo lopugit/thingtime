@@ -328,3 +328,37 @@ fn streaming_watches_new_paths_and_backlog_updates_until_acknowledged_stop() {
     assert!(child.0.wait().unwrap().success());
     reader.join().unwrap();
 }
+
+#[test]
+fn task_owned_backup_reports_actual_worker_ceiling_and_fractional_cpu_measurement() {
+    let root = TempDir::new().unwrap();
+    fs::write(root.path().join("payload"), vec![7u8; 1024 * 1024]).unwrap();
+    let mut request = request(root.path(), "");
+    request.resource_feedback = true;
+    request.cpu_budget_shares = 3;
+    request.resource_limits.max_threads = 1;
+    request.resource_limits.max_parallelism = 1;
+    request.resource_limits.max_cpu_percent = 1;
+    let mut resources = Vec::new();
+    capture(request, |event| {
+        if let Event::Resources { usage } = event {
+            resources.push(usage);
+        }
+        Ok(())
+    })
+    .unwrap();
+    let usage = resources.last().expect("requested measurement missing");
+    assert_eq!(usage.effective.worker_threads, 1);
+    assert_eq!(usage.active_worker_limit, 1);
+    assert!(usage.cpu_measurement_available);
+    assert!(usage.cpu_time_nanoseconds > 0);
+    assert!(usage.wall_time_nanoseconds > 0);
+    let measured = usage.cpu_time_nanoseconds as f64
+        / usage.wall_time_nanoseconds as f64
+        / usage.effective.logical_cpu_count as f64
+        * 100.0;
+    assert!(
+        measured <= 0.4,
+        "task index CPU exceeded its one-third allocation: {measured}"
+    );
+}

@@ -48,12 +48,12 @@ export async function resumeNativeSyncJobs(ownerId: string, generation: number, 
 			} catch { currentScope(); origins.set(job.scope.deviceId, null); }
 		}
 		const selected = (job: SyncJob) => origins.get(job.scope.deviceId) === job.scope.origin;
-		const retained = (job: SyncJob) => syncJobEnabled(job) && selected(job);
+		const retained = (job: SyncJob) => !nativeSyncTasks.isPaused(job.scope) && syncJobEnabled(job) && selected(job);
 		if (bridge) await setDesktopSyncScheduled(discovered.some(retained), bridge); currentScope();
 		for (const job of discovered) {
 			currentScope();
 			if (nativeSyncTasks.read()?.active) break;
-			if (selected(job) && syncJobDue(job, Date.now())) await startNativeSyncTask(job.reviewed, job.scope, generation, job);
+			if (!nativeSyncTasks.isPaused(job.scope) && selected(job) && syncJobDue(job, Date.now())) await startNativeSyncTask(job.reviewed, job.scope, generation, job);
 		}
 		if (bridge) await setDesktopSyncScheduled((await readJobs()).some(retained), bridge); currentScope();
 	} finally { journal?.close(); discovering = false; }

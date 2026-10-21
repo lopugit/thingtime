@@ -1484,6 +1484,34 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 		} catch (error) { return knownFailure(error) || unavailable('fingerprint', error); }
 	};
 
+	/** Short-lived owner-only transport authority for one exact stored range.
+	 * The fingerprint describes the whole attachment, not a range digest. */
+	const downloadTarget = async (viewer: AttachmentViewer, idInput: unknown, range: { version: string; offset: number; length: number }) => {
+		try {
+			if (!viewer?.id || !range || !/^[a-f0-9]{64}$/.test(range.version) || !Number.isSafeInteger(range.offset) || range.offset < 0 || !Number.isSafeInteger(range.length) || range.length < 1 || range.length > 2 * 1024 * 1024 || !Number.isSafeInteger(range.offset + range.length)) return fail(400, 'Invalid signed download range');
+			const readable = await readableStoredAttachment(viewer, idInput);
+			if (readable.ok === false) return readable;
+			const { doc } = readable;
+			if (doc.ownerId !== viewer.id) return fail(404, 'Attachment not found');
+			const currentVersion = attachmentContentVersion(doc.shareId, doc.objectKey, doc.objectVersionId!);
+			if (currentVersion !== range.version) return fail(409, 'Attachment version changed');
+			if (range.offset + range.length > doc.objectSizeBytes) return fail(416, 'Attachment range is outside the file');
+			const s3 = dependencies.getS3();
+			if (!s3.signDownloadRange) return fail(503, 'Signed range downloads are unavailable for this storage provider');
+			const receipt = await fingerprint(viewer, idInput);
+			if (receipt.ok === false) return receipt;
+			if (receipt.version !== range.version || receipt.size !== doc.objectSizeBytes) return fail(409, 'Attachment changed during target verification');
+			const signed = await s3.signDownloadRange({ objectKey: doc.objectKey, versionId: doc.objectVersionId!, offset: range.offset, length: range.length });
+			const expires = Date.parse(signed.expiresAt), now = dependencies.now().getTime();
+			let targetUrl: URL; try { targetUrl = new URL(signed.url); } catch { return fail(503, 'Signed range download target unavailable'); }
+			if (targetUrl.protocol !== 'https:' || targetUrl.username || targetUrl.password || targetUrl.hash || !Number.isFinite(expires) || expires <= now || expires > now + 60_000) return fail(503, 'Signed range download target unavailable');
+			const fresh = await readableStoredAttachment(viewer, idInput, false, false);
+			if (fresh.ok === false) return fresh;
+			if (fresh.doc.ownerId !== viewer.id || fresh.doc.objectKey !== doc.objectKey || fresh.doc.objectVersionId !== doc.objectVersionId) return fail(409, 'Attachment changed during target verification');
+			return { ok: true as const, target: { version: 1 as const, ownerId: viewer.id, attachmentId: doc.shareId, contentVersion: range.version, size: receipt.size, offset: range.offset, length: range.length, fingerprint: receipt.fingerprint, url: signed.url, expiresAt: signed.expiresAt, headers: { Range: `bytes=${range.offset}-${range.offset + range.length - 1}` } } };
+		} catch (error) { return knownFailure(error) || unavailable('download-target', error); }
+	};
+
 	// The download gates without a signed URL: size and served type only. The
 	// archive planner uses it for manifests and HEAD probes so those never
 	// presign hundreds of objects nobody is about to fetch.
@@ -1641,6 +1669,7 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 		cancel,
 		remove,
 		download,
+		downloadTarget,
 		inspectDownload,
 		fingerprint,
 		describeTransfer,
@@ -1664,6 +1693,7 @@ export const completeAttachmentUpload = service.complete;
 export const cancelAttachmentUpload = service.cancel;
 export const deleteAttachment = service.remove;
 export const getAttachmentDownload = service.download;
+export const getAttachmentDownloadTarget = service.downloadTarget;
 export const inspectAttachmentDownload = service.inspectDownload;
 export const getAttachmentFingerprint = service.fingerprint;
 export const describeAttachmentTransfer = service.describeTransfer;

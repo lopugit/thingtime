@@ -1,6 +1,8 @@
+import { fileSyncDownloadRequirements } from '~/fileSync/signedDownloadTarget';
+import { SyncResourceControls } from './SyncResourceControls';
 import { SyncIgnoreRulesEditor } from './SyncIgnoreRulesEditor';
 import { readNativeInventory } from '~/fileSync/nativeInventory';
-import { nativeSyncTasks, startNativeSyncTask, supportsNativeSyncTasks } from '~/fileSync/nativeSyncTasks.client';
+import { nativeSyncTasks, pauseNativeSyncJob, startNativeSyncTask, supportsNativeSyncTasks } from '~/fileSync/nativeSyncTasks.client';
 import { nativeUploadMayContinue } from '~/fileSync/nativeUploadBackground';
 import { assertPhotoSourcePolicy, photoAccessDescription } from '~/fileSync/photoSourcePolicy';
 import { NativeFileRecovery } from './NativeFileRecovery';
@@ -49,7 +51,7 @@ import { runForegroundCloudSync, type ForegroundSyncProgress } from '~/fileSync/
 import { runPagedForegroundCloudSync } from '~/fileSync/pagedForegroundSync';
 import { requireThingtimeCapability } from '~/api/utils/capabilities/requireCapability.client';
 import { requestMobileDevice } from './mobileDeviceBridge';
-import { newFileSyncConfiguration, type FileSyncConfiguration } from '~/fileSync/configuration';
+import { newFileSyncConfiguration, FILE_SYNC_RESOURCE_REQUIREMENTS, type FileSyncConfiguration } from '~/fileSync/configuration';
 import { readOwnedFileSyncConfiguration, type SavedFileSyncConfiguration } from '~/fileSync/configuredPlan';
 import {
 	canonicalDraftConfiguration,
@@ -131,6 +133,7 @@ function Connections({
 	const appOwned = supportsNativeSyncTasks();
 	const busy = viewBusy || (appOwned && !!nativeTask?.active);
 	const [draft, setDraft] = useState<ConfigurationDraft | null>(initial.draft);
+	const [resourceDraftValid, setResourceDraftValid] = useState(true);
 	const [ready, setReady] = useState(!initial.error),
 		[conflict, setConflict] = useState<ConfigurationConflict | null>(null);
 	const [connections, setConnections] = useState<SavedFileSyncConfiguration[]>(() => {
@@ -525,8 +528,11 @@ function Connections({
 	const save = () =>
 		void run(async (assertCurrent) => {
 			if (!draft || !ready) return;
+			if (!resourceDraftValid) throw Error('Correct the resource limit fields before saving.');
 			const pending = { ...draft, configuration: canonicalDraftConfiguration(draft), pending: true };
-			if (pending.configuration.ignoreRules) await requireCapability('api.things', '1.38.0');
+			if (pending.configuration.resourceLimits) {
+				for (const [feature, minimum] of Object.entries({ ...FILE_SYNC_RESOURCE_REQUIREMENTS, ...fileSyncDownloadRequirements(pending.configuration) })) await requireCapability(feature, minimum);
+			} else if (pending.configuration.ignoreRules) await requireCapability('api.things', '1.38.0');
 			persist(pending); // Must succeed before even starting the first write attempt.
 			let dispatched = false;
 			let saved: SavedFileSyncConfiguration;
@@ -659,7 +665,7 @@ function Connections({
 								</Text>
 							)}
 							<Text fontSize="12px">
-								{!rootsReady
+								{task?.stopping ? 'Pausing…' : task?.status === 'paused' && !task.waiting ? 'Paused' : !rootsReady
 									? running ? 'Transfer in progress · Folder list pending' : 'Checking folder access…'
 									: !sourceAllowed
 									? 'Source access or backup policy needs review'
@@ -720,12 +726,12 @@ function Connections({
 							Edit
 						</Button>
 						{running ? (
-							<Button size="sm" minHeight="40px" onClick={() => task?.active ? void nativeSyncTasks.cancel(task.scope).catch(cause => setError(cause instanceof Error ? cause.message : 'Could not save the stopped transfer.')) : controller.current?.abort()}>
-								Stop transfer
+							<Button size="sm" minHeight="40px" isDisabled={task?.stopping} onClick={() => task?.active ? void pauseNativeSyncJob(task.scope, generation).catch(cause => setError(cause instanceof Error ? cause.message : 'Transfer stopped, but its pause could not be saved.')) : controller.current?.abort()}>
+								{task?.stopping ? 'Pausing…' : 'Pause sync'}
 							</Button>
 						) : (
 							<Button size="sm" minHeight="40px" isDisabled={!allowed || busy || !!draft || !ready} onClick={() => transfer(saved)}>
-								{progress && !['complete', 'retained'].includes(progress.stage)
+								{task?.status === 'paused' && !task.waiting ? 'Resume sync' : progress && !['complete', 'retained'].includes(progress.stage)
 									? 'Retry transfer'
 									: twoWay
 									? 'Sync now'
@@ -782,7 +788,7 @@ function Connections({
 				<Box marginTop={4} border="1px solid var(--tt-border, #ececef)" borderRadius="12px" padding={3}>
 					{host && <HomeBackupPreset draft={draft} disabled={busy || !ready} scopeKey={`${key}:${generation}:${draft.id}`}
 						onChange={edit} accountTransport={reviewTransport} />}
-					<SyncConfigurationForm draft={draft} roots={roots} folders={folders} disabled={busy || draft.pending || !ready} scopeKey={`${key}:${generation}:${draft.id}`} accountTransport={reviewTransport} onChange={edit} />
+					<SyncConfigurationForm draft={draft} roots={roots} folders={folders} disabled={busy || draft.pending || !ready} scopeKey={`${key}:${generation}:${draft.id}`} accountTransport={reviewTransport} onChange={edit} onResourceValidityChange={setResourceDraftValid} />
 					{folderCursor && (
 						<Button size="sm" minHeight="40px" marginTop={2} isDisabled={busy} onClick={() => void run(() => load('folders', folderCursor))}>
 							More cloud folders
@@ -817,7 +823,7 @@ function Connections({
 						</Box>
 					)}
 					<Flex gap={2} marginTop={3} wrap="wrap">
-						<Button size="sm" minHeight="40px" isDisabled={busy || !ready || !!conflict} onClick={save}>
+						<Button size="sm" minHeight="40px" isDisabled={busy || !ready || !!conflict || !resourceDraftValid} onClick={save}>
 							{draft.pending ? 'Retry save' : 'Save connection'}
 						</Button>
 						{!draft.pending && (
@@ -872,7 +878,8 @@ export function SyncConfigurationForm({
 	disabled,
 	scopeKey,
 	accountTransport,
-	onChange
+	onChange,
+	onResourceValidityChange
 }: {
 	draft: ConfigurationDraft;
 	roots: MobileFolder[];
@@ -881,6 +888,7 @@ export function SyncConfigurationForm({
 	scopeKey?: string;
 	accountTransport?: Parameters<typeof SyncIgnoreRulesEditor>[0]['accountTransport'];
 	onChange(draft: ConfigurationDraft): void;
+	onResourceValidityChange?(valid: boolean): void;
 }) {
 	const prefix = useId(),
 		c = draft.configuration;
@@ -1000,9 +1008,11 @@ export function SyncConfigurationForm({
 			<Text fontSize="12px" color="var(--tt-muted, #71717a)">
 				Paths are relative to the selected folder. A folder exclusion includes its contents. Wildcards are not supported.
 			</Text>
+			<SyncResourceControls onValidityChange={onResourceValidityChange} resourceLimits={c.resourceLimits} disabled={disabled || photos} scopeKey={scopeKey ?? `${draft.id}:${c.deviceId}`} accountTransport={accountTransport}
+				onChange={resourceLimits => change({ resourceLimits, configurationVersion: resourceLimits ? 3 : c.ignoreRules ? 2 : 1 })} />
 			<SyncIgnoreRulesEditor rules={c.ignoreRules ?? ''} excludedPaths={draft.exclusions.split(/\r?\n/).filter(Boolean)} disabled={disabled || photos}
 				scopeKey={scopeKey ?? `${draft.id}:${c.deviceId}`} accountTransport={accountTransport}
-				onChange={ignoreRules => change({ configurationVersion: ignoreRules ? 2 : 1, ignoreRules })} />
+				onChange={ignoreRules => change({ configurationVersion: c.resourceLimits ? 3 : ignoreRules ? 2 : 1, ignoreRules })} />
 		</Stack>
 	);
 }
