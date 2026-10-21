@@ -12,5 +12,5 @@ export const loader = async ({ request }: { request: Request }) => {
 	const deviceId = new URL(request.url).searchParams.get('id');
 	const result = await listDevices(user.id, deviceId);
 	if (result.ok === false) return json(result, { status: result.status });
-	return json(result);
+	return json(result, { headers: { 'Cache-Control': 'private, no-store' } });
 };

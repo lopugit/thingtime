@@ -13,7 +13,7 @@ import { SITE_FORM_REFS } from './siteFormsSuite.ts';
 // asserts for the whole catalog, so a bound tightened in the registry can
 // never ship a demo the builder would refuse to save.
 
-export type DemoBlockType = 'component' | 'container' | 'text' | 'native' | 'media' | 'html';
+export type DemoBlockType = 'component' | 'container' | 'text' | 'native' | 'media' | 'html' | 'element' | 'collection' | 'condition';
 
 export type DemoBlock = {
 	id: string;
@@ -25,7 +25,13 @@ export type DemoBlock = {
 	args?: Record<string, string | number | boolean>;
 	// component: a data binding — the page runtime runs this action as the
 	// viewer and hands the result to the template as `result`
-	source?: { action: string; inputs?: Record<string, string | number | boolean>; refresh?: 'load' | 'manual' | 'interval'; intervalMs?: number };
+	source?: {
+		action: string;
+		inputs?: Record<string, string | number | boolean>;
+		refresh?: 'load' | 'manual' | 'interval' | 'live';
+		intervalMs?: number;
+		stream?: { path: string; feature: string; minimumVersion: string };
+	};
 	direction?: 'column' | 'row' | 'grid';
 	gap?: number;
 	columns?: number;
@@ -33,6 +39,9 @@ export type DemoBlock = {
 	text?: string;
 	style?: 'body' | 'heading' | 'eyebrow';
 	tag?: string;
+	props?: Record<string, unknown>;
+	condition?: Record<string, unknown>;
+	format?: Record<string, unknown>;
 	// text: optional link target, mirroring WebpageBlock.href — the demo
 	// buttons and nav links below set it, so the catalog type has to carry it
 	href?: string;

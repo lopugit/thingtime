@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 
-import { getThingsCollection } from '../mongodb/collections';
+import { getThingsCollection, getHomeThingsCollection } from '../mongodb/collections';
 import { ACL_OWNER, COLLECTION_SCHEMA_VERSIONS } from '~/schemas/registry';
 
 // Account-ownership links (FUNDAMENTALS.md §3: appended/child data is
@@ -9,21 +9,24 @@ import { ACL_OWNER, COLLECTION_SCHEMA_VERSIONS } from '~/schemas/registry';
 // construction: a user can hold links to many targets, a target can be linked
 // from many users.
 //
-// Two link kinds:
+// Link kinds:
 //   • 'account' — the user OWNS another account (usually a service account):
 //     it appears in their switcher's "Owned accounts" and can be assumed
 //     without credentials via POST /api/v1/auth/accounts/assume.
 //   • 'app' — the user co-manages a registered app (targetId = clientId):
 //     the app shows up in their /apps list and update/delete accept them.
 //
-// Links are written ONLY by the admin endpoints (the kind is protected from
+//   • 'character' — private owner roster, created transactionally with the user.
+//     Generic admin assignment deliberately excludes this kind.
+//
+// Account/app links are written ONLY by the admin endpoints (the kind is protected from
 // generic CRUD — self-assigning ownership would be privilege escalation).
 // The doc's ownerId is the managing user, so their links surface first-party.
 
 type Fail = { ok: false; status: number; error: string };
 const fail = (status: number, error: string): Fail => ({ ok: false, status, error });
 
-export type AccountLinkKind = 'account' | 'app';
+export type AccountLinkKind = 'account' | 'app' | 'character';
 
 export const isAccountLinkKind = (value: unknown): value is AccountLinkKind => value === 'account' || value === 'app';
 
@@ -49,7 +52,7 @@ const linkMatch = (linkKind: AccountLinkKind, userId: string, targetId: string) 
 });
 
 const toLink = (doc: any): AccountLink => ({
-  linkKind: doc?.crystal?.linkKind === 'app' ? 'app' : 'account',
+  linkKind: doc?.crystal?.linkKind === 'character' ? 'character' : doc?.crystal?.linkKind === 'app' ? 'app' : 'account',
   userId: String(doc?.crystal?.userId ?? doc?.ownerId ?? ''),
   targetId: String(doc?.crystal?.targetId ?? ''),
   role: 'owner',
@@ -62,6 +65,7 @@ export const createAccountLink = async (input: {
   userId: string;
   targetId: string;
   createdBy: string;
+  session?: any;
 }): Promise<{ ok: true; link: AccountLink } | Fail> => {
   const userId = typeof input.userId === 'string' ? input.userId.trim() : '';
   const targetId = typeof input.targetId === 'string' ? input.targetId.trim() : '';
@@ -71,7 +75,8 @@ export const createAccountLink = async (input: {
   }
 
   const now = new Date();
-  const things = await getThingsCollection();
+  const things = await (input.linkKind === 'character' ? getHomeThingsCollection() : getThingsCollection());
+  const options = input.session ? { session: input.session } : {};
   try {
     await things.updateOne(
       linkMatch(input.linkKind, userId, targetId),
@@ -94,13 +99,13 @@ export const createAccountLink = async (input: {
           updatedAt: now
         }
       },
-      { upsert: true }
+      { upsert: true, ...options }
     );
   } catch (err: any) {
     if (err?.code !== 11000) throw err; // lost the upsert race — link exists
   }
 
-  const doc = await things.findOne(linkMatch(input.linkKind, userId, targetId));
+  const doc = await things.findOne(linkMatch(input.linkKind, userId, targetId), options);
   return { ok: true, link: toLink(doc) };
 };
 

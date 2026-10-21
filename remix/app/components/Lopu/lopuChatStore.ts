@@ -1,6 +1,7 @@
+import { withoutPlanAdmissionHints } from './lopuProviderCore';
 import { isRunningLopuChatTask } from '~/api/utils/lopu/backgroundTaskCore';
 import { lopuAccessMode, type LopuAccessMode } from '~/api/utils/lopu/accessMode';
-import { continuationContext, continuationRequestId, LOPU_MAX_RECOVERY_FAILURES, type LopuManagement } from '~/api/utils/lopu/continuationCore';
+import { continuationContext, continuationRequestId, lopuProviderManagement, LOPU_MAX_RECOVERY_FAILURES, type LopuManagement } from '~/api/utils/lopu/continuationCore';
 import { bindLopuQueue, pauseLopuQueue } from './lopuQueueStore';
 import { LOPU_CONTINUE_PROMPT, shouldAutoContinueLopuReply } from './lopuRecovery';
 import { bindAiTaskOwner, getAiTasks, refreshAiTasks, readAiTaskOutput, stopAiTaskRequest } from './aiTasks.client';
@@ -84,6 +85,7 @@ export type LopuChatDefaults = { model: string | null; effort: string | null; sp
 
 // the viewer's per-chat choice: a catalog model (+ effort / speed) OR one of
 // their own Secure Vault providers (providerId, which wins over the model)
+export type LopuAiDefaults = LopuChatDefaults & { providerId: string | null };
 export type LopuChatSettings = LopuChatDefaults & { providerId: string | null; accessMode?: LopuAccessMode; management?: LopuManagement };
 
 // providers.<p>: key presence + the server's probe verdict (never a value)
@@ -144,6 +146,7 @@ export type LopuStoreState = {
 	vaultProviders: LopuVaultProvider[];
 	vault: LopuVaultInfo | null;
 	settings: LopuChatSettings;
+	aiDefaults: LopuAiDefaults | null;
 	error: string | null;
 	notices: LopuNotice[];
 	navigateSeq: number;
@@ -165,7 +168,7 @@ export const LOPU_CONTEXT_BLOCKS_MAX_CHARS = 48_000;
 
 type ChatsCache = { at: number; chats: LopuChatSummary[] };
 type MessagesCache = { at: number; messages: ChatMessage[] };
-type ModelsCache = { at: number } & Partial<LopuModelsPayload>;
+type ModelsCache = { at: number; ownerId?: string | null } & Partial<LopuModelsPayload>;
 
 const EMPTY_SETTINGS: LopuChatSettings = { model: null, effort: null, speed: null, providerId: null };
 const EMPTY_MESSAGES: ChatMessage[] = [];
@@ -193,6 +196,7 @@ const createInitialState = (): LopuStoreState => ({
 	vaultProviders: EMPTY_VAULT_PROVIDERS,
 	vault: null,
 	settings: EMPTY_SETTINGS,
+	aiDefaults: null,
 	error: null,
 	notices: [],
 	navigateSeq: 0,
@@ -314,22 +318,37 @@ const uuid = (): string =>
 
 const isAvailable = (model: AiModelPublic | undefined | null): boolean => !!model && model.available !== false && model.enabled !== false;
 
-// A providerId survives only while it names one of the viewer's usable vault
-// providers. `vaultProviders === null` means "not known yet" (before the
-// catalog loads) — keep the cached choice rather than dropping it.
-const reconcileProviderId = (requested: string | null | undefined, vaultProviders: LopuVaultProvider[] | null | undefined): string | null => {
-	if (!requested) return null;
-	if (!Array.isArray(vaultProviders)) return requested;
-	const provider = findLopuVaultProvider(vaultProviders, requested);
-	return provider && provider.available !== false ? provider.id : null;
+// A saved pin is intent, not availability. Retain it through catalog failures,
+// revocation and removal so the server can refuse it without charging credits.
+const reconcileProviderId = (requested: string | null | undefined, _providers: LopuVaultProvider[] | null | undefined): string | null => requested || null;
+
+export const lopuAiDefaultsCacheKey = (ownerId: string) => `tt-lopu-ai-defaults:${ownerId}`;
+const aiDefaultsOnly = (raw: Partial<LopuAiDefaults>): LopuAiDefaults => ({
+  model: typeof raw.model === 'string' && raw.model.trim() ? raw.model.trim() : null,
+  effort: typeof raw.effort === 'string' && raw.effort.trim() ? raw.effort.trim() : null,
+  speed: typeof raw.speed === 'string' && raw.speed.trim() ? raw.speed.trim() : null,
+  providerId: typeof raw.providerId === 'string' && raw.providerId.trim() ? raw.providerId.trim() : null
+});
+
+/** Account- and origin-scoped device defaults; existing chats retain their pins.
+ * Only public IDs are cached. Tokens remain in the runtime's credential store. */
+export const setLopuAiDefaults = (patch: Partial<LopuAiDefaults>, options?: { initialize?: boolean }) => {
+  if (!state.userId || (options?.initialize && state.aiDefaults)) return;
+  const providers = knownVaultProviders();
+  if (!options?.initialize && patch.providerId && providers && !providers.some(row => row.id === patch.providerId && row.available)) {
+    notice('That credential is unavailable. Refresh connections before choosing it.', { status: 'error' }); return;
+  }
+  const aiDefaults = aiDefaultsOnly({ ...(state.aiDefaults || EMPTY_SETTINGS), ...patch });
+  writeLocalCache(lopuAiDefaultsCacheKey(state.userId), aiDefaults);
+  setState({ aiDefaults, ...(!state.activeChatId ? { settings: reconcileLopuSettings({ ...state.settings, ...aiDefaults }, state.models, state.defaults, providers) } : {}) });
 };
 
 /**
  * Clamp a settings choice to the catalog: a known, available model (else the
  * server defaults, else the first available model), an effort that model
  * offers (prefer the requested, then the default, then 'high', then the last),
- * a speed only when offered, and a providerId only while that vault provider
- * is still listed and available (null vaultProviders = unknown yet → kept).
+ * a speed only when offered. An explicit credential pin is never cleared by
+ * availability changes; choosing Thingtime credits must be deliberate.
  */
 export const reconcileLopuSettings = (
 	requested: Partial<LopuChatSettings> | null | undefined,
@@ -338,12 +357,13 @@ export const reconcileLopuSettings = (
 	vaultProviders: LopuVaultProvider[] | null = null
 ): LopuChatSettings => {
 	const providerId = reconcileProviderId(requested?.providerId, vaultProviders);
+	const management = requested?.management || providerId?.startsWith('chatgpt-plan-') ? { management: lopuProviderManagement(requested?.management, providerId) } : {};
 	if (!models.length) {
 		return {
 			model: requested?.model ?? defaults?.model ?? null,
 			effort: requested?.effort ?? defaults?.effort ?? null,
 			speed: requested?.speed ?? defaults?.speed ?? null,
-			providerId, ...(requested?.accessMode ? { accessMode: lopuAccessMode(requested.accessMode) } : {}), ...(requested?.management ? { management: requested.management } : {})
+			providerId, ...(requested?.accessMode ? { accessMode: lopuAccessMode(requested.accessMode) } : {}), ...management
 		};
 	}
 	const wanted = requested?.model ? models.find((model) => model.id === requested.model) : null;
@@ -351,14 +371,14 @@ export const reconcileLopuSettings = (
 	const model = isAvailable(wanted) ? wanted : isAvailable(fallback) ? fallback : models.find(isAvailable) || null;
 	// Execution management is independent of provider access (including new
  // invite-gated accounts whose catalog has no available model).
- if (!model) return { model: null, effort: null, speed: null, providerId, ...(requested?.accessMode ? { accessMode: lopuAccessMode(requested.accessMode) } : {}), ...(requested?.management ? { management: requested.management } : {}) };
+ if (!model) return { model: null, effort: null, speed: null, providerId, ...(requested?.accessMode ? { accessMode: lopuAccessMode(requested.accessMode) } : {}), ...management };
 	const efforts = Array.isArray(model.efforts) ? model.efforts : [];
 	const speeds = Array.isArray(model.speeds) ? model.speeds : [];
 	const effortCandidates = [requested?.effort, defaults?.effort, 'high'];
 	const effort = effortCandidates.find((candidate): candidate is string => !!candidate && efforts.includes(candidate)) ?? efforts[efforts.length - 1] ?? null;
 	const speedWanted = requested?.speed ?? defaults?.speed ?? 'normal';
 	const speed = speeds.includes(speedWanted) ? speedWanted : speeds.includes('normal') ? 'normal' : speeds[0] ?? null;
-	return { model: model.id, effort, speed, providerId, ...(requested?.accessMode ? { accessMode: lopuAccessMode(requested.accessMode) } : {}), ...(requested?.management ? { management: requested.management } : {}) };
+	return { model: model.id, effort, speed, providerId, ...(requested?.accessMode ? { accessMode: lopuAccessMode(requested.accessMode) } : {}), ...management };
 };
 
 export const sameLopuSettings = (a: LopuChatSettings, b: LopuChatSettings): boolean =>
@@ -372,25 +392,57 @@ const persistSettings = (userId: string | null, settings: LopuChatSettings) => {
 // been fetched at least once this session (a cached list still counts)
 const knownVaultProviders = (): LopuVaultProvider[] | null => (state.modelsLoaded || state.vault ? state.vaultProviders : null);
 
-// The provider choice is per conversation (design note: providerId persisted
-// through the update route) — fire-and-forget, the reply body carries it on
-// every turn anyway, so a refused sync only costs the next reload.
-const persistChatProvider = (chatId: string, providerId: string | null) => {
-	if (!client) return;
-	client.chats.update({ chatId, providerId }).catch((error: unknown) => {
-		if (typeof console !== 'undefined') console.warn('[lopu] could not persist the chat provider', errorText(error, 'unknown error'));
-	});
+// Serialize AI choices per conversation. Preserve the last confirmed choice
+// across a refusal, and fence responses against account changes and newer edits.
+const providerWrites = new Map<string, { tail: Promise<void>; confirmed: LopuAiDefaults; revision: number }>();
+const persistChatProvider = (chatId: string, patch: Partial<LopuAiDefaults>, previous: LopuChatSettings) => {
+  if (!client) return;
+  const api = client, ownerId = state.userId, generation = accountGeneration;
+  const entry = providerWrites.get(chatId) ?? { tail: Promise.resolve(), confirmed: aiDefaultsOnly(previous), revision: 0 };
+  const revision = ++entry.revision;
+  providerWrites.set(chatId, entry);
+  chatWrites++;
+  entry.tail = entry.tail.catch(() => {}).then(async () => {
+    if (generation !== accountGeneration) return;
+    try {
+      const response = await api.chats.update({ chatId, ...patch });
+      if (response?.ok === false) throw new Error(errorText(response, 'Could not save this AI choice'));
+      if (generation !== accountGeneration) return;
+      entry.confirmed = { ...entry.confirmed, ...patch };
+      setState(current => {
+        const chats = current.chats.map(chat => chat.id === chatId ? { ...chat, lopu: { ...chat.lopu, ...patch } } : chat);
+        writeChatsCache(ownerId, chats);
+        return { chats };
+      });
+    } catch (error) {
+      if (generation !== accountGeneration || entry.revision !== revision) return;
+      if (state.activeChatId === chatId) {
+        const settings = { ...state.settings, ...entry.confirmed };
+        persistSettings(ownerId, settings); setState({ settings });
+      }
+      notice(errorText(error, 'Could not save this AI choice'), { status: 'error' });
+      throw error;
+    }
+  }).finally(() => {
+    chatWrites--;
+    if (entry.revision === revision && providerWrites.get(chatId) === entry) providerWrites.delete(chatId);
+  });
+  void entry.tail.catch(() => {});
 };
 
 // Merge a patch into the current settings and clamp it. A providerId the
 // vault does not offer is refused rather than wiping the current provider —
 // the picker never offers one, but a stale cache or a per-send override might.
-const mergeSettingsPatch = (patch: Partial<LopuChatSettings>): LopuChatSettings => {
-	const merged = { ...state.settings, ...patch };
+const mergeSettingsPatch = (patch: Partial<LopuChatSettings>, base = state.settings): LopuChatSettings => {
 	const vault = knownVaultProviders();
-	if (!(state.modelsLoaded || state.models.length)) return merged;
+  if (patch.providerId && vault && !vault.some(row => row.id === patch.providerId && row.available)) {
+    notice('That credential is unavailable. Refresh connections before choosing it.', { status: 'error' });
+    return base;
+  }
+  const merged = { ...base, ...patch };
+	if (!(state.modelsLoaded || state.models.length)) return { ...merged, ...(merged.providerId?.startsWith('chatgpt-plan-') ? { management: 'client' as const } : {}) };
 	const reconciled = reconcileLopuSettings(merged, state.models, state.defaults, vault);
-	if (patch.providerId && !reconciled.providerId && vault) return { ...reconciled, providerId: state.settings.providerId };
+	if (patch.providerId && !reconciled.providerId && vault) return { ...reconciled, providerId: base.providerId };
 	return reconciled;
 };
 
@@ -423,18 +475,21 @@ const persistChatAccess = (chatId: string, accessMode: LopuAccessMode) => {
   void work.catch(() => {});
 };
 
+let aiChoiceRevision = 0;
 export const setLopuSettings = (patch: Partial<LopuChatSettings>) => {
 	const settings = mergeSettingsPatch(patch);
 	if (sameLopuSettings(settings, state.settings)) {
     if (patch.accessMode && state.activeChatId) persistChatAccess(state.activeChatId, patch.accessMode);
     return;
   }
-	const providerChanged = settings.providerId !== state.settings.providerId;
+	const previous = state.settings;
+  aiChoiceRevision++;
 	persistSettings(state.userId, settings);
 	setState({ settings });
   if (patch.accessMode && state.activeChatId) persistChatAccess(state.activeChatId, patch.accessMode);
-	if (patch.management && state.activeChatId && client) void client.chats.update({ chatId: state.activeChatId, management: patch.management }).catch(() => {});
-	if (providerChanged && 'providerId' in patch && state.activeChatId) persistChatProvider(state.activeChatId, settings.providerId);
+	if (patch.management && state.activeChatId && client) void client.chats.update({ chatId: state.activeChatId, management: settings.management }).catch(() => {});
+  const choice = Object.fromEntries((['providerId', 'model', 'effort', 'speed'] as const).filter(key => key in patch && settings[key] !== previous[key]).map(key => [key, settings[key]]));
+  if (Object.keys(choice).length && state.activeChatId) persistChatProvider(state.activeChatId, choice, previous);
 };
 
 // ——— hydration ————————————————————————————————————————————————————————————
@@ -448,6 +503,7 @@ let accountGeneration = 0;
 export const hydrateLopuStore = (userId: string | null): LopuStoreState => {
 	if (state.hydrated && state.userId === userId) return state;
 	accountGeneration++;
+  providerWrites.clear();
   accessWrites.clear(); accessRevisions.clear();
 	for (const controller of controllers.values()) controller.abort();
 	controllers.clear();
@@ -457,12 +513,14 @@ export const hydrateLopuStore = (userId: string | null): LopuStoreState => {
 	const chatsCache = userId ? readLocalCache<ChatsCache>(lopuChatsCacheKey(userId)) : null;
 	const modelsCache = readLocalCache<ModelsCache>(LOPU_MODELS_CACHE_KEY);
 	const settingsCache = userId ? readLocalCache<LopuChatSettings>(lopuSettingsCacheKey(userId)) : null;
+  const savedDefaults = userId ? readLocalCache<LopuAiDefaults>(lopuAiDefaultsCacheKey(userId)) : null;
+  const aiDefaults = savedDefaults && typeof savedDefaults === 'object' ? aiDefaultsOnly(savedDefaults) : null;
 	const models = Array.isArray(modelsCache?.models) ? modelsCache!.models : state.models;
 	const defaults = modelsCache?.defaults && typeof modelsCache.defaults === 'object' ? modelsCache.defaults : state.defaults;
 	const providers = modelsCache?.providers && typeof modelsCache.providers === 'object' ? modelsCache.providers : state.providers;
 	// the vault list is per viewer — a different account never inherits it
-	const vaultProviders = userId ? normalizeLopuVaultProviders(modelsCache?.vaultProviders) : EMPTY_VAULT_PROVIDERS;
-	const vault = userId ? normalizeLopuVaultInfo(modelsCache?.vault) : null;
+	const vaultProviders = userId && modelsCache?.ownerId === userId ? withoutPlanAdmissionHints(normalizeLopuVaultProviders(modelsCache?.vaultProviders)) : EMPTY_VAULT_PROVIDERS;
+	const vault = userId && modelsCache?.ownerId === userId ? normalizeLopuVaultInfo(modelsCache?.vault) : null;
 	state = {
 		...createInitialState(),
 		userId,
@@ -473,8 +531,9 @@ export const hydrateLopuStore = (userId: string | null): LopuStoreState => {
 		providers,
 		vaultProviders,
 		vault,
-		// a cached providerId is trusted until the fresh catalog says otherwise
-		settings: reconcileLopuSettings({ ...(settingsCache || defaults), accessMode: 'ask' }, models, defaults, null)
+		// Defaults belong to this account; a new chat must not inherit another chat.
+    aiDefaults,
+		settings: reconcileLopuSettings({ ...(aiDefaults || settingsCache || defaults), accessMode: 'ask' }, models, defaults, null)
 	};
 	scheduleEmit();
 	return state;
@@ -513,21 +572,30 @@ export const loadLopuModels = async (): Promise<void> => {
 		// a server that predates vault providers simply lists none
 		const vaultProviders = normalizeLopuVaultProviders(response?.vaultProviders);
 		const vault = normalizeLopuVaultInfo(response?.vault);
-		writeLocalCache(LOPU_MODELS_CACHE_KEY, { at: Date.now(), models, defaults, providers, vaultProviders, vault } satisfies ModelsCache);
+		writeLocalCache(LOPU_MODELS_CACHE_KEY, { at: Date.now(), ownerId: state.userId, models, defaults, providers, vaultProviders: withoutPlanAdmissionHints(vaultProviders), vault } satisfies ModelsCache);
 		const settings = reconcileLopuSettings(state.settings, models, defaults, vaultProviders);
 		persistSettings(state.userId, settings);
 		setState({ models, defaults, providers, vaultProviders, vault, modelsLoaded: true, modelsLoading: false, settings });
 	} catch {
-		if (generation === accountGeneration) setState({ modelsLoading: false, modelsLoaded: true });
+		if (generation === accountGeneration) setState({ modelsLoading: false, modelsLoaded: true, vaultProviders: withoutPlanAdmissionHints(state.vaultProviders) });
 	}
 };
 
 let chatWrites = 0;
-export const loadLopuChats = async (options: { quiet?: boolean } = {}): Promise<void> => {
+let chatsRead: { generation: number; promise: Promise<void> } | null = null;
+export const loadLopuChats = (options: { quiet?: boolean } = {}): Promise<void> => {
+  if (chatsRead?.generation === accountGeneration) return chatsRead.promise;
+  const read = { generation: accountGeneration, promise: readLopuChats(options) };
+  chatsRead = read;
+  void read.promise.finally(() => { if (chatsRead === read) chatsRead = null; });
+  return read.promise;
+};
+const readLopuChats = async (options: { quiet?: boolean }): Promise<void> => {
 	if (!client || !state.userId || state.chatsLoading || chatWrites) return;
 	const userId = state.userId;
 	const generation = accountGeneration;
 	const previous = state.chats;
+  const choiceRevision = aiChoiceRevision;
 	setState({ chatsLoading: true });
 	try {
 		const response = await client.chats.list();
@@ -537,7 +605,16 @@ export const loadLopuChats = async (options: { quiet?: boolean } = {}): Promise<
 		if (state.chats !== previous || chatWrites) { setState({ chatsLoading: false }); return; }
 		const chats: LopuChatSummary[] = response.chats;
 		writeChatsCache(userId, chats);
-		setState(current => ({ chats, chatsLoaded: true, chatsLoading: false, ...(current.activeChatId ? { settings: { ...current.settings, accessMode: lopuAccessMode(chats.find(chat => chat.id === current.activeChatId)?.lopu?.accessMode) } } : {}) }));
+		setState(current => {
+      const selected = chats.find(chat => chat.id === current.activeChatId);
+      // A cold deep link adopts its saved choice once metadata arrives. A
+      // delayed list may not undo a deliberate edit made during that read.
+      const saved = choiceRevision === aiChoiceRevision ? settingsFromChat(selected) : null;
+      return { chats, chatsLoaded: true, chatsLoading: false, ...(current.activeChatId ? { settings: {
+        ...current.settings, ...(saved ? reconcileLopuSettings({ ...current.settings, ...saved }, current.models, current.defaults, knownVaultProviders()) : {}),
+        accessMode: lopuAccessMode(selected?.lopu?.accessMode)
+      } } : {}) };
+    });
 	} catch (error) {
 		if (generation !== accountGeneration) return;
 		setState({ chatsLoading: false, chatsLoaded: true, ...(!options.quiet ? { error: errorText(error, 'Could not load your conversations') } : {}) });
@@ -605,7 +682,7 @@ const settingsFromChat = (chat: LopuChatSummary | undefined): Partial<LopuChatSe
 	const raw = (chat as { lopu?: unknown; settings?: unknown } | undefined)?.lopu ?? (chat as { settings?: unknown } | undefined)?.settings;
 	if (!raw || typeof raw !== 'object') return null;
 	const record = raw as Record<string, unknown>;
-	const out: Partial<LopuChatSettings> = { accessMode: lopuAccessMode(record.accessMode) };
+	const out: Partial<LopuChatSettings> = { providerId: null, accessMode: lopuAccessMode(record.accessMode) };
 	if (typeof record.model === 'string') out.model = record.model;
 	if (typeof record.effort === 'string') out.effort = record.effort;
 	if (typeof record.speed === 'string') out.speed = record.speed;
@@ -625,7 +702,9 @@ export const selectLopuChat = (chatId: string | null, options?: { silent?: boole
 	seedLopuMessages(chatId);
 	const chat = chatId ? state.chats.find((entry) => entry.id === chatId) : undefined;
 	const fromChat = settingsFromChat(chat);
-	const settings = fromChat ? reconcileLopuSettings({ ...state.settings, ...fromChat }, state.models, state.defaults, knownVaultProviders()) : { ...state.settings, accessMode: 'ask' as const };
+	// Existing/legacy chats never inherit a different conversation's credential.
+  const requested = chatId ? { ...EMPTY_SETTINGS, ...fromChat } : { ...state.settings, ...state.aiDefaults, accessMode: 'ask' as const };
+  const settings = reconcileLopuSettings(requested, state.models, state.defaults, knownVaultProviders());
 	const next = { activeChatId: chatId, settings };
 	if (options?.silent) {
 		state = { ...state, ...next };
@@ -639,22 +718,23 @@ export const selectLopuChat = (chatId: string | null, options?: { silent?: boole
 
 export const createLopuChat = async (args?: { title?: string }): Promise<{ ok: boolean; chat?: LopuChatSummary; error?: string }> => {
 	if (!client) return { ok: false, error: 'Lopu is not connected yet' };
+	const chosen = state.activeChatId && state.aiDefaults ? reconcileLopuSettings(state.aiDefaults, state.models, state.defaults, knownVaultProviders()) : state.settings;
 	chatWrites++;
 	try {
 		const response = await client.chats.create({
 			...(args?.title ? { title: args.title } : {}),
       accessMode: state.activeChatId ? 'ask' : lopuAccessMode(state.settings.accessMode),
-			...(state.settings.model ? { model: state.settings.model } : {}),
-			...(state.settings.effort ? { effort: state.settings.effort } : {}),
-			...(state.settings.speed ? { speed: state.settings.speed } : {}),
-			...(state.settings.providerId ? { providerId: state.settings.providerId } : {})
+			...(chosen.model ? { model: chosen.model } : {}),
+			...(chosen.effort ? { effort: chosen.effort } : {}),
+			...(chosen.speed ? { speed: chosen.speed } : {}),
+			...(chosen.providerId ? { providerId: chosen.providerId } : {})
 		});
 		const chat: LopuChatSummary | null = response?.chat && typeof response.chat === 'object' ? response.chat : null;
 		if (!chat) return { ok: false, error: errorText(response, 'Could not start a chat') };
 		setState((current) => {
 			const chats = [chat, ...current.chats.filter((entry) => entry.id !== chat.id)];
 			writeChatsCache(current.userId, chats);
-			return { chats, activeChatId: chat.id, settings: { ...current.settings, accessMode: lopuAccessMode(chat.lopu?.accessMode) } };
+			return { chats, activeChatId: chat.id, settings: { ...chosen, accessMode: lopuAccessMode(chat.lopu?.accessMode) } };
 		});
 		return { ok: true, chat };
 	} catch (error) {
@@ -1071,6 +1151,14 @@ const sendLopuMessagePart = async (text: string, options: SendLopuOptions = {}, 
    }
  }
  catch { return { ok: false, error: 'Save the chat access setting before sending.', text }; }
+ if (chatId) {
+   try {
+     let pending: Promise<void> | undefined;
+     do { pending = providerWrites.get(chatId)?.tail; await pending; }
+     while (accessGeneration === accountGeneration && providerWrites.get(chatId) && pending !== providerWrites.get(chatId)?.tail);
+   } catch { return { ok: false, error: 'Save the AI credential choice before sending.', text }; }
+   if (!state.chats.some(chat => chat.id === chatId)) await loadLopuChats({ quiet: true });
+ }
  if (accessGeneration !== accountGeneration) return { ok: false, error: 'The active account changed.', text };
 	const trimmed = (text || '').trim();
 	if (!trimmed) return { ok: false, error: 'Say something first', text };
@@ -1092,7 +1180,10 @@ const sendLopuMessagePart = async (text: string, options: SendLopuOptions = {}, 
  // Computing a continuation id is asynchronous; an account/source change
  // or Stop during that gap must not dispatch through a newly bound client.
  if (state.userId !== userId || generation !== accountGeneration || !client || (continuation && stoppedRequests.has(continuation.previousRequestId))) return {ok:false,error:'This continuation was cancelled before sending.',text:trimmed};
-	const settings = mergeSettingsPatch(options.settings || {});
+	const targetChat = chatId ? state.chats.find(chat => chat.id === chatId) : null;
+  const base = chatId && chatId !== state.activeChatId
+    ? reconcileLopuSettings(settingsFromChat(targetChat), state.models, state.defaults, knownVaultProviders()) : state.settings;
+  const settings = mergeSettingsPatch(options.settings || {}, base);
 	if (!continuation && !options.chatId && options.settings && Object.keys(options.settings).length && !sameLopuSettings(settings, state.settings)) {
 		persistSettings(userId, settings);
 		setState({ settings });
@@ -1192,7 +1283,10 @@ const sendLopuMessagePart = async (text: string, options: SendLopuOptions = {}, 
 	// null — a pin the server still holds (a refused update, a provider the
 	// vault no longer lists) must never route the turn behind the picker's back
 	const activeChat = chatId ? state.chats.find((chat) => chat.id === chatId) : null;
-	const statesProvider = !!settings.providerId || !!activeChat?.lopu || !!(options.settings && 'providerId' in options.settings);
+	// Unknown/older chats resolve their own saved AI choice on the server;
+  // never send an unrelated new-chat default over that choice.
+  const knowsChoice = !chatId || !!activeChat?.lopu;
+  const statesProvider = knowsChoice || !!(options.settings && 'providerId' in options.settings);
 	const body: LopuReplyBody = {
   management: settings.management || 'client',
   ...(!chatId ? { accessMode: lopuAccessMode(settings.accessMode) } : {}),
@@ -1200,9 +1294,9 @@ const sendLopuMessagePart = async (text: string, options: SendLopuOptions = {}, 
 		...(chatId ? { chatId } : {}),
 		text: trimmed,
 		requestId,
-		...(settings.model ? { model: settings.model } : {}),
-		...(settings.effort ? { effort: settings.effort } : {}),
-		...(settings.speed ? { speed: settings.speed } : {}),
+		...(settings.model && (knowsChoice || options.settings?.model) ? { model: settings.model } : {}),
+		...(settings.effort && (knowsChoice || options.settings?.effort) ? { effort: settings.effort } : {}),
+		...(settings.speed && (knowsChoice || options.settings?.speed) ? { speed: settings.speed } : {}),
 		...(statesProvider ? { providerId: settings.providerId ?? null } : {}),
 		...(options.context ? { context: options.context } : {}),
 		...(options.attachmentIds?.length ? { attachmentIds: options.attachmentIds } : {}),

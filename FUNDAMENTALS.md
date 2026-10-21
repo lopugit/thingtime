@@ -211,6 +211,21 @@ How (see `api/utils/things/things.ts`):
   anchor until no comments/replies/reactions/saves/attachment bytes can survive
   it.
 
+### Stable file identities and retained byte versions
+
+The protected `file` kind lives in `things` alongside its separately accounted
+`attachment` Things. `api/utils/files/files.ts` is the canonical writer: a
+revision-fenced transaction binds an owned durable `file` upload, updates the
+current metadata and storage delta, and appends a `file-content` revision to
+Timeline. Attachments retain immutable bytes; `targetId` and `parentId` identify
+the owning file. No version array or alternate history collection is created.
+The current attachment reference is bounded metadata in `file.crystal.content`.
+Trash retains every version and its storage charge. Direct generic deletion of
+file Things or deletion of their bound attachments is refused; retention/purge
+must eventually use the canonical external-object cleanup before refunding.
+Current access is owner-only on the home data plane. See
+[mobile file sync](docs/mobile-file-sync.md) for remaining sharing/UI/workers.
+
 ### Account storage is one exact, transactional ledger
 
 Timeline uses protected relational `timeline-event` Things in the owner's
