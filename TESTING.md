@@ -12837,3 +12837,21 @@ separate from deterministic discovery/lease tests.
 - [x] Missing priorities cannot hold a full eligible queue. Reserved/individual recovery IDs still win; a preference revision changed during selection cannot expand the old selection into a batch.
 - [x] Optional Electron disk-only upload-batch counters are emitted only after final scope/account/envelope validation. Native-verified members are not canonical commits; earlier receipts and overlapping acknowledged/unknown payload counts remain distinct. Failed/cancelled/malformed rows carry no counters or private values.
 - [ ] Preserve the installed Home job and measure actual batch member counts, confirmed-file/payload deltas and priority-file recovery after release. The source-proven starvation regression does not establish the previous live window's exact cause or prove useful throughput.
+
+
+## Folder metadata batches — 2026-10-21
+
+- [ ] Negotiate `api.file-sync-batches` 1.1.0 before the additive `folder-probe` / `folder-commit` phases; file-only 1.0 clients remain compatible. Check all six phases in the generated docs and actual built-server manifest smoke after the canonical build.
+- [ ] Preserve original folder operation IDs and immutable writes. A member parent requires its canonical receipt ID to equal its original operation ID and its current exact owned private path to match. Moved, trashed, missing or wrong-ID parents must block descendants; explicit existing-parent references use their actual IDs.
+- [ ] Run `node remix/scripts/test-file-sync-folder-batches.mjs` for real canonical Mongo transactions, quota/Timeline rollback after writes, unknown-commit receipt replay, dependency ordering and current parent checks. It requires installed `mongod` / `mongosh`, unused loopback 28168, and successful OS isolation preflight; it owns and removes a fresh disposable replica, reads no `.env` or real credentials, and makes no native/provider throughput claim.
+- [ ] Keep root waves serial and at most eight members. Failure after canonical writes aborts the whole current wave while earlier waves survive. Verify request row/deadline/cancellation bounds, exact selected ordinal responses and explicit six-unit folder metadata admission with no S3 charge.
+
+### Folder batch journal, recovery and whole pipeline — 2026-10-21
+
+- [x] Shared parser cross-language ASCII/Unicode/V1/existing-parent vectors, normalized collisions, bounded metadata, exact ordered native subsets and immutable canonical parent IDs.
+- [x] Actual 512-operation journal reserves 117 representative folders topologically, then releases 395 small files in bounded batches; restart preserves original reservations and contiguous source proof.
+- [x] Parent A source failure, receipt-missing/never-dispatched dependent release, legitimate indexed B, unchanged child source with a new target intent, descendant cascade and restart. Unknown/dispatched children cannot be released or rekeyed; stale source requires a legitimate new observation.
+- [x] Actual shared consumer survives restart after durable release and loss of the folder capability, using scalar fallback and fresh parent/source checks before canonical recovery.
+- [x] Receipt replay precedes deleted-source IO; configuration drift, expired validation, stale parent IDs and source failures cannot fabricate canonical confirmations. Newly prepared folders cannot fall through the batch-probe race into scalar execution while the negotiated batch adapter is ready.
+- [x] **Original numeric speed gate FAILED (46.102s→34.513s; repeat44.280s→32.750s, conservative38.374s). Parent explicitly superseded this local release threshold for a partial performance release; installed speed remains OPEN.** `node remix/scripts/test-file-sync-folder-batches.mjs --pipeline`: exact 84c3 shared baseline versus current real planner/journal/consumer and canonical Mongo folder/file CAS, Timeline and quota; same synthetic native/provider schedule, first file before full index, full elapsed and conservative native-time sensitivity. This is not installed speed evidence.
+- [ ] After exact server feature rollout and verified signed installation, preserve the same Home job and measure canonical files/bytes plus closed batch counts over one bounded window; export one new version and independently compare bytes. Do not reset/regrant/retry repeatedly.

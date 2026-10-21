@@ -12,6 +12,7 @@ struct Configuration: Decodable {
     let directory: URL
     let photoFixture: Bool?
     let batchFixture: Bool?
+    let commanderIndexer: URL?
 }
 /// Deterministic files stand in for PhotoKit only in this non-shipping fixture.
 struct FixturePhotoResources: PhotoResourceProvider {
@@ -89,7 +90,7 @@ final class StreamWriter: @unchecked Sendable {
             verify: { owner, device in identityChecks += 1; try await api.verifyFileSyncIdentity(ownerID: owner, deviceID: device) },
             choose: { selected }, approve: { _ in true },
             chooseSource: config.photoFixture == true ? { .photos } : nil,
-            photos: PhotoLibraryReader(provider: FixturePhotoResources(directory: selected)), approveTrash: { _ in true }, approveRestore: { _, _ in true }, conditions: { .init(network: "wifi", charging: true) })
+            photos: PhotoLibraryReader(provider: FixturePhotoResources(directory: selected)), inventories: MobileFolderInventory(directory: config.directory.appendingPathComponent("inventory"), commanderIndexer: config.commanderIndexer), approveTrash: { _ in true }, approveRestore: { _, _ in true }, conditions: { .init(network: "wifi", charging: true) })
         if config.batchFixture == true {
             guard let input = try NodeFolderStreamInput.header(.standardInput, maximumBytes: 600_000) else { throw MobileFolderStore.Failure.invalid }
             let request = try JSONDecoder().decode(JSONValue.self, from: input)
@@ -104,10 +105,10 @@ final class StreamWriter: @unchecked Sendable {
             } catch { response = ["id": id, "ok": false, "error": ["code": "fixture-refused", "message": "Fixture batch refused"]] }
             duplex.finish(try JSONSerialization.data(withJSONObject: response)); return
         }
-        while let input = try NodeFolderStreamInput.header(.standardInput) {
+        while let input = try NodeFolderStreamInput.header(.standardInput, maximumBytes: 524_288) {
             let response: JSONValue
             do {
-                guard input.count <= 131_072 else { throw MobileFolderStore.Failure.limit }
+                guard input.count <= 524_288 else { throw MobileFolderStore.Failure.limit }
                 let request = try JSONDecoder().decode(JSONValue.self, from: input)
                 let stream: (@Sendable (Data) throws -> Void)?
                 if case .object(let fields) = request, fields["action"] == .string("read-range") {

@@ -19,7 +19,7 @@ export { syncScopeKey } from './reconcile';
 export const openSyncJournal = async (factory: IDBFactory = indexedDB, name = 'thingtime-file-sync-v1', keyRange?: typeof IDBKeyRange) => {
 	const db = await new Promise<IDBDatabase>((resolve, reject) => {
 		// Older clients must not silently ignore active relational batch claims.
-		const request = factory.open(name, 14);
+		const request = factory.open(name, 15);
 		request.onupgradeneeded = () => {
 			for (const store of ['runs', 'checkpoints']) if (!request.result.objectStoreNames.contains(store)) request.result.createObjectStore(store);
 			upgradeJournalRetention(request.result);

@@ -22,7 +22,8 @@ function fixture() {
 		effects = 0,
 		charged = 0,
 		failCreate = false,
-		failAfterInsert = false;
+		failAfterInsert = false,
+		failNth = 0;
 	const collection = {
 		async findOne(filter: any) {
 			return docs.get(filter.shareId) ?? null;
@@ -81,7 +82,7 @@ function fixture() {
 			};
 			docs.set(doc.shareId, doc);
 			charged++;
-			if (failAfterInsert) throw Error('History unavailable');
+			if (failAfterInsert || creates === failNth) throw Error('History unavailable');
 			const event = thingMutationEvent(null, doc, hooks.timelineCapture)!;
 			events.set(event.id, event);
 			doc.timelineHeadId = event.id;
@@ -94,6 +95,9 @@ function fixture() {
 	const input = () => ({ kind: 'folder' as const, id: randomUUID(), operationId: randomUUID(), name: 'Documents', folderId: 'root' });
 	return {
 		service,
+		failNth: (n: number) => {
+			failNth = n;
+		},
 		input,
 		docs: () => docs,
 		events: () => events,
@@ -205,4 +209,60 @@ test('folder create is closed and custom data planes never touch home storage', 
 	assert.equal((await service.create('owner', f.input())).status, 409);
 	const denied = await service.read('owner', 'root');
 	assert.equal(denied.ok === false && denied.status, 409);
+});
+
+test('folder waves share namespace reads and commit canonical receipts atomically', async () => {
+	const f = fixture();
+	const inputs = Array.from({ length: 8 }, (_, i) => ({ ...f.input(), name: 'Folder' + i }));
+	const result: any = await f.service.createWave('owner', inputs);
+	assert.equal(result.ok, true);
+	assert.ok(result.results.every((r: any) => r.ok));
+	assert.equal(f.counts().charged, 8);
+	assert.equal(f.counts().effects, 8);
+	const receipts: any = await f.service.readReceipts(
+		'owner',
+		inputs.map((r) => ({ id: r.id, operationId: r.operationId }))
+	);
+	assert.equal(receipts.ok, true);
+	assert.deepEqual(
+		receipts.receipts,
+		result.results.map((r: any) => r.folder)
+	);
+	const replay: any = await f.service.createWave('owner', inputs);
+	assert.ok(replay.results.every((r: any) => r.replayed));
+	assert.equal(f.counts().charged, 8);
+});
+test('a member failure after writes rolls back whole wave and afterCommit effects', async () => {
+	const f = fixture();
+	f.failNth(2);
+	const inputs = [
+		{ ...f.input(), name: 'First' },
+		{ ...f.input(), name: 'Second' }
+	];
+	const result: any = await f.service.createWave('owner', inputs);
+	assert.equal(result.ok, false);
+	for (const input of inputs) assert.equal(f.docs().has(input.id), false);
+	assert.equal(f.events().size, 0);
+	assert.equal(f.counts().charged, 0);
+	assert.equal(f.counts().effects, 0);
+});
+test('preflight collision leaves independent wave member eligible, while row limit never truncates success', async () => {
+	const f = fixture();
+	const before = { ...f.input(), name: 'Occupied' };
+	await f.service.create('owner', before);
+	const result: any = await f.service.createWave('owner', [
+		{ ...f.input(), name: 'Occupied' },
+		{ ...f.input(), name: 'Independent' }
+	]);
+	assert.equal(result.ok, true);
+	assert.equal(result.results[0].ok, false);
+	assert.equal(result.results[1].ok, true);
+	const input = { ...f.input(), name: 'NotPublished' };
+	const limited: any = await f.service.createWave('owner', [input], {
+		row: () => {
+			throw Error('budget');
+		}
+	});
+	assert.equal(limited.ok, false);
+	assert.equal(f.docs().has(input.id), false);
 });

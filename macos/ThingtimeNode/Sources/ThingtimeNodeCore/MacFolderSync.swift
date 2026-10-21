@@ -5,8 +5,8 @@ import Foundation
 /// commands. The desktop host must also verify its active browser account.
 @MainActor
 public final class MacFolderSync {
-    public static let version = "1.13.0"
-    private static let supportedActions: Set<String> = ["upload-batch", "context", "conditions", "list", "choose", "remove", "scan", "scan-stream", "scan-stream-finish", "scan-changes", "scan-capture", "scan-status", "scan-cancel", "scan-skips", "scan-page", "scan-discard", "inspect", "read", "read-range", "stage-begin", "stage-append", "stage-range", "stage-finish", "write-approve", "write-check", "publication-lookup", "publish", "trash", "trash-lookup", "trash-expected", "trash-inspect", "trash-restore", "trash-restore-reviewed", "trash-list"]
+    public static let version = "1.14.0"
+    private static let supportedActions: Set<String> = ["validate-folder-batch", "upload-batch", "context", "conditions", "list", "choose", "remove", "scan", "scan-stream", "scan-stream-finish", "scan-changes", "scan-capture", "scan-status", "scan-cancel", "scan-skips", "scan-page", "scan-discard", "inspect", "read", "read-range", "stage-begin", "stage-append", "stage-range", "stage-finish", "write-approve", "write-check", "publication-lookup", "publish", "trash", "trash-lookup", "trash-expected", "trash-inspect", "trash-restore", "trash-restore-reviewed", "trash-list"]
     public enum SourceSelection { case folder(URL), photos }
     public struct Conditions: Codable, Sendable {
         public let network: String
@@ -31,6 +31,7 @@ public final class MacFolderSync {
         let captureId: String?; let capture: MobileFolderInventory.Capture?; let inventoryDeviceId: String?
         let trash: MobileSyncTrash.Request?; let restore: MobileSyncTrash.Restore?; let cursor: String?
         let batch: JSONValue?
+        let remainingMs: Int?
     }
     private let origin: URL
     private let store: MobileFolderStore
@@ -362,7 +363,7 @@ public final class MacFolderSync {
 
     public func handle(_ payload: JSONValue, stream: (@Sendable (Data) throws -> Void)? = nil, receive: (@Sendable (Int) throws -> Data)? = nil, batchCallback: (@Sendable (JSONValue, TimeInterval) async throws -> JSONValue)? = nil) async throws -> JSONValue {
         let encoded = try JSONEncoder().encode(payload)
-        let isBatch = { if case .object(let fields) = payload { return fields["action"] == .string("upload-batch") }; return false }()
+        let isBatch = { if case .object(let fields) = payload { return [JSONValue.string("upload-batch"), .string("validate-folder-batch")].contains(fields["action"] ?? .null) }; return false }()
         guard encoded.count <= (isBatch ? 600_000 : 131_072) else { throw MobileFolderStore.Failure.limit }
         let r = try JSONDecoder().decode(Request.self, from: encoded)
         guard UUID(uuidString: r.requestId) != nil, !r.deviceId.isEmpty, r.deviceId.utf8.count <= 512,
@@ -399,6 +400,9 @@ public final class MacFolderSync {
                 guard r.action == "scan-changes", let wait = r.waitMilliseconds, (0...25_000).contains(wait) else { throw MobileFolderStore.Failure.invalid }
             }
         }
+        if r.action == "validate-folder-batch" {
+            guard encoded.count <= 524_288, let remaining = r.remainingMs, (1...180_000).contains(remaining) else { throw MobileFolderStore.Failure.invalid }
+        } else if r.remainingMs != nil { throw MobileFolderStore.Failure.invalid }
         let owner = try FileSyncOwnerScope(ownerId: r.ownerId, url: origin)
         if r.action == "suspend" {
             if let active, active.id == r.requestId, active.owner == r.ownerId, active.device == r.deviceId { suspendRequest() }
@@ -424,7 +428,7 @@ public final class MacFolderSync {
         if waiting { streamWaiter = (r.requestId, r.ownerId, r.deviceId, task) }
         else { active = (r.requestId, r.ownerId, r.deviceId, task) }
         let timeout = Task {
-            try await Task.sleep(for: .seconds(isBatch ? 180 : 270))
+            try await Task.sleep(for: .milliseconds(r.action == "validate-folder-batch" ? (r.remainingMs ?? 0) : (isBatch ? 180_000 : 270_000)))
             if waiting { if streamWaiter?.id == r.requestId { streamWaiter?.task.cancel(); streamJob?.wake.signal() } }
             else if active?.id == r.requestId { suspendRequest() }
         }
@@ -491,6 +495,7 @@ public final class MacFolderSync {
         if r.action == "context" {
             var capabilities: [String: JSONValue] = ["fileAccessVersion": .string(Self.version), "fileStagingVersion": .string("1.1.0"), "filePublicationVersion": .string("1.2.0")]
             capabilities["fileUploadBatchVersion"] = .string("1.0.0")
+            capabilities["fileFolderBatchVersion"] = .string("1.0.0")
             if trash != nil, approveTrash != nil { capabilities["fileTrashVersion"] = .string(approveRestore == nil ? "1.1.1" : "1.2.1") }
             result["capabilities"] = .object(capabilities)
             result["conditions"] = try value(conditions())
@@ -529,7 +534,42 @@ public final class MacFolderSync {
                     }
                     throw error
                 }
-                if r.action == "upload-batch" {
+                if r.action == "validate-folder-batch" {
+                    guard let raw = r.batch, let remaining = r.remainingMs, grant.sourceKind == nil else { throw MobileFolderStore.Failure.invalid }
+                    let batch = try MacFolderBatchDescriptor(raw)
+                    guard batch.origin == r.origin, batch.ownerId == r.ownerId, batch.deviceId == r.deviceId,
+                          batch.localRootId == root else { throw MobileFolderStore.Failure.invalid }
+                    let bookmark = grant.bookmark
+                    func current() throws {
+                        try Task.checkCancellation()
+                        let current = try store.grant(owner, id: root), status = conditions()
+                        guard ProcessInfo.processInfo.systemUptime - started < Double(remaining) / 1000,
+                              current.bookmark == bookmark, current.sourceKind == nil,
+                              batch.network != "wifi" || status.network == "wifi",
+                              batch.network != "unmetered" || ["wifi", "ethernet"].contains(status.network),
+                              !batch.chargingOnly || status.charging == true else { throw MobileFolderStore.Failure.changed }
+                        try MobileFolderReader.checkAccess(bookmark: bookmark)
+                    }
+                    var rows: [JSONValue] = []
+                    for ordinal in batch.ordinals {
+                        try current()
+                        let entry = batch.members[ordinal].source
+                        let valid = try await worker { () throws -> Bool in
+                            do { try MobileFolderBatchValidator.check(bookmark: bookmark, expected: entry); return true }
+                            catch is CancellationError { throw CancellationError() }
+                            catch MobileFolderStore.Failure.changed { return false }
+                            catch MobileFolderStore.Failure.unavailable { return false }
+                            catch MobileFolderStore.Failure.invalid { return false }
+                        }
+                        try current()
+                        var row: [String: JSONValue] = ["ordinal": .number(Double(ordinal)), "status": .string(valid ? "validated" : "failed")]
+                        if !valid { row["code"] = .string("source-changed"); row["retryable"] = .bool(false) }
+                        rows.append(.object(row))
+                    }
+                    try current(); inspectedGrant = grant
+                    result["validatedFolderBatch"] = .object(["ok": .bool(true), "version": .number(1), "batchId": .string(batch.batchId), "digest": .string(batch.digest), "results": .array(rows)])
+                }
+                else if r.action == "upload-batch" {
                     guard let raw = r.batch, let batchCallback, grant.sourceKind == nil else { throw MobileFolderStore.Failure.invalid }
                     let batch = try MacUploadBatchDescriptor(raw)
                     guard batch.origin == r.origin, batch.ownerId == r.ownerId, batch.deviceId == r.deviceId,
@@ -744,6 +784,15 @@ public final class MacFolderSync {
         if let exclusions = r.excludedPaths { result["excludedPaths"] = try value(exclusions) }
         else if r.capturePolicy == "backup-supported" { result["excludedPaths"] = .array([]) }
         try await authorized(r)
+        if r.action == "validate-folder-batch" {
+            guard let remaining = r.remainingMs, ProcessInfo.processInfo.systemUptime - started < Double(remaining) / 1000,
+                  let raw = r.batch else { throw MobileFolderStore.Failure.changed }
+            let batch = try MacFolderBatchDescriptor(raw), status = conditions()
+            guard batch.network != "wifi" || status.network == "wifi",
+                  batch.network != "unmetered" || ["wifi", "ethernet"].contains(status.network),
+                  !batch.chargingOnly || status.charging == true else { throw MobileFolderStore.Failure.changed }
+        }
+        if r.action == "validate-folder-batch", let inspectedGrant { try MobileFolderReader.checkAccess(bookmark: inspectedGrant.bookmark) }
         if let inspectedGrant {
             let current = try store.grant(owner, id: inspectedGrant.id)
             guard current.bookmark == inspectedGrant.bookmark, current.sourceKind == nil else { throw MobileFolderStore.Failure.changed }
@@ -760,7 +809,7 @@ public final class MacFolderSync {
         })
         let response = JSONValue.object(result)
         // Never send a partial inventory or exceed the existing XPC frame budget.
-        guard try JSONEncoder().encode(response).count <= 900_000 else { throw MobileFolderStore.Failure.limit }
+        guard try JSONEncoder().encode(response).count <= (r.action == "validate-folder-batch" ? 524_288 : 900_000) else { throw MobileFolderStore.Failure.limit }
         return response
     }
 }

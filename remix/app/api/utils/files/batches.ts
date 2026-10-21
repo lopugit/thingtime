@@ -1,3 +1,4 @@
+import { folderBatches } from './folderBatches';
 import { createHash } from 'node:crypto';
 import {
 	parseUploadBatchDescriptor,
@@ -11,9 +12,6 @@ import {
 } from '../../../fileSync/uploadBatch';
 import { equalContentFingerprints, validContentFingerprint } from '../../../fileSync/contentFingerprint';
 import { cloudWriteCommit } from '../../../fileSync/cloudWrite';
-import { readOwnedFileSyncConfiguration } from '../../../fileSync/configuredPlan';
-import { getHomeThingsCollection, getSessionsCollection, withHomeMongoSnapshot } from '../mongodb/collections';
-import { isCustomMongoEndpointActive } from '../mongodb/endpoint';
 import {
 	attachmentIdForRequest,
 	startAttachmentUpload,
@@ -24,15 +22,12 @@ import {
 import { attachmentStore } from '../attachments/attachmentStore';
 import { parseBatchObserveRequest, observeBatchPaths } from './batchObserve';
 import { cloudFiles } from './files';
-import { readCloudInventoryRoot } from './inventory';
 import { chargeBatch, admitBatchProvider } from './batchAdmission';
 
+import { authorizeBatch, BatchAuthorityChanged } from './batchAuthority';
+
 type MutationBatchRequest = Exclude<UploadBatchRequest, UploadBatchObserveRequest>;
-export class BatchAuthorityChanged extends Error {
-	constructor() {
-		super('Batch authority changed');
-	}
-}
+export { authorizeBatch, BatchAuthorityChanged } from './batchAuthority';
 class BatchObservationConflict extends Error {}
 const authorityStatus = (error: unknown) => (error instanceof BatchAuthorityChanged ? 403 : 503);
 const obj = (v: any): v is Record<string, any> => !!v && typeof v === 'object' && !Array.isArray(v);
@@ -77,61 +72,10 @@ export function parseBatchRequest(value: any): MutationBatchRequest {
 	return { ...value, descriptor } as MutationBatchRequest;
 }
 
-/** Full authority is read afresh for each phase and each bounded dispatch
- * wave. Neither a digest nor a prior prepared result is a bearer permit. */
-export async function authorizeBatch(owner: string, origin: string, d: Pick<UploadBatchDescriptor, 'scope' | 'configuration'>, signal: AbortSignal) {
-	signal.throwIfAborted();
-	if (isCustomMongoEndpointActive() || d.scope.ownerId !== owner || d.scope.origin !== origin) throw new BatchAuthorityChanged();
-	const things = await getHomeThingsCollection();
-	const doc = await things.findOne({ shareId: d.configuration.id, ownerId: owner }, { maxTimeMS: 5000, signal });
-	if (!doc || doc.sandbox != null || doc.sandboxSpace != null) throw new BatchAuthorityChanged();
-	let saved: ReturnType<typeof readOwnedFileSyncConfiguration>;
-	try {
-		saved = readOwnedFileSyncConfiguration({ ...doc, id: doc.shareId, author: { id: doc.ownerId }, updatedAt: doc.updatedAt?.toISOString() }, owner);
-	} catch {
-		throw new BatchAuthorityChanged();
-	}
-	if (saved.updatedAt !== d.configuration.updatedAt || JSON.stringify(saved.configuration) !== JSON.stringify(d.configuration.configuration))
-		throw new BatchAuthorityChanged();
-	const device = await things.findOne(
-		{ shareId: d.scope.deviceId, ownerId: owner, thingtime: 'device' },
-		{ projection: { _id: 1 }, maxTimeMS: 5000, signal }
-	);
-	const sessions = await getSessionsCollection();
-	const paired = await sessions.findOne(
-		{
-			purpose: 'device',
-			userId: owner,
-			'meta.deviceId': d.scope.deviceId,
-			revokedAt: null,
-			$or: [{ expiresAt: null }, { expiresAt: { $gt: new Date() } }]
-		},
-		{ projection: { _id: 1 }, maxTimeMS: 5000, signal }
-	);
-	if (!device || !paired) throw new BatchAuthorityChanged();
-	try {
-		await withHomeMongoSnapshot((session) =>
-			readCloudInventoryRoot(
-				things,
-				session,
-				owner,
-				saved.configuration.remoteFolderId,
-				() => {
-					signal.throwIfAborted();
-					return 5000;
-				},
-				signal
-			)
-		);
-	} catch (error: any) {
-		if (error?.status === 404 || error?.status === 409) throw new BatchAuthorityChanged();
-		throw error;
-	}
-}
-
 export function createFileBatchService(
 	overrides: Partial<{
 		authorize: typeof authorizeBatch;
+		folder: typeof folderBatches;
 		observe: typeof observeBatchPaths;
 		charge: typeof chargeBatch;
 		admit: typeof admitBatchProvider;
@@ -145,6 +89,7 @@ export function createFileBatchService(
 ) {
 	const deps = {
 		authorize: authorizeBatch,
+		folder: folderBatches,
 		observe: observeBatchPaths,
 		charge: chargeBatch,
 		admit: admitBatchProvider,
@@ -157,6 +102,7 @@ export function createFileBatchService(
 		...overrides
 	};
 	return async (owner: string, origin: string, raw: unknown, signal: AbortSignal) => {
+		if ((raw as any)?.phase === 'folder-probe' || (raw as any)?.phase === 'folder-commit') return deps.folder(owner, origin, raw, signal);
 		if ((raw as any)?.phase === 'observe') {
 			let observation: ReturnType<typeof parseBatchObserveRequest>;
 			try {

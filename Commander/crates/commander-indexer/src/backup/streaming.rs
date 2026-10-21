@@ -163,7 +163,11 @@ impl Policy {
     // Prune private-cache/excluded notifications before any indexed-row query.
     // Otherwise a WAL write under an excluded subtree can still repeatedly
     // query a multi-million-row capture even though it cannot emit an entry.
+    #[cfg(test)]
     fn pruned_event(&self, root: &File, path: &str) -> bool {
+        self.pruned_event_kind(root, path, None)
+    }
+    fn pruned_event_kind(&self, root: &File, path: &str, directory: Option<bool>) -> bool {
         let canonical = key(path);
         if self
             .exclusions
@@ -177,10 +181,12 @@ impl Policy {
                 return true;
             }
         }
-        let kind = open_path(root, path)
-            .ok()
-            .and_then(|file| file.metadata().ok())
-            .map(|m| m.is_dir());
+        let kind = directory.or_else(|| {
+            open_path(root, path)
+                .ok()
+                .and_then(|file| file.metadata().ok())
+                .map(|m| m.is_dir())
+        });
         // Missing paths still need coverage-gap handling. Do not guess that a
         // removed file matched a directory-only ignore rule.
         kind.is_some_and(|is_dir| self.ignores.ignores_entry(path, is_dir))
@@ -286,6 +292,13 @@ pub(super) fn monitor(
             event.kind,
             notify::EventKind::Modify(notify::event::ModifyKind::Data(_))
         );
+        let directory = match event.kind {
+            notify::EventKind::Create(notify::event::CreateKind::Folder)
+            | notify::EventKind::Remove(notify::event::RemoveKind::Folder) => Some(true),
+            notify::EventKind::Create(notify::event::CreateKind::File)
+            | notify::EventKind::Remove(notify::event::RemoveKind::File) => Some(false),
+            _ => None,
+        };
         for changed in event.paths {
             let relative = match changed
                 .strip_prefix(&changes.root)
@@ -295,16 +308,19 @@ pub(super) fn monitor(
                 Some(s) => s,
                 None => continue,
             };
-            if !relative.is_empty() && policy.pruned_event(&root, relative) {
+            let pruned =
+                !relative.is_empty() && policy.pruned_event_kind(&root, relative, directory);
+            if pruned && !namespace {
                 continue;
             }
-            if !relative.is_empty() {
+            if !relative.is_empty() && !pruned {
                 discover(
                     &state, &root, relative, &governor, &cancelled, &sender, changes, &policy,
                 );
             }
-            // Include indexed descendants of an affected parent. This handles
-            // namespace aliases/renames without discovering any unknown paths.
+            // Namespace changes also change the immediate directory's full stamp.
+            // A pruned child may refresh only that indexed parent: never discover
+            // the excluded subtree or revalidate its unrelated siblings.
             let parent = relative.rsplit_once('/').map(|(p, _)| p).unwrap_or("");
             let prefix = format!("{relative}/");
             let upper = format!("{prefix}\u{10ffff}");
@@ -313,8 +329,10 @@ pub(super) fn monitor(
                 let rows: Vec<(i64, String, String)> = {
                     let state = state.lock().unwrap();
                     let result = (|| -> Result<_, rusqlite::Error> {
-                        let sql = if namespace {
-                            "SELECT seq,path,version FROM observed WHERE seq>?1 AND (path=?2 OR parent=?4 OR (path>=?5 AND path<?6)) ORDER BY seq LIMIT 64"
+                        let sql = if pruned {
+                            "SELECT seq,path,version FROM observed WHERE seq>?1 AND path=?4 AND ?2 IS NOT NULL AND ?3=1 AND ?5 IS NOT NULL AND ?6 IS NOT NULL ORDER BY seq LIMIT 64"
+                        } else if namespace {
+                            "SELECT seq,path,version FROM observed WHERE seq>?1 AND (path=?2 OR path=?4 OR parent=?4 OR (path>=?5 AND path<?6)) ORDER BY seq LIMIT 64"
                         } else {
                             "SELECT seq,path,version FROM observed WHERE seq>?1 AND path=?2 AND ?3=0 AND ?4 IS NOT NULL AND ?5 IS NOT NULL AND ?6 IS NOT NULL"
                         };
@@ -585,6 +603,253 @@ mod tests {
             Arc::new(ResourceGovernor::new(&limits).unwrap()),
             Arc::new(AtomicBool::new(false)),
         )
+    }
+    // Inject exactly one notification; no operating-system event timing is
+    // involved. The existing finite monitor drain bounds each invocation.
+    fn injected(
+        dir: &TempDir,
+        root: Arc<File>,
+        governor: Arc<ResourceGovernor>,
+        cancelled: Arc<AtomicBool>,
+        state: Arc<Mutex<State>>,
+        policy: Arc<Policy>,
+        kind: notify::EventKind,
+        paths: &[&str],
+    ) -> Vec<Event> {
+        let (input, receiver) = mpsc::sync_channel(1);
+        let changes = Changes {
+            watcher: Mutex::new(notify::recommended_watcher(|_| {}).unwrap()),
+            receiver: Mutex::new(receiver),
+            overflow: Arc::new(AtomicBool::new(false)),
+            root: dir.path().canonicalize().unwrap(),
+        };
+        let mut event = notify::Event::new(kind);
+        for path in paths {
+            event.paths.push(changes.root.join(path));
+        }
+        input.send(Ok(event)).unwrap();
+        let (output, receiver) = mpsc::sync_channel(512);
+        monitor(
+            state,
+            root,
+            governor,
+            cancelled,
+            Arc::new(AtomicBool::new(true)),
+            EventSender {
+                inner: output,
+                sequence: Arc::new(AtomicU64::new(0)),
+            },
+            &changes,
+            None,
+            policy,
+        );
+        receiver.try_iter().collect()
+    }
+    fn remember_paths(
+        state: &mut State,
+        root: &File,
+        governor: &ResourceGovernor,
+        cancelled: &AtomicBool,
+        paths: &[&str],
+    ) {
+        for path in paths {
+            state.validate(root, path, governor, cancelled).unwrap();
+            state
+                .remember(&observe(root, path, governor, cancelled).unwrap())
+                .unwrap();
+        }
+    }
+    #[test]
+    fn namespace_refreshes_immediate_parent_and_pages_more_than_64_rows() {
+        let (dir, root, governor, cancelled) = fixture();
+        fs::create_dir_all(dir.path().join("ancestor/parent")).unwrap();
+        let mut names = vec!["ancestor".to_string(), "ancestor/parent".to_string()];
+        for n in 0..130 {
+            let path = format!("ancestor/parent/file{n:03}");
+            fs::write(dir.path().join(&path), "old").unwrap();
+            names.push(path);
+        }
+        let mut state = State::new().unwrap();
+        remember_paths(
+            &mut state,
+            &root,
+            &governor,
+            &cancelled,
+            &names.iter().map(String::as_str).collect::<Vec<_>>(),
+        );
+        // Every sibling now differs, exercising all three 64-row pages.
+        for path in names.iter().skip(2) {
+            fs::write(dir.path().join(path), "new payload").unwrap();
+        }
+        fs::write(dir.path().join("ancestor/parent/added"), "new").unwrap();
+        let events = injected(
+            &dir,
+            root,
+            governor,
+            cancelled,
+            Arc::new(Mutex::new(state)),
+            test_policy(),
+            notify::EventKind::Create(notify::event::CreateKind::File),
+            &["ancestor/parent/added"],
+        );
+        let entries: Vec<_> = events
+            .iter()
+            .filter_map(|e| match e {
+                Event::Entry { entry } => Some(entry.path.as_str()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(entries.len(), 132); // New child + immediate parent + 130 siblings.
+        assert!(entries.contains(&"ancestor/parent"));
+        assert!(!entries.contains(&"ancestor"));
+    }
+    #[test]
+    fn pruned_namespace_refreshes_only_visible_parent_on_create_and_remove() {
+        for excluded in [false, true] {
+            let (dir, root, governor, cancelled) = fixture();
+            fs::create_dir_all(dir.path().join("visible")).unwrap();
+            fs::write(dir.path().join("visible/sibling"), "old").unwrap();
+            let mut state = State::new().unwrap();
+            remember_paths(
+                &mut state,
+                &root,
+                &governor,
+                &cancelled,
+                &["visible", "visible/sibling"],
+            );
+            let state = Arc::new(Mutex::new(state));
+            let policy = Arc::new(Policy {
+                ignores: Arc::new(BackupIgnoreRules::new(if excluded {
+                    ""
+                } else {
+                    "node_modules/"
+                })),
+                exclusions: if excluded {
+                    vec![key("visible/node_modules"), key("node_modules")]
+                } else {
+                    vec![]
+                },
+                invalid: test_policy().invalid.clone(),
+            });
+            fs::write(dir.path().join("visible/sibling"), "changed but unrelated").unwrap();
+            fs::create_dir_all(dir.path().join("visible/node_modules/deep")).unwrap();
+            fs::write(
+                dir.path().join("visible/node_modules/deep/private"),
+                "never indexed",
+            )
+            .unwrap();
+            let mut versions = Vec::new();
+            for remove in [false, true] {
+                if remove {
+                    fs::remove_dir_all(dir.path().join("visible/node_modules")).unwrap();
+                }
+                let kind = if remove {
+                    notify::EventKind::Remove(notify::event::RemoveKind::Folder)
+                } else {
+                    notify::EventKind::Create(notify::event::CreateKind::Folder)
+                };
+                let events = injected(
+                    &dir,
+                    root.clone(),
+                    governor.clone(),
+                    cancelled.clone(),
+                    state.clone(),
+                    policy.clone(),
+                    kind,
+                    &["visible/node_modules"],
+                );
+                assert_eq!(events.len(), 1);
+                match &events[0] {
+                    Event::Entry { entry } => {
+                        assert_eq!(entry.path, "visible");
+                        versions.push(entry.version.clone());
+                    }
+                    _ => panic!("parent must be a fresh entry"),
+                }
+            }
+            assert_ne!(versions[0], versions[1]);
+            assert_eq!(
+                state
+                    .lock()
+                    .unwrap()
+                    .db
+                    .query_row("SELECT count(*) FROM observed", [], |r| r.get::<_, i64>(0))
+                    .unwrap(),
+                2
+            );
+            // Root has no SyncEntry, even for an excluded root child.
+            fs::create_dir(dir.path().join("node_modules")).unwrap();
+            let events = injected(
+                &dir,
+                root,
+                governor,
+                cancelled,
+                state,
+                policy,
+                notify::EventKind::Create(notify::event::CreateKind::Folder),
+                &["node_modules"],
+            );
+            assert!(events.is_empty());
+        }
+    }
+    #[test]
+    fn rename_refreshes_both_parents_and_missing_or_symlink_parent_is_a_gap() {
+        let (dir, root, governor, cancelled) = fixture();
+        for path in ["left", "right"] {
+            fs::create_dir(dir.path().join(path)).unwrap();
+        }
+        fs::write(dir.path().join("left/file"), "x").unwrap();
+        let mut state = State::new().unwrap();
+        remember_paths(
+            &mut state,
+            &root,
+            &governor,
+            &cancelled,
+            &["left", "right", "left/file"],
+        );
+        let state = Arc::new(Mutex::new(state));
+        fs::rename(dir.path().join("left/file"), dir.path().join("right/file")).unwrap();
+        let events = injected(
+            &dir,
+            root.clone(),
+            governor.clone(),
+            cancelled.clone(),
+            state.clone(),
+            test_policy(),
+            notify::EventKind::Modify(notify::event::ModifyKind::Name(
+                notify::event::RenameMode::Both,
+            )),
+            &["left/file", "right/file"],
+        );
+        for path in ["left", "right"] {
+            assert!(events
+                .iter()
+                .any(|e| matches!(e, Event::Entry {entry} if entry.path == path)));
+        }
+        fs::remove_dir(dir.path().join("left")).unwrap();
+        for symlink in [false, true] {
+            if symlink {
+                std::os::unix::fs::symlink(dir.path().join("right"), dir.path().join("left"))
+                    .unwrap();
+            }
+            let events = injected(
+                &dir,
+                root.clone(),
+                governor.clone(),
+                cancelled.clone(),
+                state.clone(),
+                test_policy(),
+                notify::EventKind::Remove(notify::event::RemoveKind::File),
+                &["left/file"],
+            );
+            assert!(!events
+                .iter()
+                .any(|e| matches!(e, Event::Entry {entry} if entry.path == "left")));
+            assert!(
+                !events.is_empty(),
+                "unavailable parent retains a coverage gap"
+            );
+        }
     }
     #[test]
     fn private_cache_events_are_pruned_before_index_queries() {

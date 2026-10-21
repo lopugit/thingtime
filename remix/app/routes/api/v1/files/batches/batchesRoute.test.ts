@@ -64,10 +64,10 @@ test('batch route and all three semantic phases belong to the negotiated registr
 	assert.deepEqual(doc.methods, ['POST']);
 	assert.ok(apiV1RouteKeys.includes('v1/files/batches'));
 	assert.ok(apiV1DocsRouteKeys.includes('v1/files/batches-docs'));
-	for (const phase of ['observe', 'prepare', 'verify', 'commit']) assert.ok(doc.steps.some((step) => step.includes(`phase=${phase}`)));
-	assert.equal(createApiCapabilitiesManifest().features['api.file-sync-batches'], '1.0.0');
+	for (const phase of ['observe', 'prepare', 'verify', 'commit','folder-probe','folder-commit']) assert.ok(doc.steps.some((step) => step.includes(`phase=${phase}`)));
+	assert.equal(createApiCapabilitiesManifest().features['api.file-sync-batches'], '1.1.0');
 	const manifest = thingtimeCapabilityManifest('https://sync.test');
-	assert.equal(manifest.features['api.file-sync-batches'].version, '1.0.0');
+	assert.equal(manifest.features['api.file-sync-batches'].version, '1.1.0');
 	assert.ok(
 		manifest.operations.some((op) => op.feature === 'api.file-sync-batches' && op.path === '/api/v1/files/batches' && op.methods.includes('POST'))
 	);

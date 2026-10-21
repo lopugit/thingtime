@@ -1,3 +1,5 @@
+import { executeCloudFolderBatch, folderBatchFailure } from './cloudFolderBatch.client';
+import { eligibleFolderBatchEntry } from './folderBatch';
 import type { PriorityReadiness } from './priorityReadiness';
 import { executeCloudUploadBatch, uploadBatchFailure } from './cloudUploadBatch.client';
 import { eligibleUploadBatchEntry, parseUploadBatchObservations, UPLOAD_BATCH_FILES, UPLOAD_BATCH_METADATA_BYTES } from './uploadBatch';
@@ -92,6 +94,9 @@ export async function streamOneWayForegroundSync(
 	const ignore = createSyncIgnorePolicy(configuration.ignoreRules, configuration.excludedPaths);
 	const report = () => publishProgress({ stage: 'transferring', confirmed: state.confirmed, total: state.operations, indexed, ...coverage() });
 	const bulk = local && input.nativeOperationGuards && input.uploadBatch && !input.runtime.authorizeMutation ? input.uploadBatch : undefined;
+	const folderBulk = local && input.nativeOperationGuards && input.folderBatch && !input.runtime.authorizeMutation ? input.folderBatch : undefined;
+	const batching = !!bulk || !!folderBulk;
+	const observableBatchEntry = (entry: SyncEntry) => (!!bulk && eligibleUploadBatchEntry(entry)) || (!!folderBulk && eligibleFolderBatchEntry(entry));
 	let readinessRefresh: Promise<void> | undefined;
 	let readinessAgain = false;
 	const refreshReadiness = (): Promise<void> => {
@@ -166,7 +171,7 @@ export async function streamOneWayForegroundSync(
 		const pathsSeen = new Set<string>();
 		const inputs = [change, ...candidates].filter(input => {
 			const path = syncPathKey(input.entry.path);
-			if (!eligibleUploadBatchEntry(input.entry) || pathsSeen.has(path)) return false;
+			if (!observableBatchEntry(input.entry) || pathsSeen.has(path)) return false;
 			pathsSeen.add(path); return true;
 		}).slice(0, UPLOAD_BATCH_FILES);
 		const paths = inputs.map(input => input.entry.path);
@@ -227,7 +232,7 @@ export async function streamOneWayForegroundSync(
 			}
 			if (!input.nativeOperationGuards) await authorize();
 			check();
-			const observations = bulk && eligibleUploadBatchEntry(change.entry) ? await observeBatch(change) : undefined;
+			const observations = observableBatchEntry(change.entry) ? await observeBatch(change) : undefined;
 			const provisional = observations?.has(change.entry.path) && observations.get(change.entry.path) === null;
 			const source = local
 				? provisional ? structuredClone(change.entry) : await readLocal(change.entry.path)
@@ -327,11 +332,16 @@ export async function streamOneWayForegroundSync(
 		for (;;) {
 			const observed = wakeRevision;
 			check();
-			if (bulk) {
-				const batch = await runs.claimUploadBatch(spec, reviewed);
+			if (batching) {
+				const batch = await runs.claimTransferBatch(spec, reviewed, !!folderBulk);
 				if (batch) {
 					try {
-						const failures = await executeCloudUploadBatch(batch, bulk, runtime, signal, {
+						if (('kind' in batch && !folderBulk) || (!('kind' in batch) && !bulk)) { await runs.recoverUploadBatch(spec); wake(); continue; }
+						const failures = 'kind' in batch ? await executeCloudFolderBatch(batch, folderBulk!, runtime, signal, {
+							markCommit: ordinals => runs.markUploadBatchCommit(spec, batch.batchId, ordinals),
+							confirm: async receipt => { state = await runs.confirm(spec, receipt); check(); },
+							folder: () => input.transfer?.({ direction: 'upload', kind: 'folder' })
+						}) : await executeCloudUploadBatch(batch, bulk!, runtime, signal, {
 							markCommit: ordinals => runs.markUploadBatchCommit(spec, batch.batchId, ordinals),
 							confirm: async receipt => { state = await runs.confirm(spec, receipt); check(); },
 							transfer: input.transfer
@@ -339,7 +349,7 @@ export async function streamOneWayForegroundSync(
 						if (failures.length) {
 							await runs.recoverUploadBatch(spec);
 							const stop = failures.find(f => f.retryable || f.code === 'authority-changed' || f.code === 'invalid-member' || f.code === 'cancelled');
-							if (stop) throw uploadBatchFailure(stop);
+							if (stop) throw 'kind' in batch ? folderBatchFailure(stop as import('./folderBatch').FolderBatchFailure) : uploadBatchFailure(stop as import('./uploadBatch').UploadBatchFailure);
 						}
 					} catch (error) {
 						// Never regroup effects with lost replies. The durable per-member
@@ -350,7 +360,7 @@ export async function streamOneWayForegroundSync(
 					wake(); report(); continue;
 				}
 			} else await runs.recoverUploadBatch(spec);
-			const operation = await runs.claimNext(spec, input.nativeOperationGuards === true, bulk ? 512 : 128, !!bulk);
+			const operation = await runs.claimNext(spec, input.nativeOperationGuards === true, batching ? 512 : 128, batching, false, !!folderBulk);
 			await refreshReadiness();
 			check();
 			if (!operation) {
@@ -361,7 +371,33 @@ export async function streamOneWayForegroundSync(
 				continue;
 			}
 			try {
-				const receipt = await executeSyncOperation(operation, scope, port, signal);
+				const rebind = local ? await runs.targetRebind(spec, operation.id) : null;
+				check();
+				if (rebind) {
+					const prior = await port.lookup(operation.id, scope);
+					check();
+					if (prior.status === 'pending') throw Error('Original dependent publication is still pending; retain its identity.');
+					if (prior.status === 'complete') {
+						state = await runs.confirm(spec, prior.receipt); port.confirmed?.(operation, prior.receipt);
+					} else if (!rebind.undispatched) {
+						throw Error('Original child publication may still be in flight; preserve its identity for reconciliation.');
+					} else if (rebind.recovery || !rebind.parentId) {
+						await runs.deferTargetRebind(spec, operation.id);
+					} else {
+						const source = await readLocal(operation.mutation.path);
+						check();
+						if (operation.mutation.kind !== 'copy' || !sameSyncStamp(source, operation.mutation.source)) throw new SyncObservationChangedError(true, false);
+						const parentPath = operation.mutation.path.split('/').slice(0, -1).join('/');
+						const parent = await readCloudPathEntry(runtime, scope, configuration.remoteFolderId, parentPath, signal);
+						check();
+						if (parent?.kind !== 'folder' || parent.id !== rebind.parentId) throw Error('Replacement parent changed; retain the original target intent.');
+						await runs.rebindStreamTarget(spec, operation.id, source!, rebind.parentId);
+					}
+					wake(); report(); continue;
+				}
+				const receipt = await executeSyncOperation(operation, scope, { ...port, apply: async (op, currentScope) => {
+					await runs.markStreamCanonicalDispatch(spec, op.id); check(); return port.apply(op, currentScope);
+				} }, signal);
 				check();
 				state = await runs.confirm(spec, receipt);
 				port.confirmed?.(operation, receipt);
@@ -433,7 +469,7 @@ export async function streamOneWayForegroundSync(
 			if (status.terminal) return;
 			// Select only after a slot opens: priorities may have changed while
 			// waiting, and the durable producer keeps indexing independently.
-			while (state.operations - state.confirmed >= (bulk ? 512 : 128)) {
+			while (state.operations - state.confirmed >= (batching ? 512 : 128)) {
 				const observed = wakeRevision;
 				await wait(observed);
 			}

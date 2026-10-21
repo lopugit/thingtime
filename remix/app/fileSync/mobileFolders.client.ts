@@ -1,3 +1,4 @@
+import { parseNativeFolderBatchResult } from './folderBatch';
 import { parseNativeIndexChangesPage, type NativeIndexChangesPage } from './streamingIndex';
 import { parseNativeUploadBatchResult } from './uploadBatch';
 import { canonicalIgnoreRules, createSyncIgnorePolicy } from './syncIgnore';
@@ -45,6 +46,7 @@ export type MobileStageRequest = { scope: SyncScope; rootId: string; operation: 
 export type MobileTrashRequest = MobileStageRequest & LocalTrashContext;
 export type MobileWriteApproval = { scope: SyncScope; configurationRevision: string; configurationHash: string; allowTrash?: boolean };
 export type FolderRequest =
+	| { action: 'validate-folder-batch'; rootId: string; batch: Omit<import('./folderBatch').NativeFolderBatchInput, 'remainingMs'>; remainingMs: number }
 	| { action: 'upload-batch'; rootId: string; batch: import('./uploadBatch').NativeUploadBatchInput }
 	| { action: 'upload-file'; rootId: string; upload: NativeFileUpload & { source: SyncEntry } }
 	| { action: 'upload-part'; rootId: string; upload: NativePartUpload & { source: SyncEntry } }
@@ -84,6 +86,7 @@ export type FolderRequest =
 	  };
 export type FolderResult = {
 	uploadedBatch?: import('./uploadBatch').NativeUploadBatchResult;
+	validatedFolderBatch?: import('./folderBatch').NativeFolderBatchResult;
 	uploadedFile?: { fingerprint: ContentFingerprint };
 	uploadedPart?: { sha256: string; payloadBytes?: number };
 	writeApproval?: MobileWriteApproval;
@@ -115,6 +118,7 @@ export type FolderCapabilities = Pick<
 	| 'platform'
 	| 'fileUploadVersion'
 	| 'fileUploadBatchVersion'
+	| 'fileFolderBatchVersion'
 	| 'fileAccessVersion'
 	| 'fileStagingVersion'
 	| 'filePublicationVersion'
@@ -128,6 +132,8 @@ export const supportsNativePartPayloadBytes = (bridge: FolderCapabilities | unde
 	bridge?.platform === 'macos' && supportsNativePartUploads(bridge) && Number(bridge.fileUploadVersion!.split('.')[1]) >= 1;
 export const supportsNativeUploadBatches = (bridge: FolderCapabilities | undefined) =>
 	bridge?.platform === 'macos' && supportsNativeAuthorizationContext(bridge) && /^1\.\d+\.\d+$/.test(bridge.fileUploadBatchVersion ?? '');
+export const supportsNativeFolderBatches = (bridge: FolderCapabilities | undefined) =>
+	bridge?.platform === 'macos' && supportsNativeAuthorizationContext(bridge) && /^1\.\d+\.\d+$/.test(bridge.fileFolderBatchVersion ?? '');
 /** These native access contracts independently add exact single-path inspection. */
 export const supportsNativeInventoryPages = (bridge: FolderCapabilities | undefined = getNativeBridge()) => {
 	const minimum = bridge?.platform === 'macos' ? 5 : bridge?.platform === 'ios' ? 3 : undefined;
@@ -319,6 +325,10 @@ export function parseMobileFolderResult(
 			...(r.sourceKind === 'photos' ? { sourceKind: r.sourceKind, photoAccess: r.photoAccess } : {})
 		}))
 	};
+	if (request.action === 'validate-folder-batch') {
+		if (payload.rootId !== request.rootId || request.rootId !== request.batch.descriptor.configuration.configuration.localRootId) throw Error('Folder batch source root changed.');
+		result.validatedFolderBatch = parseNativeFolderBatchResult(payload.validatedFolderBatch, { ...request.batch, remainingMs: request.remainingMs });
+	}
 	if (request.action === 'upload-batch') {
 		if (payload.rootId !== request.rootId || request.rootId !== request.batch.descriptor.configuration.configuration.localRootId)
 			throw Error('Native upload batch changed its source root.');

@@ -1,3 +1,4 @@
+import { readCloudPathEntry } from './cloudPath.client';
 import { cloudSyncHttpError, SyncConnectionWait } from './syncConnectionWait';
 import type { FileSyncApproval } from './configuredPlan';
 import { fileRetentionEventId } from './fileVersions';
@@ -430,6 +431,14 @@ export function createCloudFolderTransport(runtime: CloudTransportRuntime, saved
 		async apply(): Promise<SyncReceipt> {
 			const prior = await lookup();
 			if (prior.status === 'complete') return prior.receipt;
+			// An immutable parent receipt proves history, not current placement.
+			// Individual fallback must preserve the exact original folderId.
+			if (!write.cloudRootId) throw Error('Folder publication has no reviewed cloud root.');
+			const parentPath = m.path.split('/').slice(0, -1).join('/');
+			if (parentPath) {
+				const parent = await readCloudPathEntry(runtime, scope, write.cloudRootId, parentPath, signal);
+				if (parent?.kind !== 'folder' || parent.id !== input.folderId) throw Error('Folder parent changed before publication.');
+			} else if (input.folderId !== write.cloudRootId) throw Error('Folder root changed before publication.');
 			return receipt((await json('/api/v1/files', input)).folder);
 		}
 	};

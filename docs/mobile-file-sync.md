@@ -4010,3 +4010,39 @@ An actual old/new fake-clock fixture (26 attempts, 100 ms synthetic HTTP each)
 measured 10.95 s versus 4.866668 s. This demonstrates removal of the fixed gap
 while the new budgets still bind; it predicts no installed throughput gain.
 The existing closed timing logs support the next bounded natural acceptance window.
+
+## Bounded folder metadata validation — 2026-10-21
+
+The optional trusted Mac adapter requires `fileAccessVersion >=1.14.0`,
+`fileFolderBatchVersion >=1.0.0`, and the selected origin's
+`api.file-sync-batches >=1.1.0` with matching majors. File upload batches keep
+minimum 1.0.0. Negotiation is origin/account/device/host bound. Unsupported hosts
+use the existing scalar executor, including original-ID recovery of retained
+folder reservations; they never treat a missing feature as confirmation.
+
+`validate-folder-batch` takes an immutable descriptor/digest, an exact ascending
+subset of missing-receipt ordinals and a remaining budget outside the digest.
+It performs fresh pre/post native identity checks and exact directory-only local
+stamp checks for each member. Metadata is bounded to 256 members/320 KiB, full
+control to 512 KiB, and remaining total lifetime to 180 seconds. It transfers no
+file payload, credentials or destinations across XPC. A source mismatch is an
+explicit member failure; grant/account/configuration/conditions/cancellation
+drift fails the operation. Canonical dispatch is allowed only within the
+remaining total budget and 30 seconds of successful native validation.
+
+The six API phases are `observe`, `prepare`, `verify`, `commit`, `folder-probe`
+and `folder-commit`. Folder probe is receipt-first; folder commit requires fresh
+server configuration/device/root/namespace authority, current parent placement
+and topological canonical receipts. Up to eight ready folders share one actual
+Mongo transaction with existing inner placement locks; an after-write failure
+aborts the whole wave. The metadata admission cost is six units per committed
+member plus the existing bounded probe cost, under the unchanged bulk budget.
+These are resource bounds, not an installed throughput promise.
+
+Directory child changes refresh only the already-indexed immediate parent's
+full stamp, including excluded-child notifications without excluded discovery.
+Journal version 15 retains typed folder claims. Proven-unpublished parent
+supersession can allocate an explicit new child target intent only under the
+receipt/source/current-parent/undispatched fences described in the README;
+unknown canonical outcomes always keep their original IDs. No inode-only
+shortcut, authority cache, baseline publication or hidden ID rewrite is used.

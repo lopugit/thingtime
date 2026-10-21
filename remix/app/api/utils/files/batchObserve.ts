@@ -53,6 +53,7 @@ export function createBatchObserveService(
 		snapshot: typeof withHomeMongoSnapshot;
 		workspace: typeof openInventoryUniqueness;
 		now: () => number;
+		row: () => void;
 	}> = {}
 ) {
 	const deps = {
@@ -60,6 +61,7 @@ export function createBatchObserveService(
 		snapshot: withHomeMongoSnapshot,
 		workspace: openInventoryUniqueness,
 		now: Date.now,
+		row: () => {},
 		...overrides
 	};
 	return async (owner: string, root: string, paths: string[], signal: AbortSignal) => {
@@ -73,7 +75,7 @@ export function createBatchObserveService(
 		try {
 			const things = await deps.collection();
 			return await deps.snapshot(async (session) => {
-				if (!session?.snapshotEnabled) throw Error('Observation requires a snapshot');
+				if (!session?.snapshotEnabled && !session?.inTransaction?.()) throw Error('Observation requires a snapshot');
 				try {
 					await readCloudInventoryRoot(things, session, owner, root, budget, signal);
 				} catch (error) {
@@ -116,6 +118,7 @@ export function createBatchObserveService(
 							.batchSize(100);
 						try {
 							for await (const doc of cursor) {
+								deps.row();
 								budget();
 								const prefix = frontier.get(doc.folderId);
 								if (prefix === undefined) throw new BatchObservationConflict('Unexpected folder');

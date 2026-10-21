@@ -202,6 +202,14 @@ public struct MobileFolderReader {
     /// a directory listing. Absence is distinct from permission/provider errors.
     /// Both traversals must resolve the same ancestors and the same final object.
     public static func inspect(bookmark: Data, path: String) throws -> Entry? {
+        try inspectEntry(bookmark: bookmark, path: path, directoryOnly: false)
+    }
+    /// Metadata-only directory inspection: a file replacement must never enter
+    /// the regular-file fingerprint path, including between the two resolves.
+    public static func inspectFolder(bookmark: Data, path: String) throws -> Entry? {
+        try inspectEntry(bookmark: bookmark, path: path, directoryOnly: true)
+    }
+    private static func inspectEntry(bookmark: Data, path: String, directoryOnly: Bool) throws -> Entry? {
         let parts = try components(path)
         return try access(bookmark) { root in
             func resolve() throws -> (fd: Int32?, ancestors: [String]) {
@@ -221,7 +229,7 @@ public struct MobileFolderReader {
                         guard try stamp(info(fd)) == before else { throw Failure.changed }
                         ancestors.append(before)
                         if !found { close(fd); return (nil, ancestors) }
-                        let next = openat(fd, name, O_RDONLY | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK | (index < parts.count - 1 ? O_DIRECTORY : 0))
+                        let next = openat(fd, name, O_RDONLY | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK | (index < parts.count - 1 || directoryOnly ? O_DIRECTORY : 0))
                         guard next >= 0 else { throw Failure.unavailable }
                         close(fd); fd = next
                     }
