@@ -3,6 +3,7 @@
 const { uploadFolderPart, uploadRetry, retryableUploadFailure } = require('./folder-upload.cjs');
 const { validateFolderBatchInput, validateFolderBatchReply } = require('./folder-validate-batch.cjs');
 const { uploadFolderBatch } = require('./folder-upload-batch.cjs');
+const { BATCH_FAILURE_FIELDS } = require('./folder-sync-diagnostics.cjs');
 const { stageRangeMetadata } = require('./folder-stream.cjs');
 const { normalizeEndpointUrl } = require('./desktop-settings.cjs');
 const { randomUUID } = require('node:crypto');
@@ -152,13 +153,18 @@ function batchTimingCounts(value) {
         const members = value.results.length;
         if (!Number.isSafeInteger(members) || members < 1 || members > 256 || value.payloads.length !== members) return null;
         const row = { batchMemberCount: members, batchVerifiedCount: 0, batchReceiptCount: 0, batchFailedCount: 0,
-            batchPayloadAcknowledgedCount: 0, batchPayloadUnknownCount: 0, batchPayloadAcknowledgedBytes: 0 };
+            batchPayloadAcknowledgedCount: 0, batchPayloadUnknownCount: 0, batchPayloadAcknowledgedBytes: 0,
+            ...Object.fromEntries(Object.values(BATCH_FAILURE_FIELDS).map(name => [name, 0])) };
         for (let ordinal = 0; ordinal < members; ordinal++) {
             const result = value.results[ordinal], payload = value.payloads[ordinal];
             if (result.ordinal !== ordinal || payload.ordinal !== ordinal) return null;
             if (result.status === 'verified') row.batchVerifiedCount++;
             else if (result.status === 'confirmed') row.batchReceiptCount++;
-            else if (result.status === 'failed') row.batchFailedCount++;
+            else if (result.status === 'failed') {
+                const code = Object.getOwnPropertyDescriptor(result, 'code')?.value;
+                if (typeof code !== 'string' || !Object.prototype.hasOwnProperty.call(BATCH_FAILURE_FIELDS, code)) return null;
+                row.batchFailedCount++; row[BATCH_FAILURE_FIELDS[code]]++;
+            }
             else return null;
             if (payload.bytes === null) row.batchPayloadUnknownCount++;
             else if (!Number.isSafeInteger(payload.bytes) || payload.bytes < 0 || payload.bytes > 262_144) return null;

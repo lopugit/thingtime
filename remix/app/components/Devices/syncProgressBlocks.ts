@@ -144,10 +144,17 @@ export function priorityReadinessDisplay(progress: ForegroundSyncProgress | unde
 		: readiness.blocker === 'reserved-or-in-flight' ? 'A prepared or active operation must finish safely before another priority revision can run.'
 		: readiness.blocker === 'ready' ? 'The last checked priority candidate is ready for preparation.'
 		: readiness.preferencesCount === 0 ? 'No upload priorities are saved for this connection.' : 'No candidate was selected by the last scheduling check.';
+	const reservationLabels = { none: 'none', operation: 'individual original operation', 'file-batch': 'file batch', 'folder-batch': 'folder batch', 'file-recovery': 'original file-batch recovery', 'folder-recovery': 'original folder-batch recovery' };
+	const folderGateLabels = { enabled: 'negotiated and enabled', 'not-negotiated': 'not negotiated by this adapter/server', 'custom-policy': 'disabled by the custom mutation policy' };
+	const folderGate = readiness?.folderBatchGate ? folderGateLabels[readiness.folderBatchGate] : 'UNKNOWN (not measured)';
+	const reservation = readiness?.reservationKind === undefined ? 'UNKNOWN (not measured)'
+		: `${reservationLabels[readiness.reservationKind]} · ${readiness.reservationRemaining!.toLocaleString()} original operations remaining`;
+	const recovery = readiness?.reservationKind?.endsWith('-recovery') ? ' New batches wait for original-operation recovery.' : '';
+	const queueStatus = !readiness ? '' : ` Folder batches: ${folderGate}. Journal reservation: ${reservation}.${recovery} These are last observed gates, not uploaded counts.`;
 	return { hasPriorityReadiness: !!readiness,
 		priorityGate: readiness ? `${savedObservation}Priority preparation ${readiness.gate === 'enabled' ? 'enabled by the trusted native adapter' : 'unsupported by this adapter'} · ${readiness.preferencesCount.toLocaleString()} saved priorities · revision ${readiness.preferencesRevision.toLocaleString()}.` : '',
 		priorityProof: readiness ? readiness.proofCursor === null || readiness.proofCutoff === null ? 'Legacy index validation has not been measured.' : `Legacy index validation: ${readiness.proofCursor.toLocaleString()} / ${readiness.proofCutoff.toLocaleString()} fixed observations checked. This is not an upload count.` : '',
 		priorityCandidate: readiness ? `Last checked candidate: ${readiness.candidateOrdinal === null ? 'not measured' : `saved priority ${readiness.candidateOrdinal.toLocaleString()}`}${readiness.candidateSequence === null ? '' : ` · input observation ${readiness.candidateSequence.toLocaleString()}`}.${readiness.reserved ? ' An operation is reserved or in flight.' : ''}` : '',
-		priorityStatus: savedObservation + readinessStatus,
+		priorityStatus: savedObservation + readinessStatus + queueStatus,
  };
 }

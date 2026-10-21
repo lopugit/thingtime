@@ -8,6 +8,18 @@ const failureCodes = new Set(['node_timeout', 'node_unavailable', 'node_protocol
 const milliseconds = ['totalMs', 'queueMs', 'accountMs', 'capabilityMs', 'nativeMs', 'replyMs'];
 const counts = ['accountCount', 'capabilityCount', 'nativeCount'];
 const batchCounts = ['batchMemberCount', 'batchVerifiedCount', 'batchReceiptCount', 'batchFailedCount', 'batchPayloadAcknowledgedCount', 'batchPayloadUnknownCount', 'batchPayloadAcknowledgedBytes'];
+// Closed result codes shared with the disk-only counter producer. No arbitrary
+// error strings or member metadata may become diagnostic fields.
+const BATCH_FAILURE_FIELDS = Object.freeze({
+    conflict: 'batchFailureConflictCount',
+    'temporarily-unavailable': 'batchFailureTemporarilyUnavailableCount',
+    'authority-changed': 'batchFailureAuthorityChangedCount',
+    'invalid-member': 'batchFailureInvalidMemberCount',
+    'source-changed': 'batchFailureSourceChangedCount',
+    cancelled: 'batchFailureCancelledCount',
+    deadline: 'batchFailureDeadlineCount'
+});
+const failureCounts = Object.values(BATCH_FAILURE_FIELDS);
 const scalar = (value, key) => Object.getOwnPropertyDescriptor(value, key)?.value;
 // Own data scalars only: getters/proxies, arbitrary errors and caller metadata
 // cannot enter the log. Invalid diagnostics never affect a folder request.
@@ -46,6 +58,16 @@ function closedRow(value) {
                 row.batchPayloadAcknowledgedBytes < row.batchPayloadAcknowledgedCount ||
                 row.batchPayloadAcknowledgedBytes > row.batchPayloadAcknowledgedCount * 262_144) return null;
         }
+        if (failureCounts.some(name => Object.prototype.hasOwnProperty.call(value, name))) {
+            if (!hasBatch) return null;
+            let failures = 0;
+            for (const name of failureCounts) {
+                const n = scalar(value, name);
+                if (!Number.isSafeInteger(n) || n < 0 || n > 256) return null;
+                row[name] = n; failures += n;
+            }
+            if (failures !== row.batchFailedCount) return null;
+        }
         return row;
     } catch { return null; }
 }
@@ -65,4 +87,4 @@ function recordFolderSyncDiagnostic(file, value) {
     }).catch(() => { /* No diagnostic IO error reaches a transfer. */ }).finally(() => { pending--; });
     return tail;
 }
-module.exports = { recordFolderSyncDiagnostic };
+module.exports = { recordFolderSyncDiagnostic, BATCH_FAILURE_FIELDS };

@@ -48,6 +48,8 @@ function Fixture() {
 		path: rows.find(r => r.entry.size === 990)!.entry.path, bytes: 495, size: 990 });
 	return <ChakraProvider><Box maxW="760px" mx="auto" p={4}>
 		<Text as="h1">Editable progress acceptance</Text>
+
+        {([true,false] as const).map(known => <Button key={String(known)} onClick={() => { setStatus('running'); setProgress({stage:'transferring',total:512,confirmed:0,priorityReadiness:{gate:'enabled',preferencesCount:5,preferencesRevision:1,proofCursor:3629575,proofCutoff:3629575,candidateOrdinal:1,candidateSequence:2296559,blocker:'reserved-or-in-flight',measured:true,reserved:true,...(known?{folderBatchGate:'enabled',reservationKind:'file-recovery',reservationRemaining:89}:{})}}); }}>{known?'Recovery diagnostics fixture':'Legacy diagnostics fixture'}</Button>)}
 		<Button onClick={() => setStatus('paused')}>Pause fixture</Button>
 		<Button onClick={() => setStatus('error')}>Fail fixture</Button>
 		<Button onClick={() => setProgress({ stage: 'scanning', total: 0, confirmed: 0, indexed: 128 })}>Index fixture</Button>

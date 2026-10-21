@@ -88,3 +88,34 @@ test('optional batch timing counters are closed, bounded, atomic and absent on l
         assert.deepEqual(row, { ...base, ...counts }); assert.doesNotMatch(JSON.stringify(row), /private|secret|owner|signedUrl|path/);
     } finally { fs.rmSync(directory, { recursive: true, force: true }); }
 });
+
+
+test('failure histogram is fixed numeric counts, complete and equal to failed members; legacy rows remain valid', async () => {
+    const { BATCH_FAILURE_FIELDS } = require('../lib/folder-sync-diagnostics.cjs');
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'folder-failures-')), file = path.join(directory, 'folder-sync.log');
+    const base = { phase: 'folder-timing', action: 'upload-batch', outcome: 'ok', totalMs: 20, queueMs: 0,
+        accountMs: 2, accountCount: 2, capabilityMs: 0, capabilityCount: 0, nativeMs: 15, nativeCount: 1, replyMs: 3,
+        batchMemberCount: 9, batchVerifiedCount: 0, batchReceiptCount: 0, batchFailedCount: 9,
+        batchPayloadAcknowledgedCount: 0, batchPayloadUnknownCount: 0, batchPayloadAcknowledgedBytes: 0 };
+    const histogram = Object.fromEntries(Object.values(BATCH_FAILURE_FIELDS).map(field => [field, 1]));
+    histogram.batchFailureSourceChangedCount = 3;
+    try {
+        for (const patch of [{ batchFailureSourceChangedCount: -1 }, { batchFailureSourceChangedCount: 257 },
+            { batchFailureSourceChangedCount: 1.5 }, { batchFailureSourceChangedCount: NaN },
+            { batchFailureSourceChangedCount: 2 }, { batchFailureDeadlineCount: undefined }, { action: 'inspect' }, { outcome: 'failed' }])
+            await recordFolderSyncDiagnostic(file, { ...base, ...histogram, ...patch });
+        const incomplete = { ...base, ...histogram }; delete incomplete.batchFailureConflictCount;
+        await recordFolderSyncDiagnostic(file, incomplete);
+        let getterCalls = 0;
+        await recordFolderSyncDiagnostic(file, { ...base, ...histogram, get batchFailureDeadlineCount() { getterCalls++; throw Error('secret'); } });
+        await recordFolderSyncDiagnostic(file, new Proxy({}, { getOwnPropertyDescriptor() { throw Error('secret'); } }));
+        assert.equal(getterCalls, 0); assert.equal(fs.existsSync(file), false);
+        await recordFolderSyncDiagnostic(file, { ...base, ...histogram, responseBody: 'secret', memberPath: '/private/path', code: 'arbitrary-secret' });
+        const row = JSON.parse(fs.readFileSync(file, 'utf8')); delete row.time;
+        assert.deepEqual(row, { ...base, ...histogram });
+        assert.doesNotMatch(JSON.stringify(row), /secret|private|memberPath|responseBody/);
+        await recordFolderSyncDiagnostic(file, base);
+        const legacy = JSON.parse(fs.readFileSync(file, 'utf8').trim().split('\n').at(-1)); delete legacy.time;
+        assert.deepEqual(legacy, base);
+    } finally { fs.rmSync(directory, { recursive: true, force: true }); }
+});

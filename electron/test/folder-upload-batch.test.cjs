@@ -74,7 +74,7 @@ async function batchHost(f, options = {}) {
     return { rows, run: () => host.request(event, f.input), cancel: () => host.cancel() };
 }
 const batchTiming = rows => rows.find(row => row.phase === 'folder-timing' && row.action === 'upload-batch');
-const batchCounts = row => Object.fromEntries(Object.entries(row).filter(([key]) => key.startsWith('batch')));
+const batchCounts = row => Object.fromEntries(Object.entries(row).filter(([key]) => key.startsWith('batch') && !key.startsWith('batchFailure')));
 test('Electron matches both shared canonical digest vectors and rejects changed members', () => {
     for (const v of vectors.vectors) {
         const bytes = batchCanonicalBytes(v.descriptor); assert.equal(bytes.length, v.canonicalBytes); assert.equal(bytes.toString('base64'), v.canonicalBase64); assert.equal(hex(bytes), v.digest);
@@ -199,4 +199,33 @@ test('batch timing omits result counters after final account refusal or invalid 
         await assert.rejects(h.run());
         const row = batchTiming(h.rows); assert.ok(row); assert.equal(row.outcome, mode === 'cancelled' ? 'cancelled' : 'failed'); assert.deepEqual(batchCounts(row), {});
     }
+});
+
+
+test('validated upload batch diagnostics count actual closed failure codes, not status or paths', async () => {
+    const { BATCH_FAILURE_FIELDS } = require('../lib/folder-sync-diagnostics.cjs');
+    const codes = [...Object.keys(BATCH_FAILURE_FIELDS).filter(code => code !== 'authority-changed'), 'source-changed', 'source-changed'];
+    const f = fixture(codes.length);
+    const h = await batchHost(f, { native: async (request, options) => {
+        const value = await f.native(request, options);
+        value.uploadedBatch.results = codes.map((code, ordinal) => ({ ordinal, status: 'failed', statusCode: 409, code, retryable: false }));
+        return value;
+    } });
+    const reply = await h.run();
+    assert.deepEqual(reply.uploadedBatch.results.map(r => r.code), codes, 'logging never changes member results');
+    const row = batchTiming(h.rows);
+    assert.equal(row.batchFailedCount, codes.length);
+    for (const [code, field] of Object.entries(BATCH_FAILURE_FIELDS)) assert.equal(row[field], codes.filter(c => c === code).length);
+    assert.equal(Object.keys(row).filter(k => k.startsWith('batchFailure')).length, 7);
+    assert.doesNotMatch(JSON.stringify(row), /uploadId|signed|https:|inode-|Parent|operationId/);
+    const allGood = await batchHost(fixture()); await allGood.run();
+    for (const field of Object.values(BATCH_FAILURE_FIELDS)) assert.equal(batchTiming(allGood.rows)[field], 0);
+    const deniedFixture = fixture();
+    const denied = await batchHost(deniedFixture, { native: async (request, options) => {
+        const value = await deniedFixture.native(request, options);
+        value.uploadedBatch.results = [{ ordinal: 0, status: 'failed', statusCode: 403, code: 'authority-changed', retryable: false }];
+        return value;
+    } });
+    await assert.rejects(denied.run(), /could not be verified/);
+    assert.equal(Object.keys(batchTiming(denied.rows)).some(k => k.startsWith('batch')), false, 'whole authority refusal has no accepted member histogram');
 });

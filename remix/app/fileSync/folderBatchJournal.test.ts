@@ -89,6 +89,8 @@ test('representative512queue reserves117folders topologically then releases395fi
 	for (const [i, member] of batch.members.entries()) {
 		if (i === 40) {
 			await f.reopen();
+			const observation = await f.runs().streamPriorityReadiness(f.s,true,'enabled');
+			assert.equal(observation.reservationKind,'folder-batch'); assert.equal(observation.reservationRemaining,77);
 			assert.equal(await folderBatchDigest(await f.runs().claimTransferBatch(f.s, saved, true)), digest);
 		}
 		await f.runs().confirm(f.s, receipt(member.write.operation));
@@ -266,4 +268,27 @@ test('pending old child target is excluded beside replacement parent and sibling
 	assert.equal(file.id, f.operations[2].id);
 	assert.equal((await f.runs().targetRebind(f.s, file.id))!.parentId, next.id);
 	f.f.journal().close();
+});
+
+
+test('read-only reservation diagnostics retain batch/recovery counts, IDs and watermarks across restart', async () => {
+ for(const file of [false,true]) {
+  const f=await fixture([{path:'parent',file}]);
+  try {
+   const before=await f.runs().streamState(f.s);
+   assert.equal((await f.runs().streamPriorityReadiness(f.s,true)).reservationKind,'none');
+   const batch=(await f.runs().claimTransferBatch(f.s,saved,true))!;
+   let d=await f.runs().streamPriorityReadiness(f.s,true,'enabled');
+   assert.equal(d.folderBatchGate,'enabled'); assert.equal(d.reservationKind,file?'file-batch':'folder-batch'); assert.equal(d.reservationRemaining,1);
+   await f.runs().recoverUploadBatch(f.s); await f.reopen();
+   d=await f.runs().streamPriorityReadiness(f.s,true,'not-negotiated');
+   assert.equal(d.folderBatchGate,'not-negotiated'); assert.equal(d.reservationKind,file?'file-recovery':'folder-recovery'); assert.equal(d.reservationRemaining,1);
+   assert.equal(await f.runs().claimTransferBatch(f.s,saved,true),null);
+   assert.equal((await f.runs().claimNext(f.s))!.id,batch.members[0].write.operation.id);
+   assert.deepEqual(await f.runs().streamState(f.s),before);
+   await f.runs().confirm(f.s,receipt(batch.members[0].write.operation));
+   d=await f.runs().streamPriorityReadiness(f.s,true,'custom-policy');
+   assert.equal(d.folderBatchGate,'custom-policy'); assert.equal(d.reservationKind,'none'); assert.equal(d.reservationRemaining,0);
+  } finally {f.f.journal().close();}
+ }
 });

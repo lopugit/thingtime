@@ -4046,3 +4046,10 @@ supersession can allocate an explicit new child target intent only under the
 receipt/source/current-parent/undispatched fences described in the README;
 unknown canonical outcomes always keep their original IDs. No inode-only
 shortcut, authority cache, baseline publication or hidden ID rewrite is used.
+
+
+#### Bounded recovery observations
+
+The existing saved priority-readiness status includes the last negotiated folder-batch gate and journal reservation kind/remaining original-operation count. This is a read-only header observation, not authority, upload progress or completion proof. Recovery takes precedence over new batches; older saved observations show UNKNOWN. Existing customized blocks are preserved; the status binding remains editable.
+
+After a fully validated upload-batch response, existing rotated local diagnostic timing rows may include fixed numeric failure-code counts for conflict, temporarily-unavailable, authority-changed, invalid-member, source-changed, cancelled and deadline. Their sum equals the returned failed-member count. Whole-request authority rejection/cancellation emits no accepted-member histogram. Missing legacy fields or missing/rotated rows mean unknown, not zero. Counts cannot recover historical member codes or establish canonical cloud acceptance; no member paths, IDs, URLs, bodies or arbitrary errors are logged.

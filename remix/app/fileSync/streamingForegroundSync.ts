@@ -105,7 +105,7 @@ export async function streamOneWayForegroundSync(
 		readinessRefresh = (async () => {
 			do {
 				readinessAgain = false;
-				const next = await runs.streamPriorityReadiness(spec, input.nativeOperationGuards === true);
+				const next = await runs.streamPriorityReadiness(spec, input.nativeOperationGuards === true, folderBulk ? 'enabled' : input.runtime.authorizeMutation ? 'custom-policy' : 'not-negotiated');
 				check();
 				if (JSON.stringify(next) !== JSON.stringify(priorityReadiness)) {
 					priorityReadiness = next;
@@ -335,6 +335,7 @@ export async function streamOneWayForegroundSync(
 			if (batching) {
 				const batch = await runs.claimTransferBatch(spec, reviewed, !!folderBulk);
 				if (batch) {
+					await refreshReadiness();
 					try {
 						if (('kind' in batch && !folderBulk) || (!('kind' in batch) && !bulk)) { await runs.recoverUploadBatch(spec); wake(); continue; }
 						const failures = 'kind' in batch ? await executeCloudFolderBatch(batch, folderBulk!, runtime, signal, {
@@ -357,6 +358,7 @@ export async function streamOneWayForegroundSync(
 						if (!signal.aborted) await runs.recoverUploadBatch(spec);
 						throw error;
 					}
+					await refreshReadiness();
 					wake(); report(); continue;
 				}
 			} else await runs.recoverUploadBatch(spec);
@@ -393,6 +395,7 @@ export async function streamOneWayForegroundSync(
 						if (parent?.kind !== 'folder' || parent.id !== rebind.parentId) throw Error('Replacement parent changed; retain the original target intent.');
 						await runs.rebindStreamTarget(spec, operation.id, source!, rebind.parentId);
 					}
+					await refreshReadiness();
 					wake(); report(); continue;
 				}
 				const receipt = await executeSyncOperation(operation, scope, { ...port, apply: async (op, currentScope) => {
