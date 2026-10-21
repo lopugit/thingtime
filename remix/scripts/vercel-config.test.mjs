@@ -8,7 +8,7 @@ import { gunzipSync } from 'node:zlib';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { prodCsp, devCsp } from './csp.mjs';
-import { draftPreviewCsp, platformRuntimeCsp } from './csp.mjs';
+import { mediaWorkerCsp, draftPreviewCsp, platformRuntimeCsp } from './csp.mjs';
 import { execFileSync } from 'node:child_process';
 import { claudeRuntimeFunctions, packageClaudeOAuthArtifacts, verifyClaudeOAuthArtifacts } from './claude-oauth-artifacts.mjs';
 
@@ -34,6 +34,13 @@ test('emitted Web Platform routes prevent stale compiler reuse and keep document
 	await fs.writeFile(join(output, 'functions/__server.func/.vc-config.json'), '{}');
 	execFileSync(process.execPath, [join(repositoryRoot, 'remix/scripts/patch-vercel-output.mjs')], { cwd: root, stdio: 'pipe' });
 	const { routes } = JSON.parse(await fs.readFile(join(output, 'config.json'), 'utf8'));
+	const media = routes.find(route => route.src === '^/assets/mediaWorker-[A-Za-z0-9_-]+\\.js$');
+	assert.equal(media.headers['Content-Security-Policy'], mediaWorkerCsp);
+	assert.equal(media.headers['Cross-Origin-Resource-Policy'], 'same-origin');
+	assert.ok(routes.indexOf(media) < routes.findIndex(route => route.handle === 'filesystem'));
+	assert.match(mediaWorkerCsp, /connect-src 'none'/);
+	assert.match(mediaWorkerCsp, /worker-src 'none'/);
+	assert.ok(!mediaWorkerCsp.includes('unsafe-eval'));
 	const draft = routes.find(route => route.src === '^/draft-preview(?:/.*)?$');
 	assert.equal(draft.headers['Content-Security-Policy'], draftPreviewCsp);
 	assert.equal(draft.headers['Cache-Control'], 'no-store');

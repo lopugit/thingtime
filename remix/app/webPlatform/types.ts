@@ -1,3 +1,4 @@
+import type { MediaPipeline } from './mediaPipeline';
 export type Feature = {
 	id: string;
 	language: 'html' | 'css' | 'javascript' | 'webapi';
@@ -53,6 +54,8 @@ export type PlatformPattern =
 	| PlatformExpression;
 export type PlatformProgram = {
 	version: 1;
+	/** Selected-file processing in a dedicated worker; controls/settings remain saved data. */
+	media?: MediaPipeline;
 	title: string;
 	description?: string;
 	parameters?: { name: string; label: string; type: 'text' | 'number' | 'boolean' | 'json'; default: unknown }[];

@@ -1,3 +1,4 @@
+import { lopuProviderManagement } from './continuationCore';
 import { createHash } from 'node:crypto';
 import { Binary } from 'mongodb';
 import { waitUntil } from '@vercel/functions';
@@ -251,14 +252,16 @@ export const startBackgroundTask = async (request: Request, execute: (request: R
 	if (!limit.allowed) return json({ ok: false, error: 'Please wait before starting another background task.' }, rateLimitedResponseInit(limit));
 	const now = new Date();
 	let existingChatId: string | null = null;
+	let storedProviderId: string | null = null;
 	if (url.pathname === '/api/v1/lopu/chats/reply' && input?.chatId) {
 		const chat = await getLopuChat(user.id, input.chatId);
 		if (chat.ok === false) return fail(chat.error, chat.status);
 		existingChatId = input.chatId;
+		storedProviderId = chat.settings?.providerId ?? null;
 	}
 	const chatClaim = existingChatId && !internal ? new Binary(Buffer.from(`lopu-background-chat:${hash(`${user.id}:${scope}:${existingChatId}`)}`)) : null;
 	await stale({ ownerId: user.id, thingtime: AI_TASK_KIND, taskScope: scope });
-	const serverManaged = input?.management === 'server' && url.pathname === '/api/v1/lopu/chats/reply';
+	const serverManaged = lopuProviderManagement(input?.management, input?.providerId === undefined ? storedProviderId : input.providerId) === 'server' && url.pathname === '/api/v1/lopu/chats/reply';
  const row: any = {
 		...filter,
   ...(internal ? { rootTaskId: internal.rootTaskId, workerStarted: true } : {}),

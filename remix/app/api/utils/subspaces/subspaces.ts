@@ -1,3 +1,4 @@
+import { deleteSubspaceMessaging, ensureSubspaceMessaging, ensureSubspaceMessagingMember, subspaceMessagingIds } from '../messenger/subspaceMessages';
 // Subspaces — Reddit-style communities as things (see subspaceSchema and
 // friends in schemas/registry.ts). A subspace thing owns its branding, rules,
 // flairs and access mode; membership is one relational subspace-member doc per
@@ -190,6 +191,8 @@ export type PublicSubspaceViewer = {
 
 export type PublicSubspace = {
 	id: string;
+	messagesCommunityId: string;
+	messagesChatId: string;
 	slug: string;
 	name: string;
 	description: string | null;
@@ -289,6 +292,8 @@ export const toPublicSubspace = (
 	}
 ): PublicSubspace => ({
 	id: String(doc.shareId),
+	messagesCommunityId: subspaceMessagingIds(String(doc.shareId)).communityId,
+	messagesChatId: subspaceMessagingIds(String(doc.shareId)).chatId,
 	slug: String(doc.crystal?.slug || ''),
 	name: String(doc.crystal?.name || doc.crystal?.slug || 'Subspace'),
 	description: doc.crystal?.description ?? null,
@@ -647,6 +652,8 @@ export const createSubspace = async (viewerInput: string | Viewer, input: Create
 			if (tombstone) await things.deleteOne({ _id: tombstone._id } as any, { session });
 			await insertAccountedThing(things, subspace as any, { session });
 			await things.insertOne(owner as any, { session });
+				await ensureSubspaceMessaging(subspace, session);
+				await ensureSubspaceMessagingMember(subspace, owner, session);
 		});
 	} catch (err) {
 		if (isDuplicateKey(err)) return fail(409, `s/${slug} is taken — pick another slug`);
@@ -1649,6 +1656,8 @@ export const deleteSubspace = async (viewerInput: string | Viewer, input: Delete
     const cleanup = await prepareAttachmentCascadeForThing({ shareId: id, ownerId: String(ownerId) });
     if (cleanup.ok === false) return cleanup;
   }
+	const messagingCleanup = await deleteSubspaceMessaging(id);
+	if (messagingCleanup.ok === false) return messagingCleanup;
 	// the doc goes and the slug tombstone arrives in ONE transaction, guarded
 	// by the ownership the gate saw: a transfer that landed meanwhile makes the
 	// delete match nothing and the whole thing aborts with 409
