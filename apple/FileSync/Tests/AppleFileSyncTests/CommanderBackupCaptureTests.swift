@@ -78,6 +78,81 @@ final class CommanderBackupCaptureTests: XCTestCase {
         XCTAssertEqual(page.nextSequence, 2); XCTAssertFalse(page.hasMore)
         XCTAssertEqual(try inventory.beginStream(scope, id: id, bookmark: bookmark, excludedPaths: [], ignoreRules: nil).generation, initial.generation)
     }
+    func testProductionDirectoryRevisionsRemainDurableAndMatchNativeFullStamp() async throws {
+        let helper = try helper(), (base, source, bookmark, scope) = try fixture()
+        let folder = source.appendingPathComponent("visited")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        try Data("seed".utf8).write(to: folder.appendingPathComponent("seed"))
+        // Keep initial traversal active after the first folder observation.
+        let slow = source.appendingPathComponent("zz-slow.bin")
+        XCTAssertTrue(FileManager.default.createFile(atPath: slow.path, contents: nil))
+        let handle = try FileHandle(forWritingTo: slow)
+        try handle.truncate(atOffset: 64 * 1024 * 1024); try handle.close()
+        let cache = base.appendingPathComponent("directory-feed")
+        let inventory = MobileFolderInventory(directory: cache, commanderIndexer: helper)
+        let id = UUID().uuidString.lowercased(), control = MobileFolderInventory.StreamControl()
+        let wake = DispatchSemaphore(value: 0)
+        let initial = try inventory.beginStream(scope, id: id, bookmark: bookmark, excludedPaths: [], ignoreRules: nil)
+        let scanner = Task.detached {
+            try inventory.runStream(scope, id: id, bookmark: bookmark, excludedPaths: [], ignoreRules: nil,
+                control: control, wake: { wake.signal() }, authorize: { try Task.checkCancellation() })
+            try inventory.finishStream(scope, id: id, bookmark: bookmark, state: "complete")
+            wake.signal()
+        }
+        defer { scanner.cancel() }
+        var rows: [MobileFolderInventory.Change] = [], cursor = 0, state = "running"
+        func drain() throws {
+            var more = true
+            while more {
+                let page = try inventory.streamChanges(scope, id: id, bookmark: bookmark, excludedPaths: [], ignoreRules: nil, afterSequence: cursor)
+                XCTAssertEqual(page.generation, initial.generation)
+                rows += page.changes; cursor = page.nextSequence; state = page.state; more = page.hasMore
+            }
+        }
+        // Reads occur only after a producer wake, never on a timer/poll loop.
+        func awaitChange(_ condition: () -> Bool) throws {
+            let deadline = DispatchTime.now() + 10
+            while !condition() {
+                guard wake.wait(timeout: deadline) == .success else {
+                    XCTFail("No expected directory revision before bounded deadline")
+                    throw NSError(domain: "directory-feed-timeout", code: 1)
+                }
+                try drain()
+            }
+        }
+        try awaitChange { rows.contains { $0.entry.path == "visited" } }
+        let a = try XCTUnwrap(rows.first { $0.entry.path == "visited" })
+        XCTAssertEqual(state, "running")
+        let child = folder.appendingPathComponent("added")
+        try Data("new child".utf8).write(to: child)
+        let b = try XCTUnwrap(MobileFolderReader.inspect(bookmark: bookmark, path: "visited"))
+        XCTAssertEqual(a.entry.id, b.id); XCTAssertNotEqual(a.entry.version, b.version)
+        try awaitChange { rows.contains { $0.entry.path == "visited" && $0.entry.version == b.version } && state == "indexed" }
+        // Initial traversal has ended, but the backlog watcher is still live.
+        try FileManager.default.removeItem(at: child)
+        let c = try XCTUnwrap(MobileFolderReader.inspect(bookmark: bookmark, path: "visited"))
+        XCTAssertEqual(c.id, a.entry.id); XCTAssertNotEqual(c.version, b.version)
+        try awaitChange { rows.contains { $0.entry.path == "visited" && $0.entry.version == c.version } }
+        let bRow = try XCTUnwrap(rows.first { $0.entry.path == "visited" && $0.entry.version == b.version })
+        let cRow = try XCTUnwrap(rows.first { $0.entry.path == "visited" && $0.entry.version == c.version })
+        XCTAssertLessThan(a.sequence, bRow.sequence); XCTAssertLessThan(bRow.sequence, cRow.sequence)
+        // Reopening retains the same generation and all immutable revisions.
+        let reopened = MobileFolderInventory(directory: cache, commanderIndexer: helper)
+        let durable = try reopened.streamChanges(scope, id: id, bookmark: bookmark, excludedPaths: [], ignoreRules: nil, afterSequence: 0)
+        XCTAssertEqual(durable.generation, initial.generation)
+        XCTAssertEqual(durable.changes.filter { $0.entry.path == "visited" }.map(\.entry.version), [a.entry.version, b.version, c.version])
+        let current = try XCTUnwrap(MobileFolderReader.inspect(bookmark: bookmark, path: "visited"))
+        XCTAssertEqual(current, cRow.entry) // Latest production full stamp validates.
+        XCTAssertNotEqual(current, a.entry); XCTAssertNotEqual(current, bRow.entry)
+        control.finish(afterSequence: cursor)
+        // A final queued namespace gap may advance the stop watermark once.
+        try awaitChange { state == "complete" || (state == "indexed" && cursor > cRow.sequence) }
+        if state != "complete" {
+            control.finish(afterSequence: cursor)
+            try awaitChange { state == "complete" }
+        }
+        try await scanner.value
+    }
     func testProductionCommanderStreamEntryPassesBulkReaderAndStaleSourceFails() throws {
         let helper = try helper(), (base, source, bookmark, scope) = try fixture()
         let bytes = Data(repeating: 71, count: 131_073), file = source.appendingPathComponent("payload")

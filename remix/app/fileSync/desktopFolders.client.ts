@@ -10,6 +10,7 @@ import {
 	supportsNativePathInspection,
 	supportsNativeInventoryPages,
 	supportsNativeUploadBatches,
+	supportsNativeFolderBatches,
 	type FolderCapabilities,
 	type FolderRequest,
 	type FolderResult,
@@ -23,6 +24,7 @@ export type FolderHost = {
 	authorizeDevice(ownerId: string, deviceId: string, signal: AbortSignal): Promise<void>;
 	authorizeContext?(ownerId: string, deviceId: string, signal: AbortSignal): Promise<{ roots: FolderResult['roots']; conditions: NonNullable<FolderResult['conditions']> }>;
 	uploadBatch?: import('./uploadBatch').NativeUploadBatch;
+	folderBatch?: import('./folderBatch').NativeFolderBatch;
 	fetch: typeof fetch;
 	requireCapability(feature: string, minimumVersion: string): Promise<void>;
 	assertCurrent(): void;
@@ -190,11 +192,24 @@ export async function createDesktopFolderHost(input: {
 				return result.uploadedBatch;
 			}
 		} : {}),
+		...(supportsNativeFolderBatches(context.capabilities) && capabilitySatisfies(context.apiCapabilities.features['api.file-sync-batches']?.version, '1.1.0') ? {
+			folderBatch: async (value: import('./folderBatch').NativeFolderBatchInput, signal: AbortSignal) => {
+				check();
+				if (value.descriptor.scope.ownerId !== ownerId || value.descriptor.scope.deviceId !== deviceId || value.descriptor.scope.origin !== origin) throw changed();
+				const { remainingMs, ...batch } = value;
+				const request: FolderRequest = { action: 'validate-folder-batch', rootId: batch.descriptor.configuration.configuration.localRootId, batch, remainingMs };
+				const { value: reply, expected } = await send(request, signal);
+				const parsed = parseMobileFolderResult({ type: 'mobile-files-result', payload: reply }, expected, request);
+				if (!parsed?.validatedFolderBatch) throw changed();
+				return parsed.validatedFolderBatch;
+			}
+		} : {}),
 		request: async (expectedOwner, request, signal) => {
 			if (expectedOwner !== ownerId) throw changed();
 			assertNativeScanExclusions(request, context.capabilities);
 			if (['scan-capture', 'scan-page', 'scan-discard'].includes(request.action) && !supportsNativeInventoryPages(context.capabilities))
 				throw Error('Inventory pages require an updated Mac app.');
+			if (request.action === 'validate-folder-batch' && (!supportsNativeFolderBatches(context.capabilities) || !capabilitySatisfies(context.apiCapabilities.features['api.file-sync-batches']?.version, '1.1.0'))) throw Error('Folder metadata batches require a compatible native host and server.');
 			if (request.action === 'inspect' && !supportsNativePathInspection(context.capabilities)) throw Error('Update Thingtime Desktop to inspect individual sync paths.');
 			if (request.action === 'upload-batch' && (!supportsNativeUploadBatches(context.capabilities) ||
 				!capabilitySatisfies(context.apiCapabilities.features['api.file-sync-batches']?.version, '1.0.0')))

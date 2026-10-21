@@ -135,3 +135,11 @@ test('empty verified/commit control charges one provider-free probe unit', async
 	assert.equal([...f.docs.values()][0].units, 1);
 	assert.equal(await f.charge('owner', 'verify', 0, 0), false);
 });
+
+test('folder metadata charges six units per member and no payload budget', async () => {
+	const f = ledger();
+	assert.equal(await f.charge('owner', 'folderCommit', 256, 32 * 1024 * 1024), true);
+	const row = [...f.docs.values()][0];
+	assert.equal(row.units, 1536);
+	assert.equal(row.bytes, 0);
+});

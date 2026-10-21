@@ -68,6 +68,11 @@ test('nested folder executor resumes accepted response loss after journal reopen
 				}
 				return Response.json({ ok: true, folder: value, replayed: false });
 			}
+			if (u.searchParams.has('rootId')) {
+				const path=u.searchParams.get('path')!; let parentId='root', found:any;
+				for(const name of path.split('/')) { found=[...rows.values()].find(row=>row.folderId===parentId&&row.name===name);if(!found)break;parentId=found.id; }
+				return Response.json({ok:true,observation:{version:1,complete:true,rootId:'root',rootRevision:'r1',path,entry:found?{path,id:found.id,version:found.revision,kind:'folder',size:0,sha256:null}:null}});
+			}
 			const id = u.searchParams.get('folderId')!;
 			if (u.searchParams.has('operationId'))
 				return Response.json({ ok: true, receipt: receipts.get(u.searchParams.get('operationId')!)?.folder ?? null });

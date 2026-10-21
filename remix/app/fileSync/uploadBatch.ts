@@ -125,27 +125,15 @@ export function eligibleUploadBatchWrite(value: unknown, scope?: SyncScope): val
 	}
 }
 
-export function parseUploadBatchDescriptor(value: unknown): UploadBatchDescriptor {
-	if (
-		!object(value) ||
-		!closed(value, ['version', 'batchId', 'scope', 'configuration', 'members']) ||
-		value.version !== 1 ||
-		typeof value.batchId !== 'string' ||
-		!uuid.test(value.batchId) ||
-		!object(value.configuration) ||
-		!closed(value.configuration, ['id', 'updatedAt', 'configuration']) ||
-		!Array.isArray(value.members) ||
-		value.members.length < 1 ||
-		value.members.length > UPLOAD_BATCH_FILES
-	)
-		throw invalid();
-	const scope = structuredClone(value.scope) as SyncScope;
+export function parseBatchScopeConfiguration(scopeValue: unknown, savedValue: unknown): { scope: SyncScope; configuration: SavedFileSyncConfiguration } {
+	if (!object(savedValue) || !closed(savedValue, ['id', 'updatedAt', 'configuration'])) throw invalid();
+	const scope = structuredClone(scopeValue) as SyncScope;
 	validateSyncScope(scope);
-	const saved = value.configuration,
+	const saved = savedValue as Record<string, any>,
 		configuration = parseFileSyncConfiguration(saved.configuration);
 	if (
-		!object(value.scope) ||
-		!closed(value.scope, ['origin', 'ownerId', 'dataPlane', 'rootId', 'deviceId']) ||
+		!object(scopeValue) ||
+		!closed(scopeValue, ['origin', 'ownerId', 'dataPlane', 'rootId', 'deviceId']) ||
 		!object(saved.configuration) ||
 		!closed(saved.configuration, [
 			'configurationVersion',
@@ -173,6 +161,25 @@ export function parseUploadBatchDescriptor(value: unknown): UploadBatchDescripto
 		configuration.sourceKind === 'photos'
 	)
 		throw invalid();
+	return { scope, configuration: { id: saved.id as string, updatedAt: saved.updatedAt as string, configuration } };
+}
+
+export function parseUploadBatchDescriptor(value: unknown): UploadBatchDescriptor {
+	if (
+		!object(value) ||
+		!closed(value, ['version', 'batchId', 'scope', 'configuration', 'members']) ||
+		value.version !== 1 ||
+		typeof value.batchId !== 'string' ||
+		!uuid.test(value.batchId) ||
+		!object(value.configuration) ||
+		!closed(value.configuration, ['id', 'updatedAt', 'configuration']) ||
+		!Array.isArray(value.members) ||
+		value.members.length < 1 ||
+		value.members.length > UPLOAD_BATCH_FILES
+	)
+		throw invalid();
+	const { scope, configuration: saved } = parseBatchScopeConfiguration(value.scope, value.configuration);
+	const configuration = saved.configuration;
 	const paths = new Set<string>(),
 		ids = new Set<string>(),
 		sourceIds = new Set<string>(),

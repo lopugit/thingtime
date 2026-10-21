@@ -57,6 +57,7 @@ export type ForegroundSyncInput = {
 	nativeOperationGuards?: true;
 	/** Explicit negotiated bounded operation, never inferred from cloud metadata. */
 	uploadBatch?: import('./uploadBatch').NativeUploadBatch;
+	folderBatch?: import('./folderBatch').NativeFolderBatch;
 	conditions(): Promise<SyncConditions>;
 	scanLocal(): Promise<SyncEntry[]>;
 	/** Native durable revision feed; negotiated separately from sealed captures. */

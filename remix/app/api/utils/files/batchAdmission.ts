@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { ensureIndexes, getRateLimitsCollection } from '../mongodb/collections';
 
 export const BATCH_BUDGET = { windowMs: 60_000, units: 65_536, bytes: 512 * 1024 * 1024 } as const;
-export const BATCH_PHASE_COST = { prepare: 2, verify: 6, commit: 2 } as const;
+export const BATCH_PHASE_COST = { prepare: 2, verify: 6, commit: 2, folderCommit: 6 } as const;
 /** Separate owner-bound bulk policy. Fixed bucket keys make rollover atomic;
  * failed admission never changes a live bucket or extends its TTL. */
 export function createBatchBudget(collection: () => Promise<any> = getRateLimitsCollection, indexes = ensureIndexes, now = Date.now) {
@@ -68,3 +68,6 @@ export function createBatchProviderAdmission(perOwner = 8, maxOwners = 64) {
 export const admitBatchProvider = createBatchProviderAdmission();
 
 export const admitBatchControl = createBatchProviderAdmission(2, 32);
+
+/** Metadata waves use a zero-wait root lease, not an S3/provider slot. */
+export const admitFolderRoot = createBatchProviderAdmission(1, 64);
