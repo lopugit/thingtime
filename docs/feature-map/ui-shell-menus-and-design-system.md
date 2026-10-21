@@ -195,6 +195,14 @@ Things, Timeline, navigation and local-workspace suites. See the
 [History checkpoint](../local-workspaces.md#native-anonymousoffline-history-menu--2026-10-17)
 for cached-account versus authoritative anonymous coverage and remaining sync work.
 
+## Native mobile device setup
+
+`components/Devices/MobileDeviceSetupCard.tsx` is shared by Things and Things
+settings. `mobileDeviceBridge.ts` negotiates the explicit native capability and
+fences responses by request, account and origin. iOS implements the bounded
+bridge in `iOS/Thingtime/Devices/`; Android uses `android/app/src/main/java/com/thingtime/mobile/`. Native credentials never reach the renderer.
+Run `test:devices` and the opt-in iOS/Android mobile-device acceptance scripts. See
+[full mobile and sync scope](../mobile-file-sync.md).
 ## Incoming mail
 
 See [incoming-mail.md](incoming-mail.md) for Email settings, IMAP/POP3, private cloud storage, the paired local connector, offline reading and proxy inbox views.

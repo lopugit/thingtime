@@ -105,6 +105,10 @@ export const ALLOWED_PROPS = new Set([
 	// assistive tech — no URL, no JS sink, no validation engine
 	'role',
 	'aria-label',
+	'aria-valuenow',
+	'aria-valuemin',
+	'aria-valuemax',
+	'aria-valuetext',
 	'aria-hidden',
 	'aria-pressed',
 	'aria-expanded',

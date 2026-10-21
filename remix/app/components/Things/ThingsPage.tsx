@@ -24,8 +24,10 @@ import { useIsMobileViewport } from '~/components/Nav/Drawer/useDrawer';
 import { Rainbow } from '~/components/Rainbow/Rainbow';
 import { DeviceDetailsDrawer } from '~/components/Devices/DeviceDetailsDrawer';
 import { deviceThingsPageHref } from '~/components/Devices/deviceNavigation';
+import { DesktopFolderAccess } from '~/components/Devices/DesktopFolderAccess';
 import { shouldHideLocalNodePanel } from '~/components/Devices/localNodePanel';
 import { useNodePanelPreference } from '~/components/Devices/useNodePanelPreference';
+import { MobileDeviceSetupCard } from '~/components/Devices/MobileDeviceSetupCard';
 import { LocalNodeSetupCard } from '~/components/Devices/LocalNodeSetupCard';
 import type { DeviceActionIntent, DeviceControlResolver } from '~/components/Devices/DeviceStateGrid';
 import type { DeviceActionKind, DeviceRuntimeState } from '~/components/Devices/deviceTypes';
@@ -1617,9 +1619,11 @@ const ThingsLibraryPage = () => {
             <Button as={RouterLink} to={contentPath(homeLibraryHref(user.id))} size="sm" variant={homeView ? 'solid' : 'outline'} aria-pressed={homeView}>Home library</Button>
           </Flex> : null}
         </Flex>
+				{devicesEnabled && !folderId && !searchMode && user?.id ? <MobileDeviceSetupCard ownerId={user.id} onPaired={deviceStore.refreshList} /> : null}
 				{devicesEnabled && !folderId && !searchMode && !shouldHideLocalNodePanel(localNode, nodePanelDismissed) ? (
 					<LocalNodeSetupCard onDismiss={() => setNodePanelDismissed(true)} onRefresh={localNode.refresh} controlFor={localDeviceControlFor} onAction={executeLocalDeviceAction} state={localNode} />
 				) : null}
+        {devicesEnabled && !folderId && !searchMode && user?.id ? <DesktopFolderAccess ownerId={user.id} pairedDeviceIds={localNode.pairedDeviceIds} ownedDeviceIds={currentAccountDeviceIds} /> : null}
         {homeView ? <Text fontSize="sm">Home library on this device. Local edits and imports finish here; account sync runs separately when its matching connection is available.</Text> : null}
         <Flex alignItems="center" gap={3} wrap="wrap">
           <Text

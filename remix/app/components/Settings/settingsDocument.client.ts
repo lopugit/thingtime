@@ -49,7 +49,7 @@ export function accountSettingsDocumentAdapter(scope: SettingsDocumentScope, dep
       return data.page && data.source === 'user' ? project(data.page) : null;
     },
     async save(document, signal) {
-      await requireCapabilities(signal, { 'api.things': '1.35.0', 'api.actions-run': '1.7.0', 'api.mongodb-endpoint': '1.1.0' });
+      await requireCapabilities(signal, { 'api.things': '1.36.0', 'api.actions-run': '1.7.0', 'api.mongodb-endpoint': '1.1.0' });
       if (document.id && !document.revision) throw new Error('Reload the settings document before updating it.');
       // An uncertain POST retry, a reload and another tab all target the same
       // private document. A duplicate never silently overwrites the winner.

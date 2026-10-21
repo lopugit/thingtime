@@ -473,7 +473,7 @@ const canonicalLinkedAttachmentCrystal = (raw: Record<string, unknown>): Attachm
 		: null;
 };
 
-const canonicalAttachmentCrystal = (value: unknown): AttachmentCrystal | null => {
+export const canonicalAttachmentCrystal = (value: unknown): AttachmentCrystal | null => {
 	if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
 	if ('url' in (value as Record<string, unknown>)) return canonicalLinkedAttachmentCrystal(value as Record<string, unknown>);
 	const sanitized = sanitizeAttachmentPublicMetadata(value);

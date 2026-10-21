@@ -1,5 +1,19 @@
 # API endpoints and capabilities
 
+Mobile device descriptors use `app/devices/platform.ts` across validation,
+projection, schemas and client types. `api.devices` 1.10.0 and
+`api.devices-pairing-claim` 1.1.0 add iOS/Android to the existing signed pairing
+protocol. Run `test:devices`, `test:schemas` and `test:api-capabilities`.
+See [mobile sync acceptance](../mobile-file-sync.md) for pending native clients.
+
+`api.devices-node-identity` 1.0.0 is a private device-token-only GET: the token
+fixes both IDs and the owned device must still exist. `api.devices-disconnect`
+1.0.0 is a full-user POST accepting only `deviceId`; `disconnectDevice.ts` revokes
+that owner's matching device sessions in the home transaction while retaining
+Things/files. Both routes use the import map and docs registry. Native
+`ThingtimeAPIClient.verifyFileSyncIdentity` negotiates the optional identity
+feature and selects the exact local credential. `device-identity.integration.mts`
+checks real signed pairing, privacy, owner-only disconnect and no claim revival.
 Character agent discovery uses `remix/scripts/character-coordination-preflight.ts`
 and the shared `capabilityContract.ts` SemVer/origin contract. Run
 `npm --prefix remix run characters:preflight -- --origin <selected-origin>` and

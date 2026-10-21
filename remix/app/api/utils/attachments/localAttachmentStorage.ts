@@ -1,6 +1,6 @@
 import { createHash, createHmac, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { createReadStream, createWriteStream } from 'node:fs';
-import { mkdir, open, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdir, open, readFile, readdir, rename, rm, stat, writeFile, link } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import path from 'node:path';
 import { Readable } from 'node:stream';
@@ -127,7 +127,7 @@ type ObjectRecord = {
 	versionId: string;
 	sizeBytes: number;
 	checksumSha256: string;
-	checksumType: 'COMPOSITE';
+	checksumType: 'COMPOSITE' | 'FULL_OBJECT';
 	attachmentId: string;
 	tags: Record<string, string>;
 	createdAt: string;
@@ -281,6 +281,29 @@ export const createLocalAttachmentStorage = (config: LocalAttachmentStorageConfi
 	};
 
 	const storage: AttachmentS3 = {
+        async putEmptyObject({ objectKey, attachmentId }) {
+            const id = assertObjectKey(objectKey);
+            if (attachmentId !== id) throw invalid('Empty attachment identity must match its private key');
+            try { await readObject(objectKey); throw new LocalAttachmentStorageError('InvalidRequest', 'Object already exists', 412); }
+            catch (error) { if (!(error instanceof LocalAttachmentStorageError) || error.code !== 'NotFound') throw error; }
+            // A deterministic zero-byte version is an immutable canonical empty
+            // object. It can finish after a crash between data/metadata writes
+            // without a duplicate version or an abandoned lock file.
+            const versionId = `v0-${createHash('sha256').update(objectKey).digest('hex').slice(0,16)}`;
+            await mkdir(objectDir(id), { recursive: true });
+            try { await writeFile(objectFile(id, versionId), new Uint8Array(0), { flag: 'wx', mode: 0o600 }); }
+            catch (error) { if ((error as NodeJS.ErrnoException).code !== 'EEXIST' || (await stat(objectFile(id, versionId))).size !== 0) throw error; }
+            const record: ObjectRecord = { versionId, sizeBytes: 0, checksumSha256: sha256Base64(new Uint8Array(0)),
+                checksumType: 'FULL_OBJECT', attachmentId, tags: { 'thingtime-state': 'pending' }, createdAt: new Date(now()).toISOString() };
+            const temporary = `${objectMeta(id, versionId)}.${randomUUID()}.tmp`;
+            try {
+                await writeFile(temporary, JSON.stringify(record), { flag: 'wx', mode: 0o600 });
+                // Atomic no-replace publication: a stale initializer must not
+                // revert a winner's ready tag to pending after lease takeover.
+                await link(temporary, objectMeta(id, versionId));
+            } finally { await rm(temporary, { force: true }); }
+            return { versionId };
+        },
 		async createMultipartUpload({ objectKey, attachmentId }) {
 			assertObjectKey(objectKey);
 			if (!attachmentId || /[\p{Cc}]/u.test(attachmentId)) throw invalid('Invalid attachment id');

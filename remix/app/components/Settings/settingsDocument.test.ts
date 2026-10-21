@@ -4,11 +4,12 @@ import { createDesktopOperationGate } from './desktopOperationGate';
 import { localSettingsDocumentAdapter, settingsDocumentBlocks, settingsDocumentKey } from './settingsDocument';
 import { accountSettingsDocumentAdapter } from './settingsDocument.client';
 import { DESKTOP_CONNECTION_BLOCKS, DESKTOP_RECOVERY_BLOCKS } from './desktopSettingsDocuments';
+import { syncConflictReviewBlocks } from '../Devices/syncConflictReviewBlocks';
 
 const scope = { origin: 'https://settings.example.test', ownerId: 'owner', dataPlane: 'home', documentKey: 'desktop-connection' };
 const document = { name: 'Layout', blocks: [{ id: 'title', type: 'element' as const, tag: 'p', text: 'Private settings' }], revision: null };
 const signal = () => new AbortController().signal;
-const features = { 'api.things': { version: '1.35.0' }, 'api.webpages-resolve': { version: '1.6.0' }, 'api.actions-run': { version: '1.7.0' }, 'api.mongodb-endpoint': { version: '1.1.0' } };
+const features = { 'api.things': { version: '1.36.0' }, 'api.webpages-resolve': { version: '1.6.0' }, 'api.actions-run': { version: '1.7.0' }, 'api.mongodb-endpoint': { version: '1.1.0' } };
 const page = (id = 'settings-layout-1', overrides = {}) => ({ id, author: { id: scope.ownerId }, updatedAt: '2026-10-19T00:00:00Z', crystal: { name: document.name, blocks: document.blocks, pageKey: `settings-${scope.documentKey}` }, ...overrides });
 const response = (value: unknown, status = 200) => new Response(JSON.stringify(value), { status });
 function localFixture() {
@@ -23,10 +24,10 @@ function localFixture() {
 }
 
 test('authored desktop and recovery documents survive canonical sanitization without private values', () => {
-  for (const blocks of [DESKTOP_CONNECTION_BLOCKS, DESKTOP_RECOVERY_BLOCKS]) {
+  for (const blocks of [DESKTOP_CONNECTION_BLOCKS, DESKTOP_RECOVERY_BLOCKS, syncConflictReviewBlocks]) {
     const saved = settingsDocumentBlocks(blocks);
     assert.deepEqual(settingsDocumentBlocks(saved), saved);
-    assert.ok(JSON.stringify(saved).includes('runtime.save'));
+    assert.ok(JSON.stringify(saved).includes(blocks === syncConflictReviewBlocks ? '$transient' : 'runtime.save'));
     assert.ok(!JSON.stringify(saved).includes('mongodb://user:password'));
   }
 });

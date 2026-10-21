@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { MAX_PAGINATION_CURSOR_CHARS, INVALID_PAGINATION_CURSOR } from '~/schemas/paginationCursor';
+import { buildOverview, OVERVIEW_ROLES, parseOverviewInput, type OverviewRole, type OverviewThing } from '~/api/utils/agents/overviewCore';
+import { localQueryHref } from '../Actions/localUiAction';
 import { workspaceScopeKey } from '../../local-workspace/storage';
 
 import { MAX_SHARED_SOURCE_LOADS, gatherFormFields, evictSharedLoads, queryScopeOf, readSourceCache, sourceCacheKey, writeSourceCache } from './webpageRuntime';
@@ -67,6 +70,31 @@ test('the query scope caps value length and key count', () => {
 	assert.equal(queryScopeOf(`?note=${long}`).note?.length, 200);
 	const many = Array.from({ length: 80 }, (_value, index) => `k${index}=${index}`).join('&');
 	assert.ok(Object.keys(queryScopeOf(`?${many}`)).length <= 32);
+});
+
+test('overview next-page cursors survive local navigation and query binding intact', () => {
+	const input = parseOverviewInput(new URLSearchParams('taskSchema=tasks&projectSchema=projects&agentSchema=agents&questionSchema=questions&progressSchema=progress&todoSchema=todos'));
+	const records = Object.fromEntries(OVERVIEW_ROLES.map(role => [role, []])) as Record<OverviewRole, OverviewThing[]>;
+	records.task = Array.from({ length: 55 }, (_, i) => ({ id: `task-${i}`, crystal: { title: String(i) } }));
+	const first = buildOverview(input, records, true, 'now');
+	assert.ok(first.nextCursor!.length > 200);
+	const href = localQueryHref('overview-page', { cursor: first.nextCursor });
+	assert.ok(href);
+	const scope = queryScopeOf(new URL(href, 'https://thingtime.test').search);
+	assert.equal(scope.cursor, first.nextCursor);
+	const next = buildOverview({ ...input, cursor: scope.cursor }, records, true, 'now');
+	assert.deepEqual(next.rows.map(row => row.id), ['task-50', 'task-51', 'task-52', 'task-53', 'task-54']);
+});
+
+test('pagination query values retain the transport budget and oversize stays an explicit refusal', () => {
+	const cursor = 'a'.repeat(MAX_PAGINATION_CURSOR_CHARS);
+	for (const key of ['cursor', 'todoCursor', 'progressCursor']) {
+		const href = localQueryHref('overview-page', { [key]: cursor });
+		assert.ok(href);
+		assert.equal(queryScopeOf(new URL(href, 'https://thingtime.test').search)[key], cursor);
+		assert.equal(localQueryHref('overview-page', { [key]: `${cursor}a` }), null);
+		assert.equal(queryScopeOf(`?${key}=${cursor}a`)[key], INVALID_PAGINATION_CURSOR);
+	}
 });
 
 // ── source cache: whose last result a page may paint ────────────────────────

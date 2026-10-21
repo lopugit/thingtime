@@ -21,6 +21,9 @@ const apiRoutes = [...apiV1RouteKeys, ...apiV1DocsRouteKeys];
 
 export default defineNitroConfig({
   serverDir: 'server',
+  // Electron owns the HTTP socket; Nitro's middleware preset assumes another
+  // host serves public assets unless explicitly enabled. Keep cloud defaults.
+  ...(/^node[_-]middleware$/.test(process.env.NITRO_PRESET ?? '') ? { serveStatic: true } : {}),
   modules: ['workflow/nitro'],
   compatibilityDate: '2026-07-02',
   // Node/packaged builds serve these files directly, without Vite or Vercel's

@@ -13,6 +13,10 @@ import { ActionResult, type ControlResult } from './ActionResult';
 import { Box } from '@chakra-ui/react';
 
 import { useApi } from '~/hooks/useApi';
+import { useDataPlane } from '~/hooks/useDataPlane';
+import { useCharacterScope } from '~/components/Characters/CharacterScope';
+import { requireThingtimeCapability } from '~/api/utils/capabilities/requireCapability.client';
+import { consumeLiveSourceStream, validateLiveSourceStream, type LiveSourceStreamBinding } from './liveSourceStream';
 import { DEFAULT_WEBPAGE_SOURCE_INTERVAL_MS, MAX_WEBPAGE_SOURCE_INTERVAL_MS, MIN_WEBPAGE_SOURCE_INTERVAL_MS } from '~/schemas/registry';
 import { ChakraThingRenderer, isChakraThingNode, type ChakraThingNode } from '../Kinds/ChakraThingRenderer';
 import { HtmlThingRenderer, type HtmlThingNode } from '../Kinds/HtmlThingRenderer';
@@ -51,8 +55,9 @@ import { clearSourceCache, readSourceCache, useWebpageRuntime, writeSourceCache 
 export type ThingSourceBinding = {
 	action: string;
 	inputs?: Record<string, string | number | boolean>;
-	refresh?: 'load' | 'manual' | 'interval';
+	refresh?: 'load' | 'manual' | 'interval' | 'live';
 	intervalMs?: number;
+	stream?: LiveSourceStreamBinding;
 };
 
 export type ThingSourceState = 'inert' | 'signed-out' | 'not-installed' | 'loading' | 'ok' | 'error';
@@ -84,11 +89,15 @@ export const useThingSource = ({
 }): { scope: ThingSourceScope; refetch: () => void } => {
 	const runtime = useWebpageRuntime();
 	const api = useApi();
+	const dataPlane = useDataPlane();
+	const character = useCharacterScope();
 	const apiRef = React.useRef(api);
 	apiRef.current = api;
 	const sourceKey = JSON.stringify(source || null);
 	const active = !!source && interactive;
 	const canRun = runtime.canRunSources || !!runtime.sharedRun;
+	const liveStream = source?.refresh === 'live' ? source.stream : undefined;
+	const liveSourceValid = !!liveStream && validateLiveSourceStream(liveStream);
 	// inputs interpolate {arg} tokens against the args and {query.x} against
 	// the URL — the same substitution the template itself gets
 	const inputsKey = JSON.stringify({ i: source?.inputs || null, a: argValues, q: runtime.query });
@@ -98,16 +107,18 @@ export const useThingSource = ({
 		return resolved && typeof resolved === 'object' && !Array.isArray(resolved) ? (resolved as Record<string, unknown>) : {};
 		// eslint-disable-next-line react-hooks/exhaustive-deps -- inputsKey is the serialised form
 	}, [inputsKey]);
-	const binding = JSON.stringify([sourceKey, inputsKey, cacheId]);
+	const binding = JSON.stringify([sourceKey, inputsKey, cacheId, dataPlane, character?.id || null]);
 	const initial = React.useMemo(
 		() => ({
 			identity: runtime.identity,
 			binding,
 			status: (!active ? 'inert' : !canRun ? 'signed-out' : 'loading') as ThingSourceState,
-			result: active && canRun && !runtime.sharedRun ? readSourceCache(runtime.cacheScope, runtime.pageId, cacheId, binding) : undefined,
+			result: active && canRun && !runtime.sharedRun && (source?.refresh !== 'live' || liveSourceValid)
+				? readSourceCache(runtime.cacheScope, runtime.pageId, cacheId, binding)
+				: undefined,
 			error: null as string | null
 		}),
-		[runtime.identity, binding, active, canRun, runtime.sharedRun, runtime.cacheScope, runtime.pageId, cacheId]
+		[runtime.identity, binding, active, canRun, runtime.sharedRun, runtime.cacheScope, runtime.pageId, cacheId, liveSourceValid, source?.refresh]
 	);
 	const [storedState, setState] = React.useState(initial);
 	// A new target must never render the preceding target's controls, even
@@ -133,7 +144,11 @@ export const useThingSource = ({
 		return () => window.clearInterval(handle);
 	}, [intervalMs, interactive, canRun]);
 	const [local, setLocal] = React.useState(0);
-	const runVersion = manual ? local : runtime.version + tick * 1_000_003 + local * 1_000_000_007;
+	// A manual refetch explicitly reconnects a live stream; action runs do not.
+	const runVersion = source?.refresh === 'live' ? runtime.refreshVersion + local * 1_000_000_007 : manual ? local : runtime.version + tick * 1_000_003 + local * 1_000_000_007;
+	// Action reports replace runtime.load; that cache is only used by action
+	// sources. A live stream keeps its connection until explicit refresh.
+	const sourceLoader = source?.refresh === 'live' ? null : runtime.load;
 	const signedIn = runtime.viewer.signedIn;
 	const cacheScope = runtime.cacheScope;
 	const pageId = runtime.pageId;
@@ -144,6 +159,78 @@ export const useThingSource = ({
 			return;
 		}
 		let cancelled = false;
+		if (source.refresh === 'live') {
+			// Shared-page action execution has its own stored-root authority and
+			// must never inherit this viewer's private session through a stream.
+			if (runtime.sharedRun || !signedIn || !liveSourceValid || !liveStream) {
+				setState({ identity: runtime.identity, binding, status: runtime.sharedRun ? 'inert' : 'error', result: undefined, error: runtime.sharedRun ? null : 'Live source is unavailable' });
+				return;
+			}
+			const stale = () => cancelled || currentIdentity.current.identity !== runtime.identity || currentIdentity.current.binding !== binding;
+			let backoff = 500;
+			let forbidden = false;
+			const pause = (ms: number) => new Promise<void>((resolve) => {
+				const finish = () => {
+					window.clearTimeout(timer);
+					controller.signal.removeEventListener('abort', finish);
+					resolve();
+				};
+				const timer = window.setTimeout(finish, ms);
+				if (controller.signal.aborted) finish();
+				else controller.signal.addEventListener('abort', finish, { once: true });
+			});
+			const controller = new AbortController();
+			const receiveSnapshot = (result: unknown) => {
+				if (stale()) return;
+				writeSourceCache(cacheScope, pageId, cacheId, result, binding);
+				setState({ identity: runtime.identity, binding, status: 'ok', result, error: null });
+				backoff = 500;
+			};
+			const revoke = () => {
+				forbidden = true;
+				clearSourceCache(cacheScope, pageId, cacheId);
+				if (!stale()) setState({ identity: runtime.identity, binding, status: 'signed-out', result: undefined, error: 'Live source access is no longer available' });
+			};
+			setState((current) => current.identity === runtime.identity && current.binding === binding
+				? { ...current, error: null, ...(current.result === undefined ? { status: 'loading' as ThingSourceState } : {}) }
+				: initial);
+			void (async () => {
+				try {
+					await requireThingtimeCapability(liveStream.feature, liveStream.minimumVersion);
+					while (!stale() && !controller.signal.aborted && !forbidden) {
+						try {
+							await consumeLiveSourceStream({
+								path: liveStream.path,
+								inputs,
+								dataPlane,
+								characterId: character?.id,
+								signal: controller.signal,
+								onSnapshot: receiveSnapshot,
+								onForbidden: revoke
+							});
+						} catch (error: any) {
+							if (stale() || controller.signal.aborted || error?.terminal || forbidden) break;
+							setState((current) => current.identity === runtime.identity && current.binding === binding ? { ...current, error: 'Live source disconnected; reconnecting' } : current);
+						}
+						if (!stale() && !controller.signal.aborted && !forbidden) {
+							await pause(backoff);
+							backoff = Math.min(15_000, backoff * 2);
+						}
+					}
+				} catch (error: unknown) {
+					if (!stale() && !controller.signal.aborted) {
+						const failure = sourceFailure(error, false);
+						setState((current) => current.identity === runtime.identity && current.binding === binding
+							? { ...current, status: failure.status, error: failure.error, ...(failure.clear ? { result: undefined } : {}) }
+							: current);
+					}
+				}
+			})();
+			return () => {
+				cancelled = true;
+				controller.abort();
+			};
+		}
 		// a seeded page the viewer has not installed keeps saying so across
 		// refetches (an interval source ticks every few seconds — flipping the
 		// Install card to "Loading…" on each tick unmounts the button under the
@@ -164,7 +251,7 @@ export const useThingSource = ({
 		(async () => {
 			try {
 				const shareKey = JSON.stringify({ a: source.action, i: inputs, t: tick, l: local });
-				const response: any = await runtime.load(shareKey, () =>
+				const response: any = await sourceLoader!(shareKey, () =>
 					runtime.sharedRun
 						? runtime.sharedRun(source.action, inputs)
 						: apiRef.current.v1.actions.run({ action: source.action, inputs, source: 'component' })
@@ -187,21 +274,24 @@ export const useThingSource = ({
 		return () => {
 			cancelled = true;
 		};
-		// eslint-disable-next-line react-hooks/exhaustive-deps -- sourceKey/inputsKey are the serialised forms; runVersion folds the runtime's refetch signal, the interval tick and manual refetches; runtime.load is version-keyed
+		// eslint-disable-next-line react-hooks/exhaustive-deps -- sourceKey/inputsKey are serialized bindings; runVersion includes explicit refreshes; only action sources subscribe to the version-keyed sourceLoader
 	}, [
 		active,
 		signedIn,
 		canRun,
 		runtime.sharedRun,
 		runtime.identity,
-		runtime.load,
+		sourceLoader,
 		cacheScope,
 		sourceKey,
 		inputsKey,
 		runVersion,
 		pageId,
 		cacheId,
-		binding
+		binding,
+		dataPlane,
+		character?.id,
+		liveSourceValid
 	]);
 
 	const scope = React.useMemo<ThingSourceScope>(
