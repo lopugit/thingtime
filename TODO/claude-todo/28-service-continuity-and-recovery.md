@@ -145,6 +145,14 @@ purchase before approval.
       confirmation, or resurrect deleted/revoked state.
 - [ ] Bound timeout, retry, exponential backoff/jitter, concurrency, and circuit
       budgets. Shed optional provider work before critical first-party paths.
+- [ ] Close the release-level acceptance gap for the scoped sync controls in
+      [PR #1086](https://github.com/lopugit/thingtime/pull/1086): on the signed
+      installed bundle and deployed origin, exercise Pause during an active
+      throttled transfer; verify immediate abort, journal-safe cleanup, no
+      automatic restart for that connection, unchanged folder selection, and
+      persisted limits. Confirm unsupported clients/providers fail closed and
+      attach exact build/deployment receipts. Do not infer a global SLO from
+      the feature-specific limits. See the [continuity evidence ledger](../../NOTES/service-continuity-and-recovery-baseline.md).
 - [ ] Keep safe core data/text paths available when attachments, email, AI,
       previews, ranking, or external integrations fail independently.
 - [ ] Surface actionable states through Lopu and pass desktop/mobile, keyboard,

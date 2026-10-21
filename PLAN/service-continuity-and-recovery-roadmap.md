@@ -143,6 +143,7 @@ never creates false success or a security bypass.
   version, confirmation, quota, and moderation at replay time.
 - Bound timeout, retry, backoff, jitter, concurrency, and circuit behavior by
   dependency and request budget. Shed optional work before core paths.
+- Treat the scoped sync controls merged by [PR #1086](https://github.com/lopugit/thingtime/pull/1086) as a useful feature-level control, not a service-wide reliability guarantee. Its implementation record reports immediate per-connection pause fencing and optional transfer/index/CPU ceilings, while signed-installed-bundle and deployed-origin acceptance remain pending. Close that evidence gap through [TODO 28](../TODO/claude-todo/28-service-continuity-and-recovery.md) before claiming release-level behavior; see the [evidence ledger](../NOTES/service-continuity-and-recovery-baseline.md).
 - Keep first-party data and basic composition useful when optional media,
   email, AI, integration, ranking, or preview services fail.
 - Use Lopu for actionable user-facing errors, with accessible non-color state,
