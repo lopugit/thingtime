@@ -216,7 +216,12 @@ purchase before approval.
       synthetic fixed fixture, an approved matched baseline, and separate
       interruption/capability-loss recovery runs. Reconcile every file outcome
       to its durable receipt; keep any performance target owner-approved and
-      do not infer one from a synthetic run.
+      do not infer one from a synthetic run. Reconcile new measurements with
+      [the partial batch and recovery evidence](../../NOTES/service-continuity-and-recovery-baseline.md#evidence-ledger):
+      PR #1083 missed its original local threshold and left installed speed
+      acceptance open; PR #1084's draining-barrier observation was
+      observability-only, not proof of independent recovery or complete file
+      outcomes. Do not reuse the superseded threshold or imply a general speedup.
 - [ ] Review objectives, receipts, owners, provider assumptions, support load,
       and cost on an approved cadence; expire stale evidence visibly.
 - [ ] Keep truthful status, baseline safety, export/delete, and tested recovery

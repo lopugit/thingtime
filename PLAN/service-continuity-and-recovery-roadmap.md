@@ -187,10 +187,23 @@ security, deletion, and timing criteria twice from clean environments.
 #### Native small-file backup integration gate
 
 This is a focused acceptance slice of M3, not a second backup architecture.
-As of 2026-10-21 Australia/Melbourne, [PR #1081](https://github.com/lopugit/thingtime/pull/1081)
-had merged to `main`, while [PR #1022](https://github.com/lopugit/thingtime/pull/1022)
-to synchronize `main` into `develop` was still open. These statuses and the
-implementation's exact server capability must be rechecked before execution.
+See the [continuity evidence ledger](../NOTES/service-continuity-and-recovery-baseline.md#evidence-ledger)
+for the dated PR observations and their confidence limits.
+As of the fetched `origin/develop` commit `fedef75f52` on 2026-10-21
+Australia/Melbourne, the implementation commits reported by [PR #1083](https://github.com/lopugit/thingtime/pull/1083)
+and [PR #1084](https://github.com/lopugit/thingtime/pull/1084) are in its
+ancestry. [PR #1022](https://github.com/lopugit/thingtime/pull/1022) remains
+open, so recheck the exact target SHA and its origin-scoped capability before
+release; repository ancestry alone does not prove what a deployed origin serves.
+
+The PR reports narrow the remaining proof. PR #1083's 512-operation fixture
+missed its original local `<=50%` threshold in both reported runs; that
+threshold was superseded after review and installed speed acceptance remained
+open. PR #1084's installed observation was explicitly observability-only: an
+original-operation recovery barrier drained during one window, but no upload
+batch or folder-validation result completed there, and historical failure/ACK
+totals stayed unknown. Preserve those as partial evidence, not a speed claim or
+completion of the independent interruption/capability-loss tests below.
 
 1. **Fence the release:** confirm the implementation is present in the chosen
    `develop` commit and its capability is published by the exact selected
@@ -203,11 +216,17 @@ implementation's exact server capability must be rechecked before execution.
    file and byte counts, elapsed time, and per-file terminal outcomes. Agree on
    the comparison method and any performance threshold before interpreting the
    result; publish neither an SLO nor a throughput promise from a single run.
+   Reconcile any new result with PR #1083's explicitly failed original threshold
+   and still-open installed speed acceptance; do not revive that superseded
+   threshold as an owner-approved target.
 3. **Prove partial recovery separately:** interrupt after durable dispatch but
    before all per-file receipts, then repeat with capability loss. On restart,
    reconcile attempted, confirmed, fallback, and unknown files to the original
    operation/upload identities. Require no missing file, duplicate finalization,
-   false completion, or silent conversion of unknown into failure/success.
+   false completion, or silent conversion of unknown into failure/success. The
+   PR #1084 observation that a recovery barrier drained is useful operational
+   context, but is not a substitute for either fault-injection case or per-file
+   receipt reconciliation.
 4. **Keep evidence privacy-safe:** retain no user filenames, file contents,
    credentials, signed URLs, or stable account/device identifiers in the
    acceptance record. A fixture result is not evidence for personal-file
