@@ -21,12 +21,17 @@ are never persisted. Unsupported providers/clients fail closed.
 
 ## Validation in progress
 
+Final integration also covers cancellation of low-rate reservations, adaptive
+100ms payload quanta and stall deadlines that exclude intentional throttle waits.
+Control/signing timeouts remain bounded; original operation IDs stay fixed.
+
 - Runtime/journal/cache pause regressions:38 pass.
 - Coalesced journal event regression:2 pass.
-- Full file-sync suites:615 pass.
+- Full file-sync suites:621 pass; API capability111 pass.
 - Isolated actual Chromium desktop/mobile Pause, draft/focus and Builder controls pass.
-- Resource schema/codecs/native/governor targeted tests pass; final integration,
-  extended resource-status Builder acceptance, signed installed app and deployment pending.
+- Final native Node113/Mac58 tests and isolated actual Electron Node-mode transport
+  smoke pass. UI/resource-status Builder acceptance passes at both viewports.
+  Signed final bundle, installed copy and deployed-origin acceptance remain pending.
 - Existing unrelated typecheck baseline errors remain; owned new errors are fixed
   before publication. Never update the baseline to hide them.
 

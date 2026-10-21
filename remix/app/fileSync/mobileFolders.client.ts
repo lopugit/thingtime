@@ -1,4 +1,4 @@
-import { parseSyncResourceStatus, type SyncResourceStatus } from './resourceGovernor';
+import { syncRequestHasPacing, parseSyncResourceStatus, type SyncResourceStatus } from './resourceGovernor';
 import { parseNativeFolderBatchResult } from './folderBatch';
 import { parseNativeIndexChangesPage, type NativeIndexChangesPage } from './streamingIndex';
 import { parseNativeUploadBatchResult } from './uploadBatch';
@@ -866,7 +866,8 @@ export function requestMobileFolders(
 			stop();
 			reject(Error('Folder access timed out. Your saved selections are preserved.'));
 		};
-		let timer = setTimeout(
+		const pacedPayload = syncRequestHasPacing(input.action, input.resourceLimits ?? (input.action === 'upload-batch' ? input.batch.descriptor.configuration.configuration.resourceLimits : undefined));
+		let timer = pacedPayload ? undefined : setTimeout(
 			expire,
 			input.action === 'upload-part' || input.action === 'upload-file'
 				? 900_000
@@ -903,7 +904,7 @@ export function requestMobileFolders(
 		);
 		const renewUploadDeadline = () => {
 			clearTimeout(timer);
-			if (!(background === true && typeof document !== 'undefined' && document.visibilityState === 'hidden')) timer = setTimeout(expire, 900_000);
+			if (!pacedPayload && !(background === true && typeof document !== 'undefined' && document.visibilityState === 'hidden')) timer = setTimeout(expire, 900_000);
 		};
 		const visibility = () => {
 			if (background === true) renewUploadDeadline();

@@ -32,3 +32,13 @@ test('stream backpressure emits bounded slices from an existing chunk', async ()
  let size = 0; for (;;) { const next = await reader.read(); if (next.done) break; assert.ok(next.value.length <= 65536); size += next.value.length; }
  assert.equal(size, original.length); assert.ok(now >= 150);
 });
+
+test('312.5-byte/s streams release first payload within250ms and preserve the aggregate ceiling across concurrent streams', async () => {
+ let now = 0; const g = new SyncResourceGovernor({ uploadBytesPerSecond: 312.5 }, () => now, async ms => { now += ms; });
+ const source = () => new ReadableStream<Uint8Array>({ start(c) { c.enqueue(new Uint8Array(100)); c.close(); } });
+ const first = g.stream('upload', source()).getReader(), second = g.stream('upload', source()).getReader();
+ const chunk = await first.read(); assert.equal(chunk.value!.length, 31); assert.ok(now <= 250); assert.ok(now >= chunk.value!.length / 312.5 * 1000);
+ let bytes = chunk.value!.length;
+ const drain = async (reader: ReadableStreamDefaultReader<Uint8Array>) => { for (;;) { const next = await reader.read(); if (next.done) break; bytes += next.value.length; } };
+ await Promise.all([drain(first), drain(second)]); assert.equal(bytes, 200); assert.ok(now >= 200 / 312.5 * 1000);
+});

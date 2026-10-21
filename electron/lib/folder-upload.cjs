@@ -12,7 +12,7 @@ const id = value => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,
 
 // Reuse the mobile part contract; the host obtains the destination itself.
 // A renderer can select an owned upload, never an arbitrary outgoing URL.
-async function uploadFolderPart({ input, context, signal, authorize, requestNative, signPart, fetchUpload }) {
+async function uploadFolderPart({ input, context, signal, authorize, requestNative, signPart, fetchUpload, assertCurrent = () => {} }) {
     const governor = governorFor(input, context);
     const upload = input.upload, source = upload?.source, mib = 1024 * 1024;
     if (!source || source.kind !== 'file' || !id(upload.uploadId) || !id(upload.requestId) ||
@@ -52,10 +52,11 @@ async function uploadFolderPart({ input, context, signal, authorize, requestNati
     if (target.username || target.password || target.hash || (target.protocol !== 'https:' && target.origin !== context.apiOrigin)) throw invalid();
     await read(false); await authorize(); signal.throwIfAborted();
     let response;
-    const uploadSignal = AbortSignal.any([signal, AbortSignal.timeout(120_000)]);
+    const governed = governor && (governor.policy.uploadBytesPerSecond || governor.policy.cpuPercent);
+    const uploadSignal = governed ? signal : AbortSignal.any([signal, AbortSignal.timeout(120_000)]);
     try { response = await governedFetch(governor, fetchUpload, target, { method: 'PUT', credentials: 'omit', redirect: 'error', referrerPolicy: 'no-referrer',
         headers: { 'x-amz-checksum-sha256': checksum }, body: bytes,
-        signal: uploadSignal }, authorize); }
+        signal: uploadSignal }, () => { signal.throwIfAborted(); assertCurrent(); }); }
     catch (error) { signal.throwIfAborted();
         if ((uploadSignal.aborted && uploadSignal.reason?.name === 'TimeoutError') || retryableUploadFailure(error)) throw uploadRetry();
         throw invalid(); }

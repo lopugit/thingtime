@@ -1,3 +1,4 @@
+import { createSyncTransferDeadline } from './syncTransferDeadline';
 import { supportsSyncUploadStreaming, SYNC_STREAM_UPLOAD_UNAVAILABLE } from './browserSyncUpload';
 import { readCloudPathEntry } from './cloudPath.client';
 import { cloudSyncHttpError, SyncConnectionWait } from './syncConnectionWait';
@@ -349,7 +350,8 @@ function cloudFileTransport(runtime: CloudTransportRuntime, saved: CloudWrite, s
 						await runtime.authorizeMutation?.(signal);
 						await sourceCheck();
 						const transferAbort = new AbortController();
-						const uploadSignal = AbortSignal.any([transferAbort.signal, ...(signal ? [signal] : []), ...(pacedUploads ? [] : [AbortSignal.timeout(120_000)])]);
+						const deadline = createSyncTransferDeadline(AbortSignal.any([transferAbort.signal, ...(signal ? [signal] : [])]));
+						const uploadSignal = deadline.signal;
 						let response: Response;
 						try { response = await runtime.fetch(target, {
 							method: 'PUT',
@@ -357,12 +359,12 @@ function cloudFileTransport(runtime: CloudTransportRuntime, saved: CloudWrite, s
 							redirect: 'error',
 							referrerPolicy: 'no-referrer',
 							headers: part.headers,
-							body: pacedUploads ? runtime.resources!.stream('upload', new Blob([bytes]).stream(), uploadSignal) : bytes,
+							body: pacedUploads ? runtime.resources!.stream('upload', new Blob([bytes]).stream(), uploadSignal, deadline) : bytes,
 							...(pacedUploads ? { duplex: 'half' } : {}),
 							signal: uploadSignal
 						}); } catch (error) {
 							check(); if (pacedUploads && error instanceof TypeError) throw Error(SYNC_STREAM_UPLOAD_UNAVAILABLE); throw error;
-						} finally { transferAbort.abort(); }
+						} finally { deadline.dispose(); transferAbort.abort(); }
 						await response.body?.cancel().catch(() => {});
 						await sourceCheck();
 						if (!response.ok) throw Error(`Cloud upload part failed (${response.status}); retain this run.`);

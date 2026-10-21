@@ -461,7 +461,10 @@ public final class MacFolderSync {
         }
         if waiting { streamWaiter = (r.requestId, r.ownerId, r.deviceId, task) }
         else { active = (r.requestId, r.ownerId, r.deviceId, task) }
+        let governedPayload = (r.action == "upload-batch" && (r.resourceLimits?.uploadBytesPerSecond != nil || r.resourceLimits?.cpuPercent != nil)) ||
+            (["stage-finish", "publish"].contains(r.action) && r.resourceLimits?.cpuPercent != nil)
         let timeout = Task {
+            if governedPayload { return }
             try await Task.sleep(for: .milliseconds(r.action == "validate-folder-batch" ? (r.remainingMs ?? 0) : (isBatch ? 180_000 : 270_000)))
             if waiting { if streamWaiter?.id == r.requestId { streamWaiter?.task.cancel(); streamJob?.wake.signal() } }
             else if active?.id == r.requestId { suspendRequest() }

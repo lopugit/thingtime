@@ -14,9 +14,9 @@ function transferProcess(governor) {
     state = { child, pending: new Map(), idle: null }; children.set(governor, state);
     child.on('message', async message => {
         if (message.kind === 'authority') {
-            let accepted = false;
-            try { const pending = state.pending.get(message.id); if (pending) { await pending.check(); accepted = state.pending.has(message.id); } } catch { }
-            if (child.connected) child.send({ kind: 'authority-reply', ticket: message.ticket, accepted });
+            let accepted = false, target;
+            try { const pending = state.pending.get(message.id); if (pending) { target = await pending.check(message.phase); accepted = state.pending.has(message.id); } } catch { }
+            if (child.connected) child.send({ kind: 'authority-reply', ticket: message.ticket, accepted, ...(target ? { target } : {}) });
             return;
         }
         if (message.kind === 'resources') {
@@ -30,12 +30,19 @@ function transferProcess(governor) {
     child.send({ kind: 'policy', policy: governor.policy }); return state;
 }
 async function governedFetch(governor, fetchUpload, target, options, check = () => {}) {
-    if (!governor) return fetchUpload(target, options);
+    if (!governor) {
+        const fresh = await options.refreshTarget?.();
+        const { refreshTarget, ...request } = options;
+        return fetchUpload(fresh?.url ?? target, { ...request, ...(fresh?.headers ? { headers: fresh.headers } : {}) });
+    }
     // Injected fetches are for fixtures; they exercise the same byte pacing and
     // admission, but cannot supply process-attributed measurements.
     if (fetchUpload !== globalThis.fetch) {
         const release = await governor.acquire(options.signal, check);
-        try { return await fetchUpload(target, { ...options, body: governor.body(options.body, options.signal, check), duplex: 'half' }); }
+        try {
+            const fresh = await options.refreshTarget?.(); const { refreshTarget, ...request } = options;
+            return await fetchUpload(fresh?.url ?? target, { ...request, ...(fresh?.headers ? { headers: fresh.headers } : {}), body: governor.body(options.body, options.signal, check), duplex: 'half' });
+        }
         finally { release(); }
     }
     await check(); options.signal.throwIfAborted();
@@ -55,7 +62,7 @@ async function governedFetch(governor, fetchUpload, target, options, check = () 
             if (message.digest) { resolve(message.digest); return; }
             resolve({ ok: message.status >= 200 && message.status < 300, status: message.status, redirected: message.redirected, body: null });
         };
-        finish.check = async () => { options.signal.throwIfAborted(); await check(); options.signal.throwIfAborted(); };
+        finish.check = async phase => { options.signal.throwIfAborted(); await check(); const target = phase === 'dispatch' ? await options.refreshTarget?.() : undefined; options.signal.throwIfAborted(); return target; };
         state.pending.set(id, finish); options.signal.addEventListener('abort', cancel, { once: true });
         state.child.send({ kind: options._hash ? 'hash' : options._get ? 'get' : 'put', id, url: String(target), headers: options.headers, bytes: options.body, ...(options._get ?? {}) }, error => { if (error) finish({ error: 'transport' }); });
         if (options.signal.aborted) cancel();
@@ -65,9 +72,9 @@ async function governedHash(governor, bytes, signal) {
     if (!governor) return require('node:crypto').createHash('sha256').update(bytes).digest('hex');
     return governedFetch(governor, globalThis.fetch, '', { signal, headers: {}, body: bytes, _hash: true });
 }
-async function governedDownload(governor, target, signal, check) {
+async function governedDownload(governor, target, signal, check, refreshTarget) {
     if (!governor) throw new Error('Native cloud download requires its task resource governor.');
     return governedFetch(governor, globalThis.fetch, target.url, { signal, headers: target.headers,
-        _get: { offset: target.offset, length: target.length, size: target.size, expiresAt: target.expiresAt } }, check);
+        refreshTarget, _get: { offset: target.offset, length: target.length, size: target.size, expiresAt: target.expiresAt } }, check);
 }
 module.exports = { governedFetch, governedHash, governedDownload };

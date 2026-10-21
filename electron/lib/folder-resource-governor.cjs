@@ -6,14 +6,14 @@ function limits(value) {
     if (value === undefined) return {};
     if (!value || typeof value !== 'object' || Array.isArray(value) || Object.keys(value).some(k => !LIMIT_KEYS.includes(k))) throw new Error('Invalid sync resource limits.');
     for (const [k, v] of Object.entries(value)) if (!Number.isFinite(v) || v <= 0 ||
-        (k.endsWith('Concurrency') && !Number.isSafeInteger(v)) || (k === 'cpuPercent' && (v < 1 || v > 100))) throw new Error('Invalid sync resource limits.');
+        (k.endsWith('Concurrency') && !Number.isSafeInteger(v)) || (k === 'cpuPercent' && (!Number.isInteger(v) || v < 1 || v > 100))) throw new Error('Invalid sync resource limits.');
     return { ...value };
 }
 // One governor is shared by ALL transfers for the same authorized connection.
 // Configuration replacement mutates the governor, never resets its reserved bytes.
 class ResourceGovernor {
     constructor(policy = {}, clock = () => performance.now(), wait = (ms, signal) => sleep(ms, undefined, { signal })) {
-        this.clock = clock; this.wait = wait; this.next = { upload: 0, download: 0 }; this.active = 0;
+        this.clock = clock; this.wait = wait; this.next = { upload: 0, download: 0 }; this.pacing = { upload: 0, download: 0 }; this.active = 0;
         this.factor = 1; this.samples = new Map(); this.lastAdapt = -Infinity; this.setLimits(policy);
     }
     setLimits(policy) { this.policy = limits(policy); }
@@ -38,25 +38,44 @@ class ResourceGovernor {
     }
     cpu() { const fresh = [...this.samples.values()].filter(x => this.clock() - x.at < 2000); return fresh.length ? Math.min(100, fresh.reduce((s, x) => s + x.percent, 0)) : null; }
     concurrency() { return Math.max(1, Math.floor(Math.min(16, this.policy.transferConcurrency ?? 16) * this.factor)); }
+    clearIdleReservations() {
+        for (const direction of ['upload', 'download']) {
+            // Pace is charged before emission. A completed ticket has therefore
+            // paid its entire byte cost; once no ticket remains, only unused
+            // cancelled reservations can lie in the future. Never reset a lane
+            // with a live waiter, even if another transfer released its permit.
+            if (this.pacing[direction] === 0 && this.next[direction] > this.clock()) this.next[direction] = this.clock();
+        }
+    }
     async acquire(signal, check = () => {}) {
         while (this.active >= this.concurrency()) { signal.throwIfAborted(); await this.wait(25, signal); await check(); }
         signal.throwIfAborted(); await check(); signal.throwIfAborted();
         // check may await; another caller may have admitted while it did.
         if (this.active >= this.concurrency()) return this.acquire(signal, check);
         this.active++; let released = false;
-        return () => { if (!released) { released = true; this.active--; } };
+        return () => { if (!released) { released = true; this.active--; this.clearIdleReservations(); } };
     }
     async pace(direction, count, signal, check = () => {}) {
-        const configured = this.policy[direction + 'BytesPerSecond'];
-        // CPU pressure also paces unlimited connections; this adaptive duty delay
-        // is independent of the optional user byte ceiling.
-        const rate = configured ? configured * this.factor : undefined;
-        if (rate) {
-            const start = Math.max(this.clock(), this.next[direction]);
-            const end = start + count / rate * 1000; this.next[direction] = end;
-            while (this.clock() < end) { signal.throwIfAborted(); await this.wait(Math.min(100, end - this.clock()), signal); await check(); }
-        } else if (this.factor < 1) { await this.wait(Math.min(250, (1 / this.factor - 1) * 10), signal); await check(); }
-        signal.throwIfAborted(); await check(); signal.throwIfAborted();
+        this.pacing[direction]++;
+        try {
+            const configured = this.policy[direction + 'BytesPerSecond'];
+            // CPU pressure also paces unlimited connections; this adaptive duty
+            // delay is independent of the optional user byte ceiling.
+            const rate = configured ? configured * this.factor : undefined;
+            if (rate) {
+                const start = Math.max(this.clock(), this.next[direction]);
+                const end = start + count / rate * 1000; this.next[direction] = end;
+                while (this.clock() < end) { signal.throwIfAborted(); await this.wait(Math.min(100, end - this.clock()), signal); await check(); }
+            } else if (this.factor < 1) { await this.wait(Math.min(250, (1 / this.factor - 1) * 10), signal); await check(); }
+            signal.throwIfAborted(); await check(); signal.throwIfAborted();
+        } finally {
+            this.pacing[direction]--;
+            this.clearIdleReservations();
+        }
+    }
+    quantum(direction) {
+        const rate = this.policy[direction + 'BytesPerSecond'];
+        return rate ? Math.max(1, Math.min(65536, Math.floor(rate * this.factor / 10))) : 65536;
     }
     body(bytes, signal, check) {
         let offset = 0; const governor = this;
@@ -64,7 +83,7 @@ class ResourceGovernor {
             async pull(controller) {
                 try {
                     if (offset === bytes.length) { controller.close(); return; }
-                    const end = Math.min(bytes.length, offset + 65536), chunk = bytes.subarray(offset, end);
+                    const end = Math.min(bytes.length, offset + governor.quantum('upload')), chunk = bytes.subarray(offset, end);
                     await governor.pace('upload', chunk.length, signal, check); offset = end; controller.enqueue(chunk);
                 } catch (error) { controller.error(error); }
             }

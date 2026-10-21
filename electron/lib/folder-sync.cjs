@@ -325,7 +325,11 @@ class DesktopFolderSync {
         let outcome = 'failed', endReply;
         const lane = input.action === 'scan-changes' ? 'streamWaiter' : 'active';
         const state = { context, folderDeadline: input.action === 'validate-folder-batch' ? this.now() + input.remainingMs : null, input: structuredClone(input), abort: new AbortController(), dispatched: false, lane, phase: 'admission' };
-        const timer = setTimeout(() => this.cancel(state), state.folderDeadline === null ? this.timeoutMs : Math.min(this.timeoutMs, input.remainingMs)); timer.unref?.();
+        const policy = state.input.resourceLimits;
+        const governedPayload = policy && ((['upload-part', 'upload-batch'].includes(input.action) && (policy.uploadBytesPerSecond || policy.cpuPercent)) ||
+            (input.action === 'stage-download' && (policy.downloadBytesPerSecond || policy.cpuPercent)) ||
+            (['stage-finish', 'publish'].includes(input.action) && policy.cpuPercent));
+        const timer = governedPayload ? null : setTimeout(() => this.cancel(state), state.folderDeadline === null ? this.timeoutMs : Math.min(this.timeoutMs, input.remainingMs)); timer?.unref?.();
         const verify = async () => {
             const previousPhase = state.phase;
             state.phase = 'account-verification';
@@ -402,9 +406,9 @@ class DesktopFolderSync {
             state.phase = 'native-request';
             state.dispatched = true;
             const value = state.input.action === 'upload-batch' ? await uploadFolderBatch({ input: state.input, context, signal: state.abort.signal,
-                assertCurrent: () => this.assertCurrent(state), requestNative: nativeRequest, fetchUpload: this.fetchUpload }) :
+                assertCurrent: () => this.assertCurrent(state), requestNative: nativeRequest, fetchUpload: this.fetchUpload, refreshPart: async body => { await verify(); return signDesktopUploadPart(context, body, state.abort.signal, 20_000, this.diagnostic); } }) :
                 state.input.action === 'upload-part' ? await uploadFolderPart({ input: state.input, context,
-                signal: state.abort.signal, authorize: verify, fetchUpload: this.fetchUpload,
+                signal: state.abort.signal, authorize: verify, assertCurrent: () => this.assertCurrent(state), fetchUpload: this.fetchUpload,
                 requestNative: nativeRequest,
                 signPart: async body => { await verify(); return signDesktopUploadPart(context, body, state.abort.signal, 20_000, this.diagnostic); }
             }) : state.input.action === 'stage-download' ? await stageFolderDownload({ input: state.input, context, signal: state.abort.signal, authorize: verify, assertCurrent: () => this.assertCurrent(state), requestNative: nativeRequest }) : await nativeRequest({ ...state.input, origin: context.apiOrigin });

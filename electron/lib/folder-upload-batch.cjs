@@ -80,18 +80,19 @@ async function requestBatchPhase(context, body, signal) {
         throw error;
     } finally { if (!response?.body?.locked) await response?.body?.cancel().catch(() => {}); }
 }
-async function uploadFolderBatch({ input, context, signal, assertCurrent, requestNative, fetchUpload,
+async function uploadFolderBatch({ input, context, signal, assertCurrent, requestNative, fetchUpload, refreshPart,
     requestPhase = (body, phaseSignal) => requestBatchPhase(context, body, phaseSignal), now = () => performance.now() }) {
     const descriptor = structuredClone(input.batch?.descriptor), digest = input.batch?.digest;
     if (!sha(digest) || createHash('sha256').update(batchCanonicalBytes(descriptor)).digest('hex') !== digest ||
         descriptor.scope.origin !== context.apiOrigin || descriptor.scope.ownerId !== context.ownerId || descriptor.scope.deviceId !== input.deviceId ||
         descriptor.configuration.configuration.localRootId !== input.rootId) throw invalid();
     const governor = governorFor(input, context);
-    const started = now(), deadline = started + 30000, lifetime = new AbortController();
-    const combined = AbortSignal.any([signal, lifetime.signal, AbortSignal.timeout(180000)]);
+    const governed = !!(governor?.policy.uploadBytesPerSecond || governor?.policy.cpuPercent);
+    const started = now(), deadline = governed ? Infinity : started + 30000, lifetime = new AbortController();
+    const combined = AbortSignal.any([signal, lifetime.signal, ...(!governed ? [AbortSignal.timeout(180000)] : [])]);
     const states = descriptor.members.map(member => ({ member, prepared: null, confirmed: null, content: null, bytes: null, received: 0, put: 'none', payload: 0, checksum: null }));
     let prepareRounds = 0, verified = false, active = 0;
-    const check = extra => { combined.throwIfAborted(); extra?.throwIfAborted(); assertCurrent(); if (now() - started >= 180000) throw invalid(); };
+    const check = extra => { combined.throwIfAborted(); extra?.throwIfAborted(); assertCurrent(); if (!governed && now() - started >= 180000) throw invalid(); };
     const phase = async (body, callbackSignal) => {
         check(callbackSignal); const phaseSignal = callbackSignal ? AbortSignal.any([combined, callbackSignal]) : combined;
         const reply = await requestPhase({ ...body, descriptor, digest }, phaseSignal); check(callbackSignal);
@@ -139,7 +140,7 @@ async function uploadFolderBatch({ input, context, signal, assertCurrent, reques
                 const target = new URL(row.part.url);
                 if (target.username || target.password || target.hash || (target.protocol !== 'https:' && target.origin !== context.apiOrigin) ||
                     target.searchParams.get('partNumber') !== '1' || !target.searchParams.get('uploadId') || !(Date.parse(row.part.expiresAt) > Date.now())) throw invalid();
-                s.prepared = { id: row.upload.id, target, headers: row.part.headers };
+                s.prepared = { id: row.upload.id, target, headers: row.part.headers, expiresAt: row.part.expiresAt };
                 return { ordinal, status: 'prepared', uploadId: row.upload.id };
             }) };
         }
@@ -157,11 +158,27 @@ async function uploadFolderBatch({ input, context, signal, assertCurrent, reques
             if (!s?.prepared || s.put !== 'none' || frame.sha256 !== s.checksum || !s.bytes || s.received !== s.bytes.length ||
                 await governedHash(governor, s.bytes, combined) !== s.checksum || active >= 16 || verified) throw invalid();
             if (now() >= deadline) { s.bytes.fill(0); s.bytes = null; s.put = 'deadline'; return { status: 'failed', code: 'deadline' }; }
-            check(callbackSignal); s.put = 'pending'; active++;
-            const putSignal = AbortSignal.any([combined, callbackSignal, AbortSignal.timeout(60000)]); let response;
+            check(callbackSignal);
+            const freshTarget = async () => {
+                check(callbackSignal);
+                if (!(Date.parse(s.prepared.expiresAt) > Date.now() + 1000)) {
+                if (typeof refreshPart !== 'function') throw invalid();
+                const signed = await refreshPart({ uploadId: s.prepared.id, parts: [{ partNumber: 1, checksumSha256: Buffer.from(s.checksum, 'hex').toString('base64') }] });
+                check(callbackSignal); const part = signed?.parts?.[0];
+                if (!Array.isArray(signed?.parts) || signed.parts.length !== 1 || part?.partNumber !== 1 ||
+                    !part.headers || Object.keys(part.headers).length !== 1 || part.headers['x-amz-checksum-sha256'] !== s.prepared.headers['x-amz-checksum-sha256'] ||
+                    !(Date.parse(part.expiresAt) > Date.now())) throw invalid();
+                const renewed = new URL(part.url);
+                if (renewed.username || renewed.password || renewed.hash || (renewed.protocol !== 'https:' && renewed.origin !== context.apiOrigin) || renewed.searchParams.get('partNumber') !== '1' || !renewed.searchParams.get('uploadId')) throw invalid();
+                s.prepared = { ...s.prepared, target: renewed, headers: part.headers, expiresAt: part.expiresAt };
+            }
+                return { url: String(s.prepared.target), headers: s.prepared.headers, expiresAt: s.prepared.expiresAt };
+            };
+            s.put = 'pending'; active++;
+            const putSignal = AbortSignal.any([combined, callbackSignal, ...(!governed ? [AbortSignal.timeout(60000)] : [])]); let response;
             try {
                 response = await governedFetch(governor, fetchUpload, s.prepared.target, { method: 'PUT', credentials: 'omit', redirect: 'error', referrerPolicy: 'no-referrer',
-                    signal: putSignal, headers: s.prepared.headers, body: s.bytes }, () => check(callbackSignal));
+                    signal: putSignal, headers: s.prepared.headers, body: s.bytes, refreshTarget: freshTarget }, () => check(callbackSignal));
                 check(callbackSignal);
                 if (response.redirected) throw invalid();
                 if (!response.ok) { s.put = 'failed'; return { status: 'failed', code: [408, 429].includes(response.status) || response.status >= 500 ? 'temporarily-unavailable' : 'invalid-member' }; }

@@ -4,17 +4,20 @@
 const { setTimeout: sleep } = require('node:timers/promises');
 const { createHash } = require('node:crypto');
 const { availableParallelism } = require('node:os');
+const network = require('./folder-network-io.cjs');
 const { ResourceGovernor } = require('./folder-resource-governor.cjs');
 const governor = new ResourceGovernor(); governor.cpuBudgetShares = 3;
 const requests = new Map(), approvals = new Map(); let ticket = 0;
-function authorize(id, signal) {
+function authorize(id, signal, phase = 'chunk') {
     signal.throwIfAborted();
     return new Promise((resolve, reject) => {
         const key = ++ticket;
-        const cancel = () => { approvals.delete(key); reject(signal.reason); };
-        approvals.set(key, ok => { signal.removeEventListener('abort', cancel); approvals.delete(key); ok ? resolve() : reject(new Error('authority')); });
+        const cleanup = () => { clearTimeout(timer); signal.removeEventListener('abort', cancel); approvals.delete(key); };
+        const cancel = () => { cleanup(); reject(signal.reason); };
+        const timer = setTimeout(() => { cleanup(); reject(Object.assign(new Error('authority'), { code: 'ETIMEDOUT' })); }, phase === 'dispatch' ? 60000 : 10000);
+        approvals.set(key, reply => { cleanup(); reply.accepted ? resolve(reply.target) : reject(new Error('authority')); });
         signal.addEventListener('abort', cancel, { once: true });
-        process.send?.({ kind: 'authority', id, ticket: key });
+        process.send?.({ kind: 'authority', id, ticket: key, phase });
         if (signal.aborted) cancel();
     });
 }
@@ -40,7 +43,7 @@ const sample = () => {
 const timer = setInterval(() => { if (requests.size) sample(); }, 250); timer.unref();
 process.on('disconnect', () => { requests.forEach(c => c.abort()); process.exit(0); });
 process.on('message', async message => {
-    if (message.kind === 'authority-reply') { approvals.get(message.ticket)?.(message.accepted === true); return; }
+    if (message.kind === 'authority-reply') { approvals.get(message.ticket)?.(message); return; }
     if (message.kind === 'policy') { governor.setLimits(message.policy); return; }
     if (message.kind === 'sample') { governor.sample(message.scope, message.percent); return; }
     if (message.kind === 'cancel') { requests.get(message.id)?.abort(); return; }
@@ -56,10 +59,11 @@ process.on('message', async message => {
             await cpuCheckpoint(controller.signal);
             process.send?.({ kind: 'reply', id: message.id, digest }); return;
         }
-        await authorize(message.id, controller.signal);
+        const fresh = await authorize(message.id, controller.signal, 'dispatch');
+        if (fresh) { message.url = fresh.url; message.headers = fresh.headers; if (fresh.expiresAt) message.expiresAt = fresh.expiresAt; }
         if (message.kind === 'get') {
             if (!Number.isSafeInteger(message.offset) || !Number.isSafeInteger(message.length) || message.offset < 0 || message.length <= 0 || message.length > 2097152 || message.offset + message.length > message.size || !(Date.parse(message.expiresAt) > Date.now())) throw new Error('range');
-            const response = await fetch(message.url, { method: 'GET', credentials: 'omit', redirect: 'error', referrerPolicy: 'no-referrer', headers: message.headers, signal: controller.signal });
+            const response = await network.get(message.url, message.headers, controller.signal);
             try {
                 if (response.status !== 206 || response.redirected || ![null, 'identity'].includes(response.headers.get('content-encoding')) || response.headers.get('content-range') !== `bytes ${message.offset}-${message.offset + message.length - 1}/${message.size}` || !response.body || (response.headers.has('content-length') && response.headers.get('content-length') !== String(message.length))) throw new Error('range');
                 const output = Buffer.alloc(message.length), reader = response.body.getReader(); let at = 0;
@@ -68,8 +72,9 @@ process.on('message', async message => {
                         const chunk = await reader.read(); controller.signal.throwIfAborted();
                         if (chunk.done) break;
                         if (at + chunk.value.length > output.length) throw new Error('range');
-                        for (let start = 0; start < chunk.value.length; start += 65536) {
-                            const part = chunk.value.subarray(start, Math.min(start + 65536, chunk.value.length));
+                        for (let start = 0; start < chunk.value.length;) {
+                            const part = chunk.value.subarray(start, Math.min(start + governor.quantum('download'), chunk.value.length));
+                            start += part.length;
                             await governor.pace('download', part.length, controller.signal, async () => { await cpuCheckpoint(controller.signal); await authorize(message.id, controller.signal); });
                             output.set(part, at); at += part.length;
                         }
@@ -82,9 +87,7 @@ process.on('message', async message => {
             } finally { await response.body?.cancel().catch(() => {}); }
             return;
         }
-        const response = await fetch(message.url, { method: 'PUT', credentials: 'omit', redirect: 'error', referrerPolicy: 'no-referrer',
-            headers: message.headers, body: governor.body(bytes, controller.signal, async () => { await cpuCheckpoint(controller.signal); await authorize(message.id, controller.signal); }), duplex: 'half', signal: controller.signal });
-        await response.body?.cancel();
+        const response = await network.put(message.url, message.headers, governor.body(bytes, controller.signal, async () => { await cpuCheckpoint(controller.signal); await authorize(message.id, controller.signal); }), bytes.length, controller.signal, () => controller.abort());
         process.send?.({ kind: 'reply', id: message.id, status: response.status, redirected: response.redirected });
     } catch (error) {
         // Only fixed categories cross IPC; no signed URLs or network error text.

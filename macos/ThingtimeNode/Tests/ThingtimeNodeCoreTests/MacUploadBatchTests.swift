@@ -64,6 +64,14 @@ final class MacUploadBatchTests: XCTestCase {
     private final class SilentCallback: NSObject, ThingtimeNodeBatchCallback {
         func exchange(_ frame: Data, withReply reply: @escaping (Data) -> Void) { }
     }
+    func testOnlyGovernedPayloadCallbackMayOutliveWallClockAndStillCancels() async throws {
+        let callback = SilentCallback()
+        do { _ = try await NodeBatchCallback.exchange(callback, frame: .object(["kind": .string("prepare-ready")]), timeout: .infinity); XCTFail("Control callback lost its deadline") }
+        catch { XCTAssertTrue(error is CancellationError) }
+        let task = Task { try await NodeBatchCallback.exchange(callback, frame: .object(["kind": .string("put-ready")]), timeout: .infinity) }
+        await Task.yield(); task.cancel()
+        do { _ = try await task.value; XCTFail("Governed payload ignored cancellation") } catch { XCTAssertTrue(error is CancellationError) }
+    }
     func testMissingCallbackHasBoundedTimeoutAndCancellation() async throws {
         let callback = SilentCallback()
         do { _ = try await NodeBatchCallback.exchange(callback, frame: .object(["kind": .string("verify-ready")]), timeout: 0.01); XCTFail("Missing callback accepted") }

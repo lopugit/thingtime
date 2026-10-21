@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 const { createServer } = require('node:http');
 const { once } = require('node:events');
 const { ResourceGovernor } = require('../lib/folder-resource-governor.cjs');
-const { governedFetch, governedHash } = require('../lib/folder-transfer-process.cjs');
+const { governedFetch, governedHash, governedDownload } = require('../lib/folder-transfer-process.cjs');
 
 test('aggregate byte reservations do not multiply across simultaneous files or directions', async () => {
     let now = 0; const waits = [];
@@ -52,4 +52,84 @@ test('dedicated transport process enforces aggregate streaming rate on real loop
         assert.ok(performance.now() - start >= 900, 'rate multiplied by simultaneous files');
         assert.equal(governor.snapshot().cpuStatus, 'measured'); assert.deepEqual(governor.snapshot().cpuScopes, ['transport-process']);
     } finally { server.close(); await once(server, 'close'); }
+});
+
+test('cancelled slow pacing cannot poison immediate reuse after a policy change', async () => {
+    const governor = new ResourceGovernor({ uploadBytesPerSecond: 0.001 });
+    const cancel = new AbortController(), pending = governor.pace('upload', 65536, cancel.signal);
+    assert.ok(governor.next.upload > performance.now() + 1000000000);
+    cancel.abort(); await assert.rejects(pending);
+    assert.ok(governor.next.upload <= performance.now());
+    governor.setLimits({ uploadBytesPerSecond: 1e12 });
+    await governor.pace('upload', 65536, AbortSignal.timeout(500));
+    assert.equal(governor.pacing.upload, 0);
+});
+test('cancel cleanup and permit release retain live reservations and isolate directions', async () => {
+    const governor = new ResourceGovernor({ uploadBytesPerSecond: 0.001, downloadBytesPerSecond: 0.001 });
+    const first = new AbortController(), second = new AbortController(), downloading = new AbortController();
+    const release = await governor.acquire(new AbortController().signal);
+    const one = governor.pace('upload', 65536, first.signal), two = governor.pace('upload', 65536, second.signal);
+    const down = governor.pace('download', 65536, downloading.signal);
+    const uploadDebt = governor.next.upload, downloadDebt = governor.next.download;
+    first.abort(); await assert.rejects(one); release();
+    assert.equal(governor.next.upload, uploadDebt); assert.equal(governor.pacing.upload, 1);
+    second.abort(); await assert.rejects(two);
+    assert.ok(governor.next.upload <= performance.now()); assert.equal(governor.next.download, downloadDebt);
+    downloading.abort(); await assert.rejects(down); assert.equal(governor.pacing.download, 0);
+    assert.ok(governor.next.download <= performance.now());
+});
+test('native CPU percentages require whole integers while fractional byte rates remain valid', () => {
+    assert.throws(() => new ResourceGovernor({ cpuPercent: 1.5 }));
+    assert.throws(() => new ResourceGovernor({ cpuPercent: 99.9 }));
+    assert.doesNotThrow(() => new ResourceGovernor({ cpuPercent: 1, uploadBytesPerSecond: 0.001, downloadBytesPerSecond: 312.5 }));
+});
+
+test('low bandwidth uses small prompt chunks and no direction exceeds its budget', async () => {
+    let now = 0; const waits = [];
+    const governor = new ResourceGovernor({ uploadBytesPerSecond: 312.5, downloadBytesPerSecond: 625 }, () => now, async ms => { waits.push(ms); now += ms; });
+    assert.equal(governor.quantum('upload'), 31); assert.equal(governor.quantum('download'), 62);
+    const reader = governor.body(Buffer.alloc(100), new AbortController().signal).getReader();
+    const first = await reader.read(); assert.equal(first.value.length, 31); assert.ok(now <= 100);
+    let bytes = first.value.length;
+    for (;;) { const next = await reader.read(); if (next.done) break; bytes += next.value.length; }
+    assert.equal(bytes, 100); assert.ok(now >= 320); assert.ok(waits.every(ms => ms <= 100));
+});
+
+
+test('queued PUT and GET resolve fresh targets only after child transfer admission', async () => {
+    let entered, unblock, released = false, refreshed = 0;
+    const firstEntered = new Promise(resolve => { entered = resolve; });
+    const releaseFirst = new Promise(resolve => { unblock = resolve; });
+    const paths = [];
+    const server = createServer(async (request, response) => {
+        paths.push(request.url);
+        for await (const chunk of request) { }
+        if (request.url === '/first') { entered(); await releaseFirst; }
+        if (request.method === 'GET') {
+            response.writeHead(206, { 'Content-Range': 'bytes 0-3/4', 'Content-Length': '4' });
+            response.end('data');
+        } else response.end();
+    });
+    server.listen(0, '127.0.0.1'); await once(server, 'listening');
+    try {
+        const base = 'http://127.0.0.1:' + server.address().port;
+        const governor = new ResourceGovernor({ transferConcurrency: 1, uploadBytesPerSecond: 1e9 });
+        const signal = AbortSignal.timeout(5000);
+        const first = governedFetch(governor, globalThis.fetch, base + '/first', { signal, headers: {}, body: Buffer.from('one') });
+        await firstEntered;
+        const fresh = method => async () => {
+            assert.equal(released, true, 'signature refreshed before queued admission'); refreshed++;
+            return { url: base + '/fresh-' + method, headers: method === 'get' ? { Range: 'bytes=0-3' } : {}, expiresAt: new Date(Date.now() + 60000).toISOString() };
+        };
+        const put = governedFetch(governor, globalThis.fetch, base + '/stale-put',
+            { signal, headers: {}, body: Buffer.from('two'), refreshTarget: fresh('put') });
+        const get = governedDownload(governor, { url: base + '/stale-get', headers: { Range: 'bytes=0-3' },
+            offset: 0, length: 4, size: 4, expiresAt: new Date(Date.now() + 60000).toISOString() }, signal, () => {}, fresh('get'));
+        await new Promise(resolve => setTimeout(resolve, 30)); assert.equal(refreshed, 0);
+        released = true; unblock();
+        const replies = await Promise.all([first, put, get]);
+        assert.equal(replies[0].ok, true); assert.equal(replies[1].ok, true);
+        assert.equal(Buffer.from(replies[2].bytes).toString(), 'data');
+        assert.equal(refreshed, 2); assert.deepEqual(paths, ['/first', '/fresh-put', '/fresh-get']);
+    } finally { unblock(); server.close(); await once(server, 'close'); }
 });

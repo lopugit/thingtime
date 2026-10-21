@@ -4853,7 +4853,9 @@ needed. Direct object transfers retain existing scoped upload authorization.
 Pause cancels current work immediately and saves a per-connection stop independently
 of progress refreshes. Resume is explicit. A failed pause save is reported; the
 current process blocks automatic restart, but reopening may recover the old saved
-job. Keep the device folder selected to resume its journaled progress.
+job. Keep the device folder selected to resume its journaled progress. Intentional
+rate/CPU waits do not consume network-stall deadlines; actual stalled IO remains
+bounded, and cancelling releases unused pacing reservations before Resume.
 
 
 

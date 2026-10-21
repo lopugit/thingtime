@@ -1,3 +1,4 @@
+import { syncRequestHasPacing } from './resourceGovernor';
 import { SyncConnectionWait } from './syncConnectionWait';
 import { createFolderHostFetch } from './folderHostFetch.client';
 import type { ThingtimeDesktopBridge } from '../utils/electronBridge';
@@ -84,7 +85,8 @@ export async function createDesktopFolderHost(input: {
 		const payload = structuredClone(request);
 		if ('rootId' in payload && input.resourcePolicy) Object.assign(payload, { resourceLimits: input.resourcePolicy.resourceLimits, resourceScope: input.resourcePolicy.resourceScope });
 		const expected = { requestId: crypto.randomUUID(), ownerId, deviceId, ...(origin ? { origin } : {}) };
-		const combined = AbortSignal.any([input.signal, signal, AbortSignal.timeout(300_000)]);
+		const pacedPayload = syncRequestHasPacing(payload.action, input.resourcePolicy?.resourceLimits ?? ('batch' in payload ? payload.batch.descriptor.configuration.configuration.resourceLimits : undefined));
+		const combined = AbortSignal.any([input.signal, signal, ...(pacedPayload ? [] : [AbortSignal.timeout(300_000)])]);
 		return await new Promise<any>((resolve, reject) => {
 			let dispatched = false;
 			const abort = () => {

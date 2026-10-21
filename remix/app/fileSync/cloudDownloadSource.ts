@@ -1,3 +1,4 @@
+import { createSyncTransferDeadline } from './syncTransferDeadline';
 import { CLOUD_NATIVE_DOWNLOAD_REQUIREMENTS, parseSignedDownloadTarget } from './signedDownloadTarget';
 import { cloudRequests, type CloudTransportRuntime } from './cloudTransport';
 import { cloudFileSyncEntry, parseCloudFile, type CloudFile } from './cloudFile';
@@ -78,12 +79,14 @@ export function createCloudDownloadSource(
 					offset: String(range.offset),
 					length: String(range.length)
 				});
+				const deadline = createSyncTransferDeadline(active, 30000);
+				try {
 				const response = await runtime.fetch(new URL('/api/v1/attachments/content?' + query, scope.origin), {
 					method: 'GET',
 					credentials: 'same-origin',
 					cache: 'no-store',
 					redirect: 'error',
-					signal: AbortSignal.any([active, AbortSignal.timeout(30_000)]),
+					signal: deadline.signal,
 					headers: { [EXPECTED_ACTOR_HEADER]: scope.ownerId, [EXPECTED_DATA_PLANE_HEADER]: scope.dataPlane }
 				});
 				try {
@@ -100,9 +103,10 @@ export function createCloudDownloadSource(
 					await response.body?.cancel();
 					throw Error('Cloud range version is unavailable or changed.');
 				}
-				const paced = runtime.resources && response.body ? new Response(runtime.resources.stream('download', response.body, active), { status: response.status, headers: response.headers }) : response;
-				bytes.set(await readExactRange(paced, range, file.content.size, guard), at);
+				const paced = runtime.resources && response.body ? new Response(runtime.resources.stream('download', response.body, deadline.signal, deadline), { status: response.status, headers: response.headers }) : response;
+				bytes.set(await readExactRange(paced, range, file.content.size, () => { deadline.signal.throwIfAborted(); guard(); }), at);
 				guard();
+				} finally { deadline.dispose(); }
 			}
 			await check();
 			guard();

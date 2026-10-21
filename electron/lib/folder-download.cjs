@@ -7,6 +7,7 @@ const hex = value => typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
 const equal = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 const fingerprint = (a, b) => a?.algorithm === 'sha256-parts-v1' && a.algorithm === b?.algorithm && a.partSizeBytes === b.partSizeBytes && a.partCount === b.partCount && a.sha256 === b.sha256 && hex(a.sha256);
 async function authenticatedJson(context, path, signal) {
+    signal = AbortSignal.any([signal, AbortSignal.timeout(20000)]);
     const response = await context.window.webContents.session.fetch(new URL(path, context.appOrigin).href, {
         credentials: 'include', redirect: 'error', cache: 'no-store', bypassCustomProtocolHandlers: true, signal,
         headers: { Accept: 'application/json', 'X-Thingtime-Expected-Actor': context.ownerId, 'X-Thingtime-Expected-Data-Plane': 'home', 'X-Thingtime-Expected-Api-Origin': context.apiOrigin }
@@ -48,18 +49,22 @@ async function stageFolderDownload({ input, context, signal, authorize, assertCu
             current.content?.attachmentId !== file.content.attachmentId || current.content.version !== file.content.version || current.content.size !== file.content.size || !fingerprint(current.content.fingerprint, file.content.fingerprint)) throw invalid();
     };
     await checkCloud();
+    async function resolveTarget() {
     // Renderer hints never select an outgoing URL. Resolve the authoritative
     // target through the captured host session and the fixed canonical endpoint.
-    const query = new URLSearchParams({ id: file.content.attachmentId, target: '1', range: '1', version: file.content.version, offset: String(input.offset), length: String(input.length) });
-    const resolved = await json('/api/v1/attachments/content?' + query, signal); await check();
-    const target = resolved?.target;
-    if (resolved?.ok !== true || target?.version !== 1 || target.ownerId !== context.ownerId || target.attachmentId !== file.content.attachmentId || target.contentVersion !== file.content.version ||
+        const query = new URLSearchParams({ id: file.content.attachmentId, target: '1', range: '1', version: file.content.version, offset: String(input.offset), length: String(input.length) });
+        const resolved = await json('/api/v1/attachments/content?' + query, signal); await check();
+        const target = resolved?.target;
+        if (resolved?.ok !== true || target?.version !== 1 || target.ownerId !== context.ownerId || target.attachmentId !== file.content.attachmentId || target.contentVersion !== file.content.version ||
         target.size !== file.content.size || target.offset !== input.offset || target.length !== input.length || !fingerprint(target.fingerprint, file.content.fingerprint) ||
         !equal(Object.keys(target.headers ?? {}), ['Range']) || target.headers.Range !== `bytes=${input.offset}-${input.offset + input.length - 1}` ||
         !(Date.parse(target.expiresAt) > Date.now()) || Date.parse(target.expiresAt) > Date.now() + 60000) throw invalid();
-    let url; try { url = new URL(target.url); } catch { throw invalid(); }
-    if (url.username || url.password || url.hash || (url.protocol !== 'https:' && !(url.protocol === 'http:' && ['127.0.0.1', '[::1]', 'localhost'].includes(url.hostname) && url.origin === context.apiOrigin))) throw invalid();
-    const result = await download(governor, target, signal, check);
+        let url; try { url = new URL(target.url); } catch { throw invalid(); }
+        if (url.username || url.password || url.hash || (url.protocol !== 'https:' && !(url.protocol === 'http:' && ['127.0.0.1', '[::1]', 'localhost'].includes(url.hostname) && url.origin === context.apiOrigin))) throw invalid();
+        return target;
+    }
+    const target = await resolveTarget();
+    const result = await download(governor, target, signal, () => { signal.throwIfAborted(); assertCurrent(); }, async () => { await checkCloud(); return resolveTarget(); });
     try {
         if (!(result.bytes instanceof Uint8Array) || result.bytes.length !== input.length || !hex(result.sha256)) throw invalid();
         await checkCloud();

@@ -91,7 +91,7 @@ export class SyncResourceGovernor {
 		} finally { if (abort) signal?.removeEventListener('abort', abort); void prior.then(release); }
 	}
 	/** Backpressure keeps only the existing source chunk and one output slice. */
-	stream(direction: 'upload' | 'download', source: ReadableStream<Uint8Array>, signal?: AbortSignal): ReadableStream<Uint8Array> {
+	stream(direction: 'upload' | 'download', source: ReadableStream<Uint8Array>, signal?: AbortSignal, deadline?: { pause(): void; resume(): void }): ReadableStream<Uint8Array> {
 		const cancellation = new AbortController(), active = signal ? AbortSignal.any([signal, cancellation.signal]) : cancellation.signal;
 		const reader = source.getReader(); let bytes: Uint8Array | undefined, offset = 0;
 		return new ReadableStream<Uint8Array>({
@@ -99,10 +99,20 @@ export class SyncResourceGovernor {
 				try {
 					active.throwIfAborted();
 					if (!bytes || offset === bytes.length) { const next = await reader.read(); if (next.done) { reader.releaseLock(); controller.close(); return; } bytes = next.value; offset = 0; }
-					const part = bytes.subarray(offset, Math.min(bytes.length, offset + 64 * 1024));
-					await this.pace(direction, part.length, active); offset += part.length; controller.enqueue(part);
+					const rate = this.status()[direction === 'upload' ? 'uploadBytesPerSecond' : 'downloadBytesPerSecond'];
+					const chunkBytes = rate === undefined ? 64 * 1024 : Math.max(1, Math.min(64 * 1024, Math.floor(rate / 10)));
+					const part = bytes.subarray(offset, Math.min(bytes.length, offset + chunkBytes));
+					deadline?.pause();
+					try { await this.pace(direction, part.length, active); } finally { deadline?.resume(); }
+					offset += part.length; controller.enqueue(part);
 				} catch (error) { await reader.cancel(error).catch(() => {}); controller.error(error); }
 			}, cancel: reason => { cancellation.abort(reason); return reader.cancel(reason); }
 		}, { highWaterMark: 0 });
 	}
+}
+
+/** Only governed payload calls may outlive a fixed bridge wall deadline. Native
+ * transports still own bounded network inactivity and cancellable waits. */
+export function syncRequestHasPacing(action: string, limits?: FileSyncResourceLimits): boolean {
+ return !!limits && ((['upload-batch', 'upload-file', 'upload-part'].includes(action) && !!(limits.uploadBytesPerSecond || limits.cpuPercent)) || (action === 'stage-download' && !!(limits.downloadBytesPerSecond || limits.cpuPercent)) || (['stage-finish', 'publish'].includes(action) && !!limits.cpuPercent));
 }
