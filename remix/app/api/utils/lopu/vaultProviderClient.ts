@@ -16,6 +16,7 @@ import { createClaudeOAuthClient, type runClaudeOAuth } from '../ai/claudeOAuth'
 import { lookup } from 'node:dns/promises';
 import { isModelUnavailableError } from '../ai/modelDiscovery';
 import { AiTransportFailure } from '../ai/providerWaterfall';
+import { ChatGPTPlanError, RESOURCE as CHATGPT_PLAN_RESOURCE } from '../ai/chatgptPlanProtocol';
 
 import {
 	defaultVaultProviderModel,
@@ -55,6 +56,9 @@ export type LopuVaultProviderRecord = {
 	endpoint: string;
 	model: string | null;
 	token: string;
+	authMode?: 'chatgpt-plan';
+	// Runtime-owned cancellation for this authorization generation. Never stored.
+	authSignal?: AbortSignal;
 };
 
 export type LopuVaultHistoryMessage = { role: 'user' | 'assistant'; content: string };
@@ -113,6 +117,7 @@ export type LopuVaultProviderClientConfig = {
 	apiKey: string;
 	model: string;
 	rewritten: boolean;
+	authMode?: 'chatgpt-plan';
 };
 
 // What chat.ts builds its SDK client from: guard first, then the base URL
@@ -124,6 +129,17 @@ export const resolveVaultProviderClientConfig = async (
 	provider: LopuVaultProviderRecord,
 	options: { model?: string | null } = {}
 ): Promise<LopuVaultProviderClientConfig> => {
+	if (provider.authMode === 'chatgpt-plan') {
+		// Plan credentials must never follow an API-key endpoint, default model,
+		// or development rewrite. The runtime supplied an account-discovered model.
+		if (provider.provider !== 'openai' || provider.endpoint !== CHATGPT_PLAN_RESOURCE || !provider.token ||
+			applyProviderDevRewrite(provider.endpoint, devRewrites())) throw new ChatGPTPlanError('invalid_request');
+		const model = resolveVaultTurnModel(provider.model, options.model);
+		if (!model) throw new ChatGPTPlanError('invalid_request');
+		await assertSafeProviderEndpoint(provider.endpoint);
+		return { transport: 'openai', toolProtocol: 'native', baseURL: CHATGPT_PLAN_RESOURCE,
+			apiKey: provider.token, model, rewritten: false, authMode: 'chatgpt-plan' };
+	}
 	const model = resolveVaultTurnModel(provider.model, options.model, defaultVaultProviderModel(provider.provider));
 	if (!model) throw vaultGuardError(LOPU_VAULT_NO_MODEL_REASON);
 	const safe = await assertSafeProviderEndpoint(provider.endpoint);
@@ -288,6 +304,7 @@ export const callVaultProviderPlainCompletion = async (provider: LopuVaultProvid
 	(await callVaultProviderCompletion(provider, input)).text;
 
 export const callVaultProviderCompletion = async (provider: LopuVaultProviderRecord, input: PlainCompletionInput): Promise<VaultProviderCompletion> => {
+	if (provider.authMode === 'chatgpt-plan') throw new ChatGPTPlanError('subscription_sharing_route_not_supported');
 	const model = resolveVaultTurnModel(provider.model, input.model, defaultVaultProviderModel(provider.provider));
 	if (!model) throw vaultGuardError(LOPU_VAULT_NO_MODEL_REASON);
 	if (provider.provider === 'anthropic') {
@@ -367,6 +384,7 @@ export type RealtimeSessionInput = {
 // response. The credential that comes back must differ from the key it was
 // minted with, so a misbehaving endpoint can never echo the key downstream.
 export const mintVaultProviderRealtimeSession = async (provider: LopuVaultProviderRecord, input: RealtimeSessionInput): Promise<VaultProviderRealtimeSession> => {
+	if (provider.authMode === 'chatgpt-plan') throw new ChatGPTPlanError('subscription_sharing_route_not_supported');
 	if (!vaultProviderSupportsRealtime(provider.provider)) throw vaultGuardError(LOPU_VAULT_REALTIME_UNSUPPORTED_REASON);
 	const model = input.model.trim();
 	if (!model) throw vaultGuardError(LOPU_VAULT_NO_MODEL_REASON);

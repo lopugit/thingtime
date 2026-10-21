@@ -1,4 +1,5 @@
 import { useCallback, useMemo } from 'react';
+import type { DevicePlatform } from '../../devices/platform';
 
 import { createApiFailure, readApiResponsePayload } from '~/hooks/apiFailure';
 import type { DeviceBattery } from './deviceTypes';
@@ -132,7 +133,7 @@ export type PublicDeviceConnector = {
 export type PublicDevice = {
 	id: string;
 	name: string;
-	platform: 'macos' | 'windows' | 'linux' | 'watchos';
+	platform: DevicePlatform;
 	model: string | null;
 	osVersion: string | null;
 	appVersion: string | null;

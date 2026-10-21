@@ -202,3 +202,17 @@ test('every post-completion S3 operation targets the exact verified object versi
 	assert.ok(presignedCommand instanceof GetObjectCommand);
 	assert.equal(presignedCommand.input.VersionId, 'opaque-version-1');
 });
+
+test('empty objects use a conditional encrypted single PutObject with exact checksum and owner-bound key', async () => {
+    const commands: any[] = [];
+    const s3 = createPrivateS3({ roleArn: 'test', bucket: 'private-test', region: 'ap-southeast-2', expectedBucketOwner: '123456789012' },
+        { send: async (command: any) => { commands.push(command); return { VersionId: 'empty-version' }; } } as any);
+    assert.deepEqual(await s3.putEmptyObject({ objectKey: 'objects/empty', attachmentId: 'empty' }), { versionId: 'empty-version' });
+    assert.equal(commands[0].constructor.name, 'PutObjectCommand');
+    assert.deepEqual(commands[0].input, { Bucket: 'private-test', ExpectedBucketOwner: '123456789012', Key: 'objects/empty',
+        Body: new Uint8Array(0), ContentLength: 0, ContentType: 'application/octet-stream', ServerSideEncryption: 'AES256',
+        ChecksumAlgorithm: 'SHA256', ChecksumSHA256: '47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=',
+        Metadata: { 'attachment-id': 'empty' }, Tagging: 'thingtime-state=pending', IfNoneMatch: '*' });
+    await assert.rejects(s3.putEmptyObject({ objectKey: 'objects/other', attachmentId: 'empty' }));
+    assert.equal(commands.length, 1);
+});

@@ -1,3 +1,4 @@
+import { isPngThumbnail } from '../../utils/pngThumbnail';
 import { ComponentChange } from '../Builder/ComponentChange';
 import { ComponentMenu } from '../Builder/ComponentMenu';
 import { ComponentSelect } from '../Builder/ComponentSelect';
@@ -104,6 +105,10 @@ export const ALLOWED_PROPS = new Set([
 	// assistive tech — no URL, no JS sink, no validation engine
 	'role',
 	'aria-label',
+	'aria-valuenow',
+	'aria-valuemin',
+	'aria-valuemax',
+	'aria-valuetext',
 	'aria-hidden',
 	'aria-pressed',
 	'aria-expanded',
@@ -184,7 +189,7 @@ const sanitizeStyle = (style: unknown): React.CSSProperties | undefined => {
 	return out;
 };
 
-const sanitizeProps = (props: unknown): Record<string, unknown> => {
+const sanitizeProps = (props: unknown, tag?: string): Record<string, unknown> => {
 	if (!props || typeof props !== 'object' || Array.isArray(props)) return {};
 
 	const out: Record<string, unknown> = {};
@@ -203,7 +208,7 @@ const sanitizeProps = (props: unknown): Record<string, unknown> => {
 			return;
 		}
 		if ((key === 'href' || key === 'src' || key === 'poster') && typeof value === 'string') {
-			if (!isSafeUrl(value)) return;
+			if (!isSafeUrl(value) && !(tag === 'img' && key === 'src' && isPngThumbnail(value))) return;
 			out[key] = value;
 			return;
 		}
@@ -230,7 +235,10 @@ const fieldProps = (tag: string, props: Record<string, unknown>): Record<string,
 	const out: Record<string, unknown> = { ...props };
 	// Local bindings are controlled by LiveTemplate's bounded instance state.
 	// Keep the DOM in sync after another control changes a value or resets it.
-	if (out['data-tt-action'] === '$ui') return { ...out, value: out.value ?? '', onChange: () => {} };
+	if (out.type === 'file') { delete out.value; delete out.defaultValue; return out; }
+ if (out['data-tt-action'] === '$ui' || (out['data-tt-action'] === '$transient' && ('value' in out || 'checked' in out))) {
+  return { ...out, ...('checked' in out ? { checked: out.checked === true || out.checked === 'true' || out.checked === 'checked' } : { value: out.value ?? '' }), onChange: () => {} };
+ }
 	if ('value' in out) {
 		out.defaultValue = out.value;
 		delete out.value;
@@ -349,7 +357,7 @@ const renderNode = (node: HtmlThingNode, key: number, depth: number, state: Rend
 		return <span key={key}>{renderChildren(node.children, depth + 1, state)}</span>;
 	}
 
-	const props = fieldProps(tag, sanitizeProps(node.props));
+	const props = fieldProps(tag, sanitizeProps(node.props, tag));
 	if (props.style) props.style = mapStyleMediaUrls(props.style, state.mediaUrl);
 	for (const field of ['src', 'poster', 'href']) if (typeof props[field] === 'string') props[field] = state.mediaUrl(props[field]);
 
@@ -388,3 +396,18 @@ export const HtmlThingRenderer = ({ node }: { node: HtmlThingNode }) => {
 	const state: RenderState = { count: 0, mediaUrl: useSharedMediaUrl() };
 	return <>{renderNode(node, 0, 0, state)}</>;
 };
+
+/** Individual Builder elements share the exact HTML allowlist and URL policy. */
+export function HtmlBlockElement({ tag, attributes, editorProps, children }: {
+ tag: string; attributes?: Record<string, unknown>; editorProps?: Record<string, any>; children?: React.ReactNode;
+}) {
+ const mediaUrl = useSharedMediaUrl();
+ const safeTag = ALLOWED_TAGS.has(tag) && !tag.startsWith('tt-') ? tag : 'div';
+ const props = fieldProps(safeTag, sanitizeProps(attributes, safeTag));
+ if (props.style) props.style = mapStyleMediaUrls(props.style, mediaUrl);
+ for (const key of ['src', 'poster', 'href']) if (typeof props[key] === 'string') props[key] = mediaUrl(props[key]);
+ const merged = { ...props, ...editorProps, style: { ...(props.style as React.CSSProperties), ...editorProps?.style } };
+ if (FIELD_TAGS.has(safeTag)) return <HtmlTemplateField tag={safeTag as 'input' | 'textarea' | 'select'} fieldProps={merged}>{safeTag === 'select' ? children : undefined}</HtmlTemplateField>;
+ if (safeTag === 'a') return <ComponentLink {...merged}>{children}</ComponentLink>;
+ return React.createElement(safeTag, merged, VOID_TAGS.has(safeTag) ? undefined : children);
+}

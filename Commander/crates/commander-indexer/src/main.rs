@@ -49,6 +49,14 @@ fn main() -> ExitCode {
 }
 
 fn run_cli(arguments: Vec<String>) -> Result<(), IndexerError> {
+    #[cfg(unix)]
+    if arguments.as_slice() == ["backup"] {
+        // Grant paths and policy travel over a private pipe, never argv/logs.
+        return commander_indexer::backup::serve(
+            io::BufReader::new(io::stdin()),
+            io::stdout().lock(),
+        );
+    }
     if arguments.is_empty()
         || arguments
             .iter()

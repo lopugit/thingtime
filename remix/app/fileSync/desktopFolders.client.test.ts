@@ -1,0 +1,431 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { uploadBatchDigest } from './uploadBatch';
+import { createDesktopFolderHost } from './desktopFolders.client';
+import { mobileFolderSource } from './mobileFolders.client';
+const origin = 'https://sync.test';
+const rootId = '00000000-0000-4000-8000-000000000001';
+test('desktop folder failures show fixed compatibility guidance and hide arbitrary native details', async () => {
+	const unsupported = 'The selected server does not support this version of folder sync.';
+	for (const message of [unsupported,
+		`Error invoking remote method 'thingtime-desktop:folder-sync': Error: ${unsupported}`,
+		'/private/user/folder: native transport failure', `secret prefix ${unsupported}`, '']) {
+		await assert.rejects(createDesktopFolderHost({
+			ownerId: 'owner', deviceId: 'device', signal: new AbortController().signal,
+			rendererOrigin: () => 'http://127.0.0.1:12001', assertCurrent: () => {},
+			bridge: { folderSyncRequest: async () => { throw Error(message); } }
+		}), { message: message === unsupported || message.startsWith("Error invoking remote method '")
+			? unsupported : 'Folder access could not be verified. Check the connection, pairing and selected account.' });
+	}
+});
+function fixture() {
+	const lifetime = new AbortController(),
+		calls: any[] = [],
+		network: any[] = [];
+	let localOrigin = 'http://127.0.0.1:12001',
+		current = true,
+		patch: any = {},
+		hold = false,
+		release: (value: unknown) => void = () => {};
+	let responseOrigin = origin;
+	const bridge = {
+		folderSyncRequest: async (input: any) => {
+			calls.push(input);
+			if (input.action === 'suspend') return {};
+			const value = {
+				...input,
+				origin,
+				roots: [{ id: rootId, name: 'Chosen', publicationVersion: '1.0.0' }],
+				capabilities: { fileAccessVersion: '1.1.0', fileStagingVersion: '1.0.0', filePublicationVersion: '1.1.0' },
+				apiCapabilities: { schemaVersion: 1, origin, features: { 'api.files': { version: '1.4.0' } } },
+				...(input.action === 'read'
+					? {
+							chunk: {
+								version: input.version,
+								offset: input.offset,
+								size: 131073,
+								data: btoa('a'.repeat(Math.min(input.length, 131073 - input.offset)))
+							}
+					  }
+					: {}),
+				...patch
+			};
+			if (hold)
+				return await new Promise((resolve) => {
+					release = () => resolve(value);
+				});
+			return value;
+		}
+	};
+	const fetcher: typeof fetch = async (url, init) => {
+		network.push({ url: String(url), init });
+		return new Response('ok', { headers: { 'x-thingtime-api-fallback': responseOrigin } });
+	};
+	const create = () =>
+		createDesktopFolderHost({
+			ownerId: 'owner',
+			deviceId: 'device',
+			bridge,
+			signal: lifetime.signal,
+			rendererOrigin: () => localOrigin,
+			assertCurrent: () => {
+				if (!current) throw Error('Identity changed');
+			},
+			fetch: fetcher
+		});
+	return {
+		create,
+		calls,
+		network,
+		lifetime,
+		patch: (p: any) => {
+			patch = p;
+		},
+		hold: (value = true) => {
+			hold = value;
+		},
+		release: () => release({}),
+		origin: (value: string) => {
+			localOrigin = value;
+		},
+		current: (value: boolean) => {
+			current = value;
+		},
+		responseOrigin: (value: string) => {
+			responseOrigin = value;
+		}
+	};
+}
+const apiInit = {
+	credentials: 'same-origin',
+	cache: 'no-store',
+	redirect: 'error',
+	headers: {
+		'X-Thingtime-Expected-Actor': 'owner',
+		'X-Thingtime-Expected-Data-Plane': 'home'
+	}
+} satisfies RequestInit;
+test('desktop context binds capabilities, origin and every native reply to the host-confirmed owner/device', async () => {
+	const f = fixture(),
+		host = await f.create();
+	assert.equal(host.origin(), origin);
+	assert.equal(host.capabilities?.platform, 'macos');
+	await host.requireCapability('api.files', '1.3.0');
+	await assert.rejects(host.requireCapability('api.files', '1.5.0'));
+	await assert.rejects(host.requireCapability('api.actions-run', '1.0.0'));
+	assert.equal((await host.request('owner', { action: 'list' }, f.lifetime.signal)).roots[0].id, rootId);
+	await assert.rejects(host.request('other', { action: 'list' }, f.lifetime.signal));
+	await assert.rejects(host.authorizeDevice('owner', 'other', f.lifetime.signal));
+	for (const patch of [{ origin: 'https://other.test' }, { ownerId: 'other' }, { deviceId: 'other' }, { requestId: 'other' }]) {
+		f.patch(patch);
+		await assert.rejects(host.request('owner', { action: 'list' }, f.lifetime.signal));
+	}
+	f.patch({ apiCapabilities: { schemaVersion: 1, origin: 'https://other.test', features: {} } });
+	await assert.rejects(host.authorizeDevice('owner', 'device', f.lifetime.signal));
+});
+test('desktop remaps only pinned authenticated API requests and never lends cookies to signed upload URLs', async () => {
+	const f = fixture(),
+		host = await f.create();
+	await host.fetch(origin + '/api/v1/files?rootId=cloud', apiInit);
+	assert.equal(f.network[0].url, 'http://127.0.0.1:12001/api/v1/files?rootId=cloud');
+	assert.equal(f.network[0].init.credentials, 'same-origin');
+	const signed = origin + '/signed-upload?signature=fixture';
+	await host.fetch(signed, { method: 'PUT', credentials: 'omit', redirect: 'error', body: 'bytes' });
+	assert.equal(f.network[1].url, signed);
+	assert.equal(f.network[1].init.credentials, 'omit');
+	for (const [url, init] of [
+		['https://other.test/api/v1/files', apiInit],
+		[origin + '/private', apiInit],
+		[origin + '/api/v1/files', { ...apiInit, redirect: 'follow' }],
+		[origin + '/api/v1/files', { ...apiInit, headers: {} }],
+		[signed, { credentials: 'omit', redirect: 'error', headers: apiInit.headers }],
+		['http://other.test/upload', { credentials: 'omit', redirect: 'error' }],
+		[origin + '/api/v1/files', { ...apiInit, headers: { ...apiInit.headers, Authorization: 'not-a-real-token' } }]
+	] as [string, RequestInit][])
+		await assert.rejects(host.fetch(url, init));
+	assert.equal(f.network.length, 2);
+	f.responseOrigin('https://other.test');
+	await assert.rejects(host.fetch(origin + '/api/v1/files', apiInit));
+	f.current(false);
+	await assert.rejects(host.fetch(signed, { credentials: 'omit', redirect: 'error' }));
+	assert.equal(f.network.length, 3);
+});
+test('desktop native reads use the shared bounded source without a global mobile bridge', async () => {
+	const f = fixture(),
+		host = await f.create();
+	const source = mobileFolderSource(
+		'owner',
+		rootId,
+		{ path: 'file', id: 'native', version: '1', size: 131073, kind: 'file', sha256: 'a'.repeat(64) },
+		f.lifetime.signal,
+		host.request,
+		host.capabilities
+	);
+	await source.check();
+	assert.equal((await source.read(0, 131073)).length, 131073);
+	assert.deepEqual(
+		f.calls.filter((call) => call.action === 'read').map((call) => call.length),
+		[1, 65536, 65536, 1]
+	);
+	assert.ok(f.calls.every((call) => call.verifiedChunks === undefined));
+});
+test('cancelled desktop calls stop waiting, suspend their original request, and discard late replies', async () => {
+	const f = fixture(),
+		host = await f.create();
+	f.hold();
+	const pending = host.request('owner', { action: 'choose' }, f.lifetime.signal);
+	await new Promise((resolve) => setTimeout(resolve, 0));
+	const original = f.calls.at(-1);
+	f.lifetime.abort();
+	await assert.rejects(pending);
+	assert.deepEqual(f.calls.at(-1), { requestId: original.requestId, ownerId: 'owner', deviceId: 'device', origin, action: 'suspend' });
+	f.release();
+	await new Promise((resolve) => setTimeout(resolve, 0));
+	assert.throws(host.origin);
+});
+test('context negotiation can cancel before the renderer learns the host-selected origin', async () => {
+	const f = fixture();
+	f.hold();
+	const pending = f.create();
+	await new Promise((resolve) => setTimeout(resolve, 0));
+	const original = f.calls.at(-1);
+	f.lifetime.abort();
+	await assert.rejects(pending);
+	assert.equal(f.calls.at(-1).requestId, original.requestId);
+	assert.equal(f.calls.at(-1).origin, undefined);
+	f.release();
+	await new Promise((resolve) => setTimeout(resolve, 0));
+});
+
+test('queued requests keep immutable payloads and cancelled waiters never dispatch', async () => {
+	const f = fixture(),
+		host = await f.create();
+	f.hold();
+	const first = host.request('owner', { action: 'choose' }, f.lifetime.signal);
+	await new Promise((resolve) => setTimeout(resolve, 0));
+	const request = { action: 'remove' as const, rootId };
+	const second = host.request('owner', request, f.lifetime.signal);
+	request.rootId = 'changed-after-enqueue';
+	const cancelled = new AbortController();
+	const third = host.request('owner', { action: 'list' }, cancelled.signal);
+	cancelled.abort();
+	await assert.rejects(third);
+	f.hold(false);
+	f.release();
+	await first;
+	await second;
+	assert.deepEqual(
+		f.calls.filter((call) => call.action !== 'context').map((call) => ({ action: call.action, rootId: call.rootId })),
+		[
+			{ action: 'choose', rootId: undefined },
+			{ action: 'remove', rootId }
+		]
+	);
+});
+
+
+test('desktop excluded scans fail before dispatch on an older native host', async () => {
+	const f = fixture(), host = await f.create(), calls = f.calls.length;
+	for (const request of [{ action: 'scan' as const, rootId, excludedPaths: ['Library'] },
+		{ action: 'scan-capture' as const, rootId, captureId: crypto.randomUUID(), inventoryDeviceId: 'device', excludedPaths: ['Library'] }])
+		await assert.rejects(host.request('owner', request, f.lifetime.signal), /Update Thingtime to exclude paths/);
+	assert.equal(f.calls.length, calls);
+});
+
+test('fixed native verification and shutdown waits survive IPC redaction; arbitrary and authority failures remain terminal', async () => {
+ const { SyncConnectionWait, isSyncConnectionFailure } = await import('./syncConnectionWait');
+ for (const marker of ['[folder_transport_retry] Folder service is temporarily unavailable. Retry after reconnecting.',
+  '[folder_identity_retry] Folder identity verification is temporarily unavailable. Retry after reconnecting.',
+  '[folder_sync_shutdown] Thingtime is closing. Saved sync work can resume when reopened.']) {
+ for (const message of [marker, `Error invoking remote method 'thingtime-desktop:folder-sync': Error: ${marker}`,
+  `private-prefix ${marker}`, `${marker} private-suffix`, 'Folder access changed. Reopen this device with the current account.']) {
+  for (const initial of [true, false]) {
+   let fail = initial;
+   const bridge = { folderSyncRequest: async (input: any) => {
+    if (fail) throw Error(message);
+    return { ...input, origin, capabilities: { fileAccessVersion: '1.10.0' },
+     apiCapabilities: { schemaVersion: 1, origin, features: {} } };
+   } };
+   const attempt = async () => {
+    const host = await createDesktopFolderHost({ ownerId: 'owner', deviceId: 'device', bridge,
+     signal: new AbortController().signal, rendererOrigin: () => 'http://127.0.0.1:12001', assertCurrent: () => {} });
+    fail = true;
+    await host.request('owner', { action: 'list' }, new AbortController().signal);
+   };
+   const expected = message === marker || message.startsWith("Error invoking remote method '");
+   await assert.rejects(attempt(), error => {
+    assert.equal(error instanceof SyncConnectionWait, expected);
+    assert.equal(isSyncConnectionFailure(error), expected);
+    assert.equal((error as InstanceType<typeof SyncConnectionWait>).reason, expected && marker.startsWith('[folder_identity_retry]') ? 'folder-identity' : undefined);
+    assert.doesNotMatch((error as Error).message, /private-prefix|private-suffix|folder_identity_retry|folder_sync_shutdown/);
+    return true;
+   });
+  }
+ }
+ }
+});
+
+async function streamLaneFixture() {
+	const lifetime = new AbortController(), calls: any[] = [], holds = new Set<string>(), releases = new Map<string, () => void>();
+	const bridge = { folderSyncRequest: async (input: any) => {
+		calls.push(input);
+		if (input.action === 'suspend') return {};
+		if (holds.has(input.action)) await new Promise<void>(resolve => releases.set(input.action, resolve));
+		return { ...input, origin, roots: [], capabilities: { fileAccessVersion: '1.11.0' },
+			apiCapabilities: { schemaVersion: 1, origin, features: {} },
+			conditions: { network: 'wifi', charging: true }, complete: true, entry: null,
+			changesPage: { id: input.captureId, generation: input.captureId, state: 'running', revision: 0, changes: [], nextSequence: 0, hasMore: false },
+			chunk: { version: input.version, size: 1, offset: input.offset, length: input.length, bytes: new Uint8Array([7]) }
+		};
+	} };
+	const host = await createDesktopFolderHost({ ownerId: 'owner', deviceId: 'device', bridge, signal: lifetime.signal,
+		rendererOrigin: () => 'http://127.0.0.1:12001', assertCurrent: () => {} });
+	const wait = (signal = lifetime.signal) => host.request('owner', { action: 'scan-changes', rootId, inventoryDeviceId: 'device',
+		captureId: rootId, afterSequence: 0, waitMilliseconds: 25000, capturePolicy: 'one-way-supported' }, signal);
+	return { host, lifetime, calls, holds, wait,
+		release(action: string) { holds.delete(action); releases.get(action)?.(); },
+		releaseAll() { holds.clear(); for (const resolve of releases.values()) resolve(); }
+	};
+}
+const nextTurn = () => new Promise<void>(resolve => setImmediate(resolve));
+
+test('held scan-changes never blocks ordinary conditions, inspect and read-range; ordinary dispatch stays FIFO', async () => {
+	const f = await streamLaneFixture(), pending: Promise<unknown>[] = [];
+	f.holds.add('scan-changes'); f.holds.add('inspect');
+	try {
+		pending.push(f.wait()); await nextTurn();
+		pending.push(f.host.request('owner', { action: 'inspect', rootId, path: 'file' }, f.lifetime.signal));
+		pending.push(f.host.request('owner', { action: 'conditions' }, f.lifetime.signal));
+		pending.push(f.host.request('owner', { action: 'read-range', rootId, path: 'file', version: '1', offset: 0, length: 1 }, f.lifetime.signal));
+		await nextTurn();
+		assert.deepEqual(f.calls.map(call => call.action), ['context', 'scan-changes', 'inspect']);
+		f.release('inspect'); await Promise.all(pending.slice(1));
+		assert.deepEqual(f.calls.map(call => call.action), ['context', 'scan-changes', 'inspect', 'conditions', 'read-range']);
+		assert.equal((await pending[3] as any).range.bytes[0], 7);
+	} finally { f.releaseAll(); await Promise.allSettled(pending); }
+});
+
+test('cancelled stream waiter suspends only its request; task cancellation still suspends both lanes', async () => {
+	const f = await streamLaneFixture(), waiter = new AbortController(), pending: Promise<unknown>[] = [];
+	f.holds.add('scan-changes'); f.holds.add('inspect');
+	try {
+		const wait = f.wait(waiter.signal); pending.push(wait); void wait.catch(() => {}); await nextTurn();
+		const ordinary = f.host.request('owner', { action: 'inspect', rootId, path: 'file' }, f.lifetime.signal); pending.push(ordinary); void ordinary.catch(() => {}); await nextTurn();
+		const waitId = f.calls.find(call => call.action === 'scan-changes').requestId;
+		const ordinaryId = f.calls.find(call => call.action === 'inspect')?.requestId;
+		assert.ok(ordinaryId, 'ordinary request must dispatch while waiter is held');
+		waiter.abort(); await assert.rejects(wait);
+		assert.deepEqual(f.calls.filter(call => call.action === 'suspend').map(call => call.requestId), [waitId]);
+		assert.equal(f.calls.some(call => call.action === 'scan-cancel'), false);
+		f.release('scan-changes'); await nextTurn();
+		const nextWait = f.wait(); pending.push(nextWait); void nextWait.catch(() => {});
+		f.holds.add('scan-changes'); await nextTurn();
+		const nextWaitId = f.calls.filter(call => call.action === 'scan-changes').at(-1).requestId;
+		f.lifetime.abort(); await Promise.all([assert.rejects(ordinary), assert.rejects(nextWait)]);
+		assert.deepEqual(f.calls.filter(call => call.action === 'suspend').map(call => call.requestId).sort(), [waitId, ordinaryId, nextWaitId].sort());
+	} finally { f.releaseAll(); await Promise.allSettled(pending); }
+});
+
+test('negotiated Mac part upload stays on scoped native IPC rather than cross-origin browser PUT', async () => {
+    const lifetime = new AbortController(), calls: any[] = [];
+    let badReceipt = false;
+    const bridge = { folderSyncRequest: async (input: any) => {
+        calls.push(input);
+        return { ...input, origin, roots: [], capabilities: { fileAccessVersion: '1.11.0', fileUploadVersion: '1.0.0' },
+            apiCapabilities: { schemaVersion: 1, origin, features: {} },
+            ...(input.action === 'upload-part' ? { uploadedPart: { ...input.upload, source: undefined,
+                version: badReceipt ? 'changed' : input.upload.source.version, size: input.upload.source.size, sha256: 'b'.repeat(64) } } : {}) };
+    } };
+    const host = await createDesktopFolderHost({ ownerId: 'owner', deviceId: 'device', bridge, signal: lifetime.signal,
+        rendererOrigin: () => 'http://127.0.0.1:54321', assertCurrent: () => {},
+        fetch: async () => { throw Error('A browser S3 PUT would be blocked by CORS'); } });
+    const entry = { id: 'inode', path: '.composer/.htaccess', kind: 'file' as const, version: 'v1', size: 13, sha256: null,
+        fingerprint: { algorithm: 'sha256-parts-v1' as const, partSizeBytes: 8388608, partCount: 1, sha256: 'a'.repeat(64) } };
+    const source = mobileFolderSource('owner', rootId, entry, lifetime.signal, host.request, host.capabilities);
+    assert.equal(source.uploadFile, undefined);
+    assert.equal(typeof source.uploadPart, 'function');
+    const part = { uploadId: 'att_fixture', requestId: 'operation', partNumber: 1, offset: 0, length: 13 };
+    assert.deepEqual(await source.uploadPart!(part, lifetime.signal), { sha256: 'b'.repeat(64) });
+    assert.deepEqual(calls.map(call => call.action), ['context', 'upload-part']);
+    assert.equal(calls[1].upload.requestId, 'operation');
+    assert.equal(calls[1].upload.source.version, 'v1');
+    badReceipt = true;
+    await assert.rejects(source.uploadPart!(part, lifetime.signal), /Invalid native upload receipt/);
+    lifetime.abort();
+});
+
+test('real native bridge errors survive Electron43 string serialization as narrowly classified renderer waits', async () => {
+ const { createRequire } = await import('node:module');
+ const require=createRequire(import.meta.url);
+ const { DesktopFolderSync }=require('../../../electron/lib/folder-sync.cjs');
+ const { ThingtimeNodeBridgeError }=require('../../../electron/lib/thingtime-node-bridge.cjs');
+ const { SyncConnectionWait }=await import('./syncConnectionWait');
+ for(const code of ['folder_identity_retry','node_timeout','node_unavailable','folder_unavailable','node_protocol_error','cancelled']) {
+  const localOrigin='http://127.0.0.1:12001',frame={url:localOrigin},sender={mainFrame:frame};
+  const window={webContents:sender,isDestroyed:()=>false};
+  const main=new DesktopFolderSync({context:()=>({enabled:true,window,appOrigin:localOrigin,apiOrigin:origin}),
+   verifyAccount:async()=>{},capabilities:async()=>({schemaVersion:1,origin,features:{'api.devices-node-identity':{version:'1.0.0'}}}),
+   requestNative:async(_method:unknown,input:any)=>{
+    if(input.action==='list')throw new ThingtimeNodeBridgeError(code,code==='folder_identity_retry'?
+     '[folder_identity_retry] Folder identity verification is temporarily unavailable. Retry after reconnecting.':'private-source?credential=never-log');
+    return {...input,capabilities:{fileAccessVersion:'1.11.0'},roots:[]};
+   }});
+  const bridge={folderSyncRequest:async(input:any)=>{
+   try{return await main.request({sender,senderFrame:frame},input);}
+   // Electron43.1 ipc-dispatch.ts:88 and ipc-renderer.ts:22 preserve Error.toString(), not custom fields.
+   catch(error){throw Error(`Error invoking remote method 'thingtime-desktop:folder-sync': ${String(error)}`);}
+  }};
+  const host=await createDesktopFolderHost({ownerId:'owner',deviceId:'device',bridge,signal:new AbortController().signal,
+   rendererOrigin:()=>localOrigin,assertCurrent:()=>{}});
+  await assert.rejects(host.request('owner',{action:'list'},new AbortController().signal),error=>{
+   assert.equal(error instanceof SyncConnectionWait,['folder_identity_retry','node_timeout','node_unavailable'].includes(code));
+   assert.doesNotMatch((error as Error).message,/private|credential|never-log|ThingtimeNodeBridgeError/);return true;
+  });
+ }
+});
+
+
+test('composite authorization freshly returns roots and conditions with one context RPC; old hosts retain the legacy path', async () => {
+ const old = fixture(), oldHost = await old.create();
+ assert.equal(oldHost.authorizeContext, undefined);
+ const f = fixture(); f.patch({ capabilities: { fileAccessVersion: '1.12.0' }, conditions: { network: 'wifi', charging: true } });
+ const host = await f.create(), before = f.calls.length;
+ assert.deepEqual(await host.authorizeContext!('owner', 'device', f.lifetime.signal), {
+  roots: [{ id: rootId, name: 'Chosen', publicationVersion: '1.0.0' }], conditions: { network: 'wifi', charging: true }
+ });
+ assert.deepEqual(f.calls.slice(before).map(row => row.action), ['context']);
+ f.patch({ capabilities: { fileAccessVersion: '1.12.0' }, conditions: { network: 'offline', charging: null }, roots: [] });
+ assert.deepEqual(await host.authorizeContext!('owner', 'device', f.lifetime.signal), { roots: [], conditions: { network: 'offline', charging: null } });
+ f.patch({ capabilities: { fileAccessVersion: '1.12.0' }, conditions: { network: 'secret-network', charging: true } });
+ await assert.rejects(host.authorizeContext!('owner', 'device', f.lifetime.signal));
+ f.patch({ capabilities: { fileAccessVersion: '1.12.0' }, conditions: { network: 'wifi', charging: true }, ownerId: 'other' });
+ await assert.rejects(host.authorizeContext!('owner', 'device', f.lifetime.signal));
+});
+
+
+test('desktop bulk runner requires both trusted native and selected-origin API capability and binds exact scope', async () => {
+	const capabilities = { fileAccessVersion: '1.13.0', fileUploadBatchVersion: '1.0.0' };
+	for (const patch of [
+		{ capabilities },
+		{ capabilities: { fileAccessVersion: '1.13.0' }, apiCapabilities: { schemaVersion: 1, origin, features: { 'api.file-sync-batches': { version: '1.0.0' } } } }
+	]) {
+		const f = fixture(); f.patch({ ...patch, conditions: { network: 'wifi', charging: true } });
+		assert.equal((await f.create()).uploadBatch, undefined);
+	}
+	const f = fixture(), descriptor = JSON.parse(readFileSync(new URL('./fixtures/uploadBatchDigest.v1.json', import.meta.url), 'utf8')).vectors[0].descriptor;
+	descriptor.configuration.configuration.localRootId = rootId;
+	const digest = await uploadBatchDigest(descriptor);
+	f.patch({ capabilities, conditions: { network: 'wifi', charging: true }, apiCapabilities: { schemaVersion: 1, origin, features: { 'api.file-sync-batches': { version: '1.0.0' } } },
+		uploadedBatch: { ok: true, version: 1, batchId: descriptor.batchId, digest,
+			results: [{ ordinal: 0, status: 'failed', statusCode: 409, code: 'source-changed', retryable: false }], payloads: [{ ordinal: 0, bytes: 0 }] } });
+	const host = await f.create();
+	assert.ok(host.uploadBatch);
+	const result = await host.uploadBatch({ descriptor, digest }, {}, f.lifetime.signal);
+	assert.equal(result.batchId, descriptor.batchId);
+	assert.equal(f.calls.at(-1).action, 'upload-batch');
+	assert.equal(f.calls.at(-1).rootId, rootId);
+	const before = f.calls.length, foreign = structuredClone(descriptor); foreign.scope.ownerId = 'foreign';
+	await assert.rejects(host.uploadBatch({ descriptor: foreign, digest }, {}, f.lifetime.signal));
+	assert.equal(f.calls.length, before, 'scope drift is rejected before native dispatch');
+});

@@ -22,6 +22,16 @@ test('only managed content and public assets enter the cache policy', () => {
 	}
 	assert.equal(publicLifetime(new Response('bytes', { headers: { 'Cache-Control': 'public, max-age=300', Age: '20' } })), 280000);
 });
+test('pinned sync ranges, fingerprint JSON and actor-scoped requests bypass media caching', () => {
+	const content = `${origin}/api/v1/attachments/content?id=a`;
+	for (const query of ['range=1&version=abc&offset=0&length=17', 'fingerprint=1', 'range=0', 'version=abc', 'offset=0', 'length=17']) {
+		assert.equal(managedUrl(new Request(`${content}&${query}`), origin), null);
+	}
+	for (const headers of [{ 'X-Thingtime-Expected-Actor': 'owner' }, { 'X-Thingtime-Expected-Data-Plane': 'home' }]) {
+		assert.equal(managedUrl(new Request(content, { headers }), origin), null);
+	}
+	assert.equal(managedUrl(new Request(content, { cache: 'no-store' }), origin), null);
+});
 test('cached complete files satisfy byte ranges, suffix ranges and unsatisfiable ranges', async () => {
 	const record = { bytes: new Blob(['0123456789']), headers: { 'Content-Type': 'audio/mpeg' } };
 	const response = responseFromRecord(record, 'bytes=2-5');
@@ -79,6 +89,13 @@ test('real worker reauthorizes cache hits, deduplicates bytes, respects ranges, 
 	try {
 		await mediaStore.clear();
 		await import('../public/media-cache-sw.mjs');
+		for (const query of ['range=1&version=abc&offset=0&length=17', 'fingerprint=1']) {
+			listeners.fetch({
+				request: new Request(`${origin}/api/v1/attachments/content?id=test&${query}`),
+				respondWith: () => assert.fail('Sync reads must retain their original network request and response'),
+				waitUntil: () => assert.fail('Sync reads must not schedule cache work')
+			});
+		}
 		const request = async (range) => {
 			let result;
 			const work = [];
