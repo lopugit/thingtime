@@ -100,6 +100,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-21: Add closed upload-batch failure counts to rotated local diagnostics and show negotiated folder-batch/reservation observations through the existing editable readiness status. No retry, authority, receipt or scheduling changes; historical member codes remain unknown. [Details](../PRs/codex-sync-recovery-diagnostics.md). **Codex (AI)**
+
 - 2026-10-21: Add negotiated parent-first folder metadata batches, refresh immediate parent index stamps on child changes, and retain explicit new target intents when proven-unpublished parents are superseded. Original IDs, unknown-write recovery, canonical placement locks and fresh authority/source fences remain intact. Installed throughput remains unverified. [Details](../PRs/1083-codex-sync-folder-batches-batch-guarded-folder-metadata-before-dependent-uploads.md). **Codex (AI)**
 
 - 2026-10-21: Add negotiated bounded small-file upload batches across durable preparation, original-ID reservations, native source validation and canonical per-file receipts, plus scan-only transient identity recovery. Controlled amplification reduction is verified; practical installed throughput remains unverified. See [PR 1081](../PRs/1081-codex-sync-small-file-batches-batch-independent-small-file-uploads.md). — Codex (AI)

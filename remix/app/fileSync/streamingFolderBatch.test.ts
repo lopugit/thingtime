@@ -264,15 +264,19 @@ test('actual consumer converges changed parent and unchanged descendant after pa
 			}
 		};
 	};
+	const observed = new Set<string>();
+	const tracedInput = () => { const original = input(); return { ...original, progress: (p: Parameters<typeof streamOneWayForegroundSync>[2]['progress'] extends (p: infer P) => void ? P : never) => { original.progress(p); const d=p.priorityReadiness; if(d) observed.add(`${d.folderBatchGate}:${d.reservationKind}`); } }; };
 	try {
-		await assert.rejects(streamOneWayForegroundSync(saved, scope, input(), controller.signal), /Controlled restart/);
+		await assert.rejects(streamOneWayForegroundSync(saved, scope, tracedInput(), controller.signal), /Controlled restart/);
 		assert.equal(parked, true);
 		assert.equal(files.size, 0);
 		assert.equal(folders.size, 0);
 		await f.reload();
 		controller = new AbortController();
 		supportsFolders = false;
-		await streamOneWayForegroundSync(saved, scope, input(), controller.signal);
+		await streamOneWayForegroundSync(saved, scope, tracedInput(), controller.signal);
+		assert.ok(observed.has('enabled:folder-batch'));
+		assert.ok([...observed].some(v=>v.startsWith('not-negotiated:')));
 		assert.deepEqual(terminalState, { confirmed: 3, operations: 3, sequence: 4 });
 		assert.equal(folders.size, 2);
 		assert.equal(files.size, 1);

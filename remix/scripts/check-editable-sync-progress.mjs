@@ -7,6 +7,8 @@ import { join } from 'node:path';
 import { once } from 'node:events';
 import { createServer } from 'node:http';
 import { isolatedAccountBackupProcess, verifyAccountBackupIsolation } from './account-backup-isolation.mjs';
+const args=process.argv.slice(2); assert.ok(args.length===0 || args.length===1 && args[0]==='--recovery-diagnostics');
+const recoveryOnly=args.length===1;
 const root = fileURLToPath(new URL('../..', import.meta.url));
 const port = 28191, evidence = process.env.TT_PROGRESS_EVIDENCE || join(tmpdir(), 'thingtime-editable-progress-evidence');
 if (!process.env.TT_PROGRESS_WORKER) {
@@ -17,7 +19,7 @@ if (!process.env.TT_PROGRESS_WORKER) {
 		const env = { PATH: process.env.PATH, HOME: process.env.HOME, TMPDIR: dir, TT_PROGRESS_WORKER: dir, TT_PROGRESS_EVIDENCE: evidence,
 			...(process.env.TT_PLAYWRIGHT_MODULE ? { TT_PLAYWRIGHT_MODULE: process.env.TT_PLAYWRIGHT_MODULE } : {}) };
 		await verifyAccountBackupIsolation(port, env);
-		const child = isolatedAccountBackupProcess(process.execPath, [import.meta.filename], { env, stdio: 'inherit' }, port, true), timer = setTimeout(() => child.kill('SIGTERM'), 180000);
+		const child = isolatedAccountBackupProcess(process.execPath, [import.meta.filename,...args], { env, stdio: 'inherit' }, port, true), timer = setTimeout(() => child.kill('SIGTERM'), 180000);
 		try { const [code] = await once(child, 'exit'); assert.equal(code, 0); } finally { clearTimeout(timer); }
 	} finally { await rm(dir, { recursive: true, force: true }); }
 } else {
@@ -31,6 +33,37 @@ if (!process.env.TT_PROGRESS_WORKER) {
 		page = context.pages()[0]; const errors = []; page.on('pageerror', error => errors.push(String(error)));
 		await page.setViewportSize({ width: 1440, height: 1000 }); await page.goto(`http://127.0.0.1:${port}`);
 		await page.getByRole('heading', { name: 'Sync progress', exact: true }).waitFor();
+
+        if (recoveryOnly) {
+            await page.getByRole('button',{name:'Recovery diagnostics fixture',exact:true}).click();
+            const section=page.locator('[data-settings-document="file-sync-priority-readiness"]');
+            await section.getByText(/Folder batches: negotiated and enabled.*original file-batch recovery.*89 original operations remaining/).waitFor();
+            for(const width of [1440,390]) {
+                await page.setViewportSize({width,height:1000});
+                await page.evaluate(()=>window.scrollTo(0,0));
+                await page.evaluate(()=>window.scrollTo(0,document.documentElement.scrollHeight));
+                assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));
+                await section.screenshot({path:join(evidence,`recovery-${width}.png`)});
+            }
+            await page.setViewportSize({width:1440,height:1000});
+            await section.getByRole('button',{name:'Edit layout',exact:true}).click();
+            await page.locator('[data-block-id="sync-priority-readiness-status"]').click();
+            await page.getByRole('combobox',{name:'Select block',exact:true}).selectOption('sync-priority-readiness-status');
+            await page.getByRole('textbox',{name:'Block text',exact:true}).fill('Diagnostics: {sync.priorityStatus}');
+            await page.getByRole('button',{name:'Close builder',exact:true}).click();
+            await section.getByRole('button',{name:'Save layout',exact:true}).click();
+            await page.getByText('Unsaved layout',{exact:true}).waitFor({state:'hidden'});
+            await section.getByRole('button',{name:'Done editing layout',exact:true}).click();
+            await page.reload(); await page.getByRole('button',{name:'Recovery diagnostics fixture',exact:true}).click();
+            await section.getByText(/^Diagnostics:.*Folder batches: negotiated and enabled/).waitFor();
+            await page.getByRole('button',{name:'Pause fixture',exact:true}).click();
+            await section.getByText(/^Diagnostics: Saved observation.*89 original operations remaining/).waitFor();
+            await page.getByRole('button',{name:'Legacy diagnostics fixture',exact:true}).click();
+            await section.getByText(/Folder batches: UNKNOWN.*Journal reservation: UNKNOWN/).waitFor();
+            assert.deepEqual(errors,[]);
+            await writeFile(join(evidence,'result.json'),JSON.stringify({ok:true,isolated:true,viewports:[1440,390],existingStatusBlockEdited:true,savedAndReloaded:true,paused:true,legacyUnknown:true}));
+            console.log(`SYNC_RECOVERY_DIAGNOSTICS_OK ${evidence}`);
+        } else {
 		// Cached connections can mount this child before the parent passive effect.
 		// Read priorities on first mount (including StrictMode), without Reload.
 		await page.getByText('Saved priorities loaded.', { exact: true }).waitFor();
@@ -157,6 +190,7 @@ if (!process.env.TT_PROGRESS_WORKER) {
 		await page.waitForFunction(() => [...document.querySelectorAll('[role="progressbar"]')].every(element => element.getAttribute('aria-valuenow') === '100'));
 		assert.deepEqual(errors, []); await writeFile(join(evidence, 'result.json'), JSON.stringify({ ok: true, isolated: true, viewports: [1440, 390], nestedBlocksEdited: true, savedAndReloaded: true, focusedDepth: 13, parentAndRootNavigation: true, states: ['partial-bytes', 'index-unknown-total', 'preparation-counts', 'stream-upload', 'stream-download', 'watching', 'error', 'paused', 'complete'] }));
 		console.log(`EDITABLE_SYNC_PROGRESS_OK ${evidence}`);
+        }
 	} catch (error) {
 		if (page) { await page.screenshot({ path: join(evidence, 'failed.png') }).catch(() => {}); await writeFile(join(evidence, 'failed-dom.txt'), await page.locator('body').innerText()).catch(() => {}); }
 		throw error;

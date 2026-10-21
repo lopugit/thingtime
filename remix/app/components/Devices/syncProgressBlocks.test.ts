@@ -120,3 +120,15 @@ test('priority readiness fields stay individually editable and explain saved obs
  assert.match(unknown.priorityStatus, /Waiting for the scheduler.*No completion is inferred/);
  assert.equal(priorityReadinessDisplay(undefined, 'running').hasPriorityReadiness, false);
 });
+
+
+test('existing readiness text distinguishes negotiated gates, exact recovery counts and saved unknowns', () => {
+ const d={gate:'enabled' as const,preferencesCount:5,preferencesRevision:1,proofCursor:300,proofCutoff:300,candidateOrdinal:null,candidateSequence:null,blocker:'reserved-or-in-flight' as const,measured:true,reserved:true};
+ const progress={stage:'transferring' as const,total:512,confirmed:0,priorityReadiness:d};
+ assert.match(priorityReadinessDisplay(progress,'running').priorityStatus,/Folder batches: UNKNOWN.*Journal reservation: UNKNOWN/);
+ const known={...progress,priorityReadiness:{...d,folderBatchGate:'enabled' as const,reservationKind:'file-recovery' as const,reservationRemaining:89}};
+ const text=priorityReadinessDisplay(JSON.parse(JSON.stringify(known)),'paused').priorityStatus;
+ assert.match(text,/^Saved observation/); assert.match(text,/negotiated and enabled.*original file-batch recovery.*89 original operations remaining/);
+ assert.match(text,/New batches wait for original-operation recovery/); assert.match(text,/not uploaded counts/);
+ for(const gate of ['not-negotiated','custom-policy'] as const) assert.match(priorityReadinessDisplay({...known,priorityReadiness:{...known.priorityReadiness,folderBatchGate:gate}},'running').priorityStatus,gate==='not-negotiated'?/not negotiated/:/custom mutation policy/);
+});

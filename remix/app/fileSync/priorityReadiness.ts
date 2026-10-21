@@ -1,6 +1,11 @@
 /** Closed, path-free observations for the existing saved progress surface.
  * Selection is sampled by the scheduler; this is never transfer authority. */
+export type FolderBatchGate = 'enabled' | 'not-negotiated' | 'custom-policy';
+export type ReservationKind = 'none' | 'operation' | 'file-batch' | 'folder-batch' | 'file-recovery' | 'folder-recovery';
 export type PriorityReadiness = {
+ folderBatchGate?: FolderBatchGate;
+ reservationKind?: ReservationKind;
+ reservationRemaining?: number;
  gate: 'enabled' | 'unsupported';
  preferencesCount: number;
  preferencesRevision: number;
@@ -22,7 +27,13 @@ export function parsePriorityReadiness(value: unknown): PriorityReadiness | unde
   (p.candidateOrdinal !== null && (p.candidateOrdinal === 0 || p.candidateOrdinal > p.preferencesCount)) ||
   (p.candidateSequence !== null && p.candidateSequence === 0) || typeof p.measured !== 'boolean' || typeof p.reserved !== 'boolean' ||
   !['none', 'not-indexed', 'proof-pending', 'reserved-or-in-flight', 'ready'].includes(p.blocker)) return undefined;
- return { gate: p.gate, preferencesCount: p.preferencesCount, preferencesRevision: p.preferencesRevision,
+ const folderBatchGate = ['enabled', 'not-negotiated', 'custom-policy'].includes(p.folderBatchGate ?? '') ? p.folderBatchGate : undefined;
+ const kind = p.reservationKind, remaining = p.reservationRemaining;
+ const reservation = ['none', 'operation', 'file-batch', 'folder-batch', 'file-recovery', 'folder-recovery'].includes(kind ?? '') && count(remaining) && remaining <= 256 &&
+  (kind !== 'none' || remaining === 0) && (kind !== 'operation' || remaining === 1) &&
+  (kind === 'none' || kind === 'operation' || remaining >= 1)
+  ? { reservationKind: kind, reservationRemaining: remaining } : {};
+ return { ...(folderBatchGate ? { folderBatchGate } : {}), ...reservation, gate: p.gate, preferencesCount: p.preferencesCount, preferencesRevision: p.preferencesRevision,
   proofCursor: p.proofCursor, proofCutoff: p.proofCutoff, candidateOrdinal: p.candidateOrdinal,
   candidateSequence: p.candidateSequence, blocker: p.blocker, measured: p.measured, reserved: p.reserved };
 }

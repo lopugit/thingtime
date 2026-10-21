@@ -71,7 +71,7 @@ test('reserved and confirmed operations retain IDs across diagnostic reads and r
   await f.runs.appendStream(spec, change, { write: prepareCloudInventoryWrite(operation, scope, 'cloud', null, 'cloud') });
   assert.equal((await f.runs.claimNext(spec))!.id, operation.id);
   const d = await f.runs.streamPriorityReadiness(spec, true);
-  assert.equal(d.reserved, true);
+  assert.equal(d.reserved, true); assert.equal(d.reservationKind,'operation'); assert.equal(d.reservationRemaining,1);
   assert.equal((await f.runs.claimNext(spec))!.id, operation.id);
   await f.reopen();
   const unknown = await f.runs.streamPriorityReadiness(spec, true);
@@ -134,4 +134,16 @@ test('a newer pending path revision cannot reuse the old observed candidate iden
   assert.equal((await f.runs.claimNext(spec, false))!.id, second.operation.id);
   assert.equal((await f.runs.claimNext(spec, false))!.id, second.operation.id);
  } finally { f.journal.close(); }
+});
+
+
+test('unknown reservation diagnostics never infer recovery from a reserved boolean', () => {
+ const d={gate:'enabled' as const,preferencesCount:0,preferencesRevision:0,proofCursor:null,proofCutoff:null,candidateOrdinal:null,candidateSequence:null,blocker:'none' as const,measured:true,reserved:true};
+ assert.equal(parsePriorityReadiness(d)!.reservationKind,undefined);
+ for(const patch of [...(['file-batch','folder-batch','file-recovery','folder-recovery'].map(reservationKind=>({reservationKind,reservationRemaining:0}))),{reservationKind:'file-recovery',reservationRemaining:-1},{reservationKind:'file-recovery',reservationRemaining:257},{reservationKind:'operation',reservationRemaining:2},{reservationKind:'none',reservationRemaining:1},{reservationKind:'secret',reservationRemaining:1},{reservationKind:'file-batch'}]) {
+  const value=parsePriorityReadiness({...d,...patch,folderBatchGate:'secret'})!;
+  assert.equal(value.folderBatchGate,undefined); assert.equal(value.reservationKind,undefined); assert.equal(value.reservationRemaining,undefined);
+ }
+ const known={...d,folderBatchGate:'enabled' as const,reservationKind:'file-recovery' as const,reservationRemaining:89};
+ assert.deepEqual(parsePriorityReadiness(JSON.parse(JSON.stringify(known))),known);
 });

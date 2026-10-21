@@ -1,5 +1,5 @@
 import { eligibleFolderBatchWrite, parseFolderBatchDescriptor, type FolderBatchDescriptor, type FolderParentRef } from './folderBatch';
-import type { PriorityReadiness } from './priorityReadiness';
+import type { FolderBatchGate, PriorityReadiness } from './priorityReadiness';
 import { eligibleUploadBatchWrite, parseUploadBatchDescriptor, UPLOAD_BATCH_FILES, UPLOAD_BATCH_BYTES, UPLOAD_BATCH_DESCRIPTOR_BYTES, type UploadBatchDescriptor } from './uploadBatch';
 import type { SavedFileSyncConfiguration } from './configuredPlan';
 import { validIndexProvenance, type NativeIndexChange } from './streamingIndex';
@@ -706,14 +706,18 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 		}) as Promise<NonNullable<Header['stream']>>,
 		/** Read only: reuse the scheduler's last bounded search, then validate its
 		 * exact candidate/pending row. No render-time preference/tree search. */
-		streamPriorityReadiness: (value: PagedRunSpec, enabled: boolean) => withHeader<PriorityReadiness>(parsePagedRunSpec(value), 'readonly', (h, tx, done, fail) => {
+		streamPriorityReadiness: (value: PagedRunSpec, enabled: boolean, folderBatchGate?: FolderBatchGate) => withHeader<PriorityReadiness>(parsePagedRunSpec(value), 'readonly', (h, tx, done, fail) => {
 			const spec = h.spec, stream = h.stream;
 			if (!stream) throw Error('This run is not streaming.');
 			const get = tx.objectStore(SYNC_PRIORITY_STORE).get(key);
 			get.onsuccess = () => { try {
 				check(); const preferences = get.result === undefined ? { revision: 0, paths: [] } : parseSyncPriorityPreferences(get.result);
 				const trusted = enabled && spec.streaming?.source === 'local';
-				const result: PriorityReadiness = { gate: trusted ? 'enabled' : 'unsupported', preferencesCount: preferences.paths.length,
+				// Project the existing validated header only; no operation lookup,
+				// claim, watermark change or extra per-file transaction.
+				const batch = h.scheduling?.recovery ?? h.scheduling?.batch;
+				const reservationKind = batch ? `${batch.kind === 'folders' ? 'folder' : 'file'}-${h.scheduling?.recovery ? 'recovery' : 'batch'}` as const : h.scheduling?.reserved ? 'operation' : 'none';
+				const result: PriorityReadiness = { ...(folderBatchGate ? { folderBatchGate } : {}), reservationKind, reservationRemaining: batch?.remaining ?? (h.scheduling?.reserved ? 1 : 0), gate: trusted ? 'enabled' : 'unsupported', preferencesCount: preferences.paths.length,
 					preferencesRevision: preferences.revision, proofCursor: stream.inputBackfillSequence ?? null, proofCutoff: stream.inputBackfillThrough ?? null,
 					candidateOrdinal: null, candidateSequence: null, blocker: 'none', measured: !trusted || preferences.paths.length === 0,
 					reserved: h.scheduling?.reserved != null || !!h.scheduling?.batch || !!h.scheduling?.recovery };
