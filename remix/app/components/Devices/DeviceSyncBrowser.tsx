@@ -11,7 +11,7 @@ import { deviceSyncOverviewBlocks } from './deviceSyncBlocks';
 import { SettingsDocumentHost } from '../Settings/SettingsDocumentHost';
 import { SettingsSection } from '../Settings/SettingsSection';
 import { DesktopFolderAccess } from './DesktopFolderAccess';
-import { deviceThingsPageHref } from './deviceNavigation';
+import { deviceSyncPageHref } from './deviceNavigation';
 import { deviceSyncFolders, deviceSyncedFilesHref, type DeviceSyncFolder } from './deviceSyncNavigation';
 
 const cache = new Map<string, DeviceSyncFolder[]>();
@@ -62,7 +62,7 @@ function DeviceSyncBrowserContent({
 			let cursor: string | undefined;
 			const seen = new Set<string>(),
 				rows: unknown[] = [];
-			for (let page = 0; page < 100; page++) {
+			for (;;) {
 				const result = await apiRef.current.v1.things.list(
 					{ thingtime: 'file-sync', limit: 50, cursor },
 					{ expectedActor: ownerId, expectedDataPlane: 'home', signal: controller.signal }
@@ -82,7 +82,6 @@ function DeviceSyncBrowserContent({
 				seen.add(next);
 				cursor = next;
 			}
-			throw Error('This account has too many connection pages to load at once. No partial list is presented as complete.');
 		})()
 			.catch((cause) => {
 				if (!controller.signal.aborted) setError(cause instanceof Error ? cause.message : 'Saved sync folders are unavailable.');
@@ -123,7 +122,7 @@ function DeviceSyncBrowserContent({
 							status,
 							error,
 							empty: loading || error || !allowed ? 'No verified folder list is available yet.' : 'No saved sync connections for this device yet.',
-							settingsHref: deviceThingsPageHref(deviceId),
+							settingsHref: deviceSyncPageHref(deviceId),
 							filesHref: deviceSyncedFilesHref(deviceId)
 						}
 					}}
@@ -150,7 +149,7 @@ export function DeviceSyncPanel({
 	pairedDeviceIds?: readonly string[];
 	ownedDeviceIds?: readonly string[];
 }) {
-	const [managing, setManaging] = React.useState(false);
+	const [managing, setManaging] = React.useState(true);
 	return (
 		<Box minWidth={0}>
 			<DeviceSyncBrowser deviceId={deviceId} />

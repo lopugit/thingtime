@@ -19,8 +19,11 @@ export type SyncProgressViewerProps = {
 };
 const MAX_OPEN_BRANCHES = 8;
 export function SyncProgressViewer(props: SyncProgressViewerProps) {
-	const parsed = React.useMemo(() => { try { return { descriptor: props.descriptor ? parseSyncProgressDescriptor(props.descriptor) : null, invalid: false }; }
-		catch { return { descriptor: null, invalid: true }; } }, [props.descriptor]);
+	// Native snapshots may recreate this small descriptor on every byte event.
+	// Keep the journal source stable until its actual identity changes.
+	const descriptorJson = JSON.stringify(props.descriptor ?? null);
+	const parsed = React.useMemo(() => { try { const value = JSON.parse(descriptorJson); return { descriptor: value ? parseSyncProgressDescriptor(value) : null, invalid: false }; }
+		catch { return { descriptor: null, invalid: true }; } }, [descriptorJson]);
 	return <SyncProgressSession key={`${props.scopeKey}:${parsed.descriptor?.run.id ?? 'indexing'}`} {...props} descriptor={parsed.descriptor}
 		invalidDescriptor={parsed.invalid} />;
 }
@@ -34,12 +37,12 @@ function SyncProgressSession({ scopeKey, series, descriptor, progress, currentSc
 	const focusRef = React.useRef(focusedFolder); focusRef.current = focusedFolder;
 	const latest = React.useRef(branches); latest.current = branches;
 	const requests = React.useRef(new Map<string, AbortController>());
-	const read = React.useCallback(async (parent: string, history?: (string | null)[]) => {
+	const read = React.useCallback(async (parent: string, history?: (string | null)[], quiet=false) => {
 		if (!source) return;
 		requests.current.get(parent)?.abort();
 		const controller = new AbortController(); requests.current.set(parent, controller);
 		const trail = history ?? latest.current[parent]?.history ?? [];
-		setBranches(previous => ({ ...previous, [parent]: { ...previous[parent], history: trail, busy: true, error: '' } }));
+		setBranches(previous => ({ ...previous, [parent]: { ...previous[parent], history: trail, busy: quiet && previous[parent]?.page ? false : true, error: '' } }));
 		try {
 			const page = await projectSyncProgress(source, { parent, after: trail.at(-1) ?? null, activePath: progressRef.current?.path, signal: controller.signal });
 			if (!controller.signal.aborted) setBranches(previous => {
@@ -65,7 +68,7 @@ function SyncProgressSession({ scopeKey, series, descriptor, progress, currentSc
 		const timer = setTimeout(() => {
 			lastRead.current = Date.now();
 			const final = ['complete', 'retained'].includes(stage);
-			for (const parent of Object.keys(latest.current)) if (final || !requests.current.has(parent)) void read(parent);
+			for (const parent of Object.keys(latest.current)) if (final || !requests.current.has(parent)) void read(parent, undefined, true);
 		}, delay);
 		return () => clearTimeout(timer);
 	}, [source, read, confirmed, stage]);

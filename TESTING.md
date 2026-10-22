@@ -12883,3 +12883,63 @@ separate from deterministic discovery/lease tests.
 - [ ] Fresh drawer and settings page start with every section collapsed. Verify the drawer Close and expand-to-page buttons have separate 44px targets and both work. Open File sync & backup, live filesystem and long sections on desktop/mobile, scroll top to bottom, and check focus, overflow and reduced motion. Legacy version-1 expansion flags reset once while width survives; explicit version-2 choices remain respected.
 - [ ] Edit the overview heading, a navigation link and a repeated folder field separately in Builder; save/reload and verify live bindings still work. Verify empty/error/account-change states without exposing the old account’s folders.
 - [ ] Preserve a removed home source and durable paused state throughout navigation, deployment and app reload.
+
+### Device sync library containment and saved locations
+
+- Open Things root: setup, sync controls, file-sync preferences and relational
+  child data must not appear as root items. Open a device's sync page; verify
+  configuration, progress, Activity manager and saved cloud-folder links.
+- Compare root, nested folder and search for the same canonical file; its stored
+  folder hierarchy must be preserved. Legacy durable standalone files remain
+  available in Unfiled files and search, while storage blobs stay out of the
+  ordinary root; pending/expiring upload drafts do not become library content.
+- Open a canonical file and its storage attachment: verify each breadcrumb
+  against stored folder IDs, click the containing folder, save/reload a nested
+  breadcrumb block edit. An unbound attachment must say no recorded folder
+  location; missing/private/cyclic ancestry must never invent a partial path.
+- Inspect full page desktop/mobile scroll, open the sync settings, progress and
+  Builder controls, and check wrapping, focus, overflow and nested selection.
+
+- Sync upload provenance: fail publication after verified bytes, reload the
+  original run and retry. Verify the private original source/root and intended
+  destination survive before upload authority; reject changed origin, account
+  or initial publication destination. A queued pre-contract exact retry may
+  explicitly stamp its saved path; never infer one from a filename. Verify
+  standalone uploads are unchanged and shared/app/PAT/list reads omit provenance.
+
+### Device activity controls and quiet refresh
+
+- In Activity manager (`/things?activity=1`), disable a recurring view refresh
+  and an event listener. Verify the underlying callbacks stop, other owners
+  remain active, and the choice survives reload and a second window. Re-enable
+  and verify only still-mounted owners resume. Hidden windows release view
+  timers; essential cleanup guards remain enabled.
+- Change an activity preference with unavailable storage: show an error and keep
+  the existing live state. Native stop failures retain the disabled intent and
+  expose the observed running state with a retry; failed preference writes must
+  not stop the service or silently change its in-memory preference.
+- In an isolated desktop environment, disable the Thingtime Node service, verify
+  actual launchd/process termination and no login restart, then re-enable its
+  existing registration. Preserve pairing, grants, jobs and journals. Never use
+  a real active user's service for destructive test setup.
+- Compare Electron CPU/RSS with the native adapter measurement; unavailable
+  values stay unknown. Separate native Node/child and external runtime metrics
+  are not attributed to Electron. Child tasks currently share a service control.
+- Background status refresh retains its last state without a blinking checking
+  label. Paused/completed transfer charts stop their clock; equivalent progress
+  descriptors must not reopen the journal on every byte update.
+- Edit Activity manager heading, controls and repeated fields independently;
+  save/reload. Scroll desktop/mobile fully and open coverage/Builder controls.
+  Isolated fixture evidence is distinct from installed/deployed acceptance.
+
+- Referenced-by parent paths: no scan on mount; explicitly scan a file referenced
+  from two distinct files/folders, a typed post collection and authored webpage
+  media. Verify separate clickable breadcrumbs, ACL-denied sources omitted,
+  cycles terminate, stale references disappear and parentId lineage works.
+  Continue beyond a 500-record batch and a 20-path / 200-read traversal page;
+  cancel and resume from the retained cursor. Other-account reverse references
+  must remain an explicit coverage limitation. Save/reload a nested path-link
+  Builder edit, including a layout containing legacy JSON transient inputs.
+- Unfiled files: verify only one page loads on mount; each Load more makes one
+  further request, displays existing results during load/error, rejects repeated
+  cursors and cancels pending reads on account change/unmount.

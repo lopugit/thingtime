@@ -22,7 +22,8 @@ import { EXPECTED_DATA_PLANE_HEADER } from '../utils/dataPlane';
 
 export const CLOUD_TRANSFER_REQUIREMENTS = {
 	...CLOUD_FILE_REQUIREMENTS,
-	'api.attachment-uploads': '1.6.1',
+	'api.files': '1.8.1',
+	'api.attachment-uploads': '1.7.0',
 	'api.attachment-upload-parts': '1.1.0',
 	'api.attachment-upload-complete': '1.4.0',
 	'api.actions-run': '1.7.0'
@@ -191,7 +192,7 @@ function cloudFileTransport(runtime: CloudTransportRuntime, saved: CloudWrite, s
 	const { check, json, negotiate: negotiateRequirements } = cloudRequests(runtime, scope, signal);
 	const empty = (m.kind === 'copy' && m.source.size === 0) || write.before?.content.size === 0;
 	const negotiate = () => negotiateRequirements({ ...CLOUD_TRANSFER_REQUIREMENTS, ...(retained ? CLOUD_FILE_RETENTION_REQUIREMENTS : {}),
-		...(empty ? { 'api.files': '1.8.0',
+		...(empty ? { 'api.files': '1.8.1',
 			'api.attachment-upload-complete': '1.5.0', 'api.attachment-content': '1.16.0' } : {}) });
 	const fileId = write.before?.id ?? write.operation.id;
 	const receipt = (value: unknown): SyncReceipt => {
@@ -269,7 +270,8 @@ function cloudFileTransport(runtime: CloudTransportRuntime, saved: CloudWrite, s
 				filename: m.path.split('/').at(-1),
 				contentType: 'application/octet-stream',
 				sizeBytes: source.size,
-				purpose: 'file'
+				purpose: 'file',
+				fileSyncOrigin: { version: 1, deviceId: scope.deviceId, localRootId: scope.rootId, ...(write.cloudRootId ? { cloudRootId: write.cloudRootId } : {}), fileId, folderId: write.folderId, path: m.path }
 			});
 			const upload = started.upload;
 			if (!identifier(upload?.id) || upload.partSizeBytes !== plan.partSizeBytes || upload.partCount !== plan.partCount)

@@ -1,3 +1,4 @@
+import { activityInterval, clearActivityInterval, activityEvents } from '~/activity/activityManager';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useCurrentUser } from '../hooks/useCurrentUser';
 import type { LocalTimelineRow } from './localStore';
@@ -83,9 +84,9 @@ export function useThingTimeline(thingId: string | null, enabled = true, related
 			catch (error) { await fail(error); } finally { busy = false; }
 		};
 		const changed = () => void refresh();
-		window.addEventListener('focus', changed); window.addEventListener('online', changed); window.addEventListener(TIMELINE_CHANGED_EVENT, changed); document.addEventListener('visibilitychange', changed);
-		const timer = setInterval(changed, 10_000); void refresh(true);
-		return () => { alive = false; clearInterval(timer); refreshRef.current = async () => {}; olderRef.current = async () => {}; window.removeEventListener('focus', changed); window.removeEventListener('online', changed); window.removeEventListener(TIMELINE_CHANGED_EVENT, changed); document.removeEventListener('visibilitychange', changed); };
+		activityEvents(window, 'events:timeline/useThingTimeline', 'useThingTimeline').addEventListener('focus', changed); activityEvents(window, 'events:timeline/useThingTimeline', 'useThingTimeline').addEventListener('online', changed); activityEvents(window, 'events:timeline/useThingTimeline', 'useThingTimeline').addEventListener(TIMELINE_CHANGED_EVENT, changed); activityEvents(document, 'events:timeline/useThingTimeline', 'useThingTimeline').addEventListener('visibilitychange', changed);
+		const timer = activityInterval('timer:timeline/useThingTimeline:1', 'Thing history', changed, 10_000); void refresh(true);
+		return () => { alive = false; clearActivityInterval(timer); refreshRef.current = async () => {}; olderRef.current = async () => {}; activityEvents(window, 'events:timeline/useThingTimeline', 'useThingTimeline').removeEventListener('focus', changed); activityEvents(window, 'events:timeline/useThingTimeline', 'useThingTimeline').removeEventListener('online', changed); activityEvents(window, 'events:timeline/useThingTimeline', 'useThingTimeline').removeEventListener(TIMELINE_CHANGED_EVENT, changed); activityEvents(document, 'events:timeline/useThingTimeline', 'useThingTimeline').removeEventListener('visibilitychange', changed); };
 	}, [identity, enabled, thingId, connection, related]);
 	const current = view.identity === identity ? view : emptyView(identity);
 	return { ...current, identity: related ? `${identity}:${current.related?.revision ?? 'unknown'}` : identity, error: current.error || session.error, signedIn: !!user?.id, refresh: useCallback(() => refreshRef.current(), []), older: useCallback(() => olderRef.current(), []) };

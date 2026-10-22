@@ -40,6 +40,8 @@ import { isDataPlane, scopedThingCacheKey } from '~/utils/dataPlane';
 import type * as InstallSuite from '~/components/Builder/installSuite';
 import type { BehaviourSuite } from '~/schemas/behaviourSuites';
 import { CARD_STYLES } from '~/theme/card';
+import { ThingParentPaths } from '~/components/Things/ThingParentPaths';
+import { ThingFileLocation } from '~/components/Things/ThingFileLocation';
 import { ThingAttachmentDetail } from '~/components/Things/ThingAttachmentDetail';
 import { ThingComments } from '~/components/Things/ThingComments';
 import { PersistedThingMenu } from '~/components/Thingtime/ContextMenu/PersistedThingMenu';
@@ -982,6 +984,8 @@ function GenericThingPage() {
 							</Flex>
 						) : null}
 
+						{sections.detail && thing ? <ThingParentPaths thing={thing as any} /> : null}
+						{sections.preview && thing && (attachment || thing.thingtime?.includes('file')) ? <ThingFileLocation key={thing.id} thing={thing as any} /> : null}
 						{sections.preview && attachment ? <ThingAttachmentDetail attachment={attachment} references={references} /> : null}
 
 						{sections.preview && post ? (

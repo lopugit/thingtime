@@ -5739,13 +5739,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
 	endpoint({
 		id: 'attachment-uploads',
-		contractVersion: '1.6.2',
-		featureVersion: '1.6.2',
+		contractVersion: '1.7.0',
+		featureVersion: '1.7.0',
 		group: 'attachments',
 		title: 'Start attachment upload',
 		endpoint: '/api/v1/attachments/uploads',
 		summary: 'Reserves account storage and starts a private, checksummed S3 multipart upload.',
 		detail:
+			'Version 1.7 adds optional private fileSyncOrigin version 1 for purpose=file with an exact requestId and filename: deviceId, localRootId, optional cloudRootId, fileId, folderId and root-relative path. It is persisted before byte authority and immutable on retries, including explicitly supplied provenance on an exact old queued reservation. It is a client-reported original source/destination hint, never a native grant, current folder path or write authority. Standalone uploads remain unchanged. ' +
 			'Version 1.6.2 creates empty files with a conditional PUT before object verification, so the object-only storage role does not require ListBucket to distinguish missing keys. Existing objects and ambiguous replies still require exact identity, version, size and empty SHA-256 verification under the finalization lease. ' +
 			'Version 1.6.1 recovers an exact owned file request interrupted during finalization through the original fenced completion lease and MPU/object version. A live lease returns 409 with code finalization_in_progress and retryable:true; retry the same requestId and metadata with bounded backoff. Changed metadata, expired uploads and other conflicts remain terminal. ' +
 			'Version 1.6 accepts exact sizeBytes=0 only for file/file-import. It reserves the same owner/request metadata and quota, conditionally stores an encrypted zero-byte object, verifies its exact-version size/identity/full SHA-256, and returns partCount=0 plus upload.state=ready. Do not issue part URLs or native multipart work. An ambiguous/repeated request reuses the same ready object; other upload purposes still require positive size. ' +
@@ -6108,9 +6109,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 	}),
 	endpoint({
     // 1.2: config3 resource ceilings bind distinct v2 digest domains; legacy digests remain unchanged.
-    id: 'file-sync-batches', contractVersion: '1.2.0', featureVersion: '1.2.0', group: 'attachments', title: 'Upload bounded small-file batches',
+    id: 'file-sync-batches', contractVersion: '1.2.1', featureVersion: '1.2.1', group: 'attachments', title: 'Upload bounded small-file batches',
     endpoint: '/api/v1/files/batches', summary: 'Prepare, verify and commit independent original file operations with fresh session authority.',
-    detail: 'Home-plane private regular files only, absent destinations and already confirmed parents. An immutable descriptor digest binds source, scope, saved configuration and original operation identities; it never grants authority. Existing attachment MPU leases, quota and immutable file Timeline receipts remain authoritative.',
+    detail: 'Version 1.2.1 preserves immutable private upload provenance from the authorized descriptor before new byte grants and exact ready/finalizing retry recovery. It is not a native folder grant or a current path assertion. Home-plane private regular files only, absent destinations and already confirmed parents. An immutable descriptor digest binds source, scope, saved configuration and original operation identities; it never grants authority. Existing attachment MPU leases, quota and immutable file Timeline receipts remain authoritative.',
     auth: { mode: 'session-or-bearer', description: 'Full owning user session only; no device, PAT, app or service upload authority.' }, methods: ['POST'],
     steps: [
       'In 1.1.0 POST phase=folder-probe with a separate kind:folders v1 descriptor and domain-separated digest. At most256 original local folder-copy operations,320 KiB descriptor and512 KiB request/response. Parents are reviewed root, explicit existing actual ID or an earlier member ordinal whose original operation ID is already pinned as folderId. Aggregate owner-bound canonical Timeline receipts in chunks of128; exact accepted history is returned before source IO. No S3, payload, alternate receipt store or delete authority.',
@@ -6129,9 +6130,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     responseExamples: [{ status: 200, description: 'Ordered independent results; inspect every status before recording progress.', body: { ok: true, version: 1, batchId: 'original UUID', digest: 'sha256', results: [] } }]
   }),
 	endpoint({
-    id: 'files', contractVersion: '1.8.0', featureVersion: '1.8.0', group: 'attachments', title: 'Inventory folders and recover file versions',
+    id: 'files', contractVersion: '1.8.1', featureVersion: '1.8.1', group: 'attachments', title: 'Inventory folders and recover file versions',
     endpoint: '/api/v1/files', summary: 'Inventory a private folder, read file revisions or conditionally commit a stable file Thing.',
-    detail: 'Complete private folder inventories use a bounded snapshot read and never return partial success. One file identity points at an immutable attachment version. Commits atomically bind owned durable file uploads, update metadata/accounting and append a private Timeline revision. Prior byte versions remain charged and recoverable. No overwrite occurs on revision mismatch. Home data plane only.',
+    detail: 'Version 1.8.1 refuses first publication of a provenance-stamped upload at a different file ID, folder or filename; current moves and retained-version restores keep their existing semantics and do not rewrite original provenance. Complete private folder inventories use a bounded snapshot read and never return partial success. One file identity points at an immutable attachment version. Commits atomically bind owned durable file uploads, update metadata/accounting and append a private Timeline revision. Prior byte versions remain charged and recoverable. No overwrite occurs on revision mismatch. Home data plane only.',
     auth: { mode: 'session-or-bearer', description: 'Full owning user sessions only; scoped PAT, app, device and service credentials are rejected.' }, methods: ['GET', 'POST'],
     steps: [
       'In 1.8.0, stable files, conditional commits, retained versions and inventories accept size zero with the canonical verified zero-part fingerprint. No noncanonical digest is accepted for an empty file. Authorization, operation receipts, expected revisions and prior-version retention are unchanged.',
@@ -9414,8 +9415,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // owner-library files. The combined 1.27.0 contract adds shared
     // Thing discussions, linked references, display-metadata renames and
     // optional cursor-backed rich comment projections.
-    featureVersion: '1.39.0',
-    contractVersion: '1.39.0',
+    featureVersion: '1.40.0',
+    contractVersion: '1.40.0',
     group: 'things',
     // 1.33.1: placement and folder deletion share transactional ancestry fences.
     // 1.33.2: protected library display-title renames commit title-only history.
@@ -9423,6 +9424,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     endpoint: '/api/v1/things',
     summary: 'One endpoint for every thing: create, read, update/upsert, and delete posts, comments, reactions, and shares. OAuth app tokens may use explicitly approved account Things permissions; legacy picker and app-storage grants retain their prior boundaries.',
     detail:
+      'Version 1.40 adds owner-session-only fileSyncOrigin on individual attachment Thing reads. It records the original client-reported sync source path and intended destination before upload; it is omitted from public, app, PAT and list projections and is never evidence of a current file location or native access. ' +
+      'Version 1.39.1 corrects root containment: folder=root excludes parent/target children, storage attachment blobs and file-sync configuration records. Durable unbound attachments remain reachable in the Unfiled files collection and owner search. Expiring unbound uploads are not durable library content. Explicit folder/target and search scopes, canonical file hierarchy and legacy durable standalone files remain supported. ' +
       'Version 1.39 adds optional closed resourceLimits under file-sync configurationVersion 3; save and execution require compatible server and native resource control capabilities. Older clients must refuse version 3. ' +
       'Version 1.38 adds private file-sync configurationVersion 2 with bounded root-relative Gitignore rules. Rules prune native scans before hashing and filter both planning sides; ignored baseline facts are retained. Older clients must refuse version 2 rather than discard its policy. Empty-rule configurations keep version 1 compatibility. Native grants and exact-policy approval are still required. ' +
       'Version 1.37 adds registered authenticated live SSE source bindings on saved Components and page blocks; shared-root execution cannot borrow viewer stream authority. ' +
