@@ -33,7 +33,7 @@ function fixture() {
   attachmentState: 'ready', attachmentPurpose: 'file', attachmentEnvelopeVersion: 1, objectKey: 'objects/'+id, objectVersionId: 'version-'+id, objectSizeBytes: 2,
   storageClass: 'content', storageAccountingVersion: USER_STORAGE_ACCOUNTING_VERSION, createdAt: now, updatedAt: now, ...patch };
   try { doc.sizeBytes = thingStorageSizeBytes(doc); } catch { doc.sizeBytes = 0; } docs.set(id, doc); return attachmentContentVersion(id, doc.objectKey, doc.objectVersionId); }
- return { service, upload, receiptReads: () => receiptReads, docs: () => docs, events: () => events, charged: () => charged, fingerprints: () => fingerprints, failAppend: () => { failAppend = true; } };
+ return { service, upload, receiptReads: () => receiptReads, docs: () => docs, events: () => events, charged: () => charged, fingerprints: () => fingerprints, failAppend: (value = true) => { failAppend = value; } };
 }
 const input = (contentVersion: string) => ({ id: randomUUID(), operationId: randomUUID(), expectedRevision: null, name: 'fixture.bin', folderId: null, attachmentId: 'att1', contentVersion, trashed: false });
 test('stable identity, exact retries, retained versions, trash and restore share Timeline', async () => {
@@ -163,4 +163,21 @@ test('bounded aggregate receipts reuse canonical validation without provider cal
  const e=f.events().get(first.file.revision);e.source='client';
  assert.equal((await f.service.readReceipts('owner',[{id:create.id,operationId:create.operationId}])).ok,false);
  assert.equal((await f.service.readReceipts('owner',Array.from({length:257},()=>({id:create.id,operationId:create.operationId})))).ok,false);
+});
+
+test('failed publication retains original sync provenance and rejects a different destination on retry', async () => {
+  const f = fixture(), create = input(f.upload('att1'));
+  const origin = { version: 1 as const, deviceId: 'device', localRootId: 'local-root', cloudRootId: 'cloud-root', fileId: create.id, folderId: create.folderId, path: 'Icons/fixture.bin' };
+  f.docs().get('att1').attachmentFileSyncOrigin = origin;
+  f.failAppend();
+  assert.equal((await f.service.commit('owner', create)).ok, false);
+  assert.deepEqual(f.docs().get('att1').attachmentFileSyncOrigin, origin);
+  assert.equal(f.docs().get('att1').targetId, undefined);
+  assert.equal((await f.service.commit('owner', { ...create, id: randomUUID() })).ok, false);
+  assert.equal((await f.service.commit('owner', { ...create, folderId: 'different-folder' })).ok, false);
+  assert.equal(f.docs().has(create.id), false);
+  f.failAppend(false);
+  assert.equal((await f.service.commit('owner', create)).ok, true);
+  assert.deepEqual(f.docs().get('att1').attachmentFileSyncOrigin, origin);
+  assert.equal(f.docs().get('att1').targetId, create.id);
 });

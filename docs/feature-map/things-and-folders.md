@@ -1093,3 +1093,71 @@ multi-scope atomic rollback boundary. Tests in those local-workspace families
 cover 101+ themes, 51+ profiles, reload/export, protected intents and real-class
 browser quota failure. Remote response parsing/server limits are unchanged and
 remain a separate capacity-contract audit.
+
+### Device sync and file locations (2026-10-22)
+
+The device details sync section opens `/things?device=<id>&deviceView=sync`,
+which owns configuration, resource controls and transfer progress. The root
+library contains Things, not setup/sync panels. `api.things` 1.39.1 corrects
+root containment before pagination: parent/target children, storage attachment blobs and file-sync
+configuration records are excluded; explicit folders and search retain their
+scopes. Expiring unbound uploads are drafts, while legacy durable standalone
+files remain content in `/things?unfiled=attachments` and search. This virtual
+recovery collection explicitly records that no original folder location is
+known; it never fabricates a device path. No migration or deletion is performed.
+
+`ThingFileLocation.tsx` renders editable breadcrumb blocks on file/attachment
+details. `fileLocationCore.ts` follows an attachment's recorded canonical file
+target and that file's actual folder ancestry through authorized generic reads.
+Unbound blobs have no recorded location; inaccessible or cyclic ancestry is
+reported as unavailable. Names and MIME types never establish a path.
+
+
+### Device activity ownership
+
+`/things?activity=1` is a dedicated editable Builder surface linked from device
+sync. `app/activity/activityManager.ts` owns registered view polling, listeners,
+sync discovery and transfer execution, with persistent origin/device preferences
+and real teardown. Register new background producers with a stable semantic ID;
+return cleanup and honor the supplied abort signal for active asynchronous work.
+A disabled view timer cannot cancel an already-issued read unless its owner
+supports cancellation. The manager does not monkey-patch browser globals.
+
+The desktop preload exposes versioned `activityRequest` 1.0.0. Only the trusted
+main renderer at its configured node origin may invoke it. The native Node
+service is one separately controlled owner; disabling it persists intent before
+stopping launchd, while retaining pairing, grants and transfer journals. Browser
+lease/deadline cleanup guards remain required. Measurements cover Electron
+processes only; native Node children, MongoDB and API runtimes are explicitly
+outside that resource total. This is a registered-owner inventory, not a claim
+that arbitrary third-party listeners or all operating-system processes are
+instrumented. Native inventory refresh is manual and does not add a poll.
+
+Verification commands: `npm --prefix remix run test:activity`,
+`npm --prefix remix run test:activity-ui`, and
+`node --test electron/test/activity-manager.test.cjs`.
+
+### Referenced-by parent paths
+
+`ThingParentPaths.tsx` on Thing data offers an explicit reference scan, never an
+automatic home-library sweep. Each action reads up to ten ordinary owner-list
+pages of 50 rows and retains its cursor plus a compact inverse reference map.
+Continue scan discovers more rows; More parent paths resumes the traversal
+frontier (20 paths / at most 200 ACL reads per action). Cancel, account/data-plane
+changes and unmount abort requests.
+
+`thingParentPathsCore.ts` indexes canonical file content identities, existing
+post Thing collection references and the shared authored webpage media scanner
+(`Builder/webpageAttachmentRefs.ts`, also used by the server binder). Actual
+folder/target/parent lineage comes from exact current reads. Every incoming typed
+reference is revalidated through the source's ACL-checked read; stale matches,
+missing ancestors and cycles do not create invented complete paths. Each segment
+is clickable and separately editable through Builder. Original sync upload
+provenance remains a separate display, never a current-parent edge.
+
+Coverage is the user's accessible owner library plus viewable direct ancestors.
+Other accounts' reverse references, arbitrary text, unknown reference kinds and
+private managed content excluded by the ordinary library API are not covered.
+Incomplete scan/traversal status remains explicit. No new API contract or
+background indexing service is introduced. Unfiled files independently loads
+one page at a time and requires Load more for each subsequent page.

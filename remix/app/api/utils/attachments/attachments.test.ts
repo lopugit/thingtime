@@ -3250,3 +3250,35 @@ test('signed native download targets are owner-only, version/range/fingerprint b
  expiry = new Date(now.getTime() + 61000).toISOString(); assert.equal((await service.downloadTarget({ id: doc.ownerId }, doc.shareId, range)).ok, false);
  doc = { ...original, attachmentState: 'deleting' }; assert.equal((await service.downloadTarget({ id: doc.ownerId }, doc.shareId, range)).ok, false);
 });
+
+test('sync upload origin is saved before byte authority and exact legacy retries retain the original path', async () => {
+  let doc: AttachmentDoc | null = null, stamps = 0, creates = 0;
+  const origin = { version: 1 as const, deviceId: 'device', localRootId: 'local-root', cloudRootId: 'cloud-root', fileId: 'file', folderId: 'folder', path: 'Icons/search.svg' };
+  const store: any = {
+    listExpiredOwned: async () => [], getById: async () => doc,
+    reservePending: async (input: any) => {
+      doc = attachmentDoc({ shareId: input.id, ownerId: input.ownerId, crystal: input.crystal, attachmentPurpose: input.purpose, attachmentRequestFingerprint: input.requestFingerprint,
+        attachmentFileSyncOrigin: input.fileSyncOrigin, objectSizeBytes: input.crystal.size, uploadId: undefined }); return doc;
+    },
+    recordFileSyncOrigin: async (ownerId: string, id: string, fingerprint: string, value: any) => {
+      assert.equal(doc?.ownerId, ownerId); assert.equal(doc?.shareId, id); assert.equal(doc?.attachmentRequestFingerprint, fingerprint);
+      stamps++; doc = { ...doc!, attachmentFileSyncOrigin: value }; return doc;
+    },
+    setUploadId: async (_owner: string, _id: string, uploadId: string) => { doc = { ...doc!, uploadId }; return doc; }
+  };
+  const service = createAttachmentService({ store, now: () => now, customMongoActive: () => false, getS3: () => noopS3({ createMultipartUpload: async () => {
+    assert.deepEqual(doc?.attachmentFileSyncOrigin, origin, 'path persisted before any multipart authority'); creates++; return { uploadId: 'mpu' };
+  } }) });
+  const input = { requestId: 'sync-operation', filename: 'search.svg', contentType: 'application/octet-stream', sizeBytes: 494, purpose: 'file', fileSyncOrigin: origin };
+  assert.equal((await service.start('user-1', input)).ok, true);
+  assert.equal(creates, 1);
+  // Simulate bytes ready but logical-file publication failed, then a resumed
+  // pre-contract queued operation explicitly resupplies its saved origin.
+  doc = { ...doc!, attachmentState: 'ready', attachmentExpiresAt: undefined, attachmentFileSyncOrigin: undefined };
+  assert.equal((await service.start('user-1', input)).ok, true);
+  assert.equal(stamps, 1); assert.deepEqual(doc.attachmentFileSyncOrigin, origin); assert.equal(creates, 1);
+  assert.equal((await service.start('user-1', { ...input, fileSyncOrigin: { ...origin, localRootId: 'different-root' } })).ok, false);
+  assert.equal((await service.start('other-owner', input)).ok, false);
+  assert.equal((await service.start('user-1', input)).ok, true);
+  assert.equal(stamps, 1); assert.equal(creates, 1);
+});

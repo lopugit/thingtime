@@ -175,7 +175,7 @@ export const ThingAttachmentDetail = ({ attachment, references, onSaveDetails }:
 				<Flex align="center" justify="space-between" gap={3} wrap="wrap">
 					<Box>
 						<Heading as="h2" fontSize="md">
-							Referenced by {references.length}
+							Direct post references · {references.length}
 						</Heading>
 						<Text color={MUTED} fontSize="sm" mt={1}>
 							{references.length

@@ -1,3 +1,4 @@
+import { activityInterval, clearActivityInterval } from '~/activity/activityManager';
 import { ComponentDataScope } from './ComponentSelect';
 import { ComponentDragBoundary } from './ComponentDrag';
 import { NativeControlsEnabled, ComponentLocalControl } from './NativeComponentControls';
@@ -140,8 +141,8 @@ export const useThingSource = ({
 	const [tick, setTick] = React.useState(0);
 	React.useEffect(() => {
 		if (!intervalMs || !interactive || !canRun) return;
-		const handle = window.setInterval(() => setTick((current) => current + 1), intervalMs);
-		return () => window.clearInterval(handle);
+		const handle = activityInterval('timer:components/Builder/liveComponent:1', 'Live component refresh', () => setTick((current) => current + 1), intervalMs);
+		return () => clearActivityInterval(handle);
 	}, [intervalMs, interactive, canRun]);
 	const [local, setLocal] = React.useState(0);
 	// A manual refetch explicitly reconnects a live stream; action runs do not.

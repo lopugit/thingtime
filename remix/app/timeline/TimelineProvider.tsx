@@ -1,4 +1,5 @@
 import { TimelineNameQueue } from './nameQueue';
+import { activityInterval, clearActivityInterval, activityEvents } from '~/activity/activityManager';
 import React from 'react';
 import { useApi } from '../hooks/useApi';
 import { useWorkspaceUser, useOfflineWorkspace } from '../hooks/useWorkspaceUser';
@@ -135,9 +136,9 @@ function useTimelineConnection(pool: TimelineConnectionPool, storage: TimelineSt
 			if (current) install(current.scope, current.folderId, false);
 		};
 		const unlisten = storage === 'home' ? () => {} : listenTimelineScopeChange(() => { generation++; setEpoch(value => value + 1); forget(); stop(); setError(''); busy = false; void connect(true); });
-		window.addEventListener('offline', disconnected); window.addEventListener('online', refresh); window.addEventListener('focus', refresh); window.addEventListener(TIMELINE_CHANGED_EVENT, edited);
-		const timer = setInterval(refresh, 15_000); void connect(true);
-		return () => { alive = false; generation++; lease?.release(); lease = null; active.current = null; clearInterval(timer); unlisten(); window.removeEventListener('offline', disconnected); window.removeEventListener('online', refresh); window.removeEventListener('focus', refresh); window.removeEventListener(TIMELINE_CHANGED_EVENT, edited); retry.current = async () => {}; redact.current = async () => {}; };
+		activityEvents(window, 'events:timeline/TimelineProvider', 'TimelineProvider').addEventListener('offline', disconnected); activityEvents(window, 'events:timeline/TimelineProvider', 'TimelineProvider').addEventListener('online', refresh); activityEvents(window, 'events:timeline/TimelineProvider', 'TimelineProvider').addEventListener('focus', refresh); activityEvents(window, 'events:timeline/TimelineProvider', 'TimelineProvider').addEventListener(TIMELINE_CHANGED_EVENT, edited);
+		const timer = activityInterval('timer:timeline/TimelineProvider:1', 'Timeline updates', refresh, 15_000); void connect(true);
+		return () => { alive = false; generation++; lease?.release(); lease = null; active.current = null; clearActivityInterval(timer); unlisten(); activityEvents(window, 'events:timeline/TimelineProvider', 'TimelineProvider').removeEventListener('offline', disconnected); activityEvents(window, 'events:timeline/TimelineProvider', 'TimelineProvider').removeEventListener('online', refresh); activityEvents(window, 'events:timeline/TimelineProvider', 'TimelineProvider').removeEventListener('focus', refresh); activityEvents(window, 'events:timeline/TimelineProvider', 'TimelineProvider').removeEventListener(TIMELINE_CHANGED_EVENT, edited); retry.current = async () => {}; redact.current = async () => {}; };
 	}, [user?.id, user?.localOnly, delegatedBy, workspace, pool, storage, onDenied, expectedPlane]);
 	const scoped = timelineConnectionForViewer(connection, workspace === 'pending' ? null : user?.id, expectedPlane, delegatedBy);
 	return { storage, identity: JSON.stringify([user?.id ?? null, delegatedBy, workspace, storage, epoch]), ownerId: user?.id ?? null, connection: scoped, error, retry: () => retry.current(), redact: failure => redact.current(failure) };

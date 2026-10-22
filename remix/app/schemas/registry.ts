@@ -806,6 +806,13 @@ const rootThingSchema: ThingtimeSchema = {
 			description: 'Private server-derived fingerprint that makes upload-start retries idempotent without exposing request metadata.'
 		},
 		{
+			name: 'attachmentFileSyncOrigin',
+			type: 'object',
+			required: false,
+			system: true,
+			description: 'Private immutable client-reported sync source/destination identity stored before bytes; owner-session detail only, never a native grant or current location.'
+		},
+		{
 			name: 'attachmentPurpose',
 			type: 'enum',
 			required: false,

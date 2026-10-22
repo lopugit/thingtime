@@ -26,6 +26,7 @@ export type ThingsThing = {
   acl: string[];
   linkKey?: string;
   targetId: string | null;
+  parentId?: string | null;
   folderId: string | null;
   crystal: Record<string, any>;
   extended: unknown | null;
@@ -80,11 +81,16 @@ export type ThingsCache = {
   schemaRenders?: Record<string, Record<string, unknown> | null>;
 };
 
-export const thingsCacheKey = (userId: string | null | undefined) => `tt-things-${userId || 'anon'}`;
+export const thingsCacheKey = (userId: string | null | undefined) => `tt-things-v2-${userId || 'anon'}`;
 // Native library and detail previews share only an exact workspace destination.
 export const thingsWorkspaceCacheKey = (scope: string, localPlane?: 'home') => `tt-things-workspace-${JSON.stringify([scope, localPlane || 'selected'])}`;
 
 export const folderKeyOf = (folderId: string | null) => folderId || 'root';
+
+/** Apply the root contract to cached first paint as well as fresh API pages.
+ * Search and explicit folder views keep their own scope. */
+export const isTopLevelLibraryThing = (thing: Pick<ThingsThing, 'thingtime' | 'folderId' | 'targetId' | 'parentId' | 'crystal'>): boolean =>
+  !thing.folderId && !thing.targetId && !thing.parentId && !thing.crystal?.parentId && !thing.thingtime.some(kind => kind === 'attachment' || kind === 'file-sync');
 
 export const isFolder = (thing: Pick<ThingsThing, 'thingtime'> & Partial<Pick<ThingsThing, 'crystal'>>): boolean => isFolderThing(thing);
 

@@ -45,6 +45,8 @@ import { isDataPlane, scopedThingCacheKey } from '~/utils/dataPlane';
 import type * as InstallSuite from '~/components/Builder/installSuite';
 import type { BehaviourSuite } from '~/schemas/behaviourSuites';
 import { CARD_STYLES } from '~/theme/card';
+import { ThingParentPaths } from '~/components/Things/ThingParentPaths';
+import { ThingFileLocation } from '~/components/Things/ThingFileLocation';
 import { ThingAttachmentDetail } from '~/components/Things/ThingAttachmentDetail';
 import { ThingComments } from '~/components/Things/ThingComments';
 import { PersistedThingMenu } from '~/components/Thingtime/ContextMenu/PersistedThingMenu';
@@ -999,6 +1001,8 @@ function GenericThingPage() {
 						) : null}
 
 						{attachment && (thing as any)?.localRetentionError ? <Text role="status" color="orange.700" fontSize="sm">{(thing as any).localRetentionError}</Text> : null}
+						{thing ? <ThingParentPaths thing={thing as any} /> : null}
+						{sections.preview && thing && (attachment || thing.thingtime?.includes('file')) ? <ThingFileLocation key={thing.id} thing={thing as any} /> : null}
 						{sections.preview && attachment ? <ThingAttachmentDetail key={requestKey} attachment={attachment} references={references} onSaveDetails={canEditLocalFileDetails(thing, currentUser?.id, linkKey) ? async details => { await api.v1.attachments.annotate({ id: attachment.id, ...details }); refreshThing(); } : undefined} /> : null}
 
 						{sections.preview && post ? (

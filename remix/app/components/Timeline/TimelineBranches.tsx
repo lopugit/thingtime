@@ -1,3 +1,4 @@
+import { activityInterval, clearActivityInterval, activityEvents } from '~/activity/activityManager';
 import { Link } from 'react-router';
 import { branchBuilderHref } from '../Builder/branchWebpageCore';
 import React from 'react';
@@ -40,10 +41,10 @@ export function TimelineBranches({ thingId, selected, onSelect }: { thingId: str
 	React.useEffect(() => {
 		if (!open) return;
 		void pull();
-		const changed = () => { if (document.visibilityState !== 'hidden') void pull(); else void cached().catch(() => {}); };
-		window.addEventListener(TIMELINE_CHANGED_EVENT, changed); window.addEventListener('online', changed); window.addEventListener('focus', changed);
-		const timer = setInterval(changed, 15_000);
-		return () => { clearInterval(timer); window.removeEventListener(TIMELINE_CHANGED_EVENT, changed); window.removeEventListener('online', changed); window.removeEventListener('focus', changed); };
+		const changed = () => { if (document.visibilityState !== 'hidden') return pull(); return cached().catch(() => {}); };
+		activityEvents(window, 'events:components/Timeline/TimelineBranches', 'TimelineBranches').addEventListener(TIMELINE_CHANGED_EVENT, changed); activityEvents(window, 'events:components/Timeline/TimelineBranches', 'TimelineBranches').addEventListener('online', changed); activityEvents(window, 'events:components/Timeline/TimelineBranches', 'TimelineBranches').addEventListener('focus', changed);
+		const timer = activityInterval('timer:components/Timeline/TimelineBranches:1', 'Timeline Branches', changed, 15_000);
+		return () => { clearActivityInterval(timer); activityEvents(window, 'events:components/Timeline/TimelineBranches', 'TimelineBranches').removeEventListener(TIMELINE_CHANGED_EVENT, changed); activityEvents(window, 'events:components/Timeline/TimelineBranches', 'TimelineBranches').removeEventListener('online', changed); activityEvents(window, 'events:components/Timeline/TimelineBranches', 'TimelineBranches').removeEventListener('focus', changed); };
 	}, [open, pull, cached]);
 	const queue = async (command: TimelineBranchCommand) => {
 		if (!connection || working.current) return;

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { groupThings, thingsWorkspaceCacheKey, parseThingsReferrer, schemaRenderOf, thingLink, thingOpenHref, type ThingsThing } from './thingsCore';
+import { isTopLevelLibraryThing, groupThings, thingsWorkspaceCacheKey, parseThingsReferrer, schemaRenderOf, thingLink, thingOpenHref, type ThingsThing } from './thingsCore';
 
 const makeThing = (id: string, kind: string): ThingsThing => ({
   id,
@@ -113,4 +113,10 @@ test('preview caches isolate full workspace identity and local destination', () 
  const keys = scopes.flatMap(scope => [thingsWorkspaceCacheKey(scope), thingsWorkspaceCacheKey(scope, 'home')]);
  assert.equal(new Set(keys).size, keys.length);
  assert.equal(thingsWorkspaceCacheKey(home), `tt-things-workspace-${JSON.stringify([home, 'selected'])}`);
+});
+
+test('cached root uses the same structural placement contract without removing search access', () => {
+  assert.equal(isTopLevelLibraryThing(makeThing('top', 'data')), true);
+  for (const row of [makeThing('blob', 'attachment'), makeThing('settings','file-sync'), {...makeThing('child','data'),parentId:'parent'}, {...makeThing('report','data'),crystal:{parentId:'task',body:'Progress'}}, {...makeThing('nested','file'),folderId:'folder'}, {...makeThing('linked','data'),targetId:'owner'}]) assert.equal(isTopLevelLibraryThing(row), false);
+  assert.equal(isTopLevelLibraryThing(makeThing('file','file')), true);
 });

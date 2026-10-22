@@ -1,3 +1,4 @@
+import { parseFileSyncUploadOrigin, sameFileSyncUploadOrigin } from '../../../fileSync/uploadOrigin';
 import { logFinalizationFailure, type AttachmentFinalizationStage } from './finalizationDiagnostic';
 import { activeAttachmentRetention, attachmentRetention } from './attachmentRetention';
 import { fingerprintFromVerifiedHead, attachmentContentVersion } from './contentFingerprint';
@@ -759,7 +760,7 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 		try {
 			if (!input || typeof input !== 'object' || Array.isArray(input)) return fail(400, 'Invalid attachment upload request');
 			const raw = input as Record<string, unknown>;
-			if (Object.keys(raw).some((key) => !['filename', 'contentType', 'sizeBytes', 'requestId', 'purpose'].includes(key))) {
+			if (Object.keys(raw).some((key) => !['filename', 'contentType', 'sizeBytes', 'requestId', 'purpose', 'fileSyncOrigin'].includes(key))) {
 				return fail(400, 'Invalid attachment upload request');
 			}
 			const intent = attachmentUploadIntent(raw.purpose);
@@ -767,6 +768,11 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 			if (intent.purpose !== 'profile' && dependencies.customMongoActive()) {
 				return fail(400, 'Private attachments are unavailable with a custom MongoDB endpoint');
 			}
+			let fileSyncOrigin: ReturnType<typeof parseFileSyncUploadOrigin> | undefined;
+      if (raw.fileSyncOrigin !== undefined) {
+        try { fileSyncOrigin = parseFileSyncUploadOrigin(raw.fileSyncOrigin); } catch { return fail(400, 'Invalid sync upload origin'); }
+        if (raw.purpose !== 'file' || !raw.requestId || fileSyncOrigin.path.split('/').at(-1) !== raw.filename) return fail(400, 'Sync origin requires an exact file upload request');
+      }
 			const requestedId = raw.requestId === undefined ? null : normalizeId(raw.requestId);
 			if (raw.requestId !== undefined && !requestedId) return fail(400, 'Invalid attachment request id');
 			const sizeBytes = Number(raw.sizeBytes);
@@ -838,6 +844,7 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 						objectKey,
 						requestFingerprint,
 						purpose: intent.purpose,
+						...(fileSyncOrigin ? { fileSyncOrigin } : {}),
 						profileSlot: intent.profileSlot,
 						...(intent.recordingImportDraft ? { recordingImportDraft: true as const } : {}),
 						expiresAt: expires
@@ -855,6 +862,12 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 				}
 			}
 			if (reserved.attachmentState === 'cancelled') return fail(409, 'This upload request was cancelled', { code: 'upload_cancelled', retryable: false });
+      // Persist provenance before returning any byte-upload authority, including
+      // retries of a pre-provenance deterministic reservation. Never infer it.
+      if (fileSyncOrigin) {
+        if (reserved.attachmentFileSyncOrigin && !sameFileSyncUploadOrigin(reserved.attachmentFileSyncOrigin, fileSyncOrigin)) return fail(409, 'Sync upload origin changed');
+        if (!reserved.attachmentFileSyncOrigin) reserved = await dependencies.store.recordFileSyncOrigin(ownerId, id, requestFingerprint, fileSyncOrigin);
+      }
 			// Recording starts can be replayed after a lost completion receipt.
 			// The owner and exact metadata fingerprint have already been checked.
 			if (['recording', 'file', 'password'].includes(intent.purpose) && reserved.attachmentState === 'ready') {

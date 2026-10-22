@@ -1174,7 +1174,7 @@ class ThingtimeNodeIntegration {
 	}
 
 	controlService(action, options = {}) {
-		if (!['start', 'stop', 'restart'].includes(action)) {
+		if (!['start', 'stop', 'restart', 'disable'].includes(action)) {
 			return Promise.reject(new ThingtimeNodeBridgeError('invalid_request', 'Unsupported node control.'));
 		}
 		return this.withServiceLock(async () => {
@@ -1185,6 +1185,10 @@ class ThingtimeNodeIntegration {
 			const registration = await this.registrationStatus();
 			if (registration.registered && existing === null) {
 				throw new ThingtimeNodeBridgeError('login_item_conflict', 'The running node has no Desktop-owned registration.');
+			}
+			if (action === 'disable') {
+				const disabled = await this.runner('/bin/launchctl', ['disable', `gui/${process.getuid()}/${NODE_LABEL}`], { maximumOutputBytes: MAX_ERROR_BYTES, timeoutMs: 10_000 });
+				requireLaunchctlSuccess(disabled, 'disable login launch for');
 			}
 			const stopped = await this.runner('/bin/launchctl', ['bootout', `gui/${process.getuid()}/${NODE_LABEL}`], {
 				maximumOutputBytes: MAX_ERROR_BYTES, timeoutMs: 10_000

@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { deviceSyncFolders, deviceSyncedFilesHref } from './deviceSyncNavigation';
+import { deviceSyncOverviewBlocks } from './deviceSyncBlocks';
+import { settingsDocumentBlocks } from '../Settings/settingsDocument';
+import { deviceSyncPageHref } from './deviceNavigation';
 const row = (id: string, deviceId = 'device-a', remoteFolderId = 'folder-a', owner = 'owner') => ({
 	id,
 	updatedAt: '2026-10-22T00:00:00Z',
@@ -49,8 +52,6 @@ test('device virtual-folder links encode the entire identifier', () => {
 	assert.equal(q.has('folder'), false);
 });
 
-import { deviceSyncOverviewBlocks } from './deviceSyncBlocks';
-import { settingsDocumentBlocks } from '../Settings/settingsDocument';
 test('saved device overview retains separately editable nested fields under the settings validator', () => {
 	const blocks = settingsDocumentBlocks(deviceSyncOverviewBlocks);
 	const nodes: any[] = [];
@@ -72,4 +73,12 @@ test('saved device overview retains separately editable nested fields under the 
 			id
 		);
 	assert.ok(nodes.some((node) => node.type === 'collection' && node.props.itemsPath === 'deviceSync.folders'));
+});
+
+test('dedicated sync route preserves device identity and activity navigation', () => {
+  const url = new URL(deviceSyncPageHref('device a&folder=foreign'), 'https://example.test');
+  assert.equal(url.searchParams.get('device'), 'device a&folder=foreign');
+  assert.equal(url.searchParams.get('deviceView'), 'sync');
+  assert.equal(url.searchParams.has('folder'), false);
+  assert.ok(JSON.stringify(deviceSyncOverviewBlocks).includes('/things?activity=1'));
 });
