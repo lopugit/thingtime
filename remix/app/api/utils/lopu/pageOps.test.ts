@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 // @ts-ignore Node executes TypeScript through the repo's tsx test loader.
-import { MAX_BLOCKS, type WebpageBlock } from '../../../components/Builder/webpageBlocks.ts';
+import { type WebpageBlock } from '../../../components/Builder/webpageBlocks.ts';
 // @ts-ignore Node executes TypeScript through the repo's tsx test loader.
 import { applyPageOps, MAX_PAGE_OPS, summarizeBlocks, validatePageOps, validatePatchTarget, type PageOp } from './pageOps.ts';
 
@@ -159,15 +159,24 @@ test('duplicate and invalid ids are rewritten to unique lowercase slugs — and 
   assert.match(twins.children![1].id, /^twin-/);
 });
 
-test('the block cap holds for insert, replace and setBlocks', () => {
-  const many = Array.from({ length: MAX_BLOCKS }, (_, index) => ({ id: `b-${index}`, type: 'text' as const, text: 'x' }));
+test('insert, replace and setBlocks retain pages beyond the former block-count cap', () => {
+  const many = Array.from({ length: 121 }, (_, index) => ({ id: `b-${index}`, type: 'text' as const, text: 'x' }));
   const full = applyPageOps([], [{ op: 'setBlocks', blocks: many }]);
   assert.equal(full.applied, 1);
-  const over = applyPageOps(full.blocks, [{ op: 'insert', containerId: null, index: 'end', block: { id: 'one-more', type: 'text', text: 'x' } }]);
-  assert.equal(over.applied, 0);
-  assert.match(over.errors[0], /exceed/);
-  const tooMany = applyPageOps([], [{ op: 'setBlocks', blocks: [...many, { id: 'extra', type: 'text', text: 'x' }] }]);
-  assert.equal(tooMany.applied, 0);
+  assert.deepEqual(full.errors, []);
+  assert.equal(full.blocks.length, 121);
+  const inserted = applyPageOps(full.blocks, [{ op: 'insert', containerId: null, index: 'end', block: { id: 'one-more', type: 'text', text: 'x' } }]);
+  assert.equal(inserted.applied, 1);
+  assert.deepEqual(inserted.errors, []);
+  assert.equal(inserted.blocks.length, 122);
+  const replaced = applyPageOps(inserted.blocks, [{ op: 'replace', id: 'one-more', block: {
+    id: 'replacement', type: 'container', children: [{ id: 'nested', type: 'text', text: 'Retained' }]
+  } }]);
+  assert.equal(replaced.applied, 1);
+  assert.deepEqual(replaced.errors, []);
+  assert.equal(ids(replaced.blocks).length, 123);
+  assert.equal(replaced.blocks.at(-1)?.children?.[0]?.text, 'Retained');
+  assert.deepEqual(applyPageOps([], [{ op: 'setBlocks', blocks: replaced.blocks }]).blocks, replaced.blocks);
 });
 
 test('replaying the broadcast ops on the original tree reproduces the server result (client parity)', () => {

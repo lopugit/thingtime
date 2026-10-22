@@ -20,6 +20,7 @@ const jsonResponse = (value: unknown, status = 200): Response =>
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
+  vi.useRealTimers();
 });
 
 describe('ThingtimeService OAuth', () => {
@@ -104,6 +105,54 @@ describe('ThingtimeService OAuth', () => {
       'Thingtime login expired; start again',
     );
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([
+    ['server', { thingtimeBaseUrl: 'https://other.thingtime.test' }],
+    ['client', { thingtimeClientId: 'other-client' }],
+    ['callback', {}],
+  ] as const)('rejects a changed %s without consuming state or sending a code', async (kind, override) => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ accessToken: 'test-token' }))
+      .mockResolvedValueOnce(jsonResponse({ user: { id: 'test-user', username: 'tester' } }));
+    vi.stubGlobal('fetch', fetchMock);
+    const service = new ThingtimeService();
+    const settings = configuredSettings();
+    const redirect = 'com.thingtime.commander://oauth/callback';
+    const login = service.beginLogin(settings, redirect);
+    const changedRedirect = kind === 'callback' ? 'http://127.0.0.1:47820/oauth/callback' : redirect;
+    await expect(
+      service.exchange({ ...settings, ...override }, login.state, 'code', changedRedirect),
+    ).rejects.toThrow('environment or callback changed');
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(() => service.cancel({ ...settings, ...override }, login.state, changedRedirect)).toThrow(
+      'environment or callback changed',
+    );
+    await expect(service.exchange(settings, login.state, 'code', redirect)).resolves.toMatchObject({
+      account: { id: 'test-user' },
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('expires pending login states without a token request and rejects a cancelled replay', async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const service = new ThingtimeService();
+    const settings = configuredSettings();
+    const redirect = 'com.thingtime.commander://oauth/callback';
+    const expired = service.beginLogin(settings, redirect);
+    vi.advanceTimersByTime(10 * 60_000 + 1);
+    await expect(service.exchange(settings, expired.state, 'code', redirect)).rejects.toThrow(
+      'login expired',
+    );
+    const cancelled = service.beginLogin(settings, redirect);
+    expect(service.cancel(settings, cancelled.state, redirect)).toBe(true);
+    await expect(service.exchange(settings, cancelled.state, 'code', redirect)).rejects.toThrow(
+      'login expired',
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it('rejects non-loopback plaintext Thingtime origins before creating an authorization request', () => {

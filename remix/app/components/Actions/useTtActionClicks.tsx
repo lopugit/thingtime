@@ -1,4 +1,5 @@
 import React from 'react';
+import { isTransientBlockTarget, TRANSIENT_BLOCK_ACTION } from '../Builder/transientBlockActions';
 import { CATALOG_RECORD_ACTION } from '~/schemas/catalogRecordsSuite';
 import { LOCAL_UI_ACTION, localQueryFormInput } from './localUiAction';
 import { useNavigate } from 'react-router';
@@ -122,9 +123,13 @@ export const useTtActionClicks = (options?: { onUnowned?: TtActionUnownedHandler
 	return React.useCallback(
 		(event: React.MouseEvent) => {
 			const origin = event.target as HTMLElement | null;
+			if (isTransientBlockTarget(origin)) return;
 			const control = origin?.closest?.('[data-tt-action]') as HTMLElement | null;
 			// closest() can walk past the wrapper — only act on controls INSIDE it
 			if (!control || !(event.currentTarget as HTMLElement).contains(control)) return;
+			// Reserved for an explicitly mounted transient adapter. Never prepare,
+			// record or gather its fields as a normal Action, even outside that host.
+			if (control.getAttribute('data-tt-action') === TRANSIENT_BLOCK_ACTION) return;
 			// a click that lands ON a form field is the viewer typing, not firing
 			const tag = origin?.tagName?.toLowerCase();
 			if (tag === 'input' || tag === 'select' || tag === 'textarea' || tag === 'option' || tag === 'label') return;
@@ -132,6 +137,7 @@ export const useTtActionClicks = (options?: { onUnowned?: TtActionUnownedHandler
 			event.stopPropagation();
 			if (busyRef.current || control.matches(':disabled') || control.getAttribute('aria-disabled') === 'true') return;
 			const action = control.getAttribute('data-tt-action') || '';
+			if (action === '$transient') return; // An enclosing transient host owns this intent; never persist or dispatch it.
 			if (!action) return;
 			if (action === LOCAL_UI_ACTION) {
 				try {

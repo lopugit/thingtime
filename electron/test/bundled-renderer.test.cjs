@@ -22,8 +22,8 @@ test('the desktop window always opens the packaged renderer while the selected e
 	assert.doesNotMatch(mainSource, /createWindow\(settings\.selectedEndpoint\.url\)/u);
 	assert.doesNotMatch(mainSource, /mainWindow\.loadURL\(target\.url\)/u);
 	assert.match(mainSource, /process\.env\.THINGTIME_API_FALLBACK_ORIGIN = new URL\(endpointUrl\)\.origin/u);
-	assert.match(mainSource, /await session\.defaultSession\.clearCache\(\)/u);
-	assert.ok(startup.indexOf('session.defaultSession.clearCache()') < startup.indexOf('initializeDesktopSettings()'));
+	assert.match(mainSource, /await \(partition \? session\.fromPartition\(partition\) : session\.defaultSession\)\.clearCache\(\)/u);
+	assert.ok(startup.indexOf('startNitroServer()') < startup.indexOf('session.defaultSession).clearCache()'));
 	assert.ok(startup.indexOf('initializeDesktopSettings()') < startup.indexOf('startNitroServer()'));
 	assert.match(routesSource, /cache: init\.cache \|\| 'no-store'/u);
 	assert.match(lopuSource, /as=\{RouterLink\} to=\{link\.href\}/u);
@@ -81,4 +81,13 @@ test('desktop updater exposes a signed release catalog, cache recovery, and trus
 	assert.match(mainSource, /scheduleCachedReleaseHandoff\('launch', entry\)/u);
 	assert.match(mainSource, /action, cacheRoot: updateCacheRoot\(\), format: 1/u);
 	assert.match(mainSource, /requireTrustedAiBridgeEvent\(event\);\n  return installCachedRelease/u);
+});
+
+test('agent claims use the selected API origin even when the bundled window origin stays fixed', async () => {
+  const mainSource = await readFile(path.join(electronDir, 'main.cjs'), 'utf8');
+  const routeSource = await readFile(path.join(repoRoot, 'remix/app/routes/agent-browsers.tsx'), 'utf8');
+  assert.match(mainSource, /apiOrigin:.*activeAccountEndpoint\(\)/u);
+  assert.match(routeSource, /setApiOrigin\(new URL\(info\.apiOrigin\)\.origin\)/u);
+  assert.match(routeSource, /JSON\.stringify\(\[apiOrigin, plane, ownerId, taskId\]\)/u);
+  assert.doesNotMatch(routeSource, /JSON\.stringify\(\[location\.origin/u);
 });

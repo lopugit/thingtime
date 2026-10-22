@@ -1,4 +1,5 @@
 import { definePlugin } from 'nitro';
+import { agentTestEnvironment } from '../../app/api/utils/agentTesting';
 import { hasSelfHostedApiEnv } from '../utils/apiFallback';
 
 import { ensureIndexes, warnIfTransactionsUnsupported } from '../../app/api/utils/mongodb/collections';
@@ -14,6 +15,8 @@ import { ensureIndexes, warnIfTransactionsUnsupported } from '../../app/api/util
 // An incomplete server must not connect or create indexes before the request
 // guard can reject it. Explicit desktop bridges also skip local DB warmup.
 export default definePlugin(() => {
+  // A malformed isolated test must never connect or adopt remote storage.
+  agentTestEnvironment();
   if (!hasSelfHostedApiEnv()) return;
   try {
     void ensureIndexes().catch(() => {});

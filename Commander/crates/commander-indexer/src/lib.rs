@@ -26,6 +26,9 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{mpsc, Arc};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
+#[cfg(unix)]
+pub mod backup;
+pub mod backup_ignore;
 mod resources;
 
 use resources::{validate_resource_limits, ResourceGovernor};
@@ -1118,6 +1121,25 @@ struct ScanContext<'a> {
     governor: Arc<ResourceGovernor>,
 }
 
+/// Shared traversal configuration for search indexing and backup capture.
+fn source_walker(root: &Path, source: &IndexSource, governor: &ResourceGovernor) -> WalkBuilder {
+    let mut builder = WalkBuilder::new(root);
+    builder
+        .threads(governor.effective().worker_threads)
+        .hidden(!source.include_hidden)
+        .follow_links(source.follow_symlinks)
+        .same_file_system(true)
+        .ignore(source.respect_git_ignore)
+        .parents(source.respect_git_ignore)
+        .git_ignore(source.respect_git_ignore)
+        .git_global(source.respect_git_ignore)
+        .git_exclude(source.respect_git_ignore);
+    if let Some(max_depth) = source.max_depth {
+        builder.max_depth(Some(max_depth));
+    }
+    builder
+}
+
 fn scan_and_store(
     transaction: &Transaction<'_>,
     context: ScanContext<'_>,
@@ -1132,26 +1154,7 @@ fn scan_and_store(
         generation,
         governor,
     } = context;
-    let mut builder = WalkBuilder::new(root);
-    builder
-        // ignore 0.4.25 is pinned and holds at most one ReadDir per traversal
-        // worker. ResourceGovernor takes the strictest thread, parallel-work,
-        // logical-CPU, and open-directory ceiling before we reach this call.
-        .threads(governor.effective().worker_threads)
-        .hidden(!source.include_hidden)
-        .follow_links(source.follow_symlinks)
-        // A source is a filesystem boundary. Commander supplies one source
-        // per mounted volume, which indexes all mounted files without walking
-        // another volume twice through a mount point.
-        .same_file_system(true)
-        .ignore(source.respect_git_ignore)
-        .parents(source.respect_git_ignore)
-        .git_ignore(source.respect_git_ignore)
-        .git_global(source.respect_git_ignore)
-        .git_exclude(source.respect_git_ignore);
-    if let Some(max_depth) = source.max_depth {
-        builder.max_depth(Some(max_depth));
-    }
+    let builder = source_walker(root, source, &governor);
     let walker = builder.build_parallel();
     let kinds: HashSet<IndexKind> = normalized_kinds(&source.kinds).into_iter().collect();
     let (sender, receiver) =

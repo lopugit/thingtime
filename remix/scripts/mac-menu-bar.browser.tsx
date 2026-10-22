@@ -3,6 +3,10 @@ import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { ChakraProvider } from '@chakra-ui/react';
 import { createMemoryRouter, RouterProvider } from 'react-router';
+import { ThingtimeProvider } from '../app/Providers/ThingtimeProvider';
+import SeamlessPageEditor from '../app/components/Builder/SeamlessPageEditor';
+import { PAGE_VIEWPORT_CSS } from '../app/components/Layout/pageViewport';
+import { sanitizeWebpageBlocks } from '../app/schemas/registry';
 import { WebpageBlocksRenderer } from '../app/components/Builder/WebpageBlocksRenderer';
 import { WebpageRuntimeProvider } from '../app/components/Builder/webpageRuntime';
 import { materializeSuite } from '../app/schemas/behaviourSuites';
@@ -14,7 +18,7 @@ import { macMenuBarSuite } from '../app/schemas/appSuites/macMenuBar';
 let scenario = 'available';
 const scripts = new URLSearchParams(location.search).has('scripts');
 const suite = materializeSuite(scripts ? deviceScriptsSuite : macMenuBarSuite, 'own');
-const items = Array.from({ length: 10001 }, (_, index) => ({
+const items = Array.from({ length: 47 }, (_, index) => ({
 	id: `ax:42:${index}`,
 	label: `Menu item ${index}`,
 	program: 'Sample program',
@@ -22,6 +26,8 @@ const items = Array.from({ length: 10001 }, (_, index) => ({
 	bundleId: 'com.example.sample',
 	appPath: `/Applications/${'Long program name '.repeat(12)}.app`,
 	executablePath: '/Applications/Sample.app/Contents/MacOS/Sample',
+	iconDataUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a6m0AAAAASUVORK5CYII=',
+ iconSource: 'menu-bar',
 	source: 'accessibility',
 	visible: false,
 	x: index,
@@ -115,12 +121,22 @@ window.fetch = async (url, init) => {
 		});
 	return Response.json({ schemaVersion: 1, operations: [], origin: location.origin, features: { 'api.actions-run': { version: '1.37.0' } } });
 };
+function EditorFixture() {
+ const [blocks,setBlocks]=React.useState(()=>JSON.parse(sessionStorage.getItem('menu-blocks') || JSON.stringify(suite.pages[0].crystal.blocks)));
+ const [mode,setMode]=React.useState<any>('builder'),[chrome,setChrome]=React.useState<any>(null),[viewport,setViewport]=React.useState<any>(null),[saved,setSaved]=React.useState(false);
+ const surface=React.useRef<HTMLDivElement|null>(null);
+ const [surfaceDocument,setSurfaceDocument]=React.useState<Document|null>(null);
+ const setSurface=React.useCallback((node:HTMLDivElement|null)=>{surface.current=node;setSurfaceDocument(node?.ownerDocument || null);},[]);
+ const components=Object.fromEntries(suite.components.map(c=>[c.crystal.componentKey,{id:c.shareId,crystal:c.crystal}]));
+ const draft:any={blocks,setBlocks,componentsByRef:components,dirty:!saved,loading:false,error:null,resolved:{page:{id:'fixture-menu-bar',author:{id:'synthetic-menu-bar'},acl:['tt:user'],crystal:{name:'Menu block acceptance',blocks}},source:'user',componentsByRef:components},save:async()=>{const result=sanitizeWebpageBlocks(blocks);if(!result.ok) throw Error(result.error);sessionStorage.setItem('menu-blocks',JSON.stringify(result.blocks));setSaved(true);return {ok:true,id:'fixture-menu-bar'};},refresh:()=>{},ensureComponent:async()=>{},discardDraft:()=>{},markSaved:()=>{}};
+ return <><style>{PAGE_VIEWPORT_CSS}</style><div id="lopuPageViewport"><div id="lopuPageScroll"><WebpageRuntimeProvider pageId="fixture-menu-bar" pageKey={null} suiteKey={null} source="user" enabled={mode==='view'}><main style={{padding:'24px 24px 180px'}}><div ref={setSurface}><WebpageBlocksRenderer blocks={blocks} componentsByRef={components} chrome={chrome} interactive={mode==='view'} seamless /></div><SeamlessPageEditor draft={draft} mode={mode} onMode={setMode} surface={surface} surfaceDocument={surfaceDocument} onChrome={setChrome} viewport={viewport} onViewport={setViewport}/><output data-testid="saved">{saved?'Saved and validated':''}</output></main></WebpageRuntimeProvider></div></div></>;
+}
 function App() {
 	const [revision, setRevision] = React.useState(0);
 	const page = suite.pages[0].crystal as any;
 	const components = Object.fromEntries(suite.components.map((c) => [c.crystal.componentKey, { id: c.shareId, crystal: c.crystal }]));
 	return (
-		<main style={{ maxWidth: 1100, margin: '0 auto', padding: 16 }}>
+		<main>
 			<label>
 				Acceptance scenario{' '}
 				<select
@@ -148,7 +164,7 @@ const router = createMemoryRouter([
 		loader: () => ({ user: { id: 'synthetic-menu-bar', username: 'synthetic-menu-bar', accountKind: 'user' } }),
 		Component: () => (
 			<ChakraProvider>
-				<App />
+				<ThingtimeProvider storageKey="menu-block-fixture" persistLocal={false} exposeGlobals={false}>{new URLSearchParams(location.search).has('editor') ? <EditorFixture/> : <App />}</ThingtimeProvider>
 			</ChakraProvider>
 		)
 	}
