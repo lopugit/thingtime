@@ -384,6 +384,7 @@ test('subspace discovery publishes its contract versions', () => {
 	assert.equal(manifest.features['api.subspaces-get'], '1.4.0');
 });
 
+<<<<<<< .merge_file_OSKWb8
 test('run chat advertises both origin-scoped contracts and rejects incompatible responders', () => {
   const manifest = thingtimeCapabilityManifest('https://thingtime.test');
   for (const [feature, path] of [['api.admin-ci-stack-chat', '/api/v1/admin/ci/stacks/chat'], ['api.integrations-ci-chat', '/api/v1/integrations/ci/chat']]) {
@@ -393,4 +394,12 @@ test('run chat advertises both origin-scoped contracts and rejects incompatible 
   }
   assert.equal(capabilitySatisfies('1.1.0', '1.0.0'), true);
   for (const version of ['', '0.9.0', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.0.0'), false);
+=======
+test('marketing publishing publishes its public read and admin write contracts', () => {
+	const manifest = createApiCapabilitiesManifest(Object.keys(routeModules));
+	assert.equal(manifest.features['api.marketing-publications'], '1.0.0');
+	assert.equal(manifest.features['api.admin-marketing-publications'], '1.0.0');
+	assert.match(manifest.features[apiRouteCapabilityId('v1/marketing/publications')] || '', /^\d+\.\d+\.\d+$/);
+	assert.match(manifest.features[apiRouteCapabilityId('v1/admin/marketing/publications')] || '', /^\d+\.\d+\.\d+$/);
+>>>>>>> .merge_file_zLdJqt
 });

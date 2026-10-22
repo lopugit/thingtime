@@ -6,7 +6,7 @@ import { DEFAULT_SETTINGS } from '@commander/protocol';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CommanderState } from '../hooks/useCommander.js';
 import { resetNativeFileIconSchedulerForTests } from '../lib/nativeFileIcons.js';
-import { beginWindowDrag, nativeRequest } from '../lib/nativeBridge.js';
+import { beginWindowDrag, hideLauncher, nativeRequest } from '../lib/nativeBridge.js';
 import { Launcher } from './Launcher.js';
 
 vi.mock('../lib/nativeBridge.js', () => ({
@@ -95,6 +95,22 @@ describe('Launcher keyboard navigation', () => {
   afterEach(() => {
     cleanup();
     resetNativeFileIconSchedulerForTests();
+  });
+
+  it('returns focus to the previous app when Escape dismisses the launcher', async () => {
+    const commander = state();
+    render(<Launcher state={commander} />);
+    fireEvent.keyDown(window, { key: 'Escape' });
+    await waitFor(() => expect(hideLauncher).toHaveBeenCalledWith(true));
+    expect(commander.rememberRecentSearch).toHaveBeenCalledWith(commander.query);
+  });
+
+  it('keeps focus in Commander when Escape only closes the actions panel', () => {
+    const commander = state({ actionsOpen: true });
+    render(<Launcher state={commander} />);
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(commander.setActionsOpen).toHaveBeenCalledWith(false);
+    expect(hideLauncher).not.toHaveBeenCalled();
   });
 
   it('moves selection down and opens the actions panel with Command-K', () => {

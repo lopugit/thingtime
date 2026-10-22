@@ -55,8 +55,11 @@ export async function nativeRequest<T = unknown>(
   });
 }
 
-export async function hideLauncher(): Promise<void> {
-  await nativeRequest('launcher.hide');
+export async function hideLauncher(restorePreviousApplication = false): Promise<void> {
+  await nativeRequest(
+    'launcher.hide',
+    restorePreviousApplication ? { restorePreviousApplication: true } : undefined,
+  );
 }
 
 export function beginWindowDrag(event: ReactMouseEvent<HTMLElement>): void {

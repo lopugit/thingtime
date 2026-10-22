@@ -5,6 +5,7 @@ export const ADMIN_TABS = [
   { slug: 'tiers', label: 'Tiers' },
   { slug: 'ci-control', label: 'CI Control' },
   { slug: 'external-integrations', label: 'External integrations' },
+  { slug: 'marketing', label: 'Marketing' },
   { slug: 'system', label: 'System' }
 ] as const;
 

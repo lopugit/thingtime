@@ -1299,6 +1299,37 @@ email whose link points at the attacker.
       does not float.
 - [ ] Drawer: the Marketing hub appears with its seven children and keeps the
       drawer open on click like Branding/Docs.
+- [ ] Publishing gate (`docs/marketing-suite.md` → Publishing): signed out or
+      as a non-admin, `/marketing`, a category index, a page and
+      `/marketing/social-media` each show the 🔒 "Not published yet" card until
+      an admin publishes them, the `<head>` carries `robots: noindex`, and the
+      drawer has no Marketing section. As an admin every surface renders with
+      the admin bar (state pill, Publish/Unpublish, "Publish all N", 👁️ View
+      as visitor, Manage all →) and `/admin/marketing` opens.
+- [ ] Publish ONE page only (`landing/feed`): a visitor opens it; its crumbs do
+      not link to the unpublished hub/category, the sub-nav lists no
+      categories and no search, footer links skip unpublished targets, related
+      cards and "Same page, other looks" list only published pages, and
+      `/marketing/landing` (the index) still gates.
+- [ ] Publish the `landing` index: visitors see only the published pages
+      (header count matches), cards for unpublished pages are absent; admins
+      see every card with unpublished ones dimmed + 🌐/🔒 chips. "Publish all
+      N pages" then "Unpublish all" round-trip and the count line updates.
+- [ ] Hide a section (the social block on `landing/feed`): admins see it
+      dimmed + dashed with "👁️ Show"; visitors get no such section;
+      `/admin/marketing` lists it under Hidden sections and "Show" restores it.
+- [ ] Social suite: with `social` published and no image set, visitors see
+      "Images are on their way"; publish one set — the visitor menu lists only
+      that feature and `?feature=<unpublished>` falls back to it.
+- [ ] 👁️ View as visitor: the admin bar collapses to the preview strip,
+      gates/filters match a signed-out visit, "Exit preview" restores, and the
+      flag survives a reload.
+- [ ] `/admin/marketing`: stats match the state, per-category page lists
+      filter + toggle, "Publish everything" / "Unpublish everything" need the
+      second confirmation click, Lopu toasts report success/failure, and a
+      rejected POST (e.g. after demotion) reverts the optimistic toggle.
+- [ ] `npm --prefix remix run test:marketing` (publishing + store tests) and
+      `npm --prefix remix run test:api-capabilities` pass.
 
 ## Composer — Thingtime tab (`remix/app/components/Feed/PostComposer.tsx`)
 
@@ -6095,6 +6126,9 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
 
 
 ## Commander emoji paste recovery
+
+- [ ] Seed a disposable clipboard value, paste an emoji into TextEdit and a browser text field, and verify the emoji arrives before restoration. Repeat with a busy destination, rapid Return presses, and two Commander windows. Copy a new value during the paste and verify restoration never overwrites that new copy; check Paste and Keep a Copy separately.
+- [ ] Open Commander over a text editor, dismiss the root launcher with Escape, and immediately type: input must return to the original editor. Escape from Actions must only close Actions. Clicking another app, opening a result, or switching to Commander Settings must not reactivate an older destination. Repeat with a pinned launcher.
 
 - [ ] Follow `Commander/docs/TESTING.md` for denied emoji paste: preserve the selected emoji, recents, learning and clipboard; keep the error, grid and recovery controls inside the native window at standard/minimum/compact widths and large text size. Verify the installed signing requirement stays stable and complete an approved Accessibility grant migration before claiming successful paste.
 
