@@ -104,333 +104,853 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
-- 2026-10-17 — **Codex (AI)**: Normal account Download now exports saved file
-  bytes and offline annotations as canonical ZIPs without waiting for sync.
-  Production-client cold offline Download → anonymous Import → native preview
-  and retained-file exports pass. Full account imports/media coverage remains
-  open. [PR #1000 checkpoint](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+- 2026-10-21: Replace fixed native identity completion spacing with a conservative FIFO burst/rolling budget while preserving every fresh auth/source fence and shared server cooldown. Controlled scheduling improves; installed throughput remains unverified. See [PR 1080](../PRs/1080-codex-sync-identity-budget-allow-bounded-bursts-of-fresh-native-identity-checks.md). — Codex (AI)
+
+- 2026-10-21: Add bounded closed host phase timings and distinguish native identity admission from HTTP duration. Best-effort asynchronous diagnostics preserve all transfer/auth/source/receipt behavior; installed bottleneck evidence remains pending. See [PR 1079](../PRs/1079-codex-sync-phase-timing-measure-closed-native-sync-request-phases.md). — Codex (AI)
+
+- 2026-10-21: Show supported upload-priority readiness through existing saved progress: trusted adapter gate, preference revision, legacy proof cursor and last checked candidate/blocker. Individually editable labels preserve custom progress layouts; scheduling/migration and installed Home cause remain unchanged/unverified. See [PR 1078](../PRs/1078-codex-sync-priority-readiness-show-saved-upload-priority-readiness.md). — Codex (AI)
+
+- 2026-10-21: Expose exact completed-PUT payload samples through Mac upload 1.1.0 and share conservative fresh identity admission/cooldowns across native sync callers. Trackers recover per-direction coverage without counting retained offsets and label acknowledgment-based updates; installed speed accuracy and practical throughput remain unverified. See [PR 1077](../PRs/1077-codex-sync-payload-telemetry-measure-native-payload-speed-and-pace-fresh-identity-checks.md). — Codex (AI)
+
+- 2026-10-21: Prepare eligible saved upload priorities ahead of ordinary durable index rows while preserving ancestry, reserved receipts and contiguous watermarks. Journal v13 migrates legacy normalized keys in independent bounded pages; ordinary uploads continue during migration. Installed priority acceptance and native live-speed telemetry remain incomplete. See [PR 1076](../PRs/1076-codex-sync-priority-preparation-prepare-saved-upload-priorities-before-ordinary-indexed-input.md). — Codex (AI)
+
+- 2026-10-21: Remove redundant read-only native sync preparation guards, combine Mac context/roots/conditions and retain every mutation/source/receipt fence. Controlled streaming calls drop 184→72 HTTP and 40→13 native RPCs; installed throughput remains unverified. File-access 1.12.0 and closed identity timing/cooldown diagnostics support acceptance. See [PR 1075](../PRs/1075-codex-sync-operation-amplification-reduce-read-only-native-sync-preflight-overhead.md). — Codex (AI)
+
+- 2026-10-21: Reduce repeated full-bundle verification and native streaming RPC overhead while retaining fresh child/parent authentication, bounded journal chunks and restart cursors. Mac file-access 1.11.1 fixes full response byte accounting; installed throughput acceptance remains pending. See [PR 1074](../PRs/1074-codex-sync-throughput-reduce-native-verification-and-feed-overhead.md). — Codex (AI)
+
+- 2026-10-20: Create empty attachments with a conditional PUT before HEAD verification, preserving the object-only S3 role, immutable recovery and integrity checks. Upload-start/completion advertise compatible PATCH corrections; live saved-job acceptance remains open. See [PR 1073](../PRs/1073-codex-sync-empty-object-finalization-create-empty-objects-without-listbucket.md). — Codex (AI)
+
+- 2026-10-20: Preserve exact native identity retry markers across Electron error serialization, resume only known native transport interruptions, and retain closed cloud status/code/proxy reasons in the sync UI. Persist redacted folder-request diagnostics beside signer logs. Installed automatic retry and sustained uploads remain pending; see [PR verification note](../PRs/1072-codex-sync-native-failure-recovery-preserve-native-sync-retries-across-electron-ipc.md). — Codex (AI)
+
+- 2026-10-20: Add server-only attachment completion diagnostics with fixed stages and closed error class/code/status fields, preserving HTTP responses and finalization leases. No error messages, paths, IDs or provider request IDs are logged by this diagnostic. Continued upload recovery remains open; see [diagnostic verification](../PRs/1071-codex-attachment-finalization-diagnostics-log-safe-attachment-completion-stages.md). — Codex (AI)
+
+- 2026-10-20: Resume exact nonempty file upload requests interrupted during finalization through the original fenced lease and object version. Back off only for three explicit retryable upload lease/settling codes; retain other conflicts with bounded, fixed diagnostics. `api.attachment-uploads` advances to 1.6.1. Installed upload-start 409 cause and recovery remain unverified. — Codex (AI)
+
+- 2026-10-20: Keep transient cloud sync HTTP 408/429/5xx failures resumable with original operation receipts. Persist a bounded retry deadline across restarts and noisy wake events; keep permission, identity, integrity and explicit Stop behavior unchanged. Signed installed recovery remains pending. — Codex (AI)
+
+- 2026-10-20: Preserve the final verified native roots in desktop upload receipts (fileUploadVersion 1.0.1), so production response parsers accept completed parts. Extend native/HTTP regression through the desktop host and real client parser/source adapter; installed cloud completion and downloaded-byte acceptance remain pending. — Codex (AI)
+
+- 2026-10-20: Revalidate Mac upload sources with valid positive-length EOF reads instead of rejected zero-length requests. Verify the full part helper against actual native reads/stream framing and HTTP bytes, including source changes before/after PUT. Signed installed byte acceptance remains pending. — Codex (AI)
+
+- 2026-10-20: Pin the desktop upload-signing POST Origin to the trusted local window, preserving the proxy's mutation fence. Add bounded, redacted signer phase/status diagnostics and a real loopback guard regression; signed installed byte acceptance remains pending. See [PR 1065](../PRs/1065-codex-desktop-sync-signer-origin-preserve-the-trusted-desktop-origin-when-signing-sync-upload-parts.md). — Codex (AI)
+
+- 2026-10-20: Add the checksum-locked desktop part-upload adapter so bundled loopback origins use host uploads instead of browser S3 PUTs rejected by CORS. Keep source/version, scope, checksums, finalization and receipt checks; no browser security or bucket access changes. Signed installed byte acceptance remains pending; see [PR 1064](../PRs/1064-codex-desktop-sync-upload-transport-upload-mac-sync-parts-through-the-scoped-desktop-host.md). — Codex (AI)
+
+- 2026-10-20: Give renderer index long-polls a separate queue so conditions and file reads continue; preserve independent native indexing when request authorization is canceled. Keep real authority loss fail-closed and add privacy-tested interruption/slow-request diagnostics. Installed payload acceptance remains open; see [PR 1063](../PRs/1063-codex-sync-indexer-recovery-preserve-streaming-indexing-when-identity-requests-are-canceled.md). — Codex (AI)
+
+- 2026-10-20: Stream eligible one-way file transfers from the durable native index while traversal continues, retaining version receipts and revision-aware wake-ups. Show concurrent indexing/transfer progress and growing totals in editable blocks. Native concurrency, cloud changes and signed installed acceptance remain under verification. — Codex (AI)
+
+- 2026-10-20: Bound file-sync startup cleanup to one page and drain obsolete journal data after successful transfer/checkpoint publication, preventing old preparation rows from delaying the first upload. Added backlog and interrupted-checkpoint regressions; installed acceptance pending. — Codex (AI)
+
+- 2026-10-20: Initialize cached sync-screen lifetime guards before child reads,
+  so upload priorities load automatically on first mount and StrictMode remount.
+  Keep late work fenced after removal. Reuse bounded ignore-rule results during
+  planning and skip a new conflict-review scan only when a complete, instance-bound
+  initial-upload plan proves there can be no conflicts. Existing drafts and all
+  transfer durability checks remain intact. Signed installed acceptance is
+  pending. — Codex (AI)
+
+- 2026-10-20: Add persistent device upload priorities with editable path ordering
+  and file-tree Upload next controls. Preserve in-flight operations and receipts
+  across priority changes/restarts, and keep parent-first uploads and safe Trash
+  order. Regression checks retain `.git` objects and worktree metadata under
+  dependency ignores. Skip redundant ancestor work for sealed first uploads to
+  an empty destination, preserving excluded-parent protection and pinned-input
+  migration checks. Installed priority and complete-backup acceptance remain
+  pending. See [PR1059](../PRs/1059-codex-sync-upload-priorities-add-upload-priorities-and-accelerate-initial-backups.md). — Codex (AI)
+
+- 2026-10-20: Read bounded inventory, plan and operation pages in bulk while
+  preserving stored-key, ancestry, byte/count, scope and cancellation checks.
+  Deduplicate sibling ancestor work and show the actual preparation phase and
+  counts before uploads. Signed home-upload acceptance remains open; see
+  [PR1058 verification](../PRs/1058-sync-inventory-page-reads-batch-file-sync-preparation.md). — Codex (AI)
+
+- 2026-10-20: Batch bounded cloud-binding metadata and parent-operation reads
+  before large file-sync uploads. Keep exact capture/account/path checks,
+  active-run admission and revision-guarded commits while avoiding separate
+  database transactions for every file lookup. — Codex (AI)
+
+- 2026-10-20: Resume Mac backup imports from committed entry, skip and validation
+  cursors after reconnect or app restart. Bind the retained import to its exact
+  reviewed job and preserve it through cleanup until a durable plan owns it.
+  Existing matching native captures can adopt their already imported prefix.
+  Installed recovery and first payload acceptance remain pending. See
+  [PR1056 verification](../PRs/1056-sync-import-resume-resume-mac-backup-imports.md). — Codex (AI)
+
+- 2026-10-20: Preserve automatic file-sync admission when normal desktop Quit
+  cancels an in-flight folder request before renderer shutdown. The host refuses
+  new work and retains a fixed lifecycle wait through IPC; actual authority
+  refusals remain terminal. Signed installed Quit/reopen resumed the saved
+  five-minute job without Start or Retry; first payload acceptance remains open. — Codex (AI)
+
+- 2026-10-20 — Codex (AI): Preserve redacted desktop verification retries through
+  IPC and sealed inventory imports; keep the automatic interval on an explicit
+  retry after attention, while retaining explicit Stop behavior.
 
 
-- 2026-10-17 — **Codex (AI)**: Retain opened owned standalone files with bounded,
-  version-checked bytes and native offline metadata editing/download. Reuse
-  conditional sync and durable deletion receipts without duplicate uploads.
-  Production-build cold reload and 1440/390/320px checks pass locally; the full
-  local-first rollout remains incomplete. Details in
-  [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+- 2026-10-20: Add negotiated, byte-bounded Mac inventory batches to reduce the
+  handoff after Commander indexing. Retain canonical journal pages and saved
+  captures through transient import failures; installed throughput acceptance
+  remains pending. — Codex (AI)
 
-- 2026-10-16 — **Codex (AI)**: Add durable deletion receipts for existing owned
-  standalone files without their original upload request ID, retaining version,
-  scope and authentication fences. Local storage/browser and capability checks
-  pass; existing-file offline retention remains in progress. Details in
-  [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+- PR1052 implementation, validation and coverage details: [Commander backup indexer](../PRs/1052-commander-backup-indexer-reuse-commander-rust-indexing.md).
 
-- 2026-10-16 — **Codex (AI)**: Account Files picker, local folder moves,
-  discovery and native previews now use scoped device persistence independently
-  of upload. Preserve stable local IDs after sync, revoke retired media URLs and
-  refuse shared-context/recovery-byte access. See the ongoing
-  [PR #1000 checkpoint](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
-
-- 2026-10-16 — **Codex (AI)**: Queue completed account-file deletion locally,
-  retaining recovery bytes through offline use and lost replies. Add native
-  version review, full-quota restoration, durable delete 1.3.0 replay fences,
-  ready-only moderation stamps and coalesced sync wake-ups. Ordinary account
-  picker/list/media wiring remains pending. See [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md#completed-account-file-deletion--2026-10-16).
-
-- 2026-10-16 — **Codex (AI)**: Make queued file cancellation durable across
-  offline use, lost responses and delayed upload starts. Reuse private,
-  quota-accounted attachment receipts and the existing cleanup lifecycle; add
-  native Cancel upload with retained bytes until confirmation. Real local
-  browser/database and built API checks pass; completed-file deletion and normal
-  account file UI integration remain pending. See [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md#durable-upload-cancellation--2026-10-16).
-
-- 2026-10-16 — **Codex (AI)**: Add conditional attachment deletion to the existing
-  cleanup lifecycle. Stale/racing edits are protected, deferred cleanup remains
-  retryable and billed, and built API discovery advertises delete 1.2.0. Real
-  local database/browser and built-server checks pass; durable upload cancellation
-  and local deletion wiring remain pending. See [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md#conditional-attachment-deletion--2026-10-16).
-
-- 2026-10-16 — **Codex (AI)**: Persist account file annotations and folder choices
-  locally with an independent conditional sync queue, folder dependencies and
-  native conflict comparison. Verified offline edits, lost replies and responsive
-  review in the real local app; corrected the Vite fixture to reuse app-loaded
-  modules. Normal account file picker/media/deletion integration remains pending.
-  See [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md#durable-account-file-details--2026-10-16).
-
-- 2026-10-16 — **Codex (AI)**: Add conditional file annotation and single-item
-  placement to the existing APIs and account transport. Real local replica tests
-  verify concurrent/stale writes, private bytes and canonical fixture cleanup;
-  built Nitro discovery/docs/auth smoke passes. Native account file reconciliation
-  remains pending. See [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md#conditional-account-file-metadata--2026-10-16).
-
-- 2026-10-16 — **Codex (AI)**: Add the durable account file upload foundation:
-  atomic device bytes/intent, scoped multipart recovery, permission-preserving
-  retries, and native sync status. Local browser verification covers offline
-  admission and lost completion without duplicate byte uploads; ordinary account
-  file/post UI wiring remains pending. See [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md#durable-account-file-upload-adapter--2026-10-16).
+- 2026-10-20: Reuse Commander’s Rust indexer for Mac backup traversal and parallel
+  content fingerprints, preserving saved Git-ignore rules and the canonical
+  inventory. Keep captures through transient identity verification failures while
+  retaining authorization and revocation gates. Signed installed home-upload
+  acceptance is pending. — Codex (AI)
 
 
-- 2026-10-16 — **Codex (AI)**: Account post bookmarks/reactions now complete
-  locally for read-only retained posts; native Saved/permalink recovery works
-  offline and across tabs, with conditional independent sync, scope isolation,
-  known-refusal eviction and stale-read fencing. Local clean-browser checks
-  cover private sharing, logout, revocation and 1440/390/320px layouts. Full
-  local-first acceptance remains open; see the
-  [PR #1000 note](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+- 2026-10-19: Keep resumed file-sync indexing distinct from missing folder access and paused transfer counters. Reduce native status polling to leave room for authenticated device traffic; every native request retains live authorization. Add redacted native interruption categories to distinguish storage, network and identity failures; full-home scan restart diagnosis remains open. — Codex (AI)
+
+- 2026-10-19 · Codex (AI): Keep Stop available for unfinished one-time sync jobs, including attention after a failed scan. The editable automation panel now explains how to stop an earlier job before applying changed ignore rules; existing policy and operation-journal fences remain intact.
+
+- 2026-10-19 — **Codex (AI)**: Add resumable Mac home-backup indexing, durable skipped-item coverage, Gitignore-style sync rules and automatic reconnect recovery. Supported files can be backed up without following links or reading live sockets; incomplete coverage stays explicit. Installed home-folder acceptance and link restoration remain pending. See [PR #1049 verification](../PRs/1049-home-backup-indexing-resumable-partial-captures.md).
+
+- 2026-10-19 — **Codex (AI)**: Integrate the current-main file-sync contracts into PR #1047, preserve both reusable framework paths, and advance live-source creation negotiation to `api.things` 1.37.0 so prior 1.36.0 origins remain incompatible with that addition.
+
+- 2026-10-19 — **Codex (AI)**: Add the reusable schema-parameterized agent work-graph read adapter (`api.agent-overview` 2.0.0) with ACL-checked paging, live streaming, and optional status classification. Dashboard pages and write flows are authored as saved Things; current Builder acceptance remains pending. [PR #1047 verification](../PRs/1047-agent-overview-builder-editable-live-agent-manager.md).
+
+- 2026-10-19 — **Codex (AI)**: Document the adapter's breaking response shape,
+  capability negotiation, unknown measurements, external authored-Thing fixture,
+  and pending live acceptance in the fork-safe runbook and manual checklist.
+  See [the adapter guide](../docs/agent-overview.md).
+- 2026-10-19 — Connection-pressure mitigation: reuse the application MongoDB
+  client for health checks, coalesce concurrent checks, and retire idle sockets.
+  Production recovery pending; the observed alert does not establish causation.
+  [PR #1048 details](../PRs/1048-subspace-production-acceptance-and-mongodb-health-pooling.md).
+- 2026-10-19 — **Codex (AI)**: Prepare the current-main file-sync release with reviewed home exclusions, editable hierarchical progress and saved transfer-speed windows; preserve current account/runtime protections and installed AutoFill integration. Completed speed counters now say Complete. Validation and release gates: [PR #1046](../PRs/1046-codex-file-sync-release-recoverable-file-sync-home-backups-and-live-progress.md).
+
+- Commander login verification and API contract details: [PR #1044](../PRs/1044-commander-login-callback-fix-commander-thingtime-login-callback-registration.md).
+
+- 2026-10-19 — **Codex (AI)**: Check Commander OAuth capabilities and callback registration before browser login; recover an unregistered native callback through the explicitly registered loopback callback and bind PKCE attempts to their original server, app and redirect.
+
+- 2026-10-19 — **Codex (AI)**: Integrate mobile file-sync contracts with main: preserve Character, password, runtime and streaming guards; version device and pairing-claim additions as 1.13/1.2 without collision; bind the selected runtime and legacy renderer port through the owned middleware socket while retaining origin history. Renderer port acceptance: 18/18 focused tests. See [PR 1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-19 — **Codex (AI)**: Added editable saved upload/download speed trackers, independent averaging windows and decimal bit/logical-entry units. Bounded per-run history excludes retained offsets and recovered confirmations; native adapters without byte telemetry remain explicit. Isolated Builder and transport checks pass; release and real home upload remain open. See [PR 1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-19 — **Codex (AI)**: Add a paused home-folder backup preset, native
+  pre-traversal exclusions, and an editable two-step sync hierarchy with
+  cumulative file/folder progress. Completed journal results remain readable
+  without reviving write authority. Isolated UI/native verification and live
+  release gates are tracked in [PR 1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
 
 
-- 2026-10-16 — **Codex (AI)**: Cached account bookmarks and reactions complete
-  locally and synchronize independently using conditional membership writes,
-  immutable retries and native conflict review. Generic and legacy interaction
-  mutations invalidate revisions atomically. Local replica/browser checks cover
-  offline reload, cross-tab changes, lost responses and 320px review layout;
-  full local-first acceptance remains open. Details:
-  [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md#account-bookmark-and-reaction-synchronization--2026-10-16).
-
-- 2026-10-16 — **Codex (AI)**: Anonymous Component Library now retains bookmarks
-  and reactions to bundled definitions offline without creating owned copies.
-  Verified reload, cross-tab changes, save ordering and 1440/390/320px layouts.
-  Account interaction sync remains outstanding;
-  [PR #1000 notes](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
-
-- 2026-10-16 — **Codex (AI)**: Visited account Component/Schema catalogues now
-  retain owned definitions atomically for offline editing; scoped tab changes
-  refresh device catalogues and native Component previews. Verified multi-page
-  retention, offline schema data creation, cross-tab edits and responsive bounds.
-  [PR #1000 notes](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+- 2026-10-19: Added an independent S3 replica provider and resumable upload/download
+  worker for the existing portable backup format, with private credential handoff,
+  bounded progress and kill/resume/source-loss protocol checks. Fixed SDK mutation
+  of caller credentials and fenced account changes during credential resolution.
+  Live cloud and native backup UI acceptance remain open. See
+  [PR 1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md). — Codex (AI)
 
 
-- 2026-10-16 — **Codex (AI)**: Builder definition and Component source controls
-  recover unfinished fields offline in isolated anonymous/account workspaces.
-  Content saves no longer await draft/Timeline queues; private ordinary copies
-  reuse canonical local transfer. Verified stale/malformed recovery, stalled
-  drafts, native saves and 1440/390/320px layouts. Full matrix remains open;
-  [PR #1000 notes](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+- 2026-10-19 — **Codex (AI)**: Repair the iOS sync test host by retaining real
+  scene-backed WebViews and diagnosing foreground/origin prerequisites. All 66
+  selected iOS 27 simulator checks pass; physical-device rerun remains open.
+  Production guards are unchanged. See [PR 1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
 
 
-- 2026-10-16 — **Codex (AI)**: Normal account Downloads now export saved device
-  edits offline through the canonical transfer pipeline, with complete scoped
-  export snapshots, dependency/alias guards and explicit missing-content errors.
-  Verified normal-dialog download, importer round-trip and cold offline reload;
-  [PR #1000 evidence](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
-
-- 2026-10-16 — **Codex (AI)**: Ordinary account imports now create editable local
-  private copies and queue sync atomically, reusing canonical copy preparation
-  and stable retry identities. Verified native offline import/edit/reload and
-  a real server export/import round-trip. Managed/file imports and the wider
-  matrix remain open. Details: [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
-
-- 2026-10-16 — **Codex (AI)**: Ordinary account deletion and Builder reset now
-  finish locally while offline and sync through conditional canonical deletes.
-  Conflict review restores the account version immediately or deletes the
-  reviewed version; folder/linked-child ordering and stale-read tombstones
-  protect pending work. Local browser evidence and remaining merge gates:
-  [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
-
-- 2026-10-16 — **Codex (AI)**: Anonymous/offline Builder global and site pages reuse
-  canonical route definitions, native rendering and scoped draft recovery;
-  bounded caches refresh across tabs without sharing content. Save/reset complete
-  independently of account drafts. Local offline/account/import browser evidence
-  and remaining gates are in the [PR #1000 note](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+- 2026-10-19 — **Codex (AI)**: Whole-tree restore now uses bounded private disk
+  indexes and streamed CLI review output, removing the old 10,001-item/32-MiB
+  memory limit while retaining v1 review hashes and recoverable receipts.
+  See [PR 1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
 
 
-- 2026-10-16 — **Codex (AI)**: Device component catalogue, native argument
-  editing and independent version drafts now work offline. Saved copies open
-  their exact local IDs; content creation completes independently of draft
-  requests. Local browser coverage includes 1440/390/320px and stalled account
-  drafts. Full local-first acceptance remains open. Details:
-  [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+- 2026-10-19 — **Codex (AI):** Selected-folder backups now consume bounded Files
+  inventory pages and validate/order them with private SQLite scratch storage.
+  Existing sealed plans and byte resume stay compatible; large whole-tree restore
+  and cloud-scale acceptance remain open. See [PR 1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
 
-- 2026-10-16 — **Codex (AI)**: Schema catalogue, authoring, copying and data
-  forms now work in anonymous/offline workspaces. Schema and Thing creation
-  complete independently of draft saves; recovery stays scoped, malformed
-  snapshots are preserved, and account data waits for its schema to sync.
-  Local offline, stalled-draft and responsive evidence is recorded in the
-  [PR #1000 note](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
-
-- 2026-10-16 — **Codex (AI)**: The native Search page now filters saved device
-  Things anonymously and offline using the shared canonical field grammar.
-  Source-scoped caches/cursors keep online and device results separate; anonymous
-  public search omits credentials. Local server comparison and responsive/cold
-  offline checks are documented in the [PR #1000 note](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
-
-- 2026-10-16 — **Codex (AI)**: Lopu messages now save to scoped device history
-  without login or network. Account messages queue the existing idempotent
-  recorder after verified reconnect; failures retain local text. The normal nav
-  and notifications page expose searchable offline history. Clean anonymous
-  offline reload and disposable account reconnect checks pass locally.
-  [PR #1000 checkpoint](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
-
-- 2026-10-16 — **Codex (AI)**: Account folder moves now commit locally with sync
-  intent and reconnect through conditional account writes. Pending placement
-  wins over stale folder lists. Promise-based offline refusals also prevent an
-  optional archive probe from crashing cold account folders. Native offline
-  move/reload/reconnect passes locally at desktop/phone widths.
-  [PR #1000 checkpoint](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
-
-- 2026-10-16 — **Codex (AI)**: Settings → Things now exposes scoped device
-  workspace usage and an explicit browser storage-protection request without
-  login. Missing accounting retains last-known values with an error; identity
-  changes retire reads. Offline reload, other-tab writes and native responsive
-  failure/recovery checks pass locally.
-  [PR #1000 checkpoint](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
-
-- 2026-10-16 — **Codex (AI)**: Anonymous Timeline is discoverable through the
-  normal Things library and search, using a protected read projection over
-  canonical local history. Cold offline rename no longer requests a server
-  capability manifest. Native offline navigation/reload is verified at
-  1440/390/320px; intermittent startup failures remain a merge gate.
-  [PR #1000 checkpoint](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
-
-- 2026-10-16 — **Codex (AI)**: Page + related History resolves anonymous local
-  composition offline through canonical references, bounded membership and the
-  shared cursor contract. Includes race/scope regression coverage, native
-  offline browser checks and cleanup for the disposable account API fixture.
-  Preserves the review-bot cache-error fallback, verified with the combined build.
-  [PR #1000 checkpoint](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
-
-- 2026-10-16 — **Codex (AI)**: Restored local components now open in native detail
-  pages and support local discussions, reactions and browser Actions. Routing
-  uses scoped storage and local author projections, preserves deleted identities,
-  and keeps public reads/account authority separate. See the local verification
-  in [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
-
-- 2026-10-16 — **Codex (AI)**: Local History now downloads saved-version archives
-  offline through the shared account resolver, retaining original content, names
-  and notes with bounded output and cancelled-editor download protection. Native
-  offline download and restored-page portable round-trip verified locally. See
-  [PR #1000 checkpoint](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
-
-- 2026-10-16 — **Codex (AI)**: Anonymous History now restores, undoes and merges
-  ordinary content offline through the shared account planner and atomic local
-  writer, preserving independent recorded components and retry/CAS guarantees.
-  Offline native UI and real local account API regressions passed. Full rollout
-  remains unmerged; [PR #1000 evidence](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
-
-- 2026-10-16 — **Codex (AI)**: Anonymous variations now review and save merges
-  offline using the canonical account comparison and recorded-component rules.
-  Native preview, conflict choices, cold reload and account API parity passed
-  locally. Current-content restore and the full local-first matrix remain open.
-  [PR #1000 evidence](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
-
-- 2026-10-16 — **Codex (AI)**: Anonymous variations now create, checkout and
-  save offline through History and the native Builder, sharing canonical branch
-  and ancestry rules with account Timeline. Conflict/retry/rollback and clean
-  offline desktop/phone checks passed; account API regression passed locally.
-  The full local-first matrix still blocks merge. See the
-  [PR #1000 note](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
-
-- 2026-10-16 — **Codex (AI)**: Anonymous saved versions can be named, renamed
-  and cleared offline through the existing Versions tab and a mutation planner
-  shared with account Timeline. Canonical replay/concurrency, native offline UI
-  and real local API regression checks passed. Full local-first rollout remains
-  unmerged; see the [PR #1000 note](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+- 2026-10-19 — **Codex (AI):** Share app-owned file sync and durable recovery
+  between Mac and capable iOS hosts. Files navigation keeps runs alive; foreground
+  recovery preserves user Stop and fences hidden work at native lease expiry.
+  Physical iOS lifecycle acceptance remains open. See [PR 1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
 
 
-- 2026-10-16 — **Codex (AI)**: Anonymous History owner notes now save/remove
-  offline with canonical relational records, atomic limits, safe deletion
-  retries and device-only status. Clean-browser reload/refusal/viewport checks
-  passed; full local-first rollout remains unmerged. See the
-  [PR #1000 note](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+- 2026-10-19 — **Codex (AI)**: iOS publication 1.2.0 adds saved-consent checks
+  without prompting, per-folder publication capabilities and final device/grant
+  revalidation. Added native and shared regressions; iOS durable execution remains
+  open. See [PR 1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-19 — **Codex (AI)**: Mac connections gain editable automatic-sync
+  interval/Start/Stop blocks, durable recurring admissions and composed window
+  retention. Stop also fences completion races. Shared and isolated browser
+  regressions cover scheduling, process restart and Builder save/reload;
+  installed acceptance remains open. See [PR 1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-19 — **Codex (AI)**: Mac sync now persists explicit job admission,
+  resumes unfinished work from the app shell with existing native consent, and
+  retains Stop across relaunch. Isolated Chromium process-restart acceptance
+  recovers an accepted write without replay; installed/reboot checks remain open.
+  See [PR 1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
 
 
-- 2026-10-16 — **Codex (AI)**: Anonymous ordinary content now retains canonical
-  local Timeline versions and recorded native page previews, verified through
-  offline import/rename/reload at desktop and phone widths. History uses isolated
-  browser authority and never claims account sync. The full local-first matrix
-  remains incomplete; see [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+- 2026-10-19 — **Codex (AI)**: Move explicit Mac sync runs out of the Files
+  screen, reconnect live progress/review on return, and keep an active window
+  hidden on Close. Fix reattachment behind long scans and cancellation render
+  errors; automatic relaunch scheduling and installed acceptance remain open.
+  See [PR 1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
 
-- 2026-10-16 — **Codex (AI)**: Things library text search now reads local content
-  first, including anonymous/offline folders, with bounded pagination, visible
-  errors and Retry. Account refresh preserves pending edits and scope isolation.
-  Clean production-browser checks cover anonymous 61-row paging, account outage
-  recovery, cold reload and mouse selection at 1440/390/320px. Full local-first
-  completion remains open. [PR #1000 details](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+- 2026-10-19 — **Codex (AI)**: Mac sync can check exact saved folder approval
+  without prompting, including after native restart; capable clients recheck
+  before new writes. Whole-folder workers remain in progress. See
+  [PR 1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
 
-- 2026-10-16 — **Codex (AI)**: Local Component/Action/Data details now load native
-  discussions and support owner rename without remote capability calls. Comments,
-  nested replies, search and renamed titles survive a cold offline reload;
-  anonymous public reads omit credentials. Local browser evidence covers
-  desktop, 390px and 320px. Cloud History/handoff retain real authentication.
-  [PR #1000 checkpoint](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+- 2026-10-19 — **Codex (AI)**: Verified paged Mac sync and reply-loss recovery with 10,003 real native/cloud paths, full upload/download hashes and an unchanged repeat. Shared file-sync checks pass 291 tests; installed providers, persistent workers and million-file acceptance remain open. See [PR 1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
 
-- 2026-10-16 — **Codex (AI)**: Web Platform Components now run the real compiled
-  sandbox renderer after a cold offline reload. Build-produced srcdoc and an exact
-  CSP script hash retain opaque-origin isolation and existing network restrictions;
-  embed/draft bundles keep standalone behavior. Production-CSP browser checks cover
-  native DOM, workers, form events, errors, Stop and isolation probes. The broader
-  local-first matrix remains unfinished. [PR #1000 details](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+- 2026-10-19 — Seek the remaining retired sync metadata before each bounded cleanup page, avoiding repeated deleted-prefix traversal on large reruns; retain transaction rollback and active-baseline guards.
+
+- 2026-10-19 — **Codex (AI)**: Stream Mac/iOS destination alias checks so wide folders can publish downloads and recover Trash. Gate the complete paged runner on patched native contracts; retain limits for older adapters. Add API-provisioned large-root acceptance. Details: [PR 1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md#wide-native-destination-checks--2026-10-19).
+
+- 2026-10-19: Add reproducible isolated Mac paged-sync/API acceptance, including saved conflict choices, native restart recovery and exact byte verification. Installed UI and scale remain open; see [PR 1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-19 — **Codex (AI)**: Mac/iOS conflict reviews now use durable paged
+  choices and individual editable Builder blocks, with private account layouts
+  and the selected desktop API transport. Isolated UI restart/save/reload,
+  desktop/mobile scrolling and explicit review outcomes pass. Installed native
+  acceptance remains open. [PR 1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-19 — **Codex (AI)**: Foreground conflict reviews now retain sealed choices across interrupted scans/imports and validate fresh conflicts in bounded pages before execution. Streaming retention hashes preserve existing Ignore receipts. The editable Builder adapter and installed acceptance remain open; Android stays deferred. Details: [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-19 — **Codex (AI)**: Add bounded durable conflict-review drafts, per-row
+  revision checks, restart recovery, fresh-plan handoff and bounded cleanup.
+  Twelve focused regressions and a Chromium process-restart fixture cover the
+  storage contract; foreground/Builder integration and installed acceptance remain
+  open. See [PR 1002 notes](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-19 — **Codex (AI)**: `api.files` 1.6.0 streams wide-folder path
+  observations through bounded anonymous scratch storage, preserving late
+  ambiguity/private-access checks and reclaiming storage after process death.
+  Clients negotiate the new capability; regression and isolated handler coverage
+  include >10,000 siblings, found/absent paths and logout refusal. Installed
+  acceptance and the foreground combined-plan cap remain open. See
+  [PR #1002 notes](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-19 — **Codex (AI)**: Mac/iOS cloud inventories stream bounded pages from
+  one Mongo snapshot (`api.files` 1.5.0). Incomplete streams and invalid ancestry
+  cannot publish checkpoints. Added isolated real-handler and browser checks;
+  installed acceptance and the live 10,000-path cap remain open. Details:
+  [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-18 — **Codex (AI)**: Mac/iOS foreground sync imports sealed native
+  folder observations in bounded pages, retaining source/device/grant checks
+  and complete checkpoint publication. Large-root cloud paging and installed
+  acceptance remain open; Android is deferred. Details and validation:
+  [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md#native-paged-folder-captures--2026-10-18).
 
 
-- 2026-10-16 — **Codex (AI)**: Bundled suites install atomically in anonymous
-  workspaces using the shared canonical install plan. Browser Actions can use
-  bounded local Things/data-Action adapters without HTTP. Offline gallery/edit/
-  save/reload and JSON round-trip pass locally; isolated Web Platform execution
-  offline remains unfinished. Vite preview preserves the existing runtime CSP.
-  [PR #1000 checkpoint and verification](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+- 2026-10-18 — **Codex (AI)**: Mac session-lock checks now read session state
+  without enumerating Bluetooth or other hardware. Explicit telemetry fixtures
+  keep controller/recovery tests independent of the host's privacy permissions;
+  the full native suite passes (160 passed, one opt-in hardware test skipped).
+  Signed installed-app acceptance remains separate. Details:
+  [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md#mac-session-checks-and-test-isolation--2026-10-18).
 
-- 2026-10-16 — **Codex (AI)**: Anonymous page Components and Collections now run
-  local source Actions and refresh after native controls, including cold offline
-  reload. Source caches and local form state use complete workspace identity;
-  shared authorization and inert previews are preserved. Local 1440/390/320px
-  acceptance and 446 checks passed. Full local-first rollout remains incomplete;
-  see [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+- 2026-10-18 — **Codex (AI)**: Mac/iOS foreground sync can verify a selected
+  path without hashing the whole root for every operation. Native contracts
+  negotiate exact observations and recheck owner/grant access before replying;
+  explicit absence stays distinct from errors. Shared/native/browser checks pass;
+  installed acceptance and stable large-root scan producers remain open. Android
+  stays deferred. Details: [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md#native-single-path-verification--2026-10-18).
 
-- 2026-10-16 — **Codex (AI)**: Anonymous Actions reuse the canonical bounded
-  executor against device storage, with local authoring/editing, scoped nested
-  data operations and protected execution details. Offline browser JSON
-  round-trip and desktop/mobile checks pass; the live server regression remains
-  100/100. Suite/request adapters and full rollout acceptance remain unfinished.
-  [PR #1000 notes](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
 
-- 2026-10-16 — **Codex (AI)**: Native local reactions, Saved and poll voting now
-  work offline through scoped relational Things and shared validators. Saved is
-  discoverable without login and caches are separated by workspace. Local browser
-  desktop/phone checks pass; account sync and full-suite completion remain gated.
-  [PR #1000 notes](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+- 2026-10-18 — **Codex (AI)**: Bound foreground sync metadata growth with resumable
+  journal cleanup. Preserve active transfers, current baselines, reader pins and
+  retained conflict receipts; refuse identity reuse during partial deletion.
+  Repeated desktop/iOS fixture runs maintain steady storage counts and cleanup
+  survives a browser-process restart. Android remains deferred.
+  [Details](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md#bounded-foreground-journal-cleanup--2026-10-18).
 
-- 2026-10-16 — **Codex (AI)**: Continue anonymous local-workspace rollout with
-  native composer file/post saves, relational comments/replies and independent
-  draft/template media copies. Posting does not wait for draft saving. Fixed
-  restored-image editor URLs and missing comments after reload; verified offline
-  desktop/mobile locally. Full-suite merge remains gated. [PR #1000 notes](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+- 2026-10-18 — **Codex (AI)**: Connect Mac/iOS foreground controls to paged sync
+  recovery, durable conflict choices and checkpoint publication. Repeated Ignore
+  reuses retained-version receipts; interrupted post-run scans restart with fresh
+  generations. Shared approval checks and legacy recovery remain in place. Desktop
+  and phone browser fixtures pass; installed acceptance, stable paged producers
+  and worker integration remain open. Android stays deferred.
+  [Details](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md#macios-foreground-paged-recovery--2026-10-18).
 
-- 2026-10-16 — **Codex (AI)**: Anonymous Files supports normal picker saves,
-  exact-byte downloads and copy/move offline. Native media resolves scoped local
-  bytes with bounded, revoked object URLs; stable workspace API callbacks prevent
-  repeated Thing-page loads. Local browser/test evidence and remaining rollout
-  gaps: [PR #1000 checkpoint](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+- 2026-10-18 — **Codex (AI)**: PR #1002 retains cloud metadata with paged
+  inventories and prepares immutable cloud destinations/native Trash receipt
+  links before execution. Indexed bindings reuse the existing guarded transport;
+  interrupted preparation and lost publication replies resume with original IDs.
+  Isolated Chromium verified 270 generated downloads across two process restarts.
+  Live scan/lifecycle integration and installed Mac/iOS acceptance remain open;
+  Android stays deferred. [Details](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md#paged-cloud-operation-bindings--2026-10-18).
 
-- 2026-10-16 — **Codex (AI)**: Anonymous Things ZIP import/export/copy/delete
-  now keeps real file bytes and metadata atomically on the device, with canonical
-  validation, dependency remapping and bounded quotas. Offline browser round-trip
-  retained exact bytes after original deletion; uploads/media rendering/account
-  sync remain unfinished. [PR #1000 checkpoint](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
 
-- 2026-10-16 — **Codex (AI)**: Anonymous algorithm profiles save, branch, train
-  and transfer locally using canonical profile validation and ranking maths.
-  Public feed pages rank on the device; training no longer bypasses the workspace
-  facade through a beacon, and identity changes retire queued session events.
-  Offline browser and transfer evidence, plus remaining account-sync and global
-  ranking limits, are in the
-  [PR #1000 checkpoint](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+- 2026-10-18 — **Codex (AI)**: Add resumable paged sync checkpoint publication,
+  exact inventory-instance retention and post-copy edit preservation. Bounded
+  merges survive interruption between baseline copies and browser restarts;
+  stale retries cannot replace newer checkpoints. The shared suite passes 208
+  checks; the existing TypeScript baseline remains. Native/cloud adapter rollout
+  is still open and Android deferred. See the
+  [PR #1002 ledger](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md#resumable-paged-checkpoint-handoff--2026-10-18).
 
-- 2026-10-16 — **Codex (AI)**: Anonymous Theme Studio saves, applies, deletes
-  and round-trips named themes offline through canonical transfer validation.
-  Root-session refusals retire outstanding workspace operations; browser storage
-  opening now fails within a bound and permits retry. Local browser evidence and
-  remaining account-sync/history gaps are in the
-  [PR #1000 checkpoint](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
 
-- 2026-10-16 — **Codex (AI)**: Local workspace rollout in progress: atomic
-  account-scoped Thing writes, immutable retries, native Builder pending-page
-  resolution, explicit conflict review and offline account cold startup with
-  separately confirmed remote authority. Local disposable-fixture outage,
-  reload/edit/reconnect and desktop/320px/390px checks passed; other feature
-  families and full integration remain incomplete. See
-  [PR #1000 checkpoint](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md)
-  and [coverage matrix](../docs/local-workspaces.md). No rollout merge or
-  deployment is implied by this checkpoint.
+- 2026-10-18 — **Codex (AI)**: Added resumable paged sync operation storage and
+  execution using shared ordering, receipt checks and root locks. Chromium
+  verified 10,001 generated operations across two restarts, including a lost
+  reply with no repeated accepted effect. Native/cloud paging and checkpoint
+  integration remain open; the live scan cap is unchanged. Details:
+  [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md#durable-paged-operation-recovery--2026-10-18).
 
+- 2026-10-18 — **Codex (AI)**: Add resumable paged sync planning to the existing journal, with pinned inventory inputs, whole-union validation, shared conflict/deletion policy, bounded decisions and a Unicode cursor correction. Browser proof survives two process restarts; native/cloud execution integration and Android remain open/deferred. See the [PR #1002 ledger](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md#resumable-paged-reconciliation--2026-10-18).
+
+
+- 2026-10-18 — **Codex (AI)**: Add durable paged inventory observations to the
+  existing sync journal, with atomic retry/collision checks and restartable
+  validation before reads. The 100,000-path storage regression passes; native
+  scanning and planner integration remain open, with the live 10,000-path limit
+  unchanged. Android stays deferred. [PR #1002 notes](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-18 — **Codex (AI)**: Validate account profile snapshots against real
+  signup/settings handlers on an isolated replica, concurrent updates,
+  independent copies and current-writer restoration. Share the authorized
+  account reader with inventory and use the existing exact-ID index. Enforce
+  loopback-only OS network isolation for the fixture. Whole-account
+  and product restore gates remain open. [PR #1002 notes](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-18 — **Codex (AI)**: Retain approved account profile content and private
+  preferences in independent snapshots, with exact profile-media checks and
+  explicit credential/security exclusions. Offline recovery and refusal tests
+  pass; live account API capture/restore remains open. [PR #1002 notes](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-18 — **Codex (AI)**: Saved themes join independent account snapshots
+  through the canonical Timeline format, with exact partial-token and chunked
+  recovery after source loss. Preserve unfinished Android OS continuation in the
+  PR as deferred work. Validation and remaining scope: [PR #1002 notes](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+
+- 2026-10-18 — **Codex (AI)**: Android retains bounded, verified native upload
+  parts across uncertain replies and process restart, while rechecking current
+  authorization/source and preserving canonical sync/Timeline identities.
+  Added installed two-process recovery acceptance; background scheduling remains
+  pending. [PR #1002 evidence](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-18 — **Codex (AI)**: Android native multipart uploads now use the
+  existing sync identities, reviewed connection and Timeline handoff with bounded
+  private part staging and no bulk bytes in the WebView. Foreground only;
+  scheduling and durable native resume remain open. Details: [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-18 — **Codex (AI)**: Extend internal account snapshots to saved drafts,
+  templates, deletion tombstones and large canonical Thing content, with exact
+  owned-media checks, bounded chunk retention and independent offline recovery.
+  Real Mongo source-loss proof covers 357 records; whole-account jobs/UI and
+  remaining managed families are still pending. [PR #1002 details](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md#draft-and-large-content-snapshot-coverage--2026-10-18).
+
+
+- 2026-10-18 — **Codex (AI)**: Capture ready attachment bytes and validate file
+  history references in account snapshots. Offline readers recover current,
+  earlier and retained-conflict versions from the independent vault. Full account
+  restore remains open; existing storage setup and evidence are documented in
+  [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-18 — **Codex (AI)**: Retain canonical Timeline history, including large
+  snapshots, in the existing portable backup chunks at the account inventory's
+  database timestamp. Verified independent-copy reads after source and first-vault
+  removal; full account restore remains in progress. Setup and evidence:
+  [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-18 — **Codex (AI)**: Add iOS 26+ continued-processing lifecycle for
+  user-started file uploads, exact native acknowledgement and foreground Timeline
+  handoff. Refused OS tasks retain foreground behavior. Simulator background
+  acceptance was declined; physical-device completion remains unverified. Setup
+  and checks: [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-18 — **Codex (AI)**: iOS upload 1.2 moves multipart orchestration
+  and attachment completion into a native job with live configuration, pairing
+  and network/power checks; the shared runner still verifies stored bytes and
+  publishes canonical Timeline history. Foreground-only; background acceptance
+  remains pending. See the [PR #1002 evidence ledger](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-18 — **Codex (AI)**: iOS upload retries retain verified native parts
+  across app-process exits under the original owner/grant/upload identity.
+  Document cache bounds, source reauthorization, fresh-process tests and the
+  remaining background-worker boundary in
+  [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-18: Add Mac photo backup source selection and read-only original-resource
+  streaming through the existing sync/Timeline pipeline. Document native permission
+  packaging and synthetic-provider versus installed-library acceptance in
+  [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+
+- 2026-10-18 — **Codex (AI)**: iOS uploads now send file-backed native multipart
+  parts with pinned API identity, signed storage requests and final fingerprint
+  verification. Installed photo backup verified 18.9 MB without bulk WebView
+  reads. OS-dialog cancellation now settles pending device checks promptly.
+  Setup, storage limits and evidence are recorded in
+  [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-18 — **Codex (AI)**: iOS foreground photo backup now reads local
+  PhotoKit originals through shared, permission-checked Apple storage and the
+  existing backup/Timeline pipeline. Photo sources remain read-only in native
+  and shared recovery controls. Installed simulator acceptance verified original
+  bytes, new-photo discovery and cloud retention after device deletion. Native
+  setup, limits and remaining coverage are documented in
+  [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-18 — **Codex (AI)**: Add Android original-photo backup through native
+  photo permission and folder selection, with editable backup-only connections
+  and cloud copies retained after device deletion. Verify 71 installed Android
+  tests, original-byte download hashes and responsive access messaging. Large
+  libraries, background transfer and Apple Photos remain open. See the
+  [PR #1002 ledger](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-18 — **Codex (AI)**: Android offline folders can browse versions kept
+  during replacement and restore an independent copy with native confirmation,
+  preserving exact retry intent through reload. Schema migration, 67 installed
+  Android tests and 390px/1280px controls verified. Local history remains outside
+  independent backups. See the [PR #1002 ledger](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-18 — **Codex (AI)**: Verify installed Android planner deletion across
+  a lost reply and WebView reload, original operation replay, reviewed tree
+  restoration, exact bytes and Android Files visibility. Stream operator
+  readiness prompts from the acceptance runner so folder selection does not
+  race initial bridge checks. Earlier emulator timeouts and physical-device
+  coverage remain open. Details: [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-18 — **Codex (AI)**: Add installed Android planner deletion/recovery
+  acceptance with a lost committed reply, WebView reload and durable operation
+  identity checks. Document the local emulator graphics recovery workflow and
+  keep physical-device and whole-account backup coverage explicit.
+  Details: [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-17 — **Codex (AI)**: Add Android offline-folder recoverable deletion
+  and reviewed restoration using the existing catalog and shared recovery UI.
+  Atomic receipts survive lost replies without overwriting later edits; separate
+  deletion consent and grant checks protect every commit. Generic providers and
+  independent device-loss backups remain outside this checkpoint.
+  Details: [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-17 — **Codex (AI)**: Wire approved Mac/iOS foreground deletions to
+  recoverable native Trash with child-receipt parent stamps. Add paged device
+  recovery, separate native restore consent and restart-safe restore intents.
+  Android, regrant recovery and whole-account backup coverage remain open.
+  Details: [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-17 — **Codex (AI)**: Fresh cloud path observations now protect native
+  downloads from moved ancestors and replaced path identities. Files 1.4.0
+  distinguishes explicit absence from unavailable roots and failed reads; new
+  runs retain their cloud root. Local deletion propagation remains gated.
+  Details: [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+
+- 2026-10-17 — **Codex (AI)**: Add Apple native recoverable Trash primitives,
+  separate deletion consent, immutable receipt recovery and exclusive restore.
+  Verify process interruptions and real Mac/API restart/revocation, plus iOS
+  simulator bridges. Automatic local deletion, Android support and recovery UI
+  remain pending. Details: [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+
+- 2026-10-17 — **Codex (AI)**: Add an internal paged account inventory using one
+  MongoDB snapshot and canonical Timeline metadata. Refuse unsupported managed
+  families, expired snapshots and incomplete plans. Verify concurrent mutations
+  on a disposable replica and keep the new owner/ID index out of the full legacy
+  index plan. Whole-account backup UI and managed-family export remain pending.
+  Details: [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-17 — **Codex (AI)**: Mac folder access checks the selected server's
+  identity capability before native dispatch and explains an unsupported server
+  without suggesting broken pairing. Native IPC errors are replaced with bounded
+  user guidance. Details: [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-17 — **Codex (AI)**: Add Mac History Save As with bounded, verified
+  retained-version downloads and native destination selection. Fix Electron's
+  middleware build serving HTML for startup assets and account-bound proxy
+  requests failing Node’s Request copy constructor; extend restart acceptance
+  to verify packaged JS/CSS. Native fixture coverage and remaining installed
+  acceptance are recorded in [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+
+- 2026-10-17 — **Codex (AI)**: Add reviewed full selected-tree restore to portable
+  backups, with empty-folder preservation, durable range recovery and protection
+  for existing/user-edited output. Process-exit and real API/CLI restore pass;
+  native/account-wide restoration remains unfinished. [PR #1002 evidence](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md#reviewed-backup-tree-restore--2026-10-17).
+
+- 2026-10-17 — **Codex (AI)**: Connect selected cloud-folder capture/resume to the
+  portable backup vault, preserving empty folders and exact retained bytes after
+  live Trash. Real API/CLI and 17 MiB acceptance pass; whole-account snapshots and
+  native/cloud job controls remain unfinished. [PR #1002 evidence](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md#cloud-folder-backup-worker--2026-10-17).
+
+- 2026-10-17 — **Codex (AI)**: Add portable backup manifests, independently retained
+  chunks, resumable copy and offline verification/restore tooling. Source-loss
+  and real API range acceptance pass; complete account snapshots and product
+  controls remain unfinished. [PR #1002 evidence](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md#portable-backup-foundation--2026-10-17).
+
+- 2026-10-17 — **Codex (AI)**: Add “Save versions and ignore” to file conflict
+  review, with muted content-ID guidance and durable Timeline capture that keeps
+  both live files unchanged. Lost-response/source-loss recovery passes real
+  storage checks; installed capture and whole backups remain open.
+  [PR #1002 evidence](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md#durable-conflict-capture--2026-10-17).
+
+- 2026-10-17: Files API 1.3 retains alternate uploaded versions in Timeline without
+  publishing them over the live file. Exact replay, concurrent publication and
+  restore pass real storage acceptance. Conflict capture UI and whole backups
+  remain unfinished. [PR #1002 evidence](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md#alternate-version-retention--2026-10-17).
+
+
+- 2026-10-17 — **Codex (AI)**: Verified iOS History save/cancel and restore with
+  independently checked retained bytes after sharing native range transport.
+  Installed acceptance now observes real replies across WebView reloads; isolated
+  simulator/PM2 recovery and remaining snapshot scope are recorded in
+  [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-17 — **Codex (AI)**: iOS cloud downloads now transfer bounded binary
+  ranges directly into native staging, sharing authenticated transport with
+  History export and cancelling active work after session changes. Installed
+  simulator download/replacement/repeat checks passed with zero base64 appends.
+  Details and remaining scope: [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-17: Android native access 1.4 streams verified upload ranges through acknowledged binary WebView frames, preserving older-host compatibility and scoped source checks. Details: [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-17 — **Codex (AI)**: Add iOS History exports through Files with verified ranges, temporary destination access, exclusive collision naming and saved-byte readback. Installed simulator checks also verify restore cancellation and retained versions. See [PR #1002 iOS acceptance](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md#ios-historical-file-exports--2026-10-17).
+
+- 2026-10-17 — **Codex (AI)**: Add Android History Save As with verified exact-version ranges, system destination selection, provider readback and cancellation fences. See [PR #1002 export acceptance](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md#android-historical-file-exports--2026-10-17).
+
+
+- 2026-10-17 — **Codex (AI)**: File History restore controls now survive React
+  StrictMode effect replay; retained revisions show their filenames and remain
+  visible in Files/search filters. Added opt-in installed Android History
+  acceptance alongside the shared browser regression. Details: [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+
+- 2026-10-17 — **Codex (AI)**: Add retained file versions to Timeline with
+  content IDs, authorized downloads, reviewed restores that retain current names
+  and folders, and durable exact-operation retry. Conflicts link to home History.
+  Real byte/API and browser checks pass after managed dev-stack readiness.
+  Validation and remaining native scope are recorded in the
+  [PR #1002 note](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-17 — **Codex (AI)**: Add paginated file conflict review to shared sync
+  controls. Explicit version choices recheck both folders and settings before
+  entering the existing recoverable transfer journal; stale reviews preserve both
+  copies. Details: [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-17 — **Codex (AI)**: Android staging 1.1 negotiates bounded binary
+  WebView download frames with one durable checkpoint per range, retaining
+  identity, native-grant, replay and cancellation checks. Older WebViews keep
+  the chunk path. Details: [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+- 2026-10-17 — **Codex (AI)**: Verify renewed Android native consent after saved
+  sync settings change. Cancel and approved retry preserve complete cloud
+  inventories, native identities and byte hashes; the installed two-way/Files
+  sequence, 26 JVM checks, build and lint pass. Document process-scoped live
+  acceptance prompts. [PR #1002 details](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-17 — **Codex (AI)**: Fixed iOS foreground sync failing with WebKit's
+  `Window.fetch` receiver error after native approval. The mobile transport now
+  calls through Window, and the editor fixture enforces that constraint.
+  Installed simulator acceptance verified mixed uploads/downloads with full
+  byte hashes. [PR #1002 details](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-17 — **Codex (AI)**: Mac staging 1.1 streams downloaded ranges through
+  binary Electron/helper input and bounded XPC pulls, retaining flushed range
+  checkpoints and explicit publication approval. Real upload/download acceptance
+  recovered a lost staging reply across native restart without replay. Mobile
+  streaming and installed acceptance remain open. [PR #1002 details](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-17 — **Codex (AI)**: Mac file access 1.2 streams bounded upload-source
+  ranges across acknowledged XPC frames and binary Electron IPC, preserving
+  live authorization, source-version checks and cancellation. Verified real
+  multipart upload/recovery and isolated XPC/Electron transport; download/mobile
+  streaming and installed acceptance remain open. [PR #1002 details](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-17 — **Codex (AI)**: Start sync HTTP deadlines after native authorization, fixing unsent upload timeouts during valid cooldowns. Preserve per-mutation authorization, caller cancellation, captured bodies and network limits. A real 62-second preflight and all 105 shared checks pass; streaming and installed acceptance remain open. [PR #1002 details](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-17 — **Codex (AI)**: Verify real Mac adapter/cloud sync across lost replies, native restart and independent edits. Fix a reproduced native identity 429 by honoring one bounded Retry-After while rechecking cancellation and the exact credential; identity stays uncached. Real acceptance and 23 focused native tests pass; signed installed acceptance and streaming throughput remain open. [PR #1002 details](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-17 — **Codex (AI)**: Preserve Desktop sync journals and editor drafts across app restarts with one durable loopback origin per profile and an owned Nitro middleware socket. Occupied ports and invalid address records stop startup without changing stored state. Four isolated Electron launches verify IDs, receipt recovery, completion baseline, drafts and collision recovery; signed native transfer acceptance remains open. [PR #1002 details](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-17 — **Codex (AI)**: Connect the Mac folder adapter to the shared Things/Settings sync controls. Electron independently checks the current account, paired device and selected server; the desktop proxy pins owner/home/origin before forwarding bounded sync requests. Add native network/power conditions and isolated Chromium/renderer regression checks. Signed installed transfers, restart persistence and streaming remain release gates. [PR #1002 details](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+
+- 2026-10-17 — **Codex (AI)**: Add the Mac local folder adapter with paired
+  identity checks and native consent, plus private identity and owner-only device
+  disconnect APIs. Verify real loopback pairing/revocation and preserve history
+  and files; document native test-host and pending Electron/installed boundaries.
+  [PR #1002 details](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-17 — **Codex (AI)**: Share the Apple native folder reader, grant store
+  and recoverable publication core between iOS and macOS builds. Preserve iOS
+  storage identity, add platform-specific bookmark handling and verify actual
+  process-exit recovery on both platforms. Mac host integration remains pending.
+  [PR #1002 details](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-17 — **Codex (AI)**: Enable approved two-way foreground folder sync
+  through the shared runner and native adapters. Installed Android acceptance
+  verifies mixed uploads/downloads, independent replacements, repeated convergence
+  and Files visibility; shared recovery/conflict tests and fork-safe runbooks
+  cover the new mode. Background and full cross-device delivery remain pending.
+  [PR #1002 details](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-17 — **Codex (AI)**: Android foreground cloud downloads now negotiate
+  offline-folder capabilities and exact-connection native consent, preserving
+  generic SAF read-only behavior. Pinned sync reads bypass the media cache and
+  HTTP errors retain their status. Added installed-app byte/consent acceptance
+  and fork-safe runbooks. [PR #1002 details](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-17 — **Codex (AI)**: Add native Android offline-folder creation and
+  explicit read-only Android Files exposure, with stable document IDs, bounded
+  indexed listings and private catalog migration. Verify the installed picker,
+  nested file bytes and OS permission gate; document reproducible acceptance.
+  Android cloud download integration remains pending. Details:
+  [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-17 — **Codex (AI)**: Add the Android offline-folder publication
+  backend with verified immutable bytes, atomic conditional entry/receipt
+  transactions and retained replacements. Verify three real process-exit
+  recovery scenarios and shared native receipt compatibility; document
+  fork-safe checks. Android Files and download UI integration remain pending.
+  Details: [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-17 — **Codex (AI)**: Add Android native write approval with exact
+  folder re-selection, account/configuration binding and shared OS grant
+  cleanup. Verify cancellation, real Files write permission, retry and
+  re-selection invalidation in the installed Android app; document the SAF
+  publication limit and fork-safe acceptance steps. Android downloads remain
+  disabled pending safe publication. Details: [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-17 — **Codex (AI)**: Add Android private resumable download staging
+  using the shared mobile contract, bounded verified chunks and durable progress.
+  Verify real process-exit recovery and native response compatibility; document
+  the reproducible emulator checks. Android selected-folder publication and
+  background synchronization remain in progress. Details:
+  [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-17 — **Codex (AI)**: Verified installed iOS cloud downloads, retained
+  replacement bytes and real process-exit recovery; added opt-in fixture/runbook
+  tooling. Serialize mobile pairing checks so polling cannot interrupt transfer
+  setup, and distinguish cancelled native approval from unavailable folders.
+  Details: [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+
+- 2026-10-17 — **Codex (AI)**: Add approved foreground iOS downloads to the
+  existing sync connection controls, with native scoped consent, verified
+  same-volume publication, retained displaced files and durable receipt recovery.
+  Unsupported providers and uncertain local races remain pending safely;
+  Android/Mac publication and full installed-app acceptance remain open. See
+  [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-17 — **Codex (AI)**: iOS can receive resumable file chunks into
+  private native staging, with durable acknowledgements, immutable operation
+  checks and full fingerprint verification. Simulator byte/WebKit bridge tests
+  pass and the rebuilt app is installed. Publication into selected folders and
+  download controls remain pending. Details:
+  [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-17 — **Codex (AI)**: Attachment-content 1.14.0 provides bounded,
+  exact-version downloads beyond the browser cache limit. Download operations
+  reuse the durable sync executor with verified staging and native receipt
+  recovery; a real 17 MiB range/hash acceptance passes. Native destination
+  publishers and download controls remain pending. Details:
+  [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-17 — **Codex (AI)**: Android foreground uploads use bounded scoped
+  chunk proofs to avoid rehashing whole files per read, with full native
+  verification before file publication and on ready-upload retries. Byte-count,
+  same-stamp mutation and real provider-descriptor tests pass; optional system
+  picker/upload acceptance is documented separately. Details:
+  [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-17 — **Codex (AI)**: Mobile connections can start, stop and retry
+  foreground upload/backup runs with native connectivity/charging checks,
+  retained progress and recoverable completion baselines. Real local API/storage
+  acceptance covers lost replies and checkpoint failure followed by a local edit;
+  native background/download/Photos work remains pending. Details:
+  [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-17 — **Codex (AI)**: Nested cloud uploads now create ordinary folders
+  through the canonical Things/Timeline writer, pin parent IDs before transfers
+  and recover lost creation replies without duplicate trees. Real local byte
+  acceptance covers folder and multipart/file-commit interruptions. Native workers
+  and directory deletion remain open. [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-17 — **Codex (AI)**: Added complete private cloud folder inventories
+  through Files 1.1.0, with snapshot consistency, bounded reads and fail-closed
+  path/account checks. Real local API/storage acceptance covers nested folders,
+  exact file fingerprints and ambiguous-name refusal. Native sync workers remain
+  pending. [PR #1002 details](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-17 — **Codex (AI)**: Mobile device cards now create/edit private sync
+  connections with complete local drafts, fixed-ID lost-response recovery,
+  stale-edit comparison and fresh folder checks. Desktop/mobile browser and
+  real API recovery checks pass; native transfer workers remain pending.
+  [PR #1002 details](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-17 — **Codex (AI)**: Persist editable file-sync connections through
+  ordinary private-by-default Things, with bounded direction, pause, network,
+  charging and exclusion preferences. Configured planning checks local approval
+  and protects excluded descendants from ancestor deletion. Real API guarded
+  edit/readback acceptance passes; native workers and connection UI remain open.
+  [PR #1002 details](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-17 — **Codex (AI)**: Android now shares the mobile folder-access
+  controls with native read-only tree grants, encrypted scoped references and
+  verified provider scans/reads. Native/provider and installed bridge tests pass;
+  system-picker acceptance and persistent transfers remain pending.
+  [PR #1002 notes](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-17 — **Codex (AI)**: Added iOS Files folder selection, private native
+  grants, bounded verified scans/reads and responsive access controls. Native
+  tests and browser fixture checks cover source bytes, isolation and failures;
+  persistent transfers and signed-in picker acceptance remain pending.
+  [PR #1002 notes](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-17: Connected prepared sync runs to real cloud upload/replacement and
+  Trash, with pinned durable destinations, exact retry identities, byte checks
+  and account/database guards. Real interruption and lost-response acceptance
+  passed; native workers and production sync UI remain pending. See [PR #1002
+  notes](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-17 — **Codex (AI)**: Stable cloud file revisions use canonical
+  attachments, quota accounting and Timeline in one guarded transaction.
+  Exact retry receipts, retained versions, Trash/restore and folder integration
+  passed real local API acceptance. Native workers and product controls remain
+  in progress. [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-17 — **Codex (AI)**: Mobile sync content integrity: expose authorized,
+  exact-version multipart fingerprints through attachment-content 1.13.0 and
+  compare them with bounded local hashing. Real local multipart upload/download,
+  replay and deletion checks pass. Native sync workers and conditional file
+  replacement remain in progress. [PR #1002 details](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-17 — **Codex (AI)**: Added the Android native shell and device pairing
+  through the shared Things controls, with Keystore-encrypted recovery and
+  origin/account fencing. Debug build, lint, protocol and real API/emulator
+  acceptance passed; fork setup and native inset checks are documented. File
+  and Photos workers remain pending. [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-17 — **Codex (AI)**: iOS now advertises native device pairing, with
+  Things/Settings controls, account/origin-scoped Keychain recovery and bounded
+  foreground presence. Verified real local API pairing/readback and simulator
+  installation; Android and file/Photos workers remain pending. Details:
+  [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+
+- 2026-10-17 — **Codex (AI)**: Added iOS/Android device descriptor contracts
+  and safe projections, plus file-sync reconciliation, conditional execution
+  and a durable browser operation journal. Native pairing, folder/photo
+  workers and product integration remain in progress; see the
+  [acceptance ledger](../docs/mobile-file-sync.md) and
+  [PR #1002 verification note](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+- 2026-10-19: Give the editable Mac menu inventory Action an explicit 8 MiB browser response budget so real icon-bearing device snapshots load instead of failing at the 64 KiB default.
+
+- 2026-10-19 — **Codex (AI)**: Installed ChatGPT-plan acceptance passed fresh text, same-chat follow-up, a read-only Things tool roundtrip and saved model/conversation/Builder layout persistence; retain local execution placement and idempotent settings updates. [PR #1034 evidence](../PRs/1034-chatgpt-plan-usage-local-runtime-and-encrypted-connection-moves.md).
+
+- 2026-10-19 — **Codex (AI)**: Desktop connection, local runtime and session recovery now use editable Builder documents with offline persistence, private account webpage adapters, revision/origin fences and transient native controls. Focused persistence/SSR tests, isolated desktop/mobile fixtures and installed account-owned Builder edit-save-reload checks pass.
+
+- 2026-10-18 — Integrate Characters and CPU telemetry main updates; fence ChatGPT credential management to the current session identity so request overrides cannot survive a later Character switch. Publish the compatible `api.ai-chatgpt-plan` 1.1.1 correction.
+
+- 2026-10-18 — Integrate the merged agent-browser manager with ChatGPT runtime packaging, isolated proxy guards and supervised desktop restart. Both MongoDB and browser resources remain required in new builds. [PR #1034 validation](../PRs/1034-chatgpt-plan-usage-local-runtime-and-encrypted-connection-moves.md).
+
+- 2026-10-18 — Replace public desktop database connection-string hashes with keyed identifiers while preserving pre-upgrade renderer sessions through an encrypted migration alias.
+
+- 2026-10-18 — Desktop builds now include pinned MongoDB Community Server, source and notices for optional local execution; fresh profiles need no separate database install, while existing selections/data are preserved. Session recovery and installed acceptance remain in progress in [PR #1034](../PRs/1034-chatgpt-plan-usage-local-runtime-and-encrypted-connection-moves.md).
+
+- 2026-10-18 — **Codex (AI)**: Add ChatGPT plan consent and Lopu execution, optional Electron local API/authenticated MongoDB setup, encrypted connection moves between self-hosted runtimes, and isolated endpoint sessions with pinned streaming proxy requests. [Scope and validation](../PRs/1034-chatgpt-plan-usage-local-runtime-and-encrypted-connection-moves.md).
+
+- 2026-10-19 — **Codex (AI)**: Add individually editable bound Builder elements, list templates and conditions; migrate Mac menu bar composition, default its pagination to Show all, and include scoped icon thumbnails. Acceptance and deployment tracking: [PR 1042](../PRs/1042-menu-bar-editable-blocks.md).
+- 2026-10-18 — **Codex (AI)**: Add supported Character coordination preflight using the canonical origin-scoped manifest, distinguish Cloudflare discovery refusal from account/capability failures, and cover failure/retry behavior through real HTTP. See [the runbook](../docs/characters.md#agent-coordination).
+
+
+- 2026-10-18 — **Codex (AI)**: Convert Mac menu bar process CPU counters with the host Mach timebase. Apple Silicon readings now agree with macOS CPU seconds; regression coverage compares the collector conversion with independent `getrusage` readings.
+- 2026-10-18 — **Codex (AI)**: Add privately owned Characters with independent logins, inherited tier entitlements, session identity selection and Post as controls for posts/comments. Preserve principal account switching and independent private-subspace membership; add isolated real-API/browser acceptance. Capture early editor input during initialization. See [PR 1039 verification](../PRs/1039-characters-private-proxy-accounts.md).
+
+- 2026-10-18 — **Codex (AI)**: Give installed Device scripts pages a centered, padded Builder container. Remove fixture-provided layout so browser acceptance catches missing page spacing.
+
+- 2026-10-18 — **Codex (AI)**: Add editable agent tasks, todos and progress,
+  a Mac browser manager with task claims/live viewing, verified Chrome/Chromium
+  copies, device/task network controls and a private full-app container runtime.
+  Isolated authentication/database configuration refuses production fallback.
+  Packaged-container builds replace Mac-native libraries with verified Linux
+  dependencies and fail installation on binary/version mismatches.
+  Setup is documented in [the agent browser runbook](../docs/agent-browsers.md);
+  verification and fixes are recorded in [PR #1033](../PRs/1033-agent-browser-space-isolated-agent-browsers-and-task-management.md).
+
+- 2026-10-18 — **Codex (AI)**: Restore the existing password-title search, pagination and api.passwords 1.2.0 contract accidentally removed by the menu-bar merge. Preserve all menu-bar and script functionality.
+
+- 2026-10-18 — **Codex (AI)**: Fix installed desktop browser Actions through the
+  selected account endpoint while retaining actor, database and origin checks;
+  correct paired-device Builder links to Things. [PR 1031 notes](../PRs/1031-mac-menu-bar-paired-device-builder-tools.md).
+
+- 2026-10-18 — **Codex (AI)**: Add editable Mac menu bar and Device scripts
+  Builder suites, private menu telemetry, freshly approved paired-Mac Bash
+  commands, bounded result reads and explicit private-Thing/recipe saving.
+  Negotiate versioned device capabilities and include collection styles with
+  full inline search/pagination. Add isolated desktop/mobile acceptance tooling.
+  [Details and verification](../PRs/1031-mac-menu-bar-paired-device-builder-tools.md).
+- 2026-10-18 — **Codex (AI)**: Commander launcher Settings gear, stable process ordering, typed filters and sampled averaging windows, a resizable Processes pop-out with Keep above, and Settings maximize/restore. [PR #1030](../PRs/1030-commander-window-controls-settings-and-process-monitor.md).
+- 2026-10-18: Password title search now filters the whole private vault before pagination (`api.passwords` 1.2.0), cancels stale searches, and distinguishes no matches from request failure. Added HTTP pagination/owner-isolation and capability regressions.
+- 2026-10-18 — **Codex (AI)**: Document the reusable video compressor as a
+  Builder use case, including editable definitions, local encoding, saved
+  presets and verified output. Record the completed media workflow separately
+  from the still-paused standards catalogue backlog.
+
+
+- 2026-10-18: Fix incident cleanup to recognize the automatic logout history entry, bound to the revoked test session; retain strict content and actor checks. Production dry-run caught this mismatch before any deletion.
+
+
+- 2026-10-18 — **Codex (AI)**: Remove implicit production API forwarding from
+  Vite and Nitro; missing local database/signing settings now fail closed before
+  handlers or DB warmup. Restrict fixture destinations and redirects, add an OS
+  isolated server smoke, and provide guarded admin cleanup for the accidental
+  catalog acceptance account, with atomic identity/activity checks and dry-run.
+  Details: [PR #1025](../PRs/1025-local-fallback-safety-prevent-production-test-data.md).
+
+
+- Claude catalogue/workflow persistence validation: [PR #1016 notes](../PRs/1016-claude-catalog-workflow-keyless-claude-model-sync.md).
+
+- 2026-10-18: Add a create-only admin import of the configured OpenAI key into the shared AI credential vault without exposing the value.
+- 2026-10-18 — **Codex (AI)**: Add reusable local video pipelines and a Builder
+  media-tools suite with editable saved layouts/settings, WebCodecs encoding,
+  cancellation, progress, previews and downloads. Secure-host workers preserve
+  the opaque preview sandbox and deny network access. Lopu now receives shared
+  framework-discovery guidance. Suite installation requires capability 1.4.0;
+  browser acceptance verifies real MP4/WebM outputs and responsive layout.
+  [PR 1024 validation](../PRs/1024-media-pipeline-reusable-local-video-compression.md).
+
+- 2026-10-17 — **Codex (AI)**: Stream complete 1PUX imports, preserve source data and rich fields, and add encrypted password attachments and file-inclusive backups. Remove arbitrary import/editor caps and document fork-safe storage setup. [PR #1015 validation](../PRs/1015-codex-password-import-fix-preserve-complete-1pux-imports-and-encrypted-password-attachments.md).
+
+
+- 2026-10-17 — **Codex (AI)**: Add Gmail connection through Google OAuth, encrypted
+  refresh authorization and Gmail API sync/actions with independent device/cloud
+  message storage, labels, Trash, encrypted draft autosave and explicit sending.
+  Durable receipts prevent replaying uncertain sends. Consent uses the system
+  browser on iOS and desktop; setup is
+  exact-origin vault configuration with documented Google verification requirements.
+  Document isolated native build caches after concurrent signing-stage collisions.
+  [PR #1014 details](../PRs/1014-codex-gmail-oauth-google-login-and-gmail-actions.md).
+
+- 2026-10-17: Add explicit browser mail relay without cloud persistence, bundled desktop direct mail sync, and an iOS Mail shortcut. Preserve transport choice and credential origin boundaries; document native build and relay setup. [PR #1013 details](../PRs/1013-codex-mail-native-relay-native-desktop-mail-sync-and-browser-api-relay.md).
+
+- 2026-10-17 — **Codex (AI)**: Prepare incoming mail PR #1009 for the authorized main promotion, preserving the current Settings sections and rerunning the mail/settings checks after integration.
+
+- 2026-10-17 — **Codex (AI)**: Add private incoming-mail accounts, read-only IMAP/POP3 adapters, `/mail` and `/email`, combined and proxy inboxes, independent cloud/local sync, encrypted offline records and a paired loopback connector. Include its exact origin in the shared CSP. Setup is in README; [PR #1009 notes](../PRs/1009-codex-mail-provider-incoming-mail-accounts-proxy-inboxes-cloud-local-sync.md) record verification and remaining acceptance.
+
+- 2026-10-17: Split admin System settings into AI Providers, Lopu, Platform,
+  and Access & limits. Shared settings cards start collapsed, show descriptions
+  and status summaries, preserve drafts, and open for legacy deep links. Labels
+  and controls wrap without squeezing helper text into a narrow column. Details:
+  [PR #1008](../PRs/1008-codex-settings-cards-split-system-settings-into-focused-tabs-and-collapsible-cards.md). — **Codex (AI)**
+
+- 2026-10-17 — **Codex (AI)**: Fix Astra replies rejected by Chat Completions tool/reasoning compatibility. The shared model registry now routes GPT-6 Astra native tools through Responses, publishes its supported reasoning levels and pricing, and preserves provider-default or selected reasoning across tool hops. Both API manifests advertise reply 1.19.3 and catalogue 1.5.1.
+
+- 2026-10-17: Add automatic native-main TestFlight publishing, version allocation, pre-upload widget/signature checks and exact-build processing verification. Add production-only GitHub OIDC delivery and create-only Apple credential migration through the shared admin vault; see [PR #1006 validation and rollout](../PRs/1006-codex-ios-testflight-vault--automatic-ios-testflight-publishing.md).
+
+- 2026-10-17 — **Codex (AI)**: Support a separate Anthropic Models API credential for catalogue discovery when Claude OAuth cannot list models. Keep replies on Claude Code OAuth and show redacted HTTP failure reasons in admin sync reports.
+
+- 2026-10-17 — **Codex (AI)**: Daily provider model inventory sync, bounded
+  model-not-available recovery and admin manual refresh. Retired models leave
+  Lopu/shared selectors; per-provider allow-all and auto-allow-new checkboxes
+  preserve individual choices. Includes Fable 5.1, transactional publication,
+  complete-list validation and fork-safe cron setup in README.
+  Details: [PR #1004](../PRs/1004-codex-provider-model-sync--sync-available-provider-models-and-admin-allow-controls.md).
+
+
+- 2026-10-16 — **Codex (AI)**: Raise Lopu model/settings popup positioners above the floating window and mobile scrim; bound long popup bodies to the viewport so their controls remain scrollable.
+
+- 2026-10-16 — **Codex (AI)**: Keep fresh Lopu chats ready to send while unrelated background tasks run; scope busy checks and Stop to the selected conversation.
 
 - 2026-10-16 — **Codex (AI)**: Post creation, editing, rich comments and plain
   comments/replies no longer await account draft sync or cleanup. Completed
