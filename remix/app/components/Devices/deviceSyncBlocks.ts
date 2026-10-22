@@ -26,8 +26,8 @@ export const deviceSyncOverviewBlocks: WebpageBlock[] = [
 		props: { 'aria-label': 'Device file sync' },
 		css: { display: 'grid', gap: '16px', 'font-size': '14px', 'line-height': '1.55', 'min-width': '0', color: 'var(--tt-ink, #18181b)' },
 		children: [
-			text('device-sync-eyebrow', 'p', 'DEVICE FILES', { 'aria-hidden': true }),
-			{ ...text('device-sync-heading', 'h2', 'Synced files'), css: { 'font-size': '24px', 'font-weight': '650', margin: '0' } },
+			text('device-sync-eyebrow', 'p', 'DEVICE SYNC', { 'aria-hidden': true }),
+			{ ...text('device-sync-heading', 'h2', 'Device sync & backup'), css: { 'font-size': '24px', 'font-weight': '650', margin: '0' } },
 			text(
 				'device-sync-description',
 				'p',
@@ -42,6 +42,7 @@ export const deviceSyncOverviewBlocks: WebpageBlock[] = [
 				children: [
 					{ ...text('device-sync-all-things', 'a', 'All Things', { href: '/things' }), css: linkStyle },
 					{ ...text('device-sync-settings-link', 'a', 'Device settings', { href: '{deviceSync.settingsHref}' }), css: linkStyle },
+					{ ...text('device-sync-activity-link', 'a', 'Activity manager', { href: '/things?activity=1' }), css: linkStyle },
 					{ ...text('device-sync-files-link', 'a', 'Browse synced files', { href: '{deviceSync.filesHref}' }), css: linkStyle }
 				]
 			},
@@ -49,7 +50,7 @@ export const deviceSyncOverviewBlocks: WebpageBlock[] = [
 				...text('device-sync-refresh', 'button', 'Refresh folders', {
 					type: 'button',
 					'data-tt-action': '$transient',
-					'data-tt-action-inputs': JSON.stringify({ operation: 'refresh' })
+					'data-tt-action-inputs': { operation: 'refresh' }
 				}),
 				css: { ...linkStyle, 'justify-self': 'start', cursor: 'pointer', background: 'var(--tt-card, #fff)' }
 			},

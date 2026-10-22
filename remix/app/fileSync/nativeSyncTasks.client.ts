@@ -1,3 +1,4 @@
+import { activityManager } from '~/activity/activityManager';
 import { fileSyncDownloadRequirements } from './signedDownloadTarget';
 import { createSyncProgressCache } from './syncProgressCache';
 import { SyncResourceGovernor, type SyncResourceStatus } from './resourceGovernor';
@@ -10,7 +11,8 @@ import { holdDesktopSyncWindow, setDesktopSyncScheduled } from './desktopSyncWin
 import { createNativeSyncHost, getNativeSyncAdapter, isNativeSyncAdapterCurrent } from './nativeSyncHost.client';
 import { watchNativeSyncVisibility } from './nativeSyncVisibility';
 import { rootIdentity } from '../utils/rootIdentity';
-import { createSyncTaskRuntime } from './syncTaskRuntime';
+import { createSyncTaskRuntime, cancelSyncForActivity } from './syncTaskRuntime';
+import { createSyncStopCleanup } from './syncStopCleanup';
 import { openSyncJournal, withSyncRootLock, syncScopeKey } from './journal.client';
 import { runPagedForegroundCloudSync } from './pagedForegroundSync';
 import { readNativeInventory, NATIVE_INVENTORY_BATCH_ENTRIES, NativeInventoryRetryWait, type LocalInventoryPage, type NativeBackupCapture } from './nativeInventory';
@@ -35,14 +37,19 @@ export const supportsNativeSyncTasks = () => !!getNativeSyncAdapter();
 /** Explicit runs persist admission separately from editable connection Things.
  * Relaunch resumes only that admitted job, using existing native consent. */
 export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, scope: SyncScope, generation: number, resume?: SyncJob, intervalMs?: number) {
+	if (!activityManager.enabled('sync.execution')) throw Error('File sync is disabled in Activity manager. Enable it before starting a transfer.');
 	const adapter = getNativeSyncAdapter();
 	if (!adapter) throw Error('Update Thingtime to continue sync outside this screen.');
 	const reviewed = structuredClone(saved), binding = structuredClone(scope);
 	if (binding.dataPlane !== 'home' || binding.rootId !== reviewed.id || binding.deviceId !== reviewed.configuration.deviceId)
 		throw Error('The file sync connection changed.');
-	let stopWork: Promise<void> | undefined;
+	const stopCleanup = createSyncStopCleanup(async () => { if (resume) throw Error('Transfer stopped, but saved native cleanup could not be opened. Reopen this connection before resuming.'); });
 	let stopRequested = false, saveStop: (() => Promise<void>) | undefined, cancelCapture: (() => Promise<void>) | undefined;
 	await nativeSyncTasks.start(binding, async (signal, update) => {
+		const disposeActivity = activityManager.register({id:'sync.execution',title:'File transfer and filesystem indexing',kind:'watcher',background:true,detail:'Owns the current index, upload/download runner, index change reads and their native tasks. Disable to cancel this runner; saved transfer work is retained.'}, activitySignal => {
+			const disabled=()=>{if(activitySignal.reason==='disabled') void cancelSyncForActivity(nativeSyncTasks).catch(() => {});};
+			activitySignal.addEventListener('abort',disabled,{once:true});return()=>activitySignal.removeEventListener('abort',disabled);
+		});
 		const checkIdentity = () => {
 			if (rootIdentity.read().pending || rootIdentity.read().generation !== generation || !isNativeSyncAdapterCurrent(adapter))
 				throw Error('The active account changed. Reopen folder access.');
@@ -60,7 +67,7 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 		let jobs: ReturnType<Awaited<ReturnType<typeof openSyncJournal>>['jobs']> | undefined;
 		try {
 			check();
-			journal = await openSyncJournal(); check();
+			journal = await openSyncJournal(); checkIdentity();
 			jobs = journal.jobs({ scope: binding, currentScope: () => { checkIdentity(); return binding; } });
 			saveStop = async () => {
 				let admitted: SyncJob | null | undefined, failure: Error | undefined;
@@ -73,6 +80,27 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 				catch { failure ??= Error('Pause saved. Native indexing cleanup could not be confirmed; reopen this connection before resuming.'); }
 				if (failure) throw failure;
 			};
+			cancelCapture = async () => {
+				// Cleanup must outlive the aborted execution host, while retaining
+				// the same account generation, adapter, origin, device and root.
+				const cleanupSignal = AbortSignal.timeout(10_000);
+				const cleanupCheck = () => { cleanupSignal.throwIfAborted(); checkIdentity(); };
+				const streaming = await journal!.pagedRuns({ scope: binding, currentScope: () => { cleanupCheck(); return binding; } }).active();
+				const captures = [
+					...(streaming?.spec.streaming?.source === 'local' ? [{ id: streaming.spec.streaming.captureId, policy: 'one-way-supported' as const }] : []),
+					...((job ?? resume)?.nativeCaptureId ? [{ id: (job ?? resume)!.nativeCaptureId!, policy: 'backup-supported' as const }] : [])
+				];
+				if (!captures.length) return;
+				const cleanupHost = await createNativeSyncHost({ ownerId: binding.ownerId, deviceId: binding.deviceId, adapter, signal: cleanupSignal, assertCurrent: cleanupCheck });
+				if (cleanupHost.origin() !== binding.origin) throw Error('The selected sync server changed.');
+				for (const capture of captures) {
+					cleanupCheck();
+					await cleanupHost.request(binding.ownerId, { action: 'scan-cancel', rootId: reviewed.configuration.localRootId, inventoryDeviceId: binding.deviceId,
+						captureId: capture.id, capturePolicy: capture.policy, excludedPaths: reviewed.configuration.excludedPaths,
+						...(reviewed.configuration.ignoreRules ? { ignoreRules: reviewed.configuration.ignoreRules } : {}) }, cleanupSignal);
+				}
+			};
+			stopCleanup.install(saveStop); check();
 			if (adapter.platform === 'macos') releaseWindow = await holdDesktopSyncWindow(adapter.bridge); check();
 			const resources = reviewed.configuration.resourceLimits ? new SyncResourceGovernor(reviewed.configuration.resourceLimits) : undefined;
 			let nativeResources: SyncResourceStatus | undefined;
@@ -114,26 +142,6 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 				const changed = await jobs!.beginImport(job!, purpose, inventory); check();
 				if (!changed) throw Error('The sync job changed before inventory import.'); job = changed;
 				return structuredClone(job.localImport!.inventory);
-			};
-			cancelCapture = async () => {
-				// Cleanup must outlive the aborted execution host, while retaining
-				// the same account generation, adapter, origin, device and root.
-				const cleanupSignal = AbortSignal.timeout(10_000);
-				const cleanupCheck = () => { cleanupSignal.throwIfAborted(); checkIdentity(); };
-				const streaming = await journal!.pagedRuns({ scope: binding, currentScope: () => { cleanupCheck(); return binding; } }).active();
-				const captures = [
-					...(streaming?.spec.streaming?.source === 'local' ? [{ id: streaming.spec.streaming.captureId, policy: 'one-way-supported' as const }] : []),
-					...((job ?? resume)?.nativeCaptureId ? [{ id: (job ?? resume)!.nativeCaptureId!, policy: 'backup-supported' as const }] : [])
-				];
-				if (!captures.length) return;
-				const cleanupHost = await createNativeSyncHost({ ownerId: binding.ownerId, deviceId: binding.deviceId, adapter, signal: cleanupSignal, assertCurrent: cleanupCheck });
-				if (cleanupHost.origin() !== binding.origin) throw Error('The selected sync server changed.');
-				for (const capture of captures) {
-					cleanupCheck();
-					await cleanupHost.request(binding.ownerId, { action: 'scan-cancel', rootId: reviewed.configuration.localRootId, inventoryDeviceId: binding.deviceId,
-						captureId: capture.id, capturePolicy: capture.policy, excludedPaths: reviewed.configuration.excludedPaths,
-						...(reviewed.configuration.ignoreRules ? { ignoreRules: reviewed.configuration.ignoreRules } : {}) }, cleanupSignal);
-				}
 			};
 			const nativePages = async function* (options?: Parameters<NonNullable<ForegroundSyncInput['scanLocalPages']>>[0]): AsyncGenerator<LocalInventoryPage> {
 				if (backup && !job!.nativeCaptureId) {
@@ -284,14 +292,13 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 			disposeProgressCache?.();
 			// The stop hook uses this journal after immediate abort. Keep it open
 			// until durable pause and independent capture cancellation settle.
-			await stopWork?.catch(() => {});
-			visibility?.dispose(); journal?.close(); unsubscribe(); window.removeEventListener('pagehide', leave);
+			await stopCleanup.finish().catch(() => {});
+			disposeActivity(); visibility?.dispose(); journal?.close(); unsubscribe(); window.removeEventListener('pagehide', leave);
 			await releaseWindow?.();
 		}
 	}, () => {
 		stopRequested = true;
-		stopWork ??= (async () => { await saveStop?.(); })();
-		return stopWork;
+		return stopCleanup.request();
 	}, { automatic: !!resume });
 }
 

@@ -1,3 +1,4 @@
+import { activityInterval, clearActivityInterval } from '~/activity/activityManager';
 import React from 'react';
 import { createPortal } from 'react-dom';
 import { ComponentStyle } from './ComponentStyle';
@@ -151,8 +152,8 @@ function Countdown({ duration, enabled }: { duration: number; enabled: boolean }
 			if (!next) setDeadline(null);
 		};
 		tick();
-		const timer = window.setInterval(tick, 200);
-		return () => window.clearInterval(timer);
+		const timer = activityInterval('timer:components/Builder/NativeComponentControls:1', 'Native Component Controls', tick, 200);
+		return () => clearActivityInterval(timer);
 	}, [deadline, enabled]);
 	const pause = () => {
 		if (deadline !== null) setRemaining(countdownRemaining(deadline, performance.now()));

@@ -67,3 +67,11 @@ test('deep editable trees retain inherited stored media and remap nested Action 
  const twice=rewriteComposition(['webpage'],copied,(_kind,ref)=>`second-${ref}`);
  assert.deepEqual(compositionReferences(['webpage'],twice).map(x=>x.ref),['second-copy-do-saved']);
 });
+
+test('saved transient JSON inputs survive intrinsic binding without widening the closed scalar authority', () => {
+ const original = { 'data-tt-action': '$transient', 'data-tt-action-inputs': JSON.stringify({ operation: 'scan', id: '{item.id}' }) };
+ assert.deepEqual(resolveBlockProps(original, { item: { id: 'saved-id' } })['data-tt-action-inputs'], { operation: 'scan', id: 'saved-id' });
+ assert.equal(typeof original['data-tt-action-inputs'], 'string');
+ const invalid = { ...original, 'data-tt-action-inputs': '{"operation":"scan","nested":{"secret":"x"}}' };
+ assert.notDeepEqual(resolveBlockProps(invalid, {})['data-tt-action-inputs'], { operation: 'scan', nested: { secret: 'x' } });
+});

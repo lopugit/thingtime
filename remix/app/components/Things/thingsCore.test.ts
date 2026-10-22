@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { groupThings, parseThingsReferrer, schemaRenderOf, thingLink, thingOpenHref, type ThingsThing } from './thingsCore';
+import { isTopLevelLibraryThing, groupThings, parseThingsReferrer, schemaRenderOf, thingLink, thingOpenHref, type ThingsThing } from './thingsCore';
 
 const makeThing = (id: string, kind: string): ThingsThing => ({
   id,
@@ -104,4 +104,11 @@ test('explicit legacy Lopu folder markers use canonical browse links and sort be
   assert.deepEqual(folder.crystal.value, { kept: true });
   for (const crystal of [{ name: 'folder' }, { type: 'Folder' }, { folder: true }]) assert.equal(isFolder({ ...folder, crystal }), false);
   assert.equal(isFolder({ ...folder, thingtime: ['post', 'data'] }), false);
+});
+
+
+test('cached root uses the same structural placement contract without removing search access', () => {
+  assert.equal(isTopLevelLibraryThing(makeThing('top', 'data')), true);
+  for (const row of [makeThing('blob', 'attachment'), makeThing('settings','file-sync'), {...makeThing('child','data'),parentId:'parent'}, {...makeThing('report','data'),crystal:{parentId:'task',body:'Progress'}}, {...makeThing('nested','file'),folderId:'folder'}, {...makeThing('linked','data'),targetId:'owner'}]) assert.equal(isTopLevelLibraryThing(row), false);
+  assert.equal(isTopLevelLibraryThing(makeThing('file','file')), true);
 });

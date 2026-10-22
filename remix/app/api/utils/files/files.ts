@@ -1,3 +1,4 @@
+import { parseFileSyncUploadOrigin } from '../../../fileSync/uploadOrigin';
 import { createHash } from 'node:crypto';
 import { getHomeThingsCollection, withHomeMongoTransaction } from '../mongodb/collections';
 import { isCustomMongoEndpointActive } from '../mongodb/endpoint';
@@ -120,6 +121,10 @@ export function createCloudFileService(overrides: Partial<{
 						(attachment.targetId != null && attachment.targetId !== input.id) || currentContentStorageSizeBytes(attachment) === null ||
 						attachment.objectSizeBytes !== verified.size || attachmentContentVersion(attachment.shareId, attachment.objectKey, attachment.objectVersionId) !== verified.version)
 						conflict('Use an owned, ready file upload or a retained version of this file');
+          if (attachment.attachmentFileSyncOrigin && attachment.targetId == null) {
+            const origin = parseFileSyncUploadOrigin(attachment.attachmentFileSyncOrigin);
+            if (origin.fileId !== input.id || origin.folderId !== input.folderId || origin.path.split('/').at(-1) !== input.name) conflict('Sync upload publication differs from its recorded destination');
+          }
 					await deps.lockFolder(things, ownerId, input.folderId, session);
 					// Binding writes the attachment even on restore: cleanup and content
 					// publication cannot both win a concurrent transaction.

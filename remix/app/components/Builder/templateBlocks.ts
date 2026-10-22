@@ -1,3 +1,4 @@
+import { parseTransientBinding, TRANSIENT_BLOCK_ACTION } from './transientBlockActions';
 import { componentScopeValue, resolveTemplate } from '../ComponentsLibrary/componentTemplate';
 import type { WebpageBlock } from './webpageBlocks';
 
@@ -42,6 +43,13 @@ export function resolveBlockProps(props: Record<string, unknown>, scope: Record<
   if (typeof value !== 'string' || (key === 'data-tt-action' && props['data-tt-action-refs'])) continue;
   const match = value.match(/^\{([^{}]+)\}$/);
   if (match) resolved[key] = componentScopeValue(scope, match[1]);
+ }
+ // Compatibility for saved intrinsic layouts authored before action inputs
+ // became structured props. Parse only the closed transient scalar envelope;
+ // other Action strings retain their normal binding semantics.
+ if (props['data-tt-action'] === TRANSIENT_BLOCK_ACTION && typeof props['data-tt-action-inputs'] === 'string') {
+  const legacy = parseTransientBinding(props['data-tt-action-inputs']);
+  if (legacy) resolved['data-tt-action-inputs'] = resolveTemplate({ operation: legacy.operation, ...legacy.inputs }, scope);
  }
  return resolved;
 }

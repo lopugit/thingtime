@@ -213,3 +213,16 @@ test('runtime pause retains the admitted cycle through completion CAS and journa
   assert.equal(await recoveredJobs.begin(recovered!, 100_000, 'late-discovery'), null);
  } finally { reopened.close(); }
 });
+
+test('Activity Disable durably stops and waits for capture cleanup; visibility suspend stays separate', async () => {
+ const { cancelSyncForActivity } = await import('./syncTaskRuntime');
+ const tasks = createSyncTaskRuntime(), capture = gate(); let stopped = 0;
+ const running = tasks.start(scope, async signal => { await new Promise<void>(resolve => signal.addEventListener('abort', () => resolve(), { once: true })); }, async () => { stopped++; await capture.promise; });
+ const stopping = cancelSyncForActivity(tasks);
+ assert.equal(tasks.read()?.stopping, true); assert.equal(tasks.isPaused(scope), true); assert.equal(stopped, 1);
+ await Promise.resolve(); assert.equal(tasks.read()?.active, true);
+ capture.resolve(); await stopping; await running; assert.equal(tasks.read()?.active, false);
+ let resumedStops = 0;
+ const resumed = tasks.start(scope, async signal => { await new Promise<void>(resolve => signal.addEventListener('abort', () => resolve(), { once: true })); }, async () => { resumedStops++; });
+ tasks.suspend('Hidden'); await resumed; assert.equal(resumedStops, 0); assert.equal(tasks.isPaused(scope), false);
+});
