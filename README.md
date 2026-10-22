@@ -46,6 +46,45 @@ wrappers unreadable; do not generate a new key on each deploy. The server-assist
 recovery model is documented above. No provider developer accounts are required
 for storing passwords or importing TOTP setup codes.
 
+For native AutoFill, register your app and credential-provider extension bundle
+identifiers in your Apple Developer team, enable **AutoFill Credential Provider**
+for the containing app and extension, and provision the same Keychain access
+group on both. iOS uses `iOS/project.yml`, `THINGTIME_IOS_BUNDLE_IDENTIFIER` and
+`<your-ios-bundle-id>.password-provider`; macOS uses
+`macos/ThingtimePasswords/project.yml` and `com.thingtime.passwords{,.provider}`
+(change those identifiers for your fork). Both use
+`$(AppIdentifierPrefix)com.thingtime.passwords` by default; change the suffix
+consistently when forking. Accept pending Apple Developer agreements before
+requesting profiles. Keep all real signing values out of git.
+The shared session uses the data-protection Keychain on both platforms, with
+device-only accessibility and synchronization disabled. A missing or unresolved
+Keychain group fails closed; it must not fall back to the macOS legacy Keychain.
+
+`npm --prefix electron run build:resources` embeds the macOS provider. The build
+requires `THINGTIME_PASSWORD_SIGNING_IDENTITY=<Apple signing identity>` (or the
+existing `THINGTIME_NODE_SIGNING_IDENTITY`) and `APPLE_TEAM_ID=<team>`; local
+Apple Development signing can request profiles through the signed-in Xcode
+account. With a Developer ID Application identity and no profile overrides,
+the build creates an intermediate development archive and exports it through
+Xcode's Developer ID workflow; the final host and extension must match the
+requested distribution identity, timestamp, team and bundle-specific profiles.
+If Xcode reports an unregistered development Mac, deliberately opt into device
+registration with `THINGTIME_PASSWORD_REGISTER_DEVICE=1` for that build.
+For manual distribution signing, set both
+`THINGTIME_PASSWORD_HOST_PROFILE=<host profile>` and
+`THINGTIME_PASSWORD_PROVIDER_PROFILE=<extension profile>`; a partial pair fails
+before building. Unsigned builds
+compile the feature but cannot provide the system's signed credential-provider
+access. iOS Fastlane syncs a separate provider profile; its override is
+`PASSWORD_PROVIDER_PROVISIONING_PROFILE_SPECIFIER=<profile name>`. Follow
+`iOS/AGENTS.md` for API-key-based TestFlight setup, use `xcodegen generate`
+before native builds, and pass preview URLs explicitly as the
+`THINGTIME_WEB_URL=https://<your-deployment>` Xcode build setting.
+
+Users connect their current native session from Passwords and enable Thingtime
+in **Settings → General → AutoFill & Passwords**. New passkeys are created through
+that system picker; uploaded passkey handoff QR images are not imported as keys.
+
 Password attachments also require the existing private, versioned S3 setup
 (`THINGTIME_PRIVATE_S3_BUCKET=<bucket>`, `THINGTIME_PRIVATE_S3_REGION=<region>`,
 `THINGTIME_PRIVATE_S3_ROLE_ARN=<role ARN>`), signed multipart PUT/GET CORS for your
@@ -58,9 +97,7 @@ are needed beyond the existing vault and private object storage configuration.
 
 Native system AutoFill and passkey creation are being delivered separately in
 [PR #996](https://github.com/lopugit/thingtime/pull/996). They require signed Apple
-credential-provider bundles, provisioning and device verification. This web
-release does not change the existing desktop/iOS packaging or claim OS AutoFill
-availability. TOTP QR imports, generated codes and password transfers work here
+credential-provider bundles, provisioning and device verification. Native availability requires the signed installation and system-provider setup below. TOTP QR imports, generated codes and password transfers work here
 without native installation.
 
 ### Unified Timeline (implementation in progress)
@@ -3030,8 +3067,7 @@ browses them with native Thingtime comments/reactions layered on the synced
 posts, and AI feed filters ("warn for sad news" → veiled behind a Show
 button, or hidden) applied server-side.
 
-Fork-safe setup: the shipped providers are keyless public-content APIs and
-need **no configuration**. AI-backed filter classification reuses the Lopu
+Fork-safe setup: public-content providers need no external credentials. Authenticated services additionally require an OAuth app and the encrypted account vault described below. AI-backed filter classification reuses the Lopu
 provider keys above (`ANTHROPIC_API_KEY` / `OPENAI_API_KEY`) and the Admin AI
 model waterfall; without any key, classification falls back to a
 deterministic keyword heuristic so the feature keeps working. Verify a
@@ -3041,19 +3077,32 @@ deployment end to end with:
 pnpm --dir remix run verify:connections
 ```
 
-(94 real-API checks against the local nitro port; `TT_VERIFY_LIVE=1` adds a
-live Hacker News pull, for 96.)
+(Real-API checks against the local Nitro port; `TT_VERIFY_LIVE=1` adds a
+live Hacker News pull.)
 
-### SSO account linking (Facebook, Instagram, TikTok, YouTube account)
+### Multiple accounts and SSO account linking
 
-SSO providers use real OAuth sign-in: Connect sends the browser to the
-provider's own login, and the token response is sealed into the linked
-account's secure storage server-side (no token ever reaches a client). Each
-provider stays `configured: false` (UI: "Needs setup") until its app
-credentials are set:
+The service library at `/connections` groups each provider and its subservices
+in titled cards. Each **Add account** opens the provider in a new tab; you can
+connect several personal/work identities. Reconnecting the same identity is
+idempotent. There is no fixed connection-count limit; individual accounts can
+be removed without deleting other saved accounts. Google services request separate read permissions, so connecting
+Google identity does not grant Gmail or Drive access.
+
+Authenticated accounts have independent owner-bound AES-256-GCM ciphertext;
+public sources can still share a feed. No access token, refresh token, or raw
+provider response is returned by the account-list API. Old shared grants must
+be reconnected: they are never silently imported into another owner's vault.
+Disconnect removes the local credential and link; revoke the app in the
+provider's dashboard too if you want to withdraw the provider-side grant.
+
+Set the following **server-only** environment variables in your ignored
+`remix/.env` locally or your deployment's secret manager. OAuth cards stay
+disabled until both provider credentials and a valid vault key are available:
+
 
 ```sh
-# Meta app (facebook provider — scopes public_profile,user_posts)
+# Meta app (facebook-account: public_profile; facebook posts also asks user_posts)
 FACEBOOK_APP_ID="<meta-app-id>"
 FACEBOOK_APP_SECRET="<meta-app-secret>"
 # Instagram API with Instagram Login (professional accounts)
@@ -3062,7 +3111,7 @@ INSTAGRAM_APP_SECRET="<instagram-app-secret>"
 # TikTok Login Kit (scopes user.info.basic,video.list)
 TIKTOK_CLIENT_KEY="<tiktok-client-key>"
 TIKTOK_CLIENT_SECRET="<tiktok-client-secret>"
-# Google OAuth client (youtube-account provider — youtube.readonly)
+# Google Web application OAuth client (Google identity and Google subservices)
 GOOGLE_CLIENT_ID="<google-oauth-client-id>"
 GOOGLE_CLIENT_SECRET="<google-oauth-client-secret>"
 # Reddit script app (reddit-account provider — syncs your REAL front page)
@@ -3094,15 +3143,146 @@ SPOTIFY_CLIENT_SECRET="<spotify-client-secret>"
 # Optional: YouTube Data API key — lights up channel NAME search for the
 # Thingtime-managed virtual subscription list (ids/URLs/@handles work keyless)
 YOUTUBE_API_KEY="<youtube-data-api-key>"
-# Optional: pin the OAuth redirect origin when the app runs behind a proxy or
-# tunnel (must match the redirect URI registered with each provider app)
+# Required for hosted OAuth: the exact origin serving the signed-in account.
+# Register its callback with every provider; no path/query/fragment in this value.
 CONNECTIONS_OAUTH_REDIRECT_BASE="https://your-host.example.com"
+# Required: stable 32-byte base64url vault key. Reuse an existing key; do not
+# regenerate it on deployments or existing saved credentials become unreadable.
+THINGTIME_USER_VAULT_KEY="<32-byte-base64url-key>"
 # Optional: dedicated HMAC key the PKCE code verifier is derived from. Falls
 # back to JWT_SECRET / JWT_PRIVATE_KEY, so every deployment already has one;
 # set it only to rotate PKCE independently of the auth signing key. Any
 # in-flight connect started before a rotation just has to be retried.
 CONNECTIONS_PKCE_SECRET="<random-32-byte-secret>"
 ```
+
+Generate a key **once** for a new installation with
+`node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"`.
+Store it privately. An existing `THINGTIME_ADMIN_VAULT_KEY` is accepted as a
+fallback. Changing either the vault key or the JWT/PKCE key invalidates pending
+sign-in attempts. Restart the PM2-managed app after changing local env values.
+Loopback development may infer its origin; hosted deployments fail closed when
+the redirect env is absent. Use the same host for beginning and finishing OAuth
+so the initiating Thingtime session cookie reaches the callback.
+
+Saved credential names, keys, provider endpoint paths/model IDs and values have
+no arbitrary character or byte limits. The saved-value envelope and generic
+`data` strings preserve their complete contents; the vault and Things mutation
+routes do not impose their former request-body caps. Save clients negotiate
+`api.lopu-vault` 1.4.0, and large data writes negotiate the corresponding Things
+capability before sending. Host request capacity, available memory, account
+storage accounting and the database's physical document capacity still apply;
+this is not a promise of infinite storage. Deploy the compatible backend before
+using these clients. Protocol identifiers, URL safety checks and authorization
+validation remain in place.
+
+Credential storage uses **server-assisted account encryption**. Each user has a
+random data key in their private home-account secure record. New OAuth grants
+and Secure Vault secrets use owner/record/purpose-bound AES-256-GCM envelopes.
+Password login wraps that key with scrypt (N=32768, r=8, p=3); browser requests
+use a live-session-checked HKDF wrapper bound to their exact JWT and session.
+Session wrappers live on individual session records and are removed on revocation.
+Passkey/OTP login and account switching obtain a wrapper when first accessing a
+credential, after live session/owner checks. Existing accounts gain a password
+wrapper at their next successful password login or verification.
+
+The stable server vault key protects a recovery wrapper for authorized background
+actions and password resets. This is **not end-to-end or zero-knowledge encryption**:
+the Thingtime server can decrypt credentials. Password reset atomically rewraps
+the same data key with the new password hash, then revokes sessions; it does not
+rewrite every saved credential. Missing/corrupted key material fails closed and
+must never be replaced with a freshly generated key. Back up the configured server
+vault key with the database; do not rotate it without a recovery-wrapper migration.
+
+Legacy owner-private OAuth and Secure Vault values upgrade on use with a
+revision/credential compare-and-set so migration cannot overwrite a reconnect,
+edit or disconnect. Legacy shared OAuth grants still require reconnecting. The
+normal account list never returns keys, wrappers, tokens or decrypted values.
+
+Local disposable-database acceptance:
+`node remix/scripts/verify-vault-recovery.mjs http://localhost:<web-port>` checks
+registration, two saved accounts, password recovery, old-session revocation,
+reset replay, independent removal and logout. `verify-service-accounts.mjs`
+covers owner isolation, stale forms, concurrency and route registration.
+Keep a replica set used across QA sessions in a persistent private directory
+outside OS temporary folders (for example `$HOME/.local/share/thingtime/qa-mongo`).
+Create it with directory permissions `0700`, bind MongoDB to loopback, and use
+only that disposable URI in the local ignored env. Start the worktree through
+`npm run web-pms` and wait for `/api/v1/health/nitro` to return `ok:true` before
+running HTTP checks; the initial development-worker build can take longer than
+the PM2 startup command. If the disposable database loses files, preserve a
+stopped copy, create a fresh replica set, and recreate fixtures through the
+normal API. Reconnect real test OAuth accounts afterward. Do not apply this
+replacement procedure to a production database.
+
+Google Cloud setup:
+
+1. Create or select your own project, configure its OAuth consent branding and
+   audience, and add your test Google accounts while it is in Testing mode.
+2. Create an OAuth client of type **Web application**, register the exact
+   callback below (and your local callback separately), then store its client
+   ID/secret in the env variables above. Do not use a service-account key.
+3. Enable the APIs you plan to use: Drive, Gmail, Calendar, Docs, Sheets,
+   People (Contacts), and YouTube Data. Identity uses `openid profile email`;
+   each service adds only its documented readonly scope. Gmail and other
+   sensitive/restricted scopes can require Google verification before public
+   use; a Testing-mode consent grant may have a shorter refresh lifetime.
+4. Add two different Google accounts in Thingtime, return to the original tab,
+   and use **Check connection**. Decline and replay a callback as well. Google
+   authorization requests use PKCE, offline access, and explicit account choice.
+
+Meta setup: select your own app in Meta for Developers, configure Facebook
+Login and its valid OAuth redirect URI, set `FACEBOOK_APP_ID` and
+`FACEBOOK_APP_SECRET`, and add test users/app roles while the app is in
+Development mode. The Facebook account card requests only `public_profile`;
+the separate Facebook posts card requests `user_posts`, which needs the applicable Meta approval for public
+use. Do not assume app-admin testing proves public availability.
+
+The **ChatGPT identity** card implements the [hosted OpenAI identity flow](https://developers.openai.com/siwc/website)
+for approved partner clients. Set `CHATGPT_OAUTH_CLIENT_ID`,
+`CHATGPT_OAUTH_AUTH_METHOD` (`client_secret_basic` or the explicitly registered
+`none` method), and `CHATGPT_OAUTH_CLIENT_SECRET` for confidential clients.
+Register the same exact callback below. PKCE, one-use session-bound state, and
+signature/issuer/audience/expiry/nonce checks protect the callback. The saved
+ID token is encrypted and is never sent as an API bearer token. Identity sign-in
+does not grant ChatGPT subscription or OpenAI API usage. The separate
+[open-source subscription flow](https://developers.openai.com/siwc/token-sharing-open-source/sign-in)
+requires a local callback and host registration; it is not implemented by this
+hosted identity adapter.
+
+OpenAI API and Claude Code cards reuse the existing Secure Vault. Multiple
+saved connections are available in Lopu's model picker. OpenAI API usage has
+separate billing. Thingtime's existing Claude runtime accepts a **Claude Code
+OAuth token**, generated with `claude setup-token`; it does not accept an
+Anthropic API key. Direct browser-based Claude account enrollment remains
+unavailable. Never import browser session cookies as provider credentials.
+
+Saved Google grants can already be reused server-side through
+`POST /api/v1/connections/request` with `{ "connectionId": "<owned-link-id>",
+"operation": "drive.list-files" }`. Supported operations are `account.profile`,
+`drive.list-files`, `gmail.list-messages`, `calendar.list-calendars`,
+`docs.get-document`, `sheets.get-spreadsheet`, and `contacts.list-contacts`.
+The document/sheet operations also require `resourceId`. Each operation checks
+the owner, provider, and granted scopes; arbitrary URLs and caller-supplied
+auth headers are not accepted. Token refresh uses a database lease plus a
+compare-and-set, so rotating grants cannot be exchanged concurrently.
+
+For list operations, keep requesting pages with the same connection and
+operation, passing `data.nextPageToken` unchanged as `pageToken`; stop when the
+provider omits it. Negotiate `api.connections-request` **1.1.0** (compatible
+major 1) at the selected origin before using pagination. Page sizes are
+processing batches, not a total-record limit. Results preserve complete text,
+arrays and object fields while redacting authentication material; they do not
+use the truncated logging representation. The fixed provider endpoint cannot
+redirect to another origin, and request cancellation reaches its transport.
+The deployment's memory/response constraints and provider timeout still apply
+to each response; document reads are a single provider response. Provider
+cursor behavior follows the official [Drive](https://developers.google.com/workspace/drive/api/reference/rest/v3/files/list),
+[Gmail](https://developers.google.com/workspace/gmail/api/reference/rest/v1/users.messages/list),
+[Calendar](https://developers.google.com/workspace/calendar/api/v3/reference/calendarList/list)
+and [People](https://developers.google.com/people/api/rest/v1/people.connections/list)
+contracts. A rejected or expired cursor requires restarting the listing; it
+does not imply the saved authorization was removed.
 
 Register `https://<your-host>/api/v1/connections/oauth/callback` as the OAuth
 redirect URI in each provider app's settings (Meta and TikTok require https —
@@ -4852,39 +5032,6 @@ production editor with synthetic API/native responses and never accesses files.
 Native approval persistence and transfer workers remain in the
 [full sync acceptance ledger](docs/mobile-file-sync.md).
 
-Optional per-connection resource limits use configuration version 3. Negotiate
-`api.things` 1.39.0 and `api.file-sync-batches` 1.2.0 against the selected origin
-before saving/activating them, and require the native `fileResourceLimitsVersion`
-1.0.0 capability before execution. Upload/download ceilings are decimal bit rates
-in the editor (Kbps/Mbps/Gbps), stored as bytes per second and shared across that
-connection's transfers. Transfer and index concurrency are maximums, not promises
-of parallelism; host safety and CPU backpressure can lower the effective values.
-Blank controls preserve existing defaults. CPU percent is an averaged upper
-budget normalized to total available machine CPU, attributed to this connection's
-indexer, source IO and transport; it does not change other apps' priorities.
-The initial implementation conservatively allocates one third of that CPU budget
-to each scope and does not borrow unused shares. Unsupported native clients fail
-closed rather than silently ignoring limits. CPU-limited downloads and two-way
-sync additionally negotiate `api.attachment-content` 1.17.0 and native
-`fileDownloadVersion` 1.0.0 before admission. The authenticated content endpoint
-returns a private, no-store, 60-second signed target for the exact stored object
-version and signed byte range. The host resolves that target independently and
-the task-owned transport downloads directly without copying account cookies or
-processing payload bytes in the renderer. Targets are ephemeral and never saved
-in progress or journals. Custom storage providers must implement the optional
-`signDownloadRange` adapter; unsupported providers fail closed. The S3 adapter
-reuses the configured credentials and existing versioned GetObject permission.
-No new secret or provider setting is
-needed. Direct object transfers retain existing scoped upload authorization.
-
-Pause cancels current work immediately and saves a per-connection stop independently
-of progress refreshes. Resume is explicit. A failed pause save is reported; the
-current process blocks automatic restart, but reopening may recover the old saved
-job. Keep the device folder selected to resume its journaled progress. Intentional
-rate/CPU waits do not consume network-stall deadlines; actual stalled IO remains
-bounded, and cancelling releases unused pacing reservations before Resume.
-
-
 
 ### Running a foreground mobile folder upload
 
@@ -6416,54 +6563,6 @@ origin, source and revocation fences. Scope eviction cannot forget live rolling
 history, token debt or cooldown. Installed throughput after this scheduling
 correction remains unverified.
 
-### Bounded small-file upload batches — 2026-10-21
-
-Trusted Mac upload/backup streams negotiate `fileAccessVersion` 1.13.0,
-`fileUploadBatchVersion` 1.0.0 and selected-origin `api.file-sync-batches` 1.0.0.
-Independent absent-target regular files of 1–256 KiB can share a batch of at
-most 256 files and 32 MiB. The first eligible file starts immediately; folders,
-existing targets/conflicts, empty/large files and older adapters retain the
-existing executor. Hardlink paths remain queued under their original IDs and
-are split across batches. No extra secrets or fork-specific setup are needed
-beyond existing private attachment storage, paired devices and folder grants.
-
-Preparation uses a bounded metadata observation and provisional durable index
-entries; those entries grant no source access. One explicit native operation
-checks current identity before/after the batch and validates each local grant,
-path, pinned descriptor and revision before disclosure/PUT, after PUT, and after
-stored fingerprint verification. Electron alone holds authenticated API access
-and signed URLs; no cookies, tokens or network destinations cross XPC. New
-payload dispatch expires after 30 seconds, total operation/callback lifetime is
-180 seconds, and payload workers are capped at 16. Already-issued storage grants
-can stage bytes until expiry after remote revocation; fresh final server and
-configuration checks still gate canonical visibility.
-
-The five bounded control phases are metadata observe, receipt-only prepare
-probe, checksum prepare, stored-content verify and canonical commit. Descriptors
-are capped at 320 KiB, control requests at 512 KiB, and host-only signed-URL
-responses at 2 MiB. Server work uses at most eight provider slots per owner per
-process and fresh authority/namespace checks in bounded waves. The separate
-bulk policy charges 65,536 weighted units/minute plus 512 MiB prepared payload
-bytes/minute; it does not raise existing identity/global limits. These limits
-are feasibility ceilings, not measured upload speed.
-
-Every member retains its original operation/upload identity, CAS, Timeline and
-receipt. A durable dispatch marker precedes canonical POST. Partial or unknown
-outcomes enter original-ID individual receipt-first recovery before regrouping;
-a missing receipt cannot retire a possibly in-flight canonical write. Active
-batch claims survive restart and capability fallback. Journal version 14 blocks
-older clients from silently ignoring these claims. Root serialization, priority
-ancestry and contiguous source/baseline proof remain unchanged; trusted bulk
-preparation is bounded to 512 operations (other modes retain 128).
-
-Controlled planner/journal/service tests and isolated real native/HTTP fixtures
-measure distinct portions of this path. Practical installed throughput and
-byte-identical same-job recovery remain acceptance requirements; neither test
-establishes 100 files/second. A transient native identity timeout on scan-changes
-alone resumes its original cursor with existing backoff, without cancelling an
-independent safe payload. Revocation, account changes and other actions remain
-terminal under their existing policy.
-
 ### Upload priority readiness — 2026-10-21
 
 The existing file-sync progress view includes an individually editable priority
@@ -6487,43 +6586,3 @@ request observations, not a file-operation or HTTP request census. See
 [the timing field definitions](docs/mobile-file-sync.md#closed-host-phase-timing--2026-10-21)
 before interpreting a bounded installed capture. No authorization, source check,
 rate-limit, receipt or native request/response contract changes.
-
-### Bounded folder metadata batches — 2026-10-21
-
-Trusted Mac upload/backup streams additionally negotiate `fileAccessVersion`
-1.14.0, optional `fileFolderBatchVersion` 1.0.0 and selected-origin
-`api.file-sync-batches` 1.1.0. Existing file-batch 1.0 clients remain compatible.
-At most 256 absent-target folders share a 320 KiB descriptor; requests and
-folder results remain bounded to 512 KiB. No new credentials, storage provider,
-collection or setup is required. Existing grants, paired devices, private roots,
-exclusions and ignore rules still apply. Other hosts retain scalar execution.
-
-Receipt history is checked before local source IO. One bounded native operation
-validates every missing member's exact directory stamp under fresh pre/post
-identity, grant, account, configuration and conditions checks. It discloses no
-file bytes. A changed child entry publishes the already-indexed immediate
-parent's new full stamp, including when the child is excluded; it does not scan
-the excluded subtree. Stale folder observations remain provisional and cannot
-be silently refreshed under an old operation ID.
-
-The existing batch route adds `folder-probe` and `folder-commit` to its four
-file/metadata phases. Canonical folder writes use parent-first waves of at most
-eight in one Mongo transaction, retaining inner placement locks, individual
-Timeline receipts, quota and exact ownership/path checks. An after-write error
-rolls back that whole wave; earlier committed waves remain recoverable. A parent
-receipt must pin the original operation ID, and the parent must still occupy its
-current owned private path before children are dispatched. Historical receipts
-alone do not authorize a moved, deleted or replaced parent.
-
-Journal version 15 retains typed folder reservations and original uncertain
-IDs across restart or capability loss. A proven-unpublished parent supersession
-can create an explicit **new child target intent**, only after the old child's
-receipt is missing, its durable dispatch fence is false, its source is unchanged
-and the replacement parent is canonically confirmed at the reviewed path.
-Original operations and supersession evidence remain retained; retirement never
-counts as uploaded files or bytes. Unknown writes stay with their original IDs.
-No source watermark or baseline is advanced by this recovery decision.
-
-These changes target folder-constrained file frontiers. Controlled tests and
-isolated native/Mongo fixtures are distinct evidence; installed same-job
-throughput and byte-identical recovery remain release acceptance requirements.

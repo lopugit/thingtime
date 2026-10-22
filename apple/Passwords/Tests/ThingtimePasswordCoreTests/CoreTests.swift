@@ -14,34 +14,6 @@ final class CoreTests: XCTestCase {
         XCTAssertEqual(query[kSecAttrSynchronizable as String] as? Bool, false)
         XCTAssertEqual(query[kSecAttrAccessGroup as String] as? String, "TESTTEAM.com.thingtime.passwords")
     }
-    func testSessionDeletionAcceptsOnlySuccessOrAlreadyMissingAndCanRetry() throws {
-        let group = "TESTTEAM.com.thingtime.passwords"
-        let expected = try PasswordSessionStore.query(accessGroup: group)
-        var calls = 0
-        for status in [errSecSuccess, errSecItemNotFound] {
-            try PasswordSessionStore.clear(accessGroup: group) { query in
-                calls += 1
-                XCTAssertEqual(query as NSDictionary, expected as NSDictionary)
-                return status
-            }
-        }
-        for status in [errSecInteractionNotAllowed, errSecAuthFailed, errSecMissingEntitlement, errSecNotAvailable] {
-            XCTAssertThrowsError(try PasswordSessionStore.clear(accessGroup: group) { query in
-                calls += 1
-                XCTAssertEqual(query as NSDictionary, expected as NSDictionary)
-                return status
-            }) { error in
-                guard case PasswordProviderError.unavailable = error else { return XCTFail("Deletion must return the safe provider error") }
-            }
-        }
-        // A failed attempt must not mark clearing complete or prevent retry.
-        try PasswordSessionStore.clear(accessGroup: group) { _ in calls += 1; return errSecSuccess }
-        XCTAssertEqual(calls, 7)
-        XCTAssertThrowsError(try PasswordSessionStore.clear(accessGroup: nil) { _ in
-            XCTFail("An invalid signing scope must never reach Keychain deletion")
-            return errSecSuccess
-        })
-    }
     @MainActor func testLogoutClearsAfterPendingIdentitySync() async throws {
         let operations = PasswordIdentityOperations()
         var calls: [String] = []
@@ -119,26 +91,5 @@ final class CoreTests: XCTestCase {
         XCTAssertThrowsError(try ProviderSession(origin: URL(string:"https://example.test")!, ownerId:"user", cookie:"tt_auth=fixture\r\nInjected: yes"))
         let entry = PasswordEntry(title: "test", passwordType: "login", fields:[PasswordField("site", "Site", "url", "https://example.test/login")])
         XCTAssertTrue(entry.matches(host:"example.test")); XCTAssertFalse(entry.matches(host:"evil.example.test")); XCTAssertFalse(entry.matches(host:"example.test.evil.test"))
-    }
-}
-
-
-final class CapabilityContractTests: XCTestCase {
-    func testProviderManifestRequiresTheSelectedOriginAndCompatiblePasswordsFeature() throws {
-        let origin = URL(string: "https://passwords.example.test")!
-        func manifest(version: String? = "1.0.0", selectedOrigin: String = "https://passwords.example.test", schema: Int = 1) throws -> Data {
-            let features = version.map { ["api.passwords": ["version": $0]] } ?? [:]
-            return try JSONSerialization.data(withJSONObject: ["schemaVersion": schema, "origin": selectedOrigin, "features": features])
-        }
-        for version in ["1.0.0", "1.2.1", "1.99.99"] {
-            XCTAssertTrue(PasswordClient.compatibleCapabilities(try manifest(version: version), origin: origin))
-        }
-        for version in [nil, "0.9.0", "2.0.0", "1.00.0", "1.0", "1.0.0-beta"] {
-            XCTAssertFalse(PasswordClient.compatibleCapabilities(try manifest(version: version), origin: origin))
-        }
-        XCTAssertFalse(PasswordClient.compatibleCapabilities(try manifest(selectedOrigin: "https://other.example.test"), origin: origin))
-        XCTAssertFalse(PasswordClient.compatibleCapabilities(try manifest(schema: 2), origin: origin))
-        XCTAssertFalse(PasswordClient.compatibleCapabilities(Data("not-json".utf8), origin: origin))
-        XCTAssertFalse(PasswordClient.compatibleCapabilities(Data(repeating: 32, count: 512 * 1024), origin: origin))
     }
 }

@@ -18,18 +18,15 @@ function runHelper(executable, action, value) {
 function createPasswordProvider({ app, root, origin, endpoint, helper = runHelper }) {
   // One serial queue keeps logout/account switches ordered after pending connects.
   let queue = Promise.resolve();
-  let retiring = false;
   const executable = app.isPackaged ? path.join(process.resourcesPath, '..', 'Helpers', 'Thingtime Passwords.app', 'Contents', 'MacOS', 'Thingtime Passwords') : path.join(root, 'dist', 'native', 'Thingtime Passwords.app', 'Contents', 'MacOS', 'Thingtime Passwords');
   const enqueue = work => { const pending = queue.then(work, work); queue = pending.catch(() => {}); return pending; };
   const handle = async (event, input) => {
-    if (retiring) throw new Error('Thingtime is restarting. Try again after restart.');
     const activeOrigin = new URL(origin()).origin;
     requirePasswordSender(event, activeOrigin, app.isPackaged);
     if (process.platform !== 'darwin' || !['connect', 'sync', 'disconnect'].includes(input?.action)) throw new Error('Unsupported Password AutoFill request.');
     const authority = new URL(endpoint()).origin;
     if (!authority.startsWith('https://')) throw new Error('System AutoFill requires an HTTPS account endpoint.');
     const work = async () => {
-      if (retiring) throw new Error('Thingtime is restarting. Try again after restart.');
       requirePasswordSender(event, activeOrigin, app.isPackaged);
       if (new URL(origin()).origin !== activeOrigin || new URL(endpoint()).origin !== authority) throw new Error('Your Thingtime endpoint changed.');
       if (input.action === 'disconnect' || !input.ownerId) { await helper(executable, 'disconnect'); return { ok: true, message: 'Password AutoFill disconnected.' }; }
@@ -44,10 +41,7 @@ function createPasswordProvider({ app, root, origin, endpoint, helper = runHelpe
     return enqueue(work);
   };
   // Endpoint changes clear the OS vault before switching the app's authority.
-  handle.disconnect = () => {
-    retiring = true;
-    return process.platform === 'darwin' ? enqueue(() => helper(executable, 'disconnect')) : Promise.resolve();
-  };
+  handle.disconnect = () => process.platform === 'darwin' ? enqueue(() => helper(executable, 'disconnect')) : Promise.resolve();
   return handle;
 }
 module.exports = { createPasswordProvider, requirePasswordSender };

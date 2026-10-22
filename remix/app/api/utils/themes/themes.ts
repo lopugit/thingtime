@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { ObjectId } from 'mongodb';
 
-import { resolveTheme, THINGTIME_THEME, TtTheme } from '../../../theme/tokens';
+import type { TtTheme } from '../../../theme/tokens';
+import { normalizeSavedTheme, MAX_SAVED_THEMES } from '../../../theme/savedTheme';
 // theme is a PROTECTED system kind: theme things stay on the home deployment
 // DB even while a data-plane endpoint override is active (see endpoint.ts).
 import { getHomeThingsCollection as getThingsCollection, getThemesCollection, withHomeMongoTransaction } from '../mongodb/collections';
@@ -59,7 +60,7 @@ export const toPublicTheme = (doc: any): PublicTheme => ({
   updatedAt: new Date(doc.updatedAt).toISOString()
 });
 
-const MAX_THEMES_PER_USER = 100;
+const MAX_THEMES_PER_USER = MAX_SAVED_THEMES;
 
 // legacy visibility → theme-thing acl. Themes only ever use the two-value
 // subset: public is world-readable, everything else is owner-only. Exported so
@@ -121,17 +122,9 @@ const assertLegacyThemeMutationAllowed = async (ownerId: string, things: any, se
 
 // Create or update (when `id` is an owned theme's shareId) a saved theme.
 export const saveTheme = async (ownerId: string, input: SaveThemeInput): Promise<SaveResult> => {
-  const name = typeof input.name === 'string' ? input.name.trim().slice(0, 60) : '';
-  if (!name) {
-    return { ok: false, status: 400, error: 'Theme name is required' };
-  }
-  if (!input.theme || typeof input.theme !== 'object') {
-    return { ok: false, status: 400, error: 'Theme tokens are required' };
-  }
-
-  // Sanitize by resolving the patch against the default theme — drops any
-  // non-allowlisted keys and rejects unsafe CSS values.
-  const theme = resolveTheme(THINGTIME_THEME, { ...(input.theme as object), name });
+  const normalized = normalizeSavedTheme(input);
+  if (normalized.ok === false) return normalized;
+  const { name, theme } = normalized;
   // Only an explicit 'public' publishes; anything else stays/becomes private
   // (and updates that omit the field keep the existing visibility).
 	const explicitVisibility = input.visibility === 'public' ? 'public' : input.visibility === 'private' ? 'private' : null;

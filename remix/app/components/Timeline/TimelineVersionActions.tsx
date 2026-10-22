@@ -19,7 +19,7 @@ const UNDO_LABELS = { incoming: 'Before this change', useIncoming: 'Use the earl
  * command; component choices are reviewed after page-content conflicts. */
 export function TimelineVersionActions({ event, onApplied }: { event: TimelineEvent; onApplied: () => void }) {
 	const { connection } = useTimelineSession();
-	const api = useApi();
+	const api = React.useRef(useApi()).current;
 	const [preview, setPreview] = React.useState<PublishedVersionPreview | null>(null);
 	const [choices, setChoices] = React.useState<VersionChoices>({});
 	const [componentChoices, setComponentChoices] = React.useState<VersionChoices>({});

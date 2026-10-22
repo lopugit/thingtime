@@ -1,7 +1,7 @@
 import React from 'react';
 import { Box, Button, Text } from '@chakra-ui/react';
 import { useApi } from '~/hooks/useApi';
-import { useCurrentUser } from '~/hooks/useCurrentUser';
+import { useWorkspaceScope } from '~/hooks/useWorkspaceScope';
 import { PostCard } from '~/components/Feed/PostCard';
 import { mergeCommentPage, type PublicPost, type PostChange } from '~/components/Feed/feedTypes';
 import { createDiscussionCommentPager, mergeDiscussionComments } from '~/components/Feed/discussionCommentPages';
@@ -20,8 +20,8 @@ type DiscussionProps = {
 
 // The corresponding discussion shares the original Thing id and its live ACL.
 export function ThingComments({ thingId, linkKey = '', initialPost, description, onCommentAdded, collectionControls = false }: DiscussionProps) {
-  const user = useCurrentUser();
-  return <Discussion key={`${user?.id || 'anonymous'}:${thingId}:${linkKey}`} thingId={thingId} linkKey={linkKey} initialPost={initialPost} description={description} onCommentAdded={onCommentAdded} collectionControls={collectionControls} />;
+  const workspace = useWorkspaceScope();
+  return <Discussion key={`${workspace}:${thingId}:${linkKey}`} thingId={thingId} linkKey={linkKey} initialPost={initialPost} description={description} onCommentAdded={onCommentAdded} collectionControls={collectionControls} />;
 }
 
 function Discussion({ thingId, linkKey = '', initialPost, description, onCommentAdded, collectionControls }: DiscussionProps) {

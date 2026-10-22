@@ -1,7 +1,6 @@
 import { validateLiveSource } from './liveSources';
 import { fileSyncSchema, parseFileSyncConfiguration, FILE_SYNC_KIND } from '../fileSync/configuration';
 import { HTML_ALLOWED_TAGS } from '../components/Kinds/htmlRenderPolicy';
-import { PASSWORD_TYPES, FIELD_TYPES } from '../passwords/model';
 import { TIMELINE_SNAPSHOT_PART_KIND } from '../timeline/snapshotParts.ts';
 import { DEVICE_PLATFORMS } from '../devices/platform.ts';
 import { TIMELINE_BRANCH_KIND, TIMELINE_BRANCH_HEAD_KIND } from '../timeline/branches.ts';
@@ -33,6 +32,9 @@ import { MAX_REACTION_EMOJIS, sanitizeReactionToken } from '../utils/reactionTok
 // @ts-ignore Node 24 executes TypeScript directly and requires the extension.
 import { blocksToText, isEditorJsDoc, isEditorJsDocSafeToEdit } from '../components/Editor/editorJsValue.ts';
 import { MAX_EXPRESSION_ARGS, catalogueSignature, isLambdaArg } from './actionExpressions.ts';
+// Pure password-manager vocabulary (no node/mongo imports), shared with the
+// password manager UI and API so the schema enum stays single-source.
+import { FIELD_TYPES, PASSWORD_TYPES } from '../passwords/model.ts';
 // Pure attachment metadata/envelope vocabulary shared with the server storage
 // layer. This module has no Node imports, so registry remains browser-safe.
 import {
@@ -769,7 +771,7 @@ const rootThingSchema: ThingtimeSchema = {
 			values: [...ATTACHMENT_STATES],
 			system: true,
 			description:
-				'Private upload lifecycle state. Pending, finalizing, ready, and deleting objects all remain billable until their source Thing is removed.'
+				'Private upload lifecycle state. Pending, finalizing, ready, and deleting objects remain billable until cleanup. Cancelled receipts retain only their small JSON allocation and permanently fence delayed upload starts.'
 		},
 		{
 			name: 'objectSizeBytes',
@@ -792,6 +794,11 @@ const rootThingSchema: ThingtimeSchema = {
 			required: false,
 			system: true,
 			description: 'Private immutable S3 version id used for exact reads and permanent deletion before quota is refunded.'
+		},
+		{
+			name: 'attachmentCancellationRequested',
+			type: 'boolean', required: false, system: true,
+			description: 'Server-only durable cancellation intent on deleting uploads and their zero-object cancelled receipts. Never accepted from generic input.'
 		},
 		{
 			name: 'attachmentRequestFingerprint',
@@ -1257,7 +1264,7 @@ const dataSchema: ThingtimeSchema = {
     `are letters/numbers/_/- (max ${MAX_DATA_KEY_CHARS} chars), nesting is unbounded up to ` +
     `MongoDB's own ${MAX_STORABLE_NESTING}-level storage limit (circular references rejected), ` +
     `${MAX_DATA_CRYSTAL_NODES} values per crystal, arrays at ` +
-    `${MAX_DATA_ARRAY_ITEMS} items, strings at ${MAX_TEXT_CHARS} chars.`,
+    `${MAX_DATA_ARRAY_ITEMS} items. Strings are preserved without a character cap; storage capacity still applies.`,
   fields: [
     {
       name: '*',
@@ -5016,7 +5023,6 @@ const sanitizeDataValue = (
       continue;
     }
     if (typeof value === 'string') {
-      if (value.length > MAX_TEXT_CHARS) return fail(400, `Data strings cap at ${MAX_TEXT_CHARS} chars (${path})`);
       item.assign(value);
       continue;
     }

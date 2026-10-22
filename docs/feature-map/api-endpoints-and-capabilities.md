@@ -1,34 +1,21 @@
 # API endpoints and capabilities
 
-Mobile device descriptors use `app/devices/platform.ts` across validation,
-projection, schemas and client types. `api.devices` 1.10.0 and
-`api.devices-pairing-claim` 1.1.0 add iOS/Android to the existing signed pairing
-protocol. Run `test:devices`, `test:schemas` and `test:api-capabilities`.
-See [mobile sync acceptance](../mobile-file-sync.md) for pending native clients.
+Conditional file sync prerequisites reuse `attachmentStore.annotateOwnedAttachment`
+and `managedPlacement.moveManagedContent`. Annotation 1.2.0 accepts optional
+`expectedUpdatedAt` and returns the committed timestamp; bulk 1.6.0 accepts it
+only for single-item moves and reports stale per-item status 409. Both manifests
+must carry these versions. `accountTransport.client.ts` negotiates them;
+`accountFiles.browser.test.ts` covers real concurrent edits, moves, private bytes
+and canonical attachment cleanup. The durable local metadata queue now consumes these contracts; deletion
+reconciliation and ordinary account file UI wiring remain pending; see [local workspaces](../local-workspaces.md#conditional-account-file-metadata--2026-10-16).
 
-`api.devices-node-identity` 1.0.0 is a private device-token-only GET: the token
-fixes both IDs and the owned device must still exist. `api.devices-disconnect`
-1.0.0 is a full-user POST accepting only `deviceId`; `disconnectDevice.ts` revokes
-that owner's matching device sessions in the home transaction while retaining
-Things/files. Both routes use the import map and docs registry. Native
-`ThingtimeAPIClient.verifyFileSyncIdentity` negotiates the optional identity
-feature and selects the exact local credential. `device-identity.integration.mts`
-checks real signed pairing, privacy, owner-only disconnect and no claim revival.
-Character agent discovery uses `remix/scripts/character-coordination-preflight.ts`
-and the shared `capabilityContract.ts` SemVer/origin contract. Run
-`npm --prefix remix run characters:preflight -- --origin <selected-origin>` and
-`test:characters-preflight`; see [the coordination runbook](../characters.md#agent-coordination).
-This read-only client adds no route, permission or server contract. Edge refusal
-must remain distinct from missing capabilities, authentication and membership.
-
-Paired Mac inventory uses `api.devices` 1.10.0 and `api.devices-node-state`
-1.11.0 (`deviceMenuBar.ts`, native `MenuBarTelemetry.swift`). Approved Bash uses
-`api.devices-commands` / `api.devices-node-commands` 1.10.0 (`deviceScript.ts`,
-native `DeviceScript.swift`). Both extend existing routes. Optional native
-negotiation preserves compatibility with older origins; script leases require
-explicit approved envelopes. Editable suites live in `appSuites/macMenuBar.ts`
-and `appSuites/deviceScripts.ts`; scripts retain results only on explicit
-private-Thing creation. See README and TESTING for limits and acceptance.
+`api.things-interactions` 1.0.0 adds the first-party private GET/POST
+`/api/v1/things/interactions` capability: bounded membership snapshots and
+conditional desired-state writes for independent account interaction sync.
+The canonical Things helpers own revision invalidation and authorization;
+`local-workspace/accountTransport.client.ts` negotiates this capability and the
+existing data-plane fence. Route file, import map and docs registry are updated
+together. See [Things and folders](things-and-folders.md) for tests and limits.
 
 Timeline 1.18.0 adds named versions, undo and version export on the existing
 route: the POST command `name-version` (`api/utils/timeline/versionNames.ts`,

@@ -1,5 +1,4 @@
 import { capabilitySatisfies, THINGTIME_CAPABILITY_MANIFEST_PATH } from '../../app/api/utils/capabilities/capabilityContract';
-import { agentTestEnvironment } from '../../app/api/utils/agentTesting';
 
 const MONGO_PASSWORD_PLACEHOLDER = '<db_password>';
 
@@ -148,15 +147,7 @@ const cloneProxyRequestHeaders = (request: Request, fallbackUrl: URL) => {
   return headers;
 };
 
-export const EXPECTED_API_ORIGIN_HEADER = 'X-Thingtime-Expected-Api-Origin';
-
-const endpointChangedResponse = () => Response.json({
-  ok: false, code: 'API_ENDPOINT_CHANGED', error: 'The selected API changed. Retry on the current endpoint.'
-}, { status: 409, headers: { 'Cache-Control': 'private, no-store' } });
-
-export const proxyApiRequestToFallback = async (request: Request, options: { stripForwardedOrigin?: boolean; expectedOrigin?: string | null } = {}) => {
-  if (process.env.THINGTIME_AGENT_TEST_MODE === '1') return Response.json({ ok: false, error: 'Isolated tests cannot use an API fallback.' }, { status: 503 });
-  const expectedOrigin = options.expectedOrigin === undefined ? getApiFallbackOrigin() : options.expectedOrigin;
+export const proxyApiRequestToFallback = async (request: Request, options: { stripForwardedOrigin?: boolean } = {}) => {
   const requestUrl = new URL(request.url);
   const syncOrigin = request.headers.get(EXPECTED_API_ORIGIN_HEADER);
   if (syncOrigin !== null && syncOrigin !== expectedOrigin) return Response.json({
@@ -167,7 +158,33 @@ export const proxyApiRequestToFallback = async (request: Request, options: { str
   if (expectedOrigin !== getApiFallbackOrigin()) return endpointChangedResponse();
   // Direct callers cannot bypass the dispatcher's policy.
   if (!shouldProxyApiToFallback(request)) return unavailableLocalApiResponse();
-  const fallbackUrl = new URL(requestUrl.pathname + requestUrl.search, expectedOrigin!);
+  const fallbackUrl = new URL(requestUrl.pathname + requestUrl.search, getApiFallbackOrigin()!);
+  if (options.stripForwardedOrigin) {
+    // A bundled client and its selected server can be released independently.
+    // Negotiate the actual authority before forwarding credentials or bodies.
+    const requirements: Record<string, [string, string]> = {
+      '/api/v1/passwords': ['api.passwords', requestUrl.searchParams.has('q') ? '1.2.0' : '1.1.0'],
+      '/api/v1/mail': ['api.mail', '1.2.0'],
+      '/api/v1/mail/sync': ['api.mail-sync', '1.0.0']
+    };
+    const required = requirements[requestUrl.pathname];
+    if (required) {
+      try {
+        const response = await fetch(new URL(THINGTIME_CAPABILITY_MANIFEST_PATH, fallbackUrl.origin), {
+          headers: { Accept: 'application/json' }, redirect: 'error', signal: AbortSignal.timeout(10_000)
+        });
+        const text = response.ok ? await response.text() : '';
+        if (text.length > 512 * 1024) throw new Error('Manifest too large');
+        const manifest = JSON.parse(text);
+        if (manifest.schemaVersion !== 1 || manifest.origin !== fallbackUrl.origin ||
+            !capabilitySatisfies(manifest.features?.[required[0]]?.version, required[1])) throw new Error('Incompatible manifest');
+      } catch {
+        return Response.json({ ok: false, code: 'API_CAPABILITY_INCOMPATIBLE', error: `The selected desktop server must provide ${required[0]} ${required[1]} or a compatible version. Update or reconnect that server.` }, {
+          status: 503, headers: { 'Cache-Control': 'private, no-store' }
+        });
+      }
+    }
+  }
   const headers = cloneProxyRequestHeaders(request, fallbackUrl);
   if (options.stripForwardedOrigin) {
     headers.delete('x-forwarded-host');

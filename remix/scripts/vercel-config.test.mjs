@@ -8,7 +8,8 @@ import { gunzipSync } from 'node:zlib';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { prodCsp, devCsp } from './csp.mjs';
-import { mediaWorkerCsp, draftPreviewCsp, platformRuntimeCsp } from './csp.mjs';
+import { draftPreviewCsp, platformRuntimeCsp } from './csp.mjs';
+import { builtPlatformScriptHash } from './platform-runtime.mjs';
 import { execFileSync } from 'node:child_process';
 import { claudeRuntimeFunctions, packageClaudeOAuthArtifacts, verifyClaudeOAuthArtifacts } from './claude-oauth-artifacts.mjs';
 
@@ -107,7 +108,8 @@ test('native Maps can load under the deployed policy without broad script or eva
 		'https://cdn.jsdelivr.net',
 		'https://va.vercel-scripts.com',
 		'https://maps.googleapis.com',
-		'https://maps.gstatic.com'
+		'https://maps.gstatic.com',
+		...(builtPlatformScriptHash() ? [builtPlatformScriptHash()] : [])
 	]);
 	for (const policy of [prodCsp, devCsp]) {
 		assert(!cspSources(policy, 'script-src').includes("'unsafe-eval'"));

@@ -1,3 +1,4 @@
+import { useWorkspaceUser } from '~/hooks/useWorkspaceUser';
 import { attachmentCountLimit } from '~/schemas/attachmentLimits';
 import { uploadFileTypes } from './attachmentFileTypes';
 import React from 'react';
@@ -453,9 +454,10 @@ const AttachmentComposerInner = React.forwardRef<AttachmentComposerHandle, Attac
 	const boundedMaxFiles = Number.isFinite(maxFiles) ? Math.max(1, Math.min(attachmentCountLimit(purpose), Math.trunc(maxFiles))) : attachmentCountLimit(purpose);
 	const lopu = useLopu();
 	const currentUser = useCurrentUser();
+	const localOnly = useWorkspaceUser()?.localOnly === true;
 	const uploadScope = attachmentUploadScopeForPurpose(purpose);
 	const scopeEnabled = currentUser ? (uploadScope === 'private' ? currentUser.privateUploadsEnabled : currentUser.publicUploadsEnabled) : undefined;
-	const uploadsNotGranted = scopeEnabled === false;
+	const uploadsNotGranted = !localOnly && scopeEnabled === false;
 	const [dragging, setDragging] = React.useState(false);
 	const inputRef = React.useRef<HTMLInputElement | null>(null);
 	const emittedSnapshotRef = React.useRef<AttachmentComposerSnapshot | null>(null);
@@ -570,7 +572,7 @@ const AttachmentComposerInner = React.forwardRef<AttachmentComposerHandle, Attac
 		);
 	}
 
-	const storageLabel =
+	const storageLabel = localOnly ? 'Up to 16 MiB per file and 64 MiB in this device workspace.' :
 		storageStatus === 'reconciling'
 			? 'Storage is being verified; the server will check each file.'
 			: storageStatus === 'unavailable'
@@ -581,6 +583,7 @@ const AttachmentComposerInner = React.forwardRef<AttachmentComposerHandle, Attac
 
 	return (
 		<Flex flexDirection="column" rowGap={2} role="group" aria-label={ariaLabel}>
+			{localOnly && <Text fontSize="xs">Files stay on this device. Nothing is uploaded or published.</Text>}
 			{uploadsNotGranted ? (
 				<Box border={BORDER} borderRadius="var(--tt-radius-md, 12px)" background="var(--tt-surface, #fafafb)" padding={3}>
 					<Text fontSize="12px" color={MUTED} whiteSpace="normal">

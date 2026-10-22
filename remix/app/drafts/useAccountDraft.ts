@@ -1,36 +1,44 @@
 import React from 'react';
 import { clearLocalCache, readLocalCache } from '~/hooks/localCache';
-import { draftRequest, listAccountDrafts } from './draftClient';
+import { inspectDraftRecovery } from './draftRecovery';
+import { draftRequest } from './draftClient';
 import { createDraftSession, type LocalDraft, type DraftSaveState } from './draftSession';
-import type { AccountDraft, DraftContent, DraftSurface } from './draftCore';
+import type { AccountDraft, DraftContent, DraftSurface, DraftSummary } from './draftCore';
 
 export function useAccountDraft({
 	actor,
 	context,
 	surface,
 	onRestore,
-	resumeRemote = true
+	resumeRemote = true,
+	request = draftRequest,
+	validateSnapshot
 }: {
 	actor?: string | null;
 	context: string;
 	surface: DraftSurface;
 	onRestore: (draft: AccountDraft) => void;
 	resumeRemote?: boolean;
+	request?: typeof draftRequest;
+	validateSnapshot?: (snapshot: string) => unknown;
 }) {
 	const key = `tt-account-draft:${typeof location === 'undefined' ? '' : location.origin}:${actor || 'guest'}:${context}`;
 	const [status, setStatus] = React.useState<DraftSaveState>('idle');
 	const [error, setError] = React.useState('');
 	const [deviceError, setDeviceError] = React.useState('');
+	const validate = React.useRef(validateSnapshot);
+	validate.current = validateSnapshot;
+	const recovery = React.useMemo(() => inspectDraftRecovery(actor ? readLocalCache<LocalDraft>(key) : null, validate.current), [actor, key]);
 	const scope = React.useMemo(() => ({ key, active: true, touched: false, restoring: false, baseline: null as string | null }), [key]);
 	const restore = React.useRef(onRestore);
 	restore.current = onRestore;
 	const session = React.useMemo(
 		() =>
 			createDraftSession({
-				seed: actor ? readLocalCache<LocalDraft>(key) : null,
+				seed: recovery.seed,
 				uuid: () => crypto.randomUUID(),
-				save: async (input) => (await draftRequest(actor!, { operation: 'save', ...input })).draft,
-				copy: async (input) => (await draftRequest(actor!, { operation: 'recover', ...input })).draft,
+				save: async (input) => (await request(actor!, { operation: 'save', ...input })).draft,
+				copy: async (input) => (await request(actor!, { operation: 'recover', ...input })).draft,
 				recovered: (value) => {
 					if (scope.active) {
 						scope.baseline = value.content.snapshot;
@@ -38,7 +46,7 @@ export function useAccountDraft({
 					}
 				},
 				persist: (value) => {
-					if (!actor) return;
+					if (!actor || recovery.error) return;
 					if (!value) {
 						clearLocalCache(key);
 						// Retirement/clear leaves no draft to recover, so a stale device
@@ -61,10 +69,11 @@ export function useAccountDraft({
 					}
 				}
 			}),
-		[actor, key, scope]
+		[actor, key, scope, request, recovery]
 	);
 	const accept = React.useCallback(
 		async (draft: AccountDraft) => {
+			validate.current?.(draft.snapshot);
 			await session.load(draft);
 			if (!scope.active) return;
 			const saved = session.current();
@@ -86,7 +95,7 @@ export function useAccountDraft({
 				// suppressing resume, so stop re-sending a delete that can never apply.
 				if (!retired || !actor || retired.conflicted) continue;
 				try {
-					await draftRequest(actor, { operation: 'delete', id: retired.id, revision: retired.revision });
+					await request(actor, { operation: 'delete', id: retired.id, revision: retired.revision });
 					localStorage.removeItem(savedKey);
 				} catch (failure) {
 					const status = (failure as any)?.status;
@@ -118,12 +127,12 @@ export function useAccountDraft({
 			restore.current({ ...local.content, id: local.id, revision: local.revision, mode: 'draft', createdAt: '', updatedAt: '' });
 			if (local.dirty !== false || local.pending || local.pendingCopy) void session.retry().catch(() => {});
 			else setStatus('saved');
-		} else if (actor && resumeRemote && localStorage.getItem(`tt-draft-resume:${location.origin}:${actor}`) !== 'false') {
-			void listAccountDrafts(actor, { context, surface })
+		} else if (!recovery.error && actor && resumeRemote && localStorage.getItem(`tt-draft-resume:${location.origin}:${actor}`) !== 'false') {
+			void request<{ drafts: DraftSummary[] }>(actor, undefined, { context, surface })
 				.then(async (result) => {
 					const found = result.drafts.find((entry) => entry.mode === 'draft' && !localStorage.getItem(`${key}:retired:${entry.id}`));
 					if (!found || cancelled || scope.touched) return;
-					const response = await draftRequest(actor, undefined, { id: found.id });
+					const response = await request(actor, undefined, { id: found.id });
 					if (!cancelled && !scope.touched) await accept(response.draft);
 				})
 				.catch((failure) => {
@@ -151,10 +160,10 @@ export function useAccountDraft({
 				if (!scope.active) session.dispose();
 			});
 		};
-	}, [actor, context, key, surface, session, accept, scope, resumeRemote]);
+	}, [actor, context, key, surface, session, accept, scope, resumeRemote, request, recovery]);
 	const capture = React.useCallback(
 		(content: DraftContent, hasContent = true, force = false) => {
-			if (!actor || scope.restoring) return;
+			if (!actor || scope.restoring || recovery.error) return;
 			if (scope.baseline === null && !force) {
 				scope.baseline = content.snapshot;
 				return;
@@ -164,7 +173,7 @@ export function useAccountDraft({
 			scope.touched = true;
 			if (hasContent || session.current()) session.capture(content);
 		},
-		[actor, session, scope]
+		[actor, session, scope, recovery]
 	);
 	const clear = React.useCallback(async () => {
 		await session.clear(async (id, revision) => {
@@ -178,18 +187,18 @@ export function useAccountDraft({
 				/* Account cleanup still proceeds when device storage is unavailable. */
 			}
 			try {
-				await draftRequest(actor!, { operation: 'delete', id, revision });
+				await request(actor!, { operation: 'delete', id, revision });
 				localStorage.removeItem(retiredKey);
 			} catch (failure) {
 				if ([404, 409, 410].includes((failure as any)?.status)) localStorage.removeItem(retiredKey);
 			}
 		});
 		scope.baseline = null;
-	}, [actor, key, session, scope]);
+	}, [actor, key, session, scope, request]);
 	const retire = React.useCallback(async () => {
 		scope.baseline = null;
 		return session.retire(async (id, revision) => {
-			await draftRequest(actor!, { operation: 'delete', id, revision });
+			await request(actor!, { operation: 'delete', id, revision });
 			localStorage.removeItem(`${key}:retired:${id}`);
 		}, draft => {
 			try {
@@ -198,7 +207,7 @@ export function useAccountDraft({
 				if (scope.active) setDeviceError('Posted successfully, but device storage could not record draft cleanup.');
 			}
 		});
-	}, [actor, key, session, scope]);
+	}, [actor, key, session, scope, request]);
 	return {
 		retire,
 		forget: async (id: string) => {
@@ -208,7 +217,8 @@ export function useAccountDraft({
 			}
 		},
 		status,
-		error: deviceError || error,
+		error: recovery.error || deviceError || error,
+		recoveryError: recovery.error,
 		capture,
 		load: accept,
 		clear,

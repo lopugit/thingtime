@@ -15,6 +15,7 @@ components; reuse them instead of adding parallel versions.
 | Canonical link copying | `ContextMenu/thingEntityLink.ts` |
 | Icons: emoji ↔ lucide registry (`LUCIDE_ICONS`, `LUCIDE_FOR_EMOJI`) | `app/theme/icons.tsx`; renderer `app/components/Icon/Icon.tsx` |
 | Toasts / notifications | `app/components/Lopu/useLopu.tsx` (`useLopu()`, `useLopuStream()`) — never raw Chakra `useToast` or `alert()` |
+| Device notification history | `app/local-workspace/notifications.ts`, `notifications.client.ts`; `NotificationsPage.tsx` reuses the normal rows/filters. Anonymous messages never sync; account messages use the existing home-pinned recorder after verified login. |
 | Layering (z-index) | `app/components/Things/transferLayers.ts` and the shared layer constants; never ad-hoc z-index escalation |
 | Page shell, nav clearance, drawers | `app/components/Layout/Main.tsx`, `app/components/Nav/*` (`--tt-nav-clearance`, safe-area vars) |
 | Device menu and full page | `app/components/Things/ThingsPage.tsx`, `ThingsViews.tsx`, `app/components/Devices/deviceNavigation.ts`, `DeviceDetailsDrawer.tsx` (one shared details tree for drawer and page) |
@@ -126,55 +127,51 @@ expanded transfer dialog without changing the ordinary library defaults.
 Popup menus use the shared transfer layer constants; keyboard copy/cut/paste
 only intercepts events inside the browser and leaves editable inputs alone.
 
+`app/local-workspace/AccountSyncStatus.tsx` sits in normal page flow with the
+shared nav clearance. It distinguishes device saves, retries, refusals and
+conflicts. Comparison uses bounded scrollable content and explicit keep-device /
+keep-account choices; stale review must fail instead of overwriting new edits.
+Verify at 1440, 390 and 320 CSS pixels, including expanded comparison and long IDs.
 
-## Native mobile device setup
+## Anonymous theme library
 
-`components/Devices/MobileDeviceSetupCard.tsx` is shared by Things and Things
-settings. `mobileDeviceBridge.ts` negotiates the explicit native capability and
-fences responses by request, account and origin. iOS implements the bounded
-bridge in `iOS/Thingtime/Devices/`; Android uses `android/app/src/main/java/com/thingtime/mobile/`. Native credentials never reach the renderer.
-Run `test:devices` and the opt-in iOS/Android mobile-device acceptance scripts. See
-[full mobile and sync scope](../mobile-file-sync.md).
-## Incoming mail
+`ThemeSettings/ThemeStudio.tsx` uses content identity from `useWorkspaceUser`.
+Anonymous saves show device-only wording and use the dedicated `local-workspace/themes.ts`
+writer; account routes retain their authentication and publication rules.
+`theme/savedTheme.ts` is the shared token sanitizer. Normal Transfer controls
+reuse `utils/thingTransfer/theme.ts` validation and the local import transaction.
+Verify offline save/reload/apply/delete and transfer at desktop/390/320px with
+`test:local-workspace`, `test:things` and `test:theme`. Account theme sync and
+local history remain tracked in [the local coverage matrix](../local-workspaces.md).
 
-See [incoming-mail.md](incoming-mail.md) for Email settings, IMAP/POP3, private cloud storage, the paired local connector, offline reading and proxy inbox views.
 
-## Settings sections
+## Device workspace storage
 
-`SettingsSection.tsx` is the shared, initially collapsed disclosure card for
-personal settings (page and popup) and admin configuration. It keeps children
-mounted, exposes a title/description/summary, and opens enclosing cards for
-fragment links. `SettingRow` gives labels a readable wrapping basis before
-controls move to the next line. Admin categories live in `adminRoutesCore.ts`:
-AI Providers, Lopu, Platform, and Access & limits replace System; legacy System
-links resolve to AI Providers or to Lopu for Lopu anchors. Browser regression:
-`/scripts/settings-sections.browser.html`; route coverage: `test:admin-integrations`.
+`Settings/ThingsSettings.tsx` includes `WorkspaceStorageSettings`, shared by the
+Settings page and drawer. `local-workspace/storageStatus.client.ts` binds only
+the active anonymous or account/origin/data-plane lease; identity invalidation
+clears old values before a new workspace renders. `WorkspaceTransaction.usage`
+reads the existing ledger and counts exact-scope keys without file-body reads.
+`storagePersistence.ts` separates passive browser protection checks from an
+explicit, bounded `StorageManager.persist()` request. No origin-wide usage
+estimate, account HTTP request or anonymous synchronization is introduced.
+Run `test:local-workspace`; `storage.browser.test.ts` uses `TT_LOCAL_STORAGE_URL`,
+`TT_SHARED_PLAYWRIGHT_PATH`, optional `TT_SHARED_CHROME_PATH` and
+`TT_LOCAL_STORAGE_ARTIFACTS` with the built local client. It verifies offline
+reload, other-tab writes, ledger failure/recovery, protection outcome and
+1440/390/320px layout. See the device-storage checkpoint in
+[local workspaces](../local-workspaces.md).
 
-## Native Commander controls
 
-The desktop launcher gear reuses `builtin:settings` / `open-settings` in
-`Commander/apps/desktop-ui/src/components/Launcher.tsx`. `ProcessesPanel.tsx`
-and `processModel.ts` share sorting, averaging, filters and local view preferences
-between Activity and `ProcessesWindow.tsx`. `useSystemMetrics.ts` polls the native
-bridge without overlapping requests. `SystemMetricsService` and
-`ProcessUsageHistory` share sampled history across native windows, with stable
-process identities and explicit coverage. `CommanderUtilityWindow` implements
-maximize/restore; `SettingsWindowController` hosts Settings and Processes, and the
-native bridge applies Keep above only to the requesting utility window. Checks:
-Commander TypeScript/Vitest and Swift tests, plus TESTING.md's native launcher
-checklist on the installed signed app.
+## Local global/site composition
 
-## Editable private settings
-
-`Settings/SettingsDocumentHost.tsx` composes the ordinary Builder drawer/chrome
-with authored `WebpageBlock[]`. Account layouts use private keyed webpages through
-`settingsDocument.client.ts` and existing Things revision fences. Device recovery
-uses the same document format with origin/authority scoped local storage and Web
-Locks. Neither adapter captures form DOM or runtime credential state.
-
-`desktopSettingsDocuments.ts` defines the runtime, endpoint and previous-workspace
-recovery controls as editable intrinsic blocks. `useDesktopSettingsAdapter.ts`
-provides public bindings and a bounded transient native-operation map. Sensitive
-hosts reject external sources, native/component blocks and persisted password/file
-values before rendering; normal Builder insertion and source editing follow the
-same restrictions. Scope changes abort transient controls and fence late results.
+`BuilderPagesList` links global editing and canonical site routes to `BuilderPage`.
+`schemas/sitePages.ts` supplies the same native-section definitions to offline
+Builder and server seeding. `SiteBlocksHost` resolves the workspace's pages with
+`useWebpage` and a bounded identity-owned `siteBlocksCache`; failed refreshes
+retain paint and offer Retry. Each global/route composition uses the existing
+webpage runtime, with native permission and Action trust checks intact.
+`drafts/sitePageDraft.ts` validates recoverable editor snapshots against the saved
+page revision. Cross-tab refresh is a scope-only local-workspace invalidation.
+Run `test:webpages`, `test:drafts`, `test:local-workspace` and the opt-in
+`local-workspace/siteBlocks.browser.test.ts` described in `docs/local-workspaces.md`.

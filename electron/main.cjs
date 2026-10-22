@@ -1489,15 +1489,30 @@ async function switchDesktopEndpointGuarded(endpointId, { confirm = true } = {})
 		});
 		if (!approved) return getDesktopInfo();
 	}
- // Keep the running server pinned to its old endpoint until it exits.
- // Changing global proxy state in-place could redirect queued old-account
- // requests into the new API even after stopping the renderer.
- await passwordProvider.disconnect();
- await settings.selectEndpoint(target.id);
- mainWindow?.webContents.stop();
- desktopSpeech.stop(); desktopMail.stop();
- await restartDesktopRuntime();
- return getDesktopInfo();
+	try {
+		await passwordProvider.disconnect();
+		await settings.selectEndpoint(target.id);
+		setApiFallbackEndpoint(target.url);
+		const compatibility = await checkSelectedEndpointCompatibility({ syncNode: true });
+		if (compatibility.status !== 'compatible') throw compatibilityError(compatibility);
+		await loadBundledRenderer();
+		desktopSettingsLastError = null;
+		createApplicationMenu();
+		return getDesktopInfo();
+	} catch (error) {
+		await settings.selectEndpoint(before.selectedEndpointId);
+		setApiFallbackEndpoint(before.selectedEndpoint.url);
+		let rollbackError = null;
+		try {
+			await checkSelectedEndpointCompatibility({ syncNode: true });
+			await loadBundledRenderer();
+		} catch (caughtRollbackError) {
+			rollbackError = caughtRollbackError;
+		}
+		desktopSettingsLastError = rollbackError instanceof Error ? rollbackError.message : rollbackError ? String(rollbackError) : null;
+		createApplicationMenu();
+		throw error;
+	}
 }
 
 async function desktopSelectEndpoint(event, request) {
@@ -1893,7 +1908,7 @@ ipcMain.handle('thingtime-desktop:speech-stop', (event, request) => {
 	return desktopSpeech.stop(request.sessionId);
 });
 
-const passwordProvider = require('./lib/password-provider.cjs').createPasswordProvider({ app, root: __dirname, origin: () => appOrigin, endpoint: activeAccountEndpoint });
+const passwordProvider = require('./lib/password-provider.cjs').createPasswordProvider({ app, root: __dirname, origin: () => appOrigin, endpoint: () => requireDesktopSettings().snapshot().selectedEndpoint.url });
 ipcMain.handle('thingtime-desktop:password-provider', (event, request) => passwordProvider(event, request));
 
 ipcMain.handle('thingtime-desktop:mail-sync', (event, request) => desktopMail.sync(event, request));

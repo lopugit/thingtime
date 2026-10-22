@@ -54,7 +54,7 @@ export const drawerMenuItems: DrawerTopItem[] = [
 			{ id: 'feed-home', label: 'Feed', icon: '📰', to: '/feed' },
 			{ id: 'feed-explore', label: 'Explore', icon: '🔥', to: '/explore' },
 			{ id: 'feed-subspaces', label: 'Subspaces', icon: '🪐', to: '/s' },
-			{ id: 'feed-saved', label: 'Saved', icon: '🔖', to: '/saved', authOnly: true },
+			{ id: 'feed-saved', label: 'Saved', icon: '🔖', to: '/saved' },
 			{ id: 'feed-connections', label: 'Connected feed', icon: '📡', to: '/connections/feed', authOnly: true },
 			{ id: 'feed-profile', label: 'Profile', icon: '👤', to: '/profile', authOnly: true },
 			{ id: 'feed-settings', label: 'Settings', icon: '⚙️', to: '/settings' }
@@ -69,6 +69,17 @@ export const drawerMenuItems: DrawerTopItem[] = [
 		children: [
 			{ id: 'mail-inboxes', label: 'All inboxes', to: '/mail', authOnly: true },
 			{ id: 'mail-settings', label: 'Email settings', to: '/settings/email', authOnly: true }
+		]
+	},
+	{
+		id: 'passwords',
+		label: 'Passwords',
+		icon: '🔐',
+		to: '/passwords',
+		authOnly: true,
+		children: [
+			{ id: 'passwords-vault', label: 'Passwords', icon: '🔐', to: '/passwords', authOnly: true },
+			{ id: 'passwords-security', label: 'Security settings', icon: '⚙️', to: '/settings/security', authOnly: true }
 		]
 	},
 	{

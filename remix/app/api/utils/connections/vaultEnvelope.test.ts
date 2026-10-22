@@ -50,12 +50,16 @@ test('AES-GCM rejects edited ciphertext, nonce, tag, version, and malformed enco
   }
 });
 
-test('value size is bounded in bytes and empty values are supported', () => {
+test('values have no product size cap, while explicit storage byte bounds are respected', () => {
   const key = createVaultDataKey();
-  for (const value of ['', '🦊'.repeat(16_384)]) {
+  for (const value of ['', '🦊'.repeat(300_000)]) {
     assert.equal(openVaultValue(owner, key, 'record-a', 'secret', sealVaultValue(owner, key, 'record-a', 'secret', value)), value);
   }
-  assert.throws(() => sealVaultValue(owner, key, 'record-a', 'secret', '🦊'.repeat(16_385)), failure);
+  const value = '🦊'.repeat(16_385);
+  assert.throws(() => sealVaultValue(owner, key, 'record-a', 'secret', value, 64 * 1024), failure);
+  const envelope = sealVaultValue(owner, key, 'record-a', 'oauth', value);
+  assert.equal(openVaultValue(owner, key, 'record-a', 'oauth', envelope), value);
+  assert.throws(() => openVaultValue(owner, key, 'record-a', 'oauth', envelope, 64 * 1024), failure);
   assert.throws(() => sealVaultValue('', key, 'record-a', 'secret', secret), failure);
   assert.throws(() => sealVaultValue(owner, key, '', 'secret', secret), failure);
   assert.throws(() => sealVaultValue(owner, { ...key, bytes: Buffer.alloc(31) }, 'record-a', 'secret', secret), failure);

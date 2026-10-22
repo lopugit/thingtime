@@ -7,15 +7,18 @@ import type { ThingsThing } from '../Things/thingsCore';
 import type { PublicAttachment } from '~/components/Attachments/attachmentTypes';
 import type { EditorJsDoc } from '~/components/Editor/editorJsValue';
 import { THING_AUDIENCE_META, type ThingAudience, type ResolvedAudience } from '~/components/Sharing/audienceCore';
-import type { PostMediaLayout } from '~/schemas/registry';
+import type { PostMediaLayout, SubspaceAccessMode, SubspaceRole, UpdownDirection } from '~/schemas/registry';
 
-export type { PostMediaLayout };
+export type { PostMediaLayout, SubspaceRole, UpdownDirection };
+// the subspace access mode under the name the client vocabulary uses for it
+export type SubspaceAccess = SubspaceAccessMode;
 
 export type PublicProfile = {
   id: string;
   username: string;
   displayName: string | null;
   temporary?: boolean;
+  localOnly?: true;
   bio: string | null;
   avatarUrl: string | null;
   bannerUrl: string | null;
@@ -32,6 +35,7 @@ export type FeedAuthor = {
   username: string;
   displayName: string | null;
   temporary?: boolean;
+  localOnly?: true;
   avatarUrl: string | null;
   external?: boolean;
   externalUrl?: string | null;
@@ -51,7 +55,7 @@ export type FeedAuthor = {
 export type AuthorLinkTarget = { external: boolean; href: string };
 
 export const authorLinkTarget = (author: FeedAuthor | null): AuthorLinkTarget | null => {
-  if (!author?.username) return null;
+  if (!author?.username || author.localOnly) return null;
   if (author.external) return author.externalUrl ? { external: true, href: author.externalUrl } : null;
   return { external: false, href: `/profile/${author.username}` };
 };
@@ -180,6 +184,44 @@ export type PublicPost = {
   createdAt: string;
 };
 
+// Lean subspace embed on subspace posts — identity + branding + the viewer's
+// own role there (never the member roster). Mirrors PublicPostSubspace in
+// api/utils/things/things.ts.
+export type PublicPostSubspace = {
+	id: string;
+	slug: string;
+	name: string;
+	icon: string | null;
+	iconUrl: string | null;
+	accent: string | null;
+	access: SubspaceAccess;
+	nsfw: boolean;
+	viewerRole: SubspaceRole | null;
+};
+
+// the post's flair inside its subspace (a template pick — always has an id)
+export type PublicPostFlair = { id: string; label: string; emoji: string | null; color: string | null };
+
+// a user flair beside an author's name: a template pick (id) or custom text
+// (id null) — the post-flair shape with a nullable id
+export type PublicAuthorFlair = { id: string | null; label: string; emoji: string | null; color: string | null };
+
+// The post's moderation state in its subspace. `reason` is shown to the author
+// and moderators only; `reportCount` reaches moderators only (the card's 🚩
+// badge), so it is absent for everyone else.
+export type PublicSubspaceMod = {
+	status: 'approved' | 'removed';
+	removed: boolean;
+	reason: string | null;
+	removedAt: string | null;
+	pinned: boolean;
+	locked: boolean;
+	nsfw: boolean;
+	spoiler: boolean;
+	viewerCanModerate: boolean;
+	reportCount?: number;
+};
+
 // Live poll tally on poll posts (posts whose thing carries question/options):
 // per-option counts (index-aligned with the options), the total, and the
 // viewer's own option (null = hasn't voted). Mirrors PublicPollVotes in
@@ -196,46 +238,15 @@ export type FeedFilterMatch = {
   source: 'claude' | 'openai' | 'heuristic';
 };
 
-// Up/down vote tally carried on posts and comments (mirrors PublicUpdownVotes
-// in api/utils/things/updownCore.ts): raw counts, net score, the viewer's
-// own vote (null = hasn't voted).
-export type UpdownDirection = 'up' | 'down';
+// Up/down votes — the separate, deliberately limited reaction kind beside the
+// emoji reactions (POST /api/v1/things/updown). Mirrors PublicUpdownVotes in
+// api/utils/things/updownCore.ts: `score` is up - down, `viewerVote` is the
+// viewer's own tap (null = hasn't voted).
 export type PublicUpdownVotes = { up: number; down: number; score: number; viewerVote: UpdownDirection | null };
-export const EMPTY_VOTES: PublicUpdownVotes = { up: 0, down: 0, score: 0, viewerVote: null };
 
-// Lean subspace embed on subspace posts (mirrors PublicPostSubspace in
-// api/utils/things/things.ts) — identity + branding + the viewer's own role.
-export type SubspaceAccess = 'public' | 'restricted' | 'private';
-export type SubspaceRole = 'owner' | 'moderator' | 'member';
-export type PublicPostSubspace = {
-  id: string;
-  slug: string;
-  name: string;
-  icon: string | null;
-  iconUrl: string | null;
-  accent: string | null;
-  access: SubspaceAccess;
-  nsfw: boolean;
-  viewerRole: SubspaceRole | null;
-};
-export type PublicPostFlair = { id: string; label: string; emoji: string | null; color: string | null };
-// a user flair beside an author's name (mirrors PublicAuthorFlair in
-// api/utils/things/things.ts): a template pick (id) or custom text (id null)
-export type PublicAuthorFlair = { id: string | null; label: string; emoji: string | null; color: string | null };
-export type PublicSubspaceMod = {
-  status: 'approved' | 'removed';
-  removed: boolean;
-  reason: string | null;
-  removedAt: string | null;
-  pinned: boolean;
-  locked: boolean;
-  nsfw: boolean;
-  spoiler: boolean;
-  viewerCanModerate: boolean;
-  // moderators only: open reports against the post (the 🚩 badge in the
-  // subspace line); absent for everyone else
-  reportCount?: number;
-};
+// The no-votes reading a post/comment falls back to while `votes` is absent
+// (older deployments) — frozen so a shared default can never be mutated.
+export const EMPTY_VOTES: PublicUpdownVotes = Object.freeze({ up: 0, down: 0, score: 0, viewerVote: null });
 
 // Apply one up/down tap to a post or comment optimistically: same direction
 // again clears, the other direction flips (both counters move), null clears.
@@ -299,6 +310,9 @@ export const isPendingComment = (comment: Pick<PostComment, 'id'>): boolean => c
 // the viewer just posted below the fold with nothing on screen to confirm it
 // landed (the optimistic-render rule: paint first).
 export const windowCommentPage = <T extends Pick<PostComment, 'id'>>(ordered: readonly T[], sort: CommentSort | null, visible: number, pinnedIds: readonly string[] = []): T[] => {
+  // guard before the default page's slice(-visible): slice(-0) is the WHOLE
+  // level, not an empty window
+  if (visible <= 0) return [];
   if (!sort) return ordered.slice(-visible);
   const shown = ordered.slice(0, visible);
   if (!pinnedIds.length || shown.length === ordered.length) return shown;

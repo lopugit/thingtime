@@ -55,6 +55,13 @@ proves the host connected.
 - Local admin bootstrap recipe: register a throwaway user, add its username to
   `ADMIN_USERNAMES` in `remix/.env`, restart the dev stack.
 - `TESTING.md`: the auth, passkey, account switcher and admin sections.
+- Saved provider replacement: `connections/vaultTokenReplacement.test.mts`
+  (included in `test:connections`) exercises the vault HTTP action, exact
+  encrypted replacement, intentional blank retention, and no-write rejection.
+  Credential-save clients require `api.lopu-vault` 1.4.0. Long names, keys,
+  endpoints, model IDs and values round-trip without arbitrary field/envelope
+  caps. `schemas/dataStrings.test.ts` covers the shared validator, and capability
+  regressions cover the affected Things/copy/import/Action contracts.
 
 Lopu browser Actions bind a revalidated first-party user resolver to the exact
 synthetic Request through `internalRequestActor.ts`. `getCurrentUser` and
@@ -73,6 +80,49 @@ private draft API, editor recovery, account isolation and independent media copi
 
 `GET/POST /api/v1/settings/lopu-prompt` exposes the shared public base prompt, the authenticated account's private instruction checklist, and admin-only base edits. `settings/lopuPromptSettings.ts` stores the shared revision in home settings and personal revisions in protected account metadata through `users.ts`; public user projections omit that text. `promptSettingsCore.ts` bounds inputs and composes enabled preferences. Revision comparisons reject stale writes. `LopuPromptSettings.tsx` serves Settings → Lopu and Settings → Admin; account-keyed mounting and private in-memory caching prevent cross-account drafts. Prompt text never grants server tool authority. Routes, concurrent save conflicts, disabled entries and private response handling are covered by `test:lopu` and `test:settings`.
 
+### Third-party account library
+
+`/connections` is the service/subservice catalog and account manager. The native
+provider boundary is `api/utils/connections/{providers,oauth,connections}.ts`;
+`tokenVault.ts` and `lopu/userVault.ts` use the shared account-key envelope. Public sources
+retain shared accounts; authenticated grants are separate Things per owner.
+OAuth uses a deployment env callback, session binding and one-use nonce; refresh
+is serialized with a home-database lease. `connections/request` exposes only
+fixed, scope-checked operations and never returns credential material.
+Its 1.1.1 contract preserves complete API payloads and forwards opaque
+`pageToken`/`data.nextPageToken` cursors for Google lists. The bounded logging
+redactor is not an API serializer. Token redaction operates on string values
+and property names, preserves typed scalars and JSON syntax, and removes
+overlapping tokens in full without rewriting generated replacement markers. Fixed-target requests reject cross-origin
+redirects and propagate cancellation; ordinary key/value fields are data.
+OpenAI API/Claude Code OAuth cards reuse `lopu/vault`, keeping Lopu's selectable providers
+and Secure Vault as the same records. See README's third-party setup section
+and TESTING's multi-account, callback, rotation and cache isolation checklist.
+
+ChatGPT hosted identity uses an approved client, verified OIDC ID tokens and
+no inference grant. Facebook identity and posts are separate grants. Account
+and link writes/disconnects commit in one home transaction; old source rows
+remain inert without a live link. Owner IDs accompany private reads; an
+optional `expectedOwnerId` rejects forms submitted after an account switch.
+
+### Server-assisted vault keys
+
+`auth/vaultEnvelope.ts` owns AES-GCM, scrypt password wrapping and HKDF session
+wrapping. `auth/vaultKeys.ts` owns the stable per-user key, approved background
+recovery, exact-password binding and live-session grants. The bounded registry
+stays in the home user secure blob through `users.ts` CAS; wrappers are excluded
+from public user projections. Session wrappers are binary on each session row,
+removed by the shared revocation pipeline. `vaultRequest.ts` gives the Nitro API
+dispatcher request-local token context without a global identity/key cache.
+Login/registration/verified reveal bind passwords; reset writes hash+wrapper in
+one CAS. Passkey/OTP/account-switch sessions obtain grants lazily after liveness
+checks. Server recovery is intentional, not zero-knowledge encryption.
+
+Run `test:connections` (envelopes, registry, concurrency, scope isolation),
+`test:sensitive-reveal`, `test:collections`, and the local-only
+`scripts/verify-vault-recovery.mjs` acceptance script. Existing legacy entries
+migrate only under canonical revision guards; corrupt key records fail closed.
+
 
 ## Password manager
 
@@ -84,11 +134,19 @@ fences and secret-free native catalog projections; `auth/vaultEnvelope.ts` and
 intentionally bypasses general request diagnostics and automatic origin fallback
 so decrypted fields never enter shared client history/cache. The reusable
 `Thingtime` fields mod renders the entry without global Thing persistence.
+Native integrations live in `apple/Passwords`, `apple/PasswordProvider`,
+`iOS/Thingtime/Web/PasswordBridge.swift` and `electron/lib/password-provider.cjs`.
 Native provider implementation and signed release are tracked separately in
 [PR #996](https://github.com/lopugit/thingtime/pull/996); this release exposes the
 private catalog and negotiates an optional supported native bridge.
 
-## Account content snapshots
+Local account workers are bound to the confirmed root identity generation,
+origin, owner ID and data plane (`app/local-workspace/runtime.client.ts`).
+Expected-actor mismatch now also returns `code: ACTOR_CHANGED`; the existing
+409 refusal remains. A mismatched queue stops before another request and root
+identity refreshes. Temporary/anonymous users do not start account workers, and
+logging in does not adopt anonymous content. See the incomplete
+[local workspace acceptance matrix](../local-workspaces.md).
 
 The internal owner inventory uses `backups/accountSnapshots.ts` and the shared
 `timeline/accountContent.ts` v1 contract for approved profile content and private

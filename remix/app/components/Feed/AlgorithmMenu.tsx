@@ -16,7 +16,8 @@ import { useNavigate } from 'react-router';
 import { Check, ChevronDown, X } from 'lucide-react';
 
 import { useApi } from '~/hooks/useApi';
-import { useCurrentUser } from '~/hooks/useCurrentUser';
+import { useWorkspaceUser } from '~/hooks/useWorkspaceUser';
+import { rootIdentity } from '~/utils/rootIdentity';
 import { useLopu } from '~/components/Lopu/useLopu';
 import {
   DRAWER_MODAL_OVERLAY_Z,
@@ -190,7 +191,7 @@ export const AlgorithmMenu = (props: AlgorithmMenuProps) => {
   const { value, onChange, sessionEventCount, getSessionEvents } = props;
 
   const api = useApi();
-  const user = useCurrentUser();
+  const user = useWorkspaceUser();
   const lopu = useLopu();
   const navigate = useNavigate();
 
@@ -207,6 +208,9 @@ export const AlgorithmMenu = (props: AlgorithmMenuProps) => {
   const [draftEmoji, setDraftEmoji] = React.useState('🧠');
   const [saving, setSaving] = React.useState(false);
 
+  React.useEffect(() => { setModalMode(null); setDraftName(''); setSaving(false); }, [user?.id]);
+  React.useEffect(() => rootIdentity.subscribe(() => { setModalMode(null); setDraftName(''); setSaving(false); }), []);
+
   const apiRef = React.useRef(api);
   apiRef.current = api;
   const sessionEventCountRef = React.useRef(sessionEventCount);
@@ -221,6 +225,7 @@ export const AlgorithmMenu = (props: AlgorithmMenuProps) => {
     // (🐣 → 🥚 mid-scroll). Over-counting the overlap is the safe direction —
     // that is what keeps the stage monotonic.
     const baseline = sessionEventCountRef.current;
+    const generation = rootIdentity.read().generation;
     if (!user) {
       setAlgorithms([]);
       setSessionBaseline(baseline);
@@ -228,6 +233,7 @@ export const AlgorithmMenu = (props: AlgorithmMenuProps) => {
     }
     try {
       const resp = await apiRef.current.v1.algorithms.list();
+      if (rootIdentity.read().pending || rootIdentity.read().generation !== generation) return;
       setAlgorithms(resp.algorithms || []);
       // rebase the overlay only when fresh counts actually landed
       setSessionBaseline(baseline);
@@ -257,7 +263,7 @@ export const AlgorithmMenu = (props: AlgorithmMenuProps) => {
       onChange(id);
       reload();
     } catch (err: any) {
-      lopu({ title: err?.error || 'Could not switch algorithms 😞', status: 'error' });
+      lopu({ title: err?.error || err?.message || 'Could not switch algorithms 😞', status: 'error' });
     }
   };
 
@@ -288,12 +294,16 @@ export const AlgorithmMenu = (props: AlgorithmMenuProps) => {
     if (!name || saving || !modalMode) return;
 
     setSaving(true);
+    const operationApi = apiRef.current;
+    const generation = rootIdentity.read().generation;
+    const current = () => !rootIdentity.read().pending && rootIdentity.read().generation === generation;
     try {
       const payload: any = { name, emoji: draftEmoji.trim() || undefined };
       if (modalMode === 'branch' && value) payload.branchFrom = value;
       if (modalMode === 'session') payload.events = getSessionEvents();
 
-      const resp = await apiRef.current.v1.algorithms.create(payload);
+      const resp = await operationApi.v1.algorithms.create(payload);
+      if (!current()) return;
       const created: PublicAlgorithm = resp.algorithm;
 
       if (modalMode === 'session') {
@@ -303,7 +313,8 @@ export const AlgorithmMenu = (props: AlgorithmMenuProps) => {
           status: 'success'
         });
       } else {
-        await apiRef.current.v1.algorithms.setActive({ algorithmId: created.id });
+        await operationApi.v1.algorithms.setActive({ algorithmId: created.id });
+        if (!current()) return;
         onChange(created.id);
         lopu({
           title: `${created.emoji} ${created.name} is curating your feed ✨`,
@@ -315,7 +326,8 @@ export const AlgorithmMenu = (props: AlgorithmMenuProps) => {
       setModalMode(null);
       reload();
     } catch (err: any) {
-      lopu({ title: err?.error || 'Could not save that algorithm 😞', status: 'error' });
+      if (!current()) return;
+      lopu({ title: err?.error || err?.message || 'Could not save that algorithm 😞', status: 'error' });
     }
     setSaving(false);
   };

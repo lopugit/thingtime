@@ -202,7 +202,7 @@ export const AudioAttachmentPlayer = ({ attachments, compact = false }: { attach
 
 			<Button
 				as="a"
-				href={mediaUrl(active.url || attachmentContentUrl(active.id, true))}
+				href={mediaUrl(active.url || attachmentContentUrl(active.id, true)) || undefined}
 				{...(active.url ? { target: '_blank', rel: 'noopener noreferrer' } : { download: active.name })}
 				mt={2}
 				size="xs"

@@ -66,3 +66,16 @@ back to the normal expiry/reaper lifecycle, preserving files already published.
 `test:attachments`, `test:api-capabilities`; real API
 `verify-account-drafts.mjs <ignored local fixture.json> --media` and the
 [account draft checklist](../../TESTING.md#account-drafts-and-reusable-post-templates).
+
+
+## Anonymous workspace drafts
+
+`local-workspace/drafts.ts` implements the same protocol over scoped IndexedDB.
+`things.ts` owns post/file commits and `posts.ts` reuses canonical post request
+mapping and native projections. The attachment queue stores local bytes before
+reporting ready; template/recovery copies atomically duplicate them and remap
+snapshot references. Draft deletion releases only draft-bound files. Post saving
+has no draft-save prerequisite. `DraftPicker` labels device-only storage explicitly.
+Run `test:local-workspace` alongside the account suites above; the local composer
+manual checklist covers offline edit previews, template independence and reload.
+Account draft permissions and upload admission are unchanged.

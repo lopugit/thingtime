@@ -1,3 +1,4 @@
+import { withVaultRequest } from '../../../app/api/utils/auth/vaultRequest';
 import { agentTestRefusal } from '../../../app/api/utils/agentTesting';
 import { actionDataRoutes } from '../../utils/actionDataRoutes';
 import { defineHandler } from 'nitro/h3';
@@ -18,10 +19,7 @@ type RouteModule = {
 
 export const routeModules: Record<string, () => Promise<RouteModule>> = {
   ...actionDataRoutes,
-  'v1/devices/node/identity': () => import('../../../app/routes/api/v1/devices/node/identity/_identity'),
-  'v1/devices/disconnect': () => import('../../../app/routes/api/v1/devices/disconnect/_disconnect'),
-  'v1/files/batches': () => import('../../../app/routes/api/v1/files/batches/_batches'),
-  'v1/files': () => import('../../../app/routes/api/v1/files/_files'),
+  'v1/things/interactions': () => import('../../../app/routes/api/v1/things/interactions/_interactions'),
   'v1/lopu/network': () => import('../../../app/routes/api/v1/lopu/network/_network'),
   'v1/lopu/tasks': () => import('../../../app/routes/api/v1/lopu/tasks/_tasks'),
   'v1/admin/error-logs': () => import('../../../app/routes/api/v1/admin/error-logs/_error-logs'),
@@ -186,7 +184,8 @@ export const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/communities/members': () => import('../../../app/routes/api/v1/communities/members/_members'),
   'v1/communities/sections': () => import('../../../app/routes/api/v1/communities/sections/_sections'),
   'v1/communities/update': () => import('../../../app/routes/api/v1/communities/update/_update'),
-  'v1/connections': () => import('../../../app/routes/api/v1/connections/_connections'),
+  'v1/connections/request': () => import('../../../app/routes/api/v1/connections/request/_request'),
+	'v1/connections': () => import('../../../app/routes/api/v1/connections/_connections'),
   'v1/connections/feed': () => import('../../../app/routes/api/v1/connections/feed/_feed'),
   'v1/connections/filters': () => import('../../../app/routes/api/v1/connections/filters/_filters'),
   'v1/connections/oauth/begin': () => import('../../../app/routes/api/v1/connections/oauth/begin/_begin'),
@@ -421,11 +420,9 @@ export default defineHandler(async (event) => {
         return jsonResponse({ ok: false, error: 'Configure private account services on this deployment.' }, { status: 503, headers: { 'Cache-Control': 'private, no-store' } });
       if (event.req.headers.get('Sec-Fetch-Site') === 'cross-site' || (method !== 'GET' && event.req.headers.get('Origin') !== local.origin))
         return jsonResponse({ ok: false, error: 'Use the same Thingtime origin.' }, { status: 403, headers: { 'Cache-Control': 'private, no-store' } });
-      if (path === 'v1/ai/chatgpt-plan' && !await selectedRuntimeSupportsPlan(configured, event.req.signal))
-        return jsonResponse({ ok: false, error: 'The selected API does not support portable ChatGPT plan connections. Update that runtime first.' }, { status: 409, headers: { 'Cache-Control': 'private, no-store' } });
-      // Nitro's lazy request is not a native Request; preserve its body API
-      // while pinning the selected origin across asynchronous negotiation.
-      return proxyApiRequestToFallback(event.req, { expectedOrigin: configured, stripForwardedOrigin: true });
+      // Nitro's lazy server request is not a native Undici Request. Preserve
+      // its public body interface and sanitize the copied upstream headers.
+      return proxyApiRequestToFallback(event.req, { stripForwardedOrigin: true });
     }
     // Root data uses this same fallback. Forward its public database
     // precondition and selection unchanged for the upstream to enforce.
@@ -475,7 +472,7 @@ export default defineHandler(async (event) => {
   const mongoEndpoint = path.startsWith('v1/admin/') ? null : selectedEndpoint;
 
   try {
-		const response = await runWithMongoEndpoint(mongoEndpoint, async () => {
+		const response = await withVaultRequest(event.req, () => runWithMongoEndpoint(mongoEndpoint, async () => {
       const identityFailure = await enforceExpectedActor(event.req, getCurrentUser);
       if (identityFailure) return identityFailure;
       if (event.req.headers.has('X-Thingtime-Background-Id')) {
@@ -483,7 +480,7 @@ export default defineHandler(async (event) => {
         return startBackgroundTask(event.req, async request => normalizeResponse(await handler({ request })));
       }
       return normalizeResponse(await handler({ request: event.req }));
-    });
+    }));
     if (response.status >= 500 && path !== 'v1/admin/error-logs') await recordErrorLog(new Error('HTTP request returned a server error'), { source: 'http-response', status: response.status });
     return response;
   } catch (err) {

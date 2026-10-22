@@ -4,13 +4,14 @@ import { extname, isAbsolute, join, normalize, relative } from 'node:path';
 import { fileURLToPath, URL } from 'node:url';
 
 import react from '@vitejs/plugin-react';
-import { defineConfig, type Plugin } from 'vite';
+import { defineConfig, type Plugin, type ViteDevServer } from 'vite';
 
 import { THINGTIME_CAPABILITY_MANIFEST_PATH } from './app/api/utils/capabilities/capabilityContract';
 import { APPLE_APP_ASSOCIATION_PATH } from './app/api/utils/auth/appleAppAssociation';
 import { ROBOTS_PATH, SITEMAP_PATH } from './app/api/utils/seo/sitemapCore';
 import { installPreviewBuildFreshness } from './app/utils/previewBuildFreshness';
-import { mediaWorkerCsp, draftPreviewCsp, platformRuntimeCsp, designBundlesCsp, librarySandboxCsp, librarySdkCsp, devCsp } from './scripts/csp.mjs';
+import { draftPreviewCsp, platformRuntimeCsp, designBundlesCsp, librarySandboxCsp, librarySdkCsp, devCsp, prodCsp } from './scripts/csp.mjs';
+import { platformRuntimePlugin } from './scripts/platform-runtime-plugin.mjs';
 
 const designDocsBase = '/docs/design-bundles';
 const designDocsDir = fileURLToPath(new URL('../docs/design', import.meta.url));
@@ -184,9 +185,7 @@ const forwardHostProxy = (target: string) => ({
   }
 });
 
-const librarySandboxPlugin = (): Plugin => ({
-  name: 'library-isolated-preview',
-  configureServer(server) {
+const configureIsolatedRuntimes = (server: { middlewares: ViteDevServer['middlewares'] }) => {
     server.middlewares.use((req,res,next) => {
       const path = req.url?.split('?')[0];
       if (path === '/draft-preview/index.html' || path === '/draft-preview/' ) {
@@ -221,10 +220,15 @@ const librarySandboxPlugin = (): Plugin => ({
       res.setHeader('Cache-Control','no-store');
       createReadStream(file).pipe(res);
     });
-  }
+};
+const librarySandboxPlugin = (): Plugin => ({
+  name: 'library-isolated-preview',
+  configureServer: configureIsolatedRuntimes,
+  configurePreviewServer: configureIsolatedRuntimes
 });
 
 export default defineConfig({
+  preview: { headers: { 'Content-Security-Policy': prodCsp } },
   build: {
     outDir: 'dist',
     sourcemap: true
@@ -284,5 +288,5 @@ export default defineConfig({
       '/api': forwardHostProxy(localApiTarget)
     }
   },
-  plugins: [librarySandboxPlugin(),previewFreshnessHtmlPlugin(), react(), designDocsStaticPlugin(), embedBundleDevPlugin()]
+  plugins: [platformRuntimePlugin(),librarySandboxPlugin(),previewFreshnessHtmlPlugin(), react(), designDocsStaticPlugin(), embedBundleDevPlugin()]
 });

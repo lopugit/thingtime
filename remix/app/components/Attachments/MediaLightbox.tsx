@@ -112,7 +112,7 @@ export const MediaLightbox = ({ attachments, index, isOpen, onClose, onDownloadA
 						/>
 						<IconButton
 							as="a"
-							href={mediaUrl(attachment.url || attachmentContentUrl(attachment.id, true))}
+							href={mediaUrl(attachment.url || attachmentContentUrl(attachment.id, true)) || undefined}
 							// cross-origin ignores the download attribute — linked media opens
 							// the original URL in a new tab instead
 							{...(attachment.url ? { target: '_blank', rel: 'noopener noreferrer' } : { download: attachment.name })}

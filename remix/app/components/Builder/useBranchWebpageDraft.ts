@@ -18,7 +18,7 @@ export function useBranchWebpageDraft(
 	const branch = useTimelineBranchDraft(target, connection);
 	const api = useApi();
 	const apiRef = React.useRef(api);
-	apiRef.current = api;
+	// Keep component reads bound to the authority that opened this branch.
 	const [currentComponents, setCurrentComponents] = React.useState<ComponentsByRef>({});
 	const [useCurrentComponents, setUseCurrentComponents] = React.useState(false);
 	const [componentError, setComponentError] = React.useState('');

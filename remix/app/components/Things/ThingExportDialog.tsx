@@ -27,7 +27,7 @@ export const ThingExportDialog = ({ ids, linkKey, onClose }: { ids: string[]; li
       const bundle = await bundleFromPlan(result.plan, { key: linkKey, signal: controller.signal });
       controller.signal.throwIfAborted();
       await downloadTransfer(bundle, format, 'thingtime', controller.signal);
-      if (!controller.signal.aborted) { lopu({ title: 'Download ready', description: 'Import this file to create new private copies.', status: 'success' }); onClose(); }
+      if (!controller.signal.aborted) { lopu({ title: 'Download ready', description: result.localWorkspace ? 'Downloaded the saved device snapshot, including your local edits. Other devices may have newer changes.' : 'Import this file to create new private copies.', status: 'success' }); onClose(); }
     } catch (cause) {
       if (!controller.signal.aborted) setError(cause instanceof Error ? cause.message : 'Export failed');
     } finally { if (!controller.signal.aborted) { setBusy(false); operation.current = null; } }
@@ -39,6 +39,7 @@ export const ThingExportDialog = ({ ids, linkKey, onClose }: { ids: string[]; li
       <ModalCloseButton />
       <ModalBody><Flex direction="column" gap={4}>
         <Text fontSize="sm">Downloads contain portable content, not account credentials or sharing permissions. Importing creates new private copies.</Text>
+        <Text fontSize="sm">Offline downloads use saved device content. Uncached dependencies or folder contents must be downloaded online first.</Text>
         <Select aria-label="Download format" value={format} isDisabled={busy} onChange={(event) => setFormat(event.target.value as 'zip' | 'json')}>
           <option value="zip">ZIP — content + files</option>
           <option value="json">JSON — content + links</option>

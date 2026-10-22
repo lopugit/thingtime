@@ -220,3 +220,21 @@ export function parsePublishedVersionPreview(input: unknown, eventId: string, th
 	}
 	return value;
 }
+
+/** Immutable request identity shared by account and anonymous version writers. */
+export const versionRequestIdentity = (request: VersionRequest) =>
+	JSON.stringify({
+		mode: request.mode,
+		eventId: request.eventId,
+		expectedHeadId: request.expectedHeadId ?? null,
+		...(request.recover ? { recover: true } : {}),
+		...(request.expectedRecovery ? { expectedRecovery: request.expectedRecovery } : {}),
+		choices: request.choices ?? {},
+		...(request.componentMode
+			? {
+					componentMode: request.componentMode,
+					componentChoices: request.componentChoices ?? {},
+					expectedComponents: request.expectedComponents ?? null
+			  }
+			: {})
+	});
