@@ -24,7 +24,11 @@ export type HistoryFilters = {
 	messages: boolean;
 };
 const choice = (value: string | null, values: readonly string[]) => (value && values.includes(value) ? value : '');
-export function readHistoryFilters(params: URLSearchParams, initialThing = ''): HistoryFilters {
+/** Per-viewer defaults (Settings → History → "Show messages in the timeline"). The URL carries
+ * `messages=on|off` only when the state differs from the viewer's default, so a default of
+ * off still lets the in-panel toggle stick instead of snapping back on the next read. */
+export type HistoryFilterDefaults = { messages?: boolean };
+export function readHistoryFilters(params: URLSearchParams, initialThing = '', defaults?: HistoryFilterDefaults): HistoryFilters {
 	const target = params.get('thing') ?? initialThing;
 	const day = params.get('day') ?? '';
 	const validDay =
@@ -43,10 +47,10 @@ export function readHistoryFilters(params: URLSearchParams, initialThing = ''): 
 		day: validDay ? day : '',
 		compact: params.get('density') === 'compact',
 		realTime: params.get('spacing') === 'time',
-		messages: params.get('messages') !== 'off'
+		messages: params.has('messages') ? params.get('messages') !== 'off' : defaults?.messages ?? true
 	};
 }
-export function writeHistoryFilters(params: URLSearchParams, state: HistoryFilters) {
+export function writeHistoryFilters(params: URLSearchParams, state: HistoryFilters, defaults?: HistoryFilterDefaults) {
 	const result = new URLSearchParams(params);
 	for (const [key, value] of Object.entries({
 		look: state.look === 'list' ? '' : state.look,
@@ -60,7 +64,7 @@ export function writeHistoryFilters(params: URLSearchParams, state: HistoryFilte
 		day: state.day,
 		density: state.compact ? 'compact' : '',
 		spacing: state.realTime ? 'time' : '',
-		messages: state.messages ? '' : 'off'
+		messages: state.messages === (defaults?.messages ?? true) ? '' : state.messages ? 'on' : 'off'
 	})) {
 		if (value) result.set(key, value);
 		else result.delete(key);

@@ -229,6 +229,7 @@ export const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/notifications/read': () => import('../../../app/routes/api/v1/notifications/read/_read'),
   'v1/notifications/record': () => import('../../../app/routes/api/v1/notifications/record/_record'),
   'v1/timeline': () => import('../../../app/routes/api/v1/timeline/_timeline'),
+  'v1/timeline/settings': () => import('../../../app/routes/api/v1/timeline/settings/_settings'),
   'v1/notifications/settings': () => import('../../../app/routes/api/v1/notifications/settings/_settings'),
   'v1/oauth/authorize': () => import('../../../app/routes/api/v1/oauth/authorize/_authorize'),
   'v1/oauth/desktop/authorize': () => import('../../../app/routes/api/v1/oauth/desktop/authorize/_authorize'),

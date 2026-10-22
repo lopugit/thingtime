@@ -137,6 +137,71 @@ persisted; every check is client-side.
   the guarded `timeline-rs` replica, plus
   `node --import tsx --test app/components/Timeline/timelineExportDownload.test.ts app/components/Timeline/timelineVersionControls.test.ts`.
 
+- [ ] History settings, sync hold, per-Thing pause and entry points (2026-10-14):
+  open `/settings/history` at desktop and 375px, reload it, press Back, then
+  open `?settings=history` from any page: the popup shows the same category
+  and its "Open settings page" link lands on `/settings/history`. Rows, in
+  order: Show messages (device only), Pause syncing (account, all devices),
+  Keep history (stored only, "Coming: nothing is deleted yet"), Paused Things
+  (ids linking to `/thing/<id>`, Resume per row, never a fabricated title),
+  Export history. No storage row. Signed out: the "Sign in to manage these
+  account settings" card. Temporary or service account: "History settings
+  need a full account." with no settings request and no toast. Against an
+  origin whose manifest lacks `api.timeline-settings`: "This Thingtime doesn't
+  support history settings yet." with Retry (the well-known manifest is CDN
+  cached for up to five minutes after a deploy). Block the settings GET:
+  inline error + Retry, no Lopu toast on mount.
+- [ ] Hold and resume: on two sessions of one account (home + selected
+  database) create pending rows offline, switch "Pause syncing" on, reconnect:
+  nothing uploads, `/history` and a Thing's History read "Sync paused · n
+  waiting on this device" with a "History settings" link, the Settings row
+  shows the per-queue counts, and from 1600 pending the "Resume soon — this
+  device holds at most 2000 changes." warning appears. Resume: both queues
+  drain within the next pass and the status returns to "Saved to your
+  account". While held, select a pending row: Restore / Undo / Review and
+  combine say "Resume sync to restore or compare this version", Compare with
+  now "Resume sync to compare this version", the Versions-tab strip "Resume
+  sync to name or export this version", a saved note or branch command reads
+  "Saved on this device. Resume sync to save this … to your account.", and
+  Retry sync in Variations is disabled with the Resume sync link. Synced rows
+  keep every control.
+- [ ] Per-Thing pause: on an owned Thing (feed card ⋯, `/thing/<id>` ⋯) at
+  desktop and 390px "Pause draft history" follows History with the ⏸️ / Lucide
+  pause icon; it is absent for other users' Things, from the Drive right-click
+  menu and bulk menus, and while prefs are unavailable. Pause: the verb flips
+  to "Resume draft history" (▶️), the Thing's History shows the orange
+  "Paused" badge, the Settings list shows the id, and the Builder page and
+  definition editors stop capturing drafts ("History paused for this Thing.
+  Edits are not captured on this device; saved versions still record.") while
+  Recover / Dismiss / "Use latest saved version" are disabled with "Paused ·
+  History is paused for this Thing. Resume history to recover or dismiss
+  drafts." Save the definition: the server revision still appears in History.
+  Resume: capture returns and a draft pinned before the pause is still
+  recoverable. Pausing the 201st Thing is refused inline (max 200).
+- [ ] Entry points: an owned `/thing/<id>` shows the owner-only History section
+  collapsed ("Show history" mounts the panel; no Timeline polls before that),
+  with "Open History browser" (`/history?storage=…&thing=<id>`) and "History
+  settings"; other users' Things and diagnostics show no section. The `/history`
+  header and the History modal header link to History settings and the modal
+  closes on navigation. Editing an existing post shows the ghost "History"
+  button beside Undo/Redo/Changes and opens that post's History; new posts,
+  comments and Builder rich-text fields show no History button.
+- [ ] Export: press Export history (online, connected): a
+  `history-export-<ownerId>-<date>.json` file downloads with
+  `kind: "thingtime-history-export"`, `formatVersion: 1`, `ownerId`,
+  `dataPlane`, `storage`, `bounds`, `truncated`, `entries`, `notes`, `names`;
+  it is refused by the single-version import check. The IndexedDB cache size
+  does not grow. Offline or unverified: the button is disabled with "Reconnect
+  to export". Force a 429 with `Retry-After: 2` on the scan: the export waits
+  and completes; four 429s in a row surface the rate-limit message inline.
+  Run `test:timeline` (includes `historyExport.test.ts`,
+  `historyPrefs.test.ts`, `historyPrefsStore.test.ts`,
+  `timelineSettingsRoute.test.ts`, `historyPrefsClient.test.ts`),
+  `test:settings`, `test:things`, `test:api-capabilities` and
+  `test:rate-limit`. The `users.ts` secure-blob round-trip is integration tier:
+  exercise it through `POST /api/v1/timeline/settings` on the guarded
+  `timeline-rs` replica set beyond the injected-collection unit test.
+
 - [ ] With only admission storage available, run an ordinary server Action.
   Preserve its actual result and sealed completion. Block recovery requests:
   desktop and 390px show local retention, and the pending History event survives

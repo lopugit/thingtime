@@ -129,6 +129,12 @@ export class TimelineLocalStore {
 	async pending(): Promise<TimelineEvent[]> {
 		return (await this.pendingWrites()).map(row => row.event);
 	}
+	/** Scope-wide count of rows waiting to upload, from the index alone (no payload loads, no touch). */
+	async pendingCount(): Promise<number> {
+		let count = 0;
+		await this.change([], index => { count = index.filter(item => item.status === 'pending').length; return { put: [], remove: [] }; });
+		return count;
+	}
 	async pendingWrites(): Promise<LocalTimelineRow[]> {
 		const rows = await this.read({ status: 'pending' });
 		const pending = new Map(rows.map(row => [row.event.id, row.event]));

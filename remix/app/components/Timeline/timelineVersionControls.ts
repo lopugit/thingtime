@@ -7,10 +7,11 @@ import { TIMELINE_VERSION_NAME_MAX_CHARS } from '../../timeline/versionNames';
  * Naming needs a synced saved version with content; export also covers synced
  * deletions (the server resolves their `before` content). Both are online only. */
 export type VersionControlState = { name: boolean; export: boolean; title: string };
-export function versionControlState(row: Pick<LocalTimelineRow, 'status' | 'event'>, verified: boolean): VersionControlState {
+/** `held`: the account's sync hold is on, so a pending row will not sync until the viewer resumes. */
+export function versionControlState(row: Pick<LocalTimelineRow, 'status' | 'event'>, verified: boolean, held = false): VersionControlState {
 	const { event } = row;
 	if (event.mode !== 'revision') return { name: false, export: false, title: 'Only saved versions can be named or exported' };
-	if (row.status !== 'accepted') return { name: false, export: false, title: 'Sync this version first' };
+	if (row.status !== 'accepted') return { name: false, export: false, title: held ? 'Resume sync to name or export this version' : 'Sync this version first' };
 	if (!verified) return { name: false, export: false, title: 'Reconnect to name or export versions' };
 	if (event.after === null) return { name: false, export: true, title: 'Only saved versions can be named' };
 	return { name: true, export: true, title: '' };

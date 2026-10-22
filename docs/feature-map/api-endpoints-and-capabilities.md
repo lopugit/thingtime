@@ -1,5 +1,15 @@
 # API endpoints and capabilities
 
+History settings (`api.timeline-settings` 1.0.0, `GET`/`POST /api/v1/timeline/settings`,
+`app/routes/api/v1/timeline/settings/_settings.tsx` with injectable deps, the
+home-pinned `createHistoryPrefsStore` in `api/utils/auth/users.ts`, shared
+`timeline/historyPrefs.ts`, rate key `timeline.settings`) keep the sync hold,
+retention choice and per-Thing pause list on the user Thing's protected
+`secure.meta.historyPrefs` blob; `api.timeline` stays at 1.18.0. Register changes
+in `apiDocs.ts` (both version fields) and run `test:timeline`,
+`test:api-capabilities` and `test:rate-limit`. See
+[history-and-timeline.md](history-and-timeline.md).
+
 Timeline 1.18.0 adds named versions, undo and version export on the existing
 route: the POST command `name-version` (`api/utils/timeline/versionNames.ts`,
 shared `timeline/versionNames.ts`, protected kind `timeline-version-name`),

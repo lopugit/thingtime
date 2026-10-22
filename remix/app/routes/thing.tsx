@@ -43,6 +43,7 @@ import { CARD_STYLES } from '~/theme/card';
 import { ThingAttachmentDetail } from '~/components/Things/ThingAttachmentDetail';
 import { ThingComments } from '~/components/Things/ThingComments';
 import { PersistedThingMenu } from '~/components/Thingtime/ContextMenu/PersistedThingMenu';
+import { ThingHistorySection } from '~/components/Timeline/TimelineHost';
 import { ScheduledTaskPanel } from '~/components/Lopu/ScheduledTaskPanel';
 import { attachmentFromThing, directAttachmentReferences } from '~/components/Things/thingAttachmentDetailCore';
 import { canKeepThingAfterReadFailure, thingDetailSections } from '~/components/Things/thingDetailSectionsCore';
@@ -1067,6 +1068,8 @@ function GenericThingPage() {
 							</Box>
 						) : null}
 
+						{/* Owner-only: the collapsed section mounts no Timeline panel (and so no polls) until "Show history" opens it. */}
+						{thing && isThingOwner && !diagnosticRoute ? <ThingHistorySection key={`${currentUser?.id}:${thing.id}`} thingId={thing.id} thingtime={kinds} /> : null}
 						{thing && isThingOwner && ['scheduled-task', 'reminder'].includes(thing.crystal?.type) ? <ScheduledTaskPanel key={`${currentUser?.id}:${thing.id}`} thingId={thing.id} /> : null}
 						{thing && (!post || !sections.preview) ? dataPlane?.startsWith('custom-')
 							? <Text color={MUTED} fontSize="sm">Comments are available in your home database.</Text>

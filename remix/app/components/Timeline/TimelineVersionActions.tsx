@@ -17,8 +17,11 @@ const UNDO_LABELS = { incoming: 'Before this change', useIncoming: 'Use the earl
 
 /** Mounted by scope/event identity. A retry retains the exact reviewed
  * command; component choices are reviewed after page-content conflicts. */
-export function TimelineVersionActions({ event, onApplied }: { event: TimelineEvent; onApplied: () => void }) {
-	const { connection } = useTimelineSession();
+/** `rowPending`: the version is still only on this device; under the account sync hold the server cannot resolve it, so the controls wait for a resume. */
+export function TimelineVersionActions({ event, rowPending = false, onApplied }: { event: TimelineEvent; rowPending?: boolean; onApplied: () => void }) {
+	const { connection, held } = useTimelineSession();
+	const blocked = held && rowPending;
+	const blockedTitle = 'Resume sync to restore or compare this version';
 	const api = useApi();
 	const [preview, setPreview] = React.useState<PublishedVersionPreview | null>(null);
 	const [choices, setChoices] = React.useState<VersionChoices>({});
@@ -44,7 +47,7 @@ export function TimelineVersionActions({ event, onApplied }: { event: TimelineEv
 		selectedComponents: VersionChoices = {},
 		selectedMode = componentMode
 	) => {
-		if (!connection || pending.current) return;
+		if (!connection || pending.current || blocked) return;
 		pending.current = true;
 		setBusy(true);
 		setLoading(mode);
@@ -258,20 +261,27 @@ export function TimelineVersionActions({ event, onApplied }: { event: TimelineEv
 					</Flex>
 				</>
 			) : (
-				<Flex gap={2} wrap="wrap">
-					<Button size="sm" variant="outline" isLoading={loading === 'restore'} isDisabled={busy && loading !== 'restore'} onClick={() => void compare('restore', {}, {}, 'recorded')}>
-						{event.operation === 'delete' ? 'Recover this Thing…' : 'Restore this version…'}
-					</Button>
-					{event.operation === 'update' && event.mode === 'revision' && event.before && event.after ? (
-						// Undo defaults to current shared components: the recorded default would fork every referenced component into private copies on apply.
-						<Button size="sm" variant="outline" isLoading={loading === 'undo'} isDisabled={busy && loading !== 'undo'} onClick={() => void compare('undo', {}, {}, 'current')}>
-							Undo this change…
+				<>
+					<Flex gap={2} wrap="wrap">
+						<Button size="sm" variant="outline" isLoading={loading === 'restore'} isDisabled={(busy && loading !== 'restore') || blocked} title={blocked ? blockedTitle : undefined} onClick={() => void compare('restore', {}, {}, 'recorded')}>
+							{event.operation === 'delete' ? 'Recover this Thing…' : 'Restore this version…'}
 						</Button>
+						{event.operation === 'update' && event.mode === 'revision' && event.before && event.after ? (
+							// Undo defaults to current shared components: the recorded default would fork every referenced component into private copies on apply.
+							<Button size="sm" variant="outline" isLoading={loading === 'undo'} isDisabled={(busy && loading !== 'undo') || blocked} title={blocked ? blockedTitle : undefined} onClick={() => void compare('undo', {}, {}, 'current')}>
+								Undo this change…
+							</Button>
+						) : null}
+						<Button size="sm" variant="ghost" isLoading={loading === 'merge'} isDisabled={(busy && loading !== 'merge') || !event.after || blocked} title={blocked ? blockedTitle : undefined} onClick={() => void compare('merge', {}, {}, 'recorded')}>
+							Review and combine…
+						</Button>
+					</Flex>
+					{blocked ? (
+						<Text fontSize="xs" color="var(--tt-muted)" mt={2}>
+							{blockedTitle}
+						</Text>
 					) : null}
-					<Button size="sm" variant="ghost" isLoading={loading === 'merge'} isDisabled={(busy && loading !== 'merge') || !event.after} onClick={() => void compare('merge', {}, {}, 'recorded')}>
-						Review and combine…
-					</Button>
-				</Flex>
+				</>
 			)}
 			{error ? (
 				<Text role="alert" fontSize="sm" mt={3} overflowWrap="anywhere">

@@ -10,6 +10,10 @@ const saved = (overrides = {}) => eventFixture('saved', { mode: 'revision', oper
 test('name and export controls follow sync state, mode, content and the live connection', () => {
 	assert.deepEqual(versionControlState({ status: 'accepted', event: saved() }, true), { name: true, export: true, title: '' });
 	assert.deepEqual(versionControlState({ status: 'pending', event: saved() }, true), { name: false, export: false, title: 'Sync this version first' });
+	// Under the account sync hold a pending row says what to do; synced rows and other refusals are unchanged.
+	assert.deepEqual(versionControlState({ status: 'pending', event: saved() }, true, true), { name: false, export: false, title: 'Resume sync to name or export this version' });
+	assert.deepEqual(versionControlState({ status: 'accepted', event: saved() }, true, true), { name: true, export: true, title: '' });
+	assert.equal(versionControlState({ status: 'pending', event: eventFixture('draft') }, true, true).title, 'Only saved versions can be named or exported');
 	assert.deepEqual(versionControlState({ status: 'accepted', event: saved() }, false), { name: false, export: false, title: 'Reconnect to name or export versions' });
 	assert.equal(versionControlState({ status: 'accepted', event: eventFixture('draft') }, true).name, false);
 	assert.equal(versionControlState({ status: 'accepted', event: eventFixture('draft') }, true).export, false);

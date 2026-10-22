@@ -15,6 +15,7 @@ import {
 import { buildComponentsByRef, type ComponentsByRef, type ComponentThingLike } from './WebpageBlocksRenderer';
 import type { WebpageBlock, WebpageCrystal } from './webpageBlocks';
 import { useTimelineDraft } from '~/timeline/useTimelineDraft';
+import { HISTORY_PAUSED_DRAFT_ERROR } from '~/timeline/historyPrefsClient';
 import type { TimelineEvent } from '~/timeline/contract';
 import { useTimelineSession } from '~/timeline/TimelineProvider';
 
@@ -163,7 +164,9 @@ export const mergeSavedWebpage = (prev: ResolvedWebpage | null, thing: LopuSaved
 
 export type UseWebpageDraft = {
 	branch?: { id: string; name: string; locked: boolean; notice: string; canRefresh: () => boolean; componentNotice?: string; useCurrentComponents?: boolean; setUseCurrentComponents?: (value: boolean) => void; retryComponents?: () => void; updateMetadata: (patch: { name?: string; acl?: string[] }) => void };
-	history?: { error: string; saving: boolean; recoverable: TimelineEvent[]; recover: (event: TimelineEvent) => Promise<void>; dismiss: (event: TimelineEvent) => Promise<void> };
+	/** `paused`: Settings → History paused this Thing — edits are not captured on this device (saved versions still
+	 * record). Absent for named-branch editing (useBranchWebpageDraft), whose own recorder keeps capturing. */
+	history?: { error: string; saving: boolean; paused?: boolean; recoverable: TimelineEvent[]; recover: (event: TimelineEvent) => Promise<void>; dismiss: (event: TimelineEvent) => Promise<void> };
 	loading: boolean;
 	error: boolean;
 	resolved: ResolvedWebpage | null;
@@ -401,7 +404,8 @@ export const useWebpageDraft = (target: WebpageTarget | null, options?: UseWebpa
 						...(options?.acl ? { acl: options.acl } : {})
 					});
 					if (!resp?.ok) return { ok: false, error: resp?.error || 'Save failed' };
-					await draftHistory.release(draftEventId);
+					// A capture made before this Thing was paused keeps its pin until history resumes; the save itself is recorded server-side.
+					if (!draftHistory.paused) await draftHistory.release(draftEventId);
 					if (generation !== generationRef.current) return { ok: false, error: 'Page or account changed while saving. Reopen the saved page to continue.' };
 					if (editRevision === editRevisionRef.current) { setDirty(false); dirtyRef.current = false; }
 					const nextUpdatedAt = typeof resp?.thing?.updatedAt === 'string' ? resp.thing.updatedAt : page.updatedAt;
@@ -581,9 +585,11 @@ export const useWebpageDraft = (target: WebpageTarget | null, options?: UseWebpa
 
 	return {
 		history: {
-			error: history.error, saving: history.saving, recoverable: history.recoverable,
+			error: history.error, saving: history.saving, paused: history.paused, recoverable: history.recoverable,
 			dismiss: history.dismissRecovery,
 			recover: async event => {
+				// Refuse before touching the editor: applying a draft while paused would replace the page with no capture to undo it.
+				if (historyRef.current.paused) throw new Error(HISTORY_PAUSED_DRAFT_ERROR);
 				const value = event.after?.value as any;
 				if (event.after?.adapter !== 'webpage-draft' || !Array.isArray(value?.crystal?.blocks)) throw new Error('This draft cannot be opened in the page editor.');
 				if (value.baseUpdatedAt !== (resolvedRef.current?.page?.updatedAt ?? null)) throw new Error('The saved page changed since this draft. Open History to compare before merging it.');

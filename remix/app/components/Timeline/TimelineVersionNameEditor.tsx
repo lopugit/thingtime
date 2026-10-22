@@ -15,7 +15,7 @@ import { normalizeVersionName, versionControlState } from './timelineVersionCont
  * `drafts` outlives this editor (the mobile sheet unmounts the whole panel on
  * Escape), so a typed name is still there when the row is reopened. */
 export function TimelineVersionNameEditor({ row, current, drafts, draftKey }: { row: LocalTimelineRow; current: TimelineVersionName | undefined; drafts: Map<string, string>; draftKey: string }) {
-	const { connection } = useTimelineSession(); const api = useApi();
+	const { connection, held } = useTimelineSession(); const api = useApi();
 	const { event } = row;
 	// A save or refresh knows the record before the history view repaints; the view's own record wins again as soon as it changes.
 	const [override, setOverride] = React.useState<{ name: TimelineVersionName | null } | null>(null);
@@ -38,7 +38,7 @@ export function TimelineVersionNameEditor({ row, current, drafts, draftKey }: { 
 		seen.current = stamp;
 		if (!drafts.has(draftKey)) setValue(live?.name ?? '');
 	}, [live?.revision, live?.updatedAt, live?.name, drafts, draftKey]);
-	const state = versionControlState(row, !!connection?.verified);
+	const state = versionControlState(row, !!connection?.verified, held);
 	const name = normalizeVersionName(value);
 	const unchanged = name === (live?.name ?? '');
 	const change = (next: string) => { setValue(next); if (next === (live?.name ?? '')) drafts.delete(draftKey); else drafts.set(draftKey, next); };

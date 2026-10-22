@@ -68,6 +68,21 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-14 — **Claude (AI)**: History settings. New `api.timeline-settings`
+  1.0.0 (`GET`/`POST /api/v1/timeline/settings`; `api.timeline` stays 1.18.0)
+  stores the account-wide sync hold, the retention choice (stored only —
+  nothing is deleted yet) and the per-Thing draft-capture pause list on the
+  user Thing's protected `secure.meta.historyPrefs` blob through a
+  home-pinned, injectable `createHistoryPrefsStore` (`users.ts`; pause/resume
+  are deltas merged inside the `secureVersion` CAS write, 200-id cap, 64 KiB
+  body cap, `timeline.settings` 30/min, 503 + `Retry-After: 1` on contention).
+  Shared contract `remix/app/timeline/historyPrefs.ts`; Settings → History
+  category, `pause-history`/`resume-history` verbs, Thing-page and editor
+  History entry points, bounded client export. Pausing stops client draft
+  capture in the Builder page and definition editors only; saved versions
+  keep recording. Docs: `docs/unified-timeline.md` (2026-10-14 section),
+  `docs/feature-map/history-and-timeline.md`.
+
 - 2026-10-13 — **Claude (AI)**: Unified Timeline named versions, undo this
   change, compare with now and version export (`api.timeline` 1.18.0): new
   `timeline-version-name` relational records behind the `name-version`

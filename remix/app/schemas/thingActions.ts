@@ -5,6 +5,10 @@ export const THING_ACTIONS = {
   open: { id: 'open', command: 'open', label: 'Open Thing', icon: '🔎', lucide: 'external-link' },
   inspect: { id: 'inspect', command: 'inspect', label: 'View Thing data', icon: '💎', lucide: 'braces' },
   history: { id: 'history', command: 'history', label: 'History', icon: '🕰️', lucide: 'clock' },
+  // Pausing stops CLIENT draft capture for one Thing on the viewer's devices (the
+  // Builder page and definition editors); canonical server revisions keep recording.
+  'pause-history': { id: 'pause-history', command: 'pause-history', label: 'Pause draft history', icon: '⏸️', lucide: 'pause' },
+  'resume-history': { id: 'resume-history', command: 'resume-history', label: 'Resume draft history', icon: '▶️', lucide: 'play' },
   'copy-link': { id: 'copy-link', command: 'copy-link', label: 'Copy link', icon: '🔗', lucide: 'link' },
   rename: { id: 'rename', command: 'rename', label: 'Rename', icon: '✏️', lucide: 'text-cursor-input' },
   edit: { id: 'edit', command: 'edit', label: 'Edit', icon: '✏️', lucide: 'pen-line' },

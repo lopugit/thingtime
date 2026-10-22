@@ -19,13 +19,22 @@ test('menu geometry keeps tall menus and scrollbar edges reachable without offse
 });
 
 test('entity schemas inherit canonical verbs while extending their own sections', () => {
-  const menu = buildThingEntityMenu({ open: true, inspect: true, history: true, 'copy-link': true, rename: true, edit: true, share: true, delete: true, 'send-to-lopu': true },
+  const menu = buildThingEntityMenu({ open: true, inspect: true, history: true, 'pause-history': true, 'resume-history': true, 'copy-link': true, rename: true, edit: true, share: true, delete: true, 'send-to-lopu': true },
     [{ id: 'extension', actions: [{ id: 'flair', command: 'flair', label: 'Flair', icon: '🏷️' }] }]);
   const actions = menu.sections.flatMap(section => section.actions);
   for (const base of Object.values(THING_ACTIONS)) assert.deepEqual(actions.find(action => action.id === base.id), base);
   assert.equal(actions.at(-1)?.command, 'delete');
   assert.ok(actions.some(action => action.command === 'flair'));
   assert.deepEqual(buildThingEntityMenu({}).sections, []);
+  // The pause/resume verbs sit immediately after History in the thing section; a menu offers at most one of them.
+  const commands = menu.sections[0].actions.map(action => action.command);
+  assert.deepEqual(commands.slice(commands.indexOf('history'), commands.indexOf('history') + 3), ['history', 'pause-history', 'resume-history']);
+  for (const verb of ['pause-history', 'resume-history'] as const) {
+    assert.deepEqual(THING_ACTIONS[verb].lucide, verb === 'pause-history' ? 'pause' : 'play');
+    assert.ok(THING_ACTIONS[verb].label.includes('draft history'), 'the label says this pauses draft capture, not server revisions');
+  }
+  const paused = buildThingEntityMenu({ history: true, 'pause-history': false, 'resume-history': true }).sections.flatMap(section => section.actions).map(action => action.command);
+  assert.deepEqual(paused, ['history', 'resume-history']);
 });
 test('Drive right-click and touch menus inherit the same model and retain bulk safety', () => {
   const thing: any = { id: 'watch-upload-test', thingtime: ['post'], author: { id: 'owner' }, acl: ['tt:user'], tags: ['apple-watch'] };
@@ -40,6 +49,9 @@ test('Drive right-click and touch menus inherit the same model and retain bulk s
   assert.ok(!bulk.sections.flatMap(section => section.actions).some(action => action.command === 'history'));
   const other = buildThingsItemMenu({ thing, ownerId: 'another-user', actCount: 1, clipboardCount: 0 });
   assert.ok(!other.sections.flatMap(section => section.actions).some(action => action.command === 'history'));
+  // The per-Thing pause verbs are not offered from Drive, bulk or other users' menus in this slice.
+  for (const model of [menu, bulk, other]) for (const command of ['pause-history', 'resume-history'])
+    assert.ok(!model.sections.flatMap(section => section.actions).some(action => action.command === command), `${command} must not appear in Drive menus`);
   const views = readFileSync(new URL('./ThingsViews.tsx', import.meta.url), 'utf8');
   assert.match(views, /buildThingsItemMenu\(/); assert.doesNotMatch(views, /<MenuList/);
   for (const file of ['../Feed/PostCard.tsx', '../Lopu/RecordingAutomationPage.tsx']) {

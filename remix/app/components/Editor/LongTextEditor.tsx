@@ -290,6 +290,9 @@ export type LongTextEditorProps = {
 	blockTypes?: LongTextBlockTypes;
 	/** Optional owner-scoped history keeps branches across an editor closing/reopening. */
 	history?: EditorHistory;
+	/** The saved Thing being edited, when there is one (edit composers). Adds the "History" button that opens its saved
+	 * Timeline; new-post composers, comments and inline Builder editors pass nothing and get no button. */
+	thingId?: string | null;
 };
 
 type SequencedLongTextValue = {
@@ -1075,7 +1078,7 @@ const EditableLongTextEditor = React.forwardRef<LongTextEditorHandle, LongTextEd
 				onValueChange={(next, sequence, doc, label) => handleChange(next, { ...sourceRevision, configKey }, sequence, doc, label)}
 			/>
 			{!props.readonly ? (
-				<EditorHistoryControls history={history} act={act} preferences={carryPreferences} onPreferences={setCarryPreferences} />
+				<EditorHistoryControls history={history} act={act} preferences={carryPreferences} onPreferences={setCarryPreferences} thingId={props.thingId ?? null} />
 			) : null}
 		</Box>
 	);

@@ -2,7 +2,7 @@ import { SUBSPACE_MEDIA_REQUIREMENTS } from '../utils/subspaceMediaCapabilities'
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { apiEndpointDocs, apiRouteCapabilityId, createApiCapabilitiesManifest } from './apiDocs';
+import { apiEndpointDocs, apiRouteCapabilityId, apiV1RouteKeys, createApiCapabilitiesManifest } from './apiDocs';
 import { routeModules } from '../../server/routes/api/[...]';
 import { thingtimeCapabilityManifest } from '../api/utils/capabilities/thingtimeCapabilities';
 import { capabilitySatisfies } from '../api/utils/capabilities/capabilityContract';
@@ -13,6 +13,18 @@ test('Timeline synchronization is registered and versioned on both capability ma
 	assert.equal(createApiCapabilitiesManifest().features['api.timeline'], '1.18.0');
 	assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.timeline'].version, '1.18.0');
 	assert.equal(typeof routeModules['v1/timeline'], 'function');
+	for (const version of [undefined, '0.9.0', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.0.0'), false);
+});
+
+test('History settings are registered and versioned on both manifests without bumping Timeline', () => {
+	assert.equal(createApiCapabilitiesManifest().features['api.timeline-settings'], '1.0.0');
+	const wellKnown = thingtimeCapabilityManifest('https://thingtime.test');
+	assert.equal(wellKnown.features['api.timeline-settings'].version, '1.0.0');
+	assert.ok(wellKnown.operations.some((operation) => operation.feature === 'api.timeline-settings' && operation.path === '/api/v1/timeline/settings' && operation.methods.includes('GET') && operation.methods.includes('POST')));
+	assert.ok(apiV1RouteKeys.includes('v1/timeline/settings'));
+	assert.equal(typeof routeModules['v1/timeline/settings'], 'function');
+	assert.equal(createApiCapabilitiesManifest().features['api.timeline'], '1.18.0');
+	assert.equal(capabilitySatisfies(createApiCapabilitiesManifest().features['api.timeline-settings'], '1.0.0'), true);
 	for (const version of [undefined, '0.9.0', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.0.0'), false);
 });
 

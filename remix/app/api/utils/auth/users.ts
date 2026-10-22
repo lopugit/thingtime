@@ -1,7 +1,7 @@
 import { randomUUID as lopuSettingsRevision } from 'node:crypto';
 import { LopuPromptConflictError, validateLopuInstructions, type LopuInstructionSettings } from '../lopu/promptSettingsCore';
 import { createHash } from 'node:crypto';
-import { Binary, ObjectId } from 'mongodb';
+import { Binary, ObjectId, type Collection } from 'mongodb';
 
 import {
 	ADMIN_SNAPSHOT_LOOKAHEAD_LIMIT,
@@ -22,8 +22,9 @@ import {
 // Identity is control-plane: user things ALWAYS live on the home deployment
 // DB, regardless of any active data-plane endpoint override (see endpoint.ts) —
 // aliased so every things access in this file is home-pinned.
-import { getHomeThingsCollection as getThingsCollection, getUsersCollection, withHomeMongoTransaction } from '../mongodb/collections';
+import { getHomeThingsCollection as getThingsCollection, getHomeThingsCollection, getUsersCollection, withHomeMongoTransaction } from '../mongodb/collections';
 import { ACL_ALL, COLLECTION_SCHEMA_VERSIONS, MAX_BIO_CHARS, MAX_DISPLAY_NAME_CHARS, MAX_PROFILE_URL_CHARS } from '~/schemas/registry';
+import { applyHistoryPrefsPatch, parseHistoryPrefs, type HistoryPrefs, type HistoryPrefsPatch } from '~/timeline/historyPrefs';
 import { AttachmentBindingError, reconcileReadyProfileAttachmentsToUser, type ProfileAttachmentRefs } from '../attachments/attachmentStore';
 import { effectiveProfileMediaUrl, linkedProfileMediaUrl, profileAttachmentIdFromRecord } from '~/utils/profileMediaUrl';
 import { isAdminDoc, isEnvAdmin } from './admin';
@@ -634,8 +635,10 @@ export const insertUser = async (
 // exceed realistic burst width
 const SECURE_CAS_ATTEMPTS = 20;
 type SecureMutateResult = 'mutated' | 'missing' | 'contended';
-const mutateUserThingSecure = async (userId: string, mutate: (secure: SecurePayload) => void): Promise<SecureMutateResult> => {
-	const things = await getThingsCollection();
+// The CAS loop against an explicit collection handle: injectable stores (the
+// history prefs store below, tests) pass their own; the wrapper keeps every
+// existing caller on the module's home-pinned things alias.
+export const mutateUserThingSecureIn = async (things: Collection, userId: string, mutate: (secure: SecurePayload) => void): Promise<SecureMutateResult> => {
 	const base = { shareId: String(userId), thingtime: 'user' } as any;
 	for (let attempt = 0; attempt < SECURE_CAS_ATTEMPTS; attempt++) {
 		const thing = await things.findOne(base, { projection: { secure: 1, secureVersion: 1 } });
@@ -657,6 +660,8 @@ const mutateUserThingSecure = async (userId: string, mutate: (secure: SecurePayl
 	}
 	return 'contended';
 };
+const mutateUserThingSecure = async (userId: string, mutate: (secure: SecurePayload) => void): Promise<SecureMutateResult> =>
+	mutateUserThingSecureIn(await getThingsCollection(), userId, mutate);
 
 // Finalize the storage-field handoff after the canonical subscription
 // override has been persisted. This uses the same CAS retry as every secure
@@ -684,7 +689,7 @@ export const removeLegacyUserStorageFields = async (userId: string): Promise<voi
 // Thrown by the secure-blob setters when a things-era write loses every CAS
 // round (never persisted). Routes propagate it as a 5xx so the caller retries,
 // rather than the write silently reporting success.
-class SecureWriteContendedError extends Error {
+export class SecureWriteContendedError extends Error {
 	constructor(userId: string) {
 		super(`secure blob write contended for user ${userId} — mutation did not persist`);
 		this.name = 'SecureWriteContendedError';
@@ -802,6 +807,49 @@ export const setUserNotificationPrefs = async (userId: string, patch: Record<str
 	const res = await (await getUsersCollection()).updateOne({ _id: new ObjectId(userId) }, { $set: sets });
 	return res.matchedCount > 0;
 };
+
+// History preferences (meta.historyPrefs: { syncHold, retention, pausedThingIds }
+// — see ~/timeline/historyPrefs.ts). Dual-era like the notification prefs, but
+// built from INJECTED collection getters so the store is home-pinned by
+// construction (the `user` kind contract in mongodb/collections.ts) instead of
+// by whichever alias a copied route happens to import; a custom data-plane
+// selection can never read defaults or write to the wrong store. Pause/resume
+// are deltas merged inside the CAS closure, so two devices pausing different
+// Things never clobber each other; the legacy $set fallback recomputes the same
+// union from the legacy read. Never projected by toPublicUser.
+export type HistoryPrefsStore = {
+	get(userId: string): Promise<HistoryPrefs>;
+	/** `matched: false` = no store holds the account. Contention throws SecureWriteContendedError; a cap overflow throws the merge's RangeError before any write. */
+	set(userId: string, patch: HistoryPrefsPatch): Promise<{ matched: true; prefs: HistoryPrefs } | { matched: false }>;
+};
+export const createHistoryPrefsStore = (deps: { things: () => Promise<Collection>; users: () => Promise<Collection> }): HistoryPrefsStore => ({
+	get: async (userId) => {
+		const thing = await (await deps.things()).findOne({ shareId: String(userId), thingtime: 'user' } as any, { projection: { secure: 1 } });
+		if (thing) return parseHistoryPrefs(unpackSecure((thing as any).secure).meta?.historyPrefs);
+		if (!ObjectId.isValid(userId)) return parseHistoryPrefs(undefined);
+		const doc = await (await deps.users()).findOne({ _id: new ObjectId(userId) }, { projection: { 'meta.historyPrefs': 1 } });
+		return parseHistoryPrefs(doc?.meta?.historyPrefs);
+	},
+	set: async (userId, patch) => {
+		const merged: { prefs?: HistoryPrefs } = {};
+		const result = await mutateUserThingSecureIn(await deps.things(), userId, (secure) => {
+			merged.prefs = applyHistoryPrefsPatch(parseHistoryPrefs(secure.meta!.historyPrefs), patch);
+			secure.meta!.historyPrefs = merged.prefs;
+		});
+		if (result === 'mutated') return { matched: true, prefs: merged.prefs! };
+		if (result === 'contended') throw new SecureWriteContendedError(userId);
+		if (!ObjectId.isValid(userId)) return { matched: false };
+		const users = await deps.users();
+		const doc = await users.findOne({ _id: new ObjectId(userId) }, { projection: { 'meta.historyPrefs': 1 } });
+		if (!doc) return { matched: false };
+		const prefs = applyHistoryPrefsPatch(parseHistoryPrefs(doc.meta?.historyPrefs), patch);
+		const res = await users.updateOne({ _id: new ObjectId(userId) }, { $set: { 'meta.historyPrefs': prefs, updatedAt: new Date() } });
+		return res.matchedCount > 0 ? { matched: true, prefs } : { matched: false };
+	}
+});
+export const historyPrefsStore = createHistoryPrefsStore({ things: getHomeThingsCollection, users: getUsersCollection });
+export const getUserHistoryPrefs = historyPrefsStore.get;
+export const setUserHistoryPrefs = historyPrefsStore.set;
 
 // Messenger read-receipts privacy flag (meta.readReceiptsEnabled) — mirrors the
 // 2FA accessors above. DEFAULT ON: absent means enabled, so only an explicit

@@ -11,12 +11,13 @@ import { mergeComponentVersions } from '../../timeline/componentMerge';
 import { TimelineMergePagePreview } from './TimelineMergePagePreview';
 import { TimelineVersionComparison } from './TimelineVersionComparison';
 
-type Props = { target: TimelineBranchEntry; incoming: TimelineEvent; onClose: () => void };
+/** `incomingPending`: the selected version is still only on this device. Under the account sync hold the server cannot know it yet. */
+type Props = { target: TimelineBranchEntry; incoming: TimelineEvent; incomingPending?: boolean; onClose: () => void };
 export function TimelineBranchMerge(props: Props) {
-	const { connection, identity } = useTimelineSession();
+	const { connection, identity, held } = useTimelineSession();
 	if (!connection) return null;
 	const key = JSON.stringify([identity, timelineScopeKey(connection.scope), props.target.head.id, props.target.head.revision, props.incoming.id]);
-	return <BranchMergeReview key={key} {...props} connection={connection} />;
+	return <BranchMergeReview key={key} {...props} connection={connection} blocked={held && !!props.incomingPending} />;
 }
 
 /** A review is bound to one scope and exact pair of versions. Applying first
@@ -25,8 +26,11 @@ function BranchMergeReview({
 	target,
 	incoming,
 	onClose,
-	connection
-}: Props & { connection: NonNullable<ReturnType<typeof useTimelineSession>['connection']> }) {
+	connection,
+	blocked
+}: Props & { connection: NonNullable<ReturnType<typeof useTimelineSession>['connection']>; blocked: boolean }) {
+	const blockedRef = React.useRef(blocked);
+	blockedRef.current = blocked;
 	const api = useApi();
 	const apiRef = React.useRef(api);
 	apiRef.current = api;
@@ -46,7 +50,8 @@ function BranchMergeReview({
 	const working = React.useRef(false);
 	const controller = React.useRef<AbortController | null>(null);
 	const compare = async (selected: VersionChoices = {}, selectedComponents: VersionChoices = {}) => {
-		if (working.current || proposal.current) return;
+		// A pending version under the sync hold is not on the server: the preview would 404, so the review waits for a resume.
+		if (working.current || proposal.current || blockedRef.current) return;
 		working.current = true;
 		setBusy(true);
 		setError('');
@@ -197,12 +202,19 @@ function BranchMergeReview({
 					Your merged version is kept in History. If the branch changed before syncing, pull its latest version and compare again.
 				</Text>
 			) : null}
+			{blocked && !preview && !queued ? (
+				<Text role="status" fontSize="sm" color="var(--tt-muted)" mb={3}>
+					Resume sync to review and combine
+				</Text>
+			) : null}
 			<Flex gap={2} wrap="wrap">
 				{!queued ? (
 					<Button
 						size="sm"
 						isLoading={busy}
+						title={blocked && !preview ? 'Resume sync to review and combine' : undefined}
 						isDisabled={
+							(blocked && !preview) ||
 							preview?.conflicts.some((conflict) => !choices[JSON.stringify(conflict.path)]) ||
 							(!preview?.conflicts.length && componentMerge?.conflicts.some((conflict) => !componentChoices[JSON.stringify(conflict.path)]))
 						}

@@ -149,6 +149,9 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   // name into a 4 MiB file; bounded separately from ordinary history reads
   'timeline.export': { limit: 30, windowMs: 60_000, enabled: true },
   'notifications.settings': { limit: 30, windowMs: 60_000, enabled: true },
+  // history settings (POST /api/v1/timeline/settings) — a rare interactive
+  // toggle/pause list write; reads share timeline.read
+  'timeline.settings': { limit: 30, windowMs: 60_000, enabled: true },
   'notifications.devices': { limit: 30, windowMs: 60_000, enabled: true },
   // one-click email unsubscribe — anonymous (keys by IP), tokens are HMACs so
   // this is hygiene against link-scanner hammering, not a security boundary
