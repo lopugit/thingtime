@@ -102,7 +102,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
-- 2026-10-22: Add a dedicated editable device sync overview, device double-click/keyboard navigation to saved cloud roots, and collapsed defaults in both device settings presentations. Real-account acceptance pending. **Codex (AI)**
+- 2026-10-22: Add a dedicated editable device sync overview, device double-click/keyboard navigation to saved cloud roots, and collapsed defaults in both device settings presentations. Real-account acceptance pending. [Details](../PRs/1088-codex-device-sync-browser-add-dedicated-device-sync-ui-and-browse-saved-device-files.md). **Codex (AI)**
 
 - 2026-10-21: Add closed upload-batch failure counts to rotated local diagnostics and show negotiated folder-batch/reservation observations through the existing editable readiness status. No retry, authority, receipt or scheduling changes; historical member codes remain unknown. [Details](../PRs/1084-codex-sync-recovery-diagnostics-expose-closed-sync-recovery-diagnostics.md). **Codex (AI)**
 
