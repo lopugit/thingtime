@@ -12943,3 +12943,5 @@ separate from deterministic discovery/lease tests.
 - Unfiled files: verify only one page loads on mount; each Load more makes one
   further request, displays existing results during load/error, rejects repeated
   cursors and cancels pending reads on account change/unmount.
+
+- Device sync correction: a fresh dedicated sync page keeps Manage sync connections collapsed; the Thing page exposes Parent paths with raw Thing data switched off. Explicit scanning remains required.

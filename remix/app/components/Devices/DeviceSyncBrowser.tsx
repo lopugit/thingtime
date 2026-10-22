@@ -149,7 +149,7 @@ export function DeviceSyncPanel({
 	pairedDeviceIds?: readonly string[];
 	ownedDeviceIds?: readonly string[];
 }) {
-	const [managing, setManaging] = React.useState(true);
+	const [managing, setManaging] = React.useState(false);
 	return (
 		<Box minWidth={0}>
 			<DeviceSyncBrowser deviceId={deviceId} />

@@ -57,7 +57,8 @@ closed scalar parser; user layouts are not rewritten.
 
 ## Verification at initial publication
 
-- 177 upload/backend/manifest checks passed.
+- 177 upload/backend/manifest checks passed. All 69 capability-contract tests passed
+ after updating stale exact-version assertions exposed by CI.
 - 325 Electron tests passed.
 - 630 file-sync tests: 629 passed initially; the sole failure was an outdated exact
  capability-version expectation. Updated it and all 11 configuration tests passed;
@@ -70,7 +71,11 @@ closed scalar parser; user layouts are not rewritten.
  multi-parent paths, no scan on mount, bounded Unfiled paging, and independent
  heading/repeated-field/breadcrumb edits saved and reloaded.
 
-Installed/native process-stop and production acceptance remain pending. Synthetic
+Installed checks confirmed a clean Things root, device folder navigation, retained
+paused home settings, and real Electron CPU/RSS plus native service inventory.
+They caught an expanded sync editor and parent paths hidden behind the raw-data
+toggle; both were corrected before final delivery. Native process-stop control
+and production acceptance remain pending. Synthetic
 native UI evidence is not proof of stopping a live launchd service. Home sync stays
 paused; its removed grant is not restored. No personal transfer or local deletion
 is part of this correction. The exact producer of the legacy search.svg remains

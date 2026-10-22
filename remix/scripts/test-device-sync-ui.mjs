@@ -138,9 +138,9 @@ if (!process.env.TT_DEVICE_SYNC_UI_WORKER) {
 			await page.getByRole('heading', { name: 'Device sync & backup', exact: true }).waitFor();
 			await page.getByRole('link', { name: 'Activity manager', exact: true }).waitFor();
 			const manage = page.locator('summary').filter({ hasText: 'Manage sync connections' });
-			assert.equal(await manage.locator('..').evaluate((el) => el.open), true);
-			await manage.click();
 			assert.equal(await manage.locator('..').evaluate((el) => el.open), false);
+			await manage.click();
+			assert.equal(await manage.locator('..').evaluate((el) => el.open), true);
 			await manage.click();
 			assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
 			await page.screenshot({ path: join(evidence, label + '-settings.png'), fullPage: true });

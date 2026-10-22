@@ -984,7 +984,7 @@ function GenericThingPage() {
 							</Flex>
 						) : null}
 
-						{sections.detail && thing ? <ThingParentPaths thing={thing as any} /> : null}
+						{thing ? <ThingParentPaths thing={thing as any} /> : null}
 						{sections.preview && thing && (attachment || thing.thingtime?.includes('file')) ? <ThingFileLocation key={thing.id} thing={thing as any} /> : null}
 						{sections.preview && attachment ? <ThingAttachmentDetail attachment={attachment} references={references} /> : null}
 
