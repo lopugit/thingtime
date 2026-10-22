@@ -104,6 +104,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### 2026-10-22 — General local compressor
 
+[PR 1164 validation and release notes](../PRs/1164-general-media-compressor-local-images-and-immediate-file-controls.md)
+
 - Add local image compression with bundled WASM codecs, transparency/animation safeguards and truthful size receipts alongside WebCodecs video compression.
 - Show file selection on load, keep the selected file while settings change, and compose the new tool from individually editable Builder elements.
 - Version intrinsic media storage/install contracts and extend the isolated desktop/mobile browser regression; scope WebAssembly compilation permission to the network-disabled media worker.
