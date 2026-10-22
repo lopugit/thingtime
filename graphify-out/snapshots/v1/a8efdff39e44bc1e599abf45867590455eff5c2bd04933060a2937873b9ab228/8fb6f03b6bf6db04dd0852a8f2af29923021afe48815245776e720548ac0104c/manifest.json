@@ -2165,7 +2165,7 @@
     "semantic_hash": "70a4a9dbd0d87d97133f4e04742017cf"
   },
   "remix/app/api/utils/things/things.ts": {
-    "mtime": 1788258824.8096123,
+    "mtime": 1788259208.3449492,
     "ast_hash": "4fe0a0e419ebbb3ac1da8aad482f313f",
     "semantic_hash": ""
   },
@@ -2325,8 +2325,8 @@
     "semantic_hash": "f33d517f220a280930d5f773399b28a0"
   },
   "remix/app/docs/apiDocs.ts": {
-    "mtime": 1788258315.5192778,
-    "ast_hash": "dc3f17aa84c8c73bb19ccb18fb0d38f1",
+    "mtime": 1788259208.3016288,
+    "ast_hash": "4ede93c329adb8482805db5f24158264",
     "semantic_hash": ""
   },
   "remix/app/routes/docs/api.tsx": {
@@ -3270,8 +3270,8 @@
     "semantic_hash": "3690d11b40344928dd512587d7c1e06b"
   },
   "TESTING.md": {
-    "mtime": 1788258315.5706575,
-    "ast_hash": "240d43e88a60992034ef0bb8e95ec185",
+    "mtime": 1788259208.256367,
+    "ast_hash": "09022d12bd9445e50afe08cafffb1e1f",
     "semantic_hash": ""
   },
   "claude-todo/12-everything-is-a-thing-collections.md": {
@@ -5530,7 +5530,7 @@
     "semantic_hash": "bc60ff0f9914d6aa1494f8700bf3eeab"
   },
   "remix/app/api/utils/things/relatedProjection.test.ts": {
-    "mtime": 1788258824.8098412,
+    "mtime": 1788259208.344152,
     "ast_hash": "3bd12da71df352dec18be3dc391f7e13",
     "semantic_hash": ""
   },
@@ -6150,9 +6150,9 @@
     "semantic_hash": "6a67f6bb81ac7b4d1e0a7135ba9271de"
   },
   "integrations/ChatGPT/plugin/thingtime-chatgpt/.codex-plugin/plugin.json": {
-    "mtime": 1788257612.0320413,
-    "ast_hash": "a851b74ce9a7d1f17e570adb569fe442",
-    "semantic_hash": "a851b74ce9a7d1f17e570adb569fe442"
+    "mtime": 1788259208.2961528,
+    "ast_hash": "0f8d88dbdb2093e79c696faa0c80fbd4",
+    "semantic_hash": ""
   },
   "integrations/ChatGPT/plugin/thingtime-chatgpt/.mcp.json": {
     "mtime": 1788257612.0320947,
@@ -6160,14 +6160,14 @@
     "semantic_hash": "437ed30eadd7d69525867e49876a816f"
   },
   "remix/app/api/utils/chatgpt/plugin.test.ts": {
-    "mtime": 1788257612.0461593,
-    "ast_hash": "37c509cec6de19d6a9d84859ff0a572a",
-    "semantic_hash": "37c509cec6de19d6a9d84859ff0a572a"
+    "mtime": 1788259208.2980793,
+    "ast_hash": "22b7d6c97b08f5930d377a51410ef29d",
+    "semantic_hash": ""
   },
   "remix/app/api/utils/chatgpt/plugin.ts": {
-    "mtime": 1788257612.0463102,
-    "ast_hash": "bcb2cf9ab7d204582d21feb89f3a2c30",
-    "semantic_hash": "bcb2cf9ab7d204582d21feb89f3a2c30"
+    "mtime": 1788259208.298635,
+    "ast_hash": "b463ba498e11a6697657982920b65ab5",
+    "semantic_hash": ""
   },
   "remix/app/api/utils/chatgpt/pluginCore.test.ts": {
     "mtime": 1788257612.0464764,
@@ -6175,9 +6175,9 @@
     "semantic_hash": "87745331f0ab998e745353cdebd9de5c"
   },
   "remix/app/api/utils/chatgpt/pluginCore.ts": {
-    "mtime": 1788257612.0466113,
-    "ast_hash": "023d8630cdeff60372643951f675b3d3",
-    "semantic_hash": "023d8630cdeff60372643951f675b3d3"
+    "mtime": 1788259208.2990928,
+    "ast_hash": "acd51a21c8b904db165f331edaeb2cba",
+    "semantic_hash": ""
   },
   "remix/app/routes/api/v1/integrations/chatgpt/mcp/_mcp.tsx": {
     "mtime": 1788257612.1082613,
@@ -6210,19 +6210,19 @@
     "semantic_hash": "b2b2c936e63c166970366f48a29858d2"
   },
   "integrations/ChatGPT/plugin/thingtime-chatgpt/README.md": {
-    "mtime": 1788257612.0321755,
-    "ast_hash": "0b170583fc3d98e9865a969af03462dc",
-    "semantic_hash": "0b170583fc3d98e9865a969af03462dc"
+    "mtime": 1788259208.2967253,
+    "ast_hash": "9c113b86032a12636e31a9c9b1d35f15",
+    "semantic_hash": ""
   },
   "integrations/ChatGPT/plugin/thingtime-chatgpt/SUBMISSION.md": {
-    "mtime": 1788257612.0323498,
-    "ast_hash": "1e94b47a68325beab4144a1542897c1a",
-    "semantic_hash": "1e94b47a68325beab4144a1542897c1a"
+    "mtime": 1788259208.2971883,
+    "ast_hash": "5333f5675bc511ad21115a7944305289",
+    "semantic_hash": ""
   },
   "integrations/ChatGPT/plugin/thingtime-chatgpt/skills/thingtime/SKILL.md": {
-    "mtime": 1788257612.032471,
-    "ast_hash": "3d2a34c34592ff3f1ef19d321e89a7ce",
-    "semantic_hash": "3d2a34c34592ff3f1ef19d321e89a7ce"
+    "mtime": 1788259208.2975547,
+    "ast_hash": "3c2215174333922a9003351ef984d8a6",
+    "semantic_hash": ""
   },
   "timeline/21-08-2026/INTEGRATION_ORDER.md": {
     "mtime": 1788257612.2604473,
