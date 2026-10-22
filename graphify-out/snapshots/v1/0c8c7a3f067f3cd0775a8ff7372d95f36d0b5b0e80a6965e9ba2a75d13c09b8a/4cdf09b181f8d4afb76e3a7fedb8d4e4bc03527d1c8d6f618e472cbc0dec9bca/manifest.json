@@ -3000,21 +3000,21 @@
     "semantic_hash": ""
   },
   "electron/lib/folder-sync-diagnostics.cjs": {
-    "mtime": 1792497752.0216866,
-    "seen": 1792510818.0180511,
-    "ast_hash": "573112854fc15060c1bf3f5d8b3b7d9e",
+    "mtime": 1792524501.7144952,
+    "seen": 1792524927.609864,
+    "ast_hash": "f5ac31c23adc1b767aa9d32833369d6d",
     "semantic_hash": ""
   },
   "electron/lib/folder-sync.cjs": {
-    "mtime": 1792509865.8820207,
-    "seen": 1792510818.018053,
-    "ast_hash": "d76ce1bcebf3c7748eb23154727c526a",
+    "mtime": 1792524785.7623088,
+    "seen": 1792524927.609868,
+    "ast_hash": "a09397034c089c0366c6b9bbf44579b2",
     "semantic_hash": ""
   },
   "electron/lib/folder-upload.cjs": {
-    "mtime": 1792482540.7378747,
-    "seen": 1792510818.0180538,
-    "ast_hash": "0ef6eb2d789633b6e39d37d1c52c5baf",
+    "mtime": 1792516654.625191,
+    "seen": 1792519144.3470988,
+    "ast_hash": "3835da035f2030588bd856df49869a65",
     "semantic_hash": ""
   },
   "electron/lib/github-release-catalog.cjs": {
@@ -3240,9 +3240,9 @@
     "semantic_hash": ""
   },
   "electron/scripts/test-folder-upload-native.mjs": {
-    "mtime": 1792482666.153323,
-    "seen": 1792510818.018107,
-    "ast_hash": "2b3ab85a8203778a5148b78d4b87f57f",
+    "mtime": 1792522040.0212946,
+    "seen": 1792523029.10972,
+    "ast_hash": "5fbf4b04a3bf7be64f777b5104e92a4b",
     "semantic_hash": ""
   },
   "electron/scripts/test-folder-upload-origin.mjs": {
@@ -3444,21 +3444,21 @@
     "semantic_hash": ""
   },
   "electron/test/folder-sync-diagnostics.test.cjs": {
-    "mtime": 1792497290.5486367,
-    "seen": 1792510818.018154,
-    "ast_hash": "f1fc398f1eb4ddc2d69edf8bf27ed139",
+    "mtime": 1792524576.04972,
+    "seen": 1792524927.612546,
+    "ast_hash": "c12843f49929c32de3cc75211a36e413",
     "semantic_hash": ""
   },
   "electron/test/folder-sync.test.cjs": {
-    "mtime": 1792510097.7752893,
-    "seen": 1792510818.018155,
-    "ast_hash": "84f83259c5e8f7e31862aee53dd5d72e",
+    "mtime": 1792524713.492873,
+    "seen": 1792524927.612548,
+    "ast_hash": "83ccdacf90fbed4f220bfc48b6eba07f",
     "semantic_hash": ""
   },
   "electron/test/folder-upload.test.cjs": {
-    "mtime": 1792482666.1530173,
-    "seen": 1792510818.018156,
-    "ast_hash": "66e9cf72afb3c7516c3f9eed42254c3d",
+    "mtime": 1792516743.5797105,
+    "seen": 1792519144.351239,
+    "ast_hash": "36bb3757a3673b0d5cba9a8b6770458b",
     "semantic_hash": ""
   },
   "electron/test/github-release-catalog.test.cjs": {
@@ -4350,9 +4350,9 @@
     "semantic_hash": ""
   },
   "macos/ThingtimeNode/Sources/ThingtimeNodeCore/ThingtimeAPIClient.swift": {
-    "mtime": 1792509556.078056,
-    "seen": 1792510818.0183702,
-    "ast_hash": "6ca092d907e6b63737b4794312c96006",
+    "mtime": 1792524521.148712,
+    "seen": 1792524927.61836,
+    "ast_hash": "1e7b974b665b54cb7a383b4c16c0a5d8",
     "semantic_hash": ""
   },
   "macos/ThingtimeNode/Sources/ThingtimeNodeCore/XPCContract.swift": {
@@ -4524,9 +4524,9 @@
     "semantic_hash": ""
   },
   "macos/ThingtimeNode/Tests/ThingtimeNodeCoreTests/ThingtimeAPIClientTests.swift": {
-    "mtime": 1792509556.0788994,
-    "seen": 1792510818.018409,
-    "ast_hash": "0d5617940f80a2616d438fa86057d125",
+    "mtime": 1792526583.6400735,
+    "seen": 1792526954.540756,
+    "ast_hash": "b707a9de0710928f1494bea2bc1a0c6f",
     "semantic_hash": ""
   },
   "macos/ThingtimeNode/Tests/ThingtimeNodeCoreTests/WireCodecTests.swift": {
@@ -12312,9 +12312,9 @@
     "semantic_hash": ""
   },
   "remix/app/components/Devices/SyncProgressViewer.tsx": {
-    "mtime": 1792470405.662454,
-    "seen": 1792510818.020279,
-    "ast_hash": "b13ad4b94990222fb39197184939a65e",
+    "mtime": 1792522258.3278058,
+    "seen": 1792523029.224662,
+    "ast_hash": "a09864449fade58bac373f2ab664a781",
     "semantic_hash": ""
   },
   "remix/app/components/Devices/SyncUploadPriorities.tsx": {
@@ -12324,9 +12324,9 @@
     "semantic_hash": ""
   },
   "remix/app/components/Devices/TransferSpeedTrackers.tsx": {
-    "mtime": 1792413580.5221574,
-    "seen": 1792510818.020282,
-    "ast_hash": "7d83ef3d3e7dd39962acee62d90a654b",
+    "mtime": 1792516680.1782143,
+    "seen": 1792519144.423326,
+    "ast_hash": "5fe4857eb7b8bd203056b6f7ba7b2d1c",
     "semantic_hash": ""
   },
   "remix/app/components/Devices/WatchDeviceDetails.tsx": {
@@ -12492,15 +12492,15 @@
     "semantic_hash": ""
   },
   "remix/app/components/Devices/syncProgressBlocks.test.ts": {
-    "mtime": 1792471165.706915,
-    "seen": 1792510818.0204968,
-    "ast_hash": "87ca682e9e3fac9d00b5de28fbe9a20d",
+    "mtime": 1792522302.471092,
+    "seen": 1792523029.226897,
+    "ast_hash": "56840623b2a489be2ed6dfdcfc5b09bf",
     "semantic_hash": ""
   },
   "remix/app/components/Devices/syncProgressBlocks.ts": {
-    "mtime": 1792471165.6715665,
-    "seen": 1792510818.020498,
-    "ast_hash": "0b3163244cc87db0abccc42b911867d6",
+    "mtime": 1792522258.3270328,
+    "seen": 1792523029.226899,
+    "ast_hash": "e901f948aff0b3751dab3c14a169495b",
     "semantic_hash": ""
   },
   "remix/app/components/Devices/transferSpeedBlocks.test.ts": {
@@ -16206,15 +16206,15 @@
     "semantic_hash": ""
   },
   "remix/app/fileSync/cloudTransport.test.ts": {
-    "mtime": 1792510530.3967607,
-    "seen": 1792510818.021376,
-    "ast_hash": "c01243842ed1d01d9a270209dee41db1",
+    "mtime": 1792517050.5017452,
+    "seen": 1792519144.4504,
+    "ast_hash": "387c034ee5caae82f17156ec891b2011",
     "semantic_hash": ""
   },
   "remix/app/fileSync/cloudTransport.ts": {
-    "mtime": 1792510678.8884838,
-    "seen": 1792510818.021378,
-    "ast_hash": "5770cb266d21322a12aa34dbeb9eb9b4",
+    "mtime": 1792517050.500668,
+    "seen": 1792519144.450402,
+    "ast_hash": "9234ebf7787f8184c98099e546351b89",
     "semantic_hash": ""
   },
   "remix/app/fileSync/cloudWrite.ts": {
@@ -16290,9 +16290,9 @@
     "semantic_hash": ""
   },
   "remix/app/fileSync/contentFingerprint.ts": {
-    "mtime": 1792510678.9084327,
-    "seen": 1792510818.021396,
-    "ast_hash": "d1f485b1b602eb433acc41ba4ee4cdb8",
+    "mtime": 1792516654.6258013,
+    "seen": 1792519144.4508932,
+    "ast_hash": "70e90f35704bd6d11e8a5d7cd7cfdf44",
     "semantic_hash": ""
   },
   "remix/app/fileSync/desktopFolders.client.test.ts": {
@@ -16374,9 +16374,9 @@
     "semantic_hash": ""
   },
   "remix/app/fileSync/foregroundSync.ts": {
-    "mtime": 1792510678.961809,
-    "seen": 1792510818.021415,
-    "ast_hash": "e85766b657e66627942ea434c016d99b",
+    "mtime": 1792522040.020459,
+    "seen": 1792523029.272916,
+    "ast_hash": "750706812f62071545824a7ce3a4928a",
     "semantic_hash": ""
   },
   "remix/app/fileSync/foregroundSyncContext.test.ts": {
@@ -16416,9 +16416,9 @@
     "semantic_hash": ""
   },
   "remix/app/fileSync/journal.client.ts": {
-    "mtime": 1792459546.3458447,
-    "seen": 1792510818.021452,
-    "ast_hash": "18e38d75c0fbb84a111f8195d7a65b64",
+    "mtime": 1792514024.686705,
+    "seen": 1792519144.451704,
+    "ast_hash": "1ba4c2da4819fcc63ac9dd2e07e379dd",
     "semantic_hash": ""
   },
   "remix/app/fileSync/journal.test.ts": {
@@ -16470,15 +16470,15 @@
     "semantic_hash": ""
   },
   "remix/app/fileSync/mobileFolders.client.test.ts": {
-    "mtime": 1792509865.882721,
-    "seen": 1792510818.021464,
-    "ast_hash": "c08e0785e683886e7baefca2598e887c",
+    "mtime": 1792516905.6989982,
+    "seen": 1792519144.451969,
+    "ast_hash": "a63405dcdf30dedf6dc85d4427d0218a",
     "semantic_hash": ""
   },
   "remix/app/fileSync/mobileFolders.client.ts": {
-    "mtime": 1792510679.0139518,
-    "seen": 1792510818.021466,
-    "ast_hash": "4076b08deb07d096aa6d529ae79219ae",
+    "mtime": 1792516991.126352,
+    "seen": 1792519144.45197,
+    "ast_hash": "adfccb0e490a68989ec98b596b534385",
     "semantic_hash": ""
   },
   "remix/app/fileSync/mobileRangeFrames.test.ts": {
@@ -16686,9 +16686,9 @@
     "semantic_hash": ""
   },
   "remix/app/fileSync/pagedRunJournal.ts": {
-    "mtime": 1792471796.9951265,
-    "seen": 1792510818.021513,
-    "ast_hash": "d50f3399433ad46a0a237de7cfed957a",
+    "mtime": 1792522806.6369898,
+    "seen": 1792523029.277558,
+    "ast_hash": "8a3238d3c4112461b5822e7146800cfb",
     "semantic_hash": ""
   },
   "remix/app/fileSync/pagedRunReview.test.ts": {
@@ -16770,9 +16770,9 @@
     "semantic_hash": ""
   },
   "remix/app/fileSync/streamingForegroundSync.ts": {
-    "mtime": 1792510679.1160347,
-    "seen": 1792510818.0215318,
-    "ast_hash": "abec4d4b55751f2c4753fbbdfce759f3",
+    "mtime": 1792522427.8792474,
+    "seen": 1792523029.278354,
+    "ast_hash": "5bf617a9c246aa4798b5ce916b49a585",
     "semantic_hash": ""
   },
   "remix/app/fileSync/streamingIndex.test.ts": {
@@ -16872,27 +16872,27 @@
     "semantic_hash": ""
   },
   "remix/app/fileSync/transferActivity.test.ts": {
-    "mtime": 1792398124.3463416,
-    "seen": 1792510818.021556,
-    "ast_hash": "e94e2b0d5990f13b525cbd829faa4544",
+    "mtime": 1792516743.5902736,
+    "seen": 1792519144.454123,
+    "ast_hash": "162e3cbf7f197824d695d511e03fccf9",
     "semantic_hash": ""
   },
   "remix/app/fileSync/transferActivity.ts": {
-    "mtime": 1792398124.3464746,
-    "seen": 1792510818.021557,
-    "ast_hash": "6bbbd036bb5538d4dcea8c4203936655",
+    "mtime": 1792516680.1775577,
+    "seen": 1792519144.454124,
+    "ast_hash": "f44860e7fcfb8613fe806fc87341ce9c",
     "semantic_hash": ""
   },
   "remix/app/fileSync/transferSpeed.test.ts": {
-    "mtime": 1792398124.3466086,
-    "seen": 1792510818.021559,
-    "ast_hash": "5b421bd40b6de77bcf6ace48b635b1ca",
+    "mtime": 1792517078.985328,
+    "seen": 1792519144.4541261,
+    "ast_hash": "a09d0c5e8f02ae50dcbed81950f9e769",
     "semantic_hash": ""
   },
   "remix/app/fileSync/transferSpeed.ts": {
-    "mtime": 1792398124.3467493,
-    "seen": 1792510818.02156,
-    "ast_hash": "5f19d5f44be655c3d358ab9bdb58fc27",
+    "mtime": 1792516680.1766324,
+    "seen": 1792519144.454128,
+    "ast_hash": "f08750da876027beed1dd1575ef74fee",
     "semantic_hash": ""
   },
   "remix/app/fileSync/uploadPriorityEditor.test.ts": {
@@ -22650,9 +22650,9 @@
     "semantic_hash": ""
   },
   "remix/scripts/check-editable-transfer-speed.mjs": {
-    "mtime": 1792398742.6797743,
-    "seen": 1792510818.0231721,
-    "ast_hash": "45ab5ee6daf254a6a716f1ee5205e310",
+    "mtime": 1792522448.0548048,
+    "seen": 1792523029.428225,
+    "ast_hash": "df1d9dda858026b47a20ec544b319124",
     "semantic_hash": ""
   },
   "remix/scripts/check-mac-menu-bar-browser.mjs": {
@@ -22728,9 +22728,9 @@
     "semantic_hash": ""
   },
   "remix/scripts/editable-transfer-speed.browser.tsx": {
-    "mtime": 1792398714.9089992,
-    "seen": 1792510818.023194,
-    "ast_hash": "1298c5c1031d342df0d2223b28d38c82",
+    "mtime": 1792522363.9120123,
+    "seen": 1792523029.428927,
+    "ast_hash": "20d973286a7cc0c965780fa702de6ab0",
     "semantic_hash": ""
   },
   "remix/scripts/embed-bundle-source-map.mjs": {
@@ -26310,9 +26310,9 @@
     "semantic_hash": ""
   },
   "README.md": {
-    "mtime": 1792510755.2633703,
-    "seen": 1792510818.0250099,
-    "ast_hash": "5bddac0254e0636b248ed6c8925a5f95",
+    "mtime": 1792526775.6072006,
+    "seen": 1792526954.664245,
+    "ast_hash": "8a11897ae839e9501682b046d331e31c",
     "semantic_hash": ""
   },
   "SCHEMA-FEATURE-HANDOFF.md": {
@@ -26334,9 +26334,9 @@
     "semantic_hash": ""
   },
   "TESTING.md": {
-    "mtime": 1792510798.866412,
-    "seen": 1792510818.025017,
-    "ast_hash": "13adc42e09d8c3e7ec1337f46a03fc3c",
+    "mtime": 1792526775.6167595,
+    "seen": 1792526954.664311,
+    "ast_hash": "f87c9af6a2cc60fd0401118b18c8ddaa",
     "semantic_hash": ""
   },
   "TODO/TODO.md": {
@@ -27186,9 +27186,9 @@
     "semantic_hash": ""
   },
   "docs/mobile-file-sync.md": {
-    "mtime": 1792482666.1543524,
-    "seen": 1792510818.025422,
-    "ast_hash": "0512e79687b7b2a9fd45ec51a166f9a4",
+    "mtime": 1792526775.608707,
+    "seen": 1792526954.667957,
+    "ast_hash": "418f24c8182750aa50dca9925c31d97a",
     "semantic_hash": ""
   },
   "docs/no-login-draft-preview.md": {
@@ -27330,9 +27330,9 @@
     "semantic_hash": ""
   },
   "remix/CHANGELOG.md": {
-    "mtime": 1792510755.2761254,
-    "seen": 1792510818.025459,
-    "ast_hash": "abd64b21a2cefdc7b30369e36f1907ef",
+    "mtime": 1792526827.2809675,
+    "seen": 1792526954.668561,
+    "ast_hash": "f5b19f3ddc19ed244268206434d1d955",
     "semantic_hash": ""
   },
   "remix/README.md": {
@@ -29871,6 +29871,66 @@
     "mtime": 1792397518.469578,
     "seen": 1792510818.026558,
     "ast_hash": "fc3abcbb6b0b05a9fc250f51e3f250c4",
+    "semantic_hash": ""
+  },
+  "macos/ThingtimeNode/Sources/ThingtimeNodeCore/FileSyncIdentityAdmission.swift": {
+    "mtime": 1792526653.1602485,
+    "seen": 1792526954.539155,
+    "ast_hash": "5a3356bbf987e840d39be2811f783224",
+    "semantic_hash": ""
+  },
+  "macos/ThingtimeNode/Tests/ThingtimeNodeCoreTests/FileSyncIdentityAdmissionTests.swift": {
+    "mtime": 1792526583.639514,
+    "seen": 1792526954.540097,
+    "ast_hash": "9f475cdb67bd6a72bf41a58870f63643",
+    "semantic_hash": ""
+  },
+  "remix/app/fileSync/streamingPriorityPreparation.test.ts": {
+    "mtime": 1792522505.7072651,
+    "seen": 1792523029.278542,
+    "ast_hash": "1e6f5f2c8add7ad8ebc3fbde3952dc39",
+    "semantic_hash": ""
+  },
+  "PRs/1076-codex-sync-priority-preparation-prepare-saved-upload-priorities-before-ordinary-indexed-input.md": {
+    "mtime": 1792514710.1452365,
+    "seen": 1792519144.51261,
+    "ast_hash": "b6ff890bb3dc8e65d6c5f9ef4214a2dc",
+    "semantic_hash": ""
+  },
+  "PRs/1077-codex-sync-payload-telemetry-measure-native-payload-speed-and-pace-fresh-identity-checks.md": {
+    "mtime": 1792519007.2142966,
+    "seen": 1792519144.512615,
+    "ast_hash": "c44ad8279bf371ff6c5fcce5a171eec2",
+    "semantic_hash": ""
+  },
+  "remix/app/fileSync/priorityReadiness.test.ts": {
+    "mtime": 1792522695.0612395,
+    "seen": 1792523029.2778492,
+    "ast_hash": "94f13fc710378be99755a7881ab2d726",
+    "semantic_hash": ""
+  },
+  "remix/app/fileSync/priorityReadiness.ts": {
+    "mtime": 1792522806.6366773,
+    "seen": 1792523029.277855,
+    "ast_hash": "8cf0924f0ab6970468169f17500a3e9e",
+    "semantic_hash": ""
+  },
+  "PRs/1078-codex-sync-priority-readiness-show-saved-upload-priority-readiness.md": {
+    "mtime": 1792522864.0465214,
+    "seen": 1792523029.4561868,
+    "ast_hash": "743078aff88212c5c572e94b2c9a025e",
+    "semantic_hash": ""
+  },
+  "PRs/1079-codex-sync-phase-timing-measure-closed-native-sync-request-phases.md": {
+    "mtime": 1792524820.5809872,
+    "seen": 1792524927.749451,
+    "ast_hash": "28733ac6d0d6bd1bf0e5584433a34718",
+    "semantic_hash": ""
+  },
+  "PRs/1080-codex-sync-identity-budget-allow-bounded-bursts-of-fresh-native-identity-checks.md": {
+    "mtime": 1792526827.2781603,
+    "seen": 1792526954.657331,
+    "ast_hash": "7e6ca95dbacb7acf3d21a394c3cf2e86",
     "semantic_hash": ""
   }
 }
