@@ -5,13 +5,14 @@ import { growthStageFor } from '~/components/Feed/algorithmGrowth';
 import { POST_TYPE_META, PostType, PublicAlgorithm, timeAgo } from '~/components/Feed/feedTypes';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { ThingTransferControls } from '~/components/Things/ThingTransferControls';
+import { useWorkspaceUser } from '~/hooks/useWorkspaceUser';
 import { useApi } from '~/hooks/useApi';
 import { RAINBOW } from '~/theme/rainbow';
 
 // Manager for doomscroll feed algorithms on /settings: list, rename inline,
 // set active (or "Latest" chronological), branch, two-step delete, create.
-// Mount this only for logged-in users, keyed on user id so account switches
-// refetch cleanly.
+// Key by workspace owner so account switches refetch cleanly. Anonymous
+// algorithms remain on this device.
 
 const trainedLabel = (iso: string): string => {
   const label = timeAgo(iso);
@@ -66,6 +67,7 @@ const ActiveBadge = () => (
 
 export const AlgorithmManager = () => {
   const api = useApi();
+  const localOnly = !!useWorkspaceUser()?.localOnly;
   const lopu = useLopu();
 
   const [algorithms, setAlgorithms] = React.useState<PublicAlgorithm[]>([]);
@@ -89,7 +91,7 @@ export const AlgorithmManager = () => {
     } catch (err: any) {
       lopu({
         title: 'Could not load algorithms 😔',
-        description: err?.error || 'Please try again in a moment.',
+        description: err?.error || err?.message || 'Please try again in a moment.',
         status: 'error'
       });
     } finally {
@@ -123,7 +125,7 @@ export const AlgorithmManager = () => {
     } catch (err: any) {
       lopu({
         title: 'Could not switch algorithm 😔',
-        description: err?.error || 'Please try again in a moment.',
+        description: err?.error || err?.message || 'Please try again in a moment.',
         status: 'error'
       });
     } finally {
@@ -144,7 +146,7 @@ export const AlgorithmManager = () => {
     const current = algorithms.find((algorithm) => algorithm.id === id);
     if (!name || !current || name === current.name) return;
     try {
-      const resp = await api.v1.algorithms.update({ id, name });
+      const resp = await api.v1.algorithms.update({ id, name, expectedUpdatedAt: current.updatedAt });
       setAlgorithms((prev) =>
         prev.map((algorithm) => (algorithm.id === id ? resp?.algorithm || { ...algorithm, name } : algorithm))
       );
@@ -152,7 +154,7 @@ export const AlgorithmManager = () => {
     } catch (err: any) {
       lopu({
         title: 'Rename failed 😔',
-        description: err?.error || 'Please try again in a moment.',
+        description: err?.error || err?.message || 'Please try again in a moment.',
         status: 'error'
       });
     }
@@ -178,7 +180,7 @@ export const AlgorithmManager = () => {
     } catch (err: any) {
       lopu({
         title: 'Branch failed 😔',
-        description: err?.error || 'Please try again in a moment.',
+        description: err?.error || err?.message || 'Please try again in a moment.',
         status: 'error'
       });
     } finally {
@@ -218,7 +220,7 @@ export const AlgorithmManager = () => {
         lopu({ title: 'Sharing is on — copy the link', description: url, status: 'info' });
       }
     } catch (err: any) {
-      lopu({ title: 'Share failed 😔', description: err?.error || 'Please try again in a moment.', status: 'error' });
+      lopu({ title: 'Share failed 😔', description: err?.error || err?.message || 'Please try again in a moment.', status: 'error' });
     } finally {
       setBusyId(null);
     }
@@ -232,7 +234,7 @@ export const AlgorithmManager = () => {
       setAlgorithms((prev) => prev.map((item) => (item.id === algorithm.id ? resp.algorithm : item)));
       lopu({ title: 'Sharing stopped 🚪', description: 'Existing links no longer resolve.', status: 'success', duration: 5000 });
     } catch (err: any) {
-      lopu({ title: 'Could not stop sharing 😔', description: err?.error || 'Please try again in a moment.', status: 'error' });
+      lopu({ title: 'Could not stop sharing 😔', description: err?.error || err?.message || 'Please try again in a moment.', status: 'error' });
     } finally {
       setBusyId(null);
     }
@@ -257,7 +259,7 @@ export const AlgorithmManager = () => {
     } catch (err: any) {
       lopu({
         title: 'Delete failed 😔',
-        description: err?.error || 'Please try again in a moment.',
+        description: err?.error || err?.message || 'Please try again in a moment.',
         status: 'error'
       });
     } finally {
@@ -288,7 +290,7 @@ export const AlgorithmManager = () => {
     } catch (err: any) {
       lopu({
         title: 'Could not create algorithm 😔',
-        description: err?.error || 'Please try again in a moment.',
+        description: err?.error || err?.message || 'Please try again in a moment.',
         status: 'error'
       });
     } finally {
@@ -332,6 +334,7 @@ export const AlgorithmManager = () => {
 
   return (
     <Flex flexDirection="column" rowGap={2}>
+      {localOnly && <Text fontSize="sm">Saved and trained on this device. Nothing is uploaded.</Text>}
       <Box><ThingTransferControls onImported={refresh} /></Box>
       <Text fontSize="xs" color="var(--tt-muted, #9a9aa6)">Downloaded or copied algorithms contain your private interest weights. Share these files only deliberately.</Text>
       {/* "Latest" pseudo-entry — chronological feed, no training */}
@@ -431,7 +434,7 @@ export const AlgorithmManager = () => {
                   Branch 🌿
                 </Button>
                 <ThingTransferControls id={algorithm.id} canCut onImported={refresh} />
-                <Button
+                {!localOnly && <Button
                   size="xs"
                   variant="ghost"
                   isLoading={busyId === `${algorithm.id}:share`}
@@ -439,7 +442,7 @@ export const AlgorithmManager = () => {
                   title={algorithm.shared ? 'Copy the share link again' : 'Turn on sharing and copy the link'}
                 >
                   {algorithm.shared ? 'Copy link 🧠🔗' : 'Share 🧠'}
-                </Button>
+                </Button>}
                 {algorithm.shared && (
                   <Button
                     size="xs"

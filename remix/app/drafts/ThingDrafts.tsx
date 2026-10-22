@@ -1,6 +1,6 @@
 import React from 'react';
 import { Flex } from '@chakra-ui/react';
-import { useCurrentUser } from '~/hooks/useCurrentUser';
+import { useWorkspaceUser } from '~/hooks/useWorkspaceUser';
 import { useThingtime } from '~/components/Thingtime/useThingtime';
 import { parseThingtime, stringifyThingtimeForStorage } from '~/Providers/thingtimeSerialization';
 import { readLocalCache, clearLocalCache } from '~/hooks/localCache';
@@ -20,7 +20,7 @@ const DraftContext = React.createContext<{
 	error: string;
 } | null>(null);
 export function ThingDraftsProvider({ children }: { children: React.ReactNode }) {
-	const user = useCurrentUser(),
+	const user = useWorkspaceUser(),
 		{ events, setThingtime } = useThingtime(),
 		lopu = useLopu();
 	const sessions = React.useRef(new Map<string, ReturnType<typeof createDraftSession>>());
@@ -142,7 +142,7 @@ export function ThingDraftsProvider({ children }: { children: React.ReactNode })
 	return <DraftContext.Provider value={{ load, flush, forget, retry, status, error }}>{children}</DraftContext.Provider>;
 }
 export function ThingDraftPicker() {
-	const user = useCurrentUser(),
+	const user = useWorkspaceUser(),
 		drafts = React.useContext(DraftContext);
 	return user && drafts ? (
 		<Flex px={3} py={2} gap={3} justify="flex-end" flexWrap="wrap">

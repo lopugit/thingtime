@@ -57,6 +57,7 @@ export type AttachmentDoc = {
 	ownerId: string;
 	acl: string[];
 	targetId?: string;
+	folderId?: string;
 	tags: [];
 	storageClass: 'content';
 	storageAccountingVersion: number;
@@ -75,6 +76,7 @@ export type AttachmentDoc = {
 	attachmentFinalizationLeaseId?: string;
 	attachmentPartsIssuedAt?: Date;
 	attachmentObjectlessDelete?: true;
+	attachmentCancellationRequested?: true;
 	attachmentMpuEmptyVerifiedAt?: Date;
 	uploadId?: string;
 	attachmentExpiresAt?: Date;
@@ -122,16 +124,25 @@ type LinkedReadyInput = {
 	expiresAt: Date;
 };
 
-export type AttachmentDeleteClaimScope =
-	| { kind: 'draft'; expiredAtOrBefore?: Date; finalizingUpdatedAtOrBefore?: Date }
-	| { kind: 'target'; targetId: string };
+export type AttachmentDeleteClaimScope = (
+	| { kind: 'draft'; expiredAtOrBefore?: Date; finalizingUpdatedAtOrBefore?: Date; retainCancellation?: true; standaloneFile?: true }
+	| { kind: 'target'; targetId: string }
+) & { expectedUpdatedAt?: Date };
 export type AttachmentDraftDeleteClaimScope = Extract<AttachmentDeleteClaimScope, { kind: 'draft' }>;
 
 export const attachmentDeleteClaimFence = (scope: AttachmentDeleteClaimScope): Record<string, unknown> => {
-	if (scope.kind === 'target') return { targetId: scope.targetId };
 	return {
-		targetId: { $exists: false },
-		...(scope.expiredAtOrBefore ? { attachmentExpiresAt: { $lte: scope.expiredAtOrBefore } } : {})
+		...(scope.kind === 'target' ? { targetId: scope.targetId } : {
+			targetId: { $exists: false },
+			...(scope.standaloneFile ? {
+				attachmentPurpose: 'file', attachmentLinked: { $ne: true },
+				// Ready import drafts are excluded; already-claimed deletion has
+				// its own cleanup deadline and must remain retryable.
+				$and: [{ $or: [{ attachmentState: 'deleting' }, { attachmentExpiresAt: { $exists: false } }] }]
+			} : {}),
+			...(scope.expiredAtOrBefore ? { attachmentExpiresAt: { $lte: scope.expiredAtOrBefore } } : {})
+		}),
+		...(scope.expectedUpdatedAt ? { updatedAt: scope.expectedUpdatedAt } : {})
 	};
 };
 
@@ -169,7 +180,7 @@ const attachmentMatch = (id: string) => ({ shareId: id, thingtime: ATTACHMENT_TH
 
 export type AttachmentStore = {
 	reservePending(input: PendingInput): Promise<AttachmentDoc>;
-	recordFileSyncOrigin(ownerId: string, id: string, requestFingerprint: string, origin: FileSyncUploadOrigin): Promise<AttachmentDoc>;
+	reserveCancellation(ownerId: string, id: string): Promise<AttachmentDoc>;
 	insertLinkedReady(input: LinkedReadyInput): Promise<AttachmentDoc>;
 	claimUploadInitialization(ownerId: string, id: string, staleAtOrBefore: Date): Promise<AttachmentDoc | null>;
 	setUploadId(ownerId: string, id: string, uploadId: string): Promise<AttachmentDoc>;
@@ -225,29 +236,39 @@ export const expiredAttachmentDraftFilter = (
 	]
 });
 
+// This tiny accounted receipt occupies the same unique upload identity forever.
+// Expiring it would allow an arbitrarily delayed original start to resurrect bytes.
+export const cancelledAttachmentReceipt = (ownerId: string, id: string, now = new Date()): AttachmentDoc => {
+	const doc = {
+		shareId: id, schemaVersion: COLLECTION_SCHEMA_VERSIONS.things,
+		thingtime: [ATTACHMENT_THINGTIME] as [typeof ATTACHMENT_THINGTIME],
+		crystal: { name: 'Cancelled upload', size: 0, contentType: 'application/octet-stream', mediaKind: 'file' as const },
+		extended: null, ownerId, acl: [ACL_OWNER], tags: [] as [],
+		storageClass: 'content' as const, storageAccountingVersion: USER_STORAGE_ACCOUNTING_VERSION,
+		attachmentEnvelopeVersion: ATTACHMENT_ENVELOPE_VERSION, attachmentState: 'cancelled' as const,
+		attachmentCancellationRequested: true as const, objectSizeBytes: 0, objectKey: `objects/${id}`,
+		createdAt: now, updatedAt: now
+	};
+	return { ...doc, sizeBytes: thingStorageSizeBytes(doc) };
+};
+
 export const attachmentStore: AttachmentStore = {
-	async recordFileSyncOrigin(ownerId, id, requestFingerprint, originInput) {
-    const origin = parseFileSyncUploadOrigin(originInput);
-    return withHomeMongoTransaction(async session => {
-      const things = await getHomeThingsCollection();
-      const before = await things.findOne({ ...attachmentMatch(id), ownerId, attachmentRequestFingerprint: requestFingerprint } as any, { session }) as any as AttachmentDoc;
-      if (!before || before.attachmentPurpose !== 'file' || before.attachmentImportDraft || !['pending', 'finalizing', 'ready'].includes(before.attachmentState) || before.attachmentLinked ||
-        (before.targetId != null && before.targetId !== origin.fileId) || (before.targetId == null && !isDeepStrictEqual(before.acl, [ACL_OWNER]))) throw new AttachmentStoreConflictError('Sync upload reservation changed');
-      if (before.attachmentFileSyncOrigin) {
-        if (!sameFileSyncUploadOrigin(before.attachmentFileSyncOrigin, origin)) throw new AttachmentStoreConflictError('Sync upload origin changed');
-        return before;
-      }
-      const next = { ...before, attachmentFileSyncOrigin: origin, updatedAt: new Date() };
-      const nextSize = thingStorageSizeBytes(next);
-      await applyUserStorageDelta(ownerId, nextSize - canonicalStoredBytes(before), session);
-      const written = await things.updateOne({ _id: before._id, ownerId, attachmentRequestFingerprint: requestFingerprint, attachmentFileSyncOrigin: { $exists: false }, updatedAt: before.updatedAt, sizeBytes: before.sizeBytes } as any,
-        { $set: { attachmentFileSyncOrigin: origin, sizeBytes: nextSize, updatedAt: next.updatedAt } }, { session });
-      if (written.matchedCount !== 1) throw new AttachmentStoreConflictError();
-      return { ...next, sizeBytes: nextSize };
-    });
-  },
-	async reservePending({ id, ownerId, crystal, objectKey, requestFingerprint, purpose, profileSlot, expiresAt, recordingImportDraft, fileSyncOrigin }) {
-		if (fileSyncOrigin && (purpose !== 'file' || recordingImportDraft)) throw new AttachmentBindingError(400, 'Sync origin requires an ordinary file reservation');
+	async reserveCancellation(ownerId, id) {
+		return withHomeMongoTransaction(async session => {
+			const things = await getHomeThingsCollection();
+			const existing = await things.findOne(attachmentMatch(id) as any, { session }) as any as AttachmentDoc | null;
+			if (existing) {
+				if (existing.ownerId !== ownerId) throw new AttachmentStoreConflictError();
+				return existing;
+			}
+			const receipt = cancelledAttachmentReceipt(ownerId, id);
+			await applyUserStorageDelta(ownerId, receipt.sizeBytes, session);
+			await things.insertOne(receipt as any, { session });
+			return receipt;
+		});
+	},
+
+	async reservePending({ id, ownerId, crystal, objectKey, requestFingerprint, purpose, profileSlot, expiresAt, recordingImportDraft }) {
 		if (recordingImportDraft && (!['recording', 'file'].includes(purpose) || profileSlot)) throw new AttachmentBindingError(400, 'Recording import drafts must retain recording purpose');
 		const now = new Date();
 		const unstamped = {
@@ -614,6 +635,7 @@ export const attachmentStore: AttachmentStore = {
 				$set: {
 					attachmentState: 'deleting',
 					attachmentObjectlessDelete: true,
+					...(scope.retainCancellation ? { attachmentCancellationRequested: true } : {}),
 					attachmentExpiresAt: attachmentDeletingRetryAt(now),
 					updatedAt: now
 				}
@@ -621,15 +643,20 @@ export const attachmentStore: AttachmentStore = {
 			{ returnDocument: 'after' }
 		)) as any as AttachmentDoc | null;
 		if (claimed) return claimed;
-		return (await things.findOne({
+		const retryFilter = {
 			...attachmentMatch(id),
 			ownerId,
-			...attachmentDeleteClaimFence(scope),
+			// A previous claim already made deletion irreversible and advanced updatedAt.
+			// Resume its cleanup without requiring the pre-claim content version.
+			...attachmentDeleteClaimFence({ ...scope, expectedUpdatedAt: undefined }),
 			attachmentState: 'deleting',
 			attachmentObjectlessDelete: true,
 			uploadId: { $exists: false },
 			objectVersionId: { $exists: false }
-		} as any)) as any as AttachmentDoc | null;
+		};
+		return (scope.kind === 'draft' && scope.retainCancellation
+			? await things.findOneAndUpdate(retryFilter as any, { $set: { attachmentCancellationRequested: true } }, { returnDocument: 'after' })
+			: await things.findOne(retryFilter as any)) as any as AttachmentDoc | null;
 	},
 
 	async claimDeleting(ownerId, id, allowedStates, scope) {
@@ -656,6 +683,7 @@ export const attachmentStore: AttachmentStore = {
 						{
 							$set: {
 								attachmentState: 'deleting',
+								...(scope.kind === 'draft' && scope.retainCancellation ? { attachmentCancellationRequested: true } : {}),
 								attachmentExpiresAt: {
 									$max: [
 										{ $cond: [{ $eq: [{ $type: '$attachmentPartsIssuedAt' }, 'date'] }, attachmentMpuSettlementAt(now), attachmentDeletingRetryAt(now)] },
@@ -672,27 +700,30 @@ export const attachmentStore: AttachmentStore = {
 			: null;
 		if (claimed) return claimed;
 		if (!allowedStates.includes('deleting')) return null;
-		return (await things.findOne({
+		const retryFilter = {
 			...attachmentMatch(id),
 			ownerId,
-			...fence,
+			// Retry only the already-claimed deletion; retain owner/target/expiry fences.
+			...attachmentDeleteClaimFence({ ...scope, expectedUpdatedAt: undefined }),
 			attachmentState: 'deleting'
-		} as any)) as any as AttachmentDoc | null;
+		};
+		return (scope.kind === 'draft' && scope.retainCancellation
+			? await things.findOneAndUpdate(retryFilter as any, { $set: { attachmentCancellationRequested: true } }, { returnDocument: 'after' })
+			: await things.findOne(retryFilter as any)) as any as AttachmentDoc | null;
 	},
 
 	async removeDeleting(ownerId, id) {
 		return withHomeMongoTransaction(async (session) => {
 			const things = await getHomeThingsCollection();
-			const removed = (await things.findOneAndDelete({ ...attachmentMatch(id), ownerId, attachmentState: 'deleting' } as any, {
-				session
-			})) as any as AttachmentDoc | null;
+			const filter = { ...attachmentMatch(id), ownerId, attachmentState: 'deleting' };
+			const removed = await things.findOne(filter as any, { session }) as any as AttachmentDoc | null;
 			if (!removed) return false;
+			const receipt = removed.attachmentCancellationRequested ? cancelledAttachmentReceipt(ownerId, id) : null;
+			if (receipt) await things.replaceOne(filter as any, receipt as any, { session });
+			else await things.deleteOne(filter as any, { session });
 			const bytes = currentContentStorageSizeBytes(removed);
-			if (bytes === null) {
-				await markUserStorageNeedsReconcile(ownerId, session);
-			} else {
-				await applyUserStorageDelta(ownerId, -bytes, session);
-			}
+			if (bytes === null) await markUserStorageNeedsReconcile(ownerId, session);
+			else await applyUserStorageDelta(ownerId, (receipt?.sizeBytes ?? 0) - bytes, session);
 			return true;
 		});
 	},
@@ -971,11 +1002,14 @@ export const commitRecordingImport = async (ownerId: string, id: string, expecte
   });
 };
 
-export const annotateOwnedAttachment = async (ownerId: string, id: string, patch: AttachmentAnnotationPatch, options: { unboundPostOnly?: boolean } = {}): Promise<AttachmentDoc> =>
+export const annotateOwnedAttachment = async (ownerId: string, id: string, patch: AttachmentAnnotationPatch, options: { unboundPostOnly?: boolean; expectedUpdatedAt?: string } = {}): Promise<AttachmentDoc> =>
 	withHomeMongoTransaction(async (session) => {
 		const things = await getHomeThingsCollection();
 		const before = (await things.findOne({ ...attachmentMatch(id), ownerId } as any, { session })) as any as AttachmentDoc | null;
-		if (!before || before.attachmentPurpose === 'password') throw new AttachmentBindingError(404, 'Attachment not found');
+		if (!before) throw new AttachmentBindingError(404, 'Attachment not found');
+		if (options.expectedUpdatedAt !== undefined && new Date(options.expectedUpdatedAt).getTime() !== before.updatedAt.getTime()) {
+			throw new AttachmentBindingError(409, 'Attachment changed before this edit. Refresh and compare your changes.');
+		}
 		if (before.attachmentState !== 'ready') {
 			throw new AttachmentBindingError(409, 'This file is still uploading — try again once it is ready');
 		}
@@ -995,7 +1029,7 @@ export const annotateOwnedAttachment = async (ownerId: string, id: string, patch
 			return before;
 		}
 
-		const next: AttachmentDoc = { ...before, crystal: nextCrystal, updatedAt: new Date() };
+		const next: AttachmentDoc = { ...before, crystal: nextCrystal, updatedAt: new Date(Math.max(Date.now(), before.updatedAt.getTime() + 1)) };
 		const nextSize = thingStorageSizeBytes(next);
 		const deltaBytes = nextSize - canonicalStoredBytes(before);
 		if (deltaBytes !== 0) await applyUserStorageDelta(ownerId, deltaBytes, session);

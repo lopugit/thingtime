@@ -7,7 +7,7 @@ import { Link as RouterLink } from 'react-router';
 import { RAINBOW, RAINBOW_PALETTE } from '~/theme/rainbow';
 import { normalizeLopuMessage } from './lopuMessage';
 import { lopuToastPlacement } from './lopuPosition';
-import { useCurrentUser } from '~/hooks/useCurrentUser';
+import { useWorkspaceUser } from '~/hooks/useWorkspaceUser';
 import { saveLopuHistory } from './notificationHistory.client';
 
 // 🦄 Lopu — the Thingtime AI. A minimal, modern toast: a rainbow gradient
@@ -205,7 +205,7 @@ const LopuToast = ({
 
 export const useLopu = () => {
   const toast = useToast();
-  const user = useCurrentUser();
+  const user = useWorkspaceUser();
 
   return useCallback(
 		({ title, description, status, duration = 13000, link, announceDescription, descriptionLabel }: LopuArgs) => {
@@ -246,7 +246,7 @@ const sourceLabel = (source?: string) =>
 // response types in live (NDJSON from /api/v1/lopu/musing), à la modern AI chat.
 export const useLopuStream = () => {
   const toast = useToast();
-  const user = useCurrentUser();
+  const user = useWorkspaceUser();
 
   return useCallback(
     async (url: string) => {

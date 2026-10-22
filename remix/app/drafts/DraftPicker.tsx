@@ -3,14 +3,15 @@ import { Button, Flex, Input, Modal, ModalBody, ModalCloseButton, ModalContent, 
 import { useLopu } from '~/components/Lopu/useLopu';
 import { DRAWER_MODAL_OVERLAY_Z, DRAWER_MODAL_Z } from '~/components/Nav/Drawer/useDrawer';
 import { readLocalCache, writeLocalCache } from '~/hooks/localCache';
+import { LOCAL_WORKSPACE_OWNER } from '../local-workspace/runtime.client';
 import { draftRequest, listAccountDrafts } from './draftClient';
 import type { AccountDraft, DraftSummary, DraftSurface } from './draftCore';
 
-export function DraftSaveStatus({ status, error, retry }: { status: string; error: string; retry: () => Promise<void> }) {
+export function DraftSaveStatus({ status, error, retry, paused = false }: { status: string; error: string; retry: () => Promise<void>; paused?: boolean }) {
 	return (
 		<Flex alignItems="center" gap={2} flexWrap="wrap" minW={0}>
 			<Text fontSize="xs" color="var(--tt-muted, #777)" role="status">
-				{status === 'saved'
+				{paused ? 'Draft recovery needs attention' : status === 'saved'
 					? 'Saved to your drafts ✓'
 					: status === 'saving'
 					? 'Saving draft…'
@@ -20,7 +21,8 @@ export function DraftSaveStatus({ status, error, retry }: { status: string; erro
 					? 'Draft changed or was removed elsewhere'
 					: 'Changes save privately as drafts'}
 			</Text>
-			{error && (
+			{paused && error && <Text fontSize="xs" role="alert">{error}</Text>}
+			{error && !paused && (
 				<Button
 					size="xs"
 					variant="ghost"
@@ -39,6 +41,8 @@ export function DraftPicker({
 	actor,
 	surface,
 	targetId,
+	context,
+	label,
 	disabled,
 	beforeOpen,
 	onDeleted,
@@ -47,17 +51,20 @@ export function DraftPicker({
 	actor: string;
 	surface?: DraftSurface;
 	targetId?: string;
+	context?: string;
+	label?: string;
 	disabled?: boolean;
 	beforeOpen?: () => Promise<void>;
 	onDeleted?: (id: string) => Promise<void>;
 	onLoad: (draft: AccountDraft) => Promise<void>;
 }) {
+	const localOnly = actor === LOCAL_WORKSPACE_OWNER;
 	const [open, setOpen] = React.useState(false),
 		[filter, setFilter] = React.useState<'all' | 'draft' | 'template'>('all');
 	const [search, setSearch] = React.useState(''),
 		[error, setError] = React.useState(''),
 		[busy, setBusy] = React.useState(false);
-	const cacheKey = `tt-draft-list:${location.origin}:${actor}:${surface || 'all'}`;
+	const cacheKey = `tt-draft-list:${location.origin}:${actor}:${surface || 'all'}${context ? `:${context}` : ''}`;
 	const [rows, setRows] = React.useState<DraftSummary[]>(() => readLocalCache<DraftSummary[]>(cacheKey) || []);
 	const [cursor, setCursor] = React.useState<string | null>(null);
 	const lopu = useLopu();
@@ -74,7 +81,7 @@ export function DraftPicker({
 	const refresh = async (next?: string) => {
 		setError('');
 		try {
-			const response = await listAccountDrafts(actor, { ...(surface ? { surface } : {}), ...(next ? { cursor: next } : {}) });
+			const response = await listAccountDrafts(actor, { ...(surface ? { surface } : {}), ...(context ? { context } : {}), ...(next ? { cursor: next } : {}) });
 			if (!mounted.current) return;
 			setRows((previous) => {
 				const combined = next ? [...previous, ...response.drafts] : response.drafts;
@@ -126,6 +133,7 @@ export function DraftPicker({
 	const visibleRows = rows.filter(
 		(row) =>
 			!row.context.startsWith('post:edit:') &&
+			(!context || row.context === context) &&
 			(!targetId || row.context.endsWith(`:${targetId}`)) &&
 			!localStorage.getItem(`tt-account-draft:${location.origin}:${actor}:${row.context}:retired:${row.id}`) &&
 			(filter === 'all' || row.mode === filter) &&
@@ -154,7 +162,7 @@ export function DraftPicker({
 					})();
 				}}
 			>
-				Load drafts & templates
+				{label || 'Load drafts & templates'}
 			</Button>
 			<Modal
 				isOpen={open}
@@ -171,7 +179,7 @@ export function DraftPicker({
 					<ModalCloseButton isDisabled={busy} />
 					<ModalBody paddingBottom={6}>
 						<Text fontSize="sm" mb={3}>
-							Private to your account. Templates stay here when you use them.
+							{localOnly ? 'Stored on this device only.' : 'Private to your account.'} Templates stay here when you use them.
 						</Text>
 						<Flex gap={2} align="center" mb={2}>
 							<Switch
@@ -183,11 +191,11 @@ export function DraftPicker({
 								}}
 							/>
 							<Text as="label" htmlFor="draft-auto-resume" fontSize="sm">
-								Automatically resume my latest account draft
+								Automatically resume my latest {localOnly ? 'saved' : 'account'} draft
 							</Text>
 						</Flex>
 						<Text fontSize="xs" mb={3}>
-							Drafts on this device always recover. Turn this off to choose account drafts yourself.
+							{localOnly ? 'Your current editor recovers on this device. Turn this off to choose other saved drafts yourself.' : 'Drafts on this device always recover. Turn this off to choose account drafts yourself.'}
 						</Text>
 						<Flex gap={2} mb={3} flexWrap="wrap">
 							{(['all', 'draft', 'template'] as const).map((kind) => (

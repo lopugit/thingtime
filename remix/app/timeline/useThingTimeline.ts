@@ -1,6 +1,6 @@
 import { activityInterval, clearActivityInterval, activityEvents } from '~/activity/activityManager';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useCurrentUser } from '../hooks/useCurrentUser';
+import { useWorkspaceUser } from '../hooks/useWorkspaceUser';
 import type { LocalTimelineRow } from './localStore';
 import { timelineScopeKey } from './contract';
 import { useTimelineSession, timelineAccessFailure } from './TimelineProvider';
@@ -22,7 +22,7 @@ const emptyView = (identity: string): View => ({ identity, rows: [], notes: new 
 
 /** Only open history views pull pages. The account queue runs independently. */
 export function useThingTimeline(thingId: string | null, enabled = true, related = false) {
-	const user = useCurrentUser(); const session = useTimelineSession();
+	const user = useWorkspaceUser(); const session = useTimelineSession();
 	const sessionRef = useRef(session); sessionRef.current = session;
 	const connection = session.connection;
 	const scope = connection ? timelineScopeKey(connection.scope) : 'unavailable';
@@ -89,5 +89,5 @@ export function useThingTimeline(thingId: string | null, enabled = true, related
 		return () => { alive = false; clearActivityInterval(timer); refreshRef.current = async () => {}; olderRef.current = async () => {}; activityEvents(window, 'events:timeline/useThingTimeline', 'useThingTimeline').removeEventListener('focus', changed); activityEvents(window, 'events:timeline/useThingTimeline', 'useThingTimeline').removeEventListener('online', changed); activityEvents(window, 'events:timeline/useThingTimeline', 'useThingTimeline').removeEventListener(TIMELINE_CHANGED_EVENT, changed); activityEvents(document, 'events:timeline/useThingTimeline', 'useThingTimeline').removeEventListener('visibilitychange', changed); };
 	}, [identity, enabled, thingId, connection, related]);
 	const current = view.identity === identity ? view : emptyView(identity);
-	return { ...current, identity: related ? `${identity}:${current.related?.revision ?? 'unknown'}` : identity, error: current.error || session.error, signedIn: !!user?.id, refresh: useCallback(() => refreshRef.current(), []), older: useCallback(() => olderRef.current(), []) };
+	return { ...current, identity: related ? `${identity}:${current.related?.revision ?? 'unknown'}` : identity, error: current.error || session.error, signedIn: !!user?.id, localOnly: !!user?.localOnly, refresh: useCallback(() => refreshRef.current(), []), older: useCallback(() => olderRef.current(), []) };
 }

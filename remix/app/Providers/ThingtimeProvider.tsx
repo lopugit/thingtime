@@ -397,20 +397,9 @@ export const ThingtimeProvider = (props: any): React.JSX.Element => {
 
 		const hydrate = async () => {
 			try {
-				let localStorageThingtime = persistLocal ? await localforage.getItem(storageKey) : null;
-        // Preserve the pre-account device workspace once, without ever uploading
-        // it on hydration or handing it to a later account on this device.
-        if (persistLocal && !localStorageThingtime && props.accountId) {
-          let claim: string | null = null;
-          try {
-            claim = localStorage.getItem('tt-legacy-workspace-account');
-            if (!claim) { claim = props.accountId; localStorage.setItem('tt-legacy-workspace-account', claim); }
-          } catch { /* Account isolation takes precedence when storage is unavailable. */ }
-          if (claim === props.accountId) {
-            localStorageThingtime = await localforage.getItem('thingtime');
-            if (localStorageThingtime) await localforage.setItem(storageKey, localStorageThingtime);
-          }
-        }
+				const localStorageThingtime = persistLocal ? await localforage.getItem(storageKey) : null;
+        // The anonymous device tree remains in its own namespace. Login must
+        // never silently claim it for an account; explicit transfer is separate.
 				if (cancelled) return;
 
 				if (localStorageThingtime) {

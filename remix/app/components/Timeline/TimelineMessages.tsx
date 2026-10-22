@@ -1,6 +1,7 @@
 import React from 'react';
 import { Box, Button, Flex, Text, Textarea } from '@chakra-ui/react';
 import { useApi } from '../../hooks/useApi';
+import { LOCAL_TIMELINE_PLANE } from '../../local-workspace/timeline';
 import { useCurrentUser } from '../../hooks/useCurrentUser';
 import { apiErrorMessage } from '../../hooks/apiFailure';
 import { useTimelineSession } from '../../timeline/TimelineProvider';
@@ -40,6 +41,9 @@ export function HistoryMessages({ card, compact = false, actions }: { card: Hist
 export function HistoryMessageComposer({ card }: { card: HistoryCard }) {
 	const { connection } = useTimelineSession(); const api = useApi(); const user = useCurrentUser();
 	const { event } = card.row;
+	const localOnly = connection?.scope.dataPlane === LOCAL_TIMELINE_PLANE;
+	const waiting = localOnly ? 'Saved on this device. Waiting for local History storage.' : 'Saved on this device. This note is waiting for the next sync.';
+	const saved = localOnly ? 'Note saved on this device. It will never be uploaded.' : 'Note saved to your account.';
 	const [value, setValue] = React.useState('');
 	// `saving` covers the composer's own Save; `acting` covers Remove, Retry and Dismiss on a note.
 	const [saving, setSaving] = React.useState(false); const [acting, setActing] = React.useState(false); const [thinking, setThinking] = React.useState(false);
@@ -67,18 +71,18 @@ export function HistoryMessageComposer({ card }: { card: HistoryCard }) {
 			if (!alive.current) return;
 			if (command.command === 'add-note') setValue('');
 			window.dispatchEvent(new Event(TIMELINE_CHANGED_EVENT));
-			if (!connection.verified) { setNotice(`Saved on this device. This ${noun} will sync when you reconnect.`); return; }
+			if (!connection.verified) { setNotice(localOnly ? waiting : `Saved on this device. This ${noun} will sync when you reconnect.`); return; }
 			await connection.sync.pushPending();
 			const remaining = (await connection.notes.queued()).find(row => row.command.operationId === command.operationId);
 			if (alive.current) {
-				setNotice(remaining ? `Saved on this device. This ${noun} is waiting for the next sync.` : command.command === 'remove-note' ? 'Note removed from your account.' : 'Note saved to your account.');
+				setNotice(remaining ? waiting : command.command === 'remove-note' ? (localOnly ? 'Note removed from this device.' : 'Note removed from your account.') : saved);
 				window.dispatchEvent(new Event(TIMELINE_CHANGED_EVENT));
 			}
 		} catch (failure: any) { if (alive.current) { setError(failure?.error || failure?.message || `The ${noun} is still on this device. Retry syncing to check its result.`); window.dispatchEvent(new Event(TIMELINE_CHANGED_EVENT)); } }
 		finally { working.current = false; if (alive.current) { setBusy(false); if (command.command === 'remove-note') textarea.current?.focus(); } }
 	};
 	const explain = async () => {
-		if (!connection?.verified || working.current) return;
+		if (!connection?.verified || localOnly || !user || user.temporary || user.accountKind !== 'user' || working.current) return;
 		explainOperation.current ??= crypto.randomUUID();
 		const command = { command: 'explain-change', operationId: explainOperation.current, eventId: event.id, thingId: event.thingId } as const;
 		const controller = new AbortController(); explaining.current = controller;
@@ -110,8 +114,8 @@ export function HistoryMessageComposer({ card }: { card: HistoryCard }) {
 			if (mode === 'retry' && connection.verified) {
 				await connection.sync.pushPending();
 				const remaining = (await connection.notes.queued()).find(row => row.command.operationId === operationId);
-				if (alive.current) { setNotice(remaining ? 'Saved on this device. This note is waiting for the next sync.' : 'Note synced to your account.'); window.dispatchEvent(new Event(TIMELINE_CHANGED_EVENT)); }
-			} else if (alive.current) setNotice(mode === 'retry' ? 'Saved on this device. This note will sync when you reconnect.' : 'Note command cancelled. Your change remains in History.');
+				if (alive.current) { setNotice(remaining ? waiting : saved); window.dispatchEvent(new Event(TIMELINE_CHANGED_EVENT)); }
+			} else if (alive.current) setNotice(mode === 'retry' ? (localOnly ? waiting : 'Saved on this device. This note will sync when you reconnect.') : 'Note command cancelled. Your change remains in History.');
 		} catch (failure: any) { if (alive.current) { setError(failure?.error || failure?.message || 'Could not update this note.'); window.dispatchEvent(new Event(TIMELINE_CHANGED_EVENT)); } }
 		finally { working.current = false; if (alive.current) { setActing(false); textarea.current?.focus(); } }
 	};

@@ -45,6 +45,6 @@ export function branchComponentRefs(blocks: WebpageBlock[]): string[] {
 }
 export function branchBuilderHref(branchId: string, thingId: string, ownerId: string, dataPlane: string) {
 	const lookup = parseTimelineBranchLookup({ branchId, thingId });
-	if (!ownerId || !isDataPlane(dataPlane)) throw new Error('Branch account or database is unavailable.');
+	if (!ownerId || !(isDataPlane(dataPlane) || (ownerId === 'local-workspace' && dataPlane === 'local-workspace'))) throw new Error('Branch account or database is unavailable.');
 	return `/builder?${new URLSearchParams({ page: lookup.thingId, branchId: lookup.branchId, historyOwner: ownerId, dataPlane, mode: 'edit' })}`;
 }

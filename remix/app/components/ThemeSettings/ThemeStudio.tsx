@@ -6,7 +6,8 @@ import { useLopu } from '~/components/Lopu/useLopu';
 import { ThingTransferControls } from '~/components/Things/ThingTransferControls';
 import { openThingHistory } from '~/components/Timeline/TimelineHost';
 import { useApi } from '~/hooks/useApi';
-import { useCurrentUser } from '~/hooks/useCurrentUser';
+import { useWorkspaceUser } from '~/hooks/useWorkspaceUser';
+import { rootIdentity } from '~/utils/rootIdentity';
 import { useTtTheme } from '~/hooks/useTtTheme';
 import { RAINBOW } from '~/theme/rainbow';
 
@@ -225,7 +226,9 @@ const COLOR_FIELDS: { key: string; label: string; hint?: string }[] = [
 export const ThemeStudio = () => {
 	const lopu = useLopu();
 	const api = useApi();
-	const user = useCurrentUser();
+	const user = useWorkspaceUser();
+	const localOnly = !!user?.localOnly;
+	const apiRef = React.useRef(api); apiRef.current = api;
 	const navigate = useNavigate();
 	const [searchParams, setSearchParams] = useSearchParams();
 	const {
@@ -245,25 +248,32 @@ export const ThemeStudio = () => {
 		resetOverrides,
 		applyThemeDoc
 	} = useTtTheme();
+	const themeRef = React.useRef(theme); themeRef.current = theme;
 
 	const [myThemes, setMyThemes] = React.useState<any[]>([]);
 	const [saveName, setSaveName] = React.useState('');
 	const [savePublic, setSavePublic] = React.useState(true);
 	const [saving, setSaving] = React.useState(false);
+	const [listError, setListError] = React.useState<string | null>(null);
+	const listRequest = React.useRef(0);
 
 	const refreshMyThemes = React.useCallback(async () => {
 		if (!user) return;
+		const request = ++listRequest.current, generation = rootIdentity.read().generation;
+		setListError(null);
 		try {
-			const res = await api.v1.themes.list();
+			const res = await apiRef.current.v1.themes.list();
+			if (request !== listRequest.current || generation !== rootIdentity.read().generation) return;
 			setMyThemes(res?.themes || []);
-		} catch (error) {
-			// listing is best-effort; errors surface on explicit actions
+		} catch (error: any) {
+			if (request === listRequest.current && generation === rootIdentity.read().generation) setListError(error?.error || 'Could not load saved themes. Retry when storage is available.');
 		}
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [user?.id]);
+	}, [user?.id, user?.offline]);
 
 	React.useEffect(() => {
 		refreshMyThemes();
+		return () => { listRequest.current++; };
 	}, [refreshMyThemes]);
 
 	// Apply a shared theme from ?apply=<shareId> deep links.
@@ -329,6 +339,7 @@ export const ThemeStudio = () => {
 	};
 
 	const saveCurrent = async () => {
+		const savingTheme = themeRef.current, savingName = saveName;
 		const name = saveName.trim() || appliedThemeName || `${theme.name} remix`;
 		if (!user) {
 			lopu({
@@ -343,18 +354,20 @@ export const ThemeStudio = () => {
 		try {
 			// Re-saving the currently applied saved theme (same or blank name)
 			// updates it in place instead of minting a duplicate document.
-			const updatingApplied =
-				appliedThemeShareId && (!saveName.trim() || saveName.trim() === appliedThemeName);
+			const appliedOwned = myThemes.find(saved => saved.id === appliedThemeShareId);
+			const updatingApplied = appliedOwned && (!saveName.trim() || saveName.trim() === appliedThemeName);
 			const res = await api.v1.themes.save({
 				id: updatingApplied ? appliedThemeShareId : undefined,
 				name,
 				theme: { name, colors: theme.colors, fonts: theme.fonts, general: theme.general, windows: theme.windows },
-				visibility: savePublic ? 'public' : 'private'
+				visibility: !localOnly && savePublic ? 'public' : 'private',
+				expectedUpdatedAt: updatingApplied ? appliedOwned.updatedAt : undefined
 			});
-			lopu({ title: `Theme "${name}" saved 🎨`, description: savePublic ? 'It’s shareable — copy the link from My themes.' : 'Saved privately.', status: 'success' });
-			setSaveName('');
+			lopu({ title: `Theme "${name}" saved 🎨`, description: localOnly ? 'Saved on this device.' : savePublic ? 'It’s shareable — copy the link from My themes.' : 'Saved privately.', status: 'success' });
+			setSaveName(current => current === savingName ? '' : current);
 			refreshMyThemes();
-			if (res?.theme?.id) {
+			if (res?.theme?.id && themeRef.current === savingTheme) {
+				applyThemeDoc(res.theme.theme, { shareId: res.theme.id });
 				api.v1.themes.setActive({ themeId: res.theme.id }).catch(() => {});
 			}
 		} catch (error: any) {
@@ -377,8 +390,8 @@ export const ThemeStudio = () => {
 					Themes 🎨
 				</Text>
 				<Text marginTop="6px" fontSize="md" color="var(--tt-text, #5a5a66)">
-					Make Thingtime yours — tweak colours, fonts, and the general feel. Save your look as a theme and share it
-					with a link — or browse everyone&rsquo;s public looks in the{' '}
+					Make Thingtime yours — tweak colours, fonts, and the general feel.{' '}
+					{localOnly ? 'Save and export your looks on this device, or browse public looks in the ' : 'Save your look as a theme and share it with a link — or browse public looks in the '}
 					<Text as={RouterLink} to="/themes/gallery" textDecoration="underline" _hover={{ color: 'var(--tt-ink, #16161a)' }}>
 						theme gallery ✨
 					</Text>
@@ -569,7 +582,7 @@ export const ThemeStudio = () => {
 
 				{/* Save + share */}
 				<Text {...sectionHeaderStyle} marginTop={10} marginBottom={2}>
-					Save as a shareable theme
+					{localOnly ? 'Save a theme on this device' : 'Save as a shareable theme'}
 				</Text>
 				<Flex
 					border="1px solid var(--tt-border, #ececef)"
@@ -592,13 +605,13 @@ export const ThemeStudio = () => {
 						border="1px solid var(--tt-border, #ececef)"
 						borderRadius="var(--tt-radius-sm, 9px)"
 					/>
-					<Flex alignItems="center" gap="6px">
+					{localOnly ? <Text fontSize="13px">Saved on this device</Text> : <Flex alignItems="center" gap="6px">
 						<Switch size="sm" isChecked={savePublic} onChange={(e) => setSavePublic(e.target.checked)} />
 						<Text fontSize="13px" color="var(--tt-text, #5a5a66)">
 							Shareable
 						</Text>
-					</Flex>
-					<ActionButton onClick={saveCurrent} fontWeight={700} color="var(--tt-ink, #16161a)">
+					</Flex>}
+					<ActionButton onClick={saveCurrent} disabled={saving} fontWeight={700} color="var(--tt-ink, #16161a)">
 						{saving ? 'Saving…' : 'Save theme 💾'}
 					</ActionButton>
 				</Flex>
@@ -608,6 +621,7 @@ export const ThemeStudio = () => {
 					My themes
 				</Text>
 				<Box marginBottom={3}><ThingTransferControls onImported={refreshMyThemes} /></Box>
+				{listError ? <Flex role="alert" gap={2} alignItems="center"><Text fontSize="sm">{listError}</Text><ActionButton onClick={refreshMyThemes}>Retry</ActionButton></Flex> : null}
 				{!user ? (
 					<Text fontSize="sm" color="var(--tt-muted, #9a9aa6)">
 						<Box as="button" onClick={() => navigate('/login')} color="var(--tt-link, #2f8fd6)" cursor="pointer" fontWeight={600}>
@@ -643,7 +657,7 @@ export const ThemeStudio = () => {
 											{saved.name} {isUsersActive ? '⭐' : ''}
 										</Text>
 										<Text fontSize="xs" color="var(--tt-muted, #9a9aa6)">
-											{saved.visibility === 'public' ? 'shareable 🔗' : 'private 🔒'}
+											{saved.localOnly ? 'on this device' : saved.visibility === 'public' ? 'shareable 🔗' : 'private 🔒'}
 										</Text>
 									</Box>
 									<Flex gap="6px" flexWrap="wrap">

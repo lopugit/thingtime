@@ -4,14 +4,14 @@ import { Link, useNavigate, useParams, useSearchParams, useLocation, useRouteLoa
 
 import { useApi } from '~/hooks/useApi';
 import { useLopu } from '~/components/Lopu/useLopu';
-import { useCurrentUser } from '~/hooks/useCurrentUser';
+import { useWorkspaceUser } from '~/hooks/useWorkspaceUser';
 // the REGISTRY module (not just the lookups): importing it registers the app
 // suites, so a cold load of /p/pokeworld knows the page belongs to an app
 import { ALL_SUITES } from '~/schemas/appSuites/index';
 import { isSafeCssText } from '../Kinds/safeUrl';
 import { PageShell } from '../Layout/PageShell';
 import { WebpageBlocksRenderer, type BuilderChrome } from './WebpageBlocksRenderer';
-import { installSuite, installSuiteOnServer, suiteKeyFromActionKey, suiteKeyOfPage } from './installSuite';
+import { installSuite, installSuiteForWorkspace, suiteKeyFromActionKey, suiteKeyOfPage } from './installSuite';
 import { useWebpageDraft, type UseWebpageDraft } from './useWebpage';
 import { WebpageRuntimeProvider } from './webpageRuntime';
 import { useSharedMediaUrl } from '../Sharing/SharedMedia';
@@ -63,7 +63,7 @@ export function LiveWebpageView({ builderPageId, draft }: { builderPageId?: stri
 	const rootData = useRouteLoaderData('root') as { titlePrefix?: string } | undefined;
 	const runMode = !draft.branch && (standalone || requestedMode === 'run' || requestedMode === 'visit');
 	const linkKey = (searchParams.get('key') || '').trim();
-	const user = useCurrentUser();
+	const user = useWorkspaceUser();
 	const api = useApi();
 	const apiRef = React.useRef(api);
 	apiRef.current = api;
@@ -165,8 +165,8 @@ export function LiveWebpageView({ builderPageId, draft }: { builderPageId?: stri
 				status: 'info',
 				duration: 4000
 			});
-			if (suite.app) {
-				const installed = await installSuiteOnServer(suite.key);
+			if (suite.app || user?.localOnly) {
+				const installed = await installSuiteForWorkspace(suite.key);
 				lopu({
 					title: `${suite.emoji} ${suite.title} installed ✨`,
 					description: `${installed.created} things created · ${installed.updated} refreshed — this page is yours now.`,
@@ -185,7 +185,7 @@ export function LiveWebpageView({ builderPageId, draft }: { builderPageId?: stri
 			});
 			return { href: `/p/${encodeURIComponent(installed.pageId)}` };
 		},
-		[lopu, navigate, user?.id]
+		[lopu, navigate, user?.id, user?.localOnly]
 	);
 
 	// a seeded suite control the viewer has no program for: install the suite

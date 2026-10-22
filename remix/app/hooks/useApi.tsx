@@ -1,8 +1,8 @@
-import { hasLiveSourceBinding } from '~/schemas/liveSources';
-import { FILE_SYNC_REQUIREMENTS } from '~/fileSync/configuration';
-import { parseCloudFile, parseCloudFileCommit, type CloudFileCommit } from '~/fileSync/cloudFile';
-import type { TimelineScope } from '~/timeline/contract';
-import { useCharacterScope, CHARACTER_HEADER } from '~/components/Characters/CharacterScope';
+import { startNotificationHistorySync } from '../local-workspace/notifications.client';
+import { WorkspaceApiIdentity } from '../local-workspace/apiIdentity';
+import { useOfflineWorkspace } from './useWorkspaceUser';
+import { accountApi, startAccountWorkspaceSync } from '../local-workspace/accountApi.client';
+import { anonymousApi } from '../local-workspace/api.client';
 import type { VersionRequest } from '../timeline/publishedVersion';
 import type { BranchCheckoutRequest } from '../timeline/branchCheckout';
 import { timelineRequestScope, type TimelineStorage } from '../timeline/storageScope';
@@ -18,7 +18,7 @@ import { enqueueActionOutcomeRecovery } from '~/timeline/localBackend.client';
 import type { TimelinePageRequest } from '~/timeline/sync';
 import { announceTimelineScopeChange } from '~/timeline/clientEvents';
 import { ensureFoundPostBrowserIdentity } from './foundPostIdentity.client';
-import { useCallback, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { useCurrentUser } from './useCurrentUser';
 import { useDataPlane } from './useDataPlane';
 import { EXPECTED_DATA_PLANE_HEADER } from '../utils/dataPlane';
@@ -135,6 +135,7 @@ export function useApi() {
   const planeRef = useRef(dataPlane); planeRef.current = dataPlane;
   const asyncFetcher = useAsyncFetcher();
   const actionUser = useCurrentUser();
+  const offlineWorkspace = useOfflineWorkspace();
   const actionActor = useRef(actionUser?.id);
   actionActor.current = actionUser?.id;
 
@@ -832,6 +833,10 @@ export function useApi() {
       )
     },
 		attachments: {
+			saveLocalFile: useCallback(async (_input: { requestId: string; name: string; contentType: string; bytes: Uint8Array; folderId?: string | null; purpose?: 'file' | 'post' | 'comment' }, _options?: { signal?: AbortSignal }): Promise<any> => { throw new Error('Local file bytes require a local workspace; account uploads use the existing upload service'); }, []),
+			moveLocalFile: useCallback(async (_input: { id: string; folderId: string | null }): Promise<any> => { throw new Error('Local file moves require an active workspace'); }, []),
+			readLocalFile: useCallback(async (_input: { id: string }, _options?: { signal?: AbortSignal }): Promise<any> => { throw new Error('Local file bytes are unavailable in this account workspace'); }, []),
+
 			// "download all" ZIP manifests: what a post/folder/media archive would
 			// hold (count, bytes, paths) without streaming any bytes. The download
 			// itself is a plain navigation to attachmentArchiveUrl().
@@ -1085,6 +1090,10 @@ export function useApi() {
       )
     },
     things: {
+      fork: useCallback(async (args: { id: string; key?: string }) => {
+        await requireThingtimeCapability('api.things-fork', '1.6.0');
+        return asyncFetcher.submit({ id: args.id, key: args.key }, { action: '/api/v1/things/fork' });
+      }, [asyncFetcher]),
       export: useCallback(async (args: { ids: string[]; key?: string; includeChildren?: boolean; includeDependencies?: boolean; includeFiles?: boolean; includeLinks?: boolean }, options?: { signal?: AbortSignal }) => {
         return withExportDeadline(async signal => {
           await requireThingtimeCapability('api.things-export', '1.15.0');
@@ -1093,8 +1102,9 @@ export function useApi() {
           return asyncFetcher.submit(args, { action: '/api/v1/things/export', signal, errorContext: 'export Things' });
         }, options?.signal);
       }, [asyncFetcher]),
-      import: useCallback(async (args: { manifest: unknown; files?: Record<string, string>; folderId?: string | null }, options?: { signal?: AbortSignal }) => {
-        await requireThingtimeCapability('api.things-import', requiresUncappedDataStrings(args.manifest) ? '1.12.0' : '1.11.0');
+      import: useCallback(async (args: { manifest: unknown; files?: Record<string, string>; localFiles?: Map<string, Uint8Array>; folderId?: string | null }, options?: { signal?: AbortSignal }) => {
+        if (args.localFiles !== undefined) throw new Error('Local file bytes require the local workspace importer; they cannot be sent to an account endpoint');
+        await requireThingtimeCapability('api.things-import', '1.11.0');
         return asyncFetcher.submit(args, { action: '/api/v1/things/import', signal: options?.signal, errorContext: 'import Things' });
       }, [asyncFetcher]),
       // scope: 'subspaces' narrows the page to posts from the viewer's ACTIVE
@@ -1121,13 +1131,13 @@ export function useApi() {
       // only on the URL). `mode` is meaningless without conditions, so the GET
       // URL drops it to keep cache keys stable.
       search: useCallback(
-        async (args) => {
-          const { conditions, mode, ...rest } = args || {};
+        async (args, options?: { signal?: AbortSignal; onRefresh?: (result: any) => void; onError?: (error: unknown) => void }) => {
+          const { conditions, mode, workspace: _workspace, ...rest } = args || {};
           if (rest.near !== undefined) await requireThingtimeCapability('api.things-search', '1.3.0');
           if (rest.anon && !conditions && rest.near === undefined) {
             return getJson(`/api/v1/things/search${toQuery(rest)}`);
           }
-          return asyncFetcher.submit(args || {}, { action: '/api/v1/things/search' });
+          return asyncFetcher.submit({ ...rest, conditions, mode }, { action: '/api/v1/things/search', signal: options?.signal });
         },
         [asyncFetcher]
       ),
@@ -1676,9 +1686,19 @@ export function useApi() {
     }
   };
 
-  const ret = {
-    v1
-  };
-
-  return ret;
+  useEffect(() => {
+    if (actionUser?.id && !actionUser.temporary && dataPlane) {
+      const scope = { kind: 'account' as const, origin: window.location.origin, ownerId: actionUser.id, dataPlane };
+      startAccountWorkspaceSync(scope); startNotificationHistorySync(scope);
+    }
+  }, [actionUser?.id, actionUser?.temporary, dataPlane]);
+  const workspaceApi = useRef(new WorkspaceApiIdentity<typeof v1>());
+  const identity = rootIdentity.read();
+  const workspaceKey = JSON.stringify([identity.generation, identity.pending, offlineWorkspace || null,
+    actionUser?.id || null, actionUser?.temporary || false, dataPlane || null,
+    actionUser?.username, actionUser?.displayName, actionUser?.avatarUrl]);
+  return { v1: workspaceApi.current.resolve(workspaceKey, v1, remote =>
+    offlineWorkspace ? accountApi(remote, { id: offlineWorkspace.ownerId, displayName: 'Offline workspace' }, offlineWorkspace.dataPlane)
+    : actionUser && !actionUser.temporary && dataPlane ? accountApi(remote, { id: actionUser.id, username: actionUser.username, displayName: actionUser.displayName, avatarUrl: actionUser.avatarUrl }, dataPlane)
+    : actionUser && !actionUser.temporary ? remote : anonymousApi(remote)) };
 }

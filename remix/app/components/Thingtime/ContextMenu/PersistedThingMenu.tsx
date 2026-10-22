@@ -6,6 +6,8 @@ import React from 'react';
 import { useNavigate } from 'react-router';
 import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
+import { useWorkspaceUser } from '~/hooks/useWorkspaceUser';
+import { useWorkspaceScope } from '~/hooks/useWorkspaceScope';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { canOfferRecordingHandoff, sendRecordingThingToLopu, type RecordingThingIdentity } from '~/components/Lopu/recordingThingHandoff';
 import type { ThingActionId } from '~/schemas/thingActions';
@@ -26,10 +28,15 @@ export function PersistedThingMenu({ id, initialThing, label, extensions = [], c
   const api = useApi();
   const sharedAccess = useSharedAccess();
   const sharedPath = useSharedThingPath();
-  const user = useCurrentUser();
+  const accountUser = useCurrentUser(), workspace = useWorkspaceUser();
+  // Workspace identity chooses the local adapter; the resolved author below
+  // still determines whether this Thing offers owner actions.
+  const localIdentity = workspace?.localOnly || workspace?.offline;
+  const user = localIdentity ? workspace : accountUser;
+  const scope = useWorkspaceScope();
   const navigate = useNavigate();
   const lopu = useLopu();
-  const identity = `${user?.id || ''}:${id}`;
+  const identity = `${scope}:${user?.id || ''}:${id}`;
   const currentIdentity = React.useRef(identity);
   const owner = React.useRef(user?.id);
   currentIdentity.current = identity;
@@ -42,6 +49,7 @@ export function PersistedThingMenu({ id, initialThing, label, extensions = [], c
   const busy = React.useRef(false);
   const [renameOpen, setRenameOpen] = React.useState(false);
   const [sending, setSending] = React.useState(false);
+  React.useEffect(() => setRenameOpen(false), [identity]);
   const fetched = resolved?.identity === identity ? resolved.thing : undefined;
   // Live card projections win over an earlier menu read (e.g. privacy changed).
   const thing = initialThing ? { ...fetched, ...initialThing } : fetched;
@@ -57,11 +65,11 @@ export function PersistedThingMenu({ id, initialThing, label, extensions = [], c
     } catch { /* Keep last-known presentation; all writes reauthorize server-side. */ }
   };
   const send = async () => {
-    if (!thing || !user?.id || busy.current || handoffDisabled) return;
+    if (!thing || !accountUser?.id || busy.current || handoffDisabled) return;
     busy.current = true;
     setSending(true);
     try {
-      const sent = await sendRecordingThingToLopu(thing, user.id, {
+      const sent = await sendRecordingThingToLopu(thing, accountUser.id, {
         origin: window.location.origin, activeOwner: () => currentIdentity.current === identity ? owner.current : undefined,
         confirm: message => window.confirm(message), fetch: window.fetch.bind(window)
       });
@@ -71,8 +79,8 @@ export function PersistedThingMenu({ id, initialThing, label, extensions = [], c
       if (currentIdentity.current === identity) lopu({ title: 'Could not send to Lopu', description: error instanceof Error ? error.message : 'Check Recording activity before retrying.', status: 'error' });
     } finally { busy.current = false; setSending(false); }
   };
-  const model = id.startsWith('timeline-folder-') ? buildThingEntityMenu({ open: { href }, 'copy-link': true }) : buildThingEntityMenu({ history: !!user?.id && thing?.author?.id === user.id, rename: !!thing && thing.author?.id === user?.id, open: { href }, inspect: { href: inspectHref }, 'copy-link': true, ...capabilities,
-    'send-to-lopu': !!thing && canOfferRecordingHandoff(thing, user?.id) ? { disabled: sending || handoffDisabled } : false
+  const model = id.startsWith('timeline-folder-') ? buildThingEntityMenu({ open: { href }, 'copy-link': true }) : buildThingEntityMenu({ history: !!accountUser?.id && thing?.author?.id === accountUser.id, rename: !!user?.id && !!thing && thing.author?.id === user.id, open: { href }, inspect: { href: inspectHref }, 'copy-link': true, ...capabilities,
+    'send-to-lopu': !!thing && canOfferRecordingHandoff(thing, accountUser?.id) ? { disabled: sending || handoffDisabled } : false
   }, extensions);
   return <><ThingActionMenuButton identity={identity} label={label} model={model} onOpen={() => void resolve()}
     onAction={event => {
@@ -94,8 +102,8 @@ export function PersistedThingMenu({ id, initialThing, label, extensions = [], c
     }} />
     <RenameDialog thing={renameOpen && thing ? thing as ThingsThing : null} onClose={() => setRenameOpen(false)} onRename={async (target, title) => {
       try {
-        const { requireThingtimeCapability } = await import('~/api/utils/capabilities/requireCapability.client');
-        await requireThingtimeCapability('api.things', '1.27.0');
+        // The selected adapter owns capability negotiation. Local writes must
+        // not wait on a remote manifest; remote methods still negotiate it.
         const response = isManagedLibraryThing(target)
           ? await api.v1.things.renameLibrary({ id, displayTitle: title, expectedUpdatedAt: target.updatedAt })
           : target.thingtime.includes('attachment')
@@ -105,7 +113,7 @@ export function PersistedThingMenu({ id, initialThing, label, extensions = [], c
         if (currentIdentity.current !== identity) return false;
         setResolved({ identity, thing: { ...target, crystal: { ...target.crystal, ...thingRenameCrystal(target, title) } } });
         lopu({ title: 'Renamed', status: 'success' }); onRenamed?.(title); onChanged?.();
-        window.dispatchEvent(new Event('thingtime:root-data-refresh'));
+        if (!localIdentity) window.dispatchEvent(new Event('thingtime:root-data-refresh'));
         return true;
       } catch (error) {
         if (currentIdentity.current === identity) lopu({ title: 'Could not rename', description: error instanceof Error ? error.message : 'Please try again.', status: 'error' });

@@ -15,6 +15,14 @@ export const bundleFromPlan = async (plan: TransferPlan, options: { key?: string
   const files = new Map<string, Uint8Array>();
   for (const [index, entry] of plan.files.entries()) {
     options.signal?.throwIfAborted();
+    if (typeof plan.readLocalFile === 'function') {
+      const bytes = Uint8Array.from(await plan.readLocalFile(entry.id, options.signal));
+      options.signal?.throwIfAborted();
+      if (bytes.byteLength !== entry.bytes || bytes.byteLength > TRANSFER_LIMITS.fileBytes) invalid('A local file changed size during export');
+      manifest.files[index].sha256 = await transferChecksum(bytes);
+      files.set(entry.id, bytes);
+      continue;
+    }
     if (entry.inlineBase64 !== undefined) {
       const avatar = plan.things.some(thing => thing.id === entry.targetId && thing.thingtime.length === 1 &&
         thing.thingtime[0] === 'chat-archive-participant' && thing.crystal.avatarFileId === entry.id);

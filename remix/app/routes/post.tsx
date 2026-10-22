@@ -1,3 +1,5 @@
+import { useWorkspaceScope } from '~/hooks/useWorkspaceScope';
+import { LOCAL_WORKSPACE_CHANGED } from '~/local-workspace/runtime.client';
 import { sharePathForThing } from '~/components/Sharing/audienceCore';
 import { sharedThingPath } from '~/components/Sharing/sharedMediaCore';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
@@ -21,12 +23,18 @@ import type { PostChange, PublicPost } from '~/components/Feed/feedTypes';
 const MUTED = 'var(--tt-muted, #9a9aa6)';
 
 type ThingResponse = {
+  incomplete?: boolean;
+  localCacheError?: string;
   post: PublicPost | null;
   parent: PublicPost | null;
   root: PublicPost | null;
 };
 
 export const PostPage = () => {
+  const scope = useWorkspaceScope(), { id } = useParams(), [query] = useSearchParams();
+  return <WorkspacePostPage key={JSON.stringify([scope,id,query.get('key'),query.get('sharedRoot')])} />;
+};
+const WorkspacePostPage = () => {
   const { id } = useParams();
   // hidden (unlisted) posts: the secret ?key= from the shared link makes the
   // post viewable to whoever opened it — logged out included
@@ -41,14 +49,15 @@ export const PostPage = () => {
   const [data, setData] = React.useState<ThingResponse | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(true);
+  const [workspaceRevision, refreshWorkspace] = React.useReducer(value => value + 1, 0);
+  React.useEffect(() => { window.addEventListener(LOCAL_WORKSPACE_CHANGED, refreshWorkspace); return () => window.removeEventListener(LOCAL_WORKSPACE_CHANGED, refreshWorkspace); }, []);
   // permalink pages count as views too (feed/profile wire this via PostList)
   const { observeView } = useViewTracking();
 
   React.useEffect(() => {
     let cancelled = false;
-    setLoading(true);
+    if (!data) setLoading(true);
     setError(null);
-    setData(null);
 
     // stamp the START — a response snapshotted before a reaction tap that
     // lands after it merges through the viewer's overlay, never clobbers it
@@ -58,6 +67,7 @@ export const PostPage = () => {
       .then((resp: any) => {
         if (cancelled) return;
         setData({
+          incomplete: resp.incomplete === true, localCacheError: resp.localCacheError,
           post: resp.post ? mergeReactionOverlay(startedAt, resp.post) : null,
           parent: resp.parent ? mergeReactionOverlay(startedAt, resp.parent) : null,
           root: resp.root ? mergeReactionOverlay(startedAt, resp.root) : null
@@ -65,6 +75,7 @@ export const PostPage = () => {
       })
       .catch((err: any) => {
         if (cancelled) return;
+        if ([403,404,410].includes(Number(err?.status))) setData(null);
         setError(err?.error || 'This post is missing or private 🌫️');
       })
       .finally(() => {
@@ -76,7 +87,7 @@ export const PostPage = () => {
     };
     // api.v1.things.get is a stable useCallback
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id, linkKey, sharedRoot, user?.id]);
+  }, [id, linkKey, sharedRoot, user?.id, workspaceRevision]);
 
   const post = data?.post ?? null;
   const isComment = !!post?.thingtime?.includes('comment');
@@ -169,13 +180,16 @@ export const PostPage = () => {
           </Flex>
         )}
 
+        {data?.incomplete && <Text fontSize="sm" color={MUTED}>Saved on this device. Account updates and cloud media need a connection.</Text>}
+        {data?.localCacheError && <Text role="alert" fontSize="sm">{data.localCacheError}</Text>}
+        {error && post && <Text role="alert" fontSize="sm">{error}</Text>}
         {loading && (
           <Center paddingY={16}>
             <Spinner size="lg" color={MUTED} />
           </Center>
         )}
 
-        {!loading && (error || !post) && (
+        {!loading && !post && (
           <Flex flexDirection="column" alignItems="center" rowGap={3} paddingY={16}>
             <Text fontSize="sm" color={MUTED}>
               {error || 'This thing has no post view 🌫️'}

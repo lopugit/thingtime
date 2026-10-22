@@ -8,7 +8,7 @@ import React from 'react';
 import { useLocation, useNavigate } from 'react-router';
 import { componentPageHref, componentNavigationState, hasComponentBackEntry } from './componentNavigation';
 import { useLopu } from '~/components/Lopu/useLopu';
-import { useCurrentUser } from '~/hooks/useCurrentUser';
+import { useWorkspaceScope } from '~/hooks/useWorkspaceScope';
 import { LOCAL_UI_ACTION, reduceLocalUi, localQueryHref } from '../Actions/localUiAction';
 import { ActionResult, type ControlResult } from './ActionResult';
 import { Box } from '@chakra-ui/react';
@@ -96,9 +96,7 @@ export const useThingSource = ({
 	apiRef.current = api;
 	const sourceKey = JSON.stringify(source || null);
 	const active = !!source && interactive;
-	const canRun = runtime.viewer.signedIn || !!runtime.sharedRun;
-	const liveStream = source?.refresh === 'live' ? source.stream : undefined;
-	const liveSourceValid = !!liveStream && validateLiveSourceStream(liveStream);
+	const canRun = runtime.canRunSources || !!runtime.sharedRun;
 	// inputs interpolate {arg} tokens against the args and {query.x} against
 	// the URL — the same substitution the template itself gets
 	const inputsKey = JSON.stringify({ i: source?.inputs || null, a: argValues, q: runtime.query });
@@ -114,12 +112,10 @@ export const useThingSource = ({
 			identity: runtime.identity,
 			binding,
 			status: (!active ? 'inert' : !canRun ? 'signed-out' : 'loading') as ThingSourceState,
-			result: active && canRun && !runtime.sharedRun && (source?.refresh !== 'live' || liveSourceValid)
-				? readSourceCache(runtime.viewer.id, runtime.pageId, cacheId, binding)
-				: undefined,
+			result: active && canRun && !runtime.sharedRun ? readSourceCache(runtime.cacheScope, runtime.pageId, cacheId, binding) : undefined,
 			error: null as string | null
 		}),
-		[runtime.identity, binding, active, canRun, runtime.sharedRun, runtime.viewer.id, runtime.pageId, cacheId, liveSourceValid, source?.refresh]
+		[runtime.identity, binding, active, canRun, runtime.sharedRun, runtime.cacheScope, runtime.pageId, cacheId]
 	);
 	const [storedState, setState] = React.useState(initial);
 	// A new target must never render the preceding target's controls, even
@@ -151,7 +147,7 @@ export const useThingSource = ({
 	// sources. A live stream keeps its connection until explicit refresh.
 	const sourceLoader = source?.refresh === 'live' ? null : runtime.load;
 	const signedIn = runtime.viewer.signedIn;
-	const viewerId = runtime.viewer.id;
+	const cacheScope = runtime.cacheScope;
 	const pageId = runtime.pageId;
 
 	React.useEffect(() => {
@@ -245,7 +241,7 @@ export const useThingSource = ({
 		const stale = () => cancelled || currentIdentity.current.identity !== runtime.identity || currentIdentity.current.binding !== binding;
 		const fail = (error: unknown) => {
 			const failure = sourceFailure(error, !!runtime.sharedRun);
-			if (failure.clear) clearSourceCache(viewerId, pageId, cacheId);
+			if (failure.clear) clearSourceCache(cacheScope, pageId, cacheId);
 			setState((current) => ({ ...current, status: failure.status, error: failure.error, ...(failure.clear ? { result: undefined } : {}) }));
 		};
 
@@ -260,8 +256,8 @@ export const useThingSource = ({
 				if (stale()) return;
 				if (response?.status === 'ok') {
 					if (!runtime.sharedRun) {
-						if (response.cache === 'no-store') clearSourceCache(viewerId, pageId, cacheId);
-						else writeSourceCache(viewerId, pageId, cacheId, response.result ?? null, binding);
+						if (response.cache === 'no-store') clearSourceCache(cacheScope, pageId, cacheId);
+						else writeSourceCache(cacheScope, pageId, cacheId, response.result ?? null, binding);
 					}
 					setState({ identity: runtime.identity, binding, status: 'ok', result: response.result ?? null, error: null });
 				} else {
@@ -282,8 +278,8 @@ export const useThingSource = ({
 		canRun,
 		runtime.sharedRun,
 		runtime.identity,
-		sourceLoader,
-		viewerId,
+		runtime.load,
+		cacheScope,
 		sourceKey,
 		inputsKey,
 		runVersion,
@@ -357,7 +353,7 @@ export const LiveTemplate = ({
 	children?: React.ReactNode;
 }) => {
 	const runtime = useWebpageRuntime();
-	const user = useCurrentUser();
+	const workspaceScope = useWorkspaceScope();
 	const navigate = useNavigate();
 	const location = useLocation();
 	const lopu = useLopu();
@@ -367,7 +363,7 @@ export const LiveTemplate = ({
 		)
 	);
 	// Explicit navigation starts a new component draft; source refreshes do not.
-	const identity = JSON.stringify([user?.id, runtime.pageId, runtime.query, render, baseScope]);
+	const identity = JSON.stringify([workspaceScope, runtime.pageId, runtime.query, render, baseScope]);
 	const [local, setLocal] = React.useState<{ identity: string; values: Record<string, unknown>; outcome?: ControlResult }>({ identity, values: {} });
 	const active = local.identity === identity ? local : { identity, values: {} };
 	const [pending, setPending] = React.useState<{ identity: string; action: string | null }>({ identity, action: null });

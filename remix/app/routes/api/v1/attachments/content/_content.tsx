@@ -6,8 +6,8 @@ import { withFoundPostBrowser } from '~/api/utils/things/foundPostRequest';
 import { attachmentImageResponse, parseImageWidth } from '~/api/utils/attachments/imageVariants';
 import { json, redirect } from '~/api/http';
 import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
-import { getAttachmentDownload, getAttachmentDownloadTarget, getAttachmentFingerprint } from '~/api/utils/attachments/attachments';
-import { withAttachmentPrivateResponse } from '~/api/utils/attachments/attachmentResponses';
+import { getAttachmentDownload } from '~/api/utils/attachments/attachments';
+import { isSameOriginAttachmentRequest, withAttachmentPrivateResponse } from '~/api/utils/attachments/attachmentResponses';
 import { fetchStoredObject } from '~/api/utils/attachments/localAttachmentStorage';
 import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
 import { viewerOf, withFriendIds, withLinkKeys } from '~/api/utils/things/things';
@@ -65,6 +65,10 @@ export const createAttachmentContentLoader = (overrides: Partial<ContentDependen
 			// Service credentials are not first-party attachment principals. Treat
 			// them exactly like an anonymous caller for public-post authorization.
 			const user = resolvedUser?.accountKind === 'user' ? resolvedUser : null;
+			const retainOwnedFile = url.searchParams.get('cache') === 'retain';
+			if (retainOwnedFile && (!user || !isSameOriginAttachmentRequest(request))) return json({ ok: false, error: 'A same-origin full user session is required' }, { status: user ? 403 : 401 });
+			if (retainOwnedFile && (sharedRoot || url.searchParams.has('key') || url.searchParams.has('width') || url.searchParams.get('download') !== '1'))
+				return json({ ok: false, error: 'File retention requires an unscoped original download' }, { status: 400 });
 			const limit = await dependencies.enforceLimit(request, 'attachments.read', user ? `user:${user.id}` : null, {
 				failClosed: true
 			});
@@ -101,55 +105,12 @@ export const createAttachmentContentLoader = (overrides: Partial<ContentDependen
 				audience || sharedRoot ? { id: '', ...audience, ...(user?.isAdmin ? { isAdmin: true } : {}), ...(sharedRoot ? { sharedRoot } : {}) } : null,
 				url.searchParams.get('id'),
 				url.searchParams.get('download') === '1',
-				retained ? range!.version : undefined
+				retainOwnedFile
 			);
 			if (result.ok === false) return json({ ok: false, error: result.error }, { status: result.status });
-			if (range) {
-				if (result.version !== range.version) return json({ ok: false, error: 'Attachment version changed' }, { status: 409 });
-				if (range.offset + range.length > result.size) return json({ ok: false, error: 'Attachment range is outside the file' }, { status: 416 });
-				const signal = AbortSignal.any([request.signal, AbortSignal.timeout(30_000)]);
-				let bytes: Uint8Array<ArrayBuffer>;
-				try {
-					const upstream = await dependencies.rangeFetch(result.url, {
-						redirect: 'error',
-						signal,
-						headers: { Range: `bytes=${range.offset}-${range.offset + range.length - 1}` }
-					});
-					bytes = await readExactRange(upstream, range, result.size, () => signal.throwIfAborted());
-				} catch {
-					return json({ ok: false, error: 'Attachment range unavailable; retry the same version' }, { status: 502 });
-				}
-				signal.throwIfAborted();
-				if (retained && (await dependencies.getUser(actorRequest))?.id !== user?.id)
-					return json({ ok: false, error: 'Attachment not found' }, { status: 404 });
-				const refreshedAudience = await dependencies.enrichViewer(
-					withLinkKeys(withFoundPostBrowser(viewerOf(user), request, !resolvedUser), [url.searchParams.get('key') || ''])
-				);
-				const current = await dependencies.download(
-					refreshedAudience || sharedRoot
-						? { id: '', ...refreshedAudience, ...(user?.isAdmin ? { isAdmin: true } : {}), ...(sharedRoot ? { sharedRoot } : {}) }
-						: null,
-					url.searchParams.get('id'),
-					false,
-					retained ? range!.version : undefined
-				);
-				if (current.ok === false) return json({ ok: false, error: current.error }, { status: current.status });
-				if (current.version !== range.version || current.size !== result.size)
-					return json({ ok: false, error: 'Attachment changed during the range read' }, { status: 409 });
-				signal.throwIfAborted();
-				return new Response(bytes, {
-					status: 206,
-					headers: {
-						'Content-Type': 'application/octet-stream',
-						'Content-Disposition': result.disposition,
-						'Content-Length': String(bytes.length),
-						'Content-Range': `bytes ${range.offset}-${range.offset + range.length - 1}/${result.size}`,
-						'Accept-Ranges': 'bytes',
-						ETag: `"${range.version}"`,
-						'Cache-Control': 'private, no-store',
-						'X-Content-Type-Options': 'nosniff'
-					}
-				});
+			if (retainOwnedFile) {
+				if (!result.retention || result.retention.ownerId !== user!.id) return json({ ok: false, error: 'Saved owned file not found' }, { status: 404 });
+				return json({ ok: true, cacheKey: `${result.cacheKey}:original`, size: result.size, file: result.retention });
 			}
 			if (width && (!result.image || result.size > 20 * 1024 * 1024)) {
 				return json({ ok: false, error: 'Image preview unavailable; use the original' }, { status: 415 });

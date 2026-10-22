@@ -4,6 +4,16 @@ import { mergeBuilderThings, requestBuilderThingsPage } from './useBuilderThings
 
 const thing = (id: string) => ({ id, crystal: { name: id } });
 
+test('device-only list coverage clears when a confirmed account page replaces it', async () => {
+	const signal = new AbortController().signal;
+	const local = await requestBuilderThingsPage(async () => ({ ok: true, things: [thing('local')], nextCursor: 'device:local', incomplete: true }), 'webpage', undefined, signal);
+	assert.equal(local.deviceOnly, true);
+	assert.equal(local.nextCursor, 'device:local');
+	const account = await requestBuilderThingsPage(async () => ({ ok: true, things: [thing('local'), thing('remote')], nextCursor: null }), 'webpage', undefined, signal);
+	assert.equal(account.deviceOnly, undefined);
+	assert.equal(account.rows.length, 2);
+});
+
 test('Builder passes each kind and cursor through and retains continuation after an empty visible page', async () => {
 	const requests: any[] = [];
 	const list = async (args: any) => {

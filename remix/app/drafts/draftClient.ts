@@ -1,3 +1,5 @@
+import { LocalDrafts } from '../local-workspace/drafts';
+import { assertAccountSyncAllowed, currentAccountWorkspace, anonymousWorkspaceDatabase, anonymousWorkspaceLease, LOCAL_WORKSPACE_OWNER } from '../local-workspace/runtime.client';
 import { requireThingtimeCapability } from '~/api/utils/capabilities/requireCapability.client';
 import { EXPECTED_ACTOR_HEADER } from '~/api/utils/auth/expectedActor';
 import type { AccountDraft, DraftSummary } from './draftCore';
@@ -11,7 +13,11 @@ export async function draftRequest<T = { ok: true; draft: AccountDraft }>(
 	input?: Record<string, unknown>,
 	query?: Record<string, string>
 ): Promise<T> {
-	await requireThingtimeCapability('api.drafts', '1.1.0');
+	if (actor === LOCAL_WORKSPACE_OWNER) return new LocalDrafts(anonymousWorkspaceDatabase(), { kind: 'anonymous' }, anonymousWorkspaceLease()).request(input, query);
+	const scope = currentAccountWorkspace();
+	if (scope) { if (scope.ownerId !== actor) throw new DraftRequestError(409, 'Draft account changed'); assertAccountSyncAllowed(scope); }
+	await requireThingtimeCapability('api.drafts', '1.0.0');
+	if (scope) assertAccountSyncAllowed(scope);
 	const response = await fetch(`/api/v1/drafts${query ? `?${new URLSearchParams(query)}` : ''}`, {
 		credentials: 'include',
 		method: input ? 'POST' : 'GET',

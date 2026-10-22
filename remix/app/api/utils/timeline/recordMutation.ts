@@ -1,9 +1,8 @@
+import { thingContentSnapshot } from '../../../timeline/thingContent.ts';
 import { recordPageComponentBindings } from './componentBindings';
-import { TIMELINE_SNAPSHOT_MAX_BYTES } from '../../../timeline/snapshotParts.ts';
 import { splitLargeThingSnapshot, storeTimelineSnapshotParts } from './snapshotParts.ts';
 import { randomUUID } from 'node:crypto';
-import { copyBoundedJson } from '../../../utils/boundedJson.ts';
-import { TIMELINE_RESERVED_PREFIX, parseTimelineEvent, type TimelineEvent, type TimelineSnapshot } from '../../../timeline/contract.ts';
+import { TIMELINE_RESERVED_PREFIX, parseTimelineEvent, type TimelineEvent } from '../../../timeline/contract.ts';
 import { appendTimelineEvent } from './repository.ts';
 import { isProtectedThingtime } from '../../../schemas/registry.ts';
 import { currentContentStorageSizeBytes, thingStorageSizeBytes, StorageMutationError } from '../storage/storageCore.ts';
@@ -11,20 +10,7 @@ import { markUserStorageNeedsReconcile, retainDeletedThingStorage } from '../sto
 import { timelineMutationContext } from './mutationContext';
 import { folderPlacementSnapshot } from '../../../timeline/folderPlacement.ts';
 
-/** Explicit content projection. Never copy a Mongo document wholesale: secure,
- * tokens, hidden-link keys, grants and platform ledger state are not revisions.
- * Dedicated protected families must supply their own approved snapshot adapter. */
-export function thingContentSnapshot(doc: any): TimelineSnapshot | null {
-	if (!doc) return null;
-	return {
-		adapter: 'thing-content', version: 1,
-		value: copyBoundedJson({
-			thingtime: doc.thingtime ?? ['data'], crystal: doc.crystal ?? null, extended: doc.extended ?? null,
-			tags: doc.tags ?? [], acl: doc.acl ?? ['tt:user'], folderId: doc.folderId ?? null, targetId: doc.targetId ?? null,
-			geo: doc.geo ?? null
-		}, { maxBytes: TIMELINE_SNAPSHOT_MAX_BYTES, maxDepth: 90, maxNodes: 90_000, sortKeys: true }, 'Thing revision')
-	};
-}
+export { thingContentSnapshot } from '../../../timeline/thingContent.ts';
 
 export type ThingMutationCapture = {
 	id: string;

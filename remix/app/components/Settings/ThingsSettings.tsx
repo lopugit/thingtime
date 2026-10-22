@@ -1,4 +1,5 @@
 import React from 'react';
+import { WorkspaceStorageSettings } from './WorkspaceStorageSettings';
 import { Switch, Text } from '@chakra-ui/react';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { MobileDeviceSetupCard } from '~/components/Devices/MobileDeviceSetupCard';
@@ -20,8 +21,8 @@ export function ThingsSettings() {
 	const [dismissed, setDismissed] = useNodePanelPreference(user?.id);
 	return (
 		<>
-			<SettingsSection eyebrow={mobile ? "This device" : "This Mac"} description="Your local connection and privacy access are always available here.">
-                {mobile && user?.id && !user.temporary && user.accountKind === 'user' ? <MobileDeviceSetupCard ownerId={user.id} onPaired={devices.refreshList} /> : null}
+			<WorkspaceStorageSettings />
+			<SettingsSection eyebrow="This Mac" description="Your local connection and privacy access are always available here.">
 				{node.available ? (
 					<>
 						<LocalNodeSetupCard state={node} controlFor={node.controlFor} onAction={node.executeAction} onRefresh={node.refresh} />

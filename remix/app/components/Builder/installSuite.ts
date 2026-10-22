@@ -1,3 +1,14 @@
+import {
+	anonymousThings,
+	anonymousWorkspaceLease,
+	announceLocalWorkspaceChange,
+	isAnonymousWorkspace,
+	currentAccountWorkspace,
+	accountRemoteWorkspaceLease
+} from '~/local-workspace/runtime.client';
+import { WorkspaceError } from '~/local-workspace/storage';
+import { EXPECTED_ACTOR_HEADER } from '~/api/utils/auth/expectedActor';
+import { EXPECTED_DATA_PLANE_HEADER } from '~/utils/dataPlane';
 import { requireThingtimeCapability } from '~/api/utils/capabilities/requireCapability.client';
 import { materializeSuite, type BehaviourSuite } from '~/schemas/behaviourSuites';
 
@@ -13,11 +24,7 @@ type CreateThing = (payload: Record<string, unknown>) => Promise<any>;
 
 export type InstalledSuite = { pageId: string; actionIds: Record<string, string>; schemaIds: Record<string, string> };
 
-export const installSuite = async (
-	create: CreateThing,
-	suite: BehaviourSuite,
-	options: { seeded?: boolean } = {}
-): Promise<InstalledSuite> => {
+export const installSuite = async (create: CreateThing, suite: BehaviourSuite, options: { seeded?: boolean } = {}): Promise<InstalledSuite> => {
 	const bundle = materializeSuite(suite, 'own');
 	const createId = async (payload: Record<string, unknown>): Promise<string> => {
 		const resp: any = await create(payload);
@@ -49,10 +56,8 @@ export const installSuite = async (
 	return { pageId, actionIds, schemaIds };
 };
 
-// The server-side install: one request, idempotent (upserts by key), the
-// route every APP suite prefers — see api/utils/webpages/suites.ts. Falls
-// back to the client part-by-part install above when the endpoint is
-// unavailable (an older deployment), so both paths write the same things.
+// Workspace installation uses one shared plan: an atomic local transaction
+// for anonymous work, or the existing authorized server endpoint for accounts.
 export type ServerInstalledSuite = {
 	ok: true;
 	suite: string;
@@ -65,17 +70,40 @@ export type ServerInstalledSuite = {
 	entryPageKey: string;
 };
 
-export const installSuiteOnServer = async (key: string, options: { onlyMissing?: boolean } = {}): Promise<ServerInstalledSuite> => {
-	await requireThingtimeCapability('api.webpages-suites-install', key === 'mac-menu-bar' ? '1.6.0' : key === 'agent-tasks' ? '1.5.0' : key === 'media-tools' ? '1.4.0' : key === 'web-standards' ? '1.3.0' : '1.1.0');
-	const response = await fetch('/api/v1/webpages/suites/install', {
-		method: 'POST',
-		credentials: 'include',
-		headers: { 'content-type': 'application/json' },
-		body: JSON.stringify({ key, ...(options.onlyMissing ? { onlyMissing: true } : {}) })
-	});
-	const data = await response.json().catch(() => null);
-	if (!response.ok || !data?.ok) throw data || { error: `Install failed (${response.status})` };
-	return data as ServerInstalledSuite;
+export const installSuiteForWorkspace = async (key: string, options: { onlyMissing?: boolean } = {}): Promise<ServerInstalledSuite> => {
+	if (isAnonymousWorkspace()) {
+		const lease = anonymousWorkspaceLease();
+		const { installLocalSuite } = await import('~/local-workspace/suites');
+		lease.assertCurrent();
+		const result = await installLocalSuite(anonymousThings(), key, options);
+		lease.assertCurrent();
+		announceLocalWorkspaceChange();
+		return result;
+	}
+	const account = currentAccountWorkspace();
+	if (!account) throw new WorkspaceError('WORKSPACE_CHANGED', 'Reopen this workspace before installing a suite', 409);
+	const lease = accountRemoteWorkspaceLease(account);
+	lease.assertCurrent();
+	await requireThingtimeCapability('api.webpages-suites-install', key === 'web-standards' ? '1.3.0' : '1.1.0');
+	lease.assertCurrent();
+	const retired = new AbortController();
+	const unsubscribe = lease.onInvalidate(() => retired.abort());
+	try {
+		const response = await fetch('/api/v1/webpages/suites/install', {
+			method: 'POST',
+			credentials: 'same-origin',
+			redirect: 'error',
+			signal: AbortSignal.any([retired.signal, AbortSignal.timeout(60_000)]),
+			headers: { 'content-type': 'application/json', [EXPECTED_ACTOR_HEADER]: account.ownerId, [EXPECTED_DATA_PLANE_HEADER]: account.dataPlane },
+			body: JSON.stringify({ key, ...(options.onlyMissing ? { onlyMissing: true } : {}) })
+		});
+		const data = await response.json().catch(() => null);
+		lease.assertCurrent();
+		if (!response.ok || !data?.ok) throw data || { error: `Install failed (${response.status})` };
+		return data as ServerInstalledSuite;
+	} finally {
+		unsubscribe();
+	}
 };
 
 // A suite's own-mode actionKeys are `demo-<suite>-<key>`; recover the suite a
@@ -84,7 +112,8 @@ export const installSuiteOnServer = async (key: string, options: { onlyMissing?:
 export const suiteKeyFromActionKey = (actionKey: string, suites: BehaviourSuite[]): string | null => {
 	let best: string | null = null;
 	for (const suite of suites) {
-		if ((actionKey.startsWith(`demo-${suite.key}-`) || actionKey.startsWith(`app-${suite.key}-`)) && (!best || suite.key.length > best.length)) best = suite.key;
+		if ((actionKey.startsWith(`demo-${suite.key}-`) || actionKey.startsWith(`app-${suite.key}-`)) && (!best || suite.key.length > best.length))
+			best = suite.key;
 	}
 	return best;
 };

@@ -32,6 +32,9 @@ import {
 import { useApi } from '~/hooks/useApi';
 import { clearLocalCache, readLocalCache, writeLocalCache } from '~/hooks/localCache';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
+import { useWorkspaceUser } from '~/hooks/useWorkspaceUser';
+import { workspaceStorageBinding, workspaceStorageIdentity, subscribeWorkspaceStorage } from '~/local-workspace/storageStatus.client';
+import { workspaceScopeKey } from '~/local-workspace/storage';
 import { thingtimeSchemas } from '~/schemas/registry';
 import { CARD_STYLES } from '~/theme/card';
 import { getUserDisplayName, getUserIdentityDetail } from '~/utils/userIdentity';
@@ -413,6 +416,14 @@ const StandardThingResult = React.memo(function StandardThingResult({
 });
 
 export const SearchPage = () => {
+  const location = useLocation(), user = useWorkspaceUser();
+  const identity = React.useSyncExternalStore(subscribeWorkspaceStorage, workspaceStorageIdentity, () => '');
+  const source = new URLSearchParams(location.search).get('source');
+  const device = source === 'device' || (source !== 'online' && !!(user?.localOnly || user?.offline));
+  return <SearchWorkspace key={`${identity}:${device}`} device={device} />;
+};
+
+const SearchWorkspace = ({ device }: { device: boolean }) => {
   const api = useApi();
   const lopu = useLopu();
   const location = useLocation();
@@ -420,7 +431,8 @@ export const SearchPage = () => {
   const navigation = useNavigation();
   const user = useCurrentUser();
 
-  const cacheKey = cacheKeyFor(user?.id);
+  const binding = workspaceStorageBinding();
+  const cacheKey = cacheKeyFor(binding ? JSON.stringify([workspaceScopeKey(binding.scope), device ? 'device' : 'online']) : null);
   // Purge any pre-scoping global 'tt-search' blob (it may hold another account's
   // private results) once, so it can never paint for the wrong principal.
   React.useEffect(() => {
@@ -454,6 +466,7 @@ export const SearchPage = () => {
   const [ranked, setRanked] = React.useState(cached?.ranked || false);
   const [nextCursor, setNextCursor] = React.useState<string | null>(cached?.nextCursor ?? null);
   const [loading, setLoading] = React.useState(false);
+  const [searchError, setSearchError] = React.useState('');
 
   const [schemasOpen, setSchemasOpen] = React.useState(false);
   const [communitySchemas, setCommunitySchemas] = React.useState<SchemaSource[]>([]);
@@ -476,6 +489,8 @@ export const SearchPage = () => {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
+      requestSeqRef.current += 1;
+      schemaSeqRef.current += 1;
     };
   }, []);
 
@@ -531,6 +546,7 @@ export const SearchPage = () => {
       // never fire from anywhere else
       const submittedLocationKey = locationKeyRef.current;
       setLoading(true);
+      setSearchError('');
 
       const current = cursor ? submittedRef.current : stateRef.current;
 
@@ -560,7 +576,7 @@ export const SearchPage = () => {
         sort: effectiveSort,
         cursor: cursor || undefined,
         limit: PAGE_SIZE,
-        anon: viewerIdRef.current ? undefined : 1
+        ...(device ? { workspace: true, device: true } : { anon: viewerIdRef.current ? undefined : 1 })
       };
 
       try {
@@ -568,7 +584,7 @@ export const SearchPage = () => {
         // aren't things (separate collection) and subspaces have their own
         // directory search, so each gets its own endpoint, in parallel; either
         // failing quietly keeps the post results the search is about
-        const wantPeople = !cursor && !!current.q.trim();
+        const wantPeople = !device && !cursor && !!current.q.trim();
         const [resp, peopleResp, subspacesResp] = (await Promise.all([
           apiRef.current.v1.things.search(body),
           wantPeople
@@ -631,7 +647,7 @@ export const SearchPage = () => {
             navigationIdleRef.current &&
             locationKeyRef.current === submittedLocationKey
           ) {
-            const params = new URLSearchParams();
+            const params = new URLSearchParams({ source: device ? 'device' : 'online' });
             if (current.q.trim()) params.set('q', current.q.trim());
             lastSyncedQRef.current = current.q.trim();
             navigate({ pathname: '/search', search: params.toString() ? `?${params}` : '' }, { replace: true });
@@ -660,12 +676,14 @@ export const SearchPage = () => {
             }
           }
         }
-        lopuRef.current({ title: err?.error || 'Search hit a snag 😞', status: 'error' });
+        const message = err?.error || err?.message || 'Search hit a snag. Try again.';
+        setSearchError(message);
+        lopuRef.current({ title: message, status: 'error' });
       } finally {
         if (seq === requestSeqRef.current) setLoading(false);
       }
     },
-    [navigate]
+    [navigate, cacheKey, device]
   );
 
   // first mount: only an EXPLICIT deep link searches automatically. A ?q=
@@ -771,12 +789,15 @@ export const SearchPage = () => {
       // sort and reloads in one click, before the setSchemaSort re-render syncs
       // the ref, so passing it as an argument avoids a stale-ref pre-write dance.
       const sort = options.sort ?? rail.schemaSort;
-      const resp: any = await apiRef.current.v1.schemas.browse({
+      const query = {
         q: rail.schemaQ.trim() || undefined,
         sort,
         cursor: cursor || undefined,
         limit: 12
-      });
+      };
+      const resp: any = device
+        ? await apiRef.current.v1.things.search({ ...query, sort: 'newest', thingtime: 'schema', workspace: true, device: true }).then((page: any) => ({ ...page, schemas: page.things }))
+        : await apiRef.current.v1.schemas.browse(query);
       if (seq !== schemaSeqRef.current || !resp?.ok) return;
       // only a SUCCESSFUL first load marks the rail as loaded — a failed or
       // rate-limited first fetch must retry when the rail is next opened
@@ -795,7 +816,7 @@ export const SearchPage = () => {
     } finally {
       if (seq === schemaSeqRef.current) setSchemasLoading(false);
     }
-  }, []);
+  }, [device]);
 
   React.useEffect(() => {
     if (!schemasOpen || schemasLoadedRef.current) return;
@@ -946,11 +967,16 @@ export const SearchPage = () => {
   // the count is a visibility-superset approximation (private-to-others docs
   // can be counted but never shown), so present it as such
   const totalLabel =
-    total === null ? null : `${totalCapped ? `${total}+` : `~${total}`} thing${total === 1 && !totalCapped ? '' : 's'}`;
+    total === null ? null : `${totalCapped ? `${total}+` : device ? total : `~${total}`} thing${total === 1 && !totalCapped ? '' : 's'}`;
 
   return (
     <Flex background="var(--tt-surface, #fafafb)" justifyContent="center" minHeight="100vh" width="100%">
       <Flex direction="column" gap={5} maxWidth="760px" pb={24} paddingTop="calc(var(--thingtime-safe-area-top, 0px) + var(--tt-nav-clearance, 54px) + 36px)" px={4} width="100%">
+        <Flex gap={2} align="center" wrap="wrap">
+          <Button size="sm" variant={device ? "solid" : "outline"} aria-pressed={device} onClick={() => { const params = new URLSearchParams(location.search); params.set('source', 'device'); navigate({ pathname: '/search', search: `?${params}` }); }}>This device</Button>
+          <Button size="sm" variant={device ? "outline" : "solid"} aria-pressed={!device} onClick={() => { const params = new URLSearchParams(location.search); params.set('source', 'online'); navigate({ pathname: '/search', search: `?${params}` }); }}>Online search</Button>
+        </Flex>
+        {device && <Text fontSize="sm" color="var(--tt-muted, #9a9aa6)">Search saved content in this workspace. Text matches literally; field filters use Thingtime’s normal search grammar. Account results include only content saved on this device.</Text>}
         {/* Commander, grown up: the same rainbow-ringed input, page-sized */}
         <form onSubmit={submit}>
           <Center position="relative" width="100%">
@@ -984,7 +1010,7 @@ export const SearchPage = () => {
                   onChange={(event) => setQ(event.target.value)}
                   outline="none"
                   padding={0}
-                  placeholder="Search every thing…"
+                  placeholder={device ? "Search this device…" : "Search every thing…"}
                   value={q}
                   variant="unstyled"
                 />
@@ -996,6 +1022,7 @@ export const SearchPage = () => {
           </Center>
         </form>
 
+        {searchError && <Text role="alert" fontSize="sm">{searchError}</Text>}
         {/* builder controls */}
         <Flex align="center" gap={2} wrap="wrap">
           <Button
@@ -1035,7 +1062,7 @@ export const SearchPage = () => {
           </Select>
           <Select maxWidth="130px" onChange={(event) => setSort(event.target.value)} size="xs" value={sort}>
             <option value="auto">auto sort</option>
-            <option value="relevance">relevance</option>
+            {!device && <option value="relevance">relevance</option>}
             <option value="newest">newest</option>
             <option value="oldest">oldest</option>
           </Select>
@@ -1086,7 +1113,7 @@ export const SearchPage = () => {
               >
                 Recent
               </Button>
-              <Button
+              {!device && <Button
                 onClick={() => {
                   setSchemaSort('popular');
                   loadSchemas({ sort: 'popular' });
@@ -1095,7 +1122,7 @@ export const SearchPage = () => {
                 variant={schemaSort === 'popular' ? 'solid' : 'ghost'}
               >
                 Popular
-              </Button>
+              </Button>}
             </Flex>
             <Flex gap={2} wrap="wrap">
               {schemaSources.map((source) => (

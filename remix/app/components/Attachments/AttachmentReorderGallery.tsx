@@ -8,6 +8,7 @@ import { MediaGalleryGrid, MediaGalleryTile } from '~/components/Media/MediaGall
 import { AttachmentAnnotatePopover } from './AttachmentAnnotatePopover';
 import { movedToTargetPosition, nudgeTargetId, useMediaReorder, type MediaReorderNudge } from '~/components/Media/useMediaReorder';
 import { attachmentDisplayName, attachmentMediaSrc, formatAttachmentBytes } from './attachmentUiCore';
+import { useSharedMediaUrl } from '../Sharing/SharedMedia';
 import type { PublicAttachment } from './attachmentTypes';
 
 const MUTED = 'var(--tt-muted, #9a9aa6)';
@@ -35,12 +36,12 @@ const gripLabel = (name: string, position: number, count: number) =>
 	`Reorder ${name} — position ${position} of ${count}. Drag, or use arrow keys to move.`;
 
 const AttachmentPreview = ({ attachment }: { attachment: PublicAttachment }) => {
-  const actor = useCharacterScope();
+	const mediaUrl = useSharedMediaUrl();
 	if (attachment.mediaKind === 'image') {
 		return (
 			<Box
 				as="img"
-				src={characterMediaUrl(attachmentMediaSrc(attachment), actor?.id)}
+				src={mediaUrl(attachmentMediaSrc(attachment)) || undefined}
 				alt=""
 				loading="lazy"
 				referrerPolicy="no-referrer"
@@ -54,7 +55,7 @@ const AttachmentPreview = ({ attachment }: { attachment: PublicAttachment }) => 
 	return (
 		<Box
 			as="video"
-			src={characterMediaUrl(attachmentMediaSrc(attachment), actor?.id)}
+			src={mediaUrl(attachmentMediaSrc(attachment)) || undefined}
 			aria-label={`Preview of ${attachmentDisplayName(attachment)}`}
 			width="100%"
 			height="100%"
