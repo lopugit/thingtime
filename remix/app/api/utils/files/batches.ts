@@ -207,8 +207,9 @@ export function createFileBatchService(
 			);
 		};
 
-		for (let offset = 0; offset < dispatchMembers.length; offset += 8) {
-			const wave = dispatchMembers.slice(offset, offset + 8);
+		const memberConcurrency = Math.min(8, d.configuration.configuration.resourceLimits?.transferConcurrency ?? 8);
+		for (let offset = 0; offset < dispatchMembers.length; offset += memberConcurrency) {
+			const wave = dispatchMembers.slice(offset, offset + memberConcurrency);
 			let waveError: unknown = terminalError;
 			if (!terminal)
 				try {

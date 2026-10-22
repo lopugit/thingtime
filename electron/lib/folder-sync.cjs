@@ -1,5 +1,7 @@
 'use strict';
 
+const { governorFor, limits: resourceLimits } = require('./folder-resource-governor.cjs');
+const { stageFolderDownload } = require('./folder-download.cjs');
 const { uploadFolderPart, uploadRetry, retryableUploadFailure } = require('./folder-upload.cjs');
 const { validateFolderBatchInput, validateFolderBatchReply } = require('./folder-validate-batch.cjs');
 const { uploadFolderBatch } = require('./folder-upload-batch.cjs');
@@ -8,7 +10,7 @@ const { stageRangeMetadata } = require('./folder-stream.cjs');
 const { normalizeEndpointUrl } = require('./desktop-settings.cjs');
 const { randomUUID } = require('node:crypto');
 const { performance } = require('node:perf_hooks');
-const ACTIONS = new Set(['validate-folder-batch', 'upload-batch', 'context', 'upload-part', 'list', 'choose', 'conditions', 'remove', 'scan', 'scan-stream', 'scan-stream-finish', 'scan-changes', 'scan-capture', 'scan-status', 'scan-cancel', 'scan-skips', 'scan-page', 'scan-discard', 'inspect', 'read', 'read-range', 'stage-begin', 'stage-append', 'stage-range', 'stage-finish', 'write-approve', 'write-check', 'publication-lookup', 'publish', 'trash', 'trash-lookup', 'trash-expected', 'trash-inspect', 'trash-restore', 'trash-list', 'trash-restore-reviewed', 'suspend']);
+const ACTIONS = new Set(['validate-folder-batch', 'upload-batch', 'context', 'upload-part', 'list', 'choose', 'conditions', 'remove', 'scan', 'scan-stream', 'scan-stream-finish', 'scan-changes', 'scan-capture', 'scan-status', 'scan-cancel', 'scan-skips', 'scan-page', 'scan-discard', 'inspect', 'read', 'read-range', 'stage-begin', 'stage-download', 'stage-append', 'stage-range', 'stage-finish', 'write-approve', 'write-check', 'publication-lookup', 'publish', 'trash', 'trash-lookup', 'trash-expected', 'trash-inspect', 'trash-restore', 'trash-list', 'trash-restore-reviewed', 'suspend']);
 const supportsBatchPages = version => {
     const parts = typeof version === 'string' && version.length <= 32 && /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/.exec(version);
     return !!parts && parts[1] === '1' && Number.isSafeInteger(Number(parts[2])) && Number.isSafeInteger(Number(parts[3])) && Number(parts[2]) >= 10;
@@ -225,6 +227,14 @@ class DesktopFolderSync {
         if (!input || typeof input !== 'object' || Array.isArray(input) || !UUID.test(input.requestId) ||
             !identifier(input.ownerId) || !identifier(input.deviceId) || !ACTIONS.has(input.action) ||
             (input.action !== 'context' && !(input.action === 'suspend' && input.origin === undefined) && input.origin !== apiOrigin) || Buffer.byteLength(JSON.stringify(stageRangeMetadata(input))) > (input.action === 'validate-folder-batch' ? 524_288 : input.action === 'upload-batch' ? 600_000 : 131_072)) throw unavailable();
+        if (input.resourceLimits !== undefined) {
+            if (!input.rootId || typeof input.resourceScope !== 'string' || !input.resourceScope || input.resourceScope.length > 512 || !Object.keys(resourceLimits(input.resourceLimits)).length) throw unavailable();
+        }
+        if (input.batch?.descriptor && input.resourceLimits !== undefined) {
+            const descriptor = input.batch.descriptor, saved = resourceLimits(descriptor.configuration?.configuration?.resourceLimits);
+            const supplied = resourceLimits(input.resourceLimits);
+            if (input.resourceScope !== descriptor.scope?.rootId || ['uploadBytesPerSecond', 'downloadBytesPerSecond', 'transferConcurrency', 'indexingConcurrency', 'cpuPercent'].some(key => supplied[key] !== saved[key])) throw unavailable();
+        }
         if (Object.prototype.hasOwnProperty.call(input, 'pageSize') &&
             (!['scan-page', 'scan-skips', 'scan-changes', 'scan-stream-finish'].includes(input.action) || !Number.isSafeInteger(input.pageSize) || input.pageSize < 1 || input.pageSize > 4096)) throw unavailable();
         if (input.action === 'validate-folder-batch') validateFolderBatchInput(input, { apiOrigin });
@@ -315,7 +325,11 @@ class DesktopFolderSync {
         let outcome = 'failed', endReply;
         const lane = input.action === 'scan-changes' ? 'streamWaiter' : 'active';
         const state = { context, folderDeadline: input.action === 'validate-folder-batch' ? this.now() + input.remainingMs : null, input: structuredClone(input), abort: new AbortController(), dispatched: false, lane, phase: 'admission' };
-        const timer = setTimeout(() => this.cancel(state), state.folderDeadline === null ? this.timeoutMs : Math.min(this.timeoutMs, input.remainingMs)); timer.unref?.();
+        const policy = state.input.resourceLimits;
+        const governedPayload = policy && ((['upload-part', 'upload-batch'].includes(input.action) && (policy.uploadBytesPerSecond || policy.cpuPercent)) ||
+            (input.action === 'stage-download' && (policy.downloadBytesPerSecond || policy.cpuPercent)) ||
+            (['stage-finish', 'publish'].includes(input.action) && policy.cpuPercent));
+        const timer = governedPayload ? null : setTimeout(() => this.cancel(state), state.folderDeadline === null ? this.timeoutMs : Math.min(this.timeoutMs, input.remainingMs)); timer?.unref?.();
         const verify = async () => {
             const previousPhase = state.phase;
             state.phase = 'account-verification';
@@ -324,8 +338,15 @@ class DesktopFolderSync {
             await timing.measure('account', () => this.verifyAccount(context, signal)); this.assertCurrent(state);
             state.phase = previousPhase;
         };
-        const nativeRequest = (request, extra = {}) => timing.measure('native', () => this.requestNative('folder-sync.request', request, { ...extra, signal: extra.signal ?? state.abort.signal }));
+        let governor;
+        const nativeRequest = (request, extra = {}) => timing.measure('native', async () => {
+            const governed = request.rootId === state.input.rootId && state.input.resourceLimits ? { ...request, resourceLimits: state.input.resourceLimits, resourceScope: state.input.resourceScope } : request;
+            const reply = await this.requestNative('folder-sync.request', governed, { ...extra, signal: extra.signal ?? state.abort.signal });
+            if (governor && reply?.resources?.version === 1) governor.observeNative(reply.resources);
+            return reply;
+        });
         try {
+            governor = governorFor(state.input, context);
             await timing.measure('queue', () => this.admit(state));
             await verify();
             let apiCapabilities;
@@ -377,21 +398,29 @@ class DesktopFolderSync {
                 if (!capability?.bulk || !/^1\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/.test(capability.apiCapabilities?.features?.['api.file-sync-batches']?.version ?? ''))
                     throw new Error('This native host or server does not support bounded upload batches.');
             }
+            if (state.input.action === 'stage-download') {
+                const manifest = this.samePageCapability(context, state.input)?.apiCapabilities ?? await timing.measure('capability', () => this.capabilities(context, AbortSignal.any([state.abort.signal, AbortSignal.timeout(20_000)])));
+                await verify();
+                if (!/^1\.(1[7-9]|[2-9][0-9]|[1-9][0-9]{2,})\.(0|[1-9][0-9]*)$/.test(manifest?.features?.['api.attachment-content']?.version ?? '')) throw new Error('The selected server does not support signed native download targets. Update the server before using this connection.');
+            }
             state.phase = 'native-request';
             state.dispatched = true;
             const value = state.input.action === 'upload-batch' ? await uploadFolderBatch({ input: state.input, context, signal: state.abort.signal,
-                assertCurrent: () => this.assertCurrent(state), requestNative: nativeRequest, fetchUpload: this.fetchUpload }) :
+                assertCurrent: () => this.assertCurrent(state), requestNative: nativeRequest, fetchUpload: this.fetchUpload, refreshPart: async body => { await verify(); return signDesktopUploadPart(context, body, state.abort.signal, 20_000, this.diagnostic); } }) :
                 state.input.action === 'upload-part' ? await uploadFolderPart({ input: state.input, context,
-                signal: state.abort.signal, authorize: verify, fetchUpload: this.fetchUpload,
+                signal: state.abort.signal, authorize: verify, assertCurrent: () => this.assertCurrent(state), fetchUpload: this.fetchUpload,
                 requestNative: nativeRequest,
                 signPart: async body => { await verify(); return signDesktopUploadPart(context, body, state.abort.signal, 20_000, this.diagnostic); }
-            }) : await nativeRequest({ ...state.input, origin: context.apiOrigin });
+            }) : state.input.action === 'stage-download' ? await stageFolderDownload({ input: state.input, context, signal: state.abort.signal, authorize: verify, assertCurrent: () => this.assertCurrent(state), requestNative: nativeRequest }) : await nativeRequest({ ...state.input, origin: context.apiOrigin });
+            if (governor) value.resources = governor.snapshot();
             endReply = timing.begin('reply');
             state.phase = 'reply-verification';
             if (!value || typeof value !== 'object') throw unavailable();
             if (state.input.action === 'context') {
                 this.assertCurrent(state);
                 value.apiCapabilities = apiCapabilities;
+                if (/^1\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/.test(value.capabilities?.fileResourceLimitsVersion ?? '') && /^1\.([1-9][0-9]*)\.(0|[1-9][0-9]*)$/.test(value.capabilities?.fileStagingVersion ?? '') && /^1\.(1[7-9]|[2-9][0-9]|[1-9][0-9]{2,})\.(0|[1-9][0-9]*)$/.test(apiCapabilities?.features?.['api.attachment-content']?.version ?? ''))
+                    value.capabilities = { ...value.capabilities, fileDownloadVersion: '1.0.0' };
                 if (/^1\.([2-9]|[1-9][0-9]+)\.(0|[1-9][0-9]*)$/.test(value.capabilities?.fileAccessVersion ?? ''))
                     value.capabilities = { ...value.capabilities, fileUploadVersion: '1.1.0' };
             }

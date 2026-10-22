@@ -62,8 +62,9 @@ function fixture() {
 		network.push({ url: String(url), init });
 		return new Response('ok', { headers: { 'x-thingtime-api-fallback': responseOrigin } });
 	};
-	const create = () =>
+	const create = (resourcePolicy?: Parameters<typeof createDesktopFolderHost>[0]['resourcePolicy']) =>
 		createDesktopFolderHost({
+			resourcePolicy,
 			ownerId: 'owner',
 			deviceId: 'device',
 			bridge,
@@ -428,4 +429,18 @@ test('desktop bulk runner requires both trusted native and selected-origin API c
 	const before = f.calls.length, foreign = structuredClone(descriptor); foreign.scope.ownerId = 'foreign';
 	await assert.rejects(host.uploadBatch({ descriptor: foreign, digest }, {}, f.lifetime.signal));
 	assert.equal(f.calls.length, before, 'scope drift is rejected before native dispatch');
+});
+
+test('resource policy negotiates native support, binds connection scope and consumes scoped feedback', async () => {
+ const old = fixture(), observed: unknown[] = [];
+ const resourcePolicy = { resourceLimits: { transferConcurrency: 2, uploadBytesPerSecond: 1234 }, resourceScope: 'connection', observe: (value: unknown) => { observed.push(value); } };
+ await assert.rejects(old.create(resourcePolicy), /Update Thingtime/);
+ const f = fixture();
+ f.patch({ capabilities: { platform: 'macos', fileAccessVersion: '1.1.0', fileResourceLimitsVersion: '1.0.0' },
+ resources: { version: 1, cpuPercent: 12, cpuStatus: 'measured', effectiveTransferConcurrency: 2, effectiveIndexingConcurrency: 1 }, entries: [], complete: true });
+ const host = await f.create(resourcePolicy);
+ await host.request('owner', { action: 'scan', rootId }, f.lifetime.signal);
+ const sent = f.calls.find(value => value.action === 'scan');
+ assert.deepEqual(sent.resourceLimits, resourcePolicy.resourceLimits); assert.equal(sent.resourceScope, 'connection');
+ assert.equal(observed.length, 1);
 });

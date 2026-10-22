@@ -1,4 +1,5 @@
-import { parseFileSyncConfiguration, FILE_SYNC_IGNORE_REQUIREMENTS } from './configuration';
+import { SyncResourceGovernor } from './resourceGovernor';
+import { parseFileSyncConfiguration, FILE_SYNC_IGNORE_REQUIREMENTS, FILE_SYNC_RESOURCE_REQUIREMENTS } from './configuration';
 import { planConfiguredFileSync, readOwnedFileSyncConfiguration, type SavedFileSyncConfiguration } from './configuredPlan';
 import { inventorySyncEntry, parseCloudInventory } from './cloudInventory';
 import { sameSyncScope, validSyncEntry, validSyncPath, type SyncScope, type SyncEntry } from './reconcile';
@@ -29,6 +30,7 @@ export function foregroundSyncContext(reviewed: SavedFileSyncConfiguration, scop
 	};
 	const authorize = async () => {
 		check();
+		if (configuration.resourceLimits) for (const [feature, minimum] of Object.entries(FILE_SYNC_RESOURCE_REQUIREMENTS)) await input.runtime.requireCapability(feature, minimum);
 		if (configuration.ignoreRules) await input.runtime.requireCapability('api.things', FILE_SYNC_IGNORE_REQUIREMENTS['api.things']);
 		check();
 		const current = readOwnedFileSyncConfiguration(await input.readConfiguration(), scope.ownerId);
@@ -84,6 +86,7 @@ export function foregroundSyncContext(reviewed: SavedFileSyncConfiguration, scop
 	};
 	const runtime: CloudTransportRuntime = {
 		...input.runtime,
+		...(configuration.resourceLimits ? { resources: input.runtime.resources ?? new SyncResourceGovernor(configuration.resourceLimits) } : {}),
 		// Custom mutation policies must remain in the shared per-part path.
 		nativeUploadApproval: input.runtime.authorizeMutation ? undefined : approved,
 		currentScope: input.currentScope,

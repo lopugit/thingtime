@@ -459,3 +459,22 @@ test('server accepts legacy V1 no-ignore configuration consistently for probe an
 	assert.equal(result.ok, true);
 	assert.equal(result.results[0].status, 'source-required');
 });
+
+test('configuration3 transfer ceiling bounds actual concurrent provider members without changing IDs', async () => {
+ for (const ceiling of [1, 2, 100]) {
+  let active = 0, peak = 0;
+  const f = fixture(12, { admit: async (_owner: string, _signal: AbortSignal, _deadline: number, work: () => Promise<unknown>) => {
+   active++; peak = Math.max(peak, active);
+   try { await new Promise(resolve => setImmediate(resolve)); return await work(); }
+   finally { active--; }
+  } });
+  f.d.configuration.configuration.configurationVersion = 3;
+  f.d.configuration.configuration.resourceLimits = { transferConcurrency: ceiling };
+  const ids = f.d.members.map((m: any) => m.write.operation.id);
+  const result = await f.run('prepare', f.d.members.map((m: any) => ({ ordinal: m.ordinal, sha256: raw })));
+  assert.equal(result.ok, true);
+  assert.equal(peak, Math.min(8, ceiling));
+  assert.equal(active, 0);
+  assert.deepEqual(f.d.members.map((m: any) => m.write.operation.id), ids);
+ }
+});

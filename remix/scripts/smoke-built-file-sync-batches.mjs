@@ -38,7 +38,8 @@ export async function resolveCompiledEntry(bundle) {
 export function assertBuiltBatchManifest(manifest, origin) {
 	assert.equal(manifest.schemaVersion, 1);
 	assert.equal(manifest.origin, origin);
-	assert.equal(manifest.features?.['api.file-sync-batches']?.version, '1.1.0');
+	assert.equal(manifest.features?.['api.file-sync-batches']?.version, '1.2.0');
+	assert.equal(manifest.features?.['api.attachment-content']?.version, '1.17.0');
 	assert.ok(
 		manifest.operations?.some(
 			(op) => op.feature === 'api.file-sync-batches' && op.path === ENDPOINT && op.methods.length === 1 && op.methods[0] === 'POST'
@@ -97,12 +98,12 @@ async function worker(entry, directory, parentTemporaryRoot) {
 		const manifest = await get(PUBLIC_MANIFEST);
 		assertBuiltBatchManifest(manifest, origin);
 		const registry = await get('/api/v1/capabilities');
-		assert.equal(registry.features?.['api.file-sync-batches'], '1.1.0');
+		assert.equal(registry.features?.['api.file-sync-batches'], '1.2.0');
 		assert.ok(registry.features?.['route.v1.files.batches']);
 		const docs = await get(ENDPOINT + '-docs');
 		assert.equal(docs.ok, true);
 		assert.equal(docs.docs.id, 'file-sync-batches');
-		assert.equal(docs.docs.contractVersion, '1.1.0');
+		assert.equal(docs.docs.contractVersion, '1.2.0');
 		for (const phase of ['observe', 'prepare', 'verify', 'commit','folder-probe','folder-commit'])
 			assert.ok(
 				docs.docs.steps.some((step) => step.includes(`phase=${phase}`)),
@@ -130,7 +131,7 @@ async function worker(entry, directory, parentTemporaryRoot) {
 				adapter: 'compiled-node_middleware',
 				origin,
 				feature: 'api.file-sync-batches',
-				version: '1.1.0',
+				version: '1.2.0',
 				postRegistered: true,
 				docsPhases: 6,
 				unauthenticatedStatus: 401,

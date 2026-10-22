@@ -1,3 +1,4 @@
+import { DeviceSyncPanel } from './DeviceSyncBrowser';
 import { FilesystemThingsBrowser } from '../Things/FilesystemThingsBrowser';
 import React, { memo } from 'react';
 
@@ -74,7 +75,8 @@ const Section = ({
 				marginX={-1.5}
 				onClick={toggleExpanded}
 				paddingX={1.5}
-				paddingY={1}
+				paddingY={2}
+				minHeight="44px"
 				sx={{ WebkitAppRegion: 'no-drag' }}
 				type="button"
 				width="calc(100% + 12px)"
@@ -82,7 +84,7 @@ const Section = ({
 				_focusVisible={{ boxShadow: '0 0 0 2px var(--tt-accent, #ec4899)' }}
 			>
 				<Flex alignItems="center" gap={1.5} minWidth={0}>
-					<Text as="h3" color="var(--tt-muted, #71717a)" fontSize="10px" fontWeight={800} letterSpacing="0.055em" textTransform="uppercase">
+					<Text as="h3" color="var(--tt-muted, #71717a)" fontSize="13px" fontWeight={600}>
 						{label}
 					</Text>
 					{typeof count === 'number' ? <DeviceStatusPill label={String(count)} tone="neutral" /> : null}
@@ -94,12 +96,13 @@ const Section = ({
 					flexShrink={0}
 					transform={expanded ? 'rotate(0deg)' : 'rotate(-90deg)'}
 					transition="transform 140ms ease"
+					sx={{ '@media (prefers-reduced-motion: reduce)': { transition: 'none' } }}
 				>
 					<ChevronDown size={15} strokeWidth={2} />
 				</Box>
 			</Flex>
 			<Box hidden={!expanded} id={panelId}>
-				{section === 'files' && !expanded ? null : children}
+				{(section === 'files' || section === 'sync') && !expanded ? null : children}
 			</Box>
 		</Box>
 	);
@@ -153,6 +156,9 @@ export type DeviceDetailsDrawerProps = {
 	presentation?: 'drawer' | 'page';
 	state: DeviceRuntimeState | null;
 	localBattery?: DeviceBattery | null;
+	ownerId?: string;
+	pairedDeviceIds?: readonly string[];
+	ownedDeviceIds?: readonly string[];
 	now?: number;
 	controlFor?: DeviceControlResolver;
 	onAction?: DeviceActionHandler;
@@ -169,6 +175,9 @@ export const DeviceDetailsDrawer = memo(
 		presentation = 'drawer',
 		state,
 		localBattery,
+		ownerId,
+		pairedDeviceIds = [],
+		ownedDeviceIds = [],
 		now = Date.now(),
 		controlFor,
 		onAction,
@@ -330,7 +339,7 @@ export const DeviceDetailsDrawer = memo(
 						borderBottom="1px solid var(--tt-border, #ececef)"
 						paddingBottom={3}
 						paddingLeft={{ base: 4, sm: 5 }}
-						paddingRight={14}
+						paddingRight={presentation === 'drawer' ? '120px' : '24px'}
 						paddingTop={{ base: 'calc(16px + env(safe-area-inset-top))', md: 4 }}
 					>
 						{summary ? (
@@ -399,7 +408,10 @@ export const DeviceDetailsDrawer = memo(
 									</Notice>
 								) : null}
 
-								<Section deviceId={state.deviceId} key={`files:${state.deviceId}`} label="Files" section="files">
+								<Section deviceId={state.deviceId} key={`sync:${state.deviceId}`} label="File sync & backup" section="sync">
+									<DeviceSyncPanel deviceId={state.deviceId} ownerId={ownerId} pairedDeviceIds={pairedDeviceIds} ownedDeviceIds={ownedDeviceIds} />
+								</Section>
+								<Section deviceId={state.deviceId} key={`files:${state.deviceId}`} label="Live device filesystem" section="files">
                   {summary.capabilities?.some(capability => capability.id === 'filesystem.v1' && capability.supported && capability.enabled) ? <FilesystemThingsBrowser compact deviceId={state.deviceId} /> : <Text fontSize="12px">Update the Thingtime node on this device to browse its home folder.</Text>}
                 </Section>
                 <Section deviceId={state.deviceId} key={`observed-state:${state.deviceId}`} label="Quick controls" section="observed-state">
@@ -743,7 +755,7 @@ export const DeviceDetailsDrawer = memo(
 						height={11}
 						justifyContent="center"
 						position="absolute"
-						right={{ base: 14, md: 15 }}
+						right={{ base: '60px', md: '64px' }}
 						top={{ base: 2, md: 2 }}
 						to={deviceThingsPageHref(deviceId)}
 						width={11}
