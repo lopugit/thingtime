@@ -1331,7 +1331,7 @@ const ThingsLibraryPage = () => {
   );
 	const deviceMenuModel = useMemo(() => ({ sections: [{ id: 'device-navigation', actions: [{
 		id: 'open-device-files', label: 'Open synced files', icon: '🗂️', lucide: 'folder', href: menuDeviceId ? deviceSyncedFilesHref(menuDeviceId) : '/things'
-	}, { id: 'open-device-page', label: 'Device settings page', icon: '↗', lucide: 'maximize', href: menuDeviceId ? deviceThingsPageHref(menuDeviceId) : '/things'
+	}, { id: 'open-device-page', label: 'Device settings page', icon: '⚙️', lucide: 'maximize', href: menuDeviceId ? deviceThingsPageHref(menuDeviceId) : '/things'
 	}, { id: 'open-device-settings', label: 'Quick device settings', icon: '⚙️', lucide: 'settings', command: 'inspect-device'
 	}] }] }), [menuDeviceId]);
 
