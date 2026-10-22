@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import assert from "node:assert/strict";
+import { fileURLToPath } from "node:url";
 import { readFileSync } from "node:fs";
 
 const CAPACITY_PATTERNS = [
@@ -134,4 +135,4 @@ function main() {
   process.stdout.write(`retryable=${result.retryable}\nreason=${result.reason}\n`);
 }
 
-main();
+if (process.argv[1] === fileURLToPath(import.meta.url)) main();

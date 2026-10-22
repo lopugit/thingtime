@@ -553,6 +553,7 @@ jobs:
             .github/actions/lopu-agent
             .github/scripts/classify-claude-credential-failure.mjs
             .github/scripts/lopu-credential-vault.mjs
+            .github/scripts/lopu-model-waterfall.mjs
           sparse-checkout-cone-mode: false
 
       - name: Fetch and validate the ordered credential bundle
@@ -3494,10 +3495,10 @@ jobs:
               && inputs.feature_stack_plan_b64 != ''))
     runs-on: ${{ (inputs.promotion_source_pr != '' || inputs.promotion_plan_b64 != '') && 'ubuntu-latest' || needs.route.outputs.runner_label || 'ubuntu-latest' }}
     timeout-minutes: 2
-    # This job deliberately has no checkout and no repository permissions. It
-    # reads one public, non-secret setting and turns it into a closed set of
-    # Claude CLI values; repository or PR code can never execute here.
-    permissions: {}
+    # Read public model metadata through the protected controller parser.
+    # No PR source or provider credentials are available to this job.
+    permissions:
+      contents: read
     outputs:
       model_args: ${{ steps.waterfall.outputs.model_args }}
       primary_model: ${{ steps.waterfall.outputs.primary_model }}
@@ -3509,228 +3510,18 @@ jobs:
       codex_model: ${{ steps.waterfall.outputs.codex_model }}
       codex_reasoning_effort: ${{ steps.waterfall.outputs.codex_reasoning_effort }}
     steps:
+      - name: Check out the trusted model parser
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: github-actions
+          path: trusted
+          persist-credentials: false
+          sparse-checkout: .github/scripts
+
       - name: Fetch and validate the configured waterfall
         id: waterfall
         shell: bash
-        env:
-          # One provider selection governs every model-backed Lopu lane. Keep
-          # LOPU_REVIEW_BACKEND as a compatibility fallback for existing repos.
-          LOPU_AGENT_BACKEND: ${{ vars.LOPU_AGENT_BACKEND || vars.LOPU_REVIEW_BACKEND || 'claude' }}
-          LOPU_CODEX_MODEL: ${{ vars.LOPU_CODEX_MODEL || 'gpt-5.6-terra' }}
-          LOPU_CODEX_REASONING_EFFORT: ${{ vars.LOPU_CODEX_REASONING_EFFORT || 'xhigh' }}
-        run: |
-          set -euo pipefail
-
-          endpoint="https://thingtime.com/api/v1/settings/pr-conflict-auto-resolver-model-waterfall"
-          response_file="$RUNNER_TEMP/pr-conflict-model-waterfall.json"
-
-          # Use only the configured model order; never invent a default attempt.
-          waterfall='[]'
-          source="Thingtime admin setting"
-
-          if curl --fail --silent --show-error \
-            --proto '=https' \
-            --tlsv1.2 \
-            --connect-timeout 5 \
-            --max-time 12 \
-            --retry 2 \
-            --retry-delay 1 \
-            --retry-max-time 30 \
-            --max-filesize 65536 \
-            --output "$response_file" \
-            "$endpoint"; then
-            # Slurp first so a response containing multiple top-level JSON
-            # values is malformed too. Only the exact public setting key and a
-            # unique 1..256 item array of closed-charset composed option ids
-            # (`<model>[:<effort>][:fast]`, the expanded Admin catalog) is
-            # valid. Every entry must start with an alphanumeric — never `-` —
-            # and can never contain a space, so a compromised response cannot
-            # smuggle another CLI flag through this chain.
-            if configured="$(jq -cse '
-              select(length == 1)
-              | .[0]
-              | select(type == "object")
-              | select(.ok == true)
-              | select(.key == "Thingtime.PRConflictAutoResolverModelWaterfall")
-              | .waterfall
-              | select(type == "array")
-              | select(length >= 1 and length <= 256)
-              | select(all(.[]; type == "string"))
-              | select(all(.[]; test("^[a-z0-9][a-z0-9.:-]{0,63}$")))
-              | select(length == (unique | length))
-            ' "$response_file" 2>/dev/null)"; then
-              waterfall="$configured"
-              source="Thingtime admin setting"
-            else
-              echo "::error::Thingtime returned a malformed conflict-resolver model waterfall; no model will run."
-              exit 1
-            fi
-          else
-            echo "::error::Thingtime conflict-resolver model waterfall is unavailable; no model will run."
-            exit 1
-          fi
-
-          # Never interpolate API strings into claude_args. Re-validate every
-          # entry against fixed patterns and rebuild the ordered chain only
-          # from the matched tokens, so even a compromised response cannot
-          # inject another CLI flag or model name. Composed option ids carry
-          # `<model>[:<effort>][:fast]`. Claude Code runs Claude-capable
-          # entries only; an entry for another provider (an OpenAI id, for
-          # example) configures that provider's own consumers and is skipped
-          # here without failing the chain.
-          mapfile -t configured_ids < <(jq -r '.[]' <<<"$waterfall")
-          models=()
-          claude_effort="max"
-          primary_fast=0
-          mapping_failed=0
-          for id in "${configured_ids[@]}"; do
-            if ! [[ "$id" =~ ^[a-z0-9][a-z0-9.:-]{0,63}$ ]] || [[ "$id" == *::* ]] || [[ "$id" == *: ]]; then
-              mapping_failed=1
-              break
-            fi
-            IFS=':' read -r -a segments <<<"$id"
-            base="${segments[0]}"
-            effort=""
-            fast=0
-            segments_ok=1
-            for segment in "${segments[@]:1}"; do
-              case "$segment" in
-                fast)
-                  [ "$fast" -eq 0 ] || segments_ok=0
-                  fast=1
-                  ;;
-                none|minimal|low|medium|high|xhigh|max|ultra)
-                  [ -z "$effort" ] || segments_ok=0
-                  effort="$segment"
-                  ;;
-                *) segments_ok=0 ;;
-              esac
-            done
-            if [ "$segments_ok" -ne 1 ]; then
-              mapping_failed=1
-              break
-            fi
-            if [ "$base" = "default" ]; then
-              model="default"
-            elif [[ "$base" =~ ^claude-[a-z0-9-]{1,48}$ ]]; then
-              model="${BASH_REMATCH[0]}"
-            else
-              echo "Skipping waterfall entry '$id'; this Claude Code chain cannot run it."
-              continue
-            fi
-            duplicate=0
-            for existing in "${models[@]}"; do
-              if [ "$existing" = "$model" ]; then
-                duplicate=1
-                break
-              fi
-            done
-            # Variants of one base model collapse into its single CLI slot;
-            # the first occurrence keeps the position, and only the primary
-            # entry's effort steers the session-wide --effort flag.
-            [ "$duplicate" -eq 0 ] || continue
-            if [ "${#models[@]}" -eq 0 ]; then
-              case "$effort" in
-                low|medium|high|xhigh|max) claude_effort="$effort" ;;
-                "") : ;;
-                *) echo "Primary entry effort '$effort' has no Claude Code tier; keeping --effort max." ;;
-              esac
-              primary_fast="$fast"
-            fi
-            models+=("$model")
-          done
-          if [ "$mapping_failed" -eq 1 ]; then
-            echo "::error::Validated waterfall mapping failed closed; no model will run."
-            exit 1
-          fi
-          if [ "${#models[@]}" -eq 0 ]; then
-            echo "::error::No Claude-capable waterfall entries; no model will run."
-            exit 1
-          fi
-          if [ "$primary_fast" -eq 1 ]; then
-            echo "The primary entry requests fast mode; headless Claude Code has no fast-mode flag, so it is recorded but not applied."
-          fi
-
-          primary="${models[0]}"
-          case "$primary" in
-            claude-fable-5) backend_label="Claude Fable 5" ;;
-            claude-opus-5) backend_label="Claude Opus 5" ;;
-            default) backend_label="Claude Code default" ;;
-            *) backend_label="Claude Code $primary" ;;
-          esac
-          if [ "$claude_effort" != "max" ]; then
-            backend_label="$backend_label ($claude_effort effort)"
-          fi
-          model_args="--model $primary"
-          if [ "${#models[@]}" -gt 1 ]; then
-            fallbacks="$(IFS=,; echo "${models[*]:1}")"
-            model_args="$model_args --fallback-model $fallbacks"
-          fi
-          model_args="$model_args --effort $claude_effort"
-          # An oversized chain would otherwise only hard-fail downstream AFTER
-          # the resolution work is done (the promotion publish step caps
-          # model_args at 2048 characters); fail closed at the loader instead.
-          if [ "${#model_args}" -gt 2048 ]; then
-            echo "::error::Validated model args exceed the 2048-character transport cap; no model will run."
-            exit 1
-          fi
-
-          echo "Model waterfall source: $source"
-          echo "Lopu backend model waterfall (Claude Code): $(IFS=,; echo "${models[*]}") · effort $claude_effort"
-          echo "Fallbacks apply only to model overload, unavailability, or eligible server errors."
-          echo "A model that completes but leaves conflict markers does not mechanically trigger the next model."
-          echo "model_args=$model_args" >> "$GITHUB_OUTPUT"
-          echo "primary_model=$primary" >> "$GITHUB_OUTPUT"
-          echo "backend_label=$backend_label" >> "$GITHUB_OUTPUT"
-
-          agent_backend="${LOPU_AGENT_BACKEND:-claude}"
-          case "$agent_backend" in
-            claude)
-              agent_backend_label="$backend_label"
-              codex_model=""
-              codex_reasoning_effort=""
-              ;;
-            codex)
-              codex_model="${LOPU_CODEX_MODEL:-gpt-5.6-terra}"
-              codex_reasoning_effort="${LOPU_CODEX_REASONING_EFFORT:-xhigh}"
-              case "$codex_model" in
-                gpt-5.6-terra) model_name="GPT-5.6 Terra" ;;
-                gpt-5.6-sol) model_name="GPT-5.6 Sol" ;;
-                *)
-                  echo "::warning::Unsupported LOPU_CODEX_MODEL '$codex_model'; using gpt-5.6-terra."
-                  codex_model="gpt-5.6-terra"
-                  model_name="GPT-5.6 Terra"
-                  ;;
-              esac
-              case "$codex_reasoning_effort" in
-                medium) effort_label="Medium" ;;
-                high) effort_label="High" ;;
-                xhigh) effort_label="Extra High" ;;
-                max) effort_label="Maximum" ;;
-                *)
-                  echo "::warning::Unsupported LOPU_CODEX_REASONING_EFFORT '$codex_reasoning_effort'; using xhigh."
-                  codex_reasoning_effort="xhigh"
-                  effort_label="Extra High"
-                  ;;
-              esac
-              agent_backend_label="OpenAI API $model_name $effort_label"
-              ;;
-            *)
-              echo "::warning::Unsupported LOPU_AGENT_BACKEND '$agent_backend'; using claude."
-              agent_backend="claude"
-              agent_backend_label="$backend_label"
-              codex_model=""
-              codex_reasoning_effort=""
-              ;;
-          esac
-          echo "Lopu agent backend: $agent_backend ($agent_backend_label)"
-          echo "agent_backend=$agent_backend" >> "$GITHUB_OUTPUT"
-          echo "agent_backend_label=$agent_backend_label" >> "$GITHUB_OUTPUT"
-          # Compatibility outputs for the already-published review contract.
-          echo "review_backend=$agent_backend" >> "$GITHUB_OUTPUT"
-          echo "review_backend_label=$agent_backend_label" >> "$GITHUB_OUTPUT"
-          echo "codex_model=$codex_model" >> "$GITHUB_OUTPUT"
-          echo "codex_reasoning_effort=$codex_reasoning_effort" >> "$GITHUB_OUTPUT"
+        run: node "trusted/.github/scripts/lopu-model-waterfall.mjs" metadata
 
   feature_stack_merge:
     name: Merge Feature Stack into ${{ matrix.target }}
@@ -3814,14 +3605,14 @@ jobs:
       - name: Require an AI credential
         if: needs.feature_stack_plan.outputs.custom_models != 'true'
         env:
-          AGENT_BACKEND: ${{ needs.model_config.outputs.agent_backend }}
+          AGENT_BACKEND: ${{ env.LOPU_SELECTED_BACKEND || needs.model_config.outputs.agent_backend }}
           HAS_CLAUDE_CREDENTIAL: ${{ secrets.THINGTIME_CI_ROUTER_SECRET != '' || secrets.CLAUDE_CODE_OAUTH_TOKEN_THINGTIME != '' || secrets.ANTHROPIC_API_KEY != '' || secrets.CLAUDE_CODE_OAUTH_TOKEN != '' || secrets.ANTHROPIC_API_KEY_FALLBACK != '' || secrets.CLAUDE_CODE_OAUTH_TOKEN_FALLBACK != '' }}
-          HAS_OPENAI_CREDENTIAL: ${{ secrets.OPENAI_API_KEY != '' }}
+          HAS_OPENAI_CREDENTIAL: ${{ secrets.THINGTIME_CI_ROUTER_SECRET != '' }}
         run: |
           set -euo pipefail
           case "$AGENT_BACKEND" in
             claude) [ "$HAS_CLAUDE_CREDENTIAL" = true ] || { echo '::error::Lopu needs a configured Claude credential.'; exit 1; } ;;
-            codex) [ "$HAS_OPENAI_CREDENTIAL" = true ] || { echo '::error::Lopu needs OPENAI_API_KEY.'; exit 1; } ;;
+            codex) [ "$HAS_OPENAI_CREDENTIAL" = true ] || { echo '::error::Lopu needs THINGTIME_CI_ROUTER_SECRET for its OpenAI vault credentials.'; exit 1; } ;;
             *) echo "::error::Unsupported Lopu backend: $AGENT_BACKEND"; exit 1 ;;
           esac
 
@@ -3880,7 +3671,7 @@ jobs:
             edits outside a conflict set.
 
       - name: Continue the exact Feature Stack session until it finishes
-        if: needs.feature_stack_plan.outputs.custom_models != 'true' && needs.model_config.outputs.agent_backend == 'claude' && steps.feature_stack_agent.outcome == 'failure'
+        if: needs.feature_stack_plan.outputs.custom_models != 'true' && steps.feature_stack_agent.outputs.backend == 'claude' && steps.feature_stack_agent.outcome == 'failure'
         shell: bash
         working-directory: integration
         env:
@@ -3957,7 +3748,7 @@ jobs:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           ANTHROPIC_API_KEY_FALLBACK: ${{ secrets.ANTHROPIC_API_KEY_FALLBACK }}
           CLAUDE_CODE_OAUTH_TOKEN_FALLBACK: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_FALLBACK }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_API_KEY: ${{ env.LOPU_SELECTED_OPENAI_API_KEY || secrets.OPENAI_API_KEY }}
         run: |
           set -euo pipefail
           test -z "$(git status --porcelain --untracked-files=all)" || {
@@ -3969,7 +3760,7 @@ jobs:
 
           keyfile="$RUNNER_TEMP/feature-stack-secret-needles.txt"
           node ../trusted/.github/scripts/lopu-credential-vault.mjs needles "$keyfile"
-          for secret in "${OPENAI_API_KEY:-}"; do
+          for secret in "${LOPU_OPENAI_API_KEY:-}" "${OPENAI_API_KEY:-}"; do
             [ -n "$secret" ] || continue
             printf '%s\n' "$secret" >>"$keyfile"
             printf '%s' "$secret" | base64 -w0 >>"$keyfile"
@@ -4094,6 +3885,7 @@ jobs:
             .github/scripts/feature-stack-progress.mjs
             .github/scripts/feature-stack-chat.mjs
             .github/scripts/lopu-credential-vault.mjs
+            .github/scripts/lopu-model-waterfall.mjs
           sparse-checkout-cone-mode: false
 
       - name: Prepare the optional run chat responder
@@ -4141,6 +3933,7 @@ jobs:
             .github/scripts/feature-stack-progress.mjs
             .github/scripts/feature-stack-chat.mjs
             .github/scripts/lopu-credential-vault.mjs
+            .github/scripts/lopu-model-waterfall.mjs
           sparse-checkout-cone-mode: false
 
       - name: Publish the signed terminal success receipt
@@ -4602,9 +4395,9 @@ jobs:
       - name: Require an AI credential
         if: steps.prepare.outputs.any == 'true'
         env:
-          AGENT_BACKEND: ${{ needs.model_config.outputs.agent_backend }}
+          AGENT_BACKEND: ${{ env.LOPU_SELECTED_BACKEND || needs.model_config.outputs.agent_backend }}
           HAS_CLAUDE_CREDENTIAL: ${{ secrets.THINGTIME_CI_ROUTER_SECRET != '' || secrets.CLAUDE_CODE_OAUTH_TOKEN_THINGTIME != '' || secrets.ANTHROPIC_API_KEY != '' || secrets.CLAUDE_CODE_OAUTH_TOKEN != '' || secrets.ANTHROPIC_API_KEY_FALLBACK != '' || secrets.CLAUDE_CODE_OAUTH_TOKEN_FALLBACK != '' }}
-          HAS_OPENAI_CREDENTIAL: ${{ secrets.OPENAI_API_KEY != '' }}
+          HAS_OPENAI_CREDENTIAL: ${{ secrets.THINGTIME_CI_ROUTER_SECRET != '' }}
         run: |
           set -euo pipefail
           case "$AGENT_BACKEND" in
@@ -4792,7 +4585,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
 
       - name: Continue the exact Lopu repository-review session until it finishes
-        if: steps.prepare.outputs.any == 'true' && needs.model_config.outputs.agent_backend == 'claude' && steps.lopu_review.outcome == 'failure'
+        if: steps.prepare.outputs.any == 'true' && steps.lopu_review.outputs.backend == 'claude' && steps.lopu_review.outcome == 'failure'
         continue-on-error: true
         shell: bash
         env:
@@ -6405,15 +6198,15 @@ jobs:
         shell: bash
         env:
           GRAPHIFY_VERSION: "0.9.4"
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_API_KEY: ${{ env.LOPU_SELECTED_OPENAI_API_KEY || secrets.OPENAI_API_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           CLAUDE_CODE_OAUTH_TOKEN_PREFERRED: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_THINGTIME }}
           ANTHROPIC_API_KEY_FALLBACK: ${{ secrets.ANTHROPIC_API_KEY_FALLBACK }}
           CLAUDE_CODE_OAUTH_TOKEN_FALLBACK: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_FALLBACK }}
-          GRAPHIFY_BACKEND_PREFERENCE: ${{ needs.model_config.outputs.agent_backend }}
-          LOPU_OPENAI_MODEL: ${{ needs.model_config.outputs.codex_model }}
-          PREFERRED_MODEL: ${{ needs.model_config.outputs.primary_model }}
+          GRAPHIFY_BACKEND_PREFERENCE: ${{ env.LOPU_SELECTED_BACKEND || needs.model_config.outputs.agent_backend }}
+          LOPU_OPENAI_MODEL: ${{ env.LOPU_SELECTED_MODEL || needs.model_config.outputs.codex_model }}
+          PREFERRED_MODEL: ${{ env.LOPU_SELECTED_MODEL || needs.model_config.outputs.primary_model }}
         run: |
           set -euo pipefail
           bash "$GITHUB_WORKSPACE/trusted/.github/scripts/rebase-stack/refresh-promotion-graphify.sh" \
@@ -6792,7 +6585,7 @@ jobs:
             --allowedTools "Bash(*),Read,Edit,Write,Glob,Grep,WebFetch,WebSearch"
 
       - name: Continue the exact release-analysis session until it finishes
-        if: steps.release_analysis_inputs.outputs.ready == 'true' && needs.model_config.outputs.agent_backend == 'claude' && steps.release_analysis.outcome == 'failure'
+        if: steps.release_analysis_inputs.outputs.ready == 'true' && steps.release_analysis.outputs.backend == 'claude' && steps.release_analysis.outcome == 'failure'
         continue-on-error: true
         shell: bash
         env:
@@ -6911,7 +6704,7 @@ jobs:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           ANTHROPIC_API_KEY_FALLBACK: ${{ secrets.ANTHROPIC_API_KEY_FALLBACK }}
           CLAUDE_CODE_OAUTH_TOKEN_FALLBACK: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_FALLBACK }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_API_KEY: ${{ env.LOPU_SELECTED_OPENAI_API_KEY || secrets.OPENAI_API_KEY }}
         run: |
           set -euo pipefail
           analysis="$ANALYSIS_DIR/out/analysis.md"
@@ -6925,7 +6718,7 @@ jobs:
           fi
           needles="$RUNNER_TEMP/analysis-needles"
           node trusted/.github/scripts/lopu-credential-vault.mjs needles "$needles"
-          for secret in "${OPENAI_API_KEY:-}" "${GH_TOKEN:-}"; do
+          for secret in "${LOPU_OPENAI_API_KEY:-}" "${OPENAI_API_KEY:-}" "${GH_TOKEN:-}"; do
             [[ -n "$secret" ]] || continue
             printf '%s\n' "$secret" >>"$needles"
             printf '%s' "$secret" | base64 | tr -d '\n' >>"$needles"; printf '\n' >>"$needles"
@@ -8171,14 +7964,14 @@ jobs:
           && steps.admission.outputs.current == 'true'
           && steps.merge.outputs.conflicted == 'true'
         env:
-          AGENT_BACKEND: ${{ needs.model_config.outputs.agent_backend }}
+          AGENT_BACKEND: ${{ env.LOPU_SELECTED_BACKEND || needs.model_config.outputs.agent_backend }}
           HAS_CLAUDE_CREDENTIAL: ${{ secrets.THINGTIME_CI_ROUTER_SECRET != '' || secrets.CLAUDE_CODE_OAUTH_TOKEN_THINGTIME != '' || secrets.ANTHROPIC_API_KEY != '' || secrets.CLAUDE_CODE_OAUTH_TOKEN != '' || secrets.ANTHROPIC_API_KEY_FALLBACK != '' || secrets.CLAUDE_CODE_OAUTH_TOKEN_FALLBACK != '' }}
-          HAS_OPENAI_CREDENTIAL: ${{ secrets.OPENAI_API_KEY != '' }}
+          HAS_OPENAI_CREDENTIAL: ${{ secrets.THINGTIME_CI_ROUTER_SECRET != '' }}
         run: |
           set -euo pipefail
           case "$AGENT_BACKEND" in
             claude) [ "$HAS_CLAUDE_CREDENTIAL" = true ] || { echo "::error::Lopu's configured Claude backend needs a primary or fallback Anthropic/Claude Code credential."; exit 1; } ;;
-            codex) [ "$HAS_OPENAI_CREDENTIAL" = true ] || { echo "::error::Lopu's configured Codex backend needs OPENAI_API_KEY."; exit 1; } ;;
+            codex) [ "$HAS_OPENAI_CREDENTIAL" = true ] || { echo "::error::Lopu's configured OpenAI backend needs the Thingtime credential vault."; exit 1; } ;;
             *) echo "::error::Unknown Lopu agent backend: $AGENT_BACKEND"; exit 1 ;;
           esac
 
@@ -8287,7 +8080,7 @@ jobs:
           steps.user_merge_pause.outputs.paused != 'true'
           && steps.admission.outputs.current == 'true'
           && steps.merge.outputs.conflicted == 'true'
-          && needs.model_config.outputs.agent_backend == 'claude'
+          && steps.resolve_conflicts.outputs.backend == 'claude'
           && steps.resolve_conflicts.outcome == 'failure'
         shell: bash
         env:
@@ -8599,7 +8392,7 @@ jobs:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           ANTHROPIC_API_KEY_FALLBACK: ${{ secrets.ANTHROPIC_API_KEY_FALLBACK }}
           CLAUDE_CODE_OAUTH_TOKEN_FALLBACK: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_FALLBACK }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_API_KEY: ${{ env.LOPU_SELECTED_OPENAI_API_KEY || secrets.OPENAI_API_KEY }}
           GRAPHIFY_RESET: ${{ steps.merge.outputs.graphify_reset }}
         run: |
           set -euo pipefail
@@ -8746,7 +8539,7 @@ jobs:
           # skipped: legit in markdown setext underlines. Best-effort backstop,
           # not a boundary (see header).
           keyfile="$RUNNER_TEMP/scan-needles.txt"
-          : > "$keyfile"
+          node "$GITHUB_WORKSPACE/trusted/.github/scripts/lopu-credential-vault.mjs" needles "$keyfile"
           for secret in "${CLAUDE_CODE_OAUTH_TOKEN_PREFERRED:-}" \
             "${ANTHROPIC_API_KEY:-}" "${CLAUDE_CODE_OAUTH_TOKEN:-}" \
             "${ANTHROPIC_API_KEY_FALLBACK:-}" "${CLAUDE_CODE_OAUTH_TOKEN_FALLBACK:-}" \
@@ -8822,12 +8615,12 @@ jobs:
           PRIMARY_CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           FALLBACK_ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY_FALLBACK }}
           FALLBACK_CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_FALLBACK }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          AGENT_BACKEND: ${{ needs.model_config.outputs.agent_backend }}
-          CODEX_MODEL: ${{ needs.model_config.outputs.codex_model || 'gpt-5.6-terra' }}
+          OPENAI_API_KEY: ${{ env.LOPU_SELECTED_OPENAI_API_KEY || secrets.OPENAI_API_KEY }}
+          AGENT_BACKEND: ${{ env.LOPU_SELECTED_BACKEND || needs.model_config.outputs.agent_backend }}
+          CODEX_MODEL: ${{ env.LOPU_SELECTED_MODEL || needs.model_config.outputs.codex_model }}
           # Keep the post-resolution semantic refresh on the same trusted,
           # administrator-selected primary model as the conflict edit itself.
-          PREFERRED_MODEL: ${{ needs.model_config.outputs.primary_model }}
+          PREFERRED_MODEL: ${{ env.LOPU_SELECTED_MODEL || needs.model_config.outputs.primary_model }}
         run: |
           set -euo pipefail
           unset ANTHROPIC_API_KEY
@@ -8939,13 +8732,13 @@ jobs:
           fi
           if [ "$backend" = openai ]; then
             unset GRAPHIFY_CLAUDE_CLI_MODEL
-            case "${CODEX_MODEL:-gpt-5.6-terra}" in
-              gpt-5.6-terra|gpt-5.6-sol)
-                graphify_model_args=(--model "$CODEX_MODEL")
-                export GRAPHIFY_OPENAI_MODEL="$CODEX_MODEL"
-                ;;
-              *) echo "::warning::Unexpected Lopu Codex model; Graphify will use its OpenAI default."; unset GRAPHIFY_OPENAI_MODEL ;;
-            esac
+            if [[ "${CODEX_MODEL:-}" =~ ^[a-z0-9][a-z0-9.-]{0,100}$ ]]; then
+              graphify_model_args=(--model "$CODEX_MODEL")
+              export GRAPHIFY_OPENAI_MODEL="$CODEX_MODEL"
+            else
+              echo "::error::No valid administrator-selected OpenAI model for Graphify."
+              exit 1
+            fi
           fi
 
           # Mechanical guard for graph collapse. `graphify update` has its own
@@ -9020,7 +8813,7 @@ jobs:
           # doc could steer extraction), so staged content must never carry
           # them. Best-effort backstop, not a boundary (see header).
           keyfile="$RUNNER_TEMP/graphify-needles.txt"
-          : > "$keyfile"
+          node "$GITHUB_WORKSPACE/trusted/.github/scripts/lopu-credential-vault.mjs" needles "$keyfile"
           for secret in "$PREFERRED_CLAUDE_CODE_OAUTH_TOKEN" \
             "$PRIMARY_ANTHROPIC_API_KEY" "$PRIMARY_CLAUDE_CODE_OAUTH_TOKEN" \
             "$FALLBACK_ANTHROPIC_API_KEY" "$FALLBACK_CLAUDE_CODE_OAUTH_TOKEN" \

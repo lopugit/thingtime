@@ -165,8 +165,8 @@ test("workflow publishes the checkpoint before requeue and never marks untouched
   assert.equal((workflow.match(/MANIFEST: \$\{\{ steps.review_checkpoint.outputs.manifest \}\}/g) || []).length, 3);
   assert.match(workflow.slice(resume), /steps.publish.outcome == 'success'/);
   assert.match(workflow, /path: \$\{\{ steps.review_checkpoint.outputs.receipt \}\}/);
-  assert.equal((action.match(/settings: \$\{\{ steps.handoff.outputs.settings \|\| '' \}\}/g) || []).length, 8);
-  assert.equal((action.match(/prompt: \$\{\{ steps.handoff.outputs.prompt \|\| inputs.prompt \}\}/g) || []).length, 9);
+  assert.equal((action.match(/settings: \$\{\{ steps.handoff.outputs.settings \|\| '' \}\}/g) || []).length, 1);
+  assert.equal((action.match(/\$\{\{ steps.handoff.outputs.prompt \|\| inputs.prompt \}\}/g) || []).length, 1);
 });
 
 test("remaining work dispatches once against the protected controller, with only its original PR inventory", async () => withTemp(async (dir) => {

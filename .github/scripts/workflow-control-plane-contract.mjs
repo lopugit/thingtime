@@ -257,93 +257,9 @@ function workflowBlock(source, start, end, label) {
 // including the build doctor's, which emits no `primary_model` and so cannot
 // use the fuller `assertAdminLoader` below.
 function assertAdminWaterfallGrammar(block, label) {
-  assert.ok(
-    block.includes(ADMIN_MODEL_ENDPOINT),
-    `${label}: fetches Thingtime Admin endpoint`,
-  );
-  assert.ok(
-    block.includes(ADMIN_MODEL_KEY),
-    `${label}: validates the exact Admin setting key`,
-  );
-  assert.ok(
-    block.includes(ADMIN_MODEL_ID_CHARSET),
-    `${label}: validates the closed composed-id charset`,
-  );
-  assert.ok(
-    block.includes(ADMIN_MODEL_EFFORT_SEGMENTS),
-    `${label}: parses the closed effort segment set`,
-  );
-  assert.ok(
-    block.includes(ADMIN_CLAUDE_BASE_PATTERN),
-    `${label}: rebuilds Claude models from the closed base pattern`,
-  );
-  assert.ok(
-    !block.includes('. + ["default"]') && !block.includes('models+=("default")'),
-    `${label}: never appends an unconfigured default`,
-  );
-  // A repeated segment (`model:fast:fast`, `model:high:low`) must fail the
-  // whole mapping closed rather than being silently absorbed by one copy.
-  assert.ok(
-    block.includes('[ "$fast" -eq 0 ] || segments_ok=0'),
-    `${label}: rejects a repeated fast segment`,
-  );
-  assert.ok(
-    block.includes('[ -z "$effort" ] || segments_ok=0'),
-    `${label}: rejects a repeated effort segment`,
-  );
-  assert.match(
-    block,
-    /--effort \$claude_effort/u,
-    `${label}: appends the validated session effort to the model args`,
-  );
-  assert.match(
-    block,
-    /model_args=.*>> "\$GITHUB_OUTPUT"/u,
-    `${label}: exports validated model args`,
-  );
-  assertAdminTransportCap(block, label);
+  assert.match(block, /lopu-model-waterfall\.mjs" metadata/, `${label}: uses the shared validated DB model loader`);
 }
-
-// The promotion publish step rejects a `model_args` longer than
-// ADMIN_MODEL_ARGS_CAP characters, so a valid-but-oversized chain has to
-// collapse here rather than hard-fail after the resolution work is finished.
-// Widening the waterfall to 256 ids made that reachable, and the guard now
-// lives in three copies of the loader with the same split-brain risk as the
-// grammar above — so pin its cap, its ordering, and its fail-closed body.
-function assertAdminTransportCap(block, label) {
-  const guard = new RegExp(
-    `if \\[ "\\$\\{#(?:model_)?args\\}" -gt ${ADMIN_MODEL_ARGS_CAP} \\]; then\\n([\\s\\S]*?)\\n\\s*fi\\n`,
-    "u",
-  ).exec(block);
-  assert.ok(
-    guard,
-    `${label}: caps the assembled model args at the ${ADMIN_MODEL_ARGS_CAP}-character transport limit`,
-  );
-  const body = guard[1];
-  assert.match(body, /::error::/u, `${label}: reports an unusable configured chain`);
-  assert.match(body, /exit 1/u, `${label}: stops rather than running an unconfigured model`);
-  // Measuring anything but the finished chain would let an oversized value
-  // through to the downstream gate, which is the failure this guard exists to
-  // prevent — so pin assembly < guard < export.
-  const assembled = block.search(
-    /(?:model_)?args="\$(?:model_)?args --effort \$claude_effort"/u,
-  );
-  const capped = block.indexOf(`-gt ${ADMIN_MODEL_ARGS_CAP}`);
-  const exported = block.search(/echo "model_args=/u);
-  assert.ok(
-    assembled >= 0 && assembled < capped && capped < exported,
-    `${label}: measures the finished chain after assembly and before export`,
-  );
-}
-
-function assertAdminLoader(block, label) {
-  assertAdminWaterfallGrammar(block, label);
-  assert.match(
-    block,
-    /primary_model=.*>> "\$GITHUB_OUTPUT"/u,
-    `${label}: exports validated primary model`,
-  );
-}
+function assertAdminLoader(block, label) { assertAdminWaterfallGrammar(block, label); }
 
 function assertAdminModelRouting(resolver, rebase, allBranch) {
   const resolverLoader = workflowBlock(
@@ -394,12 +310,12 @@ function assertAdminModelRouting(resolver, rebase, allBranch) {
 
   assert.ok(
     resolver.includes(
-      "PREFERRED_MODEL: ${{ needs.model_config.outputs.primary_model }}",
+      "PREFERRED_MODEL: ${{ env.LOPU_SELECTED_MODEL || needs.model_config.outputs.primary_model }}",
     ),
     "resolver Graphify: receives the validated Admin primary model",
   );
   assert.ok(
-    rebase.includes("PREFERRED_MODEL: ${{ steps.models.outputs.primary_model }}"),
+    rebase.includes("PREFERRED_MODEL: ${{ env.LOPU_SELECTED_MODEL || steps.models.outputs.primary_model }}"),
     "rebase Graphify: receives the validated Admin primary model",
   );
 
@@ -461,7 +377,7 @@ function assertAdminModelRouting(resolver, rebase, allBranch) {
   const runtimeFiles = [...yamlFiles(workflows), ...yamlFiles(actions)]
     .filter((path) => {
       const source = readFileSync(path, "utf8");
-      return /uses:\s*(?:anthropics\/claude-code-action|openai\/codex-action)@|\bbackend=(?:["']?)claude(?:-cli)?(?:["']?)\b|GRAPHIFY_(?:CLAUDE_CLI|OPENAI)_MODEL|--model\b/u.test(
+      return /uses:\s*(?:anthropics\/claude-code-action|openai\/codex-action)@|\bbackend=(?:["']?)claude(?:-cli)?(?:["']?)\b|GRAPHIFY_(?:CLAUDE_CLI|OPENAI)_MODEL|lopu-model-waterfall\.mjs|--model\b/u.test(
         source,
       );
     })
@@ -501,17 +417,17 @@ function assertAdminModelRouting(resolver, rebase, allBranch) {
   }
 
   const lopuAgent = readFileSync(
-    resolve(actions, "lopu-agent/action.yml"),
+    resolve(githubRoot, "scripts/lopu-model-waterfall.mjs"),
     "utf8",
   );
   assert.match(
     lopuAgent,
-    /uses:\s*anthropics\/claude-code-action@1623c36729ac1cd5895198cded705a287de7db79/u,
+    /anthropics\/claude-code-action@1623c36729ac1cd5895198cded705a287de7db79/u,
     "the single Lopu action pins Claude's executable implementation",
   );
   assert.match(
     lopuAgent,
-    /uses:\s*openai\/codex-action@86365089eb2b84e0a8fb0717b304f8bdcb13b20e/u,
+    /openai\/codex-action@86365089eb2b84e0a8fb0717b304f8bdcb13b20e/u,
     "the single Lopu action pins Codex's executable implementation",
   );
   assert.match(
@@ -521,7 +437,7 @@ function assertAdminModelRouting(resolver, rebase, allBranch) {
   );
   assert.match(
     lopuAgent,
-    /steps\.claude_1_failure\.outputs\.retryable == 'true'[\s\S]*steps\.claude_7_failure\.outputs\.retryable == 'true'/u,
+    /steps\.result_\$\{index - 1\}\.outputs\.retryable == 'true'/u,
     "every later vault credential is limited to classified credential or account-capacity failures",
   );
   assert.match(
@@ -541,12 +457,12 @@ function assertAdminModelRouting(resolver, rebase, allBranch) {
   const claudeActionCount = runtimeFiles.reduce((count, path) => {
     const source = readFileSync(resolve(githubRoot, "..", path), "utf8");
     return count +
-      (source.match(/uses:\s*anthropics\/claude-code-action@/gu)?.length ?? 0);
+      (source.match(/anthropics\/claude-code-action@/gu)?.length ?? 0);
   }, 0);
   assert.equal(
     claudeActionCount,
-    8,
-    "only the single Lopu action owns the bounded eight-position Claude credential waterfall",
+    1,
+    "only the configured waterfall compiler owns the pinned Claude action template",
   );
   const credentialVaultProbe = resolver.slice(
     resolver.indexOf("\n  verify_credential_vault:"),
@@ -801,10 +717,31 @@ export function assertControlPlaneContract() {
     /- name: Confirm this push still owns the analysis\n\s+id: ownership\n\s+if: github\.event_name == 'push' && needs\.scope\.outputs\.analysis_ref == ''/u,
     "only a branch-ref push re-checks ownership; PR and centrally dispatched runs are untouched",
   );
+  // Both ownership gates must be re-checked on the upload itself, in order.
+  // `preinit` and `ownership` are each skipped on non-push events, and a
+  // skipped step's output is the empty string, which is `!= 'false'` -- so the
+  // pair still analyzes every other event while either one alone can suppress
+  // an adopted branch upload. Pin the two clauses as properties rather than
+  // pinning the whole condition verbatim, so adding a third ownership gate
+  // does not silently throw here and skip every assertion below it.
+  const triggeringRevisionUpload =
+    /- name: Analyze the triggering revision\n\s+if: ([^\n]+)\n/u.exec(
+      codeql,
+    )?.[1] ?? "";
   assert.match(
-    codeql,
-    /- name: Analyze the triggering revision\n\s+if: needs\.scope\.outputs\.analysis_ref == '' && steps\.ownership\.outputs\.upload != 'false'/u,
-    "the re-check suppresses only an adopted branch upload, and its skipped empty output still analyzes every other event",
+    triggeringRevisionUpload,
+    /needs\.scope\.outputs\.analysis_ref == ''/u,
+    "the branch-ref upload stays scoped to runs without a centrally dispatched analysis ref",
+  );
+  assert.match(
+    triggeringRevisionUpload,
+    /steps\.preinit\.outputs\.own != 'false'/u,
+    "a push disowned before database init does not upload the branch snapshot it declined to register",
+  );
+  assert.match(
+    triggeringRevisionUpload,
+    /steps\.ownership\.outputs\.upload != 'false'/u,
+    "the post-init re-check suppresses an adopted branch upload, and its skipped empty output still analyzes every other event",
   );
   assert.match(
     codeql,
@@ -842,8 +779,13 @@ export function assertControlPlaneContract() {
   // removed, and either mistake reintroduces a lone first uploader.
   assert.match(
     siblingStartBarrier,
-    /if: strategy\.job-total > 1\n[\s\S]*?EXPECTED_LEGS: \$\{\{ strategy\.job-total \}\}/u,
-    "the barrier is gated on, and counts, the live matrix size, so adding or removing a language cannot leave it waiting for the wrong number of legs",
+    /if: [^\n]*strategy\.job-total > 1/u,
+    "the barrier is gated on the live matrix size, so a single-language matrix cannot leave it waiting for a sibling that does not exist",
+  );
+  assert.match(
+    siblingStartBarrier,
+    /EXPECTED_LEGS: \$\{\{ strategy\.job-total \}\}/u,
+    "the barrier counts the live matrix size, so adding or removing a language cannot leave it waiting for the wrong number of legs",
   );
   // "Started" is the whole point: #662 passed while its js-ts analysis was
   // still running, so the sibling's presence -- not its result -- is what the

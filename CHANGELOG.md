@@ -15,7 +15,21 @@ verbatim, and CI changes are recorded here from now on.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 every entry is attributed the same way the app changelog attributes them.
 
----
+## 2026-10-18 — Diagnose OpenAI preflight failures safely
+
+- Report the HTTP status and an allowlisted error code when OpenAI rejects a configured model before execution. Keep response messages and unknown fields private so quota and authentication failures can be diagnosed without exposing credentials.
+
+## 2026-10-18 — Correct reusable workflow context
+
+- Keep administrator-selected model values in step inputs, where runtime outputs are available; remove premature job environment references. Regression coverage checks the workflow context boundary.
+
+## 2026-10-18 — Execute the saved admin AI waterfall
+
+- Preserve the complete model, provider and reasoning order from Thingtime's DB
+  across [GitHub Lopu](PRs/1017-codex-lopu-astra-vault-admin-model-waterfall.md) workflows, using ordered platform vault credentials.
+- Compile pinned Claude/Codex attempts from the validated plan, advance only on
+  classified provider failures, and report the actual provider for continuation.
+- Include OpenAI credentials in publication scans and validate capability versions.
 
 ## 2026-09-05 — Visible previews and conflict detector recovery
 

@@ -284,17 +284,12 @@ graphify_model_args=()
 case "$backend" in
   openai)
     unset GRAPHIFY_CLAUDE_CLI_MODEL
-    case "${LOPU_OPENAI_MODEL:-default}" in
-      default|'') unset GRAPHIFY_OPENAI_MODEL ;;
-      gpt-5.6-terra|gpt-5.6-sol)
-        graphify_model_args=(--model "$LOPU_OPENAI_MODEL")
-        export GRAPHIFY_OPENAI_MODEL="$LOPU_OPENAI_MODEL"
-        ;;
-      *)
-        echo "::warning::Unexpected Lopu OpenAI model; Graphify will use its built-in OpenAI default."
-        unset GRAPHIFY_OPENAI_MODEL
-        ;;
-    esac
+    if [[ "${LOPU_OPENAI_MODEL:-}" =~ ^[a-z0-9][a-z0-9.-]{0,100}$ ]]; then
+      graphify_model_args=(--model "$LOPU_OPENAI_MODEL")
+      export GRAPHIFY_OPENAI_MODEL="$LOPU_OPENAI_MODEL"
+    else
+      fail "No valid administrator-selected OpenAI model for Graphify."
+    fi
     ;;
   claude|claude-cli)
     unset GRAPHIFY_OPENAI_MODEL

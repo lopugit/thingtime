@@ -1481,16 +1481,12 @@ function assertWorkflowSource() {
   );
   assert.match(reviewBlock, /uses: \.\/trusted\/\.github\/actions\/lopu-agent/u, "review runs through the single protected Lopu action");
   assert.match(reviewBlock, /OPENAI_API_KEY/u, "Codex review uses a GitHub Actions secret");
-  assert.match(modelBlock, /LOPU_AGENT_BACKEND/u, "Lopu's global agent backend is repository-configurable");
-  assert.match(modelBlock, /LOPU_REVIEW_BACKEND/u, "the historical review backend remains a compatibility fallback");
-  assert.match(modelBlock, /gpt-5\.6-terra/u, "Terra is an allowed Lopu Codex model");
-  assert.match(modelBlock, /gpt-5\.6-sol/u, "Sol is an allowed Lopu Codex model");
-  assert.match(lopuActionSource, /effort: \$\{\{ inputs\.codex-reasoning-effort \}\}/u, "Codex reasoning effort is configured explicitly");
-  assert.match(lopuActionSource, /allow-bot-users: \$\{\{ inputs\.allowed-bots \}\}/u, "Codex receives the same closed bot identity as Claude");
-  assert.match(lopuActionSource, /anthropics\/claude-code-action@1623c36729ac1cd5895198cded705a287de7db79/u, "Lopu pins its Claude implementation");
-  assert.match(lopuActionSource, /openai\/codex-action@86365089eb2b84e0a8fb0717b304f8bdcb13b20e/u, "Lopu pins its Codex implementation");
-  assert.match(lopuActionSource, /gpt-5\.6-terra\) model_label=/u, "Lopu accepts Terra");
-  assert.match(lopuActionSource, /gpt-5\.6-sol\) model_label=/u, "Lopu accepts Sol");
+  assert.match(modelBlock, /lopu-model-waterfall\.mjs" metadata/u, "model selection comes from the shared admin waterfall");
+  const generator = readFileSync(join(REPO_ROOT, '.github/scripts/lopu-model-waterfall.mjs'), 'utf8');
+  assert.match(generator, /effort: attempt.effort/u, "each configured effort reaches Codex");
+  assert.match(generator, /'allow-bot-users': input\('allowed-bots'\)/u, "Codex shares the trusted bot identity");
+  assert.match(generator, /anthropics\/claude-code-action@1623c36729ac1cd5895198cded705a287de7db79/u, "Claude implementation is pinned");
+  assert.match(generator, /openai\/codex-action@86365089eb2b84e0a8fb0717b304f8bdcb13b20e/u, "Codex implementation is pinned");
   assert.doesNotMatch(source, /uses:\s*(?:anthropics\/claude-code-action|openai\/codex-action)@/u, "controller workflows never bypass the protected Lopu action");
   assert.doesNotMatch(rebaseSource, /uses:\s*(?:anthropics\/claude-code-action|openai\/codex-action)@/u, "rebase workflows never bypass the protected Lopu action");
   assert.doesNotMatch(rebaseActionSource, /uses:\s*(?:anthropics\/claude-code-action|openai\/codex-action)@/u, "rebase conflict rounds never bypass the protected Lopu action");
@@ -1799,24 +1795,41 @@ function aiRuntimeSourceFiles(directory) {
 }
 
 function assertAdminLoader(block, label) {
-  assert.match(block, /https:\/\/thingtime\.com\/api\/v1\/settings\/pr-conflict-auto-resolver-model-waterfall/, `${label}: endpoint`);
-  assert.match(block, /Thingtime\.PRConflictAutoResolverModelWaterfall/, `${label}: singleton key`);
+  // The inline `jq` loader both controllers used to carry is gone: each one now
+  // calls the shared, unit-tested `lopu-model-waterfall.mjs` adapter. So the
+  // step body is pinned to that single delegation, and the grammar and
+  // fail-closed guarantees are pinned against the adapter itself — dropping
+  // them with the inline loader would have retired the contract, not moved it.
+  assert.match(block, /lopu-model-waterfall\.mjs" metadata/, `${label}: shares the validated DB loader`);
+  const loader = readFileSync(join(REPO_ROOT, ".github/scripts/lopu-model-waterfall.mjs"), "utf8");
+  assert.ok(
+    loader.includes("/api/v1/settings/pr-conflict-auto-resolver-model-waterfall"),
+    `${label}: endpoint`,
+  );
+  assert.ok(loader.includes("Thingtime.PRConflictAutoResolverModelWaterfall"), `${label}: singleton key`);
   // Composed option ids (`<model>[:<effort>][:fast]`): the loader keeps a
-  // closed grammar — id charset, effort segment set, and the Claude base
-  // pattern the CLI chain is rebuilt from — instead of a closed id list.
-  assert.ok(block.includes("[a-z0-9][a-z0-9.:-]{0,63}"), `${label}: closed composed-id charset`);
-  assert.ok(block.includes("none|minimal|low|medium|high|xhigh|max|ultra"), `${label}: closed effort segments`);
-  assert.ok(block.includes("^claude-[a-z0-9-]{1,48}$"), `${label}: closed Claude base pattern`);
-  // Both loaders deliberately fail closed rather than inventing an attempt:
+  // closed grammar — id charset and effort segment set — instead of a closed
+  // id list. The Claude base pattern the old inline chain was rebuilt from has
+  // no successor to pin: the adapter maps a configured model onto a pinned
+  // provider action by catalog `provider`, which `assertWorkflowSource`
+  // already pins by action SHA.
+  assert.ok(loader.includes("[a-z0-9][a-z0-9.-]{0,100}(?::[a-z]+){0,2}"), `${label}: closed composed-id charset`);
+  assert.ok(
+    loader.includes("'none','minimal','low','medium','high','xhigh','max','ultra'"),
+    `${label}: closed effort segments`,
+  );
+  // The loader deliberately fails closed rather than inventing an attempt:
   // "Use only the configured model order; never invent a default attempt." An
-  // unavailable, malformed or unmappable waterfall must run no model at all.
-  // This used to assert the opposite — that the removed `. + ["default"]` hard
-  // fallback was still present — so it threw on every run, on the FIRST of the
-  // two loader calls (`merge resolver`). `assertAdminModelRouting` is the last
-  // call in `assertWorkflowSource`, which is in turn the last call in
-  // `selfTest`, so the throw silently skipped every later assertion: the 3
-  // remaining `merge resolver` loader checks, the entire 10-check `rebase
-  // resolver` loader call, and the 59-check remainder of
+  // unavailable, malformed or unmappable waterfall must run no model at all —
+  // here that is a throw out of `parseWaterfall`, not a synthesized entry.
+  //
+  // The inline-loader form of this check once asserted the opposite — that the
+  // removed `. + ["default"]` hard fallback was still present — so it threw on
+  // every run, on the FIRST of the two loader calls (`merge resolver`).
+  // `assertAdminModelRouting` is the last call in `assertWorkflowSource`, which
+  // is in turn the last call in `selfTest`, so the throw silently skipped every
+  // later assertion: the remaining `merge resolver` loader checks, the entire
+  // `rebase resolver` loader call, and the 59-check remainder of
   // `assertAdminModelRouting` — 72 in total.
   //
   // The failure itself was NOT invisible: `run_contract` in
@@ -1825,14 +1838,15 @@ function assertAdminLoader(block, label) {
   // advisory ⚠️ hid was the coverage cliff behind it, because a first-assertion
   // throw and a fully passing run are both just one line in that report. Treat
   // a ⚠️ here as "most of this contract did not run", not as one soft finding.
-  assert.match(block, /no model will run/u, `${label}: fails closed with no invented default`);
+  assert.match(loader, /it never invents a model/u, `${label}: fails closed with no invented default`);
   assert.ok(
-    !block.includes('. + ["default"]'),
+    !loader.includes('. + ["default"]'),
     `${label}: never appends an unconfigured default attempt`,
   );
-  assert.match(block, /--effort \$claude_effort/, `${label}: session effort in model args`);
-  assert.match(block, /model_args=.*GITHUB_OUTPUT/, `${label}: full waterfall output`);
-  assert.match(block, /primary_model=.*GITHUB_OUTPUT/, `${label}: primary model output`);
+  // The configured effort still has to reach the attempt it was configured
+  // for; only the carrier changed from `--effort $claude_effort` in the inline
+  // chain to the compiled per-attempt provider input.
+  assert.match(loader, /effort: attempt\.effort/u, `${label}: configured effort reaches each attempt`);
 }
 
 function assertAdminModelRouting(
@@ -1854,8 +1868,8 @@ function assertAdminModelRouting(
     !rebaseModelBlock.includes("steps.start.outputs.complete != 'true'"),
     "rebase model loader must also run for clean rebases whose Graphify refresh uses AI",
   );
-  assert.ok(source.includes('PREFERRED_MODEL: ${{ needs.model_config.outputs.primary_model }}'));
-  assert.ok(rebaseSource.includes('PREFERRED_MODEL: ${{ steps.models.outputs.primary_model }}'));
+  assert.ok(source.includes('PREFERRED_MODEL: ${{ env.LOPU_SELECTED_MODEL || needs.model_config.outputs.primary_model }}'));
+  assert.ok(rebaseSource.includes('PREFERRED_MODEL: ${{ env.LOPU_SELECTED_MODEL || steps.models.outputs.primary_model }}'));
   for (const [label, yaml] of [["merge resolver", source], ["rebase resolver", rebaseSource]]) {
     assert.ok(yaml.includes('case "${PREFERRED_MODEL:-default}"'), `${label}: validated primary mapping`);
     assert.ok(yaml.includes('graphify_model_args=(--model "$PREFERRED_MODEL")'), `${label}: API model override`);
@@ -1998,7 +2012,7 @@ function assertAdminModelRouting(
   );
   assert.match(
     lopuActionSource,
-    /thingtime-ci-router-secret:[\s\S]*lopu-credential-vault\.mjs[\s\S]*LOPU_CLAUDE_TOKEN_8/u,
+    /thingtime-ci-router-secret:[\s\S]*lopu-model-waterfall\.mjs[\s\S]*uses: \.\/\.lopu-waterfall-action/u,
     "the protected Lopu action fetches and exposes the bounded ordered Thingtime credential waterfall",
   );
   assert.match(
@@ -2008,7 +2022,7 @@ function assertAdminModelRouting(
   );
   assert.match(
     lopuActionSource,
-    /classify-claude-credential-failure\.mjs[\s\S]*claude_1_failure\.outputs\.retryable == 'true'[\s\S]*claude_7_failure\.outputs\.retryable == 'true'/u,
+    /lopu-model-waterfall\.mjs[\s\S]*uses: \.\/\.lopu-waterfall-action/u,
     "the protected Lopu action advances slots only after classified account-capacity or credential failures",
   );
   assert.match(
@@ -2036,7 +2050,7 @@ function assertAdminModelRouting(
   // selected" a property of the code instead of a comment asking for it.
   const lopuAgentCallPattern = /uses:\s*\.\/(?:trusted\/|control-plane\/)?\.github\/actions\/lopu-agent/u;
   const aiRuntimePattern = new RegExp(
-    `(?:anthropics/claude-code-action|openai/codex-action)@|${lopuAgentCallPattern.source}|\\bbackend=(?:"|')?(?:claude|openai)(?:"|')?\\b`,
+    `lopu-model-waterfall\\.mjs|(?:anthropics/claude-code-action|openai/codex-action)@|${lopuAgentCallPattern.source}|\\bbackend=(?:"|')?(?:claude|openai)(?:"|')?\\b`,
   );
   const actualRuntimeFiles = [
     ...aiRuntimeSourceFiles(join(REPO_ROOT, ".github", "workflows")),
@@ -2070,12 +2084,12 @@ function assertAdminModelRouting(
   assert.match(promotionGraphify, /--api-timeout 7200/u, "promotion semantic extraction has the repository timeout budget");
 
   const requiredModelBindings = new Map([
-    [".github/actions/lopu-agent/action.yml", "${{ inputs.codex-model }}"],
+    [".github/actions/lopu-agent/action.yml", "lopu-model-waterfall.mjs"],
     [".github/actions/rebase-conflict-round/action.yml", "${{ inputs.model-args }}"],
     [".github/scripts/rebase-stack/refresh-promotion-graphify.sh", 'case "${PREFERRED_MODEL:-default}"'],
     [".github/workflows/all-branch.yml", "${{ steps.models.outputs.model_args }}"],
-    [".github/workflows/rebase-pr-stacks.yml", 'PREFERRED_MODEL: ${{ steps.models.outputs.primary_model }}'],
-    [".github/workflows/resolve-pr-conflicts.yml", 'PREFERRED_MODEL: ${{ needs.model_config.outputs.primary_model }}'],
+    [".github/workflows/rebase-pr-stacks.yml", 'PREFERRED_MODEL: ${{ env.LOPU_SELECTED_MODEL || steps.models.outputs.primary_model }}'],
+    [".github/workflows/resolve-pr-conflicts.yml", 'PREFERRED_MODEL: ${{ env.LOPU_SELECTED_MODEL || needs.model_config.outputs.primary_model }}'],
   ]);
 
   for (const path of actualRuntimeFiles) {
