@@ -19,6 +19,8 @@ import {
 	selectLopuChat,
 	sendLopuMessage,
 	setLopuSettings,
+  setLopuAiDefaults,
+  createLopuChat,
 	type AiModelPublic,
 	type LopuApiClient,
 	type LopuVaultProvider
@@ -221,20 +223,20 @@ test('a 402 / 403 from the reply endpoint becomes a gated turn kept in the timel
 	resetLopuStoreForTests();
 });
 
-test('reconcileLopuSettings keeps a providerId only while the vault lists it as available', () => {
+test('reconcileLopuSettings retains explicit credential intent even after revocation or catalog removal', () => {
 	assert.equal(reconcileLopuSettings({ model: 'gpt-5', providerId: 'vp-1' }, MODELS, DEFAULTS, VAULT).providerId, 'vp-1');
-	assert.equal(reconcileLopuSettings({ model: 'gpt-5', providerId: 'vp-off' }, MODELS, DEFAULTS, VAULT).providerId, null);
-	assert.equal(reconcileLopuSettings({ model: 'gpt-5', providerId: 'ghost' }, MODELS, DEFAULTS, VAULT).providerId, null);
-	// an unknown vault (null) trusts the cached choice; an empty list drops it
+	assert.equal(reconcileLopuSettings({ model: 'gpt-5', providerId: 'vp-off' }, MODELS, DEFAULTS, VAULT).providerId, 'vp-off');
+	assert.equal(reconcileLopuSettings({ model: 'gpt-5', providerId: 'ghost' }, MODELS, DEFAULTS, VAULT).providerId, 'ghost');
+	// Both an unknown vault and an empty catalog preserve the explicit pin.
 	assert.equal(reconcileLopuSettings({ providerId: 'ghost' }, MODELS, DEFAULTS, null).providerId, 'ghost');
-	assert.equal(reconcileLopuSettings({ providerId: 'ghost' }, MODELS, DEFAULTS, []).providerId, null);
+	assert.equal(reconcileLopuSettings({ providerId: 'ghost' }, MODELS, DEFAULTS, []).providerId, 'ghost');
 	// the catalog choice still clamps alongside the provider
 	const clamped = reconcileLopuSettings({ model: 'claude-opus-5', effort: 'max', providerId: 'vp-1' }, MODELS, DEFAULTS, VAULT);
 	assert.deepEqual(clamped, { model: 'gpt-5', effort: 'high', speed: 'normal', providerId: 'vp-1' });
 	assert.deepEqual(reconcileLopuSettings(null, [], null, null), { model: null, effort: null, speed: null, providerId: null });
 });
 
-test('the catalog load adopts vaultProviders + vault and drops a providerId the vault no longer offers', async () => {
+test('the catalog load adopts vaultProviders + vault and preserves a providerId the vault no longer offers', async () => {
 	resetLopuStoreForTests();
 	const { client } = fakeClient();
 	bindLopuApi(client);
@@ -245,7 +247,7 @@ test('the catalog load adopts vaultProviders + vault and drops a providerId the 
 	const snapshot = getLopuStoreSnapshot();
 	assert.equal(snapshot.vaultProviders.length, 2);
 	assert.deepEqual(snapshot.vault, { configured: true });
-	assert.equal(snapshot.settings.providerId, null);
+	assert.equal(snapshot.settings.providerId, 'ghost');
 	assert.equal(snapshot.settings.model, 'gpt-5');
 	resetLopuStoreForTests();
 });
@@ -272,11 +274,11 @@ test('choosing a provider persists it on the active chat and clears it back thro
 	setLopuSettings({ providerId: null });
 	await flush();
 	assert.deepEqual(calls.find((call) => call.name === 'chats.update')?.args, { chatId: 'chat-1', providerId: null });
-	// a model change alone never touches the chat's provider
+	// Model/effort edits persist independently without changing the credential.
 	calls.length = 0;
 	setLopuSettings({ effort: 'low' });
 	await flush();
-	assert.equal(calls.filter((call) => call.name === 'chats.update').length, 0);
+	assert.deepEqual(calls.find(call => call.name === 'chats.update')?.args, { chatId: 'chat-1', effort: 'low' });
 	resetLopuStoreForTests();
 });
 
@@ -301,7 +303,7 @@ test('selecting a chat adopts its stored providerId (and a chat without one clea
 	assert.equal(getLopuStoreSnapshot().settings.providerId, null, 'an explicit null clears the provider');
 	setLopuSettings({ providerId: 'vp-1' });
 	selectLopuChat('chat-legacy');
-	assert.equal(getLopuStoreSnapshot().settings.providerId, 'vp-1', 'a row without the key leaves the choice alone');
+	assert.equal(getLopuStoreSnapshot().settings.providerId, null, 'a legacy chat never inherits another conversation’s credential');
 	resetLopuStoreForTests();
 });
 
@@ -314,7 +316,7 @@ test('send carries providerId in the reply body and a vault meta names the provi
 	const plain = await sendLopuMessage('hello');
 	assert.equal(plain.ok, true);
 	const plainBody = calls.find((call) => call.name === 'reply')?.args as { providerId?: string; model?: string };
-	assert.equal(plainBody.providerId, undefined);
+	assert.equal(plainBody.providerId, null, 'new chats explicitly use credits unless a credential was chosen');
 	assert.equal(plainBody.model, 'gpt-5');
 
 	calls.length = 0;
@@ -845,7 +847,7 @@ test('hydration never restores plan admission hints and never shares provider me
 
 test('personal-plan sends use local management even with a server default or per-turn override', async () => {
   resetLopuStoreForTests(); hydrateLopuStore('plan-owner');
-  const fixture = fakeClient(); bindLopuApi(fixture.client);
+  const fixture = fakeClient({ chats: [{ id: 'chat-1', name: 'Plan chat', updatedAt: new Date().toISOString(), lopu: { providerId: 'chatgpt-plan-test', management: 'client' } }] }); bindLopuApi(fixture.client);
   setLopuSettings({ providerId: 'chatgpt-plan-test', management: 'server' });
   assert.equal(getLopuStoreSnapshot().settings.management, 'client');
   await sendLopuMessage('First', { settings: { management: 'server' } });
@@ -858,4 +860,85 @@ test('personal-plan sends use local management even with a server default or per
     assert.equal(reconcileLopuSettings({ providerId: 'vp-1', management: 'server' }, models, DEFAULTS).management, 'server');
     assert.equal(reconcileLopuSettings({ management: 'server' }, models, DEFAULTS).management, 'server');
   }
+});
+
+
+test('AI defaults seed new chats and stay separate from saved chat overrides', async () => {
+  resetLopuStoreForTests();
+  const { client, calls } = fakeClient({ chats: [{ id: 'existing', name: 'Existing', updatedAt: new Date().toISOString(), lopu: { model: 'gpt-5', providerId: null } }] });
+  bindLopuApi(client); hydrateLopuStore('defaults-owner');
+  await loadLopuModels(); await loadLopuChats();
+  setLopuAiDefaults({ providerId: 'vp-1', model: 'gpt-5', effort: 'low', speed: 'normal' });
+  selectLopuChat('existing');
+  assert.equal(getLopuStoreSnapshot().settings.providerId, null);
+  setLopuSettings({ effort: 'high' }); await flush();
+  assert.equal(getLopuStoreSnapshot().aiDefaults?.effort, 'low');
+  const created = await createLopuChat();
+  assert.equal(created.ok, true);
+  assert.equal((calls.find(row => row.name === 'chats.create')?.args as any).providerId, 'vp-1');
+  assert.equal(getLopuStoreSnapshot().settings.providerId, 'vp-1');
+  setLopuSettings({ providerId: null }); await flush();
+  selectLopuChat(null);
+  assert.equal(getLopuStoreSnapshot().settings.providerId, 'vp-1');
+  assert.equal(getLopuStoreSnapshot().settings.effort, 'low');
+  hydrateLopuStore('other-owner');
+  assert.equal(getLopuStoreSnapshot().aiDefaults, null);
+  assert.equal(getLopuStoreSnapshot().settings.providerId, null);
+  resetLopuStoreForTests();
+});
+
+test('removed ChatGPT pins remain explicit on the next request instead of spending credits', async () => {
+  resetLopuStoreForTests();
+  const { client, calls } = fakeClient(); bindLopuApi(client); hydrateLopuStore('removed-plan-owner');
+  setLopuSettings({ providerId: 'chatgpt-plan-removed' });
+  await loadLopuModels();
+  assert.equal(getLopuStoreSnapshot().settings.providerId, 'chatgpt-plan-removed');
+  await sendLopuMessage('synthetic request');
+  const body = calls.find(row => row.name === 'reply')?.args as any;
+  assert.equal(body.providerId, 'chatgpt-plan-removed');
+  resetLopuStoreForTests();
+});
+
+
+test('cold deep links load their saved credential before sending and background sends use the target chat', async () => {
+  resetLopuStoreForTests(); hydrateLopuStore('deep-link-owner');
+  const fixture = fakeClient({ chats: [
+    { id: 'personal', name: 'Personal', updatedAt: new Date().toISOString(), lopu: { ...DEFAULTS, providerId: 'vp-1' } },
+    { id: 'credits', name: 'Credits', updatedAt: new Date().toISOString(), lopu: { ...DEFAULTS, providerId: null } }
+  ] });
+  bindLopuApi(fixture.client); await loadLopuModels();
+  setLopuAiDefaults({ providerId: null, ...DEFAULTS }); selectLopuChat('personal');
+  await sendLopuMessage('Cold link');
+  assert.equal((fixture.calls.find(row => row.name === 'reply')?.args as any).providerId, 'vp-1');
+  assert.equal(getLopuStoreSnapshot().settings.providerId, 'vp-1');
+  fixture.calls.length = 0;
+  await sendLopuMessage('Other chat', { chatId: 'credits' });
+  assert.equal((fixture.calls.find(row => row.name === 'reply')?.args as any).providerId, null);
+  assert.equal(getLopuStoreSnapshot().settings.providerId, 'vp-1');
+  resetLopuStoreForTests();
+});
+
+test('an unknown chat never receives a new-chat credential default', async () => {
+  resetLopuStoreForTests(); hydrateLopuStore('unknown-owner');
+  const fixture = fakeClient(); bindLopuApi(fixture.client); await loadLopuModels();
+  setLopuAiDefaults({ providerId: 'vp-1', ...DEFAULTS }); selectLopuChat('not-in-list');
+  await sendLopuMessage('Use saved server settings');
+  const body = fixture.calls.find(row => row.name === 'reply')?.args as any;
+  for (const key of ['providerId', 'model', 'effort', 'speed']) assert.equal(key in body, false, key);
+  resetLopuStoreForTests();
+});
+
+test('sending waits for a credential save and a refusal prevents any billed request', async () => {
+  resetLopuStoreForTests(); hydrateLopuStore('pending-owner');
+  const fixture = fakeClient({ chats: [{ id: 'chat', name: 'Chat', updatedAt: new Date().toISOString(), lopu: { ...DEFAULTS, providerId: null } }] });
+  bindLopuApi(fixture.client); await loadLopuModels(); await loadLopuChats(); selectLopuChat('chat');
+  let complete!: (value: any) => void;
+  fixture.client.chats.update = () => new Promise(resolve => { complete = resolve; });
+  setLopuSettings({ providerId: 'vp-1' }); await flush();
+  const sending = sendLopuMessage('Wait for my choice'); await flush();
+  assert.equal(fixture.calls.some(row => row.name === 'reply'), false);
+  complete({ ok: false, error: 'Connection revoked' });
+  assert.equal((await sending).ok, false);
+  assert.equal(fixture.calls.some(row => row.name === 'reply'), false);
+  resetLopuStoreForTests();
 });
