@@ -99,11 +99,12 @@ export type DeviceCardProps = {
 	pendingApprovalCount?: number;
 	now?: number;
 	onSelect: (deviceId: string) => void;
+	onOpen?: (deviceId: string) => void;
 	onContextMenu?: (deviceId: string, event: React.MouseEvent) => void;
 };
 
 export const DeviceCard = memo(
-	({ device, snapshot = null, selected = false, pendingCommandCount = 0, pendingApprovalCount = 0, now, onSelect, onContextMenu }: DeviceCardProps) => {
+	({ device, snapshot = null, selected = false, pendingCommandCount = 0, pendingApprovalCount = 0, now, onSelect, onOpen, onContextMenu }: DeviceCardProps) => {
 		const observed = snapshot?.observed;
 		const model = device.system?.model || (device.platform === 'watchos' ? 'Apple Watch' : device.platform) || 'Device';
 		const version = device.system?.osVersion || device.nodeVersion || null;
@@ -113,6 +114,7 @@ export const DeviceCard = memo(
 				_focusVisible={{ boxShadow: '0 0 0 3px var(--tt-accent-soft, rgba(244, 114, 182, 0.25))' }}
 				_hover={{ borderColor: 'var(--tt-border-strong, #d4d4d8)', transform: 'translateY(-1px)' }}
 				aria-label={`Open ${device.name}`}
+			title={onOpen ? 'Double-click or press Enter to browse saved files. Right-click for device settings.' : undefined}
 				aria-pressed={selected}
 				as="button"
 				background={selected ? 'var(--tt-accent-soft, rgba(244, 114, 182, 0.08))' : 'var(--tt-card, #ffffff)'}
@@ -122,7 +124,9 @@ export const DeviceCard = memo(
 				boxShadow="var(--tt-shadow-card, 0 1px 2px rgba(0, 0, 0, 0.05))"
 				color="var(--tt-ink, #17171c)"
 				minWidth={0}
-				onClick={() => onSelect(device.id)}
+				onClick={(event) => { if (onOpen && (event.detail === 0 || window.matchMedia('(pointer: coarse)').matches)) onOpen(device.id); else onSelect(device.id); }}
+				onDoubleClick={() => onOpen?.(device.id)}
+				onKeyDown={(event) => { if (onOpen && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); onOpen(device.id); } }}
 				onContextMenu={(event) => onContextMenu?.(device.id, event)}
 				padding={4}
 				textAlign="left"

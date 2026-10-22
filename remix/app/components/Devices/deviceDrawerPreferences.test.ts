@@ -8,7 +8,7 @@ import {
 	setDeviceDrawerWidthPreference
 } from './deviceDrawerPreferences';
 
-test('device drawer preferences foreground everyday controls and collapse advanced sections', () => {
+test('device drawer preferences collapse every section by default', () => {
 	const preferences = defaultDeviceDrawerPreferences();
 
 	assert.equal(preferences.version, 1);
@@ -16,15 +16,16 @@ test('device drawer preferences foreground everyday controls and collapse advanc
 	assert.deepEqual(preferences.sections, {
 		node: false,
 		permissions: false,
-		'observed-state': true,
+		'observed-state': false,
 		audio: false,
 		network: false,
 		'system-controls': false,
 		power: false,
-		applications: true,
+		applications: false,
 		connectors: false,
 		screen: false,
     files: false,
+    sync: false,
 		approvals: false,
 		'command-activity': false
 	});
