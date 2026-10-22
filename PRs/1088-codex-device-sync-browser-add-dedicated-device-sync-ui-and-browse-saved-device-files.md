@@ -14,6 +14,8 @@ The overview uses editable intrinsic Builder blocks and an editable collection t
 - Focused lint passes. The repository typecheck ratchet passes with 92 existing diagnostics against a baseline of 89; the three ratchet additions are unrelated legacy test files. No diagnostics appear in this change's sources.
 - The prior home source stays removed and sync stays paused. Android and the earlier throughput investigation remain deferred.
 
+CI initially caught an eager account hook requiring a data router when the standalone device page had no selected device. Account ownership is now passed from the existing Things page boundary, keeping the closed device view independent of account/router hooks. The standalone renderer regression includes an explicit owner input. The full device suite passes after the correction.
+
 ## Delivery and remaining acceptance
 
 PR: https://github.com/lopugit/thingtime/pull/1088

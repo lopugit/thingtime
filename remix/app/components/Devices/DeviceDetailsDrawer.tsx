@@ -1,5 +1,4 @@
 import { DeviceSyncPanel } from './DeviceSyncBrowser';
-import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { FilesystemThingsBrowser } from '../Things/FilesystemThingsBrowser';
 import React, { memo } from 'react';
 
@@ -157,6 +156,7 @@ export type DeviceDetailsDrawerProps = {
 	presentation?: 'drawer' | 'page';
 	state: DeviceRuntimeState | null;
 	localBattery?: DeviceBattery | null;
+	ownerId?: string;
 	pairedDeviceIds?: readonly string[];
 	ownedDeviceIds?: readonly string[];
 	now?: number;
@@ -175,6 +175,7 @@ export const DeviceDetailsDrawer = memo(
 		presentation = 'drawer',
 		state,
 		localBattery,
+		ownerId,
 		pairedDeviceIds = [],
 		ownedDeviceIds = [],
 		now = Date.now(),
@@ -185,7 +186,6 @@ export const DeviceDetailsDrawer = memo(
 		screenStartInput = null,
 		onPermissionModeChange
 	}: DeviceDetailsDrawerProps) => {
-		const currentUser = useCurrentUser();
 		const [drawerWidth, setDrawerWidth] = React.useState(DEVICE_DRAWER_DEFAULT_WIDTH);
 		const [resizing, setResizing] = React.useState(false);
 		const resizeOrigin = React.useRef<{ pointerId: number; x: number; width: number } | null>(null);
@@ -409,7 +409,7 @@ export const DeviceDetailsDrawer = memo(
 								) : null}
 
 								<Section deviceId={state.deviceId} key={`sync:${state.deviceId}`} label="File sync & backup" section="sync">
-									<DeviceSyncPanel deviceId={state.deviceId} ownerId={currentUser?.id} pairedDeviceIds={pairedDeviceIds} ownedDeviceIds={ownedDeviceIds} />
+									<DeviceSyncPanel deviceId={state.deviceId} ownerId={ownerId} pairedDeviceIds={pairedDeviceIds} ownedDeviceIds={ownedDeviceIds} />
 								</Section>
 								<Section deviceId={state.deviceId} key={`files:${state.deviceId}`} label="Live device filesystem" section="files">
                   {summary.capabilities?.some(capability => capability.id === 'filesystem.v1' && capability.supported && capability.enabled) ? <FilesystemThingsBrowser compact deviceId={state.deviceId} /> : <Text fontSize="12px">Update the Thingtime node on this device to browse its home folder.</Text>}

@@ -1523,6 +1523,7 @@ const ThingsLibraryPage = () => {
 			<DeviceDetailsDrawer
 				controlFor={deviceControlFor}
 				localBattery={localBattery}
+				ownerId={user?.id}
 				pairedDeviceIds={localNode.pairedDeviceIds}
 				ownedDeviceIds={currentAccountDeviceIds}
 				isOpen
@@ -1961,6 +1962,7 @@ const ThingsLibraryPage = () => {
 			<DeviceDetailsDrawer
 				controlFor={deviceControlFor}
 				localBattery={localBattery}
+				ownerId={user?.id}
 				pairedDeviceIds={localNode.pairedDeviceIds}
 				ownedDeviceIds={currentAccountDeviceIds}
 				isOpen={Boolean(deviceParam) && !devicePageMode}
