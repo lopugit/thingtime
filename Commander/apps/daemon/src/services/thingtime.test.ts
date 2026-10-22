@@ -438,3 +438,39 @@ describe('ThingtimeService settings sync', () => {
     });
   });
 });
+
+describe('saved-account cloud sync', () => {
+  it('uses only the issuing origin even when a different next-login profile is selected', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ entry: { value: { revision: 0, preferences: {} } } }));
+    vi.stubGlobal('fetch', fetchMock);
+    const settings = configuredSettings({
+      activeAccountId: 'saved',
+      thingtimeBaseUrl: 'https://other.test',
+      syncRevision: 0,
+      syncDirty: false,
+    });
+    const result = await new ThingtimeService().syncAccount('fixture-token', settings, {
+      id: 'saved',
+      username: 'fixture',
+      scopes: [],
+      expiresAt: '2030-01-01',
+      environment: { baseUrl: 'https://issuer.test', clientId: 'original-client' },
+    });
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(fetchMock.mock.calls[0]?.[0].origin).toBe('https://issuer.test');
+    expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({ redirect: 'error' });
+    expect(result.thingtimeBaseUrl).toBe(settings.thingtimeBaseUrl);
+    expect(result.thingtimeClientId).toBe(settings.thingtimeClientId);
+  });
+
+  it('never sends a credential when the saved issuer is missing', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(
+      new ThingtimeService().syncAccount('fixture-token', configuredSettings(), undefined),
+    ).rejects.toThrow('Restore the saved account environment');
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
