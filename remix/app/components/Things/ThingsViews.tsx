@@ -166,6 +166,7 @@ export type ThingsDevicePresentation = {
 	deviceCounts?: Record<string, { commands: number; approvals: number }>;
 	selectedDeviceId?: string | null;
 	onDeviceSelect?: (deviceId: string) => void;
+	onDeviceOpen?: (deviceId: string) => void;
 	onDeviceContextMenu?: (deviceId: string, event: React.MouseEvent) => void;
 };
 
@@ -295,6 +296,7 @@ export const ThingsGridView = ({
 	deviceCounts = {},
 	selectedDeviceId = null,
 	onDeviceSelect,
+	onDeviceOpen,
 	onDeviceContextMenu
 }: {
   items: ThingsThing[];
@@ -309,6 +311,7 @@ export const ThingsGridView = ({
 					device={state.summary}
 					key={`device:${state.deviceId}`}
 					onSelect={onDeviceSelect || noopDeviceSelect}
+					onOpen={onDeviceOpen}
 					onContextMenu={onDeviceContextMenu}
 					pendingApprovalCount={deviceCounts[state.deviceId]?.approvals ?? pendingApprovalCount(state)}
 					pendingCommandCount={deviceCounts[state.deviceId]?.commands ?? pendingCommandCount(state)}
@@ -397,6 +400,7 @@ export const ThingsListView = ({
 	deviceCounts = {},
 	selectedDeviceId = null,
 	onDeviceSelect,
+	onDeviceOpen,
 	onDeviceContextMenu
 }: {
   items: ThingsThing[];
@@ -415,6 +419,7 @@ export const ThingsListView = ({
 							device={state.summary}
 							key={`device:${state.deviceId}`}
 							onSelect={onDeviceSelect || noopDeviceSelect}
+					onOpen={onDeviceOpen}
 					onContextMenu={onDeviceContextMenu}
 							pendingApprovalCount={deviceCounts[state.deviceId]?.approvals ?? pendingApprovalCount(state)}
 							pendingCommandCount={deviceCounts[state.deviceId]?.commands ?? pendingCommandCount(state)}
@@ -549,6 +554,7 @@ export const ThingsColumnsView = ({
 	deviceCounts = {},
 	selectedDeviceId = null,
 	onDeviceSelect,
+	onDeviceOpen,
 	onDeviceContextMenu
 }: {
   // folder ids by depth; index 0 is always null (the root)
@@ -584,6 +590,7 @@ export const ThingsColumnsView = ({
 										device={state.summary}
 										key={`device:${state.deviceId}`}
 										onSelect={onDeviceSelect || noopDeviceSelect}
+					onOpen={onDeviceOpen}
 					onContextMenu={onDeviceContextMenu}
 										pendingApprovalCount={deviceCounts[state.deviceId]?.approvals ?? pendingApprovalCount(state)}
 										pendingCommandCount={deviceCounts[state.deviceId]?.commands ?? pendingCommandCount(state)}
