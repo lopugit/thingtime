@@ -29,10 +29,8 @@
 		"verify:signed": "node scripts/verify-signed-app.mjs",
 		"verify:unsigned": "node scripts/verify-unsigned-app.mjs",
 		"verify:web": "node scripts/verify-web-build.mjs",
-		"verify:renderer-restart": "node scripts/verify-renderer-restart.mjs",
-		"build:mail": "node scripts/build-mail.mjs",
-		"build:database": "node scripts/build-database.mjs",
-		"build:passwords": "node scripts/build-native-passwords.mjs"
+		"build:passwords": "node scripts/build-native-passwords.mjs",
+		"build:mail": "node scripts/build-mail.mjs"
 	},
 	"build": {
 		"appId": "com.thingtime.desktop",

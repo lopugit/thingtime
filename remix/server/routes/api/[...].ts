@@ -423,11 +423,9 @@ export default defineHandler(async (event) => {
         return jsonResponse({ ok: false, error: 'Configure private account services on this deployment.' }, { status: 503, headers: { 'Cache-Control': 'private, no-store' } });
       if (event.req.headers.get('Sec-Fetch-Site') === 'cross-site' || (method !== 'GET' && event.req.headers.get('Origin') !== local.origin))
         return jsonResponse({ ok: false, error: 'Use the same Thingtime origin.' }, { status: 403, headers: { 'Cache-Control': 'private, no-store' } });
-      if (path === 'v1/ai/chatgpt-plan' && !await selectedRuntimeSupportsPlan(configured, event.req.signal))
-        return jsonResponse({ ok: false, error: 'The selected API does not support portable ChatGPT plan connections. Update that runtime first.' }, { status: 409, headers: { 'Cache-Control': 'private, no-store' } });
-      // Nitro's lazy request is not a native Request; preserve its body API
-      // while pinning the selected origin across asynchronous negotiation.
-      return proxyApiRequestToFallback(event.req, { expectedOrigin: configured, stripForwardedOrigin: true });
+      // Nitro's lazy server request is not a native Undici Request. Preserve
+      // its public body interface and sanitize the copied upstream headers.
+      return proxyApiRequestToFallback(event.req, { stripForwardedOrigin: true });
     }
     // Root data uses this same fallback. Forward its public database
     // precondition and selection unchanged for the upstream to enforce.

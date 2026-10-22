@@ -134,6 +134,8 @@ fences and secret-free native catalog projections; `auth/vaultEnvelope.ts` and
 intentionally bypasses general request diagnostics and automatic origin fallback
 so decrypted fields never enter shared client history/cache. The reusable
 `Thingtime` fields mod renders the entry without global Thing persistence.
+Native integrations live in `apple/Passwords`, `apple/PasswordProvider`,
+`iOS/Thingtime/Web/PasswordBridge.swift` and `electron/lib/password-provider.cjs`.
 Native provider implementation and signed release are tracked separately in
 [PR #996](https://github.com/lopugit/thingtime/pull/996); this release exposes the
 private catalog and negotiates an optional supported native bridge.
@@ -207,18 +209,4 @@ requires dry-run/confirmation, checks exact identity and idle account state, and
 deletes account/bootstrap/auth records atomically in the home DB. It cannot
 accept arbitrary target accounts. Delivery and migration audit records remain.
 
-OpenAI environment-to-vault import uses `credentialVault.ts::importConfiguredOpenAiCredential` through the existing admin credentials route and `PlatformCredentials.tsx`. It is same-origin, admin-only and create-only; `api.admin-ci-credentials` 3.1.1 is negotiated before use. The sole source is server `OPENAI_API_KEY`, and the destination is `OpenAI` / `OPENAI_THINGTIME_API_KEY`.
-
-
-## Local ChatGPT plan connections
-
-`ai/chatgptPlanProtocol.ts` validates dynamic registration, JWT identity, scopes, rotation and Responses restrictions. `chatgptPlanRuntime.ts` owns protected local credentials, loopback callbacks, one-use attempts, account/session/origin fences and per-account cancellation. The authenticated `ai/chatgpt-plan` route publishes redacted state only; `Settings/ChatGPTPlanSettings.tsx` negotiates its capability. Model discovery and Lopu use the existing provider path with strict saved plan pins and no billing fallback. See README ChatGPT plan usage, TESTING and `test:chatgpt-plan`. `chatgptPlanStorage.ts` encrypts owner/origin-scoped records in the account MongoDB and fences its single refresh authority. `chatgptPlanTransfer.ts` seals explicit moves to a destination-owned key. Electron `local-runtime.cjs` manages optional authenticated local Mongo and generated OS-protected secrets; API switching uses separate sessions and restart.
-## Characters
-
-See [Characters](../characters.md) for the settings, login modes, private ownership,
-admin lookup, session selection, agent coordination and acceptance runbook.
-`characterCore.ts`, `characterSession.ts`, `characters.ts` and
-`characterEntitlements.ts` extend the existing home-plane user/session/ledger paths.
-`resolveSessionUser` defaults to the authenticated principal for roster and
-credential callers; request authentication passes an explicit selection (or null
-for the session default). Never re-mint a principal session with an acting user ID.
+OpenAI environment-to-vault import uses `credentialVault.ts::importConfiguredOpenAiCredential` through the existing admin credentials route and `PlatformCredentials.tsx`. It is same-origin, admin-only and create-only; `api.admin-ci-credentials` 3.1.0 is negotiated before use. The sole source is server `OPENAI_API_KEY`, and the destination is `OpenAI` / `OPENAI_THINGTIME_API_KEY`.
