@@ -3,7 +3,8 @@ import { randomUUID } from 'node:crypto';
 import { ensureIndexes, getThingtimeDb } from '../mongodb/collections';
 import { safeErrorText } from '../errors/safeError';
 import { reactionShareId } from '../things/things';
-import { buildUserSecure, packRecentReactions, toBin, userEmailKey, userUsernameKey } from '../auth/users';
+import { buildUserSecure, packRecentReactions, toBin, unpackSecure, userEmailKey, userUsernameKey } from '../auth/users';
+import { getSecureFieldsConfig } from '../secureFields/config';
 import { waitlistEmailKey } from '../waitlist/waitlist';
 import { themeAcl } from '../themes/themes';
 import {
@@ -960,6 +961,96 @@ const seedBuiltinSchemas: Migration = {
   }
 };
 
+// Reconcile the plaintext email mirror on user things with the admin
+// secure-fields toggle (api/utils/secureFields/config.ts). The secure blob is
+// ALWAYS the source of truth; the root `email` field is a derived debugging
+// mirror that exists only while the toggle is off (plaintext mode):
+//   secure mode    → strip every root email mirror ($unset, one updateMany)
+//   plaintext mode → walk all user things and $set the mirror from the blob
+// Idempotent + config-driven, so it can re-run any time (the admin toggle runs
+// it inline on every flip; re-run it after users-to-things conversions made
+// during plaintext mode, since toThing writes blob-only docs). Root-only $set
+// without a secureVersion bump is safe: concurrent blob CAS writes derive the
+// same mirror value themselves (mutateUserThingSecure self-heals it).
+const usersEmailMirrorSync: Migration = {
+  id: 'users-email-mirror-sync',
+  collection: 'things',
+  fromVersion: THINGS_VERSION,
+  toVersion: THINGS_VERSION, // reconcile, not a shape change (legal: fromVersion === toVersion)
+  title: 'Sync plaintext email mirrors with the secure-fields toggle',
+  description:
+    'Brings the root plaintext `email` mirror on every user thing in line with the admin ' +
+    'secure-fields config: removes all mirrors when email is in secure (blob-only) mode, or ' +
+    'copies each blob email to the root mirror when an admin has toggled email to plaintext ' +
+    'mode for direct-DB debugging. The BinData secure blob stays the single source of truth ' +
+    'either way; the mirror is derived, regenerable data.',
+  pending: async () => {
+    const db = await getThingtimeDb();
+    const config = await getSecureFieldsConfig(true);
+    // cheap approximation: presence/absence mismatches (a drifted VALUE — mirror
+    // ≠ blob email — is invisible here but fixed by run(); no email-change flow
+    // exists today, so drift is theoretical)
+    const filter =
+      config.email?.secure === false
+        ? { thingtime: 'user', email: { $exists: false } }
+        : { thingtime: 'user', email: { $exists: true } };
+    return db.collection('things').countDocuments(filter as any);
+  },
+  run: async ({ dryRun }) => {
+    const db = await getThingtimeDb();
+    const things = db.collection('things');
+    const config = await getSecureFieldsConfig(true);
+    const notes = makeNotes();
+
+    if (config.email?.secure !== false) {
+      // secure mode: the mirror must not exist anywhere — one bulk $unset
+      const filter = { thingtime: 'user', email: { $exists: true } } as any;
+      const matched = await things.countDocuments(filter);
+      if (dryRun || !matched) return { dryRun, matched, migrated: 0, created: 0, skipped: 0, notes: notes.list() };
+      const result = await things.updateMany(filter, { $unset: { email: '' } });
+      return { dryRun, matched, migrated: result.modifiedCount, created: 0, skipped: 0, notes: notes.list() };
+    }
+
+    // plaintext mode: walk ALL user things (mirrors that merely drifted in
+    // value need fixing too, so the filter can't drain — paginate by _id)
+    const BATCH = 200;
+    let matched = 0;
+    let migrated = 0;
+    let skipped = 0;
+    let lastId: any = null;
+    for (;;) {
+      const page = (await things
+        .find(lastId ? ({ thingtime: 'user', _id: { $gt: lastId } } as any) : ({ thingtime: 'user' } as any))
+        .sort({ _id: 1 })
+        .limit(BATCH)
+        .toArray()) as any[];
+      if (!page.length) break;
+      lastId = page[page.length - 1]._id;
+      for (const doc of page) {
+        try {
+          const blobEmail = unpackSecure(doc.secure).email || '';
+          const desired = blobEmail || null; // never mirror an empty string
+          const current = typeof doc.email === 'string' ? doc.email : null;
+          if (current === desired) continue;
+          matched += 1;
+          if (dryRun) continue;
+          await things.updateOne(
+            { _id: doc._id } as any,
+            desired ? { $set: { email: desired } } : { $unset: { email: '' } }
+          );
+          migrated += 1;
+        } catch {
+          // generic note only — never echo a doc field (an email!) into the
+          // admin-visible migration report
+          skipped += 1;
+          notes.push('mirror sync error — left for a later re-run');
+        }
+      }
+    }
+    return { dryRun, matched, migrated, created: 0, skipped, notes: notes.list() };
+  }
+};
+
 export const migrations: Migration[] = [
   thingsMigration,
   usersToThings,
@@ -967,6 +1058,7 @@ export const migrations: Migration[] = [
   feedAlgorithmsToThings,
   waitlistToThings,
   seedBuiltinSchemas,
+  usersEmailMirrorSync,
   stampMigration('users', 'User docs already match the v2 shape — stamps schemaVersion.'),
   stampMigration('sessions', 'Session docs already match the v2 shape — stamps schemaVersion.'),
   stampMigration('emailVerifications', 'Email verification docs already match the v2 shape — stamps schemaVersion.'),

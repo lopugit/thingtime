@@ -825,6 +825,39 @@ export const apiTests: ApiTestDefinition[] = [
     )
   },
   {
+    id: 'admin-secure-fields-guarded',
+    name: 'Secure-field config is admin-only',
+    description: 'Non-admin callers are rejected; admins see the secure-field storage config.',
+    group: 'admin',
+    method: 'GET',
+    path: '/api/v1/admin/secure-fields',
+    expect: expectJson(
+      [200, 401, 403],
+      (body) =>
+        (body?.ok === true && typeof body?.config?.email?.secure === 'boolean') ||
+        (body?.ok === false && typeof body?.error === 'string'),
+      'Secure-field config either returned (admin) or was rejected (non-admin).'
+    )
+  },
+  {
+    id: 'admin-secure-fields-set-guarded',
+    name: 'Secure-field toggle is admin-only',
+    description:
+      'Toggling secure blobbing requires an admin session. The empty patch keeps the current config, so an admin run is a harmless reconcile.',
+    group: 'admin',
+    method: 'POST',
+    path: '/api/v1/admin/secure-fields',
+    mutates: true,
+    body: { fields: {} },
+    expect: expectJson(
+      [200, 401, 403],
+      (body) =>
+        (body?.ok === true && typeof body?.config?.email?.secure === 'boolean') ||
+        (body?.ok === false && typeof body?.error === 'string'),
+      'Secure-field toggle either applied (admin) or was rejected (non-admin).'
+    )
+  },
+  {
     id: 'admin-users-guarded',
     name: 'Admin user lookup is admin-only',
     description: 'The admin user lookup requires an admin session.',

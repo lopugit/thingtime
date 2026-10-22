@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { Binary, ObjectId } from 'mongodb';
 
 import { getThingsCollection, getUsersCollection } from '../mongodb/collections';
+import { getSecureFieldsConfig } from '../secureFields/config';
 import {
   ACL_ALL,
   COLLECTION_SCHEMA_VERSIONS,
@@ -146,6 +147,17 @@ export const fromBin = (value: any): string => {
 //                      emoji tokens — same guarantee `secure` relies on). A
 //                      plain string array here WOULD be enumerable via
 //                      q=<emoji>, which is exactly why it is not one.
+//
+// ADMIN EXCEPTION — the secure-fields toggle (api/utils/secureFields/config.ts):
+// an admin can flip an allowlisted blob field (currently only `email`) to
+// plaintext mode, which maintains a root plaintext MIRROR of the blob value
+// (root `email`) for direct-DB debugging. The blob stays the single source of
+// truth; the mirror is derived data written by insertUser, self-healed by every
+// mutateUserThingSecure write, and bulk-reconciled by the
+// users-email-mirror-sync migration when the toggle flips. In plaintext mode
+// the wildcard text index DOES tokenize the mirror — search results still
+// exclude user things via the PROTECTED_THINGTIME $nin, but the index entries
+// exist, which is why the default is secure and prod should stay secure.
 // Legacy-era user docs keep their plaintext subdocument shape (the `users`
 // collection has no text index, so nothing there is searchable).
 type SecurePayload = {
@@ -299,6 +311,7 @@ export const insertUser = async (doc: UserDoc & { schemaVersion?: number }) => {
   const shareId = new ObjectId().toHexString();
   const now = doc.createdAt instanceof Date ? doc.createdAt : new Date();
   const { secure, admin, recentReactions } = buildUserSecure(doc);
+  const secureFields = await getSecureFieldsConfig();
 
   const thing = {
     shareId,
@@ -324,6 +337,9 @@ export const insertUser = async (doc: UserDoc & { schemaVersion?: number }) => {
     // reaction MRU as a BinData array (text-index-invisible, atomically mutable);
     // only present when a migrated account arrives with prior recents
     ...(recentReactions.length ? { secureRecentReactions: packRecentReactions(recentReactions) } : {}),
+    // plaintext debugging mirror of the blob email (admin secure-fields toggle,
+    // see the ADMIN EXCEPTION block above) — derived, only when toggled off
+    ...(secureFields.email?.secure === false && doc.email ? { email: doc.email } : {}),
     createdAt: now,
     updatedAt: now
   };
@@ -370,6 +386,10 @@ const mutateUserThingSecure = async (
 ): Promise<SecureMutateResult> => {
   const things = await getThingsCollection();
   const base = { shareId: String(userId), thingtime: 'user' } as any;
+  // read the secure-fields toggle once per mutation (15s-cached) so every blob
+  // write also reconciles the plaintext email mirror — mirrors self-heal on the
+  // hot write paths instead of waiting for the next bulk sync migration
+  const secureFields = await getSecureFieldsConfig();
   for (let attempt = 0; attempt < SECURE_CAS_ATTEMPTS; attempt++) {
     const thing = await things.findOne(base, { projection: { secure: 1, secureVersion: 1 } });
     if (!thing) return 'missing';
@@ -379,9 +399,20 @@ const mutateUserThingSecure = async (
     mutate(secure);
     // guard on the exact version we read — a missing field guards on its absence
     const guard = version === undefined ? { secureVersion: { $exists: false } } : { secureVersion: version };
+    const mirrorEmail = secureFields.email?.secure === false ? secure.email || '' : '';
     const res = await things.updateOne(
       { ...base, ...guard },
-      { $set: { secure: packSecure(secure), secureVersion: (version ?? 0) + 1, updatedAt: new Date() } }
+      {
+        $set: {
+          secure: packSecure(secure),
+          secureVersion: (version ?? 0) + 1,
+          updatedAt: new Date(),
+          ...(mirrorEmail ? { email: mirrorEmail } : {})
+        },
+        // secure mode (or blob email empty): remove any stale mirror in the same
+        // guarded write — a no-op when the field is already absent
+        ...(mirrorEmail ? {} : { $unset: { email: '' } })
+      }
     );
     if (res.modifiedCount) return 'mutated';
     // lost the CAS — another writer won; small jittered backoff so a burst of

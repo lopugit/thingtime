@@ -12,6 +12,7 @@ const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/admin/migrations': () => import('../../../app/routes/api/v1/admin/migrations/_migrations'),
   'v1/admin/migrations/run': () => import('../../../app/routes/api/v1/admin/migrations/run/_run'),
   'v1/admin/rate-limits': () => import('../../../app/routes/api/v1/admin/rate-limits/_rate-limits'),
+  'v1/admin/secure-fields': () => import('../../../app/routes/api/v1/admin/secure-fields/_secure-fields'),
   'v1/admin/set-admin': () => import('../../../app/routes/api/v1/admin/set-admin/_set-admin'),
   'v1/admin/users': () => import('../../../app/routes/api/v1/admin/users/_users'),
   'v1/algorithms': () => import('../../../app/routes/api/v1/algorithms/_algorithms'),

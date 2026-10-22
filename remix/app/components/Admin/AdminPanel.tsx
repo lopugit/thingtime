@@ -4,13 +4,16 @@ import { Box, Button, Flex, Input, Spinner, Switch, Text } from '@chakra-ui/reac
 import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { useLopu } from '~/components/Lopu/useLopu';
+import { readLocalCache, writeLocalCache } from '~/hooks/localCache';
 
 // Admin-only control panel (rendered from SettingsPage when user.isAdmin).
-// Lets admins tune the global rate limits and grant/revoke admin on other
-// users. Every action re-checks admin server-side; this UI is just the surface.
+// Lets admins tune the global rate limits, control secure-field storage, and
+// grant/revoke admin on other users. Every action re-checks admin server-side;
+// this UI is just the surface.
 
 type Rule = { limit: number; windowMs: number; enabled: boolean };
 type Config = Record<string, Rule>;
+type SecureFieldsCfg = Record<string, { secure: boolean }>;
 type AdminRow = { id: string; username: string; displayName: string | null; email?: string; isAdmin: boolean; envAdmin: boolean };
 
 const eyebrow = {
@@ -148,6 +151,152 @@ const RateLimitEditor = () => {
   );
 };
 
+const SECURE_FIELDS_CACHE_KEY = 'tt-admin-secure-fields';
+
+const SECURE_FIELD_LABELS: Record<string, { label: string; blurb: string }> = {
+  email: {
+    label: 'Email address',
+    blurb: 'User emails on user things (the secure BinData blob is always the source of truth).'
+  }
+};
+
+// Per-field secure-storage toggles. Secure = blob-only (BinData, invisible to
+// the wildcard text index). Plaintext = a root mirror field is maintained so
+// admins can query the DB directly while debugging; flipping runs the
+// users-email-mirror-sync migration server-side. Going plaintext needs an
+// explicit inline confirm — it puts real addresses into the search index's
+// token stream, so it should never happen by mis-tap.
+const SecureFieldsEditor = () => {
+  const api = useApi();
+  const lopu = useLopu();
+  // paint the last-known config instantly (optimistic house rule); the server
+  // refetch below reconciles — spinner only on a true cold start
+  const [config, setConfig] = React.useState<SecureFieldsCfg | null>(() =>
+    readLocalCache<SecureFieldsCfg>(SECURE_FIELDS_CACHE_KEY)
+  );
+  const [confirming, setConfirming] = React.useState<string | null>(null);
+  const [busy, setBusy] = React.useState<string | null>(null);
+
+  const apiRef = React.useRef(api);
+  apiRef.current = api;
+
+  React.useEffect(() => {
+    let cancelled = false;
+    apiRef.current.v1.admin
+      .secureFields()
+      .then((resp: any) => {
+        if (cancelled || !resp?.ok) return;
+        setConfig(resp.config);
+        writeLocalCache(SECURE_FIELDS_CACHE_KEY, resp.config);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const apply = async (name: string, secure: boolean) => {
+    setConfirming(null);
+    setBusy(name);
+    const prev = config;
+    setConfig((c) => (c ? { ...c, [name]: { secure } } : c));
+    try {
+      const resp = await apiRef.current.v1.admin.setSecureFields({ [name]: { secure } });
+      if (resp?.ok) {
+        setConfig(resp.config);
+        writeLocalCache(SECURE_FIELDS_CACHE_KEY, resp.config);
+        const synced = resp.report?.migrated ?? 0;
+        lopu({
+          title: secure ? 'Secure blobbing back on 🔐' : 'Plaintext mirrors on ⚠️',
+          description: `${synced} user thing${synced === 1 ? '' : 's'} reconciled.`,
+          status: secure ? 'success' : 'warning',
+          duration: 5000
+        });
+      } else {
+        setConfig(prev);
+        lopu({ title: 'Could not update secure fields', description: resp?.error, status: 'error' });
+      }
+    } catch (err: any) {
+      setConfig(prev);
+      lopu({ title: 'Could not update secure fields', description: err?.error, status: 'error' });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  if (!config) {
+    return (
+      <Flex justifyContent="center" padding={3}>
+        <Spinner size="sm" />
+      </Flex>
+    );
+  }
+
+  return (
+    <Flex flexDirection="column" rowGap={3}>
+      <Text sx={eyebrow}>Secure fields</Text>
+      {Object.entries(config).map(([name, rule]) => {
+        const meta = SECURE_FIELD_LABELS[name] || { label: name, blurb: '' };
+        return (
+          <Flex
+            key={name}
+            flexDirection="column"
+            rowGap={2}
+            padding={2}
+            borderRadius="var(--tt-radius-sm, 9px)"
+            background="var(--tt-surface-alt, #f5f5f7)"
+          >
+            <Flex alignItems="center" columnGap={2}>
+              <Box minWidth={0} flex="1 1 auto">
+                <Text fontSize="sm" fontWeight={600}>
+                  {meta.label}
+                </Text>
+                <Text fontSize="xs" opacity={0.6}>
+                  {rule.secure
+                    ? 'Secure blob only — hidden from the search index, not directly queryable.'
+                    : 'Plaintext mirror on — queryable in the DB, tokenized by the search index.'}
+                </Text>
+              </Box>
+              <Flex alignItems="center" columnGap={1} flexShrink={0}>
+                <Text fontSize="xs" opacity={0.7}>
+                  {rule.secure ? 'Secure' : 'Plaintext'}
+                </Text>
+                <Switch
+                  size="sm"
+                  isChecked={rule.secure}
+                  isDisabled={busy === name}
+                  onChange={(e) => {
+                    if (e.target.checked) apply(name, true);
+                    else setConfirming(name);
+                  }}
+                  aria-label={`${meta.label} secure blobbing`}
+                />
+              </Flex>
+            </Flex>
+            {confirming === name && (
+              <Flex flexDirection="column" rowGap={2} padding={2} borderRadius="var(--tt-radius-sm, 9px)" border="1px solid var(--tt-border, #e2e2e6)">
+                <Text fontSize="xs">
+                  ⚠️ Plaintext mode writes a root <code>{name}</code> field on every user thing so the DB can be
+                  queried directly. The wildcard text index will tokenize those values (search results still exclude
+                  user things, but the index entries exist). Keep production secure.
+                </Text>
+                <Flex columnGap={2}>
+                  <Button size="xs" variant="outline" isLoading={busy === name} onClick={() => apply(name, false)}>
+                    Store plaintext mirrors
+                  </Button>
+                  <Button size="xs" variant="ghost" onClick={() => setConfirming(null)}>
+                    Cancel
+                  </Button>
+                </Flex>
+              </Flex>
+            )}
+          </Flex>
+        );
+      })}
+    </Flex>
+  );
+};
+
 const AdminManager = () => {
   const api = useApi();
   const lopu = useLopu();
@@ -267,6 +416,7 @@ const AdminManager = () => {
 export const AdminPanel = () => (
   <Flex flexDirection="column" rowGap={5}>
     <RateLimitEditor />
+    <SecureFieldsEditor />
     <AdminManager />
   </Flex>
 );

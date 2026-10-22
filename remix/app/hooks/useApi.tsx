@@ -125,6 +125,11 @@ export function useApi() {
         async (endpoints) => asyncFetcher.submit({ endpoints }, { action: '/api/v1/admin/rate-limits' }),
         [asyncFetcher]
       ),
+      secureFields: useCallback(async () => getJson('/api/v1/admin/secure-fields'), []),
+      setSecureFields: useCallback(
+        async (fields) => asyncFetcher.submit({ fields }, { action: '/api/v1/admin/secure-fields' }),
+        [asyncFetcher]
+      ),
       users: useCallback(async (args) => getJson(`/api/v1/admin/users${toQuery(args)}`), []),
       setAdmin: useCallback(
         async (args) => asyncFetcher.submit({ userId: args?.userId, admin: args?.admin }, { action: '/api/v1/admin/set-admin' }),

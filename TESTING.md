@@ -167,3 +167,27 @@ is fixed, and cite the checklist you ran in the PR description.
 - [ ] A dead `?schema=` deep link (unknown/invisible shareId) toasts, strips
       the param from the URL, and fires NO fallback search; while a live
       `?schema=` resolves, no empty-state copy shows at all.
+
+## Admin secure-fields toggle (`remix/app/components/Admin/AdminPanel.tsx`)
+
+- [ ] `/settings` as an admin shows the "Secure fields" section; the Email
+      row paints its last-known state instantly from `tt-admin-secure-fields`
+      (no spinner after the first ever visit), then reconciles with the
+      server config in the background.
+- [ ] Flipping Email to Plaintext does NOT write immediately: the inline
+      warning + "Store plaintext mirrors" confirm appears; Cancel keeps
+      secure mode. Confirming toasts the reconcile count and every existing
+      user thing gains a root plaintext `email` matching its blob email
+      (spot-check in Compass/mongosh: `db.things.find({ email: <addr> })`).
+- [ ] While plaintext mode is on, a NEW registration (and a new service
+      account) writes the root `email` mirror at insert time; a secure-blob
+      write (e.g. verify-email, theme change) self-heals a hand-deleted
+      mirror on that user.
+- [ ] Flipping back to Secure applies without a confirm step and strips the
+      root `email` from every user thing (`db.things.countDocuments({
+      thingtime: 'user', email: { $exists: true } })` returns 0); the blob
+      email + hashed uniqueKey lookup (`/api/v1/admin/users?q=<full email>`)
+      keep working in both modes.
+- [ ] Non-admin sessions get 401/403 from GET/POST
+      `/api/v1/admin/secure-fields` (the /tests admin group passes), and a
+      failed toggle POST reverts the switch and toasts the error.
