@@ -102,6 +102,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+### 2026-10-22 — General local compressor
+
+- Add local image compression with bundled WASM codecs, transparency/animation safeguards and truthful size receipts alongside WebCodecs video compression.
+- Show file selection on load, keep the selected file while settings change, and compose the new tool from individually editable Builder elements.
+- Version intrinsic media storage/install contracts and extend the isolated desktop/mobile browser regression; scope WebAssembly compilation permission to the network-disabled media worker.
+
 - 2026-10-22: Move device sync configuration off Things home into a dedicated
   device page; keep storage attachments and parent-linked records out of root,
   retain recovery/search access, and preserve private upload provenance before

@@ -444,3 +444,10 @@ Public docs and capability discovery remain local and available.
 
 
 `api.ai-chatgpt-plan` 1.1.0 registers GET redacted account/attempt status, local authorization availability and storage mode; same-origin POST begin/cancel/select-model/refresh-models/disconnect/prepare-import/move-account/import-account. An optional `X-Thingtime-Expected-User` header rejects stale-account UI requests. `api.ai-models` 1.7.0 lists owner-scoped plan connections; `api.lopu-chats-reply` 1.20.0 resolves those IDs strictly even when saved and uses plan Responses without API billing fallback. Explicit desktop remote selections negotiate and pin the receiving API before proxying; local mode never falls back. `api.capabilities` 1.2.0 permits custom loopback data authorities for local runtimes. Both manifests derive these versions from the canonical docs registry; tests live in `ai/chatgpt-plan`, `apiCapabilities.test.ts` and the Lopu stream suite.
+
+General compressor storage adds `api.things` 1.41.0, `api.things-update`
+1.12.0 and `api.webpages-resolve` 1.8.0 for validated intrinsic media containers
+with separately editable children. `api.webpages-suites-install` 1.7.0 installs
+the upgraded media-tools definitions. Both manifest generators consume the
+canonical endpoint registry; media suite clients require the new minor before
+installation. No image-byte HTTP endpoint is introduced.

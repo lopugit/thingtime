@@ -4463,36 +4463,53 @@ configured. Local development without a configured secret uses an ephemeral
 key, so refreshing comments after a server restart starts a new cursor chain.
 
 
-### Reusable local video tools
+### Reusable local image and video tools
 
-Install **Local video tools** (`media-tools`) from Builder's app suites on an
-origin advertising `api.webpages-suites-install >= 1.4.0`. The normal installation
-creates private, owned Page, Component and Action Things. Its `tt-web-platform`
-program stores the document, CSS, selectors and editable encoding settings;
-**Save edited component** persists the edited program and current defaults for
-reuse. Neither the selected file nor the output bytes are saved by this Action.
-See `/docs/builder#local-media` for the declarative contract and capability
-inspection guidance shared with Lopu.
+Install **Local image and video tools** (`media-tools`) from Builder on an origin
+advertising `api.webpages-suites-install >= 1.7.0`. The file selector appears on
+load; choose a local file, optionally open **Compression settings**, then **Start**.
+Settings changes apply on the next Start without discarding the selected file.
+The page consists of ordinary individually editable elements inside the reusable
+`tt-media-pipeline` adapter. Builder can select, style, move, duplicate and remove
+its labels, fields, buttons and previews. Save the Page or Component through the
+normal Builder controls. Existing saved `tt-web-platform` media programs also
+mount their file controls automatically; their Save edited component Action still
+saves the program and current defaults, never selected or output bytes.
 
-Encoding runs on the selected device through WebCodecs and the pinned
-[Mediabunny 1.61.6 source](https://github.com/Vanilagy/mediabunny/tree/v1.61.6).
-Its unmodified source is MPL-2.0; the shipped notice is at
-`/platform/mediabunny-LICENSE.txt`. No FFmpeg service, provider key, upload,
-external request or additional secret is required. Existing account/database
-configuration is only needed to install or save reusable Things. HTTPS (or
-localhost) and browser codec support are required. MP4 uses H.264/AAC; WebM uses
-VP9/Opus. Unsupported sources or codecs produce an error, including unsupported
-audio rather than silently dropping it. Only primary video/audio are retained;
-extra tracks, subtitles and metadata are omitted. Output can be larger than input;
-the receipt reports actual byte counts. Large files depend on available memory.
+Images use pinned [ImageMagick WASM](https://github.com/dlemstra/magick-wasm)
+and [resvg WASM](https://github.com/yisibl/resvg-js), shipped as same-origin build
+assets. Actual tested inputs include JPEG, PNG, WebP, GIF, BMP, TIFF, ICO, HEIC and
+static SVG paths. Other bundled raster decoders may work; unsupported inputs fail
+explicitly. Output choices are WebP (Automatic), JPEG, PNG, AVIF and GIF; quality
+controls lossy formats and PNG stays lossless. Aspect ratio and orientation are
+preserved, without upscaling. Metadata is stripped. Transparent JPEG conversion
+requires choosing a background explicitly. Animation keeps frames/timing/loops
+in supported WebP/GIF outputs; APNG, multi-page/layered images and incompatible
+animation outputs are refused rather than flattened. SVG is rasterized and only
+the supported static subset is accepted: no text requiring fonts, embedded or
+external images, scripts or animation. Transparent GIF output is refused in favor
+of WebP. WASM and available device memory constrain very large jobs; cancellation
+terminates the worker and leaves the original unchanged. Output can be larger;
+actual before/after byte counts are always reported.
 
-The fixed encoding worker runs on the secure host because opaque iframes cannot
-access WebCodecs. The editable document remains in its opaque sandbox. The host
-validates file messages against that frame and run, resolves settings from its
-validated saved program, and terminates work on cancel, replacement or unmount.
-Custom hosts must serve `/assets/mediaWorker-*.js` with `mediaWorkerCsp` from
-`remix/scripts/csp.mjs` (no network or child workers). Vite and Vercel configure
-this automatically; `verify:vercel-output` asserts the worker and scoped header.
+Videos continue through the pinned
+[Mediabunny 1.61.6 source](https://github.com/Vanilagy/mediabunny/tree/v1.61.6)
+and browser WebCodecs, using MP4 H.264/AAC or WebM VP9/Opus when supported.
+Only primary video/audio tracks are retained; extra tracks, subtitles and
+metadata are omitted. Audio is never silently removed. The MPL-2.0 Mediabunny
+source notice remains at `/platform/mediabunny-LICENSE.txt`; image-engine notices
+are in `remix/THIRD_PARTY_NOTICES.md`.
+
+No upload, server encoder, external codec CDN, provider key or new secret is
+required. Existing account/database configuration is needed only to install or
+save Things. Selected and output bytes remain local. The host fetches only the
+public bundled WASM engines, then passes their bytes to a fixed terminable worker
+whose CSP denies network and child workers. `wasm-unsafe-eval` is scoped to that
+worker's policy, not the application shell; it enables WebAssembly compilation,
+not authored JavaScript. ImageMagick denies external delegates and coders; its
+virtual filesystem has only codec-internal temporary memory paths. Custom hosts
+must serve `/assets/mediaWorker-*.js` with `mediaWorkerCsp` from
+`remix/scripts/csp.mjs`. Legacy editable documents remain opaque sandboxed frames.
 
 Browser regression on macOS: install FFmpeg/ffprobe, a task-owned Chrome for
 Testing binary and Playwright outside the repository. Set `PLAYWRIGHT_MODULE`
