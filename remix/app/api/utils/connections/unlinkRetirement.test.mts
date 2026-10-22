@@ -2,8 +2,8 @@ import assert from 'node:assert/strict';
 import { beforeEach, mock, test, after } from 'node:test';
 
 // Unlinking the LAST holder of a shared external account retires it: the
-// account thing (which carries the sealed OAuth token blob) is deleted along
-// with every external-post-source membership row behind it. That branch is
+// account thing (which carries the sealed OAuth token blob) is deleted,
+// while external-post-source rows stay inert without links. That branch is
 // irreversible and it is taken on the strength of ONE count, so what it counts
 // matters.
 //
@@ -21,6 +21,7 @@ type Doc = Record<string, any>;
 
 const matches = (doc: Doc, query: Doc): boolean =>
   Object.entries(query).every(([field, expected]) => {
+    if (field === '$or') return expected.some((part: Doc) => matches(doc, part));
     // the one dotted path these queries use
     const value = field.includes('.') ? field.split('.').reduce<any>((node, key) => node?.[key], doc) : doc[field];
     return Array.isArray(value) ? value.includes(expected) : value === expected;
@@ -54,6 +55,7 @@ let things = makeCollection([]);
 
 mock.module(new URL('../mongodb/collections.ts', import.meta.url).href, {
   namedExports: {
+    withHomeMongoTransaction: async (work: any) => work({}),
     getThingsCollection: async () => things,
     getHomeThingsCollection: async () => home
   }
@@ -84,12 +86,12 @@ const world = (otherLinks: Doc[]) => {
 
 beforeEach(() => world([]));
 
-test('the last link retires the shared account and drains its membership rows', async () => {
+test('the last link retires the credential-bearing account and preserves inert source rows', async () => {
   const result = await unlinkConnection({ id: 'user-1', username: 'one' }, { id: 'ext-link-mine' });
 
   assert.deepEqual(result, { ok: true, removed: true });
   assert.equal(home.docs.find((doc) => doc.shareId === ACCOUNT), undefined, 'the account is retired');
-  assert.equal(things.docs.length, 0, 'its membership rows are drained');
+  assert.equal(things.docs.length, 1, 'post membership cannot be drained after commit across a concurrent reconnect');
 });
 
 test('another current-shape link keeps the shared account alive', async () => {

@@ -1257,7 +1257,7 @@ const dataSchema: ThingtimeSchema = {
     `are letters/numbers/_/- (max ${MAX_DATA_KEY_CHARS} chars), nesting is unbounded up to ` +
     `MongoDB's own ${MAX_STORABLE_NESTING}-level storage limit (circular references rejected), ` +
     `${MAX_DATA_CRYSTAL_NODES} values per crystal, arrays at ` +
-    `${MAX_DATA_ARRAY_ITEMS} items, strings at ${MAX_TEXT_CHARS} chars.`,
+    `${MAX_DATA_ARRAY_ITEMS} items. Strings are preserved without a character cap; storage capacity still applies.`,
   fields: [
     {
       name: '*',
@@ -5016,7 +5016,6 @@ const sanitizeDataValue = (
       continue;
     }
     if (typeof value === 'string') {
-      if (value.length > MAX_TEXT_CHARS) return fail(400, `Data strings cap at ${MAX_TEXT_CHARS} chars (${path})`);
       item.assign(value);
       continue;
     }

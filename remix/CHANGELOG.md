@@ -348,6 +348,67 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   installed acceptance and the live 10,000-path cap remain open. Details:
   [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
 
+- 2026-10-18 — **Codex (AI)**: Reconcile the OAuth library with develop's
+  create-only admin OpenAI import. Correct its mismatched capability manifests
+  to 3.1.1 and require that version before import; add a regression for both
+  discovery endpoints and compatibility boundaries. Keep the floating Lopu
+  launcher clear of open credential forms while retaining navbar access. Focused
+  tests and builds pass.
+  [PR #992 evidence](../PRs/992-service-account-library-add-multi-account-third-party-service-library.md).
+
+- 2026-10-18 — **Codex (AI)**: Remove arbitrary saved-credential field,
+  envelope, request-body and shared data-string caps; wrap long Secure Vault
+  metadata on mobile and keep credential verification above navigation/floating
+  controls. All 24 isolated browser/API checks pass. Negotiate `api.lopu-vault`
+  1.4.0 and the affected data
+  contracts before writes. Physical hosting/database capacity still applies.
+  [PR #992 evidence](../PRs/992-service-account-library-add-multi-account-third-party-service-library.md).
+
+- 2026-10-18 — **Codex (AI)**: Reject invalid provider-token replacements
+  before any metadata or credential changes, preserving intentional blank-field
+  retention. Publish and negotiate `api.lopu-vault` 1.3.1. All 253 focused tests
+  and 20 isolated browser/API check records pass; remaining storage-size limits
+  and real-provider acceptance stay open.
+  [PR #992 evidence](../PRs/992-service-account-library-add-multi-account-third-party-service-library.md).
+
+- 2026-10-18 — **Codex (AI)**: Keep saved AI account names full-width on
+  mobile, with account controls on the next row. Validate independent account
+  removal, logout and owner isolation with disposable vault-backed browser
+  fixtures. Meta profile/logo and production callback validation are verified;
+  real multi-provider acceptance remains separate.
+  [PR #992 evidence](../PRs/992-service-account-library-add-multi-account-third-party-service-library.md).
+
+- 2026-10-18 — **Codex (AI)**: Fix saved-account response redaction so opaque
+  credentials cannot corrupt JSON syntax or leave suffixes of overlapping
+  tokens visible. Preserve typed data; publish `api.connections-request` 1.1.1
+  on both manifests. Regression coverage and acceptance boundaries:
+  [PR #992](../PRs/992-service-account-library-add-multi-account-third-party-service-library.md).
+
+- 2026-10-18 — **Codex (AI)**: Preserve complete saved-account API results and
+  support opaque Google pagination cursors. Separate credential redaction from
+  bounded log summaries, retain ordinary key/value data, and reject cross-origin
+  redirects for complete responses. Publish `api.connections-request` 1.1.0
+  with cancellation and regression coverage.
+  [PR #992 evidence](../PRs/992-service-account-library-add-multi-account-third-party-service-library.md).
+
+- 2026-10-18 — **Codex (AI)**: Integrate the OAuth account library with the
+  released 1PUX importer and encrypted attachments. Revalidate shared vault
+  recovery, local callback persistence and real Google profile reuse; retain
+  explicit second-account, Meta and hosted OpenAI acceptance gates.
+  Document persistent private QA database storage and the dev-worker readiness
+  gate after rebuilding a disposable replica with missing data files.
+  [PR #992 evidence](../PRs/992-service-account-library-add-multi-account-third-party-service-library.md).
+
+- 2026-10-16 — **Codex (AI)**: Reject malformed successful provider JSON instead
+  of reporting an empty connection result; retain safe reconnect errors for
+  non-JSON authorization refusals. [PR #992 evidence](../PRs/992-service-account-library-add-multi-account-third-party-service-library.md).
+
+- 2026-10-16 — **Codex (AI)**: Reconcile the OAuth account library with the
+  released password vault and preserve shared encryption/session boundaries.
+  Verify refresh of a genuinely expired Google grant and successful subsequent
+  profile API reuse. Keep the existing local callback while adopting isolated
+  worktree PM2 names. [PR #992 evidence](../PRs/992-service-account-library-add-multi-account-third-party-service-library.md).
+
 - 2026-10-18 — **Codex (AI)**: Mac/iOS foreground sync imports sealed native
   folder observations in bounded pages, retaining source/device/grant checks
   and complete checkpoint publication. Large-root cloud paging and installed
@@ -987,6 +1048,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   block the web vault or existing native packaging. Correct managed worktree
   port identity and prune non-target image binaries from Vercel functions.
   [Setup and security model](../docs/password-manager.md); [PR #997 validation](../PRs/997-codex-password-manager-web--encrypted-web-password-manager.md).
+
+- **Account credential encryption**: integrated stable per-user keys, exact-password and live-session wrappers, server-assisted background/recovery access, guarded legacy migration and password-reset preservation. Local API acceptance verifies two saved accounts survive recovery while old sessions and reset replay fail. Google client creation and a real account API request are verified; remaining provider acceptance is tracked in [PR #992](../PRs/992-service-account-library-add-multi-account-third-party-service-library.md). — Codex (AI), 2026-10-14
+
+- **Third-party account library**: grouped service/subservice cards, multiple owner-private encrypted OAuth accounts, Google readonly subservices, new-tab sign-in with env-pinned callbacks, one-use session-bound state, safe server-side reuse, refresh serialization, and owner-scoped caches. Facebook identity and posts have separate grants; ChatGPT hosted identity is gated by an approved OpenAI client. OpenAI API and Claude Code OAuth cards reuse Secure Vault. Fork setup and manual QA are documented in README/TESTING. Password/session encryption and real-provider acceptance remain pending; see [draft PR #992](../PRs/992-service-account-library-add-multi-account-third-party-service-library.md). — Codex (AI), 2026-10-13
+
+- **Credential encryption preparation**: tested password/session key-wrapping primitives now preserve a stable data key across rotations and reject altered owner, record, purpose, session and expiry metadata. Runtime credentials still use the existing server-key vault; login/recovery and migration remain open in [PR #992](../PRs/992-service-account-library-add-multi-account-third-party-service-library.md). — Codex (AI), 2026-10-13
 
 - 2026-10-13 — **Claude (AI)**: Unified Timeline named versions, undo this
   change, compare with now and version export (`api.timeline` 1.18.0): new

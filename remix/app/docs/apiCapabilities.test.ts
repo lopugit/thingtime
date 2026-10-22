@@ -10,6 +10,23 @@ import { routeModules } from '../../server/routes/api/[...]';
 import { thingtimeCapabilityManifest } from '../api/utils/capabilities/thingtimeCapabilities';
 import { capabilitySatisfies } from '../api/utils/capabilities/capabilityContract';
 
+test('configured OpenAI credential import advertises its corrected contract on both manifests', () => {
+	const feature = 'api.admin-ci-credentials';
+	const versions = [
+		createApiCapabilitiesManifest().features[feature],
+		thingtimeCapabilityManifest('https://thingtime.test').features[feature].version
+	];
+	for (const version of versions) {
+		assert.equal(version, '3.1.1');
+		assert.equal(capabilitySatisfies(version, '3.1.1'), true);
+	}
+	for (const version of [undefined, '1.0.0', '3.0.0', '3.1.0', '4.0.0']) {
+		assert.equal(capabilitySatisfies(version, '3.1.1'), false);
+	}
+	for (const version of ['3.1.2', '3.2.0']) assert.equal(capabilitySatisfies(version, '3.1.1'), true);
+	assert.equal(typeof routeModules['v1/admin/ci/credentials'], 'function');
+});
+
 test('Timeline synchronization is registered and versioned on both capability manifests', () => {
 	assert.equal(createApiCapabilitiesManifest().features['api.mongodb-endpoint'], '1.1.0');
 	assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.mongodb-endpoint'].version, '1.1.0');
@@ -53,8 +70,8 @@ test('external avatar export requires the bounded-download contract on both mani
 
 test('emoji transfer, library and move capabilities reject pre-support origins', () => {
   const manifest = thingtimeCapabilityManifest('https://thingtime.test');
-  for (const [feature, version] of [['api.things-export', '1.15.0'], ['api.things-import', '1.11.0'], ['api.things', '1.38.0'], ['api.things-bulk', '1.6.0']]) {
-    assert.equal(manifest.features[feature].version, feature === 'api.things' ? '1.40.0' : version);
+  for (const [feature, version] of [['api.things-export', '1.15.0'], ['api.things-import', '1.12.0'], ['api.things', '1.38.0'], ['api.things-bulk', '1.6.0']]) {
+    assert.equal(manifest.features[feature].version, version);
     assert.equal(capabilitySatisfies(version, version), true);
     assert.equal(capabilitySatisfies('1.0.0', version), false);
     assert.equal(capabilitySatisfies('2.0.0', version), false);
@@ -111,7 +128,7 @@ test('shared dependency reads negotiate the additive Things contract on both man
 
 test('standalone Thing copying negotiates the additive copy contract on both manifests', () => {
 	const version = createApiCapabilitiesManifest().features['api.things-fork'];
-	assert.equal(version, '1.7.0');
+	assert.equal(version, '1.8.0');
 	assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.things-fork'].version, version);
 	assert.equal(capabilitySatisfies(version, '1.0.0'), true);
 	for (const unsupported of ['', '1.0.0', '1.1.0', '1.1.1', '2.0.0']) assert.equal(capabilitySatisfies(unsupported, '1.2.0'), false);
@@ -297,8 +314,9 @@ test('the Lopu family publishes its minor capability updates (own providers, ver
 	// 1.1.0: optional provider `model` + templates with catalog models / more kinds (vault);
 	// optional per-turn model, effort, speed (voice turn) — on top of the 1.0.1 fences;
 	// 1.2.0 (voice reply): the gate on conversation turns + billing/usage/costMicros on done
-	assert.equal(manifest.features['api.lopu-vault'], '1.2.0');
-	assert.equal(manifest.features['api.lopu-voice-reply'], '1.4.0');
+	// 1.3.0: owner-tagged private lists and expectedOwnerId fencing on writes.
+	assert.equal(manifest.features['api.lopu-vault'], '1.4.0');
+	assert.equal(manifest.features['api.lopu-voice-reply'], '1.5.0');
 	// direct voice (§6.1): the ephemeral realtime credential; 1.1.0: the gate + a usage row per session
 	assert.equal(manifest.features['api.lopu-voice-session'], '1.2.0');
 });
@@ -568,7 +586,7 @@ test('subspace rename requires the post-media additive contract', () => {
 test('background AI requires compatible operation and task contracts on both manifests', () => {
  const legacy = createApiCapabilitiesManifest(Object.keys(routeModules));
  const discovery = thingtimeCapabilityManifest('https://background.test');
- for (const [feature, required] of Object.entries({ 'api.lopu-background-tasks': '1.3.1', 'api.lopu-chats-reply': '1.21.1', 'api.lopu-voice-reply': '1.4.0', 'api.lopu-musing': '1.1.0', 'api.ai-complete': '1.2.0' })) {
+ for (const [feature, required] of Object.entries({ 'api.lopu-background-tasks': '1.3.1', 'api.lopu-chats-reply': '1.21.1', 'api.lopu-voice-reply': '1.5.0', 'api.lopu-musing': '1.1.0', 'api.ai-complete': '1.2.0' })) {
   assert.equal(legacy.features[feature], required);
   assert.equal(discovery.features[feature].version, required);
   assert.equal(capabilitySatisfies(required, required), true);

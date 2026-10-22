@@ -1183,7 +1183,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     group: 'admin',
     title: 'Manage the ordered Lopu credential waterfall',
     endpoint: '/api/v1/admin/ci/credentials',
-    featureVersion: '3.1.0',
+    featureVersion: '3.1.1',
+    contractVersion: '3.1.1',
     summary: 'Store, rotate, enable, delete, and reorder named AI-platform credentials without exposing their values.',
     detail:
       'Credential values are AES-256-GCM encrypted with THINGTIME_ADMIN_VAULT_KEY and are write-only from the browser. Each entry has a built-in or custom AI platform label; GET and every mutation response contain redacted metadata only. Lopu requests the ordered compatible platform subset from the vault at run time, so GitHub needs one stable router secret instead of one repository secret per account. At most 128 entries are stored. Anthropic and Claude entries accept only Claude Code OAuth tokens; API keys are rejected. Claude and CI share this store. The same-origin admin import-configured-openai action copies only this deployment’s OPENAI_API_KEY into an enabled OpenAI entry named OPENAI_THINGTIME_API_KEY. It is create-only, retries preserve existing entries, and no secret is returned.',
@@ -5000,25 +5001,27 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
 		id: 'lopu-vault',
+    // 1.4.0: Names, keys, model ids, endpoint paths and encrypted values have no product length/byte caps. Hosting and database capacity still apply; values are never truncated.
+		// 1.3.1: invalid supplied provider tokens fail without any metadata write.
 		// 1.0.1: writes are JSON-only (415, the CSRF fence, before the rate limit) and
 		// refuse a temporary (guest) session with 403 — compatible corrections.
 		// 1.1.0: `model` is optional on save-provider (a template kind runs on its
 		// first catalog model), providerTemplates carry `models[]` (efforts, speeds,
 		// audioInput 'realtime' for direct-voice models), four more kinds
 		// (mistral, deepseek, groq, cohere) — compatible additions.
-		contractVersion: '1.2.0',
-		featureVersion: '1.2.0',
+		contractVersion: '1.4.0',
+		featureVersion: '1.4.0',
 		group: 'lopu',
 		title: 'Lopu Secure Vault',
 		endpoint: '/api/v1/lopu/vault',
 		summary: 'Manages the current user’s write-only secrets, environments, and AI provider connections.',
-		detail:
-			'Vault values are AES-256-GCM encrypted with owner-and-record-bound authenticated data inside owner-private Things. GET returns metadata only (providerTemplates list each kind’s endpoint and catalog models with their efforts, speeds and whether a model speaks the realtime direct-voice transport). Provider tokens and generic secret values are accepted on writes and never returned. A provider’s `model` is optional: a template kind without one runs on its first catalog model, a custom compatible host must name one. Custom AI hosts must also be admitted by the server allowlist before Lopu can call them.',
+		detail: 'Names, keys, model ids, endpoint paths and encrypted values have no product length/byte caps. Hosting and database capacity still apply; values are never truncated. ' + 'Vault values are AES-256-GCM encrypted with owner-and-record-bound authenticated data inside owner-private Things. GET returns metadata only (providerTemplates list each kind’s endpoint and catalog models with their efforts, speeds and whether a model speaks the realtime direct-voice transport). Provider tokens and generic secret values are accepted on writes and never returned. A provider’s `model` is optional: a template kind without one runs on its first catalog model, a custom compatible host must name one. Custom AI hosts must also be admitted by the server allowlist before Lopu can call them.',
 		auth: { mode: 'session', description: 'Requires the current full Thingtime user session (a temporary guest session is a 403 on writes). POST bodies must be application/json (415 otherwise).' },
 		methods: ['GET', 'POST'],
 		steps: [
-			'GET the provider templates, environments, and redacted entry metadata.',
+			'GET ownerId, provider templates, environments, and redacted entry metadata. Bind cached metadata to ownerId.',
 			'POST create-group, save-secret, or save-provider to create write-only records.',
+			'When updating a provider, omit token or send an empty string to retain its encrypted credential. An invalid supplied token returns 400 before any fields change; it never silently retains the old token while saving new metadata.',
 			'POST move-entry with id and groupId to move a secret or provider between owned environments; null or an empty string means Ungrouped. Only metadata changes; the encrypted value is preserved without decryption.',
 			'POST delete with an owner-scoped record id to remove it.'
 		],
@@ -5045,6 +5048,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 	}),
   endpoint({
 		id: 'lopu-voice-reply',
+    // 1.5.0: Provider model IDs retain their character grammar without a product length cap.
 		// 1.0.1: JSON-only bodies (415, the CSRF fence, before the rate limit) and 403 for a
 		// temporary (guest) session — compatible corrections.
 		// 1.1.0: optional per-turn `model`, `effort`, `speed` (validated against the
@@ -5053,14 +5057,13 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		// unless Thingtime.LopuAccess.allowByoUnverified; transcribe mode is not gated) and are
 		// recorded as lopu-usage rows — meta carries billing "byo", done carries the provider's
 		// usage, billing and the list-price costMicros (never debited) — compatible additions.
-		contractVersion: '1.4.0',
-		featureVersion: '1.4.0',
+		contractVersion: '1.5.0',
+		featureVersion: '1.5.0',
 		group: 'lopu',
 		title: 'Lopu voice turn',
 		endpoint: '/api/v1/lopu/voice/reply',
 		summary: 'Streams one Lopu conversation turn or persists one private transcription page. OAuth callers must explicitly approve the corresponding Lopu chat, voice, or recording permission.',
-		detail:
-			'Optional background transport: negotiate api.lopu-background-tasks 1.0.0 and send X-Thingtime-Background-Id plus X-Thingtime-Task-Owner; HTTP 202 returns an idempotent task for polling its original response. Conversation mode decrypts only the selected owner-scoped provider token in server memory, calls the fixed provider endpoint through the shared SSRF fence, and streams NDJSON text deltas. The model is the connection’s own, else the kind’s first catalog model, else the optional `model` in the body; optional `effort` and `speed` must be supported by that model. Version 1.3 transcribe mode accepts chatId and requestId, persists the transcript in the same Lopu conversation and as a linked owner-private data Thing, and returns meta.chatId, quote.page and done.messages. Stable request IDs deduplicate chat/page/turn writes. Transcription makes no provider call and is limited to 12000 characters per utterance.',
+		detail: 'Provider model IDs retain their character grammar without a product length cap. ' + 'Optional background transport: negotiate api.lopu-background-tasks 1.0.0 and send X-Thingtime-Background-Id plus X-Thingtime-Task-Owner; HTTP 202 returns an idempotent task for polling its original response. Conversation mode decrypts only the selected owner-scoped provider token in server memory, calls the fixed provider endpoint through the shared SSRF fence, and streams NDJSON text deltas. The model is the connection’s own, else the kind’s first catalog model, else the optional `model` in the body; optional `effort` and `speed` must be supported by that model. Version 1.3 transcribe mode accepts chatId and requestId, persists the transcript in the same Lopu conversation and as a linked owner-private data Thing, and returns meta.chatId, quote.page and done.messages. Stable request IDs deduplicate chat/page/turn writes. Transcription makes no provider call and is limited to 12000 characters per utterance.',
 		auth: { mode: 'session', description: 'Requires the current full Thingtime user session (a temporary guest session is a 403). Bodies must be application/json (415 otherwise).' },
 		methods: ['POST'],
 		steps: [
@@ -9390,6 +9393,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'things',
+    // 1.34.0: User-authored data strings no longer have the generic 5,000-character cap; other schema and storage constraints retain their contracts.
     // 1.3.0 / contract 1.2.0: post + comment projections carry authorFlair —
     // the author's USER flair in the post's subspace (additive). The shared
     // post projection is versioned HERE and on things-comment / things-feed /
@@ -9415,8 +9419,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // owner-library files. The combined 1.27.0 contract adds shared
     // Thing discussions, linked references, display-metadata renames and
     // optional cursor-backed rich comment projections.
-    featureVersion: '1.40.0',
-    contractVersion: '1.40.0',
+    // 1.38.0 also publishes uncapped user-authored data strings and request
+    // bodies with no application byte cap (hosting/storage capacity applies).
+    featureVersion: '1.38.0',
+    contractVersion: '1.38.0',
     group: 'things',
     // 1.33.1: placement and folder deletion share transactional ancestry fences.
     // 1.33.2: protected library display-title renames commit title-only history.
@@ -9424,9 +9430,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     endpoint: '/api/v1/things',
     summary: 'One endpoint for every thing: create, read, update/upsert, and delete posts, comments, reactions, and shares. OAuth app tokens may use explicitly approved account Things permissions; legacy picker and app-storage grants retain their prior boundaries.',
     detail:
-      'Version 1.40 adds owner-session-only fileSyncOrigin on individual attachment Thing reads. It records the original client-reported sync source path and intended destination before upload; it is omitted from public, app, PAT and list projections and is never evidence of a current file location or native access. ' +
-      'Version 1.39.1 corrects root containment: folder=root excludes parent/target children, storage attachment blobs and file-sync configuration records. Durable unbound attachments remain reachable in the Unfiled files collection and owner search. Expiring unbound uploads are not durable library content. Explicit folder/target and search scopes, canonical file hierarchy and legacy durable standalone files remain supported. ' +
-      'Version 1.39 adds optional closed resourceLimits under file-sync configurationVersion 3; save and execution require compatible server and native resource control capabilities. Older clients must refuse version 3. ' +
+      'Request bodies have no application byte cap; hosting and storage capacity still apply. User-authored data strings no longer have the generic 5,000-character cap; other schema and storage constraints retain their contracts. ' +
       'Version 1.38 adds private file-sync configurationVersion 2 with bounded root-relative Gitignore rules. Rules prune native scans before hashing and filter both planning sides; ignored baseline facts are retained. Older clients must refuse version 2 rather than discard its policy. Empty-rule configurations keep version 1 compatibility. Native grants and exact-policy approval are still required. ' +
       'Version 1.37 adds registered authenticated live SSE source bindings on saved Components and page blocks; shared-root execution cannot borrow viewer stream authority. ' +
       'Version 1.36 combines file-sync configuration with individually editable element, collection and condition blocks, scalar DOM bindings and child templates. Authored trees have no product block-count/depth limit; transport and storage bounds remain. ' +
@@ -11427,6 +11431,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'things-update',
+    // 1.11.0: User-authored data strings no longer have the generic 5,000-character cap; other schema and storage constraints retain their contracts.
     // Builder SDK: action updates accept scoped lookup steps and literal Vault entry ids.
     // Stored component and page-block arguments use the same media-addition guard as render edits.
     featureVersion: '1.11.0',
@@ -11435,8 +11440,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     title: 'Update thing',
     endpoint: '/api/v1/things/update',
     summary: 'Updates one of the current user things — crystal payload, acl audience, or tags. OAuth app tokens may use explicitly approved account Things permissions; legacy picker and app-storage grants retain their prior boundaries.',
-    detail:
-      'JSON Action inputs accept bounded JSON values; form controls decode their JSON text before transport. Literal strings are never reparsed by the API. JSON defaults preserve arrays, objects and null; input references remain inert data. Resolved defaults and nested calls obey the input byte budget. The Web standards workbench can save the edited program and current inputs as a private reusable Component through its authored browser Action. ' +
+    detail: 'Request bodies have no application byte cap; hosting and storage capacity still apply. User-authored data strings no longer have the generic 5,000-character cap; other schema and storage constraints retain their contracts. JSON Action inputs accept bounded JSON values; form controls decode their JSON text before transport. Literal strings are never reparsed by the API. JSON defaults preserve arrays, objects and null; input references remain inert data. Resolved defaults and nested calls obey the input byte budget. The Web standards workbench can save the edited program and current inputs as a private reusable Component through its authored browser Action. ' +
       'Reusable indexBy and groupBy expressions create bounded own-key lookups from lists using scalar lambda keys; invalid and prototype keys are refused. Browser programs using these expressions require executionVersion 1.11.0. ' +
       'Web standards adds the web-standards installable suite, pure webstandards.browse/component expressions and the reusable tt-web-platform declarative document/CSS/JavaScript runtime. Runtime execution is isolated from account data; inventory provenance and incomplete-demo coverage are explicit. ' +
       'Component source bindings use the same validation as page bindings and survive create/update. Browser Actions may declare expressionLimits {nodes,listItems} up to 1000000/10000 (defaults 20000/1000), with shared parent/child budgets and deadline checks inside evaluation. Browser each steps also require executionVersion 1.9.0. Each prepares every allowlisted child as the current viewer, shares all parent budgets, and rejects an oversized batch before its first request; authors explicitly slice batches when desired. Programs using expressionLimits require executionVersion 1.9.0. The Builder runtime includes stable-identity, revision-pinned tt-form controls and encoded local query navigation. ' +
@@ -12808,14 +12812,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'schemas',
+    // 1.2.0: User-authored data strings no longer have the generic 5,000-character cap; other schema and storage constraints retain their contracts.
     group: 'schemas',
     title: 'Thingtime Schemas',
     endpoint: '/api/v1/schemas',
-    contractVersion: '1.1.0',
-    featureVersion: '1.1.0',
+    contractVersion: '1.2.0',
+    featureVersion: '1.2.0',
     summary: 'Returns every Thingtime Schema — the root thing schema, crystal sub-schemas, and collection schemas.',
-    detail:
-      'The registry the API validates against, as data: field lists, versions, examples, and the schema version each collection currently writes. Browse the same registry visually at /docs/schemas; published community schemas live at /schemas.',
+    detail: 'User-authored data strings no longer have the generic 5,000-character cap; other schema and storage constraints retain their contracts. The registry the API validates against, as data: field lists, versions, examples, and the schema version each collection currently writes. Browse the same registry visually at /docs/schemas; published community schemas live at /schemas.',
     auth: {
       mode: 'none',
       description: 'Public — schemas describe shapes, never data.'
@@ -13016,11 +13020,12 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'things-import',
+    // 1.12.0: User-authored data strings no longer have the generic 5,000-character cap; other schema and storage constraints retain their contracts.
     // 1.4.0: owner-only algorithm snapshots and private validated restoration.
     // 1.9.0: atomic private chat archives with importer identity substitution.
     // 1.9.1: accept canonical stored-upload custom emoji IDs in archives.
-    featureVersion: '1.11.0',
-    contractVersion: '1.11.0',
+    featureVersion: '1.12.0',
+    contractVersion: '1.12.0',
     notes: [
       'Historical participants may carry avatarPreset lopu, chatgpt or claude instead of avatarFileId, never on self. Messages may carry toolHistory with at most 20 display-only {name, ok, summary} receipts (80/240 character limits). Extra fields and deleted-message receipts are rejected. These fields survive private storage and re-export; they never authorize tools or resolve live accounts.',
       'Chat archive records use only chat-archive, chat-archive-participant, chat-archive-message and chat-archive-reaction kinds. A root contains name, topic, chatType (dm/group/channel), createdAt and selfParticipantId. Participants target the root and contain username, displayName, nickname, joinedAt and optional avatarFileId. Messages target the root and contain participantId, text, createdAt, deleted and optional editedAt, replyToId, threadRootId and systemText. Reactions target a message and contain participantId, emoji and createdAt. Dates are canonical millisecond UTC ISO strings; all participant, reply and thread references must stay inside the same archive.',
@@ -13033,7 +13038,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     title: 'Import portable Things',
     endpoint: '/api/v1/things/import',
     summary: 'Import private caller-owned content, preserving templated media and file/link annotations. Themes and feed algorithms use dedicated home-plane writers with fresh IDs and quota checks, without changing active selections. Themes accept name and token data. Algorithms accept name, emoji, weights, eventCount and canonical ISO lastTrainedAt or null; each weight bucket allows at most 10000 keys of at most 512 characters and finite weights from -50 to 50. Malformed data fails without truncation. Imported algorithms start unshared with no branch lineage and never execute training events. Both kinds retain folder placement but reject child Things, extended fields and gallery files. Other account/control kinds remain protected.',
-    detail: 'Standalone file transfers require fresh file-import uploads; the manifest filePurpose=file must match the immutable upload purpose before any mutation. Commit uses the existing accounted attachment writer. ' +
+    detail: 'User-authored data strings no longer have the generic 5,000-character cap; other schema and storage constraints retain their contracts. Standalone file transfers require fresh file-import uploads; the manifest filePurpose=file must match the immutable upload purpose before any mutation. Commit uses the existing accounted attachment writer. ' +
       'Recording attachment Things contain only crystal.recordingFileId referencing one stored file targeted at that Thing, with optional folderId but without extra fields, children or links. Upload those bytes with purpose recording-import and private-upload approval. Import validates a fresh ready owner draft, commits annotations and durability atomically without changing purpose or moderation, returns the new recording ID, and remaps embedded recording URLs. Included recording folders are remapped after all parent folders exist; otherwise recordings use the selected import destination. Placement uses the dedicated transactional home-plane writer, without changing bytes or ACLs. Existing recordings cannot be reused. Later failures delete newly committed recordings through the attachment lifecycle; deferred cleanup appears in remainingIds. Other content allocates fresh IDs, remaps composition, folder, target and schema references, and uses normal schema validation, quota accounting and transactional attachment binding. Never restores ownership, ACL grants, link secrets, site routes or managed account records. Other stored files use normal post-purpose uploads. Optional links recreate private URL-backed gallery drafts without fetching external bytes. Repeated successful requests create separate copies; never automatically retry an uncertain mutation. Returns linksImported separately from filesImported.',
     auth: { mode: 'session', description: 'Requires a first-party user account. Cross-origin requests, app tokens, PATs and service accounts are not supported.' },
     methods: ['POST'],
@@ -13043,14 +13048,15 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'things-fork',
+    // 1.8.0: User-authored data strings no longer have the generic 5,000-character cap; other schema and storage constraints retain their contracts.
     // 1.4.0: root render media bindings preserve split-fragment template behavior.
-    featureVersion: '1.7.0',
-    contractVersion: '1.7.0',
+    featureVersion: '1.8.0',
+    contractVersion: '1.8.0',
     group: 'things',
     title: 'Copy a shared composition',
     endpoint: '/api/v1/things/fork',
     summary: 'Create an independent private copy of readable standalone content, including pages, components, actions, schema controls and data with extended content and bound post-purpose file galleries; independently readable foreign components include their authored same-author children. Bound files keep their copied home target and gallery order, even when also embedded elsewhere. Linked gallery entries become new private quota-accounted records with the same validated external URL and annotations; external bytes are never fetched, stored or redirected by the content endpoint. Flagged linked media cannot be re-minted as unflagged. Non-post purposes are excluded and unavailable or unsupported files fail the copy instead of silently dropping a gallery.',
-    detail: 'Unlisted targets and shared roots accept their canonical id without a secret key; existing identity, engagement, write, scope and moderation rules still apply. ' +
+    detail: 'User-authored data strings no longer have the generic 5,000-character cap; other schema and storage constraints retain their contracts. Unlisted targets and shared roots accept their canonical id without a secret key; existing identity, engagement, write, scope and moderation rules still apply. ' +
       'Revalidates the root audience and traverses stored component, action, schema and data references, including saved component arguments and every persisted page instance. Copies readable relational comments and nested replies in parent-first order (up to 512 Things, files and comments; larger copies fail without truncation), including comments on media and each nested gallery. Creates fresh caller-owned private Things through normal quota and schema gates. Rewrites executable references and capability scopes to copied ids; never edits the original or overwrites a prior fork. Templated controls retain their editable arguments and receive a bounded ttActionRefs array of [original resolved reference, copied id] pairs on the authored control node. The renderer applies the first matching pair once after ttAction interpolation, never to labels or inputs, and strips the marker from rendered output. Unused pairs are not access grants. Deferred tt-collection/Collection itemTemplate controls participate in stored dependency discovery and copying; row runtime values never grant authority. Dialog closeOnAction references follow copied actions without independently granting access. Forks of forks rebind to their own actions. Missing dependencies fail before writes. Failed writes trigger best-effort cleanup of exact newly created ids; a cleanup failure is reported explicitly. Repeated successful calls create separate copies.',
     auth: { mode: 'session', description: 'Requires a signed-in user and read access to id, including its key or group membership when needed. File-bearing copies additionally require the recipient to be a user account with normal post-purpose upload approval; that permission is checked before reservation and throughout copying.' },
     methods: ['POST'],
@@ -13060,6 +13066,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'actions-run',
+    // 1.38.0: User-authored data strings no longer have the generic 5,000-character cap; other schema and storage constraints retain their contracts.
     // 1.34.0 adds owned XPath evaluator, compiled expression and result objects.
     // 1.34.1 retains trusted mutation provenance; 1.35.0 adds native traversal and reusable synchronous data callbacks.
     featureVersion: '1.38.0',
@@ -13069,7 +13076,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     endpoint: '/api/v1/actions/run',
     summary: 'Execute one action thing inside its declared capability + budget envelope. OAuth callers must explicitly approve actions.run, including declared action side effects and costs.',
     detail:
-      'Version 1.38 preserves opaque pagination cursor query values up to the shared 16-KiB transport bound in local UI navigation. ' +
+      'Version 1.38 preserves opaque pagination cursor query values up to the shared 16-KiB transport bound in local UI navigation. User-authored data strings no longer have the generic 5,000-character cap; other schema and storage constraints retain their contracts. ' +
       'Version 1.37.1 fixes browser Action requests in the installed desktop shell: same-origin requests use the selected HTTPS account endpoint with actor and database preconditions preserved; incomplete web servers still fail closed. ' +
       'Version 1.37.0 adds history.recovery:{formatVersion:1,event,dataPlane,proof} when completion retries fail and configured signing keys can seal the exact immutable outcome. API clients should retain this bounded bundle and retry it through api.timeline 1.16.0; never rerun the Action to repair delivery. The first-party client durably queues the same event before reporting local retention, then synchronizes normally across reloads. A lost response or process death before sealing cannot supply a known outcome; incomplete without recovery remains explicit. ' +
       'Version 1.36.0 journals admitted ordinary server runs and outcomes in canonical Timeline, including read-only runs. A failed admission returns 507/503 before execution. Completed runs include history:{status:recorded|incomplete,startedEventId,outcomeEventId:string|null}; incomplete preserves the actual run result and warns that completion was not acknowledged after bounded receipt retries. Do not replay the Action to repair History. A process that stops after admission can leave only a started event. Outcomes omit runtime payloads, use the invoker account/data plane and survive Action deletion. Browser preparation and shared runs remain unrecorded. The bounded action-run records below remain a supplementary debug cache. ' +
@@ -14050,10 +14057,12 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'connections-providers',
+    contractVersion: '1.1.0',
+    featureVersion: '1.1.0',
     group: 'connections',
     title: 'Connection providers',
     endpoint: '/api/v1/connections/providers',
-    summary: 'Lists the third-party feed providers Thingtime can connect to.',
+    summary: 'Lists service groups, subservices, authentication modes and deployment readiness.',
     detail:
       'The provider catalog behind "connect a 3rd party app": Reddit, YouTube, Mastodon, Bluesky, RSS, Hacker News, ' +
       'Lemmy, GitHub, and a demo personal-algorithm provider. Each entry declares its connect fields, whether its ' +
@@ -14099,14 +14108,16 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'connections',
+    contractVersion: '1.1.0',
+    featureVersion: '1.1.0',
     group: 'connections',
     title: 'Connections',
     endpoint: '/api/v1/connections',
     summary: 'Lists or creates links between this Thingtime account and third-party app accounts.',
     detail:
       'A connection links the current Thingtime account to one external identity (a subreddit set, a YouTube ' +
-      'channel, a Mastodon account, …). External accounts are shared many-to-many: the same third-party identity ' +
-      'can be linked from several Thingtime accounts, converging on one account record. Once linked, the feed is ' +
+      'channel, a Mastodon account, …). Public sources are shared many-to-many. Authenticated identities and AES-256-GCM ' +
+      'encrypted credentials are private to each Thingtime owner. Legacy shared grants require reconnect; existing connection IDs are retained. Multiple identities per provider are supported. GET includes ownerId, credentialStatus, scopes and expiry, never token values. POST accepts optional expectedOwnerId and returns 409 if the active account changed. Once linked, the feed is ' +
       'browsable via /api/v1/connections/feed with Thingtime comments and reactions layered on top.',
     auth: {
       mode: 'session-or-bearer',
@@ -14156,6 +14167,19 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
+    id: 'connections-request', contractVersion: '1.1.1', featureVersion: '1.1.1', group: 'connections', title: 'Use a saved service account',
+    endpoint: '/api/v1/connections/request', summary: 'Runs a fixed read-only operation with an owned saved authorization.',
+    detail: 'Credentials are decrypted and refreshed on the server after checking the link owner. The browser and Actions pass connectionId, never an access token. No arbitrary URL, method or header is accepted. Responses are private/no-store; API data is not truncated into log summaries. Supported operations: account.profile for OAuth providers; drive.list-files, gmail.list-messages, calendar.list-calendars, docs.get-document, sheets.get-spreadsheet, contacts.list-contacts for the corresponding Google service. List operations return one provider page: pass data.nextPageToken unchanged as pageToken with the same connectionId and operation until it is absent. Batch sizes control processing, not the total number of records. Clients using pagination negotiate api.connections-request >=1.1.0 within major version 1. Docs and Sheets require resourceId and do not accept pageToken. The service-specific grant must include the required scope. Credential fields and known saved tokens in string values and property names are redacted. Opaque tokens cannot corrupt JSON syntax or change typed numbers, booleans and null; overlapping tokens are removed in full. Ordinary key/value fields and pagination tokens remain intact. Cancellation reaches the provider transport; provider timeouts and deployment constraints still apply. Disconnecting removes future access from Thingtime; it does not revoke the provider app globally.',
+    auth: { mode: 'session', description: 'An authenticated first-party user. Foreign connections return 404; service accounts and scoped tokens are refused.' },
+    methods: ['POST'],
+    steps: ['Choose a connection ID from GET /api/v1/connections.', 'POST its connectionId and a supported operation.', 'For lists, repeat with pageToken from data.nextPageToken until it is absent. Treat it as opaque and keep the connection and operation unchanged.', 'Reconnect if the grant expired or a required permission was declined.'],
+    requestExamples: [
+      { name: 'Verify an account', description: 'Read the profile with the saved grant.', method: 'POST', body: { connectionId: 'ext-link-<owned-id>', operation: 'account.profile' } },
+      { name: 'Next Drive page', description: 'Use the continuation token from the previous response.', method: 'POST', body: { connectionId: 'ext-link-<owned-id>', operation: 'drive.list-files', pageToken: '<previous-data.nextPageToken>' } }
+    ],
+    responseExamples: [{ status: 200, description: 'A redacted result, never credentials.', body: { ok: true, provider: 'google', operation: 'account.profile', data: { displayName: 'Example', handle: 'account@example.com' } } }]
+  }),
+  endpoint({
     id: 'connections-unlink',
     group: 'connections',
     title: 'Unlink connection',
@@ -14163,7 +14187,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     summary: 'Removes one of the caller’s third-party connections.',
     detail:
       'Deletes the caller’s link to the external account. The shared external account record retires with its last ' +
-      'link; already-synced external posts (and any Thingtime comments and reactions on them) remain.',
+      'link in the same home transaction; its credentials are deleted. Already-synced external posts, inert source memberships, comments and reactions remain. Without a live link they grant no private access.',
     auth: {
       mode: 'session-or-bearer',
       description: 'Requires an auth cookie or Authorization: Bearer token.'
@@ -14196,6 +14220,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'connections-feed',
+    contractVersion: '1.1.0',
+    featureVersion: '1.1.0',
     group: 'connections',
     title: 'Connections feed',
     endpoint: '/api/v1/connections/feed',
@@ -14261,16 +14287,18 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'connections-oauth-begin',
+    contractVersion: '1.1.0',
+    featureVersion: '1.1.0',
     group: 'connections',
     title: 'Begin SSO connect',
     endpoint: '/api/v1/connections/oauth/begin',
-    summary: 'Starts an SSO account link with an OAuth provider (Facebook, Instagram, TikTok, YouTube account).',
+    summary: 'Starts a new-tab account link with Google, Facebook, ChatGPT identity, or another configured OAuth provider.',
     detail:
       'Returns the provider’s authorize URL for the requested SSO provider. Send the browser there; the provider’s ' +
       'own sign-in page collects credentials (Thingtime never sees a third-party password) and returns to the ' +
       'callback endpoint, which saves the token response into the linked external account’s sealed secure storage. ' +
       'The state parameter is a short-lived signed JWT bound to the beginning session. Providers report ' +
-      'configured:false in the catalog until their app credentials are set in the environment.',
+      'configured:false until their app credentials and vault key are configured. Hosted deployments require CONNECTIONS_OAUTH_REDIRECT_BASE. The callback is bound to the exact starting session and deployment, consumes its nonce once, and uses PKCE where supported. Google always offers account selection and requests each service permission separately. Facebook basic identity does not request posts. Hosted ChatGPT sign-in requires an approved OpenAI client and supplies identity only. Optional expectedOwnerId rejects a stale account context with 409. Open authorizeUrl in a new tab.',
     auth: {
       mode: 'session-or-bearer',
       description: 'Requires an auth cookie or Authorization: Bearer token.'
@@ -14305,6 +14333,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'connections-oauth-callback',
+    contractVersion: '1.1.0',
+    featureVersion: '1.1.0',
     group: 'connections',
     title: 'SSO connect callback',
     endpoint: '/api/v1/connections/oauth/callback',
@@ -14432,6 +14462,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'connections-filters',
+    contractVersion: '1.1.0',
+    featureVersion: '1.1.0',
     group: 'connections',
     title: 'Feed filters',
     endpoint: '/api/v1/connections/filters',
