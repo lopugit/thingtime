@@ -4,6 +4,8 @@ import { useDataPlane } from '~/hooks/useDataPlane';
 import { LocalApiView, useLocalApiView } from '~/local-workspace/LocalApiView';
 import { useWorkspaceScope } from '~/hooks/useWorkspaceScope';
 import { LOCAL_WORKSPACE_CHANGED } from '~/local-workspace/runtime.client';
+import { DeviceSyncedFilesPage } from '~/components/Devices/DeviceSyncBrowser';
+import { deviceSyncedFilesHref } from '~/components/Devices/deviceSyncNavigation';
 import { openThingHistory, TimelineLibrary } from '~/components/Timeline/TimelineHost';
 import { isManagedLibraryThing } from './thingsCore';
 import { FilesystemThingsPage } from './FilesystemThingsBrowser';
@@ -153,7 +155,9 @@ const ThingsPageContents = () => {
   const [params] = useSearchParams();
   const scope = useWorkspaceScope();
   const view = useLocalApiView();
-  return params.has("files") && !view.localPlane ? <FilesystemThingsPage /> : <ThingsLibraryPage key={`${scope}:${view.localPlane || "selected"}`} />;
+  // Device surfaces read the account plane, so the local-first home view falls
+  // through to the library instead of opening the synced-file browser.
+  return params.has("files") && !view.localPlane ? <FilesystemThingsPage /> : params.get("deviceFiles") && !params.get("folder") && !view.localPlane ? <DeviceSyncedFilesPage deviceId={params.get("deviceFiles")!} /> : <ThingsLibraryPage key={`${scope}:${view.localPlane || "selected"}`} />;
 };
 
 const ThingsLibraryPage = () => {
@@ -195,6 +199,7 @@ const ThingsLibraryPage = () => {
   const folderId = searchParams.get('folder') || null;
   const previewParam = searchParams.get('preview') || null;
 	const deviceParam = homeView ? null : searchParams.get('device') || null;
+	const [selectedDevice, setSelectedDevice] = useState<string | null>(null);
 	const devicePageMode = Boolean(deviceParam && searchParams.get('deviceView') === 'page');
   const currentKey = folderKeyOf(folderId);
 
@@ -1397,8 +1402,9 @@ const ThingsLibraryPage = () => {
     [clipboard?.ids.length, displayItems.length, sort, groupBy, view, displayMode]
   );
 	const deviceMenuModel = useMemo(() => ({ sections: [{ id: 'device-navigation', actions: [{
-		id: 'open-device-page', label: 'Open device page', icon: '↗', lucide: 'maximize',
-		href: menuDeviceId ? deviceThingsPageHref(menuDeviceId) : '/things'
+		id: 'open-device-files', label: 'Open synced files', icon: '🗂️', lucide: 'folder', href: menuDeviceId ? deviceSyncedFilesHref(menuDeviceId) : '/things'
+	}, { id: 'open-device-page', label: 'Device settings page', icon: '⚙️', lucide: 'maximize', href: menuDeviceId ? deviceThingsPageHref(menuDeviceId) : '/things'
+	}, { id: 'open-device-settings', label: 'Quick device settings', icon: '⚙️', lucide: 'settings', command: 'inspect-device'
 	}] }] }), [menuDeviceId]);
 
   const onBackgroundMenuAction = useCallback(
@@ -1578,8 +1584,9 @@ const ThingsLibraryPage = () => {
 	const devicePresentation = {
 		devices: visibleDevices,
 		deviceCounts: deviceStore.countsById,
-		selectedDeviceId: deviceParam,
-		onDeviceSelect: openDevice,
+		selectedDeviceId: deviceParam || selectedDevice,
+		onDeviceSelect: setSelectedDevice,
+		onDeviceOpen: (id: string) => navigate(deviceSyncedFilesHref(id)),
 		onDeviceContextMenu
 	};
 	const searchResultCount = (searchResults || []).length + visibleDevices.length;
@@ -1588,6 +1595,9 @@ const ThingsLibraryPage = () => {
 			<DeviceDetailsDrawer
 				controlFor={deviceControlFor}
 				localBattery={localBattery}
+				ownerId={user?.id}
+				pairedDeviceIds={localNode.pairedDeviceIds}
+				ownedDeviceIds={currentAccountDeviceIds}
 				isOpen
 				onAction={onDeviceAction}
 				onClose={closeDevice}
@@ -2037,6 +2047,9 @@ const ThingsLibraryPage = () => {
 			<DeviceDetailsDrawer
 				controlFor={deviceControlFor}
 				localBattery={localBattery}
+				ownerId={user?.id}
+				pairedDeviceIds={localNode.pairedDeviceIds}
+				ownedDeviceIds={currentAccountDeviceIds}
 				isOpen={Boolean(deviceParam) && !devicePageMode}
 				onAction={onDeviceAction}
 				onClose={closeDevice}
@@ -2095,6 +2108,7 @@ const ThingsLibraryPage = () => {
 			{...deviceMenu.menuProps}
 			meta={menuDeviceId ? { path: deviceStore.devices.find((device) => device.deviceId === menuDeviceId)?.summary?.name || 'Device', type: 'Device' } : undefined}
 			model={deviceMenuModel}
+			onAction={({ action }) => { if (action.command === 'inspect-device' && menuDeviceId) openDevice(menuDeviceId); }}
 		/>
     </Flex>
   );

@@ -8,7 +8,7 @@ import type { SyncScope } from '~/fileSync/reconcile';
 import { TransientBlockHost } from '../Builder/TransientBlockHost';
 import { WebpageBlocksRenderer } from '../Builder/WebpageBlocksRenderer';
 import { SettingsDocumentHost, type SettingsDocumentHostProps } from '../Settings/SettingsDocumentHost';
-import { priorityReadinessBlocks, priorityReadinessDisplay, syncProgressBlocks, syncProgressDisplay, type SyncProgressBranch } from './syncProgressBlocks';
+import { syncResourceStatusBlocks, syncResourceStatusDisplay, priorityReadinessBlocks, priorityReadinessDisplay, syncProgressBlocks, syncProgressDisplay, type SyncProgressBranch } from './syncProgressBlocks';
 
 export type SyncProgressViewerProps = {
 	scopeKey: string; series?: TransferSpeedTrackersProps['series']; descriptor?: SyncProgressDescriptor | null; progress?: ForegroundSyncProgress;
@@ -118,7 +118,7 @@ function SyncProgressSession({ scopeKey, series, descriptor, progress, currentSc
 		{({ blocks, chrome, editing }) => <TransientBlockHost scopeKey={scopeKey} scope={syncProgressDisplay(displayBranches, progress, status, !!source, message, focusedFolder, priorities.enabled, priorities.disabled)} actions={actions} enabled={!editing}>
 			<WebpageBlocksRenderer blocks={blocks} componentsByRef={{}} chrome={chrome} />
 		</TransientBlockHost>}
-	</SettingsDocumentHost><PriorityReadinessViewer scopeKey={scopeKey} progress={progress} state={status} accountTransport={accountTransport} /><TransferSpeedTrackers scopeKey={scopeKey} stage={progress?.stage} state={status === 'running' && progress?.stage === 'complete' ? 'complete' : status} series={series} accountTransport={accountTransport} /></>;
+	</SettingsDocumentHost><SyncResourceStatusViewer scopeKey={scopeKey} progress={progress} state={status} accountTransport={accountTransport} /><PriorityReadinessViewer scopeKey={scopeKey} progress={progress} state={status} accountTransport={accountTransport} /><TransferSpeedTrackers scopeKey={scopeKey} stage={progress?.stage} state={status === 'running' && progress?.stage === 'complete' ? 'complete' : status} series={series} accountTransport={accountTransport} /></>;
 }
 
 function PriorityReadinessViewer({ scopeKey, progress, state, accountTransport }: {
@@ -128,6 +128,18 @@ function PriorityReadinessViewer({ scopeKey, progress, state, accountTransport }
  if (!display.hasPriorityReadiness) return null;
  return <SettingsDocumentHost documentKey="file-sync-priority-readiness" defaultDocument={priorityReadinessBlocks} scopeKey={scopeKey} title="Upload priority readiness" accountTransport={accountTransport}>
   {({ blocks, chrome, editing }) => <TransientBlockHost scopeKey={scopeKey} enabled={!editing} actions={{}} scope={{ sync: display }}>
+   <WebpageBlocksRenderer blocks={blocks} componentsByRef={{}} chrome={chrome} />
+  </TransientBlockHost>}
+ </SettingsDocumentHost>;
+}
+
+function SyncResourceStatusViewer({ scopeKey, progress, state, accountTransport }: {
+ scopeKey: string; progress?: ForegroundSyncProgress; state: SyncProgressState; accountTransport?: SettingsDocumentHostProps['accountTransport'];
+}) {
+ const display = syncResourceStatusDisplay(progress, state);
+ if (!progress?.resources) return null;
+ return <SettingsDocumentHost documentKey="file-sync-resource-status" defaultDocument={syncResourceStatusBlocks} scopeKey={scopeKey} title="Effective sync resources" accountTransport={accountTransport}>
+  {({ blocks, chrome, editing }) => <TransientBlockHost scopeKey={scopeKey} enabled={!editing} actions={{}} scope={display}>
    <WebpageBlocksRenderer blocks={blocks} componentsByRef={{}} chrome={chrome} />
   </TransientBlockHost>}
  </SettingsDocumentHost>;

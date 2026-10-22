@@ -121,6 +121,8 @@ export function createBoundCloudSyncPort(savedScope: SyncScope, version: 1 | 2, 
 			return result;
 		},
 		apply: async (operation, scope) => {
+			const release = await runtime.resources?.acquire(input.signal);
+			try {
 			const { write, trashContext } = await get(operation.id, scope);
 			if (JSON.stringify({ ...operation, confirmed: false }) !== JSON.stringify({ ...write.operation, confirmed: false }))
 				throw Error('Cloud sync operation changed.');
@@ -155,11 +157,12 @@ export function createBoundCloudSyncPort(savedScope: SyncScope, version: 1 | 2, 
 				check();
 				return result;
 			}
-			if (isCloudFolderWrite(write)) return createCloudFolderTransport(runtime, write, input.signal).apply();
+			if (isCloudFolderWrite(write)) return await createCloudFolderTransport(runtime, write, input.signal).apply();
 			const source = operation.mutation.kind === 'copy' ? await input.openSource(operation.mutation.source) : undefined;
-			return fileTransport(runtime, write, input.signal).apply(source,
+			return await fileTransport(runtime, write, input.signal).apply(source,
 				(bytes, total) => input.progress?.(operation.mutation.path, bytes, total),
 				bytes => { check(); input.transfer?.({ direction: 'upload', bytes }); });
+			} finally { release?.(); }
 		}
 	};
 }

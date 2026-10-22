@@ -61,7 +61,9 @@ export async function stageMobileCopy(
 		const start = progress.received;
 		if (nativeCloud) {
 			const length = Math.min(2 * 1024 * 1024, m.source.size - start);
-			progress = await send({ action: 'stage-download', rootId, transfer, offset: start, length, cloudFile: nativeCloud.file });
+			const target = bridge?.platform === 'macos' ? await source!.downloadTarget?.(start, length, signal) : undefined;
+			if (bridge?.platform === 'macos' && !target) throw Error('Native downloads require fresh signed range authority. Update the selected server.');
+			progress = await send({ action: 'stage-download', rootId, transfer, offset: start, length, cloudFile: nativeCloud.file, ...(target ? { target } : {}) });
 			if (progress.received !== start + length || progress.stage) throw Error('Native staging progress changed during transfer.');
 			transferred?.(length, progress.received);
 			await check();

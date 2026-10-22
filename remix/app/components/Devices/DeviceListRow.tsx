@@ -14,16 +14,18 @@ export type DeviceListRowProps = {
 	pendingApprovalCount?: number;
 	now?: number;
 	onSelect: (deviceId: string) => void;
+	onOpen?: (deviceId: string) => void;
 	onContextMenu?: (deviceId: string, event: React.MouseEvent) => void;
 };
 
 export const DeviceListRow = memo(
-	({ device, snapshot = null, selected = false, pendingCommandCount = 0, pendingApprovalCount = 0, now, onSelect, onContextMenu }: DeviceListRowProps) => (
+	({ device, snapshot = null, selected = false, pendingCommandCount = 0, pendingApprovalCount = 0, now, onSelect, onOpen, onContextMenu }: DeviceListRowProps) => (
 		<Flex
 			_focusVisible={{ boxShadow: 'inset 0 0 0 2px var(--tt-accent, #f472b6)' }}
 			_hover={{ background: 'var(--tt-surface-hover, #f7f7f8)' }}
 			alignItems="center"
 			aria-label={`Open ${device.name}`}
+			title={onOpen ? 'Double-click or press Enter to browse saved files. Right-click for device settings.' : undefined}
 			aria-pressed={selected}
 			as="button"
 			background={selected ? 'var(--tt-accent-soft, rgba(244, 114, 182, 0.08))' : 'transparent'}
@@ -32,7 +34,9 @@ export const DeviceListRow = memo(
 			gap={3}
 			minHeight="66px"
 			minWidth={0}
-			onClick={() => onSelect(device.id)}
+			onClick={(event) => { if (onOpen && (event.detail === 0 || window.matchMedia('(pointer: coarse)').matches)) onOpen(device.id); else onSelect(device.id); }}
+				onDoubleClick={() => onOpen?.(device.id)}
+				onKeyDown={(event) => { if (onOpen && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); onOpen(device.id); } }}
 			onContextMenu={(event) => onContextMenu?.(device.id, event)}
 			paddingX={{ base: 3, md: 4 }}
 			paddingY={2.5}

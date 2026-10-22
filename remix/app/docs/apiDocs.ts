@@ -6127,7 +6127,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		responseExamples: [{ status: 200, description: 'Attachment absent.', body: { ok: true } }]
 	}),
 	endpoint({
-    id: 'file-sync-batches', contractVersion: '1.1.0', featureVersion: '1.1.0', group: 'attachments', title: 'Upload bounded small-file batches',
+    // 1.2: config3 resource ceilings bind distinct v2 digest domains; legacy digests remain unchanged.
+    id: 'file-sync-batches', contractVersion: '1.2.0', featureVersion: '1.2.0', group: 'attachments', title: 'Upload bounded small-file batches',
     endpoint: '/api/v1/files/batches', summary: 'Prepare, verify and commit independent original file operations with fresh session authority.',
     detail: 'Home-plane private regular files only, absent destinations and already confirmed parents. An immutable descriptor digest binds source, scope, saved configuration and original operation identities; it never grants authority. Existing attachment MPU leases, quota and immutable file Timeline receipts remain authoritative.',
     auth: { mode: 'session-or-bearer', description: 'Full owning user session only; no device, PAT, app or service upload authority.' }, methods: ['POST'],
@@ -6174,14 +6175,16 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		id: 'attachment-content',
 		// 1.16.0: owned originals stream into scoped device storage without buffer caps;
 		// the same feature fingerprints stored empty content through sha256-parts-v1.
-		contractVersion: '1.16.0',
-		featureVersion: '1.16.0',
+		// 1.17.0 keeps that streamed retention alongside the owner-only signed
+		// exact-range targets promoted on main.
+		contractVersion: '1.17.0',
+		featureVersion: '1.17.0',
 		group: 'attachments',
 		title: 'Read attachment content',
 		endpoint: '/api/v1/attachments/content',
 		summary: 'Authorizes a stable same-origin attachment URL and redirects to short-lived private S3 content.',
 		detail:
-			'Version 1.16 fingerprints stored empty file content with algorithm sha256-parts-v1, partSizeBytes=8388608, partCount=0 and the exact SHA-256 of empty input. Verification requires an exact-version FULL_OBJECT storage checksum, size zero and the canonical attachment identity. Ordinary authorized GET returns the real stored zero-byte object; no placeholder bytes or absent-object inference is used. ' +
+			'Version 1.17 adds owner-only target=1 with an exact range, returning a 60-second signed GET target whose Range header and stored object version are signature-bound. The JSON fingerprint describes the whole attachment. URLs are transient transport authority: never log, persist or cache them. Providers without exact signed-range support fail closed. Legacy redirects, ranges, fingerprints and retention remain unchanged. Version 1.16 fingerprints stored empty file content with algorithm sha256-parts-v1, partSizeBytes=8388608, partCount=0 and the exact SHA-256 of empty input. Verification requires an exact-version FULL_OBJECT storage checksum, size zero and the canonical attachment identity. Ordinary authorized GET returns the real stored zero-byte object; no placeholder bytes or absent-object inference is used. ' +
 			'Optional character=<id> selects an owned Character for media elements; unauthorized identities return 401. ' +
 			'Version 1.16.0 adds cache=retain-bytes&download=1 for streamed owned originals, with the same full-user, same-origin, exact-owner and durable-binding gates as cache=retain. Both retention modes admit valid stored originals without the former 16 MiB ceiling. Bytes carry the descriptor ETag and exact Content-Length; responses are private/no-store, use backpressure and propagate disconnect cancellation. Clients negotiate 1.16.0 before retention, validate exact bytes and recheck the descriptor before atomic scoped storage. Existing generic cache=bytes keeps its media-cache budget. ' +
 			'Version 1.15.0: cache=retain also admits owned, durably bound post/comment originals and returns file.targetId. Revalidate the parent and atomically admit its complete binding before enabling local editing. Other bound purposes remain excluded. ' +
@@ -6207,6 +6210,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		},
 		methods: ['GET', 'POST'],
 		steps: [
+			'In 1.17.0, authenticated full owners may GET id,target=1,range=1,version,offset,length (each key once; no other query modes). Returns {ok,target:{version:1,ownerId,attachmentId,contentVersion,size,offset,length,fingerprint,url,expiresAt,headers:{Range}}}. The exact 1 byte–2 MiB range must fit the exact stored version. The whole-attachment fingerprint is independently storage verified. Denied owner returns uniform404; stale version409; invalid range400/416; unsupported provider503. Obtain fresh authority before each native range; verify206 Content-Range/length, then the full staged fingerprint and fresh file/owner authority before publication. Signed requests use credentials:omit and redirect:error. Expiry never exceeds60seconds. Never retain targets in journals, Things, logs or persistent caches.',
 			'In 1.15.0, authenticated owner POST {versions:[{id,version}]} retains 1–64 exact owned stored versions for 24 hours. Atomic batches reject missing, foreign, blocked, unaccounted, linked or already-purging objects. Renewals only extend the shared deadline; no early release can shorten another backup. Retained bytes remain charged. GET retained=1 is allowed only with an exact range, authenticated owner and active hold, including deletion-pending bytes; it never grants shared/public access or returns a signed URL. After expiry, canonical cleanup fences renewals before deleting and refunding. Clients must renew while copying and verify independently before calling a snapshot complete. A metadata inventory alone does not acquire retention.',
 			'range=1 with version (the exact fingerprint version), offset and length returns 206 bytes without redirects. Length is 1 byte–2 MiB, offset is a nonnegative integer, and the complete range must fit the file. No cache/image/download/fingerprint variants may be combined. The server validates exact upstream Content-Range and byte count and reauthorizes before returning bytes; responses are private/no-store. Changed versions return 409, out-of-file ranges 416, truncated/wrong upstream bytes 502. Native staged publication must still verify the full planned fingerprint.',
 			'fingerprint=1 returns a verified sha256-parts-v1 fingerprint, exact-content opaque version and size through the same live authorization gate. The digest hashes canonical multipart part digests, not the whole file; compare algorithm, part size, part count and size as well. No object keys, signed URLs or account data are returned. Unavailable or incompatible checksums return 409; never treat that as a missing file.',
@@ -9475,9 +9479,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // 1.34.0: same-origin full-user DELETE may retain durable post/comment upload receipts.
     // 1.34.1: generic Vault edits/deletes preserve owned environment membership transactionally.
     // 1.36.0 combines editable intrinsic blocks with local-first durable receipts and vault membership safety.
-    // 1.38.0 keeps those additions alongside the later contracts promoted on main.
-    featureVersion: '1.38.0',
-    contractVersion: '1.38.0',
+    // 1.39.0 keeps those additions alongside the later contracts promoted on main.
+    featureVersion: '1.39.0',
+    contractVersion: '1.39.0',
     group: 'things',
     // 1.33.1: placement and folder deletion share transactional ancestry fences.
     // 1.33.2: protected library display-title renames commit title-only history.
@@ -9485,6 +9489,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     endpoint: '/api/v1/things',
     summary: 'One endpoint for every thing: create, read, update/upsert, and delete posts, comments, reactions, and shares. OAuth app tokens may use explicitly approved account Things permissions; legacy picker and app-storage grants retain their prior boundaries.',
     detail:
+      'Version 1.39 adds optional closed resourceLimits under file-sync configurationVersion 3; save and execution require compatible server and native resource control capabilities. Older clients must refuse version 3. ' +
       'Version 1.38 adds private file-sync configurationVersion 2 with bounded root-relative Gitignore rules. Rules prune native scans before hashing and filter both planning sides; ignored baseline facts are retained. Older clients must refuse version 2 rather than discard its policy. Empty-rule configurations keep version 1 compatibility. Native grants and exact-policy approval are still required. ' +
       'Version 1.37 adds registered authenticated live SSE source bindings on saved Components and page blocks; shared-root execution cannot borrow viewer stream authority. ' +
       'Version 1.36 combines file-sync configuration with individually editable element, collection and condition blocks, scalar DOM bindings and child templates. Authored trees have no product block-count/depth limit; transport and storage bounds remain. ' +

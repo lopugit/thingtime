@@ -30,14 +30,17 @@ private final class BatchCallbackReply: @unchecked Sendable {
 public enum NodeBatchCallback {
     public static func exchange(_ peer: ThingtimeNodeBatchCallback, frame: JSONValue, timeout: TimeInterval) async throws -> JSONValue {
         try Task.checkCancellation()
-        guard timeout > 0, timeout <= 60 else { throw CancellationError() }
+        let governedPayload: Bool
+        if case .object(let fields) = frame { governedPayload = fields["kind"] == .string("put-ready") && timeout == .infinity }
+        else { governedPayload = false }
+        guard timeout > 0, timeout <= 60 || governedPayload else { throw CancellationError() }
         let data = try JSONEncoder().encode(frame)
         guard data.count <= 100_000 else { throw ThingtimeNodeError.invalidRequest("Invalid batch callback.") }
         let reply = BatchCallbackReply()
         let response = try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { continuation in
                 guard reply.install(continuation) else { return }
-                reply.timeout(timeout)
+                if timeout.isFinite { reply.timeout(timeout) }
                 if Task.isCancelled { reply.finish(.failure(CancellationError())); return }
                 peer.exchange(data) { value in
                     guard !value.isEmpty, value.count <= 524_288 else {

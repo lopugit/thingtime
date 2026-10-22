@@ -8,6 +8,7 @@ struct MacUploadBatchDescriptor: Sendable {
     struct Member: Sendable { let ordinal: Int; let operationId: String; let source: MobileFolderReader.Entry }
     let raw: JSONValue, digest: String, batchId: String, origin: String, ownerId: String, deviceId: String
     let connectionId: String, localRootId: String, network: String, chargingOnly: Bool
+    let resourceLimits: SyncResourceLimits?
     let members: [Member]
     let canonicalBytes: Data
 
@@ -22,24 +23,27 @@ struct MacUploadBatchDescriptor: Sendable {
         deviceId = try BatchJSON.string(scope, "deviceId"); connectionId = try BatchJSON.string(scope, "rootId")
         guard scope["dataPlane"] == .string("home") else { throw MobileFolderStore.Failure.invalid }
         let saved = try BatchJSON.object(BatchJSON.required(d, "configuration"), keys: ["id", "updatedAt", "configuration"])
-        let c = try BatchJSON.object(BatchJSON.required(saved, "configuration"), keys: ["configurationVersion", "name", "deviceId", "localRootId", "sourceKind", "remoteFolderId", "mode", "paused", "propagateDeletes", "network", "chargingOnly", "excludedPaths", "ignoreRules"])
+        let c = try BatchJSON.object(BatchJSON.required(saved, "configuration"), keys: ["configurationVersion", "name", "deviceId", "localRootId", "sourceKind", "remoteFolderId", "mode", "paused", "propagateDeletes", "network", "chargingOnly", "excludedPaths", "ignoreRules", "resourceLimits"])
         localRootId = try BatchJSON.string(c, "localRootId"); network = try BatchJSON.string(c, "network"); chargingOnly = try BatchJSON.bool(c, "chargingOnly")
         let remote = try BatchJSON.string(c, "remoteFolderId"), mode = try BatchJSON.string(c, "mode")
         let updated = try BatchJSON.string(saved, "updatedAt"), savedId = try BatchJSON.string(saved, "id")
         guard savedId == connectionId, try BatchJSON.string(c, "deviceId") == deviceId,
-              [JSONValue.number(1), .number(2)].contains(c["configurationVersion"] ?? .null), c["paused"] == .bool(false), c["propagateDeletes"] == .bool(false),
+              [JSONValue.number(1), .number(2), .number(3)].contains(c["configurationVersion"] ?? .null), c["paused"] == .bool(false), c["propagateDeletes"] == .bool(false),
               ["backup", "upload"].contains(mode), c["sourceKind"] == nil || c["sourceKind"] == .string("folder"),
               ["any", "wifi", "unmetered"].contains(network), !updated.isEmpty else { throw MobileFolderStore.Failure.invalid }
         let excluded = try BatchJSON.array(BatchJSON.required(c, "excludedPaths")).map { try BatchJSON.text($0) }
         let exclusions = try MobileFolderReader.canonicalExclusions(excluded)
         let ignoreText = (try c["ignoreRules"].map { try BatchJSON.text($0) } ?? "").replacingOccurrences(of: "\r\n", with: "\n")
-        guard ignoreText.isEmpty || c["configurationVersion"] == .number(2) else { throw MobileFolderStore.Failure.invalid }
+        guard ignoreText.isEmpty || c["configurationVersion"] == .number(2) || c["configurationVersion"] == .number(3) else { throw MobileFolderStore.Failure.invalid }
+        resourceLimits = try c["resourceLimits"].map { try JSONDecoder().decode(SyncResourceLimits.self, from: JSONEncoder().encode($0)) }
+        guard resourceLimits == nil || resourceLimits?.isEmpty == false else { throw MobileFolderStore.Failure.invalid }
+        guard (c["configurationVersion"] == .number(3)) == (resourceLimits != nil && resourceLimits?.isEmpty == false) else { throw MobileFolderStore.Failure.invalid }
         let ignore = try MobileFolderIgnoreRules(ignoreText)
         let rows = try BatchJSON.array(BatchJSON.required(d, "members"))
         guard !rows.isEmpty, rows.count <= 256 else { throw MobileFolderStore.Failure.limit }
-        var fields = ["thingtime-upload-batch-v1", batchId, origin, ownerId, "home", connectionId, deviceId, savedId, updated,
-                      ignoreText.isEmpty ? "1" : "2", try BatchJSON.string(c, "name").trimmingCharacters(in: .whitespacesAndNewlines), deviceId, localRootId, "folder", remote, mode, "0", "0", network, chargingOnly ? "1" : "0",
-                      String(excluded.count)] + excluded + [ignoreText, String(rows.count)]
+        var fields = [resourceLimits == nil ? "thingtime-upload-batch-v1" : "thingtime-upload-batch-v2", batchId, origin, ownerId, "home", connectionId, deviceId, savedId, updated,
+                      resourceLimits == nil ? (ignoreText.isEmpty ? "1" : "2") : "3", try BatchJSON.string(c, "name").trimmingCharacters(in: .whitespacesAndNewlines), deviceId, localRootId, "folder", remote, mode, "0", "0", network, chargingOnly ? "1" : "0",
+                      String(excluded.count)] + excluded + [ignoreText] + (resourceLimits?.canonicalFields ?? []) + [String(rows.count)]
         var parsed: [Member] = [], operations = Set<String>(), destinations = Set<String>()
         for (index, row) in rows.enumerated() {
             let member = try BatchJSON.object(row, keys: ["ordinal", "write"])

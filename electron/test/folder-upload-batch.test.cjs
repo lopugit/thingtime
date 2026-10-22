@@ -6,7 +6,7 @@ const { batchCanonicalBytes, uploadFolderBatch, requestBatchPhase } = require('.
 const { DesktopFolderSync } = require('../lib/folder-sync.cjs');
 const vectors = require('../../remix/app/fileSync/fixtures/uploadBatchDigest.v1.json');
 const hex = bytes => createHash('sha256').update(bytes).digest('hex');
-function fixture(count = 1) {
+function fixture(count = 1, resourceLimits) {
     const d = structuredClone(vectors.vectors[0].descriptor), payloads = Array.from({ length: count }, (_, i) => Buffer.from('payload-' + i));
     const prototype = d.members[0];
     d.members = payloads.map((bytes, ordinal) => {
@@ -15,6 +15,7 @@ function fixture(count = 1) {
         source.path = member.write.operation.mutation.path = 'Parent/file-' + ordinal; source.size = bytes.length;
         source.fingerprint.sha256 = hex(Buffer.from(hex(bytes), 'hex')); return member;
     });
+    if (resourceLimits) { d.configuration.configuration.configurationVersion = 3; d.configuration.configuration.resourceLimits = resourceLimits; }
     const digest = hex(batchCanonicalBytes(d)), phases = [], nativeFrames = [];
     const source = i => d.members[i].write.operation.mutation.source;
     const content = i => ({ ordinal: i, uploadId: 'upload-' + i, version: 'c'.repeat(64), size: source(i).size, fingerprint: source(i).fingerprint });
@@ -30,7 +31,7 @@ function fixture(count = 1) {
         return { ok: true, version: 1, batchId: d.batchId, digest, results };
     };
     const input = { action: 'upload-batch', requestId: randomUUID(), ownerId: d.scope.ownerId, deviceId: d.scope.deviceId,
-        origin: d.scope.origin, rootId: d.configuration.configuration.localRootId, batch: { descriptor: d, digest } };
+        origin: d.scope.origin, rootId: d.configuration.configuration.localRootId, batch: { descriptor: d, digest }, ...(resourceLimits ? { resourceLimits, resourceScope: d.scope.rootId } : {}) };
     const context = { apiOrigin: d.scope.origin, appOrigin: 'http://127.0.0.1:54000', ownerId: d.scope.ownerId };
     // Synthetic native producer only. Real local source/XPC coverage is in the
     // Swift batch and duplex tests; this checks production Electron orchestration.
@@ -228,4 +229,19 @@ test('validated upload batch diagnostics count actual closed failure codes, not 
     } });
     await assert.rejects(denied.run(), /could not be verified/);
     assert.equal(Object.keys(batchTiming(denied.rows)).some(k => k.startsWith('batch')), false, 'whole authority refusal has no accepted member histogram');
+});
+
+test('queued expired bulk targets refresh under their original upload identity before PUT', async () => {
+    const f = fixture(), refreshed = [];
+    const reply = await uploadFolderBatch({ input: f.input, context: f.context, signal: new AbortController().signal, assertCurrent() {}, requestNative: f.native,
+        requestPhase: async (...args) => { const value = await f.requestPhase(...args); for (const row of value.results) if (row.part) row.part.expiresAt = new Date(Date.now() + 500).toISOString(); return value; },
+        refreshPart: async input => { refreshed.push(input); return { parts: [{ partNumber: 1, url: 'https://storage.test/fresh?partNumber=1&uploadId=provider-0', expiresAt: new Date(Date.now()+600000).toISOString(), headers: { 'x-amz-checksum-sha256': input.parts[0].checksumSha256 } }] }; },
+        fetchUpload: async url => { assert.equal(new URL(url).pathname, '/fresh'); return new Response(null, { status: 200 }); } });
+    assert.equal(refreshed.length, 1); assert.equal(refreshed[0].uploadId, 'upload-0'); assert.equal(reply.uploadedBatch.results[0].status, 'verified');
+});
+test('governed bulk payloads retain control phases while outliving legacy dispatch wall deadlines', async () => {
+    const f = fixture(1, { uploadBytesPerSecond: 312.5 }); let now = 0;
+    const reply = await uploadFolderBatch({ input: f.input, context: f.context, signal: AbortSignal.timeout(3000), assertCurrent() {}, requestNative: f.native,
+        requestPhase: f.requestPhase, fetchUpload: async () => new Response(null, { status: 200 }), now: () => (now += 200000) });
+    assert.equal(reply.uploadedBatch.results[0].status, 'verified'); assert.deepEqual(f.phases.map(row => row.phase), ['prepare', 'prepare', 'verify']);
 });

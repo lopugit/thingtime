@@ -851,3 +851,18 @@ test('Character media selectors reuse session authorization and never fall back 
   const malformed = await route({ request: new Request('https://thingtime.example/api/v1/attachments/content?id=file&character=') });
   assert.equal(malformed.status, 400);
 });
+
+test('signed target mode accepts only full owner session and one closed exact range, returning private no-store JSON', async () => {
+ const version = 'a'.repeat(64), query = `id=attachment&target=1&range=1&version=${version}&offset=0&length=10`;
+ let calls = 0;
+ const route = createAttachmentContentLoader({ getUser: async () => user, enforceLimit: allowed as any,
+ downloadTarget: async (viewer, id, range) => { calls++; assert.deepEqual(viewer, { id: user.id }); assert.equal(id, 'attachment'); assert.deepEqual(range, { version, offset: 0, length: 10 }); return { ok: true, target: { version: 1, ownerId: user.id, attachmentId: 'attachment', contentVersion: version, offset: 0, length: 10, size: 10, fingerprint: {} as any, url: 'https://storage.example/signed', expiresAt: new Date(Date.now()+60000).toISOString(), headers: { Range: 'bytes=0-9' } } }; } });
+ const response = await route({ request: new Request('https://thingtime.example/api/v1/attachments/content?' + query) });
+ assert.equal(response.status, 200); assert.equal((await response.json()).target.ownerId, user.id); assert.match(response.headers.get('Cache-Control')!, /private.*no-store/); assert.equal(response.headers.get('Referrer-Policy'), 'no-referrer');
+ for (const suffix of ['&target=1', '&id=other', '&key=secret', '&retained=1', '&sharedRoot=page', '&cache=bytes', '&fingerprint=1', '&download=1', '&width=64', '&character=other', '&other=1']) {
+  assert.equal((await route({ request: new Request('https://thingtime.example/api/v1/attachments/content?' + query + suffix) })).status, 400);
+ }
+ assert.equal(calls, 1);
+ const anonymous = createAttachmentContentLoader({ getUser: async () => null, enforceLimit: allowed as any, downloadTarget: async () => { throw Error('anonymous cannot request targets'); } });
+ assert.equal((await anonymous({ request: new Request('https://thingtime.example/api/v1/attachments/content?' + query) })).status, 404);
+});

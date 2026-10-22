@@ -6,7 +6,7 @@ import { withFoundPostBrowser } from '~/api/utils/things/foundPostRequest';
 import { attachmentImageResponse, parseImageWidth } from '~/api/utils/attachments/imageVariants';
 import { json, redirect } from '~/api/http';
 import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
-import { getAttachmentDownload, getAttachmentFingerprint } from '~/api/utils/attachments/attachments';
+import { getAttachmentDownload, getAttachmentDownloadTarget, getAttachmentFingerprint } from '~/api/utils/attachments/attachments';
 import { isSameOriginAttachmentRequest, withAttachmentPrivateResponse } from '~/api/utils/attachments/attachmentResponses';
 import { fetchStoredObject } from '~/api/utils/attachments/localAttachmentStorage';
 import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
@@ -16,6 +16,7 @@ type ContentDependencies = {
 	getUser: typeof getCurrentUser;
 	enforceLimit: typeof enforceRateLimit;
 	download: typeof getAttachmentDownload;
+	downloadTarget: typeof getAttachmentDownloadTarget;
 	fingerprint: typeof getAttachmentFingerprint;
 	enrichViewer: typeof withFriendIds;
 	fetchObject: typeof fetchStoredObject;
@@ -26,6 +27,7 @@ const defaultDependencies: ContentDependencies = {
 	getUser: getCurrentUser,
 	enforceLimit: enforceRateLimit,
 	download: getAttachmentDownload,
+	downloadTarget: getAttachmentDownloadTarget,
 	fingerprint: getAttachmentFingerprint,
 	enrichViewer: withFriendIds,
 	fetchObject: fetchStoredObject,
@@ -43,6 +45,9 @@ export const createAttachmentContentLoader = (overrides: Partial<ContentDependen
 			} catch {
 				return json({ ok: false, error: 'Invalid attachment byte range' }, { status: 400 });
 			}
+			const target = url.searchParams.has('target');
+			if (target && (!range || url.searchParams.get('target') !== '1' || [...url.searchParams.keys()].some(key => !['id', 'target', 'range', 'version', 'offset', 'length'].includes(key) || url.searchParams.getAll(key).length !== 1)))
+				return json({ ok: false, error: 'Signed targets require one owned exact range without other modes' }, { status: 400 });
 			const retained = url.searchParams.has('retained');
 			if (retained && (!range || url.searchParams.getAll('retained').length !== 1 || url.searchParams.get('retained') !== '1' || url.searchParams.has('sharedRoot') || url.searchParams.has('key')))
 				return json({ ok: false, error: 'Retention reads require an owned exact byte range' }, { status: 400 });
@@ -77,6 +82,13 @@ export const createAttachmentContentLoader = (overrides: Partial<ContentDependen
 				return json({ ok: false, error: 'Too many attachment requests' }, rateLimitedResponseInit(limit));
 			}
 
+			if (target) {
+				if (!user?.id) return json({ ok: false, error: 'Attachment not found' }, { status: 404 });
+				const result = await dependencies.downloadTarget({ id: user.id }, url.searchParams.get('id'), range!);
+				if (result.ok === false) return json({ ok: false, error: result.error }, { status: result.status });
+				if ((await dependencies.getUser(actorRequest))?.id !== user.id) return json({ ok: false, error: 'Attachment not found' }, { status: 404 });
+				return json(result);
+			}
 			const audience = await dependencies.enrichViewer(
 				withLinkKeys(withFoundPostBrowser(viewerOf(user), request, !resolvedUser), [url.searchParams.get('key') || ''])
 			);
