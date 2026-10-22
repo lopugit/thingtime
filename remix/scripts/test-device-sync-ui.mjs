@@ -25,7 +25,7 @@ if (!process.env.TT_DEVICE_SYNC_UI_WORKER) {
 				"url.origin !== location.origin || headers.get('X-Thingtime-Expected-Api-Origin') !== canonicalOrigin ||\n\t\t\theaders",
 				"url.origin !== location.origin || (desktop && headers.get('X-Thingtime-Expected-Api-Origin') !== canonicalOrigin) ||\n\t\t\theaders"
 			);
-		source += `\nfunction DeviceBrowserFixture(){const [mode,setMode]=useState('root');const [selected,setSelected]=useState(false);const summary:any={id:deviceId,name:'Test Mac',platform:'macos',serviceStatus:'stopped',pairingStatus:'paired',transportStatus:'offline',revision:1,lastSeenAt:null,capabilities:[],permissionMode:'ask'};const state:any={deviceId,summary,snapshot:null,commands:[],approvals:[],sessions:[],screenSessions:[]};return <ChakraProvider><Box maxWidth="1100px" mx="auto" p={4}><Button onClick={()=>setMode('root')}>All Things test entry</Button><Button onClick={()=>setMode('drawer')}>Open quick settings</Button><Button onClick={()=>setMode('page')}>Open settings page</Button><Text role="status">Selection: {selected?'device':'none'}</Text>{mode==='root'?<DeviceCard device={summary} selected={selected} onSelect={()=>setSelected(true)} onOpen={()=>setMode('files')} />:mode==='files'?<DeviceSyncBrowser deviceId={deviceId}/>:null}<DeviceDetailsDrawer isOpen={mode==='drawer'||mode==='page'} presentation={mode==='page'?'page':'drawer'} state={state} onClose={()=>setMode('root')}/></Box></ChakraProvider>;}\n`;
+		source += `\nfunction DeviceBrowserFixture(){const [mode,setMode]=useState('root');const [selected,setSelected]=useState(false);const summary:any={id:deviceId,name:'Test Mac',platform:'macos',serviceStatus:'stopped',pairingStatus:'paired',transportStatus:'offline',revision:1,lastSeenAt:null,capabilities:[],permissionMode:'ask'};const state:any={deviceId,summary,snapshot:null,commands:[],approvals:[],sessions:[],screenSessions:[]};return <ChakraProvider><Box maxWidth="1100px" mx="auto" p={4}><Button onClick={()=>setMode('root')}>All Things test entry</Button><Button onClick={()=>setMode('drawer')}>Open quick settings</Button><Button onClick={()=>setMode('page')}>Open settings page</Button><Text role="status">Selection: {selected?'device':'none'}</Text>{mode==='root'?<DeviceCard device={summary} selected={selected} onSelect={()=>setSelected(true)} onOpen={()=>setMode('files')} />:mode==='files'?<DeviceSyncBrowser deviceId={deviceId}/>:null}<DeviceDetailsDrawer isOpen={mode==='drawer'||mode==='page'} presentation={mode==='page'?'page':'drawer'} ownerId={ownerId} pairedDeviceIds={[deviceId]} ownedDeviceIds={[deviceId]} state={state} onClose={()=>setMode('root')}/></Box></ChakraProvider>;}\n`;
 		await require('esbuild').build({
 			stdin: { contents: source, loader: 'tsx', resolveDir: join(root, 'scripts') },
 			bundle: true,
@@ -103,7 +103,7 @@ if (!process.env.TT_DEVICE_SYNC_UI_WORKER) {
 			const folder = page.getByRole('link', { name: expected.name, exact: true });
 			assert.equal(new URL(await folder.getAttribute('href'), 'http://fixture').searchParams.get('folder'), expected.remoteFolderId);
 			await page
-				.getByText(expected.paused ? 'Connection paused' : 'Connection enabled · transfer status is shown on this device', { exact: true })
+				.getByText(expected.paused ? 'Saved configuration: paused' : 'Live transfer status: check this device’s sync settings', { exact: true })
 				.waitFor();
 			assert.equal(await page.evaluate(() => window.syncInspectionFixture.observations.captures), 0);
 			assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
@@ -122,6 +122,10 @@ if (!process.env.TT_DEVICE_SYNC_UI_WORKER) {
 			assert.equal(expanded, 0);
 			await page.getByRole('button', { name: 'Expand File sync & backup', exact: true }).click();
 			await page.getByRole('heading', { name: 'Synced files', exact: true }).waitFor();
+			const manage = page.locator('summary').filter({ hasText: 'Manage sync connections' });
+			await manage.click();
+			assert.equal(await manage.locator('..').evaluate((el) => el.open), true);
+			await manage.click();
 			assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
 			await page.screenshot({ path: join(evidence, label + '-settings.png'), fullPage: true });
 			assert.equal(await page.getByText('Could not load your layout.', { exact: false }).count(), 0);

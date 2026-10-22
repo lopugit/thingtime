@@ -118,7 +118,7 @@ function DeviceSyncBrowserContent({
 						deviceSync: {
 							folders: folders.map((f) => ({
 								...f,
-								state: f.paused ? 'Connection paused' : 'Connection enabled · transfer status is shown on this device'
+								state: f.paused ? 'Saved configuration: paused' : 'Live transfer status: check this device’s sync settings'
 							})),
 							status,
 							error,
