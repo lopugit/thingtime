@@ -16,13 +16,13 @@ Scalar and adaptive batch reservations record immutable private sync origin and
 intended file/folder before transfer authority. Exact queued retries may supply
 that original descriptor; changed account/root/destination is rejected. Initial
 publication must match it. Only the owner-session single-Thing projection exposes
-origin. Capabilities: attachment-uploads1.7.0, files1.8.1, file-sync-batches1.2.1,
-things1.40.0. Old blobs without provenance remain explicitly unknown.
+origin. Capabilities: attachment-uploads 1.7.0, files 1.8.1, file-sync-batches 1.2.1,
+things 1.40.0. Old blobs without provenance remain explicitly unknown.
 
 The Thing page offers generated parent paths using the existing owner-library
 query and canonical file, post/comment and webpage reference scanners. Scanning
-is explicit, up to500 records per batch; path traversal performs at most200 ACL
-reads with20 paths per page. Cursors/frontiers survive continuation, cycles and
+is explicit, up to 500 records per batch; path traversal performs at most 200 ACL
+reads with 20 paths per page. Cursors/frontiers survive continuation, cycles and
 unavailable relationships do not produce fabricated complete paths, and account
 changes cancel the old scope. Other-account reverse references, arbitrary prose
 and unsupported/private managed query kinds are outside this scan's coverage.
@@ -39,7 +39,7 @@ materialized only when read and UI notifications are coalesced.
 Activity Disable uses durable Pause semantics and cancels independent native
 capture work before closing its journal, including cancellation during journal
 initialization. Visibility interruptions retain their existing recovery behavior.
-Background node status retains last-known content and uses a30-second fallback;
+Background node status retains last-known content and uses a 30-second fallback;
 paused/completed charts stop ticking and stable progress descriptors avoid
 reopening journals for equivalent byte updates.
 
@@ -57,15 +57,15 @@ closed scalar parser; user layouts are not rewritten.
 
 ## Verification at initial publication
 
--177 upload/backend/manifest checks passed.
--325 Electron tests passed.
--630 file-sync tests:629 passed initially; the sole failure was an outdated exact
- capability-version expectation. Updated it and all11 configuration tests passed;
+- 177 upload/backend/manifest checks passed.
+- 325 Electron tests passed.
+- 630 file-sync tests: 629 passed initially; the sole failure was an outdated exact
+ capability-version expectation. Updated it and all 11 configuration tests passed;
  the additional module-mock suite passed.
--Things suite, focused activity/cancellation/path tests and scoped ESLint passed
- (existing warnings retained). Typecheck ratchet reports92 errors against the
- existing89 baseline; no new feature errors identified, baseline unchanged.
--Isolated browser checks cover desktop/mobile/landscape, full scroll, navigation,
+- Things suite, focused activity/cancellation/path tests and scoped ESLint passed
+ (existing warnings retained). Typecheck ratchet reports 92 errors against the
+ existing 89 baseline; no new feature errors identified, baseline unchanged.
+- Isolated browser checks cover desktop/mobile/landscape, full scroll, navigation,
  timer/listener stop, persistence, native adapter states, explicit native refresh,
  multi-parent paths, no scan on mount, bounded Unfiled paging, and independent
  heading/repeated-field/breadcrumb edits saved and reloaded.
@@ -74,4 +74,8 @@ Installed/native process-stop and production acceptance remain pending. Syntheti
 native UI evidence is not proof of stopping a live launchd service. Home sync stays
 paused; its removed grant is not restored. No personal transfer or local deletion
 is part of this correction. The exact producer of the legacy search.svg remains
-unproven despite its measured21October2026 creation time.
+unproven despite its measured 21 October 2026 creation time.
+
+The graph refresh is structural; existing semantic nodes are retained, but changed
+document prose has not been newly semantically indexed. Portable graph outputs
+were regenerated without altering the 22 pre-existing dirty snapshot entries.
