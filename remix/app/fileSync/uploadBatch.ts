@@ -16,7 +16,7 @@ import {
 } from './reconcile';
 import { parseCloudInventoryNode, type CloudInventoryNode } from './cloudInventory';
 
-export const UPLOAD_BATCH_REQUIREMENTS = { 'api.file-sync-batches': '1.0.0' } as const;
+export const UPLOAD_BATCH_REQUIREMENTS = { 'api.file-sync-batches': '1.2.1' } as const;
 export const UPLOAD_BATCH_FILES = 256;
 export const UPLOAD_BATCH_FILE_BYTES = 256 * 1024;
 export const UPLOAD_BATCH_BYTES = 32 * 1024 * 1024;

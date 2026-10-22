@@ -115,3 +115,9 @@ export function createSyncTaskRuntime() {
 		}
 	};
 }
+
+/** Activity Disable is user Stop; visibility interruptions still use suspend. */
+export function cancelSyncForActivity(tasks: Pick<ReturnType<typeof createSyncTaskRuntime>, 'read' | 'cancel'>) {
+ const current = tasks.read();
+ return current ? tasks.cancel(current.scope) : Promise.resolve();
+}

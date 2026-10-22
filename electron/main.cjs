@@ -127,6 +127,26 @@ const desktopMail = new DesktopMailSync({
 });
 app.on('before-quit', () => desktopMail.stop());
 const thingtimeNode = new ThingtimeNodeIntegration({ app, electronDir: __dirname });
+const { DesktopActivityManager } = require('./lib/activity-manager.cjs');
+const desktopActivities = new DesktopActivityManager({
+ filePath: path.join(app.getPath('userData'), 'activity-preferences.json'), app,
+ nodeAvailable: () => process.platform === 'darwin' && !parallelDevMode,
+ nodeStatus: () => thingtimeNode.status(), browserGuardActive: async () => { try { return !desktopServicesClosing && Boolean((await agentBrowsersPromise)?.manager.timer); } catch { return false; } },
+ controlNode: async enabled => {
+  if (enabled) {
+   const compatibility = await checkSelectedEndpointCompatibility();
+   if (compatibility.status !== 'compatible') throw compatibilityError(compatibility);
+   await ensureLocalProjectRegistry(nodeProjectRegistryPath());
+   await thingtimeNode.controlService('start', configuredNodeRegistration());
+   await desktopSettings.setAutoStartNodeOnLaunch(true);
+   nodeStoppedForSession = false;
+  } else {
+   nodeStoppedForSession = true;
+   await desktopSettings.setAutoStartNodeOnLaunch(false);
+   await thingtimeNode.controlService('disable', configuredNodeRegistration());
+  }
+ }
+});
 const syncWindowLease = new SyncWindowLease(() => ({ window: mainWindow, origin: appOrigin,
     enabled: process.platform === 'darwin' && !parallelDevMode }));
 const desktopFolderSync = new DesktopFolderSync({
@@ -1037,6 +1057,7 @@ let nodeStoppedForSession = false;
 async function reconcileConfiguredNode({ startIfStopped } = {}) {
 	if (parallelDevMode) return null;
 	if (process.platform !== 'darwin' || !desktopSettings) return null;
+	if (!desktopActivities.nodeEnabled()) return thingtimeNode.status();
 	if (endpointCompatibility && endpointCompatibility.status !== 'compatible') return thingtimeNode.status();
 	await ensureLocalProjectRegistry(nodeProjectRegistryPath());
 	const shouldStart = typeof startIfStopped === 'boolean' ? startIfStopped : desktopSettings.snapshot().autoStartNodeOnLaunch && !nodeStoppedForSession;
@@ -1044,6 +1065,7 @@ async function reconcileConfiguredNode({ startIfStopped } = {}) {
 }
 
 async function initializeDesktopSettings() {
+ await desktopActivities.initialize();
  localRuntime = new LocalRuntime({
   userData: app.getPath('userData'), safeStorage, parallelDev: parallelDevMode,
   bundledMongodPath: path.join(app.isPackaged ? process.resourcesPath : path.join(__dirname, 'dist'), 'database', 'mongodb', 'bin', 'mongod'),
@@ -1059,6 +1081,7 @@ async function initializeDesktopSettings() {
 		metadata: readWebBuildMetadata()
 	});
 	const settings = await desktopSettings.initialize();
+ if (process.platform === 'darwin' && !parallelDevMode && !desktopActivities.nodeEnabled()) await desktopActivities.controlNode(false);
 	activeApiEndpoint = settings.selectedEndpoint.url;
  sessionAuthority = new SessionAuthority({ userData: app.getPath('userData'), isolated: parallelDevMode });
  await sessionAuthority.initialize();
@@ -1099,6 +1122,7 @@ async function controlConfiguredNode(action) {
 	}
 	if (!['start', 'stop', 'restart'].includes(action)) throw new ThingtimeNodeBridgeError('invalid_request', 'Unsupported node control.');
 	if (action !== 'stop') {
+		if (!desktopActivities.nodeEnabled()) throw new Error('Enable Thingtime Node in Activity Manager before starting it.');
 		const compatibility = await checkSelectedEndpointCompatibility();
 		if (compatibility.status !== 'compatible') throw compatibilityError(compatibility);
 		await ensureLocalProjectRegistry(nodeProjectRegistryPath());
@@ -1110,6 +1134,7 @@ async function controlConfiguredNode(action) {
 
 async function nodeRegisterService(event) {
 	requireMacNode(event);
+	if (!desktopActivities.nodeEnabled()) throw new Error('Enable Thingtime Node in Activity Manager before registering it.');
 	const compatibility = await checkSelectedEndpointCompatibility();
 	if (compatibility.status !== 'compatible') throw compatibilityError(compatibility);
 	const confirmed = await confirmNodeChange({
@@ -1127,6 +1152,7 @@ async function nodeRegisterService(event) {
 
 async function nodeAddProject(event) {
 	requireMacNode(event);
+	if (!desktopActivities.nodeEnabled()) throw new Error('Enable Thingtime Node in Activity Manager before adding a project.');
 	const registration = await thingtimeNode.registrationStatus();
 	if (!registration.registered) {
 		throw new ThingtimeNodeBridgeError('node_not_registered', 'Start Thingtime Node before adding a local Codex project.');
@@ -1521,6 +1547,7 @@ async function desktopSelectMenuBarIcon(event, request) {
 async function desktopSetNodeAutoStart(event, request) {
 	requireTrustedAiBridgeEvent(event);
 	const settings = requireDesktopSettings();
+	if (request?.enabled && !desktopActivities.nodeEnabled()) throw new Error('Enable Thingtime Node in Activity Manager before enabling automatic launch.');
 	const previous = settings.snapshot().autoStartNodeOnLaunch;
 	const snapshot = await settings.setAutoStartNodeOnLaunch(request?.enabled);
 	if (!snapshot.autoStartNodeOnLaunch) return snapshot;
@@ -1939,6 +1966,11 @@ ipcMain.handle('thingtime-desktop:ai-read-batch', (event, request) => readAiSync
 ipcMain.handle('thingtime-desktop:ai-cancel-sync', (event, request) => cancelAiSync(event, request));
 ipcMain.handle('thingtime-desktop:open-app-locations', (event) => openAppLocations(event));
 ipcMain.handle('thingtime-desktop:permission-restart', (event) => { requireMacNode(event); return offerPermissionRestart(); });
+ipcMain.handle('thingtime-desktop:activity', (event, request) => {
+ requireSpeechSender(event, mainWindow, appOrigin);
+ requireRendererMatchesConfiguredNode(event);
+ return desktopActivities.request(request);
+});
 ipcMain.handle('thingtime-desktop:node-control', (event, request) => nodeControlService(event, request));
 ipcMain.handle('thingtime-desktop:node-status', (event) => nodeGetStatus(event));
 ipcMain.handle('thingtime-desktop:node-register-service', (event) => nodeRegisterService(event));

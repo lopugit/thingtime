@@ -1,3 +1,4 @@
+import { activityInterval, clearActivityInterval, activityManager } from '~/activity/activityManager';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { useLopu } from '~/components/Lopu/useLopu';
@@ -966,8 +967,8 @@ export const useDeviceStore = ({ userId, selectedDeviceId = null, enabled = true
 	useEffect(() => {
 		if (!active) return;
 		void refreshList();
-		const timer = window.setInterval(() => void refreshList(), LIST_REFRESH_MS);
-		return () => window.clearInterval(timer);
+		const timer = activityInterval('timer:components/Devices/useDeviceStore:1', 'Device list', () => refreshList(), LIST_REFRESH_MS);
+		return () => clearActivityInterval(timer);
 	}, [active, refreshList]);
 
 	useEffect(() => {
@@ -977,6 +978,7 @@ export const useDeviceStore = ({ userId, selectedDeviceId = null, enabled = true
 
 	useEffect(() => {
 		if (!active || !ownerId || !selectedDeviceId) return;
+		return activityManager.register({id:'device.events',title:'Device live events',kind:'event',detail:'Long-polls only the selected device. Disabling aborts the active request and its retry loop.'}, () => {
 		const controller = new AbortController();
 		let cancelled = false;
 		let cursor = readEventCursor(ownerId, selectedDeviceId);
@@ -1040,6 +1042,7 @@ export const useDeviceStore = ({ userId, selectedDeviceId = null, enabled = true
 			cancelled = true;
 			controller.abort();
 		};
+		});
 	}, [active, api, notifyError, ownerId, refreshDevice, selectedDeviceId]);
 
 	const visibleStore = store.ownerId === ownerId ? store : seedStore(ownerId, selectedDeviceId);

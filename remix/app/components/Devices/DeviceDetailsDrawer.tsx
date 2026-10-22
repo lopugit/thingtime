@@ -1,4 +1,3 @@
-import { DeviceSyncPanel } from './DeviceSyncBrowser';
 import { FilesystemThingsBrowser } from '../Things/FilesystemThingsBrowser';
 import React, { memo } from 'react';
 
@@ -33,7 +32,7 @@ import { readDeviceDrawerPreferences, setDeviceDrawerSectionExpanded, setDeviceD
 import type { DeviceDrawerSectionId } from './deviceDrawerPreferences';
 import type { DeviceBattery, DeviceCommandStatus, DeviceExecutionPermissionMode, DeviceRuntimeState, DeviceScreenSession } from './deviceTypes';
 import { WatchDeviceDetails } from './WatchDeviceDetails';
-import { deviceThingsPageHref } from './deviceNavigation';
+import { deviceSyncPageHref, deviceThingsPageHref } from './deviceNavigation';
 
 const Section = ({
 	deviceId,
@@ -409,7 +408,8 @@ export const DeviceDetailsDrawer = memo(
 								) : null}
 
 								<Section deviceId={state.deviceId} key={`sync:${state.deviceId}`} label="File sync & backup" section="sync">
-									<DeviceSyncPanel deviceId={state.deviceId} ownerId={ownerId} pairedDeviceIds={pairedDeviceIds} ownedDeviceIds={ownedDeviceIds} />
+									<Button as={RouterLink} to={deviceSyncPageHref(state.deviceId)} variant="outline" minHeight="44px" whiteSpace="normal">Open device sync &amp; backup</Button>
+                  <Button as={RouterLink} to="/things?activity=1" variant="ghost" minHeight="44px">Activity manager</Button>
 								</Section>
 								<Section deviceId={state.deviceId} key={`files:${state.deviceId}`} label="Live device filesystem" section="files">
                   {summary.capabilities?.some(capability => capability.id === 'filesystem.v1' && capability.supported && capability.enabled) ? <FilesystemThingsBrowser compact deviceId={state.deviceId} /> : <Text fontSize="12px">Update the Thingtime node on this device to browse its home folder.</Text>}

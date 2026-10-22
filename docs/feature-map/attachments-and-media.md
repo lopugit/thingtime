@@ -631,3 +631,17 @@ Things, with the existing save-draft Action preserving settings as data.
 Canonical docs and Lopu discovery guidance live in `docs/builderGuide.ts`.
 Run `test:web-platform`, `test:api-capabilities`, `test:vercel-config` and the
 isolated real-browser flow in README; see TESTING's local video checklist.
+
+### Sync upload provenance (2026-10-22)
+
+`fileSync/uploadOrigin.ts` defines closed private original-source metadata.
+Attachment upload-start 1.7.0 persists the approved client-supplied relative path,
+device/root IDs and intended file/folder identity before multipart authority,
+including exact queued retries of older reservations. It never grants native
+access. Private batch preparation 1.2.1 supplies the same metadata from its
+authorized immutable descriptor, including ready/finalizing recovery.
+`api.files` 1.8.1 checks initial publication against that destination. Current
+moves/restores never rewrite the original source. `api.things` 1.40.0 exposes
+provenance only on full owner-session individual detail reads; public, PAT, app
+and list projections omit it. Legacy unbound uploads without an explicit saved
+retry cannot acquire an inferred path. Standalone upload semantics stay intact.

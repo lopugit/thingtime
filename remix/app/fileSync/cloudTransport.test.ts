@@ -308,7 +308,7 @@ test('uploads negotiate finalization recovery before any network request on olde
   const f = await fixture(), run = f.make(); let negotiated = false;
   f.runtime.requireCapability = async (feature, minimum) => {
    if (feature !== 'api.attachment-uploads') return;
-   negotiated = true; assert.equal(minimum, '1.6.1');
+   negotiated = true; assert.equal(minimum, '1.7.0');
    if (!capabilitySatisfies(version, minimum)) throw Error('Finalization recovery needs the updated server');
   };
   await assert.rejects(executeSyncRun(run, f.port(run, async () => {})), /updated server/);
@@ -320,7 +320,7 @@ test('empty-file uploads negotiate the new storage contract before any network r
  const seen: string[] = [];
  f.runtime.requireCapability = async (feature, minimum) => { seen.push(feature + '@' + minimum); if (feature === 'api.files') throw Error('Empty files need the updated server'); };
  await assert.rejects(executeSyncRun(run, f.port(run, async () => {})), /updated server/);
- assert.ok(seen.includes('api.files@1.8.0'));
+ assert.ok(seen.includes('api.files@1.8.1'));
  assert.deepEqual(f.counts(), { puts: 0, starts: 0, commits: 0, opens: 0 });
 });
 
@@ -612,4 +612,20 @@ test('native scoped part uploads bypass unsupported browser stream APIs', async 
   await createCloudFileTransport(f.runtime, f.make().cloudWrites[0]).apply(nativeSource);
   assert.equal(f.counts().puts, 0); assert.equal(f.counts().commits, 1);
  } finally { globalThis.Request = original; }
+});
+
+test('publication failure and retry submit the immutable saved origin before upload bytes', async () => {
+ const f = await fixture(), run = f.make(), origins: any[] = [];
+ let reject = true;
+ f.hook((path, body) => {
+  if (path === '/api/v1/attachments/uploads') origins.push(structuredClone(body.fileSyncOrigin));
+  if (path === '/api/v1/files' && body && reject) return Response.json({ ok: false }, { status: 409 });
+  return null;
+ });
+ await assert.rejects(executeSyncRun(run, f.port(run, async () => {})));
+ assert.equal(origins[0].path, 'file.bin'); assert.equal(origins[0].localRootId, scope.rootId);
+ assert.equal(origins[0].deviceId, scope.deviceId); assert.equal(origins[0].fileId, run.operations[0].id);
+ reject = false;
+ await executeSyncRun(run, f.port(run, async () => {}));
+ assert.deepEqual(origins[1], origins[0]); assert.ok(f.file());
 });

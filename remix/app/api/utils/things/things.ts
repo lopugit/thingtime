@@ -1,3 +1,4 @@
+import { ownerFileSyncUploadOrigin, type FileSyncUploadOrigin } from '../../../fileSync/uploadOrigin';
 import { decodeDiscussionCursor, encodeDiscussionCursor, discussionCursorConfigured } from './discussionCursor';
 import { newThingMutationCapture, recordThingMutation, recordFolderPlacement, type ThingMutationCapture } from '../timeline/recordMutation';
 import { lockFolderDestination, MAX_FOLDER_DEPTH } from './folderPlacement';
@@ -5,7 +6,7 @@ import { isFolderThing, folderThingMatch } from '../../../schemas/folderThing';
 import { postThingReferences, type PostThingReference } from '../../../components/Feed/postThingReferences';
 import type { ResolvedAudience } from '~/components/Sharing/audienceCore';
 import { FOUND_POST_KIND, FOUND_POST_PREFIX, foundPostViewerId, foundPostGrantMatches, withFoundPostGrant, loadFoundPostsForAuthor, rememberFoundPost } from './foundPosts';
-import { ownerLibraryMatch } from './ownerLibraryQuery';
+import { ownerLibraryMatch, ownerLibraryRootMatch } from './ownerLibraryQuery';
 import { serviceWorkspaceCanRead, workspaceRootFor } from '../serviceWorkspaces/access';
 import { moveManagedContent } from './managedPlacement';
 import { randomBytes, randomUUID } from 'node:crypto';
@@ -471,6 +472,7 @@ export type PublicSubspaceMod = {
 
 // Generic projection for non-post things (and the unified read endpoint).
 export type PublicThing = {
+  fileSyncOrigin?: FileSyncUploadOrigin;
   // Owner-only immutable revision id, used to branch locally without a race.
   timelineHeadId?: string;
   // First-party target comment lists include authorized, bounded media metadata.
@@ -3782,6 +3784,10 @@ export async function getThing(
     if (terminal && canView(terminal, viewer)) await rememberFoundPost(viewer, terminal, options.discoveryIp);
   }
   const thing = (await toPublicThings([doc], viewer, !app))[0];
+  if (!app && !viewer?.pat) {
+    const origin = ownerFileSyncUploadOrigin(doc as any, viewer?.id);
+    if (origin) thing.fileSyncOrigin = origin;
+  }
 
   // App consumers get the generic thing shape only: the PublicPost projection
   // batch-embeds comments/reactions across ALL viewers (scope-blind), so it
@@ -3923,7 +3929,7 @@ export const listThings = async (
     );
     if (folder === 'root') {
       // v1 docs and pre-folder v2 docs have no folderId at all — both read as root
-      match.folderId = { $in: [null] };
+      match = withMatch(match, ownerLibraryRootMatch());
     } else if (folder) {
       const assignment = await resolveFolderAssignment(viewer.id, folder, []);
       if (isFail(assignment)) return assignment;
