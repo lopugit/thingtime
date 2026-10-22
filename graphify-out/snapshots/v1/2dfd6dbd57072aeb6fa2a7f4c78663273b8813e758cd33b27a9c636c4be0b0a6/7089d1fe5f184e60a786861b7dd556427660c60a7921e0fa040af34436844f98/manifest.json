@@ -3170,8 +3170,8 @@
     "semantic_hash": ""
   },
   "remix/app/components/Feed/PostComposer.tsx": {
-    "mtime": 1788159275.640954,
-    "ast_hash": "d9cf8c7b3e4abb554b24b7ea88e7a03b",
+    "mtime": 1788162007.6632667,
+    "ast_hash": "0096a0d83e09b2b6d1509863009e1d78",
     "semantic_hash": ""
   },
   "remix/app/components/Feed/PostList.tsx": {
@@ -5170,13 +5170,13 @@
     "semantic_hash": "80c16741772671388961fe9cf6b82ea4"
   },
   "remix/app/api/utils/attachments/attachmentCore.test.ts": {
-    "mtime": 1788159512.6116831,
-    "ast_hash": "bde19403584dce44832b97a91c8c47e3",
+    "mtime": 1788162041.5945537,
+    "ast_hash": "f96e7c7c3d62525b0924027094c84f76",
     "semantic_hash": ""
   },
   "remix/app/api/utils/attachments/attachmentCore.ts": {
-    "mtime": 1788158483.1780157,
-    "ast_hash": "be71b80574f048ae7221cda906c73337",
+    "mtime": 1788161970.4242628,
+    "ast_hash": "a7277e04a4bef07f582f5c29512c8a51",
     "semantic_hash": ""
   },
   "remix/app/api/utils/attachments/attachmentPresentation.test.ts": {
@@ -5210,8 +5210,8 @@
     "semantic_hash": "c8061ad25c8bdc5b7a41b1a2b053dfe0"
   },
   "remix/app/api/utils/attachments/attachments.ts": {
-    "mtime": 1788158719.365636,
-    "ast_hash": "2fb9c761c3bc5f9031e21363264a2931",
+    "mtime": 1788161987.2035093,
+    "ast_hash": "f72d565f46b27bc0abbf3da3818ab275",
     "semantic_hash": ""
   },
   "remix/app/api/utils/attachments/config.test.ts": {
@@ -5415,8 +5415,8 @@
     "semantic_hash": ""
   },
   "remix/app/components/Attachments/useAttachmentUploads.ts": {
-    "mtime": 1788159135.0519166,
-    "ast_hash": "278a0275e29f47410307ee0b58bac3f3",
+    "mtime": 1788161995.6154773,
+    "ast_hash": "f368af399b7fdc049ebacc6651cff119",
     "semantic_hash": ""
   },
   "remix/app/components/Commander/commanderClickAway.test.ts": {
@@ -7245,13 +7245,13 @@
     "semantic_hash": ""
   },
   ".claude/loop-state/post-editor-round2.md": {
-    "mtime": 1788158242.6018972,
-    "ast_hash": "9ea922b216cd9dac2a7e0c46dade4c3a",
+    "mtime": 1788160128.306474,
+    "ast_hash": "245ea668764d6c6470ec46d81c93d323",
     "semantic_hash": ""
   },
   "PRs/496-claude-post-editor-media-badges-7b2acd--toggle-badges-linked-attachments-edit-media.md": {
-    "mtime": 1788159894.6150837,
-    "ast_hash": "254e4db679071013c01642eb507e7dc4",
+    "mtime": 1788162031.6544921,
+    "ast_hash": "e5fa772f008df83e333a3e14304e9077",
     "semantic_hash": ""
   }
 }
