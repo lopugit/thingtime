@@ -73,6 +73,13 @@ private draft API, editor recovery, account isolation and independent media copi
 
 `GET/POST /api/v1/settings/lopu-prompt` exposes the shared public base prompt, the authenticated account's private instruction checklist, and admin-only base edits. `settings/lopuPromptSettings.ts` stores the shared revision in home settings and personal revisions in protected account metadata through `users.ts`; public user projections omit that text. `promptSettingsCore.ts` bounds inputs and composes enabled preferences. Revision comparisons reject stale writes. `LopuPromptSettings.tsx` serves Settings → Lopu and Settings → Admin; account-keyed mounting and private in-memory caching prevent cross-account drafts. Prompt text never grants server tool authority. Routes, concurrent save conflicts, disabled entries and private response handling are covered by `test:lopu` and `test:settings`.
 
+`components/Lopu/lopuChatStore.ts` owns account-scoped AI defaults and per-chat
+credential choices. Explicit unavailable send choices fail before dispatch;
+saved unavailable pins remain selected. Async chat writes and their list-read
+fences belong to the starting account generation, including create/rename/delete
+results, failures and cache writes. `test:lopu-ui` covers delayed completions,
+switch-away/return, queued credential refusal and independent chat routing.
+
 
 ## Password manager
 

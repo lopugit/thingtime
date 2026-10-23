@@ -8110,6 +8110,22 @@ a label. Browse cards and `/things` tiles are LINKS, never armed controls.
       selections and switch accounts while saving. Requests wait for saves;
       a refusal cancels that send and stale responses cannot overwrite newer
       choices or another account. Regression coverage: `test:lopu-ui`.
+- [ ] Keep create, rename and delete requests pending while switching accounts,
+      including switching away and back. Late successes and failures must not
+      restore the previous account's chats, provider choice, messages, notices
+      or cache. The new account can load chats immediately; an old completion
+      cannot release its pending credential-save fence. Try a queued send whose
+      explicit credential has disappeared or become unavailable: it must stop
+      with an error before sending, even when the prior choice used credits.
+- [ ] While a rename or delete is pending, save a personal credential in another
+      chat, select it and load a new message. Refuse the earlier mutation; only
+      its own title or removed entry returns. The confirmed credential, later
+      selection, message and cached list survive. A successful rename response
+      containing older chat metadata must not restore a credit-backed choice.
+- [ ] Delete a selected chat with a different credential from the account's
+      new-chat default, then send a new message: the default handles it. Refuse
+      deletion and verify the prior chat/choice return only if no later draft
+      settings or selection have changed.
 - [ ] At desktop and 390px, scroll defaults and open chat settings top to bottom;
       select credentials/models, reopen and reload. Edit nested label/control
       blocks with Builder, save, reload and confirm credential actions still
