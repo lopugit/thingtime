@@ -1,9 +1,16 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { deploymentArgs, deploymentIssue, marker, selectTarget, sourceFromEvent } from './deploy-vercel-prebuilt.mjs';
+import { deploymentArgs, deploymentIssue, marker, publisherEnvironment, selectTarget, sourceFromEvent } from './deploy-vercel-prebuilt.mjs';
 
 const custom = [{ id: 'env_develop', slug: 'develop', branchMatcher: { type: 'equals', pattern: 'develop' } }];
+test('publisher supplies the paired CLI identifiers and overrides inherited project context', () => {
+  const environment = publisherEnvironment({ teamId: 'team_authorized', projectId: 'prj_authorized', token: 'synthetic-test-token' }, { VERCEL_PROJECT_ID: 'prj_other', VERCEL_ORG_ID: 'team_other', CI: 'true' });
+  assert.equal(environment.VERCEL_ORG_ID, 'team_authorized');
+  assert.equal(environment.VERCEL_PROJECT_ID, 'prj_authorized');
+  assert.equal(environment.VERCEL_TOKEN, 'synthetic-test-token');
+  assert.equal(environment.CI, 'true');
+});
 test('all targets resolve explicitly and production cannot receive feature code', () => {
   assert.deepEqual(selectTarget('main', 'main', custom), { slug: 'production', kind: 'production', id: '' });
   assert.deepEqual(selectTarget('develop', 'main', custom), { slug: 'develop', kind: 'preview', id: 'env_develop' });
