@@ -56,6 +56,11 @@ The original working checkout and its unrelated conflicts were preserved. All
 owned changes were made in isolated worktrees. Secrets were passed directly
 through supported CLI/process interfaces and were not saved in these notes.
 
+- [#1214](https://github.com/lopugit/thingtime/pull/1214): keep existing provider
+  branch/project aliases on the verified prebuilt outputs after native Git is
+  disconnected. Verify ownership before reassignment and retry only read checks
+  during edge propagation; no repeated alias mutation or rebuild is required.
+
 ## Verification boundaries
 
 Focused publisher, root-flow and extraction contracts cover source/target
