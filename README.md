@@ -654,6 +654,33 @@ before each server-side provider request, redirects are rejected, and
 ordinary responses never include stored credentials. The explicit Show action
 requires fresh password or passkey verification for one owner-authorized entry.
 
+### Lopu defaults and chat credentials
+
+**Settings → Lopu → Default AI for new chats** chooses Thingtime credits or
+one of the current account's saved AI connections. Credit-backed defaults
+include the model, reasoning effort and speed. Defaults are account- and
+origin-scoped on this device; existing conversations retain their own choices.
+The **Chat settings** gear in the full-page, floating and embedded Lopu composer
+saves a credential override with that conversation. The endpoint and model
+shown for personal credentials come from the saved connection.
+
+Use **Manage saved credentials, models and endpoints** to configure a
+connection in Secure Vault. ChatGPT OAuth uses the supported ChatGPT plan
+runtime and its discovered model; it is not an API key for an arbitrary URL.
+Connect and discover models on a persistent local/self-hosted runtime that
+advertises `api.ai-chatgpt-plan` and the Lopu chat capabilities, following the
+ChatGPT plan setup below. Hosted deployments without that runtime report the
+connection unavailable. Custom endpoints use their own saved credentials and
+the existing provider host allowlist described above. This UI adds no new
+secret, endpoint, OAuth client registration or token storage mechanism.
+
+Missing/unavailable selections stay pinned. Sending waits for pending choice
+writes, refused writes prevent that send, cold chat links load saved metadata,
+and an unknown chat delegates its stored choice to the server without sending
+new-chat defaults. There is no automatic fallback from a selected personal
+credential to Thingtime credits. Layouts use ordinary editable Builder blocks;
+only authored labels, styles and bindings are stored in the layout Thing.
+
 ## Conflict-free Graphify snapshots
 
 Thingtime does not ask every branch to modify the same generated Graphify JSON
@@ -4465,16 +4492,15 @@ key, so refreshing comments after a server restart starts a new cursor chain.
 
 ### Reusable local image and video tools
 
-Install **Local image and video tools** (`media-tools`) from Builder on an origin
-advertising `api.webpages-suites-install >= 1.7.0`. The file selector appears on
-load; choose a local file, optionally open **Compression settings**, then **Start**.
-Settings changes apply on the next Start without discarding the selected file.
-The page consists of ordinary individually editable elements inside the reusable
-`tt-media-pipeline` adapter. Builder can select, style, move, duplicate and remove
-its labels, fields, buttons and previews. Save the Page or Component through the
-normal Builder controls. Existing saved `tt-web-platform` media programs also
-mount their file controls automatically; their Save edited component Action still
-saves the program and current defaults, never selected or output bytes.
+Author image/video tools directly as saved Thingtime Pages and Components, using
+ordinary editable child elements inside the reusable `tt-media-pipeline` adapter.
+This framework release does not author or install a compressor page. The legacy
+`media-tools` suite keeps its existing video definitions. New intrinsic blocks
+require `api.things >= 1.41.0`, `api.things-update >= 1.12.0` and
+`api.webpages-resolve >= 1.8.0` on the selected origin. Save through ordinary
+Builder controls. Selected files and encoded output stay transient on device.
+Existing saved `tt-web-platform` media programs mount controls automatically and
+retain their save Action.
 
 Images use pinned [ImageMagick WASM](https://github.com/dlemstra/magick-wasm)
 and [resvg WASM](https://github.com/yisibl/resvg-js), shipped as same-origin build
@@ -6517,3 +6543,40 @@ No source watermark or baseline is advanced by this recovery decision.
 These changes target folder-constrained file frontiers. Controlled tests and
 isolated native/Mongo fixtures are distinct evidence; installed same-job
 throughput and byte-identical recovery remain release acceptance requirements.
+
+# GitHub-built Vercel deployments
+
+Thingtime builds production, custom environments and previews on standard
+GitHub-hosted Ubuntu runners. Vercel hosts the resulting Build Output API
+artifact; it does not compile application source. The protected implementation
+lives on `github-actions` in `.github/workflows/deploy-vercel-prebuilt.yml`.
+Product branches carry a thin listener only. Existing PR preview controllers
+already use the same separate build/publish pattern.
+
+`main` maps to production, branches matching Vercel's custom-environment
+matchers map to that environment (`develop` today), and other product branches
+map to Preview. The default-branch listener also observes requested push runs
+of Web CI and Lopu CodeQL so older branches need not contain the new listener.
+Duplicate ready SHAs are skipped. Deleted, stale and fork PR events never
+authorize a deployment. Use **Actions → Vercel prebuilt deployments → Run
+workflow**, on `main`, to deploy a branch manually; `auto` selects its target.
+Production always requires the current `main` head. Use `preview` explicitly
+to test the production branch without moving production.
+
+Fork setup: create a GitHub environment named `vercel-prebuilt-control`, restrict
+it to the default branch, add `VERCEL_DEPLOY_TOKEN` as an environment secret,
+and set non-secret environment variables `VERCEL_PROJECT_ID`,
+`VERCEL_PROJECT_NAME`, `VERCEL_TEAM_ID` and `VERCEL_TEAM_SLUG` for your own project.
+Keep deployment credentials out of repository-level secrets and build jobs.
+Point reusable workflow references at your protected controller branch.
+Disconnect Vercel's native Git integration and remove its source deploy hooks
+after proving a GitHub-built deployment. Keep `git.deploymentEnabled: false`
+and the always-skip ignore command as repository safeguards. Existing runtime
+variables, vault selection, regions, domains and production cron definitions
+remain managed by their normal contracts. The publisher copies only regions,
+Fluid settings and production cron definitions from the immutable source
+configuration; it never executes source in its credential-bearing job.
+
+See [Vercel deployment references](VERCEL_DEPLOYMENTS.md) for the project and
+verification receipts. Standard Actions usage for this public repository is
+subject to GitHub's current plan terms; Vercel hosting/runtime charges remain.

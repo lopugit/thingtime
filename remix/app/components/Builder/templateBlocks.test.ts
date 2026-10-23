@@ -77,9 +77,9 @@ test('saved transient JSON inputs survive intrinsic binding without widening the
 });
 
 test('media adapters expand into selectable authored headings, inputs, controls and previews', async () => {
- const { mediaCompressorTemplate } = await import('../../webPlatform/mediaCompressorTemplate');
+ const { mediaCompressorTemplate } = await import('../../../scripts/media-acceptance/authoredFixture');
  let id=0;
- const blocks=templateToBlocks(mediaCompressorTemplate(), kind=>`${kind}-${++id}`);
+ const blocks=templateToBlocks(JSON.parse(JSON.stringify(mediaCompressorTemplate())), kind=>`${kind}-${++id}`);
  const flatten=(rows:any[]):any[]=>rows.flatMap(row=>[row,...flatten(row.children||[])]);
  const all=flatten(blocks);
  assert.equal(blocks[0].tag,'tt-media-pipeline');

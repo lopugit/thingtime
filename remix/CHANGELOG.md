@@ -35,6 +35,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   embedded Things retain their own access rules. Includes a retry-safe existing
   subspace migration and isolated acceptance harness. See [PR 1045](../PRs/1045-subspace-messages-views-and-moderated-embeds.md) for verification and rollout status. — Codex (AI)
 
+- 2026-10-20: Add editable Lopu AI defaults and per-chat credential settings, with saved connection endpoint/model labels and explicit Thingtime-credit selection. Preserve unavailable pins, isolate defaults from chat changes, persist AI choices immediately and fence cold-link/pending-save routing. See [PR 1070](../PRs/1070-lopu-credential-selection-add-lopu-defaults-and-per-chat-ai-credentials.md) for validation and remaining live acceptance. — Codex (AI)
+
 - 2026-10-19: Keep personal-plan chats on local management, make repeated verified provider selections idempotent, and align the floating header with plan eligibility. Added regressions for first sends, follow-ups, old-client background admission and revoked proofs. Reconcile completed Responses output items before executing tools; incomplete/conflicting output remains fail-closed (installed tool acceptance pending). — Codex (AI)
 
 - 2026-10-18: Admit full-session owners to Lopu text chat through their live ChatGPT plan without an admin grant, preserve provider ownership on chat writes, and discard cached eligibility across identity changes. Catalog/API-key/voice invitation policy is unchanged. Live consent/model discovery/restart passed; rebuilt inference acceptance remains pending. See [PR 1034](../PRs/1034-chatgpt-plan-usage-local-runtime-and-encrypted-connection-moves.md). — Codex (AI)
@@ -102,13 +104,19 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-23: Limit PR 1164 to reusable local-media and editable Builder primitives. Author compressor Pages/Components directly as saved Things; retain the legacy suite and fix capability-compatible file-sync assertions.
+
 ### 2026-10-22 — General local compressor
 
 [PR 1164 validation and release notes](../PRs/1164-general-media-compressor-local-images-and-immediate-file-controls.md)
 
 - Add local image compression with bundled WASM codecs, transparency/animation safeguards and truthful size receipts alongside WebCodecs video compression.
-- Show file selection on load, keep the selected file while settings change, and compose the new tool from individually editable Builder elements.
-- Version intrinsic media storage/install contracts and extend the isolated desktop/mobile browser regression; scope WebAssembly compilation permission to the network-disabled media worker.
+- Show file selection on load, keep the selected file while settings change, and support individually editable Builder elements authored directly as saved Things.
+- Version intrinsic media storage/resolve contracts and extend the isolated desktop/mobile browser regression; scope WebAssembly compilation permission to the network-disabled media worker.
+- 2026-10-23: Make the existing sync change-storm regression observe its trailing
+  read instead of racing a five-millisecond timer under CI load. **Codex (AI)**
+
+- 2026-10-23: Preserve the GitHub Actions prebuilt-only deployment migration on develop so future promotions keep native Vercel source builds disabled. See [PR #1206](https://github.com/lopugit/thingtime/pull/1206). **Codex (AI)**
 
 - 2026-10-22: Move device sync configuration off Things home into a dedicated
   device page; keep storage attachments and parent-linked records out of root,

@@ -649,8 +649,9 @@ retry cannot acquire an inferred path. Standalone upload semantics stay intact.
 ### General local compressor (2026-10-22)
 
 `webPlatform/LocalMediaPipeline.tsx` binds the same media worker to ordinary
-editable child elements through `tt-media-pipeline`. `mediaCompressorTemplate.ts`
-composes those elements; `templateToBlocks` preserves individual Builder identity.
+editable child elements through `tt-media-pipeline`. Author the controls directly
+as saved Things; `templateToBlocks` preserves individual Builder identity.
+No new compressor Page/Component definition ships in the application.
 Legacy Web Platform media surfaces mount automatically and read current settings
 on Start. `imageFiles.ts` classifies images without loading codec code into the
 main bundle; `imageAssets.ts` fetches pinned same-origin WASM only;

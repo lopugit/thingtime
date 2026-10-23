@@ -1,5 +1,5 @@
-import { mediaConversionProgram } from './mediaConversionProgram';
-import type { PlatformNode } from './types';
+import { mediaConversionProgram } from './programFixture';
+import type { PlatformNode } from '../../app/webPlatform/types';
 
 /** Plain child elements, also expanded into individually editable Page blocks. */
 export function mediaCompressorTemplate() {

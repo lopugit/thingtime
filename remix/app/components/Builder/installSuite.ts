@@ -18,7 +18,6 @@ export const installSuite = async (
 	suite: BehaviourSuite,
 	options: { seeded?: boolean } = {}
 ): Promise<InstalledSuite> => {
-	if (suite.key === 'media-tools') await requireThingtimeCapability('api.things', '1.41.0');
 	const bundle = materializeSuite(suite, 'own');
 	const createId = async (payload: Record<string, unknown>): Promise<string> => {
 		const resp: any = await create(payload);
@@ -67,7 +66,7 @@ export type ServerInstalledSuite = {
 };
 
 export const installSuiteOnServer = async (key: string, options: { onlyMissing?: boolean } = {}): Promise<ServerInstalledSuite> => {
-	await requireThingtimeCapability('api.webpages-suites-install', key === 'mac-menu-bar' ? '1.6.0' : key === 'agent-tasks' ? '1.5.0' : key === 'media-tools' ? '1.7.0' : key === 'web-standards' ? '1.3.0' : '1.1.0');
+	await requireThingtimeCapability('api.webpages-suites-install', key === 'mac-menu-bar' ? '1.6.0' : key === 'agent-tasks' ? '1.5.0' : key === 'media-tools' ? '1.4.0' : key === 'web-standards' ? '1.3.0' : '1.1.0');
 	const response = await fetch('/api/v1/webpages/suites/install', {
 		method: 'POST',
 		credentials: 'include',

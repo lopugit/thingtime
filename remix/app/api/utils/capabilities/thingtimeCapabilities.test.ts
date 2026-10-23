@@ -405,7 +405,7 @@ test('Thing discussions and linked post references negotiate additive contracts 
 test('functional demo capabilities advertise compatible catalog and install contracts', () => {
   const manifest = thingtimeCapabilityManifest('https://thingtime.com');
   for (const feature of ['api.webpages-demos', 'api.webpages-suites-install', 'api.admin-webpages-seed-demos']) {
-    assert.equal(manifest.features[feature]?.version, feature === 'api.webpages-demos' ? '1.1.0' : feature === 'api.webpages-suites-install' ? '1.7.0' : '1.2.0');
+    assert.equal(manifest.features[feature]?.version, feature === 'api.webpages-demos' ? '1.1.0' : feature === 'api.webpages-suites-install' ? '1.6.0' : '1.2.0');
     assert.ok(capabilitySatisfies(manifest.features[feature].version, '1.1.0'));
   }
   assert.equal(capabilitySatisfies('1.0.0', '1.1.0'), false);
@@ -513,10 +513,10 @@ test('sync upload provenance clients require compatible contracts on the selecte
 });
 
 
-test('editable media suite requires compatible element storage and install contracts on both manifests', () => {
+test('editable media containers require compatible element storage contracts on both manifests', () => {
  const generated=createApiCapabilitiesManifest();
  const runtime=thingtimeCapabilityManifest('https://media.test');
- for(const [feature,minimum] of [['api.things','1.41.0'],['api.things-update','1.12.0'],['api.webpages-resolve','1.8.0'],['api.webpages-suites-install','1.7.0']]) {
+ for(const [feature,minimum] of [['api.things','1.41.0'],['api.things-update','1.12.0'],['api.webpages-resolve','1.8.0'],['api.webpages-suites-install','1.6.0']]) {
   assert.equal(generated.features[feature],minimum);
   assert.equal(runtime.features[feature].version,minimum);
   assert.equal(capabilitySatisfies(minimum,minimum),true);

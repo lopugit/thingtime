@@ -35,7 +35,7 @@ test('JSON Action inputs and draft-saving suites negotiate both origin manifests
 	const wellKnown = thingtimeCapabilityManifest('https://thingtime.test').features;
 	for (const [feature, minimum, previous] of [
 		['api.things', '1.38.0', '1.32.0'], ['api.things-update', '1.12.0', '1.9.0'],
-		['api.actions-run', '1.38.0', '1.35.0'], ['api.webpages-suites-install', '1.7.0', '1.4.0']
+		['api.actions-run', '1.38.0', '1.35.0'], ['api.webpages-suites-install', '1.6.0', '1.4.0']
 	]) {
 		assert.equal(route[feature], feature === 'api.things' ? '1.41.0' : minimum);
 		assert.equal(wellKnown[feature].version, feature === 'api.things' ? '1.41.0' : minimum);
@@ -526,7 +526,7 @@ test('agent testing and task installation negotiate their additive contracts', (
   const legacy = createApiCapabilitiesManifest(), manifest = thingtimeCapabilityManifest('https://thingtime.test');
   for (const [feature, minimum, previous] of [
     ['api.health-nitro', '1.2.0', '1.1.0'],
-    ['api.webpages-suites-install', '1.7.0', '1.4.0']
+    ['api.webpages-suites-install', '1.6.0', '1.4.0']
   ]) {
     assert.equal(legacy.features[feature], minimum);
     assert.equal(manifest.features[feature].version, minimum);
