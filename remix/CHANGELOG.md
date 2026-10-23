@@ -108,7 +108,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   including offline edits, and relay live folder access, transfer/automation,
   conflict, recovery, progress and priority controls to the installed app.
   Private leased requests preserve device-owned execution and account boundaries.
-  [Contract and validation](../docs/browser-device-sync.md). **Codex (AI)**
+  [Contract](../docs/browser-device-sync.md) and [PR 1216 validation](../PRs/1216-codex-browser-device-folder-sync-make-device-folder-sync-manageable-from-any-signed-in-browser.md). **Codex (AI)**
 
 - 2026-10-23: Limit PR 1164 to reusable local-media and editable Builder primitives. Author compressor Pages/Components directly as saved Things; retain the legacy suite and fix capability-compatible file-sync assertions.
 
