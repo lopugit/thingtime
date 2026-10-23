@@ -237,8 +237,8 @@ export const BorderControl = ({
 			<Text {...MICRO_LABEL} fontSize="10px">
 				Border
 			</Text>
-			<Flex columnGap={2}>
-				<Flex flexDirection="column" rowGap="2px" flex="0 0 30%" minWidth="56px">
+			<Flex gap={2} flexWrap="wrap">
+				<Flex flexDirection="column" rowGap="2px" flex="1 1 100px" minWidth="100px">
 					<Text {...MICRO_LABEL}>Style</Text>
 					<Select {...inputStyles} value={style} onChange={(event) => write(width, event.target.value, color)} data-testid={`${testIdPrefix}-style`}>
 						<option value="">none</option>

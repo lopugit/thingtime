@@ -1,3 +1,4 @@
+import type { TimelineGraphNode } from '../../../timeline/versionGraph.ts';
 import { createHash } from 'node:crypto';
 import { COLLECTION_SCHEMA_VERSIONS } from '../../../schemas/registry.ts';
 import {
@@ -62,7 +63,7 @@ export async function readTimelineEntries(things: any, ownerId: string, eventIds
 	return entriesFromDocs(things, ownerId, docs, session);
 }
 
-export type TimelineGraphNode = { id: string; thingId: string; parentIds: string[]; afterAdapter: string | null };
+export type { TimelineGraphNode } from '../../../timeline/versionGraph.ts';
 /** Traverse small graph headers, never thousands of full revision snapshots. */
 export async function readTimelineNodes(things: any, ownerId: string, eventIds: string[]): Promise<TimelineGraphNode[]> {
 	if (eventIds.length > 128) throw new Error('Too many Timeline versions requested.');

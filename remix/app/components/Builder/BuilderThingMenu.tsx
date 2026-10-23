@@ -3,13 +3,14 @@ import { ThingDefinitionEditor } from './DefinitionEditor/ThingDefinitionEditor'
 import { MenuItem } from '@chakra-ui/react';
 import { useNavigate } from 'react-router';
 import { useApi } from '~/hooks/useApi';
+import { useWorkspaceUser } from '~/hooks/useWorkspaceUser';
+import { useWorkspaceScope } from '~/hooks/useWorkspaceScope';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { useLopu } from '../Lopu/useLopu';
 import { ThingTransferControls } from '../Things/ThingTransferControls';
 import { RenameDialog, ShareDialog } from '../Things/ThingsDialogs';
 import { thingRenameCrystal, type ThingsThing } from '../Things/thingsCore';
 import { sharePathForThing } from '../Sharing/audienceCore';
-import { requireThingtimeCapability } from '~/api/utils/capabilities/requireCapability.client';
 
 /** Builder uses the same persisted content, audience and transfer operations as Things. */
 export const BuilderThingMenu = (props: {
@@ -20,8 +21,8 @@ export const BuilderThingMenu = (props: {
 	onChanged?: () => void;
 	onMetadataChanged?: (thing: ThingsThing) => void;
 }) => {
-	const user = useCurrentUser();
-	return <BuilderThingActions key={`${user?.id || ''}:${props.id}:${props.linkKey || ''}`} {...props} ownerId={user?.id} />;
+	const user = useWorkspaceUser(), account = useCurrentUser(), scope = useWorkspaceScope();
+	return <BuilderThingActions key={`${scope}:${props.id}:${props.linkKey || ''}`} {...props} ownerId={scope === 'pending' ? undefined : user?.id} canShare={!!account?.id && account.id === user?.id} />;
 };
 
 function BuilderThingActions({
@@ -31,8 +32,9 @@ function BuilderThingActions({
 	disabledReason,
 	onChanged,
 	onMetadataChanged,
-	ownerId
-}: React.ComponentProps<typeof BuilderThingMenu> & { ownerId?: string }) {
+	ownerId,
+	canShare
+}: React.ComponentProps<typeof BuilderThingMenu> & { ownerId?: string; canShare: boolean }) {
 	const api = useApi();
 	const navigate = useNavigate();
 	const lopu = useLopu();
@@ -104,7 +106,7 @@ function BuilderThingActions({
 				menuItems={
 					<>
 						<MenuItem onClick={() => setDialog('definition')} isDisabled={!own || busy || !!disabledReason}>Edit definition…</MenuItem>
-						<MenuItem onClick={() => setDialog('share')} isDisabled={!own || busy || !!disabledReason}>
+						<MenuItem onClick={() => setDialog('share')} isDisabled={!canShare || !own || busy || !!disabledReason}>
 							Privacy and sharing…
 						</MenuItem>
 						<MenuItem onClick={copyLink}>Share / Copy link</MenuItem>
@@ -115,20 +117,13 @@ function BuilderThingActions({
 							isDisabled={!ownerId || busy || !!disabledReason}
 							onClick={() =>
 								void run(async () => {
-									await requireThingtimeCapability('api.things-fork', '1.6.0');
-									if (!active.current) return false;
-									const response = await fetch('/api/v1/things/fork', {
-										method: 'POST',
-										credentials: 'include',
-										headers: { 'Content-Type': 'application/json' },
-										body: JSON.stringify({ id, key: linkKey })
-									});
-									const data = await response.json();
-									if (!response.ok || !data.ok || !data.id) throw new Error(data.error || 'Could not duplicate this Thing');
+									const data = await api.v1.things.fork({ id, key: linkKey });
+									const copyId = data?.id;
+									if (!data?.ok || !copyId) throw new Error(data?.error || 'Could not duplicate this Thing');
 									if (!active.current) return false;
 									lopu({ title: 'Private duplicate created', status: 'success' });
 									onChanged?.();
-									navigate(kind === 'webpage' ? `/builder?page=${encodeURIComponent(data.id)}` : `/thing/${encodeURIComponent(data.id)}`);
+									navigate(kind === 'webpage' ? `/builder?page=${encodeURIComponent(copyId)}` : `/thing/${encodeURIComponent(copyId)}`);
 									return true;
 								})
 							}
@@ -139,7 +134,7 @@ function BuilderThingActions({
 					</>
 				}
 			/>
-			{dialog === 'definition' ? <ThingDefinitionEditor id={id} onClose={() => setDialog(null)} onSaved={() => void changed()} /> : null}
+			{dialog === 'definition' ? <ThingDefinitionEditor id={id} initialThing={thing as any} onClose={() => setDialog(null)} onSaved={() => void changed()} /> : null}
 			<ShareDialog
 				things={dialog === 'share' && thing ? [thing] : []}
 				onClose={() => setDialog(null)}

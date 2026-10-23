@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { bundleFromPlan, readTransferClipboard, transferClipboardText, writeTransferClipboard } from './browser';
+import { bundleFromPlan, downloadTransfer, readTransferClipboard, transferClipboardText, writeTransferClipboard } from './browser';
 import type { TransferPlan } from './plan';
 import { encodeTransferArchive, decodeTransferArchive } from './archive';
 
@@ -119,6 +119,79 @@ test('cancelled and undeclared clipboard bundles are never serialized', async ()
   const bundle = await bundleFromPlan(plan());
   const controller = new AbortController(); controller.abort();
   await assert.rejects(transferClipboardText(bundle, controller.signal), { name: 'AbortError' });
-  bundle.files.set('hidden', new Uint8Array([1]));
+  bundle.files.set('hidden', new Blob([new Uint8Array([1])]));
   await assert.rejects(transferClipboardText(bundle), /undeclared/);
+});
+
+
+test('in-process export availability is checked before and after preparing portable content',async()=>{
+ const original=plan();let reads=0,allowed=true;
+ original.assertCurrent=async()=>{reads++;if(!allowed)throw Error('Export refused');};
+ const bundle=await bundleFromPlan(original);assert.equal(reads,2);assert.equal('assertCurrent' in bundle.manifest,false);
+ allowed=false;await assert.rejects(bundleFromPlan(original),/Export refused/);
+ allowed=true;original.files=[{id:'file',targetId:'note',name:'file.txt',mime:'text/plain',bytes:2}];
+ original.readLocalFile=async()=>{allowed=false;return new Uint8Array([1,2]);};
+ await assert.rejects(bundleFromPlan(original),/Export refused/);
+});
+
+
+test('portable encoding and download cannot outlive an in-process availability fence',async()=>{
+ let allowed=true;
+ const original=plan();original.assertCurrent=async()=>{if(!allowed)throw Error('Export refused');};
+ const bundle=await bundleFromPlan(original);allowed=false;
+ await assert.rejects(encodeTransferArchive(bundle),/Export refused/);
+ await assert.rejects(transferClipboardText(bundle),/Export refused/);
+ await assert.rejects(downloadTransfer(bundle,'json'),/Export refused/);
+ let checks=0;bundle.assertCurrent=async()=>{if(++checks===2)throw Error('Refused during ZIP encoding');};
+ await assert.rejects(encodeTransferArchive(bundle),/Refused during ZIP encoding/);
+});
+
+test('streamed file chunks become exact immutable Blobs with the same download authority', async () => {
+  const original = plan(); original.files = [{ id: 'file', sourceId: 'source', sharedRoot: 'note', targetId: 'note', name: 'a.bin', mime: 'application/octet-stream', bytes: 4 }];
+  const chunks = [new Uint8Array([1, 2]), new Uint8Array([3, 4])];
+  const bundle = await bundleFromPlan(original, { key: 'presented', fetch: async (url, init) => {
+    const parsed = new URL(String(url), 'https://fixture.invalid');
+    assert.equal(parsed.pathname, '/api/v1/attachments/content');
+    assert.equal(parsed.searchParams.get('id'), 'source');
+    assert.equal(parsed.searchParams.get('sharedRoot'), 'note');
+    assert.equal(parsed.searchParams.get('key'), 'presented');
+    assert.equal(init?.credentials, 'same-origin'); assert.equal(init?.cache, 'no-store');
+    return new Response(new ReadableStream({ start(controller) { for (const chunk of chunks) controller.enqueue(chunk); controller.close(); } }));
+  } });
+  chunks.forEach(chunk => chunk.fill(0));
+  assert.ok(bundle.files.get('file') instanceof Blob);
+  assert.deepEqual(new Uint8Array(await bundle.files.get('file')!.arrayBuffer()), new Uint8Array([1, 2, 3, 4]));
+  const copied = await readTransferClipboard(await transferClipboardText(bundle));
+  assert.deepEqual(copied.manifest, bundle.manifest);
+  assert.deepEqual(new Uint8Array(await copied.files.get('file')!.arrayBuffer()), new Uint8Array([1, 2, 3, 4]));
+});
+
+test('cancelling a stalled stream releases the reader without waiting for the server', async () => {
+  const original = plan(); original.files = [{ id: 'file', targetId: 'note', name: 'a.bin', mime: 'application/octet-stream', bytes: 4 }];
+  const controller = new AbortController(); let cancelled = false;
+  let reading!: () => void; const started = new Promise<void>(resolve => { reading = resolve; });
+  const body = new ReadableStream({ pull() { reading(); }, cancel() { cancelled = true; } }, { highWaterMark: 0 });
+  const pending = bundleFromPlan(original, { signal: controller.signal, fetch: async () => new Response(body) });
+  await started; controller.abort();
+  await assert.rejects(pending, { name: 'AbortError' });
+  assert.equal(cancelled, true); assert.equal(body.locked, false);
+});
+
+test('plan metadata and reader identity are frozen before asynchronous availability checks', async () => {
+  const original = plan(); const bytes = new Uint8Array([1, 2, 3]);
+  original.files = [{ id: 'file', targetId: 'note', name: 'original.bin', mime: 'application/octet-stream', bytes: 3 }];
+  original.readLocalFile = async () => bytes;
+  let checks = 0;
+  original.assertCurrent = async () => {
+    if (++checks !== 1) return;
+    original.things[0].crystal.name = 'Changed'; original.files[0].name = 'changed.bin';
+    original.files[0].id = 'other'; original.roots.length = 0;
+    original.readLocalFile = async () => { throw Error('Replaced reader'); };
+  };
+  const bundle = await bundleFromPlan(original);
+  bytes.fill(0);
+  assert.equal(checks, 2); assert.deepEqual(bundle.manifest.roots, ['note']);
+  assert.equal(bundle.manifest.things[0].crystal.name, 'A note');
+  assert.equal(bundle.manifest.files[0].name, 'original.bin');
+  assert.deepEqual(new Uint8Array(await bundle.files.get('file')!.arrayBuffer()), new Uint8Array([1, 2, 3]));
 });

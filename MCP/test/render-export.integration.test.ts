@@ -6,7 +6,10 @@ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 
 const enabled = process.env.TT_DRAFT_BROWSER_TEST === '1';
 test('stdio agent: no-login native PNGs, canonical dependencies and failures', { skip: !enabled, timeout: 120000 }, async () => {
-  const transport = new StdioClientTransport({ command: process.execPath, args: ['dist/index.js'], stderr: 'pipe' });
+  const transport = new StdioClientTransport({
+    command: process.execPath, args: ['dist/index.js'], stderr: 'pipe',
+    env: process.env.PLAYWRIGHT_BROWSERS_PATH ? { PLAYWRIGHT_BROWSERS_PATH: process.env.PLAYWRIGHT_BROWSERS_PATH } : undefined
+  });
   const client = new Client({ name: 'thingtime-draft-acceptance', version: '1.0.0' });
   await client.connect(transport);
   try {
@@ -46,7 +49,8 @@ test('stdio agent: no-login native PNGs, canonical dependencies and failures', {
     assert.equal(repeat.isError, undefined, JSON.stringify(repeat));
     assert.equal(repeat.structuredContent.hash, metadata.hash);
     const concurrent: any[] = await Promise.all([0, 1].map(() => client.callTool({ name: 'thingtime_render_and_export', arguments: { content: exported } })));
-    assert.equal(concurrent.filter(result => result.isError).length, 1);
+    assert.equal(concurrent.filter(result => result.isError).length, 1,
+      JSON.stringify(concurrent.map(result => result.isError ? result.content : { ok: true })));
     assert.match(concurrent.find(result => result.isError).content[0].text, /busy/);
     for (const args of [{ content: exported, viewports: [{ width: 319, height: 844 }] }, { content: exported, crop: { enabled: true, blockId: 'missing' } }]) {
       const rejected: any = await client.callTool({ name: 'thingtime_render_and_export', arguments: args });
@@ -78,7 +82,13 @@ test('stdio agent: no-login native PNGs, canonical dependencies and failures', {
 test('running web app: clean browser edit, native render, JSON download and zero API traffic', { skip: !process.env.TT_DRAFT_WEB_BASE, timeout: 30000 }, async () => {
   const { chromium } = await import('playwright');
   const base = process.env.TT_DRAFT_WEB_BASE!;
-  assert.equal(base, 'http://127.0.0.1:22460');
+  if (process.env.TT_DRAFT_TEST_SESSION) {
+    assert.equal(new URL(base).hostname, '127.0.0.1');
+    assert.equal(new URL(base).origin, base);
+    const health = await (await fetch(`${base}/api/v1/health/nitro`)).json();
+    assert.equal(health.testEnvironment.mode, 'isolated-agent-test');
+    assert.equal(health.testEnvironment.sessionId, process.env.TT_DRAFT_TEST_SESSION);
+  } else assert.equal(base, 'http://127.0.0.1:22460');
   const browser = await chromium.launch({ headless: true, chromiumSandbox: true });
   try {
     const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
@@ -88,7 +98,10 @@ test('running web app: clean browser edit, native render, JSON download and zero
       if ([`${base}/draft-preview/index.html`, `${base}/draft-preview/runner.js`].includes(url)) await route.continue(); else await route.abort();
     });
     const page = await context.newPage();
-    await page.goto(`${base}/draft-preview/index.html`);
+    const response = await page.goto(`${base}/draft-preview/index.html`);
+    assert.match(response!.headers()['content-security-policy'] || '', /sandbox allow-scripts allow-downloads(?:;|$)/);
+    assert.equal(response!.headers()['cache-control'], 'no-store');
+    assert.equal(await page.getByRole('button', { name: 'Download JSON' }).isDisabled(), true);
     const fixture = await readFile(new URL('./fixtures/affirmation.transfer.json', import.meta.url), 'utf8');
     await page.getByLabel('Thing / transfer JSON', { exact: true }).fill(fixture);
     await page.getByRole('button', { name: 'Render draft', exact: true }).click();
@@ -104,6 +117,7 @@ test('running web app: clean browser edit, native render, JSON download and zero
     await page.getByRole('button', { name: 'Render draft', exact: true }).click();
     await page.waitForFunction(() => document.querySelector('#diagnostics')?.textContent?.includes('"ok":false'));
     assert.equal(await page.locator('#native-preview article').count(), 1, 'Last valid preview retained on error');
+    assert.equal(await page.getByRole('button', { name: 'Download JSON' }).isDisabled(), true, 'Failed drafts cannot download stale content');
     await page.reload();
     assert.equal(await page.getByLabel('Thing / transfer JSON', { exact: true }).inputValue(), '');
     assert.equal(await page.locator('#native-preview').count(), 0);

@@ -1,7 +1,8 @@
 import { createHostMediaPipeline } from './hostMediaPipeline';
 import { mediaExport } from './mediaExport';
 import React from 'react';
-import { useCurrentUser } from '~/hooks/useCurrentUser';
+import { useWorkspaceScope } from '~/hooks/useWorkspaceScope';
+import runtimeDocument from 'virtual:thingtime-platform-document';
 import { validatePlatformProgram } from './compiler';
 import { platformFieldValue, reconcilePlatformInputs, snapshotPlatformDraft, type PlatformInputEdits } from './draft';
 import type { PlatformProgram } from './types';
@@ -9,12 +10,9 @@ import type { PlatformProgram } from './types';
 /** Generic builder primitive: the entire document, styles, program and input
  * descriptors come from the component Thing. No feature ID or app UI here. */
 export default function WebPlatformSurface({ program: raw, name }: { program?: unknown; name?: unknown }) {
-	const user = useCurrentUser();
-	const serialized = JSON.stringify([user?.id ?? null, raw ?? null]);
-	const fieldName =
-		typeof name === 'string' && /^[A-Za-z_][A-Za-z0-9_-]{0,39}$/.test(name) && !['constructor', 'prototype', '__proto__'].includes(name)
-			? name
-			: undefined;
+	const workspace = useWorkspaceScope();
+	const serialized = JSON.stringify([workspace, raw ?? null]);
+	const fieldName = typeof name === 'string' && /^[A-Za-z_][A-Za-z0-9_-]{0,39}$/.test(name) && !['constructor', 'prototype', '__proto__'].includes(name) ? name : undefined;
 	return <PlatformInstance key={serialized} raw={raw} fieldName={fieldName} />;
 }
 function PlatformInstance({ raw, fieldName }: { raw: unknown; fieldName?: string }) {
@@ -47,7 +45,7 @@ function PlatformInstance({ raw, fieldName }: { raw: unknown; fieldName?: string
 	const [error, setError] = React.useState('');
 	const [download, setDownload] = React.useState<{ url: string; name: string; runId: string } | null>(null);
 	const frame = React.useRef<HTMLIFrameElement>(null);
-	React.useEffect(() => {
+	React.useLayoutEffect(() => {
 		if (!job) return;
 		const media = job.program.media
 			? createHostMediaPipeline(
@@ -67,7 +65,7 @@ function PlatformInstance({ raw, fieldName }: { raw: unknown; fieldName?: string
 			setDownload(null);
 		};
 		const receive = (e: MessageEvent) => {
-			if (e.source !== frame.current?.contentWindow) return;
+			if (e.origin !== 'null' || e.source !== frame.current?.contentWindow) return;
 			if (
 				e.data?.type === 'tt-platform-layout' &&
 				e.data.runId === job.id &&
@@ -186,7 +184,8 @@ function PlatformInstance({ raw, fieldName }: { raw: unknown; fieldName?: string
 					ref={frame}
 					key={job.id}
 					title={`${initial.title} interactive preview`}
-					src="/platform/runtime.html"
+					srcDoc={runtimeDocument || undefined}
+					src={runtimeDocument ? undefined : '/platform/runtime.html'}
 					sandbox={job.program.allowFormEvents ? 'allow-scripts allow-forms' : 'allow-scripts'}
 					referrerPolicy="no-referrer"
 					style={{

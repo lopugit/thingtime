@@ -19,3 +19,8 @@ export const attachmentFromThing = (thing: Record<string, unknown> | null): Publ
 // list shape here makes the UI honest now and leaves it ready for a future
 // multi-reference projection without ever rendering a post as the attachment.
 export const directAttachmentReferences = (parent: PublicPost | null): PublicPost[] => (parent ? [parent] : []);
+
+/** UI eligibility only. The annotation adapter rechecks the live scoped record. */
+export const canEditLocalFileDetails = (thing: Record<string, any> | null, ownerId?: string, linkKey?: string | null): boolean =>
+ Boolean(ownerId && !linkKey && thing?.author?.id === ownerId && !thing?.targetId &&
+  thing?.canEditLocalFileDetails === true && attachmentFromThing(thing));

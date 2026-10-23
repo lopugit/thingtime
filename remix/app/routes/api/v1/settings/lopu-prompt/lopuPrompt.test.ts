@@ -42,3 +42,11 @@ test('admin base writes are validated and stale revisions return a conflict', as
   f.deps.setLopuBasePrompt = async () => { throw new LopuPromptConflictError(); };
   assert.equal((await f.call({ scope: 'base', revision: 'base-1', basePrompt: 'Stale edit' })).status, 409);
 });
+
+test('personal lists exceed the old count/text caps while authentication and transport bounds remain', async () => {
+  const f = fixture({ id: 'alice', accountKind: 'user', isAdmin: false });
+  const instructions = Array.from({ length: 35 }, (_, i) => ({ id: String(i), text: i === 0 ? 'x'.repeat(2100) : 'Keep this instruction.', enabled: true }));
+  assert.equal((await f.call({ scope: 'personal', revision: 'personal-1', instructions })).status, 200);
+  assert.deepEqual(f.writes[0].instructions, instructions);
+  await assert.rejects(f.call({ scope: 'personal', revision: 'personal-1', instructions: [{ id: 'large', text: 'x'.repeat(100000), enabled: true }] }), (error: unknown) => error instanceof Response && error.status === 413);
+});

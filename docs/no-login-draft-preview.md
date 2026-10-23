@@ -63,6 +63,14 @@ API token or arbitrary HTTP access in the agent host. It launches a fresh
 Chromium context and fulfills only the two shipped preview files in memory.
 Nothing is fetched from the apparent loopback URL.
 
+If Chromium is installed in a shared cache (for example `/ms-playwright` in an
+isolated container), set `PLAYWRIGHT_BROWSERS_PATH` to that directory in the
+MCP server's explicit `env` configuration. The MCP SDK filters inherited
+environment variables, so setting it only on the parent process is insufficient.
+The example client and integration test forward this one non-secret path when
+set. Keep the browser version matched to `MCP/package-lock.json`; do not forward
+account credentials or the complete host environment.
+
 Call `thingtime_capabilities`, then `thingtime_render_and_export`:
 
 ```json
@@ -131,7 +139,7 @@ root; without `blockId`, the first component, or the root element for a single
 component. It is captured at the first requested viewport.
 
 Production/static hosting must serve the generated CSP headers. The existing
-Vite and Vercel packaging paths set them; `dist/draft-preview/policy.json`
+Vite, Nitro Node-server and Vercel packaging paths set them; `dist/draft-preview/policy.json`
 contains the same generated policy for the offline MCP host. Do not serve the
 HTML on an account origin with a generic server that omits the sandbox header.
 
@@ -169,3 +177,28 @@ reexports through the normal API. It removes only its imported Things and
 logs out. Stop the QA PM2 stack and disposable Mongo process after verification.
 No existing account is used. This is separate from the anonymous workflow,
 which performs no writes at all.
+
+
+## Packaged-server regression checkpoint — 2026-10-19
+
+The Node server now applies the same canonical sandbox and `no-store` headers
+as Vite/Vercel. A metadata CSP cannot enforce `sandbox`: the HTTP response must
+carry it. Native acceptance verifies storage denial on the actual Node-served
+page, including ordinary, query-string, directory and encoded asset paths.
+The JSON download control is disabled initially, during rendering and after a
+failed render; the last valid preview remains visible without becoming an
+exportable stale result.
+
+For the documented isolated browser-manager runtime, set `TT_DRAFT_WEB_BASE`
+to its loopback application origin and `TT_DRAFT_TEST_SESSION` to its public
+session ID. The integration test checks the actual health response before using
+that origin. The legacy dedicated `22460` fixture remains supported. These
+variables are test configuration, never account credentials or authorization.
+
+Local evidence: `tmp/current-render-native/native/` contains fresh MCP JSON,
+1440×1000, 390×844 and 320×844 PNGs, the 400×560 card crop, editor captures,
+serving/storage checks and the normal private importer round trip. The importer
+legitimately remaps both IDs and component keys; content and dependencies remain
+intact. The runtime has no external network, host mounts or published ports and
+is released after testing. This is local acceptance, not target-host connector,
+CI or deployed verification.

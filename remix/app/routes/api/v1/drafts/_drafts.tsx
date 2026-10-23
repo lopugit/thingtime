@@ -70,6 +70,7 @@ export function createDraftHandler(
 				await deps.discardDraft(user.id, input.id, input.revision);
 				return json({ ok: true }, { headers });
 			}
+			if (input.operation === 'save' && input.mode !== undefined && !['draft', 'template'].includes(input.mode)) throw new DraftError(400, 'Invalid draft mode');
 			const draft =
 				input.operation === 'from-post'
 					? await deps.templateFromPost(user, input, request.signal)
@@ -78,7 +79,7 @@ export function createDraftHandler(
 					: input.operation === 'recover'
 					? await deps.recoverDraft(user.id, input, request.signal)
 					: input.operation === 'save'
-					? await deps.saveDraft(user.id, input)
+					? await deps.saveDraft(user.id, input, input.mode || 'draft')
 					: null;
 			if (!draft) throw new DraftError(400, 'Unknown draft operation');
 			return json({ ok: true, draft }, { headers });

@@ -1,4 +1,7 @@
+import { useCharacterContentPath } from '../Characters/CharacterScope';
 import { readActionOutcome, actionOutcomeDescription } from '../../timeline/actionOutcome';
+import { CharacterContentScope } from '../Characters/CharacterContentScope';
+import { TimelineProvider } from '../../timeline/TimelineProvider';
 import { TimelineEventBrowser, VersionNameBadge } from './TimelineEventBrowser';
 import { TimelineVersionNameEditor } from './TimelineVersionNameEditor';
 import { HistoryChangeBox, TimelineCompareNow, useTimelineCompareNow } from './TimelineCompareNow';
@@ -30,9 +33,11 @@ import { useDataPlane } from '../../hooks/useDataPlane';
 import { thingHistoryHref } from '../../utils/dataPlane';
 import { apiErrorMessage } from '../../hooks/apiFailure';
 
+import { workspaceStorageIdentity, subscribeWorkspaceStorage } from '../../local-workspace/storageStatus.client';
+
 const OPEN_HISTORY = 'thingtime:open-history';
-export function openThingHistory(thingId: string, thingtime?: readonly string[]) {
-	window.dispatchEvent(new CustomEvent(OPEN_HISTORY, { detail: { thingId, storage: historyStorageForThing(thingtime) } }));
+export function openThingHistory(thingId: string, thingtime?: readonly string[], storage?: TimelineStorage) {
+	window.dispatchEvent(new CustomEvent(OPEN_HISTORY, { detail: { thingId, storage: storage ?? historyStorageForThing(thingtime) } }));
 }
 
 const date = (value: string) => new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value));
@@ -46,6 +51,7 @@ const preview = (snapshot: TimelineSnapshot | null) => {
 const sourceLabel = (event: TimelineEvent) => ({ client: 'Editor', api: 'API', ai: 'Lopu', action: 'Action', system: 'Thingtime' }[event.source]);
 
 function TimelinePanel({ thingId, folderId, urlState = false }: { thingId: string | null; folderId?: string; urlState?: boolean }) {
+	const contentPath = useCharacterContentPath();
 	const [params, setParams] = useSearchParams();
 	const [filters, setFilters] = React.useState(() => readHistoryFilters(urlState ? params : new URLSearchParams(), thingId ?? ''));
 	React.useEffect(() => {
@@ -273,7 +279,7 @@ function TimelinePanel({ thingId, folderId, urlState = false }: { thingId: strin
 									setOpenError('');
 									try {
 										if (differentSource) await api.v1.mongodb.endpoint.set({ reset: true });
-										navigate(thingHistoryHref(selected.thingId, scope.dataPlane, scope.ownerId));
+										navigate(contentPath(thingHistoryHref(selected.thingId, scope.dataPlane, scope.ownerId)));
 									} catch (error) {
 										setOpenError(apiErrorMessage(error, 'Could not open this Thing. Your history is still here.'));
 									} finally {
@@ -331,7 +337,7 @@ function TimelinePanel({ thingId, folderId, urlState = false }: { thingId: strin
 												</Text>
 												<Text fontSize="xs" fontWeight="400" color="var(--tt-muted)" overflowWrap="anywhere">
 													{row.event.branchId === 'main' ? 'Saved version' : 'Private variation'} · {date(row.event.occurredAt)} ·{' '}
-													{row.status === 'accepted' ? 'Synced to your account' : 'Saved on this device'}
+													{row.status === 'accepted' && !timeline.localOnly ? 'Synced to your account' : 'Saved on this device'}
 												</Text>
 											</Box>
 										</Button>
@@ -368,13 +374,13 @@ function TimelinePanel({ thingId, folderId, urlState = false }: { thingId: strin
 	return (
 		<Flex direction="column" gap={4} minW={0}>
 			<Flex gap={2} wrap="wrap" align="center">
-				<Text flex="1" fontSize="sm" color="var(--tt-muted)">
+				<Text flex="1" minW="min(180px, 100%)" fontSize="sm" color="var(--tt-muted)">
 					{pending
-						? `${pending} ${pending === 1 ? 'change' : 'changes'} waiting to sync`
+						? `${pending} ${pending === 1 ? 'change' : 'changes'} waiting to ${timeline.localOnly ? 'save on this device' : 'sync'}`
 						: timeline.error
 						? 'Could not refresh history'
 						: timeline.ready
-						? 'Saved to your account'
+						? timeline.localOnly ? 'Saved on this device · never uploaded' : 'Saved to your account'
 						: 'Opening history…'}
 				</Text>
 
@@ -385,7 +391,7 @@ function TimelinePanel({ thingId, folderId, urlState = false }: { thingId: strin
 					<Button
 						size="sm"
 						variant="ghost"
-						onClick={() => navigate(`/history?${writeHistoryFilters(new URLSearchParams({ storage: homeHistory ? 'home' : 'selected' }), filters)}`)}
+						onClick={() => navigate(contentPath(`/history?${writeHistoryFilters(new URLSearchParams({ storage: homeHistory ? 'home' : 'selected' }), filters)}`))}
 					>
 						Open History browser
 					</Button>
@@ -404,7 +410,7 @@ function TimelinePanel({ thingId, folderId, urlState = false }: { thingId: strin
 			{filters.related ? (
 				<Text fontSize="sm" color="var(--tt-muted)">
 					Changes to this page and your Things used by its current saved composition, including Components, Actions, Data and Schemas.
-					{timeline.related ? ` ${timeline.related.thingIds.length} owned Things included.` : ' Related Things are refreshed when online.'}
+					{timeline.related ? ` ${timeline.related.thingIds.length} owned Things included.` : timeline.localOnly ? ' Related Things are resolved on this device.' : ' Related Things are refreshed when online.'}
 					{timeline.related?.sharedCount
 						? ` ${timeline.related.sharedCount} shared Things are used here; their authors' private histories stay private.`
 						: ''}
@@ -414,6 +420,7 @@ function TimelinePanel({ thingId, folderId, urlState = false }: { thingId: strin
 			<Flex direction={{ base: 'column', lg: selected ? 'row' : 'column' }} gap={4} minW={0} align="stretch">
 				<Box flex={selected ? '0 0 48%' : '1'} minW={0}>
 					<TimelineEventBrowser
+						localOnly={timeline.localOnly}
 						rows={timeline.rows}
 						notes={timeline.notes}
 						names={timeline.names}
@@ -452,7 +459,8 @@ function HistoryDetails({ children, onClose, activity }: { children: React.React
 				>
 					<ModalHeader>{activity ? 'Activity details' : 'Version details'}</ModalHeader>
 					<ModalCloseButton />
-					<ModalBody px={2} pb={4}>
+					{/* Leave the final controls reachable above floating launchers and the phone safe area. */}
+					<ModalBody px={2} pb="calc(var(--thingtime-safe-area-bottom, env(safe-area-inset-bottom, 0px)) + 80px)">
 						{children}
 					</ModalBody>
 				</ModalContent>
@@ -476,22 +484,23 @@ function HistoryDetails({ children, onClose, activity }: { children: React.React
 }
 
 export function TimelineLibrary({ folderId, storage = 'selected' }: { folderId: string; storage?: TimelineStorage }) {
+	const contentPath = useCharacterContentPath();
 	const navigate = useNavigate();
 	const user = useCurrentUser();
 	const selected = useSelectedTimelineSession();
 	return (
 		<PageShell width={1100} columnProps={{ pt: 4 }}>
-			<Button alignSelf="flex-start" variant="ghost" size="sm" onClick={() => navigate('/things')}>
+			<Button alignSelf="flex-start" variant="ghost" size="sm" onClick={() => navigate(contentPath('/things'))}>
 				← Things
 			</Button>
 			<PageHeader eyebrow="Thingtime · Things" title="Timeline" variant="ink" subtitle="Your changes across Thingtime, saved in one place." />
-			{selected.connection?.scope.dataPlane !== 'home' ? (
+			{selected.connection?.scope.dataPlane !== 'home' && selected.connection?.scope.dataPlane !== 'local-workspace' ? (
 				<Flex gap={2} wrap="wrap" role="group" aria-label="History location">
 					<Button
 						size="sm"
 						variant={storage === 'home' ? 'solid' : 'outline'}
 						aria-pressed={storage === 'home'}
-						onClick={() => navigate(timelineFolderHref(folderId, 'home'))}
+						onClick={() => navigate(contentPath(timelineFolderHref(folderId, 'home')))}
 					>
 						Home account
 					</Button>
@@ -499,7 +508,7 @@ export function TimelineLibrary({ folderId, storage = 'selected' }: { folderId: 
 						size="sm"
 						variant={storage === 'selected' ? 'solid' : 'outline'}
 						aria-pressed={storage === 'selected'}
-						onClick={() => navigate(timelineFolderHref(folderId, 'selected'))}
+						onClick={() => navigate(contentPath(timelineFolderHref(folderId, 'selected')))}
 					>
 						Selected database
 					</Button>
@@ -520,7 +529,7 @@ export function HistoryPage() {
 	return (
 		<PageShell width={1180} columnProps={{ pt: 4 }}>
 			<PageHeader eyebrow="Thingtime" title="History" variant="ink" subtitle="Every change, in its place. Explore your Things as they were." />
-			{selected.connection?.scope.dataPlane !== 'home' ? (
+			{selected.connection?.scope.dataPlane !== 'home' && selected.connection?.scope.dataPlane !== 'local-workspace' ? (
 				<Flex gap={2} wrap="wrap" role="group" aria-label="History location">
 					{(['home', 'selected'] as const).map((value) => (
 						<Button
@@ -548,19 +557,22 @@ export function HistoryPage() {
 }
 
 export function TimelineHost() {
-	const [target, setTarget] = React.useState<{ thingId: string; storage: TimelineStorage } | null>(null);
-	const user = useCurrentUser();
+	const [query] = useSearchParams();
+	const character = query.get('character');
+	const identity = React.useSyncExternalStore(subscribeWorkspaceStorage, workspaceStorageIdentity, () => '');
+	const [selectedTarget, setTarget] = React.useState<{ identity: string; thingId: string; storage: TimelineStorage } | null>(null);
+	const target = selectedTarget?.identity === identity ? selectedTarget : null;
 	const location = useLocation();
 	React.useEffect(() => setTarget(null), [location.key]);
 	React.useEffect(() => {
 		const open = (event: Event) => {
 			const id = (event as CustomEvent).detail?.thingId;
-			if (typeof id === 'string' && id.length > 0 && id.length <= 200)
-				setTarget({ thingId: id, storage: (event as CustomEvent).detail?.storage === 'home' ? 'home' : 'selected' });
+			if (identity && typeof id === 'string' && id.length > 0 && id.length <= 200)
+				setTarget({ identity, thingId: id, storage: (event as CustomEvent).detail?.storage === 'home' ? 'home' : 'selected' });
 		};
 		window.addEventListener(OPEN_HISTORY, open);
 		return () => window.removeEventListener(OPEN_HISTORY, open);
-	}, []);
+	}, [identity]);
 	return (
 		<Modal isOpen={target !== null} onClose={() => setTarget(null)} size="5xl" scrollBehavior="inside" isCentered>
 			<ModalOverlay zIndex={DRAWER_MODAL_OVERLAY_Z} />
@@ -569,12 +581,17 @@ export function TimelineHost() {
 				<ModalCloseButton />
 				<ModalBody pb={6} minW={0}>
 					{target ? (
-						<TimelineStorageProvider storage={target.storage}>
-							<TimelinePanel key={`${user?.id}:${target.thingId}:${target.storage}`} thingId={target.thingId} />
-						</TimelineStorageProvider>
+						<CharacterHistoryTarget actorId={character} storage={target.storage}>
+							<TimelinePanel key={`${identity}:${character}:${target.thingId}:${target.storage}`} thingId={target.thingId} />
+						</CharacterHistoryTarget>
 					) : null}
 				</ModalBody>
 			</ModalContent>
 		</Modal>
 	);
+}
+
+function CharacterHistoryTarget({actorId, storage, children}: {actorId:string|null;storage:TimelineStorage;children:React.ReactNode}) {
+	const content = <TimelineStorageProvider storage={storage}>{children}</TimelineStorageProvider>;
+	return actorId ? <CharacterContentScope actorId={actorId}><TimelineProvider>{content}</TimelineProvider></CharacterContentScope> : content;
 }

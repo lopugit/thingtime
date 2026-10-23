@@ -9,6 +9,7 @@ import {
 } from './app/api/utils/chatgpt/pluginCore.ts';
 import { THINGTIME_CAPABILITY_MANIFEST_PATH } from './app/api/utils/capabilities/thingtimeCapabilities.ts';
 import { ROBOTS_PATH, SITEMAP_PATH } from './app/api/utils/seo/sitemapCore.ts';
+import { draftPreviewCsp } from './scripts/csp.mjs';
 
 const publicDir = new URL('./dist', import.meta.url).pathname;
 const embedDir = new URL('./dist/embed', import.meta.url).pathname;
@@ -25,6 +26,12 @@ export default defineNitroConfig({
   ...(/^node[_-]middleware$/.test(process.env.NITRO_PRESET ?? '') ? { serveStatic: true } : {}),
   modules: ['workflow/nitro'],
   compatibilityDate: '2026-07-02',
+  // Node/packaged builds serve these files directly, without Vite or Vercel's
+  // header middleware. The draft document must retain its opaque origin here.
+  routeRules: {
+    '/draft-preview': { headers: { 'Content-Security-Policy': draftPreviewCsp, 'Cache-Control': 'no-store' } },
+    '/draft-preview/**': { headers: { 'Content-Security-Policy': draftPreviewCsp, 'Cache-Control': 'no-store' } }
+  },
   routes: {
     ...Object.fromEntries(apiRoutes.map((route) => [`/api/${route}`, apiHandler])),
     [THINGTIME_CAPABILITY_MANIFEST_PATH]: thingtimeCapabilitiesHandler,

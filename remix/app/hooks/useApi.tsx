@@ -1,3 +1,11 @@
+import { characterApi, withCharacterRequest } from '../local-workspace/characterRequest.client';
+import { useLocalApiView } from '../local-workspace/LocalApiView';
+import { parseTimelineVersionExport } from '../timeline/exportVersion';
+import { startNotificationHistorySync } from '../local-workspace/notifications.client';
+import { WorkspaceApiIdentity } from '../local-workspace/apiIdentity';
+import { useOfflineWorkspace, type WorkspaceUser } from './useWorkspaceUser';
+import { accountApi, startAccountWorkspaceSync, type AccountLocalView } from '../local-workspace/accountApi.client';
+import { anonymousApi } from '../local-workspace/api.client';
 import { hasLiveSourceBinding } from '~/schemas/liveSources';
 import { FILE_SYNC_REQUIREMENTS } from '~/fileSync/configuration';
 import { parseCloudFile, parseCloudFileCommit, type CloudFileCommit } from '~/fileSync/cloudFile';
@@ -9,17 +17,17 @@ import { timelineRequestScope, type TimelineStorage } from '../timeline/storageS
 import { draftRequest } from '~/drafts/draftClient';
 import type { BranchMergeRequest } from '../timeline/branchMerge';
 import { parseTimelineBranchLookup, parseTimelineBranchLookupResult, type TimelineBranchCommand } from '../timeline/branches';
-import type { TimelineNote, TimelineNoteCommand } from '../timeline/notes';
-import { parseTimelineVersionName, type TimelineVersionName, type TimelineVersionNameCommand } from '../timeline/versionNames';
+import type { TimelineNoteCommand } from '../timeline/notes';
+import type { TimelineVersionNameCommand } from '../timeline/versionNames';
 import { browserActionMinimumVersion } from '~/schemas/actionRequestPagination';
-import { parseTimelineEntry, type TimelineEvent, type TimelineReceipt, type TimelineSnapshot } from '~/timeline/contract';
+import type { TimelineEvent } from '~/timeline/contract';
 import { retainActionOutcomeRecovery, type ActionOutcomeRecovery } from '~/timeline/actionRecovery';
 import { enqueueActionOutcomeRecovery } from '~/timeline/localBackend.client';
 import type { TimelinePageRequest } from '~/timeline/sync';
 import { announceTimelineScopeChange } from '~/timeline/clientEvents';
 import { ensureFoundPostBrowserIdentity } from './foundPostIdentity.client';
-import { useCallback, useRef } from 'react';
-import { useCurrentUser } from './useCurrentUser';
+import { useCallback, useEffect, useRef } from 'react';
+import { useCurrentUser, useRootUser } from './useCurrentUser';
 import { useDataPlane } from './useDataPlane';
 import { EXPECTED_DATA_PLANE_HEADER } from '../utils/dataPlane';
 import { rootIdentity } from '../utils/rootIdentity';
@@ -99,22 +107,7 @@ const getJsonRequest = async (url: string, options?: ThingRequestOptions) => {
 
 // Build "?a=1&b=2" from an args object, skipping null/undefined/'' and
 // joining array values with commas (the feed API's csv convention).
-/** One saved version as the server exports it (`export=1`): the raw event and
- * receipt, its resolved restorable content, notes and 📌 name. Parsed leniently
- * so a later server may add fields; the entry itself is parsed exactly. */
-export type TimelineVersionExport = {
-  formatVersion: 1; exportedAt: string; event: TimelineEvent; receipt: TimelineReceipt;
-  content: TimelineSnapshot; notes: TimelineNote[]; name: TimelineVersionName | null;
-};
-const parseTimelineVersionExport = (input: unknown, ownerId: string, eventId: string): TimelineVersionExport => {
-  const data = (input as any)?.export;
-  if ((input as any)?.ok !== true || !data || typeof data !== 'object' || Array.isArray(data) || data.formatVersion !== 1) throw new Error('Invalid Timeline export');
-  const entry = parseTimelineEntry({ event: data.event, receipt: data.receipt });
-  if (entry.event.id !== eventId || entry.event.ownerId !== ownerId) throw new Error('Server exported a different version');
-  const name = data.name === undefined || data.name === null ? null : parseTimelineVersionName(data.name);
-  if (name && (name.eventId !== eventId || name.ownerId !== ownerId)) throw new Error('Server exported a different version');
-  return { ...data, event: entry.event, receipt: entry.receipt, notes: Array.isArray(data.notes) ? data.notes : [], name };
-};
+export type { TimelineVersionExport } from '../timeline/exportVersion';
 
 const toQuery = (args?: Record<string, unknown>) => {
   const params = new URLSearchParams();
@@ -127,14 +120,32 @@ const toQuery = (args?: Record<string, unknown>) => {
   return qs ? `?${qs}` : '';
 };
 
-export function useApi() {
-  const character = useCharacterScope();
-  const getJson = useCallback((url: string, options?: ThingRequestOptions) =>
-    getJsonRequest(url, { ...options, ...(character ? { characterId: character.id } : {}) }), [character]);
+/** An explicit actor selects the same fenced workspace used by CharacterScope;
+ * null selects the principal. It never supplies server delegation authority. */
+export function useApi(explicitView?: AccountLocalView, actorOverride?: WorkspaceUser | null) {
+  const inheritedView = useLocalApiView();
+  const view = explicitView ?? inheritedView;
+  const inheritedCharacter = useCharacterScope(), rootUser = useRootUser(), offlineWorkspace = useOfflineWorkspace();
+  const principalId = rootUser?.id || offlineWorkspace?.ownerId;
+  // The anonymous editor's display identity is not a delegated account.
+  const explicitActor = actorOverride?.localOnly ? null : actorOverride;
+  const selectedCharacter = explicitActor === undefined ? inheritedCharacter : explicitActor;
+  const character = selectedCharacter?.id === principalId ? undefined : selectedCharacter;
+  const getJson = useCallback(async (url: string, options?: ThingRequestOptions) => {
+    if (!character) return getJsonRequest(url, options);
+    return withCharacterRequest(async (signal, scope) => {
+      await requireThingtimeCapability('api.auth-characters', '1.0.0');
+      signal.throwIfAborted();
+      return getJsonRequest(url, { expectedActor: character.id, expectedDataPlane: scope.dataPlane, ...options, characterId: character.id, signal: options?.signal ? AbortSignal.any([signal, options.signal]) : signal });
+    });
+  }, [character]);
   const dataPlane = useDataPlane();
   const planeRef = useRef(dataPlane); planeRef.current = dataPlane;
-  const asyncFetcher = useAsyncFetcher();
-  const actionUser = useCurrentUser();
+  const asyncFetcher = useAsyncFetcher(character ?? null);
+  const inheritedUser = useCurrentUser();
+  const actionUser = explicitActor === undefined ? inheritedUser : explicitActor || rootUser;
+  const delegated = !!character && character.id !== rootUser?.id;
+  const actionPrincipal = useRef(principalId); actionPrincipal.current = principalId;
   const actionActor = useRef(actionUser?.id);
   actionActor.current = actionUser?.id;
 
@@ -166,6 +177,8 @@ export function useApi() {
       }, [asyncFetcher])
     },
     timeline: {
+      canChangeLocally: (_scope: {ownerId: string; dataPlane: string}) => false,
+      canExportLocally: (_scope: {ownerId: string; dataPlane: string}) => false,
       recoverOutcome: useCallback(async (scope: { ownerId: string; dataPlane: string }, recovery: ActionOutcomeRecovery, options?: { signal?: AbortSignal }) => {
         await requireThingtimeCapability('api.timeline', '1.16.0');
         return asyncFetcher.submit({ command: 'recover-action-outcome', recovery }, { action: `/api/v1/timeline${toQuery(timelineRequestScope(scope))}`, expectedActor: scope.ownerId, signal: options?.signal });
@@ -173,13 +186,13 @@ export function useApi() {
       componentBindings: useCallback(async (scope: { ownerId: string; dataPlane: string }, eventId: string, options?: { signal?: AbortSignal }) => {
         await requireThingtimeCapability('api.timeline', '1.10.0');
         return getJson(`/api/v1/timeline${toQuery({ ...timelineRequestScope(scope), eventId, components: 1 })}`, options);
-      }, []),
+      }, [getJson]),
       branchHead: useCallback(async (scope: { ownerId: string; dataPlane: string }, branchId: string, thingId: string, options?: { signal?: AbortSignal }) => {
         const lookup = parseTimelineBranchLookup({ branchId, thingId });
         await requireThingtimeCapability('api.timeline', '1.9.0');
         const result = await getJson(`/api/v1/timeline${toQuery({ ...timelineRequestScope(scope), ...lookup })}`, options);
         return parseTimelineBranchLookupResult(result, scope.ownerId, lookup);
-      }, []),
+      }, [getJson]),
       checkoutBranch: useCallback(async (scope: { ownerId: string; dataPlane: string }, request: BranchCheckoutRequest, options?: { signal?: AbortSignal }) => {
         await requireThingtimeCapability('api.timeline', '1.8.0');
         return asyncFetcher.submit(request, { action: `/api/v1/timeline${toQuery(timelineRequestScope(scope))}`, expectedActor: scope.ownerId, signal: options?.signal });
@@ -191,40 +204,40 @@ export function useApi() {
       entry: useCallback(async (scope: { ownerId: string; dataPlane: string }, eventId: string, options?: { signal?: AbortSignal }) => {
         await requireThingtimeCapability('api.timeline', scope.dataPlane === 'home' ? '1.6.0' : '1.2.0');
         return getJson(`/api/v1/timeline${toQuery({ ...timelineRequestScope(scope), eventId })}`, options);
-      }, []),
+      }, [getJson]),
       branches: useCallback(async (scope: { ownerId: string; dataPlane: string }, thingId: string, before?: number, options?: { signal?: AbortSignal }) => {
         await requireThingtimeCapability('api.timeline', scope.dataPlane === 'home' ? '1.6.0' : '1.2.0');
         return getJson(`/api/v1/timeline${toQuery({ ...timelineRequestScope(scope), thingId, branches: 1, before })}`, options);
-      }, []),
+      }, [getJson]),
       branch: useCallback(async (scope: { ownerId: string; dataPlane: string }, command: TimelineBranchCommand, options?: { signal?: AbortSignal }) => {
         await requireThingtimeCapability('api.timeline', scope.dataPlane === 'home' ? '1.6.0' : '1.2.0');
         return asyncFetcher.submit(command, { action: `/api/v1/timeline${toQuery(timelineRequestScope(scope))}`, expectedActor: scope.ownerId, signal: options?.signal });
       }, [asyncFetcher]),
       note: useCallback(async (scope: { ownerId: string; dataPlane: string }, command: TimelineNoteCommand, options?: { signal?: AbortSignal }) => {
-        await requireThingtimeCapability('api.timeline', '1.17.0');
+        await requireThingtimeCapability('api.timeline', '1.19.0');
         return asyncFetcher.submit(command, { action: `/api/v1/timeline${toQuery(timelineRequestScope(scope))}`, expectedActor: scope.ownerId, signal: options?.signal });
       }, [asyncFetcher]),
-      // Online only: there is no offline name queue, so the editor stays disabled without a verified connection.
+      // Remote transport only. The History name queue persists local edits and calls this after verified discovery.
       nameVersion: useCallback(async (scope: { ownerId: string; dataPlane: string }, command: TimelineVersionNameCommand, options?: { signal?: AbortSignal }) => {
-        await requireThingtimeCapability('api.timeline', '1.18.0');
+        await requireThingtimeCapability('api.timeline', '1.20.0');
         return asyncFetcher.submit(command, { action: `/api/v1/timeline${toQuery(timelineRequestScope(scope))}`, expectedActor: scope.ownerId, signal: options?.signal });
       }, [asyncFetcher]),
       // Strict gate: a 1.17 server answers `export=1&eventId=` with a plain entry read (HTTP 200), so the manifest is the only reliable signal.
-      exportVersion: useCallback(async (scope: { ownerId: string; dataPlane: string }, eventId: string, options?: { signal?: AbortSignal }) => {
-        await requireThingtimeCapability('api.timeline', '1.18.0');
+      exportVersion: useCallback(async (scope: { ownerId: string; dataPlane: string }, eventId: string, options?: { signal?: AbortSignal; adapter?: string }) => {
+        await requireThingtimeCapability('api.timeline', options?.adapter === 'theme-content' ? '1.21.0' : '1.18.0');
         const result = await getJson(`/api/v1/timeline${toQuery({ ...timelineRequestScope(scope), eventId, export: 1 })}`, options);
-        return parseTimelineVersionExport(result, scope.ownerId, eventId);
-      }, []),
+        return parseTimelineVersionExport(result, {ownerId: scope.ownerId, id: eventId}, true);
+      }, [getJson]),
       discover: useCallback(async (ownerId: string, options?: { signal?: AbortSignal; storage?: TimelineStorage }) => {
         const expectedDataPlane = planeRef.current;
         if (expectedDataPlane) await requireThingtimeCapability('api.mongodb-endpoint', '1.1.0');
         await requireThingtimeCapability('api.timeline', options?.storage === 'home' ? '1.6.0' : '1.0.0');
         return getJson(`/api/v1/timeline${toQuery({ ownerId, ...(options?.storage === 'home' ? { storage: 'home' } : {}) })}`, { ...options, expectedDataPlane });
-      }, []),
+      }, [getJson]),
       page: useCallback(async (scope: { ownerId: string; dataPlane: string }, request: TimelinePageRequest, options?: { signal?: AbortSignal }) => {
         await requireThingtimeCapability('api.timeline', request.related ? '1.13.0' : scope.dataPlane === 'home' ? '1.6.0' : '1.0.0');
         return getJson(`/api/v1/timeline${toQuery({ ...timelineRequestScope(scope), ...request, ...(request.related ? { related: 1 } : {}), ...(request.thingId === null ? { history: 1 } : {}) })}`, options);
-      }, []),
+      }, [getJson]),
       push: useCallback(async (scope: { ownerId: string; dataPlane: string }, event: TimelineEvent, options?: { signal?: AbortSignal }) => {
         await requireThingtimeCapability('api.timeline', scope.dataPlane === 'home' ? '1.6.0' : '1.0.0');
         return asyncFetcher.submit(event, { action: `/api/v1/timeline${toQuery(timelineRequestScope(scope))}`, expectedActor: scope.ownerId, signal: options?.signal });
@@ -238,7 +251,7 @@ export function useApi() {
     tiers: useCallback(async (options?: { signal?: AbortSignal }) => {
       await requireThingtimeCapability('api.tiers', '1.1.0');
       return getJson('/api/v1/tiers', options);
-    }, []),
+    }, [getJson]),
     login: useCallback(
       async (args) => {
         const { username, password, challenge, code } = args;
@@ -280,7 +293,7 @@ export function useApi() {
         )
       },
       twoFactor: {
-        get: useCallback(async () => getJson('/api/v1/auth/two-factor'), []),
+        get: useCallback(async () => getJson('/api/v1/auth/two-factor'), [getJson]),
         set: useCallback(async (args) => asyncFetcher.submit({ enabled: !!args?.enabled }, { action: '/api/v1/auth/two-factor' }), [asyncFetcher])
       },
       logout: useCallback(
@@ -335,7 +348,7 @@ export function useApi() {
       accounts: {
         // Listing changes no state, so no refreshRootData (pruning only rewrites
         // the roster cookie, never the active user).
-        list: useCallback(async () => getJson('/api/v1/auth/accounts'), []),
+        list: useCallback(async () => getJson('/api/v1/auth/accounts'), [getJson]),
         switch: useCallback(
           async (args) => {
 						await flushAttachmentDraftCleanups();
@@ -353,7 +366,7 @@ export function useApi() {
           },
           [asyncFetcher]
         ),
-        owned: useCallback(async () => getJson('/api/v1/auth/accounts/owned'), []),
+        owned: useCallback(async () => getJson('/api/v1/auth/accounts/owned'), [getJson]),
         assume: useCallback(
           async (args: { accountId: string }) => {
 						await flushAttachmentDraftCleanups();
@@ -366,7 +379,7 @@ export function useApi() {
       },
       // Accounts this browser is signed into on OTHER Thingtime deployments
       // (cross-deployment auto-login suggestions). Read-only.
-      accountHints: useCallback(async () => getJson('/api/v1/auth/account-hints'), []),
+      accountHints: useCallback(async () => getJson('/api/v1/auth/account-hints'), [getJson]),
       // Cross-origin session handoff (Login with Thingtime anywhere): mint a
       // code for a target origin / redeem one minted for THIS origin.
       ssoHandoff: useCallback(
@@ -382,7 +395,7 @@ export function useApi() {
         [asyncFetcher]
       ),
       passkeys: {
-        list: useCallback(async () => getJson('/api/v1/auth/passkeys'), []),
+        list: useCallback(async () => getJson('/api/v1/auth/passkeys'), [getJson]),
         registerOptions: useCallback(
           async (args: { password: string; signal?: AbortSignal }) => asyncFetcher.submit({ password: args?.password }, { action: '/api/v1/auth/passkeys/register-options', signal: args.signal }),
           [asyncFetcher]
@@ -430,19 +443,19 @@ export function useApi() {
       }
     },
     settings: {
-      lopuPrompt: useCallback(async (options?: { signal?: AbortSignal }) => getJson('/api/v1/settings/lopu-prompt', options), []),
+      lopuPrompt: useCallback(async (options?: { signal?: AbortSignal }) => getJson('/api/v1/settings/lopu-prompt', options), [getJson]),
       setLopuPrompt: useCallback(async (args: Record<string, unknown>) => {
         await requireThingtimeCapability('api.settings-lopu-prompt', '1.0.0');
         return asyncFetcher.submit(args, { action: '/api/v1/settings/lopu-prompt', errorContext: 'save Lopu instructions' });
       }, [asyncFetcher]),
       // Public so the GitHub conflict resolver can read the same ordered model
       // waterfall as the admin UI without inheriting an admin browser session.
-			prConflictResolverModelWaterfall: useCallback(async () => getJson('/api/v1/settings/pr-conflict-auto-resolver-model-waterfall'), []),
+			prConflictResolverModelWaterfall: useCallback(async () => getJson('/api/v1/settings/pr-conflict-auto-resolver-model-waterfall'), [getJson]),
 			// Lopu's stored chat defaults ({ model, effort, speed }); public GET, admin POST (admin.setLopuChatDefaults)
-			lopuChatDefaults: useCallback(async () => getJson('/api/v1/settings/lopu-chat-defaults'), []),
+			lopuChatDefaults: useCallback(async () => getJson('/api/v1/settings/lopu-chat-defaults'), [getJson]),
 			// Thingtime.LopuAccess ({ requireVerification, allowByoUnverified, starterCredits,
 			// lowBalanceWarningCredits }); public GET, admin POST (admin.setLopuAccess)
-			lopuAccess: useCallback(async (options?: { signal?: AbortSignal }) => getJson('/api/v1/settings/lopu-access', options), [])
+			lopuAccess: useCallback(async (options?: { signal?: AbortSignal }) => getJson('/api/v1/settings/lopu-access', options), [getJson])
     },
     // the `ai-model` catalog Lopu thinks with (public; { models, defaults, providers }
     // + for a signed-in viewer their Secure Vault providers as metadata only:
@@ -455,14 +468,14 @@ export function useApi() {
           catch { return { ...result, vaultProviders: result.vaultProviders.map(({ planChatEligible: _hint, ...provider }: any) => provider) }; }
         }
         return result;
-      }, []),
+      }, [getJson]),
       complete: useCallback(async (input: AiCompletionInput) => {
         for (const [feature, minimum] of Object.entries(AI_COMPLETION_REQUIREMENTS)) await requireThingtimeCapability(feature, minimum);
         return asyncFetcher.submit(input, { action: '/api/v1/ai/complete', errorContext: 'complete text with your selected AI connections' });
       }, [asyncFetcher])
     },
     admin: {
-      aiModels: useCallback(async () => getJson('/api/v1/admin/ai/models'), []),
+      aiModels: useCallback(async () => getJson('/api/v1/admin/ai/models'), [getJson]),
       // { id, enabled } toggles one catalog model; { seed: true } re-runs the catalog upsert;
       // { probe: true } re-checks the provider keys (fresh providers.<p>.verified + the re-projected list)
       setAiModel: useCallback(
@@ -499,7 +512,7 @@ export function useApi() {
       lopuAccounts: useCallback(
         async (args?: { q?: string; cursor?: string; limit?: number }, options?: { signal?: AbortSignal }) =>
           getJson(`/api/v1/admin/lopu/accounts${toQuery(args)}`, options),
-        []
+        [getJson]
       ),
       // grant / adjust credits ({ userId, credits, entry, reason }), approve a
       // request ({ ...same, requestId }) or decline one ({ requestId, decline: true, reason })
@@ -514,7 +527,7 @@ export function useApi() {
         }) => asyncFetcher.submit(args, { action: '/api/v1/admin/lopu/credits', errorContext: 'update Lopu credits' }),
         [asyncFetcher]
       ),
-      integrations: useCallback(async () => getJson('/api/v1/admin/integrations'), []),
+      integrations: useCallback(async () => getJson('/api/v1/admin/integrations'), [getJson]),
       integrationAction: useCallback(
         async (args: Record<string, unknown>) =>
           asyncFetcher.submit(args, { action: '/api/v1/admin/integrations', errorContext: 'manage integration policy' }),
@@ -522,11 +535,11 @@ export function useApi() {
       ),
       ciControl: useCallback(
 				async (args?: { limit?: number }, options?: { signal?: AbortSignal }) => getJson(`/api/v1/admin/ci${toQuery(args)}`, options),
-        []
+        [getJson]
       ),
-      ciCredentials: useCallback(async (options?: { signal?: AbortSignal }) => getJson('/api/v1/admin/ci/credentials', options), []),
-      ciFeatureStacks: useCallback(async (options?: { signal?: AbortSignal }) => getJson('/api/v1/admin/ci/stacks', options), []),
-      ciStackChat: useCallback(async (runId: string) => getJson(`/api/v1/admin/ci/stacks/chat${toQuery({ runId })}`), []),
+      ciCredentials: useCallback(async (options?: { signal?: AbortSignal }) => getJson('/api/v1/admin/ci/credentials', options), [getJson]),
+      ciFeatureStacks: useCallback(async (options?: { signal?: AbortSignal }) => getJson('/api/v1/admin/ci/stacks', options), [getJson]),
+      ciStackChat: useCallback(async (runId: string) => getJson(`/api/v1/admin/ci/stacks/chat${toQuery({ runId })}`), [getJson]),
       sendCiStackQuestion: useCallback(async (args: Record<string, unknown>) => asyncFetcher.submit(args, { action: '/api/v1/admin/ci/stacks/chat', errorContext: 'ask Lopu about a stack run' }), [asyncFetcher]),
       mutateCiFeatureStack: useCallback(
         async (args: Record<string, unknown>) =>
@@ -564,7 +577,7 @@ export function useApi() {
         },
         [asyncFetcher]
       ),
-      rateLimits: useCallback(async () => getJson('/api/v1/admin/rate-limits'), []),
+      rateLimits: useCallback(async () => getJson('/api/v1/admin/rate-limits'), [getJson]),
       setRateLimits: useCallback(async (endpoints) => asyncFetcher.submit({ endpoints }, { action: '/api/v1/admin/rate-limits' }), [asyncFetcher]),
 			// A private, cursor-paged projection for the Developer → Deployment
 			// peers explorer. This intentionally differs from /api/v1/peers,
@@ -572,9 +585,9 @@ export function useApi() {
 			peers: useCallback(
 				async (args?: { cursor?: string; limit?: number }, options?: { signal?: AbortSignal }) =>
 					getJson(`/api/v1/admin/peers${toQuery(args)}`, options),
-				[]
+				[getJson]
 			),
-      users: useCallback(async (args) => getJson(`/api/v1/admin/users${toQuery(args)}`), []),
+      users: useCallback(async (args) => getJson(`/api/v1/admin/users${toQuery(args)}`), [getJson]),
       setAdmin: useCallback(
         async (args) => asyncFetcher.submit({ userId: args?.userId, admin: args?.admin }, { action: '/api/v1/admin/set-admin' }),
         [asyncFetcher]
@@ -590,7 +603,7 @@ export function useApi() {
           ),
         [asyncFetcher]
       ),
-      moderation: useCallback(async () => getJson('/api/v1/admin/moderation'), []),
+      moderation: useCallback(async () => getJson('/api/v1/admin/moderation'), [getJson]),
       moderationReview: useCallback(
         async (args) =>
           asyncFetcher.submit(
@@ -607,10 +620,10 @@ export function useApi() {
       migrations: useCallback(async () => {
         await requireThingtimeCapability('api.admin-migrations', '1.4.1');
         return getJson('/api/v1/admin/migrations');
-      }, []),
+      }, [getJson]),
 			migrationDiagnostic: useCallback(
 				async (args, options?: { signal?: AbortSignal }) => getJson(`/api/v1/admin/migrations/diagnostic${toQuery({ id: args?.id })}`, options),
-				[]
+				[getJson]
 			),
       migrationsRun: useCallback(
         async (args) => {
@@ -628,12 +641,12 @@ export function useApi() {
       usersOverview: useCallback(
         async (args?: { q?: string; limit?: number; cursor?: string }, options?: { signal?: AbortSignal }) =>
           getJson(`/api/v1/admin/users/overview${toQuery(args)}`, options),
-        []
+        [getJson]
       ),
       apps: useCallback(
         async (args?: { q?: string; limit?: number; cursor?: string }, options?: { signal?: AbortSignal }) =>
           getJson(`/api/v1/admin/apps${toQuery(args)}`, options),
-        []
+        [getJson]
       ),
       revokeApp: useCallback(
         async (args: { clientId: string; revoked: boolean }) =>
@@ -642,7 +655,7 @@ export function useApi() {
       ),
       subscription: useCallback(
         async (args: { subjectType: 'user' | 'app'; subjectId: string }) => getJson(`/api/v1/admin/subscriptions${toQuery(args)}`),
-        []
+        [getJson]
       ),
       setSubscription: useCallback(
         async (args: {
@@ -656,7 +669,7 @@ export function useApi() {
         }) => asyncFetcher.submit(args, { action: '/api/v1/admin/subscriptions' }),
         [asyncFetcher]
       ),
-      tiers: useCallback(async () => getJson('/api/v1/admin/tiers'), []),
+      tiers: useCallback(async () => getJson('/api/v1/admin/tiers'), [getJson]),
       setTier: useCallback(
         async (args: {
           action: 'create' | 'update-draft' | 'create-version' | 'publish' | 'archive';
@@ -667,7 +680,7 @@ export function useApi() {
       ),
       links: useCallback(
         async (args: { userId?: string; targetId?: string; linkKind?: 'account' | 'app' }) => getJson(`/api/v1/admin/links${toQuery(args)}`),
-        []
+        [getJson]
       ),
       setLink: useCallback(
         async (args: { action: 'add' | 'remove'; linkKind: 'account' | 'app'; userId: string; targetId: string }) =>
@@ -679,7 +692,7 @@ export function useApi() {
     // catalog is v1.ai.models() above.
     lopu: {
       chats: {
-        list: useCallback(async (options?: { signal?: AbortSignal }) => getJson('/api/v1/lopu/chats', options), []),
+        list: useCallback(async (options?: { signal?: AbortSignal }) => getJson('/api/v1/lopu/chats', options), [getJson]),
         // providerId = one of the viewer's Secure Vault providers (v1.ai.models()
         // → vaultProviders[].id); null clears it back to the catalog model
         create: useCallback(
@@ -730,12 +743,12 @@ export function useApi() {
       // the viewer's Lopu account (verified flag, credits, usage — design note
       // "Lopu verified access, usage accounting and credits" §3); session only
       account: {
-        get: useCallback(async (options?: { signal?: AbortSignal }) => getJson('/api/v1/lopu/account', options), []),
+        get: useCallback(async (options?: { signal?: AbortSignal }) => getJson('/api/v1/lopu/account', options), [getJson]),
         // ledger rows + the usage rows of the same window, newest first, cursor-paged (limit ≤ 100)
         history: useCallback(
           async (args?: { cursor?: string | null; limit?: number }, options?: { signal?: AbortSignal }) =>
             getJson(`/api/v1/lopu/account/history${toQuery({ cursor: args?.cursor ?? undefined, limit: args?.limit })}`, options),
-          []
+          [getJson]
         ),
         // { credits: 0.5..1000, note? } — one pending request at a time (409)
         requestTopup: useCallback(
@@ -746,7 +759,7 @@ export function useApi() {
       }
     },
     mongodb: {
-      capabilities: useCallback(async () => getJson('/api/v1/mongodb/raw-results'), []),
+      capabilities: useCallback(async () => getJson('/api/v1/mongodb/raw-results'), [getJson]),
       rawResults: useCallback(
         async (args, options?: { signal?: AbortSignal }) =>
           asyncFetcher.submit(args, { action: '/api/v1/mongodb/raw-results', signal: options?.signal }),
@@ -755,7 +768,7 @@ export function useApi() {
       // session data-endpoint override (thin-frontend mode): which MongoDB the
       // data plane uses for this browser session
       endpoint: {
-        get: useCallback(async () => getJson('/api/v1/mongodb/endpoint'), []),
+        get: useCallback(async () => getJson('/api/v1/mongodb/endpoint'), [getJson]),
         set: useCallback(
           async (args?: { url?: string; savedId?: string; reset?: boolean }) => {
             const body = args?.savedId ? { savedId: args.savedId } : args?.reset ? { reset: true } : { url: args?.url };
@@ -772,7 +785,7 @@ export function useApi() {
       },
       // the signed-in user's saved endpoints (persisted server-side)
       endpoints: {
-        list: useCallback(async () => getJson('/api/v1/mongodb/endpoints'), []),
+        list: useCallback(async () => getJson('/api/v1/mongodb/endpoints'), [getJson]),
         add: useCallback(
           async (args?: { name?: string; url?: string }) =>
             asyncFetcher.submit({ name: args?.name, url: args?.url }, { action: '/api/v1/mongodb/endpoints' }),
@@ -792,7 +805,7 @@ export function useApi() {
     },
     // cross-deployment account links (Settings → Linked deployments)
     deploymentLinks: {
-      list: useCallback(async () => getJson('/api/v1/deployment-links'), []),
+      list: useCallback(async () => getJson('/api/v1/deployment-links'), [getJson]),
       link: useCallback(
         async (args?: {
           baseUrl?: string;
@@ -832,6 +845,10 @@ export function useApi() {
       )
     },
 		attachments: {
+			saveLocalFile: useCallback(async (_input: { requestId: string; name: string; contentType: string; bytes: Uint8Array | Blob; folderId?: string | null; purpose?: 'file' | 'post' | 'comment' }, _options?: { signal?: AbortSignal }): Promise<any> => { throw new Error('Local file bytes require a local workspace; account uploads use the existing upload service'); }, []),
+			moveLocalFile: useCallback(async (_input: { id: string; folderId: string | null }): Promise<any> => { throw new Error('Local file moves require an active workspace'); }, []),
+			readLocalFile: useCallback(async (_input: { id: string }, _options?: { signal?: AbortSignal; format?: 'blob' }): Promise<any> => { throw new Error('Local file bytes are unavailable in this account workspace'); }, []),
+
 			// "download all" ZIP manifests: what a post/folder/media archive would
 			// hold (count, bytes, paths) without streaming any bytes. The download
 			// itself is a plain navigation to attachmentArchiveUrl().
@@ -839,7 +856,7 @@ export function useApi() {
 				manifest: useCallback(async (args: { id: string; key?: string; sharedRoot?: string }, options?: { signal?: AbortSignal }) => {
 					await requireThingtimeCapability('api.attachment-archive', ATTACHMENT_ARCHIVE_REQUIREMENTS['api.attachment-archive']);
 					return getJson(attachmentArchiveUrl(args.id, { key: args.key, sharedRoot: args.sharedRoot, manifest: true }), options);
-				}, [])
+				}, [getJson])
 			},
 			uploads: {
 				create: useCallback(
@@ -984,9 +1001,9 @@ export function useApi() {
       list: useCallback(
         async (args?: { q?: string; mine?: boolean; sort?: 'new' | 'members' | 'active'; cursor?: string; limit?: number; anon?: 1 }) =>
           getJson(`/api/v1/subspaces${toQuery({ q: args?.q, mine: args?.mine ? 1 : undefined, sort: args?.sort, cursor: args?.cursor, limit: args?.limit, anon: args?.anon })}`),
-        []
+        [getJson]
       ),
-      get: useCallback(async (args: { slug?: string; id?: string }) => getJson(`/api/v1/subspaces/get${toQuery(args)}`), []),
+      get: useCallback(async (args: { slug?: string; id?: string }) => getJson(`/api/v1/subspaces/get${toQuery(args)}`), [getJson]),
       create: useCallback(async (body: Record<string, unknown>) => asyncFetcher.submit(body, { action: '/api/v1/subspaces', errorContext: 'create the subspace' }), [asyncFetcher]),
       update: useCallback(
         async (body: Record<string, unknown>) => {
@@ -1011,7 +1028,7 @@ export function useApi() {
               approvalRequests: args?.approvalRequests ? 1 : undefined
             })}`
           ),
-        []
+        [getJson]
       ),
       // actions: add | remove | approve | unapprove | ban (reason shown to the
       // user, banDays, and a private mod-log `note`) | unban | role |
@@ -1044,7 +1061,7 @@ export function useApi() {
           asyncFetcher.submit(body, { action: '/api/v1/subspaces/moderate', errorContext: 'moderate the post' }),
         [asyncFetcher]
       ),
-      modlog: useCallback(async (args: { slug?: string; id?: string; cursor?: string; limit?: number }) => getJson(`/api/v1/subspaces/modlog${toQuery(args)}`), []),
+      modlog: useCallback(async (args: { slug?: string; id?: string; cursor?: string; limit?: number }) => getJson(`/api/v1/subspaces/modlog${toQuery(args)}`), [getJson]),
       // report a post (or a comment — resolved to its root post) to the
       // subspace's mods: reason (a rule title / removal-reason id / free
       // text, ≤120) + optional note (≤500); a repeat by the same reporter
@@ -1057,7 +1074,7 @@ export function useApi() {
       // resolved, offset cursor); moderator-only
       reports: useCallback(
         async (args: { slug?: string; id?: string; status?: 'open' | 'resolved'; cursor?: string; limit?: number }) => getJson(`/api/v1/subspaces/reports${toQuery(args)}`),
-        []
+        [getJson]
       ),
       // dismiss every open report on a post (the post stays); remove /
       // approve through `moderate` settle them implicitly
@@ -1069,7 +1086,7 @@ export function useApi() {
       feed: useCallback(
         async (args: { slug?: string; id?: string; sort?: string; range?: string; cursor?: string; limit?: number; includeRemoved?: boolean }) =>
           getJson(`/api/v1/subspaces/feed${toQuery({ ...args, includeRemoved: args?.includeRemoved ? 1 : undefined })}`),
-        []
+        [getJson]
       ),
       // owner-only lifecycle: hand the subspace to an active member / delete
       // it (posts survive as plain posts) after retyping the slug
@@ -1085,16 +1102,21 @@ export function useApi() {
       )
     },
     things: {
+      fork: useCallback(async (args: { id: string; key?: string }) => {
+        await requireThingtimeCapability('api.things-fork', '1.6.0');
+        return asyncFetcher.submit({ id: args.id, key: args.key }, { action: '/api/v1/things/fork' });
+      }, [asyncFetcher]),
       export: useCallback(async (args: { ids: string[]; key?: string; includeChildren?: boolean; includeDependencies?: boolean; includeFiles?: boolean; includeLinks?: boolean }, options?: { signal?: AbortSignal }) => {
         return withExportDeadline(async signal => {
-          await requireThingtimeCapability('api.things-export', '1.15.0');
+          await requireThingtimeCapability('api.things-export', '1.17.0');
           if (args.includeFiles !== false) await requireThingtimeCapability('api.attachment-content', '1.11.0');
           signal.throwIfAborted();
           return asyncFetcher.submit(args, { action: '/api/v1/things/export', signal, errorContext: 'export Things' });
         }, options?.signal);
       }, [asyncFetcher]),
-      import: useCallback(async (args: { manifest: unknown; files?: Record<string, string>; folderId?: string | null }, options?: { signal?: AbortSignal }) => {
-        await requireThingtimeCapability('api.things-import', '1.11.0');
+      import: useCallback(async (args: { manifest: unknown; files?: Record<string, string>; localFiles?: Map<string, Uint8Array | Blob>; folderId?: string | null }, options?: { signal?: AbortSignal }) => {
+        if (args.localFiles !== undefined) throw new Error('Local file bytes require the local workspace importer; they cannot be sent to an account endpoint');
+        await requireThingtimeCapability('api.things-import', '1.13.0');
         return asyncFetcher.submit(args, { action: '/api/v1/things/import', signal: options?.signal, errorContext: 'import Things' });
       }, [asyncFetcher]),
       // scope: 'subspaces' narrows the page to posts from the viewer's ACTIVE
@@ -1102,10 +1124,10 @@ export function useApi() {
       feed: useCallback(async (args) => {
         await requireThingtimeCapability('api.things-feed', '1.8.0');
         return getJson(`/api/v1/things/feed${toQuery(args)}`);
-      }, []),
+      }, [getJson]),
       // the explore board — public trending posts; `anon: 1` keeps logged-out
       // requests edge-cacheable, mirroring feed
-      trending: useCallback(async (args?: { anon?: 1 }) => getJson(`/api/v1/things/trending${toQuery(args)}`), []),
+      trending: useCallback(async (args?: { anon?: 1 }) => getJson(`/api/v1/things/trending${toQuery(args)}`), [getJson]),
 			reveal: useCallback(
 				async (args: { thingId: string; reference: string; password: string }, options?: { signal?: AbortSignal }) =>
 					asyncFetcher.submit(
@@ -1121,21 +1143,21 @@ export function useApi() {
       // only on the URL). `mode` is meaningless without conditions, so the GET
       // URL drops it to keep cache keys stable.
       search: useCallback(
-        async (args) => {
-          const { conditions, mode, ...rest } = args || {};
+        async (args, options?: { signal?: AbortSignal; onRefresh?: (result: any) => void; onError?: (error: unknown) => void }) => {
+          const { conditions, mode, workspace: _workspace, ...rest } = args || {};
           if (rest.near !== undefined) await requireThingtimeCapability('api.things-search', '1.3.0');
           if (rest.anon && !conditions && rest.near === undefined) {
             return getJson(`/api/v1/things/search${toQuery(rest)}`);
           }
-          return asyncFetcher.submit(args || {}, { action: '/api/v1/things/search' });
+          return asyncFetcher.submit({ ...rest, conditions, mode }, { action: '/api/v1/things/search', signal: options?.signal });
         },
-        [asyncFetcher]
+        [asyncFetcher, getJson]
       ),
       userPosts: useCallback(async (args) => {
         await requireThingtimeCapability('api.things-user', '1.7.0');
         await requireThingtimeCapability('api.attachment-content', '1.8.0');
         return getJson(`/api/v1/things/user${toQuery(args)}`);
-      }, []),
+      }, [getJson]),
 			// commentSort: 'top' | 'new' | 'old' re-orders the shipped comment page
 			// of the post projection (PostCard's Top / New / Old menu); omit for
 			// the default page. key: a hidden thing's secret link key (?key= on
@@ -1150,7 +1172,7 @@ export function useApi() {
           await requireThingtimeCapability('api.attachment-content', '1.9.0');
           return getJson(`/api/v1/things${toQuery({ id: args?.id, commentProjection: args?.commentProjection ? true : undefined, commentSort: args?.commentSort, key: args?.key, sharedRoot: args?.sharedRoot })}`, { ...options, expectedDataPlane });
         },
-				[]
+				[getJson]
 			),
       list: useCallback(
         async (args, options?: ThingRequestOptions) => {
@@ -1172,12 +1194,12 @@ export function useApi() {
             })}`, { ...options, expectedDataPlane }
           );
         },
-        []
+        [getJson]
       ),
       archive: useCallback(async (args: { id: string }, options?: { signal?: AbortSignal }) => {
         await requireThingtimeCapability('api.things', '1.17.0');
         return getJson(`/api/v1/things${toQuery({ id: args.id, archive: true })}`, options);
-      }, []),
+      }, [getJson]),
       update: useCallback(
         async (args, options?: ThingRequestOptions) => {
           const expectedDataPlane = options?.expectedDataPlane === undefined ? planeRef.current : options.expectedDataPlane;
@@ -1257,7 +1279,7 @@ export function useApi() {
           ),
         [asyncFetcher]
       ),
-      reactionsRecent: useCallback(async () => getJson('/api/v1/things/reactions-recent'), []),
+      reactionsRecent: useCallback(async () => getJson('/api/v1/things/reactions-recent'), [getJson]),
       create: useCallback(
         async (args, options?: ThingRequestOptions) => {
           const expectedDataPlane = options?.expectedDataPlane === undefined ? planeRef.current : options.expectedDataPlane;
@@ -1296,7 +1318,7 @@ export function useApi() {
         return asyncFetcher.submit({ id: args?.id }, { action: '/api/v1/things/save' });
       }, [asyncFetcher]),
       // the viewer's Saved library — posts they bookmarked, newest-saved-first
-      saved: useCallback(async (args?: { cursor?: string; limit?: number }) => getJson(`/api/v1/things/saved${toQuery(args)}`), []),
+      saved: useCallback(async (args?: { cursor?: string; limit?: number }) => getJson(`/api/v1/things/saved${toQuery(args)}`), [getJson]),
       // cast/move/remove the caller's vote on a visible poll thing
       vote: useCallback(
         async (args: { id: string; optionIndex: number }) => {
@@ -1355,7 +1377,7 @@ export function useApi() {
     },
     // "Login with Thingtime" grants — the user's connected apps
     oauth: {
-      grants: useCallback(async () => getJson('/api/v1/oauth/grants'), []),
+      grants: useCallback(async () => getJson('/api/v1/oauth/grants'), [getJson]),
       revokeGrant: useCallback(
         async (args) => asyncFetcher.submit({ clientId: args?.clientId }, { action: '/api/v1/oauth/grants/revoke' }),
         [asyncFetcher]
@@ -1364,8 +1386,8 @@ export function useApi() {
     // third-party app connections (Reddit, YouTube, Mastodon, …) — link
     // external accounts, browse their feeds, manage AI feed filters
     connections: {
-      providers: useCallback(async () => getJson('/api/v1/connections/providers'), []),
-      list: useCallback(async () => getJson('/api/v1/connections'), []),
+      providers: useCallback(async () => getJson('/api/v1/connections/providers'), [getJson]),
+      list: useCallback(async () => getJson('/api/v1/connections'), [getJson]),
       connect: useCallback(
         async (args) => asyncFetcher.submit({ provider: args?.provider, fields: args?.fields }, { action: '/api/v1/connections' }),
         [asyncFetcher]
@@ -1378,7 +1400,7 @@ export function useApi() {
         [asyncFetcher]
       ),
       // the Thingtime-managed virtual YouTube subscription list
-      youtubeSearch: useCallback(async (args) => getJson(`/api/v1/connections/youtube/search${toQuery({ q: args?.q })}`), []),
+      youtubeSearch: useCallback(async (args) => getJson(`/api/v1/connections/youtube/search${toQuery({ q: args?.q })}`), [getJson]),
       youtubeChannels: useCallback(
         async (args) =>
           asyncFetcher.submit(
@@ -1398,9 +1420,9 @@ export function useApi() {
               deepen: args?.deepen
             })}`
           ),
-        []
+        [getJson]
       ),
-      filters: useCallback(async () => getJson('/api/v1/connections/filters'), []),
+      filters: useCallback(async () => getJson('/api/v1/connections/filters'), [getJson]),
       saveFilter: useCallback(
         async (args) =>
           asyncFetcher.submit(
@@ -1416,8 +1438,8 @@ export function useApi() {
     },
     // first-party browsing of app namespaces (what has each app stored for me)
     apps: {
-      list: useCallback(async () => getJson('/api/v1/apps'), []),
-      storage: useCallback(async (args: { clientId: string }) => getJson(`/api/v1/apps/storage${toQuery({ clientId: args?.clientId })}`), []),
+      list: useCallback(async () => getJson('/api/v1/apps'), [getJson]),
+      storage: useCallback(async (args: { clientId: string }) => getJson(`/api/v1/apps/storage${toQuery({ clientId: args?.clientId })}`), [getJson]),
       setStorage: useCallback(
         async (args: {
           clientId: string;
@@ -1429,7 +1451,7 @@ export function useApi() {
         }) => asyncFetcher.submit(args, { action: '/api/v1/apps/storage' }),
         [asyncFetcher]
       ),
-      dataSummary: useCallback(async () => getJson('/api/v1/apps/data-summary'), []),
+      dataSummary: useCallback(async () => getJson('/api/v1/apps/data-summary'), [getJson]),
       dataShared: useCallback(
         async (args) =>
           getJson(
@@ -1440,7 +1462,7 @@ export function useApi() {
               limit: args?.limit
             })}`
           ),
-        []
+        [getJson]
       ),
       dataDeleteAll: useCallback(
         async (args) => asyncFetcher.submit({ appId: args?.appId }, { action: '/api/v1/apps/data/delete-all' }),
@@ -1449,7 +1471,7 @@ export function useApi() {
     },
     groups: {
       // audience groups (custom visibility) + the picker's prefill sources
-      list: useCallback(async () => getJson('/api/v1/groups'), []),
+      list: useCallback(async () => getJson('/api/v1/groups'), [getJson]),
       create: useCallback(
         async (args) => asyncFetcher.submit({ name: args?.name, memberIds: args?.memberIds }, { action: '/api/v1/groups' }),
         [asyncFetcher]
@@ -1470,12 +1492,12 @@ export function useApi() {
         async (args) => asyncFetcher.submit({ id: args?.id }, { action: '/api/v1/groups', method: 'DELETE' }),
         [asyncFetcher]
       ),
-      audienceSources: useCallback(async () => getJson('/api/v1/groups/audience-sources'), [])
+      audienceSources: useCallback(async () => getJson('/api/v1/groups/audience-sources'), [getJson])
     },
     tokens: {
       // personal access tokens (Settings → Token minter) — the mint response
       // carries the token string exactly once
-      list: useCallback(async () => getJson('/api/v1/tokens'), []),
+      list: useCallback(async () => getJson('/api/v1/tokens'), [getJson]),
       mint: useCallback(
         async (args) =>
           asyncFetcher.submit(
@@ -1495,28 +1517,36 @@ export function useApi() {
       revoke: useCallback(async (args) => asyncFetcher.submit({ id: args?.id }, { action: '/api/v1/tokens/revoke' }), [asyncFetcher])
     },
     algorithms: {
-      search: useCallback(async (args = {}) => {
+      search: useCallback(async (args = {}, options?: { signal?: AbortSignal; expectedActor?: string; expectedDataPlane?: string }) => {
+        if (options?.expectedActor) await requireThingtimeCapability('api.algorithms-sync', '1.2.0');
         await requireThingtimeCapability('api.algorithms-search', '1.0.0');
-        return getJson(`/api/v1/algorithms/search${toQuery(args)}`);
-      }, []),
-      list: useCallback(async () => getJson('/api/v1/algorithms'), []),
+        return getJson(`/api/v1/algorithms/search${toQuery(args)}`, options);
+      }, [getJson]),
+      list: useCallback(async () => getJson('/api/v1/algorithms'), [getJson]),
       // share-link preview (identity + training size only, never weights)
       getShared: useCallback(
-        async (args) => getJson(`/api/v1/algorithms/shared?id=${encodeURIComponent(args?.id || '')}`),
-        []
+        async (args, options?: { signal?: AbortSignal; expectedActor?: string; expectedDataPlane?: string }) => {
+          if (options?.expectedActor) await requireThingtimeCapability('api.algorithms-sync', '1.2.0');
+          return getJson(`/api/v1/algorithms/shared?id=${encodeURIComponent(args?.id || '')}`, options);
+        },
+        [getJson]
       ),
       create: useCallback(
-        async (args) => {
+        async (args, options?: { signal?: AbortSignal; expectedActor?: string; expectedDataPlane?: string }) => {
+          if (options?.expectedActor) await requireThingtimeCapability('api.algorithms-sync', '1.2.0');
           const { name, emoji, branchFrom, events, description } = args;
           if (description !== undefined) await requireThingtimeCapability('api.algorithms', '1.1.0');
-          return asyncFetcher.submit({ name, emoji, branchFrom, events, description }, { action: '/api/v1/algorithms' });
+          options?.signal?.throwIfAborted();
+          return asyncFetcher.submit({ name, emoji, branchFrom, events, description }, { action: '/api/v1/algorithms', signal: options?.signal, expectedActor: options?.expectedActor, expectedDataPlane: options?.expectedDataPlane });
         },
         [asyncFetcher]
       ),
       update: useCallback(
-        async (args) => {
+        async (args, options?: { signal?: AbortSignal; expectedActor?: string; expectedDataPlane?: string }) => {
+          if (options?.expectedActor) await requireThingtimeCapability('api.algorithms-sync', '1.2.0');
           if (args?.listed !== undefined || args?.description !== undefined) await requireThingtimeCapability('api.algorithms-update', '1.1.0');
-          return asyncFetcher.submit({ id: args?.id, name: args?.name, emoji: args?.emoji, shared: args?.shared, listed: args?.listed, description: args?.description }, { action: '/api/v1/algorithms/update' });
+          options?.signal?.throwIfAborted();
+          return asyncFetcher.submit({ id: args?.id, name: args?.name, emoji: args?.emoji, shared: args?.shared, listed: args?.listed, description: args?.description }, { action: '/api/v1/algorithms/update', signal: options?.signal, expectedActor: options?.expectedActor, expectedDataPlane: options?.expectedDataPlane });
         },
         [asyncFetcher]
       ),
@@ -1546,9 +1576,9 @@ export function useApi() {
     },
     social: {
       // counts + viewer relationship state for a profile ({ username | userId })
-      relationships: useCallback(async (args) => getJson(`/api/v1/users/relationships${toQuery(args)}`), []),
+      relationships: useCallback(async (args) => getJson(`/api/v1/users/relationships${toQuery(args)}`), [getJson]),
       // paged lists: { username | userId, type: followers|following|friends|requests, limit, before }
-      connections: useCallback(async (args) => getJson(`/api/v1/users/connections${toQuery(args)}`), []),
+      connections: useCallback(async (args) => getJson(`/api/v1/users/connections${toQuery(args)}`), [getJson]),
       // toggle (or explicitly set with follow: boolean) a one-way follow
       follow: useCallback(
         async (args) =>
@@ -1566,22 +1596,22 @@ export function useApi() {
       list: useCallback(async (args?: Record<string, unknown>) => {
         if (args?.history) await requireThingtimeCapability('api.notifications-list', '1.4.0');
         return getJson(`/api/v1/notifications${toQuery(args)}`);
-      }, []),
+      }, [getJson]),
       markRead: useCallback(
 				async (args) => asyncFetcher.submit(args?.all ? { all: true } : { ids: args?.ids }, { action: '/api/v1/notifications/read' }),
         [asyncFetcher]
       ),
       settings: {
-        get: useCallback(async () => getJson('/api/v1/notifications/settings'), []),
+        get: useCallback(async () => getJson('/api/v1/notifications/settings'), [getJson]),
 				set: useCallback(async (args) => asyncFetcher.submit({ prefs: args?.prefs }, { action: '/api/v1/notifications/settings' }), [asyncFetcher])
       }
     },
     profile: {
-      get: useCallback(async (args) => getJson(`/api/v1/users/profile${toQuery(args)}`), []),
+      get: useCallback(async (args) => getJson(`/api/v1/users/profile${toQuery(args)}`), [getJson]),
       // day-bucketed viewer-visible thing counts for the profile heatmap ({ username })
-      activity: useCallback(async (args) => getJson(`/api/v1/users/activity${toQuery(args)}`), []),
+      activity: useCallback(async (args) => getJson(`/api/v1/users/activity${toQuery(args)}`), [getJson]),
       // public people search (the /search People rail)
-      search: useCallback(async (args) => getJson(`/api/v1/users/search${toQuery(args)}`), []),
+      search: useCallback(async (args) => getJson(`/api/v1/users/search${toQuery(args)}`), [getJson]),
       update: useCallback(
         async (args) => {
 					const body: Record<string, unknown> = {};
@@ -1605,15 +1635,15 @@ export function useApi() {
       )
     },
     themes: {
-      list: useCallback(async () => getJson('/api/v1/themes'), []),
-      getShared: useCallback(async (args) => getJson(`/api/v1/themes/shared?id=${encodeURIComponent(args?.id || '')}`), []),
+      list: useCallback(async () => getJson('/api/v1/themes'), [getJson]),
+      getShared: useCallback(async (args) => getJson(`/api/v1/themes/shared?id=${encodeURIComponent(args?.id || '')}`), [getJson]),
       // public gallery list (no id → every public theme, newest first). The
       // arg is optional: callers that want the server default call this with
       // no arguments at all.
       listShared: useCallback(
         async (args?: { limit?: number }) =>
           getJson(`/api/v1/themes/shared${args?.limit ? `?limit=${encodeURIComponent(args.limit)}` : ''}`),
-        []
+        [getJson]
       ),
       save: useCallback(
         async (args) => {
@@ -1633,14 +1663,14 @@ export function useApi() {
       )
     },
     schemas: {
-      list: useCallback(async () => getJson('/api/v1/schemas'), []),
-      get: useCallback(async (id) => getJson(`/api/v1/schemas${toQuery({ id })}`), []),
+      list: useCallback(async () => getJson('/api/v1/schemas'), [getJson]),
+      get: useCallback(async (id) => getJson(`/api/v1/schemas${toQuery({ id })}`), [getJson]),
       // paginated UGC schema browsing — { q, sort, cursor, limit, library, mine }
-      browse: useCallback(async (args) => getJson(`/api/v1/schemas/browse${toQuery(args)}`), [])
+      browse: useCallback(async (args) => getJson(`/api/v1/schemas/browse${toQuery(args)}`), [getJson])
     },
     components: {
       // paginated component browsing — { q, sort, cursor, limit, lib, category, library, mine }
-      browse: useCallback(async (args) => getJson(`/api/v1/components/browse${toQuery(args)}`), [])
+      browse: useCallback(async (args) => getJson(`/api/v1/components/browse${toQuery(args)}`), [getJson])
       // creation rides the unified path: things.create({ thingtime: ['component'], crystal })
     },
     actions: {
@@ -1652,18 +1682,19 @@ export function useApi() {
       // path in every browser while the API-level battery stayed green.
       run: useCallback(async (args) => {
         const actor = actionActor.current;
+        const principal = actionPrincipal.current;
         const expectedPlane = planeRef.current;
         const origin = window.location.origin;
         await requireThingtimeCapability('api.actions-run', '1.37.0');
         if (actionActor.current !== actor) throw new Error('The active account changed. Run the action again.');
         const response = await asyncFetcher.submit(buildActionRunBody({ ...args, execution: 'browser' }), { action: '/api/v1/actions/run', expectedActor: actor, expectedDataPlane: expectedPlane });
-        const retained = await retainActionOutcomeRecovery(response, actor, expectedPlane, recovery => enqueueActionOutcomeRecovery(origin, recovery));
+        const retained = await retainActionOutcomeRecovery(response, actor, expectedPlane, recovery => enqueueActionOutcomeRecovery(origin, recovery, principal && principal !== actor ? principal : undefined));
         if (actionActor.current !== actor) throw new Error('The account changed during the Action request. Check History in the original account before running it again.');
         if (planeRef.current !== expectedPlane) throw new Error('The database changed during the Action request. Check History in the original database before running it again.');
         return finishBrowserAction(retained, createBrowserActionHost(() => actionActor.current));
       }, [asyncFetcher]),
       // your own run records — { action, limit }
-      runs: useCallback(async (args) => getJson(`/api/v1/actions/runs${toQuery(args)}`), [])
+      runs: useCallback(async (args) => getJson(`/api/v1/actions/runs${toQuery(args)}`), [getJson])
       // creation rides the unified path: things.create({ thingtime: ['action'], crystal })
     },
     waitlist: {
@@ -1671,9 +1702,21 @@ export function useApi() {
     }
   };
 
-  const ret = {
-    v1
-  };
-
-  return ret;
+  useEffect(() => {
+    if (actionUser?.id && !actionUser.temporary && dataPlane && (!delegated || principalId)) {
+      const scope = { kind: 'account' as const, origin: window.location.origin, ownerId: actionUser.id, dataPlane, ...(delegated ? {delegatedBy:principalId} : {}) };
+      startAccountWorkspaceSync(scope, { localPlane: view.localPlane });
+      if (!delegated) startNotificationHistorySync(scope);
+    }
+  }, [delegated, principalId, actionUser?.id, actionUser?.temporary, dataPlane, view.localPlane]);
+  const workspaceApi = useRef(new WorkspaceApiIdentity<typeof v1>());
+  const identity = rootIdentity.read();
+  const workspaceKey = JSON.stringify([identity.generation, identity.pending, offlineWorkspace || null,
+    actionUser?.id || null, actionUser?.temporary || false, dataPlane || null, view.localPlane || null,
+    actionUser?.username, actionUser?.displayName, actionUser?.avatarUrl, delegated, principalId]);
+  return { v1: workspaceApi.current.resolve(workspaceKey, v1, remote =>
+    delegated ? principalId && actionUser && dataPlane ? accountApi(remote, { id: actionUser.id, username: actionUser.username, displayName: actionUser.displayName, avatarUrl: actionUser.avatarUrl }, dataPlane, view, principalId) : characterApi(remote)
+    : offlineWorkspace ? accountApi(remote, { id: offlineWorkspace.ownerId, displayName: 'Offline workspace' }, offlineWorkspace.dataPlane, view)
+    : actionUser && !actionUser.temporary && dataPlane ? accountApi(remote, { id: actionUser.id, username: actionUser.username, displayName: actionUser.displayName, avatarUrl: actionUser.avatarUrl }, dataPlane, view)
+    : actionUser && !actionUser.temporary ? remote : anonymousApi(remote)) };
 }

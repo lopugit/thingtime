@@ -2,24 +2,29 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { writeFile } from 'node:fs/promises';
-import { captureComponentBindings } from '../app/timeline/componentBindings';
+import { captureComponentBindings, webpageComponentRefs } from '../app/timeline/componentBindings';
 import { planPublishedComponentCopies } from '../app/api/utils/timeline/publishedComponents';
 import { parseTimelineEvent, type TimelineEvent } from '../app/timeline/contract';
 import { parsePublishedVersionPreview, type VersionRequest } from '../app/timeline/publishedVersion';
 const base = process.env.TIMELINE_TEST_BASE;
 if (!base || !['127.0.0.1', 'localhost'].includes(new URL(base).hostname)) throw new Error('Set a disposable loopback TIMELINE_TEST_BASE');
 const status = await fetch(base + '/api/v1/mongodb/status').then((r) => r.json());
-assert.equal(status.host, '127.0.0.1:20337');
-assert.equal(status.replicaSet, 'timeline-rs');
+assert.equal(status.host, process.env.TIMELINE_TEST_MONGO_HOST || '127.0.0.1:20337');
+assert.equal(status.replicaSet, process.env.TIMELINE_TEST_REPLICA_SET || 'timeline-rs');
 assert.equal(status.custom, false);
+assert.equal(status.connected, true);
 let cookie = '';
+const ownThings = new Set<string>();
 async function call(path: string, body?: unknown, method = body === undefined ? 'GET' : 'POST') {
 	const response = await fetch(base + path, {
 		method,
 		headers: { Cookie: cookie, 'Content-Type': 'application/json' },
 		...(body === undefined ? {} : { body: JSON.stringify(body) })
 	});
-	return { status: response.status, body: await response.json(), headers: response.headers };
+	const data = await response.json();
+ if (path === '/api/v1/things' && method === 'POST' && data.ok && data.thing?.id) ownThings.add(data.thing.id);
+ if (data.ok && data.entry?.event?.after?.adapter === 'thing-content') for (const ref of webpageComponentRefs(data.entry.event.after.value?.crystal?.blocks)) if (ref.startsWith('restored-')) ownThings.add(ref);
+ return { status: response.status, body: data, headers: response.headers };
 }
 const username = `published-${randomUUID().slice(0, 8)}`,
 	password = `Timeline-${randomUUID()}-9a!`;
@@ -39,6 +44,8 @@ const create = async (thingtime: string[], crystal: any) => {
 	assert.equal(result.body.ok, true, result.body.error);
 	return result.body.thing;
 };
+const fixtureCookie = cookie;
+try {
 const definition = (text: string) => ({
 	name: 'Recorded card',
 	componentKey: 'shared-card',
@@ -382,3 +389,11 @@ if (process.env.TIMELINE_TEST_FIXTURE_PATH)
 console.log(
 	'PASS: published restore/merge, independent copies, shared-key isolation, standalone component stale fence, exact retry, canonical captures, current mode, atomic second-copy rollback with accounting, and scope/privacy fences'
 );
+
+} finally {
+ cookie = fixtureCookie;
+ for (const id of ownThings) {
+  const removed = await call('/api/v1/things', { id }, 'DELETE');
+  assert.ok(removed.body.ok || removed.status === 404, 'Clean up only fixture-created Things');
+ }
+}

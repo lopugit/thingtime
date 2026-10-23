@@ -6,6 +6,7 @@ import {
   DEFAULT_NOTIFICATION_FILTERS,
   NOTIFICATION_TYPES_BY_CATEGORY,
   NOTIFICATION_TYPE_META,
+  deviceSyncStatus,
   hasActiveNotificationFilters,
   isSystemNotification,
   notificationCategory,
@@ -101,4 +102,18 @@ test('category chips and the type dropdown never contradict each other', () => {
   // a chip that does keeps it
   assert.equal(withNotificationCategory(typed, 'system').type, 'action-run');
   assert.equal(withNotificationCategory(typed, 'all').type, 'action-run');
+});
+
+test('the device queue live region never announces a zero count or a plural single row', () => {
+  // The settled state is the common one: no count sentence at all.
+  assert.equal(deviceSyncStatus(0, 0), 'Account messages sync after your login is verified.');
+  assert.equal(deviceSyncStatus(1, 0), '1 message waiting to sync. Account messages sync after your login is verified.');
+  assert.equal(deviceSyncStatus(2, 0), '2 messages waiting to sync. Account messages sync after your login is verified.');
+  assert.equal(deviceSyncStatus(0, 1), '1 message could not sync; it remains saved here.');
+  assert.equal(deviceSyncStatus(0, 3), '3 messages could not sync; they remain saved here.');
+  assert.equal(deviceSyncStatus(1, 2), '1 message waiting to sync. 2 messages could not sync; they remain saved here.');
+  for (const text of [deviceSyncStatus(0, 0), deviceSyncStatus(0, 2), deviceSyncStatus(3, 0)]) {
+    assert.doesNotMatch(text, /\b0 /);
+    assert.doesNotMatch(text, /\b1 messages\b/);
+  }
 });

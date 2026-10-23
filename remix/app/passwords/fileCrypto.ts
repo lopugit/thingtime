@@ -22,14 +22,16 @@ function params(file: PasswordFile, index: number) {
 }
 async function* chunks(stream: ReadableStream<Uint8Array>, size: number, signal?: AbortSignal) {
   const reader = stream.getReader(); let buffer = new Uint8Array(size), used = 0;
+  const abort = () => { void reader.cancel().catch(() => {}); };
+  signal?.addEventListener('abort', abort, { once: true });
   try { while (true) {
-    signal?.throwIfAborted(); const { value, done } = await reader.read(); if (done) break;
+    signal?.throwIfAborted(); const { value, done } = await reader.read(); signal?.throwIfAborted(); if (done) break;
     for (let offset = 0; offset < value.length;) {
       const take = Math.min(size - used, value.length - offset); buffer.set(value.subarray(offset, offset + take), used); offset += take; used += take;
       if (used === size) { yield buffer; buffer = new Uint8Array(size); used = 0; }
     }
   } if (used) yield buffer.subarray(0, used); }
-  finally { await reader.cancel().catch(() => {}); reader.releaseLock(); }
+  finally { signal?.removeEventListener('abort', abort); await reader.cancel().catch(() => {}); reader.releaseLock(); }
 }
 export async function* encryptPasswordFile(stream: ReadableStream<Uint8Array>, metadata: PasswordFile, signal?: AbortSignal) {
   const file = validatePasswordFile(metadata), key = await crypto.subtle.importKey('raw', decode(file.key), 'AES-GCM', false, ['encrypt']);
@@ -47,8 +49,8 @@ export async function* decryptPasswordFile(stream: ReadableStream<Uint8Array>, m
   }
   if (!index || read !== file.size) throw new Error('File is incomplete.');
 }
-export function iterableStream(source: AsyncIterable<Uint8Array>): ReadableStream<Uint8Array> {
+export function iterableStream(source: AsyncIterable<Uint8Array>, strategy?: QueuingStrategy<Uint8Array>): ReadableStream<Uint8Array> {
   const iterator = source[Symbol.asyncIterator]();
-  return new ReadableStream({ async pull(controller) { try { const next = await iterator.next(); if (next.done) controller.close(); else controller.enqueue(next.value); } catch (error) { controller.error(error); } }, async cancel() { await iterator.return?.(); } });
+  return new ReadableStream({ async pull(controller) { try { const next = await iterator.next(); if (next.done) controller.close(); else controller.enqueue(next.value); } catch (error) { controller.error(error); } }, async cancel() { await iterator.return?.(); } }, strategy);
 }
 export const passwordFileParts = (stream: ReadableStream<Uint8Array>, size: number, signal?: AbortSignal) => chunks(stream, size, signal);
