@@ -6,7 +6,7 @@ import { pathToFileURL } from 'node:url';
 
 const exec = promisify(execFile);
 export const marker = 'thingtimeGithubActionsBuild';
-export const policyVersion = '1';
+export const policyVersion = '2';
 const required = (name) => {
   const value = process.env[name];
   if (!value) throw new Error(`Missing ${name}`);
@@ -57,8 +57,9 @@ export function deploymentIssue(deployment, { sha, branch, target, projectId }) 
   return null;
 }
 
-export function deploymentArgs({ directory, target, branch, sha, teamSlug, runId, repository }) {
+export function deploymentArgs({ directory, target, branch, sha, teamSlug, runId, repository, regions = [] }) {
   const args = ['deploy', '--prebuilt', '--archive=tgz', '--yes', '--scope', teamSlug, '--cwd', directory];
+  if (regions.length) args.push('--regions', regions.join(','));
   args.push(target.kind === 'production' ? '--prod' : `--target=${target.slug}`);
   const [owner, repo] = repository.split('/');
   for (const [key, value] of Object.entries({ [marker]: '1', thingtimePrebuiltPolicy: policyVersion, thingtimeBuildTarget: target.slug, githubCommitSha: sha, githubCommitRef: branch, githubCommitOrg: owner, githubCommitRepo: repo, githubDeployment: '1', githubWorkflowRunId: runId })) args.push('--meta', `${key}=${value}`);
@@ -199,7 +200,7 @@ async function publish() {
     await writeFile(resolve(directory, '.vercel/project.json'), JSON.stringify({ orgId: required('VERCEL_TEAM_ID'), projectId: plan.projectId }), { mode: 0o600 });
     await writeFile(resolve(directory, 'vercel.json'), JSON.stringify(config));
     await applyOutputPolicy(directory, productConfig, plan.target);
-    const args = deploymentArgs({ ...plan, directory, teamSlug: required('VERCEL_TEAM_SLUG'), runId: required('GITHUB_RUN_ID'), repository: required('GITHUB_REPOSITORY') });
+    const args = deploymentArgs({ ...plan, regions: productConfig.regions, directory, teamSlug: required('VERCEL_TEAM_SLUG'), runId: required('GITHUB_RUN_ID'), repository: required('GITHUB_REPOSITORY') });
     let stdout;
     try {
       ({ stdout } = await exec(required('VERCEL_CLI_PATH'), args, { env: publisherEnvironment({ teamId: required('VERCEL_TEAM_ID'), projectId: plan.projectId, token: required('VERCEL_API_TOKEN') }), timeout: 15 * 60_000, maxBuffer: 4 * 1024 * 1024 }));

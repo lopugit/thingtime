@@ -52,9 +52,10 @@ test('legacy branch wakeups admit only same-repository push events', () => {
 test('every environment uploads only prebuilt output and stamps exact source identity', () => {
   for (const branch of ['main', 'develop', 'feature/x']) {
     const target = selectTarget(branch, 'main', custom);
-    const args = deploymentArgs({ target, branch, sha: 'a'.repeat(40), directory: '/prebuilt', teamSlug: 'team', runId: '123', repository: 'owner/product' });
+    const args = deploymentArgs({ target, branch, sha: 'a'.repeat(40), directory: '/prebuilt', teamSlug: 'team', runId: '123', repository: 'owner/product', regions: ['syd1'] });
     assert.ok(args.includes('--prebuilt'));
     assert.ok(args.includes('--archive=tgz'));
+    assert.equal(args[args.indexOf('--regions') + 1], 'syd1');
     assert.ok(args.includes('THINGTIME_GIT_COMMIT_SHA=' + 'a'.repeat(40)));
     assert.equal(args.includes('--prod'), branch === 'main');
     if (branch !== 'main') assert.ok(args.includes(`--target=${target.slug}`));
