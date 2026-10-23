@@ -1,3 +1,4 @@
+import { validateMediaPipeline } from '../webPlatform/mediaPipeline';
 import { validateLiveSource } from './liveSources';
 import { fileSyncSchema, parseFileSyncConfiguration, FILE_SYNC_KIND } from '../fileSync/configuration';
 import { HTML_ALLOWED_TAGS } from '../components/Kinds/htmlRenderPolicy';
@@ -5836,7 +5837,10 @@ const sanitizeWebpageBlock = (
 	if (type === 'element' || type === 'collection' || type === 'condition') {
 		if (type === 'element') {
 			const tag = typeof raw.tag === 'string' ? raw.tag.toLowerCase() : 'div';
-			if (!HTML_ALLOWED_TAGS.has(tag) || tag.startsWith('tt-')) return fail(400, 'Element blocks require a safe HTML tag');
+			if (!HTML_ALLOWED_TAGS.has(tag) || (tag.startsWith('tt-') && tag !== 'tt-media-pipeline')) return fail(400, 'Element blocks require a safe HTML tag');
+			if (tag === 'tt-media-pipeline') {
+				try { validateMediaPipeline((raw.props as any)?.pipeline); } catch (error) { return fail(400, error instanceof Error ? error.message : 'Invalid media pipeline'); }
+			}
 			block.tag = tag;
 			if (typeof raw.text === 'string') block.text = raw.text;
 		}

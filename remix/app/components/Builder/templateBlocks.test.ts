@@ -75,3 +75,16 @@ test('saved transient JSON inputs survive intrinsic binding without widening the
  const invalid = { ...original, 'data-tt-action-inputs': '{"operation":"scan","nested":{"secret":"x"}}' };
  assert.notDeepEqual(resolveBlockProps(invalid, {})['data-tt-action-inputs'], { operation: 'scan', nested: { secret: 'x' } });
 });
+
+test('media adapters expand into selectable authored headings, inputs, controls and previews', async () => {
+ const { mediaCompressorTemplate } = await import('../../../scripts/media-acceptance/authoredFixture');
+ let id=0;
+ const blocks=templateToBlocks(JSON.parse(JSON.stringify(mediaCompressorTemplate())), kind=>`${kind}-${++id}`);
+ const flatten=(rows:any[]):any[]=>rows.flatMap(row=>[row,...flatten(row.children||[])]);
+ const all=flatten(blocks);
+ assert.equal(blocks[0].tag,'tt-media-pipeline');
+ for(const tag of ['h2','label','input','button','img','video','details','select','a']) assert.ok(all.some(block=>block.tag===tag),tag);
+ assert.equal(new Set(all.map(block=>block.id)).size,all.length);
+ const saved=sanitizeWebpageBlocks(blocks);
+ assert.equal(saved.ok,true,JSON.stringify(saved));
+});
