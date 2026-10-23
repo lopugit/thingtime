@@ -165,6 +165,7 @@ export const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/chats/updates': () => import('../../../app/routes/api/v1/chats/updates/_updates'),
 	'v1/devices': () => import('../../../app/routes/api/v1/devices/_devices'),
 	'v1/devices/approvals': () => import('../../../app/routes/api/v1/devices/approvals/_approvals'),
+	'v1/devices/sync-control': () => import('../../../app/routes/api/v1/devices/sync-control/_sync-control'),
 	'v1/devices/commands': () => import('../../../app/routes/api/v1/devices/commands/_commands'),
 	'v1/devices/events': () => import('../../../app/routes/api/v1/devices/events/_events'),
 	'v1/devices/node/commands': () => import('../../../app/routes/api/v1/devices/node/commands/_commands'),

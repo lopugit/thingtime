@@ -313,6 +313,16 @@ const deviceEndpointDocs: ApiEndpointDoc[] = [
 		responseExamples: [{ status: 200, description: 'Applied or exactly replayed.', body: { ok: true, revision: 42, applied: true, stale: false } }]
 	}),
 	endpoint({
+    id: 'devices-sync-control', contractVersion: '1.0.0', featureVersion: '1.0.0', group: 'devices',
+    title: 'Device folder sync control', endpoint: '/api/v1/devices/sync-control',
+    summary: 'Manage an owned device’s installed folder sync jobs from a logged-in browser.',
+    detail: 'Home-storage full-user control channel. Enqueue immutable requestId and allowlisted command; poll atomically claims once and returns a leaseId required for completion. GET reads only the exact owner/device/request. Requests stop accepting execution and replies after two minutes, and private operation identities remain for ten minutes to reject delayed replays. Pending work applies backpressure. Transport envelopes are bounded to 64 KiB per command and 2 MiB per result; file bytes never traverse this channel. The installed app rechecks the local account/device and retains native folder approval, jobs, file transfers and conflict journals. A paired, unrevoked device is required for every operation. All responses are private/no-store.',
+    auth: { mode: 'session-or-bearer', description: 'Full Thingtime user session; home storage only.' }, methods: ['GET', 'POST'],
+    steps: ['Keep the installed app running on the selected device.', 'Enqueue a status, folder-management, start, pause or review command.', 'Read its result with the same deviceId and requestId.'],
+    requestExamples: [{ name: 'Read device sync state', description: 'Ask the installed app for its current folders, jobs and transfer progress.', method: 'POST', body: { action: 'enqueue', deviceId: 'device-id', requestId: 'status-1', command: { action: 'status' } } }],
+    responseExamples: [{ status: 200, description: 'The request is queued for the installed app.', body: { ok: true, status: 'pending' } }]
+  }),
+  endpoint({
 		id: 'devices-commands',
     featureVersion: '1.10.0',
 		contractVersion: '1.10.0',

@@ -103,6 +103,7 @@ const EXPECTED_PROJECTED_FIELDS: Record<string, string[]> = {
   "device-state": ["deviceStateKey", "revision", "stateHash", "snapshotHash", "state", "observedAt"],
   "device-connector": ["deviceConnectorKey", "revision", "connectorHash", "connector"],
   "device-command": ["deviceCommandKey", "requestId", "kind", "input", "requiresApproval", "approvalState", "status", "controlBytes", "inputTextHash", "inputRedactedAt", "expiresAt"],
+  "device-sync-control": ["requestId", "digest", "deviceCommandKey", "pairingHash", "status", "deadlineAt", "leaseHash"],
   "device-command-event": ["deviceEventKey", "deviceControlEventScopeKey", "liveControlEventScopeKey", "retainedBytes", "liveEventSequenceKey", "liveEventHash", "liveActivityHash", "eventType", "resourceId", "revision", "payload", "expiresAt"],
   "device-ai-live-state": ["deviceAiLiveStateKey", "connectorId", "sessionId", "lastSequence", "lastObservedAt"],
   "device-approval": ["deviceApprovalKey", "commandId", "requestId", "kind", "prompt", "status"],

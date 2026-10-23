@@ -332,6 +332,7 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
 	'devices.pairing': { limit: 20, windowMs: 3_600_000, enabled: true },
 	'devices.pairing.claim': { limit: 30, windowMs: 15 * 60_000, enabled: true },
 	'devices.state': { limit: 240, windowMs: 60_000, enabled: true },
+	'devices.sync-control': { limit: 1200, windowMs: 60_000, enabled: true },
 	'devices.commands': { limit: 120, windowMs: 60_000, enabled: true },
 	'devices.node.commands': { limit: 600, windowMs: 60_000, enabled: true },
 	'devices.liveSync': { limit: 120, windowMs: 60_000, enabled: true },

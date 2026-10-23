@@ -1,5 +1,14 @@
 # API endpoints and capabilities
 
+`api.devices-sync-control` 1.0.0 adds `/api/v1/devices/sync-control` for the
+account browser and installed sync worker. `deviceSyncControl.ts` authenticates
+the owner and current device pairing, delivers an immutable request once, and
+accepts a result only from its claiming lease. Protected `device-sync-control`
+Things reuse the device queue/unique-key indexes, secure BinData payloads and
+shared control TTL; no new collection or index is introduced. File bytes and
+native grants remain on the device. Run `test:devices`, `test:api-capabilities`
+and `test:schemas`; see [browser device sync](../browser-device-sync.md).
+
 Mobile device descriptors use `app/devices/platform.ts` across validation,
 projection, schemas and client types. `api.devices` 1.10.0 and
 `api.devices-pairing-claim` 1.1.0 add iOS/Android to the existing signed pairing
