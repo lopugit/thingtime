@@ -1004,6 +1004,7 @@ const AuthoredBlock = (props: WebpageBlocksRendererProps & { block: WebpageBlock
   'data-block-id': block.id,
   style: { ...cssRecordToStyle(block.css), ...(editing && (selected || hovered) ? { outline: '2px solid var(--tt-accent, hotpink)', outlineOffset: '2px' } : {}) },
   ...(editing ? {
+   ...(attributes.hidden === true ? { hidden:false, style:{ ...cssRecordToStyle(block.css), display:'block', minHeight:44, outline:selected || hovered ? '2px solid var(--tt-accent, hotpink)' : undefined } } : {}),
    onMouseOver: (event: React.MouseEvent<HTMLElement>) => { event.stopPropagation(); chrome.onHover(block.id); },
    onClick: (event: React.MouseEvent<HTMLElement>) => {
     if ((event.target as Element).closest('[data-block-id]') !== event.currentTarget) return;
@@ -1031,9 +1032,12 @@ const AuthoredBlock = (props: WebpageBlocksRendererProps & { block: WebpageBlock
  </div>;
  const slot = contentSlot(props.contentSlots, attributes['data-tt-content-slot']);
  const text = block.format ? resolveTemplate({ ttFormat: block.format }, { ...scope, clock: { now: formatNow } }) : resolveTemplate(block.text || '', scope);
- return <HtmlBlockElement tag={block.tag || 'div'} attributes={{ ...attributes, ...(editing && ['details', 'dialog'].includes(block.tag || '') ? { open: true } : {}) }} editorProps={editorProps}>
+ const element = <HtmlBlockElement tag={block.tag || 'div'} attributes={{ ...attributes, ...(editing && ['details', 'dialog'].includes(block.tag || '') ? { open: true } : {}) }} editorProps={editorProps}>
   {typeof text === 'string' || typeof text === 'number' ? (editing && !text && block.text ? block.text : text) : null}{block.children ? children : null}{slot ? slot({ scope, editing }) : null}
  </HtmlBlockElement>;
+ return block.tag === 'tt-media-pipeline'
+  ? <NativeControlsEnabled.Provider value={props.interactive !== false && !editing}>{element}</NativeControlsEnabled.Provider>
+  : element;
 };
 
 const BlockView = (

@@ -645,3 +645,17 @@ moves/restores never rewrite the original source. `api.things` 1.40.0 exposes
 provenance only on full owner-session individual detail reads; public, PAT, app
 and list projections omit it. Legacy unbound uploads without an explicit saved
 retry cannot acquire an inferred path. Standalone upload semantics stay intact.
+
+### General local compressor (2026-10-22)
+
+`webPlatform/LocalMediaPipeline.tsx` binds the same media worker to ordinary
+editable child elements through `tt-media-pipeline`. Author the controls directly
+as saved Things; `templateToBlocks` preserves individual Builder identity.
+No new compressor Page/Component definition ships in the application.
+Legacy Web Platform media surfaces mount automatically and read current settings
+on Start. `imageFiles.ts` classifies images without loading codec code into the
+main bundle; `imageAssets.ts` fetches pinned same-origin WASM only;
+`imagePipeline.ts` decodes, auto-orients, resizes, encodes and verifies output
+frames, alpha and timing inside the network-disabled worker. See README for
+format/animation/SVG limits. Run the media/image tests, template-block tests,
+capability coverage and the isolated Chrome acceptance runner.
