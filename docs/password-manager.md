@@ -2,14 +2,21 @@
 
 `/passwords` is an account-private credential library. Each account can own many
 independent entries for the same service. Entries use the protected
-`password-manager-entry` Thing schema and the reusable Thing `mods.layout=fields`
-editor, with ordered fields, masked secrets and extensible custom fields. The
-ordinary Thing tree is unchanged; controlled field mods do not persist values
-through global Thing state, local caches, editor history or request diagnostics.
+`password-manager-entry` Thing schema with ordered fields, masked secrets and
+extensible custom fields. The password page uses ordinary editable block
+templates for its header, repeated cards/fields, transfer dialogs, QR and native
+controls, attachments and source/history panels. The Settings document host
+saves only layout templates. An explicit transient adapter hydrates allowlisted
+named inputs/textareas from live closure values; decrypted values never enter
+ComponentDataScope, saved block props, global Thing state, local caches, generic
+Action history or request diagnostics. Enter submits the enclosing entry after
+required-field validation. Hide/owner/origin changes revoke private controls;
+backgrounding masks them without discarding unsaved drafts. Entering Builder
+mode clears control values and cancels the adapter lifetime.
 
 ## Storage and access
 
-`api.passwords` 1.2.0 uses the home data plane. GET returns 50 metadata records
+`api.passwords` 1.2.1 uses the home data plane. GET returns 50 metadata records
 at a time. Optional `q` searches all owned title metadata before pagination using
 a case-insensitive literal substring (outer whitespace is ignored). Keep the same
 query on subsequent pages; restart without a cursor when it changes. Field values
@@ -20,8 +27,8 @@ and keeps prior matches visible while a new search is pending. POST requires a f
 temporary accounts and internal Action identities are not vault sessions.
 `catalog` returns names, usernames, exact HTTPS domains and public passkey
 identifiers for native selection; passwords, TOTP seeds and signing keys are
-excluded. Responses are private/no-store. The catalog and optional native bridge
-prepare for the separately delivered system provider.
+excluded. Responses are private/no-store. The native picker checks the same
+account again before filling and requires device-owner verification.
 
 Field contents are AES-256-GCM encrypted with a random account data key, using
 owner, key ID, record ID and purpose as authenticated data. The key is wrapped
@@ -58,9 +65,9 @@ screen-capture permission/picker is controlled by the browser/OS. On devices
 without screen capture, upload a screenshot instead.
 
 A `FIDO:` passkey QR is a live cross-device ceremony, not a transferable signing
-key. Importing its image does not register a passkey. Native passkey creation
-is a separate signed-provider release. A passkey reference can record the
-location of a key held elsewhere.
+key. Importing its image does not register a passkey. Choose Thingtime in the
+native system provider picker when the service requests a new passkey. A
+passkey reference can also record the location of a key held elsewhere.
 
 Import/export supports 1Password 1PUX v3 and CSV, Chrome CSV and Apple Passwords
 CSV. Imports preview every entry using ranged ZIP reads and a streaming JSON/CSV
@@ -76,7 +83,7 @@ The coverage target is every datum in a 1PUX v3 file: all known and unknown item
 categories, structured field values, sections and field attributes, tags,
 favourites, archived state, IDs, timestamps, URLs, linked-item references, account
 and vault attributes, password history, documents, attachments, icons, and unknown
-properties. Standard fields are editable through Thing mods. The original item
+properties. Standard fields are editable through the password field templates. The original item
 and its account/vault attributes remain encrypted for inspection. A separate
 archive entry owns every original ZIP member, including exact export.data and
 export.attributes bytes, so unknown structures and original numeric literals
@@ -106,11 +113,26 @@ All export files contain unencrypted secrets; the UI requires acknowledgement.
 
 ## Native Password AutoFill
 
-Native iOS/macOS password, passkey and OTP providers are prepared separately in
-[PR #996](https://github.com/lopugit/thingtime/pull/996). Their release requires
-Apple provisioning and signed-device validation. This web release includes the
-private catalog API and optional bridge negotiation, but does not change native
-packaging or make Thingtime selectable in OS AutoFill settings by itself.
+`apple/Passwords` contains the shared Swift library. `apple/PasswordProvider`
+contains the AuthenticationServices extension used by iOS and the macOS
+Thingtime Passwords companion embedded in Electron. The containing app needs
+Apple's AutoFill entitlement and the same Keychain group as its extension.
+Only the selected first-party HttpOnly session cookie is stored in the device's
+unlocked-only, non-synchronizing data-protection Keychain. Every session operation
+requires the configured shared access group; the macOS legacy Keychain is never
+used. No vault passwords or signing keys are persistently cached on the device.
+Logout/account or endpoint changes clear
+the link; expired/revoked sessions fail at the server.
+
+Open Passwords in the native app, choose **Connect Password AutoFill**, then
+enable **Thingtime** in OS Settings → General → AutoFill & Passwords. System
+configuration and biometric/device passcode prompts require the user. Password
+and passkey providers require iOS 17/macOS 14; native OTP AutoFill requires
+iOS 18/macOS 15. The provider uses exact HTTPS host matches for passwords/TOTP
+and the OS-supplied relying party and allowed credential IDs for passkeys.
+ES256 passkeys use random credential IDs, none attestation, a zero signature
+counter for synchronized credentials and user verification. Encrypted storage
+is acknowledged and read back before a new registration completes.
 
 ## Validation and setup
 
@@ -119,6 +141,11 @@ See the [README setup](../README.md#password-manager-setup) and
 `npm --prefix remix run test:passwords` covers crypto envelopes, session races,
 formats, TOTP and HTTP boundaries. `node remix/scripts/verify-password-manager.mjs
 http://localhost:<web-port>` exercises a disposable replica through HTTP only.
+`swift test --package-path apple/Passwords` verifies real passkey signatures,
+TOTP test vectors and session/domain validation. Builds alone do not establish
+that signed OS registration or a third-party login ceremony works. iOS provider
+ceremonies require a physical device; the simulator is a compile/UI check.
+Record actual OS/device results separately in the delivery PR.
 
 Screen-capture QA can use a synthetic canvas video stream in a disposable test page to exercise the real decoder and cleanup paths without sharing a desktop. This verifies video processing, cancellation, and stopped tracks, but does not substitute for OS picker/permission validation. Closing the editor aborts its pending scan; a stream returned by a late browser picker is immediately stopped.
 
@@ -130,3 +157,5 @@ in an isolated localhost deployment, then configure the first username in
 It uses real session/admin/password/upload endpoints and creates a synthetic
 `/tmp/thingtime-password-import-qa/all-data.1pux` for browser round-trip checks.
 Never point this test at production or supply personal credentials.
+
+The installed desktop bridge checks the selected HTTPS server's capability manifest before forwarding private password requests. Full-vault title search requires `api.passwords` 1.2.1 or a compatible update there, even when the bundled UI is newer. Missing, wrong-origin, or breaking manifests produce an explicit compatibility error instead of silently using an older listing contract.

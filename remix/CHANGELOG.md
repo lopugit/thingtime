@@ -104,6 +104,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-23 — **Codex (AI)**: Make password-manager controls, repeated fields, transfer dialogs, attachments and imported source/history individually editable through saved block templates. Keep decrypted values in transient controls, cancel operations on Builder mode changes, and provide native unlock/retry feedback for failed destination changes. Cloud checks use synthetic data; installed Apple credential acceptance remains pending. [PR #996](../PRs/996-codex-password-manager--encrypted-password-manager-and-apple-credential-providers.md).
+
+- 2026-10-18: Restore installed desktop password/mail requests by preserving Nitro request interfaces during the selected-origin handoff; add Passwords to sidebar and Commander navigation. See [PR #996 notes](../PRs/996-codex-password-manager--encrypted-password-manager-and-apple-credential-providers.md).
+
+- **2026-10-18 · Native password provider:** repair Developer ID archive/export, verify the exact signer and bundle-specific AutoFill profiles, and wrap the setup instructions. Signed macOS installation now succeeds; the provider is enabled and connected; OS credential ceremonies require user verification. [PR #996 evidence](../PRs/996-codex-password-manager--encrypted-password-manager-and-apple-credential-providers.md). — **Codex (AI)**
 - 2026-10-23: Limit PR 1164 to reusable local-media and editable Builder primitives. Author compressor Pages/Components directly as saved Things; retain the legacy suite and fix capability-compatible file-sync assertions.
 
 ### 2026-10-22 — General local compressor
@@ -989,8 +994,16 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   account with draft requests blocked; no production account data changed.
   Details: [PR #999](../PRs/999-codex-independent-post-draft-saving--fix-posting-blocked-by-draft-saving-failures.md).
 
+- 2026-10-15 — **Codex (AI)**: Native Password AutoFill explicitly uses the
+  data-protection Keychain so macOS enforces the shared access group and
+  device-only accessibility. Missing signing-group configuration fails closed.
+  See [PR #996](../PRs/996-codex-password-manager--encrypted-password-manager-and-apple-credential-providers.md).
+
 - 2026-10-15 — **Codex (AI)**: Add isolated no-login native draft previews and the stdio MCP `thingtime_render_and_export` tool, reusing canonical transfers, schema validation and native renderers. Return bounded JSON/PNG artifacts with diagnostics, rejecting transparent CSS Color 4 text and zero-size fonts; keep Actions, account data, assets and publishing unavailable. Local clean-browser and disposable importer verification: [PR #998 evidence](../PRs/998-codex-anonymous-render-export--no-login-native-draft-rendering.md).
 
+- 2026-10-15 — **Codex (AI)**: Deliver the web password vault separately from native Apple provisioning; reject internal Action principals at the vault boundary even with a bearer header. [Web release #997](../PRs/997-codex-password-manager-web--encrypted-web-password-manager.md); native providers remain in #996.
+
+- 2026-10-15 — **Codex (AI)**: Password-manager preview QA confirms encrypted HTTPS/native persistence and responsive layout; cancel pending QR scans on editor closure and refresh native credential catalogs after edits. Native identity updates are ordered through logout; iOS background sync preserves active connections for the same owner. Native signing remains gated by the Apple agreement/profiles. [PR #996 details](../PRs/996-codex-password-manager--encrypted-password-manager-and-apple-credential-providers.md).
 
 - 2026-10-15 — **Codex (AI)**: Add a private password library using reusable
   Thing field mods, account/session encryption and server-assisted recovery,
@@ -1001,6 +1014,15 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   block the web vault or existing native packaging. Correct managed worktree
   port identity and prune non-target image binaries from Vercel functions.
   [Setup and security model](../docs/password-manager.md); [PR #997 validation](../PRs/997-codex-password-manager-web--encrypted-web-password-manager.md).
+
+- 2026-10-15 — **Codex (AI)**: Add a private password library using Thing field
+  mods, account/session encryption with approved server-assisted recovery,
+  TOTP QR imports, 1Password/Chrome/Apple transfer and shared Apple credential
+  provider targets. Restrict desktop credential forwarding to the selected
+  HTTPS account endpoint; distinguish managed worktree names to prevent PM2
+  collisions. Prune non-target image binaries from server packages so local
+  cross-platform installs fit Vercel function limits. Setup: [password manager](../docs/password-manager.md).
+  Validation and remaining native gates: [PR #996](../PRs/996-codex-password-manager--encrypted-password-manager-and-apple-credential-providers.md).
 
 - 2026-10-13 — **Claude (AI)**: Unified Timeline named versions, undo this
   change, compare with now and version export (`api.timeline` 1.18.0): new

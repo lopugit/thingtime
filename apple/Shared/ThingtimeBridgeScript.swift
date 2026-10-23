@@ -37,6 +37,7 @@ enum ThingtimeBridgeScript {
             widgetVersion: '1.0.0',
             lopuChatActivityVersion: \(lopuChatActivityVersion),
             notificationsVersion: \(notificationsVersion),
+            passwordsVersion: \(passwordsVersion),
             platform: '\(platform)',
             isNativeWebView: true,
             postMessage(message) {
@@ -70,6 +71,13 @@ enum ThingtimeBridgeScript {
 #endif
     }
     static var notificationsVersion: String {
+#if os(iOS)
+        return "'1.0.0'"
+#else
+        return "undefined"
+#endif
+    }
+    static var passwordsVersion: String {
 #if os(iOS)
         return "'1.0.0'"
 #else
