@@ -11,6 +11,12 @@ export const repositoryRoot = resolve(dirname(scriptPath), '..');
 export const remixOutputDirectory = resolve(repositoryRoot, 'remix/.vercel/output');
 export const rootOutputDirectory = resolve(repositoryRoot, '.vercel/output');
 
+export function assertBuildLocation(environment = process.env) {
+	if (environment.VERCEL === '1' && environment.GITHUB_ACTIONS !== 'true') {
+		throw new Error('Vercel source builds are disabled. Run the GitHub Actions prebuilt deployment workflow.');
+	}
+}
+
 export async function verifyVercelOutput(outputDirectory) {
 	const [indexHtml, rawConfig] = await Promise.all([
 		readFile(resolve(outputDirectory, 'static/index.html'), 'utf8'),
@@ -84,6 +90,7 @@ function run(command, args, cwd) {
 }
 
 export async function buildForVercel() {
+	assertBuildLocation();
 	const corepack = process.platform === 'win32' ? 'corepack.cmd' : 'corepack';
 	await run(corepack, ['pnpm', '--dir', 'remix', 'run', 'build'], repositoryRoot);
 	await stageVercelOutput();

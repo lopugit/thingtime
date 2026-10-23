@@ -6500,3 +6500,39 @@ No source watermark or baseline is advanced by this recovery decision.
 These changes target folder-constrained file frontiers. Controlled tests and
 isolated native/Mongo fixtures are distinct evidence; installed same-job
 throughput and byte-identical recovery remain release acceptance requirements.
+# GitHub-built Vercel deployments
+
+Thingtime builds production, custom environments and previews on standard
+GitHub-hosted Ubuntu runners. Vercel hosts the resulting Build Output API
+artifact; it does not compile application source. The protected implementation
+lives on `github-actions` in `.github/workflows/deploy-vercel-prebuilt.yml`.
+Product branches carry a thin listener only. Existing PR preview controllers
+already use the same separate build/publish pattern.
+
+`main` maps to production, branches matching Vercel's custom-environment
+matchers map to that environment (`develop` today), and other product branches
+map to Preview. The default-branch listener also observes requested push runs
+of Web CI and Lopu CodeQL so older branches need not contain the new listener.
+Duplicate ready SHAs are skipped. Deleted, stale and fork PR events never
+authorize a deployment. Use **Actions → Vercel prebuilt deployments → Run
+workflow**, on `main`, to deploy a branch manually; `auto` selects its target.
+Production always requires the current `main` head. Use `preview` explicitly
+to test the production branch without moving production.
+
+Fork setup: create a GitHub environment named `vercel-prebuilt-control`, restrict
+it to the default branch, add `VERCEL_DEPLOY_TOKEN` as an environment secret,
+and set non-secret environment variables `VERCEL_PROJECT_ID`,
+`VERCEL_PROJECT_NAME`, `VERCEL_TEAM_ID` and `VERCEL_TEAM_SLUG` for your own project.
+Keep deployment credentials out of repository-level secrets and build jobs.
+Point reusable workflow references at your protected controller branch.
+Disconnect Vercel's native Git integration and remove its source deploy hooks
+after proving a GitHub-built deployment. Keep `git.deploymentEnabled: false`
+and the always-skip ignore command as repository safeguards. Existing runtime
+variables, vault selection, regions, domains and production cron definitions
+remain managed by their normal contracts. The publisher copies only regions,
+Fluid settings and production cron definitions from the immutable source
+configuration; it never executes source in its credential-bearing job.
+
+See [Vercel deployment references](VERCEL_DEPLOYMENTS.md) for the project and
+verification receipts. Standard Actions usage for this public repository is
+subject to GitHub's current plan terms; Vercel hosting/runtime charges remain.

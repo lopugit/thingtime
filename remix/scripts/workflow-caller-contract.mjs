@@ -8,6 +8,7 @@ const repositoryRoot = resolve(remixRoot, '..');
 const workflowsRoot = resolve(repositoryRoot, '.github', 'workflows');
 
 const callers = [
+  'deploy-vercel-prebuilt.yml',
   'develop-pr-preview.yml',
   'electron-release.yml',
   'electron-pr-release.yml',

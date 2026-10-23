@@ -430,3 +430,20 @@ deployment webhook is configured:
   otherwise the live poll decides. Without that check a failed sibling build
   would show a healthy deployment as failed in the footer and in
   `/api/v1/health/vercel` until the next event for that branch arrived.
+# GitHub Actions prebuilt migration — 2026-10-23
+
+Production, Preview and custom environments build on GitHub Actions through
+the protected `github-actions` controller. Product source compilation on Vercel
+is disabled by `git.deploymentEnabled: false`, the always-skip ignore command,
+and a guard in the canonical root build entry point. Native Git linkage and
+source deploy hooks are removed during verified cutover.
+
+- [Deployment workflow](https://github.com/lopugit/thingtime/actions/workflows/deploy-vercel-prebuilt.yml)
+- [Project dashboard](https://vercel.com/lopugits-projects/thingtime)
+- [Production](https://thingtime.com)
+- [Develop](https://dev.thingtime.com)
+- PR preview aliases: `https://pr-<number>.previews.dev.thingtime.com`
+
+The `vercel-prebuilt-control` GitHub environment allows the default branch
+only. Product compilation receives no deployment secret; a separate protected
+job validates and uploads the prebuilt artifact. See README for fork setup.
