@@ -4,18 +4,29 @@ import ThingtimePasswordCore
 @MainActor final class PasswordBridge {
     private var generation = UUID()
     private var pendingConnection: (ownerId: String, origin: URL)?
-    func clear() { generation = UUID(); pendingConnection = nil; PasswordSessionStore.clear(); PasswordIdentityIndex.clear() }
+    @discardableResult func clear() -> Bool {
+        generation = UUID(); pendingConnection = nil
+        do {
+            try PasswordSessionStore.clear()
+            PasswordIdentityIndex.clear()
+            return true
+        } catch { return false }
+    }
+    private func disconnect(reply: (Bool, String) -> Void) {
+        let cleared = clear()
+        reply(cleared, cleared ? "Password AutoFill disconnected." : "Password AutoFill could not be disconnected. Unlock your device and try again.")
+    }
     func handle(action: String, ownerId: String?, webView: WKWebView, root: URL, reply: @escaping (Bool, String) -> Void) {
-        guard action != "disconnect", let ownerId, !ownerId.isEmpty else { clear(); reply(true, "Password AutoFill disconnected."); return }
+        guard action != "disconnect", let ownerId, !ownerId.isEmpty else { disconnect(reply: reply); return }
         guard ["connect", "sync"].contains(action), root.scheme == "https", let visible = webView.url, LopuVoiceContract.sameOrigin(visible, root) else { reply(false, "Use your HTTPS Thingtime deployment."); return }
         if action == "sync" {
             if let pending = pendingConnection {
                 if pending.ownerId == ownerId, LopuVoiceContract.sameOrigin(pending.origin, root) { reply(true, "Password AutoFill connection is in progress.") }
-                else { clear(); reply(true, "Password AutoFill disconnected.") }
+                else { disconnect(reply: reply) }
                 return
             }
             guard let prior = try? PasswordSessionStore.load() else { reply(true, "Password AutoFill is not connected."); return }
-            guard prior.ownerId == ownerId, LopuVoiceContract.sameOrigin(prior.origin, root) else { clear(); reply(true, "Password AutoFill disconnected."); return }
+            guard prior.ownerId == ownerId, LopuVoiceContract.sameOrigin(prior.origin, root) else { disconnect(reply: reply); return }
         }
         generation = UUID(); let current = generation
         pendingConnection = action == "connect" ? (ownerId, root) : nil
@@ -41,7 +52,10 @@ import ThingtimePasswordCore
                 guard current == self.generation else { reply(false, "Password AutoFill request was replaced. Please try again."); return }
                 reply(true, "Connected. Enable Thingtime in Settings → General → AutoFill & Passwords.")
             } catch {
-                if current == self.generation { self.clear(); reply(false, "Could not connect. Sign in to Thingtime and try again.") }
+                if current == self.generation {
+                    let cleared = self.clear()
+                    reply(false, cleared ? "Could not connect. Sign in to Thingtime and try again." : "Password AutoFill could not be disconnected. Unlock your device and try again.")
+                }
                 else { reply(false, "Password AutoFill request was replaced. Please try again.") }
             }
         }

@@ -43,19 +43,35 @@ public final class PasswordClient: @unchecked Sendable {
         var content = body; content["expectedOwnerId"] = account.ownerId
         request.httpBody = try JSONSerialization.data(withJSONObject: content)
         let (data, response) = try await transport.data(for: request)
-        guard let response = response as? HTTPURLResponse, response.statusCode == 200, data.count <= 2 * 1024 * 1024 else { throw PasswordProviderError.unavailable }
+        guard let response = response as? HTTPURLResponse, response.statusCode == 200, response.url == request.url, data.count <= 2 * 1024 * 1024 else { throw PasswordProviderError.unavailable }
         let reply = try JSONDecoder().decode(Reply.self, from: data)
         guard reply.ok, reply.ownerId == account.ownerId else { throw PasswordProviderError.invalidSession }
         return reply
+    }
+    // The provider uses only these semantic operations. Origin and schema are
+    // part of negotiation; a manifest from another account endpoint is invalid.
+    static let capabilityRequirements = ["api.passwords": [1, 0, 0]]
+    static func compatibleCapabilities(_ data: Data, origin: URL) -> Bool {
+        guard data.count < 512 * 1024,
+              let manifest = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              manifest["schemaVersion"] as? Int == 1,
+              manifest["origin"] as? String == origin.absoluteString.trimmingCharacters(in: CharacterSet(charactersIn: "/")),
+              let features = manifest["features"] as? [String: [String: Any]] else { return false }
+        for (feature, minimum) in capabilityRequirements {
+            guard let version = features[feature]?["version"] as? String,
+                  version.range(of: "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$", options: .regularExpression) != nil else { return false }
+            let parts = version.split(separator: ".").compactMap { Int($0) }
+            guard parts.count == 3, parts[0] == minimum[0],
+                  parts[1] > minimum[1] || parts[1] == minimum[1] && parts[2] >= minimum[2] else { return false }
+        }
+        return true
     }
     public func requireCapability() async throws {
         var request = URLRequest(url: account.origin.appendingPathComponent(".well-known/thingtime-capabilities.json"))
         request.cachePolicy = .reloadIgnoringLocalCacheData
         let (data, response) = try await transport.data(for: request)
-        guard (response as? HTTPURLResponse)?.statusCode == 200, data.count < 512 * 1024,
-              let manifest = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let features = manifest["features"] as? [String: [String: String]],
-              let version = features["api.passwords"]?["version"], version.range(of: "^1\\.[0-9]+\\.[0-9]+$", options: .regularExpression) != nil else { throw PasswordProviderError.unavailable }
+        guard let response = response as? HTTPURLResponse, response.statusCode == 200,
+              response.url == request.url, Self.compatibleCapabilities(data, origin: account.origin) else { throw PasswordProviderError.unavailable }
     }
     public func catalog() async throws -> [PasswordCatalogItem] {
         try await requireCapability()

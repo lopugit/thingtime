@@ -1,0 +1,298 @@
+import { BACKUP_ATTACHMENT_ADAPTER, backupAttachmentItemContent, parseBackupAttachment } from './attachmentRecords';
+import { createHash } from 'node:crypto';
+import { timelineScopeKey, type TimelineScope } from '../../../timeline/contract';
+import { parseCloudFolder } from '../../../fileSync/cloudFolder';
+import { readCloudInventoryStream } from '../../../fileSync/cloudInventoryStream';
+import { openCloudBackupTree } from './cloudBackupTree';
+import { CLOUD_FILE_ADAPTER, parseCloudFile } from '../../../fileSync/cloudFile';
+import { equalContentFingerprints } from '../../../fileSync/contentFingerprint';
+import { MAX_ATTACHMENT_RANGE_BYTES, readExactRange } from '../attachments/attachmentRanges';
+import { EXPECTED_ACTOR_HEADER } from '../auth/expectedActor';
+import { EXPECTED_DATA_PLANE_HEADER } from '../../../utils/dataPlane';
+import { BACKUP_FORMAT, BACKUP_METADATA_BYTES, parseBackupHeader } from '../../../backups/manifest';
+import { prepareBackup, captureBackup, sealBackup, pendingBackupItems, type BackupObjectStore } from './portableBackup';
+
+export { CLOUD_BACKUP_FOLDER_ADAPTER } from './cloudBackupTree';
+export const CLOUD_FOLDER_BACKUP_REQUIREMENTS = {
+	'api.files': '1.2.0',
+	'api.attachment-content': '1.15.0',
+	'api.actions-run': '1.7.0',
+	'api.mongodb-endpoint': '1.1.0'
+} as const;
+export type CloudBackupRuntime = {
+	scope: TimelineScope;
+	currentScope(): TimelineScope;
+	fetch: typeof fetch;
+	requireCapability(feature: string, minimum: string): Promise<void>;
+	signal?: AbortSignal;
+	/** Private preparation index only; this is not a byte-copy or retention quota. */
+	maxScratchBytes?: number;
+};
+
+/** Uses existing authenticated APIs only. No signed URLs, session credentials or
+ * filesystem destinations enter the persisted plan. A selected filesystem tree
+ * is explicit coverage, not an account-wide or ordinary-Thing export. */
+function cloud(runtime: CloudBackupRuntime) {
+	const scope = { ...runtime.scope },
+		key = timelineScopeKey(scope);
+	if (scope.dataPlane !== 'home') throw Error('Cloud backups require home storage');
+	const guard = () => {
+		runtime.signal?.throwIfAborted();
+		if (timelineScopeKey(runtime.currentScope()) !== key) throw Error('Backup account or origin changed');
+	};
+	const request = async (path: string, signal?: AbortSignal, body?: unknown) => {
+		guard();
+		const response = await runtime.fetch(new URL(path, scope.apiOrigin), {
+			method: body === undefined ? 'GET' : 'POST',
+			...(body === undefined ? {} : { body: JSON.stringify(body) }),
+			credentials: 'same-origin',
+			cache: 'no-store',
+			redirect: 'error',
+			signal: AbortSignal.any([AbortSignal.timeout(30_000), ...[runtime.signal, signal].filter((s): s is AbortSignal => !!s)]),
+			headers: {
+				Accept: 'application/json',
+				...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
+				[EXPECTED_ACTOR_HEADER]: scope.ownerId,
+				[EXPECTED_DATA_PLANE_HEADER]: scope.dataPlane
+			}
+		});
+		try {
+			guard();
+			if (!response.ok) throw Error(`Cloud backup request failed (${response.status})`);
+		} catch (error) {
+			await response.body?.cancel().catch(() => {});
+			throw error;
+		}
+		return response;
+	};
+	const json = async (path: string, max = BACKUP_METADATA_BYTES, body?: unknown) => {
+		const response = await request(path, undefined, body);
+		if (!response.body) throw Error('Cloud backup response is missing');
+		const reader = response.body.getReader(),
+			decoder = new TextDecoder('utf-8', { fatal: true });
+		let size = 0,
+			text = '';
+		try {
+			for (;;) {
+				const next = await reader.read();
+				guard();
+				if (next.done) break;
+				size += next.value.length;
+				if (size > max) throw Error('Cloud backup response exceeds its bound');
+				text += decoder.decode(next.value, { stream: true });
+			}
+			text += decoder.decode();
+		} finally {
+			await reader.cancel().catch(() => {});
+			reader.releaseLock();
+		}
+		const result = JSON.parse(text);
+		if (path !== '/api/v1/auth/me' && result?.ok !== true) throw Error('Cloud backup response is invalid');
+		return result;
+	};
+	const authenticate = async () => {
+		guard();
+		for (const [feature, version] of Object.entries(CLOUD_FOLDER_BACKUP_REQUIREMENTS)) {
+			await runtime.requireCapability(feature, version);
+			guard();
+		}
+		if ((await json('/api/v1/auth/me')).user?.id !== scope.ownerId) throw Error('Backup account changed');
+		guard();
+	};
+	return { scope, guard, request, json, authenticate, access: { scope, signal: runtime.signal, authorize: async () => guard() } };
+}
+
+/** Freeze one complete paged server observation before downloading. The scratch
+ * index proves physical ancestry and uniqueness, then supplies the canonical
+ * Thing-ID order without collecting the tree in memory. EOF is required before
+ * any durable plan metadata is published; interrupted captures start afresh. */
+export async function prepareCloudFolderBackup(store: BackupObjectStore, snapshotId: string, folderId: string, runtime: CloudBackupRuntime) {
+	const c = cloud(runtime);
+	parseBackupHeader({
+		format: BACKUP_FORMAT,
+		snapshotId,
+		scope: c.scope,
+		boundary: { kind: 'capture-interval', token: 'pending', startedAt: new Date(0).toISOString(), completedAt: new Date(0).toISOString() },
+		coverage: { selectionId: folderId, description: 'Selected cloud filesystem tree' }
+	});
+	if (await store.read(`snapshots/${snapshotId}/header.json`, BACKUP_METADATA_BYTES))
+		throw Error('Snapshot already started; resume its frozen inventory');
+	await c.authenticate();
+	const startedAt = new Date().toISOString();
+	const root = parseCloudFolder((await c.json('/api/v1/files?' + new URLSearchParams({ folderId }))).folder);
+	if (root.id !== folderId) throw Error('Cloud folder changed during inventory; try a new capture');
+	const tree = await openCloudBackupTree(root, { maxBytes: runtime.maxScratchBytes });
+	try {
+		const scope = { origin: c.scope.apiOrigin, ownerId: c.scope.ownerId, dataPlane: c.scope.dataPlane, deviceId: snapshotId, rootId: folderId };
+		const hash = createHash('sha256');
+		for await (const page of readCloudInventoryStream(scope, folderId, {
+			fetch: (input, init) => runtime.fetch(input, init),
+			signal: runtime.signal,
+			requireCapability: (feature, minimum) => runtime.requireCapability(feature, minimum),
+			origin: () => runtime.currentScope().apiOrigin,
+			currentScope: () => {
+				const current = runtime.currentScope();
+				return { ...scope, origin: current.apiOrigin, ownerId: current.ownerId, dataPlane: current.dataPlane };
+			}
+		})) {
+			c.guard();
+			if (root.revision !== page.rootRevision) throw Error('Cloud folder changed during inventory; try a new capture');
+			tree.append(page.nodes);
+			hash.update(JSON.stringify(page) + '\n');
+		}
+		await tree.validate(c.guard);
+		await c.authenticate();
+		return await prepareBackup(
+			store,
+			{
+				format: BACKUP_FORMAT,
+				snapshotId,
+				scope: c.scope,
+				boundary: { kind: 'capture-interval', token: 'inventory-' + hash.digest('hex'), startedAt, completedAt: new Date().toISOString() },
+				coverage: {
+					selectionId: folderId,
+					description: 'Selected cloud folder file tree including empty folders; ordinary Things and other folders are not included'
+				}
+			},
+			tree.items(),
+			c.access
+		);
+	} finally {
+		await tree.close();
+	}
+}
+
+/** Resume the original plan, not a new live inventory. Attachment range requests
+ * reauthorize the owner and pin immutable object versions; edits/Trash do not
+ * substitute current content. Every retained byte is verified before sealing. */
+async function resumeCloudBackup(store: BackupObjectStore, snapshotId: string, runtime: CloudBackupRuntime, attachments: boolean) {
+	const c = cloud(runtime);
+	await c.authenticate();
+	const contentFor = (item: Parameters<Parameters<typeof captureBackup>[2]['read']>[0]) => {
+		if (attachments && item.snapshot.adapter === BACKUP_ATTACHMENT_ADAPTER) {
+			const record = parseBackupAttachment(item.snapshot.value);
+			if (record.ownerId !== c.scope.ownerId) throw Error('Backup attachment owner changed');
+			const content = backupAttachmentItemContent(item);
+			if (!content) throw Error('Linked attachment has no stored bytes');
+			return content;
+		}
+		if (item.snapshot.adapter !== CLOUD_FILE_ADAPTER || item.snapshot.version !== 1 || !item.content) throw Error('Unsupported cloud backup item');
+		const file = parseCloudFile(item.snapshot.value);
+		if (
+			file.id !== item.thingId ||
+			file.revision !== item.revision ||
+			file.content.size !== item.content.size ||
+			!equalContentFingerprints(file.content.fingerprint, item.content.fingerprint)
+		)
+			throw Error('Cloud backup item changed');
+		return file.content;
+	};
+	let deadline = Infinity,
+		renewAt = 0;
+	const renew = async () => {
+		let nextDeadline = Infinity;
+		const batch = new Map<string, string>();
+		const flush = async () => {
+			if (!batch.size) return;
+			const versions = [...batch].map(([id, version]) => ({ id, version }));
+			const started = performance.now();
+			const result = await c.json('/api/v1/attachments/content', BACKUP_METADATA_BYTES, { versions });
+			const duration = Date.parse(result.retainedUntil) - Date.parse(result.serverTime);
+			if (
+				!Number.isFinite(duration) ||
+				duration < 60_000 ||
+				duration > 24 * 60 * 60 * 1000 ||
+				JSON.stringify(result.versions) !== JSON.stringify(versions)
+			)
+				throw Error('Invalid source retention receipt');
+			nextDeadline = Math.min(nextDeadline, started + duration);
+			batch.clear();
+		};
+		// No new live inventory, unbounded array or per-chunk server lease row.
+		// Exhaustion validates the complete frozen plan before capture proceeds.
+		for await (const item of pendingBackupItems(store, snapshotId, c.access)) {
+			const content = contentFor(item);
+			if (batch.has(content.attachmentId) && batch.get(content.attachmentId) !== content.version) throw Error('Backup attachment identity changed');
+			batch.set(content.attachmentId, content.version);
+			if (batch.size >= 64) await flush();
+			if (performance.now() >= nextDeadline - 60_000) throw Error('Source retention acquisition exceeded its lease');
+		}
+		await flush();
+		if (performance.now() >= nextDeadline - 60_000) throw Error('Source retention acquisition exceeded its lease');
+		deadline = nextDeadline;
+		renewAt = performance.now() + (deadline - performance.now()) / 2;
+	};
+	await renew();
+	const access = {
+		...c.access,
+		authorize: async () => {
+			c.guard();
+			if (performance.now() >= deadline) throw Error('Source retention expired; resume the frozen snapshot');
+			if (performance.now() >= renewAt) await renew();
+			c.guard();
+		}
+	};
+	const result = await captureBackup(
+		store,
+		snapshotId,
+		{
+			read: async (item, offset, length, signal) => {
+				const content = contentFor(item);
+				const bytes = new Uint8Array(length);
+				for (let at = 0; at < length; at += MAX_ATTACHMENT_RANGE_BYTES) {
+					const range = { version: content.version, offset: offset + at, length: Math.min(MAX_ATTACHMENT_RANGE_BYTES, length - at) };
+					const response = await c.request(
+						'/api/v1/attachments/content?' +
+							new URLSearchParams({
+								id: content.attachmentId,
+								retained: '1',
+								range: '1',
+								version: range.version,
+								offset: String(range.offset),
+								length: String(range.length)
+							}),
+						signal
+					);
+					if (response.headers.get('ETag') !== `"${range.version}"`) {
+						await response.body?.cancel();
+						throw Error('Cloud backup version changed');
+					}
+					bytes.set(
+						await readExactRange(response, range, content.size, () => {
+							c.guard();
+							signal?.throwIfAborted();
+						}),
+						at
+					);
+				}
+				c.guard();
+				return bytes;
+			}
+		},
+		access
+	);
+	await c.authenticate();
+	const seal = await sealBackup(
+		{
+			...store,
+			put: async (key, bytes) => {
+				if (key.endsWith('/complete.json')) await c.authenticate();
+				await store.put(key, bytes);
+			}
+		},
+		snapshotId,
+		access
+	);
+	return { ...result, seal };
+}
+
+/** Selected-folder compatibility entry point. */
+export const resumeCloudFolderBackup = (store: BackupObjectStore, snapshotId: string, runtime: CloudBackupRuntime) =>
+	resumeCloudBackup(store, snapshotId, runtime, false);
+
+/** Captures only the already-frozen account plan. Attachment byte reads use the
+ * existing authenticated exact-version content endpoint. Timeline payloads were
+ * retained during enumeration; a missing history chunk cannot be reconstructed
+ * from newer database state. No complete account API or restore is implied. */
+export const resumeAccountBackup = (store: BackupObjectStore, snapshotId: string, runtime: CloudBackupRuntime) =>
+	resumeCloudBackup(store, snapshotId, runtime, true);

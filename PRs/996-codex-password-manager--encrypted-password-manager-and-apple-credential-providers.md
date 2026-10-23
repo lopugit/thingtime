@@ -1,17 +1,92 @@
 # PR #996 — Encrypted password manager and Apple credential providers
 
 PR: https://github.com/lopugit/thingtime/pull/996
-Branch: `codex/password-manager` (base `main`)
+Branch: `codex/password-manager` (base `develop`)
 
 ## Release split
 
-The web vault was merged into main at `998bdb83c` by [PR #997](https://github.com/lopugit/thingtime/pull/997). This branch incorporates that web base and retains the Apple providers, native packaging and signing setup. It is open for review; signed installation now passes, while actual OS fill/passkey ceremonies remain acceptance gates. The evidence below includes the shared web prerequisite.
+The web vault was merged into main at `998bdb83c` by [PR #997](https://github.com/lopugit/thingtime/pull/997). This branch incorporates that web base and retains the Apple providers, native packaging and signing setup. It is open for review. Historical October 2026 local evidence below recorded a signed installation; this cloud reconciliation has no Swift/Xcode or current signed-device acceptance. Actual OS fill/passkey ceremonies remain acceptance gates. The evidence below includes the shared web prerequisite.
+
+## Cloud reconciliation — 23 October 2026
+
+Integrated develop `f41cf65629fe98423405de4bea4e5894f59ccb46` into the existing
+PR history. Preserve its strict native capability origin/schema checks, throwing
+Keychain deletion, runtime restart fencing, streamed requests and selected-API
+preconditions alongside this branch's full-catalog cursor-cycle guard, iOS
+provider packaging, and private password/mail capability negotiation. Both
+AppleFileSync and ThingtimePasswordCore remain in the XcodeGen package map.
+The iOS bridge reports a failed Keychain clear instead of claiming disconnect;
+a failed clear prevents navigation to another account endpoint. Destination selection is transactional: the current authority remains selected, the drawer explains unlock/retry, and a failed target is fenced until explicit retry or a new selection. Four native XCTest scenarios were added for the fence; they have not executed on this Linux host.
+
+Fresh cloud checks use synthetic data only. Focused Node suites ran inside an OS
+loopback-only network namespace; the broader Electron run below was an earlier
+Linux compatibility check:
+
+- Password suite: 54 passed, zero skips, inside an OS loopback-only network namespace. Includes editable-layout sanitization and explicit private-display projections.
+- Editable-layout/transient/settings suite: 18 passed, zero skips; changed UI lint has zero errors or warnings.
+- TypeScript: 92 diagnostics, exactly matching clean develop after normalizing line numbers; no added diagnostics.
+- Isolated Chromium: ten acceptance groups pass at 1440px and 390px with zero
+  runtime errors. Physical typing/reveal/save, one write under rapid click/Enter,
+  focus masking and live TOTP, real synthetic QR decoding, four independently
+  edited/reloaded layouts, private-data exclusion, source/history reveal/hide,
+  attachment removal, synthetic CSV preview/import/export and delayed read /
+  capability cancellation all pass. The native bridge and screen-chooser
+  cancellation are fixtures; they do not establish OS acceptance.
+- Production client/server packaging and final Vercel output verification pass.
+- API capability suite: 113 passed, zero skips.
+- Proxy/capability files: 93 passed, zero skips, including six real Nitro HTTP
+  request forwards and a delayed password-manifest/endpoint-change regression.
+- Electron password and bundled-renderer tests: 15 passed, zero skips. The six
+  former Darwin-only mock-helper tests now execute in an isolated VM on every
+  host; the production platform gate is unchanged. This is bridge evidence,
+  not macOS provider evidence.
+- Full Electron suite: 322 passed, three failed, one skipped. Two unchanged
+  release-cache tests require macOS `/usr/bin/ditto`; the unchanged owned-process
+  cleanup test also fails alone on this Linux host. No clean full-suite pass is
+  claimed. iOS release/configuration Node checks pass 12/12; four changed Swift
+  files parse with the Swift tree-sitter grammar. Neither is Swift compilation
+  or native execution. Swift/Xcode and signed macOS/iOS builds cannot run on this executor.
+
+Public deployment readback on 23 October: production reports main
+`83a709cfa0df49a7bbc74018f7f43f6f9066c29a`, with `api.passwords` 1.2.0.
+The reachable [PR preview](https://pr-996.previews.dev.thingtime.com) advertises
+1.2.1; the deployment list correlates its old head
+`8ad72b435da76b9947bfcb77047e5b4f15a30715` with ready deployment
+`dpl_ACpnr3wMuL4V3yqFoZxhyLB96LSH`. This does not establish deployment of the
+new integration. Current Character discovery succeeds for the selected
+`https://thingtime.com` origin, but private membership/authentication and task
+writes have not been verified from cloud. The previous 1PUX import was not repeated.
+
+Remaining device acceptance requires authorized access to the executing Mac and
+physical iPhone, with the supported Thingtime password manager on each device:
+
+1. Coordinate with the owner of the current installed app before replacing it.
+   Build/verify the final signed host and extension, preserve the installed app
+   and its data, and confirm selected origin, shared Keychain group and provider
+   registration. Do not treat the historical installation below as current.
+2. Select Thingtime in actual OS AutoFill settings. With disposable exact-origin
+   login records, fill password and TOTP, create a passkey, reload/sign out and
+   later assert that same passkey. The OS chooser and device-owner verification
+   require user presence; simulator compilation does not satisfy this gate.
+3. Refuse wrong origins/RPs, canceled verification, revoked sessions and stale
+   account/endpoint operations. Remove one account and prove the other remains
+   usable. Confirm Keychain-clear failure stays visible and recoverable after
+   unlocking; a failed destination change must not misrepresent the active API.
+4. Exercise the real screen-sharing chooser with a synthetic TOTP QR: accept,
+   deny, cancel, close the editor, and allow a late chooser completion. Confirm
+   the capture indicator/tracks stop immediately. Reject FIDO handoff images as
+   TOTP/passkey-key imports. No screen or credential capture ran in cloud.
 
 ## Product and security contract
 
 The signed-in user can own multiple independent credential Things for one
-service, using the shared Thing field-mod editor and protected password-entry
-schema. Field definitions/values are encrypted with a per-owner data key;
+service, using ordinary editable block templates and the protected password-entry
+schema. Header, list cards, fields, reveal/reorder controls, QR/native controls,
+transfer dialogs, source/history and attachment panels are independently
+authored blocks. Decrypted values are hydrated only into named live controls;
+private values are absent from scope data, saved layouts and generic Action
+history. Editing, owner/origin changes, hide and background events fence the
+private controls and in-flight operations. Field definitions/values are encrypted with a per-owner data key;
 password/session wrappers and the explicitly approved server recovery wrapper
 preserve credentials across password recovery. See [the complete contract](../docs/password-manager.md).
 

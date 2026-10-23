@@ -1,5 +1,35 @@
 # API endpoints and capabilities
 
+Mobile device descriptors use `app/devices/platform.ts` across validation,
+projection, schemas and client types. `api.devices` 1.10.0 and
+`api.devices-pairing-claim` 1.1.0 add iOS/Android to the existing signed pairing
+protocol. Run `test:devices`, `test:schemas` and `test:api-capabilities`.
+See [mobile sync acceptance](../mobile-file-sync.md) for pending native clients.
+
+`api.devices-node-identity` 1.0.0 is a private device-token-only GET: the token
+fixes both IDs and the owned device must still exist. `api.devices-disconnect`
+1.0.0 is a full-user POST accepting only `deviceId`; `disconnectDevice.ts` revokes
+that owner's matching device sessions in the home transaction while retaining
+Things/files. Both routes use the import map and docs registry. Native
+`ThingtimeAPIClient.verifyFileSyncIdentity` negotiates the optional identity
+feature and selects the exact local credential. `device-identity.integration.mts`
+checks real signed pairing, privacy, owner-only disconnect and no claim revival.
+Character agent discovery uses `remix/scripts/character-coordination-preflight.ts`
+and the shared `capabilityContract.ts` SemVer/origin contract. Run
+`npm --prefix remix run characters:preflight -- --origin <selected-origin>` and
+`test:characters-preflight`; see [the coordination runbook](../characters.md#agent-coordination).
+This read-only client adds no route, permission or server contract. Edge refusal
+must remain distinct from missing capabilities, authentication and membership.
+
+Paired Mac inventory uses `api.devices` 1.10.0 and `api.devices-node-state`
+1.11.0 (`deviceMenuBar.ts`, native `MenuBarTelemetry.swift`). Approved Bash uses
+`api.devices-commands` / `api.devices-node-commands` 1.10.0 (`deviceScript.ts`,
+native `DeviceScript.swift`). Both extend existing routes. Optional native
+negotiation preserves compatibility with older origins; script leases require
+explicit approved envelopes. Editable suites live in `appSuites/macMenuBar.ts`
+and `appSuites/deviceScripts.ts`; scripts retain results only on explicit
+private-Thing creation. See README and TESTING for limits and acceptance.
+
 Timeline 1.18.0 adds named versions, undo and version export on the existing
 route: the POST command `name-version` (`api/utils/timeline/versionNames.ts`,
 shared `timeline/versionNames.ts`, protected kind `timeline-version-name`),
@@ -411,3 +441,13 @@ The admin migration status/run contracts are `1.4.0` for guarded incident cleanu
 the migration UI negotiates both before use. Missing local Mongo/JWT settings
 produce a no-store `503 LOCAL_API_NOT_CONFIGURED` before handler/body execution.
 Public docs and capability discovery remain local and available.
+
+
+`api.ai-chatgpt-plan` 1.1.0 registers GET redacted account/attempt status, local authorization availability and storage mode; same-origin POST begin/cancel/select-model/refresh-models/disconnect/prepare-import/move-account/import-account. An optional `X-Thingtime-Expected-User` header rejects stale-account UI requests. `api.ai-models` 1.7.0 lists owner-scoped plan connections; `api.lopu-chats-reply` 1.20.0 resolves those IDs strictly even when saved and uses plan Responses without API billing fallback. Explicit desktop remote selections negotiate and pin the receiving API before proxying; local mode never falls back. `api.capabilities` 1.2.0 permits custom loopback data authorities for local runtimes. Both manifests derive these versions from the canonical docs registry; tests live in `ai/chatgpt-plan`, `apiCapabilities.test.ts` and the Lopu stream suite.
+
+General compressor storage adds `api.things` 1.41.0, `api.things-update`
+1.12.0 and `api.webpages-resolve` 1.8.0 for validated intrinsic media containers
+with separately editable children. `api.webpages-suites-install` 1.7.0 installs
+the upgraded media-tools definitions. Both manifest generators consume the
+canonical endpoint registry; media suite clients require the new minor before
+installation. No image-byte HTTP endpoint is introduced.

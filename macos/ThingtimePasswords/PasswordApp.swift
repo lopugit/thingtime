@@ -8,7 +8,7 @@ import ThingtimePasswordCore
             let disconnect = CommandLine.arguments.contains("--disconnect")
             Task { @MainActor in
                 do {
-                    if disconnect { PasswordSessionStore.clear(); await PasswordIdentityIndex.clearAndWait() }
+                    if disconnect { try PasswordSessionStore.clear(); await PasswordIdentityIndex.clearAndWait() }
                     else {
                         // The Electron parent writes only its current first-party
                         // session through stdin. No tokens in argv, files or logs.
@@ -17,7 +17,7 @@ import ThingtimePasswordCore
                         let session = try ProviderSession(origin: decoded.origin, ownerId: decoded.ownerId, cookie: decoded.cookie)
                         if CommandLine.arguments.contains("--sync") {
                             guard let prior = try? PasswordSessionStore.load() else { exit(0) }
-                            guard prior.origin == session.origin, prior.ownerId == session.ownerId else { PasswordSessionStore.clear(); await PasswordIdentityIndex.clearAndWait(); exit(0) }
+                            guard prior.origin == session.origin, prior.ownerId == session.ownerId else { try PasswordSessionStore.clear(); await PasswordIdentityIndex.clearAndWait(); exit(0) }
                         }
                         let catalog = try await PasswordClient(account: session).catalog()
                         try PasswordSessionStore.save(session)

@@ -2,6 +2,9 @@
 // Unknown tags render only their children; dropped markup containers never do.
 export const HTML_ALLOWED_TAGS = new Set([
 	'tt-web-platform',
+	'tt-media-pipeline',
+	'progress',
+	'output',
 	'tt-service-workspace',
 	'tt-style',
 	'tt-collection',
@@ -19,6 +22,7 @@ export const HTML_ALLOWED_TAGS = new Set([
 	'dd',
 	'tt-dialog',
 	'tt-countdown',
+	'dialog',
 	'details',
 	'summary',
 	'tt-upload',

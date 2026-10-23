@@ -1,6 +1,8 @@
 // Local controls use the same declarative binding as server Actions, but can
 // only change bounded scalar presentation state in this component instance.
 // They cannot overwrite the page runtime, resolve a path, or execute code.
+import { MAX_PAGINATION_CURSOR_CHARS, isPaginationCursorKey } from '~/schemas/paginationCursor';
+
 export const LOCAL_UI_ACTION = '$ui';
 const RESERVED = new Set(['__proto__', 'constructor', 'prototype', 'result', 'last', 'viewer', 'query', 'state', 'error', 'installing', 'installAvailable', 'hasSource', 'pending', 'pendingAction', 'page']);
 const scalar = (value: unknown): value is string | number | boolean =>
@@ -56,9 +58,10 @@ export function localQueryHref(pageId: string | null, params: unknown): string |
 	if (values.length > 32) return null;
 	const query = new URLSearchParams();
 	for (const [key, value] of values) {
-		if (!/^[A-Za-z_][A-Za-z0-9_-]{0,39}$/.test(key) || ['key', 'mode', '__proto__', 'constructor', 'prototype'].includes(key) || !scalar(value))
+		const cursor = isPaginationCursorKey(key) && typeof value === 'string';
+		if (!/^[A-Za-z_][A-Za-z0-9_-]{0,39}$/.test(key) || ['key', 'mode', '__proto__', 'constructor', 'prototype'].includes(key) || (!cursor && !scalar(value)))
 			return null;
-		if (String(value).length > 200) return null;
+		if (String(value).length > (cursor ? MAX_PAGINATION_CURSOR_CHARS : 200)) return null;
 		query.set(key, String(value));
 	}
 	return `/p/${encodeURIComponent(pageId)}?${query.toString()}`;

@@ -85,11 +85,11 @@ graphify-out/.locks/
 graphify-out/cache/*
 !graphify-out/cache/semantic-cas/
 !graphify-out/cache/semantic-cas/**
-# derived 27MB viz - regenerate with `graphify export html`
+# Root HTML is a compatibility alias; retain portable HTML inside snapshots.
 graphify-out/graph.html
-graphify-out/snapshots/**/graph.html
 graphify-out/snapshots/**/.graphify_*
 graphify-out/snapshots/**/.staging-*
+graphify-out/snapshots/**/cache/
 # dated curated-graph backups created by `graphify update`
 graphify-out/[0-9]*/
 
@@ -123,3 +123,5 @@ apple/Passwords/.build/
 apple/Passwords/.swiftpm/
 macos/ThingtimePasswords/*.xcodeproj/
 macos/ThingtimePasswords/build/
+# Query stamps are local even when a query targets a portable snapshot.
+graphify-out/snapshots/**/cache/last_query_stamp

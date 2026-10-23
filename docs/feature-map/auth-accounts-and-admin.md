@@ -76,7 +76,7 @@ private draft API, editor recovery, account isolation and independent media copi
 
 ## Password manager
 
-See [password-manager.md](../password-manager.md). `api.passwords` 1.1.0 is a
+See [password-manager.md](../password-manager.md). `api.passwords` 1.2.1 is a
 private, session-bound home-plane API over protected `password-manager-entry`
 Things. `api/utils/passwords/passwords.ts` owns accounted mutations, revision
 fences and secret-free native catalog projections; `auth/vaultEnvelope.ts` and
@@ -90,6 +90,23 @@ Native provider implementation and signed release are tracked separately in
 [PR #996](https://github.com/lopugit/thingtime/pull/996); this release exposes the
 private catalog and negotiates an optional supported native bridge.
 
+## Account content snapshots
+
+The internal owner inventory uses `backups/accountSnapshots.ts` and the shared
+`timeline/accountContent.ts` v1 contract for approved profile content and private
+preferences. It decodes bounded user BinData without exporting email, passwords,
+vault keys, credentials, permissions or security settings. Managed profile images
+must match the owner, exact slot and durable binding at the same database
+snapshot. The offline reader has no authority to write an account or sign in.
+`test:backups` covers independent recovery, exact preferences and malformed or
+foreign data refusal. `test:backups:account-profile` runs actual registration/profile/settings Request
+handlers against its own disposable replica and compares the internal snapshot
+with independent API readback. Its macOS OS network policy and preflight refuse
+connections outside its disposable loopback database, including redirects and
+direct IPs. It exercises explicit current-writer restoration,
+concurrent edits, source-vault removal and revoked authentication. HTTP/browser,
+managed profile-media restore and product restore orchestration remain separate gates.
+See [portable backups](../portable-backups.md#account-profile-content-and-private-preferences).
 
 ## AI provider model availability
 
@@ -143,3 +160,17 @@ deletes account/bootstrap/auth records atomically in the home DB. It cannot
 accept arbitrary target accounts. Delivery and migration audit records remain.
 
 OpenAI environment-to-vault import uses `credentialVault.ts::importConfiguredOpenAiCredential` through the existing admin credentials route and `PlatformCredentials.tsx`. It is same-origin, admin-only and create-only; `api.admin-ci-credentials` 3.1.0 is negotiated before use. The sole source is server `OPENAI_API_KEY`, and the destination is `OpenAI` / `OPENAI_THINGTIME_API_KEY`.
+
+
+## Local ChatGPT plan connections
+
+`ai/chatgptPlanProtocol.ts` validates dynamic registration, JWT identity, scopes, rotation and Responses restrictions. `chatgptPlanRuntime.ts` owns protected local credentials, loopback callbacks, one-use attempts, account/session/origin fences and per-account cancellation. The authenticated `ai/chatgpt-plan` route publishes redacted state only; `Settings/ChatGPTPlanSettings.tsx` negotiates its capability. Model discovery and Lopu use the existing provider path with strict saved plan pins and no billing fallback. See README ChatGPT plan usage, TESTING and `test:chatgpt-plan`. `chatgptPlanStorage.ts` encrypts owner/origin-scoped records in the account MongoDB and fences its single refresh authority. `chatgptPlanTransfer.ts` seals explicit moves to a destination-owned key. Electron `local-runtime.cjs` manages optional authenticated local Mongo and generated OS-protected secrets; API switching uses separate sessions and restart.
+## Characters
+
+See [Characters](../characters.md) for the settings, login modes, private ownership,
+admin lookup, session selection, agent coordination and acceptance runbook.
+`characterCore.ts`, `characterSession.ts`, `characters.ts` and
+`characterEntitlements.ts` extend the existing home-plane user/session/ledger paths.
+`resolveSessionUser` defaults to the authenticated principal for roster and
+credential callers; request authentication passes an explicit selection (or null
+for the session default). Never re-mint a principal session with an acting user ID.

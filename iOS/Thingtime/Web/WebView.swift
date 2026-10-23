@@ -2,11 +2,55 @@ import SwiftUI
 import UIKit
 import WebKit
 
+// A failed protected-Keychain clear fences this request until the user chooses
+// another destination or explicitly retries. Ordinary SwiftUI updates cannot retry.
+struct DestinationNavigationFence {
+    struct Request: Equatable {
+        let url: URL
+        let id: UUID
+    }
+
+    enum Outcome: Equatable { case unchanged, allowed, failed, blocked }
+    private(set) var loadedRootURL: URL?
+    private(set) var latestRequest: Request?
+    private var failedRequest: Request?
+
+    mutating func prepare(_ request: Request, clearAuthority: () -> Bool) -> Outcome {
+        latestRequest = request
+        guard loadedRootURL != request.url else { return .unchanged }
+        guard failedRequest != request else { return .blocked }
+        if loadedRootURL != nil && !clearAuthority() {
+            failedRequest = request
+            return .failed
+        }
+        failedRequest = nil
+        loadedRootURL = request.url
+        return .allowed
+    }
+}
+
 struct WebView: UIViewRepresentable {
     private static let nativeMessageHandlerName = "thingtimeNative"
 
     let url: URL
     @Binding var widgetPath: String?
+    var destinationRequestID = UUID()
+    var onDestinationResult: (URL, UUID, URL, Bool) -> Void = { _, _, _, _ in }
+
+    private var destinationRequest: DestinationNavigationFence.Request {
+        .init(url: url, id: destinationRequestID)
+    }
+
+    private func reportDestinationResult(_ coordinator: Coordinator, succeeded: Bool) {
+        let request = destinationRequest
+        guard let activeURL = coordinator.loadedRootURL, coordinator.lastReportedDestinationRequest != request else { return }
+        coordinator.lastReportedDestinationRequest = request
+        // UIViewRepresentable updates must not synchronously mutate SwiftUI state.
+        DispatchQueue.main.async { [weak coordinator] in
+            guard coordinator?.destinationNavigation.latestRequest == request else { return }
+            onDestinationResult(request.url, request.id, activeURL, succeeded)
+        }
+    }
 
     func makeCoordinator() -> Coordinator {
         Coordinator()
@@ -17,6 +61,9 @@ struct WebView: UIViewRepresentable {
         configuration.defaultWebpagePreferences.allowsContentJavaScript = true
         configuration.websiteDataStore = .default()
         configuration.userContentController.addUserScript(Self.bridgeUserScript)
+        configuration.userContentController.addUserScript(MobileDeviceBridge.script)
+        configuration.userContentController.addUserScript(MobileFolderBridge.script)
+        configuration.userContentController.addUserScript(FileExportBridge.script)
         configuration.userContentController.add(context.coordinator, name: Self.nativeMessageHandlerName)
 
         let webView = ThingtimeWKWebView(frame: .zero, configuration: configuration)
@@ -35,8 +82,9 @@ struct WebView: UIViewRepresentable {
         webView.scrollView.alwaysBounceHorizontal = false
         webView.scrollView.contentInsetAdjustmentBehavior = .never
         webView.applyThingtimeScrollInsets(forceSafeAreaUpdate: true)
-        context.coordinator.loadedRootURL = url
+        _ = context.coordinator.destinationNavigation.prepare(destinationRequest, clearAuthority: { true })
         webView.load(URLRequest(url: url))
+        reportDestinationResult(context.coordinator, succeeded: true)
         return webView
     }
 
@@ -46,23 +94,45 @@ struct WebView: UIViewRepresentable {
         // value cannot suppress the teardown for a later destination change.
         let widgetTarget = widgetPath.flatMap { URL(string: $0, relativeTo: url)?.absoluteURL }
         if widgetPath != nil { DispatchQueue.main.async { widgetPath = nil } }
-        guard rootChanged || widgetTarget != nil else { return }
+        let passwordBridge = context.coordinator.passwordBridge
+        let outcome = context.coordinator.destinationNavigation.prepare(
+            destinationRequest, clearAuthority: { passwordBridge.clear() }
+        )
+        if outcome == .failed {
+            reportDestinationResult(context.coordinator, succeeded: false)
+            return
+        }
+        guard outcome != .blocked else { return }
+        guard rootChanged || widgetTarget != nil else {
+            reportDestinationResult(context.coordinator, succeeded: true)
+            return
+        }
 
         // A destination switch always drops the previous origin's widget content
         // and detaches its queued uploads, even when a widget tap is delivered in
         // the same update. Widget navigation alone stays within the same origin.
-        if rootChanged { WidgetStore.clear(); context.coordinator.resetChatActivity(); context.coordinator.passwordBridge.clear() }
+        if rootChanged {
+            WidgetStore.clear(); context.coordinator.resetChatActivity()
+        }
+        context.coordinator.mobileDevice.suspend()
+        context.coordinator.mobileFolders.suspend()
+        context.coordinator.fileExports.suspend()
         context.coordinator.cancelVoice()
         if rootChanged { context.coordinator.suspendRecordingUploads() }
-        context.coordinator.loadedRootURL = url
         webView.load(URLRequest(url: widgetTarget ?? url))
+        reportDestinationResult(context.coordinator, succeeded: true)
     }
 
     static let bridgeUserScript = ThingtimeBridgeScript.script
 
     final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler {
         weak var webView: WKWebView?
-        var loadedRootURL: URL?
+        var destinationNavigation = DestinationNavigationFence()
+        var lastReportedDestinationRequest: DestinationNavigationFence.Request?
+        var loadedRootURL: URL? { destinationNavigation.loadedRootURL }
+        let mobileDevice = MobileDeviceBridge()
+        let mobileFolders = MobileFolderBridge()
+        let fileExports = FileExportBridge()
         private let lopuVoice = LopuVoiceSessionController()
         private let lopuChats = LopuChatActivityController()
         let passwordBridge = PasswordBridge()
@@ -90,6 +160,12 @@ struct WebView: UIViewRepresentable {
             }
         }
 
+        func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
+            mobileDevice.suspend()
+            mobileFolders.suspend()
+            fileExports.suspend()
+        }
+
         // OAuth consent must run in the system browser. Explicit new-window web
         // links retain this app's signed-in page for the session-bound completion.
         func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration,
@@ -114,6 +190,11 @@ struct WebView: UIViewRepresentable {
                 "lopuVoiceVersion": "1.3.0",
                 "lopuChatActivityVersion": "1.0.0",
                 "notificationsVersion": "1.0.0",
+                "devicePairingVersion": "1.0.0",
+                "fileAccessVersion": MobileFolderBridge.accessVersion,
+                "fileUploadVersion": MobileFolderBridge.uploadVersion,
+                "fileExportVersion": FileExportBridge.version,
+                "fileStagingVersion": MobileFolderBridge.stagingVersion, "filePublicationVersion": MobileFolderBridge.publicationVersion,
                 "watchNotifications": true
             ])
         }
@@ -146,6 +227,38 @@ struct WebView: UIViewRepresentable {
                 return
             }
             switch type {
+            case "file-export":
+                guard message.frameInfo.isMainFrame, let webView, let root = loadedRootURL,
+                      let current = webView.url, LopuVoiceContract.sameOrigin(current, root),
+                      let frame = message.frameInfo.request.url, LopuVoiceContract.sameOrigin(frame, root) else { return }
+                fileExports.handle(body, webView: webView, root: root,
+                    currentRoot: { [weak self] in self?.loadedRootURL },
+                    cookies: { [weak self] values, url in self?.cookies(values, matching: url) ?? [] },
+                    reply: { [weak self] type, payload in self?.sendToWeb(type: type, payload: payload) })
+            case "mobile-files":
+                guard message.frameInfo.isMainFrame, let webView, let root = loadedRootURL,
+                      let current = webView.url, LopuVoiceContract.sameOrigin(current, root),
+                      let frame = message.frameInfo.request.url, LopuVoiceContract.sameOrigin(frame, root) else { return }
+                mobileFolders.handle(body, webView: webView, root: root,
+                    currentRoot: { [weak self] in self?.loadedRootURL },
+                    cookies: { [weak self] values, url in self?.cookies(values, matching: url) ?? [] },
+                    verifyOwner: { [weak self, weak webView] scope, check in
+                        guard let self, let webView else { throw CancellationError() }
+                        try await self.mobileDevice.verifyOwner(scope, webView: webView,
+                            cookies: { [weak self] values, url in self?.cookies(values, matching: url) ?? [] }, check: check)
+                    }, verifyDevice: { [weak self, weak webView] scope, deviceId, check in
+                        guard let self, let webView else { throw CancellationError() }
+                        try await self.mobileDevice.verifyDevice(scope, deviceId: deviceId, webView: webView,
+                            cookies: { [weak self] values, url in self?.cookies(values, matching: url) ?? [] }, check: check)
+                    }, reply: { [weak self] type, payload in self?.sendToWeb(type: type, payload: payload) })
+            case "mobile-device":
+                guard message.frameInfo.isMainFrame, let webView, let root = loadedRootURL,
+                      let current = webView.url, LopuVoiceContract.sameOrigin(current, root),
+                      let frame = message.frameInfo.request.url, LopuVoiceContract.sameOrigin(frame, root) else { return }
+                mobileDevice.handle(body, webView: webView, root: root,
+                    currentRoot: { [weak self] in self?.loadedRootURL },
+                    cookies: { [weak self] values, url in self?.cookies(values, matching: url) ?? [] },
+                    reply: { [weak self] type, payload in self?.sendToWeb(type: type, payload: payload) })
             case "lopu-chat-activity-sync":
                 guard message.frameInfo.isMainFrame, let webView, let root = loadedRootURL,
                       let current = webView.url, LopuVoiceContract.sameOrigin(current, root),

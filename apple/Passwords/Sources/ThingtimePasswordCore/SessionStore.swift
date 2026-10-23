@@ -32,8 +32,16 @@ public enum PasswordSessionStore {
             guard status == errSecSuccess else { throw PasswordProviderError.unavailable }
         } else if updated != errSecSuccess { throw PasswordProviderError.unavailable }
     }
-    public static func clear() {
-        guard let query = try? query(accessGroup: group) else { return }
-        SecItemDelete(query as CFDictionary)
+    public static func clear() throws {
+        try clear(accessGroup: group, delete: { SecItemDelete($0 as CFDictionary) })
+    }
+    // Inject only the system deletion result for deterministic, credential-free
+    // regression tests. Every attempt still validates the protected query.
+    static func clear(accessGroup: String?, delete: ([String: Any]) -> OSStatus) throws {
+        let query = try query(accessGroup: accessGroup)
+        let status = delete(query)
+        guard status == errSecSuccess || status == errSecItemNotFound else {
+            throw PasswordProviderError.unavailable
+        }
     }
 }

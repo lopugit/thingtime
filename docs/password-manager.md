@@ -2,14 +2,21 @@
 
 `/passwords` is an account-private credential library. Each account can own many
 independent entries for the same service. Entries use the protected
-`password-manager-entry` Thing schema and the reusable Thing `mods.layout=fields`
-editor, with ordered fields, masked secrets and extensible custom fields. The
-ordinary Thing tree is unchanged; controlled field mods do not persist values
-through global Thing state, local caches, editor history or request diagnostics.
+`password-manager-entry` Thing schema with ordered fields, masked secrets and
+extensible custom fields. The password page uses ordinary editable block
+templates for its header, repeated cards/fields, transfer dialogs, QR and native
+controls, attachments and source/history panels. The Settings document host
+saves only layout templates. An explicit transient adapter hydrates allowlisted
+named inputs/textareas from live closure values; decrypted values never enter
+ComponentDataScope, saved block props, global Thing state, local caches, generic
+Action history or request diagnostics. Enter submits the enclosing entry after
+required-field validation. Hide/owner/origin changes revoke private controls;
+backgrounding masks them without discarding unsaved drafts. Entering Builder
+mode clears control values and cancels the adapter lifetime.
 
 ## Storage and access
 
-`api.passwords` 1.2.0 uses the home data plane. GET returns 50 metadata records
+`api.passwords` 1.2.1 uses the home data plane. GET returns 50 metadata records
 at a time. Optional `q` searches all owned title metadata before pagination using
 a case-insensitive literal substring (outer whitespace is ignored). Keep the same
 query on subsequent pages; restart without a cursor when it changes. Field values
@@ -76,7 +83,7 @@ The coverage target is every datum in a 1PUX v3 file: all known and unknown item
 categories, structured field values, sections and field attributes, tags,
 favourites, archived state, IDs, timestamps, URLs, linked-item references, account
 and vault attributes, password history, documents, attachments, icons, and unknown
-properties. Standard fields are editable through Thing mods. The original item
+properties. Standard fields are editable through the password field templates. The original item
 and its account/vault attributes remain encrypted for inspection. A separate
 archive entry owns every original ZIP member, including exact export.data and
 export.attributes bytes, so unknown structures and original numeric literals
@@ -151,4 +158,4 @@ It uses real session/admin/password/upload endpoints and creates a synthetic
 `/tmp/thingtime-password-import-qa/all-data.1pux` for browser round-trip checks.
 Never point this test at production or supply personal credentials.
 
-The installed desktop bridge checks the selected HTTPS server's capability manifest before forwarding private password requests. Full-vault title search requires `api.passwords` 1.2.0 or a compatible update there, even when the bundled UI is newer. Missing, wrong-origin, or breaking manifests produce an explicit compatibility error instead of silently using an older listing contract.
+The installed desktop bridge checks the selected HTTPS server's capability manifest before forwarding private password requests. Full-vault title search requires `api.passwords` 1.2.1 or a compatible update there, even when the bundled UI is newer. Missing, wrong-origin, or breaking manifests produce an explicit compatibility error instead of silently using an older listing contract.
