@@ -1,4 +1,4 @@
-import { appendFile, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { appendFile, mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { resolve } from 'node:path';
@@ -6,6 +6,7 @@ import { pathToFileURL } from 'node:url';
 
 const exec = promisify(execFile);
 export const marker = 'thingtimeGithubActionsBuild';
+export const policyVersion = '1';
 const required = (name) => {
   const value = process.env[name];
   if (!value) throw new Error(`Missing ${name}`);
@@ -48,6 +49,7 @@ export function selectTarget(branch, productionBranch, environments, requested =
 export function deploymentIssue(deployment, { sha, branch, target, projectId }) {
   if (deployment.projectId !== projectId) return 'project';
   if (deployment.meta?.[marker] !== '1') return 'build-marker';
+  if (deployment.meta?.thingtimePrebuiltPolicy !== policyVersion) return 'output-policy';
   if (deployment.meta?.githubCommitSha !== sha || deployment.meta?.githubCommitRef !== branch) return 'source';
   if (deployment.meta?.thingtimeBuildTarget !== target.slug) return 'target-marker';
   if (target.kind === 'production' ? deployment.target !== 'production' : deployment.target === 'production') return 'production-target';
@@ -59,7 +61,7 @@ export function deploymentArgs({ directory, target, branch, sha, teamSlug, runId
   const args = ['deploy', '--prebuilt', '--archive=tgz', '--yes', '--scope', teamSlug, '--cwd', directory];
   args.push(target.kind === 'production' ? '--prod' : `--target=${target.slug}`);
   const [owner, repo] = repository.split('/');
-  for (const [key, value] of Object.entries({ [marker]: '1', thingtimeBuildTarget: target.slug, githubCommitSha: sha, githubCommitRef: branch, githubCommitOrg: owner, githubCommitRepo: repo, githubDeployment: '1', githubWorkflowRunId: runId })) args.push('--meta', `${key}=${value}`);
+  for (const [key, value] of Object.entries({ [marker]: '1', thingtimePrebuiltPolicy: policyVersion, thingtimeBuildTarget: target.slug, githubCommitSha: sha, githubCommitRef: branch, githubCommitOrg: owner, githubCommitRepo: repo, githubDeployment: '1', githubWorkflowRunId: runId })) args.push('--meta', `${key}=${value}`);
   for (const [key, value] of Object.entries({ THINGTIME_BRANCH_NAME: branch, THINGTIME_GIT_COMMIT_SHA: sha })) args.push('--env', `${key}=${value}`);
   return args;
 }
@@ -69,6 +71,38 @@ export function publisherEnvironment({ teamId, projectId, token }, environment =
   // Bind both identifiers to the independently authorized project, overriding
   // any inherited CLI context before uploading the artifact.
   return { ...environment, VERCEL_ORG_ID: teamId, VERCEL_PROJECT_ID: projectId, VERCEL_TOKEN: token };
+}
+
+// Prebuilt uploads consume Build Output API metadata; vercel.json alone does
+// not carry cron schedules or per-function regions into an existing artifact.
+export async function applyOutputPolicy(directory, productConfig, target) {
+  const output = resolve(directory, '.vercel/output');
+  const path = resolve(output, 'config.json');
+  const config = JSON.parse(await readFile(path, 'utf8'));
+  if (config.version !== 3) throw new Error('Unsupported Build Output API version');
+  delete config.crons;
+  if (target.kind === 'production') config.crons = productConfig.crons || [];
+  await writeFile(path, JSON.stringify(config));
+  async function visit(directory) {
+    for (const entry of await readdir(directory, { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue; // Function aliases are symlinks.
+      const child = resolve(directory, entry.name);
+      if (!entry.name.endsWith('.func')) { await visit(child); continue; }
+      const file = resolve(child, '.vc-config.json');
+      const fn = JSON.parse(await readFile(file, 'utf8'));
+      if (productConfig.regions) fn.regions = productConfig.regions;
+      await writeFile(file, JSON.stringify(fn));
+    }
+  }
+  await visit(resolve(output, 'functions'));
+}
+
+export function runtimePolicyIssue(deployment, productConfig, target) {
+  if (productConfig.regions && JSON.stringify([...(deployment.regions || [])].sort()) !== JSON.stringify([...productConfig.regions].sort())) return 'regions';
+  const expected = target.kind === 'production' ? productConfig.crons || [] : [];
+  const normalized = (rows) => JSON.stringify(rows.map(({ path, schedule }) => ({ path, schedule })).sort((a, b) => a.path.localeCompare(b.path)));
+  if (normalized(deployment.crons || []) !== normalized(expected)) return 'crons';
+  return null;
 }
 
 async function context(branch, requested) {
@@ -151,19 +185,20 @@ async function publish() {
   if (plan.sha !== required('SOURCE_SHA') || plan.target.id !== (process.env.TARGET_ID || '')) {
     console.log('Source or environment advanced; a newer run owns deployment'); return;
   }
+  const source = await github(`/contents/vercel.json?ref=${plan.sha}`);
+  const productConfig = JSON.parse(Buffer.from(source.content, 'base64').toString('utf8'));
   let deployment = await existing(plan);
   if (!deployment) {
     const directory = resolve(required('VERCEL_PREBUILT_DIR'));
     // Only the validated output is read from the untrusted build. Source config
     // comes independently from the authorized immutable GitHub commit.
-    const source = await github(`/contents/vercel.json?ref=${plan.sha}`);
-    const productConfig = JSON.parse(Buffer.from(source.content, 'base64').toString('utf8'));
     const config = { framework: null, git: { deploymentEnabled: false } };
     for (const key of ['regions', 'fluid']) if (productConfig[key] !== undefined) config[key] = productConfig[key];
     if (plan.target.kind === 'production' && productConfig.crons) config.crons = productConfig.crons;
     await mkdir(resolve(directory, '.vercel'), { recursive: true });
     await writeFile(resolve(directory, '.vercel/project.json'), JSON.stringify({ orgId: required('VERCEL_TEAM_ID'), projectId: plan.projectId }), { mode: 0o600 });
     await writeFile(resolve(directory, 'vercel.json'), JSON.stringify(config));
+    await applyOutputPolicy(directory, productConfig, plan.target);
     const args = deploymentArgs({ ...plan, directory, teamSlug: required('VERCEL_TEAM_SLUG'), runId: required('GITHUB_RUN_ID'), repository: required('GITHUB_REPOSITORY') });
     let stdout;
     try {
@@ -179,7 +214,7 @@ async function publish() {
       deployment = await vercel(`/v13/deployments/${new URL(urls.at(-1)).hostname}`);
     }
   }
-  const issue = deploymentIssue(deployment, plan);
+  const issue = deploymentIssue(deployment, plan) || runtimePolicyIssue(deployment, productConfig, plan.target);
   if (issue || deployment.readyState !== 'READY') throw new Error(`Deployment verification failed (${issue || deployment.readyState})`);
   const url = `https://${deployment.url}`;
   await smoke(url);

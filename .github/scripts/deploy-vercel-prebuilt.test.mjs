@@ -1,7 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { deploymentArgs, deploymentIssue, marker, planOutputs, publisherEnvironment, selectTarget, sourceFromEvent } from './deploy-vercel-prebuilt.mjs';
+import { mkdtemp, mkdir, writeFile, readFile, rm, symlink } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { applyOutputPolicy, policyVersion, runtimePolicyIssue, deploymentArgs, deploymentIssue, marker, planOutputs, publisherEnvironment, selectTarget, sourceFromEvent } from './deploy-vercel-prebuilt.mjs';
 
 const custom = [{ id: 'env_develop', slug: 'develop', branchMatcher: { type: 'equals', pattern: 'develop' } }];
 test('a READY artifact still reconciles its aliases and status without rebuilding', () => {
@@ -61,7 +64,7 @@ test('every environment uploads only prebuilt output and stamps exact source ide
 
 test('deployment evidence rejects mismatched source, project and environments', () => {
   const plan = { branch: 'develop', sha: 'a'.repeat(40), target: selectTarget('develop', 'main', custom), projectId: 'prj_thingtime' };
-  const deployment = { projectId: plan.projectId, customEnvironment: { id: 'env_develop' }, target: null, meta: { [marker]: '1', githubCommitRef: plan.branch, githubCommitSha: plan.sha, thingtimeBuildTarget: 'develop' } };
+  const deployment = { projectId: plan.projectId, customEnvironment: { id: 'env_develop' }, target: null, meta: { [marker]: '1', thingtimePrebuiltPolicy: policyVersion, githubCommitRef: plan.branch, githubCommitSha: plan.sha, thingtimeBuildTarget: 'develop' } };
   assert.equal(deploymentIssue(deployment, plan), null);
   assert.equal(deploymentIssue({ ...deployment, target: 'production' }, plan), 'production-target');
   assert.equal(deploymentIssue({ ...deployment, customEnvironment: null }, plan), 'custom-environment');
@@ -86,4 +89,28 @@ test('build job has no secrets/environment and publisher executes only protected
   // its final branch check or status receipt. Only protected jobs use the same
   // automation credential fallback as the existing PR preview controller.
   assert.equal((yaml.match(/GH_TOKEN: \$\{\{ secrets\.CONFLICT_RESOLVER_PAT \|\| github\.token \}\}/g) || []).length, 2);
+});
+
+test('prebuilt output carries trusted production crons and function regions', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'prebuilt-policy-'));
+  try {
+    const output = join(dir, '.vercel/output');
+    const fn = join(output, 'functions/server.func');
+    await mkdir(fn, { recursive: true });
+    await writeFile(join(output, 'config.json'), JSON.stringify({ version: 3, routes: [{ handle: 'filesystem' }], crons: [{ path: '/untrusted', schedule: '* * * * *' }] }));
+    await writeFile(join(fn, '.vc-config.json'), JSON.stringify({ runtime: 'nodejs22.x', handler: 'index.mjs', regions: ['iad1'] }));
+    await symlink('server.func', join(output, 'functions/alias.func'));
+    const trusted = { regions: ['syd1'], crons: [{ path: '/api/cron', schedule: '17 * * * *' }] };
+    await applyOutputPolicy(dir, trusted, { kind: 'production' });
+    const config = JSON.parse(await readFile(join(output, 'config.json'), 'utf8'));
+    assert.deepEqual(config.crons, trusted.crons);
+    assert.deepEqual(config.routes, [{ handle: 'filesystem' }]);
+    assert.deepEqual(JSON.parse(await readFile(join(fn, '.vc-config.json'), 'utf8')).regions, ['syd1']);
+    assert.equal(runtimePolicyIssue({ regions: ['syd1'], crons: trusted.crons }, trusted, { kind: 'production' }), null);
+    assert.equal(runtimePolicyIssue({ regions: ['syd1'], crons: [] }, trusted, { kind: 'production' }), 'crons');
+    assert.equal(runtimePolicyIssue({ regions: ['iad1'], crons: trusted.crons }, trusted, { kind: 'production' }), 'regions');
+    await applyOutputPolicy(dir, trusted, { kind: 'preview' });
+    assert.equal(JSON.parse(await readFile(join(output, 'config.json'), 'utf8')).crons, undefined);
+    assert.equal(runtimePolicyIssue({ regions: ['syd1'] }, trusted, { kind: 'preview' }), null);
+  } finally { await rm(dir, { recursive: true, force: true }); }
 });

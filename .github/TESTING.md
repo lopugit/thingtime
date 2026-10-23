@@ -203,6 +203,8 @@ pre-queued with no jobs, logs, or cancellable run graph.
 - Run `node --test .github/scripts/admin-model-order.test.mjs .github/scripts/lopu-credential-vault.test.mjs`.
 # Prebuilt-only deployments (2026-10-23)
 
+- Prebuilt publication must write the immutable source cron list into Build Output API `config.json` for Production only, and set each function region from that source. Verify the live deployment reports Sydney only and the active project cron list contains all seven expected schedules. A changed output-policy marker must replace older READY artifacts.
+
 - If publication stops after Vercel becomes READY, a fresh run skips compilation
   and upload, then recovers aliases and the GitHub status. Repeating a completed
   run must not write identical alias bindings or status receipts again.
