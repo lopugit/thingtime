@@ -1,0 +1,797 @@
+# TODO
+
+## Priority 1 — Fundamental product behavior
+
+- **Complete SEO, Schema.org and rich results across all pages, `/things` and public UGC.**
+  Automatically populate social/schema metadata, preserve private content, and
+  validate actual crawler/search behavior. [Scope and remaining acceptance](claude-todo/seo-schema-rich-results.md);
+  [2026-09-17 investigation and implemented foundation](../docs/seo-social-metadata.md).
+
+- **Preserve and revisit any meaningful app, search, or generated-feed state.**
+
+  Thingtime should automatically retain timestamped, versioned experience
+  snapshots so a user can return to a remembered moment instead of losing a
+  useful search, feed generation, recommendation set, navigation context, or
+  scroll position when they leave the app. Restoring history must be
+  non-destructive, privacy-aware, and able to distinguish an exact historical
+  replay from a fresh rerun of the same query or algorithm.
+  Full spec and Bambu Studio reference screenshot:
+  `claude-todo/20-versioned-experience-history.md`.
+
+- **Give every Thing one History panel and a global timeline browser.**
+
+  Every change should show the Thing card as it was, the property-level
+  diff, and the message that explains why — durable on the device first,
+  then synced to the account, with restore, undo and variations that only
+  ever append versions. Design concept delivered on `/docs/design`
+  (`docs/design/thingtime-history-timeline/`); spec and phases:
+  `claude-todo/56-unified-thing-history-and-timeline-browser.md`.
+
+1. **~~Make true `hydrateRoot(document, ...)` merge-ready.~~ RESOLVED — obsolete
+   (closed 2026-07-21).**
+
+   This item targeted the old Remix SSR architecture: `61c234a` (`Fix Remix
+   Emotion hydration styling`, merged to main) kept Emotion SSR styles in the
+   React document tree, and the remaining work was to eliminate dev-mode
+   `hydrateRoot(document, ...)` mismatch warnings. The app has since migrated
+   to the Vite + React Router non-framework shell: `remix/index.html` is a
+   static shell and `remix/app/entry.client.tsx` renders client-only via
+   `createRoot(document.getElementById('root'))` — there is no server-rendered
+   document and no hydration pass anywhere, so document-hydration mismatch
+   warnings can no longer occur. The original symptom (unstyled-content jump)
+   is handled by the static shell plus the pre-paint theme snapshot in
+   `remix/public/tt-boot.js` (a render-blocking external script loaded from
+   `index.html`'s `<head>` — external so the CSP can stay `script-src 'self'`).
+   If SSR is ever reintroduced, write a fresh spec against that architecture
+   instead of resurrecting this item.
+
+2. **✅ FIXED — Tighten verification-link origin trust.**
+
+   Largely done before this pass: `resolveTrustedOrigin`
+   (`remix/app/api/utils/auth/appOrigin.ts`) already prefers `APP_URL` and all
+   four email-link routes use it. Finished on
+   `claude/todo2-verification-link-origin-s3`: when `APP_URL` is unset the
+   origin is resolved from the platform rather than the caller. On Vercel the
+   Host header is not consulted at all — `VERCEL_BRANCH_URL`/`VERCEL_URL` (or
+   `VERCEL_PROJECT_PRODUCTION_URL` on a production target) name the deployment,
+   and those are server-injected. Off-platform (local dev) a narrow Host
+   allowlist still applies — `localhost`, `127.0.0.1`, `[::1]`,
+   `*.thingtime.com`, `*.ts.net` — and every other Host gets the canonical
+   `https://thingtime.com`. `*.vercel.app` is deliberately NOT a trusted Host
+   pattern: that namespace is multi-tenant, so trusting it would have left the
+   spoof open to anyone willing to deploy a free project. Covered by
+   `npm run test:auth-origin` and the `TESTING.md` "Emailed-link origin trust"
+   checklist. Set `APP_URL` in Vercel prod to bypass the fallback entirely.
+
+3. **Remove legacy HS256 JWT fallback after ES256 migration.**
+
+   Keep `JWT_SECRET` only long enough to verify browser cookies minted before
+   ES256 signing shipped. After the 30-day auth cookie window, remove the
+   fallback verifier and the legacy secret from deployment environments.
+
+4. **Add revocation-aware token introspection for external platforms.**
+   ✅ Built 2026-07-21: `POST /api/v1/auth/introspect` (RFC 7662 shape) —
+   `introspectToken` in `getCurrentUser.ts` verifies the signature then checks
+   the live Mongo session (revocation + expiry + user status). Possession of
+   the token is the authorization; inactive tokens return a bare
+   `{ active: false }` (no oracle). Rate-limited (`auth.introspect`),
+   documented on `/docs/api`, covered in `apiTests.ts`, and live-verified
+   (register → active:true; logout → active:false).
+
+5. **Replace Vercel status polling with Vercel webhooks.**
+
+   ✅ **Code shipped 2026-07-21** (`claude/vercel-webhook-status`): signed
+   webhook receiver at `POST /api/v1/vercel/webhook` (HMAC sha1 over the raw
+   body, 404 when `VERCEL_WEBHOOK_SECRET` unset), latest status persisted per
+   git branch in the `settings` collection (`vercelWebhookStatus`, capped at 30
+   branches), and `getVercelDeploymentStatus` serves ready/error/canceled from
+   the persisted doc with zero Vercel API spend — mid-build states still live
+   poll for phase/progress. Remaining one-time setup (owner): create the
+   webhook in the Vercel dashboard for deployment created/succeeded/error/
+   canceled events pointing at `/api/v1/vercel/webhook`, and set
+   `VERCEL_WEBHOOK_SECRET` in the Vercel env. See `VERCEL_DEPLOYMENTS.md`.
+
+   Original report: the footer status can poll while a deployment is actively building, but
+   ready deployments should not keep spending Vercel API calls just to detect
+   a future build. Add a Vercel webhook endpoint for deployment created/ready/
+   failed events, persist the latest project status server-side, and have the
+   footer/dashboard read the cached status instead of polling Vercel directly.
+
+6. **✅ Done (reconciled 2026-08-18): cross-tab sync for persisted thingtime state.**
+
+   `BroadcastChannel('thingtime')`
+   (`remix/app/Providers/thingtimeSyncChannel.ts`) publishes each successfully
+   applied local `setThingtime` write. Payloads go through the active safe
+   `thingtimeSerialization.ts` codec, so tagged Dates and cycles survive while
+   persisted/runtime function source never crosses tabs. Other tabs apply the
+   write through the existing mutation queue with `{ ignoreUndoRedo: true,
+   fromRemote: true }`, preventing echo loops and keeping undo per-tab. The
+   internal root `timemachine` path is excluded from channel traffic, while
+   ordinary paths restored by undo/redo still converge across tabs. The
+   debounced latest-revision autosave in `ThingtimeProvider` remains the one
+   persist path. Unit and live two-tab verification are recorded in
+   `claude-todo/07-cross-tab-thingtime-sync.md`; optional cold-tab revision
+   reconciliation remains future hardening.
+
+---
+
+_Added 2026-07-08 after a full multi-agent codebase review (27 agents: 6 subsystem
+readers, 3 finder tracks each adversarially verified, 3 idea lenses). Every item
+below was confirmed by reading the cited code — file/line refs are load-bearing._
+
+7. **🟡 PARTIALLY FIXED — 🔒 SECURITY: lock down the unauthenticated admin/data endpoints.**
+
+   > **Status — verified on main 2026-07-21, re-verified 2026-08-29.** A1 and A2
+   > are closed. A3 is throttled but not yet bounded. Do not re-claim A1/A2 or
+   > A3's throttle. Full spec and original finding:
+   > `claude-todo/09-security-hardening.md` §A.
+
+   - ✅ **A1 — `POST /api/v1/mongodb/raw-results`**
+     (`remix/app/routes/api/v1/mongodb/raw-results/_raw-results.tsx`): loader and
+     action both gate on `requireAdmin`, then a fail-closed `mongodb.query`
+     `enforceRateLimit`, and only run bounded read-only queries through
+     `runMongoQuery`. The `things.find().toArray()` full-collection dump that
+     bypassed the `canView` / `visibilityQueryFor` gating in `things.ts` is gone.
+   - ✅ **A2 — `POST /api/v1/mongodb/populate`**
+     (`.../mongodb/populate/_populate.tsx`): `requireAdmin` plus a fail-closed
+     `mongodb.populate` limiter, so an anonymous caller can no longer seed
+     repo-known demo passwords or burn bcrypt/Mongo work per request.
+   - 🟡 **A3 — `POST /api/v1/auth/service-account`**
+     (`.../auth/service-account/_service-account.tsx` → `serviceAccounts.ts`):
+     public by design. PR #100 (merged 2026-08-12) added the fail-closed per-IP
+     `auth.serviceAccount` limiter, a 16 KiB body cap, and an explicit field
+     whitelist, so unauthenticated mass-minting is throttled. **Still open:** the
+     minted token is non-expiring (`signJwt expiresIn:null`,
+     `createSession expiresAt:null`) and carries the 5 GiB
+     `storageAllowanceBytes` default. Bound the token lifetime before closing
+     this item. (`getCurrentUser` only disables an _unverified_ service token
+     after a 7-day grace, so it does not bound a verified one.) PR #103 was
+     closed unmerged and covered signup/item 8, not A3.
+
+   All three are still registered in the prod dispatcher
+   (`remix/server/routes/api/[...].ts`) — the gating above is what makes them
+   safe, so keep it in place if these routes ever move.
+
+8. **✅ FIXED — 🔒 SECURITY: brute-force + abuse rate limiting on auth endpoints.**
+
+   Login and resend-verification use the shared, admin-tunable IP limiter and
+   size-capped body reader. PR #167 added the canonical `auth.register` rule at
+   10 attempts per 15 minutes per IP; PR #99 leaves that rule unchanged and adds
+   the remaining 16 KiB streaming registration body cap. Public registration
+   continues to whitelist accepted fields rather than forwarding caller `meta`.
+   Full rationale and the earlier §A closure: `claude-todo/09-security-hardening.md`.
+
+9. **✅ FIXED IN PR #99 — 🐛 persisted strings no longer corrupt into Dates.**
+
+   The active persistence serializer tags real Dates and never infers a Date
+   from an untagged string. Ambiguous legacy ISO values remain text rather than
+   risking user-data corruption; known date fields can migrate schema-aware.
+   This keeps Dates and identical-looking user text distinct across new repeated
+   save/reload cycles. Malformed tag-looking user objects are preserved,
+   functions are dropped, and the real flatted codec is covered by focused
+   regression tests.
+
+10. **✅ FIXED IN PR #99 — 🔒 persisted-state code execution removed; strict CSP added.**
+
+    Persisted functions are no longer serialized, legacy `ttype:'function'`
+    payloads are dropped without execution, and the application policy omits
+    both inline script execution and `unsafe-eval`. Pre-paint boot code now comes
+    from same-origin `/tt-boot.js`; only repository-controlled design bundles get
+    a path-scoped runtime-compiler exception inside an opaque-origin sandbox.
+    Commander assignments now parse data literals without `eval`. Unused
+    smarts dynamic-code modes remain blocked by CSP; any future executable
+    command design must use an explicit safe registry or isolated sandbox rather
+    than weakening the whole application policy.
+    Full spec: `claude-todo/09-security-hardening.md`.
+
+11. **✅ FIXED: Feed shows duplicate posts in ranked mode.**
+
+    Fixed on `claude/feed-ranked-dedupe-s7` (2026-07-21): every paginated
+    append now flows through one shared `appendPostsDeduped` helper
+    (`feedTypes.ts`) — the feed pager (both simple and advanced modes) and the
+    profile pager drop any page entry whose `post.id` is already rendered, so
+    ranked re-scoring of the moving candidate window can no longer produce
+    duplicate React keys. Server-side exclusion of served ids for ranked
+    pagination remains an optional follow-up optimisation (saves duplicate
+    delivery, not needed for correctness).
+
+12. **⚡ `React.memo` on `PostCard` is defeated → every card repaints on scroll.**
+    _✅ Done 2026-07-21: `PostCard`'s `onChanged` contract is now `(id, next)` so
+    `PostList` passes the consumers' already-`useCallback`-stable
+    `handlePostChanged` straight through — no per-card closure, memo bails
+    correctly. Feed + ProfilePage handlers already matched the new signature._
+
+    `PostList.tsx` L78 passes a fresh inline closure
+    `onChanged={(next) => onPostChanged(post.id, next)}` per render, so the
+    `React.memo` at `PostCard.tsx` L250 (default shallow compare) never bails.
+    Every engagement event bumps `sessionEventCount`
+    (`useFeedEngagement.ts` L73) → re-renders `FeedPage` → repaints **all** cards
+    mid-scroll. Change `PostCard`'s prop contract to `onChanged(id, next)` (it
+    already has `post`) or memoise a per-card wrapper. Apply to other `PostList`
+    consumers (`ProfilePage`).
+
+13. **✅ FIXED: Global Cmd/Ctrl+Z listener hijacks native text undo everywhere.**
+
+    Fixed on `claude/undo-editable-guard-s8` (2026-07-21):
+    `useThingtimeMachine.tsx` `keyListener` now bails before `preventDefault()`
+    whenever `e.target` is INPUT/TEXTAREA/SELECT/contentEditable or
+    `e.isComposing`, so native text undo wins inside the post composer, comment
+    boxes, the login form, and Editor.js blocks. The combo match also
+    normalises case (`e.key.toLowerCase() === 'z'`), which makes the redo
+    branch reachable — Shift+Z reports `'Z'`, so Cmd/Ctrl+Shift+Z previously
+    never redid anything. Checklist line in `TESTING.md` under "Feed thing
+    rendering".
+
+14. **✅ FIXED IN PR #115 — 🧹 Remove render-time debug leaks in the hot path.**
+
+    The severe part — the unbounded `window.useThingtimeScope` per-render array
+    in `useThingtime.tsx` — was already gone before this pass (the hook is now a
+    plain context read). Remaining render-time `console.log`s were cleared on
+    `claude/render-log-leaks-s7` (2026-07-21): removed all four render-time logs
+    in `ThingtimeURL.tsx` (the `location`, path/thing `useMemo` bodies, and the
+    per-render return log), the per-render `commanderActive` log and the
+    per-keypress `e?.code` log in `CommanderV2.tsx`, the per-render `debug`
+    object + log in the `command` `useMemo` and the per-keypress `e?.code` log
+    in `CommanderV1Deprecated.tsx` (folded in from PR #110), and gated the three
+    `addNewChild` debug logs in `Thingtime.tsx` behind the file's existing
+    `TT_DEBUG` flag. Verified live: `/` and `/things` render cleanly with no
+    console errors and none of the removed logs. (Discrete event-handler logs in
+    `CommanderV2` — on select/close/error — were left as-is; they are not
+    render-time hot-path leaks. The two remaining render-body `console.debug`
+    calls in `LogoOld2.tsx`/`LogoOld3.tsx` are unreachable — neither component
+    is imported anywhere — so they are not hot-path leaks either.)
+
+15. **🟡 MOSTLY DONE — 🛠️ DX ratchet: add typecheck, a headless test runner, and CI.**
+
+    Shipped on `claude/dx-test-runner-ci` (PR #121, consolidating the parallel
+    PRs #119/#123/#126): a headless CLI runner
+    (`remix/scripts/run-api-tests.mts`, `npm run test:api`) that reuses the
+    canonical `apiTests.ts` + `apiTestRunner.ts` the interactive `/tests` page
+    uses; a `test:unit` aggregate whose `node --test` suites load through tsx
+    (fixing the previously-broken `~/`-alias suites and covering the
+    scriptless `collectionNames.test.ts`); `typecheck` plus a
+    `typecheck:ratchet` that fails only when the tsc error count grows past
+    `remix/scripts/typecheck-baseline.json`; and `.github/workflows/web-ci.yml`
+    (build + ratchet + unit tests, and the full API suite against a real
+    Vite + Nitro + Mongo stack). **Still open:** progressively enabling tsc
+    strictness to burn the baseline down (start with `noImplicitAny`, fixing
+    the untyped `args` in `useApi.tsx`), and finishing the Commander V1→V2
+    migration (blocked on PR #130; `ThingtimeTypes` was unified in PR #153).
+
+    Original report: `remix/package.json` has no `typecheck`/`test` script; `tsconfig` disables
+    `strict`/`noImplicitAny`/`strictNullChecks`; no CI (`.github/` absent). The
+    58+ API tests in `remix/app/tests/api/apiTests.ts` run only via the
+    interactive `/tests` page, though `apiTestRunner.ts` is plain fetch and
+    Node-portable. Add `"typecheck": "tsc --noEmit"`, a CLI runner
+    (`remix/scripts/run-api-tests.mjs`) + `"test"` script, a CI workflow, then
+    progressively enable strictness (start with `noImplicitAny`, fixing the
+    untyped `args` in `useApi.tsx` L36/L47/L59). Also unify the two drifted
+    `ThingtimeTypes` interfaces (`useThingtime.tsx` L9–19 vs
+    `ThingtimeProvider.tsx` L11–20) and finish the Commander V1→V2 migration
+    (`Thingtime.tsx` L6/L979–986 still renders `CommanderV1Deprecated`).
+
+16. **🌈 Delight & growth ideas (features / design / easter eggs).**
+
+    A curated catalogue of shippable delight — post/theme/algorithm sharing loops,
+    a public theme gallery, the "raise your feed brain" algorithm-growth design, a
+    live API playground on `/docs/api`, `Cmd+K` for the Commander, and a set of
+    hidden easter eggs — all grounded in existing files/utilities.
+    Full spec: `claude-todo/10-delight-and-growth-ideas.md`.
+    (Several eggs from this list are **already shipped** in this branch — see the
+    spec's "Shipped" markers.)
+
+17. **🔗 Unique account invite links with optional profile prefill.**
+
+    Let a signed-in user generate a unique, revocable URL for another person to
+    create a Thingtime account. The inviter may optionally suggest a username,
+    profile name, description, profile image, and banner image; the recipient
+    reviews and can change every suggestion before registering through the one
+    canonical account-creation path. Keep the URL opaque, single-use, expiring,
+    non-enumerable, and unable to grant privileges.
+    Full spec: `claude-todo/18-account-invite-links.md`.
+
+18. **🕶️ Anonymous participants in group chats.**
+
+    Extend the existing Messenger group flow so the creator can add friends or
+    any eligible users and toggle anonymity per participant, including
+    themselves. Invitees still see the real username of the person who invited
+    them, but anonymous members' messages and all in-chat identity surfaces use
+    privacy-safe, chat-local representations with no global account ids or
+    profile links. Preserve server-side moderation and state the honest limits
+    of anonymity.
+    Full spec: `claude-todo/19-anonymous-group-chats.md`.
+
+19. **⚡ Run actions from the component tester.**
+
+    _✅ Approved 2026-08-25 by the repo owner: the tester should fire._
+
+    A component's `ttAction` control is inert on `/components/:key`, because
+    the catalog renders the resolved template directly through the sanitising
+    renderers and never mounts the click wrapper; `/things` PreviewModal is the
+    only firing surface today. Make the live preview and the args tester run
+    the bound action as the viewer, with the tester's current arguments
+    reaching the action inputs, behind a confirmation that names what will run.
+    The browse grid must stay inert — one preview component renders the feed,
+    grid, and columns views, so arming it arms an infinite scroller — and the
+    confirmation, never the author-controlled button label, is the source of
+    truth about what executes. Since the 2026-08-25 security review the
+    delegated run path is owner-pinned, so foreign markup can only ever name
+    one of the viewer's _own_ actions — with author-chosen inputs, and a bare
+    key is exactly the case the dialog cannot resolve client-side. Ownership
+    therefore sets confirmation strength rather than acting as an on/off
+    switch: a component the viewer did not author always confirms, with no
+    skip.
+    Full spec: `claude-todo/20-tester-runs-actions.md`.
+
+20. **📁 Composed app surface for Data + Component + Action programs.**
+
+    Give a folder of Things a runtime view: open it as a composed page that
+    renders its component things live against their saved arguments, with
+    `ttAction` controls firing, so the folder reads as a working mini-app
+    rather than a list of parts. Every element stays traceable to its Thing and
+    `/things` stays the editor. The `app` kind and the root `appId` scalar are
+    already taken by the third-party OAuth client namespace, so express
+    app-ness as a view over an existing folder rather than overloading the
+    client-identity control plane.
+    Full spec: `claude-todo/21-app-composition-surface.md`.
+
+21. **🌱 Define and prove a trustworthy adoption loop.**
+
+    Thingtime has many useful creation, search, history, sharing, component,
+    action, invite, and composed-app ideas, but no shared definition of healthy
+    adoption. Approve one first-value journey, useful-return metric, privacy-safe
+    learning contract, consentful sharing gate, accessibility/reliability
+    guardrails, and aligned sustainability path before optimizing acquisition.
+    Raw signups, page views, time-on-site, and content volume are not north-star
+    outcomes. Start with the evidence note and phased roadmap, then execute the
+    bounded epic in `claude-todo/22-trustworthy-adoption-loop.md`.
+
+22. **🧳 Prove data portability and a graceful exit.**
+
+    Thingtime publicly promises open, always-exportable data and no lock-in,
+    while today's verified primitives are paginated Thing reads, per-item and
+    per-app deletion, private per-file downloads, and a split home/custom data
+    plane. Define one account-wide inventory, versioned open archive, offline
+    verifier, safe semantic restore, selective deletion, and resumable account
+    closure contract. Exclude credentials and foreign private data; never let
+    imported data grant authority; keep baseline exit available to every tier.
+    Start with the evidence note and phased roadmap, then execute
+    `claude-todo/23-data-portability-and-exit.md`.
+
+23. **🌿 Make attention agency and calm use a product contract.**
+
+    Preserve Thingtime's chronological no-training feed and granular
+    notification controls while making automatic continuation, ranked-feed
+    training, corrective feedback, per-post explanations, stopping points, and
+    delivery defaults explicit choices. Useful return may improve, but not by
+    rewarding more minutes, scroll depth, training events, streaks, or
+    notification opens. Start with the evidence note and phased roadmap, then
+    execute `claude-todo/24-attention-agency-and-calm-use.md` only after the
+    owner approves defaults, migration behavior, and guardrail owners.
+
+24. **🌍 Make accessibility and language readiness a release contract.**
+
+    Preserve Thingtime's existing reduced-motion, announcement, focus, and
+    feature-level keyboard work while replacing scattered checks with one
+    complete-journey matrix, impact-led severity policy, shared interaction
+    foundation, and canonical locale/formatting layer. Target WCAG 2.2 AA for
+    approved core web journeys only if the owner accepts the decision packet;
+    do not publish a conformance claim from lint or automated scores. Keep UI
+    locale, authored-content language, and translation separate, and never send
+    private Things to a translator without a distinct approved data contract.
+    Start with the evidence note and phased roadmap, then execute
+    `claude-todo/25-accessibility-and-language-readiness.md` after the owner
+    approves scope, locales, test environments, severity, and accountable
+    owners.
+
+25. **🚨 P0: Keep all established functionality available across pending storage migrations.**
+
+    Deploying code to `develop`, production, or another running shared branch
+    must never make existing user-data reads or writes depend on an operator
+    having already run a migration. Use an expand/coexist/migrate/verify/contract
+    rollout with a centralized compatibility policy, dual-era read/write paths,
+    idempotent reconciliation, and explicit tests against unmigrated, partially
+    migrated, mixed, and fully migrated storage. Feature flags may gate only new
+    behavior; they must never disable existing create, comment, update, react,
+    save, share, or other established capabilities. If compatibility cannot be
+    preserved, block the deployment in CI rather than rejecting live user work.
+    Full spec: `claude-todo/24-migration-safe-continuous-availability.md`.
+
+26. **🛡️ Make community safety and moderation accountable.**
+
+    Preserve Thingtime's shipped community roles, invite controls, message
+    requests, chat mute, and automated moderation while adding the missing
+    human loop: quiet account-level boundaries, specific reports, durable case
+    events, scoped moderator jurisdiction, policy reasons, status, appeal,
+    remedy, and privacy-safe transparency. Models may assist or quarantine under
+    an approved policy; report counts and model verdicts must never be the sole
+    basis for durable high-impact sanctions. Start with the evidence note and
+    phased roadmap, then execute
+    `claude-todo/26-community-safety-and-accountable-moderation.md` only after
+    the owner approves scope, evidence retention, staffing, and stop conditions.
+
+27. **🧩 Build a trusted developer ecosystem.**
+
+    Preserve Thingtime's origin-bound OAuth, explicit scopes, revocation,
+    user-owned app data, sandbox, generated API docs, semantic capability
+    negotiation, and capability-bounded actions while adding the missing
+    distribution lifecycle: accountable publisher declarations, immutable
+    releases, permission and compatibility diffs, reproducible review receipts,
+    narrow incident containment, remediation/appeal, abandonment, and fair
+    discovery. A declaration or badge must never widen runtime authority, and
+    popularity or payment must never substitute for evidence. Start with the
+    evidence note and phased roadmap, then execute
+    `claude-todo/27-trusted-developer-ecosystem.md` only after the owner approves
+    the first artifact family, review capacity, consent rules, incident states,
+    funding boundaries, and stop conditions.
+
+28. **🛟 Make service continuity and recovery a user-facing contract.**
+
+    Preserve Thingtime's existing frontend, Nitro, MongoDB, and deployment
+    health signals while replacing point-in-time readiness with journey-level
+    service objectives, safe degraded modes, truthful write outcomes, verified
+    backups and restore drills, incident ownership, and dependency-failure
+    exercises. Health checks and successful deployments are evidence inputs,
+    not proof that user work is durable or recoverable. Start with the evidence
+    note and phased roadmap, then execute
+    `claude-todo/28-service-continuity-and-recovery.md` only after the owner
+    approves critical journeys, objectives, recovery targets, communication
+    ownership, drill environments, and stop conditions.
+
+29. **🧭 Make content provenance and correction integrity legible.**
+
+    Preserve Thingtime's account-bound authorship, creation/update timestamps,
+    sharing references, and public projections while making material edits,
+    source claims, derivation, platform assistance, corrections, disputes, and
+    evidence limits understandable. Never turn provenance into a universal
+    truth badge, infer AI use from a detector, expose private prompts or source
+    material, or let unsigned user declarations gain platform authority. Start
+    with the evidence note and phased roadmap, then execute
+    `claude-todo/29-content-provenance-and-correction-integrity.md` only after
+    the owner approves the first artifact family, public edit policy, retention
+    and deletion semantics, assertion authority, dispute/remedy ownership, and
+    interoperability pilot boundary.
+
+30. **🌱 Make resource-conscious reach a release contract.**
+
+    Preserve Thingtime's route splitting, immutable asset caching, lazy images,
+    exact byte ledgers, and explicit offline audio while adding complete-journey
+    budgets for constrained devices and networks, a private data-saver choice,
+    intentional media derivatives, bounded local copies, backend-work evidence,
+    and honest environmental-claim limits. Do not remove meaning or safety to
+    hit a score, infer constrained users from sensitive traits, confuse billing
+    bytes with emissions, or queue offline mutations before authority and
+    conflict semantics are approved. Start with the evidence note and phased
+    roadmap, then execute `claude-todo/30-resource-conscious-reach.md` only
+    after the owner approves journeys, test profiles, resource envelopes,
+    tier-neutral meaning, offline scope, signal boundaries, and accountable
+    owners.
+
+31. **🌻 Make creator sustainability and fair value a product contract.**
+
+    Preserve Thingtime's provider-independent subscription tiers, quota
+    accounting, marketplace metadata, authorship, provenance, and portability
+    foundations while defining one honest creator value exchange. Decide the
+    seller, merchant, fulfilment, tax, refund, dispute, loss, payout, and support
+    roles before choosing payment rails; keep signed provider events separate
+    from canonical offers, orders, receipts, entitlements, remedies, and private
+    ledgers. Money must never buy reach, trust, safety, identity disclosure,
+    accessibility, export, or deletion. Start with the evidence note and phased
+    roadmap, then execute
+    `claude-todo/31-creator-sustainability-and-fair-value.md` only after the owner
+    and qualified reviewers approve the fixed-artifact pilot, country/currency,
+    responsibilities, terms, data boundary, provider criteria, operating
+    capacity, guardrails, and stop authority.
+
+32. **📚 Make learning agency and knowledge stewardship a product contract.**
+
+    Preserve Thingtime's knowledge-oriented Things, private relational saves,
+    calm anniversary memories, search, and proposed history/provenance
+    foundations while proving one user-chosen knowledge revisit. Keep saving,
+    scheduling, opening, reflecting, and sharing separate; bind private
+    reflection to authorized source/version context; and never label opens,
+    completions, confidence, streaks, or time spent as learning. Start with the
+    evidence note and phased roadmap, then execute
+    `claude-todo/32-learning-agency-and-knowledge-stewardship.md` only after the
+    owner and qualified reviewers approve the adult cohort, artifact family,
+    one-shot in-app journey, data boundary, evaluation, accessibility profiles,
+    exclusions, owners, and stop authority. AI, minors, schools, assessment,
+    credentials, institutional dashboards, and efficacy claims remain
+    separately gated.
+
+33. **🤝 Make AI agency and accountable assistance a product contract.**
+
+    Preserve Lopu's owner-private chats, explicit model/provider selection,
+    user-vault boundaries, tool evidence, signed exact-action confirmations,
+    and compact receipts while making context, authority, uncertainty,
+    correction, and remedy understandable end to end. Start with one private,
+    previewable, reversible draft journey for consenting adults. Execute
+    `claude-todo/33-ai-agency-and-accountable-assistance.md` only after the
+    owner and qualified reviewers approve the assistance charter, context and
+    memory boundary, capability-risk map, receipt and remedy contract,
+    evaluation, accessibility profiles, accountable owners, and stop authority.
+    Public, external, bulk, unattended, child-facing, and high-impact uses
+    remain separately gated.
+
+34. **🫶 Make collaboration agency and shared stewardship a product contract.**
+
+    Preserve Thingtime's owner-bound Things, explicit ACL visibility,
+    consent-based relationships, relational Messenger membership, bounded
+    community roles and invites, and exact-state update guard while defining
+    one honest shared-artifact lifecycle. Start with one named adult who may
+    suggest bounded changes to one owner-private draft; the owner accepts or
+    rejects against an exact version; either person can stop without stale
+    authority or silent loss. Execute
+    `claude-todo/34-collaboration-agency-and-shared-stewardship.md` only after
+    the owner and qualified reviewers approve invitation disclosure, role and
+    capability states, proposal/conflict semantics, departure/removal effects,
+    evidence and remedy boundaries, accessibility profiles, accountable
+    owners, and stop authority. Public groups, guests, anonymous participants,
+    direct or real-time co-editing, rights transfer, money, apps, AI agents,
+    minors, institutions, and high-impact use remain separately gated.
+
+35. **🪪 Make identity agency and context-safe presence a product contract.**
+
+    Preserve Thingtime's protected account records, allowlisted public profile
+    projection, app-scoped disclosure, authenticators, consentful invite
+    boundary, and proposed chat-local anonymity while keeping their meanings
+    distinct. Start only with an owner-facing, server-projected comparison of
+    “Only you” and “Anyone” profile state so people can predict and correct
+    disclosure. Execute
+    `claude-todo/35-identity-agency-and-context-safe-presence.md` only after the
+    owner and qualified reviewers approve the vocabulary, audiences, canonical
+    projectors, no-collection contract, correction/recovery journeys,
+    accessibility profiles, accountable owners, and stop authority. Mutable
+    usernames, new aliases, proofing, credentials, public badges or scores,
+    minors, and sensitive or high-impact uses remain separately gated.
+
+36. **🗳️ Make collective decision agency and accountable governance a product contract.**
+
+    Preserve Thingtime's poll composer, relational vote Things, protected
+    one-account-per-poll slot, ACL checks, live tally, optimistic correction,
+    and capability registration while making their limits explicit. Start only
+    with one synthetic, non-sensitive, non-binding advisory decision in a
+    private adult test group, with immutable eligibility/ballot/rule versions,
+    server-enforced timing, hidden interim totals, explicit abstention and
+    withdrawal, denominator-aware final reporting, organizer response, challenge,
+    and remedy. Execute
+    `claude-todo/36-collective-decision-agency-and-accountable-governance.md`
+    only after the owner and qualified reviewers approve the decision charter,
+    data boundary, accessibility profiles, accountable owners, and stop
+    authority. Public or binding elections, proof of personhood, secret ballots,
+    minors, institutions, money, moderation verdicts, and high-impact uses remain
+    separately gated.
+
+37. **🔔 Make notification agency and accountable delivery a product contract.**
+
+    Preserve Thingtime's protected owner-private history, stable pagination,
+    bounded text, safe links, credential redaction, and delivery-independent
+    records while separating event observation, history persistence, channel
+    attempts, provider/device receipts, in-app presentation, read state, action
+    outcome, expiry, supersession, and remedy. Start only with one synthetic,
+    owner-triggered, non-sensitive action result in a private adult test account
+    and in-app delivery. Execute
+    `claude-todo/37-notification-agency-and-accountable-delivery.md` only after
+    the owner and qualified reviewers approve the lifecycle vocabulary,
+    producer authority, retention/export/delete rules, sensitivity boundary,
+    accessibility profiles, no-attention-analytics evaluation, accountable
+    owners, and stop authority. External channels, sender-visible read receipts,
+    marketing, safety, money, elections, minors, institutions, and high-impact
+    uses remain separately gated.
+
+38. **🔎 Make search and discovery agency a product contract.**
+
+    Preserve Thingtime's ACL-aware retrieval, app-namespace fencing, bounded
+    structured grammar, account-scoped optimistic cache, and honest approximate
+    totals while separating query, corpus, candidate, match, rank,
+    presentation, recommendation, promotion, trust, and truth. Start only with
+    one fixed synthetic schema and private adult test account using POST,
+    deterministic relevance/newest order, server-derived request and “why
+    matched” evidence, bounded clearable local state, no server query history,
+    no analytics/training, and no public or commercial discovery. Execute
+    `claude-todo/38-search-and-discovery-agency.md` only after the owner and
+    qualified reviewers approve query exposure/retention, ordering and
+    explanation policy, complete-journey profiles, accountable owners, and
+    stop authority. Public people/content discovery, personalization,
+    semantic/vector retrieval, AI answers, sponsorship, minors, institutions,
+    and sensitive or high-impact uses remain separately gated.
+
+39. **🎙️ Make recording agency and intimate-data stewardship a product contract.**
+
+    Preserve Thingtime's disabled-by-default automation, owner-private source
+    checks, bounded processing, explicit personal-device/cloud routes,
+    transcript-as-untrusted-content rule, and confirmed Lopu handoff while
+    making every represented person, copy, derivative, correction, and remedy
+    legible. Start only with one consenting adult's purpose-made,
+    non-sensitive monologue on the personal-device route; prove exact route
+    binding, a scripted transcript correction, derivative review, family
+    inventory/export, and truthful deletion. Execute
+    `claude-todo/39-recording-agency-and-intimate-data-stewardship.md` only
+    after qualified owners approve the recording charter, lifecycle/retention
+    table, correction and deletion semantics, no-cloud receipt, measures,
+    accessibility profiles, incident path, and stop authority. Other people's
+    voices, automatic discovery, cloud processing, reminders, Lopu actions,
+    sharing, minors, institutions, sensitive domains, voice biometrics, emotion
+    or credibility inference, training, and surveillance remain separately
+    gated.
+
+40. **🧬 Make remix agency and responsible reuse a product contract.**
+
+    Preserve Thingtime's freshly authorized, bounded private-fork path, caller-
+    owned Things, independently copied first-party media, source immutability,
+    cleanup, and semantic capability negotiation while separating read access,
+    copy mechanics, reuse permission, adaptation, attribution, lineage,
+    independence, updates, disputes, and remedies. Start only with two approved
+    adult test accounts and one fully synthetic app; show an exact source and
+    dependency plan, apply one narrow synthetic-test grant, create one private
+    copy, change one labelled field, compare and export a version-bound receipt,
+    explicitly decline or adopt one synthetic correction, and delete every
+    fixture. Execute `claude-todo/40-remix-agency-and-responsible-reuse.md` only
+    after qualified owners approve the reuse charter, terms source, exact plan,
+    lineage/privacy contract, comparison and update semantics, dispute/remedy
+    paths, accessibility profiles, accountable owners, and stop authority.
+    Public or commercial remixing, real creator work, payments, rankings,
+    automatic updates, remote deletion, AI use, training, minors, institutions,
+    sensitive domains, and legal or ownership claims remain separately gated.
+
+41. **🤝 Make relationship agency and consentful connection a product contract.**
+
+    Preserve Thingtime's protected one-way follows, mutual friend-request
+    handshake, home-pinned relationship identity, accepted-friend ACL audience,
+    owner-private pending inbox, Messenger request states, and optimistic UI
+    while making each state and its cross-surface effects legible. Start only
+    with two approved adult test accounts, synthetic profiles, and one synthetic
+    friends-only Thing; preview and exercise request, decline, cooldown, resend,
+    accept, crossed request, idempotent repeat, unfriend, account switch, fresh
+    ACL revocation, cache convergence, and truthful transition receipts. Execute
+    `claude-todo/41-relationship-agency-and-consentful-connection.md` only after
+    qualified owners approve the relationship charter, state/effects matrix,
+    public-list policy, stopping behavior, retention/remedy paths,
+    accessibility profiles, accountable owners, and manual stop authority.
+    Account block remains gated on TODO 26. Contact upload, inferred or imported
+    graphs, recommendations, public graph expansion, analytics, advertising, AI
+    use, minors, institutions, sensitive contexts, and relationship-based
+    identity, trust, safety, or authority claims remain separately gated.
+
+42. **🌈 Make joyful delight and play agency a product contract.**
+
+    Preserve Thingtime's factual Lopu path, single bounded confetti surface,
+    motion preference, deterministic musings, and discoverable playful details
+    while separating feedback, decoration, celebration, surprise, play, and
+    reward. Start only with an explicit local design-system preview of one
+    fictional private-Thing completion: show the same factual message with
+    neutral presentation, optional confetti, operating-system reduced motion,
+    and Thingtime motion disabled; prove replay-once, dismissal, disablement,
+    route departure, cleanup, and functional equivalence. Execute
+    `claude-todo/42-joyful-delight-and-play-agency.md` only after qualified
+    owners approve the vocabulary, serious-context denylist, trigger and recipe
+    contract, preference precedence, cultural/accessibility review, measures,
+    incident/removal path, and manual stop authority. Sound, haptics, telemetry,
+    production triggers, account data, public milestones, streaks, variable
+    rewards, scarcity, leaderboards, behavioral advertising, emotional or
+    vulnerability targeting, AI, minors, and sensitive or high-impact contexts
+    remain separately gated.
+
+43. **⏱️ Make automation agency and accountable recurrence a product contract.**
+
+    Preserve Thingtime's current-chat default, saved destination reuse,
+    deterministic occurrence claims, relational run Things, pause fences,
+    ambiguity stop, and missed-backlog skip while making schedule intent,
+    time-zone calculation, destination, context, authority, cost, run state,
+    stopping, repair, export, and deletion inspectable. Start only with one
+    approved adult test account, one synthetic private Thing, one existing Lopu
+    chat, and one short recurring `message` schedule; prove duplicate-tick,
+    restart, pause/resume, downtime, DST, account-switch, destination-loss,
+    notification-failure, cancel, delete, and cleanup behavior. Execute
+    `claude-todo/43-automation-agency-and-accountable-recurrence.md` only after
+    qualified owners approve the vocabulary, persistent-chat default,
+    edit/version policy, recurrence and missed-run semantics, lifecycle,
+    measures, stop conditions, and manual authority. Assistant inference,
+    arbitrary tools, external messaging, production telemetry, new-chat-per-run
+    by default, self-replication, backlog floods, minors, and sensitive or
+    high-impact contexts remain separately gated.
+
+44. **💾 Make local-first agency and accountable synchronization a product contract.**
+
+    Preserve Thingtime's flash-free local projections, safe-codec LocalForage
+    tree, same-origin tab propagation, and bounded-cache helpers while keeping
+    drafts, pending intents, canonical API acceptance, authoritative reread,
+    conflicts, and device convergence distinct. Start only with one approved
+    adult test account, one synthetic private text Thing, one browser profile,
+    two same-origin tabs, and deterministic network fixtures: preserve a
+    bounded draft offline, reconnect after a canonical version change, show
+    both intentions, exercise keep-server/replace/edit-new choices, and verify
+    complete cleanup. Execute
+    `claude-todo/44-local-first-agency-and-accountable-synchronization.md` only
+    after qualified owners approve the claim boundary, vocabulary, storage
+    envelope and bounds, fresh-authority and conflict semantics, accessibility
+    profiles, evidence limits, accountable owners, and stop authority. General
+    offline queues, service workers, automatic merge, CRDTs, collaboration,
+    attachments, public or third-party state, analytics, AI, minors,
+    institutions, and sensitive or high-impact work remain separately gated.
+
+45. **🧒 Make youth safety and age-appropriate agency a product contract.**
+
+    Resolve the mismatch between a merchandise-oriented terms age statement,
+    age-neutral canonical registration, optional private birthday data, and
+    scattered minor exclusions without pretending any fragment proves
+    eligibility, guardian authority, compliance, or safety. Start only with
+    adult specialists and synthetic personas for ages 15, 16, 17, and 18; map
+    every account, privacy, discovery, contact, AI, recording, commerce,
+    deletion, moderation, and support surface into one versioned policy matrix.
+    Execute `claude-todo/45-youth-safety-and-age-appropriate-agency.md` only
+    after qualified owners approve service and jurisdiction scope, the interim
+    eligibility posture, likely-child-access assessment, data and age-assurance
+    boundaries, guardian role, protective defaults, support and remedies,
+    evidence, refresh triggers, and stop authority. Real minors, child accounts
+    or content, production experiments, covert inference, identity-document or
+    biometric collection, behavioral analytics, and child-facing claims remain
+    separately gated.
+
+46. **🔎 Make evidence agency and accountable product claims a product contract.**
+
+    Inventory the statements and overall impressions Thingtime creates across
+    docs, UI, visuals, Lopu, support, APIs, status, releases, stores, caches,
+    translations, and approved third-party channels. Start only with adult
+    internal reviewers, synthetic data, one exact non-production build, and one
+    low-risk claim that a private text Thing preserves specified fields through
+    the tested export-and-restore journey. Execute
+    `claude-todo/46-evidence-agency-and-accountable-product-claims.md` only
+    after owners approve claim meaning, risk tiers, pre-publication evidence,
+    negative and contradictory results, visible qualifications, freshness,
+    sensitive-evidence boundaries, correction families, accessibility,
+    retention, remedy, and stop authority. Public claims, generic trust badges,
+    telemetry, comparative advertising, and security, privacy, accessibility,
+    sustainability, health, safety, youth, identity, learning, AI,
+    institutional, or high-impact assurances remain separately gated.
+
+47. **🧭 Make support agency and accountable remedy a product contract.**
+
+    Give people one consistent, accessible route from a product failure to
+    consentful intake, acknowledgement, accountable handoff, truthful status,
+    the proper domain-owned outcome, correction, reopening, and closure. Keep
+    moderation appeals, incident recovery, refunds, export/deletion, and
+    product-claim challenges under their existing authorities. Start with one
+    synthetic failed export/restore request in an exact non-production build;
+    do not contact real people, integrate an external helpdesk, publish response
+    promises, or collect production support data. The full scope, evidence,
+    stop conditions, and first owner packet live in
+    `claude-todo/47-support-agency-and-accountable-remedy.md`.
+
+48. **🌿 Make change agency and humane product evolution a product contract.**
+
+    Give people a version-bound explanation of material Thingtime changes:
+    what changes and stays the same, why, when, which tasks, data, settings,
+    clients, or meanings are affected, which choices are real, how long old
+    paths remain compatible, and what rollback, support, remedy, or exit means.
+    Start only with adult internal reviewers, one synthetic account, one exact
+    non-production build, and the reversible rename and relocation of one
+    non-sensitive display preference while preserving its stored value and
+    effect. Execute
+    `claude-todo/48-change-agency-and-humane-product-evolution.md` only after
+    qualified owners approve the taxonomy, affected-contract and change-packet
+    vocabulary, preview/notice/choice rules, prior-setting preservation,
+    accessibility/language profiles, compatibility, stale-client, rollout,
+    rollback, deprecation, sunset, evidence, remedy, exit, cleanup, and stop
+    authority. Production rollout, real participants, public telemetry,
+    personalized experiments, a feature-flag platform, policy or permission
+    changes, external API changes, minors, and sensitive or high-impact changes
+    remain separately gated.
+
+49. **🧠 Make personalization agency and accountable memory a product contract.**
+
+    Give people one inspectable account of the choices, observations, and
+    derivatives Thingtime retains about them: source, purpose, scope, store,
+    age, expiry, policy, and current effects, plus honest correction,
+    exclusion, forgetting, and reset controls. Start only with adult internal
+    reviewers, one synthetic account, one synthetic private text Thing, one
+    exact non-production build, and four fixed low-stakes items: an explicit
+    display preference, a device-local last-view value, a synthetic
+    observation, and a deterministic manually seeded derivative. Execute
+    `claude-todo/49-personalization-agency-and-accountable-memory.md` only after
+    qualified owners approve the vocabulary, inventory contract, derivative
+    lifecycle, non-personalized baseline, accessibility matrix, evidence,
+    cleanup, and stop authority. Real personal data, production telemetry,
+    model/provider calls, training, public feeds, advertising, sensitive-trait
+    inference, minors, institutions, and high-impact uses remain separately
+    gated.

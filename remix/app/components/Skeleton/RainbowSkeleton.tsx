@@ -1,14 +1,10 @@
 import React from "react"
 import { Flex } from "@chakra-ui/react"
 
+import { RAINBOW_PALETTE } from "~/theme/rainbow"
+
 export const RainbowSkeleton = (props) => {
-  const [rainbowColours] = React.useState([
-    "#f34a4a",
-    "#ffbc48",
-    "#58ca70",
-    "#47b5e6",
-    "#a555e8",
-  ])
+  const [rainbowColours] = React.useState<string[]>([...RAINBOW_PALETTE])
 
   const keyframes = React.useMemo(() => {
     const keyframes = {}

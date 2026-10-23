@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    html, body { margin: 0; padding: 0; background: #ffffff; }
+  </style>
+  <link rel="stylesheet" href="ds/thingtime-bundle.css">
+  <script src="ds/react.js"></script>
+  <script src="ds/react-dom.js"></script>
+  <script src="ds/thingtime-bundle.js"></script>
+  <script src="ds/tt-elements.js"></script>
+</helmet>
+<div data-screen-label="Launch celebration" onClick="{{ burstAt }}" style="position:relative; min-height:100vh; background:#ffffff; color:#1a1a1a; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif; display:flex; flex-direction:column; overflow:hidden;">
+  <canvas ref="{{ setCanvas }}" style="position:fixed; top:0; left:0; width:100vw; height:100vh; pointer-events:none; z-index:9;"></canvas>
+
+  <header style="display:flex; align-items:center; justify-content:space-between; padding:24px 32px; position:relative; z-index:2;">
+    <div style="display:flex; align-items:center; gap:12px;">
+      <tt-logo icon="" theme="{{ logoTheme }}" voxel-size="11" space="0px"></tt-logo>
+      <span style="font-weight:800; font-size:18px; letter-spacing:-0.01em;">thingtime</span>
+    </div>
+    <tt-attention w="72px"></tt-attention>
+  </header>
+
+  <main style="flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; padding:24px 20px 64px; position:relative; z-index:2;">
+    <div style="display:flex; justify-content:center; max-width:100%; overflow:hidden;">
+      <tt-logo theme="{{ logoTheme }}" voxel-size="15" space="0px"></tt-logo>
+    </div>
+    <div style="margin-top:44px; font-size:13px; font-weight:800; letter-spacing:0.22em; color:#6f3198;">LAUNCH DAY — JULY 2, 2026</div>
+    <h1 style="margin:14px 0 0; font-size:clamp(56px,8.5vw,104px); line-height:0.98; font-weight:900; letter-spacing:-0.035em;">We're live.</h1>
+    <div style="margin-top:28px; display:flex; justify-content:center;">
+      <tt-attention w="220px"></tt-attention>
+    </div>
+    <p style="margin:28px 0 0; max-width:600px; font-size:20px; line-height:1.55; color:#4b4b4b; text-wrap:pretty;">Thingtime is a GUI for the internet — store, share, and shape information of all kinds, for people and machines alike.</p>
+    <div style="margin-top:38px; display:flex; gap:16px; flex-wrap:wrap; justify-content:center;">
+      <a href="https://thingtime.com" target="_blank" rel="noopener" style="display:inline-flex; align-items:center; gap:10px; background:hotpink; color:#ffffff; font-weight:800; font-size:17px; padding:16px 26px; text-decoration:none; border:3px solid #1a1a1a; box-shadow:6px 6px 0 #1a1a1a; transition:transform 120ms ease, box-shadow 120ms ease;" style-hover="transform:translate(-2px,-2px); box-shadow:9px 9px 0 #1a1a1a;">Open Thingtime 🚀</a>
+      <a href="https://www.indiegogo.com/projects/thingtime-a-gui-for-the-internet/coming_soon" target="_blank" rel="noopener" style="display:inline-flex; align-items:center; gap:10px; background:#ffffff; color:#1a1a1a; font-weight:800; font-size:17px; padding:16px 26px; text-decoration:none; border:3px solid #1a1a1a; box-shadow:6px 6px 0 #1a1a1a; transition:transform 120ms ease, box-shadow 120ms ease;" style-hover="transform:translate(-2px,-2px); box-shadow:9px 9px 0 #1a1a1a;">Back us on Indiegogo 💖</a>
+    </div>
+  </main>
+
+  <footer style="position:relative; z-index:2; display:flex; flex-direction:column; align-items:center; gap:10px; padding:0 20px 34px; font-size:14px; color:#6b6b6b;">
+    <div style="font-size:20px; letter-spacing:6px;">🚀 🌈 ✨ 🦄 💖</div>
+    <div>Click anywhere for confetti · <a href="https://www.gofundme.com/f/thingtime" target="_blank" rel="noopener" style="color:#6f3198; font-weight:700;">Donate on GoFundMe</a></div>
+  </footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{
+  &quot;logoTheme&quot;: {&quot;editor&quot;: &quot;enum&quot;, &quot;options&quot;: [&quot;nature&quot;, &quot;pink&quot;], &quot;default&quot;: &quot;nature&quot;, &quot;tsType&quot;: &quot;'nature' | 'pink'&quot;, &quot;section&quot;: &quot;Brand&quot;},
+  &quot;partyMode&quot;: {&quot;editor&quot;: &quot;boolean&quot;, &quot;default&quot;: false, &quot;tsType&quot;: &quot;boolean&quot;, &quot;section&quot;: &quot;Confetti&quot;},
+  &quot;burstSize&quot;: {&quot;editor&quot;: &quot;range&quot;, &quot;min&quot;: 40, &quot;max&quot;: 400, &quot;step&quot;: 10, &quot;default&quot;: 140, &quot;unit&quot;: &quot; pieces&quot;, &quot;tsType&quot;: &quot;number&quot;, &quot;section&quot;: &quot;Confetti&quot;}
+}">
+class Component extends DCLogic {
+  parts = [];
+  colors = ['#59ff9c', '#59bdff', '#00b7ef', '#ed1c24', '#ffa3b1', '#6f3198', '#a8e61d', '#ffc20e', '#ff7e00', 'hotpink'];
+  acc = 0;
+
+  componentDidMount() {
+    this.reduced = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+    this.onResize = () => this.sizeCanvas();
+    window.addEventListener('resize', this.onResize);
+    this.raf = requestAnimationFrame(this.tick);
+    if (!this.reduced) {
+      this.t1 = setTimeout(() => this.burst(window.innerWidth * 0.32, window.innerHeight * 0.34, this.burstSize()), 500);
+      this.t2 = setTimeout(() => this.burst(window.innerWidth * 0.68, window.innerHeight * 0.3, this.burstSize()), 850);
+    }
+  }
+
+  componentWillUnmount() {
+    cancelAnimationFrame(this.raf);
+    clearTimeout(this.t1);
+    clearTimeout(this.t2);
+    window.removeEventListener('resize', this.onResize);
+  }
+
+  burstSize() {
+    return Math.round(this.props.burstSize ?? 140);
+  }
+
+  setCanvas = (el) => {
+    this.canvas = el;
+    if (el) {
+      this.ctx = el.getContext('2d');
+      this.sizeCanvas();
+    }
+  };
+
+  sizeCanvas() {
+    const c = this.canvas;
+    if (!c || !this.ctx) return;
+    const d = Math.min(window.devicePixelRatio || 1, 2);
+    c.width = window.innerWidth * d;
+    c.height = window.innerHeight * d;
+    this.ctx.setTransform(d, 0, 0, d, 0, 0);
+  }
+
+  spawn(x, y, vx, vy) {
+    const s = [7, 9, 11, 13][Math.floor(Math.random() * 4)];
+    this.parts.push({
+      x, y, vx, vy, s,
+      c: this.colors[Math.floor(Math.random() * this.colors.length)],
+      g: 0.13 + Math.random() * 0.08,
+      ph: Math.random() * 6.28,
+      life: 0,
+      max: 380 + Math.random() * 220
+    });
+  }
+
+  burst = (x, y, n) => {
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const sp = 3 + Math.random() * 7;
+      this.spawn(x, y, Math.cos(a) * sp, Math.sin(a) * sp - 4.5);
+    }
+  };
+
+  burstAt = (e) => {
+    this.burst(e.clientX, e.clientY, Math.max(24, Math.round(this.burstSize() / 3)));
+  };
+
+  tick = () => {
+    this.raf = requestAnimationFrame(this.tick);
+    const ctx = this.ctx;
+    if (!ctx) return;
+    const w = window.innerWidth, h = window.innerHeight;
+    if (!this.reduced) {
+      const party = !!(this.props.partyMode ?? false);
+      this.acc += party ? 1.2 : 0.07;
+      while (this.acc >= 1) {
+        this.acc -= 1;
+        this.spawn(Math.random() * w, -20, (Math.random() - 0.5) * 1.6, 1 + Math.random() * 2);
+      }
+    }
+    ctx.clearRect(0, 0, w, h);
+    const keep = [];
+    for (const p of this.parts) {
+      p.life++;
+      p.vy = Math.min(p.vy + p.g, 6.5);
+      p.x += p.vx + Math.sin((p.life + p.ph * 60) / 22) * 0.8;
+      p.y += p.vy;
+      p.vx *= 0.985;
+      const fade = p.life > p.max ? 1 - (p.life - p.max) / 60 : 1;
+      if (fade > 0 && p.y < h + 30) {
+        ctx.globalAlpha = Math.max(0, Math.min(1, fade));
+        ctx.fillStyle = p.c;
+        ctx.fillRect(Math.round(p.x), Math.round(p.y), p.s, p.s);
+        keep.push(p);
+      }
+    }
+    ctx.globalAlpha = 1;
+    if (keep.length > 1200) keep.splice(0, keep.length - 1200);
+    this.parts = keep;
+  };
+
+  renderVals() {
+    return {
+      logoTheme: this.props.logoTheme ?? 'nature',
+      setCanvas: this.setCanvas,
+      burstAt: this.burstAt
+    };
+  }
+}
+</script>
+</body>
+</html>

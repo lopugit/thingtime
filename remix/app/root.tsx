@@ -1,198 +1,42 @@
-// import type { MetaFunction } from "@vercel/remix"
-import { defer, Links, LiveReload, Meta, Outlet, Scripts, ScrollRestoration, useLoaderData } from '@remix-run/react';
+import { ThingDraftsProvider } from './drafts/ThingDrafts';
+import { NativeSyncBootstrap } from './fileSync/NativeSyncBootstrap';
+import { PAGE_VIEWPORT_CSS } from './components/Layout/pageViewport';
+import { LOPU_WINDOW_Z } from './components/Nav/Drawer/useDrawer';
+import { useBackgroundRefresh } from '~/hooks/useBackgroundRefresh';
+import { Outlet, ScrollRestoration, useLoaderData, useLocation, useRevalidator } from 'react-router';
 import { Analytics } from '@vercel/analytics/react';
+import React from 'react';
+import { pageTitle } from './utils/pageTitle';
 
+import type { RootLoaderData } from './root-data.server';
 import { GlobalStyles } from './globals/GlobalStyles';
-
-import { Session } from './cookies.server';
-
 import { Main } from './components/Layout/Main';
-import { useIcons } from './hooks/useIcons';
+import { Nav } from './components/Nav/Nav';
+import { DrawerSystem } from './components/Nav/Drawer/DrawerSystem';
 import { ChakraWrapper } from './Providers/Chakra/ChakraWrapper';
 import { ThingtimeProvider } from './Providers/ThingtimeProvider';
-// TODO: See what to replace LoaderArgs with
-import { json, LoaderArgs } from '@vercel/remix';
+import { TimelineHost } from './components/Timeline/TimelineHost';
+import { TimelineProvider } from './timeline/TimelineProvider';
 import { DevKit } from './components/DevKit/DevKit';
+import { ElectronBridgeHost } from './components/Electron/ElectronBridgeHost';
+import { NativeBridgeHost } from './components/NativeBridge/NativeBridgeHost';
+import { VisualSettingsHost } from './components/VisualSettings/VisualSettingsHost';
+import { ThemeHost } from './components/ThemeSettings/ThemeHost';
+import { ConfettiCanvas } from './components/Landing/ConfettiCanvas';
+import { EasterEggs } from './components/EasterEggs/EasterEggs';
+import { LopuPositionSync } from './components/Lopu/useLopuPosition';
+import { MessengerNotifications } from './components/Messenger/MessengerNotifications';
+import { AutoLoginPopup } from './components/Account/AutoLoginPopup';
+import { WatchPendingApprovals } from './components/Watch/WatchPendingApprovals';
+import { SiteBlocksHost } from './components/Builder/SiteBlocksHost';
+import { LopuPageTracker } from './components/Lopu/useLopuPages';
+import { LopuHost } from './components/Lopu/LopuHost';
+import { rememberAuthReturnTo } from './utils/authReturn';
+import { bindTransferIdentity } from './utils/thingTransfer/intent';
+import { rootIdentity } from './utils/rootIdentity';
+import { RootRecovery } from './components/Layout/RootRecovery';
 
-// intercept console.log and read from window.tt.settings.logging.all whether to log if it includes [tt]
-const originalConsoleLog = console.log;
-const logConfig = {
-  trace: true
-};
-const whitelistObj = {
-  '[tt][undo]': true,
-  '[tt][redo]': true,
-  '[tt][history]': true,
-  '[tt][error]': false,
-  '[tt][warn]': false,
-  '[tt][info]': false,
-  '[tt][debug]': false,
-  '[tt][ThingtimeProvider.tsx][set][path]': true
-};
-const whitelist = [].concat(Object.keys(whitelistObj).filter((key) => whitelistObj[key]));
-// console.log = (...args) => {
-//   // Check if the first argument is a string and contains '[tt]'
-//   try {
-//     if (typeof args[0] === 'string' && args[0].startsWith('[tt]')) {
-//       const allowLogging = window.tt?.settings?.logging?.all || whitelist.some((item) => args[0].startsWith(item));
-//       if (typeof window !== 'undefined' && allowLogging) {
-//         if (logConfig.trace) {
-//           // If trace is enabled, log the stack trace
-//           const stack = new Error().stack;
-//           originalConsoleLog(...args, '\nStack Trace:', stack.replace(/^Error\n/, '🌈Thingtime Logger🦄'));
-//         } else {
-//           // Check if logging is enabled in Thingtime settings
-//           originalConsoleLog(...args);
-//         }
-//       }
-//     } else {
-//       // For all other logs, just call the original console.log
-//       originalConsoleLog(...args);
-//     }
-//   } catch (err) {
-//     // If there's an error (e.g., window.tt is not defined), just call the original console.log
-//     originalConsoleLog(...args);
-//   }
-// };
-
-function Document({ children, title = 'Thingtime' }: { children: React.ReactNode; title?: string }) {
-  // check Remix environment
-  // for dev mode
-  let titlePrefix = '';
-  // log the process.env.NODE_ENV
-  console.log('process.env.NODE_ENV', process.env.NODE_ENV);
-  if (process.env.NODE_ENV === 'development') {
-    titlePrefix = '🧑‍💻';
-  }
-
-  try {
-    // actually also check if the domain is not thingtime.com
-    // then add the prefix
-    const hostname = window.location.hostname;
-    if (hostname !== 'thingtime.com') {
-      titlePrefix = '🧑‍💻';
-    }
-  } catch (err) {
-    // will error on server
-    // do nothing
-  }
-
-  // assign known process.env variables to window.env object
-  try {
-    if (typeof window !== 'undefined') {
-      window.env = {
-        ...window.env,
-        BRANCH_NAME: process.env.BRANCH_NAME || 'git/unknown'
-      };
-    }
-  } catch (err) {
-    // will error on server
-  }
-
-  // the favicon will also vary depending on the environment
-
-  return (
-    <html lang="en">
-      <head>
-        <meta charSet="utf-8" />
-        <meta name="viewport" content="width=device-width,initial-scale=1" />
-        <Meta />
-        <title>{titlePrefix ? titlePrefix + ' ' + title : title}</title>
-        <Links />
-      </head>
-      <body>
-        {children}
-        <GlobalStyles />
-        <ScrollRestoration />
-        <Scripts />
-        {/* <LiveReload /> */}
-        <Analytics />
-      </body>
-    </html>
-  );
-}
-
-export default function App() {
-  // grab env from loader
-  const { envFromCookie } = useLoaderData<typeof loader>();
-
-  // log the cookie
-  console.log('envFromCookie in root.tsx:', envFromCookie);
-
-  // add env to window .env
-  try {
-    if (typeof window !== 'undefined') {
-      window.envFromCookie = {
-        ...window.env,
-        ...envFromCookie
-      };
-    }
-  } catch (err) {
-    // will error on server
-  }
-
-  useIcons();
-
-  return (
-    <Document>
-      <ChakraWrapper>
-        <ThingtimeProvider>
-          <DevKit />
-          <Main>
-            <Outlet />
-          </Main>
-        </ThingtimeProvider>
-      </ChakraWrapper>
-    </Document>
-  );
-}
-
-export async function loader({ request, context }: LoaderArgs) {
-  const { session, store } = context;
-  const cookieHeader = request.headers.get('Cookie');
-
-  const cookie = (await Session.parse(cookieHeader)) || {};
-
-  const cookiePingCounter = cookie.pingCounter || 0;
-
-  const pingCounter = cookiePingCounter + 1;
-
-  const processEnv = {};
-
-  // add all process.env variables that start with THINGTIME_ to the cookie
-  for (const key in process.env) {
-    if (key.startsWith('THINGTIME_') && !key.includes('PRIVATE')) {
-      processEnv[key] = process.env[key];
-    }
-  }
-
-  // .log everyone
-
-  return json(
-    {
-      envFromCookie: { ...processEnv }
-    },
-    {
-      headers: {
-        'Set-Cookie': await Session.serialize({ ...cookie, pingCounter })
-      }
-    }
-  );
-
-  // return defer(
-  //   {
-  //     // isLoggedIn: Boolean(customerAccessToken),
-  //   },
-  //   {
-  //     headers: {
-  //       // 'Set-Cookie': await session.commit()
-  //     }
-  //   }
-  // );
-}
-
-// limiter
-const setThingtime = (glob) => {
+const setThingtime = (glob: any) => {
   try {
     glob.meta = {
       tmp: {},
@@ -207,8 +51,8 @@ const setThingtime = (glob) => {
       },
       things: {}
     };
-  } catch (err) {
-    // will error on server
+  } catch {
+    // Global setup is best-effort in browser and server-like runtimes.
   }
 };
 
@@ -216,4 +60,131 @@ try {
   setThingtime(window);
 } catch {
   setThingtime(globalThis);
+}
+
+export default function App() {
+  const rootData = useLoaderData() as RootLoaderData & { clientIdentityGeneration: number };
+  const identity = React.useSyncExternalStore(rootIdentity.subscribe, rootIdentity.read, rootIdentity.read);
+  React.useLayoutEffect(() => { rootIdentity.confirm(rootData.clientIdentityGeneration); }, [rootData.clientIdentityGeneration]);
+  const { envFromCookie, titlePrefix } = rootData;
+  const { pathname, search, hash } = useLocation();
+  const isStandalonePage = pathname.startsWith('/t/');
+  const isAuthorizePopup = isStandalonePage || pathname === '/invite' || pathname === '/authorize' || pathname === '/watch/pair' || pathname.startsWith('/pair/');
+  const revalidator = useRevalidator();
+  const [mounted, setMounted] = React.useState(false);
+  React.useLayoutEffect(() => bindTransferIdentity(rootIdentity, rootData.user?.id, rootData.clientIdentityGeneration),
+    [rootData.user?.id, rootData.clientIdentityGeneration]);
+
+  React.useEffect(() => {
+    setMounted(true);
+
+    try {
+      window.envFromCookie = {
+        ...window.env,
+        ...envFromCookie
+      };
+      window.env = {
+        ...window.env,
+        BRANCH_NAME: envFromCookie?.THINGTIME_BRANCH_NAME || 'git/unknown'
+      };
+    } catch {
+      // Ignore non-browser runtimes.
+    }
+  }, [envFromCookie]);
+
+  React.useEffect(() => {
+    // Invite fragments are bearer credentials, never persist them as return-to hints.
+    if (pathname === '/invite') return;
+    rememberAuthReturnTo(`${pathname}${search}${hash}`);
+  }, [hash, pathname, search]);
+
+  React.useEffect(() => {
+    if (typeof document !== 'undefined') {
+      // the generated marketing pages set their own title + meta description
+      // (components/Marketing/MarketingShell.tsx useMarketingSeo). Match the
+      // four registered routes exactly: a bare startsWith('/marketing') also
+      // swallows /marketingfoo, which the '*' catch-all renders as the tree
+      // viewer — nothing would then set its title and the tab would keep the
+      // previous page's one.
+      if (pathname === '/marketing' || pathname.startsWith('/marketing/')) return;
+      document.title = pageTitle(pathname, titlePrefix);
+    }
+  }, [pathname, titlePrefix]);
+
+  React.useEffect(() => {
+    const refreshRootData = () => {
+      revalidator.revalidate();
+    };
+
+    window.addEventListener('thingtime:root-data-refresh', refreshRootData);
+    return () => window.removeEventListener('thingtime:root-data-refresh', refreshRootData);
+  }, [revalidator]);
+
+  useBackgroundRefresh('root-data', () => revalidator.state === 'idle' ? revalidator.revalidate() : undefined, 60_000, false);
+
+  if (identity.pending && rootData.clientIdentityGeneration !== identity.generation) return <RootRecovery refreshing />;
+
+  return (
+    <ChakraWrapper>
+      <GlobalStyles />
+      <style>{`
+        ${PAGE_VIEWPORT_CSS}
+        html[data-lopu-docked] #lopuPageViewport:not([data-lopu-split]) [data-testid="site-edit-pill"],
+        html[data-lopu-docked] #lopuPageViewport:not([data-lopu-split]) [class~="tt.devKit"],
+        html[data-lopu-sheet="open"] [data-testid="site-edit-pill"] { z-index: ${LOPU_WINDOW_Z - 1} !important; }
+      `}</style>
+      <ThingtimeProvider key={rootData.user?.id || 'guest'} accountId={rootData.user?.id} storageKey={rootData.user?.id ? `thingtime:account:${rootData.user.id}` : 'thingtime'}>
+        <ThingDraftsProvider>
+         <TimelineProvider>
+         {mounted && !isAuthorizePopup ? <TimelineHost /> : null}
+        <VisualSettingsHost />
+        <LopuPageTracker />
+        <ThemeHost />
+        {/* Mirrors settings.lopu.position into the cache useLopu reads at fire time. */}
+        <LopuPositionSync />
+        {mounted ? <ElectronBridgeHost /> : null}
+        {mounted && !identity.pending && rootData.dataPlane === 'home' && rootData.user?.id &&
+          rootData.user.accountKind === 'user' && !rootData.user.temporary ?
+          <NativeSyncBootstrap ownerId={rootData.user.id} generation={identity.generation} /> : null}
+        {mounted ? <NativeBridgeHost /> : null}
+        {/* Invite signup and authorization/pairing use a focused auth
+            surface with their own chrome, so the app shell (nav, drawer trigger,
+            DevKit bubble, Main's footer + its 900px spacer) stays out of it. */}
+        <div id="lopuPageViewport">
+        {isAuthorizePopup ? null : <DevKit />}
+        {isAuthorizePopup ? null : <Nav />}
+        <div id="lopuPageScroll">
+        {isAuthorizePopup ? (
+          <Outlet />
+        ) : (
+          <Main>
+            {/* every page is a block-based site: per-route + global blocks
+                render around the native screen; the ✏️ pill enters edit mode */}
+            <SiteBlocksHost>
+              <Outlet />
+            </SiteBlocksHost>
+          </Main>
+        )}
+        </div>
+        {isAuthorizePopup ? null : <DrawerSystem />}
+        </div>
+        {/* 🦄 Lopu: global floating launcher + draggable chat window (hidden on /lopu). */}
+        {mounted && !isAuthorizePopup ? <LopuHost /> : null}
+        {/* ⌘K quick switcher — global palette; renders nothing until opened. */}
+        {/* Messenger: global new-message watcher (Lopu toasts + unread badge). */}
+        {mounted && !isAuthorizePopup ? <MessengerNotifications /> : null}
+        {mounted && !isAuthorizePopup ? <WatchPendingApprovals /> : null}
+        {/* Signed out here but signed in on another Thingtime deployment →
+            "continue as" suggestions (cross-deployment auto-login). */}
+        {mounted && !isAuthorizePopup ? <AutoLoginPopup /> : null}
+        {/* App-wide confetti canvas + easter eggs (🥚 party mode, window.tt). */}
+        {!isStandalonePage ? <ConfettiCanvas /> : null}
+        {mounted && !isStandalonePage ? <EasterEggs /> : null}
+         </TimelineProvider>
+        </ThingDraftsProvider>
+      </ThingtimeProvider>
+      <ScrollRestoration />
+      {mounted ? <Analytics /> : null}
+    </ChakraWrapper>
+  );
 }

@@ -1,20 +1,16 @@
-// TODO: convert to TS and use ts-node to execute
+// Seed users — plain { username, password, email } that get created through the
+// REAL register API (see FUNDAMENTALS.md §2), so a seeded user is identical to a
+// real signup: same hashing, validation, schema, and verification flow.
+// Passwords are intentionally plaintext here; registerUser hashes them.
 
-import { getObjectId } from '~/api/utils/mongodb/objectId';
-
-import { ObjectId } from 'mongodb';
-
-if (process?.env) {
-}
-
-export const rickDeckard = async () => ({
-  _id: await getObjectId('61fbaf25671c45f3f5f4074a'),
-  ttid: 'rick.deckard',
-  username: 'rick.deckard',
-  password: 'password',
-  randId: Math.random().toString()
-});
-
-export const getUsers = async () => {
-  return [await rickDeckard()];
+export type SeedUser = {
+  username: string;
+  password: string;
+  email: string;
+  displayName?: string;
 };
+
+export const getUsers = async (): Promise<SeedUser[]> => [
+  { username: 'rick.deckard', password: 'password', email: 'rick.deckard@thingtime.com', displayName: 'Rick Deckard' },
+  { username: 'rachael', password: 'password', email: 'rachael@thingtime.com', displayName: 'Rachael' }
+];

@@ -1,5 +1,5 @@
 import { Box } from '@chakra-ui/react';
 
 export const TopSpacing = () => {
-  return <Box mt="33vh"></Box>;
+  return <Box mt="calc(var(--thingtime-safe-area-top, 0px) + 108px)"></Box>;
 };

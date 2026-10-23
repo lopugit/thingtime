@@ -18,8 +18,6 @@ export const getObjectId = async (id: any = {}) => {
 
       const adjustedId = (id + filler).slice(0, 24);
 
-      console.log('nik adjustedId', adjustedId);
-
       return new ObjectId(adjustedId);
     }
 

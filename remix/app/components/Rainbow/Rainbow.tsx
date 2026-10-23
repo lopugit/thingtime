@@ -5,11 +5,12 @@ import { GradientPath } from "~/gp/GradientPath"
 import { useProps } from "~/hooks/useProps"
 import { useTrace } from "~/hooks/useTrace"
 import { useUuid } from "~/hooks/useUuid"
+import { RAINBOW_PALETTE } from "~/theme/rainbow"
 
-export const Rainbow = (allProps: any): JSX.Element => {
+export const Rainbow = (allProps: any): React.JSX.Element => {
   // return allProps.children
 
-  const rainbow = ["#f34a4a", "#ffbc48", "#58ca70", "#47b5e6", "#a555e8"]
+  const rainbow = [...RAINBOW_PALETTE]
 
   const props = useProps(allProps)
 
@@ -17,7 +18,11 @@ export const Rainbow = (allProps: any): JSX.Element => {
 
   props.expand = props?.expand || true
 
-  const [hidden, setHidden] = React.useState(true)
+  // instant mounts skip the 500ms reveal delay and the slow fade — the
+  // rainbow is fully visible from the first painted frame
+  const instant = props?.instant === true
+
+  const [hidden, setHidden] = React.useState(!instant)
   const repeats = props?.repeats || 1
   const [filter, setFilter] = React.useState(props?.filter)
   const opacity = props?.opacity !== undefined ? props?.opacity : 1
@@ -25,7 +30,7 @@ export const Rainbow = (allProps: any): JSX.Element => {
   const [pathWidth, setPathWidth] = React.useState(props?.thickness || 1)
   const [overflow, setOverflow] = React.useState(props?.overflow || "hidden")
   const [opacityTransition, setOpacityTransition] = React.useState(
-    props?.opacityTransition || "all 10000ms ease-out"
+    props?.opacityTransition || (instant ? "none" : "all 10000ms ease-out")
   )
 
   const parentRef = React.useRef(null)
@@ -157,18 +162,25 @@ export const Rainbow = (allProps: any): JSX.Element => {
           },
         })
 
-        setTimeout(() => {
+        let reveal = null
+        if (instant) {
           setHidden(false)
-        }, 500)
+        } else {
+          reveal = setTimeout(() => {
+            setHidden(false)
+          }, 500)
+        }
 
         return () => {
           // setHidden(true)
+          if (reveal) clearTimeout(reveal)
           gp.remove()
         }
       }
     }
   }, [
     uuid,
+    instant,
     props?.duration,
     props?.segments,
     props?.samples,
@@ -197,6 +209,8 @@ export const Rainbow = (allProps: any): JSX.Element => {
           },
         }}
         position={props?.position || "relative"}
+        top={props?.position === "absolute" ? 0 : undefined}
+        left={props?.position === "absolute" ? 0 : undefined}
         overflow={overflow}
         width={props?.expand ? "100%" : ""}
         height={props?.expand ? "100%" : ""}

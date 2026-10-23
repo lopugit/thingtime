@@ -1,5 +1,6 @@
-import { createCookie } from '@remix-run/node'; // or cloudflare/deno
+import { createCookie } from './api/cookies';
 
 export const Session = createCookie('session', {
-  // opts
+  path: '/',
+  sameSite: 'lax'
 });

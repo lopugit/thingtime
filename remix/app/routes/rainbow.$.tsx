@@ -1,6 +1,6 @@
 import React from 'react';
 import { Flex } from '@chakra-ui/react';
-import { useLocation } from '@remix-run/react';
+import { useLocation } from 'react-router';
 
 import { Splash } from '~/components/Splash/Splash';
 import { useThingtime } from '~/components/Thingtime/useThingtime';

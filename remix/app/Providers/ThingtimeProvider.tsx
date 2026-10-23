@@ -1,447 +1,603 @@
 import React, { createContext } from 'react';
-// @ts-ignore
-import { parse as parseAux, stringify as stringifyAux } from 'flatted';
 import { Subject } from 'rxjs';
 import { thingtimeDefaults, thingtimeMinimumValues, thingtimeNewData, thingtimeOverwriteAll } from './Thingtime/ThingtimeDefaults';
 import { sanitise } from '../functions/sanitise';
 import { smarts } from '../smarts';
-import { TimelineEvent, useThingtimeLine } from '~/hooks/useThingtimeLine';
+import { useThingtimeLine } from '~/hooks/useThingtimeMachine';
+import type { PathArray, TimelineEvent } from '~/hooks/useThingtimeMachine';
 import localforage from 'localforage';
+import { safeJoin } from '~/utils';
+import { createLatestRevisionAutosave } from './latestRevisionAutosave';
+import type { LatestRevisionAutosaveCoordinator } from './latestRevisionAutosave';
+import { drainThingtimeMutationQueue } from './thingtimeMutationQueue';
+import {
+	hasPersistedThingtimeRuntimeMethods,
+	parseThingtime,
+	parseThingtimeWithDiagnostics,
+	stringifyThingtime,
+	stringifyThingtimeForStorage
+} from './thingtimeSerialization';
+import { createThingtimeSyncChannel, shouldPublishAppliedWrite } from './thingtimeSyncChannel';
+import type { ThingtimeSyncChannel, ThingtimeSyncPath } from './thingtimeSyncChannel';
 export interface ThingtimeTypes {
-  thingtime: any;
-  set: any;
-  setThingtime: any;
-  getThingtime: any;
-  thingtimeRef: any;
-  loading: boolean;
-  paths: string[];
-  events: Subject<any>;
+	thingtime: any;
+	set: any;
+	setThingtime: any;
+	getThingtime: any;
+	thingtimeRef: any;
+	loading: boolean;
+	paths: string[];
+	events: Subject<any>;
 }
 
 export interface EverythingTypes {
-  Everything: ThingtimeTypes;
+	Everything: ThingtimeTypes;
 }
 
 export const ThingtimeContext = createContext<EverythingTypes | null>(null);
 
-// wrap flatted parse and stringify with a function reviver and replacer
+// The persist codec (flatted parse/stringify + reviver/replacer) lives in
+// ./thingtimeSerialization so it can be unit-tested without React. Persisted
+// functions are always omitted on write and removed on read; hydration then
+// re-supplies legitimate runtime functions from ThingtimeDefaults. CSP is a
+// second boundary, not the mechanism that makes storage-controlled code inert.
 
-const reviver = (key: string, value: any) => {
-  // if value is a Date, return it as a Date object
-  if (typeof value === 'string' && !isNaN(Date.parse(value))) {
-    return new Date(value);
-  }
+export const ThingtimeProvider = (props: any): React.JSX.Element => {
+	const storageKey = props?.storageKey || 'thingtime';
+	const persistLocal = props?.persistLocal !== false;
+	const exposeGlobals = props?.exposeGlobals !== false;
 
-  // if value is a function, return it as a function
-  if (value?.ttype === 'function') {
-    try {
-      const func = eval(value.code);
-      if (typeof func === 'function') {
-        if (value?.ttScope && typeof value.ttScope === 'object') {
-          func.ttScope = value.ttScope;
+	const [_Everything, setEverything] = React.useState<ThingtimeTypes>({
+		thingtime: null,
+		set: null,
+		setThingtime: null,
+		getThingtime: null,
+		thingtimeRef: null,
+		paths: null,
+		loading: null,
+		events: null
+	});
+
+	const EverythingRef = React.useRef(_Everything);
+	const Everything: ThingtimeTypes = EverythingRef?.current;
+
+	// TODO: work out why we are doing thingtimeRef and thingtimeRef ...... ? 😂
+	const [thingtimeState, setThingtimeState] = React.useState({
+		tt: null,
+		thingtime: null,
+		set: () => console.log('Please wait for Thingtime to load'),
+		get: () => console.log('Please wait for Thingtime to load')
+	});
+
+	const thingtimeRef = React.useRef(thingtimeState);
+	const hydrationResolvedRef = React.useRef(false);
+	const persistenceReadyRef = React.useRef(false);
+	const persistenceRevisionRef = React.useRef(0);
+	// The autosave coordinator is created once, so it reads the storage key
+	// through a ref instead of closing over the first render's prop value.
+	const storageKeyRef = React.useRef(storageKey);
+	storageKeyRef.current = storageKey;
+	const persistenceRef = React.useRef<LatestRevisionAutosaveCoordinator<any> | null>(null);
+	if (!persistenceRef.current) {
+		persistenceRef.current = createLatestRevisionAutosave<any, string>({
+			debounceMs: 350,
+			maxWaitMs: 2_000,
+			serialize: (value) => {
+				const serialized = stringifyThingtimeForStorage(value);
+				if (!serialized) throw new Error('Thingtime autosave could not serialize the current value');
+				return serialized;
+			},
+			write: async (serialized) => {
+				await localforage.setItem(storageKeyRef.current, serialized);
+			},
+			onError: (error, context) => {
+				console.error(`[tt] Thingtime autosave ${context.phase} failed at revision ${context.revision}`, error);
+			}
+		});
+	}
+
+	const [loading, setLoading] = React.useState(true);
+
+	const [events] = React.useState(() => new Subject());
+
+	// Cross-tab sync (TODO/claude-todo/07): identify this tab so broadcasts can
+	// be ignored by their sender, and hold the channel + latest setThingtime in
+	// refs so the channel effect never has to re-subscribe.
+	const syncTabIdRef = React.useRef<string | null>(null);
+	if (!syncTabIdRef.current) {
+		syncTabIdRef.current =
+			typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+				? crypto.randomUUID()
+				: `tt-tab-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+	}
+	const syncChannelRef = React.useRef<ThingtimeSyncChannel | null>(null);
+	const setThingtimeSyncRef = React.useRef<((path: ThingtimeSyncPath, value: any) => void) | null>(null);
+
+	const undoRedo = useThingtimeLine(Everything);
+
+	React.useEffect(() => {
+		if (!exposeGlobals) return;
+
+		try {
+			window.smarts = smarts;
+			window.flatted = { parse: parseThingtime, stringify: stringifyThingtime };
+		} catch {
+			// Global tools are best-effort outside a browser.
+		}
+	}, [exposeGlobals]);
+
+	const setThingtimeObjectWrapper = React.useCallback((newThingtimeArg) => {
+		const newThingtime = {
+			...newThingtimeArg
+		};
+
+		newThingtime.tt = newThingtime;
+		newThingtime.thingtime = newThingtime;
+
+		// Keep queued mutations on the latest committed working snapshot even
+		// before React has rendered the state update.
+		thingtimeRef.current = newThingtime;
+		setThingtimeState(newThingtime);
+		return newThingtime;
+	}, []);
+
+	const restoreThingtime = React.useCallback(
+		(nextThingtime) => {
+			const newThingtime = smarts.merge({ ...(nextThingtime || {}) }, thingtimeDefaults);
+
+			if (!newThingtime.Content) {
+				newThingtime.Content = thingtimeDefaults.Content;
+			}
+
+			return setThingtimeObjectWrapper(newThingtime);
+		},
+		[setThingtimeObjectWrapper]
+	);
+
+	type SetThingtimeOptions = {
+		ignoreUndoRedo?: boolean;
+		namespace?: string;
+		// Applied from another tab's broadcast — never re-published (no echo
+		// loops) and never entered into this tab's undo/redo timeline.
+		fromRemote?: boolean;
+		// Ephemeral view chrome for THIS viewport — what is currently open and
+		// focused here, as opposed to user data or a saved preference. Still
+		// persisted (a reload restores it), but never broadcast, so one tab's
+		// panel/focus state cannot actuate another tab's UI mid-session.
+		tabLocal?: boolean;
+	};
+
+	interface SetThingtimeProps {
+		(path: PathArray, value: any, options?: SetThingtimeOptions): void;
+	}
+
+	interface ApplyThingtimeUpdateProps {
+		(currentThingtime: any, path: PathArray, value: any, options: SetThingtimeOptions | undefined, timestamp: number): any;
+	}
+
+	type PendingThingtimeUpdate = {
+		path: PathArray;
+		value: any;
+		options?: SetThingtimeOptions;
+		timestamp: number;
+	};
+
+	// Keep the mutation queue outside React state. A keystroke should schedule
+	// one batched microtask, not render once to enqueue and again to dequeue.
+	const setThingtimeQueueRef = React.useRef<PendingThingtimeUpdate[]>([]);
+	const setThingtimeFlushScheduledRef = React.useRef(false);
+	const applyThingtimeUpdateRef = React.useRef<ApplyThingtimeUpdateProps | null>(null);
+
+	const applyThingtimeUpdate = React.useCallback<ApplyThingtimeUpdateProps>(
+		(
+			currentThingtime,
+			path,
+			value,
+			options = {
+				ignoreUndoRedo: false,
+				namespace: 'default'
+			},
+			timestamp
+		) => {
+			const { ignoreUndoRedo, namespace } = options;
+
+			// is this a security concern do we need to sanitise the object reference?
+			// if path is thingtime or tt, we can set the whole thingtime object ??? 🤔
+
+			// TODO: make this a lot safer
+			if (['thingtime', 'tt']?.includes(safeJoin(path))) {
+				if (value) {
+					console.warn('[tt] Replacing the complete Thingtime object at path', path);
+					const replacement = { ...value };
+					// A following update in the same microtask still needs the current
+					// stable API methods before React has decorated the replacement.
+					if (!replacement.set && currentThingtime?.set) replacement.set = currentThingtime.set;
+					if (!replacement.get && currentThingtime?.get) replacement.get = currentThingtime.get;
+					replacement.tt = replacement;
+					replacement.thingtime = replacement;
+					return replacement;
+				}
+			}
+
+			const newThingtime: any = currentThingtime || {};
+
+			const paths = path instanceof Array ? path : smarts.parsePropertyPath(path);
+
+			// find first parent where a path is undefined
+			// paths is array of path parts such as ["path1", "path2", "path3"]
+			// we want to create a new reference at the first object which has an undefined part of the path
+			// and is an object itself
+			// so that react will detect the change and re-render
+			// "path1" = { ...thingtime["path1"] } if path1.path2 undefined
+			// "path1.path2" = { ...thingtime["path1"]["path2"] } if path1.path2.path3 undefined
+			// "path1.path2.path3" = { ...thingtime["path1"]["path2"]["path3"] }
+			// etc
+			let done = false;
+			paths.forEach((pathPart, index) => {
+				if (!done) {
+					const pathParts = paths.slice(0, index + 1);
+					const tmpPath = pathParts.join('.');
+					const parentPath = pathParts.slice(0, -1).join('.');
+
+					const valAtPath = smarts.getsmart(newThingtime, tmpPath);
+
+					if (parentPath) {
+						if (typeof valAtPath !== 'object' || valAtPath === null) {
+							const parentVal = smarts.getsmart(newThingtime, parentPath);
+							if (typeof parentVal === 'object') {
+								const newParent = Array.isArray(parentVal) ? [...parentVal] : { ...parentVal };
+								smarts.setsmart(newThingtime, parentPath, newParent);
+							}
+
+							done = true;
+						}
+					}
+				}
+			});
+
+			if (!ignoreUndoRedo) {
+				// store undo/redo history
+				const event: TimelineEvent = {
+					path: path,
+					value: value,
+					namespace: namespace,
+					fromValue: smarts.getsmart(currentThingtime, path),
+					timestamp
+				};
+				undoRedo.current.addTimelineEvent(newThingtime, event);
+			}
+
+			// TODO: make thingtime settable
+			newThingtime.thingtime = newThingtime;
+			newThingtime.tt = newThingtime;
+
+			smarts.setsmart(newThingtime, path, value);
+			return newThingtime;
+		},
+		[undoRedo]
+	);
+	applyThingtimeUpdateRef.current = applyThingtimeUpdate;
+
+	const flushSetThingtimeQueue = React.useCallback(() => {
+		if (!hydrationResolvedRef.current) {
+			setThingtimeFlushScheduledRef.current = false;
+			return;
+		}
+
+		const queue = setThingtimeQueueRef.current;
+		const result = drainThingtimeMutationQueue(
+			thingtimeRef.current,
+			queue,
+			(workingThingtime, nextThingtime) => {
+				const applyUpdate = applyThingtimeUpdateRef.current;
+				if (!applyUpdate) return workingThingtime;
+
+				const nextState = applyUpdate(workingThingtime, nextThingtime.path, nextThingtime.value, nextThingtime.options, nextThingtime.timestamp);
+
+				// Publish only after this update applied successfully. Remote writes use
+				// the same queue but never echo back onto the channel, and tab-local
+				// view chrome is persisted without ever actuating another tab.
+				//
+				// Contained in its own try: this callback's RETURN VALUE is the new
+				// state, and drainThingtimeMutationQueue drops an update whose apply
+				// throws. Letting a transport failure escape here would therefore
+				// discard a write that already applied — the user's own edit would
+				// vanish because a peer-facing broadcast failed. Sync is best-effort;
+				// the local write is not.
+				if (shouldPublishAppliedWrite(nextThingtime.options)) {
+					try {
+						syncChannelRef.current?.publish(nextThingtime.path as ThingtimeSyncPath, nextThingtime.value);
+					} catch (error) {
+						console.error('[tt] Failed to broadcast an applied Thingtime write', error);
+					}
+				}
+
+        if (nextThingtime.options?.namespace === 'user' && !nextThingtime.options?.fromRemote) {
+          const parts = Array.isArray(nextThingtime.path) ? [...nextThingtime.path] : smarts.parsePropertyPath(nextThingtime.path);
+          while (parts[0] === 'tt' || parts[0] === 'thingtime') parts.shift();
+          if (parts.length) events.next({ type: 'draft-edit', path: [parts[0]], value: nextState[parts[0]] });
         }
+				return nextState;
+			},
+			(error) => console.error('[tt] There was an error applying a queued Thingtime update', error)
+		);
+		setThingtimeFlushScheduledRef.current = false;
+		if (result.applied) setThingtimeObjectWrapper(result.state);
+	}, [setThingtimeObjectWrapper, events]);
 
-        // if the scope has keys
-        // re-eval the function with these keyed values in a fake function scope
-        if (Object.keys(func.ttScope || {}).length > 0) {
-          const scopeKeys = Object.keys(func.ttScope);
-          const newEval = `function scoper() {
-						${scopeKeys.map((key) => `const ${key} = this.ttScope.${key};`).join('\n')}
-						return ${value.code}
-					}`;
-          const scopedFunc = eval(newEval);
-          scopedFunc.ttScope = func.ttScope;
-          return scopedFunc;
-        }
+	const setThingtime = React.useCallback<SetThingtimeProps>(
+		(
+			path,
+			value,
+			options: SetThingtimeOptions = {
+				ignoreUndoRedo: false,
+				namespace: 'default'
+			}
+		) => {
+			setThingtimeQueueRef.current.push({ path, value, options, timestamp: Date.now() });
+			if (setThingtimeFlushScheduledRef.current) return;
+			setThingtimeFlushScheduledRef.current = true;
+			queueMicrotask(flushSetThingtimeQueue);
+		},
+		[flushSetThingtimeQueue]
+	);
 
-        return func;
-      }
-    } catch (err) {
-      console.error('There was an error evaluating the function code:', err);
-    }
-    return function () {
-      console.warn('Function could not be revived:', value.code);
-    };
-  }
+	const getThingtime = React.useCallback(
+		(...args) => {
+			const rawPath = args[0];
+			const path = rawPath;
 
-  return value;
-};
+			if (!path) {
+				return thingtimeState;
+			}
 
-const replacer = (key: string, value: any) => {
-  // if value is a Date, return it as a string
-  if (value instanceof Date) {
-    return value.toISOString();
-  }
+			// do we need to sanitise?
+			// const path = sanitise(rawPath)
+			return smarts.getsmart(thingtimeState, path);
+		},
+		[thingtimeState]
+	);
 
-  // if value is a function, return it as an object with ttype and code properties
-  if (typeof value === 'function') {
-    return {
-      ttype: 'function',
-      code: value.toString(),
-      ttScope: value?.ttScope || {}
-    };
-  }
+	const populatePaths = React.useCallback((obj, path, paths, seen = []) => {
+		try {
+			Object.keys(obj).forEach((key) => {
+				const val = obj[key];
+				const newPath = path ? `${path}${path ? '.' : ''}${key}` : key;
+				if (typeof val === 'object') {
+					paths.push(newPath);
+					if (!seen?.includes(val)) {
+						seen.push(val);
+						populatePaths(val, newPath, paths, seen);
+					}
+				} else {
+					paths.push(newPath);
+				}
+			});
+		} catch {
+			// nothing
+		}
+	}, []);
 
-  return value;
-};
+	const paths = React.useMemo(() => {
+		// const paths = ["tt", "thingtime", "."]
+		const paths = [];
 
-const parse = (text: string): any => {
-  try {
-    return parseAux(text, reviver);
-  } catch (err) {
-    console.error('There was an error parsing the thingtime data:', err);
-    return null;
-  }
-};
+		// populatePaths(thingtime, commandPath)
+		populatePaths(thingtimeState, '', paths);
 
-const stringify = (data: any): string => {
-  try {
-    return stringifyAux(data, replacer);
-  } catch (err) {
-    console.error('There was an error stringifying the thingtime data:', err);
-    return '';
-  }
-};
+		return paths;
+	}, [populatePaths, thingtimeState]);
 
-try {
-  window.smarts = smarts;
-  window.flatted = {
-    parse,
-    stringify
-  };
-} catch (err) {
-  // nothing
-}
+	// get thingtime from localstorage
+	React.useEffect(() => {
+		let cancelled = false;
+		let retryTimer: ReturnType<typeof setTimeout> | undefined;
+		let retryAttempt = 0;
+		setLoading(true);
 
-export const ThingtimeProvider = (props: any): JSX.Element => {
-  const [_Everything, setEverything] = React.useState<ThingtimeTypes>({
-    thingtime: null,
-    set: null,
-    setThingtime: null,
-    getThingtime: null,
-    thingtimeRef: null,
-    paths: null,
-    loading: null,
-    events: null
-  });
-
-  const EverythingRef = React.useRef(_Everything);
-  const Everything: ThingtimeTypes = EverythingRef?.current;
-
-  // TODO: work out why we are doing thingtimeRef and thingtimeRef ...... ? 😂
-  const [thingtimeState, setThingtimeState] = React.useState({
-    tt: null,
-    thingtime: null,
-    set: () => console.log('Please wait for Thingtime to load'),
-    get: () => console.log('Please wait for Thingtime to load')
-  });
-
-  const thingtimeRef = React.useRef(thingtimeState);
-  const stateRef: any = React.useRef({
-    c: 1
-  });
-
-  const [loading, setLoading] = React.useState(true);
-
-  const [events, setEvents] = React.useState(null);
-
-  if (!events) {
-    setEvents(() => new Subject());
-  }
-
-  const undoRedo = useThingtimeLine(Everything);
-
-  stateRef.current.undoRedo = undoRedo;
-
-  const setThingtimeObjectWrapper = React.useCallback((newThingtimeArg) => {
-    const newThingtime = {
-      ...newThingtimeArg
-    };
-
-    newThingtime.tt = newThingtime;
-    newThingtime.thingtime = newThingtime;
-
-    setThingtimeState(newThingtime);
-  }, []);
-
-  const setThingtime = React.useCallback(
-    (
-      path,
-      value,
-      options: { ignoreUndoRedo?: boolean; namespace?: string } = {
-        ignoreUndoRedo: false,
-        namespace: 'default'
-      }
-    ) => {
-      const { ignoreUndoRedo, namespace } = options;
-
-      // is this a security concern do we need to sanitise the object reference?
-      // if path is thingtime or tt, we can set the whole thingtime object ??? 🤔
-
-      // TODO: make this a lot safer
-      if (['thingtime', 'tt']?.includes(path)) {
-        if (value) {
-          console.log(
-            '[tt][ThingtimeProvider.tsx/setThingtime() ⚠️ called with Path:',
-            path,
-            'which will completely overwrite your thingtime object:',
-            value
-          );
-          setThingtimeObjectWrapper(value);
-          return;
-        }
-      }
-
-      const time = Date.now();
-
-      const newThingtime: any = thingtimeState || {};
-
-      console.log(
-        '[tt][ThingtimeProvider.tsx/setThingtime() called with Path:',
-        path,
-        'which will be set to this value:',
-        value,
-        'this is the new Thingtime:',
-        newThingtime
-      );
-
-      const paths = smarts.parsePropertyPath(path);
-
-      // find first parent where a path is undefined
-      // paths is array of path parts such as ["path1", "path2", "path3"]
-      // we want to create a new reference at the first object which has an undefined part of the path
-      // and is an object itself
-      // so that react will detect the change and re-render
-      // "path1" = { ...thingtime["path1"] } if path1.path2 undefined
-      // "path1.path2" = { ...thingtime["path1"]["path2"] } if path1.path2.path3 undefined
-      // "path1.path2.path3" = { ...thingtime["path1"]["path2"]["path3"] }
-      // etc
-      let done = false;
-      paths.forEach((pathPart, index) => {
-        if (!done) {
-          const pathParts = paths.slice(0, index + 1);
-          const tmpPath = pathParts.join('.');
-          const parentPath = pathParts.slice(0, -1).join('.');
-
-          const valAtPath = smarts.getsmart(newThingtime, tmpPath);
-
-          if (parentPath) {
-            if (typeof valAtPath !== 'object' || valAtPath === null) {
-              const parentVal = smarts.getsmart(newThingtime, parentPath);
-              if (typeof parentVal === 'object') {
-                const newParent = Array.isArray(parentVal) ? [...parentVal] : { ...parentVal };
-                smarts.setsmart(newThingtime, parentPath, newParent);
-              }
-
-              done = true;
-            }
+		const hydrate = async () => {
+			try {
+				let localStorageThingtime = persistLocal ? await localforage.getItem(storageKey) : null;
+        // Preserve the pre-account device workspace once, without ever uploading
+        // it on hydration or handing it to a later account on this device.
+        if (persistLocal && !localStorageThingtime && props.accountId) {
+          let claim: string | null = null;
+          try {
+            claim = localStorage.getItem('tt-legacy-workspace-account');
+            if (!claim) { claim = props.accountId; localStorage.setItem('tt-legacy-workspace-account', claim); }
+          } catch { /* Account isolation takes precedence when storage is unavailable. */ }
+          if (claim === props.accountId) {
+            localStorageThingtime = await localforage.getItem('thingtime');
+            if (localStorageThingtime) await localforage.setItem(storageKey, localStorageThingtime);
           }
         }
-      });
+				if (cancelled) return;
 
-      if (!ignoreUndoRedo) {
-        // store undo/redo history
-        const event: TimelineEvent = {
-          path: path,
-          value: value,
-          namespace: namespace,
-          fromValue: smarts.getsmart(thingtimeState, path),
-          timestamp: time
-        };
-        console.log('[tt][ThingtimeProvider.tsx/setThingtime() adding timeline event', event);
-        console.log('[tt][ThingtimeProvider.tsx/setThingtime() undoRedo.current.addTimelineEvent(newThingtime, event)');
-        undoRedo.current.addTimelineEvent(newThingtime, event);
-      }
+				if (localStorageThingtime) {
+					const parseResult =
+						typeof localStorageThingtime === 'string'
+							? parseThingtimeWithDiagnostics(localStorageThingtime)
+							: { value: localStorageThingtime, repaired: false, removedFunctionCount: 0 };
+					const parsed = parseResult.value;
 
-      // TODO: make thingtime settable
-      newThingtime.thingtime = newThingtime;
-      newThingtime.tt = newThingtime;
+					if (parsed) {
+						const localIsUptoDateVersion = !parsed.version || parsed.version >= thingtimeMinimumValues.version;
+						let newThingtime = smarts.merge(thingtimeMinimumValues, thingtimeDefaults);
 
-      smarts.setsmart(newThingtime, path, value);
+						if (localIsUptoDateVersion) {
+							newThingtime = smarts.merge(parsed, newThingtime);
+						} else {
+							// Should this be
+							// thingtimeNewData, parsed
+							// or
+							// parsed, thingtimeNewData
 
-      setThingtimeObjectWrapper(newThingtime);
-    },
-    [thingtimeState, setThingtimeObjectWrapper]
-  );
+							const withVersionUpdates = smarts.merge(thingtimeNewData, parsed);
+							newThingtime = smarts.merge(thingtimeMinimumValues, withVersionUpdates);
+						}
 
-  const getThingtime = React.useCallback(
-    (...args) => {
-      const rawPath = args[0];
-      const path = rawPath;
+						newThingtime = smarts.merge(newThingtime, thingtimeOverwriteAll, {
+							overwriteAll: true
+						});
 
-      if (!path) {
-        return thingtimeState;
-      }
+						const restoredThingtime = restoreThingtime(newThingtime);
 
-      // do we need to sanitise?
-      // const path = sanitise(rawPath)
-      console.log('[tt][ThingtimeProvider.tsx] getting thing at path', path, 'with Thingtime being: ', thingtimeState);
-      // console.trace("Getting thingtime at path", path)
-      return smarts.getsmart(thingtimeState, path);
-    },
-    [thingtimeState]
-  );
+						// Older blobs can contain function tags or root set/get closures.
+						// Commit the inert repair before exposing the hydrated UI so this
+						// first load is also the last load that sees executable-looking data.
+						if (parseResult.repaired || hasPersistedThingtimeRuntimeMethods(parsed)) {
+							const repairedSerialized = stringifyThingtimeForStorage(restoredThingtime);
+							if (!repairedSerialized) throw new Error('Repaired Thingtime value could not be serialized');
+							// Repair the blob this provider actually read. Writing the literal
+							// default key here would overwrite another provider's tree and
+							// leave this one unrepaired, so it would repair again every load.
+							await localforage.setItem(storageKey, repairedSerialized);
+							if (cancelled) return;
+						}
+					} else {
+						throw new Error('Stored Thingtime value could not be parsed');
+					}
+				} else {
+					restoreThingtime(thingtimeDefaults);
+				}
 
-  const populatePaths = React.useCallback((obj, path, paths, seen = []) => {
-    try {
-      Object.keys(obj).forEach((key) => {
-        const val = obj[key];
-        const newPath = path ? `${path}${path ? '.' : ''}${key}` : key;
-        if (typeof val === 'object') {
-          paths.push(newPath);
-          if (!seen?.includes(val)) {
-            seen.push(val);
-            populatePaths(val, newPath, paths, seen);
-          }
-        } else {
-          paths.push(newPath);
-        }
-      });
-    } catch {
-      // nothing
-    }
-  }, []);
+				persistenceReadyRef.current = true;
+			} catch (err) {
+				if (cancelled) return;
+				console.error('There was an error getting thingtime from localStorage', err);
+				retryAttempt += 1;
+				const retryDelay = Math.min(250 * 2 ** (retryAttempt - 1), 5_000);
+				// Do not expose an apparently editable but permanently non-persistent
+				// placeholder. Keep hydration pending and retry without overwriting the
+				// unread stored value; edits attempted meanwhile remain queued in order.
+				retryTimer = setTimeout(() => void hydrate(), retryDelay);
+				return;
+			}
 
-  const paths = React.useMemo(() => {
-    // const paths = ["tt", "thingtime", "."]
-    const paths = [];
+			if (cancelled) return;
+			hydrationResolvedRef.current = true;
+			setLoading(false);
+			// Inputs fired during hydration were held in order. Apply them on top of
+			// the restored root rather than letting a late load overwrite the edit.
+			if (setThingtimeQueueRef.current.length > 0) queueMicrotask(flushSetThingtimeQueue);
+		};
 
-    // populatePaths(thingtime, commandPath)
-    populatePaths(thingtimeState, '', paths);
+		void hydrate();
 
-    return paths;
-  }, [populatePaths, thingtimeState]);
+		return () => {
+			cancelled = true;
+			clearTimeout(retryTimer);
+		};
+	}, [flushSetThingtimeQueue, persistLocal, restoreThingtime, storageKey, props.accountId]);
 
-  // get thingtime from localstorage
-  React.useEffect(() => {
-    setLoading(true);
+	// thingtime change listener
+	React.useEffect(() => {
+		if (exposeGlobals) {
+			try {
+				window.setThingtime = setThingtime;
+				window.getThingtime = getThingtime;
+				window.thingtime = thingtimeState;
+				window.tt = thingtimeState;
+				window.events = events;
+			} catch {
+				// Global state is best-effort outside a browser.
+			}
+		}
 
-    (async () => {
-      try {
-        const localStorageThingtime = await localforage.getItem('thingtime');
+		// Never persist the temporary pre-hydration value. In development React
+		// replays effects, so a one-shot "skip the first effect" flag can otherwise
+		// schedule that placeholder state before LocalForage finishes loading.
+		// Embedded mounts opt out of local persistence entirely (persistLocal).
+		if (persistLocal && !loading && persistenceReadyRef.current) {
+			persistenceRevisionRef.current += 1;
+			persistenceRef.current?.schedule(thingtimeState, persistenceRevisionRef.current);
+		}
 
-        console.log('[tt][ThingtimeProvider.tsx] localStorageThingtime', localStorageThingtime);
+		thingtimeRef.current = thingtimeState;
 
-        if (localStorageThingtime) {
-          const thingtimeFromLocalStorage = typeof localStorageThingtime === 'string' ? localStorageThingtime : '';
-          const parsed = parse(thingtimeFromLocalStorage);
+		// not sure why this used to have @undoRedoEventKeyShortcutEventListener here.. ?
+	}, [setThingtime, events, exposeGlobals, getThingtime, loading, persistLocal, thingtimeState, setThingtimeObjectWrapper]);
 
-          if (parsed) {
-            const localIsUptoDateVersion = !parsed.version || parsed.version >= thingtimeMinimumValues.version;
-            let newThingtime = smarts.merge(thingtimeMinimumValues, thingtimeDefaults);
+	// Keep the sync channel pointed at the current setThingtime without ever
+	// recreating the channel itself.
+	setThingtimeSyncRef.current = (path, value) => {
+		// Remote writes ride the normal queue (so pre-hydration messages are held
+		// in order) but skip this tab's undo timeline — undo stays per-tab.
+		setThingtime(path, value, { ignoreUndoRedo: true, fromRemote: true });
+	};
 
-            if (localIsUptoDateVersion) {
-              console.log('[tt][ThingtimeProvider.tsx] String 📝 Above 🔝 after converting to object: {}', parsed);
-              newThingtime = smarts.merge(parsed, newThingtime);
-            } else {
-              // Should this be
-              // thingtimeNewData, parsed
-              // or
-              // parsed, thingtimeNewData
+	React.useEffect(() => {
+		if (!persistLocal) return;
+		const channel = createThingtimeSyncChannel({
+			channelName: storageKey,
+			tabId: syncTabIdRef.current as string,
+			onRemoteWrite: (path, value) => setThingtimeSyncRef.current?.(path, value)
+		});
+		syncChannelRef.current = channel;
+		return () => {
+			syncChannelRef.current = null;
+			channel?.close();
+		};
+	}, [storageKey, persistLocal]);
 
-              const withVersionUpdates = smarts.merge(thingtimeNewData, parsed);
-              newThingtime = smarts.merge(thingtimeMinimumValues, withVersionUpdates);
-            }
+	React.useEffect(() => {
+		const persistence = persistenceRef.current;
+		const flushPersistence = () => {
+			void persistence?.flush().catch(() => {
+				// The coordinator retains dirty state and already reports the error.
+			});
+		};
+		const onVisibilityChange = () => {
+			if (document.visibilityState === 'hidden') flushPersistence();
+		};
 
-            newThingtime = smarts.merge(newThingtime, thingtimeOverwriteAll, {
-              overwriteAll: true
-            });
+		document.addEventListener('visibilitychange', onVisibilityChange);
+		window.addEventListener('pagehide', flushPersistence);
+		return () => {
+			document.removeEventListener('visibilitychange', onVisibilityChange);
+			window.removeEventListener('pagehide', flushPersistence);
+			// React Strict Mode replays effect cleanup/setup without remounting refs.
+			// Flush here, but keep the coordinator live for the replayed setup.
+			if (persistence) void persistence.flush().catch(() => {});
+		};
+	}, []);
 
-            console.log('[tt][ThingtimeProvider.tsx] restoring thingtime from localStorage. Thingtime: ', newThingtime);
-            // TODO: does this need to
-            // specifically ignore undo redo calls
-            setThingtime('thingtime', newThingtime, {
-              ignoreUndoRedo: true,
-              namespace: 'tt.localStorage-restore'
-            });
-          }
-        } else {
-          // TODO: does this need to
-          // specifically ignore undo redo calls
-          setThingtime(thingtimeDefaults, {
-            ignoreUndoRedo: true,
-            namespace: 'tt.localStorage-restore'
-          });
-        }
-      } catch (err) {
-        console.error('There was an error getting thingtime from localStorage');
-      }
+	if (thingtimeState) {
+		// @ts-expect-error property get/set does not exist or something?
+		thingtimeState.set = setThingtime;
+		thingtimeState.get = getThingtime;
+	}
 
-      setLoading(false);
-    })();
-  }, []);
+	// watch all the exported values and reset on Everything if they change
+	React.useEffect(() => {
+		const newEverything = {
+			thingtime: thingtimeState,
+			setThingtime: setThingtime,
+			getThingtime: getThingtime,
+			thingtimeRef: thingtimeRef,
+			paths: paths,
+			loading: loading,
+			events: events
+		};
 
-  // thingtime change listener
-  React.useEffect(() => {
-    try {
-      window.setThingtime = setThingtime;
-      window.getThingtime = getThingtime;
-      window.thingtime = thingtimeState;
-      window.tt = thingtimeState;
-      window.events = events;
-    } catch {
-      // nothing
-    }
+		// ⚠️ ORDER OF THESE OPERATIONS IS IMPORTANT ⚠️
+		// 1
+		Object.assign(EverythingRef.current, newEverything); // 1
 
-    if (stateRef.current.initialized) {
-      try {
-        console.log('[tt][ThingtimeProvider.tsx] setting thingtime to localStorage', thingtimeState);
-        // setTimeout(() => {
-        const stringified = stringify(thingtimeState);
-        // TODO: check if doing this asynchronously is safe...
-        // or causing issues in general....
-        localforage.setItem('thingtime', stringified);
-        // }, 600)
-      } catch (err) {
-        console.error('There was an error saving thingtime to localStorage', err);
-      }
-    } else {
-      stateRef.current.initialized = true;
-    }
+		// ⚠️ ORDER OF THESE OPERATIONS IS IMPORTANT ⚠️
+		// 2
+		setEverything(EverythingRef.current); // 2
+	}, [thingtimeState, setThingtime, getThingtime, thingtimeRef, paths, loading, events]);
 
-    thingtimeRef.current = thingtimeState;
+	Object.assign(Everything, {
+		thingtime: thingtimeState,
+		setThingtime: setThingtime,
+		getThingtime: getThingtime,
+		thingtimeRef: thingtimeRef,
+		paths: paths,
+		loading: loading,
+		events: events
+	});
 
-    // not sure why this used to have @undoRedoEventKeyShortcutEventListener here.. ?
-  }, [setThingtime, events, getThingtime, thingtimeState, setThingtimeObjectWrapper]);
-
-  if (thingtimeState) {
-    // @ts-expect-error property get/set does not exist or something?
-    thingtimeState.set = setThingtime;
-    thingtimeState.get = getThingtime;
-  }
-
-  // watch all the exported values and reset on Everything if they change
-  React.useEffect(() => {
-    const newEverything = {
-      thingtime: thingtimeState,
-      setThingtime: setThingtime,
-      getThingtime: getThingtime,
-      thingtimeRef: thingtimeRef,
-      paths: paths,
-      loading: loading,
-      events: events
-    };
-
-    // ⚠️ ORDER OF THESE OPERATIONS IS IMPORTANT ⚠️
-    // 1
-    Object.assign(EverythingRef.current, newEverything); // 1
-
-    // ⚠️ ORDER OF THESE OPERATIONS IS IMPORTANT ⚠️
-    // 2
-    setEverything(EverythingRef.current); // 2
-  }, [thingtimeState, setThingtime, getThingtime, thingtimeRef, paths, loading, events]);
-
-  Object.assign(Everything, {
-    thingtime: thingtimeState,
-    setThingtime: setThingtime,
-    getThingtime: getThingtime,
-    thingtimeRef: thingtimeRef,
-    paths: paths,
-    loading: loading,
-    events: events
-  });
-
-  console.log('nik Everything', Everything);
-
-  return <ThingtimeContext.Provider value={{ Everything }}>{props?.children}</ThingtimeContext.Provider>;
+	return <ThingtimeContext.Provider value={{ Everything }}>{props?.children}</ThingtimeContext.Provider>;
 };

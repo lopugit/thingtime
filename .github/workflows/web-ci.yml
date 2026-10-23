@@ -1,0 +1,30 @@
+name: Web CI
+
+# Stable event listener only. The build/test implementation is versioned once
+# on github-actions, while checkout inside that implementation still tests the
+# exact PR/push commit that triggered this caller.
+# Pull requests stay path-filter-free: required checks from a filtered-out
+# workflow remain pending forever. The protected implementation's scope job
+# gives the stable required-context names to either the full jobs (Vite client
+# build + warning-only typecheck ratchet + unit suites, and the headless /tests
+# API suite against a real dev stack and MongoDB) or the lightweight
+# companions, so non-Remix PRs remain mergeable without masking real failures.
+on:
+  pull_request:
+  push:
+    branches: [main]
+    paths:
+      - remix/**
+      - .github/workflows/web-ci.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  # The protected reusable workflow uses this only from its no-checkout
+  # warning-comment job; build/test jobs keep read-only job permissions.
+  pull-requests: write
+
+jobs:
+  control-plane:
+    uses: lopugit/thingtime/.github/workflows/web-ci.yml@github-actions
+    secrets: inherit

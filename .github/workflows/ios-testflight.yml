@@ -1,0 +1,166 @@
+name: iOS TestFlight
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'iOS/**'
+      - 'apple/Shared/**'
+      - 'apple/Widgets/**'
+      - 'apple/Passwords/**'
+      - 'apple/PasswordProvider/**'
+      - '.github/workflows/ios-testflight.yml'
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: Publish, inspect, or copy existing GitHub Apple secrets into the admin vault
+        required: true
+        type: choice
+        options: [upload, status, migrate-secrets]
+        default: upload
+      expected_build_number:
+        description: Optional build number to inspect (status only)
+        required: false
+      web_url:
+        description: Public Thingtime URL embedded in a manually published build
+        required: false
+        default: https://thingtime.com
+
+permissions:
+  contents: read
+
+# All releases for this app share a build-number and upload lock, including reruns.
+concurrency:
+  group: ios-testflight-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    if: github.ref == 'refs/heads/main'
+    runs-on: macos-15
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      id-token: write
+    defaults:
+      run:
+        shell: bash
+    env:
+      RELEASE_OPERATION: ${{ github.event.inputs.operation || 'upload' }}
+      CREDENTIAL_SOURCE: ${{ vars.THINGTIME_IOS_CREDENTIAL_SOURCE || 'github' }}
+      THINGTIME_RELEASE_ORIGIN: ${{ vars.THINGTIME_RELEASE_ORIGIN || 'https://thingtime.com' }}
+      THINGTIME_WEB_URL: ${{ github.event.inputs.web_url || 'https://thingtime.com' }}
+      DEVELOPER_DIR: /Applications/Xcode_26.2.app/Contents/Developer
+      FASTLANE_SKIP_UPDATE_CHECK: '1'
+      EXPECTED_BUILD_NUMBER: ${{ github.event.inputs.expected_build_number }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Validate release request
+        run: |
+          node -e 'if (!["github", "vault"].includes(process.env.CREDENTIAL_SOURCE)) process.exit(1); const u = new URL(process.env.THINGTIME_WEB_URL); if (u.protocol !== "https:" || u.username || u.password) process.exit(1)'
+
+      - name: Select release Xcode
+        if: env.RELEASE_OPERATION == 'upload'
+        run: |
+          sudo xcode-select --switch "$DEVELOPER_DIR"
+          xcodebuild -version
+          test "$(xcrun --sdk iphoneos --show-sdk-version)" = '26.2'
+
+      - name: Set up Ruby and Fastlane
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.1'
+          bundler-cache: true
+          working-directory: iOS
+
+      - name: Validate release packaging and version allocation
+        if: env.RELEASE_OPERATION == 'upload'
+        run: |
+          node --test iOS/scripts/tests/*.test.mjs
+          python3 iOS/scripts/test_verify_release.py
+          ruby iOS/fastlane/lib/release_version_test.rb
+
+      - name: Install XcodeGen
+        if: env.RELEASE_OPERATION == 'upload'
+        run: command -v xcodegen >/dev/null || brew install xcodegen
+
+      - name: Run native regression tests before loading Apple credentials
+        if: env.RELEASE_OPERATION == 'upload'
+        working-directory: iOS
+        run: |
+          xcodegen generate
+          test_device=$(xcrun simctl list devices available --json | python3 -c 'import json,sys; data=json.load(sys.stdin)["devices"]; devices=[d["udid"] for runtime,rows in sorted(data.items(),reverse=True) if ".iOS-" in runtime for d in rows if d.get("isAvailable") and "iPhone" in d["name"]]; assert devices, "No iPhone simulator is available"; print(devices[0])')
+          xcodebuild -project Thingtime.xcodeproj -scheme Thingtime \
+            -destination "platform=iOS Simulator,id=$test_device" \
+            -derivedDataPath "$RUNNER_TEMP/thingtime-native-tests" \
+            -resultBundlePath "$RUNNER_TEMP/ThingtimeNativeTests.xcresult" \
+            -jobs 2 -parallel-testing-enabled NO CODE_SIGNING_ALLOWED=NO test
+
+      - name: Preserve native test results
+        if: always() && env.RELEASE_OPERATION == 'upload'
+        uses: actions/upload-artifact@v4
+        with:
+          name: thingtime-native-test-results
+          path: ${{ runner.temp }}/ThingtimeNativeTests.xcresult
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Load existing GitHub credentials or explicitly migrate them
+        if: env.CREDENTIAL_SOURCE == 'github' || env.RELEASE_OPERATION == 'migrate-secrets'
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_CONTENT: ${{ secrets.ASC_KEY_CONTENT }}
+          DEVELOPMENT_TEAM: ${{ vars.THINGTIME_APPLE_TEAM_ID || '6DQQ9V7C84' }}
+          PRODUCT_BUNDLE_IDENTIFIER: ${{ vars.THINGTIME_IOS_BUNDLE_ID || 'com.thingtime.appletime' }}
+          IOS_DISTRIBUTION_CERTIFICATE_ID: ${{ secrets.IOS_DISTRIBUTION_CERTIFICATE_ID }}
+          IOS_DISTRIBUTION_CERT_P12: ${{ secrets.IOS_DISTRIBUTION_CERT_P12 }}
+          IOS_DISTRIBUTION_CERT_P12_PASSWORD: ${{ secrets.IOS_DISTRIBUTION_CERT_P12_PASSWORD }}
+        run: |
+          export WATCH_BUNDLE_IDENTIFIER="$PRODUCT_BUNDLE_IDENTIFIER.watchkitapp"
+          if [[ "$RELEASE_OPERATION" == 'migrate-secrets' ]]; then
+            node iOS/scripts/vault-credentials.mjs
+          else
+            node iOS/scripts/github-credentials.mjs
+          fi
+
+      - name: Load Apple credentials from the Thingtime vault
+        if: env.CREDENTIAL_SOURCE == 'vault' && env.RELEASE_OPERATION != 'migrate-secrets'
+        run: node iOS/scripts/vault-credentials.mjs
+
+      - name: Prepare distribution identity
+        if: env.RELEASE_OPERATION == 'upload'
+        run: |
+          umask 077
+          ruby -rbase64 -e 'File.binwrite(ARGV.fetch(0), Base64.strict_decode64(ENV.fetch("IOS_DISTRIBUTION_CERT_P12")))' "$RUNNER_TEMP/thingtime-distribution.p12"
+          echo "IOS_DISTRIBUTION_CERTIFICATE_PATH=$RUNNER_TEMP/thingtime-distribution.p12" >> "$GITHUB_ENV"
+
+      - name: Allocate the next TestFlight build number
+        if: env.RELEASE_OPERATION == 'upload'
+        working-directory: iOS
+        run: bundle exec fastlane prepare_release
+
+      - name: Build, verify phone/Watch/widget and upload
+        if: env.RELEASE_OPERATION == 'upload'
+        working-directory: iOS
+        run: bundle exec fastlane beta
+
+      - name: Verify Apple processing and internal tester availability
+        if: env.RELEASE_OPERATION == 'upload'
+        working-directory: iOS
+        run: bundle exec fastlane verify_release
+
+      - name: Inspect TestFlight build state
+        if: env.RELEASE_OPERATION == 'status'
+        working-directory: iOS
+        run: bundle exec fastlane testflight_status
+
+      - name: Remove ephemeral signing material
+        if: always()
+        run: |
+          rm -f "$RUNNER_TEMP/thingtime-distribution.p12"
+          rm -rf iOS/build "$RUNNER_TEMP/thingtime-ipa"

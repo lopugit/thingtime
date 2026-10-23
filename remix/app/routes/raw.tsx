@@ -1,15 +1,11 @@
-import { Box } from '@chakra-ui/react';
-import { TopSpacing } from '~/components/Layout/TopSpacing';
+import { PageShell } from '../components/Layout/PageShell';
 import { Raw } from '~/components/MongoDB/Raw';
-import { RawResults } from '~/components/MongoDB/RawResults';
 
-export default function login() {
+export default function RawPage() {
   const template = (
-    <>
-      <TopSpacing />
-      <Raw></Raw>
-      <RawResults></RawResults>
-    </>
+    <PageShell width={1400} columnProps={{ rowGap: 8, minWidth: 0 }}>
+      <Raw />
+    </PageShell>
   );
 
   return template;

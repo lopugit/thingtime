@@ -1,6 +1,18 @@
 .DS_Store
 .vscode
 .env
+.env.local
+.env.auto
+.env.development
+.env.test
+.env.staging
+.env.production
+.cache/
+.vercel/
+.output/
+dist/
+.ds-sync/
+ds-bundle/
 
 # Root node_modules
 node_modules
@@ -17,13 +29,94 @@ localhost-key.pem
 localhost.pem
 
 yarn-error.log
-pnpm-lock.yaml
+# pnpm-lock.yaml
 
 build/*
 public/build/*
 api/index.js
 api/index.js.map
-
-pnpm-lock.yaml
+remix/.vercel/
+remix/dist/
+remix/.functional-preview/
+remix/server/assets/*
+!remix/server/assets/.gitignore
+electron/dist/
+electron/release/
+electron/node_modules/
+macos/ThingtimeNode/.build/
 
 tmp/*
+
+# Xcode / XcodeGen local outputs
+iOS/*.xcodeproj/
+iOS/*.xcworkspace/
+iOS/DerivedData/
+iOS/build/
+iOS/*.xcarchive
+iOS/*.ipa
+iOS/*.dSYM
+iOS/.env
+iOS/.env.*
+!iOS/.env.example
+iOS/fastlane/report.xml
+iOS/fastlane/Preview.html
+iOS/fastlane/screenshots/
+iOS/fastlane/test_output/
+iOS/xcuserdata/
+iOS/**/xcuserdata/
+iOS/Thingtime/Resources/Info.plist
+
+# graphify - one active immutable portable snapshot + untracked aliases
+graphify-out/.graphify_*
+graphify-out/.rebuild.lock
+graphify-out/.pending_changes
+graphify-out/.vocab.txt
+# Mutable root files are symlinks created by scripts/graphify for compatibility
+# with ordinary `graphify query`; the wrapper prunes superseded snapshots.
+graphify-out/graph.json
+graphify-out/manifest.json
+graphify-out/GRAPH_REPORT.md
+graphify-out/cost.json
+graphify-out/.work/
+graphify-out/.locks/
+# cache: Graphify's mutable semantic/ names are input keys and can be rewritten
+# with different valid bytes. Only immutable semantic-cas variants are tracked;
+# ast/ + stat-index.json stay local (stat-index uses absolute paths).
+graphify-out/cache/*
+!graphify-out/cache/semantic-cas/
+!graphify-out/cache/semantic-cas/**
+# Root HTML is a compatibility alias; retain portable HTML inside snapshots.
+graphify-out/graph.html
+graphify-out/snapshots/**/.graphify_*
+graphify-out/snapshots/**/.staging-*
+graphify-out/snapshots/**/cache/
+# dated curated-graph backups created by `graphify update`
+graphify-out/[0-9]*/
+
+# Keep test branch workspace directories out of git, but keep the folder itself.
+/.test-branches/*
+!/.test-branches/.keep
+
+# design-sync (claude.ai/design) — staged scripts, build output, machine state.
+# Durable inputs under .design-sync/ (config.json, NOTES.md, conventions.md,
+# previews/, overrides/) are committed; everything below is regenerated.
+.ds-sync/
+ds-bundle/
+.design-sync/.cache/
+.design-sync/learnings/
+.design-sync/node_modules
+
+# Generated native widget build products
+macos/ThingtimeWidgets/*.xcodeproj/
+macos/ThingtimeWidgets/build/
+
+# Native Widgets distribution artifacts
+macos/ThingtimeWidgets/release/
+macos/ThingtimeWidgets/release-upload/
+
+# Claude Code per-checkout tooling state (worktree-derived dev ports, local permissions)
+.claude/launch.json
+.claude/settings.local.json
+
+# Query stamps are local even when a query targets a portable snapshot.
+graphify-out/snapshots/**/cache/last_query_stamp

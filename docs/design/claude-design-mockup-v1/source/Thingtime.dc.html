@@ -1,0 +1,804 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Hanken+Grotesk:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{font-family:'Hanken Grotesk',system-ui,-apple-system,sans-serif;color:#16161a;background:#ffffff;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+  ::selection{background:rgba(165,85,232,.18)}
+  a{color:inherit;text-decoration:none}
+  input{font-family:inherit}
+  @keyframes tt-pan{to{background-position:200% center}}
+  @keyframes tt-blink{0%,100%{opacity:1}50%{opacity:0}}
+  @keyframes tt-toast-in{from{opacity:0;transform:translateY(-12px) scale(.97)}to{opacity:1;transform:none}}
+  @keyframes tt-pop{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+  @keyframes tt-word{0%{opacity:0;transform:translateY(14px)}12%,86%{opacity:1;transform:none}100%{opacity:0;transform:translateY(-14px)}}
+  @keyframes tt-bob{0%,100%{transform:translateY(0)}50%{transform:translateY(6px)}}
+</style>
+</helmet>
+
+<div style="overflow-x:hidden;width:100%">
+
+  <nav data-screen-label="Nav" style="position:fixed;top:0;left:0;right:0;z-index:9000;display:flex;align-items:center;justify-content:space-between;gap:16px;padding:13px clamp(16px,4vw,40px);background:rgba(255,255,255,.78);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-bottom:1px solid #f0f0f2">
+    <a href="#top" style="display:flex;align-items:center;gap:10px">
+      <span style="display:grid;grid-template-columns:repeat(3,6px);grid-template-rows:repeat(3,6px);gap:1.6px;padding:6px;background:#fff;border:1px solid #ececef;border-radius:8px;box-shadow:0 1px 2px rgba(0,0,0,.05)">
+        <i style="border-radius:1.5px;background:transparent"></i><i style="border-radius:1.5px;background:#47b5e6"></i><i style="border-radius:1.5px;background:transparent"></i>
+        <i style="border-radius:1.5px;background:#58ca70"></i><i style="border-radius:1.5px;background:#ffbc48"></i><i style="border-radius:1.5px;background:#a555e8"></i>
+        <i style="border-radius:1.5px;background:transparent"></i><i style="border-radius:1.5px;background:#f34a4a"></i><i style="border-radius:1.5px;background:transparent"></i>
+      </span>
+      <span style="font:600 18px 'Space Grotesk',sans-serif;letter-spacing:-.02em">thingtime</span>
+    </a>
+
+    <button type="button" onClick="{{ openCmd }}" aria-label="Open command palette" style="flex:1;max-width:300px;display:flex;align-items:center;gap:10px;padding:8px 12px;background:#f5f5f7;border:1px solid #ececef;border-radius:10px;cursor:text;color:#9a9aa6;font-size:14px;transition:all 140ms ease">
+      <span style="font-size:13px">🔍</span>
+      <span style="font-family:'Hanken Grotesk',sans-serif">Imagine…</span>
+      <span style="margin-left:auto;font:600 11px 'JetBrains Mono',monospace;color:#b6b6c0;background:#fff;border:1px solid #ececef;border-radius:6px;padding:2px 6px">⌘P</span>
+    </button>
+
+    <div style="display:flex;align-items:center;gap:clamp(10px,2vw,22px)">
+      <a href="#developers" style="font-size:13.5px;font-weight:500;color:#5a5a66;display:none">Developers</a>
+      <a href="#back" style="display:inline-flex;align-items:center;gap:7px;font-size:13.5px;font-weight:600">Login <span style="font-size:13px">🌈</span></a>
+    </div>
+  </nav>
+
+  <section id="top" data-screen-label="Hero" style="min-height:92vh;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:120px clamp(20px,5vw,40px) 60px">
+    <div style="display:inline-flex;align-items:center;gap:8px;padding:6px 13px;border:1px solid #ececef;border-radius:999px;background:#fff;font:500 12.5px 'JetBrains Mono',monospace;color:#6b6b76;margin-bottom:34px;box-shadow:0 1px 2px rgba(0,0,0,.04)">
+      <span style="width:7px;height:7px;border-radius:999px;background:linear-gradient(120deg,#47b5e6,#a555e8,#f34a4a,#ffbc48,#58ca70)"></span>
+      a GUI for the internet
+    </div>
+
+    <div style="min-height:1.02em;display:flex;align-items:center;justify-content:center;margin-bottom:6px">
+      <span style="font:700 clamp(46px,9.2vw,128px) 'Space Grotesk',sans-serif;letter-spacing:-.035em;line-height:.95;background:linear-gradient(90deg,#f34a4a,#ffbc48,#58ca70,#47b5e6,#a555e8,#f34a4a);background-size:200% auto;-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;animation:tt-pan 7s linear infinite">{{ heroWord }}</span>
+    </div>
+    <h1 style="margin:0;font:600 clamp(22px,3.2vw,40px) 'Space Grotesk',sans-serif;letter-spacing:-.02em;color:#16161a">A home for everything, in any shape.</h1>
+
+    <p style="max-width:640px;margin:22px auto 0;font-size:clamp(16px,1.7vw,19px);line-height:1.6;color:#5a5a66">
+      Store, shape, and share any data on Earth — notes, records, listings, whole apps — and let people and machines use it equally. Your data, your schema, yours to share. <strong style="color:#16161a;font-weight:600">That's freedom.</strong>
+    </p>
+
+    <div style="display:flex;flex-wrap:wrap;gap:12px;justify-content:center;margin-top:34px">
+      <button type="button" onClick="{{ scrollToDemo }}" style="display:inline-flex;align-items:center;gap:8px;padding:13px 22px;border:none;border-radius:11px;background:#16161a;color:#fff;font:600 15px 'Space Grotesk',sans-serif;cursor:pointer;box-shadow:0 6px 20px rgba(0,0,0,.16)">Try the live demo ↓</button>
+      <button type="button" onClick="{{ openCmd }}" style="display:inline-flex;align-items:center;gap:9px;padding:13px 20px;border:1px solid #e2e2e6;border-radius:11px;background:#fff;color:#16161a;font:600 15px 'Space Grotesk',sans-serif;cursor:pointer">Imagine anything <span style="font:600 11px 'JetBrains Mono',monospace;color:#9a9aa6;background:#f5f5f7;border-radius:5px;padding:2px 6px">⌘P</span></button>
+    </div>
+
+    <div style="margin-top:74px;font-size:22px;color:#c8c8d0;animation:tt-bob 2.4s ease-in-out infinite">↓</div>
+  </section>
+
+  <section id="tt-demo" data-screen-label="Live demo" style="background:#fafafb;border-top:1px solid #f0f0f2;border-bottom:1px solid #f0f0f2;padding:clamp(56px,8vw,104px) clamp(16px,5vw,40px)">
+    <div style="max-width:1080px;margin:0 auto">
+      <div style="text-align:center;margin-bottom:38px">
+        <div style="font:600 12px 'JetBrains Mono',monospace;letter-spacing:.16em;color:#9a9aa6;margin-bottom:14px">LIVE · NOT A SCREENSHOT</div>
+        <h2 style="margin:0;font:600 clamp(28px,4vw,46px) 'Space Grotesk',sans-serif;letter-spacing:-.025em">This is Thingtime.</h2>
+        <p style="max-width:560px;margin:16px auto 0;font-size:16px;line-height:1.6;color:#5a5a66">Every value is editable, addressable, and shareable. Switch the schema, hit <span style="font:600 12px 'JetBrains Mono',monospace;background:#fff;border:1px solid #ececef;border-radius:5px;padding:1px 6px">🎨 Edit</span>, or press <span style="font:600 12px 'JetBrains Mono',monospace;background:#fff;border:1px solid #ececef;border-radius:5px;padding:1px 6px">⌘P</span> to imagine.</p>
+      </div>
+
+      <div style="max-width:780px;margin:0 auto;background:#fff;border:1px solid #ececef;border-radius:20px;box-shadow:0 24px 60px -28px rgba(20,20,40,.28);overflow:hidden">
+        <div style="display:flex;flex-wrap:wrap;align-items:center;gap:12px;padding:14px 16px;border-bottom:1px solid #f1f1f3;background:#fcfcfd">
+          <div style="display:inline-flex;gap:4px;padding:4px;background:#f1f1f3;border-radius:11px">
+            <sc-for list="{{ tabs }}" as="t" hint-placeholder-count="3">
+              <button type="button" onClick="{{ t.onClick }}" style="{{ t.style }}"><span>{{ t.emoji }}</span><span>{{ t.label }}</span></button>
+            </sc-for>
+          </div>
+          <div style="display:inline-flex;gap:4px;padding:4px;background:#f1f1f3;border-radius:11px">
+            <button type="button" onClick="{{ setReader }}" title="Reader view — just words and nesting" style="{{ readerBtnStyle }}">Aa</button>
+            <button type="button" onClick="{{ setDev }}" title="Developer view — types and machinery" style="{{ devBtnStyle }}">{ }</button>
+          </div>
+          <div style="display:flex;flex-wrap:wrap;gap:7px;margin-left:auto">
+            <button type="button" onClick="{{ toggleEdit }}" style="{{ editBtnStyle }}">{{ editBtnLabel }}</button>
+            <button type="button" onClick="{{ expandAll }}" style="display:inline-flex;align-items:center;gap:6px;padding:7px 12px;border:1px solid #ececef;border-radius:9px;background:#fff;color:#5a5a66;font:600 13px 'Space Grotesk',sans-serif;cursor:pointer">Expand</button>
+            <button type="button" onClick="{{ collapseAll }}" style="display:inline-flex;align-items:center;gap:6px;padding:7px 12px;border:1px solid #ececef;border-radius:9px;background:#fff;color:#5a5a66;font:600 13px 'Space Grotesk',sans-serif;cursor:pointer">Collapse</button>
+            <button type="button" onClick="{{ share }}" style="display:inline-flex;align-items:center;gap:6px;padding:7px 12px;border:1px solid #ececef;border-radius:9px;background:#fff;color:#5a5a66;font:600 13px 'Space Grotesk',sans-serif;cursor:pointer">🔗 Share</button>
+          </div>
+        </div>
+
+        <div style="padding:18px clamp(14px,3vw,26px) 24px;min-height:340px">
+          {{ treeEl }}
+        </div>
+
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:11px 18px;border-top:1px solid #f1f1f3;background:#fcfcfd;font-size:12.5px;color:#9a9aa6">
+          <span>Hover a value for ✨ options · Aa / { } switch views</span><span style="color:#dcdce2">·</span><span>{{ thingMeta }}</span>
+          <span style="margin-left:auto;display:inline-flex;align-items:center;gap:6px;color:#58ca70;font-weight:600">● <span style="color:#9a9aa6;font-weight:500">synced to your space</span></span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section data-screen-label="Big idea" style="padding:clamp(64px,9vw,120px) clamp(20px,5vw,40px);max-width:1080px;margin:0 auto">
+    <div style="font:600 12px 'JetBrains Mono',monospace;letter-spacing:.16em;color:#9a9aa6;margin-bottom:16px">THE BIG IDEA</div>
+    <h2 style="margin:0;max-width:760px;font:600 clamp(30px,4.6vw,54px) 'Space Grotesk',sans-serif;letter-spacing:-.03em;line-height:1.04">One GUI for everything.</h2>
+    <p style="max-width:620px;margin:22px 0 0;font-size:18px;line-height:1.6;color:#5a5a66">Social feeds, spreadsheets, notes, listings — they're all just data wearing different clothes. Thingtime gives every kind of data one home you fully control.</p>
+
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:18px;margin-top:50px">
+      <div style="padding:28px;border:1px solid #ececef;border-radius:18px;background:#fff">
+        <div style="font-size:30px;margin-bottom:16px">📦</div>
+        <h3 style="margin:0 0 8px;font:600 19px 'Space Grotesk',sans-serif">Any shape</h3>
+        <p style="margin:0;font-size:15px;line-height:1.55;color:#6b6b76">Objects, lists, numbers, switches, even whole layouts. If you can imagine it, you can store it.</p>
+      </div>
+      <div style="padding:28px;border:1px solid #ececef;border-radius:18px;background:#fff">
+        <div style="font-size:30px;margin-bottom:16px">🎨</div>
+        <h3 style="margin:0 0 8px;font:600 19px 'Space Grotesk',sans-serif">Your schema</h3>
+        <p style="margin:0;font-size:15px;line-height:1.55;color:#6b6b76">No fixed forms. Bend any record into the shape that fits your life — not someone else's product.</p>
+      </div>
+      <div style="padding:28px;border:1px solid #ececef;border-radius:18px;background:#fff">
+        <div style="font-size:30px;margin-bottom:16px">🌍</div>
+        <h3 style="margin:0 0 8px;font:600 19px 'Space Grotesk',sans-serif">Shareable by a path</h3>
+        <p style="margin:0;font-size:15px;line-height:1.55;color:#6b6b76">Every value has an address — ready for people and machines to read, borrow, and build on.</p>
+      </div>
+    </div>
+
+    <div style="margin-top:48px;padding:34px clamp(24px,4vw,48px);border-radius:20px;background:#fafafb;border:1px solid #f0f0f2;text-align:center">
+      <p style="margin:0;font:600 clamp(20px,2.8vw,30px) 'Space Grotesk',sans-serif;letter-spacing:-.02em;line-height:1.3">Your data, your shape, yours to share.<br><span style="background:linear-gradient(90deg,#f34a4a,#ffbc48,#58ca70,#47b5e6,#a555e8);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent">That's freedom.</span></p>
+    </div>
+  </section>
+
+  <section data-screen-label="Use cases" style="padding:clamp(56px,8vw,104px) clamp(20px,5vw,40px);background:#fafafb;border-top:1px solid #f0f0f2;border-bottom:1px solid #f0f0f2">
+    <div style="max-width:1080px;margin:0 auto">
+      <div style="font:600 12px 'JetBrains Mono',monospace;letter-spacing:.16em;color:#9a9aa6;margin-bottom:16px">IN THE WILD</div>
+      <h2 style="margin:0;font:600 clamp(28px,4vw,46px) 'Space Grotesk',sans-serif;letter-spacing:-.025em">A few things people keep in Thingtime.</h2>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:18px;margin-top:42px">
+        <button type="button" onClick="{{ loadCar }}" style="text-align:left;cursor:pointer;padding:28px;border:1px solid #ececef;border-radius:18px;background:#fff;transition:all 160ms ease">
+          <div style="font-size:30px;margin-bottom:16px">🚗</div>
+          <h3 style="margin:0 0 8px;font:600 19px 'Space Grotesk',sans-serif">A car's whole life</h3>
+          <p style="margin:0 0 16px;font-size:15px;line-height:1.55;color:#6b6b76">Every oil change, rotation, and repair with dates and costs. Sell with a verified history buyers can trust.</p>
+          <span style="font:600 13.5px 'Space Grotesk',sans-serif;color:#a555e8">Open in demo →</span>
+        </button>
+        <button type="button" onClick="{{ loadTools }}" style="text-align:left;cursor:pointer;padding:28px;border:1px solid #ececef;border-radius:18px;background:#fff;transition:all 160ms ease">
+          <div style="font-size:30px;margin-bottom:16px">🔧</div>
+          <h3 style="margin:0 0 8px;font:600 19px 'Space Grotesk',sans-serif">Tools worth sharing</h3>
+          <p style="margin:0 0 16px;font-size:15px;line-height:1.55;color:#6b6b76">Lend the drill you use twice a year. Track condition, availability, borrowers, and rent — a tiny sharing economy.</p>
+          <span style="font:600 13.5px 'Space Grotesk',sans-serif;color:#47b5e6">Open in demo →</span>
+        </button>
+        <button type="button" onClick="{{ loadNotes }}" style="text-align:left;cursor:pointer;padding:28px;border:1px solid #ececef;border-radius:18px;background:#fff;transition:all 160ms ease">
+          <div style="font-size:30px;margin-bottom:16px">🪄</div>
+          <h3 style="margin:0 0 8px;font:600 19px 'Space Grotesk',sans-serif">A feed you own</h3>
+          <p style="margin:0 0 16px;font-size:15px;line-height:1.55;color:#6b6b76">Notes, links, todos, pins — one personal feed with the schema you choose, shared only with who you pick.</p>
+          <span style="font:600 13.5px 'Space Grotesk',sans-serif;color:#58ca70">Open in demo →</span>
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <section id="developers" data-screen-label="For developers" style="padding:clamp(64px,9vw,120px) clamp(20px,5vw,40px);max-width:1080px;margin:0 auto">
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:clamp(32px,5vw,72px);align-items:center">
+      <div>
+        <div style="font:600 12px 'JetBrains Mono',monospace;letter-spacing:.16em;color:#9a9aa6;margin-bottom:16px">FOR DEVELOPERS</div>
+        <h2 style="margin:0;font:600 clamp(28px,4vw,46px) 'Space Grotesk',sans-serif;letter-spacing:-.025em;line-height:1.05">Every thing is an API.</h2>
+        <p style="max-width:520px;margin:22px 0 0;font-size:17px;line-height:1.6;color:#5a5a66">Read and write any path over HTTP. Browser sessions and API clients share one revocable, ES256-signed token — and other platforms can verify Thingtime-issued tokens offline via JWKS.</p>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:26px">
+          <span style="font:600 12.5px 'JetBrains Mono',monospace;color:#5a5a66;background:#f5f5f7;border:1px solid #ececef;border-radius:999px;padding:6px 13px">ES256</span>
+          <span style="font:600 12.5px 'JetBrains Mono',monospace;color:#5a5a66;background:#f5f5f7;border:1px solid #ececef;border-radius:999px;padding:6px 13px">JWKS</span>
+          <span style="font:600 12.5px 'JetBrains Mono',monospace;color:#5a5a66;background:#f5f5f7;border:1px solid #ececef;border-radius:999px;padding:6px 13px">httpOnly cookie + Bearer</span>
+        </div>
+      </div>
+      <div style="border-radius:16px;overflow:hidden;border:1px solid #23232b;box-shadow:0 24px 60px -30px rgba(20,20,40,.5)">
+        <div style="display:flex;align-items:center;gap:7px;padding:12px 16px;background:#1c1c22">
+          <span style="width:11px;height:11px;border-radius:999px;background:#f34a4a"></span>
+          <span style="width:11px;height:11px;border-radius:999px;background:#ffbc48"></span>
+          <span style="width:11px;height:11px;border-radius:999px;background:#58ca70"></span>
+          <span style="margin-left:8px;font:500 12px 'JetBrains Mono',monospace;color:#7a7a88">thingtime · api</span>
+        </div>
+        <pre style="margin:0;padding:22px;background:#16161c;color:#e6e6ee;font:500 13.5px/1.7 'JetBrains Mono',monospace;overflow-x:auto"><span style="color:#58ca70">GET</span> /api/v1/things/car/Maintenance
+<span style="color:#7a7a88">Authorization:</span> Bearer &lt;jwt&gt;
+
+<span style="color:#7a7a88">→ 200 OK</span>
+[ { <span style="color:#47b5e6">"Service"</span>: <span style="color:#ffbc48">"Oil &amp; filter change"</span>,
+    <span style="color:#47b5e6">"Cost"</span>: <span style="color:#a555e8">89</span> }, … ]</pre>
+      </div>
+    </div>
+  </section>
+
+  <section id="back" data-screen-label="Back the launch" style="padding:clamp(40px,6vw,80px) clamp(20px,5vw,40px) clamp(64px,9vw,110px)">
+    <div style="max-width:880px;margin:0 auto;padding:3px;border-radius:26px;background:linear-gradient(120deg,#47b5e6,#a555e8,#f34a4a,#ffbc48,#58ca70,#47b5e6);box-shadow:0 30px 70px -34px rgba(60,40,120,.45)">
+      <div style="background:#fff;border-radius:23px;padding:clamp(32px,5vw,60px);text-align:center">
+        <div style="font-size:42px;margin-bottom:18px">🦄</div>
+        <h2 style="margin:0;font:600 clamp(26px,3.6vw,42px) 'Space Grotesk',sans-serif;letter-spacing:-.025em;line-height:1.1">Help build a GUI for the internet.</h2>
+        <p style="max-width:520px;margin:18px auto 0;font-size:16.5px;line-height:1.6;color:#5a5a66">Thingtime is independent and built in the open. Back the campaign, grab merch, and help keep data free for everyone.</p>
+        <div style="display:flex;flex-wrap:wrap;gap:12px;justify-content:center;margin-top:30px">
+          <a href="https://www.indiegogo.com/projects/thingtime-a-gui-for-the-internet/coming_soon" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:9px;padding:14px 26px;border-radius:12px;color:#fff;font:600 15px 'Space Grotesk',sans-serif;background:linear-gradient(120deg,#47b5e6,#a555e8,#f34a4a,#ffbc48,#58ca70,#47b5e6);background-size:180% auto;box-shadow:0 10px 26px -8px rgba(120,60,200,.5)">Back on Indiegogo 🌈</a>
+          <a href="https://www.gofundme.com/f/thingtime" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:9px;padding:14px 26px;border-radius:12px;color:#16161a;font:600 15px 'Space Grotesk',sans-serif;background:#fff;border:1px solid #e2e2e6">Donate on GoFundMe 💖</a>
+        </div>
+        <p style="margin:22px 0 0;font:500 13px 'JetBrains Mono',monospace;color:#9a9aa6">🌈 merch + perks for backers</p>
+      </div>
+    </div>
+  </section>
+
+  <footer data-screen-label="Footer" style="border-top:1px solid #f0f0f2;padding:clamp(48px,6vw,72px) clamp(20px,5vw,40px) 48px">
+    <div style="max-width:1080px;margin:0 auto;display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:40px">
+      <div>
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+          <span style="display:grid;grid-template-columns:repeat(3,5px);grid-template-rows:repeat(3,5px);gap:1.4px;padding:5px;background:#fff;border:1px solid #ececef;border-radius:7px">
+            <i style="background:transparent"></i><i style="background:#47b5e6"></i><i style="background:transparent"></i>
+            <i style="background:#58ca70"></i><i style="background:#ffbc48"></i><i style="background:#a555e8"></i>
+            <i style="background:transparent"></i><i style="background:#f34a4a"></i><i style="background:transparent"></i>
+          </span>
+          <span style="font:600 17px 'Space Grotesk',sans-serif;letter-spacing:-.02em">thingtime</span>
+        </div>
+        <p style="margin:0;font-size:13.5px;line-height:1.6;color:#9a9aa6">A GUI for the internet.<br>© {{ year }} Thingtime</p>
+        <div style="margin-top:14px;font:500 11px 'JetBrains Mono',monospace;color:#b6b6c0">🌱 git/main</div>
+      </div>
+      <div>
+        <div style="font:600 12px 'Space Grotesk',sans-serif;letter-spacing:.04em;text-transform:uppercase;color:#9a9aa6;margin-bottom:14px">Product</div>
+        <div style="display:flex;flex-direction:column;gap:9px;font-size:14px;color:#5a5a66">
+          <a href="#tt-demo">Live demo</a><a href="#developers">For developers</a><a href="#back">Back the launch</a>
+        </div>
+      </div>
+      <div>
+        <div style="font:600 12px 'Space Grotesk',sans-serif;letter-spacing:.04em;text-transform:uppercase;color:#9a9aa6;margin-bottom:14px">Connect</div>
+        <div style="display:flex;flex-direction:column;gap:9px;font-size:14px;color:#5a5a66">
+          <a href="mailto:connect@thingtime.com">connect@thingtime.com</a>
+          <a href="mailto:invest@thingtime.com">invest@thingtime.com</a>
+        </div>
+      </div>
+      <div>
+        <div style="font:600 12px 'Space Grotesk',sans-serif;letter-spacing:.04em;text-transform:uppercase;color:#9a9aa6;margin-bottom:14px">Status</div>
+        <div style="display:flex;flex-direction:column;gap:10px;font-size:13.5px;color:#5a5a66">
+          <span style="display:inline-flex;align-items:center;gap:8px"><span style="width:8px;height:8px;border-radius:999px;background:#58ca70"></span>MongoDB · live</span>
+          <span style="display:inline-flex;align-items:center;gap:8px"><span style="width:8px;height:8px;border-radius:999px;background:#58ca70"></span>Vercel · ready</span>
+        </div>
+        <div style="margin-top:16px;font-size:13px;color:#9a9aa6">Notifications by Lopu 🦄</div>
+        <div style="margin-top:8px;font-size:15px;letter-spacing:3px">🌈🦄🧙‍♂️</div>
+      </div>
+    </div>
+  </footer>
+
+  <sc-if value="{{ cmdOpen }}" hint-placeholder-val="{{ false }}">
+    <div onClick="{{ closeCmd }}" style="position:fixed;inset:0;z-index:10000;background:rgba(18,18,28,.32);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);display:flex;justify-content:center;align-items:flex-start;padding:14vh 20px 20px">
+      <div onClick="{{ stop }}" style="width:min(560px,94vw);background:#fff;border-radius:16px;box-shadow:0 30px 80px -20px rgba(20,20,40,.5);overflow:hidden;animation:tt-pop 180ms ease">
+        <div style="padding:3px;background:linear-gradient(120deg,#47b5e6,#a555e8,#f34a4a,#ffbc48,#58ca70,#47b5e6)">
+          <div style="display:flex;align-items:center;gap:12px;background:#fff;padding:15px 18px">
+            <span style="font-size:17px">🔮</span>
+            <input id="tt-cmd-input" autocomplete="off" spellcheck="false" value="{{ cmdQuery }}" onInput="{{ onCmdInput }}" onKeyDown="{{ onCmdKey }}" placeholder="Imagine… search a path, or type  Total spent = 600" style="flex:1;border:none;outline:none;font-size:16.5px;color:#16161a;background:transparent">
+            <span style="font:600 11px 'JetBrains Mono',monospace;color:#b6b6c0;border:1px solid #ececef;border-radius:6px;padding:3px 7px">esc</span>
+          </div>
+        </div>
+        <div style="max-height:46vh;overflow-y:auto;padding:8px">
+          <sc-for list="{{ cmdResults }}" as="r" hint-placeholder-count="0">
+            <button type="button" onClick="{{ r.onClick }}" onMouseEnter="{{ r.onHover }}" style="{{ r.style }}">
+              <span style="font-size:15px">{{ r.emoji }}</span>
+              <span style="font:600 13.5px 'JetBrains Mono',monospace;color:#16161a">{{ r.disp }}</span>
+              <span style="margin-left:auto;font-size:13px;color:#9a9aa6;max-width:46%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ r.preview }}</span>
+            </button>
+          </sc-for>
+          <div style="padding:11px 14px;font-size:12.5px;color:#b6b6c0">{{ cmdHint }}</div>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <div style="position:fixed;top:0;left:0;right:0;z-index:10001;display:flex;flex-direction:column;align-items:center;gap:10px;padding-top:74px;pointer-events:none">
+    <sc-for list="{{ toasts }}" as="t" hint-placeholder-count="0">
+      <div style="pointer-events:auto;width:360px;max-width:calc(100vw - 24px);padding:2px;border-radius:18px;background:linear-gradient(120deg,#47b5e6,#a555e8,#f34a4a,#ffbc48,#58ca70,#47b5e6);box-shadow:0 14px 38px rgba(20,20,40,.18);animation:tt-toast-in 260ms cubic-bezier(.2,.9,.3,1)">
+        <div style="background:#fff;border-radius:16px;padding:13px 15px;position:relative">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px">
+            <span style="font-size:15px">🦄</span>
+            <span style="font:800 13px 'Space Grotesk',sans-serif;background:linear-gradient(120deg,#47b5e6,#a555e8,#f34a4a,#ffbc48,#58ca70);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent">Lopu</span>
+            <span style="font-size:10px;opacity:.4;font-weight:500">Thingtime AI</span>
+            <button type="button" onClick="{{ t.onClose }}" aria-label="Close" style="margin-left:auto;width:20px;height:20px;border:none;background:transparent;border-radius:999px;color:#b6b6c0;cursor:pointer;font-size:11px">✕</button>
+          </div>
+          <div style="font-size:13.5px;font-weight:600;color:#16161a">{{ t.title }}</div>
+          <div style="font-size:12px;color:#9a9aa6;margin-top:2px">{{ t.desc }}</div>
+        </div>
+      </div>
+    </sc-for>
+  </div>
+
+</div>
+<template id="__bundler_thumbnail">
+<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><rect width="100" height="100" rx="20" fill="#0f0f14"/><g><rect x="42" y="22" width="9" height="9" rx="2" fill="#47b5e6"/><rect x="31" y="33" width="9" height="9" rx="2" fill="#58ca70"/><rect x="42" y="33" width="9" height="9" rx="2" fill="#ffbc48"/><rect x="53" y="33" width="9" height="9" rx="2" fill="#a555e8"/><rect x="42" y="44" width="9" height="9" rx="2" fill="#f34a4a"/></g><text x="50" y="74" font-family="'Space Grotesk',sans-serif" font-size="13" font-weight="700" fill="#fff" text-anchor="middle">thingtime</text></svg>
+</template>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:&quot;100%&quot;,&quot;height&quot;:&quot;100%&quot;},&quot;defaultView&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;Reader&quot;,&quot;Developer&quot;],&quot;default&quot;:&quot;Reader&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Demo&quot;},&quot;startExample&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;Car&quot;,&quot;Tools&quot;,&quot;Notes&quot;],&quot;default&quot;:&quot;Car&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Demo&quot;},&quot;editByDefault&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Demo&quot;},&quot;density&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;Comfortable&quot;,&quot;Compact&quot;],&quot;default&quot;:&quot;Comfortable&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Developer view&quot;},&quot;guides&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Developer view&quot;},&quot;rainbow&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;Subtle&quot;,&quot;Balanced&quot;,&quot;Vivid&quot;],&quot;default&quot;:&quot;Balanced&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Theme&quot;}}">
+class Component extends DCLogic {
+  EXAMPLES = {
+    car: {
+      Vehicle: { Make: 'Subaru', Model: 'Outback', Year: 2019, VIN: '4S4BSANCXK3245517', Odometer: 78450 },
+      'Verified history': true,
+      Maintenance: [
+        { Service: 'Oil & filter change', Date: '2025-11-04', Mileage: 74900, Cost: 89, Shop: 'Northside Auto' },
+        { Service: 'Tire rotation', Date: '2026-02-18', Mileage: 77100, Cost: 40, Shop: 'Northside Auto' },
+        { Service: 'Brake pads (front)', Date: '2026-05-30', Mileage: 78200, Cost: 320, Shop: 'Subaru of Eastgate' }
+      ],
+      'Total spent': 449,
+      Owner: '@nikolaj'
+    },
+    tools: {
+      Item: 'Cordless power drill',
+      'Make / model': 'Makita XFD10',
+      Condition: 'Excellent',
+      Available: true,
+      'Rental / day': 8,
+      'Safety notes': 'Two charged batteries included. Wear eye protection.',
+      Availability: ['2026-07-02', '2026-07-03', '2026-07-09'],
+      Borrowers: [
+        { Name: '@mara', From: '2026-06-10', To: '2026-06-12', Returned: true, Paid: true },
+        { Name: '@dev_sam', From: '2026-06-24', To: '2026-06-25', Returned: true, Paid: false }
+      ]
+    },
+    notes: {
+      Feed: [
+        { Type: 'note', Text: 'Thingtime is a GUI for the internet.', Pinned: true },
+        { Type: 'link', Title: 'Save humanity', URL: 'indiegogo.com/thingtime', Tags: ['thingtime', 'launch'] },
+        { Type: 'todo', Text: 'Ship the launch', Done: false }
+      ],
+      Tags: ['ideas', 'launch', 'freedom'],
+      'Shared with': ['@everyone'],
+      Count: 3
+    }
+  };
+
+  TABS = [['car', '🚗', 'Car history'], ['tools', '🔧', 'Tool lending'], ['notes', '🪄', 'Notes & feed']];
+  TYPES = [['string', '💬'], ['number', '💯'], ['boolean', '🌗'], ['object', '📦'], ['array', '📚'], ['any', '🪄']];
+  PALETTE = ['#47b5e6', '#a555e8', '#f34a4a', '#ffbc48', '#58ca70'];
+
+  state = {
+    example: 'car',
+    datas: { car: this.clone(this.EXAMPLES.car), tools: this.clone(this.EXAMPLES.tools), notes: this.clone(this.EXAMPLES.notes) },
+    editMode: false,
+    viewMode: 'reader',
+    collapsed: {},
+    hoverPath: null,
+    menuPath: null,
+    menuHover: -1,
+    highlight: null,
+    cmdOpen: false,
+    cmdQuery: '',
+    cmdSel: 0,
+    toasts: []
+  };
+
+  _toastId = 0;
+  _hlTimer = null;
+
+  // ---------- lifecycle ----------
+  componentDidMount() {
+    const start = (this.props.startExample || 'Car').toLowerCase();
+    const patch = {};
+    if (this.EXAMPLES[start]) patch.example = start;
+    if (this.props.editByDefault) patch.editMode = true;
+    if ((this.props.defaultView || '').toLowerCase() === 'developer') patch.viewMode = 'developer';
+    if (Object.keys(patch).length) this.setState(patch);
+    this._onKey = (e) => {
+      const k = (e.key || '').toLowerCase();
+      if ((e.metaKey || e.ctrlKey) && (k === 'p' || k === 'k')) {
+        e.preventDefault();
+        this.setState((s) => ({ cmdOpen: !s.cmdOpen, cmdQuery: '', cmdSel: 0 }));
+      } else if (e.key === 'Escape') {
+        this.setState({ cmdOpen: false, menuPath: null });
+      }
+    };
+    window.addEventListener('keydown', this._onKey);
+    this._wordTimer = setInterval(() => {
+      this.setState((s) => ({ _w: ((s._w || 0) + 1) % this.WORDS.length }));
+    }, 2600);
+  }
+  componentWillUnmount() {
+    window.removeEventListener('keydown', this._onKey);
+    clearInterval(this._wordTimer);
+    clearTimeout(this._hlTimer);
+  }
+  componentDidUpdate(prev) {
+    if (prev.startExample !== this.props.startExample && this.props.startExample) {
+      const k = this.props.startExample.toLowerCase();
+      if (this.EXAMPLES[k]) this.setState({ example: k });
+    }
+    if (prev.editByDefault !== this.props.editByDefault) this.setState({ editMode: !!this.props.editByDefault });
+    if (prev.defaultView !== this.props.defaultView) this.setState({ viewMode: (this.props.defaultView || 'Reader').toLowerCase() === 'developer' ? 'developer' : 'reader' });
+  }
+
+  WORDS = ['Thingtime', 'Freedom', 'Anything', 'Infinite', 'Yours', 'Shared', 'Magic', 'Love'];
+
+  // ---------- data helpers ----------
+  clone(v) { return JSON.parse(JSON.stringify(v)); }
+  current() { return this.state.datas[this.state.example]; }
+  ttype(v) { if (v === null || v === undefined) return 'null'; if (Array.isArray(v)) return 'array'; return typeof v; }
+  icon(t) { return { object: '📦', array: '📚', string: '💬', number: '💯', boolean: '🌗', null: '❓', function: '📐' }[t] || '📦'; }
+  pkey(arr) { return arr.map((k) => (typeof k === 'number' ? '#' + k : k)).join('/'); }
+  disp(arr) { let s = ''; for (const k of arr) { if (typeof k === 'number') s += '[' + k + ']'; else s += s ? '.' + k : k; } return s; }
+  defaultFor(t) { return { string: '', number: 0, boolean: false, object: {}, array: [], any: null }[t]; }
+
+  getIn(node, arr) { return arr.reduce((n, k) => (n == null ? n : n[k]), node); }
+  setIn(node, arr, val) {
+    if (arr.length === 0) return val;
+    const [k, ...rest] = arr;
+    if (Array.isArray(node)) { const c = node.slice(); c[k] = this.setIn(node[k], rest, val); return c; }
+    const c = { ...node }; c[k] = this.setIn(node[k], rest, val); return c;
+  }
+  deleteIn(node, arr) {
+    if (arr.length === 1) {
+      const k = arr[0];
+      if (Array.isArray(node)) { const c = node.slice(); c.splice(k, 1); return c; }
+      const c = { ...node }; delete c[k]; return c;
+    }
+    const [k, ...rest] = arr;
+    if (Array.isArray(node)) { const c = node.slice(); c[k] = this.deleteIn(node[k], rest); return c; }
+    const c = { ...node }; c[k] = this.deleteIn(node[k], rest); return c;
+  }
+  flatten(node, arr, out) {
+    const t = this.ttype(node);
+    if (arr.length) out.push({ arr: arr.slice(), disp: this.disp(arr), value: node, t });
+    if (t === 'object') for (const k of Object.keys(node)) this.flatten(node[k], [...arr, k], out);
+    else if (t === 'array') node.forEach((v, i) => this.flatten(v, [...arr, i], out));
+    return out;
+  }
+
+  // ---------- mutations ----------
+  setRoot(root) { this.setState((s) => ({ datas: { ...s.datas, [s.example]: root } })); }
+  setValueAt(arr, val) { this.setRoot(this.setIn(this.current(), arr, val)); }
+  toggleBool(arr) { const v = !this.getIn(this.current(), arr); this.setValueAt(arr, v); this.toast('🌗 Toggled ' + this.disp(arr), 'Now ' + v + '.'); }
+  changeType(arr, t) { this.setValueAt(arr, this.defaultFor(t)); this.setState({ menuPath: null }); this.toast('🎨 Changed to ' + t, this.disp(arr) + ' is now a ' + t + '.'); }
+  recycle(arr) { this.setRoot(this.deleteIn(this.current(), arr)); this.setState({ menuPath: null }); this.toast('🗑️ Recycled ' + this.disp(arr), 'Gone — but never truly lost.'); }
+  addChild(arr) {
+    const node = this.getIn(this.current(), arr);
+    let next;
+    if (Array.isArray(node)) next = [...node, ''];
+    else { next = { ...node }; let n = 1, key = 'new key'; while (key in next) key = 'new key ' + ++n; next[key] = ''; }
+    this.setRoot(this.setIn(this.current(), arr, next));
+    if (!this.state.editMode) this.setState({ editMode: true });
+    this.toast('✨ Added a value', 'Give it a name and a shape.');
+  }
+
+  // ---------- toasts ----------
+  toast(title, desc) {
+    const id = ++this._toastId;
+    this.setState((s) => ({ toasts: [...s.toasts, { id, title, desc, onClose: () => this.removeToast(id) }] }));
+    setTimeout(() => this.removeToast(id), 5200);
+  }
+  removeToast(id) { this.setState((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })); }
+
+  // ---------- view controls ----------
+  selectExample(k) { this.setState({ example: k, menuPath: null, highlight: null }); const lbl = this.TABS.find((t) => t[0] === k); this.toast('🪄 Loaded ' + (lbl ? lbl[2] : k), 'A different schema, same Thingtime.'); }
+  setViewMode(m) {
+    if (this.state.viewMode === m) return;
+    this.setState({ viewMode: m, menuPath: null }, () => this.toast(m === 'reader' ? '📖 Reader view' : '🛠️ Developer view', m === 'reader' ? 'Just words and nesting — like a page.' : 'Types, chips, and full control.'));
+  }
+  viewBtnStyle(on) {
+    return { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minWidth: 36, padding: '7px 10px', borderRadius: 9, cursor: 'pointer', font: "600 13px 'Space Grotesk',sans-serif", border: on ? '1px solid #ececef' : '1px solid transparent', color: on ? '#16161a' : '#9a9aa6', background: on ? '#fff' : 'transparent', boxShadow: on ? '0 1px 2px rgba(0,0,0,.05)' : 'none', transition: 'all 140ms ease' };
+  }
+  toggleEdit() { this.setState((s) => ({ editMode: !s.editMode, menuPath: null }), () => this.toast(this.state.editMode ? '🎨 Edit mode on' : '👀 View mode', this.state.editMode ? 'Click any value to reshape it.' : 'Looking good.')); }
+  collapseAll() { const out = {}; this.flatten(this.current(), [], []).forEach((r) => { if (r.t === 'object' || r.t === 'array') out[this.pkey(r.arr)] = true; }); this.setState({ collapsed: out }); }
+  expandAll() { this.setState({ collapsed: {} }); }
+  toggleCollapse(pk) { this.setState((s) => ({ collapsed: { ...s.collapsed, [pk]: !s.collapsed[pk] } })); }
+  share() {
+    try { navigator.clipboard && navigator.clipboard.writeText('https://thingtime.com/share/' + this.state.example); } catch (e) {}
+    this.toast('🔗 Share link copied', 'Anyone with the link can view this thing.');
+  }
+  scrollToDemo() { const el = document.getElementById('tt-demo'); if (el) window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - 64, behavior: 'smooth' }); }
+
+  // ---------- commander ----------
+  openCmd() { this.setState({ cmdOpen: true, cmdQuery: '', cmdSel: 0 }); }
+  closeCmd() { this.setState({ cmdOpen: false }); }
+  stop(e) { e.stopPropagation(); }
+  onCmdInput(e) { this.setState({ cmdQuery: e.target.value, cmdSel: 0 }); }
+  jumpTo(arr) {
+    const collapsed = { ...this.state.collapsed };
+    for (let i = 1; i <= arr.length; i++) delete collapsed[this.pkey(arr.slice(0, i))];
+    this.setState({ collapsed, highlight: this.pkey(arr), cmdOpen: false });
+    clearTimeout(this._hlTimer);
+    this._hlTimer = setTimeout(() => this.setState({ highlight: null }), 2400);
+    this.scrollToDemo();
+    this.toast('📍 Jumped to ' + this.disp(arr), 'Highlighted in your space.');
+  }
+  parseVal(raw) {
+    const s = (raw || '').trim();
+    if (s === 'true') return true; if (s === 'false') return false;
+    if (s !== '' && !isNaN(Number(s))) return Number(s);
+    if ((s[0] === '"' && s.slice(-1) === '"') || (s[0] === "'" && s.slice(-1) === "'")) return s.slice(1, -1);
+    try { return JSON.parse(s); } catch (e) { return s; }
+  }
+  cmdResultsList() {
+    const all = this.flatten(this.current(), [], []);
+    const q = (this.state.cmdQuery || '').trim();
+    const setM = q.match(/\s(=|is)\s/i);
+    if (setM) return [];
+    const base = q ? all.filter((r) => r.disp.toLowerCase().includes(q.toLowerCase())) : all.filter((r) => r.arr.length <= 2);
+    return base.slice(0, 8);
+  }
+  runCmd() {
+    const q = (this.state.cmdQuery || '').trim();
+    const setM = q.match(/\s(=|is)\s/i);
+    if (setM) {
+      const idx = q.indexOf(setM[0]);
+      const pathStr = q.slice(0, idx).trim();
+      const valStr = q.slice(idx + setM[0].length);
+      const all = this.flatten(this.current(), [], []);
+      const hit = all.find((r) => r.disp.toLowerCase() === pathStr.toLowerCase()) || all.find((r) => r.disp.toLowerCase().includes(pathStr.toLowerCase()));
+      if (hit) { this.setValueAt(hit.arr, this.parseVal(valStr)); this.setState({ cmdOpen: false }); this.jumpToAfterSet(hit.arr); this.toast('✨ Set ' + hit.disp, 'Now ' + JSON.stringify(this.parseVal(valStr)) + '.'); }
+      else this.toast('🌧️ No path like that', 'Try searching first, then  path = value.');
+      return;
+    }
+    const res = this.cmdResultsList();
+    const pick = res[this.state.cmdSel] || res[0];
+    if (pick) this.jumpTo(pick.arr);
+  }
+  jumpToAfterSet(arr) {
+    const collapsed = { ...this.state.collapsed };
+    for (let i = 1; i <= arr.length; i++) delete collapsed[this.pkey(arr.slice(0, i))];
+    this.setState({ collapsed, highlight: this.pkey(arr) });
+    clearTimeout(this._hlTimer);
+    this._hlTimer = setTimeout(() => this.setState({ highlight: null }), 2400);
+    this.scrollToDemo();
+  }
+  onCmdKey(e) {
+    const res = this.cmdResultsList();
+    if (e.key === 'ArrowDown') { e.preventDefault(); this.setState((s) => ({ cmdSel: Math.min(s.cmdSel + 1, res.length - 1) })); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); this.setState((s) => ({ cmdSel: Math.max(s.cmdSel - 1, 0) })); }
+    else if (e.key === 'Enter') { e.preventDefault(); this.runCmd(); }
+    else if (e.key === 'Escape') { this.setState({ cmdOpen: false }); }
+  }
+
+  // ---------- tree rendering ----------
+  dens() {
+    return (this.props.density || 'Comfortable') === 'Compact'
+      ? { rowPad: '3px 0', indent: 18, gap: 8, vFont: 15, kFont: 12.5 }
+      : { rowPad: '6px 0', indent: 24, gap: 10, vFont: 17, kFont: 13 };
+  }
+  rainbowAlpha() { return { Subtle: 0.16, Balanced: 0.34, Vivid: 0.6 }[this.props.rainbow || 'Balanced']; }
+  guideColor(depth) {
+    if (this.props.guides === false || (this.props.rainbow || 'Balanced') === 'off') return '#ededf0';
+    const hex = this.PALETTE[depth % this.PALETTE.length];
+    const a = this.rainbowAlpha();
+    const r = parseInt(hex.slice(1, 3), 16), g = parseInt(hex.slice(3, 5), 16), b = parseInt(hex.slice(5, 7), 16);
+    return 'rgba(' + r + ',' + g + ',' + b + ',' + a + ')';
+  }
+
+  valueView(value, t, label) {
+    const h = React.createElement;
+    const d = this.dens();
+    if (t === 'string') {
+      const isUrl = /^(https?:\/\/|www\.|[\w.-]+\.(com|org|io|co|gg|app))/i.test(value);
+      return h('span', { style: { fontSize: d.vFont, color: isUrl ? '#2f8fd6' : '#16161a', fontWeight: 450, textDecoration: isUrl ? 'underline' : 'none', wordBreak: 'break-word' } }, value === '' ? h('span', { style: { color: '#c2c2cc', fontStyle: 'italic' } }, 'empty') : value);
+    }
+    if (t === 'number') {
+      const money = /cost|price|spent|rental|total/i.test(label || '');
+      return h('span', { style: { fontFamily: "'JetBrains Mono',monospace", fontSize: d.vFont - 1, color: '#16161a', fontWeight: 500 } }, (money ? '$' : '') + value);
+    }
+    if (t === 'boolean') {
+      return h('span', { style: { display: 'inline-flex', alignItems: 'center', gap: 6, fontFamily: "'JetBrains Mono',monospace", fontSize: 13, fontWeight: 600, color: value ? '#2f8f4f' : '#8a8a96', background: value ? 'rgba(88,202,112,.14)' : '#f0f0f3', borderRadius: 999, padding: '3px 11px' } }, String(value));
+    }
+    if (t === 'null') return h('span', { style: { fontFamily: "'JetBrains Mono',monospace", fontSize: 14, color: '#b6b6c0', fontStyle: 'italic' } }, 'null');
+    return null;
+  }
+
+  valueEdit(value, t, arr, label) {
+    const h = React.createElement;
+    const d = this.dens();
+    const baseInput = { border: '1px solid #e6e6ec', outline: 'none', borderRadius: 8, padding: '6px 10px', fontSize: d.vFont - 1, color: '#16161a', background: '#fff', fontFamily: t === 'number' ? "'JetBrains Mono',monospace" : "'Hanken Grotesk',sans-serif" };
+    if (t === 'string') {
+      return h('input', { value: value, placeholder: 'Imagine…', onChange: (e) => this.setValueAt(arr, e.target.value), style: { ...baseInput, width: 'min(420px,60vw)' } });
+    }
+    if (t === 'number') {
+      const set = (n) => this.setValueAt(arr, n);
+      return h('span', { style: { display: 'inline-flex', alignItems: 'center', gap: 6 } },
+        h('input', { value: value, inputMode: 'decimal', onChange: (e) => { const n = Number(e.target.value); set(e.target.value === '' ? 0 : (isNaN(n) ? value : n)); }, style: { ...baseInput, width: 110 } }),
+        h('button', { type: 'button', onClick: () => set((Number(value) || 0) - 1), style: this.stepBtn() }, '−'),
+        h('button', { type: 'button', onClick: () => set((Number(value) || 0) + 1), style: this.stepBtn() }, '+')
+      );
+    }
+    if (t === 'boolean') {
+      return h('button', { type: 'button', onClick: () => this.toggleBool(arr), style: { width: 42, height: 24, borderRadius: 999, border: 'none', cursor: 'pointer', background: value ? '#58ca70' : '#d8d8de', position: 'relative', transition: 'background 160ms ease' } },
+        h('span', { style: { position: 'absolute', top: 3, left: value ? 21 : 3, width: 18, height: 18, borderRadius: 999, background: '#fff', boxShadow: '0 1px 2px rgba(0,0,0,.25)', transition: 'left 160ms ease' } })
+      );
+    }
+    if (t === 'null') return h('input', { value: '', placeholder: 'Imagine…', onChange: (e) => this.setValueAt(arr, e.target.value), style: { ...baseInput, width: 'min(360px,55vw)' } });
+    return null;
+  }
+  stepBtn() { return { width: 26, height: 26, borderRadius: 7, border: '1px solid #ececef', background: '#fff', color: '#5a5a66', cursor: 'pointer', fontSize: 14, lineHeight: 1 }; }
+
+  wizard(arr, isContainer) {
+    const h = React.createElement;
+    const pk = this.pkey(arr);
+    const open = this.state.menuPath === pk;
+    const visible = open || this.state.hoverPath === pk;
+    const items = [];
+    this.TYPES.forEach(([t, em], i) => {
+      items.push(h('button', {
+        key: t, type: 'button',
+        onMouseEnter: () => this.setState({ menuHover: i }),
+        onClick: (e) => { e.stopPropagation(); this.changeType(arr, t); },
+        style: { display: 'flex', alignItems: 'center', gap: 9, width: '100%', textAlign: 'left', border: 'none', background: this.state.menuHover === i ? '#f5f5f7' : 'transparent', padding: '7px 11px', borderRadius: 8, cursor: 'pointer', font: "500 13px 'Hanken Grotesk',sans-serif", color: '#16161a' }
+      }, h('span', null, em), h('span', null, 'as ' + t)));
+    });
+    return h('span', { style: { position: 'relative', marginLeft: 'auto', display: 'inline-flex', alignItems: 'center' } },
+      h('button', {
+        type: 'button',
+        onClick: (e) => { e.stopPropagation(); this.setState((s) => ({ menuPath: s.menuPath === pk ? null : pk, menuHover: -1 })); },
+        title: 'Options',
+        style: { opacity: visible ? 1 : 0, transition: 'opacity 140ms ease', border: 'none', background: open ? '#f0f0f3' : 'transparent', borderRadius: 7, cursor: 'pointer', fontSize: this.state.viewMode === 'reader' ? 15 : 14, fontWeight: 700, color: '#b6b6c0', lineHeight: 1, padding: '3px 6px' }
+      }, this.state.viewMode === 'reader' ? '⋯' : '🧙\u200d♂️'),
+      open && h('span', {
+        style: { position: 'absolute', top: '120%', right: 0, zIndex: 50, width: 188, background: '#fff', border: '1px solid #ececef', borderRadius: 12, boxShadow: '0 16px 40px -12px rgba(20,20,40,.3)', padding: 6 }
+      },
+        h('div', { style: { font: "600 10.5px 'JetBrains Mono',monospace", letterSpacing: '.1em', color: '#b6b6c0', padding: '5px 9px 7px' } }, 'CHANGE TYPE'),
+        ...items,
+        isContainer ? h('div', { style: { height: 1, background: '#f0f0f2', margin: '6px 4px' } }) : null,
+        isContainer ? h('button', { type: 'button', onClick: (e) => { e.stopPropagation(); this.setState({ menuPath: null }); this.addChild(arr); }, style: { display: 'flex', alignItems: 'center', gap: 9, width: '100%', textAlign: 'left', border: 'none', background: 'transparent', padding: '7px 11px', borderRadius: 8, cursor: 'pointer', font: "500 13px 'Hanken Grotesk',sans-serif", color: '#16161a' } }, h('span', null, '✨'), h('span', null, 'Add inside')) : null,
+        h('div', { style: { height: 1, background: '#f0f0f2', margin: '6px 4px' } }),
+        h('button', { type: 'button', onClick: (e) => { e.stopPropagation(); this.recycle(arr); }, style: { display: 'flex', alignItems: 'center', gap: 9, width: '100%', textAlign: 'left', border: 'none', background: 'transparent', padding: '7px 11px', borderRadius: 8, cursor: 'pointer', font: "500 13px 'Hanken Grotesk',sans-serif", color: '#d6455a' } }, h('span', null, '🗑️'), h('span', null, 'Recycle'))
+      )
+    );
+  }
+
+  renderNode(value, arr, label, depth) {
+    const h = React.createElement;
+    const d = this.dens();
+    const t = this.ttype(value);
+    const pk = this.pkey(arr);
+    const edit = this.state.editMode;
+    const hot = this.state.highlight === pk;
+    const rowEvents = {
+      onMouseEnter: () => this.setState({ hoverPath: pk }),
+      onMouseLeave: () => this.setState((s) => (s.menuPath === pk ? null : { hoverPath: s.hoverPath === pk ? null : s.hoverPath }))
+    };
+    const chip = h('span', { style: { flexShrink: 0, width: 26, height: 26, borderRadius: 8, background: '#f4f4f6', display: 'grid', placeItems: 'center', fontSize: 13 } }, this.icon(t));
+    const keyLabel = h('span', { style: { fontFamily: "'JetBrains Mono',monospace", fontSize: d.kFont, color: '#9a9aa6', fontWeight: 500, flexShrink: 0 } }, label);
+
+    if (t === 'object' || t === 'array') {
+      const isArr = t === 'array';
+      const keys = isArr ? value.map((_, i) => i) : Object.keys(value);
+      const collapsed = this.state.collapsed[pk];
+      const count = keys.length + (isArr ? ' item' + (keys.length === 1 ? '' : 's') : ' key' + (keys.length === 1 ? '' : 's'));
+      const header = h('div', { style: { display: 'flex', alignItems: 'center', gap: d.gap, padding: d.rowPad, borderRadius: 8, background: hot ? this.guideColor(depth) : 'transparent', transition: 'background 400ms ease', cursor: 'pointer' }, onClick: () => this.toggleCollapse(pk), ...rowEvents },
+        h('span', { style: { flexShrink: 0, width: 16, color: '#b6b6c0', fontSize: 11, transform: collapsed ? 'rotate(-90deg)' : 'none', transition: 'transform 160ms ease' } }, '▼'),
+        chip, keyLabel,
+        h('span', { style: { fontFamily: "'JetBrains Mono',monospace", fontSize: 11.5, color: '#b6b6c0', background: '#f6f6f8', borderRadius: 999, padding: '2px 9px', whiteSpace: 'nowrap', flexShrink: 0 } }, count),
+        edit ? this.wizard(arr, true) : (this.state.hoverPath === pk || this.state.menuPath === pk ? this.wizard(arr, true) : null)
+      );
+      const children = !collapsed && h('div', { style: { marginLeft: 12, paddingLeft: d.indent - 12, borderLeft: '2px solid ' + this.guideColor(depth), display: 'flex', flexDirection: 'column' } },
+        keys.map((k) => h(React.Fragment, { key: this.pkey([...arr, k]) }, this.renderNode(isArr ? value[k] : value[k], [...arr, k], isArr ? '[' + k + ']' : k, depth + 1))),
+        edit && h('button', { type: 'button', onClick: () => this.addChild(arr), style: { alignSelf: 'flex-start', marginTop: 6, marginBottom: 2, border: '1px dashed #d8d8e0', background: '#fff', color: '#9a9aa6', borderRadius: 8, padding: '5px 11px', cursor: 'pointer', font: "600 12.5px 'Hanken Grotesk',sans-serif" } }, '＋ ' + (isArr ? 'add item' : 'add key'))
+      );
+      return h('div', { style: { display: 'flex', flexDirection: 'column' } }, header, children);
+    }
+
+    // primitive
+    return h('div', { style: { display: 'flex', alignItems: 'center', gap: d.gap, padding: d.rowPad, borderRadius: 8, background: hot ? this.guideColor(depth) : 'transparent', transition: 'background 400ms ease', flexWrap: 'wrap' }, ...rowEvents },
+      h('span', { style: { width: 16, flexShrink: 0 } }),
+      chip, keyLabel,
+      h('span', { style: { color: '#d2d2da', flexShrink: 0 } }, ''),
+      edit ? this.valueEdit(value, t, arr, label) : this.valueView(value, t, label),
+      (edit || this.state.hoverPath === pk || this.state.menuPath === pk) ? this.wizard(arr, false) : null
+    );
+  }
+
+  readerHeadStyle(depth) {
+    const s = depth === 0 ? 21 : depth === 1 ? 17 : 15;
+    return { fontFamily: "'Space Grotesk',sans-serif", fontSize: s, fontWeight: 600, color: '#16161a', letterSpacing: '-0.015em', lineHeight: 1.3 };
+  }
+  readerValueView(value, t, label) {
+    const h = React.createElement;
+    if (t === 'boolean') return h('span', { style: { fontSize: 16, fontWeight: 600, color: value ? '#2f8f4f' : '#8a8a96' } }, value ? 'Yes' : 'No');
+    if (t === 'null') return h('span', { style: { fontSize: 16, color: '#c2c2cc', fontStyle: 'italic' } }, 'empty');
+    const money = t === 'number' && /cost|price|spent|rental|total/i.test(label || '');
+    const isUrl = t === 'string' && /^(https?:\/\/|www\.|[\w.-]+\.(com|org|io|co|gg|app))/i.test(value);
+    const empty = value === '';
+    const text = t === 'number' ? (money ? '$' + value : String(value)) : (empty ? 'empty' : String(value));
+    return h('span', { style: { fontSize: 16, lineHeight: 1.55, fontWeight: 450, wordBreak: 'break-word', color: empty ? '#c2c2cc' : (isUrl ? '#2f8fd6' : '#2a2a30'), fontStyle: empty ? 'italic' : 'normal', textDecoration: isUrl ? 'underline' : 'none' } }, text);
+  }
+  readerValueEdit(value, t, arr) {
+    const h = React.createElement;
+    if (t === 'boolean') return h('button', { type: 'button', onClick: () => this.toggleBool(arr), style: { alignSelf: 'flex-start', textAlign: 'left', border: 'none', background: 'transparent', padding: '0 0 1px', cursor: 'pointer', fontSize: 16, fontWeight: 600, fontFamily: "'Hanken Grotesk',sans-serif", color: value ? '#2f8f4f' : '#8a8a96', borderBottom: '1px dashed #d0d0d8' } }, value ? 'Yes' : 'No');
+    const base = { border: 'none', outline: 'none', background: 'transparent', padding: '0 0 1px', fontSize: 16, lineHeight: 1.55, color: '#2a2a30', fontFamily: "'Hanken Grotesk',sans-serif", borderBottom: '1px dashed #d0d0d8', borderRadius: 0 };
+    if (t === 'number') return h('input', { value: value, inputMode: 'decimal', onChange: (e) => { const n = Number(e.target.value); this.setValueAt(arr, e.target.value === '' ? 0 : (isNaN(n) ? value : n)); }, style: { ...base, width: 96, fontWeight: 500 } });
+    return h('input', { value: t === 'null' ? '' : value, placeholder: 'Imagine…', onChange: (e) => this.setValueAt(arr, e.target.value), style: { ...base, width: 'min(460px,62vw)' } });
+  }
+  renderReaderNode(value, arr, label, depth) {
+    const h = React.createElement;
+    const t = this.ttype(value);
+    const pk = this.pkey(arr);
+    const edit = this.state.editMode;
+    const hot = this.state.highlight === pk;
+    const isIndex = typeof arr[arr.length - 1] === 'number';
+    const rowEvents = {
+      onMouseEnter: () => this.setState({ hoverPath: pk }),
+      onMouseLeave: () => this.setState((s) => (s.menuPath === pk ? null : { hoverPath: s.hoverPath === pk ? null : s.hoverPath }))
+    };
+    const opts = this.wizard(arr, t === 'object' || t === 'array');
+    const hotBg = hot ? this.guideColor(depth) : 'transparent';
+    if (t === 'object' || t === 'array') {
+      const isArr = t === 'array';
+      const keys = isArr ? value.map((_, i) => i) : Object.keys(value);
+      const collapsed = this.state.collapsed[pk];
+      const head = isIndex
+        ? h('span', { style: { fontFamily: "'Space Grotesk',sans-serif", fontSize: 12.5, fontWeight: 600, color: '#b6b6c0' } }, String(arr[arr.length - 1] + 1))
+        : h('span', { style: this.readerHeadStyle(depth) }, label);
+      const header = h('div', { ...rowEvents, onClick: () => this.toggleCollapse(pk), style: { display: 'flex', alignItems: 'baseline', gap: 8, cursor: 'pointer', padding: '3px 0', borderRadius: 6, background: hotBg, transition: 'background 400ms ease' } },
+        head,
+        collapsed ? h('span', { style: { color: '#c2c2cc', fontSize: 14, letterSpacing: 2 } }, '···') : null,
+        opts
+      );
+      const children = !collapsed && h('div', { style: { display: 'flex', flexDirection: 'column', gap: 2, paddingLeft: 18, marginTop: 1, marginBottom: depth === 0 ? 14 : 6 } },
+        keys.map((k) => h(React.Fragment, { key: this.pkey([...arr, k]) }, this.renderReaderNode(value[k], [...arr, k], isArr ? '[' + k + ']' : k, depth + 1))),
+        edit && h('button', { type: 'button', onClick: () => this.addChild(arr), style: { alignSelf: 'flex-start', border: 'none', background: 'transparent', color: '#b6b6c0', padding: '2px 0', cursor: 'pointer', font: "600 13px 'Hanken Grotesk',sans-serif" } }, '＋ add')
+      );
+      return h('div', { style: { display: 'flex', flexDirection: 'column' } }, header, children);
+    }
+    const valEl = edit ? this.readerValueEdit(value, t, arr) : this.readerValueView(value, t, label);
+    if (isIndex) return h('div', { ...rowEvents, style: { display: 'flex', alignItems: 'baseline', gap: 8, padding: '2px 0', borderRadius: 6, background: hotBg, transition: 'background 400ms ease' } }, valEl, opts);
+    return h('div', { ...rowEvents, style: { display: 'flex', flexDirection: 'column', padding: '4px 0', borderRadius: 6, background: hotBg, transition: 'background 400ms ease' } },
+      h('div', { style: { display: 'flex', alignItems: 'baseline', gap: 8 } },
+        h('span', { style: { fontSize: 12.5, fontWeight: 600, color: '#9a9aa6' } }, label),
+        opts
+      ),
+      valEl
+    );
+  }
+  renderTree() {
+    const h = React.createElement;
+    const root = this.current();
+    const keys = Object.keys(root);
+    const reader = this.state.viewMode === 'reader';
+    return h('div', { style: { display: 'flex', flexDirection: 'column', gap: reader ? 4 : 2, paddingTop: reader ? 4 : 0 } },
+      keys.map((k) => h(React.Fragment, { key: k }, reader ? this.renderReaderNode(root[k], [k], k, 0) : this.renderNode(root[k], [k], k, 0))),
+      this.state.editMode && h('button', { type: 'button', onClick: () => this.addChild([]), style: reader ? { alignSelf: 'flex-start', marginTop: 4, border: 'none', background: 'transparent', color: '#b6b6c0', padding: 0, cursor: 'pointer', font: "600 13.5px 'Hanken Grotesk',sans-serif" } : { alignSelf: 'flex-start', marginTop: 10, border: '1px dashed #d8d8e0', background: '#fff', color: '#9a9aa6', borderRadius: 9, padding: '7px 13px', cursor: 'pointer', font: "600 13px 'Hanken Grotesk',sans-serif" } }, reader ? '＋ add' : '＋ add a top-level key')
+    );
+  }
+
+  // ---------- assemble ----------
+  renderVals() {
+    const ex = this.state.example;
+    const tabs = this.TABS.map(([key, emoji, label]) => ({
+      key, emoji, label,
+      onClick: () => this.selectExample(key),
+      style: { display: 'inline-flex', alignItems: 'center', gap: 7, padding: '7px 13px', borderRadius: 9, cursor: 'pointer', font: "600 13px 'Space Grotesk',sans-serif", border: key === ex ? '1px solid #ececef' : '1px solid transparent', color: key === ex ? '#16161a' : '#9a9aa6', background: key === ex ? '#fff' : 'transparent', boxShadow: key === ex ? '0 1px 2px rgba(0,0,0,.05)' : 'none', transition: 'all 140ms ease' }
+    }));
+
+    const res = this.cmdResultsList().map((r, i) => ({
+      disp: r.disp,
+      emoji: this.icon(r.t),
+      preview: r.t === 'object' ? '{ ' + Object.keys(r.value).length + ' }' : r.t === 'array' ? '[ ' + r.value.length + ' ]' : String(r.value).slice(0, 40),
+      onClick: () => this.jumpTo(r.arr),
+      onHover: () => this.setState({ cmdSel: i }),
+      style: { display: 'flex', alignItems: 'center', gap: 11, width: '100%', textAlign: 'left', border: 'none', borderRadius: 10, padding: '10px 14px', cursor: 'pointer', background: this.state.cmdSel === i ? '#f5f5f7' : 'transparent' }
+    }));
+    const q = (this.state.cmdQuery || '').trim();
+    const cmdHint = /\s(=|is)\s/i.test(q) ? '↵  set this value' : (res.length ? '↑↓ to move · ↵ to jump · try  Total spent = 600' : 'No matches — try  path = value  to create');
+
+    const editOn = this.state.editMode;
+    const counts = (() => { const f = this.flatten(this.current(), [], []); return f.length; })();
+
+    return {
+      heroWord: this.WORDS[this.state._w || 0],
+      year: new Date().getFullYear(),
+      tabs,
+      treeEl: this.renderTree(),
+      thingMeta: counts + ' values · ' + (this.TABS.find((t) => t[0] === ex) || [])[2],
+      editBtnLabel: editOn ? '🎨 Editing' : '🎨 Edit',
+      editBtnStyle: { display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 13px', border: editOn ? '1px solid #16161a' : '1px solid #ececef', borderRadius: 9, background: editOn ? '#16161a' : '#fff', color: editOn ? '#fff' : '#5a5a66', font: "600 13px 'Space Grotesk',sans-serif", cursor: 'pointer', transition: 'all 140ms ease' },
+      setReader: () => this.setViewMode('reader'),
+      setDev: () => this.setViewMode('developer'),
+      readerBtnStyle: this.viewBtnStyle(this.state.viewMode === 'reader'),
+      devBtnStyle: this.viewBtnStyle(this.state.viewMode === 'developer'),
+      toggleEdit: () => this.toggleEdit(),
+      expandAll: () => this.expandAll(),
+      collapseAll: () => this.collapseAll(),
+      share: () => this.share(),
+      scrollToDemo: () => this.scrollToDemo(),
+      loadCar: () => { this.selectExample('car'); this.scrollToDemo(); },
+      loadTools: () => { this.selectExample('tools'); this.scrollToDemo(); },
+      loadNotes: () => { this.selectExample('notes'); this.scrollToDemo(); },
+      cmdOpen: this.state.cmdOpen,
+      cmdQuery: this.state.cmdQuery,
+      cmdResults: res,
+      cmdHint,
+      onCmdInput: (e) => this.onCmdInput(e),
+      onCmdKey: (e) => this.onCmdKey(e),
+      openCmd: () => this.openCmd(),
+      closeCmd: () => this.closeCmd(),
+      stop: (e) => this.stop(e),
+      toasts: this.state.toasts
+    };
+  }
+}
+</script>
+</body>
+</html>

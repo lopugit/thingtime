@@ -1,13 +1,15 @@
 import hexgba from 'hex-to-rgba';
 
+// Legacy grey tokens, re-pointed at the runtime theme's --tt-* CSS variables
+// (fallbacks are the original hexes) so existing `greys.*` usages re-theme live.
 const greys = {
-  light: '#F1F1F3',
-  lightt: '#E7E6E8',
-  medium: '#E0E0E0',
-  dark: '#BDBDBD'
+  light: 'var(--tt-surface-alt, #F1F1F3)',
+  lightt: 'var(--tt-surface-hover, #E7E6E8)',
+  medium: 'var(--tt-faint, #E0E0E0)',
+  dark: 'var(--tt-muted, #BDBDBD)'
 };
 
-const grey = '#F1F1F3';
+const grey = 'var(--tt-surface-alt, #F1F1F3)';
 
 const g = {
   gray: grey,
@@ -69,6 +71,31 @@ export const colors = {
   white: '#FFFFFF',
   ...g,
   black: '#000000',
+  // tt design-system semantic tokens (runtime-themed via ThemeHost CSS vars)
+  tt: {
+    ink: 'var(--tt-ink, #16161a)',
+    text: 'var(--tt-text, #5a5a66)',
+    muted: 'var(--tt-muted, #9a9aa6)',
+    faint: 'var(--tt-faint, #b6b6c0)',
+    border: 'var(--tt-border, #ececef)',
+    borderLight: 'var(--tt-border-light, #f0f0f2)',
+    surface: 'var(--tt-surface, #fafafb)',
+    surfaceAlt: 'var(--tt-surface-alt, #f5f5f7)',
+    surfaceHover: 'var(--tt-surface-hover, #ececee)',
+    card: 'var(--tt-card, #ffffff)',
+    accent: 'var(--tt-accent, hotpink)',
+    accentTint: 'var(--tt-accent-tint, #fff5fa)',
+    accentContrast: 'var(--tt-accent-contrast, #ffffff)',
+    link: 'var(--tt-link, #2f8fd6)',
+    positive: 'var(--tt-positive, #2f8f4f)',
+    danger: 'var(--tt-danger, #d6455a)',
+    warning: 'var(--tt-warning, #ffbc48)'
+  },
+  // default Button colorScheme (solid ink buttons per the v1 mockup)
+  ttInk: {
+    500: 'var(--tt-ink, #16161a)',
+    600: 'var(--tt-text, #5a5a66)'
+  },
   // all colors of the chakras
   chakra: chakras,
   chakras: chakrasLight,

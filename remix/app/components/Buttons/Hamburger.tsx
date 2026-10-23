@@ -1,6 +1,8 @@
 import React from "react"
 import { Flex } from "@chakra-ui/react"
 
+import { RAINBOW_TEXT } from "~/theme/rainbow"
+
 export const Hamburger = (props) => {
   const lineCount = [1, 2, 3]
 
@@ -17,19 +19,17 @@ export const Hamburger = (props) => {
           <Flex
             key={idx}
             sx={{
-              "@keyframes moving-rainbow": {
-                "0%": { backgroundPosition: "0 0" },
-                "100%": { backgroundPosition: "200% 0" },
-              },
-              // add delay
-              animation: `moving-rainbow 3s infinite linear -${idx * 0.3}s}`,
+              animation:
+                "var(--tt-rainbow-anim, moving-rainbow 5s linear infinite)",
+              // stagger the pan per line
+              animationDelay: `-${idx * 0.3}s`,
             }}
             width="40px"
             height="3px"
             marginBottom="10px"
-            background="linear-gradient(to right, #f34a4a, #ffbc48, #58ca70, #47b5e6, #a555e8, #f34a4a);"
-            backgroundSize="200%"
-            borderRadius="9px"
+            background={RAINBOW_TEXT}
+            backgroundSize="calc(100px + 200%)"
+            borderRadius="var(--tt-radius-sm, 9px)"
           ></Flex>
         )
       })}

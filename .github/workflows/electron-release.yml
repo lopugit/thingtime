@@ -1,0 +1,22 @@
+name: Electron App Release
+
+# GitHub requires trigger entrypoints on the branch that receives the event.
+# All executable release behavior lives on the protected github-actions ref.
+on:
+  push:
+    branches: [main]
+    paths:
+      - electron/**
+      - MCP/**
+      - macos/**
+      - .github/workflows/electron-release.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: read
+
+jobs:
+  control-plane:
+    uses: lopugit/thingtime/.github/workflows/electron-release.yml@github-actions
+    secrets: inherit

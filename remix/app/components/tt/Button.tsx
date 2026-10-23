@@ -11,14 +11,16 @@ export const Button = (props: any = {}) => {
       cursor={'pointer'}
       transition={`all ${animationSpeed}`}
       _hover={{
-        opacity: 0.6
+        background: 'var(--tt-surface-hover, #ececee)'
       }}
       // allow no select
       userSelect={'none'}
       px={6}
       py={3}
-      borderRadius={'10px'}
-      bg="gray"
+      borderRadius={'var(--tt-radius-md, 12px)'}
+      bg="var(--tt-surface-alt, #f5f5f7)"
+      color="var(--tt-ink, #16161a)"
+      fontWeight={600}
       {...props}
     >
       {props.children}
