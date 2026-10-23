@@ -108,7 +108,7 @@ export const ERROR_LOG_THINGTIME = 'error-log';
 export const ERROR_LOG_ID_PREFIX = 'error-log-';
 // One root expiry policy for disposable control Things; excludes content and
 // invitations whose expiry must perform cleanup/refunds before deletion.
-export const EPHEMERAL_CONTROL_THINGTIMES = ['migration-diagnostic', ERROR_LOG_THINGTIME] as const;
+export const EPHEMERAL_CONTROL_THINGTIMES = ['migration-diagnostic', ERROR_LOG_THINGTIME, 'device-sync-control'] as const;
 export const MIGRATION_DIAGNOSTIC_THINGTIME = 'migration-diagnostic';
 export const MIGRATION_DIAGNOSTIC_ID_PREFIX = 'migration-diagnostic-';
 
@@ -3898,6 +3898,23 @@ const deviceConnectorSchema: ThingtimeSchema = {
 	}
 };
 
+const deviceSyncControlSchema: ThingtimeSchema = {
+  id: 'device-sync-control', version: 1, kind: 'crystal', collection: null,
+  title: 'Device sync control', summary: 'Private delivery state for managing installed sync jobs from any browser.',
+  detail: 'Protected home control Thing. Commands and replies are secure BinData, never generic searchable content. The exact owner/device/request identity is immutable. One claim token owns completion; requests are never re-leased. Execution expires after two minutes and the operation marker is retained for ten minutes by the shared disposable-control TTL.',
+  createdVia: 'POST /api/v1/devices/sync-control',
+  fields: [
+    { name: 'requestId', type: 'string', required: true, description: 'Immutable client operation identity.' },
+    { name: 'digest', type: 'string', required: true, description: 'Hash of the validated command.' },
+    { name: 'deviceCommandKey', type: 'string', required: true, description: 'Shared indexed command queue identity.' },
+    { name: 'pairingHash', type: 'string', required: true, description: 'Binding to the current paired device session.' },
+    { name: 'status', type: 'string', required: true, description: 'pending, processing, complete or error.' },
+    { name: 'deadlineAt', type: 'date', required: true, description: 'Deadline beyond which the request cannot execute or disclose its result.' },
+    { name: 'leaseHash', type: 'string', required: false, description: 'Hash of the sole claiming worker token.' }
+  ],
+  example: { requestId: 'sync-status-1', status: 'pending' }
+};
+
 const deviceCommandSchema: ThingtimeSchema = {
 	id: 'device-command',
 	version: 1,
@@ -4240,6 +4257,7 @@ export const DEVICE_THINGTIME = [
 	'device-state',
 	'device-connector',
 	'device-command',
+	'device-sync-control',
 	'device-command-event',
 	'device-ai-live-state',
 	'device-approval',
@@ -4250,7 +4268,7 @@ export const DEVICE_THINGTIME = [
 // Thing kinds are bounded operational machinery and remain writable while an
 // account is full; the durable device/state/connector/screen mirror and all
 // imported chat rows stay ordinary quota-billed content.
-export const DEVICE_CONTROL_THINGTIME = ['device-command', 'device-command-event', 'device-ai-live-state', 'device-approval'] as const;
+export const DEVICE_CONTROL_THINGTIME = ['device-sync-control', 'device-command', 'device-command-event', 'device-ai-live-state', 'device-approval'] as const;
 
 // Historical chats have a dedicated atomic lifecycle, never generic CRUD.
 export const CHAT_ARCHIVE_THINGTIME = ['chat-archive', 'chat-archive-participant', 'chat-archive-message', 'chat-archive-reaction'] as const;
@@ -4625,6 +4643,7 @@ export const thingtimeSchemas: ThingtimeSchema[] = [
 	deviceStateSchema,
 	deviceConnectorSchema,
 	deviceCommandSchema,
+	deviceSyncControlSchema,
 	deviceCommandEventSchema,
 	deviceAiLiveStateSchema,
 	deviceApprovalSchema,

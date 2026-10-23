@@ -12892,6 +12892,33 @@ separate from deterministic discovery/lease tests.
 
 ## Device sync browsing and collapsed settings — 2026-10-22
 
+### Browser management and remote execution — 2026-10-23
+
+- [ ] In a fresh browser without an Electron bridge or local pairing, open an
+  owned device's dedicated sync page and expand Manage sync connections. Verify
+  saved connections, all configuration fields, drafts and revision-conflict
+  recovery at desktop and narrow mobile widths. Reload a saved change.
+- [ ] Disconnect the target device. Existing unchanged folder bindings remain
+  editable; changing a device root requires live verification. Keep saved data
+  visible and distinguish offline/timeout from an empty list or successful job.
+- [ ] Run the updated installed app on the paired device and use another
+  browser/computer to request folder selection, add a connection, start/pause/
+  resume a transfer, change an automatic interval and review live progress.
+  Native selection/permission dialogs must appear on the target device. Closing
+  the browser must leave device-owned work running; reconnect and inspect it.
+- [ ] Exercise remote conflict review, paged progress/coverage, upload priority
+  revision conflicts and recoverable file restoration. Verify current native
+  state against the browser and confirm that file bytes remain on the native
+  transfer path.
+- [ ] Sign out, switch accounts/origins/storage and revoke pairing during
+  pending requests. Old callbacks must not mutate the new view, and foreign,
+  temporary, app, Character and scoped-token callers must be refused. Repeated
+  request IDs must not replay native operations; crashed claims expire.
+- [ ] Edit nested remote headings, buttons and repeated connection fields in
+  Builder, save/reload, then exercise their live bindings. Run
+  `node remix/scripts/test-remote-device-sync-ui.mjs` for synthetic browser
+  regressions; record installed-device acceptance separately.
+
 - [ ] In grid, list and columns, single-click selects a device; double-click or Enter/Space opens its saved cloud folders. Touch opens directly. The context menu offers synced files, full settings and quick settings.
 - [ ] Compare saved roots with private file-sync configuration records for the active owner/device. Opening an offline device must not start a transfer or grant filesystem access; cloud-folder descendants use ordinary Things permissions.
 - [ ] Fresh drawer and settings page start with every section collapsed. Verify the drawer Close and expand-to-page buttons have separate 44px targets and both work. Open File sync & backup, live filesystem and long sections on desktop/mobile, scroll top to bottom, and check focus, overflow and reduced motion. Legacy version-1 expansion flags reset once while width survives; explicit version-2 choices remain respected.

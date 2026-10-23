@@ -102,6 +102,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-23: Make owned-device folder sync settings available in web browsers,
+  including offline edits, and relay live folder access, transfer/automation,
+  conflict, recovery, progress and priority controls to the installed app.
+  Private leased requests preserve device-owned execution and account boundaries.
+  [Contract and validation](../docs/browser-device-sync.md). **Codex (AI)**
+
 - 2026-10-23: Add reusable local-media processing and individually editable Builder intrinsic controls. Compressor Pages and Components are authored directly as saved Things; retain the legacy suite. [Details](../PRs/1164-general-media-compressor-local-images-and-immediate-file-controls.md). **Codex (AI)**
 
 - 2026-10-23: Build Vercel production, custom environments and previews on GitHub

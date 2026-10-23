@@ -18,6 +18,12 @@ always through `getThingsCollection()` / `getHomeThingsCollection()`, never a
 raw name). Folders are `folder` Things; containment is the child's `folderId`
 pointing at a folder owned by the same account (`FUNDAMENTALS.md` §3).
 
+Private `file-sync` configurations can be managed from any signed-in browser.
+The device sync screen keeps saved connection editing available offline and
+uses a protected, leased control channel for live device operations. Native
+grants and transfer journals stay on the target device. See
+[browser device sync](../browser-device-sync.md) for code paths and checks.
+
 ## Where the code lives
 
 | Concern | Path |
