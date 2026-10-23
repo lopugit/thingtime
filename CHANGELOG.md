@@ -15,6 +15,15 @@ verbatim, and CI changes are recorded here from now on.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 every entry is attributed the same way the app changelog attributes them.
 
+## 2026-10-23 — Build every Vercel deployment on GitHub Actions
+
+- Add a protected prebuilt publisher for production, Preview and matching custom
+  environments, with secret-free compilation on GitHub-hosted Ubuntu runners.
+- Preserve exact commit/target verification, environment runtime settings,
+  production crons and stable branch domains. Skip stale and already-ready work.
+- Accept an intentionally disconnected Vercel Git integration in the existing
+  prebuilt PR controller while still rejecting a mismatched project link.
+
 ## 2026-10-18 — Diagnose OpenAI preflight failures safely
 
 - Report the HTTP status and an allowlisted error code when OpenAI rejects a configured model before execution. Keep response messages and unknown fields private so quota and authentication failures can be diagnosed without exposing credentials.
