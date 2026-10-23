@@ -225,3 +225,5 @@ pre-queued with no jobs, logs, or cancellable run graph.
   source ignore/build guards enabled, and existing domains/runtime/crons intact.
   Exercise manual Preview, Develop and Production and inspect their public
   root/index/asset/API paths and relevant stable aliases.
+
+- After disconnecting native Git, verify existing provider branch aliases for main/develop/staging and the project production alias follow the verified prebuilt deployment. Only existing aliases owned by the selected project may be reconciled; skip unsupported/long branch slugs and absent aliases.
