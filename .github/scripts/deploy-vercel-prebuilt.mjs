@@ -67,6 +67,13 @@ export function deploymentArgs({ directory, target, branch, sha, teamSlug, runId
   return args;
 }
 
+export function compatibilityAliasCandidates({ branch, projectName, teamSlug, target }) {
+  if (!/^[a-z0-9-]+$/.test(branch)) return [];
+  const labels = [`${projectName}-git-${branch}-${teamSlug}`];
+  if (target.kind === 'production') labels.push(`${projectName}-${teamSlug}`);
+  return labels.filter((label) => label.length <= 63).map((label) => `${label}.vercel.app`);
+}
+
 export function publisherEnvironment({ teamId, projectId, token }, environment = process.env) {
   // Vercel CLI rejects a lone VERCEL_PROJECT_ID even when project.json exists.
   // Bind both identifiers to the independently authorized project, overriding
@@ -165,16 +172,27 @@ async function prepare() {
   console.log(`Deployment plan: ${plan.branch} @ ${plan.sha} -> ${plan.target.slug}${deployed ? ' (already deployed)' : ''}`);
 }
 
+export async function verifyAlias(check, wait = (ms) => new Promise((done) => setTimeout(done, ms))) {
+  const delays = [2000, 5000];
+  for (let attempt = 0; ; attempt++) {
+    try { return await check(); }
+    catch (error) {
+      if (attempt === delays.length) throw error;
+      await wait(delays[attempt]);
+    }
+  }
+}
+
 async function smoke(url) {
   const home = await fetch(url, { signal: AbortSignal.timeout(30_000) });
   const html = await home.text();
-  if (!home.ok || !html.includes('<div id="root"></div>')) throw new Error('Deployed Vite shell failed verification');
+  if (!home.ok || !html.includes('<div id="root"></div>')) throw new Error(`Deployed Vite shell failed verification at ${url}`);
   const index = await fetch(`${url}/index.html`, { signal: AbortSignal.timeout(30_000) });
   if (!index.ok || !(await index.text()).includes('<div id="root"></div>')) throw new Error('Deployed index.html failed verification');
   const asset = html.match(/(?:src|href)="(\/assets\/[^"?]+\.js)[^"]*"/);
   if (!asset) throw new Error('No deployed JavaScript asset');
   const response = await fetch(new URL(asset[1], url), { signal: AbortSignal.timeout(30_000) });
-  if (!response.ok || !(response.headers.get('content-type') || '').includes('javascript')) throw new Error('Deployed asset failed verification');
+  if (!response.ok || !(response.headers.get('content-type') || '').includes('javascript')) throw new Error(`Deployed asset failed verification at ${url}`);
   const api = await fetch(`${url}/api/root-data`, { signal: AbortSignal.timeout(30_000) });
   if (!api.ok || !(api.headers.get('content-type') || '').includes('json')) throw new Error('Deployed API failed verification');
   await api.json();
@@ -221,19 +239,34 @@ async function publish() {
   await smoke(url);
   if ((await context(branch, plan.target.slug)).sha !== plan.sha) throw new Error('Branch advanced before alias publication');
   const domains = await vercel(`/v9/projects/${plan.projectId}/domains?limit=100`);
+  const aliases = new Set();
   for (const domain of domains.domains || []) {
     if (domain.redirect || domain.name.startsWith('*.')) continue;
     const productionDomain = plan.target.kind === 'production' && !domain.gitBranch && !domain.customEnvironmentId;
     if (!productionDomain && domain.gitBranch !== branch && !(plan.target.id && domain.customEnvironmentId === plan.target.id)) continue;
+    aliases.add(domain.name);
+  }
+  // Native Git used to maintain these provider-owned compatibility URLs.
+  // Reconcile only existing aliases belonging to this exact project; do not
+  // invent long-branch slugs or create additional public hostnames.
+  for (const name of compatibilityAliasCandidates({ branch, projectName: required('VERCEL_PROJECT_NAME'), teamSlug: required('VERCEL_TEAM_SLUG'), target: plan.target })) {
+    let alias;
+    try { alias = await vercel(`/v4/aliases/${name}`); }
+    catch (error) { if (error.status === 404) continue; throw error; }
+    const owner = alias.projectId || (alias.deploymentId && (await vercel(`/v13/deployments/${alias.deploymentId}`)).projectId);
+    if (owner !== plan.projectId) throw new Error('Compatibility alias project mismatch');
+    aliases.add(name);
+  }
+  for (const name of aliases) {
     let currentAlias = null;
-    try { currentAlias = await vercel(`/v4/aliases/${domain.name}`); }
+    try { currentAlias = await vercel(`/v4/aliases/${name}`); }
     catch (error) { if (error.status !== 404) throw error; }
     if (currentAlias?.deploymentId !== deployment.id) {
-      await vercel(`/v2/deployments/${deployment.id}/aliases`, { method: 'POST', body: JSON.stringify({ alias: domain.name }) });
+      await vercel(`/v2/deployments/${deployment.id}/aliases`, { method: 'POST', body: JSON.stringify({ alias: name }) });
     }
-    const alias = await vercel(`/v4/aliases/${domain.name}`);
+    const alias = await vercel(`/v4/aliases/${name}`);
     if (alias.deploymentId !== deployment.id) throw new Error('Alias did not publish the verified deployment');
-    await smoke(`https://${domain.name}`);
+    await verifyAlias(() => smoke(`https://${name}`));
   }
   const statusContext = `Vercel prebuilt (${plan.target.slug})`;
   const statuses = await github(`/commits/${plan.sha}/status`);
