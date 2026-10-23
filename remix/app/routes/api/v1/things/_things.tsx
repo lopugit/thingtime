@@ -71,11 +71,6 @@ const patScopeFor = (method: string, body: any): string | string[] => {
   return 'things.read';
 };
 
-// Crystal payloads are small (text + image URLs + listing), but every thing
-// also carries the schema-free `extended` sidecar (up to EXTENDED_MAX_BYTES =
-// 512KB, enforced by sanitizeExtended) — the body cap leaves headroom for both.
-const MAX_BODY_BYTES = 768 * 1024;
-
 const csv = (value: string | null): string[] =>
   (value || '')
     .split(',')
@@ -217,16 +212,6 @@ export const action = async ({ request }: { request: Request }) => {
   // routes OPTIONS here
   const preflight = appDataPreflight(request, 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
   if (preflight) return preflight;
-
-  // The 413 fires before any actor resolution (an oversized payload must not
-  // consume a PAT use), so its CORS headers come straight from the Origin.
-  const contentLength = Number(request.headers.get('content-length') || 0);
-  if (contentLength > MAX_BODY_BYTES) {
-    return json(
-      { ok: false, error: 'Post payload too large' },
-      { status: 413, headers: appCorsHeaders(request.headers.get('Origin')) }
-    );
-  }
 
   // Body before auth: the PAT scope a mutation needs depends on what the body
   // says it is (a POST carrying thingtime ['reaction'] is a react, not a

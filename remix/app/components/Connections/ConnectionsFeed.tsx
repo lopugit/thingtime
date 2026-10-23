@@ -7,6 +7,7 @@ import { mergeReactionOverlays } from '~/components/Feed/reactionOverlay';
 import type { FeedFilterMatch, PostChange, PublicPost } from '~/components/Feed/feedTypes';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { readLocalCache, writeLocalCache } from '~/hooks/localCache';
+import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { useApi } from '~/hooks/useApi';
 import { appendFeedPage, cardStyle, type Connection } from './shared';
 
@@ -16,7 +17,6 @@ import { appendFeedPage, cardStyle, type Connection } from './shared';
 // Show button) or drop ('hide') matched posts before they render.
 
 const PAGE_SIZE = 20;
-const feedCacheKey = (connection: string | null) => `tt-connections-feed:${connection || 'all'}`;
 
 const warnMatches = (post: PublicPost): FeedFilterMatch[] => (post.feedFilterMatches || []).filter((match) => match.action === 'warn');
 const hideMatches = (post: PublicPost): FeedFilterMatch[] => (post.feedFilterMatches || []).filter((match) => match.action === 'hide');
@@ -40,19 +40,30 @@ const VeiledPost = (props: { post: PublicPost; matches: FeedFilterMatch[]; onSho
 );
 
 export const ConnectionsFeedPage = () => {
+  const user = useCurrentUser();
+  return <ConnectionsFeedContent key={user?.id || 'guest'} ownerId={user?.accountKind === 'service' ? null : user?.id || null} />;
+};
+const ConnectionsFeedContent = ({ ownerId }: { ownerId: string | null }) => {
+  const feedCacheKey = (connection: string | null) =>
+    `tt-connections-feed:v2:${typeof window === 'undefined' ? '' : window.location.origin}:${ownerId || 'guest'}:${connection || 'all'}`;
+  const active = React.useRef(true);
+  React.useEffect(() => {
+    active.current = true;
+    return () => {
+      active.current = false;
+    };
+  }, []);
   const api = useApi();
   const lopu = useLopu();
   const [searchParams, setSearchParams] = useSearchParams();
   const activeConnection = searchParams.get('connection');
 
-  const [posts, setPosts] = React.useState<PublicPost[]>(
-    () => readLocalCache<PublicPost[]>(feedCacheKey(activeConnection)) || []
-  );
+  const [posts, setPosts] = React.useState<PublicPost[]>(() => readLocalCache<PublicPost[]>(feedCacheKey(activeConnection)) || []);
   const [connections, setConnections] = React.useState<Connection[]>([]);
   const [loading, setLoading] = React.useState(false);
   const [nextCursor, setNextCursor] = React.useState<string | null>(null);
   const [revealed, setRevealed] = React.useState<Set<string>>(() => new Set());
-  const [signedOut, setSignedOut] = React.useState(false);
+  const [signedOut, setSignedOut] = React.useState(!ownerId);
   const requestSeq = React.useRef(0);
   // At most ONE automatic provider-deepening pass per tab visit: reset only by
   // the [activeConnection] effect below, never on page arrival. Scrolling past
@@ -63,6 +74,7 @@ export const ConnectionsFeedPage = () => {
 
   const load = React.useCallback(
     async (connection: string | null, cursor: string | null, deferSync = false) => {
+      if (!ownerId || !active.current) return;
       const seq = ++requestSeq.current;
       setLoading(true);
       const startedAt = Date.now();
@@ -73,7 +85,13 @@ export const ConnectionsFeedPage = () => {
           limit: PAGE_SIZE,
           ...(deferSync ? { sync: 'defer' } : {})
         });
-        if (seq !== requestSeq.current) return;
+        if (!active.current || seq !== requestSeq.current) return;
+        if (resp.ownerId !== ownerId) {
+          setPosts([]);
+          setConnections([]);
+          setSignedOut(true);
+          return;
+        }
         const merged = mergeReactionOverlays(startedAt, (resp.posts || []) as PublicPost[]);
         // appended pages can overlap what is already rendered (see
         // appendFeedPage) — a plain concat would repeat a post and duplicate
@@ -94,11 +112,14 @@ export const ConnectionsFeedPage = () => {
           });
         }
       } catch (err: any) {
-        if (seq !== requestSeq.current) return;
-        if (err?.status === 401) setSignedOut(true);
-        else lopu({ title: err?.error || 'Could not load your connected feed 😞', status: 'error' });
+        if (!active.current || seq !== requestSeq.current) return;
+        if (err?.status === 401) {
+          setSignedOut(true);
+          setPosts([]);
+          setConnections([]);
+        } else lopu({ title: err?.error || 'Could not load your connected feed 😞', status: 'error' });
       } finally {
-        if (seq === requestSeq.current) setLoading(false);
+        if (active.current && seq === requestSeq.current) setLoading(false);
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -140,7 +161,7 @@ export const ConnectionsFeedPage = () => {
     api.v1.connections
       .list()
       .then((resp: any) => {
-        if (!cancelled && Array.isArray(resp?.connections) && resp.connections.length) setConnections(resp.connections);
+        if (!cancelled && resp.ownerId === ownerId && Array.isArray(resp?.connections) && resp.connections.length) setConnections(resp.connections);
       })
       .catch(() => {});
     return () => {
@@ -240,12 +261,7 @@ export const ConnectionsFeedPage = () => {
       {/* connection tabs */}
       {connections.length ? (
         <Flex columnGap={2} rowGap={2} flexWrap="wrap">
-          <Button
-            size="xs"
-            borderRadius="999px"
-            variant={!activeConnection ? 'solid' : 'outline'}
-            onClick={() => setSearchParams({})}
-          >
+          <Button size="xs" borderRadius="999px" variant={!activeConnection ? 'solid' : 'outline'} onClick={() => setSearchParams({})}>
             All
           </Button>
           {connections.map((connection) => (
@@ -284,14 +300,7 @@ export const ConnectionsFeedPage = () => {
       {visible.map((post) => {
         const veils = warnMatches(post);
         if (veils.length && !revealed.has(post.id)) {
-          return (
-            <VeiledPost
-              key={post.id}
-              post={post}
-              matches={veils}
-              onShow={() => setRevealed((current) => new Set(current).add(post.id))}
-            />
-          );
+          return <VeiledPost key={post.id} post={post} matches={veils} onShow={() => setRevealed((current) => new Set(current).add(post.id))} />;
         }
         return <PostCard key={post.id} post={post} onChanged={handlePostChanged} />;
       })}
