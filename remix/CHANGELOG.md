@@ -102,6 +102,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-23: Build Vercel production, custom environments and previews on GitHub
+  Actions, upload only prebuilt output, and disable native source builds. Keep
+  protected publisher credentials separate from product compilation.
+
 - 2026-10-22: Move device sync configuration off Things home into a dedicated
   device page; keep storage attachments and parent-linked records out of root,
   retain recovery/search access, and preserve private upload provenance before
