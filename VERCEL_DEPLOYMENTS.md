@@ -1,6 +1,6 @@
 # Vercel Deployments
 
-Last updated: 2026-09-01
+Last updated: 2026-10-23
 
 ## Project
 
@@ -24,19 +24,23 @@ Last updated: 2026-09-01
   `remix`).
 - Framework Preset: Other. The tracked `vercel.json` uses `framework: null`
   because Nitro emits the Build Output API directly.
-- Build, Install, Output Directory, and Ignored Build Step dashboard overrides:
-  clear them so root `vercel.json` is the single source of truth.
+- Dashboard Build and Install overrides deliberately refuse source builds;
+  Ignored Build Step is `exit 0`. Keep these additional source-build guards.
+  Application compilation runs in the secret-free GitHub job.
 - Output Directory: no dashboard override. Root `vercel.json` explicitly sets
   it to `null`; `node scripts/vercel-build.mjs` validates
   `remix/.vercel/output`, stages it at root `.vercel/output`, and validates the
   staged artifact again.
-- Node.js: 24.x, matching `remix/package.json`.
-- Git deployment policy: automatic Git deployments are disabled for every
-  branch except `main` and `develop`. Those two exact branches retain Vercel's
-  native Production and stable-development builds. Eligible PR previews are
-  built on GitHub and uploaded with Vercel's prebuilt protocol; arbitrary
-  feature, `staging`, `all`, and control-plane pushes no longer spend Vercel
-  Build CPU. `ignoreCommand` remains a second fail-safe.
+- Builder Node.js and pnpm versions are pinned in the protected reusable
+  workflow; the artifact records its function runtime.
+- Git deployment policy: disabled for every branch. Vercel's Git integration
+  is disconnected and its source deploy hooks removed. The GitHub listener
+  deploys `main` to Production, `develop` to its matched custom environment,
+  and other product branches to Preview. The protected `github-actions`
+  controller branch is not an application deployment source.
+- The publisher uses `--prebuilt --archive=tgz`, copies production schedules
+  into Build Output API metadata, and explicitly applies the immutable source
+  function regions. It verifies the accepted deployment before final receipts.
 - Source Files Outside of the Root Directory: no longer needed once Root
   Directory is the repository root; it may be disabled.
 
@@ -153,10 +157,14 @@ Last updated: 2026-09-01
   their shared `environment:preview` OIDC subject is trusted only by the
   development attachment role. They never receive Production MongoDB, JWT, or
   S3 values.
-- The `staging` branch alias is https://thingtime-git-staging-lopugits-projects.vercel.app.
+- Active staging origin: https://staging.thingtime.com. The `staging` branch
+  was promoted to the current main app on 2026-10-23 while preserving its
+  historical commits. It uses generic Preview runtime settings and the
+  existing branch-bound domain; the account permits one custom environment,
+  already used by `develop`. Staging receives no production cron schedule.
 - For eligible develop-target feature branches, use the controller-managed
   `https://pr-<number>.previews.dev.thingtime.com` URL from the GitHub PR
-  status. Other feature branches do not receive automatic Vercel deployments.
+  status. Other product branches use the generic GitHub prebuilt listener.
 
 ### Development data and auth scope
 
@@ -447,3 +455,10 @@ source deploy hooks are removed during verified cutover.
 The `vercel-prebuilt-control` GitHub environment allows the default branch
 only. Product compilation receives no deployment secret; a separate protected
 job validates and uploads the prebuilt artifact. See README for fork setup.
+
+## GitHub Actions migration receipts (2026-10-23)
+
+See the [migration note](PRs/1206-codex-vercel-actions-only-build-all-vercel-deployments-on-github-actions.md)
+for source SHAs, workflow runs, deployment evidence, staging activation and
+recovery details. Native source-build controls apply only to this Thingtime
+project. Other Vercel projects were excluded at the owner's request.
