@@ -203,6 +203,14 @@ pre-queued with no jobs, logs, or cancellable run graph.
 - Run `node --test .github/scripts/admin-model-order.test.mjs .github/scripts/lopu-credential-vault.test.mjs`.
 # Prebuilt-only deployments (2026-10-23)
 
+- If publication stops after Vercel becomes READY, a fresh run skips compilation
+  and upload, then recovers aliases and the GitHub status. Repeating a completed
+  run must not write identical alias bindings or status receipts again.
+
+- Prepare and publish may reuse the existing repository automation credential
+  when available; product build jobs must never receive it. A READY deployment
+  must finish branch verification, aliases and its GitHub status receipt.
+
 - The publisher must pass both `VERCEL_ORG_ID` and `VERCEL_PROJECT_ID` to the
   pinned CLI, matching the authorized project even if inherited values differ.
 

@@ -19,7 +19,10 @@ async function request(url, token, init = {}) {
     headers: { Accept: 'application/json', Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
     signal: AbortSignal.timeout(60_000)
   });
-  if (!response.ok) throw new Error(`Provider request failed: HTTP ${response.status} (${new URL(url).pathname})`);
+  if (!response.ok) {
+    const rateLimit = response.headers.get('x-ratelimit-remaining') === '0' ? '; provider rate limit exhausted' : '';
+    throw Object.assign(new Error(`Provider request failed: HTTP ${response.status} (${new URL(url).pathname})${rateLimit}`), { status: response.status });
+  }
   return response.status === 204 ? null : response.json();
 }
 
@@ -110,6 +113,12 @@ async function output(values) {
   }
 }
 
+export function planOutputs(plan, deployed) {
+  // READY output may still need aliases/status recovery after an interrupted
+  // publisher. Reconcile it without compiling or uploading it again.
+  return { should_build: String(!deployed), should_publish: 'true', source_sha: plan.sha, source_ref: plan.branch, target_slug: plan.target.slug, target_kind: plan.target.kind, target_id: plan.target.id };
+}
+
 async function prepare() {
   const event = JSON.parse(await readFile(required('GITHUB_EVENT_PATH'), 'utf8'));
   const source = sourceFromEvent(required('GITHUB_EVENT_NAME'), event, process.env.SOURCE_REF);
@@ -117,7 +126,7 @@ async function prepare() {
   const plan = await context(source.branch, process.env.TARGET_ENVIRONMENT || 'auto');
   if (source.sha && plan.sha !== source.sha) return output({ should_build: 'false' });
   const deployed = await existing(plan);
-  await output({ should_build: String(!deployed), source_sha: plan.sha, source_ref: plan.branch, target_slug: plan.target.slug, target_kind: plan.target.kind, target_id: plan.target.id });
+  await output(planOutputs(plan, deployed));
   console.log(`Deployment plan: ${plan.branch} @ ${plan.sha} -> ${plan.target.slug}${deployed ? ' (already deployed)' : ''}`);
 }
 
@@ -180,12 +189,21 @@ async function publish() {
     if (domain.redirect || domain.name.startsWith('*.')) continue;
     const productionDomain = plan.target.kind === 'production' && !domain.gitBranch && !domain.customEnvironmentId;
     if (!productionDomain && domain.gitBranch !== branch && !(plan.target.id && domain.customEnvironmentId === plan.target.id)) continue;
-    await vercel(`/v2/deployments/${deployment.id}/aliases`, { method: 'POST', body: JSON.stringify({ alias: domain.name }) });
+    let currentAlias = null;
+    try { currentAlias = await vercel(`/v4/aliases/${domain.name}`); }
+    catch (error) { if (error.status !== 404) throw error; }
+    if (currentAlias?.deploymentId !== deployment.id) {
+      await vercel(`/v2/deployments/${deployment.id}/aliases`, { method: 'POST', body: JSON.stringify({ alias: domain.name }) });
+    }
     const alias = await vercel(`/v4/aliases/${domain.name}`);
     if (alias.deploymentId !== deployment.id) throw new Error('Alias did not publish the verified deployment');
     await smoke(`https://${domain.name}`);
   }
-  await github(`/statuses/${plan.sha}`, { method: 'POST', body: JSON.stringify({ state: 'success', context: `Vercel prebuilt (${plan.target.slug})`, target_url: url, description: 'Built on GitHub Actions; uploaded as prebuilt output' }) });
+  const statusContext = `Vercel prebuilt (${plan.target.slug})`;
+  const statuses = await github(`/commits/${plan.sha}/status`);
+  if (!statuses.statuses?.some((status) => status.context === statusContext && status.state === 'success' && status.target_url === url)) {
+    await github(`/statuses/${plan.sha}`, { method: 'POST', body: JSON.stringify({ state: 'success', context: statusContext, target_url: url, description: 'Built on GitHub Actions; uploaded as prebuilt output' }) });
+  }
   await appendFile(required('GITHUB_STEP_SUMMARY'), `### Vercel prebuilt deployment\n\n- Source: \`${plan.branch}\` @ \`${plan.sha}\`\n- Environment: \`${plan.target.slug}\`\n- Deployment: ${url}\n- Build compute: GitHub-hosted Ubuntu runner\n`);
   console.log(`Verified ${plan.target.slug}: ${url} (${deployment.id})`);
 }

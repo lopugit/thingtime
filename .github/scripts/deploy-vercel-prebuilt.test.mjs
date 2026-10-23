@@ -1,9 +1,18 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { deploymentArgs, deploymentIssue, marker, publisherEnvironment, selectTarget, sourceFromEvent } from './deploy-vercel-prebuilt.mjs';
+import { deploymentArgs, deploymentIssue, marker, planOutputs, publisherEnvironment, selectTarget, sourceFromEvent } from './deploy-vercel-prebuilt.mjs';
 
 const custom = [{ id: 'env_develop', slug: 'develop', branchMatcher: { type: 'equals', pattern: 'develop' } }];
+test('a READY artifact still reconciles its aliases and status without rebuilding', () => {
+  const plan = { sha: 'a'.repeat(40), branch: 'main', target: { slug: 'production', kind: 'production', id: '' } };
+  assert.equal(planOutputs(plan, null).should_build, 'true');
+  const ready = planOutputs(plan, { id: 'dpl_ready' });
+  assert.equal(ready.should_build, 'false');
+  assert.equal(ready.should_publish, 'true');
+  assert.equal(ready.source_sha, plan.sha);
+  assert.equal(ready.target_slug, 'production');
+});
 test('publisher supplies the paired CLI identifiers and overrides inherited project context', () => {
   const environment = publisherEnvironment({ teamId: 'team_authorized', projectId: 'prj_authorized', token: 'synthetic-test-token' }, { VERCEL_PROJECT_ID: 'prj_other', VERCEL_ORG_ID: 'team_other', CI: 'true' });
   assert.equal(environment.VERCEL_ORG_ID, 'team_authorized');
@@ -68,7 +77,13 @@ test('build job has no secrets/environment and publisher executes only protected
   assert.match(build, /runs-on: ubuntu-latest/);
   assert.match(build, /persist-credentials: false/);
   const publish = yaml.split('\n  publish:\n')[1];
+  assert.match(publish, /should_publish == 'true'/);
+  assert.match(publish, /needs\.build\.result == 'skipped'/);
   assert.match(publish, /ref: github-actions/);
   assert.match(publish, /extract-vercel-prebuilt.py/);
   assert.doesNotMatch(publish, /run: (?:node scripts\/|.*vercel build)/);
+  // Shared installation-token quotas must not strand a READY deployment before
+  // its final branch check or status receipt. Only protected jobs use the same
+  // automation credential fallback as the existing PR preview controller.
+  assert.equal((yaml.match(/GH_TOKEN: \$\{\{ secrets\.CONFLICT_RESOLVER_PAT \|\| github\.token \}\}/g) || []).length, 2);
 });

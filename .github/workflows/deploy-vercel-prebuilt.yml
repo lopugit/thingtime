@@ -24,6 +24,7 @@ jobs:
     environment: vercel-prebuilt-control
     outputs:
       should_build: ${{ steps.plan.outputs.should_build }}
+      should_publish: ${{ steps.plan.outputs.should_publish }}
       source_sha: ${{ steps.plan.outputs.source_sha }}
       source_ref: ${{ steps.plan.outputs.source_ref }}
       target_slug: ${{ steps.plan.outputs.target_slug }}
@@ -37,7 +38,7 @@ jobs:
       - name: Authorize current branch and environment
         id: plan
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.CONFLICT_RESOLVER_PAT || github.token }}
           VERCEL_API_TOKEN: ${{ secrets.VERCEL_DEPLOY_TOKEN }}
           VERCEL_TEAM_ID: ${{ vars.VERCEL_TEAM_ID }}
           VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
@@ -89,7 +90,7 @@ jobs:
 
   publish:
     needs: [prepare, build]
-    if: needs.prepare.outputs.should_build == 'true'
+    if: always() && needs.prepare.result == 'success' && needs.prepare.outputs.should_publish == 'true' && (needs.build.result == 'success' || needs.build.result == 'skipped')
     runs-on: ubuntu-latest
     timeout-minutes: 25
     environment: vercel-prebuilt-control
@@ -102,16 +103,19 @@ jobs:
           ref: github-actions
           persist-credentials: false
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        if: needs.build.result == 'success'
         with:
           name: vercel-prebuilt-${{ github.run_id }}
           path: ${{ runner.temp }}/artifact
       - name: Validate and extract output without executing product code
+        if: needs.build.result == 'success'
         run: python3 .github/scripts/extract-vercel-prebuilt.py "$RUNNER_TEMP/artifact/vercel-prebuilt.tgz" "$RUNNER_TEMP/prebuilt"
       - name: Install pinned publisher without credentials
+        if: needs.build.result == 'success'
         run: npm install --global --prefix "$RUNNER_TEMP/vercel-cli" vercel@59.10.0
       - name: Publish verified prebuilt output
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.CONFLICT_RESOLVER_PAT || github.token }}
           VERCEL_API_TOKEN: ${{ secrets.VERCEL_DEPLOY_TOKEN }}
           VERCEL_TEAM_ID: ${{ vars.VERCEL_TEAM_ID }}
           VERCEL_TEAM_SLUG: ${{ vars.VERCEL_TEAM_SLUG }}

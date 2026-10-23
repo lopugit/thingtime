@@ -17,6 +17,12 @@ every entry is attributed the same way the app changelog attributes them.
 
 ## 2026-10-23 — Build every Vercel deployment on GitHub Actions
 
+- Reconcile already-READY output after an interrupted publisher without another
+  build or upload; skip unchanged aliases and GitHub status writes.
+
+- Reuse the protected preview controller's repository automation credential for
+  final GitHub verification and status receipts; keep it out of product builds.
+
 - Bind both required Vercel CLI project identifiers in the protected publisher;
   a project.json link alone does not override a lone inherited project ID.
 
