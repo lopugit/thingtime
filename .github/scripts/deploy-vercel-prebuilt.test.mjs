@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { mkdtemp, mkdir, writeFile, readFile, rm, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { compatibilityAliasCandidates, applyOutputPolicy, policyVersion, runtimePolicyIssue, deploymentArgs, deploymentIssue, marker, planOutputs, publisherEnvironment, selectTarget, sourceFromEvent } from './deploy-vercel-prebuilt.mjs';
+import { verifyAlias, compatibilityAliasCandidates, applyOutputPolicy, policyVersion, runtimePolicyIssue, deploymentArgs, deploymentIssue, marker, planOutputs, publisherEnvironment, selectTarget, sourceFromEvent } from './deploy-vercel-prebuilt.mjs';
 
 const custom = [{ id: 'env_develop', slug: 'develop', branchMatcher: { type: 'equals', pattern: 'develop' } }];
 test('a READY artifact still reconciles its aliases and status without rebuilding', () => {
@@ -122,4 +122,18 @@ test('legacy alias candidates are bounded and production alone includes the proj
   assert.deepEqual(compatibilityAliasCandidates({ ...input, branch: 'main', target: { kind: 'production' } }), ['thingtime-git-main-team.vercel.app', 'thingtime-team.vercel.app']);
   assert.deepEqual(compatibilityAliasCandidates({ ...input, branch: 'feature/slash' }), []);
   assert.deepEqual(compatibilityAliasCandidates({ ...input, branch: 'x'.repeat(64) }), []);
+});
+
+test('alias propagation retries only reads and stops on persistent failure', async () => {
+  let reads = 0;
+  const delays = [];
+  assert.equal(await verifyAlias(async () => {
+    if (++reads < 3) throw new Error('old shell references missing asset');
+    return 'ready';
+  }, async (ms) => { delays.push(ms); }), 'ready');
+  assert.equal(reads, 3);
+  assert.deepEqual(delays, [2000, 5000]);
+  let failures = 0;
+  await assert.rejects(verifyAlias(async () => { failures++; throw new Error('persistent'); }, async () => {}), /persistent/);
+  assert.equal(failures, 3);
 });

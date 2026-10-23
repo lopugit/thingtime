@@ -1,17 +1,17 @@
 # Graph Report - thingtime  (2026-10-23)
 
 ## Corpus Check
-- 89 files · ~242,486 words
+- 89 files · ~242,649 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 5 file(s) not represented in the graph (top: (none) 4, .jq 1)
 
 ## Summary
-- 1154 nodes · 2870 edges · 56 communities (51 shown, 5 thin omitted)
+- 1155 nodes · 2873 edges · 56 communities (51 shown, 5 thin omitted)
 - Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 20 edges (avg confidence: 0.85)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `f3ffcb51`
+- Built from commit: `200dd392`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -138,8 +138,8 @@ Cohesion: 0.11
 Nodes (28): checkpoint(), completedReport(), continuationNumbers(), finalize(), git(), HANDOVER_INSTRUCTIONS, initialize(), numbers() (+20 more)
 
 ### Community 9 - "ref_node_fs"
-Cohesion: 0.11
-Nodes (15): CAPACITY_PATTERNS, classifyClaudeCredentialFailure(), collectStrings(), CREDENTIAL_PATTERNS, main(), selfTest(), allowed, workflow (+7 more)
+Cohesion: 0.10
+Nodes (16): CAPACITY_PATTERNS, classifyClaudeCredentialFailure(), collectStrings(), CREDENTIAL_PATTERNS, main(), selfTest(), allowed, workflow (+8 more)
 
 ### Community 10 - "lopu-pr-status.mjs"
 Cohesion: 0.17
@@ -151,7 +151,7 @@ Nodes (26): acceptsBotRoutingProof(), actions, AI_RUNTIME_YAML, appReentryDispos
 
 ### Community 12 - "deploy-vercel-prebuilt.mjs"
 Cohesion: 0.20
-Nodes (24): applyOutputPolicy(), visit(), compatibilityAliasCandidates(), context(), deploymentArgs(), deploymentIssue(), exec, existing() (+16 more)
+Nodes (25): applyOutputPolicy(), visit(), compatibilityAliasCandidates(), context(), deploymentArgs(), deploymentIssue(), exec, existing() (+17 more)
 
 ### Community 13 - "refresh-promotion-graphify.sh"
 Cohesion: 0.14
@@ -166,8 +166,8 @@ Cohesion: 0.14
 Nodes (18): FALLBACK_BRANCH, FALLBACK_HEADER, FALLBACK_MARKER, fallbackDeploymentIssue(), fallbackDomainIssue(), fallbackPage(), installFallbackAliases(), publishedPreviewResponseIssue() (+10 more)
 
 ### Community 16 - "ref_node_url"
-Cohesion: 0.22
-Nodes (6): assertPrReleaseContract(), count(), here, workflow, postPublishRefRace(), snapshot
+Cohesion: 0.40
+Nodes (5): allowed(), evaluate, expression, main, workflow
 
 ### Community 17 - "ref_node_os"
 Cohesion: 0.16
@@ -178,8 +178,8 @@ Cohesion: 0.19
 Nodes (5): extract_archive(), main(), _member_path(), self_test(), _validate_link()
 
 ### Community 19 - "lopu-pr-lifecycle.mjs"
-Cohesion: 0.20
-Nodes (16): approved(), eligible(), identity(), managed(), pauses, redundant(), selectPulls(), settle() (+8 more)
+Cohesion: 0.19
+Nodes (17): checkDisposition(), approved(), eligible(), identity(), managed(), pauses, redundant(), selectPulls() (+9 more)
 
 ### Community 20 - "merge-main-develop-sync-pr.mjs"
 Cohesion: 0.22
@@ -303,7 +303,7 @@ Nodes (3): resolve-canonical-instruction-type-conflicts.sh script, stage_record(
 
 ### Community 55 - "ref_node_child_process"
 Cohesion: 0.31
-Nodes (6): checkDisposition(), publishMerge(), baseSha, fixture(), head, success
+Nodes (5): publishMerge(), baseSha, fixture(), head, success
 
 ## Knowledge Gaps
 - **28 isolated node(s):** `RUNNER_TEMP`, `GITHUB_OUTPUT`, `SOURCE_PR`, `BASE_REF`, `BASE_SHA` (+23 more)
@@ -314,16 +314,16 @@ Nodes (6): checkDisposition(), publishMerge(), baseSha, fixture(), head, success
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `selfTest()` connect `promote-features-to-main.mjs` to `ref_node_fs`?**
-  _High betweenness centrality (0.022) - this node is a cross-community bridge._
+  _High betweenness centrality (0.018) - this node is a cross-community bridge._
 - **What connects `RUNNER_TEMP`, `GITHUB_OUTPUT`, `SOURCE_PR` to the rest of the system?**
   _28 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `promote-features-to-main.mjs` be split into smaller, more focused modules?**
   _Cohesion score 0.05194805194805195 - nodes in this community are weakly interconnected._
-- **Why does `isManagedPreviewComment()` connect `deploy-admin-pr-previews.mjs` to `deploy-develop-pr-preview.mjs`?**
-  _High betweenness centrality (0.004) - this node is a cross-community bridge._
 - **Should `deploy-develop-pr-preview.mjs` be split into smaller, more focused modules?**
   _Cohesion score 0.05496774193548387 - nodes in this community are weakly interconnected._
 - **Should `deploy-admin-pr-previews.mjs` be split into smaller, more focused modules?**
   _Cohesion score 0.08231569425599276 - nodes in this community are weakly interconnected._
 - **Should `graphify-cas.mjs` be split into smaller, more focused modules?**
   _Cohesion score 0.08735733099209833 - nodes in this community are weakly interconnected._
+- **Should `promotion-pr-changelog.mjs` be split into smaller, more focused modules?**
+  _Cohesion score 0.13360323886639677 - nodes in this community are weakly interconnected._

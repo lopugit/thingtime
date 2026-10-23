@@ -172,16 +172,27 @@ async function prepare() {
   console.log(`Deployment plan: ${plan.branch} @ ${plan.sha} -> ${plan.target.slug}${deployed ? ' (already deployed)' : ''}`);
 }
 
+export async function verifyAlias(check, wait = (ms) => new Promise((done) => setTimeout(done, ms))) {
+  const delays = [2000, 5000];
+  for (let attempt = 0; ; attempt++) {
+    try { return await check(); }
+    catch (error) {
+      if (attempt === delays.length) throw error;
+      await wait(delays[attempt]);
+    }
+  }
+}
+
 async function smoke(url) {
   const home = await fetch(url, { signal: AbortSignal.timeout(30_000) });
   const html = await home.text();
-  if (!home.ok || !html.includes('<div id="root"></div>')) throw new Error('Deployed Vite shell failed verification');
+  if (!home.ok || !html.includes('<div id="root"></div>')) throw new Error(`Deployed Vite shell failed verification at ${url}`);
   const index = await fetch(`${url}/index.html`, { signal: AbortSignal.timeout(30_000) });
   if (!index.ok || !(await index.text()).includes('<div id="root"></div>')) throw new Error('Deployed index.html failed verification');
   const asset = html.match(/(?:src|href)="(\/assets\/[^"?]+\.js)[^"]*"/);
   if (!asset) throw new Error('No deployed JavaScript asset');
   const response = await fetch(new URL(asset[1], url), { signal: AbortSignal.timeout(30_000) });
-  if (!response.ok || !(response.headers.get('content-type') || '').includes('javascript')) throw new Error('Deployed asset failed verification');
+  if (!response.ok || !(response.headers.get('content-type') || '').includes('javascript')) throw new Error(`Deployed asset failed verification at ${url}`);
   const api = await fetch(`${url}/api/root-data`, { signal: AbortSignal.timeout(30_000) });
   if (!api.ok || !(api.headers.get('content-type') || '').includes('json')) throw new Error('Deployed API failed verification');
   await api.json();
@@ -255,7 +266,7 @@ async function publish() {
     }
     const alias = await vercel(`/v4/aliases/${name}`);
     if (alias.deploymentId !== deployment.id) throw new Error('Alias did not publish the verified deployment');
-    await smoke(`https://${name}`);
+    await verifyAlias(() => smoke(`https://${name}`));
   }
   const statusContext = `Vercel prebuilt (${plan.target.slug})`;
   const statuses = await github(`/commits/${plan.sha}/status`);
