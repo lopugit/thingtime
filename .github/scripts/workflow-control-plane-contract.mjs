@@ -958,6 +958,22 @@ export function assertControlPlaneContract() {
   assert.match(codeqlHandoff, /^      actions: write$/mu);
   assert.match(codeqlHandoff, /gh workflow run codeql-analysis\.yml/u);
   assert.match(codeqlHandoff, /--ref "\$DEFAULT_BRANCH"/u);
+  // Nothing re-enters this privileged hop until the PR head moves, so a
+  // single-attempt dispatch converts a transient HTTP 500 from
+  // POST /actions/workflows/{id}/dispatches into a red check that outlives the
+  // outage (observed on PR #1035 @ 4952b234, run 39462996775). Pin the retry
+  // as a property — a bounded loop around the dispatch that only escalates
+  // once the budget is exhausted — rather than pinning one spelling of it.
+  assert.match(
+    codeqlHandoff,
+    /until gh workflow run codeql-analysis\.yml[\s\S]*?\n\s*do\n[\s\S]*?\n\s*done\b/u,
+    "the CodeQL dispatch retries instead of leaving a transient API outage red on the PR",
+  );
+  assert.match(
+    codeqlHandoff,
+    /\[ "\$attempt" -ge "\$attempts" \][\s\S]*?no unprivileged analysis was queued[\s\S]*?exit 1/u,
+    "an exhausted dispatch budget still fails closed, because no analysis was queued",
+  );
   assert.doesNotMatch(
     codeqlHandoff,
     /actions\/checkout|codeql-action\/(?:init|analyze)|LOPU_AGENT_BACKEND|ANTHROPIC|OPENAI|\bsecrets\./u,
