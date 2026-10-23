@@ -61,6 +61,13 @@ export function deploymentArgs({ directory, target, branch, sha, teamSlug, runId
   return args;
 }
 
+export function publisherEnvironment({ teamId, projectId, token }, environment = process.env) {
+  // Vercel CLI rejects a lone VERCEL_PROJECT_ID even when project.json exists.
+  // Bind both identifiers to the independently authorized project, overriding
+  // any inherited CLI context before uploading the artifact.
+  return { ...environment, VERCEL_ORG_ID: teamId, VERCEL_PROJECT_ID: projectId, VERCEL_TOKEN: token };
+}
+
 async function context(branch, requested) {
   const [repository, ref, project] = await Promise.all([
     github(''), github(`/git/ref/heads/${encodeURIComponent(branch)}`),
@@ -151,7 +158,7 @@ async function publish() {
     const args = deploymentArgs({ ...plan, directory, teamSlug: required('VERCEL_TEAM_SLUG'), runId: required('GITHUB_RUN_ID'), repository: required('GITHUB_REPOSITORY') });
     let stdout;
     try {
-      ({ stdout } = await exec(required('VERCEL_CLI_PATH'), args, { env: { ...process.env, VERCEL_TOKEN: required('VERCEL_API_TOKEN') }, timeout: 15 * 60_000, maxBuffer: 4 * 1024 * 1024 }));
+      ({ stdout } = await exec(required('VERCEL_CLI_PATH'), args, { env: publisherEnvironment({ teamId: required('VERCEL_TEAM_ID'), projectId: plan.projectId, token: required('VERCEL_API_TOKEN') }), timeout: 15 * 60_000, maxBuffer: 4 * 1024 * 1024 }));
     } catch {
       // Reconcile an uncertain upload once; never silently retry a deployment.
       deployment = await existing(plan);

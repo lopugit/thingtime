@@ -203,6 +203,9 @@ pre-queued with no jobs, logs, or cancellable run graph.
 - Run `node --test .github/scripts/admin-model-order.test.mjs .github/scripts/lopu-credential-vault.test.mjs`.
 # Prebuilt-only deployments (2026-10-23)
 
+- The publisher must pass both `VERCEL_ORG_ID` and `VERCEL_PROJECT_ID` to the
+  pinned CLI, matching the authorized project even if inherited values differ.
+
 - Run `node --test .github/scripts/deploy-vercel-prebuilt.test.mjs`, the existing
   preview controller self-tests and `extract-vercel-prebuilt.py --self-test`.
 - Verify production/custom/preview routing, exact SHA and target receipts,

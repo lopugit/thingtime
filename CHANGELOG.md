@@ -17,6 +17,9 @@ every entry is attributed the same way the app changelog attributes them.
 
 ## 2026-10-23 — Build every Vercel deployment on GitHub Actions
 
+- Bind both required Vercel CLI project identifiers in the protected publisher;
+  a project.json link alone does not override a lone inherited project ID.
+
 - Add a protected prebuilt publisher for production, Preview and matching custom
   environments, with secret-free compilation on GitHub-hosted Ubuntu runners.
 - Preserve exact commit/target verification, environment runtime settings,
