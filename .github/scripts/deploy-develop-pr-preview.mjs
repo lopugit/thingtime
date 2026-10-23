@@ -1318,7 +1318,10 @@ const assertVercelConfiguration = async (config) => {
 	if (project?.id !== config.projectId || project?.name !== config.projectName) {
 		throw new Error('Vercel project identity did not match the configured exact project');
 	}
-	if (String(project.link?.repoId ?? '') !== String(config.gitRepoId)) {
+	// Prebuilt-only projects deliberately disconnect the native Git integration.
+	// An existing link must still match; project identity and team scope above
+	// remain mandatory when that optional source-build integration is absent.
+	if (project.link && String(project.link.repoId ?? '') !== String(config.gitRepoId)) {
 		throw new Error('Vercel project Git repository did not match the configured repository');
 	}
 

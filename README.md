@@ -574,3 +574,29 @@ Manual acceptance: verify a push and a scheduled non-comment run execute
 conflict detection, a repaired PR reports live mergeability, and its current-SHA
 preview is visible without expanding comments. A moving target must leave a
 requeue notice rather than overwrite it with a resolved claim.
+# Prebuilt-only Vercel deployments
+
+`.github/workflows/deploy-vercel-prebuilt.yml` builds product commits on
+standard GitHub-hosted Ubuntu runners and uploads only validated Build Output
+API artifacts. Its build job receives no deployment credentials. Prepare and
+publish use the main-only `vercel-prebuilt-control` environment, with secret
+`VERCEL_DEPLOY_TOKEN` and variables `VERCEL_PROJECT_ID`, `VERCEL_PROJECT_NAME`,
+`VERCEL_TEAM_ID`, `VERCEL_TEAM_SLUG`. Configure those for your own Vercel project
+when forking; never copy another account's values or credentials.
+
+The product default branch carries a thin push/manual/workflow-run listener.
+Current default-branch source maps to production, Vercel custom branch matchers
+select custom environments, and other product branches select Preview.
+Requested push runs of Web CI and Lopu CodeQL also wake the default-branch
+listener for older product branches. Same-SHA READY deployments skip rebuilds;
+stale events skip; production source must equal the current default branch.
+Existing PR-specific preview controllers remain GitHub-built and continue
+their private development-storage checks and exact-SHA alias management.
+
+Vercel's native Git integration and source deploy hooks are disconnected at
+cutover. An absent native Git link is valid; a present mismatched link still
+fails preview project validation. Vercel runtime configuration remains on its
+selected environment and in the vault. The publisher independently fetches
+immutable source configuration for region/Fluid/production-cron settings and
+never executes product source. See the product README and VERCEL_DEPLOYMENTS.md
+for deployment receipts and the manual entry point.

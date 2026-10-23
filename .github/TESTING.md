@@ -201,3 +201,14 @@ pre-queued with no jobs, logs, or cancellable run graph.
 - Test missing OpenAI credentials, invalid settings and incompatible capability
   manifests. No unconfigured model may run or credential value enter logs/commits.
 - Run `node --test .github/scripts/admin-model-order.test.mjs .github/scripts/lopu-credential-vault.test.mjs`.
+# Prebuilt-only deployments (2026-10-23)
+
+- Run `node --test .github/scripts/deploy-vercel-prebuilt.test.mjs`, the existing
+  preview controller self-tests and `extract-vercel-prebuilt.py --self-test`.
+- Verify production/custom/preview routing, exact SHA and target receipts,
+  fork/stale-source refusal, duplicate READY skip, GitHub-hosted build compute,
+  no build-job deployment secrets, safe extraction and `--prebuilt` uploads.
+- After cutover, inspect the actual project: no native Git link or deploy hooks,
+  source ignore/build guards enabled, and existing domains/runtime/crons intact.
+  Exercise manual Preview, Develop and Production and inspect their public
+  root/index/asset/API paths and relevant stable aliases.
