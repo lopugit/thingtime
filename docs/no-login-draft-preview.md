@@ -179,6 +179,48 @@ No existing account is used. This is separate from the anonymous workflow,
 which performs no writes at all.
 
 
+## Current isolated render and editable-browser evidence — 2026-10-23
+
+Fresh [canonical JSON, actual PNGs and usage examples](
+../artifacts/anonymous-local-first-2026-10-23/README.md) are retained in the
+repository, alongside verification hashes, invalid-render cases and normal
+private importer round-trip evidence. The stdio MCP server is actually called
+by an SDK client in an OS namespace without an account, backend or outbound
+route. This chat has no callable Thingtime MCP tool; the SDK test does not prove
+its native host connection or a deployed service.
+
+The final packaged snapshot is
+`15e93be01ba2478f19fbdd20201bb18d72ab6c87f794e5a7c4800854b4ab85a7`;
+the renderer hash is
+`a6571e789f9963a79bd8a04dec4c565e1d46a0ca881b5147d27db23a71e1b32a`.
+The complete real stdio acceptance passed in 41.14 seconds with no skips and
+unchanged deadlines: native JSON/PNG resources, repeat canonical export,
+concurrent busy refusal, malformed input, missing dependencies, remote assets,
+invalid crops, invisible text and overflow. The actual web editor, ordinary
+nested Builder editing through cold offline reload, and normal private importer
+also passed against that final package. The downloaded JSON hashes identically
+across MCP, web and importer:
+`a251642fe58ef5b1a2f32f8414591e02d6d52ebd2a50293f6b14c12464d4a06c`.
+The artifact README links exact logs and preserves earlier captures and setup
+failures separately. These local results do not establish current-head CI,
+deployed-preview acceptance or this chat's MCP artifact transport.
+
+The clean browser editor and ordinary nested Builder checks use the complete
+packaged app in a separate disposable Linux browser/backend namespace. See
+`remix/scripts/isolated-linux-browser.mjs` and its TESTING.md checklist. Both
+processes have denied direct IPv4, mapped/native IPv6, hostname and redirect
+egress. Required system libraries, source/dependency trees and an immutable
+app snapshot are explicitly mounted read-only; no host profile, repository
+configuration, dotenv file, Docker socket or inherited credential is available.
+Fresh synthetic accounts belong only to the disposable backend. This is not the
+installed macOS application or an assertion that the runtime has no mounts.
+
+An incomplete verification build omitted the independent renderer bundle and
+correctly failed the web-editor test. The canonical `build:client` already builds
+all four independent bundles. Runtime startup now also rejects HTML fallback
+responses for missing JavaScript before marking the app healthy. The setup
+failure and successful complete-build checks remain separate evidence.
+
 ## Packaged-server regression checkpoint — 2026-10-19
 
 The Node server now applies the same canonical sandbox and `no-store` headers

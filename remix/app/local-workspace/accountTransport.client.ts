@@ -78,7 +78,7 @@ export function accountThingTransport(scope: Extract<WorkspaceScope, { kind: 'ac
 	export(args: Record<string, unknown>, signal?: AbortSignal): Promise<any>;
 	fork(args: Record<string, unknown>, signal?: AbortSignal): Promise<any>;
 } {
-	const request = async (method: string, args: Record<string, unknown>, signal?: AbortSignal, endpoint: 'drafts' | 'things' | 'things/comment' | 'webpages/resolve' | 'things/export' | 'things/fork' | 'components/browse' | 'schemas/browse' | 'things/interactions' | 'attachments/uploads' | 'attachments/uploads/parts' | 'attachments/uploads/complete' | 'attachments/annotate' | 'attachments/uploads/abort' | 'attachments/delete' | 'attachments/content' | 'things/bulk' = 'things', binary?: { cacheKey: string; size: number }) => {
+	const request = async (method: string, args: Record<string, unknown>, signal?: AbortSignal, endpoint: 'drafts' | 'things' | 'things/comment' | 'webpages/resolve' | 'things/export' | 'things/fork' | 'components/browse' | 'schemas/browse' | 'things/interactions' | 'attachments/uploads' | 'attachments/uploads/parts' | 'attachments/uploads/complete' | 'attachments/annotate' | 'attachments/link' | 'attachments/uploads/abort' | 'attachments/delete' | 'attachments/content' | 'things/bulk' = 'things', binary?: { cacheKey: string; size: number }) => {
 		lease.assertCurrent();
 		const remoteLease = accountRemoteWorkspaceLease(scope); remoteLease.assertCurrent();
 		const retired = new AbortController();
@@ -87,7 +87,7 @@ export function accountThingTransport(scope: Extract<WorkspaceScope, { kind: 'ac
 		try {
 		if (window.location.origin !== scope.origin) throw new WorkspaceError('WORKSPACE_CHANGED', 'Account origin changed', 409);
 		if (scope.delegatedBy !== undefined) await requireThingtimeCapability('api.auth-characters', '1.0.0');
-		const endpointCapability = ({ 'drafts': ['api.drafts', '1.1.0'], 'things/comment': ['api.things-comment', '1.8.0'], 'attachments/content': ['api.attachment-content', '1.16.0'], 'attachments/delete': ['api.attachment-delete', '1.5.0'], 'attachments/uploads/abort': ['api.attachment-upload-abort', '1.2.0'], 'attachments/uploads': ['api.attachment-uploads', '1.5.0'], 'attachments/uploads/parts': ['api.attachment-upload-parts', '1.1.0'], 'attachments/uploads/complete': ['api.attachment-upload-complete', '1.4.0'], 'attachments/annotate': ['api.attachment-annotate', '1.2.0'], 'things/bulk': ['api.things-bulk', '1.6.0'] } as Record<string, string[]>)[endpoint];
+		const endpointCapability = ({ 'drafts': ['api.drafts', '1.1.0'], 'things/comment': ['api.things-comment', '1.8.0'], 'attachments/content': ['api.attachment-content', '1.16.0'], 'attachments/delete': ['api.attachment-delete', '1.5.0'], 'attachments/uploads/abort': ['api.attachment-upload-abort', '1.2.0'], 'attachments/uploads': ['api.attachment-uploads', '1.5.0'], 'attachments/uploads/parts': ['api.attachment-upload-parts', '1.1.0'], 'attachments/uploads/complete': ['api.attachment-upload-complete', '1.4.0'], 'attachments/annotate': ['api.attachment-annotate', '1.2.0'], 'attachments/link': ['api.attachment-link', '1.1.0'], 'things/bulk': ['api.things-bulk', '1.6.0'] } as Record<string, string[]>)[endpoint];
 		const capability = endpointCapability || (endpoint === 'things/interactions' ? ['api.things-interactions', '1.0.0'] : endpoint === 'components/browse' ? ['api.components-browse', '1.0.0'] : endpoint === 'schemas/browse' ? ['api.schemas-browse', '1.0.0'] : endpoint === 'things/fork' ? ['api.things-fork', '1.6.0'] : endpoint === 'things/export' ? ['api.things-export', '1.16.0'] : endpoint === 'things' ? ['api.things', '1.33.0'] : ['api.webpages-resolve', '1.3.0']);
 		await requireThingtimeCapability(capability[0], capability[1]);
 		if (endpoint === 'attachments/delete' && args.targetId !== undefined) await requireThingtimeCapability('api.attachment-delete', args.retainReceipt === true ? '1.7.0' : '1.6.0');
@@ -144,7 +144,8 @@ export function accountThingTransport(scope: Extract<WorkspaceScope, { kind: 'ac
 				if (!/^[a-f0-9]{64}:original$/.test(cacheKey) || !Number.isSafeInteger(size) || size < 1) throw new WorkspaceError('INVALID_FILE_BYTES', 'Invalid file descriptor.', 502);
 				return (await request('GET', { id, cache: 'retain-bytes', download: 1 }, signal, 'attachments/content', { cacheKey, size })).bytes;
 			},
-			remove: (input, signal) => request('POST', input, signal, 'attachments/delete'),
+			link: (input, signal) => request('POST', input, signal, 'attachments/link'),
+			remove: async (input, signal) => { const { linked, ...body } = input; if (linked) await requireThingtimeCapability('api.attachment-delete', '1.8.0'); return request('POST', body, signal, 'attachments/delete'); },
 			cancel: (requestId, signal) => request('POST', { requestId }, signal, 'attachments/uploads/abort'),
 			get: async (id, signal) => (await request('GET', { id }, signal)).thing,
 			annotate: (input, signal) => request('POST', input, signal, 'attachments/annotate'),

@@ -1,5 +1,5 @@
 import { decodeThingtime, stringifyThingtimeForStorage } from '../Providers/thingtimeSerialization';
-import { type WorkspaceDatabase, WorkspaceError, LEGACY_FILE_BUFFER_LIMITS, workspaceScopeKey, type WorkspaceScope, type WorkspaceLease } from './storage';
+import { type WorkspaceDatabase, WorkspaceError, workspaceScopeKey, type WorkspaceScope, type WorkspaceLease } from './storage';
 
 const COLLECTION = 'editor-tree', KEY = 'root', BYTES = 'editor-tree:root:v1';
 type Header = { version: 1; bytes: number; hash: string };
@@ -11,7 +11,7 @@ export const legacyEditorTreeKey = (scope: WorkspaceScope) => scope.kind === 'an
 
 export function decodeEditorTree(raw: unknown) {
  const serialized = typeof raw === 'string' ? raw : stringifyThingtimeForStorage(raw);
- if (typeof serialized !== 'string' || serialized.length > LEGACY_FILE_BUFFER_LIMITS.binaryBytes) throw new WorkspaceError('EDITOR_TREE_SIZE', 'The earlier editor tree is too large for device storage.', 413);
+ if (typeof serialized !== 'string') throw new WorkspaceError('INVALID_EDITOR_TREE', 'The saved editor tree could not be read. Its original copy has been kept.');
  const result = decodeThingtime(serialized);
  if (!result.value || typeof result.value !== 'object' || Array.isArray(result.value)) throw new WorkspaceError('INVALID_EDITOR_TREE', 'The saved editor tree could not be read. Its original copy has been kept.');
  return { value: result.value, serialized: stringifyThingtimeForStorage(result.value) };
@@ -19,7 +19,8 @@ export function decodeEditorTree(raw: unknown) {
 const digest = async (bytes: Uint8Array) => Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes as BufferSource)), byte => byte.toString(16).padStart(2, '0')).join('');
 
 /** The legacy native tree now shares the workspace transaction, quota and
- * identity boundary. Its canonical storage codec retains Dates and cycles.
+ * identity boundary, including actual browser capacity rather than an adapter
+ * size cap. Its canonical storage codec retains Dates and cycles.
  * This internal snapshot is never an account mutation or a public Thing. */
 export class LocalEditorTree implements ThingtimeStorage {
  readonly key: string;
@@ -33,7 +34,6 @@ export class LocalEditorTree implements ThingtimeStorage {
  private async prepare(serialized: string) {
   this.check();
   const decoded = decodeEditorTree(serialized), bytes = new TextEncoder().encode(decoded.serialized);
-  if (bytes.byteLength > LEGACY_FILE_BUFFER_LIMITS.binaryBytes) throw new WorkspaceError('EDITOR_TREE_SIZE', 'The editor tree exceeds the 16 MiB device limit. Export or reduce it before saving.', 413);
   const header: Header = { version: 1, bytes: bytes.byteLength, hash: await digest(bytes) };
   this.check(); return { bytes, header, serialized: decoded.serialized };
  }

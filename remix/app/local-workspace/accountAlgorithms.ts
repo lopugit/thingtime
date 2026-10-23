@@ -1,5 +1,7 @@
 import { AccountAlgorithmSelection, ACCOUNT_ALGORITHM_SELECTION, type AccountAlgorithmSelectionState } from './algorithmSelection';
 import { LocalAlgorithms } from './algorithms';
+import { recordAccountAlgorithmChange } from './accountTimeline';
+import type { LocalMutationCapture } from './timeline';
 import type { LocalThing } from './things';
 import { WorkspaceError, type WorkspaceDatabase, type WorkspaceScope, type WorkspaceLease, type WorkspaceTransaction } from './storage';
 import { accountSyncDeadline, type SyncState } from './accountSync';
@@ -116,7 +118,7 @@ export class AccountAlgorithmSync {
 			now,
 			uuid,
 			onActive: (tx, id) => this.selection.setIn(tx, id),
-			onWrite: (tx, row, previous) => this.mutated(tx, row, previous)
+			onWrite: (tx, row, previous, capture) => this.mutated(tx, row, previous, capture)
 		});
 	}
 	private tx<T>(mode: IDBTransactionMode, run: (tx: WorkspaceTransaction) => Promise<T>, signal?: AbortSignal) {
@@ -142,10 +144,11 @@ export class AccountAlgorithmSync {
 		const old = (await tx.get<Catalog>('settings', catalogKey)) ?? blankCatalog();
 		await tx.put('settings', catalogKey, { ...old, epoch: old.epoch + 1 });
 	}
-	private async mutated(tx: WorkspaceTransaction, row: LocalThing | null, previous: LocalThing | null) {
+	private async mutated(tx: WorkspaceTransaction, row: LocalThing | null, previous: LocalThing | null, capture?: LocalMutationCapture) {
 		const id = row?.id ?? previous!.id,
 			old = await tx.get<State>(collection, id);
 		if (previous && !old) return fail('Refresh this account algorithm before editing it.');
+		await recordAccountAlgorithmChange(tx, this.scope, previous, row, () => new Date(this.now()).toISOString(), this.uuid, capture);
 		if (!row && old?.baseVersion === null && !old.pending) {
 			await tx.delete(collection, id);
 			await this.bump(tx);
@@ -274,10 +277,12 @@ export class AccountAlgorithmSync {
 		});
 	}
 	async assertExportReadable(ids: Iterable<string>) {
-		return this.tx('readonly', async (tx) => {
-			for (const id of ids)
-				if (!(await this.viewIn(tx, id))) return fail('This algorithm is no longer available for export.', 'EXPORT_ACCESS_REFUSED');
-		});
+		return this.tx('readonly', tx => this.assertExportReadableIn(tx, ids));
+	}
+	async assertExportReadableIn(tx: WorkspaceTransaction, ids: Iterable<string>) {
+		this.lease.assertCurrent();
+		for (const id of ids)
+			if (!(await this.viewIn(tx, id))) return fail('This algorithm is no longer available for export.', 'EXPORT_ACCESS_REFUSED');
 	}
 	async list() {
 		return this.tx('readonly', async (tx) => {

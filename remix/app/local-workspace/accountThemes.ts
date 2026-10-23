@@ -1,3 +1,4 @@
+import type { LocalMutationCapture } from './timeline';
 import { validOptionalLibraryTitle } from '../utils/libraryTitle';
 import { recordAccountThemeChange } from './accountTimeline';
 import { AccountThemeSelection } from './themeSelection';
@@ -122,7 +123,7 @@ export class AccountThemeSync {
 			scope,
 			now,
 			uuid,
-			onWrite: (tx, row, previous, input) => this.mutated(tx, row, previous, input),
+			onWrite: (tx, row, previous, input, capture) => this.mutated(tx, row, previous, input, capture),
 			onActive: async (tx, id) => {
 				await this.selection.setIn(tx, id);
 				await this.bump(tx);
@@ -152,7 +153,7 @@ export class AccountThemeSync {
 		const catalog = (await tx.get<Catalog>('settings', catalogKey)) ?? blankCatalog();
 		await tx.put('settings', catalogKey, { ...catalog, epoch: catalog.epoch + 1 });
 	}
-	private async mutated(tx: WorkspaceTransaction, row: LocalThing | null, previous: LocalThing | null, input?: LocalThemeInput) {
+	private async mutated(tx: WorkspaceTransaction, row: LocalThing | null, previous: LocalThing | null, input?: LocalThemeInput, capture?: LocalMutationCapture) {
 		const id = row?.id ?? previous!.id,
 			old = await tx.get<State>(collection, id);
 		if (previous && !old) return fail('Refresh this account theme before editing it.');
@@ -161,7 +162,7 @@ export class AccountThemeSync {
 		if (input?.visibility !== undefined && !['private', 'public'].includes(String(input.visibility)))
 			return fail('Invalid theme visibility.', 'INVALID_THEME', 400);
 		const visibility = (input?.visibility as State['visibility']) ?? old?.visibility ?? 'private';
-		await recordAccountThemeChange(tx, this.scope, previous, row, { before: old?.visibility ?? 'private', after: visibility }, () => new Date(this.now()).toISOString(), this.uuid);
+		await recordAccountThemeChange(tx, this.scope, previous, row, { before: old?.visibility ?? 'private', after: visibility }, () => new Date(this.now()).toISOString(), this.uuid, capture);
 		if (!row && old?.baseVersion === null && !old.pending) {
 			await tx.delete(collection, id);
 			await this.bump(tx);
@@ -366,14 +367,15 @@ export class AccountThemeSync {
 		});
 	}
 	async assertExportReadable(ids: Iterable<string>) {
-		return this.tx('readonly', async (tx) => {
-			for (const id of ids) {
-				const state = await tx.get<State>(collection, id),
-					row = await tx.get<LocalThing>('things', id);
-				if (!state || state.deleted || !row || !isTransferTheme(row))
-					return fail('This theme is no longer available for export.', 'EXPORT_ACCESS_REFUSED');
-			}
-		});
+		return this.tx('readonly', tx => this.assertExportReadableIn(tx, ids));
+	}
+	async assertExportReadableIn(tx: WorkspaceTransaction, ids: Iterable<string>) {
+		this.lease.assertCurrent();
+		for (const id of ids) {
+			const state = await tx.get<State>(collection, id), row = await tx.get<LocalThing>('things', id);
+			if (!state || state.deleted || !row || !isTransferTheme(row))
+				return fail('This theme is no longer available for export.', 'EXPORT_ACCESS_REFUSED');
+		}
 	}
 	async beginRead() {
 		return this.tx('readwrite', async (tx) => {

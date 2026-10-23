@@ -78,6 +78,19 @@ snapshot references. Draft deletion releases only draft-bound files. Post saving
 has no draft-save prerequisite. `DraftPicker` labels device-only storage explicitly.
 Run `test:local-workspace` alongside the account suites above; the local composer
 manual checklist covers offline edit previews, template independence and reload.
+
+Post/comment URL selections now use the same scoped draft protocol. Metadata-only
+`LocalLinkedAttachment` rows have draft binding and expiry without a Blob/hash.
+Template/recovery copies assign independent local and account request IDs and
+remap snapshot references; working drafts donate links to posts without awaiting
+remote draft writes. Account drafts wait for canonical link receipts through the
+existing file journal. Known registered URL drafts refresh with exact owner and
+target checks, without fetching a byte descriptor; first-seen server-only links
+still require their complete online transfer adapter. `linkedDrafts.test.ts`,
+`accountLinkedAttachments.test.ts` and `linkedApi.test.ts` cover copies, retries,
+quota/identity/abort refusal and capability negotiation. Four native linked
+scenarios remain pending the final isolated package run; see the
+[focused evidence](../../artifacts/anonymous-local-first-2026-10-23/linked-media/README.md).
 Account draft permissions and upload admission are unchanged.
 
 

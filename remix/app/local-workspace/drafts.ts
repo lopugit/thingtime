@@ -3,18 +3,20 @@ import { draftConflict, validateDraftContent, validDraftId, type AccountDraft, t
 import { localPostProjection } from './posts';
 import { postDraftFromPost, remapPostDraftAttachments } from '../drafts/postDraft';
 import { toAttachmentPublicMetadata } from '../api/utils/attachments/attachmentCore';
-import { isLocalAttachment, localAttachmentExpired, LOCAL_ATTACHMENT_DRAFT_MS, reapLocalAttachmentDrafts, type LocalAttachment } from './attachments';
+import { isLocalAttachment, isLocalLinkedAttachment, isLocalMediaAttachment, localMediaExpired, localMediaInfo, LOCAL_ATTACHMENT_DRAFT_MS, reapLocalAttachmentDrafts, type LocalLinkedAttachment, type LocalMediaAttachment } from './attachments';
 import { LocalThings, type LocalThing } from './things';
 import { type WorkspaceDatabase, WorkspaceError, type WorkspaceLease, type WorkspaceScope, type WorkspaceTransaction } from './storage';
 
 export type StoredDraft = { draft: AccountDraft; writeId: string; deleted: boolean; source?: { kind: 'template' | 'draft' | 'post'; id: string } };
 export type LocalDraftHooks = {
  readFile?: (id: string) => ReturnType<LocalThings['readFileBlob']>;
+ readLinked?: (id: string) => Promise<LocalLinkedAttachment | null>;
  assertFileReadable?: (tx: WorkspaceTransaction, id: string) => Promise<void>;
- copiedFile?: (tx: WorkspaceTransaction, row: LocalAttachment) => Promise<void>;
+ copiedFile?: (tx: WorkspaceTransaction, row: LocalMediaAttachment) => Promise<void>;
  changed?: (tx: WorkspaceTransaction, row: StoredDraft, previous?: StoredDraft) => Promise<void>;
 };
-type PreparedFiles = Map<string, Awaited<ReturnType<LocalThings['readFileBlob']>>>;
+type PreparedFile = ({ kind: 'bytes' } & Awaited<ReturnType<LocalThings['readFileBlob']>>) | { kind: 'link'; row: LocalLinkedAttachment };
+type PreparedFiles = Map<string, PreparedFile>;
 const fail = (status: number, message: string): never => { throw new WorkspaceError('LOCAL_DRAFT_ERROR', message, status); };
 /** Canonical draft snapshots and revision/tombstone semantics. Metadata, media
  * binding, byte copies and quota accounting commit together in the scoped store. */
@@ -25,37 +27,54 @@ export class LocalDrafts {
   const files: PreparedFiles = new Map();
   const things = new LocalThings(this.db, this.scope, this.lease);
   for (const id of content.attachmentIds) {
-   try { files.set(id, await (this.hooks.readFile ? this.hooks.readFile(id) : things.readFileBlob(id))); }
+   try {
+    const linked = this.hooks.readLinked ? await this.hooks.readLinked(id) : await things.get(id);
+    if (linked && isLocalLinkedAttachment(linked) && !localMediaExpired(linked)) files.set(id, { kind: 'link', row: linked });
+    else files.set(id, { kind: 'bytes', ...await (this.hooks.readFile ? this.hooks.readFile(id) : things.readFileBlob(id)) });
+   }
    catch { this.lease.assertCurrent(); return fail(400, 'Draft attachment is not in this workspace or its bytes are unavailable'); }
   }
   return files;
  }
  private async file(tx: WorkspaceTransaction, id: string, prepared: PreparedFiles) {
-  const expected = prepared.get(id), row = await tx.get<LocalThing>('things', id), snapshot = await tx.getBinary(id);
+  const expected = prepared.get(id), row = await tx.get<LocalThing>('things', id);
   // The asynchronous checksum ran before the IDB transaction. Recheck exact
   // metadata and the storage revision in IDB; never await Blob I/O there.
-  if (!expected || !row || !isLocalAttachment(row) || localAttachmentExpired(row) || JSON.stringify(row) !== JSON.stringify(expected.row) || !sameBinary(snapshot, expected.snapshot)) return fail(409, 'Draft attachment changed. Retry with the current files.');
+  if (!expected || !row || !isLocalMediaAttachment(row) || localMediaExpired(row) || JSON.stringify(row) !== JSON.stringify(expected.row)) return fail(409, 'Draft attachment changed. Retry with the current files.');
   await this.hooks.assertFileReadable?.(tx, id);
-  return { row, snapshot: snapshot!, blob: binaryBlob(snapshot!.value) };
+  if (expected.kind === 'link' && isLocalLinkedAttachment(row)) return { kind: 'link' as const, row };
+  const snapshot = await tx.getBinary(id);
+  if (expected.kind !== 'bytes' || !isLocalAttachment(row) || !sameBinary(snapshot, expected.snapshot)) return fail(409, 'Draft attachment changed. Retry with the current files.');
+  return { kind: 'bytes' as const, row, snapshot: snapshot!, blob: binaryBlob(snapshot!.value) };
  }
  async releaseFiles(tx: WorkspaceTransaction, draftId: string, kept: string[]) {
-  for (const { value: row } of await tx.list<LocalThing>('things')) if (isLocalAttachment(row) && row.localAttachment.draftId === draftId && !kept.includes(row.id)) {
-   const next = { ...row, localAttachment: { ...row.localAttachment } };
-   delete next.localAttachment.draftId;
-   if (!row.targetId) next.localAttachment.expiresAt = new Date(Date.now() + LOCAL_ATTACHMENT_DRAFT_MS).toISOString();
+  for (const { value: row } of await tx.list<LocalThing>('things')) if (isLocalMediaAttachment(row) && localMediaInfo(row).draftId === draftId && !kept.includes(row.id)) {
+   const next = isLocalAttachment(row) ? { ...row, localAttachment: { ...row.localAttachment } } : { ...row, localLinkedAttachment: { ...row.localLinkedAttachment } };
+   const info = localMediaInfo(next);
+   delete info.draftId;
+   if (!row.targetId) info.expiresAt = new Date(Date.now() + LOCAL_ATTACHMENT_DRAFT_MS).toISOString();
    await tx.put('things', row.id, next);
   }
  }
  private async copy(tx: WorkspaceTransaction, source: DraftContent, prepared: PreparedFiles) {
   const mapping = new Map<string, string>(), files: PreparedFiles = new Map();
   for (const sourceId of source.attachmentIds) {
-   const { row, blob } = await this.file(tx, sourceId, prepared);
-   const id = `local-file-${this.uuid()}`, stamp = new Date().toISOString();
-   const copy: LocalAttachment = { id, thingtime: ['attachment'], crystal: { ...row.crystal }, createdAt: stamp, updatedAt: stamp, revision: 1,
-    localAttachment: { ...(this.scope.kind === 'account' ? { requestId: this.uuid() } : {}), purpose: source.surface === 'comment' ? 'comment' : 'post', sha256: row.localAttachment.sha256, order: mapping.size, expiresAt: new Date(Date.now() + LOCAL_ATTACHMENT_DRAFT_MS).toISOString() } };
-   await tx.put('things', id, copy); await tx.putBlob(id, blob);
-   await this.hooks.copiedFile?.(tx, copy);
-   mapping.set(sourceId, id); files.set(id, { row: copy, blob, snapshot: (await tx.getBinary(id))! });
+   const sourceFile = await this.file(tx, sourceId, prepared), row = sourceFile.row;
+   const id = `${sourceFile.kind === 'bytes' ? 'local-file' : 'local-link'}-${this.uuid()}`, stamp = new Date().toISOString();
+   const info = { ...(this.scope.kind === 'account' ? { requestId: this.uuid() } : {}), purpose: source.surface === 'comment' ? 'comment' as const : 'post' as const, order: mapping.size, expiresAt: new Date(Date.now() + LOCAL_ATTACHMENT_DRAFT_MS).toISOString() };
+   const common = { id, thingtime: ['attachment'], crystal: { ...row.crystal }, createdAt: stamp, updatedAt: stamp, revision: 1 };
+   if (sourceFile.kind === 'bytes') {
+    const copy = { ...common, localAttachment: { ...info, sha256: sourceFile.row.localAttachment.sha256 } };
+    await tx.put('things', id, copy); await tx.putBlob(id, sourceFile.blob);
+    await this.hooks.copiedFile?.(tx, copy);
+    files.set(id, { kind: 'bytes', row: copy, blob: sourceFile.blob, snapshot: (await tx.getBinary(id))! });
+   } else {
+    const copy = { ...common, localLinkedAttachment: info };
+    await tx.put('things', id, copy);
+    await this.hooks.copiedFile?.(tx, copy);
+    files.set(id, { kind: 'link', row: copy });
+   }
+   mapping.set(sourceId, id);
   }
   return { content: { ...source, attachmentIds: [...mapping.values()], snapshot: remapPostDraftAttachments(source.snapshot, mapping) }, files };
  }
@@ -70,9 +89,10 @@ export class LocalDrafts {
   for (const [order, id] of content.attachmentIds.entries()) {
    const { row } = await this.file(tx, id, prepared);
    const purpose = content.surface === 'comment' ? 'comment' : 'post';
-   if (row.targetId || row.localAttachment.purpose !== purpose || (row.localAttachment.draftId && row.localAttachment.draftId !== input.id)) return fail(409, 'Draft files belong to another Thing or draft. Create an independent copy.');
-   const next = { ...row, localAttachment: { ...row.localAttachment, draftId: input.id, order } };
-   delete next.localAttachment.expiresAt;
+   const info = localMediaInfo(row);
+   if (row.targetId || info.purpose !== purpose || (info.draftId && info.draftId !== input.id)) return fail(409, 'Draft files belong to another Thing or draft. Create an independent copy.');
+   const next = isLocalAttachment(row) ? { ...row, localAttachment: { ...row.localAttachment, draftId: input.id, order } } : { ...row, localLinkedAttachment: { ...row.localLinkedAttachment, draftId: input.id, order } };
+   delete localMediaInfo(next).expiresAt;
    await tx.put('things', id, next);
   }
   await this.releaseFiles(tx, input.id, content.attachmentIds);
@@ -92,7 +112,8 @@ export class LocalDrafts {
     const attachments = [];
     for (const id of row.draft.attachmentIds) {
      const file = await tx.get<LocalThing>('things', id);
-     if (!file || !isLocalAttachment(file) || file.localAttachment.draftId !== row.draft.id) return fail(409, 'Draft files are unavailable. Recover an independent copy before editing.');
+     if (!file || !isLocalMediaAttachment(file) || localMediaInfo(file).draftId !== row.draft.id) return fail(409, 'Draft files are unavailable. Recover an independent copy before editing.');
+     await this.hooks.assertFileReadable?.(tx, id);
      const metadata = toAttachmentPublicMetadata(file.id, file.crystal);
      if (!metadata) return fail(400, 'Invalid local attachment metadata');
      attachments.push(metadata);

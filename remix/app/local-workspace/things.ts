@@ -10,8 +10,8 @@ import { compositionAttachmentIds } from '../api/utils/actions/compositionMediaC
 import { rewriteTransferMedia } from '../api/utils/things/transferMediaCore';
 import { verifyTransferFiles, transferChecksum } from '../utils/thingTransfer/archive';
 import { isTransferRecording, recordingTransferFile } from '../utils/thingTransfer/recording';
-import { createLocalAttachment, isLocalAttachment, localAttachmentFileId, localAttachmentExpired, reapLocalAttachmentDrafts, LOCAL_ATTACHMENT_DRAFT_MS, type LocalAttachment } from './attachments';
-import { applyAttachmentAnnotationPatch, isStandaloneAttachmentPurpose, type AttachmentAnnotationPatch } from '../api/utils/attachments/attachmentCore';
+import { createLocalAttachment, createLocalLinkedAttachment, isLocalAttachment, isLocalLinkedAttachment, isLocalMediaAttachment, localMediaOrder, localMediaExpired, localAttachmentFileId, localAttachmentExpired, reapLocalAttachmentDrafts, LOCAL_ATTACHMENT_DRAFT_MS, type LocalAttachment, type LocalLinkedAttachment } from './attachments';
+import { applyAttachmentAnnotationPatch, canonicalLinkedAttachmentUrl, linkedMediaTypeForUrl, isStandaloneAttachmentPurpose, type AttachmentAnnotationPatch } from '../api/utils/attachments/attachmentCore';
 import { sanitizeTags } from '../schemas/thingTags';
 import { selectComponent } from '../api/utils/webpages/componentResolutionCore';
 import { isProtectedThingtime, sanitizeExtended, validateThingtimeCrystal } from '../schemas/registry';
@@ -27,7 +27,7 @@ import { normalizeSavedTheme } from '../theme/savedTheme';
 import { type WorkspaceDatabase, WorkspaceError, type WorkspaceLease, type WorkspaceScope, type WorkspaceTransaction } from './storage';
 
 export type LocalThing = TransferThing & { createdAt: string; updatedAt: string; revision: number; localSubmission?: string };
-export type LocalFileMutation = (tx: WorkspaceTransaction, row: LocalAttachment, previous?: LocalAttachment) => Promise<void>;
+export type LocalFileMutation = (tx: WorkspaceTransaction, row: LocalAttachment | LocalLinkedAttachment, previous?: LocalAttachment | LocalLinkedAttachment) => Promise<void>;
 export type LocalThingRecovery = (tx: WorkspaceTransaction, id: string) => Promise<Pick<LocalThing, 'revision' | 'updatedAt' | 'createdAt'> | undefined>;
 export type LocalThingMutation = (tx: WorkspaceTransaction, row: LocalThing, previous: LocalThing | null, input: ThingWrite) => Promise<void>;
 export type ThingWrite = {
@@ -43,7 +43,7 @@ export const localThingProjection = (thing: LocalThing, ownerId: string) => ({
 		!thing.targetId && !thing.localAttachment.draftId && !thing.localAttachment.expiresAt
 });
 const isLocalActivity = (row: Pick<LocalThing, 'thingtime'>) => isLocalInteraction(row) || row.thingtime.includes('action-run');
-export const isLocalLibraryThing = (row: LocalThing, target?: string) => !isLocalActivity(row) && (!isLocalAttachment(row) || ((!row.targetId && !row.localAttachment.draftId && !row.localAttachment.expiresAt) || (!!target && row.targetId === target)));
+export const isLocalLibraryThing = (row: LocalThing, target?: string) => !isLocalActivity(row) && (isLocalLinkedAttachment(row) ? !!target && row.targetId === target : !isLocalAttachment(row) || ((!row.targetId && !row.localAttachment.draftId && !row.localAttachment.expiresAt) || (!!target && row.targetId === target)));
 const fail = (code: string, message: string, status = 400): never => { throw new WorkspaceError(code, message, status); };
 const content = (thing: TransferThing): TransferThing => ({
 	id: thing.id, thingtime: thing.thingtime, crystal: isLocalAttachment(thing as LocalThing) ? { recordingFileId: localAttachmentFileId(thing.id), ...((thing as LocalAttachment).localAttachment.purpose === 'file' ? { filePurpose: 'file' } : {}) } : isTransferAlgorithm(thing) ? snapshotTransferValue(algorithmTransferContent(thing.crystal)) as TransferThing['crystal'] : thing.crystal,
@@ -75,7 +75,8 @@ export class LocalThings {
 		private onFileWrite?: LocalFileMutation, private acceptsExternalTarget?: (tx: WorkspaceTransaction, id: string) => Promise<boolean>,
 		private captureAccountChanges?: ThingTransactionCapture, private onRecover?: LocalThingRecovery,
 		private themeMutations?: { import(tx: WorkspaceTransaction, row: LocalThing): Promise<void>; move(tx: WorkspaceTransaction, row: LocalThing, previous: LocalThing): Promise<void>; rename(tx: WorkspaceTransaction, row: LocalThing, previous: LocalThing): Promise<void> },
-		private algorithmMutations?: { import(tx: WorkspaceTransaction, row: LocalThing): Promise<void>; move(tx: WorkspaceTransaction, row: LocalThing, previous: LocalThing): Promise<void>; rename(tx: WorkspaceTransaction, row: LocalThing, previous: LocalThing): Promise<void> }) {}
+		private algorithmMutations?: { import(tx: WorkspaceTransaction, row: LocalThing): Promise<void>; move(tx: WorkspaceTransaction, row: LocalThing, previous: LocalThing): Promise<void>; rename(tx: WorkspaceTransaction, row: LocalThing, previous: LocalThing): Promise<void> },
+		private removeBoundLink?: (tx: WorkspaceTransaction, id: string, targetId: string) => Promise<void>) {}
 	private transaction<T>(mode: IDBTransactionMode, run: (tx: WorkspaceTransaction) => Promise<T>, captures?: Map<string, LocalMutationCapture>, signal?: AbortSignal) {
 		const lease: WorkspaceLease = signal ? { assertCurrent: () => { this.lease.assertCurrent(); signal.throwIfAborted(); }, onInvalidate: cb => { const off = this.lease.onInvalidate(cb); signal.addEventListener('abort', cb, { once: true }); return () => { off(); signal.removeEventListener('abort', cb); }; } } : this.lease;
 		return this.db.transaction(this.scope, mode, lease, async tx => {
@@ -150,15 +151,21 @@ export class LocalThings {
 		const id = update ? input.id! : this.scope.kind === 'account' ? requestId : requestId.startsWith('local-') ? requestId : `local-post-${requestId}`;
 		const previous = update ? await this.get(id) : undefined;
 		if (previous && !previous.thingtime.includes('post')) fail('INVALID_THING', 'Select a local post');
-		const currentFiles = update ? (await this.snapshot()).filter(row => isLocalAttachment(row) && row.targetId === id).sort((a, b) => (a as LocalAttachment).localAttachment.order - (b as LocalAttachment).localAttachment.order) : [];
+		const currentFiles = update ? (await this.snapshot()).filter(isLocalMediaAttachment).filter(row => row.targetId === id).sort((a, b) => localMediaOrder(a) - localMediaOrder(b)) : [];
 		const ids = input.attachmentIds === undefined ? currentFiles.map(row => row.id) : input.attachmentIds;
 		const kinds = previous?.thingtime || input.thingtime;
 		const purpose = Array.isArray(kinds) && kinds.includes('comment') ? 'comment' : 'post';
 		if (!Array.isArray(ids) || ids.length > attachmentCountLimit(purpose) || ids.some(id => typeof id !== 'string') || new Set(ids).size !== ids.length) fail('INVALID_ATTACHMENT', 'Invalid local attachment selection');
 		const files = new Map<string, Awaited<ReturnType<LocalThings['readFileBlob']>>>();
-		for (const fileId of ids as string[]) files.set(fileId, await this.readFileBlob(fileId));
+		const linked = new Map<string, LocalLinkedAttachment>();
+		for (const fileId of ids as string[]) {
+			const row = await this.get(fileId);
+			if (isLocalLinkedAttachment(row) && (this.scope.kind === 'anonymous' || this.onFileWrite)) linked.set(fileId, row);
+			else files.set(fileId, await this.readFileBlob(fileId));
+		}
 		const crystal = previous ? input.replaceCrystal ? input.crystal : { ...previous.crystal, ...input.crystal as object } : input.crystal;
-		const checked = validated({ ...previous, ...input, thingtime: previous?.thingtime || input.thingtime, crystal }, { hasAny: files.size > 0, hasVisual: [...files.values()].some(({ row }) => ['image', 'video'].includes(String(row.crystal.mediaKind))) });
+		const media = [...[...files.values()].map(file => file.row), ...linked.values()];
+		const checked = validated({ ...previous, ...input, thingtime: previous?.thingtime || input.thingtime, crystal }, { hasAny: media.length > 0, hasVisual: media.some(row => ['image', 'video'].includes(String(row.crystal.mediaKind))) });
 		if (!checked.thingtime.includes('post') || checked.thingtime.some(kind => !['post', 'comment'].includes(kind))) fail('INVALID_THING', 'Select a local post or comment');
 		if (this.scope.kind === 'anonymous' && (checked.crystal.subspaceId || checked.crystal.flairId)) fail('REMOTE_ACCOUNT_REQUIRED', 'Posting into a subspace requires a signed-in account');
 		const fingerprint = await transferChecksum(new TextEncoder().encode(JSON.stringify({ checked, ids, targetId: input.targetId || null })));
@@ -178,6 +185,20 @@ export class LocalThings {
 			}
 			await this.placement(tx, row);
 			for (const [order, fileId] of (ids as string[]).entries()) {
+				const expectedLink = linked.get(fileId);
+				if (expectedLink) {
+					const current = await tx.get<LocalThing>('things', fileId);
+					if (!current || !isLocalLinkedAttachment(current) || JSON.stringify(current) !== JSON.stringify(expectedLink)) fail('WRITE_CONFLICT', 'Linked media changed; retry with the current selection', 409);
+					if (localMediaExpired(expectedLink) || expectedLink.localLinkedAttachment.purpose !== purpose || (expectedLink.targetId && expectedLink.targetId !== id)) fail('INVALID_ATTACHMENT', 'Linked media belongs to another Thing or has expired');
+					if (expectedLink.localLinkedAttachment.draftId) {
+						const draft = await tx.get<StoredDraft>('drafts', expectedLink.localLinkedAttachment.draftId);
+						if (!draft || draft.deleted || draft.draft.mode !== 'draft') fail('INVALID_ATTACHMENT', 'Only active working drafts can donate linked media');
+					}
+					const next = { ...expectedLink, targetId: id, localLinkedAttachment: { ...expectedLink.localLinkedAttachment, order } };
+					delete next.localLinkedAttachment.draftId; delete next.localLinkedAttachment.expiresAt;
+					await tx.put('things', fileId, next);
+					continue;
+				}
 				const expected = files.get(fileId)!, file = await tx.get<LocalThing>('things', fileId), bytes = await tx.getBinary(fileId);
 				if (!file || !isLocalAttachment(file) || JSON.stringify(file) !== JSON.stringify(expected.row) || !sameBinary(bytes, expected.snapshot)) fail('WRITE_CONFLICT', 'Post files changed; retry with the current selection', 409);
 				const attachment = file as LocalAttachment;
@@ -190,7 +211,14 @@ export class LocalThings {
 				delete next.localAttachment.draftId; delete next.localAttachment.expiresAt;
 				await tx.put('things', fileId, next);
 			}
-			for (const file of currentFiles as LocalAttachment[]) if (!(ids as string[]).includes(file.id)) {
+			for (const file of currentFiles) if (!(ids as string[]).includes(file.id)) {
+				if (isLocalLinkedAttachment(file)) {
+					if (this.scope.kind === 'account') {
+						if (!this.removeBoundLink) fail('LOCAL_OPERATION_UNAVAILABLE', 'Linked media needs its dedicated removal adapter');
+						await this.removeBoundLink!(tx, file.id, id);
+					} else await tx.delete('things', file.id);
+					continue;
+				}
 				const latest = await tx.get<LocalAttachment>('things', file.id);
 				if (latest?.targetId !== id) continue;
 				delete latest.targetId; latest.localAttachment.expiresAt = new Date(Date.parse(this.now()) + LOCAL_ATTACHMENT_DRAFT_MS).toISOString();
@@ -198,6 +226,28 @@ export class LocalThings {
 			}
 			await tx.put('things', id, row); await this.onWrite?.(tx, row, previous || null, input); return row;
 		});
+	}
+	async saveLinkedFile(input: { requestId: string; url: string; purpose?: 'post' | 'comment'; mediaKind?: 'image' | 'video' | 'audio' | 'file' }, signal?: AbortSignal) {
+		this.lease.assertCurrent(); signal?.throwIfAborted();
+		if (this.scope.kind !== 'anonymous' && !this.onFileWrite) fail('LOCAL_OPERATION_UNAVAILABLE', 'Account links require their dedicated sync adapter');
+		if (Object.keys(input).some(key => !['requestId','url','purpose','mediaKind'].includes(key)) || !/^[a-zA-Z0-9-]{16,80}$/.test(input.requestId)) fail('INVALID_REQUEST', 'A stable linked media request ID is required');
+		const purpose = input.purpose ?? 'post', url = canonicalLinkedAttachmentUrl(input.url);
+		if (!url || !['post','comment'].includes(purpose)) fail('INVALID_ATTACHMENT', 'Use a valid post or comment media URL');
+		const id = `local-link-${input.requestId}`, stamp = this.now();
+		const row = createLocalLinkedAttachment(id, {id, targetId:id, url: url!, mediaKind:input.mediaKind ?? linkedMediaTypeForUrl(url!).mediaKind}, stamp, purpose, 0, id);
+		delete row.targetId;
+		row.localLinkedAttachment.requestId = input.requestId;
+		row.localLinkedAttachment.expiresAt = new Date(Date.parse(stamp) + LOCAL_ATTACHMENT_DRAFT_MS).toISOString();
+		return this.transaction('readwrite', async tx => {
+			const previous = await tx.get<LocalThing>('things', id);
+			if (previous) {
+				if (!isLocalLinkedAttachment(previous) || previous.localLinkedAttachment.requestId !== input.requestId || previous.localLinkedAttachment.purpose !== purpose || previous.crystal.url !== row.crystal.url || previous.crystal.mediaKind !== row.crystal.mediaKind) fail('WRITE_CONFLICT', 'This link request was already used for different content', 409);
+				if (localMediaExpired(previous as LocalLinkedAttachment, Date.parse(stamp))) fail('LINK_EXPIRED', 'This link selection expired. Add it again with a new request.', 410);
+				return previous as LocalLinkedAttachment;
+			}
+			await reapLocalAttachmentDrafts(tx, Date.parse(stamp));
+			await tx.put('things', id, row); await this.onFileWrite?.(tx, row); return row;
+		}, undefined, signal);
 	}
 	async saveFile(input: { requestId: string; name: string; contentType: string; bytes: Uint8Array | Blob; folderId?: string | null; purpose?: 'file' | 'recording' | 'post' | 'comment' }, signal?: AbortSignal) {
 		this.lease.assertCurrent(); signal?.throwIfAborted();
@@ -280,10 +330,10 @@ export class LocalThings {
 		if (patch.title === undefined && patch.description === undefined && patch.filenamePreview === undefined) fail('INVALID_ATTACHMENT', 'Provide a filename preview, title or description to update');
 		return this.transaction('readwrite', async tx => {
 			const previous = await tx.get<LocalThing>('things', input.id);
-			if (!previous || !isLocalAttachment(previous) || localAttachmentExpired(previous, Date.parse(this.now()))) return fail('MISSING_LOCAL_FILE', 'File is not stored in this workspace', 404);
+			if (!previous || !isLocalMediaAttachment(previous) || localMediaExpired(previous, Date.parse(this.now()))) return fail('MISSING_LOCAL_FILE', 'File is not stored in this workspace', 404);
 			const annotated = applyAttachmentAnnotationPatch(previous.crystal, patch);
 			if (annotated.ok === false) return fail('INVALID_ATTACHMENT', annotated.error);
-			const row: LocalAttachment = { ...previous, crystal: { ...annotated.crystal },
+			const row = { ...previous, crystal: { ...annotated.crystal },
 				updatedAt: new Date(Math.max(Date.parse(this.now()), Date.parse(previous.updatedAt) + 1)).toISOString(), revision: previous.revision + 1 };
 			await tx.put('things', row.id, row); await this.onFileWrite?.(tx, row, previous); return row;
 		});
@@ -368,7 +418,7 @@ export class LocalThings {
 	}
 	async remove(ids: string[], recursive = false) {
 		if (Array.isArray(ids) && ids.includes(LOCAL_TIMELINE_FOLDER)) fail('MANAGED_KIND', 'Timeline is managed by History.');
-		if (!Array.isArray(ids) || !ids.length || ids.length > 200) fail('INVALID_IDS', 'Choose between 1 and 200 Things');
+		if (!Array.isArray(ids) || !ids.length) fail('INVALID_IDS', 'Choose Things from this workspace');
 		return this.transaction('readwrite', async tx => {
 			const all = await tx.list<LocalThing>('things'); const selected = new Set(ids);
 			for (const id of selected) {
@@ -380,7 +430,7 @@ export class LocalThings {
 			while (changed) {
 				changed = false;
 				for (const { value: row } of all) if (!selected.has(row.id) && ((recursive && row.folderId && selected.has(row.folderId)) || (row.targetId && selected.has(row.targetId)))) {
-					if (!recursive && !((isLocalAttachment(row) || isLocalActivity(row) || row.thingtime.includes('comment')) && row.targetId && selected.has(row.targetId))) fail('HAS_CHILDREN', 'This Thing has children. Choose recursive deletion to remove them.');
+					if (!recursive && !((isLocalMediaAttachment(row) || isLocalActivity(row) || row.thingtime.includes('comment')) && row.targetId && selected.has(row.targetId))) fail('HAS_CHILDREN', 'This Thing has children. Choose recursive deletion to remove them.');
 					selected.add(row.id); changed = true;
 				}
 			}
@@ -405,7 +455,7 @@ export class LocalThings {
 	}
 	async move(ids: string[], folderId: string | null) {
 		if (Array.isArray(ids) && ids.includes(LOCAL_TIMELINE_FOLDER)) fail('MANAGED_KIND', 'Timeline is managed by History.');
-		if (!Array.isArray(ids) || !ids.length || ids.length > 200 || new Set(ids).size !== ids.length) fail('INVALID_IDS', 'Choose between 1 and 200 distinct Things');
+		if (!Array.isArray(ids) || !ids.length || new Set(ids).size !== ids.length) fail('INVALID_IDS', 'Choose distinct Things from this workspace');
 		return this.transaction('readwrite', async tx => {
 			const rows: LocalThing[] = [];
 			for (const id of ids) {
@@ -434,11 +484,11 @@ export class LocalThings {
 		return exportLocalThingSnapshot(await this.snapshot(), this.builtins, ids, this.lease,
 			async id => (await this.readFileBlob(id, options.signal)).blob, options);
 	}
-	async import(input: unknown, folderId?: string | null, fileBytes = new Map<string, Uint8Array | Blob>(), signal?: AbortSignal) {
+	async import(input: unknown, folderId?: string | null, fileBytes = new Map<string, Uint8Array | Blob>(), signal?: AbortSignal, beforeCommit?: (tx: WorkspaceTransaction) => Promise<void>) {
 		this.lease.assertCurrent(); signal?.throwIfAborted();
 		const manifest = parseTransfer(serializeTransfer(validateTransfer(input)));
 		orderTransferImports(manifest);
-		if (manifest.links?.length) fail('ATTACHMENT_IMPORT_REQUIRED', 'Linked galleries require the workspace linked-attachment adapter');
+		if (manifest.links?.length && this.scope.kind !== 'anonymous' && !this.onFileWrite) fail('ATTACHMENT_IMPORT_REQUIRED', 'Account linked galleries require their dedicated synchronization adapter');
 		if (manifest.files.length && this.scope.kind !== 'anonymous' && !this.onFileWrite) fail('LOCAL_OPERATION_UNAVAILABLE', 'Account files require their dedicated sync adapter');
 		// Snapshot caller-owned bytes before asynchronous hashing or persistence.
 		if (!(fileBytes instanceof Map) || fileBytes.size !== manifest.files.length) fail('INVALID_LOCAL_FILE', 'The transfer has missing or unexpected file bytes');
@@ -455,22 +505,27 @@ export class LocalThings {
 		const map = new Map(manifest.things.map(row => [row.id, this.scope.kind === 'anonymous' ? `local-${this.uuid()}` : this.uuid()]));
 		const accountSuffix = this.scope.kind === 'account' ? this.uuid().slice(0, 8) : null;
 		const fileMap = new Map(manifest.files.map(file => [file.id, `${this.scope.kind === 'account' ? 'local-file' : 'local'}-${this.uuid()}`]));
+		for (const link of manifest.links || []) fileMap.set(link.id, `local-link-${this.uuid()}`);
 		for (const recording of recordings) { const id = fileMap.get(String(recording.crystal.recordingFileId))!; map.set(recording.id, id); fileMap.set(recording.id, id); }
 		const crystals = rewriteTransferMedia(manifest.things, fileMap);
 		const stamp = this.now();
 		const importedAlgorithms = manifest.things.filter(isTransferAlgorithm);
 		if (importedAlgorithms.length && this.scope.kind !== 'anonymous' && !this.algorithmMutations) fail('LOCAL_OPERATION_UNAVAILABLE', 'Account algorithms require their dedicated sync adapter');
-		for (const algorithm of importedAlgorithms) { validateTransferAlgorithm(algorithm); if (manifest.files.some(file => file.targetId === algorithm.id) || manifest.things.some(row => row.targetId === algorithm.id || row.folderId === algorithm.id)) fail('INVALID_ALGORITHM', 'Algorithm transfers cannot contain child Things'); }
+		for (const algorithm of importedAlgorithms) { validateTransferAlgorithm(algorithm); if ([...manifest.files, ...(manifest.links || [])].some(file => file.targetId === algorithm.id) || manifest.things.some(row => row.targetId === algorithm.id || row.folderId === algorithm.id)) fail('INVALID_ALGORITHM', 'Algorithm transfers cannot contain child Things'); }
 		const importedThemes = manifest.things.filter(isTransferTheme);
 		if (importedThemes.length && this.scope.kind !== 'anonymous' && !this.themeMutations) fail('LOCAL_OPERATION_UNAVAILABLE', 'Account themes require their dedicated sync adapter');
 		for (const theme of importedThemes) {
 			validateTransferTheme(theme);
-			if (manifest.files.some(file => file.targetId === theme.id) || manifest.things.some(row => row.targetId === theme.id || row.folderId === theme.id)) fail('INVALID_THEME', 'Theme transfers cannot contain child Things');
+			if ([...manifest.files, ...(manifest.links || [])].some(file => file.targetId === theme.id) || manifest.things.some(row => row.targetId === theme.id || row.folderId === theme.id)) fail('INVALID_THEME', 'Theme transfers cannot contain child Things');
 		}
 		const standaloneTargets = new Set(recordings.map(row => row.id));
-		const attachmentRows = manifest.files.flatMap((file, order) => standaloneTargets.has(file.targetId) ? [] : [
+		if ((manifest.links || []).some(link => standaloneTargets.has(link.targetId))) fail('INVALID_ATTACHMENT', 'A stored file cannot contain a linked gallery');
+		if ((manifest.links || []).some(link => !manifest.things.some(row => row.id === link.targetId && row.thingtime.includes('post') && row.thingtime.every(kind => ['post', 'comment'].includes(kind))))) fail('INVALID_ATTACHMENT', 'Linked galleries require a post or comment target');
+		const attachmentRows: (LocalAttachment | LocalLinkedAttachment)[] = manifest.files.flatMap((file, order) => standaloneTargets.has(file.targetId) ? [] : [
 			createLocalAttachment(fileMap.get(file.id)!, file, stamp, manifest.things.find(row => row.id === file.targetId)?.thingtime.includes('comment') ? 'comment' : 'post', manifest.attachmentOrder?.indexOf(file.id) ?? order, { targetId: map.get(file.targetId)! })
 		]);
+		for (const link of manifest.links || []) attachmentRows.push(createLocalLinkedAttachment(fileMap.get(link.id)!, link, stamp,
+			manifest.things.find(row => row.id === link.targetId)?.thingtime.includes('comment') ? 'comment' : 'post', manifest.attachmentOrder!.indexOf(link.id), map.get(link.targetId)!));
 		const importedContent = (original: TransferThing) => {
 			if (isTransferRecording(original)) { const file = recordingTransferFile(original, manifest); return createLocalAttachment(map.get(original.id)!, file, stamp, original.crystal.filePurpose === 'file' ? 'file' : 'recording', 0); }
 			if (isTransferAlgorithm(original)) return { thingtime: ['feed-algorithm'], crystal: snapshotTransferValue(algorithmTransferContent(original.crystal)) as TransferThing['crystal'] };
@@ -500,6 +555,9 @@ export class LocalThings {
 		signal?.throwIfAborted();
 		await this.transaction('readwrite', async tx => {
 			signal?.throwIfAborted();
+			// Trusted copy adapters recheck their source in this same transaction,
+			// after asynchronous hashing and before any content/byte/queue writes.
+			await beforeCommit?.(tx);
 			// All IDs exist before relationship checks, including forward refs.
 			for (const row of rows) await tx.put('things', row.id, row);
 			for (const row of rows) {
@@ -508,8 +566,9 @@ export class LocalThings {
 					row.localAttachment.requestId = row.id.slice('local-file-'.length);
 					row.localAttachment.initialFolderId = row.folderId || null;
 				}
+				if (isLocalLinkedAttachment(row) && this.scope.kind === 'account') row.localLinkedAttachment.requestId = row.id.slice('local-link-'.length);
 				await tx.put('things', row.id, row);
-				if (isLocalAttachment(row)) await this.onFileWrite?.(tx, row);
+				if (isLocalMediaAttachment(row)) await this.onFileWrite?.(tx, row);
 				else if (isTransferTheme(row) && this.scope.kind === 'account') await this.themeMutations!.import(tx, row);
 				else if (isTransferAlgorithm(row) && this.scope.kind === 'account') await this.algorithmMutations!.import(tx, row);
 				else await this.onWrite?.(tx, row, null, row);
@@ -533,7 +592,9 @@ export async function exportLocalThingSnapshot<T extends TransferBinary = Uint8A
 	if (saved.some(row => ids.includes(row.id) && isLocalActivity(row))) fail('MANAGED_KIND', 'Export the content Thing; local interaction and run state is not portable account authority');
 	const attachments = saved.filter(isLocalAttachment);
 	const mediaCopies = new Map(attachments.map(row => [row.id, localAttachmentFileId(row.id)]));
-	const docs = new Map([...builtins.map(doc => [doc.id, content(doc)] as const), ...saved.filter(row => !isLocalActivity(row)).map(value => [value.id, content(value)] as const)]);
+	const links = saved.filter(isLocalLinkedAttachment);
+	if (ids.some(id => links.some(link => link.id === id))) fail('LINK_EXPORT_REQUIRED', 'Export the containing Thing to include its linked gallery');
+	const docs = new Map([...builtins.map(doc => [doc.id, content(doc)] as const), ...saved.filter(row => !isLocalActivity(row) && !isLocalLinkedAttachment(row)).map(value => [value.id, content(value)] as const)]);
 	const timestamps = new Map(saved.map(row => [row.id, row.updatedAt]));
 	const builtinIds = new Set(builtins.map(row => row.id));
 	const componentCandidates = [...docs.values()].filter(row => row.thingtime.includes('component') && (!aliasIds || aliasIds.has(row.id)))
@@ -560,6 +621,7 @@ export async function exportLocalThingSnapshot<T extends TransferBinary = Uint8A
 			for (const id of compositionAttachmentIds(doc.thingtime, doc.crystal, { component: ref => resolve('component', ref)?.crystal })) ids.add(id);
 			for (const id of ids) {
 				lease.assertCurrent(); options.signal?.throwIfAborted();
+				if (links.some(row => row.id === id)) continue;
 				const row = attachments.find(row => row.id === id);
 				if (!row) fail('MISSING_LOCAL_FILE', `File ${id} is not stored in this workspace`, 404);
 				const data = await readBytes(id);
@@ -578,6 +640,17 @@ export async function exportLocalThingSnapshot<T extends TransferBinary = Uint8A
 		if (file) file.targetId = row.id;
 	}
 	const includedCopies = new Map([...mediaCopies].filter(([, fileId]) => bundle.files.has(fileId)));
+	const linkTargets = new Map(links.filter(row => row.targetId && included.has(row.targetId)).map(row => [row.id, row.targetId!]));
+	for (const doc of bundle.manifest.things) for (const id of compositionAttachmentIds(doc.thingtime, doc.crystal, { component: ref => resolve('component', ref)?.crystal }))
+		if (options.includeLinks !== false && links.some(row => row.id === id) && !linkTargets.has(id)) fail('MISSING_LINK_TARGET', 'Include the owning post when exporting its linked media');
+	const selectedLinks = options.includeLinks === false ? [] : links.filter(row => linkTargets.has(row.id));
+	if (selectedLinks.length) {
+		bundle.manifest.links = selectedLinks.map(row => ({ id: row.id, targetId: linkTargets.get(row.id)!, url: String(row.crystal.url),
+			mediaKind: row.crystal.mediaKind as 'image' | 'video' | 'audio' | 'file', ...transferAnnotations(row.crystal as any) }));
+		const orders = new Map([...attachments.map(row => [localAttachmentFileId(row.id), localMediaOrder(row)] as const), ...selectedLinks.map(row => [row.id, localMediaOrder(row)] as const)]);
+		bundle.manifest.attachmentOrder = [...bundle.manifest.files, ...bundle.manifest.links].map(row => row.id)
+			.sort((a, b) => (orders.get(a) ?? 0) - (orders.get(b) ?? 0) || a.localeCompare(b));
+	}
 	const crystals = rewriteTransferMedia(bundle.manifest.things, includedCopies);
 	for (const row of bundle.manifest.things) row.crystal = crystals.get(row.id)!;
 	serializeTransfer(bundle.manifest);

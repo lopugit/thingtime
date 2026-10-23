@@ -4,6 +4,8 @@ import test from 'node:test';
 import { IDBFactory, IDBKeyRange } from 'fake-indexeddb';
 import { WorkspaceDatabase } from './storage';
 import { AccountPostCache, accountPostProjection, accountPostAudienceContext, overlayAccountPost } from './accountPosts';
+import { AccountThingSync } from './accountSync';
+import { localPostProjection } from './posts';
 import { thingAudienceDisplay } from '../components/Sharing/audienceCore';
 const scope = { kind: 'account' as const, origin: 'https://example.test', ownerId: 'viewer', dataPlane: 'home' },
 	lease = { assertCurrent() {}, onInvalidate: () => () => {} };
@@ -183,5 +185,54 @@ test('canonical comment-only projections retain their exact kind and target with
   assert.equal((await cache.get('comment') as any).targetId,'data-parent');
   await cache.forget('data-parent',20); assert.equal(await cache.get('comment'),null);
   await cache.remember([{...comment,id:'late'}],19); assert.equal(await cache.get('late'),null);
+ } finally { await db.close(); }
+});
+
+test('late feed refusals fence captured roots and nested reads while preserving pending authored work', async () => {
+ const db = new WorkspaceDatabase(new IDBFactory(), undefined, undefined, IDBKeyRange), cache = new AccountPostCache(db, scope, lease);
+ const sync = new AccountThingSync(db, scope, lease);
+ try {
+  await cache.remember([post('target'), { ...post('container'), comments: [post('target')], shareOf: post('target'),
+   linkedThings: [{ id: 'target', mode: 'data', thing: { id: 'target', thingtime: ['data'], crystal: { text: 'Private' } } }] }], 10);
+  const captured = await cache.snapshot();
+  await cache.forget('target', 20);
+  const fenced = await cache.fenceRead(captured, 15);
+  assert.deepEqual(fenced.map(row => row.id), ['container']);
+  assert.deepEqual(fenced[0].comments, []); assert.equal(fenced[0].shareOf, null); assert.equal(fenced[0].linkedThings?.[0].thing, null);
+  assert.equal(captured.find(row => row.id === 'container')!.comments.length, 1, 'fencing does not mutate another pending read');
+  await cache.remember([post('target')], 30);
+  assert.deepEqual(await cache.fenceRead([accountPostProjection(post('target'))], 15), [], 'later restored access cannot authorize a captured older read');
+  assert.equal((await cache.fenceRead(await cache.snapshot(), 31)).some(row => row.id === 'target'), true);
+  const own = await sync.things.savePost({ shareId: 'authored', thingtime: ['post'], crystal: { type: 'text', text: 'Authored offline' } });
+  await cache.remember([{ ...post(own.id), author: { ...post().author, id: scope.ownerId } }], 35);
+  await cache.forget(own.id, 40);
+  const authored = { ...accountPostProjection(post(own.id)), author: { ...post().author, id: scope.ownerId }, localWorkspace: true };
+  assert.equal((await cache.fenceRead([authored], 36)).length, 1);
+  const displayOnly: typeof authored = { ...authored, localWorkspace: false };
+  assert.deepEqual(await cache.fenceRead([displayOnly], 36), [], 'cached display data alone cannot assert local authorship');
+  await sync.remove([own.id]);
+  assert.deepEqual(await cache.fenceRead([authored], 36), [], 'authored deletion is not retained work');
+ } finally { await db.close(); }
+});
+
+for (const synced of [false, true]) test(`a captured ${synced ? 'synced' : 'pending'} owned-only feed post cannot return after deletion without a read-cache watermark`, async () => {
+ const db = new WorkspaceDatabase(new IDBFactory(), undefined, undefined, IDBKeyRange), cache = new AccountPostCache(db, scope, lease);
+ const sync = new AccountThingSync(db, scope, lease);
+ try {
+  const row = synced
+   ? await sync.remember({ id: 'synced-owned', thingtime: ['post'], crystal: { type: 'text', text: 'Owned before deletion' },
+    createdAt: '2026-10-23T00:00:00.000Z', updatedAt: '2026-10-23T00:00:00.000Z', revision: 1,
+    author: { id: scope.ownerId }, acl: ['tt:user'], visibility: 'private' })
+   : await sync.things.savePost({ shareId: 'pending-owned', thingtime: ['post'], crystal: { type: 'text', text: 'Owned before deletion' } });
+  assert.ok(row);
+  const startedAt = Date.now();
+  const captured = { ...localPostProjection(row, [row], scope.ownerId), localOnly: false, localWorkspace: true };
+  assert.equal((await cache.fenceRead([captured], startedAt)).length, 1, 'live authored content stays readable');
+  assert.deepEqual(await cache.snapshot(), [], 'this post has never had a retained server projection');
+  await sync.remove([row.id]);
+  assert.equal(await sync.view(row.id), null);
+  assert.equal(await db.transaction(scope, 'readonly', lease, tx => tx.get('account-post-projections', row.id)), undefined,
+   'deletion without cached references needs no read-cache watermark');
+  assert.deepEqual(await cache.fenceRead([captured], startedAt), [], 'filtering/ranking must not resurrect a deleted captured root');
  } finally { await db.close(); }
 });

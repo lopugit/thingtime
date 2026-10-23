@@ -102,6 +102,25 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-23: Keep account file annotation and folder placement syncing when upload
+  completion safely normalizes the file MIME. Reconciliation uses the verified
+  same-file receipt, preserves the original local MIME and retry identity, and
+  still refuses later content or ownership changes. — Codex (AI)
+
+- 2026-10-23: Add dedicated local theme/algorithm History restore, undo and merge;
+  scoped device feeds; accurate inherited audience labels; and composer clearance
+  for the floating assistant. Remove obsolete local editor/provider/import caps,
+  retry theme reads on reconnect, and support local bulk Action copy/move/delete.
+  Copy complete account files offline through the normal importer and recheck
+  source availability in the commit transaction. Separate transfer files no longer
+  share one aggregate admission budget. Support offline URL gallery attachments,
+  drafts/templates and mixed transfers through the existing media journal, with
+  idempotent link registration/deletion and bound-file annotations. Negotiate
+  link 1.1.0 and deletion 1.8.0 contracts. Preserve protected writers and independent
+  account queues. Fresh native JSON/PNG,
+  isolated-browser evidence and remaining gates are in [PR #1000 notes](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+  — Codex (AI)
+
 - 2026-10-22: Move device sync configuration off Things home into a dedicated
   device page; keep storage attachments and parent-linked records out of root,
   retain recovery/search access, and preserve private upload provenance before

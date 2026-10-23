@@ -80,6 +80,18 @@ and `THINGTIME_LOCAL_ATTACHMENT_STORAGE_ORIGIN=http://localhost:<web port>`.
 This local adapter refuses deployed/Vercel environments. No new provider secrets
 are needed beyond the existing vault and private object storage configuration.
 
+The opt-in [Linux browser/backend acceptance harness](TESTING.md#linux-isolated-anonymousoffline-acceptance)
+packages a complete local build into a disposable namespace. Its
+`start <absolute-state-directory> <verified-absolute-mongod-path>` command accepts
+`--admin-fixture` for private-upload tests and `--vault-fixture` for encrypted
+account-settings tests. The former creates a fresh ordinary account through the
+normal API, restarts only the disposable server with that generated username in
+its admin allowlist, and stores its fixture credentials mode 0600 inside the
+temporary home. The latter generates a new server-only vault key. Both are
+explicit test options; neither copies existing accounts, keys or configuration.
+Use the harness's `stop` command and verify its cleanup record. See `TESTING.md`
+for build, isolation verification and required browser/runtime prerequisites.
+
 For the opt-in password-file replay API fixture, use a loopback-only disposable
 server and replica set, a stable `THINGTIME_USER_VAULT_KEY`, and the local object
 adapter above. Register a new synthetic account named `passwordfiles-<8 hex digits>`

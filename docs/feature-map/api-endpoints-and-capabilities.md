@@ -483,6 +483,12 @@ writer and transactional Timeline receipts. `themeSelectionContract.ts` is share
 with the device queue. Run selection contract/API and themes/sync route tests;
 verify normal-writer conflicts, replay after deletion and all identity boundaries.
 
+The local `accountApi.client.ts` online handler forces theme catalogue and
+selection reads past their normal refresh throttle. Each refresh still verifies
+the active account/source lease; home-view access does not authorize generic
+home queues under a selected custom plane. `accountReconnect.test.ts` verifies
+fast reconnect after failed reads, cleared errors and retired-worker silence.
+
 Catalogue reads require `api.themes-sync` 1.2.0 for explicit home `folderId`/null.
 This additive projection supports complete offline theme export without exposing
 ownership or sharing metadata. Both manifests derive the version from `apiDocs.ts`;

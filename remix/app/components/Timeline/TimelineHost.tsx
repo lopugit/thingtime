@@ -453,6 +453,7 @@ function HistoryDetails({ children, onClose, activity }: { children: React.React
 					aria-label={activity ? 'Activity details' : 'Version details'}
 					maxW="100%"
 					maxH="80dvh"
+					overflow="hidden"
 					mb={0}
 					borderBottomRadius={0}
 					containerProps={{ zIndex: DRAWER_MODAL_Z, alignItems: 'flex-end' }}
@@ -460,7 +461,10 @@ function HistoryDetails({ children, onClose, activity }: { children: React.React
 					<ModalHeader>{activity ? 'Activity details' : 'Version details'}</ModalHeader>
 					<ModalCloseButton />
 					{/* Leave the final controls reachable above floating launchers and the phone safe area. */}
-					<ModalBody px={2} pb="calc(var(--thingtime-safe-area-bottom, env(safe-area-inset-bottom, 0px)) + 80px)">
+					<ModalBody px={2} minH={0} overflowY="auto"
+						pb="calc(var(--thingtime-safe-area-bottom, env(safe-area-inset-bottom, 0px)) + 80px)"
+						scrollPaddingBottom="calc(var(--thingtime-safe-area-bottom, env(safe-area-inset-bottom, 0px)) + 80px)"
+						overscrollBehavior="contain">
 						{children}
 					</ModalBody>
 				</ModalContent>

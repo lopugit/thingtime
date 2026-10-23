@@ -66,12 +66,13 @@ test('authorized root context survives unvisited intermediate ancestors and is r
 });
 
 
-test('pending parent deletion hides retained foreign descendants and stored root shortcuts',async()=>{
+test('pending parent deletion evicts retained foreign descendants and stored root shortcuts',async()=>{
  const f=fixture();try{
   await f.sync.remember({...local('root'),author,acl:['tt:user'],visibility:'private'} as any);
   await f.posts.remember([post('root'),post('foreign','root'),post('reply','foreign')],10,{id:'reply',parent:'foreign',root:'root'});
   await f.sync.remove(['root']);
   assert.deepEqual(await f.discussions.threadContext('reply',author),{parent:null,root:null});
-  assert.equal((await f.posts.get('foreign'))?.id,'foreign','display snapshots do not grant a link past a local deletion');
+  assert.equal(await f.posts.get('foreign'),null,'retained descendants cannot reappear after the deletion tombstone is acknowledged');
+  assert.equal(await f.posts.get('reply'),null);
  }finally{await f.db.close();}
 });

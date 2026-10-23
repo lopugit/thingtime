@@ -3150,6 +3150,12 @@ email whose link points at the attacker.
       must retire the completed draft while preserving templates. For rich replies,
       wait for the composer to close after commit, not merely for the submit
       button's label to disappear while its spinner is showing.
+- [ ] Reverse the failure in `accountDraftSync.browser.test.ts`: hold only the
+      new private post's canonical Things write, start another working draft in
+      the normal composer and verify that draft reaches the real account while
+      the post remains absent. Release the post with 503, let its frozen retry
+      converge to the same ID exactly once, and verify the working draft survives
+      retry and reload. Guest reads of both private records remain refused.
 - [ ] Discard a remote-only summary after another device changes its revision:
       retain the actual loaded body and refuse deletion against the stale summary.
       Conflict choices must recheck both device and account revisions; typing
@@ -12719,10 +12725,29 @@ resume unfinished Android gates only when requested.
   workspace. Require one set of IDs, no partial writes on validation/quota error,
   canonical normalized no-op reinstall, preserved sample edits, and preserved
   authored definitions when installing only missing parts.
-- [ ] Run saved browser Actions through local Things create/read/update/delete
-  and local data-Action requests. Require zero fetches, normal validators and
+- [ ] Run saved browser Actions through local Things create/read/update/delete,
+  bulk move/copy/delete and local data-Action requests. Require zero fetches, normal validators and
   budgets, identity/cancellation fences, and explicit errors for remote IDs,
   ownership/public ACLs, protected-kind writes/deletes and unsupported services.
+- [x] Local bulk request regressions preserve per-item failures and process 205
+  selected editable Things through ordinary writer batches without an outer
+  selection cap. Account bulk effects retain queue intent and synchronize once
+  without replaying the interpreter (`actionRequests.test.ts`, `accountActions.test.ts`).
+- [x] Local copy regressions use complete editable closures, remap dependencies,
+  refuse protected children and incomplete account folders, and retain ordinary
+  queue intents without interpreter replay. `accountCopy.test.ts` additionally
+  checks file-bearing copy/fork, canonical file aliases, source revocation or
+  deletion during hashing, quota/cancel/identity rollback, and file-preserving
+  folder deletion. Passing evidence: `artifacts/anonymous-local-first-2026-10-23/copy-review/`.
+- [x] `linkedDrafts.test.ts` checks mixed URL/byte draft reopen, independent
+  template/recovery identities, release/expiry, account queue rollback and
+  partition refusal, and changed URL metadata before commit. The focused draft
+  run passes 22 tests with zero skips; evidence is in
+  `artifacts/anonymous-local-first-2026-10-23/linked-drafts-review/`.
+- [ ] Run `accountFileCopy.browser.test.ts` on the rebuilt isolated production
+  client: normal Duplicate, independent exact bytes/private IDs, cold offline
+  reload, original-upload failure with copied-file progress, retry and guest
+  refusal. This is native Duplicate evidence, not shared-Fork UI acceptance.
 - [ ] In a clean production-build browser, wait for verified offline cache
   readiness, disconnect, install Web Standards from the gallery, edit Content,
   save/open the Component and cold-reload. Verify exact text and zero mutation
@@ -13294,6 +13319,11 @@ Run `app/local-workspace/components.browser.test.ts` with
   Same-workspace closure drains the final edit and updates only its original key.
 - [x] Regression: a native private post reaches the real disposable account while
   draft POST remains held; releasing the failure later allows cleanup to converge.
+- [x] Reverse native regression: hold a private post, save a new working draft
+  through the normal composer and real API, then release the post as 503. Its
+  automatic retry uses the identical body/share ID and creates one canonical
+  post; the working draft survives retry and cold reload. Private guest reads
+  refuse. Evidence: `artifacts/anonymous-local-first-2026-10-23/posting/integrated-final/`.
 - [ ] Complete native account/origin/data-plane transitions, explicit legacy-key
   recovery and the broader draft/media/conflict matrix before merging PR #1000.
 
@@ -13792,8 +13822,11 @@ and the focused sync/transport test logs. These are local results, not CI or dep
   be revealed as invented empty tokens; generic edits/BSON type changes produce
   distinct server versions; incomplete, malformed and oversized snapshots fail.
 - [x] Unit races: older metadata and selected-value replies cannot replace local
-  edits; pending children retain their environment metadata; local/remote totals
-  respect the device entry bound; locking and anonymous scope stop adoption.
+  edits; pending children retain their environment metadata; a complete bounded
+  remote snapshot coexists with additional local entries and reviewed conflict
+  copies; locking and anonymous scope stop adoption. The former 500-entry device
+  cap is removed. `providerVault.test.ts` verifies 502 anonymous encrypted entries
+  across cold reopen without account intents; remote snapshot bounds remain.
 - [x] Real loopback API with a disposable account: metadata contains no values or
   ciphertext, generic editing changes its comparison version, and fresh selected
   verification returns the exact corresponding value/version. Wrong password,
@@ -15200,3 +15233,109 @@ Local results do not establish current-head CI or deployed acceptance.
   cursors and cancels pending reads on account change/unmount.
 
 - Device sync correction: a fresh dedicated sync page keeps Manage sync connections collapsed; the Thing page exposes Parent paths with raw Thing data switched off. Explicit scanning remains required.
+
+## Linux isolated anonymous/offline acceptance
+
+- Prerequisites: Linux with working unprivileged user/network/PID namespaces,
+  Bubblewrap, util-linux `nsenter`, a verified MongoDB executable, Node and
+  sandbox-capable Chromium. Do not weaken a namespace/sandbox refusal.
+- Build the actual client, offline shell, synced Nitro template and
+  `NITRO_PRESET=node-server` server without loading personal/project `.env`
+  files. A private mount namespace can mask those files during compilation;
+  never copy credentials or personal profiles into the fixture.
+- Start a new private directory (it must not already exist):
+  `node remix/scripts/isolated-linux-browser.mjs start <absolute-state> <verified-mongod>`.
+  Keep this foreground supervisor alive in its own terminal. Readiness requires
+  the real API's isolated-agent-test session, accounting readiness and matching
+  packaged entry assets. No account fixtures are inserted directly into Mongo.
+  The packaged application is copied through the existing validated copier and
+  mounted read-only; `artifacts/build.json` pins its aggregate content hash.
+  A partial main-only Vite build must fail preflight when the draft-preview,
+  platform, library or embed script is missing or replaced by an HTML 200
+  fallback. Rebuild all client bundles; do not bypass this refusal.
+- Run commands with
+  `node remix/scripts/isolated-linux-browser.mjs run <absolute-state> -- node --import tsx --test <fixture-relative-to-remix>`.
+  The command starts in Remix. `TT_RENDER_ORIGIN`/`TT_RENDER_SESSION` and the draft/
+  Builder session markers are generated by the harness; do not borrow a session.
+  Explicit allowlisted fixture URL variables must equal `http://127.0.0.1:18721`,
+  and fixture/artifact/tool paths must stay inside the state directory. Use the
+  standalone Chromium executable (`/usr/lib/chromium/chromium` on Debian), not
+  a wrapper that sources host configuration. Point `TT_SHARED_PLAYWRIGHT_PATH`
+  at the installed module inside the mounted Node installation. Other environment
+  variables, including inherited token/password/authentication values, are omitted.
+- For private file lifecycle checks, opt into `start ... --admin-fixture` and set
+  `TT_LOCAL_FILE_SYNC_ADMIN_FIXTURE=<state>/home/admin-fixture.json` on `run`.
+  Require ordinary API registration before the isolated server's exact generated
+  username allowlist, verified same-identity login, normal admin API approval,
+  guest 401 and non-admin 403. Keep the mode-0600 fixture out of artifact copies.
+  `--vault-fixture` generates a fresh 32-byte key for encrypted mail settings
+  acceptance; it never accepts an inherited vault key. Both flags remain opt-in.
+- Before product acceptance, run the same wrapper with
+  `node scripts/isolated-linux-browser.mjs inside-check <absolute-state>`.
+  Require `artifacts/isolation-verification.json`: direct IPv4, mapped IPv6,
+  native IPv6, hostname and redirect refusal; sandboxed browser refusal;
+  isolated process namespace; absent host profiles, `.git`, `.env`, Docker
+  socket and inherited credentials. A request interceptor or timeout is not
+  network-isolation evidence.
+  Read-only `memory.current` and `memory.events` report the whole managed
+  workspace cgroup, including concurrent jobs; label their scope accordingly.
+- Run the relevant anonymous/account theme History, algorithm History, inherited
+  audience/composer bounds, post/draft independence and editable Builder/import
+  browser fixtures. Use synthetic real-API registration. Preserve exact viewport,
+  canonical export, re-import/remapping, stale-preview and failure evidence.
+  Count opt-in skips separately; a skipped native test is not a pass.
+- Stop with `node remix/scripts/isolated-linux-browser.mjs stop <absolute-state>`.
+  Require `artifacts/cleanup.json` proving the namespace terminated and private
+  home/database/runtime metadata were removed. Keep only task-owned artifacts.
+  Label results **isolated Linux browser/backend**; these checks do not verify
+  installed Mac app controls, remote agent-host registration, CI or deployment.
+# Anonymous/local-first continuation regression boundaries (2026-10-23)
+
+- Compare TypeScript against an independently archived source baseline. If the
+  fetched baseline has syntax errors, record and apply only those parse repairs
+  to the comparison tree; do not call a failed parser an unchanged diagnostic
+  baseline. Compare normalized diagnostic signatures, not only counts.
+- Run live theme/algorithm History changes through the normal review UI and
+  dedicated writer. Verify conflicts, exact concurrent retries, stale previews
+  after same-head hydration, identity retirement and atomic quota rollback.
+  Current sharing, library title, placement, lineage and selection must survive.
+  Deleted protected kinds remain refused until a dedicated recovery path exists.
+- Test independent content and History queues through actual isolated API
+  receipts. A content 503 must not acknowledge or prevent History, and History
+  failure must not block a local content save. Download the canonical archive
+  through both the device and permitted remote exporter.
+- For posting independence, save and cold-reload a private account draft, hold
+  its next remote save, submit once, and verify exact private server content
+  before releasing the draft request with 503. Confirm draft retirement retries
+  and templates survive. Use Chromium's normal browser fetch for authenticated
+  HTTP-loopback fixture requests: Playwright's separate APIRequestContext omits
+  Secure cookies there. Never weaken production cookie policy for a test.
+- Keep native SDK/MCP stdio acceptance distinct from a tool actually connected
+  to the user's agent host. Require real JSON/PNG bytes, exact dimensions/text,
+  dependency-complete import/export and negative render cases. Skipped opt-ins,
+  an HTTP endpoint or historical temporary artifacts are not native-host proof.
+- Recheck generic private/subspace Thing labels and active composer hit targets
+  at 1440, 390 and 320px; scroll long Theme library pages before opening their
+  action menus. Assert viewport bounds and reachable actions rather than using
+  force clicks to conceal off-screen controls.
+- Verify signed-in personal instructions in the normal settings UI: offline
+  save and cold reload retain exact Unicode and disabled rows; hold a real
+  committed save response while a newer device edit completes, then return a
+  lost-response error. A subsequent read must acknowledge the committed value
+  without replaying it or discarding the newer local edit. Exercise both
+  reviewed conflict choices and confirm anonymous reads expose no personal
+  rows while anonymous writes remain refused. Allow the existing bounded
+  retry/claim interval; do not change queue timing just to shorten the fixture.
+- Treat multi-file selection as a serial queue of independent transfers. Valid
+  manifests must not share one aggregate Thing/file/byte admission budget.
+  Verify overlapping portable IDs stay separate and an invalid individual file
+  still prevents selection from returning a partially validated batch.
+
+- Verify signed-in mail account settings with
+  `app/mail/accountSettings.browser.test.ts` against an isolated fixture started
+  with `--vault-fixture`. Offline normal-UI save and cold reload must survive a
+  held successful reply, a newer local edit and the existing durable retry.
+  Assert exact replay identity, independent newer intent, real stale-revision
+  conflict and both explicit choices, plus guest read/write refusal. Preserve
+  zero offline writes and page errors at 1440, 390 and 320px. Synthetic settings
+  alone require no provider connection, mail synchronization or delivery.

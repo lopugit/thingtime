@@ -1,4 +1,4 @@
-import { attachmentMediaKindForContentType } from '../api/utils/attachments/attachmentCore';
+import { attachmentMediaKindForContentType, canonicalLinkedAttachmentUrl } from '../api/utils/attachments/attachmentCore';
 import type { WorkspaceLease } from './storage';
 import { binarySize } from './binary';
 
@@ -12,8 +12,8 @@ export function localMediaId(url: string): string | null {
  const id = params.get('id');
  return params.getAll('id').length === 1 && id && /^local-[a-zA-Z0-9-]{1,100}$/.test(id) ? id : null;
 }
-type Entry = { refs: number; lease: WorkspaceLease; dispose: () => void; url?: string; size: number; error?: string; loading: boolean; cancelled: boolean; revision: number; scheduled: boolean; dirty: boolean; controller?: AbortController };
-type FileBytes = { bytes: Uint8Array | Blob; contentType: string };
+type Entry = { refs: number; lease: WorkspaceLease; dispose: () => void; url?: string; objectUrl?: boolean; size: number; error?: string; loading: boolean; cancelled: boolean; revision: number; scheduled: boolean; dirty: boolean; controller?: AbortController };
+type FileBytes = { bytes: Uint8Array | Blob; contentType: string } | { url: string };
 /** Reference-counted object URLs. Nothing is cached under an account cookie or
  * server ID, and every read and URL lookup rechecks the captured local lease. */
 export class LocalMediaRegistry {
@@ -28,7 +28,7 @@ export class LocalMediaRegistry {
  subscribe = (listener: () => void) => { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; };
  snapshot = () => this.version;
  private publish() { this.version++; this.listeners.forEach(listener => listener()); }
- private revoke(entry: Entry) { if (entry.url) this.deps.revoke(entry.url); entry.url = undefined; entry.size = 0; }
+ private revoke(entry: Entry) { if (entry.url && entry.objectUrl) this.deps.revoke(entry.url); entry.url = undefined; entry.objectUrl = false; entry.size = 0; }
  private pump() { while (this.running < 3 && this.queued.length) this.queued.shift()!(); }
  retain(id: string) {
   const found = this.entries.get(id);
@@ -50,11 +50,16 @@ export class LocalMediaRegistry {
    this.running++; const revision = entry.revision, controller = new AbortController(); entry.controller = controller;
    void Promise.resolve().then(() => { entry.lease.assertCurrent(); return this.deps.read(id, controller.signal); }).then(result => {
     entry.lease.assertCurrent(); if (entry.cancelled || revision !== entry.revision || entry.dirty) return;
+    if ('url' in result) {
+     const url = canonicalLinkedAttachmentUrl(result.url);
+     if (!url || url !== result.url) throw new Error('Local linked media URL is invalid.');
+     this.revoke(entry); entry.url = url; entry.error = undefined; return;
+    }
     if (!(result.bytes instanceof Uint8Array) && !(result.bytes instanceof Blob)) throw new Error('Local file content is invalid.');
     // HTML/SVG and arbitrary files are opaque downloads, never active documents.
     const type = attachmentMediaKindForContentType(result.contentType) === 'file' ? 'application/octet-stream' : result.contentType;
     const next = this.deps.create(result.bytes, type);
-    this.revoke(entry); entry.url = next; entry.size = binarySize(result.bytes); entry.error = undefined;
+    this.revoke(entry); entry.url = next; entry.objectUrl = true; entry.size = binarySize(result.bytes); entry.error = undefined;
    }).catch(error => { if (!entry.cancelled && revision === entry.revision) { this.revoke(entry); entry.error = error instanceof Error ? error.message : 'Local file could not be opened'; } }).finally(() => {
     entry.loading = false; entry.scheduled = false; entry.controller = undefined; this.running--;
     if (entry.dirty) { entry.dirty = false; this.load(id, entry); }

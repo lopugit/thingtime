@@ -6,6 +6,8 @@ import { recordLocalThingChanges, type LocalMutationCapture, type ThingHistoryWr
 import { captureThingChanges, type ThingChanges } from './thingChanges';
 import { themeContentSnapshot } from '../timeline/themeContent';
 import { isTransferTheme } from '../utils/thingTransfer/theme';
+import { algorithmContentSnapshot } from '../timeline/algorithmContent';
+import { isTransferAlgorithm } from '../utils/thingTransfer/algorithm';
 import type { LocalThing } from './things';
 import { WorkspaceError, type WorkspaceDatabase, type WorkspaceLease, type WorkspaceScope, type WorkspaceTransaction } from './storage';
 
@@ -69,23 +71,32 @@ export async function captureAccountThingChanges<T>(tx:WorkspaceTransaction,scop
  });
 }
 
-async function recordAccountChanges(tx:WorkspaceTransaction,scope:AccountScope,changes:ThingChanges,now:()=>string,uuid:()=>string,captures?:Map<string,LocalMutationCapture>,themeSnapshots?:ThingHistoryWriter['themeSnapshots']){
+async function recordAccountChanges(tx:WorkspaceTransaction,scope:AccountScope,changes:ThingChanges,now:()=>string,uuid:()=>string,captures?:Map<string,LocalMutationCapture>,themeSnapshots?:ThingHistoryWriter['themeSnapshots'],algorithmSnapshots?:ThingHistoryWriter['algorithmSnapshots']){
   if(!changes.size)return;
   let clientId=await tx.get<string>(META,'client');
   if(!clientId){clientId=`workspace-${uuid()}`;await tx.put(META,'client',clientId);}
   const timeline=accountTimelineScope(scope);
-  await recordLocalThingChanges(tx,changes,now,uuid,captures,{ownerId:scope.ownerId,clientId,branchId:`device-${clientId}`,mode:'draft',themeSnapshots,
+  await recordLocalThingChanges(tx,changes,now,uuid,captures,{ownerId:scope.ownerId,clientId,branchId:`device-${clientId}`,mode:'draft',themeSnapshots,algorithmSnapshots,
    read:id=>readAccountTimelineRow(tx,timeline,id),append:event=>append(tx,timeline,event)});
 }
 
 /** Called only by the dedicated theme mutation, after its ownership/state
  * checks. Read hydration and remote acknowledgements never author a version.
  * Visibility comes from that writer's intent, not the generic Thing ACL. */
-export async function recordAccountThemeChange(tx:WorkspaceTransaction,scope:AccountScope,before:LocalThing|null,after:LocalThing|null,visibility:{before:'private'|'public';after:'private'|'public'},now:()=>string,uuid:()=>string){
+export async function recordAccountThemeChange(tx:WorkspaceTransaction,scope:AccountScope,before:LocalThing|null,after:LocalThing|null,visibility:{before:'private'|'public';after:'private'|'public'},now:()=>string,uuid:()=>string,capture?:LocalMutationCapture){
  const id=after?.id??before?.id;
  if(!id||[before,after].some(row=>row&&(!isTransferTheme(row)||row.id!==id)))failure('Invalid theme History mutation.');
  const snapshot=(row:LocalThing|null,visibility:'private'|'public')=>row?themeContentSnapshot({crystal:row.crystal,tags:row.tags??[],visibility,folderId:row.folderId??null}):null;
- await recordAccountChanges(tx,scope,new Map([[id!,{before,after}]]),now,uuid,undefined,new Map([[id!,{before:snapshot(before,visibility.before),after:snapshot(after,visibility.after)}]]));
+ await recordAccountChanges(tx,scope,new Map([[id!,{before,after}]]),now,uuid,capture?new Map([[id!,capture]]):undefined,new Map([[id!,{before:snapshot(before,visibility.before),after:snapshot(after,visibility.after)}]]));
+}
+
+/** Only the dedicated profile writer may capture protected algorithm content.
+ * Remote catalogue refreshes and receipts do not author device versions. */
+export async function recordAccountAlgorithmChange(tx:WorkspaceTransaction,scope:AccountScope,before:LocalThing|null,after:LocalThing|null,now:()=>string,uuid:()=>string,capture?:LocalMutationCapture){
+ const id=after?.id??before?.id;
+ if(!id||[before,after].some(row=>row&&(!isTransferAlgorithm(row)||row.id!==id)))failure('Invalid algorithm History mutation.');
+ const snapshot=(row:LocalThing|null)=>row?algorithmContentSnapshot({crystal:row.crystal,folderId:row.folderId??null}):null;
+ await recordAccountChanges(tx,scope,new Map([[id!,{before,after}]]),now,uuid,capture?new Map([[id!,capture]]):undefined,undefined,new Map([[id!,{before:snapshot(before),after:snapshot(after)}]]));
 }
 
 /** Authoritative device versions live in the existing scoped workspace, using

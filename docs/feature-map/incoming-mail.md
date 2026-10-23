@@ -131,3 +131,15 @@ credentials. Close the allocator's initial app tab before starting the test
 browser, keep the resource limits, inspect cgroup memory events and reject any
 run with renderer/OOM failures. Each scenario closes its browser before the next.
 Missing opt-in variables skip these tests in `test:mail`; skips are not passes.
+
+## Native account-settings acceptance
+
+`accountSettings.browser.test.ts` uses normal signed-in Email settings against the
+isolated Linux browser/backend fixture with a freshly generated server vault key.
+It covers offline save and cold reload, a held successful response while newer
+device edits complete, exact durable retry identity, independent newer intent,
+real stale-revision refusal and both explicit conflict choices. Real API readback
+and guest read/write refusal complement 1440/390/320px screenshots and zero offline
+writes. Use `TT_LOCAL_MAIL_SETTINGS_URL` and `TT_LOCAL_MAIL_SETTINGS_ARTIFACTS` with
+the harness's generated session and shared browser paths. This tests encrypted
+settings synchronization; provider connections and mail delivery remain separate.

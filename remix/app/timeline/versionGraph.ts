@@ -4,10 +4,17 @@ import { versionContent } from './versions.ts';
 
 export type TimelineGraphNode = { id: string; thingId: string; parentIds: string[]; afterAdapter: string | null };
 /** Shared bounded ancestry and materialization; the caller supplies its authority-specific error. */
-export function createVersionGraphTools(reject: (status: number, message: string) => never) {
+export function createVersionGraphTools(
+	reject: (status: number, message: string) => never,
+	content?: {
+		adapters: readonly string[];
+		read(snapshot: TimelineSnapshot | null, basis?: TimelineSnapshot['value']): ReturnType<typeof versionContent>;
+	}
+) {
+	const fullAdapters = content?.adapters ?? ['thing-content', TIMELINE_SNAPSHOT_PARTS_ADAPTER];
 	const restorableContent = (snapshot: TimelineSnapshot | null, basis?: TimelineSnapshot['value']) => {
 		try {
-			return versionContent(snapshot, basis);
+			return content ? content.read(snapshot, basis) : versionContent(snapshot, basis);
 		} catch {
 			return reject(422, 'This version has unsupported or incomplete content. Recover the draft in its editor before applying it.');
 		}
@@ -81,7 +88,7 @@ export function createVersionGraphTools(reject: (status: number, message: string
 			const node =
 				graph.get(id) ?? (id === entry.event.id ? { id, parentIds: entry.event.parentIds, afterAdapter: entry.event.after?.adapter } : null);
 			if (!node) reject(409, 'An earlier version is unavailable.');
-			if (['thing-content', TIMELINE_SNAPSHOT_PARTS_ADAPTER].includes(node.afterAdapter ?? '')) {
+			if (fullAdapters.includes(node.afterAdapter ?? '')) {
 				selected.push(id);
 				break;
 			}

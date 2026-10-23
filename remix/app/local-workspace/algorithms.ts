@@ -9,6 +9,9 @@ import { isDefaultAlgorithm } from '../components/Feed/defaultAlgorithms';
 import { algorithmTransferContent, isTransferAlgorithm } from '../utils/thingTransfer/algorithm';
 import { snapshotTransferValue } from '../utils/thingTransfer/value';
 import type { LocalThing } from './things';
+import { captureThingChanges } from './thingChanges';
+import { recordLocalThingChanges, type LocalMutationCapture } from './timeline';
+import { algorithmContentValue } from '../timeline/algorithmContent';
 import { type WorkspaceDatabase, WorkspaceError, type WorkspaceLease, type WorkspaceTransaction, type WorkspaceScope } from './storage';
 
 export type LocalAlgorithmOptions = {
@@ -16,7 +19,7 @@ export type LocalAlgorithmOptions = {
 	observationScope?: Extract<WorkspaceScope, { kind: 'account' }>;
 	now?: () => number;
 	uuid?: () => string;
-	onWrite?(tx: WorkspaceTransaction, row: LocalThing | null, previous: LocalThing | null): Promise<void>;
+	onWrite?(tx: WorkspaceTransaction, row: LocalThing | null, previous: LocalThing | null, capture?: LocalMutationCapture): Promise<void>;
 	onActive?(tx: WorkspaceTransaction, id: string | null): Promise<void>;
 };
 const validWeightKey = (value: unknown): value is string =>
@@ -89,19 +92,58 @@ export class LocalAlgorithms {
 		return this.options.now?.() ?? Date.now();
 	}
 	private transaction<T>(mode: IDBTransactionMode, run: (tx: WorkspaceTransaction) => Promise<T>) {
-		return this.db.transaction(this.scope, mode, this.lease, run);
+		return this.db.transaction(this.scope, mode, this.lease, tx =>
+			mode === 'readwrite' && this.scope.kind === 'anonymous'
+				? captureThingChanges(tx, run, (tx, changes) => recordLocalThingChanges(tx, changes, () => new Date(this.now()).toISOString(), this.options.uuid ?? (() => crypto.randomUUID())))
+				: run(tx));
+	}
+	/** History uses the dedicated profile writer, within the same transaction as
+	 * its authored event and optional account intent. Selection is untouched. */
+	async versionTransaction<T>(run: (writer: {
+		tx: WorkspaceTransaction;
+		update(input: { id: string; crystal: any; expectedUpdatedAt?: string }, capture: LocalMutationCapture): Promise<unknown>;
+	}) => Promise<T>, signal?: AbortSignal): Promise<T> {
+		const lease: WorkspaceLease = {
+			assertCurrent: () => { this.lease.assertCurrent(); signal?.throwIfAborted(); },
+			onInvalidate: callback => {
+				const off = this.lease.onInvalidate(callback);
+				signal?.addEventListener('abort', callback, { once: true });
+				return () => { off(); signal?.removeEventListener('abort', callback); };
+			}
+		};
+		return this.db.transaction(this.scope, 'readwrite', lease, async tx => {
+			const captures = new Map<string, LocalMutationCapture>();
+			const apply = (tx: WorkspaceTransaction) => run({ tx, update: async (input, capture) => {
+				lease.assertCurrent();
+				const previous = await this.read(tx, input.id);
+				if (input.expectedUpdatedAt && previous.updatedAt !== input.expectedUpdatedAt)
+					throw new WorkspaceError('WRITE_CONFLICT', 'This algorithm changed after the version preview.', 409);
+				if (Object.keys(input.crystal ?? {}).some(key => !['name', 'emoji', 'weights', 'eventCount', 'lastTrainedAt', 'description'].includes(key)))
+					throw new WorkspaceError('INVALID_ALGORITHM', 'History can replace only algorithm design content.');
+				const content = algorithmContentValue({ adapter: 'algorithm-content', version: 1, value: { crystal: input.crystal, folderId: null } });
+				const row = structuredClone(previous);
+				row.crystal = { ...row.crystal, ...snapshotTransferValue(content.crystal) as LocalThing['crystal'] };
+				captures.set(input.id, capture);
+				const result = await this.save(tx, row, previous, capture);
+				lease.assertCurrent();
+				return result;
+			} });
+			return this.scope.kind === 'anonymous'
+				? captureThingChanges(tx, apply, (tx, changes) => recordLocalThingChanges(tx, changes, () => new Date(this.now()).toISOString(), this.options.uuid ?? (() => crypto.randomUUID()), captures))
+				: apply(tx);
+		});
 	}
 	private async read(tx: WorkspaceTransaction, id: string) {
 		const row = await tx.get<LocalThing>('things', id);
 		if (!row || !isTransferAlgorithm(row)) throw new WorkspaceError('NOT_FOUND', 'Algorithm is not in this workspace', 404);
 		return row;
 	}
-	private async save(tx: WorkspaceTransaction, row: LocalThing, previous: LocalThing | null) {
+	private async save(tx: WorkspaceTransaction, row: LocalThing, previous: LocalThing | null, capture?: LocalMutationCapture) {
 		algorithmTransferContent(row.crystal);
 		row.updatedAt = new Date(Math.max(this.now(), Date.parse(row.updatedAt) + 1)).toISOString();
 		row.revision++;
 		await tx.put('things', row.id, row);
-		await this.options.onWrite?.(tx, row, previous);
+		await this.options.onWrite?.(tx, row, previous, capture);
 		return project(row);
 	}
 	async list() {

@@ -1,5 +1,10 @@
 # Posts, comments and feed
 
+Anonymous `api.client.ts` resolves `local-*` algorithm previews from the leased
+`LocalAlgorithms` store before public discovery. Missing local IDs stay local
+404s and retired facades refuse; they never trigger public capability/HTTP reads.
+Regression: `local-workspace/api.client.test.ts` and `algorithms.test.ts`.
+
 Posts are `post` Things; comments share the post schema
 (`thingtime` includes `comment`, including canonical comment-only records;
 `targetId` = parent) so every comment is
@@ -22,6 +27,7 @@ relational children aggregated on read (`FUNDAMENTALS.md` §3).
 | Composer (Editor.js rich text, attachments, tags, audience) | `app/components/Feed/PostComposer.tsx`, `app/components/Editor/*` |
 | Lists and pages | `app/components/Feed/PostList.tsx`, `Feed.tsx`, `app/routes/feed.tsx`, `post.tsx`, `media.tsx`, `explore.tsx` |
 | Account offline read snapshots and conditional bookmarks/reactions | `app/local-workspace/accountPosts.ts`, `accountInteractions.ts`, `accountApi.client.ts`; native Saved and post permalink consumers |
+| Device feed and scoped pagination | `app/local-workspace/feed.ts`, anonymous/account API facades, `components/Feed/Feed.tsx`; owned roots and retained account projections, Latest/New or local profile page ranking, type/audience/tag/date filters |
 | Reaction overlays and thread cache (optimistic rendering) | `app/components/Feed/reactionOverlay.ts`, `threadCache.ts`, `useFeedEngagement.ts` |
 | Subspaces (communities) moderation on posts | `app/api/utils/subspaces/*`, `app/components/Subspaces/*` |
 
@@ -121,6 +127,17 @@ sync and full multi-tab acceptance remain outstanding in
 
 
 ## Anonymous post authoring
+
+The feed's **On this device** control and offline first-page fallback display
+only the selected workspace's owned or retained posts, with explicit partial
+coverage. Device cursors bind account, origin, data plane, filters and profile;
+they cannot extend an online page. Current subspace membership, community sorts
+and nearby discovery remain online operations. Retained posts do not acquire
+ownership or write authority; known refusals and local deletion remove cached
+copies. `AccountPostCache.fenceRead` rechecks late refusals after feed ranking;
+authored deletion and retained-copy cleanup commit together.
+`local-workspace/feed*.test.ts` covers these boundaries and local profile
+training. The native inherited-audience fixture also checks the device feed.
 
 `local-workspace/posts.ts` and `LocalThings.savePost` map and validate native
 composer inputs, bind local attachments atomically and project native PostCards.

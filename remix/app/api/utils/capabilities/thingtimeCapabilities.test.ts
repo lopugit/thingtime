@@ -470,7 +470,7 @@ test('native traversal requires bounded synchronous callback support on both man
 test('server Action outcomes are discoverable in both capability manifests', () => {
   for (const features of [createApiCapabilitiesManifest().features, Object.fromEntries(Object.entries(thingtimeCapabilityManifest('https://outcomes.test').features).map(([id, feature]) => [id, feature.version]))]) {
     assert.equal(features['api.actions-run'], '1.38.0');
-    assert.equal(features['api.timeline'], '1.21.0');
+    assert.equal(features['api.timeline'], '1.22.0');
     assert.equal(capabilitySatisfies('1.36.0', '1.38.0'), false);
     assert.equal(capabilitySatisfies('1.15.0', '1.16.0'), false);
     assert.equal(capabilitySatisfies('1.16.0', '1.17.0'), false);
@@ -491,8 +491,8 @@ test('conditional interaction sync advertises a distinct compatible capability',
 
 
 test('existing owned file receipt deletion is advertised by both capability manifests', () => {
-  assert.equal(createApiCapabilitiesManifest().features['api.attachment-delete'], '1.7.0');
-  assert.equal(thingtimeCapabilityManifest('https://files.test').features['api.attachment-delete'].version, '1.7.0');
+  assert.equal(createApiCapabilitiesManifest().features['api.attachment-delete'], '1.8.0');
+  assert.equal(thingtimeCapabilityManifest('https://files.test').features['api.attachment-delete'].version, '1.8.0');
   for (const version of ['', '1.0.0', '1.1.0', '1.3.0', '1.4.0', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.5.0'), false);
 });
 
@@ -560,4 +560,17 @@ test('sync upload provenance clients require compatible contracts on the selecte
   assert.equal(capabilitySatisfies(old, required), false);
   assert.equal(capabilitySatisfies('2.0.0', required), false);
  }
+});
+
+test('retry-safe linked galleries require additive link and delete contracts on both manifests', () => {
+  const registry = createApiCapabilitiesManifest(), manifest = thingtimeCapabilityManifest('https://links.test');
+  for (const [feature, version] of [['api.attachment-link', '1.1.0'], ['api.attachment-delete', '1.8.0']]) {
+    assert.equal(registry.features[feature], version);
+    assert.equal(manifest.features[feature].version, version);
+    assert.equal(capabilitySatisfies(version, version), true);
+    for (const unavailable of [undefined, '1.0.0', '2.0.0']) assert.equal(capabilitySatisfies(unavailable, version), false);
+  }
+  assert.equal(capabilitySatisfies('1.7.9', '1.8.0'), false);
+  assert.equal(capabilitySatisfies('1.2.0', '1.1.0'), true);
+  assert.equal(capabilitySatisfies('1.9.0', '1.8.0'), true);
 });

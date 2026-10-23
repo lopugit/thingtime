@@ -1118,3 +1118,37 @@ must already hold the exact draft. Anonymous local authority accepts names and
 exports draft content without remote synchronization. See
 [coverage](local-workspaces.md#device-draft-names-and-anonymous-version-export--2026-10-17)
 for local-versus-account export metadata and unfinished acceptance boundaries.
+
+
+### Algorithm device versions — api.timeline 1.22.0
+
+`algorithmContent.ts` projects the approved saved profile design and library
+placement into the canonical `algorithm-content` version-1 snapshot. Local
+create, edit, training, import, organization and deletion use the existing
+Timeline transaction. Account hydration and content-sync acknowledgements do
+not invent edits. Training observations, sharing/listing authority, lineage and
+active selection are never restorable snapshot data.
+
+The shared version planner opts into `algorithmVersionWriter`, whose dedicated
+transaction restores, undoes or merges design fields while preserving the live
+library title/folder, authority and selection. The preview fingerprint rejects
+a changed live profile even before its next Timeline event is available. Local
+commit and its History event survive failed content upload; account History
+receipts acknowledge only the immutable device event. Generic protected-Thing
+mutation and deleted-profile recovery remain refused. Named-branch checkout and
+branch-merge composition are not supported for these protected profiles.
+
+Remote export now accepts canonical algorithm snapshots from revisions and
+admitted owner-authored client drafts, including deletion before-images. It
+retains the actual receipt and draft provenance, applies the existing private
+owner scope, metering and response-size limit, and writes nothing. The client
+requires `api.timeline` 1.22.0 only for remote algorithm export; ordinary and
+theme export keep their existing minima, and local operations need no server
+capability. Other client-draft adapters remain unsupported by remote export.
+
+Coverage: `local-workspace/algorithmHistory.test.ts`,
+`api/utils/timeline/exportVersion.test.ts`, `test:api-capabilities`, and the
+opt-in native `local-workspace/algorithmHistory.browser.test.ts`. The browser
+fixture requires a disposable isolated runtime and emits narrow/desktop restore
+screenshots plus actual API receipt/export checks; a skipped fixture is not
+acceptance evidence.

@@ -196,11 +196,40 @@ test('a selected reveal arriving after a local value replacement cannot overwrit
   release();await assert.rejects(retaining,/changed before/);assert.equal((await f.vault.reveal(remoteSecret().id)).value,'new local value');
  }finally{release?.();f.db.transaction=original;await f.close();}
 });
-test('account metadata plus pending local entries cannot exceed the device limit',async()=>{
+test('complete account metadata coexists with pending device entries beyond the former device cap',async()=>{
  const f=await fixture(accountScope);
  try{
-  await f.vault.mutate(command('create-group',{name:'Pending local environment'}));const before=await raw(f);
+  const local = command('create-group',{name:'Pending local environment'});
+  await f.vault.mutate(local);const before=await raw(f);
   const groups=Array.from({length:500},(_,index)=>({...remoteGroup(),id:'remote-group-'+index,name:'Remote '+index}));
-  await assert.rejects(f.vault.reconcileMetadata(metadataTransport({complete:true,groups,entries:[]})),/exceed this device limit/);assert.deepEqual(await raw(f),before);
+  await f.vault.reconcileMetadata(metadataTransport({complete:true,groups,entries:[]}));
+  assert.equal((await f.vault.list()).groups.length,501);
+  assert.deepEqual((await raw(f)).commands,before.commands);
+  const secret = command('save-secret',{name:'Offline beyond the old cap',key:'KEY',value:'exact local value',groupId:local.id});
+  await f.vault.mutate(secret);
+  assert.equal((await f.vault.reveal(secret.id)).value,secret.value);
+  f.vault.lock();await f.vault.unlock(phrase);
+  assert.equal((await f.vault.list()).entries[0].id,secret.id);
+  assert.equal((await f.vault.syncStatus()).length,2);
+  await f.vault.synchronize({write:async()=>{throw Object.assign(Error('Synthetic conflict'),{status:409});}});
+  const review=await f.vault.reviewRefused(local.id);
+  const copied=await f.vault.resolveRefused(local.id,review.reviewId,'copy',metadataTransport({complete:true,groups,entries:[]}));
+  assert.equal((await f.vault.list()).groups.length,501);
+  assert.equal((await f.vault.reveal(copied.copiedIds[secret.id])).value,secret.value);
+  assert.equal((await f.vault.list()).entries[0].groupId,copied.copiedIds[local.id]);
+  assert.deepEqual(new Set((await f.vault.syncStatus()).map(row=>row.recordId)),new Set(Object.values(copied.copiedIds)));
  }finally{await f.close();}
+});
+
+test('anonymous provider vaults can save and reopen more than 500 encrypted entries without account intent',async()=>{
+ const f=await fixture();let reopened:LocalProviderVault|undefined;
+ try{
+  for(let index=0;index<501;index++)await f.vault.mutate(command('create-group',{name:'Device environment '+index}));
+  const secret=command('save-secret',{name:'Last retained value',key:'KEY',value:'exact offline value'});
+  await f.vault.mutate(secret);
+  f.vault.dispose();await f.db.close();reopened=new LocalProviderVault(f.db,f.scope,gate,origin);await reopened.unlock(phrase);
+  assert.equal((await reopened.list()).groups.length,501);
+  assert.equal((await reopened.reveal(secret.id)).value,secret.value);
+  assert.deepEqual(await reopened.syncStatus(),[]);assert.deepEqual((await raw(f)).commands,[]);
+ }finally{reopened?.dispose();await f.close();}
 });

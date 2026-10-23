@@ -135,3 +135,45 @@ cannot provide the opaque-origin sandbox. `MCP/test/render-export.integration.te
 checks the real response and storage denial; `TT_DRAFT_TEST_SESSION` permits the
 explicit isolated runtime origin after health/session verification. See
 [no-login draft preview](../no-login-draft-preview.md).
+
+## Isolated Linux browser acceptance
+
+`remix/scripts/isolated-linux-browser.mjs` runs the packaged `node-server` build
+through the existing agent-browser `application.cjs` adapter on Linux. It uses
+Bubblewrap user/network/PID/mount namespaces, a fresh Mongo replica and generated
+signing material. `copyApplication` snapshots the packaged server/client before
+launch; `artifacts/build.json` records its aggregate content hash. Subsequent
+worktree builds cannot change the running fixture. The only network is task-local
+loopback. Explicit source and
+runtime mounts omit host profiles, project config and credentials; nested dotenv
+files are masked. `run` verifies the owning process/namespace and admits only
+listed fixture URLs, artifact paths and generated session IDs. Browser tests keep
+Chromium's sandbox enabled. `inside-check` proves browser/backend direct-IP,
+hostname and redirect refusal plus missing host state; `stop` removes private
+browser/database state and records cleanup while retaining artifacts.
+The exact read-only `memory.current` and `memory.events` diagnostics cover the
+managed workspace cgroup, including concurrent jobs; they are not per-fixture
+memory or OOM counters.
+
+Optional `start ... --admin-fixture` first registers an ordinary generated account
+through the real API, then restarts only its owned server with that exact username
+allowlisted. It enables the existing private local attachment store and verifies
+the same account's administrator login. Its mode-0600 credential file lives under
+the disposable private home, never artifacts; only the exact
+`TT_LOCAL_FILE_SYNC_ADMIN_FIXTURE` path is admitted by `run`. Guest and ordinary
+accounts still cannot grant upload access. `--vault-fixture` separately generates
+a new 32-byte server vault key for encrypted settings tests. No inherited admin,
+storage or vault configuration is accepted. Cleanup removes the private files,
+local objects and database together.
+
+`application.cjs::verifyApplicationAssets` requires JavaScript responses for
+the draft-preview, platform, library and embed bundles as well as the matching
+SPA entry. A partial main-only Vite build that returns HTML 200 for a missing
+bundle fails preflight. `agent-browser-application.test.cjs` covers that refusal.
+
+Build client, offline shell, Nitro template and `NITRO_PRESET=node-server` server
+first, without loading real configuration. Pass an independently verified local
+`mongod` executable to `start`; no production database is accepted. See TESTING's
+**Linux isolated anonymous/offline acceptance** for commands and prerequisites.
+This proves the native web renderer in an isolated Linux browser. Installed Mac
+app controls, native runtime claims and deployed previews need separate evidence.

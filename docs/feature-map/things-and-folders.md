@@ -1,5 +1,29 @@
 # Things and folders
 
+Local browser `http.request` Actions use `local-workspace/actionRequests.ts` for
+editable Things CRUD, owner-scoped search and bulk move/copy/delete. Bulk selection
+has no additional item ceiling; sequential ordinary writes retain interpreter
+budgets, cancellation and per-item results. `actions.ts` binds account moves and
+deletes to `AccountThingSync` so content and queue intent commit together. Copies
+use canonical export/import, require a complete device closure for account
+Actions, and refuse protected child content before writes.
+Regression: `actionRequests.test.ts` and `accountActions.test.ts`. Normal transfer
+selection uses `thingTransfer/readFile.ts` without a separate selected-file cap;
+`transferBatch.browser.test.ts` exercises 20 JSON files through the offline native
+dialog and cold reload (`TT_DRAFT_WEB_BASE`, `TT_DRAFT_ARTIFACT_DIR`, shared browser
+paths). Canonical transfer budgets and protected-kind request refusals remain.
+
+Account native copy/fork uses `accountApi.client.ts` with the existing scoped
+`accountExport.ts` Blob plan and `LocalThings.import` transaction. An internal
+commit callback rechecks source refusals/deletion, file metadata/bytes and
+protected library state after hashing, in the same transaction as copied
+content and file/content queue intents. Account file aliases map to the new
+root explicitly. Folder deletion drains surviving file children through
+`AccountFileSync.contentHooks.mutate`. `accountCopy.test.ts` covers these paths,
+atomic failure, selections above 200 items and deep folder traversal;
+`accountFileCopy.browser.test.ts` covers normal native Duplicate with exact
+bytes, cold reload and independent reconnect queues (no shared-Fork UI claim).
+
 Native transfer export carries Blob handles through `collectTransfer`,
 `exportLocalThingSnapshot`, `accountExport.ts` and `bundleFromPlan`. Downloads use
 the chunked Blob ZIP encoder; byte/clipboard compatibility callers materialize only
@@ -823,7 +847,7 @@ with actor/data-plane headers and capability negotiation. `accountExport.test.ts
 covers missing coverage, stale copies, pending edits, alias ownership, quota,
 cancellation and identity fencing. `accountImport.browser.test.ts` exercises
 real offline normal-dialog downloads and round-trips the downloaded file.
-Saved standalone account files now participate in this collector (see the file-transfer checkpoint below); linked-gallery and managed-account offline export remain separate work.
+Saved standalone account files and locally held linked-gallery metadata now participate in this collector (see the file-transfer checkpoint below). URL metadata remains an external reference; managed kinds outside these dedicated adapters retain their existing export contracts.
 
 
 Account catalogue discovery uses `accountThingTransport.browse` and bounded
@@ -1161,3 +1185,34 @@ private managed content excluded by the ordinary library API are not covered.
 Incomplete scan/traversal status remains explicit. No new API contract or
 background indexing service is introduced. Unfiled files independently loads
 one page at a time and requires Load more for each subsequent page.
+
+
+### Algorithm History ownership
+
+`local-workspace/algorithms.ts` owns atomic anonymous profile changes;
+`accountAlgorithms.ts` keeps the dedicated scoped content queue and records
+owner device drafts through `accountTimeline.ts`. `timeline/algorithmContent.ts`
+is the approved design projection. `local-workspace/algorithmVersions.ts` opts
+into the shared Timeline planner through the dedicated algorithm transaction,
+preserving current sharing/listing, lineage, selection and library title/folder.
+Generic protected writes and deleted-profile recovery remain refused.
+
+History displays algorithm versions through `timeline/browserModel.ts`;
+`timeline/exportVersion.ts` validates canonical local and remote archives.
+Remote algorithm draft export is the additive `api.timeline` 1.22.0 contract in
+`docs/apiDocs.ts`, published on both manifests and negotiated in `useApi.tsx`.
+It preserves actual receipts and never acknowledges the algorithm content queue.
+See [Algorithm device versions](../unified-timeline.md#algorithm-device-versions--apitimeline-1220).
+Regressions: `algorithmHistory.test.ts`,
+`api/utils/timeline/exportVersion.test.ts`, `test:api-capabilities`; native
+offline restore/organization/reconnect: `algorithmHistory.browser.test.ts`.
+
+
+Local draft media now include canonical linked URL metadata alongside stored files.
+`local-workspace/drafts.ts` rechecks prepared metadata in the destination transaction,
+binds URLs to one working draft, and gives template/recovery copies independent
+attachment and account request IDs. Releases expire only unbound selections; URL
+rows never allocate fake bytes or fetch their content. `linkedDrafts.test.ts` covers
+mixed media across reopen, remapped layouts, account queue rollback and partition
+separation, plus metadata changes before commit. Account registration and later
+post/draft binding use the dedicated `AccountFileSync` journal.

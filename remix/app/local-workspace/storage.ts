@@ -14,9 +14,6 @@ export const workspaceScopeKey = (scope: WorkspaceScope): string => {
 	return JSON.stringify(['account', scope.origin, scope.ownerId, scope.dataPlane]);
 };
 
-// Buffered file adapters still use these processing bounds until their stream
-// migration is complete. IndexedDB admission itself uses the browser's quota.
-export const LEGACY_FILE_BUFFER_LIMITS = { binaryBytes: 16 * 1024 * 1024, bytes: 64 * 1024 * 1024 } as const;
 export class WorkspaceError extends Error {
 	readonly ok = false;
 	get error() {

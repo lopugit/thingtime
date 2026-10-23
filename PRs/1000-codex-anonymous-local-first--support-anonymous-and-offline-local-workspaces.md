@@ -2,6 +2,77 @@
 
 Branch: `codex/anonymous-local-first`. PR: https://github.com/lopugit/thingtime/pull/1000
 
+## Current checkpoint — 2026-10-23
+
+This continues fetched feature head `fd49b8d1e63d106ad20d67a77271aaa2a2e4bf4d`.
+The attached brief was available; the referenced `HANDOFF.md` and
+`theme-history-in-progress.patch` were not. No missing-patch application is
+claimed. Newer main commits were fetched and inspected without resetting or
+force-pushing the feature branch. This product PR should target `develop` under
+the repository's current publishing instructions.
+
+The change gives live themes and algorithms dedicated History restore/undo/merge
+adapters while retaining the canonical planner, validation, transaction and
+queue machinery. Current sharing, title, folder and selection remain intact.
+Same-head content refreshes invalidate previews, and concurrent exact retries
+resolve to the committed operation. Deleted protected content remains refused.
+Algorithm edits now author canonical History; remote algorithm-draft archive
+export is an additive `api.timeline` 1.22.0 contract.
+
+The feed gains a clearly partial device view with scoped cursors and local
+ranking. Generic Thing audience labels share the normal inherited/subspace
+description. The narrow floating assistant clears active and collapsed composers. Local
+capacity fixes remove obsolete editor-tree, provider-count and selected-file
+caps, retain actual quota rollback, and add larger-selection Action copy/move/delete.
+Complete account file copies use device bytes and an atomic source-availability
+fence through the normal importer. URL gallery references use local
+drafts/templates and the same file journal, with idempotent registration,
+annotation and deletion; external content is not fetched. Canonical server MIME
+normalization uses the verified same-file receipt for later metadata checks,
+so safe MIME changes during upload do not block annotation or folder placement;
+later identity substitutions still refuse. Separate canonical
+transfer files are admitted independently. Theme reconnect retries failed catalogue/selection reads independently, and
+anonymous local algorithm previews no longer require a public request.
+
+Review the [current feature matrix](../docs/local-workspaces.md#current-implementation-and-evidence--2026-10-23)
+and [concrete remaining source gaps](../artifacts/anonymous-local-first-2026-10-23/matrix-source-audit.md).
+The [artifact index](../artifacts/anonymous-local-first-2026-10-23/README.md)
+contains actual canonical JSON, three native viewport PNGs, the card crop,
+content hash and runnable MCP usage. Local stdio protocol acceptance is distinct
+from this chat's unavailable Thingtime host connection.
+
+Local evidence is reproduced in a disposable Linux runtime with browser and
+backend network namespaces, absent host profiles/configuration, fresh synthetic
+accounts and the existing packaged application adapter. It is not installed
+macOS-app acceptance. The normal importer and Builder checks use real APIs and
+native UI; the stateless render process has no account/API/database. Incomplete
+test packaging was caught by the web check and retained as failure evidence;
+the canonical full client build includes the required independent bundles.
+
+Current regression reruns: workspace 794 passed/94 opt-in skipped plus four
+offline-shell checks, Timeline 261 passed, drafts 50 passed/9 opt-in skipped,
+and attachments 356 passed plus 12 prechecks. Changed-file lint has zero errors
+and nine warnings (including intentional unsafe-URL rejection fixtures). Three missing test-block closures
+in two fetched attachment tests were repaired. An isolated archive of the
+syntax-repaired baseline has 91 TypeScript diagnostics; the final frozen-product comparison
+has exactly the same normalized signatures with none added or removed.
+The final package `15e93be0` passes native account Duplicate and the complete
+SDK stdio render/failure/concurrency suite, web editor, individual Builder
+controls and normal private importer. Integrated posting passes both failure
+directions; linked galleries pass four native scenarios. Theme History,
+organization/custom plane, algorithm History, settings and responsive checks
+retain their explicitly recorded package boundaries.
+The [verification index](../artifacts/anonymous-local-first-2026-10-23/CHECKS.md)
+records actual native/browser runs and build boundaries. Historical
+sections and unavailable `tmp/` links below are not final-revision acceptance.
+
+Open gates include target-host MCP connectivity, other managed imports, deleted
+protected recovery, larger remote transfer/catalogue contracts and broader
+native/service/account-transition coverage. Exact pushed-revision CI and deployed
+preview verification are independent gates. The existing preview served an older
+build during initial audit. No merge, manual deployment, public test content or
+real-account mutation is authorized or included.
+
 ## Visible page-block recovery — 2026-10-19
 
 Native visual review found the page-block refresh notice beneath the fixed

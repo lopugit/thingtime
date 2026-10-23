@@ -8,7 +8,9 @@ import {
  type PublicVaultEntry, type PublicVaultGroup, type UserVaultGroupFields, type UserVaultSecretFields, type UserVaultProviderFields
 } from '../api/utils/lopu/userVaultModel';
 const collections = deviceVaultCollections('providers');
-const MAX_ENTRIES = 500;
+// This is the existing complete account metadata response contract, not a
+// device-storage limit. Local authored entries may outnumber that snapshot.
+const REMOTE_SNAPSHOT_LIMIT = 500;
 type RetainedContent = ({ kind: 'group' } & UserVaultGroupFields) | ({ kind: 'secret' } & UserVaultSecretFields) | ({ kind: 'provider' } & Omit<UserVaultProviderFields, 'token'> & { token: string });
 type RemoteContent = (({ kind: 'secret' } & Omit<UserVaultSecretFields, 'value'>) | ({ kind: 'provider' } & Omit<UserVaultProviderFields, 'token'>)) & { remoteOnly: true };
 type Content = RetainedContent | RemoteContent;
@@ -100,7 +102,6 @@ export class LocalProviderVault extends DeviceVaultSession {
  }
  async list(signal?: AbortSignal) {
   const op = this.operation(signal, false), rows = (await this.rows(op)).filter(row => !row.deleted);
-  if (rows.length > MAX_ENTRIES) return fail('VAULT_LIMIT', 'The vault exceeds this device entry limit.', 413);
   const groups: DeviceProviderGroup[] = [], entries: DeviceProviderEntry[] = [];
   for (const row of rows) {
    const value = await this.decode(row, op), metadata = this.metadata(row, value);
@@ -160,7 +161,6 @@ export class LocalProviderVault extends DeviceVaultSession {
    const groupId = next.groupId, group = rows.find(row => row.id === groupId && !row.deleted);
    if (!group || (await this.decode(group, op)).kind !== 'group') return fail('VAULT_GROUP', 'Vault environment was not found.', 404);
   }
-  if (!before && rows.filter(row => !row.deleted).length >= MAX_ENTRIES) return fail('VAULT_LIMIT', 'Keep at most 500 entries in this device vault.', 413);
   const time = new Date().toISOString(), record: DeviceProviderRecord = { id: command.id, revision: command.revision + 1, remoteRevision: before?.remoteRevision ?? 0,
    ...(before?.remoteVersion ? { remoteVersion: before.remoteVersion } : {}), createdAt: before?.createdAt ?? time, updatedAt: time, writeId: command.writeId, writeDigest: digest,
    ...(next ? { encryptedValue: await sealDeviceVaultValue(owner, op.key, command.id, JSON.stringify(next)) } : { deleted: true as const }) };
@@ -182,7 +182,7 @@ export class LocalProviderVault extends DeviceVaultSession {
   const metadata = this.metadata(row, value); return value.kind === 'group' ? { ok: true as const, group: metadata as DeviceProviderGroup } : { ok: true as const, entry: metadata as DeviceProviderEntry };
  }
  private async prepareMetadata(snapshot: Awaited<ReturnType<ProviderVaultMetadataTransport['metadata']>>, baseline: DeviceProviderRecord[], op: ReturnType<LocalProviderVault['operation']>, retainUnchanged = true) {
-   if (!snapshot || snapshot.complete !== true || !Array.isArray(snapshot.groups) || !Array.isArray(snapshot.entries) || snapshot.groups.length + snapshot.entries.length > MAX_ENTRIES)
+   if (!snapshot || snapshot.complete !== true || !Array.isArray(snapshot.groups) || !Array.isArray(snapshot.entries) || snapshot.groups.length + snapshot.entries.length > REMOTE_SNAPSHOT_LIMIT)
     return fail('VAULT_RESPONSE', 'The account returned an incomplete or oversized vault snapshot.', 502);
    if (snapshot.groups.some(row => !row || typeof row !== 'object' || Array.isArray(row) || 'kind' in row) ||
     snapshot.entries.some(row => !row || typeof row !== 'object' || Array.isArray(row) || !['secret','provider'].includes(row.kind)))
@@ -234,7 +234,6 @@ export class LocalProviderVault extends DeviceVaultSession {
     for (const row of prepared) if (!pending.has(row.id)) adopted.set(row.id, row);
     for (const row of baseline) if (!seen.has(row.id) && row.remoteVersion && !row.deleted && !pending.has(row.id))
      adopted.set(row.id, { ...row, revision: row.revision + 1, deleted: true, encryptedValue: undefined });
-    if ([...adopted.values()].filter(row => !row.deleted).length > MAX_ENTRIES) return fail('VAULT_LIMIT', 'Account metadata and pending device entries exceed this device limit. Existing data has been kept.', 413);
     for (const [id, row] of adopted) await tx.put(collections.records, id, row);
    });
    op.lease.assertCurrent(); return { complete: true as const };
@@ -439,7 +438,6 @@ export class LocalProviderVault extends DeviceVaultSession {
     queuedCopies.push({ key: `${id}:${command.writeId}`, command: { id: command.writeId, recordId: id, localRevision: 1, state: 'pending', encryptedValue: await sealDeviceVaultValue(owner, op.key, `command:${id}:${command.writeId}`, JSON.stringify(command)) } });
    }
    const active = [...adopted.values()].filter(row => !row.deleted);
-   if (active.length > MAX_ENTRIES) return fail('VAULT_LIMIT', 'The resolution exceeds this device entry limit. Existing work has been kept.', 413);
    const contents = new Map<string,Content>();
    for (const row of active) { this.validateRow(row.id, row); contents.set(row.id, await this.decode(row, op)); }
    for (const value of contents.values()) if (value.kind !== 'group' && value.groupId && contents.get(value.groupId)?.kind !== 'group') return fail('VAULT_GROUP', 'This resolution would leave an entry without its environment. Existing work has been kept.');

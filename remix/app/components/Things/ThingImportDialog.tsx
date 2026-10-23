@@ -5,7 +5,7 @@ import { Box, Button, Flex, Input, Modal, ModalBody, ModalCloseButton, ModalCont
 import { useAttachmentUploads } from '~/components/Attachments/useAttachmentUploads';
 import { useWorkspaceUser } from '~/hooks/useWorkspaceUser';
 import { useApi } from '~/hooks/useApi';
-import { readTransferFiles, MAX_TRANSFER_BATCH } from '~/utils/thingTransfer/readFile';
+import { readTransferFiles } from '~/utils/thingTransfer/readFile';
 import { readTransferClipboard, MAX_CLIPBOARD_BYTES } from '~/utils/thingTransfer/browser';
 import { TRANSFER_LIMITS } from '~/utils/thingTransfer/format';
 import type { TransferBundle as BinaryTransferBundle } from '~/utils/thingTransfer/archive';
@@ -195,7 +195,7 @@ const ThingImportStep = ({ ownerId, folderId, initialBundle, onClose, batch, com
       {!submitting && <ModalCloseButton />}
       <ModalBody>
         <Flex direction="column" gap={4}>
-          <Text fontSize="sm">Paste copied Things, or choose or drop up to {MAX_TRANSFER_BATCH} Thingtime JSON / complete ZIP files. Imports create private copies; originals and sharing settings stay unchanged.</Text>
+          <Text fontSize="sm">Paste copied Things, or choose or drop Thingtime JSON / complete ZIP files. Imports create private copies; originals and sharing settings stay unchanged.</Text>
           {!running && !uploadStarted && !attempted && <Box as="details" open={bundle ? undefined : true}>
             <Box as="summary" cursor="pointer" fontSize="sm">{bundle ? 'Choose different files or paste content' : 'Paste or select transfer files'}</Box>
             <Box mt={2} borderWidth="1px" borderStyle="dashed" borderRadius="md" padding={4} background={dragging ? 'blackAlpha.100' : undefined}

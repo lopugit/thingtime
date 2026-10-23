@@ -14,15 +14,36 @@ test(
 		const origin = new URL(base!).origin;
 		assert.ok(['localhost', '127.0.0.1'].includes(new URL(origin).hostname));
 		const { chromium } = await import(playwrightPath!),
-			browser = await chromium.launch({ executablePath: process.env.TT_SHARED_CHROME_PATH, headless: true });
+			browser = await chromium.launch({ executablePath: process.env.TT_SHARED_CHROME_PATH, headless: true, chromiumSandbox: true });
 		const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } }),
 			guest = await browser.newContext(),
 			page = await context.newPage();
-		const headers = { Origin: origin, 'X-Thingtime-Expected-Data-Plane': 'home' },
+		const headers: Record<string, string> = { Origin: origin, 'X-Thingtime-Expected-Data-Plane': 'home' },
 			url = (path: string) => new URL(path, origin).href,
 			errors: string[] = [],
 			writes: { path: string; offline: boolean }[] = [],
 			checks: string[] = [];
+		// Browser fetch observes loopback Secure cookies exactly as the app does.
+		const nativeRequest = async (method: string, target: string, options: any = {}) => {
+			const result = await page.evaluate(
+				async ({ method, target, headers, data }) => {
+					const response = await fetch(target, {
+						method,
+						headers: { ...headers, ...(data === undefined ? {} : { 'Content-Type': 'application/json' }) },
+						...(data === undefined ? {} : { body: JSON.stringify(data) })
+					});
+					return { status: response.status, body: await response.json() };
+				},
+				{ method, target, headers: method === 'GET' ? {} : { ...headers, ...options.headers }, data: options.data }
+			);
+			return { status: () => result.status, json: async () => result.body, text: async () => JSON.stringify(result.body) };
+		};
+		const native = {
+			get: (target: string, options?: any) => nativeRequest('GET', target, options),
+			post: (target: string, options?: any) => nativeRequest('POST', target, options),
+			delete: (target: string, options?: any) => nativeRequest('DELETE', target, options)
+		};
+
 		let offline = false,
 			themeId = '',
 			folderId = '',
@@ -34,13 +55,36 @@ test(
 		});
 		const name = 'Imported peach ' + randomUUID().slice(0, 6),
 			folderName = 'Offline looks ' + randomUUID().slice(0, 6);
+		const network = await context.newCDPSession(page);
+		await network.send('Network.enable');
+		const connectivity = async (value: boolean) => {
+			if (!value) offline = false;
+			await context.setOffline(value);
+			await network.send('Network.overrideNetworkState', {
+				offline: value,
+				latency: 1,
+				downloadThroughput: 100_000_000,
+				uploadThroughput: 100_000_000,
+				connectionType: 'ethernet'
+			});
+			if (value) offline = true;
+		};
+		await connectivity(false);
 		await mkdir(resolve(artifacts!), { recursive: true });
 		try {
 			const health = await context.request.get(url('/api/v1/mongodb/status'));
 			assert.equal(health.status(), 200);
 			const storage = await health.json();
-			assert.equal(storage.host, '127.0.0.1:22463');
-			assert.equal(storage.replicaSet, 'draftPreview');
+			if (process.env.TT_RENDER_SESSION) {
+				const isolation = await (await context.request.get(url('/api/v1/health/nitro'))).json();
+				assert.equal(isolation.testEnvironment.mode, 'isolated-agent-test');
+				assert.equal(isolation.testEnvironment.sessionId, process.env.TT_RENDER_SESSION);
+				assert.equal(storage.host, '127.0.0.1:27017');
+				assert.match(storage.replicaSet, /^tt-agent-/);
+			} else {
+				assert.equal(storage.host, '127.0.0.1:22463');
+				assert.equal(storage.replicaSet, 'draftPreview');
+			}
 			assert.equal(storage.custom, false);
 			const username = 'themeimportui-' + randomUUID().slice(0, 8),
 				registration = await context.request.post(url('/api/v1/auth/register'), {
@@ -49,6 +93,7 @@ test(
 				});
 			assert.equal(registration.status(), 200);
 			ownerId = (await registration.json()).user.id;
+			headers['X-Thingtime-Expected-Actor'] = ownerId;
 			const file = resolve(artifacts!, 'input.json');
 			await writeFile(
 				file,
@@ -73,8 +118,8 @@ test(
 						return true;
 				return false;
 			});
-			offline = true;
-			await context.setOffline(true);
+			await page.waitForLoadState('networkidle');
+			await connectivity(true);
 			await page.reload();
 			await page.getByTestId('thing-transfer-menu').first().click();
 			await page.getByRole('menuitem', { name: 'Import into my Things…', exact: true }).click();
@@ -117,11 +162,11 @@ test(
 			);
 			checks.push('canonical offline folder export preserves remapped theme and tokens');
 			offline = false;
-			await context.setOffline(false);
+			await connectivity(false);
 			await page.reload();
 			let stored: any;
 			for (let n = 0; n < 100; n++) {
-				const response = await context.request.get(url('/api/v1/things?id=' + themeId));
+				const response = await native.get(url('/api/v1/things?id=' + themeId));
 				if (response.status() === 200) {
 					stored = (await response.json()).thing;
 					if (stored?.folderId === folderId) break;
@@ -134,7 +179,7 @@ test(
 			assert.equal(stored?.visibility, 'private');
 			assert.equal(stored?.author.id, ownerId);
 			assert.equal((await guest.request.get(url('/api/v1/things?id=' + themeId))).status(), 404);
-			const selection = await context.request.post(url('/api/v1/themes/sync'), {
+			const selection = await native.post(url('/api/v1/themes/sync'), {
 				headers,
 				data: { operation: 'selection', expectedOwnerId: ownerId }
 			});
@@ -153,6 +198,7 @@ test(
 				resolve(artifacts!, 'failure.json'),
 				JSON.stringify(
 					{
+						error: String(error),
 						body: await page
 							.locator('body')
 							.innerText()
@@ -167,8 +213,8 @@ test(
 			throw error;
 		} finally {
 			await context.setOffline(false).catch(() => {});
-			if (themeId) await context.request.post(url('/api/v1/themes/delete'), { headers, data: { id: themeId } }).catch(() => {});
-			if (folderId) await context.request.delete(url('/api/v1/things'), { headers, data: { id: folderId } }).catch(() => {});
+			if (themeId) await native.post(url('/api/v1/themes/delete'), { headers, data: { id: themeId } }).catch(() => {});
+			if (folderId) await native.delete(url('/api/v1/things'), { headers, data: { id: folderId } }).catch(() => {});
 			await browser.close();
 		}
 	}

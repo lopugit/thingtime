@@ -1,5 +1,6 @@
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { useLopuVisualViewport } from './useLopuVisualViewport';
+import { useLopuLauncherClearance } from './useLopuLauncherClearance';
 import { LopuDictationSettings } from './LopuDictationSettings';
 import React from 'react';
 import { Box, Button, Center, Flex, Select, Switch, Text } from '@chakra-ui/react';
@@ -476,6 +477,7 @@ export const LopuHost = () => {
 
 	const windowRef = React.useRef<HTMLDivElement | null>(null);
 	const launcherRef = React.useRef<HTMLButtonElement | null>(null);
+	const launcherSlotRef = React.useRef<HTMLDivElement | null>(null);
 	// a drag that moved past the threshold must not also count as a click
 	const launcherMovedRef = React.useRef(false);
 
@@ -522,6 +524,8 @@ export const LopuHost = () => {
 	}, [open]);
 
 	const launcherPos = launcherRaw ? clampLopuLauncherPosition(launcherRaw, viewport) : null;
+	const launcherVisible = showLauncher && !showSheet && !(showFrame && docked);
+	const launcherCovered = useLopuLauncherClearance(launcherSlotRef, isMobile && launcherVisible && gesture !== 'launcher', `${pathname}:${launcherPos?.x}:${launcherPos?.y}`);
 	const freeGeometry = resolveLopuWindowGeometry(windowRaw, viewport, launcherPos);
 	const geometry = docked ? dockedLopuWindowGeometry(settings.dock as Exclude<LopuDock, 'free'>, freeGeometry.width, viewport, freeGeometry.height, settings.dockMode === 'split') : freeGeometry;
 
@@ -938,9 +942,13 @@ export const LopuHost = () => {
 			)}
 
 			{/* a docked column runs the full edge — the bubble would only sit on top of it */}
-			{showLauncher && !showSheet && !(showFrame && docked) && (
+			{launcherVisible && (
 				<Box
+					ref={launcherSlotRef}
 					className="lopuLauncher"
+					visibility={launcherCovered ? 'hidden' : 'visible'}
+					pointerEvents={launcherCovered ? 'none' : undefined}
+					aria-hidden={launcherCovered || undefined}
 					position="fixed"
 					zIndex={LOPU_LAUNCHER_Z}
 					left={launcherPos ? `${launcherPos.x}px` : undefined}

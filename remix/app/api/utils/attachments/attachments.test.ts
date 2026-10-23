@@ -2545,7 +2545,7 @@ test('fingerprints reveal only verified exact-version content after live attachm
 	assert.equal((await service.fingerprint({ id: original.ownerId }, original.shareId)).ok, false);
 	onRead = () => {}; doc = original; custom = true; const before = reads;
 	assert.equal((await service.fingerprint({ id: doc.ownerId }, doc.shareId)).ok, false); assert.equal(reads, before);
-
+});
 
 test('request cancellation reserves an owner-scoped receipt before a delayed start', async () => {
 	const docs = new Map<string, AttachmentDoc>(); let starts = 0;
@@ -3177,6 +3177,7 @@ test('same empty start resumes a failed finalization only through active and exp
         assert.equal((await readdir(join(directory, 'objects', identity))).filter(name => name.endsWith('.bin')).length, 1);
         assert.equal((await service.start('user-1', { ...input, filename: 'different.txt' })).ok, false);
     } finally { await rm(directory, { recursive: true, force: true }); }
+});
 
 test('password cleanup retains a minimal parent-bound receipt for target and unbound files', async () => {
   for (const bound of [false, true]) {

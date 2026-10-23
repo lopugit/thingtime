@@ -1,0 +1,30 @@
+✔ Home History restores and exports device theme and algorithm edits while a custom plane is selected, with the current account lease (304.466237ms)
+✔ account hydration can add remote themes alongside 100 pending device themes (2451.710215ms)
+✔ reviewed theme conflict copies work when the device already holds 100 themes (1570.056894ms)
+✔ account themes reuse local validation and export without remote authority or anonymous adoption (44.444855ms)
+✔ complete snapshots are scoped, validated atomically and fenced against local or newer reads (19.076252ms)
+✔ lost create replies retain an immutable command while later local changes queue independently (58.349689ms)
+✔ delete following an uncertain create replays creation then deletion without resurrection (88.061601ms)
+✔ concurrent tabs claim one frozen write and edits during transmission survive its acknowledgment (23.250288ms)
+✔ stale remote writes require exact review and never erase newer local edits (39.832873ms)
+✔ unknown outcomes cannot be reviewed away and retired identities cannot retain late snapshots (10.147125ms)
+✔ reviewed copies keep the account original and remap a deleted source to an independent private theme (49.705558ms)
+✔ workspace quota failure rolls back theme content and its queued operation together (695.342677ms)
+✔ anonymous theme restore preserves current organization/sharing and replays one exact operation (391.836121ms)
+✔ account theme restore preserves current organization/sharing and replays one exact operation (296.699949ms)
+✔ anonymous theme undo reviews overlapping edits and retains independent tokens (178.255842ms)
+✔ account theme undo reviews overlapping edits and retains independent tokens (352.966053ms)
+✔ theme merge shares the common-ancestor planner and retains both parents (138.887431ms)
+✔ theme previews fence concurrent changes, deletion and identity retirement (104.653781ms)
+✔ failed account theme History commit rolls back design, queue and Timeline (182.623967ms)
+✔ theme History cannot authorize generic protected writes or malformed snapshots (15.576221ms)
+✔ theme preview refuses unseen content refresh even when its recorded head is unchanged (35.628242ms)
+✔ a concurrent committed theme retry wins over an intermediate stale planning read (110.945969ms)
+ℹ tests 22
+ℹ suites 0
+ℹ pass 22
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 6211.735222

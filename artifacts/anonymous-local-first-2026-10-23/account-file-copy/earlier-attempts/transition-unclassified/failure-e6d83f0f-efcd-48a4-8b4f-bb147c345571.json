@@ -1,0 +1,24 @@
+{
+  "runId": "e6d83f0f-efcd-48a4-8b4f-bb147c345571",
+  "error": "AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   {\n+     actor: '6adb26558d76baae4ed90262',\n+     offline: true,\n+     path: '/api/v1/algorithms/sync',\n+     plane: 'home'\n+   }\n+ ]\n- []\n",
+  "screenshot": {
+    "file": "failure-e6d83f0f-efcd-48a4-8b4f-bb147c345571.png",
+    "sha256": "66917e56c0b8d496603a44744379b1ce3ace07cef3e1eec57abf39dedd89a402"
+  },
+  "body": "👨‍💻\n🦄\nLogin\n🌈\n🦄\n\nOffline account workspace. Local edits are available; account sync is paused until your session is verified.\n\nReconnect\n\n4 changes saved on this device. Offline — sync will resume when connected.\n\nReview sync\n\n2 file changes saved on this device. Waiting for verified account sync.\n\nReview file sync\n\nTHINGTIME · THINGS\n\nBrowse files\nSelected library\nHome library\nThings\nNew\nImport…\nPaste\n\nVIEW\n\nGrid\nList\nColumns\n\nSHOW\n\nNames\nPreviews\n\nARRANGE\n\nNewest first\nGroup\n\nKIND\n\n🌀 All\n📁 Folders\n💾 Files\n📝 Posts\n📦 Data\n💎 Schemas\n🧩 Components\n⚡ Actions\n💬 Comments\n🏠 All things\n\n/\n\n📁 Offline file copy e6d83f0f\n\n📦\n\nIndependent copy data\n\nDATA\n\njust now\n\n📄\n\nPrivate copied file\n\nATTACHMENT\n\njust now\n\n✉️\nCONTACT\n\nconnect@thingtime.com\n\nSupport Thingtime\n\n© 2026 Thingtime\n\n🌱 git/unknown\nCurrent Tab\n\nNitro API: status unavailable\n\nFrontend: status unavailable\n\nMongoDB: status unavailable\n\n🌈\n🦄\n🧙‍♂️\n📖\nDOCS\n\nLegal policies & terms\n\nDocs home\n\nDesign mockups\n\nDesign system\n\n🌈\nACCOUNT\n\nLog in\n\nRegister\n\n🦄",
+  "browserOnline": false,
+  "sourceRoot": "ad4c8e3a-0d2e-4349-9684-07354679b525",
+  "copyRoot": "db6bff8c-d660-491a-b2c6-fb3ae2cd6040",
+  "sourceFileId": "local-file-a6d9a54f-cf8a-4f61-90b8-4286471ed467",
+  "copyFileId": "local-file-5b0eac0a-1233-4b42-bc99-59bdf7c83862",
+  "failedOriginalUploads": 0,
+  "errors": [],
+  "writes": [
+    {
+      "path": "/api/v1/algorithms/sync",
+      "offline": true,
+      "actor": "6adb26558d76baae4ed90262",
+      "plane": "home"
+    }
+  ]
+}

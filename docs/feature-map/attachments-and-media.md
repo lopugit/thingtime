@@ -1,5 +1,27 @@
 # Attachments and media
 
+`api.attachment-link` 1.1.0 accepts optional owner-scoped request IDs for
+metadata-only post/comment links. Exact canonical URL/purpose/media-kind retries
+return the same attachment and current version after binding, without renewing
+draft expiry; changed requests conflict. `api.attachment-delete` 1.8.0 adds exact
+request-ID/version/target cleanup for these links, retaining the existing small
+accounted cancellation receipt on every cleanup path. The store transaction
+keeps quota and identity together; URLs are never fetched by the server. See
+`linkedAttachmentRequest.test.ts`, route/capability tests and the disposable
+`scripts/linked-attachment-requests.integration.mts` real-API fixture.
+
+Local post/comment linked galleries and normal Attach-by-URL selections now use
+`local-workspace/attachments.ts` metadata markers and the ordinary importer,
+composer and draft pipeline. URL rows never claim stored bytes. Mixed transfer
+preserves annotations/order; copies get fresh identities. Account registration
+reuses `AccountFileSync` claims and stable request IDs, verifies canonical receipts,
+and waits before parent binding; conditional metadata edits and durable deletion
+retain owner/target/content identity. Bound byte annotations use the same checks.
+Known registered URL drafts/posts refresh without fetching external bytes;
+unfamiliar server-only links and other managed targets retain their dedicated
+online boundaries. Local API/draft/receipt tests pass; final-package native
+acceptance is tracked in [linked-media evidence](../../artifacts/anonymous-local-first-2026-10-23/linked-media/README.md).
+
 Cloud JSON sync requests classify HTTP 408/429/5xx as temporary transport waits.
 `syncJobJournal.ts` persists an optional, revision-guarded `retryAt`; automatic
 discovery respects it across restart and repeated wake events. Retry-After is

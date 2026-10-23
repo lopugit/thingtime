@@ -13,6 +13,7 @@ import { parseTimelineNote, TIMELINE_NOTES_PER_EVENT, type TimelineNote } from '
 import { copyBoundedJson } from '../utils/boundedJson.ts';
 import { versionContent } from './versions.ts';
 import { THEME_CONTENT_ADAPTER, themeContentValue } from './themeContent.ts';
+import { ALGORITHM_CONTENT_ADAPTER, algorithmContentValue } from './algorithmContent.ts';
 import { parseTimelineVersionName, type TimelineVersionName } from './versionNames.ts';
 import { createVersionGraphTools, type TimelineGraphNode } from './versionGraph.ts';
 
@@ -40,7 +41,7 @@ type Dependencies<Entry extends TimelineExportSource> = {
 	now: () => Date;
 	refuse: (status: number, message: string) => never;
 	retainedLocation: 'your account' | 'this device';
-	allowClientDrafts?: boolean;
+	allowClientDrafts?: boolean | ((event: TimelineEvent) => boolean);
 	context?: TimelineVersionExport['context'];
 };
 export function createVersionExportReader<Entry extends TimelineExportSource = TimelineEntry>(deps: Dependencies<Entry>) {
@@ -52,9 +53,10 @@ export function createVersionExportReader<Entry extends TimelineExportSource = T
 		const read = deps.entries;
 		const source = (await read([eventId]))[0];
 		if (!source || source.event.ownerId !== ownerId || source.event.id !== eventId) return null;
-		if (source.event.mode !== 'revision' && !(deps.allowClientDrafts && isClientDraftVersion(source.event)))
+		const allowClientDraft = isClientDraftVersion(source.event) && (typeof deps.allowClientDrafts === 'function' ? deps.allowClientDrafts(source.event) : deps.allowClientDrafts === true);
+		if (source.event.mode !== 'revision' && !allowClientDraft)
 			refuse(422, 'Only saved versions can be exported.');
-		if (source.receipt === null && (!deps.allowClientDrafts || !isClientDraftVersion(source.event) || !deps.context))
+		if (source.receipt === null && (!allowClientDraft || !deps.context))
 			refuse(422, 'An unacknowledged version must remain a device-authored draft.');
 		const side = source.event.after ? 'after' : 'before';
 		const retained = source.event[side];
@@ -62,13 +64,15 @@ export function createVersionExportReader<Entry extends TimelineExportSource = T
 		if (retained?.adapter === TIMELINE_SNAPSHOT_PARTS_ADAPTER && parseTimelineSnapshotReference(retained.value).bytes > TIMELINE_EVENT_MAX_BYTES)
 			refuse(413, tooLarge);
 		let content: TimelineSnapshot;
-		if (retained?.adapter === THEME_CONTENT_ADAPTER) {
+		if (retained?.adapter === THEME_CONTENT_ADAPTER || retained?.adapter === ALGORITHM_CONTENT_ADAPTER) {
+			const kind = retained.adapter === THEME_CONTENT_ADAPTER ? 'theme' : 'algorithm';
 			const snapshot = await deps.snapshot(source, side);
-			if (!snapshot) refuse(422, 'This theme version is unavailable.');
+			if (!snapshot) refuse(422, `This ${kind} version is unavailable.`);
 			try {
-				themeContentValue(snapshot!);
+				if (kind === 'theme') themeContentValue(snapshot!);
+				else algorithmContentValue(snapshot!);
 			} catch {
-				refuse(422, 'This theme version has invalid content.');
+				refuse(422, `This ${kind} version has invalid content.`);
 			}
 			content = snapshot!;
 		} else {
@@ -110,6 +114,10 @@ export function createVersionExportReader<Entry extends TimelineExportSource = T
 /** A retained draft does not imply that any account mutation was executed. */
 export { isClientDraftVersion } from './contract.ts';
 
+/** These minima apply only to remote export; local retained content needs no server. */
+export const timelineVersionExportRequirement = (adapter?: string) =>
+	adapter === ALGORITHM_CONTENT_ADAPTER ? '1.22.0' : adapter === THEME_CONTENT_ADAPTER ? '1.21.0' : '1.18.0';
+
 /** Archive validation is shared by network reads, local exports and downloads.
  * Network responses still require a real receipt; a device archive can explicitly
  * retain an unacknowledged client draft without weakening parseTimelineEntry. */
@@ -143,6 +151,10 @@ export function parseTimelineVersionExport(
 		const source = event.after ?? event.before;
 		if (source?.adapter !== THEME_CONTENT_ADAPTER || JSON.stringify(themeContentValue(source)) !== JSON.stringify(themeContentValue(data.content)))
 			throw new Error('Invalid Timeline theme export content');
+	} else if (data.content.adapter === ALGORITHM_CONTENT_ADAPTER) {
+		const source = event.after ?? event.before;
+		if (source?.adapter !== ALGORITHM_CONTENT_ADAPTER || JSON.stringify(algorithmContentValue(source)) !== JSON.stringify(algorithmContentValue(data.content)))
+			throw new Error('Invalid Timeline algorithm export content');
 	} else {
 		if (data.content.adapter !== 'thing-content' || data.content.version !== 1) throw new Error('Invalid Timeline export content');
 		versionContent(data.content);

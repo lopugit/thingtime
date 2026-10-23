@@ -1,3 +1,5 @@
+import { themeContentValue, THEME_CONTENT_ADAPTER } from './themeContent';
+import { algorithmContentValue, ALGORITHM_CONTENT_ADAPTER } from './algorithmContent';
 import { copyBoundedJson } from '../utils/boundedJson.ts';
 import { componentBindingSnapshot, webpageComponentRefs } from './componentBindings.ts';
 import { componentBlocks } from './componentMerge.ts';
@@ -160,16 +162,20 @@ export function parsePublishedVersionPreview(input: unknown, eventId: string, th
 			value.conflicts?.length)
 	)
 		throw new Error('Invalid deleted Thing preview.');
+	const contentAdapter = value.result?.adapter;
+	const protectedContent = contentAdapter === THEME_CONTENT_ADAPTER || contentAdapter === ALGORITHM_CONTENT_ADAPTER;
+	if (protectedContent && value.current === null) throw new Error('Protected content requires its dedicated recovery editor.');
 	for (const side of ['current', 'incoming', 'result']) {
 		if (side === 'current' && value.current === null) continue;
-		if (
-			!keys(value[side], ['adapter', 'version', 'value']) ||
-			value[side].adapter !== 'thing-content' ||
-			value[side].version !== 1 ||
-			!keys(value[side].value, ['crystal', 'extended', 'tags', 'geo', 'acl', 'folderId'])
-		)
+		if (!keys(value[side], ['adapter', 'version', 'value']) || value[side].adapter !== contentAdapter || value[side].version !== 1)
 			throw new Error('Invalid version content.');
-		versionContent(value[side]);
+		if (contentAdapter === THEME_CONTENT_ADAPTER) themeContentValue(value[side]);
+		else if (contentAdapter === ALGORITHM_CONTENT_ADAPTER) algorithmContentValue(value[side]);
+		else {
+			if (contentAdapter !== 'thing-content' || !keys(value[side].value, ['crystal', 'extended', 'tags', 'geo', 'acl', 'folderId']))
+				throw new Error('Invalid version content.');
+			versionContent(value[side]);
+		}
 	}
 	if (value.recovery && JSON.stringify(value.result.value.acl) !== JSON.stringify(['tt:user'])) throw new Error('Recovered Things must be private.');
 	checkConflicts(value.conflicts);

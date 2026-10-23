@@ -10,8 +10,8 @@ import net from 'node:net';
 const base = process.env.TT_INHERITED_AUDIENCE_URL, artifacts = process.env.TT_INHERITED_AUDIENCE_ARTIFACTS,
   playwrightPath = process.env.TT_SHARED_PLAYWRIGHT_PATH;
 
-test('native comment permalinks describe inheritance without claiming public access to private subspaces',
-  { skip: !base || !artifacts || !playwrightPath, timeout: 240_000 }, async t => {
+test('native post and Thing permalinks preserve audience context and reachable composer controls',
+  { skip: !base || !artifacts || !playwrightPath, timeout: 300_000 }, async t => {
     const repetitions = Number(process.env.TT_INHERITED_AUDIENCE_REPETITIONS || 1);
     assert.ok(Number.isInteger(repetitions) && repetitions >= 1 && repetitions <= 3);
     const runId = randomUUID();
@@ -38,7 +38,7 @@ test('native comment permalinks describe inheritance without claiming public acc
     t.after(() => browser.close());
     const context = await browser.newContext(), guest = await browser.newContext(), foreign = await browser.newContext();
     const page = await context.newPage(), errors: string[] = [], bounds = [], failedRequests: string[] = [], consoleErrors: string[] = [], crashes: string[] = [];
-    const navigation: Array<Record<string, unknown>> = [], events: Array<Record<string, unknown>> = [], recovery = [];
+    const navigation: Array<Record<string, unknown>> = [], events: Array<Record<string, unknown>> = [], recovery = [], composerClearance = [], genericAudiences = [], deviceFeed = [];
     const record = (event: string, detail?: unknown) => {
       events.push({ at: Date.now(), event, detail });
       if (events.length > 200) events.shift();
@@ -122,15 +122,75 @@ test('native comment permalinks describe inheritance without claiming public acc
         assert.ok(notice && notice.y >= 54, 'The recovery notice must clear the fixed navigation');
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth), width);
         await page.screenshot({ path: resolve(artifacts!, `blocks-failure-${width}.png`), animations: 'disabled' });
+        const send = page.getByRole('button', { name: 'Send comment', exact: true }).last();
+        await page.getByPlaceholder('Write a comment… 💬', { exact: true }).last().fill('Composer clearance fixture');
+        assert.equal(await send.isEnabled(), true);
+        await page.locator('.lopuLauncher').waitFor({ state: 'attached' });
+        await send.scrollIntoViewIfNeeded();
+        // Align the real quick composer with the launcher's resting height.
+        // A notice, long discussion or saved launcher position may all create
+        // this collision; resizing/scrolling must not cover the submit target.
+        await send.evaluate(element => {
+          const bubble = document.querySelector('.lopuLauncher')?.getBoundingClientRect();
+          const button = element.getBoundingClientRect();
+          if (bubble) window.scrollBy(0, button.y + button.height / 2 - bubble.y - bubble.height / 2);
+        });
+        await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+        const clearance = await send.evaluate(element => {
+          const rect = element.getBoundingClientRect();
+          const bubble = document.querySelector<HTMLElement>('.lopuLauncher');
+          const area = bubble?.getBoundingClientRect();
+          const composer = element.closest('[data-lopu-launcher-clearance]')?.getBoundingClientRect();
+          return { button: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
+            visible: !bubble || getComputedStyle(bubble).visibility !== 'hidden',
+            intersects: !!area && rect.left < area.right && rect.right > area.left && rect.top < area.bottom && rect.bottom > area.top,
+            composerIntersects: !!area && !!composer && composer.left < area.right && composer.right > area.left && composer.top < area.bottom && composer.bottom > area.top,
+            reachable: element.contains(document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2)) };
+        });
+        if (width < 768) {
+          assert.equal(clearance.intersects && clearance.visible, false, 'The floating shortcut must not cover the phone composer');
+          assert.equal(clearance.reachable, true, 'The phone comment submit target stays reachable');
+        }
+        composerClearance.push({ width, ...clearance });
+        await page.screenshot({ path: resolve(artifacts!, `composer-clearance-${width}.png`), animations: 'disabled' });
+        await page.evaluate(() => window.scrollTo(0, 0));
         await Promise.all([
           page.waitForResponse((response: any) => new URL(response.url()).pathname === '/api/v1/webpages/resolve' && response.status() === 503),
           alert.getByRole('button', { name: 'Retry page blocks', exact: true }).click()
         ]);
+        const healthyBlocks = page.waitForResponse((response: any) => new URL(response.url()).pathname === '/api/v1/webpages/resolve' && response.status() === 200);
         await page.unroute('**/api/v1/webpages/resolve**', failBlocks);
-        await alert.getByRole('button', { name: 'Retry page blocks', exact: true }).click();
+        let recoveryMethod = 'retry';
+        try { await alert.getByRole('button', { name: 'Retry page blocks', exact: true }).click({ timeout: 2000 }); }
+        catch (error) {
+          // Ordinary workspace/view refresh can recover immediately once the
+          // outage ends, before a second native click reaches the old notice.
+          // Accept that only with a real healthy response and a removed alert.
+          if (await alert.isVisible()) throw error;
+          recoveryMethod = 'background refresh';
+        }
+        await healthyBlocks;
         await alert.waitFor({ state: 'hidden' });
         await page.getByText('Private parent fixture', { exact: true }).waitFor();
-        recovery.push({ width, notice, failedRetry: true, realRecovery: true });
+        recovery.push({ width, notice, failedRetry: true, realRecovery: true, recoveryMethod });
+      }
+      assert.ok(composerClearance.some(result => result.width < 768 && result.composerIntersects), 'Exercise a real phone composer/launcher collision');
+      for (const width of [1440, 390, 320]) {
+        await page.setViewportSize({ width, height: width === 1440 ? 1000 : 844 });
+        for (const [label, id, description] of [
+          ['parent', parentId, 'private subspace members only'],
+          ['comment', childId, 'follows the parent’s audience'],
+          ['public', publicId, 'anyone can see this thing']
+        ]) {
+          await page.goto(base + '/thing/' + id);
+          const header = page.getByTestId('thing-audience');
+          await header.filter({ hasText: description }).waitFor();
+          assert.ok((await header.innerText()).includes(description));
+          if (label !== 'public') assert.equal((await header.innerText()).includes('anyone can see'), false);
+          assert.equal(await page.evaluate(() => document.documentElement.scrollWidth), width);
+          genericAudiences.push({ width, label, description: await header.innerText() });
+          await page.screenshot({ path: resolve(artifacts!, `thing-audience-${label}-${width}.png`), animations: 'disabled' });
+        }
       }
       for (let repetition = 1; repetition <= repetitions; repetition++) for (const width of [1440, 390, 320]) {
         await page.setViewportSize({ width, height: width === 1440 ? 1000 : 844 });
@@ -156,10 +216,46 @@ test('native comment permalinks describe inheritance without claiming public acc
           current.finishedAt = Date.now();
         }
       }
+      await page.goto(base + '/feed?device=1&sort=new');
+      await page.getByTestId('feed-device-coverage').waitFor();
+      await page.waitForFunction(async () => {
+        await navigator.serviceWorker.ready;
+        if (!navigator.serviceWorker.controller) return false;
+        for (const key of await caches.keys()) if (key.startsWith('thingtime:offline-shell:') && await (await caches.open(key)).match('/__thingtime_offline_shell_complete__')) return true;
+        return false;
+      });
+      await context.setOffline(true);
+      for (const width of [1440, 390, 320]) {
+        await page.setViewportSize({ width, height: width === 1440 ? 1000 : 844 });
+        await page.reload();
+        await page.getByTestId('feed-device-coverage').waitFor();
+        await page.getByText('Private parent fixture', { exact: true }).waitFor();
+        await page.getByText('Public fixture for comparison', { exact: true }).waitFor();
+        const scrollWidth = await page.evaluate(() => document.documentElement.scrollWidth);
+        assert.equal(scrollWidth, width);
+        await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+        const collapsedComposer = await page.getByRole('button', { name: "What's on your mind? ✨", exact: true }).evaluate(element => {
+          const rect = element.getBoundingClientRect();
+          const bubble = document.querySelector<HTMLElement>('.lopuLauncher');
+          const area = bubble?.getBoundingClientRect();
+          return {
+            launcherVisible: !!bubble && getComputedStyle(bubble).visibility !== 'hidden',
+            intersects: !!area && rect.left < area.right && rect.right > area.left && rect.top < area.bottom && rect.bottom > area.top,
+            reachable: element.contains(document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2))
+          };
+        });
+        if (width < 768) {
+          assert.equal(collapsedComposer.intersects && collapsedComposer.launcherVisible, false, 'The floating shortcut must not cover the collapsed phone composer');
+          assert.equal(collapsedComposer.reachable, true, 'The collapsed phone composer stays reachable');
+        }
+        deviceFeed.push({ width, scrollWidth, coldOffline: true, collapsedComposer, coverage: await page.getByTestId('feed-device-coverage').innerText() });
+        await page.screenshot({ path: resolve(artifacts!, `device-feed-offline-${width}.png`), animations: 'disabled' });
+      }
+      await context.setOffline(false);
       assert.deepEqual(errors, []); assert.deepEqual(crashes, []);
       const finalMemory = await memory();
       assert.match(finalMemory.events || '', /(?:^|\n)oom_kill 0(?:\n|$)/);
-      await writeFile(resolve(artifacts!, 'verification.json'), JSON.stringify({ runId, heapLimitMiB: 256, guestRefusals: 3, foreignRefusals: 3, publicRead: true, inheritedPublicAcl: true, privateRoot: true, recovery, bounds, navigation, finalMemory, events, errors, crashes }, null, 2));
+      await writeFile(resolve(artifacts!, 'verification.json'), JSON.stringify({ runId, heapLimitMiB: 256, guestRefusals: 3, foreignRefusals: 3, publicRead: true, inheritedPublicAcl: true, privateRoot: true, recovery, composerClearance, genericAudiences, deviceFeed, bounds, navigation, finalMemory, events, errors, crashes }, null, 2));
     } catch (error) {
       // Unique names and a hash prevent a failed capture from being mistaken for
       // an older screenshot when an artifact directory is reused.

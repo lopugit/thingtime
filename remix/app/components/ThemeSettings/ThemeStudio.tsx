@@ -8,6 +8,7 @@ import { openThingHistory } from '~/components/Timeline/TimelineHost';
 import { useApi } from '~/hooks/useApi';
 import { useWorkspaceUser } from '~/hooks/useWorkspaceUser';
 import { AccountThemeSyncStatus } from '~/local-workspace/AccountThemeSyncStatus';
+import { LocalApiView } from '~/local-workspace/LocalApiView';
 import { RetainedThemeReview } from '~/local-workspace/RetainedThemeReview';
 import { LOCAL_WORKSPACE_CHANGED, workspaceIdentityKey, subscribeWorkspaceIdentity } from '~/local-workspace/runtime.client';
 import { rootIdentity } from '~/utils/rootIdentity';
@@ -228,7 +229,10 @@ const COLOR_FIELDS: { key: string; label: string; hint?: string }[] = [
  */
 export const ThemeStudio = () => {
  const identity = React.useSyncExternalStore(subscribeWorkspaceIdentity, workspaceIdentityKey, () => '');
- return <ThemeStudioWorkspace key={identity} />;
+ // Saved themes and their History share the Home partition even when the
+ // content library is connected to a different database. Child import/sync
+ // controls inherit this same local view; remote authority remains selected.
+ return <LocalApiView.Provider value={{ localPlane: 'home' }}><ThemeStudioWorkspace key={identity} /></LocalApiView.Provider>;
 };
 const ThemeStudioWorkspace = () => {
 	const lopu = useLopu();

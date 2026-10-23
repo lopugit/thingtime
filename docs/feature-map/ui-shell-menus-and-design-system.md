@@ -89,6 +89,14 @@ browser acceptance also checks reload and repeated search through the renderer.
   + "Use URL instead").
 - Lopu has no gender; use **it**.
 
+`Lopu/useLopuLauncherClearance.ts` observes shared post/comment composers, including
+the collapsed post trigger, and
+temporarily hides the phone launcher while its saved position intersects a
+composer. Scroll, resize and newly mounted composers restore or hide it without
+changing saved placement; navigation still opens Lopu. The native
+`Sharing/inheritedAudience.browser.test.ts` checks submit and collapsed-trigger hit targets and bounds
+at 1440, 390 and 320 px.
+
 ## Tests
 
 - `scripts/lopu-popovers.browser.html` mounts the real floating host, full page,
@@ -184,12 +192,19 @@ same portable JSON/ZIP flow; file-only archive actions remain distinct. The
 opt-in `accountBoundRetention.browser.test.ts` exercises keyboard menu opening,
 touch selection, responsive dialogs and real offline export/import. Managed
 Timeline folders continue to use their dedicated History workflow.
+`ThingTransferControls` keeps document menus in document coordinates and fixed
+inspector menus in their container layer. Shared viewport overflow constraints
+and a scrollable menu keep import/export reachable on long pages and phones.
 
 
 Owned anonymous and offline account Things expose History through
 `PersistedThingMenu` using workspace content identity. Its menu callbacks and
 `TimelineHost` targets include the root generation; identity changes retire the old
 modal and callbacks. Server handoff and account History authorization stay separate.
+Mobile version details use a bounded inner scrollport with safe-area content
+and scroll padding, so keyboard focus and revealed restore controls clear the
+viewport edge and floating launchers. `themeVersions.browser.test.ts` checks
+the real restore button at 1440/390/320 px.
 Run the enabled `details.browser.test.ts` and `historyMenu.browser.test.ts` alongside
 Things, Timeline, navigation and local-workspace suites. See the
 [History checkpoint](../local-workspaces.md#native-anonymousoffline-history-menu--2026-10-17)

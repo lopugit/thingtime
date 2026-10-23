@@ -1,4 +1,4 @@
-import { prepareVersionChange } from '../timeline/versionPlan';
+import { prepareVersionChange, type VersionContentAdapter } from '../timeline/versionPlan';
 import { parseVersionRequest, versionRequestIdentity, TIMELINE_UNDO_LABEL, type VersionRequest } from '../timeline/publishedVersion';
 import { createPublishedComponentTools, componentComparisonText, componentDefinitionFields } from '../timeline/publishedComponentTools';
 import { componentValues, definitionSnapshot } from '../timeline/componentDefinitions';
@@ -11,6 +11,18 @@ import { localTimelineEntry, localTimelineHead, localRecordedComponents, LOCAL_T
 import { LocalThings, type LocalThing } from './things';
 import { resolveWorkspacePage } from './webpageResolution';
 import { WorkspaceError, type WorkspaceDatabase, type WorkspaceLease, type WorkspaceTransaction, type WorkspaceScope } from './storage';
+
+export type LocalVersionUpdateWriter = {
+ tx: WorkspaceTransaction;
+ update(input: { id: string; crystal: any; expectedUpdatedAt?: string }, capture: LocalMutationCapture): Promise<unknown>;
+};
+/** Only dedicated writers can opt exact protected kinds into History edits. */
+export type LocalProtectedVersionWriter = {
+ matches(doc: LocalThing): boolean;
+ content(doc: any): VersionContentAdapter;
+ read?(tx: WorkspaceTransaction, id: string): Promise<LocalThing | undefined>;
+ transaction<T>(run: (writer: LocalVersionUpdateWriter) => Promise<T>, signal?: AbortSignal): Promise<T>;
+};
 
 type VersionEntry = { event: TimelineEvent; receipt: TimelineReceipt | null };
 export type LocalVersionAuthority<Entry extends VersionEntry> = {
@@ -83,7 +95,7 @@ async function deletedState<Entry extends VersionEntry>(tx: WorkspaceTransaction
  * exact content head and the complete canonical component comparison preimage,
  * then uses normal local validators and one atomic content/Timeline writer. */
 export class LocalTimelineVersions<Entry extends VersionEntry = TimelineEntry> {
-	constructor(private db: WorkspaceDatabase, private lease: WorkspaceLease, private things = new LocalThings(db, { kind: 'anonymous' }, lease), private authority: LocalVersionAuthority<Entry> = anonymousAuthority as unknown as LocalVersionAuthority<Entry>) {}
+	constructor(private db: WorkspaceDatabase, private lease: WorkspaceLease, private things = new LocalThings(db, { kind: 'anonymous' }, lease), private authority: LocalVersionAuthority<Entry> = anonymousAuthority as unknown as LocalVersionAuthority<Entry>, private protectedWriters: LocalProtectedVersionWriter[] = []) {}
 	async request(input: VersionRequest, signal?: AbortSignal) {
 		this.lease.assertCurrent();
 		const owner = this.authority.ownerId;
@@ -130,8 +142,12 @@ export class LocalTimelineVersions<Entry extends VersionEntry = TimelineEntry> {
 				return found;
 			});
 		let liveText = '';
-		const plan = await prepareVersionChange(owner, request, {
+		let protectedWriter: LocalProtectedVersionWriter | undefined;
+		let plan: Awaited<ReturnType<typeof prepareVersionChange<Entry>>>;
+		try {
+		plan = await prepareVersionChange(owner, request, {
 			reject,
+			contentAdapter: doc => { protectedWriter = this.protectedWriters.find(writer => writer.matches(doc)); return protectedWriter?.content(doc) ?? null; },
 			canUndoDraft: event => this.authority.deviceDrafts && event.mode === 'draft' && event.source === 'client' && event.actorId === owner && event.ownerId === owner && !!event.clientId,
 			entries,
 			find: (id) =>
@@ -166,12 +182,19 @@ export class LocalTimelineVersions<Entry extends VersionEntry = TimelineEntry> {
 			},
 			live: async (doc, current, result) => {
 				const values = await read(async (tx) => liveValues(await allThings(tx), doc, current, result, owner));
-				liveText = componentComparisonText(values);
+				liveText = componentComparisonText(protectedWriter ? { ...values, protectedContent: protectedWriter.content(doc).current, updatedAt: doc.updatedAt } : values);
 				return { ...values, fingerprint: await hashText(liveText) };
 			},
 			compare: tools.comparePublishedComponents,
 			hash: (value) => hashText(JSON.stringify(value))
 		});
+		} catch (error) {
+			checkedLease.assertCurrent();
+			// Another tab may commit this exact operation after the initial replay
+			// read but before planning. Its receipt wins over a stale-head refusal.
+			if (request.command === 'apply-version') { const prior = await read(replay); if (prior) return { ok: true as const, entry: prior }; }
+			throw error;
+		}
 		checkedLease.assertCurrent();
 		if (request.command === 'preview-version') return { ok: true as const, preview: plan.preview };
 		const { source, doc, recovery, headId, current, merged, refs, components } = plan;
@@ -211,17 +234,21 @@ export class LocalTimelineVersions<Entry extends VersionEntry = TimelineEntry> {
 		};
 		checkedLease.assertCurrent();
 		// Reuse the configured normal writer (including builtins) under the same lease.
-		await this.things.versionTransaction(async (writer) => {
+		const commit = async (writer: LocalVersionUpdateWriter & Partial<Pick<Parameters<Parameters<LocalThings['versionTransaction']>[0]>[0], 'create' | 'recover'>>) => {
 			checkedLease.assertCurrent();
 			if (await replay(writer.tx)) return;
 			const existing = await writer.tx.get<LocalThing>('things', source.event.thingId),
 				head = await this.authority.head(writer.tx, source.event.thingId);
 			if (head?.event.id !== headId || (recovery ? !!existing : !existing || existing.updatedAt !== doc.updatedAt))
 				reject(409, 'Thing changed after the version preview. Refresh and compare again.');
-			if (components && componentComparisonText(liveValues(await allThings(writer.tx), doc, current, merged.value, owner)) !== liveText)
-				reject(409, 'A component changed after the preview. Refresh and compare again.');
+			if (components) {
+				const values = liveValues(await allThings(writer.tx), doc, current, merged.value, owner);
+				const actual = protectedWriter ? { ...values, protectedContent: protectedWriter.content((await this.authority.thing(writer.tx, source.event.thingId))!).current, updatedAt: existing!.updatedAt } : values;
+				if (componentComparisonText(actual) !== liveText) reject(409, protectedWriter ? 'Content changed after the preview. Refresh and compare again.' : 'A component changed after the preview. Refresh and compare again.');
+			}
+			if ((copies.copies.length && !writer.create) || (recovery && !writer.recover)) reject(422, 'This protected content requires its dedicated recovery editor.');
 			for (const copy of copies.copies)
-				await writer.create({ thingtime: ['component'], crystal: copy.crystal }, copy.shareId, {
+				await writer.create!({ thingtime: ['component'], crystal: copy.crystal }, copy.shareId, {
 					...capture,
 					id: 'version-copy-' + copy.shareId,
 					operation: 'create',
@@ -229,10 +256,12 @@ export class LocalTimelineVersions<Entry extends VersionEntry = TimelineEntry> {
 					label: 'Copied recorded component for restored page'
 				});
 			const content = copies.content as any;
-			if (recovery) await writer.recover({ ...content, thingtime: recovery.thingtime }, source.event.thingId, capture);
-			else await writer.update({ ...content, id: source.event.thingId, replaceCrystal: true, expectedUpdatedAt: doc.updatedAt }, capture);
+			if (recovery) await writer.recover!({ ...content, thingtime: recovery.thingtime }, source.event.thingId, capture);
+			else await writer.update({ ...content, id: source.event.thingId, expectedUpdatedAt: doc.updatedAt, ...(!protectedWriter ? { replaceCrystal: true } : {}) }, capture);
 			checkedLease.assertCurrent();
-		}, signal);
+		};
+		if (protectedWriter) await protectedWriter.transaction(commit, signal);
+		else await this.things.versionTransaction(commit, signal);
 		const entry = await read(replay);
 		if (!entry) reject(409, 'Version was saved but its Timeline receipt could not be read. Retry this operation.');
 		return { ok: true as const, entry };

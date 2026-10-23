@@ -1,3 +1,5 @@
+import { themeVersionWriter } from './themeVersions';
+import { algorithmVersionWriter } from './algorithmVersions';
 import { createAccountAlgorithmWorker } from './accountAlgorithmWorker.client';
 import { isTransferAlgorithm } from '../utils/thingTransfer/algorithm';
 import { isDefaultAlgorithm } from '../components/Feed/defaultAlgorithms';
@@ -16,7 +18,7 @@ import { AccountDraftSync } from './accountDrafts';
 import { AccountDraftCatalog } from './accountDraftCatalog';
 import { AccountDraftClient } from './accountDraftClient.client';
 import { createSyncPump } from './syncPump';
-import { isLocalAttachment } from './attachments';
+import { isLocalMediaAttachment, localMediaInfo } from './attachments';
 import { AccountDiscussionCache } from './accountDiscussions';
 import { accountPostInput, localPostProjection, localTargetIndex, localThingReadProjection } from './posts';
 import { accountImportSupported } from './accountImport';
@@ -29,6 +31,7 @@ import { withExportDeadline } from '../utils/thingTransfer/exportDeadline';
 import { exportAccountThings, snapshotAccountExportInput } from './accountExport';
 import { browseLocalDefinitions } from './definitionCatalog';
 import { searchLocalThings } from './structuredSearch';
+import { deviceFeedPage, deviceFeedRequested, transientFeedFailure } from './feed';
 import { readWorkspaceSearchCursor, workspaceSearchCursor } from './searchCursor';
 import { searchLocalLibrary } from './librarySearch';
 import { MAX_ACTION_RUN_HISTORY, validateThingtimeCrystal } from '../schemas/registry';
@@ -39,7 +42,8 @@ import { accountWriteSupported, accountThingCanCache, AccountThingSync, type Acc
 import { accountThingTransport } from './accountTransport.client';
 import { assertAccountSyncAllowed, canSyncAccountWorkspace, subscribeWorkspaceBinding, accountWorkspaceLease, accountRemoteWorkspaceLease, announceLocalWorkspaceChange, announceAccountHomeThemeChange, workspaceDatabase } from './runtime.client';
 import { rootIdentity } from '../utils/rootIdentity';
-import { WorkspaceError, workspaceScopeKey, type WorkspaceScope } from './storage';
+import { WorkspaceError, workspaceScopeKey, type WorkspaceScope, type WorkspaceTransaction } from './storage';
+import { bundleFromPlan } from '../utils/thingTransfer/browser';
 
 export { accountThingCanCache } from './accountSync';
 
@@ -77,7 +81,7 @@ function createWorker(scope: AccountScope, dispose: () => void, authorityScope: 
   historyBackend ??= new IndexedDbTimelineBackend(globalThis.indexedDB);
   return new AccountTimelineStore(accountTimelineScope(scope), historyBackend, new AccountTimeline(db, scope, lease));
  };
- const historyVersion = (request: VersionRequest, signal?: AbortSignal) => new AccountTimelineVersions(db,scope,lease,sync.things,historyStore()).request(request,signal);
+ const historyVersion = (request: VersionRequest, signal?: AbortSignal) => new AccountTimelineVersions(db,scope,lease,sync.things,historyStore(),[themeVersionWriter(themes.themes,themes),...(algorithms ? [algorithmVersionWriter(algorithms.algorithms,true)] : [])]).request(request,signal);
  const historyExport = (eventId: string, signal?: AbortSignal) => {
   lease.assertCurrent();
   historyBackend ??= new IndexedDbTimelineBackend(globalThis.indexedDB);
@@ -170,7 +174,14 @@ function createWorker(scope: AccountScope, dispose: () => void, authorityScope: 
 		}
 	};
 	const unsubscribe = lease.onInvalidate(() => stop());
-	const reconnect = () => { algorithmWorker?.wake(true); wake(); };
+	const reconnect = () => {
+		algorithmWorker?.wake(true);
+		// A brief disconnect must retry failed reads even inside the normal
+		// refresh throttle. Each read still uses its own account/plane fence.
+		void refreshThemes(true).catch(() => {});
+		void refreshThemeSelection(true).catch(() => {});
+		wake();
+	};
 	const unbind = subscribeWorkspaceBinding(wake);
 	const stop = () => {
 		if (stopped) return;
@@ -213,6 +224,19 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
    facadeLease.assertCurrent(); lease.assertCurrent(); return result;
   } finally { off(); }
  };
+ // Home is the local destination for themes, while shared reads retain the
+ // selected account authority. This exception never enables generic Home sync.
+ const sharedThemeRead = async (method: 'getShared' | 'listShared', input?: unknown) => {
+  facadeLease.assertCurrent();
+  const lease = accountRemoteWorkspaceLease(authorityScope); lease.assertCurrent();
+  const controller = new AbortController(), off = lease.onInvalidate(() => controller.abort());
+  const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(20_000)]);
+  try {
+   const result = await remote.themes[method](input, { signal, expectedActor: authorityScope.ownerId,
+    expectedDataPlane: authorityScope.dataPlane, expectedApiOrigin: authorityScope.origin });
+   facadeLease.assertCurrent(); lease.assertCurrent(); signal.throwIfAborted(); return result;
+  } finally { off(); }
+ };
 	const guard = (value: any): any => {
 		// API methods are promise-based. Refusals must reject that promise so an
 		// optional remote probe's .catch() can handle offline/unconfirmed identity
@@ -247,7 +271,7 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 			throw error;
 		}
 	};
-	const fileAlias = async (id: string): Promise<string | null | undefined> => typeof id === 'string' && id.startsWith('local-file-') ? id : (await worker().files.library(true)).aliases.get(id);
+	const fileAlias = async (id: string): Promise<string | null | undefined> => typeof id === 'string' && (id.startsWith('local-file-') || id.startsWith('local-link-')) ? id : (await worker().files.library(true)).aliases.get(id);
 	const localViews = async (ids: string[]) => {
 		const { sync, files } = worker();
 		const library = new Map((await files.views(ids)).map(row => [row.id, row]));
@@ -446,8 +470,8 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 	};
 	const remove = async (ids: string[], expectedUpdatedAt: string | undefined, fallback: () => Promise<any>) => {
 		facadeLease.assertCurrent();
-		if (!Array.isArray(ids) || !ids.length || ids.length > 200 || ids.some(id => typeof id !== 'string' || !id.trim()) || new Set(ids).size !== ids.length)
-			throw new WorkspaceError('INVALID_IDS', 'Choose between 1 and 200 distinct Things.');
+		if (!Array.isArray(ids) || !ids.length || ids.some(id => typeof id !== 'string' || !id.trim()) || new Set(ids).size !== ids.length)
+			throw new WorkspaceError('INVALID_IDS', 'Choose distinct Things.');
 		const { sync } = worker();
 		let dedicated = false; const cached: string[] = [];
 		for (const id of ids) {
@@ -546,7 +570,7 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 				return exportAccountThings(input, { ...current, canRefresh, remote: (args, request) => current.transport.export(args, request?.signal) }, options?.signal);
 			}, options?.signal);
 		};
-	const importThings = async (input: { manifest: unknown; folderId?: string | null; files?: Record<string, string>; localFiles?: Map<string, Uint8Array | Blob> }, options?: { signal?: AbortSignal }) => {
+	const importThings = async (input: { manifest: unknown; folderId?: string | null; files?: Record<string, string>; localFiles?: Map<string, Uint8Array | Blob> }, options?: { signal?: AbortSignal }, beforeCommit?: (tx: WorkspaceTransaction) => Promise<void>) => {
 			facadeLease.assertCurrent(); options?.signal?.throwIfAborted();
 			if (Object.keys(input || {}).some(key => !['manifest', 'folderId', 'files', 'localFiles'].includes(key))) throw new WorkspaceError('INVALID_IMPORT', 'Unsupported import options.');
 			const manifest = parseTransfer(serializeTransfer(validateTransfer(input.manifest))), folderId = input.folderId;
@@ -560,10 +584,19 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 				if (navigator.onLine === false || !canSyncAccountWorkspace(scope)) throw new WorkspaceError('LOCAL_CONTENT_MISSING', 'Open the destination folder online once before importing offline.', 409);
 				await refresh({ id: folderId }, options?.signal);
 			}
-			const result = await sync.things.import(manifest, folderId, input.localFiles, options?.signal);
+			const result = await sync.things.import(manifest, folderId, input.localFiles, options?.signal, beforeCommit);
 			changed();
-			return { ok: true, roots: result.roots, ids: result.idMap, imported: result.things.length, filesImported: manifest.files.length, linksImported: 0, savedLocally: true };
+			return { ok: true, roots: result.roots, ids: result.idMap, imported: result.things.length, filesImported: manifest.files.length, linksImported: manifest.links?.length || 0, savedLocally: true };
 		};
+	const copyPreparedThings = async (plan: any, folderId?: string | null) => {
+		// Only complete in-process device plans can supply local bytes and a
+		// transaction fence. Remote uploads/links keep their dedicated adapter.
+		if ((plan.files?.length && typeof plan.readLocalFile !== 'function') || ((plan.files?.length || plan.links?.length) && typeof plan.assertCurrentInTransaction !== 'function') ||
+			!accountImportSupported({ format: 'thingtime.transfer', version: 1, roots: plan.roots, things: plan.things, files: plan.files, ...(plan.links?.length ? {links:plan.links,attachmentOrder:plan.attachmentOrder} : {}) })) return null;
+		const bundle = await bundleFromPlan(plan);
+		facadeLease.assertCurrent(); await plan.assertCurrent?.();
+		return importThings({ manifest: bundle.manifest, folderId, localFiles: bundle.files }, undefined, plan.assertCurrentInTransaction);
+	};
 	const localHistoryScope = (requested: {apiOrigin?: string; ownerId: string; dataPlane: string; delegatedBy?: string}, includeHome = false) =>
   requested.ownerId === scope.ownerId && requested.delegatedBy === scope.delegatedBy && (requested.dataPlane === scope.dataPlane || (includeHome && requested.dataPlane === 'home')) && (requested.apiOrigin === undefined || requested.apiOrigin === scope.origin);
  return { ...online, auth: remote.auth, login: remote.login,
@@ -628,24 +661,25 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
    save: async(input:Parameters<AccountThemeSync['save']>[0])=>{const result=await worker().themes.save(input);changed();return result;},
    remove: async({id}:{id:string})=>{const result=await worker().themes.remove(id);changed();return result;},
    setActive: async({themeId}:{themeId:string|null})=>{const result=await worker().themes.setActive(themeId);changed();return result;},
-   getShared: async(args:{id:string})=>{const local=(await worker().themes.list()).themes.find(row=>row.id===args.id);return local?{ok:true,theme:local}:online.themes.getShared(args);}
+   getShared: async(args:{id:string})=>{const local=(await worker().themes.list()).themes.find(row=>row.id===args.id);return local?{ok:true,theme:local}:sharedThemeRead('getShared',args);},
+   listShared: (args?:{limit?:number})=>sharedThemeRead('listShared',args)
   },
   timeline: { ...online.timeline,
    canChangeLocally: (requested: {apiOrigin?:string;ownerId:string;dataPlane:string}) => {
-    try { facadeLease.assertCurrent();return localHistoryScope(requested); } catch { return false; }
+    try { facadeLease.assertCurrent();return localHistoryScope(requested, true); } catch { return false; }
    },
    version: async (requested: {apiOrigin?:string;ownerId:string;dataPlane:string}, request: VersionRequest, options?:{signal?:AbortSignal}) => {
     facadeLease.assertCurrent();
-    if(!localHistoryScope(requested))return online.timeline.version(requested,request,options);
+    if(!localHistoryScope(requested,true))return online.timeline.version(requested,request,options);
     const result=await withExportDeadline(async signal=>{
-     try{return await worker().historyVersion(request,signal);}
+     try{const service=requested.dataPlane==='home'?accountWorkspaceWorker(authorityScope,{localPlane:'home'}):worker();return await service.historyVersion(request,signal);}
      catch(error){
       facadeLease.assertCurrent();signal.throwIfAborted();
       if(!(error instanceof WorkspaceError)||error.code!=='ACCOUNT_HISTORY_REMOTE_REQUIRED'||navigator.onLine===false||!canSyncAccountWorkspace(scope))throw error;
       return online.timeline.version(requested,request,{signal});
      }
     },options?.signal);
-    facadeLease.assertCurrent();if(request.command==='apply-version')changed();return result;
+    facadeLease.assertCurrent();if(request.command==='apply-version'){if(requested.dataPlane==='home'&&scope.dataPlane!=='home'){announceAccountHomeThemeChange();accountWorkspaceWorker(authorityScope,{localPlane:'home'}).wake();}else changed();}return result;
    },
    canExportLocally: (requested: {apiOrigin?: string; ownerId: string; dataPlane: string}) => {
     try { facadeLease.assertCurrent(); return localHistoryScope(requested, true); } catch { return false; }
@@ -668,6 +702,10 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
    }
   },
 		attachments: { ...online.attachments,
+			link: async (input: {url:string;purpose?:'post'|'comment';mediaKind?:'image'|'video'|'audio'|'file'}, options?:{signal?:AbortSignal}) => {
+				facadeLease.assertCurrent(); const row = await worker().files.things.saveLinkedFile({...input,requestId:crypto.randomUUID()},options?.signal); changed();
+				return {ok:true,attachment:{id:row.id,...row.crystal},savedLocally:true};
+			},
 			annotate: async (input: { id: string; title?: string | null; description?: string | null; filenamePreview?: string | null }) => {
 				const id = await fileAlias(input.id);
 				if (id === undefined) return online.attachments.annotate(input);
@@ -682,7 +720,10 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 				if (id) {
 					if (input.targetId !== undefined) { await worker().files.removeBound(id, input.targetId); changed(); return { ok: true, savedLocally: true }; }
 					const file = await worker().files.things.get(id);
-					if (file && isLocalAttachment(file) && ['post','comment'].includes(file.localAttachment.purpose)) { await worker().files.discardSelection(id); changed(); return { ok: true, savedLocally: true }; }
+					if (file && isLocalMediaAttachment(file) && ['post','comment'].includes(localMediaInfo(file).purpose)) {
+						if (localMediaInfo(file).draftId) return {ok:true,deferred:true,savedLocally:true};
+						await worker().files.discardSelection(id); changed(); return { ok: true, savedLocally: true };
+					}
 					if (await worker().files.remoteId(id)) await worker().files.remove(id); else await worker().files.cancel(id); changed(); }
 				return { ok: true, savedLocally: true };
 			},
@@ -709,7 +750,33 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
    args = snapshotOptionalInput(args);
    const startedAt = Date.now(), service = algorithmService();
    const id = typeof args.algorithm === 'string' && !isDefaultAlgorithm(args.algorithm) && (await service.algorithms.list()).algorithms.some(row => row.id === args.algorithm) ? args.algorithm : null;
-   const result = await retainPosts(await online.things.feed({ ...args, ...(id ? { algorithm: 'latest' } : {}) }, ...rest), startedAt);
+   const device = async () => {
+    const selected = worker(), all = await selected.sync.things.snapshot(), retained = await selected.posts.snapshot();
+    const byId = new Map(retained.map(post => [post.id, post])), index = localTargetIndex(all);
+    const owned = await selected.sync.viewSnapshot([...new Set([...all.filter(row => row.thingtime.includes('post')).map(row => row.id), ...byId.keys()])]);
+    for (const key of owned.deleted) byId.delete(key);
+    for (const row of owned.rows) {
+     if (!row.thingtime.includes('post') || row.thingtime.includes('comment')) continue;
+     const captured = byId.get(row.id), author = owner.username ? owner : captured?.author?.id === owner.id ? captured.author : owner;
+     byId.set(row.id, { ...localPostProjection(row, all, owner.id, false, index), ...accountPostAudienceContext(row.crystal, captured), author,
+      localOnly: false, localWorkspace: true, acl: row.acl, visibility: row.visibility, syncState: row.syncState } as any);
+    }
+    const states = new Map((await selected.interactions.states()).map(state => [state.id, state]));
+    const page = await deviceFeedPage([...byId.values()].map(post => overlayAccountPost(post, states)), args, workspaceScopeKey(scope), id);
+    facadeLease.assertCurrent();
+    let localTrainingError: string | undefined;
+    try { await service.algorithms.algorithms.observePosts(page.posts); } catch (error) { facadeLease.assertCurrent(); localTrainingError = error instanceof Error ? error.message : 'Device training storage is unavailable.'; }
+    const ranked = id ? await service.algorithms.algorithms.rankPage(id, page.posts) : page.posts;
+    const posts = await selected.posts.fenceRead(ranked, startedAt);
+    facadeLease.assertCurrent();
+    return { ...page, posts, ...(id ? { ranked: true, localRanking: true } : {}), ...(localTrainingError ? { localTrainingError } : {}) };
+   };
+   if (deviceFeedRequested(args) || discussionOffline()) return device();
+   const { device: _device, ...onlineArgs } = args;
+   let response;
+   try { response = await online.things.feed({ ...onlineArgs, ...(id ? { algorithm: 'latest' } : {}) }, ...rest); }
+   catch (error) { facadeLease.assertCurrent(); if (!args.cursor && transientFeedFailure(error)) return device(); throw error; }
+   const result = await retainPosts(response, startedAt);
    try { await service.algorithms.algorithms.observePosts(result.posts || []); }
    catch (error) { facadeLease.assertCurrent(); result.localTrainingError = error instanceof Error ? error.message : 'Device training storage is unavailable.'; }
    return id ? { ...result, posts: await service.algorithms.algorithms.rankPage(id, result.posts || []), ranked: true, localRanking: true } : result;
@@ -742,14 +809,15 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 			facadeLease.assertCurrent();
 			if (!input || Object.keys(input).some(key => !['id', 'key'].includes(key))) throw new WorkspaceError('INVALID_COPY', 'Unsupported copy options.');
 			const request = { id: input.id, key: input.key }, { plan } = await exportThings({ ids: [request.id], key: request.key });
-			if (plan.files?.length || plan.links?.length || !accountImportSupported({format:'thingtime.transfer',version:1,roots:plan.roots,things:plan.things,files:[]})) {
+			const sourceId = await fileAlias(request.id) || request.id;
+			const result = await copyPreparedThings(plan);
+			if (!result) {
 				if ((await worker().sync.status()).some(row => row.state !== 'synced')) throw new WorkspaceError('DEDICATED_COPY_REQUIRED', 'Copy device edits separately from items requiring their dedicated online adapter.', 409);
 				return worker().transport.fork(request);
 			}
-			const result = await importThings({ manifest: { format: 'thingtime.transfer', version: 1, roots: plan.roots, things: plan.things, files: [] } });
-			return { ...result, id: result.ids[request.id] };
+			return { ...result, id: result.ids[sourceId] };
 		},
-		export: exportThings, import: importThings,
+		export: exportThings, import: (input: Parameters<typeof importThings>[0], options?: Parameters<typeof importThings>[1]) => importThings(input, options),
 		remove: async (input: { id: string; expectedUpdatedAt?: string }) => {
 			if (Object.keys(input || {}).some(key => !['id', 'expectedUpdatedAt'].includes(key))) throw new WorkspaceError('UNSUPPORTED_LOCAL_DELETE', 'Unsupported deletion options.');
 			const localFileId = await fileAlias(input?.id);
@@ -759,22 +827,23 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 		bulk: async (input: { op: string; ids: string[]; folderId?: string | null }) => {
 			facadeLease.assertCurrent();
 			if (input?.op === 'copy') {
-				if (Object.keys(input).some(key => !['op', 'ids', 'folderId'].includes(key)) || !Array.isArray(input.ids) || !input.ids.length || input.ids.length > 200 ||
+				if (Object.keys(input).some(key => !['op', 'ids', 'folderId'].includes(key)) || !Array.isArray(input.ids) || !input.ids.length ||
 					input.ids.some(id => typeof id !== 'string' || !id.trim()) || new Set(input.ids).size !== input.ids.length ||
-					(input.folderId != null && (typeof input.folderId !== 'string' || !input.folderId.trim()))) throw new WorkspaceError('INVALID_COPY', 'Choose between 1 and 200 distinct Things and a copy destination.');
+					(input.folderId != null && (typeof input.folderId !== 'string' || !input.folderId.trim()))) throw new WorkspaceError('INVALID_COPY', 'Choose distinct Things and a copy destination.');
 				const request = { ids: [...input.ids], folderId: input.folderId };
 				const { plan } = await exportThings({ ids: request.ids });
-				if (plan.files?.length || plan.links?.length || !accountImportSupported({format:'thingtime.transfer',version:1,roots:plan.roots,things:plan.things,files:[]})) {
+				const sourceIds = await Promise.all(request.ids.map(async id => await fileAlias(id) || id));
+				const result = await copyPreparedThings(plan, request.folderId);
+				if (!result) {
 					if ((await worker().sync.status()).some(row => row.state !== 'synced')) throw new WorkspaceError('DEDICATED_COPY_REQUIRED', 'Copy device edits separately from items requiring their dedicated online adapter.', 409);
 					return online.things.bulk({ op: 'copy', ...request });
 				}
-				const result = await importThings({ manifest: { format: 'thingtime.transfer', version: 1, roots: plan.roots, things: plan.things, files: [] }, folderId: request.folderId });
-				return { ...result, succeeded: request.ids.length, failed: 0, results: request.ids.map(id => ({ id, ok: true, newId: result.ids[id] })) };
+				return { ...result, succeeded: request.ids.length, failed: 0, results: request.ids.map((id, index) => ({ id, ok: true, newId: result.ids[sourceIds[index]] })) };
 			}
 			if (input?.op === 'delete') {
 				if (Object.keys(input).some(key => !['op', 'ids', 'folderId'].includes(key))) throw new WorkspaceError('UNSUPPORTED_LOCAL_DELETE', 'Unsupported deletion options.');
-				if (!Array.isArray(input.ids) || !input.ids.length || input.ids.length > 200 || input.ids.some(id => typeof id !== 'string' || !id.trim()) || new Set(input.ids).size !== input.ids.length)
-					throw new WorkspaceError('INVALID_IDS', 'Choose between 1 and 200 distinct Things.');
+				if (!Array.isArray(input.ids) || !input.ids.length || input.ids.some(id => typeof id !== 'string' || !id.trim()) || new Set(input.ids).size !== input.ids.length)
+					throw new WorkspaceError('INVALID_IDS', 'Choose distinct Things.');
 				const ids = [...input.ids], aliases = await Promise.all(ids.map(fileAlias));
 				if (aliases.some(id => id !== undefined)) {
 					// The native library uses bulk deletion even for one file. Route
@@ -801,10 +870,10 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 			}
 			if (input?.op !== 'move') return online.things.bulk(input);
 			if (Object.keys(input).some(key => !['op', 'ids', 'folderId'].includes(key)) ||
-				!Array.isArray(input.ids) || !input.ids.length || input.ids.length > 200 ||
+				!Array.isArray(input.ids) || !input.ids.length ||
 				input.ids.some(id => typeof id !== 'string' || !id.trim()) || new Set(input.ids).size !== input.ids.length ||
 				(input.folderId != null && (typeof input.folderId !== 'string' || !input.folderId.trim())))
-				throw new WorkspaceError('INVALID_MOVE', 'Choose between 1 and 200 distinct Things and a destination folder.');
+				throw new WorkspaceError('INVALID_MOVE', 'Choose distinct Things and a destination folder.');
 			const { sync } = worker();
 			const requireLocal = async (id: string) => {
 				let row = await sync.view(id);
@@ -825,7 +894,7 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 			}
 			let parent = input.folderId || null; const seen = new Set<string>();
 			while (parent) {
-				if (seen.has(parent) || seen.size >= 200) throw new WorkspaceError('INVALID_FOLDER', 'The destination folder chain is cyclic or too deep.');
+				if (seen.has(parent)) throw new WorkspaceError('INVALID_FOLDER', 'The destination folder chain is cyclic.');
 				seen.add(parent); const folder = await requireLocal(parent);
 				if (!folder?.thingtime.includes('folder')) throw new WorkspaceError('INVALID_FOLDER', 'Destination folder is not owned by this workspace.');
 				parent = folder.folderId || null;

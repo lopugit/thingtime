@@ -13,8 +13,8 @@ import { capabilitySatisfies } from '../api/utils/capabilities/capabilityContrac
 test('Timeline synchronization is registered and versioned on both capability manifests', () => {
 	assert.equal(createApiCapabilitiesManifest().features['api.mongodb-endpoint'], '1.1.0');
 	assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.mongodb-endpoint'].version, '1.1.0');
-	assert.equal(createApiCapabilitiesManifest().features['api.timeline'], '1.21.0');
-	assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.timeline'].version, '1.21.0');
+	assert.equal(createApiCapabilitiesManifest().features['api.timeline'], '1.22.0');
+	assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.timeline'].version, '1.22.0');
 	assert.equal(typeof routeModules['v1/timeline'], 'function');
 	assert.equal(capabilitySatisfies('1.18.0','1.19.0'),false);
 	assert.equal(capabilitySatisfies(createApiCapabilitiesManifest().features['api.timeline'],'1.19.0'),true);
@@ -35,9 +35,9 @@ test('dedicated theme writers advertise durable history on both capability manif
 
 test('conditional theme synchronization is registered on both manifests', () => {
  const feature = 'api.themes-sync';
- assert.equal(createApiCapabilitiesManifest().features[feature], '1.5.0');
+ assert.equal(createApiCapabilitiesManifest().features[feature], '1.6.0');
  const manifest = thingtimeCapabilityManifest('https://thingtime.test');
- assert.equal(manifest.features[feature].version, '1.5.0');
+ assert.equal(manifest.features[feature].version, '1.6.0');
  assert.ok(manifest.operations.some(operation => operation.feature === feature && operation.path === '/api/v1/themes/sync' && operation.methods.includes('POST')));
  assert.equal(typeof routeModules['v1/themes/sync'], 'function');
 });
@@ -734,7 +734,7 @@ test('mobile pairing requirements are advertised by both manifests and reject de
 
 test('backup retention advertises owner-only holds and deferred cleanup together', () => {
 	const legacy = createApiCapabilitiesManifest(), manifest = thingtimeCapabilityManifest('https://thingtime.test');
-	for (const [id, version] of [['attachment-content', '1.17.0'], ['attachment-upload-abort', '1.2.0'], ['attachment-delete', '1.7.0'], ['attachment-cleanup', '1.2.0']]) {
+	for (const [id, version] of [['attachment-content', '1.17.0'], ['attachment-upload-abort', '1.2.0'], ['attachment-delete', '1.8.0'], ['attachment-cleanup', '1.2.0']]) {
 		assert.equal(legacy.features['api.' + id], version);
 		assert.equal(manifest.features['api.' + id].version, version);
 	}
@@ -775,8 +775,8 @@ test('theme title metadata requires compatible synchronization and transfer cont
 
 test('home theme receipt context requires its additive sync contract on both manifests',()=>{
  const feature='api.themes-sync';
- assert.equal(createApiCapabilitiesManifest().features[feature],'1.5.0');
- assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features[feature].version,'1.5.0');
+ assert.equal(createApiCapabilitiesManifest().features[feature],'1.6.0');
+ assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features[feature].version,'1.6.0');
  assert.equal(capabilitySatisfies('1.4.0','1.5.0'),false);
  assert.equal(capabilitySatisfies('1.5.1','1.5.0'),true);
  assert.equal(capabilitySatisfies('2.0.0','1.5.0'),false);
@@ -786,7 +786,7 @@ test('home theme receipt context requires its additive sync contract on both man
 test('conditional algorithm synchronization and atomic deletion are advertised by both manifests', () => {
   const route = createApiCapabilitiesManifest().features;
   const manifest = thingtimeCapabilityManifest('https://thingtime.test');
-  for (const [feature, version] of [['api.algorithms-sync', '1.3.0'], ['api.algorithms-delete', '1.0.1']]) {
+  for (const [feature, version] of [['api.algorithms-sync', '1.4.0'], ['api.algorithms-delete', '1.0.1']]) {
     assert.equal(route[feature], version);
     assert.equal(manifest.features[feature].version, version);
     assert.equal(capabilitySatisfies(version, version), true);

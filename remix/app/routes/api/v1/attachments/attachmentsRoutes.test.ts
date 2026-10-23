@@ -5,6 +5,7 @@ import { createAttachmentMutationAction, isSameOriginAttachmentRequest } from '~
 import { createAttachmentDetectionBackfillAction } from './backfill-detected-types/_backfill-detected-types';
 import { createAttachmentCleanupLoader } from './cleanup/_cleanup';
 import { createAttachmentContentLoader } from './content/_content';
+import { createAttachmentLinkAction } from './link/_link';
 
 const endpoint = 'https://thingtime.example/api/v1/attachments/uploads';
 const allowed = async () => ({
@@ -779,6 +780,7 @@ test('retained ranges recheck the current session after reading and cannot becom
 	for (const invalid of [url + '&sharedRoot=other', url + '&key=other', url + '&retained=1', url.replace('&range=1', '')])
 		assert.equal((await route({ request: new Request(invalid) })).status, 400);
 	assert.equal(reads, 1);
+});
 
 for (const purpose of ['file','recording'] as const) test('explicit owned-'+purpose+' retention is full-user, same-origin and unscoped while ordinary cache reads keep their gates', async () => {
  let principal:any=user, calls=0;
@@ -865,4 +867,28 @@ test('signed target mode accepts only full owner session and one closed exact ra
  assert.equal(calls, 1);
  const anonymous = createAttachmentContentLoader({ getUser: async () => null, enforceLimit: allowed as any, downloadTarget: async () => { throw Error('anonymous cannot request targets'); } });
  assert.equal((await anonymous({ request: new Request('https://thingtime.example/api/v1/attachments/content?' + query) })).status, 404);
+});
+
+test('retry-safe link route retains full-user, origin, rate and private-response fences without upload approval', async () => {
+  let calls = 0;
+  const service = async (ownerId: string, body: unknown) => {
+    calls++; assert.equal(ownerId, user.id); assert.equal((body as any).url, 'https://example.invalid/a.png');
+    return { ok: false as const, status: 409, error: 'Fixture receipt conflict' };
+  };
+  const body = { url: 'https://example.invalid/a.png', requestId: 'link-request' };
+  const route = (viewer: any = user, limit: any = allowed) => createAttachmentLinkAction({ getUser: async () => viewer, enforceLimit: limit }, service);
+  for (const [viewer, status] of [[null, 401], [{ ...user, accountKind: 'service' }, 403]]) {
+    const response = await route(viewer)({ request: post(body) }); assert.equal(response.status, status);
+    assert.equal(response.headers.get('Cache-Control'), 'private, no-store, max-age=0');
+  }
+  assert.equal((await route()({ request: post(body, { Origin: 'https://attacker.invalid' }) })).status, 403);
+  assert.equal((await route()({ request: post(body, { Authorization: 'Bearer ttnode_fixture' }) })).status, 403);
+  assert.equal((await route(user, async () => ({ allowed: false, unavailable: true }))({ request: post(body) })).status, 503);
+  assert.equal(calls, 0);
+  const response = await route({ ...user, publicUploadsEnabled: false, privateUploadsEnabled: false })({ request: post(body) });
+  assert.equal(response.status, 409); assert.equal(calls, 1);
+  assert.equal(response.headers.get('Cache-Control'), 'private, no-store, max-age=0');
+  // Existing scoped Watch behavior for non-idempotent links remains unchanged.
+  assert.equal((await route()({ request: post({ url: body.url }, { Authorization: 'Bearer ttnode_fixture' }) })).status, 409);
+  assert.equal(calls, 2);
 });

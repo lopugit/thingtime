@@ -128,10 +128,12 @@ export function TimelineVersionActions({ event, onApplied }: { event: TimelineEv
 		}
 	};
 	const content = event.after ?? (event.operation === 'delete' ? event.before : null);
+	const protectedDesign = content && ['theme-content', 'algorithm-content'].includes(content.adapter);
 	if (
 		!content ||
 		event.mode === 'effect' ||
-		!['thing-content', 'webpage-draft', 'definition-source', 'folder-placement', TIMELINE_SNAPSHOT_PARTS_ADAPTER].includes(content.adapter)
+		(protectedDesign && (!localChanges || event.operation === 'delete')) ||
+		!['theme-content', 'algorithm-content', 'thing-content', 'webpage-draft', 'definition-source', 'folder-placement', TIMELINE_SNAPSHOT_PARTS_ADAPTER].includes(content.adapter)
 	)
 		return null;
 
@@ -158,7 +160,9 @@ export function TimelineVersionActions({ event, onApplied }: { event: TimelineEv
 							? 'This restores the original Thing and link privately. Your deletion and earlier versions stay in History. You can share it again after recovery.'
 							: preview.mode === 'undo'
 							? 'Reverts only this change. Later edits to other properties are kept; overlapping edits need a choice. The undo is a new saved version.'
-							: 'This creates a new saved version. Your later history stays available.'}
+							: protectedDesign
+                            ? 'This saves the earlier design as a new version. Current sharing, library title and folder stay unchanged.'
+                            : 'This creates a new saved version. Your later history stays available.'}
 					</Text>
 					{preview.recovery ? (
 						<Text fontSize="sm" color="var(--tt-muted)" mb={3}>

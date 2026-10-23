@@ -1433,7 +1433,7 @@ const CommentRow = (props: {
             {cursorReplies && repliesOpen && !repliesLoading && !repliesHaveMore && !replies?.length && !replyLoadError && <Text fontSize="xs" color={MUTED}>No replies yet.</Text>}
             {replyInputOpen &&
               (user ? (
-                <Flex flexDirection="column" rowGap={2}>
+                <Flex data-lopu-launcher-clearance flexDirection="column" rowGap={2}>
                   <PostAsSelect user={replyActor} onChange={setReplyAs} />
                   <Flex columnGap={2}>
                     <Textarea
@@ -2819,7 +2819,7 @@ function PostCardImpl(props: PostCardProps) {
             )}
 
             {user ? (
-              <Flex flexDirection="column" rowGap={2}>
+              <Flex data-lopu-launcher-clearance flexDirection="column" rowGap={2}>
                 <PostAsSelect user={commentActor} onChange={setCommentAs} />
                 <Flex columnGap={2}>
                   <Textarea

@@ -11,8 +11,17 @@ import type { ComponentDefinitionVersion } from './componentDefinitions.ts';
 import type { createPublishedComponentTools } from './publishedComponentTools.ts';
 
 export type VersionSource = Pick<TimelineEntry, 'event'>;
+/** Dedicated, explicitly selected protected-content projection. Server callers
+ * do not supply this capability and keep their ordinary protected-kind refusal. */
+export type VersionContentAdapter = {
+	adapters: readonly string[];
+	current: TimelineSnapshot;
+	read(snapshot: TimelineSnapshot | null, basis?: TimelineSnapshot['value']): Record<string, TimelineSnapshot['value']>;
+	snapshot(value: any): TimelineSnapshot;
+};
 type Dependencies<Entry extends VersionSource> = {
 	reject(status: number, message: string): never;
+	contentAdapter?: (doc: any) => VersionContentAdapter | null;
 	canUndoDraft?: (event: TimelineEvent) => boolean;
 	find(id: string, owner: string): Promise<any>;
 	entries(owner: string, ids: string[]): Promise<Entry[]>;
@@ -31,10 +40,12 @@ type Dependencies<Entry extends VersionSource> = {
 };
 /** Canonical read-only restore/undo/current-content merge planning. Adapters
  * retain authority, transactional mutation, replay and storage-specific readers. */
-export async function prepareVersionChange<Entry extends VersionSource = TimelineEntry>(ownerId: string, request: VersionRequest, deps: Dependencies<Entry>) {
+export async function prepareVersionChange<Entry extends VersionSource = TimelineEntry>(
+	ownerId: string,
+	request: VersionRequest,
+	deps: Dependencies<Entry>
+) {
 	const { reject } = deps;
-	const { restorableContent, loadVersionGraph, versionMergeBase, versionContentSources, createVersionContentReader } =
-		createVersionGraphTools(reject);
 	const read = (ids: string[]) => deps.entries(ownerId, ids);
 	const source = (await read([request.eventId]))[0];
 	if (!source) reject(404, 'Version not found.');
@@ -56,11 +67,25 @@ export async function prepareVersionChange<Entry extends VersionSource = Timelin
 					geo: null
 			  } as any)
 			: null);
-	if (!doc || doc.ownerId !== ownerId || isProtectedThingtime(doc.thingtime ?? [])) reject(404, 'This Thing is not available for version changes.');
+	const adapter = doc && !recovery ? deps.contentAdapter?.(doc) : null;
+	if (!doc || doc.ownerId !== ownerId || (isProtectedThingtime(doc.thingtime ?? []) && !adapter))
+		reject(404, 'This Thing is not available for version changes.');
+	const { restorableContent, loadVersionGraph, versionMergeBase, versionContentSources, createVersionContentReader } = createVersionGraphTools(
+		reject,
+		adapter ?? undefined
+	);
+	const fullAdapters = adapter?.adapters ?? ['thing-content', TIMELINE_SNAPSHOT_PARTS_ADAPTER];
+	if (adapter && !request.componentMode) reject(409, 'Update this client to review the complete protected design before applying a version.');
 	// Undo reverts exactly one saved edit: base is that edit's after-state and
 	// incoming its before-state, merged against the live current content.
 	const undo = request.mode === 'undo';
-	if (undo && (source.event.operation !== 'update' || (source.event.mode !== 'revision' && !deps.canUndoDraft?.(source.event)) || !source.event.before || !source.event.after))
+	if (
+		undo &&
+		(source.event.operation !== 'update' ||
+			(source.event.mode !== 'revision' && !deps.canUndoDraft?.(source.event)) ||
+			!source.event.before ||
+			!source.event.after)
+	)
 		reject(422, 'Only a saved edit can be undone on its own.');
 	if (!source.event.after && (source.event.operation !== 'delete' || request.mode !== 'restore' || !request.recover))
 		reject(422, 'Choose Restore to recover the content before this deletion.');
@@ -69,8 +94,7 @@ export async function prepareVersionChange<Entry extends VersionSource = Timelin
 	if (request.command === 'apply-version' && headId !== request.expectedHeadId)
 		reject(409, 'Thing changed after the version preview. Refresh and compare again.');
 	const graph =
-		request.mode === 'merge' ||
-		!['thing-content', TIMELINE_SNAPSHOT_PARTS_ADAPTER].includes((source.event.after ?? source.event.before)?.adapter ?? '')
+		request.mode === 'merge' || !fullAdapters.includes((source.event.after ?? source.event.before)?.adapter ?? '')
 			? await loadVersionGraph(request.mode === 'merge' ? [source.event.id, headId] : [source.event.id], source.event.thingId, (ids) =>
 					deps.nodes(ownerId, ids)
 			  )
@@ -79,10 +103,10 @@ export async function prepareVersionChange<Entry extends VersionSource = Timelin
 	const base = baseNode ? (await read([baseNode.id]))[0] : null;
 	const resolved = (entry: Entry) => deps.snapshot(ownerId, entry, 'after');
 	const contentFor = createVersionContentReader(graph, read, resolved);
-	const currentSnapshot = thingContentSnapshot(doc)!;
+	const currentSnapshot = adapter?.current ?? thingContentSnapshot(doc)!;
 	const current = restorableContent(currentSnapshot);
 	const beforeContent = async (basis?: TimelineSnapshot['value']) =>
-		['thing-content', TIMELINE_SNAPSHOT_PARTS_ADAPTER].includes(source.event.before?.adapter ?? '')
+		fullAdapters.includes(source.event.before?.adapter ?? '')
 			? restorableContent(await deps.snapshot(ownerId, source, 'before'))
 			: // A compact before (folder-placement) overlays its field on the exact after-state; no parent walk.
 			  restorableContent(source.event.before, basis);
@@ -105,7 +129,7 @@ export async function prepareVersionChange<Entry extends VersionSource = Timelin
 		// grants. The preview shows the surviving folder (or Things root).
 		merged = { value: { ...incoming, acl: ['tt:user'], folderId }, conflicts: [] };
 	}
-	const snapshot = (value: any): TimelineSnapshot => ({ adapter: 'thing-content', version: 1, value });
+	const snapshot = (value: any): TimelineSnapshot => (adapter ? adapter.snapshot(value) : { adapter: 'thing-content', version: 1, value });
 	const isPage = doc.thingtime?.includes('webpage');
 	// Undo compares the edit's own two sides: its parent's crystal source
 	// supplies the recorded definitions before the edit, the edit its own.

@@ -8,13 +8,14 @@ import { bundleFromPlan, transferClipboardText } from '../utils/thingTransfer/br
 import { rootIdentity } from '../utils/rootIdentity';
 
 test('anonymous API writes and exports use no network and a retired facade cannot switch to an account', async () => {
-	const oldWindow = globalThis.window, oldFactory = globalThis.indexedDB;
-	Object.assign(globalThis, { window: { dispatchEvent() {} }, indexedDB: new IDBFactory() });
+	const oldWindow = globalThis.window, oldFactory = globalThis.indexedDB, oldFetch = globalThis.fetch;
+	let fetchCalls = 0;
+	Object.assign(globalThis, { window: { dispatchEvent() {}, location: { origin: 'https://thingtime.example' } }, indexedDB: new IDBFactory(), fetch: async () => { fetchCalls++; throw new Error('Unexpected public request'); } });
 	let remoteCalls = 0;
 	const remote = async (..._args: any[]): Promise<any> => { remoteCalls++; throw new Error('Unexpected remote call'); };
 	bindLocalWorkspace(true, rootIdentity.read().generation);
 	try {
-		const api = anonymousApi({ attachments: { annotate: remote }, login: remote, auth: { login: remote }, things: { search: remote, remove: remote, create: remote, update: remote, get: remote, list: remote, export: remote, import: remote, bulk: remote, feed: remote, trending: remote, react: remote, save: remote, saved: remote, vote: remote, updown: remote }, actions: { run: remote }, schemas: { list: remote }, algorithms: { list: remote, create: remote, update: remote, remove: remote, setActive: remote, track: remote }, themes: { list: remote, save: remote, getShared: remote, setActive: remote, remove: remote } });
+		const api = anonymousApi({ attachments: { annotate: remote }, login: remote, auth: { login: remote }, things: { search: remote, remove: remote, create: remote, update: remote, get: remote, list: remote, export: remote, import: remote, bulk: remote, feed: remote, trending: remote, react: remote, save: remote, saved: remote, vote: remote, updown: remote }, actions: { run: remote }, schemas: { list: remote }, algorithms: { list: remote, create: remote, update: remote, remove: remote, setActive: remote, track: remote, getShared: remote }, themes: { list: remote, save: remote, getShared: remote, setActive: remote, remove: remote } });
 		const created = await api.things.create({ thingtime: ['data'], crystal: { name: 'Offline' } });
 		assert.equal((await api.things.get({ id: created.id })).thing.crystal.name, 'Offline');
 		const device = await api.things.search({ workspace: true, device: true, conditions: [{ field: 'name', op: 'eq', value: 'Offline' }] });
@@ -48,6 +49,8 @@ test('anonymous API writes and exports use no network and a retired facade canno
 		assert.equal((await api.themes.list()).themes.length, 0);
 		assert.equal(remoteCalls, 0);
 		const algorithm = (await api.algorithms.create({ name: 'Local art' })).algorithm;
+		assert.equal((await api.algorithms.getShared({ id: algorithm.id })).algorithm.name, 'Local art');
+		await assert.rejects(api.algorithms.getShared({ id: 'local-algorithm-missing' }), /not in this workspace/);
 		await api.algorithms.setActive({ algorithmId: algorithm.id });
 		assert.equal((await api.algorithms.list()).activeAlgorithmId, algorithm.id);
 		await api.algorithms.track({ algorithmId: algorithm.id, events: [{ thingId: 'unknown', signal: 'view' }] });
@@ -95,14 +98,16 @@ test('anonymous API writes and exports use no network and a retired facade canno
 		await assert.rejects(api.things.save({ id: poll.id }), /Workspace changed/);
 		await assert.rejects(api.things.saved(), /Workspace changed/);
 		await assert.rejects(api.things.search({ workspace: true, device: true }), /Workspace changed/);
+		await assert.rejects(api.algorithms.getShared({ id: algorithm.id }), /Workspace changed/);
 		await assert.rejects(filePlan.readLocalFile(filePlan.files[0].id), /Workspace changed/);
 		await assert.rejects(bundleFromPlan(exported), /Workspace changed/);
 		await assert.rejects(encodeTransferArchiveBlob(prepared), /Workspace changed/);
 		await assert.rejects(transferClipboardText(prepared), /Workspace changed/);
 		assert.equal(remoteCalls, 0);
+		assert.equal(fetchCalls, 0);
 	} finally {
 		await anonymousWorkspaceDatabase().close();
-		Object.assign(globalThis, { window: oldWindow, indexedDB: oldFactory });
+		Object.assign(globalThis, { window: oldWindow, indexedDB: oldFactory, fetch: oldFetch });
 	}
 });
 

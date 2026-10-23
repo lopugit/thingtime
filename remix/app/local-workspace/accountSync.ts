@@ -3,10 +3,10 @@ import { isTransferAlgorithm } from '../utils/thingTransfer/algorithm';
 import { captureAccountThingChanges } from './accountTimeline';
 import type { AccountThemeSync } from './accountThemes';
 import { isTransferTheme } from '../utils/thingTransfer/theme';
-import { isLocalAttachment } from './attachments';
+import { isLocalMediaAttachment, type LocalMediaAttachment } from './attachments';
 import { normalizePublicAttachment } from '../components/Attachments/attachmentUiCore';
 import { postThingReferences } from '../components/Feed/postThingReferences';
-import { accountReadRefusals, ACCOUNT_READ_COLLECTIONS } from './accountReadRevocation';
+import { accountReadRefusals, ACCOUNT_READ_COLLECTIONS, forgetAccountConversation } from './accountReadRevocation';
 import { LocalThings, type LocalThing, type ThingWrite, type LocalFileMutation } from './things';
 import { type WorkspaceDatabase, WorkspaceError, workspaceScopeKey, type WorkspaceLease, type WorkspaceScope, type WorkspaceTransaction } from './storage';
 import { snapshotTransferValue } from '../utils/thingTransfer/value';
@@ -44,6 +44,7 @@ type AccountContentFiles = {
 	prepare(tx: WorkspaceTransaction, row: LocalThing): Promise<(LocalThing & { attachmentIds?: string[] }) | null>;
 	restore?: <T extends LocalThing>(tx: WorkspaceTransaction, row: T) => Promise<T>;
 	removeBound?(tx: WorkspaceTransaction, id: string, targetId: string): Promise<void>;
+	releaseBoundLink?(tx: WorkspaceTransaction, id: string, targetId: string): Promise<void>;
 	restoreParent?(tx: WorkspaceTransaction, targetId: string, attachmentIds: string[]): Promise<void>;
 	prepareRemove?(tx: WorkspaceTransaction, targetId: string): Promise<boolean>;
 };
@@ -94,7 +95,7 @@ export class AccountThingSync {
 					if (row?.post && (!refusal || row.at > refusal.at)) return true;
 				}
 				return false;
-			}, (tx, run, captures) => captureAccountThingChanges(tx, scope, run, () => new Date(this.now()).toISOString(), this.uuid, captures), (tx, id) => this.prepareRecovery(tx, id), themes ? { import:(tx,row)=>themes.importIn(tx,row), move:(tx,row,previous)=>themes.moveIn(tx,row,previous), rename:(tx,row,previous)=>themes.renameIn(tx,row,previous) } : undefined, algorithms ? {import:(tx,row)=>algorithms.importIn(tx,row),move:(tx,row,previous)=>algorithms.moveIn(tx,row,previous),rename:(tx,row,previous)=>algorithms.renameIn(tx,row,previous)} : undefined);
+			}, (tx, run, captures) => captureAccountThingChanges(tx, scope, run, () => new Date(this.now()).toISOString(), this.uuid, captures), (tx, id) => this.prepareRecovery(tx, id), themes ? { import:(tx,row)=>themes.importIn(tx,row), move:(tx,row,previous)=>themes.moveIn(tx,row,previous), rename:(tx,row,previous)=>themes.renameIn(tx,row,previous) } : undefined, algorithms ? {import:(tx,row)=>algorithms.importIn(tx,row),move:(tx,row,previous)=>algorithms.moveIn(tx,row,previous),rename:(tx,row,previous)=>algorithms.renameIn(tx,row,previous)} : undefined, files?.releaseBoundLink);
 	}
 	/** Recovery changes the latest device intent, never an already-sent request.
 	 * Its revision must exceed every earlier write so delayed replies cannot
@@ -211,8 +212,8 @@ export class AccountThingSync {
 	 * cascade target-linked content. Content removal and intent commit together. */
 	async remove(ids: string[], expectedUpdatedAt?: string) {
 		if (expectedUpdatedAt !== undefined && (typeof expectedUpdatedAt !== 'string' || !Number.isFinite(Date.parse(expectedUpdatedAt)))) throw new WorkspaceError('INVALID_VERSION', 'expectedUpdatedAt must be an ISO timestamp.');
-		if (!Array.isArray(ids) || !ids.length || ids.length > 200 || ids.some(id => typeof id !== 'string' || !id.trim()) || new Set(ids).size !== ids.length)
-			throw new WorkspaceError('INVALID_IDS', 'Choose between 1 and 200 distinct Things.');
+		if (!Array.isArray(ids) || !ids.length || ids.some(id => typeof id !== 'string' || !id.trim()) || new Set(ids).size !== ids.length)
+			throw new WorkspaceError('INVALID_IDS', 'Choose distinct Things from this workspace.');
 		return this.tx('readwrite', tx => captureAccountThingChanges(tx, this.scope, async tx => {
 			const all = (await tx.list<LocalThing>('things')).map(row => row.value), selected = new Set(ids);
 			const byId = new Map(all.map(row => [row.id, row]));
@@ -228,7 +229,7 @@ export class AccountThingSync {
 			// Validate the entire content cascade before changing any file intent.
 			// Files stay behind their dedicated upload/deletion replay fences.
 			for (const row of all) if (selected.has(row.id)) {
-				if (isLocalAttachment(row)) {
+				if (isLocalMediaAttachment(row)) {
 					if (!row.targetId || !selected.has(row.targetId) || !this.files?.removeBound)
 						throw new WorkspaceError('UNSUPPORTED_LOCAL_DELETE', 'This file requires its owning editor.', 409);
 				} else if (isTransferAlgorithm(row) && this.algorithms) {
@@ -240,12 +241,12 @@ export class AccountThingSync {
 				} else if (!await tx.get<SyncRecord>(COLLECTION, row.id) || isProtectedThingtime(row.thingtime))
 					throw new WorkspaceError('UNSUPPORTED_LOCAL_DELETE', 'This item requires its dedicated deletion adapter.', 409);
 			}
-			for (const row of all) if (selected.has(row.id) && isLocalAttachment(row))
+			for (const row of all) if (selected.has(row.id) && isLocalMediaAttachment(row))
 				await this.files!.removeBound!(tx, row.id, row.targetId!);
 
 			for (const row of all) {
 				if (selected.has(row.id)) {
-					if (isLocalAttachment(row) || (isTransferTheme(row) && this.themes) || (isTransferAlgorithm(row) && this.algorithms)) continue;
+					if (isLocalMediaAttachment(row) || (isTransferTheme(row) && this.themes) || (isTransferAlgorithm(row) && this.algorithms)) continue;
 					if (row.thingtime.includes('action-run') && row.id.startsWith('local-action-run-') && row.targetId && selected.has(row.targetId)) { await tx.delete('things', row.id); continue; }
 					const state = await tx.get<SyncRecord>(COLLECTION, row.id);
 					if (!state || isProtectedThingtime(row.thingtime)) throw new WorkspaceError('UNSUPPORTED_LOCAL_DELETE', 'This item requires its dedicated deletion adapter.', 409);
@@ -263,13 +264,25 @@ export class AccountThingSync {
 					}
 					const next = { ...row, folderId, revision: row.revision + 1, updatedAt: new Date(Math.max(this.now(), Date.parse(row.updatedAt) + 1)).toISOString() };
 					await tx.put('things', row.id, next);
-					if (isTransferTheme(row) && this.themes) await this.themes.moveIn(tx,next,row);
+					if (isLocalMediaAttachment(row)) {
+						if (!this.files) throw new WorkspaceError('UNSUPPORTED_LOCAL_DELETE', 'This folder contains files requiring their dedicated adapter.', 409);
+						await this.files.mutate(tx, next as LocalMediaAttachment, row);
+					} else if (isTransferTheme(row) && this.themes) await this.themes.moveIn(tx,next,row);
 					else if (isTransferAlgorithm(row) && this.algorithms) await this.algorithms.moveIn(tx, next, row);
 					else await this.enqueue(tx, next, row, { folderId });
 				}
 			}
 			for (const row of all) if (selected.has(row.id) && isTransferTheme(row) && this.themes) await this.themes.removeIn(tx,row.id);
 			for (const row of all) if (selected.has(row.id) && isTransferAlgorithm(row) && this.algorithms) await this.algorithms.removeIn(tx, row.id);
+			// Retained read copies must disappear in the same commit as authored
+			// deletion, including after the remote tombstone has been acknowledged.
+			// Never leave a committed delete reported as failed if cache cleanup
+			// cannot fit: the shared transaction rolls both changes back.
+			const snapshots = (await Promise.all(ACCOUNT_READ_COLLECTIONS.map(collection => tx.list<{ post: any; parent?: string; root?: string }>(collection)))).flat();
+			const references = (post: any, id: string): boolean => !!post && (post.id === id || post.targetId === id
+				|| post.comments?.some((child: any) => references(child, id)) || references(post.shareOf, id) || post.linkedThings?.some((link: any) => link.id === id));
+			for (const id of selected) if (snapshots.some(row => row.value.parent === id || row.value.root === id || references(row.value.post, id)))
+				await forgetAccountConversation(tx, id, this.now());
 			return { ok: true, deleted: [...selected] };
 		}, () => new Date(this.now()).toISOString(), this.uuid));
 	}
@@ -374,7 +387,7 @@ export class AccountThingSync {
 						try {
 							let destination=content.folderId || null; const seen=new Set<string>();
 							while (destination && (await tx.get<SyncRecord>(COLLECTION,destination))?.deleted) {
-								if (seen.has(destination) || seen.size>=200) throw new WorkspaceError('INVALID_FOLDER','The deleted folder chain is invalid.');
+								if (seen.has(destination)) throw new WorkspaceError('INVALID_FOLDER','The deleted folder chain is invalid.');
 								seen.add(destination); destination=(await tx.get<LocalThing>(DELETED_CONTENT,destination))?.folderId || null;
 							}
 							if (this.themes && !await this.themes.prepareFolderDelete(tx,candidate.id,destination)) continue;

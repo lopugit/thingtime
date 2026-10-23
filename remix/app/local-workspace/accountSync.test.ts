@@ -1,5 +1,6 @@
 import { createQuotaFactory } from './storageTestFixture';
 import { forgetAccountConversation } from './accountReadRevocation';
+import { AccountPostCache } from './accountPosts';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { IDBFactory, IDBKeyRange } from 'fake-indexeddb';
@@ -25,6 +26,31 @@ const setup = (factory = new IDBFactory()) => {
  };
  return { factory, db, sync, scope, lease, remote, transport, calls, tick: () => { time += 120000; }, invalidate: () => { active = false; listeners.forEach(fn => fn()); } };
 };
+test('deleting an owned root clears retained descendants and shared references in the same transaction', async () => {
+ const f = setup(), cache = new AccountPostCache(f.db, f.scope, f.lease);
+ try {
+  const root = await f.sync.things.create({ thingtime: ['post'], crystal: { type: 'text', text: 'Owned root' } });
+  const post = (id: string, changes: Record<string, unknown> = {}) => ({ id, thingtime: ['post'], type: 'text', text: id, createdAt: root.createdAt, author: { id: 'other' }, comments: [], ...changes });
+  await cache.remember([post('reply', { thingtime: ['post', 'comment'], targetId: root.id }), post('shared', { shareOf: post(root.id) })]);
+  assert.equal(await cache.get(root.id), null, 'the root itself has never been retained as a read projection');
+  const transaction = f.db.transaction.bind(f.db);
+  (f.db as any).transaction = (scope: any, mode: IDBTransactionMode, lease: WorkspaceLease, run: any) => transaction(scope, mode, lease, tx => run({ ...tx,
+   put: async (collection: string, id: string, value: any) => {
+    if (collection === 'account-post-projections' && value.post === null) throw new DOMException('Synthetic cache cleanup quota failure', 'QuotaExceededError');
+    return tx.put(collection, id, value);
+   }
+  }));
+  await assert.rejects(f.sync.remove([root.id]), /full|quota/i);
+  (f.db as any).transaction = transaction;
+  assert.equal((await f.sync.view(root.id))?.crystal.text, 'Owned root', 'cache failure rolls back authored deletion');
+  assert.equal((await cache.get('reply'))?.id, 'reply');
+  await f.sync.remove([root.id]);
+  assert.equal(await f.sync.view(root.id), null);
+  assert.equal(await cache.get('reply'), null);
+  assert.equal((await cache.get('shared'))?.shareOf ?? null, null);
+  assert.ok(await f.db.transaction(f.scope, 'readonly', f.lease, async tx => (await tx.get<any>('account-post-projections', root.id))?.deniedAt));
+ } finally { await f.db.close(); }
+});
 test('account creates and updates commit locally first and sync canonical content', async () => {
  const f = setup(); const row = await f.sync.things.create({ thingtime: ['data'], crystal: { name: 'Offline', value: 'first' } });
  assert.equal(f.calls.length, 0); assert.equal((await f.sync.status())[0].state, 'pending');

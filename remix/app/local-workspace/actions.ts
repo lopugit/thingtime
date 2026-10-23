@@ -28,6 +28,8 @@ import { localActionRequests, localActionRequestSupported } from './actionReques
 import { snapshotTransferValue } from '../utils/thingTransfer/value';
 import { LocalThings, localThingProjection, type LocalThing } from './things';
 import type { AccountThingSync } from './accountSync';
+import { exportAccountThings } from './accountExport';
+import { bundleFromPlan } from '../utils/thingTransfer/browser';
 import { WorkspaceError, workspaceScopeKey, type WorkspaceDatabase, type WorkspaceLease, type WorkspaceScope } from './storage';
 
 const fail = (message: string, status = 400): never => {
@@ -64,7 +66,14 @@ export class LocalActions {
 		return {
 			get: account.things.get.bind(account.things), snapshot: account.things.snapshot.bind(account.things),
 			list: account.things.list.bind(account.things), create: account.things.create.bind(account.things),
-			update: account.things.update.bind(account.things), remove: account.remove.bind(account)
+			update: account.things.update.bind(account.things), move: account.things.move.bind(account.things), remove: account.remove.bind(account),
+			import: account.things.import.bind(account.things),
+			export: async (ids: string[], options: Parameters<LocalThings['export']>[1] = {}) => {
+				const result = await exportAccountThings({ ids }, { sync: account, db: this.db, lease, canRefresh: () => false,
+					remote: async () => fail('This copy requires complete content saved on this device', 409) }, options.signal);
+				const bundle = await bundleFromPlan(result.plan, { signal: options.signal });
+				return { ...bundle, assertCurrent: result.plan.assertCurrent, assertCurrentInTransaction: result.plan.assertCurrentInTransaction };
+			}
 		};
 	}
 	private assert() {

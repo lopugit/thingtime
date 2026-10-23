@@ -1,13 +1,14 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { randomUUID } from 'node:crypto';
+import { detectedAttachmentType } from '../api/utils/attachments/attachmentPresentation';
 import { IDBFactory } from 'fake-indexeddb';
 import { AccountFileSync } from './accountFiles';
 import { LocalThings } from './things';
 import { WorkspaceDatabase, WorkspaceError } from './storage';
 const scope = { kind: 'account' as const, ownerId: 'owner', origin: 'https://example.test', dataPlane: 'home' };
 const lease = { assertCurrent() {}, onInvalidate: () => () => {} };
-async function fixture() {
+async function fixture(canonicalUpload = false) {
 	const factory = new IDBFactory(),
 		db = new WorkspaceDatabase(factory);
 	let now = Date.parse('2026-10-16T00:00:00Z'),
@@ -19,7 +20,7 @@ async function fixture() {
 		id: 'remote-file',
 		author: { id: scope.ownerId },
 		thingtime: ['attachment'],
-		crystal: { ...local.crystal },
+		crystal: { ...local.crystal, ...(canonicalUpload ? detectedAttachmentType(undefined, String(local.crystal.name)) : {}) },
 		folderId: null,
 		updatedAt: new Date(version).toISOString()
 	};
@@ -362,4 +363,66 @@ test('deletion pauses metadata even when a prior worker already resolved the rem
 			await assert.rejects(f.files.things.readFile(f.local.id), (error: any) => error.status === 404);
 		} finally { await f.db.close(); }
 	}
+});
+
+
+test('verified canonical upload MIME preserves offline annotation, filing, retention and original retry identity', async () => {
+ const f = await fixture(true);
+ try {
+  assert.equal(f.local.crystal.contentType, 'text/plain'); assert.equal(f.remote.crystal.contentType, 'application/octet-stream');
+  const folder = await f.files.things.create({ thingtime: ['folder'], crystal: { name: 'Copied folder' } });
+  await f.files.things.annotateFile({ id: f.local.id, title: 'Copied title' });
+  await f.files.things.move([f.local.id], folder.id);
+  await f.db.close();
+  const reopened = new WorkspaceDatabase(f.factory);
+  try {
+   const files = new AccountFileSync(reopened, scope, lease, f.now);
+   await files.sync(f.transport, undefined, 3, async id => id === folder.id);
+   assert.equal(f.remote.crystal.title, 'Copied title'); assert.equal(f.remote.folderId, folder.id);
+   assert.equal((await files.status())[0].state, 'synced'); assert.deepEqual(f.calls.map(call => call.kind), ['annotate', 'move']);
+   const retained = await files.retain({ ...f.transport, retention: async () => ({ size: f.bytes.length, cacheKey: 'a'.repeat(64) + ':original',
+    file: { purpose: 'file', ownerId: scope.ownerId, updatedAt: f.remote.updatedAt, folderId: folder.id, attachment: { id: f.remote.id, ...f.remote.crystal } } }), bytes: async () => f.bytes }, f.remote.id);
+   assert.equal(retained.row.id, f.local.id);
+   const replay = await files.things.saveFile({ requestId: f.local.localAttachment.requestId!, name: 'file.txt', contentType: 'text/plain', bytes: f.bytes, purpose: 'file' });
+   assert.equal(replay.id, f.local.id); assert.equal(replay.crystal.contentType, 'text/plain'); assert.equal(replay.crystal.title, 'Copied title');
+   assert.deepEqual((await files.readFile(f.local.id)).bytes, f.bytes);
+   assert.equal(await reopened.transaction(scope, 'readonly', lease, tx => files.metadata.matchesDeletion(tx, replay, files.metadata.checked(f.remote, f.remote.id))), true);
+   assert.equal(f.remote.crystal.contentType, 'application/octet-stream');
+  } finally { await reopened.close(); }
+ } finally { await f.db.close(); }
+});
+
+test('a canonical MIME receipt never relaxes owner, target, bytes identity or later account MIME changes', async () => {
+ for (const changed of ['owner', 'target', 'name', 'size', 'url', 'mime'] as const) {
+  const f = await fixture(true);
+  try {
+   await f.files.things.annotateFile({ id: f.local.id, title: 'Keep device edit' });
+   if (changed === 'owner') f.remote.author.id = 'other';
+   if (changed === 'target') f.remote.targetId = 'unrelated-post';
+   if (changed === 'name') f.remote.crystal.name = 'different.txt';
+   if (changed === 'size') f.remote.crystal.size++;
+   if (changed === 'url') f.remote.crystal.url = 'https://example.invalid/substitution.txt';
+   if (changed === 'mime') f.remote.crystal.contentType = 'text/plain'; // Even matching the original request is now a changed receipt.
+   await f.files.sync(f.transport);
+   // A URL on nonempty stored bytes is an invalid response (retryable 502),
+   // while well-formed identity substitutions are permanent FILE_IDENTITY.
+   assert.equal((await f.files.status())[0].state, changed === 'url' ? 'pending' : 'error', changed); assert.deepEqual(f.calls, [], changed);
+   assert.equal((await f.files.things.readFile(f.local.id)).row.crystal.title, 'Keep device edit');
+  } finally { await f.db.close(); }
+ }
+});
+
+test('only a same-file receipt can supply canonical stored-byte MIME', async () => {
+ for (const changed of ['missing', 'unrelated'] as const) {
+  const f = await fixture(true);
+  try {
+   await f.db.transaction(scope, 'readwrite', lease, async tx => {
+    const record = await tx.get<any>('account-files', f.local.id);
+    if (changed === 'missing') delete record.remote;
+    else record.remote.id = 'unrelated-receipt';
+    await tx.put('account-files', f.local.id, record);
+   });
+   await assert.rejects(f.db.transaction(scope, 'readonly', lease, tx => f.files.metadata.matchesDeletion(tx, f.local, f.files.metadata.checked(f.remote, f.remote.id))), { code: 'FILE_IDENTITY' });
+  } finally { await f.db.close(); }
+ }
 });

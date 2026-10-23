@@ -4,15 +4,17 @@ import { accountWorkspaceWorker } from './accountApi.client';
 import { announceLocalWorkspaceChange, currentAccountWorkspace, LOCAL_WORKSPACE_CHANGED } from './runtime.client';
 import type { AccountThemeSync } from './accountThemes';
 import type { AccountThemeSelection } from './themeSelection';
+import { useLocalApiView } from './LocalApiView';
 type Review =
 	| { kind: 'theme'; value: Awaited<ReturnType<AccountThemeSync['inspect']>> }
 	| { kind: 'selection'; value: Awaited<ReturnType<AccountThemeSelection['inspect']>> };
 /** ThemeStudio keys this surface by workspace identity. Anonymous workspaces
  * never construct an account worker or negotiate remote authority. */
 export function AccountThemeSyncStatus({ onAdopt }: { onAdopt: (theme: any | null) => void }) {
+    const view = useLocalApiView();
 	const [worker] = React.useState(() => {
 		const scope = currentAccountWorkspace();
-		return scope ? accountWorkspaceWorker(scope) : null;
+		return scope ? accountWorkspaceWorker(scope, view) : null;
 	});
 	const [rows, setRows] = React.useState<Awaited<ReturnType<AccountThemeSync['status']>>>([]);
 	const [selection, setSelection] = React.useState<Awaited<ReturnType<AccountThemeSelection['status']>>>(null);

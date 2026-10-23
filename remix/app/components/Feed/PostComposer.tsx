@@ -909,6 +909,7 @@ const AccountPostComposer = (props: PostComposerProps) => {
   if (!expanded) {
     return (
       <Flex
+        data-lopu-launcher-clearance
         onDragOverCapture={handleComposerDragOver}
         onDropCapture={handleComposerDrop}
         background="var(--tt-card, #ffffff)"
@@ -943,6 +944,7 @@ const AccountPostComposer = (props: PostComposerProps) => {
   return (
     <Flex
       data-editor-scope="post-composer"
+      data-lopu-launcher-clearance
 			position="relative"
       flexDirection="column"
       rowGap={3}

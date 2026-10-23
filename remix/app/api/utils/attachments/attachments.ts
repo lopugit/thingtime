@@ -35,6 +35,7 @@ import {
 	PROFILE_ATTACHMENT_CONTENT_TYPES,
 	attachmentMpuSettlementAt,
 	attachmentStore,
+	isIdempotentLinkedAttachment,
 	bindReadyCommentAttachmentsToTarget,
 	bindReadyEmojiAttachmentToTarget,
 	bindReadyMessageAttachmentsToTarget,
@@ -1400,14 +1401,15 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 					const contentPurpose = reserved.attachmentPurpose === 'post' || reserved.attachmentPurpose === 'comment' ? reserved.attachmentPurpose : undefined;
 					const eligible = targetId ? !!contentPurpose && (!reserved.targetId || reserved.targetId === targetId)
 						: !reserved.targetId && isStandaloneAttachmentPurpose(reserved.attachmentPurpose) && !(reserved.attachmentState === 'ready' && reserved.attachmentExpiresAt);
-					if (!eligible || reserved.attachmentLinked || reserved.attachmentImportDraft || reserved.attachmentProfileSlot || !['ready', 'deleting'].includes(reserved.attachmentState))
+					if (!eligible || (reserved.attachmentLinked && (!targetId || !isIdempotentLinkedAttachment(reserved))) || reserved.attachmentImportDraft || reserved.attachmentProfileSlot || !['ready', 'deleting'].includes(reserved.attachmentState))
 						return fail(409, 'This upload must finish or be removed through its owning surface');
 					if (reserved.attachmentState !== 'deleting' && reserved.updatedAt.getTime() !== expectedUpdatedAt.getTime()) return fail(409, 'Attachment changed; refresh before deleting');
 					// A content-file receipt fences the exact target and immutable purpose
 					// in the same cleanup claim. Unbound ready uploads may be discarded
 					// before their local parent ever synchronizes.
 					const result = targetId ? cleanupResponse(await cleanupClaimedDoc(() => dependencies.getS3(), reserved, {
-						...(reserved.targetId ? { kind: 'target' as const, targetId } : { kind: 'draft' as const }), contentPurpose, expectedUpdatedAt, retainCancellation: true
+						...(reserved.targetId ? { kind: 'target' as const, targetId } : { kind: 'draft' as const }), contentPurpose, expectedUpdatedAt, retainCancellation: true,
+						...(reserved.attachmentLinked ? { linkedRequestFingerprint: reserved.attachmentRequestFingerprint } : {})
 					})) : await remove(ownerId, { id, expectedUpdatedAt: raw.expectedUpdatedAt }, { retainCancellation: true });
 					if (!result.ok) return result;
 					const receipt = await dependencies.store.getById(id);
@@ -1801,6 +1803,7 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 	};
 
 	return {
+		link: (ownerId: string, input: unknown) => linkAttachmentWithDependencies(ownerId, input, dependencies),
 		start,
 		signParts,
 		complete,
@@ -1826,6 +1829,7 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 
 const service = createAttachmentService();
 
+export const linkAttachment = service.link;
 export const startAttachmentUpload = service.start;
 export const signAttachmentUploadParts = service.signParts;
 export const completeAttachmentUpload = service.complete;
@@ -1896,17 +1900,19 @@ export const annotateAttachment = async (ownerId: string, input: unknown, option
 // any uploaded attachment, but no bytes ever touch Thingtime storage: the
 // crystal's url renders straight from the original site (img/video/anchor safe
 // sinks; the server never fetches it, so there is no SSRF surface). Duplicate
-// URLs are deliberately allowed — each mint is its own attachment thing.
+// URLs are deliberately allowed — each new request is its own attachment thing.
 // Unbound mints expire on the same 24h draft TTL as uploads.
-export const linkAttachment = async (ownerId: string, input: unknown): Promise<AttachmentResult<{ attachment: AttachmentPublicMetadata }>> => {
+async function linkAttachmentWithDependencies(ownerId: string, input: unknown, dependencies: AttachmentServiceDependencies): Promise<AttachmentResult<{ attachment: AttachmentPublicMetadata; updatedAt: string }>> {
 	try {
-		if (isCustomMongoEndpointActive()) {
+		if (dependencies.customMongoActive()) {
 			return fail(400, 'Private attachments are unavailable with a custom MongoDB endpoint');
 		}
 		const record = input && typeof input === 'object' && !Array.isArray(input) ? (input as Record<string, unknown>) : {};
-		if (Object.keys(record).some((key) => !['url', 'purpose', 'mediaKind'].includes(key))) {
+		if (Object.keys(record).some((key) => !['url', 'purpose', 'mediaKind', 'requestId'].includes(key))) {
 			return fail(400, 'Invalid linked media request');
 		}
+		const requestId = 'requestId' in record ? normalizeId(record.requestId) : undefined;
+		if (requestId === null) return fail(400, 'Invalid attachment request id');
 		const url = canonicalLinkedAttachmentUrl(record.url);
 		if (!url) return fail(400, 'Linked media must be a plain http(s) URL of at most 2048 characters');
 		const purpose = record.purpose === undefined ? 'post' : record.purpose;
@@ -1932,20 +1938,46 @@ export const linkAttachment = async (ownerId: string, input: unknown): Promise<A
 			mediaKind,
 			url
 		};
-		const doc = await attachmentStore.insertLinkedReady({
-			id: randomUUID(),
-			ownerId,
-			crystal,
-			purpose,
-			expiresAt: new Date(Date.now() + ATTACHMENT_READY_DRAFT_TTL_MS)
-		});
-		const attachment = toAttachmentPublicMetadata(doc.shareId, doc.crystal, doc.moderation);
-		if (!attachment) return fail(409, 'Linked media failed validation after creation');
-		return { ok: true, attachment };
+		const id = requestId ? attachmentIdForRequest(ownerId, requestId) : dependencies.uuid();
+		// Domain separation prevents an upload and a link from sharing a request
+		// receipt even if their serialized metadata happens to match.
+		const requestFingerprint = requestId ? createHash('sha256').update('thingtime-linked-attachment-request-v1\0')
+			.update(JSON.stringify({ url, purpose, mediaKind })).digest('hex') : undefined;
+		const reply = (doc: AttachmentDoc): AttachmentResult<{ attachment: AttachmentPublicMetadata; updatedAt: string }> => {
+			if (doc.ownerId !== ownerId || doc.shareId !== id) return fail(409, 'Attachment request identity changed');
+			if (doc.attachmentState === 'cancelled') return fail(409, 'Attachment request was cancelled', { code: 'upload_cancelled', retryable: false });
+			if (doc.attachmentState !== 'ready' || !doc.attachmentLinked ||
+				(requestFingerprint && doc.attachmentRequestFingerprint !== requestFingerprint))
+				return fail(409, 'Attachment request already exists with different metadata or is being deleted', { retryable: false });
+			// A replay cannot renew a draft or resurrect an expired request. Bound
+			// attachments have no expiry and return their current annotated metadata.
+			if ((!doc.targetId && !doc.attachmentExpiresAt) || (doc.attachmentExpiresAt &&
+				(!Number.isFinite(doc.attachmentExpiresAt.getTime()) || doc.attachmentExpiresAt.getTime() <= dependencies.now().getTime())))
+				return fail(409, 'Linked attachment draft expired; create a new request', { retryable: false });
+			const attachment = toAttachmentPublicMetadata(doc.shareId, doc.crystal, doc.moderation);
+			if (!attachment) return fail(409, 'Linked media failed validation after creation');
+			return { ok: true, attachment, updatedAt: doc.updatedAt.toISOString() };
+		};
+		if (requestId) {
+			const existing = await dependencies.store.getById(id);
+			if (existing) return reply(existing);
+		}
+		try {
+			return reply(await dependencies.store.insertLinkedReady({ id, ownerId, crystal, purpose, requestFingerprint,
+				expiresAt: new Date(dependencies.now().getTime() + ATTACHMENT_READY_DRAFT_TTL_MS) }));
+		} catch (error) {
+			// The unique attachment identity and quota charge commit together. A
+			// concurrent winner can be replayed, without charging or minting again.
+			if (requestId) {
+				const raced = await dependencies.store.getById(id);
+				if (raced) return reply(raced);
+			}
+			throw error;
+		}
 	} catch (error) {
 		return knownFailure(error) || unavailable('link', error);
 	}
-};
+}
 
 // PATCH-time sync: re-stamp the display order of a target's bound attachments
 // AND bind any newly uploaded ready drafts an edit appends. The store helper

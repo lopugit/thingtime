@@ -537,7 +537,7 @@ export const useAttachmentUploads = (
 			setUploads(nextUploads);
 			void (async () => {
 				try {
-					const demoteToFile = detected === 'probe' ? !(await probeLinkedImage(url)) : false;
+					const demoteToFile = detected === 'probe' && !saveOnDevice ? !(await probeLinkedImage(url)) : false;
 					if (!isCurrent(localId, 1)) return;
 					const response = await apiRef.current.link({
 						url,
@@ -568,7 +568,7 @@ export const useAttachmentUploads = (
 			})();
 			return true;
 		},
-		[imageOnly, isCurrent, maxFiles, onSelectionError, patchUpload, uploadPurpose]
+		[imageOnly, isCurrent, maxFiles, onSelectionError, patchUpload, saveOnDevice, uploadPurpose]
 	);
 
 	const retry = React.useCallback(

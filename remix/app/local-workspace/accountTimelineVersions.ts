@@ -4,7 +4,7 @@ import { versionContent, versionContentEquals } from '../timeline/versions';
 import { thingContentSnapshot } from '../timeline/thingContent';
 import { TIMELINE_EVENT_MAX_BYTES } from '../timeline/contract';
 import type { TimelineLocalStore, LocalTimelineRow } from '../timeline/localStore';
-import { LocalTimelineVersions, type LocalVersionAuthority } from './timelineVersions';
+import { LocalTimelineVersions, type LocalVersionAuthority, type LocalProtectedVersionWriter } from './timelineVersions';
 import { AccountTimeline, accountTimelineScope, readAccountTimelineRow } from './accountTimeline';
 import { WorkspaceError, workspaceScopeKey, type WorkspaceDatabase, type WorkspaceLease, type WorkspaceScope, type WorkspaceTransaction } from './storage';
 import type { LocalThings, LocalThing } from './things';
@@ -17,13 +17,14 @@ const fail=(message:string):never=>{throw new WorkspaceError('ACCOUNT_HISTORY_VE
 export class AccountTimelineVersions {
  private history: AccountTimeline;
  private authority: LocalVersionAuthority<LocalTimelineRow>;
- constructor(private db:WorkspaceDatabase,private scope:AccountScope,private lease:WorkspaceLease,private things:LocalThings,private store:TimelineLocalStore){
+ constructor(private db:WorkspaceDatabase,private scope:AccountScope,private lease:WorkspaceLease,private things:LocalThings,private store:TimelineLocalStore, private protectedWriters:LocalProtectedVersionWriter[]=[]){
   const timeline=accountTimelineScope(scope);
   if(workspaceScopeKey(things.scope)!==workspaceScopeKey(scope))fail('The History writer belongs to another workspace.');
   if(store.scope.ownerId!==timeline.ownerId||store.scope.dataPlane!==timeline.dataPlane||store.scope.apiOrigin!==timeline.apiOrigin)fail('History belongs to another workspace.');
   this.history=new AccountTimeline(db,scope,lease);
   const entry=(tx:WorkspaceTransaction,id:string)=>readAccountTimelineRow(tx,timeline,id);
   const thing=async(tx:WorkspaceTransaction,id:string)=>{
+   for(const writer of this.protectedWriters){const doc=await writer.read?.(tx,id);if(doc&&writer.matches(doc))return doc;}
    const doc=await tx.get<LocalThing>('things',id),state=await tx.get<{audience:{acl:string[]};deleted?:unknown}>('thing-sync',id);
    if(!doc||!state||state.deleted)return undefined;
    return {...doc,acl:state.audience.acl};
@@ -33,12 +34,13 @@ export class AccountTimelineVersions {
     const head=await tx.get<string>('timeline-meta',`head:${id}`);
     if(head){const row=await entry(tx,head);if(!row||row.event.thingId!==id)fail('The device History head is unavailable.');return row;}
     const doc=await thing(tx,id);
-    const current=doc?versionContent(thingContentSnapshot(doc)!):null;
+    const adapter=doc?this.protectedWriters.find(writer=>writer.matches(doc))?.content(doc):null;
+    const current=doc?(adapter?adapter.read(adapter.current):versionContent(thingContentSnapshot(doc)!)):null;
     let match:LocalTimelineRow|null=null;
     for(const item of await tx.list<{thingId:string}>('timeline-index')){
      if(item.value.thingId!==id)continue;
      const row=await entry(tx,item.id);
-     if(row?.receipt&&row.event.mode==='revision'&&(current?row.event.after?.adapter==='thing-content'&&versionContentEquals(versionContent(row.event.after),current):true)&&(!match||row.receipt.position>match.receipt!.position))match=row;
+     if(row?.receipt&&row.event.mode==='revision'&&(current?row.event.after && (adapter ? adapter.adapters.includes(row.event.after.adapter) && versionContentEquals(adapter.read(row.event.after),current) : row.event.after.adapter==='thing-content'&&versionContentEquals(versionContent(row.event.after),current)):true)&&(!match||row.receipt.position>match.receipt!.position))match=row;
     }
     return match;
    },
@@ -53,7 +55,7 @@ export class AccountTimelineVersions {
   const check=()=>{this.lease.assertCurrent();signal?.throwIfAborted();};check();
   const request=parseVersionRequest(input);
   const run=async()=>{
-   const result=await new LocalTimelineVersions(this.db,this.lease,this.things,this.authority).request(request,signal);check();
+   const result=await new LocalTimelineVersions(this.db,this.lease,this.things,this.authority,this.protectedWriters).request(request,signal);check();
    return 'entry' in result ? {...result,entry:{event:result.entry.event,receipt:result.entry.receipt},savedLocally:true as const} : {...result,savedLocally:false as const};
   };
   // A committed retry does not depend on today's content or a surviving cache.
@@ -67,9 +69,10 @@ export class AccountTimelineVersions {
    const id=await tx.get<string>('timeline-meta',`head:${source.event.thingId}`);
    const doc=await this.authority.thing(tx,source.event.thingId);
    if(!doc&&!request.recover)fail('This Thing was deleted. Choose recovery in History to restore it.');
-   return {id,content:doc?versionContent(thingContentSnapshot(doc)!):null};
+   const adapter=doc?this.protectedWriters.find(writer=>writer.matches(doc))?.content(doc):null;
+   return {id,adapter,content:doc?(adapter?adapter.read(adapter.current):versionContent(thingContentSnapshot(doc)!)):null};
   });check();
-  const head=basis.id ? rows.find(row=>row.event.id===basis.id) : rows.filter(row=>row.receipt&&row.event.mode==='revision'&&(basis.content?row.event.after?.adapter==='thing-content'&&versionContentEquals(versionContent(row.event.after),basis.content):true)).sort((a,b)=>b.receipt!.position-a.receipt!.position)[0];
+  const head=basis.id ? rows.find(row=>row.event.id===basis.id) : rows.filter(row=>row.receipt&&row.event.mode==='revision'&&(basis.content?row.event.after && (basis.adapter ? basis.adapter.adapters.includes(row.event.after.adapter) && versionContentEquals(basis.adapter.read(row.event.after),basis.content) : row.event.after.adapter==='thing-content'&&versionContentEquals(versionContent(row.event.after),basis.content)):true)).sort((a,b)=>b.receipt!.position-a.receipt!.position)[0];
   const found=new Map<string,LocalTimelineRow>(), expanded=new Set<string>();
   let pending=[{id:source.event.id,ancestry:request.mode==='merge'},...(head?[{id:head.event.id,ancestry:request.mode==='merge'}]:[])];
   while(pending.length){

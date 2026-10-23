@@ -1,7 +1,7 @@
 import { createQuotaFactory, TEST_STORAGE_CAPACITY } from './storageTestFixture';
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { IDBKeyRange } from 'fake-indexeddb';
+import { IDBFactory, IDBKeyRange } from 'fake-indexeddb';
 import { decodeThingtime, stringifyThingtimeForStorage } from '../Providers/thingtimeSerialization';
 import { LocalEditorTree, legacyEditorTreeKey } from './editorTree';
 import { WorkspaceDatabase, type WorkspaceScope, type WorkspaceLease } from './storage';
@@ -73,11 +73,36 @@ test('a delayed legacy read cannot adopt another generation or replace a concurr
  } finally { await db.close(); }
 });
 
-test('oversized or damaged trees never replace a valid snapshot or silently hydrate blank data', async () => {
+test('large native trees retain exact canonical values through cold reopen and legacy adoption', async () => {
+ const db = new WorkspaceDatabase(new IDBFactory(), crypto.randomUUID(), 10_000, IDBKeyRange), { lease } = guard();
+ try {
+  // Exercise both former limits: serialized character count and UTF-8 bytes.
+  for (const [scope, text] of [[account, 'x'.repeat(17 * 1024 * 1024)], [{ kind: 'anonymous' }, '🦄'.repeat(5 * 1024 * 1024)]] as const) {
+   const store = new LocalEditorTree(db, scope, lease);
+   const value: any = { Notes: text, date: new Date('2026-10-23T00:00:00Z') }; value.self = value;
+   await store.setItem(store.key, stringifyThingtimeForStorage(value));
+   await db.close();
+   const reopened = decodeThingtime((await new LocalEditorTree(db, scope, lease).getItem(store.key))!).value;
+   assert.equal(reopened.Notes, text); assert.equal(reopened.self, reopened);
+   assert.equal(reopened.date.toISOString(), '2026-10-23T00:00:00.000Z');
+   assert.ok((await db.transaction(scope, 'readonly', lease, tx => tx.usage())).bytes > 16 * 1024 * 1024);
+  }
+  const legacyDb = new WorkspaceDatabase(new IDBFactory(), crypto.randomUUID(), 10_000, IDBKeyRange);
+  try {
+   const original = encoded('legacy'.repeat(3 * 1024 * 1024));
+   const legacy = { getItem: async () => original, keys: async () => ['thingtime'] };
+   const store = new LocalEditorTree(legacyDb, { kind: 'anonymous' }, lease, legacy);
+   assert.equal(await store.getItem(store.key), original);
+   await legacyDb.close();
+   assert.equal(await new LocalEditorTree(legacyDb, { kind: 'anonymous' }, lease).getItem(store.key), original);
+  } finally { await legacyDb.close(); }
+ } finally { await db.close(); }
+});
+
+test('damaged trees never replace a valid snapshot or silently hydrate blank data', async () => {
  const db = createDb(), { lease } = guard(), store = new LocalEditorTree(db, account, lease);
  try {
   await store.setItem(store.key, encoded('Keep this tree'));
-  await assert.rejects(store.setItem(store.key, encoded('x'.repeat(TEST_STORAGE_CAPACITY.binaryBytes))), /too large|16 MiB/);
   await assert.rejects(store.setItem(store.key, 'invalid'), /JSON/);
   assert.equal(decodeThingtime((await store.getItem(store.key))!).value.Notes, 'Keep this tree');
   await db.transaction(account, 'readwrite', lease, tx => tx.putBytes('editor-tree:root:v1', new TextEncoder().encode(encoded('Tampered tree'))));

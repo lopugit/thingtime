@@ -1,6 +1,6 @@
 import { characterApi, withCharacterRequest } from '../local-workspace/characterRequest.client';
 import { useLocalApiView } from '../local-workspace/LocalApiView';
-import { parseTimelineVersionExport } from '../timeline/exportVersion';
+import { parseTimelineVersionExport, timelineVersionExportRequirement } from '../timeline/exportVersion';
 import { startNotificationHistorySync } from '../local-workspace/notifications.client';
 import { WorkspaceApiIdentity } from '../local-workspace/apiIdentity';
 import { useOfflineWorkspace, type WorkspaceUser } from './useWorkspaceUser';
@@ -224,7 +224,7 @@ export function useApi(explicitView?: AccountLocalView, actorOverride?: Workspac
       }, [asyncFetcher]),
       // Strict gate: a 1.17 server answers `export=1&eventId=` with a plain entry read (HTTP 200), so the manifest is the only reliable signal.
       exportVersion: useCallback(async (scope: { ownerId: string; dataPlane: string }, eventId: string, options?: { signal?: AbortSignal; adapter?: string }) => {
-        await requireThingtimeCapability('api.timeline', options?.adapter === 'theme-content' ? '1.21.0' : '1.18.0');
+        await requireThingtimeCapability('api.timeline', timelineVersionExportRequirement(options?.adapter));
         const result = await getJson(`/api/v1/timeline${toQuery({ ...timelineRequestScope(scope), eventId, export: 1 })}`, options);
         return parseTimelineVersionExport(result, {ownerId: scope.ownerId, id: eventId}, true);
       }, [getJson]),
@@ -1636,13 +1636,13 @@ export function useApi(explicitView?: AccountLocalView, actorOverride?: Workspac
     },
     themes: {
       list: useCallback(async () => getJson('/api/v1/themes'), [getJson]),
-      getShared: useCallback(async (args) => getJson(`/api/v1/themes/shared?id=${encodeURIComponent(args?.id || '')}`), [getJson]),
+      getShared: useCallback(async (args, options?: ThingRequestOptions) => getJson(`/api/v1/themes/shared?id=${encodeURIComponent(args?.id || '')}`, options), [getJson]),
       // public gallery list (no id → every public theme, newest first). The
       // arg is optional: callers that want the server default call this with
       // no arguments at all.
       listShared: useCallback(
-        async (args?: { limit?: number }) =>
-          getJson(`/api/v1/themes/shared${args?.limit ? `?limit=${encodeURIComponent(args.limit)}` : ''}`),
+        async (args?: { limit?: number }, options?: ThingRequestOptions) =>
+          getJson(`/api/v1/themes/shared${args?.limit ? `?limit=${encodeURIComponent(args.limit)}` : ''}`, options),
         [getJson]
       ),
       save: useCallback(

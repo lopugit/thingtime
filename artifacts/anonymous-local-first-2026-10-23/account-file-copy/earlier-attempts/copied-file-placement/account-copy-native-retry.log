@@ -1,0 +1,19 @@
+✖ native account Duplicate copies offline file bytes privately and independent queues resume after reconnect (184661.894075ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 185175.458318
+
+✖ failing tests:
+
+test at app/local-workspace/accountFileCopy.browser.test.ts:2:1418
+✖ native account Duplicate copies offline file bytes privately and independent queues resume after reconnect (184661.894075ms)
+  Error: Account copy did not converge: {"status":200,"body":{"ok":true,"thing":{"id":"att_e9bef1f04a1051335d66ba8edbffba5288b1615a845d74ed8a08ab25ffc9f005","thingtime":["attachment"],"author":{"id":"6adb276b8d76baae4ed9026d","username":"copyfiles-d56d5bf0","displayName":null,"temporary":false,"avatarUrl":null},"audience":{"sourceId":"att_e9bef1f04a1051335d66ba8edbffba5288b1615a845d74ed8a08ab25ffc9f005","acl":["tt:user"]},"visibility":"private","acl":["tt:user"],"targetId":null,"folderId":null,"crystal":{"name":"private-copy.txt","size":18504,"contentType":"application/octet-stream","mediaKind":"file"},"extended":null,"geo":null,"tags":[],"createdAt":"2026-10-23T09:23:39.115Z","updatedAt":"2026-10-23T09:23:40.377Z"},"post":{"id":"att_e9bef1f04a1051335d66ba8edbffba5288b1615a845d74ed8a08ab25ffc9f005","thingtime":["attachment"],"type":"text","author":{"id":"6adb276b8d76baae4ed9026d","username":"copyfiles-d56d5bf0","displayName":null,"temporary":false,"avatarUrl":null},"audience":{"sourceId":"att_e9bef1f04a1051335d66ba8edbffba5288b1615a845d74ed8a08ab25ffc9f005","acl":["tt:user"]},"visibility":"private","acl":["tt:user"],"text":"","richText":null,"images":[],"attachments":[],"mediaLayout":null,"listing":null,"thing":null,"tags":[],"reactionCounts":{},"viewerReactions":[],"votes":{"up":0,"down":0,"score":0,"viewerVote":null},"title":null,"subspace":null,"flair":null,"authorFlair":null,"subspaceMod":null,"commentCount":0,"commentCounts":{"direct":0,"replies":0,"total":0,"loaded":0},"comments":[],"shareCount":0,"isShare":false,"shareOf":null,"viewCount":0,"viewStats":{"impressions":0,"avgDwellMs":0},"viewerSaved":false,"extended":null,"geo":null,"createdAt":"2026-10-23T09:23:39.115Z"},"discussion":null,"parent":null,"root":null,"commentSort":null}}
+      at poll (/workspace/thingtime/remix/app/local-workspace/accountFileCopy.browser.test.ts:89:9)
+      at async TestContext.<anonymous> (/workspace/thingtime/remix/app/local-workspace/accountFileCopy.browser.test.ts:232:22)
+      at async Test.run (node:internal/test_runner/test:1389:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3)

@@ -124,12 +124,21 @@ type LinkedReadyInput = {
 	crystal: AttachmentCrystal;
 	purpose: AttachmentPurpose;
 	expiresAt: Date;
+	requestFingerprint?: string;
 };
+
+// Only server-minted request identities retain a replay fence after linked
+// draft expiry, ordinary deletion, or parent cascade. Legacy random-ID links
+// keep their existing lifecycle.
+export const isIdempotentLinkedAttachment = (doc: AttachmentDoc): boolean =>
+	doc.attachmentLinked === true && /^att_[a-f0-9]{64}$/.test(doc.shareId) &&
+	/^[a-f0-9]{64}$/.test(doc.attachmentRequestFingerprint || '') &&
+	(doc.attachmentPurpose === 'post' || doc.attachmentPurpose === 'comment');
 
 export type AttachmentDeleteClaimScope = (
 	| { kind: 'draft'; expiredAtOrBefore?: Date; finalizingUpdatedAtOrBefore?: Date; standalonePurpose?: 'file' | 'recording' }
 	| { kind: 'target'; targetId: string }
-) & { expectedUpdatedAt?: Date; retainCancellation?: true; contentPurpose?: 'post' | 'comment' };
+) & { expectedUpdatedAt?: Date; retainCancellation?: true; contentPurpose?: 'post' | 'comment'; linkedRequestFingerprint?: string };
 export type AttachmentDraftDeleteClaimScope = Extract<AttachmentDeleteClaimScope, { kind: 'draft' }>;
 
 export const attachmentDeleteClaimFence = (scope: AttachmentDeleteClaimScope): Record<string, unknown> => {
@@ -145,7 +154,9 @@ export const attachmentDeleteClaimFence = (scope: AttachmentDeleteClaimScope): R
 			} : {}),
 			...(scope.expiredAtOrBefore ? { attachmentExpiresAt: { $lte: scope.expiredAtOrBefore } } : {})
 		}),
-		...(scope.contentPurpose ? { attachmentPurpose: scope.contentPurpose, attachmentLinked: { $ne: true }, attachmentImportDraft: { $ne: true }, attachmentProfileSlot: { $exists: false } } : {}),
+		...(scope.contentPurpose ? { attachmentPurpose: scope.contentPurpose,
+			...(scope.linkedRequestFingerprint ? { attachmentLinked: true, attachmentRequestFingerprint: scope.linkedRequestFingerprint } : { attachmentLinked: { $ne: true } }),
+			attachmentImportDraft: { $ne: true }, attachmentProfileSlot: { $exists: false } } : {}),
 		...(scope.expectedUpdatedAt ? { updatedAt: scope.expectedUpdatedAt } : {})
 	};
 };
@@ -241,8 +252,8 @@ export const expiredAttachmentDraftFilter = (
 	]
 });
 
-// This tiny accounted receipt occupies the same unique upload identity forever.
-// Expiring it would allow an arbitrarily delayed original start to resurrect bytes.
+// This tiny accounted receipt occupies the same unique attachment request identity forever.
+// Expiring it would allow a delayed original upload or link request to resurrect content.
 export const cancelledAttachmentReceipt = (ownerId: string, id: string, now = new Date(), source?: Pick<AttachmentDoc, 'attachmentPurpose' | 'passwordFileParent'>): AttachmentDoc => {
 	const doc = {
 		shareId: id, schemaVersion: COLLECTION_SCHEMA_VERSIONS.things,
@@ -337,7 +348,7 @@ export const attachmentStore: AttachmentStore = {
 	// the same fences, and only its JSON payload bytes hit the owner's quota.
 	// Moderation is stamped 'skipped' at mint: there are no stored bytes for
 	// the analyzer to fetch, and an unstamped doc would loop the sweep forever.
-	async insertLinkedReady({ id, ownerId, crystal, purpose, expiresAt }) {
+	async insertLinkedReady({ id, ownerId, crystal, purpose, expiresAt, requestFingerprint }) {
 		const now = new Date();
 		const unstamped = {
 			shareId: id,
@@ -353,6 +364,7 @@ export const attachmentStore: AttachmentStore = {
 			attachmentEnvelopeVersion: ATTACHMENT_ENVELOPE_VERSION,
 			attachmentState: 'ready' as const,
 			attachmentLinked: true as const,
+			...(requestFingerprint ? { attachmentRequestFingerprint: requestFingerprint } : {}),
 			objectSizeBytes: 0,
 			objectKey: `${LINKED_ATTACHMENT_OBJECT_KEY_PREFIX}${id}`,
 			attachmentPurpose: purpose,
@@ -745,7 +757,8 @@ export const attachmentStore: AttachmentStore = {
 			const filter = { ...attachmentMatch(id), ownerId, attachmentState: 'deleting' };
 			const removed = await things.findOne(filter as any, { session }) as any as AttachmentDoc | null;
 			if (!removed) return false;
-			const receipt = removed.attachmentCancellationRequested ? cancelledAttachmentReceipt(ownerId, id, new Date(), removed) : null;
+			const receipt = removed.attachmentCancellationRequested || isIdempotentLinkedAttachment(removed)
+				? cancelledAttachmentReceipt(ownerId, id, new Date(), removed) : null;
 			if (receipt) await things.replaceOne(filter as any, receipt as any, { session });
 			else await things.deleteOne(filter as any, { session });
 			const bytes = currentContentStorageSizeBytes(removed);

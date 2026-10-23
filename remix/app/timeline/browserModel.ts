@@ -1,4 +1,5 @@
 import { THEME_CONTENT_ADAPTER, themeContentValue } from './themeContent.ts';
+import { ALGORITHM_CONTENT_ADAPTER, algorithmContentValue } from './algorithmContent.ts';
 import { readActionOutcome } from './actionOutcome.ts';
 import { timelineFileVersion } from '../fileSync/fileVersions';
 import type { TimelineEvent, TimelineSnapshot } from './contract.ts';
@@ -37,7 +38,7 @@ export function readHistoryFilters(params: URLSearchParams, initialThing = ''): 
 		look: (choice(params.get('look'), HISTORY_LOOKS) || 'list') as HistoryLook,
 		thingId: /^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,199}$/.test(target) ? target : '',
 		related: params.get('scope') === 'related' && /^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,199}$/.test(target),
-		kind: choice(params.get('kind'), ['webpage', 'component', 'data', 'post', 'file', 'folder', 'action', 'schema', 'theme']),
+		kind: choice(params.get('kind'), ['webpage', 'component', 'data', 'post', 'file', 'folder', 'action', 'schema', 'theme', 'feed-algorithm']),
 		source: choice(params.get('source'), ['client', 'api', 'action', 'ai', 'system']),
 		operation: choice(params.get('operation'), ['create', 'update', 'delete', 'restore', 'merge', 'effect']),
 		sync: choice(params.get('sync'), ['pending', 'accepted']),
@@ -79,6 +80,9 @@ export function historyContent(snapshot: TimelineSnapshot | null): {crystal: Rec
 	if (snapshot?.adapter === THEME_CONTENT_ADAPTER) {
   try { return {crystal:themeContentValue(snapshot).crystal,kinds:['theme']}; } catch { return null; }
  }
+	if (snapshot?.adapter === ALGORITHM_CONTENT_ADAPTER) {
+		try { return { crystal: algorithmContentValue(snapshot).crystal, kinds: ['feed-algorithm'] }; } catch { return null; }
+	}
 	if (snapshot?.adapter === 'thing-content' || snapshot?.adapter === 'webpage-draft')
 		return {
 			crystal: object(value.crystal),

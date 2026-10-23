@@ -135,6 +135,23 @@ export async function exportAccountThings(
 		selected = new Set([...plan.roots, ...plan.things.map((row: any) => row.id)]);
 		for (const row of [...plan.files, ...(plan.links || [])])
 			for (const id of [row.id, row.sourceId, row.targetId, row.sharedRoot]) if (typeof id === 'string') watched.add(id);
+		const ownedSources = await tx('readonly', async transaction => {
+			const ids: string[] = [];
+			for (const row of await transaction.list('thing-sync')) if (selected.has(row.id)) ids.push(row.id);
+			return ids;
+		});
+		const assertCurrentInTransaction = async (transaction: WorkspaceTransaction) => {
+			check();
+			await assertReadable(transaction);
+			for (const id of ownedSources) {
+				const record = await transaction.get<{ deleted?: unknown }>('thing-sync', id);
+				if (!record || record.deleted || !await transaction.get('things', id)) throw unavailable();
+			}
+			// A bearer plan may still reference a locally known registration.
+			// Its removal must fence copy admission even while the parent survives.
+			await deps.files?.assertKnownAliasesReadableInTransaction(transaction, watched);
+			check();
+		};
 		const assertCurrent = async (requestSignal?: AbortSignal) => {
 			check();
 			requestSignal?.throwIfAborted();
@@ -151,7 +168,7 @@ export async function exportAccountThings(
 			requestSignal?.throwIfAborted();
 		};
 		await assertCurrent();
-		return { ...result, plan: { ...plan, assertCurrent } };
+		return { ...result, plan: { ...plan, assertCurrent, assertCurrentInTransaction } };
 	};
 	if (args.key) return remotePlan();
 	if (baseline) {
@@ -226,6 +243,9 @@ export async function exportAccountThings(
 			async (id) => (await deps.files!.readFileBlob(id, signal)).blob,
 			{ ...args, signal },
 			(row) => {
+				if (row.thingtime.includes('folder') && state.things.some(child => child.folderId === row.id && !child.targetId &&
+					((child.thingtime.includes('attachment') && !deps.files) || (isTransferTheme(child) && !deps.themes) || (isTransferAlgorithm(child) && !deps.algorithms))))
+					throw new WorkspaceError('DEDICATED_EXPORT_REQUIRED', 'This folder contains content requiring its dedicated export adapter.', 409);
 				if (files.has(row.id)) return;
 				if (managedRows.has(row.id)) {
 					if (!managedRecords.get(row.id)?.complete)
@@ -263,7 +283,7 @@ export async function exportAccountThings(
 			},
 			new Set(state.records.filter((row) => !row.deleted).map((row) => row.id))
 		);
-		for (const [remote, local] of aliases) if (bundle.files.has(localAttachmentFileId(local))) watched.add(remote);
+		for (const [remote, local] of aliases) if (bundle.files.has(localAttachmentFileId(local)) || bundle.manifest.links?.some(link => link.id === local)) watched.add(remote);
 		if (
 			sync.scope.dataPlane !== 'home' &&
 			bundle.manifest.things.some(
@@ -306,12 +326,34 @@ export async function exportAccountThings(
 			check();
 			const exportedThemes = [...selectedThemes],
 				exportedAlgorithms = [...selectedAlgorithms];
+			const ownedSources: string[] = [];
+			for (const row of state.records) if (selected.has(row.id)) ownedSources.push(row.id);
+			// Copy admission shares the destination write transaction. Never open
+			// nested transactions here or let a prepared Blob outlive source refusal.
+			const assertCurrentInTransaction = async (transaction: WorkspaceTransaction) => {
+				check();
+				await assertReadable(transaction);
+				for (const id of ownedSources) {
+					const record = await transaction.get<{ deleted?: unknown }>('thing-sync', id);
+					if (!record || record.deleted || !await transaction.get('things', id)) throw unavailable();
+				}
+				for (const id of bundle.files.keys()) {
+					const fileId = id.slice(0, -':bytes'.length);
+					await deps.files!.assertReadableInTransaction(transaction, fileId);
+					if (!await transaction.getBinary(fileId)) throw unavailable();
+				}
+				for (const link of bundle.manifest.links || []) await deps.files!.assertReadableInTransaction(transaction, link.id);
+				await deps.themes?.assertExportReadableIn(transaction, exportedThemes);
+				await deps.algorithms?.assertExportReadableIn(transaction, exportedAlgorithms);
+				check();
+			};
 			const assertCurrent = async (requestSignal?: AbortSignal) => {
 				check();
 				requestSignal?.throwIfAborted();
 				// A prepared bundle must not outlive file cancellation/deletion either.
 				// Check metadata only; repeatedly loading immutable bytes is unnecessary.
 				for (const id of bundle.files.keys()) await deps.files!.assertFileReadable(id.slice(0, -':bytes'.length), requestSignal);
+				for (const link of bundle.manifest.links || []) await deps.files!.assertFileReadable(link.id, requestSignal);
 				await tx('readonly', assertReadable);
 				await deps.themes?.assertExportReadable(exportedThemes);
 				await deps.algorithms?.assertExportReadable(exportedAlgorithms);
@@ -326,9 +368,11 @@ export async function exportAccountThings(
 				retainedOnDevice,
 				plan: {
 					assertCurrent,
+					assertCurrentInTransaction,
 					roots: bundle.manifest.roots,
 					things: bundle.manifest.things,
 					files: bundle.manifest.files,
+					...(bundle.manifest.links?.length ? { links: bundle.manifest.links } : {}),
 					...(bundle.manifest.attachmentOrder ? { attachmentOrder: bundle.manifest.attachmentOrder } : {}),
 					...(bundle.files.size
 						? {

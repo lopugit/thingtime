@@ -1,5 +1,7 @@
 import { themeContentSnapshot } from '../timeline/themeContent';
 import { isTransferTheme } from '../utils/thingTransfer/theme';
+import { algorithmContentSnapshot } from '../timeline/algorithmContent';
+import { isTransferAlgorithm } from '../utils/thingTransfer/algorithm';
 import { createRelatedTimelineScope, validRelatedTimelineRequest } from '../timeline/relatedHistory';
 import { localRelatedThingIds } from './timelineRelated';
 import { createVersionExportReader } from '../timeline/exportVersion';
@@ -126,9 +128,10 @@ export type ThingHistoryWriter = {
  ownerId: string; clientId: string; branchId: string; mode: 'draft' | 'revision';
  read(id: string): Promise<{ event: TimelineEvent } | null>;
  append(event: TimelineEvent): Promise<unknown>;
- /** Only the dedicated account theme writer may supply these projections.
+ /** Only the dedicated account theme and algorithm writers supply these projections.
   * Generic account captures continue to exclude every protected kind. */
  themeSnapshots?: ReadonlyMap<string, Pick<TimelineEvent, 'before' | 'after'>>;
+ algorithmSnapshots?: ReadonlyMap<string, Pick<TimelineEvent, 'before' | 'after'>>;
 };
 
 export async function recordLocalThingChanges(tx: WorkspaceTransaction, changes: Map<string, { before: LocalThing | null; after: LocalThing | null }>, now: () => string, uuid: () => string, captures = new Map<string, LocalMutationCapture>(), writer?: ThingHistoryWriter) {
@@ -137,11 +140,14 @@ export async function recordLocalThingChanges(tx: WorkspaceTransaction, changes:
  for (const [id, { before, after }] of changes) {
   const target = after || before;
   const themeSnapshots = writer?.themeSnapshots?.get(id);
-  if (!target || (isProtectedThingtime(target.thingtime) && (!isTransferTheme(target) || (writer && !themeSnapshots))) || ['reaction', 'save', 'vote', 'updown', 'action-run'].some(kind => target.thingtime.includes(kind)) || id.startsWith('timeline-')) continue;
+  const algorithmSnapshots = writer?.algorithmSnapshots?.get(id);
+  if (!target || (isProtectedThingtime(target.thingtime) && !((isTransferTheme(target) && (!writer || themeSnapshots)) || (isTransferAlgorithm(target) && (!writer || algorithmSnapshots)))) || ['reaction', 'save', 'vote', 'updown', 'action-run'].some(kind => target.thingtime.includes(kind)) || id.startsWith('timeline-')) continue;
   const snapshot = (row: LocalThing | null) => row && isTransferTheme(row)
    ? themeContentSnapshot({crystal:row.crystal,tags:row.tags ?? [],visibility:'private',folderId:row.folderId ?? null})
+   : row && isTransferAlgorithm(row) ? algorithmContentSnapshot({crystal:row.crystal,folderId:row.folderId ?? null})
    : thingContentSnapshot(row && {...row,...(!writer ? {acl:[]} : {})});
-  const previous = themeSnapshots ? themeSnapshots.before : snapshot(before), next = themeSnapshots ? themeSnapshots.after : snapshot(after);
+  const supplied = themeSnapshots ?? algorithmSnapshots;
+  const previous = supplied ? supplied.before : snapshot(before), next = supplied ? supplied.after : snapshot(after);
   if (JSON.stringify(previous) === JSON.stringify(next) && !captures.has(id)) continue;
   const parent = await tx.get<string>(META, `head:${id}`);
   const prior = parent ? await history.read(parent) : null;

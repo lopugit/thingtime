@@ -9,6 +9,29 @@ const setup = () => {
   create: (_bytes, type) => { created.push(type); return `blob:fixture-${created.length}`; }, revoke: url => revoked.push(url) });
  return { registry, revoked, created, reads: () => reads, retire() { current = false; listeners.forEach(cb => cb()); } };
 };
+test('scoped linked metadata resolves without bytes and is cleared on deletion or identity retirement', async () => {
+ let current = true; const invalidations = new Set<() => void>();
+ const registry = new LocalMediaRegistry({
+  lease: () => ({ assertCurrent() { assert.ok(current, 'Retired workspace'); }, onInvalidate(callback) { invalidations.add(callback); return () => invalidations.delete(callback); } }),
+  read: async () => ({ url: 'https://media.example/image.png' }),
+  create: () => { throw Error('URL metadata must not allocate stored-byte previews'); },
+  revoke: () => { throw Error('External URLs are not owned Blob URLs'); }
+ });
+ const release = registry.retain('local-link-example'); await flush();
+ assert.equal(registry.url('local-link-example'), 'https://media.example/image.png');
+ registry.removed(['local-link-example']); assert.equal(registry.url('local-link-example'), '');
+ registry.refresh(); await flush(); assert.equal(registry.url('local-link-example'), 'https://media.example/image.png');
+ current = false; invalidations.forEach(callback => callback()); assert.equal(registry.url('local-link-example'), '');
+ release(); registry.dispose();
+});
+test('linked preview metadata never admits active or credential-bearing URLs', async () => {
+ for (const url of ['javascript:alert(1)', 'https://user:password@media.example/image.png', ' https://media.example/image.png']) {
+  const registry = new LocalMediaRegistry({ lease: () => ({ assertCurrent() {}, onInvalidate: () => () => {} }),
+   read: async () => ({ url }), create: () => { throw Error('Unexpected bytes'); }, revoke() {} });
+  const release = registry.retain('local-link-example'); await flush();
+  assert.equal(registry.url('local-link-example'), ''); assert.match(registry.errors()[0], /invalid/); release();
+ }
+});
 test('local media accepts canonical device references without capturing remote or account IDs', () => {
  assert.equal(localMediaId('/api/v1/attachments/content?id=local-file-123&width=320'), 'local-file-123');
  for (const url of ['https://elsewhere.test/api/v1/attachments/content?id=local-123', '/api/v1/attachments/content?id=server-123', '/api/v1/attachments/content?id=local-123&id=local-456', '/other?id=local-123']) assert.equal(localMediaId(url),null);

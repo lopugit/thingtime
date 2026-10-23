@@ -1,0 +1,71 @@
+
+> test:drafts
+> node --import tsx --test app/drafts/*.test.ts
+
+✔ component recovery preserves arguments, version name and audience, rejecting malformed values (2.921345ms)
+✔ template load rejects a late onValueChange from the previous editor (252.091401ms)
+✔ template load rejects a late onDraftValueChange from the previous editor (79.348886ms)
+✔ content creation completes while draft flush and retirement remain stalled or fail (5.45011ms)
+✔ a failed content write keeps its draft for retry (0.998704ms)
+✔ draft contexts isolate account, origin and plane, and retained requests cannot adopt another workspace (15.307005ms)
+✔ first-render draft identity is byte-identical to canonical SHA-256 for every workspace (6.365415ms)
+✔ definition recovery retains its original server version, including unfinished JSON (254.29838ms)
+✔ a stale recovered definition never flushes or publishes over newer content (54.017745ms)
+✔ a server conflict preserves both account and Timeline drafts (58.917999ms)
+✔ explicitly discarding a recovered definition selects the latest without waiting for History or draft cleanup (23.628745ms)
+✔ local definition saves retain conditional writes and local drafts without requiring account Timeline (78.223123ms)
+✔ draft save defaults remain compatible; template mode is explicit and validated behind account admission (142.834973ms)
+✔ schema recovery preserves incomplete authored fields and refuses corrupt trees without mutating saved data (12.733561ms)
+✔ captures the final keystroke synchronously, serializes writes, and drains the newest edit (19.556247ms)
+✔ lost-response retry replays the identical write before sending newer content (7.629524ms)
+✔ reload retains uncertain operation identity and latest text (25.979396ms)
+✔ typing the next post during cleanup gets a fresh draft identity (1.063592ms)
+✔ loading a stale snapshot of the current draft retains newer edits (1.285617ms)
+✔ conflict recovery makes a new identity without overwriting the other device (1.223137ms)
+✔ draft validation bounds JSON, unsafe fields, files and compare-and-swap revisions (14.641413ms)
+✔ conflict copy remaps files and retains edits typed while copying (1.824802ms)
+✔ retiring a posted draft never waits for a hung save and isolates the next post (4.429206ms)
+✔ failed draft saving and failed cleanup do not prevent local retirement or new editing (3.578215ms)
+✔ retirement cancels an unsent draft rather than saving it before cleanup (0.863725ms)
+﹣ offline account post templates keep independent media after source deletion (1.596889ms) # SKIP
+﹣ anonymous post templates keep independent media after source deletion (0.227065ms) # SKIP
+﹣ offline account post templates keep independent media after source deletion and a refused parent deletion (0.465714ms) # SKIP
+﹣ native plain comment recovery is explicit, preserves edits and posts independently of drafts (4.594743ms) # SKIP
+✔ plain comment source keys stay within the selected owner, target, origin and known partition (21.155675ms)
+✔ review never mutates source bytes; explicit copy appends to the latest editor text (1.827569ms)
+✔ retired asynchronous reads and copies cannot restore into another editor (5.851119ms)
+✔ plain recovery rejects rich content, pending media and malformed or oversized snapshots without changing originals (11.187727ms)
+✔ pending draft operations are inspected but their identity and older payload are not copied (1.812511ms)
+✔ append refuses combined overflow and rechecks identity after a delayed copy read (41.630295ms)
+✔ account source review and copy preserve template identity and refuse stale revisions or non-plain content (4.594372ms)
+✔ posting completes with rejected draft saving and cleanup (28.467636ms)
+✔ posting completes with stalled draft saving and cleanup (38.001351ms)
+✔ draft failure cannot replace the frozen identity or payload after uncertain posting (7.291612ms)
+✔ edit completion is independent of draft sync (1.749574ms)
+✔ rich-comment completion is independent of draft sync (17.78778ms)
+✔ template menu coalesces duplicate clicks and keeps the same copy ID after an uncertain failure (9.431127ms)
+✔ retired account/origin/plane and unmounted menus refuse old callbacks and suppress late completions (0.977ms)
+﹣ native account-only plain draft recovery is read-only until explicit independent copy (1.375839ms) # SKIP
+﹣ rich composers isolate automatic recovery and copy templates into their current workspace (1.865208ms) # SKIP
+﹣ anonymous rich drafts and posting remain local through cold offline recovery (0.250969ms) # SKIP
+✔ unfinished JSON source survives account serialization and cannot publish (45.682267ms)
+✔ valid raw JSON becomes typed publication data without changing saved text (10.862391ms)
+✔ legacy parsed JSON drafts retain strings, objects, booleans and array positions (0.448349ms)
+✔ clearing optional JSON remains empty while malformed optional JSON stays invalid (0.349202ms)
+✔ site page recovery validates native blocks and preserves name and audience against the original save fence (11.150419ms)
+﹣ native generic Thing drafts save and reopen anonymously after a cold offline reload (24.525432ms) # SKIP
+✔ generic Thing draft recovery isolates account, origin and data plane while preserving codec values (243.129348ms)
+✔ late saves and queued loads cannot restore, persist or retry through a retired workspace (16.519821ms)
+✔ closing a generic editor drains its last edit and acknowledges only its original recovery key (309.256588ms)
+✔ cold editor recovery resumes its current scoped copy once and never replays an old workspace or legacy key (31.963366ms)
+✔ invalid recovery and forbidden Thing roots are preserved without writes or blank restoration (2.790179ms)
+✔ unreadable recovery JSON pauses writes instead of treating the key as empty (1.695125ms)
+﹣ native cross-tab account switches retire held legacy draft review and copy results (5.127379ms) # SKIP
+ℹ tests 59
+ℹ suites 0
+ℹ pass 50
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 9
+ℹ todo 0
+ℹ duration_ms 23675.817134

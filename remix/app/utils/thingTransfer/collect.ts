@@ -17,6 +17,7 @@ export type CollectTransferOptions = {
   includeChildren?: boolean;
   includeDependencies?: boolean;
   includeFiles?: boolean;
+  includeLinks?: boolean;
   signal?: AbortSignal;
   progress?: (state: { things: number; files: number; bytes: number }) => void;
 };

@@ -28,7 +28,8 @@ const icons: Record<string, string> = {
 	folder: '📁',
 	action: '⚡',
 	schema: '📋',
-	theme: '🎨'
+	theme: '🎨',
+	'feed-algorithm': '🧠'
 };
 const titleCase = (value: string) => value.charAt(0).toUpperCase() + value.slice(1);
 function SyncPill({ card, localOnly }: { card: HistoryCard; localOnly: boolean }) {
@@ -334,7 +335,8 @@ export function TimelineEventBrowser({
 								['folder', 'Folders'],
 								['action', 'Actions'],
 								['schema', 'Schemas'],
-								['theme', 'Themes']
+								['theme', 'Themes'],
+								['feed-algorithm', 'Algorithms']
 							]
 						],
 						[

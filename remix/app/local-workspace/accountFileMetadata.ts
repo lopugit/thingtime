@@ -1,12 +1,12 @@
-import { isStandaloneAttachmentPurpose, applyAttachmentAnnotationPatch, sanitizeAttachmentPublicMetadata } from '../api/utils/attachments/attachmentCore';
+import { isStandaloneAttachmentPurpose, applyAttachmentAnnotationPatch } from '../api/utils/attachments/attachmentCore';
 import { accountSyncDeadline, type SyncState } from './accountSync';
-import { isLocalAttachment, type LocalAttachment } from './attachments';
+import { isLocalAttachment, isLocalLinkedAttachment, isLocalMediaAttachment, localMediaInfo, localMediaExpired, publicAttachmentCrystal, type LocalMediaAttachment } from './attachments';
 import { WorkspaceError, type WorkspaceDatabase, type WorkspaceLease, type WorkspaceScope, type WorkspaceTransaction } from './storage';
 
 const COLLECTION = 'account-file-metadata';
 const keys = ['filenamePreview', 'title', 'description', 'folderId'] as const;
 export type FileMetadata = Record<(typeof keys)[number], string | null>;
-type Snapshot = { id: string; updatedAt: string; metadata: FileMetadata };
+type Snapshot = { id: string; updatedAt: string; metadata: FileMetadata; targetId?: string; identity: { name: string; size: number; contentType: string; url?: string; mediaKind?: string } };
 type Operation = { kind: 'annotate' | 'move'; expectedUpdatedAt: string; after: FileMetadata };
 type MetadataRecord = {
 	id: string;
@@ -51,12 +51,18 @@ export class AccountFileMetadata {
 	private tx<T>(mode: IDBTransactionMode, work: (tx: WorkspaceTransaction) => Promise<T>) {
 		return this.db.transaction(this.scope, mode, this.lease, work);
 	}
-	async enqueue(tx: WorkspaceTransaction, row: LocalAttachment, previous?: LocalAttachment) {
+	async enqueue(tx: WorkspaceTransaction, row: LocalMediaAttachment, previous?: LocalMediaAttachment) {
 		const before = previous ? fileMetadata(previous) : empty,
 			after = fileMetadata(row);
 		if (same(before, after)) return;
-		if (!isStandaloneAttachmentPurpose(row.localAttachment.purpose) || row.targetId)
-			throw new WorkspaceError('LOCAL_OPERATION_UNAVAILABLE', 'Bound account media requires its dedicated reconciliation adapter.');
+		const purpose = isLocalAttachment(row) ? row.localAttachment.purpose : row.localLinkedAttachment.purpose;
+		if (['post', 'comment'].includes(purpose) && !row.folderId) {
+			if (row.targetId) {
+				const parent = await tx.get<{ thingtime: string[] }>('things', row.targetId);
+				if (!parent?.thingtime.includes('post') || purpose !== (parent.thingtime.includes('comment') ? 'comment' : 'post')) throw new WorkspaceError('FILE_IDENTITY', 'File details belong to another post or comment.', 409);
+			} else if (!localMediaInfo(row).draftId && (!localMediaInfo(row).expiresAt || localMediaExpired(row, this.now()))) throw new WorkspaceError('FILE_IDENTITY', 'This file selection has expired.', 409);
+		} else if (!isLocalAttachment(row) || !isStandaloneAttachmentPurpose(purpose) || row.targetId)
+			throw new WorkspaceError('LOCAL_OPERATION_UNAVAILABLE', 'This media requires its dedicated reconciliation adapter.');
 		const prior = await tx.get<MetadataRecord>(COLLECTION, row.id);
 		await tx.put(
 			COLLECTION,
@@ -68,7 +74,8 @@ export class AccountFileMetadata {
 	}
 	/** An authorized observation may refresh clean details, never replace local
 	 * edits or an immutable operation whose account receipt is still unknown. */
-	async remember(tx: WorkspaceTransaction, local: LocalAttachment, remote: Snapshot) {
+	async remember(tx: WorkspaceTransaction, local: LocalMediaAttachment, remote: Snapshot) {
+		await this.assertIdentity(tx, local, remote);
 		const prior = await tx.get<MetadataRecord>(COLLECTION, local.id);
 		if (prior && (prior.state !== 'synced' || prior.pending)) return;
 		await this.writeLocal(tx, local, remote.metadata);
@@ -77,7 +84,8 @@ export class AccountFileMetadata {
 	/** Deleting after an offline edit must not depend on that edit syncing first.
 	 * Accept only a complete known snapshot; unrelated account edits still need
 	 * review, and the delete request independently fences the observed version. */
-	async matchesDeletion(tx: WorkspaceTransaction, local: LocalAttachment, remote: Snapshot) {
+	async matchesDeletion(tx: WorkspaceTransaction, local: LocalMediaAttachment, remote: Snapshot) {
+		await this.assertIdentity(tx, local, remote);
 		if (same(fileMetadata(local), remote.metadata)) return true;
 		const known = await tx.get<MetadataRecord>(COLLECTION, local.id);
 		return !!known && (!known.remoteId || known.remoteId === remote.id) && same(known.base, remote.metadata);
@@ -102,14 +110,36 @@ export class AccountFileMetadata {
 			raw.thingtime?.length !== 1 ||
 			raw.thingtime[0] !== 'attachment' ||
 			!Number.isFinite(Date.parse(raw.updatedAt)) ||
-			(raw.folderId != null && (typeof raw.folderId !== 'string' || raw.folderId.length > 200))
+			(raw.folderId != null && (typeof raw.folderId !== 'string' || raw.folderId.length > 200)) ||
+			(raw.targetId != null && (typeof raw.targetId !== 'string' || !raw.targetId || raw.targetId.length > 200))
 		)
 			throw new WorkspaceError('FILE_IDENTITY', 'The account file did not match this workspace.', 409);
-		const checked = sanitizeAttachmentPublicMetadata(raw.crystal);
-		if (!checked.ok) throw new WorkspaceError('INVALID_FILE_METADATA', 'The account returned invalid file metadata.', 502);
-		return { id, updatedAt: raw.updatedAt, metadata: fileMetadata({ crystal: checked.crystal, folderId: raw.folderId }) };
+		const crystal = publicAttachmentCrystal(raw.crystal);
+		if (!crystal) throw new WorkspaceError('INVALID_FILE_METADATA', 'The account returned invalid file metadata.', 502);
+		return { id, updatedAt: raw.updatedAt, metadata: fileMetadata({ crystal, folderId: raw.folderId }), ...(raw.targetId ? {targetId: raw.targetId} : {}),
+			identity: { name: crystal.name, size: crystal.size, contentType: crystal.contentType, ...(crystal.url ? {url: crystal.url, mediaKind: crystal.mediaKind} : {}) } };
 	}
-	private async writeLocal(tx: WorkspaceTransaction, local: LocalAttachment, next: FileMetadata) {
+	private async assertIdentity(tx: WorkspaceTransaction, local: LocalMediaAttachment, remote: Snapshot) {
+		const target = local.targetId || localMediaInfo(local).draftId;
+		if (remote.targetId && remote.targetId !== target) throw new WorkspaceError('FILE_IDENTITY', 'The account file belongs to a different target.', 409);
+		const parent = target ? await tx.get<{ postAttachmentIds?: string[] }>('thing-sync', target) : null;
+		if (target && parent?.postAttachmentIds?.includes(remote.id) && remote.targetId !== target) throw new WorkspaceError('FILE_IDENTITY', 'The account file binding changed.', 409);
+		const crystal = local.crystal;
+		let contentType = crystal.contentType;
+		if (isLocalAttachment(local)) {
+			// Upload completion sniffs the bytes and may serve a safer MIME than
+			// the original local/request MIME. Only that verified file receipt can
+			// establish the account MIME; later observations cannot replace it.
+			const receipt = (await tx.get<{ remote?: { id: string } & Snapshot['identity'] }>('account-files', local.id))?.remote;
+			if (receipt) {
+				if (receipt.id !== remote.id || receipt.name !== crystal.name || receipt.size !== crystal.size || receipt.url !== undefined)
+					throw new WorkspaceError('FILE_IDENTITY', 'The account file receipt belongs to different content.', 409);
+				contentType = receipt.contentType;
+			}
+		}
+		if (remote.identity.name !== crystal.name || remote.identity.size !== crystal.size || remote.identity.contentType !== contentType || remote.identity.url !== crystal.url || (isLocalLinkedAttachment(local) && remote.identity.mediaKind !== crystal.mediaKind)) throw new WorkspaceError('FILE_IDENTITY', 'The account file content identity changed.', 409);
+	}
+	private async writeLocal(tx: WorkspaceTransaction, local: LocalMediaAttachment, next: FileMetadata) {
 		if (same(fileMetadata(local), next)) return;
 		const patch = applyAttachmentAnnotationPatch(local.crystal, next);
 		if (patch.ok === false) throw new WorkspaceError('INVALID_FILE_METADATA', patch.error);
@@ -124,9 +154,10 @@ export class AccountFileMetadata {
 	private async prepare(id: string, token: string, remote: Snapshot): Promise<Operation | null> {
 		return this.tx('readwrite', async (tx) => {
 			const row = await tx.get<MetadataRecord>(COLLECTION, id),
-				local = await tx.get<LocalAttachment>('things', id);
+				local = await tx.get<LocalMediaAttachment>('things', id);
 			if (!row || row.claim?.token !== token || (await tx.get<any>('account-files', id))?.deleteRequested) throw new WorkspaceError('SYNC_CLAIM', 'File synchronization changed.', 409);
-			if (!local || !isLocalAttachment(local)) throw new WorkspaceError('MISSING_LOCAL_FILE', 'The device file is missing.', 404);
+			if (!local || !isLocalMediaAttachment(local)) throw new WorkspaceError('MISSING_LOCAL_FILE', 'The device file is missing.', 404);
+			await this.assertIdentity(tx, local, remote);
 			let base = row.base;
 			if (row.pending) {
 				const written = row.pending.kind === 'move' ? (['folderId'] as const) : (['filenamePreview', 'title', 'description'] as const);
@@ -166,9 +197,10 @@ export class AccountFileMetadata {
 		const remote = this.checked(await accountSyncDeadline((child) => transport.get(remoteId, child), signal), remoteId);
 		return this.tx('readonly', async (tx) => {
 			const state = await tx.get<MetadataRecord>(COLLECTION, id),
-				local = await tx.get<LocalAttachment>('things', id);
+				local = await tx.get<LocalMediaAttachment>('things', id);
 			if (state?.state !== 'conflict' || state.remoteId !== remoteId || !local)
 				throw new WorkspaceError('SYNC_CONFLICT_CHANGED', 'Review this file again.', 409);
+			await this.assertIdentity(tx, local, remote);
 			return { id, remoteId, local: fileMetadata(local), remote, localRevision: local.revision };
 		});
 	}
@@ -186,9 +218,10 @@ export class AccountFileMetadata {
 			throw new WorkspaceError('SYNC_CONFLICT_CHANGED', 'The account file changed. Review it again.', 409);
 		await this.tx('readwrite', async (tx) => {
 			const row = await tx.get<MetadataRecord>(COLLECTION, choice.id),
-				local = await tx.get<LocalAttachment>('things', choice.id);
+				local = await tx.get<LocalMediaAttachment>('things', choice.id);
 			if (row?.state !== 'conflict' || row.remoteId !== choice.remoteId || !local || local.revision !== choice.localRevision)
 				throw new WorkspaceError('SYNC_CONFLICT_CHANGED', 'The device file changed. Review it again.', 409);
+			await this.assertIdentity(tx, local, remote);
 			if (choice.keep === 'remote') await this.writeLocal(tx, local, remote.metadata);
 			await tx.put(COLLECTION, choice.id, {
 				id: choice.id,

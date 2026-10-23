@@ -179,6 +179,32 @@ export class AccountPostCache {
 	async get(id: string) {
 		return this.db.transaction(this.scope, 'readonly', this.lease, async (tx) => (await tx.get<{ post: PublicPost }>(COLLECTION, id))?.post || null);
 	}
+	async snapshot() {
+		return this.db.transaction(this.scope, 'readonly', this.lease, async tx =>
+			(await tx.list<CachedPost>(COLLECTION)).flatMap(row => row.value.post ? [row.value.post] : []));
+	}
+	/** A feed may await filtering/ranking after taking its device snapshot. Recheck
+	 * known refusals before returning that read, including nested retained copies.
+	 * Pending authored roots remain recoverable local work, never remote authority. */
+	async fenceRead(posts: PublicPost[], startedAt: number) {
+		if (!Number.isFinite(startedAt)) throw new WorkspaceError('INVALID_POST_CACHE', 'Invalid post read boundary.', 400);
+		return this.db.transaction(this.scope, 'readonly', this.lease, async tx => {
+			const refusals = await accountReadRefusals(tx);
+			const denied = (id: string) => (refusals.get(id)?.at ?? -Infinity) >= startedAt;
+			const authored = new Set<string>(), removed = new Set<string>();
+			for (const post of posts) {
+				if (!(post as PublicPost & { localWorkspace?: boolean }).localWorkspace || post.author?.id !== (this.scope as Extract<WorkspaceScope, { kind: 'account' }>).ownerId) continue;
+				const state = await tx.get<{ state: string; deleted?: unknown }>('thing-sync', post.id);
+				// An owned-only post may never have had a retained read projection,
+				// so its deletion need not leave a read-refusal watermark. Recheck
+				// live content and intent even when that watermark is absent.
+				if (!state || state.deleted || !await tx.get('things', post.id)) removed.add(post.id);
+				else if (state.state !== 'synced') authored.add(post.id);
+			}
+			const unavailable = (id: string) => removed.has(id) || denied(id);
+			return posts.filter(post => !removed.has(post.id) && (!denied(post.id) || authored.has(post.id))).map(post => prunePost(post, unavailable) as PublicPost);
+		});
+	}
 	async forget(id: string, at = Date.now()) {
 		return this.db.transaction(this.scope, 'readwrite', this.lease, tx => forgetAccountConversation(tx, id, at));
 	}

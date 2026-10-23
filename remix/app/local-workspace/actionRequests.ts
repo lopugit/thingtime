@@ -1,7 +1,7 @@
 import type { BrowserActionHost } from '../components/Actions/browserActionRuntime';
 import { capabilitySatisfies } from '../api/utils/capabilities/capabilityContract';
 import { localThingProjection, LocalThings, type ThingWrite } from './things';
-import { WorkspaceError, workspaceScopeKey, type WorkspaceDatabase, type WorkspaceLease, type WorkspaceScope } from './storage';
+import { WorkspaceError, workspaceScopeKey, type WorkspaceDatabase, type WorkspaceLease, type WorkspaceScope, type WorkspaceTransaction } from './storage';
 import { searchLocalThings } from './structuredSearch';
 import { localPostProjection, localTargetIndex } from './posts';
 
@@ -36,8 +36,14 @@ const localSearchSupported = (step: Record<string, unknown>) => {
 		&& onlyFields(body, ['scope', 'mode', 'conditions', 'thingtime', 'sort', 'cursor', 'limit']) && body?.scope === 'mine'
 		&& (body.sort === undefined || body.sort === 'newest' || body.sort === 'oldest');
 };
+const localBulkSupported = (step: Record<string, unknown>) => {
+	const body = step.body as Record<string, unknown> | undefined;
+	return step.path === '/api/v1/things/bulk' && step.method === 'POST' && step.feature === 'api.things-bulk'
+		&& capabilitySatisfies('1.6.0', String(step.minimumVersion)) && onlyFields(step.query, [])
+		&& onlyFields(body, ['op', 'ids', 'folderId']) && ['move', 'copy', 'delete'].includes(String(body?.op));
+};
 export const localActionRequestSupported = (step: Record<string, unknown>) => {
-	if (localSearchSupported(step)) return true;
+	if (localSearchSupported(step) || localBulkSupported(step)) return true;
 	if (step.path === '/api/v1/actions/run' && step.method === 'POST' && step.feature === 'api.actions-run' && capabilitySatisfies('1.10.0', String(step.minimumVersion)))
 		return onlyFields(step.query, []) && onlyFields(step.body, ['action', 'inputs', 'source']);
 	if (step.path !== '/api/v1/things' || step.feature !== 'api.things' || !capabilitySatisfies('1.33.0', String(step.minimumVersion))) return false;
@@ -56,7 +62,10 @@ export function localActionRequests(
 	scope: WorkspaceScope,
 	lease: WorkspaceLease,
 	runData: (body: { action: string; inputs?: unknown }, lease: WorkspaceLease) => Promise<unknown>,
-	store?: (lease: WorkspaceLease) => Pick<LocalThings, 'get' | 'list' | 'snapshot' | 'create' | 'update'> & { remove(ids: string[]): Promise<unknown> }
+	store?: (lease: WorkspaceLease) => Pick<LocalThings, 'get' | 'list' | 'snapshot' | 'create' | 'update' | 'move' | 'import'> & {
+		remove(ids: string[]): Promise<unknown>;
+		export: (...args: Parameters<LocalThings['export']>) => Promise<Awaited<ReturnType<LocalThings['export']>> & { assertCurrentInTransaction?: (tx: WorkspaceTransaction) => Promise<void> }>;
+	}
 ): BrowserActionHost['request'] {
 	return async (step, actor, signal) => {
 		const active: WorkspaceLease = {
@@ -88,6 +97,37 @@ export function localActionRequests(
 			result = { ...page, things: page.things.map(row => localThingProjection(row, actor)),
 				posts: Object.fromEntries(page.things.filter(row => row.thingtime.includes('post')).map(row => [row.id, localPostProjection(row, all, actor, false, index)])),
 				incomplete: scope.kind === 'account' };
+		} else if (localBulkSupported(step)) {
+			const body = object(step.body);
+			if (!Array.isArray(body.ids) || !body.ids.length || new Set(body.ids).size !== body.ids.length)
+				refuse('Choose distinct Things from this workspace');
+			const ids = (body.ids as unknown[]).map(id);
+			const folderId = body.folderId == null ? null : id(body.folderId);
+			const results: { id: string; ok: boolean; newId?: string; error?: string; status?: number }[] = [];
+			for (const targetId of ids) {
+				active.assertCurrent();
+				try {
+					const target = await things.get(targetId);
+					editableKinds(target.thingtime);
+					let newId: string | undefined;
+					if (body.op === 'move') await things.move([targetId], folderId);
+					else if (body.op === 'copy') {
+						const bundle: Awaited<ReturnType<LocalThings['export']>> & { assertCurrentInTransaction?: (tx: WorkspaceTransaction) => Promise<void> } = await things.export([targetId], { signal });
+						// A folder/dependency closure cannot smuggle protected content
+						// through this editable-only endpoint adapter.
+						for (const row of bundle.manifest.things) editableKinds(row.thingtime);
+						await bundle.assertCurrent(signal);
+						newId = (await things.import(bundle.manifest, folderId, bundle.files, signal, bundle.assertCurrentInTransaction)).idMap[targetId];
+					} else await things.remove([targetId]);
+					results.push({ id: targetId, ok: true, ...(newId ? { newId } : {}) });
+				} catch (error) {
+					active.assertCurrent();
+					results.push({ id: targetId, ok: false, error: error instanceof Error ? error.message : 'Local operation failed',
+						status: error instanceof WorkspaceError ? error.status : 500 });
+				}
+			}
+			const succeeded = results.filter(row => row.ok).length;
+			result = { ok: true, op: body.op, results, succeeded, failed: results.length - succeeded };
 		} else if (
 			step.path === '/api/v1/actions/run' &&
 			step.method === 'POST' &&

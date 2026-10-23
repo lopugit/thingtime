@@ -1,7 +1,7 @@
 import { useWorkspaceRefresh } from '~/local-workspace/useWorkspaceRefresh';
 import { useCharacterContentPath } from '~/components/Characters/CharacterScope';
 import { useWorkspaceUser } from '~/hooks/useWorkspaceUser';
-import { audienceDescription, audienceOfAcl, THING_AUDIENCE_META } from '~/components/Sharing/audienceCore';
+import { thingAudienceDisplay } from '~/components/Sharing/audienceCore';
 import React from 'react';
 import { ChatArchivePage } from '~/components/Things/ChatArchivePage';
 import { SharedMediaProvider } from '~/components/Sharing/SharedMedia';
@@ -429,6 +429,16 @@ function GenericThingPage() {
 	// projection, not the attachment's parent post, so it must never become a
 	// blank "Post view" on this generic Thing permalink.
 	const post = visibleState.data?.kind === 'thing' && !attachment ? visibleState.data.post : null;
+	// Generic Things omit the post's display embed. Only use the companion
+	// projection when both the Thing and its subspace match; cached or missing
+	// context must never turn a resolved public ACL into a public-access claim.
+	const audienceDisplay = thing ? thingAudienceDisplay({
+		id: thing.id, acl: thing.acl, audience: thing.audience,
+		...(typeof thing.crystal?.subspaceId === 'string' && thing.crystal.subspaceId ?
+			post?.id === thing.id && post.subspace?.id === thing.crystal.subspaceId
+				? { subspace: post.subspace }
+				: { subspaceContextMissing: true as const } : {})
+	}, 'thing') : null;
 	const references = attachment && visibleState.data?.kind === 'thing' ? directAttachmentReferences(visibleState.data.parent) : [];
 	const { error, loading } = visibleState;
 	const isThingOwner = !!thing && !!currentUser?.id && thing.author?.id === currentUser.id;
@@ -934,8 +944,8 @@ function GenericThingPage() {
 												{kind}
 											</Badge>
 										))}
-										{thing?.visibility ? <Text fontSize="xs" color={MUTED} maxW="100%" overflowWrap="anywhere">
-                      {THING_AUDIENCE_META[audienceOfAcl(thing.audience?.acl || thing.acl)].emoji} {audienceDescription(thing.audience?.acl || thing.acl, 'thing', !!thing.audience && thing.audience.sourceId !== thing.id)}
+										{thing?.visibility && audienceDisplay ? <Text data-testid="thing-audience" fontSize="xs" color={MUTED} maxW="100%" overflowWrap="anywhere">
+                      {audienceDisplay.emoji} {audienceDisplay.description}
                     </Text> : null}
 										{isThingOwner ? <Badge colorScheme="green">yours</Badge> : seeded ? <Badge colorScheme="purple">seeded by Thingtime</Badge> : null}
 									</Flex>

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
+import { capabilitySatisfies } from '../api/utils/capabilities/capabilityContract';
 
 const origin = process.env.TT_BLOCKS_TEST_ORIGIN, session = process.env.TT_BLOCKS_TEST_SESSION;
 const artifacts = process.env.TT_BLOCKS_TEST_ARTIFACTS, fixture = process.env.TT_BLOCKS_TEST_FIXTURE;
@@ -15,7 +16,9 @@ test('native anonymous Builder edits individual blocks offline and exports their
  assert.equal(health.testEnvironment.mode, 'isolated-agent-test');
  assert.equal(health.testEnvironment.sessionId, session);
  const manifest = await (await fetch(origin + '/.well-known/thingtime-capabilities.json')).json();
- assert.equal(manifest.features['api.things'].version, '1.36.0');
+ assert.equal(manifest.origin, origin);
+ assert.ok(capabilitySatisfies(manifest.features['api.things'].version, '1.36.0'),
+  'Requires the editable-block contract and accepts compatible later additions');
  const { default: puppeteer } = await import(puppeteerPath!);
  const browser = await puppeteer.launch({ executablePath, headless: true, pipe: true, protocolTimeout: 30_000, args: ['--no-proxy-server', '--disable-background-networking'] });
  testContext.signal.addEventListener('abort', () => { void browser.close(); }, { once: true });

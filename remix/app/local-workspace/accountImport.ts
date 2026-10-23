@@ -7,7 +7,6 @@ import { isTransferTheme } from '../utils/thingTransfer/theme';
 /** Shared capability decision for the normal import UI and account facade.
  * Post/comment files share the existing receipt-dependent content queue. */
 export function accountImportSupported(manifest: ThingTransfer): boolean {
- if (manifest.links?.length) return false;
  const files = new Set<string>();
  for (const row of manifest.things) {
   if (accountThingCanCache(row) || isTransferTheme(row) || isTransferAlgorithm(row)) continue;
@@ -15,5 +14,6 @@ export function accountImportSupported(manifest: ThingTransfer): boolean {
   try { files.add(recordingTransferFile(row, manifest).id); } catch { return false; }
  }
  const posts = new Set(manifest.things.filter(row => row.thingtime.includes('post')).map(row => row.id));
+ if (manifest.links?.some(link => !posts.has(link.targetId))) return false;
  return manifest.files.every(file => files.has(file.id) || posts.has(file.targetId));
 }

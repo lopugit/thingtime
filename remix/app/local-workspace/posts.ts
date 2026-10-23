@@ -2,7 +2,7 @@ import { localInteractionState } from './interactions';
 import { toAttachmentPublicMetadata } from '../api/utils/attachments/attachmentCore';
 import type { PublicPost } from '../components/Feed/feedTypes';
 import { buildThingCreateRequestPayload } from '../hooks/thingsRequestPayload';
-import { isLocalAttachment, type LocalAttachment } from './attachments';
+import { isLocalMediaAttachment, localMediaOrder } from './attachments';
 import { localThingProjection, type LocalThing, type ThingWrite } from './things';
 
 /** Same legacy-post -> canonical Thing mapping used by the ordinary create
@@ -56,8 +56,8 @@ export function localPostProjection(row: LocalThing, all: LocalThing[], owner: s
  byTarget ??= localTargetIndex(all);
  const related = byTarget.get(row.id) || [];
  const children = related.filter(child => child.thingtime.includes('comment')).sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
- const attachments = related.filter(isLocalAttachment)
-  .sort((a, b) => (a as LocalAttachment).localAttachment.order - (b as LocalAttachment).localAttachment.order)
+ const attachments = related.filter(isLocalMediaAttachment)
+  .sort((a, b) => localMediaOrder(a) - localMediaOrder(b) || a.id.localeCompare(b.id))
   .flatMap(file => { const metadata = toAttachmentPublicMetadata(file.id, file.crystal); return metadata ? [metadata] : []; });
  return { ...localInteractionState(row, related, owner), id: row.id, thingtime: row.thingtime, author: base.author, acl: base.acl, visibility: 'private', localOnly: true,
   type: (crystal.type || 'text') as PublicPost['type'], text: String(crystal.text || ''), richText: (crystal.richText || null) as PublicPost['richText'],

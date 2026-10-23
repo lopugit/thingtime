@@ -16,7 +16,7 @@ function fixture() {
  let now = Date.now(); const lease = { assertCurrent() {}, onInvalidate: () => () => {} };
  const files = new AccountFileSync(db, scope, lease, () => now), sync = new AccountThingSync(db, scope, lease, () => now, undefined, files.contentHooks);
  const bytes = new TextEncoder().encode('exact device file'), uploads: any[] = [], writes: any[] = [], remote = new Map<string, AccountThing>();
- const receipts = new Map<string, any>();
+ const receipts = new Map<string, any>(), bindings = new Map<string, string>();
  const upload: AccountFileTransport = {
   start: async request => { uploads.push(request); const id = 'account-' + request.requestId; receipts.set(id, {id, name: request.filename, contentType: request.contentType, size: request.sizeBytes, mediaKind: 'image'}); return {id,partSizeBytes:bytes.length,partCount:1}; },
   parts: async (_id, parts) => parts.map(part => ({...part,url:'https://storage.test/part',expiresAt:'2026-10-17',headers:{}})),
@@ -27,13 +27,16 @@ function fixture() {
   write: async op => {
    writes.push(structuredClone(op));
    const {attachmentIds,...body} = op.body;
+   // Canonical /things GET projects the attachment's own targetId separately
+   // from public crystal metadata, including after an uncertain parent receipt.
+   for (const id of attachmentIds as string[] || []) bindings.set(id, op.id);
    const row = {...body,id:op.id,author:{id:scope.ownerId},createdAt:new Date(now).toISOString(),updatedAt:new Date(++now).toISOString(),revision:1,
     attachments: (attachmentIds as string[] || []).map(id => receipts.get(id))} as unknown as AccountThing;
    remote.set(op.id,row); return row;
   }
  };
  const select = (purpose: 'post' | 'comment' = 'post') => files.things.saveFile({requestId:randomUUID(),name:'portrait.png',contentType:'image/png',bytes,purpose});
- return {db,scope,lease,files,sync,bytes,uploads,writes,remote,receipts,upload,content,select,tick(){now += 120000;}};
+ return {db,scope,lease,files,sync,bytes,uploads,writes,remote,receipts,bindings,upload,content,select,tick(){now += 120000;}};
 }
 
 test('unsubmitted account media stays on device, can be discarded, and does not stall standalone uploads',async()=>{
@@ -109,7 +112,7 @@ test('refusing a synced parent hides its file bytes and descendant media without
 
 
 const removalTransport=(f:ReturnType<typeof fixture>,remove:any)=>({...f.upload,remove,
- get:async(id:string)=>({id,author:{id:f.scope.ownerId},thingtime:['attachment'],crystal:f.receipts.get(id),updatedAt:'2026-10-17T00:00:00.000Z'})});
+ get:async(id:string)=>({id,author:{id:f.scope.ownerId},thingtime:['attachment'],targetId:f.bindings.get(id) || null,crystal:f.receipts.get(id),updatedAt:'2026-10-17T00:00:00.000Z'})});
 
 test('bound removal completes locally before upload and preserves the remaining post selection',async()=>{
  const f=fixture();try{

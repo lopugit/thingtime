@@ -5,6 +5,7 @@ import { workspaceScopeKey, type WorkspaceScope } from './storage';
 import { LocalThings } from './things';
 import { AccountFileSync } from './accountFiles';
 import { LocalMediaRegistry, localMediaId } from './media';
+import { isLocalLinkedAttachment } from './attachments';
 
 const listeners = new Set<() => void>();
 const scopeNow = (actorId?:string): WorkspaceScope | null => {
@@ -32,7 +33,17 @@ function currentContext(actorId?:string) {
  const lease = scope.kind === 'anonymous' ? anonymousWorkspaceLease() : accountWorkspaceLease(scope);
  const registry = new LocalMediaRegistry({
   lease: () => lease,
-  read: async (id, signal) => { const db = workspaceDatabase(); const reader = scope.kind === 'account' ? new AccountFileSync(db, scope, lease) : new LocalThings(db, scope, lease); const { row, blob } = await reader.readFileBlob(id, signal); return { bytes: blob, contentType: String(row.crystal.contentType) }; },
+  read: async (id, signal) => {
+   const db = workspaceDatabase(), reader = scope.kind === 'account' ? new AccountFileSync(db, scope, lease) : new LocalThings(db, scope, lease);
+   if (reader instanceof AccountFileSync) {
+    const url = await reader.readLinkedUrl(id, signal); if (url) return { url };
+   }
+   if (scope.kind === 'anonymous') {
+    const row = await (reader as LocalThings).get(id); signal.throwIfAborted(); lease.assertCurrent();
+    if (isLocalLinkedAttachment(row)) return { url: String(row.crystal.url) };
+   }
+   const { row, blob } = await reader.readFileBlob(id, signal); return { bytes: blob, contentType: String(row.crystal.contentType) };
+  },
   create: (bytes, type) => URL.createObjectURL(new Blob([bytes instanceof Blob ? bytes : Uint8Array.from(bytes)], { type })),
   revoke: url => URL.revokeObjectURL(url)
  });

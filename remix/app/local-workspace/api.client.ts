@@ -1,8 +1,11 @@
+import { themeVersionWriter } from './themeVersions';
+import { algorithmVersionWriter } from './algorithmVersions';
 import { isTransferAlgorithm } from '../utils/thingTransfer/algorithm';
 import { isTransferTheme } from '../utils/thingTransfer/theme';
 import { RESERVED_COMPONENT_ID_PREFIX } from '../components/ComponentsLibrary/componentBrowseTypes';
 import { browseLocalDefinitions } from './definitionCatalog';
 import { searchLocalThings } from './structuredSearch';
+import { deviceFeedPage, deviceFeedRequested, transientFeedFailure } from './feed';
 import { workspaceScopeKey } from './storage';
 import { LocalTimelineVersions } from './timelineVersions';
 import { LOCAL_TIMELINE_FOLDER, LocalTimeline } from './timeline';
@@ -16,7 +19,7 @@ import { localThingProjection, type ThingWrite } from './things';
 import { anonymousThings, anonymousWorkspaceDatabase, anonymousWorkspaceLease, announceLocalWorkspaceChange, LOCAL_WORKSPACE_OWNER } from './runtime.client';
 import { LocalAlgorithms } from './algorithms';
 import { LocalThemes } from './themes';
-import { isLocalAttachment } from './attachments';
+import { isLocalMediaAttachment, localMediaInfo } from './attachments';
 import { WorkspaceError } from './storage';
 import { crystalSchemas } from '../schemas/registry';
 
@@ -52,7 +55,7 @@ export function anonymousApi<T extends Record<string, any>>(remote: T): T {
 		canChangeLocally: ownsTimeline,
 		canExportLocally: ownsTimeline,
 		exportVersion: (scope: any, eventId: string, options?: { signal?: AbortSignal; adapter?: string }) => { history().assertScope(scope); return history().exportVersion(eventId, options?.signal); },
-		version: (scope: any, request: any, options?: { signal?: AbortSignal }) => { history().assertScope(scope); return new LocalTimelineVersions(anonymousWorkspaceDatabase(), lease, service()).request(request, options?.signal).then(result => request.command === 'apply-version' ? changed(result) : result); },
+		version: (scope: any, request: any, options?: { signal?: AbortSignal }) => { history().assertScope(scope); return new LocalTimelineVersions(anonymousWorkspaceDatabase(), lease, service(), undefined, [themeVersionWriter(new LocalThemes(anonymousWorkspaceDatabase(), lease)), algorithmVersionWriter(new LocalAlgorithms(anonymousWorkspaceDatabase(), lease))]).request(request, options?.signal).then(result => request.command === 'apply-version' ? changed(result) : result); },
 		branchMerge: (scope: any, request: any, options?: { signal?: AbortSignal }) => { history().assertScope(scope); return history().branchMerge(request, options?.signal); },
 		branch: (scope: any, command: any, options?: { signal?: AbortSignal }) => { history().assertScope(scope); return history().branch(command, options?.signal).then(changed); },
 		branches: (scope: any, thingId: string, before?: number, options?: { signal?: AbortSignal }) => { history().assertScope(scope); return history().branches(thingId, before ?? null, 40, options?.signal); },
@@ -121,8 +124,20 @@ export function anonymousApi<T extends Record<string, any>>(remote: T): T {
 		},
 		feed: async (args: Record<string, unknown> = {}) => {
 			lease.assertCurrent(); const localAlgorithm = typeof args.algorithm === 'string' && args.algorithm.startsWith('local-') ? args.algorithm : null;
-			const query = new URLSearchParams(Object.entries({ ...args, ...(localAlgorithm ? { algorithm: 'latest' } : {}), anon: 1 }).filter(([, value]) => value !== undefined).map(([key, value]) => [key, String(value)]));
-			const result = await publicWorkspaceRead(`/api/v1/things/feed?${query}`, 'api.things-feed', '1.8.0');
+			const device = async () => {
+				const all = await service().snapshot(), index = localTargetIndex(all);
+				const page = await deviceFeedPage(all.filter(row => row.thingtime.includes('post') && !row.thingtime.includes('comment')).map(row => localPostProjection(row, all, LOCAL_WORKSPACE_OWNER, false, index)), args, workspaceScopeKey({ kind: 'anonymous' }), localAlgorithm);
+				lease.assertCurrent();
+				let localTrainingError: string | undefined;
+				try { await algorithms().observePosts(page.posts); } catch (error) { lease.assertCurrent(); localTrainingError = error instanceof Error ? error.message : 'Local training storage is unavailable.'; }
+				return { ...page, ...(localAlgorithm ? { posts: await algorithms().rankPage(localAlgorithm, page.posts), ranked: true, localRanking: true } : {}), ...(localTrainingError ? { localTrainingError } : {}) };
+			};
+			if (deviceFeedRequested(args) || globalThis.navigator?.onLine === false) return device();
+			const { device: _device, ...onlineArgs } = args;
+			const query = new URLSearchParams(Object.entries({ ...onlineArgs, ...(localAlgorithm ? { algorithm: 'latest' } : {}), anon: 1 }).filter(([, value]) => value !== undefined).map(([key, value]) => [key, String(value)]));
+			let result;
+			try { result = await publicWorkspaceRead(`/api/v1/things/feed?${query}`, 'api.things-feed', '1.8.0'); }
+			catch (error) { lease.assertCurrent(); if (!args.cursor && transientFeedFailure(error)) return device(); throw error; }
 			// Training storage must not prevent reading an otherwise healthy public feed.
 			try { await algorithms().observePublicPosts(result.posts || []); } catch (error) { lease.assertCurrent(); result.localTrainingError = error instanceof Error ? error.message : 'Local training storage is unavailable'; }
 			return localAlgorithm ? { ...result, posts: await algorithms().rankPage(localAlgorithm, result.posts || []), ranked: true, localRanking: true } : result;
@@ -189,6 +204,9 @@ export function anonymousApi<T extends Record<string, any>>(remote: T): T {
 		}
 	};
 	local.attachments = { ...local.attachments,
+		link: async (input: {url:string;purpose?:'post'|'comment';mediaKind?:'image'|'video'|'audio'|'file'}, request?: {signal?:AbortSignal}) => {
+			const row = await service().saveLinkedFile({...input,requestId:crypto.randomUUID()},request?.signal); return changed({ok:true,attachment:{id:row.id,...row.crystal},savedLocally:true});
+		},
 		saveLocalFile: async (input: Parameters<ReturnType<typeof anonymousThings>['saveFile']>[0], request?: { signal?: AbortSignal }) => {
 			const row = await service().saveFile(input, request?.signal); return changed({ ok: true, attachment: { id: row.id, ...row.crystal } });
 		},
@@ -202,7 +220,7 @@ export function anonymousApi<T extends Record<string, any>>(remote: T): T {
 		annotate: async ({ id, ...patch }: { id: string; title?: string | null; description?: string | null; filenamePreview?: string | null }) => {
 			const row = await service().annotateFile({ id, ...patch }); return changed({ ok: true, attachment: { id: row.id, ...row.crystal } });
 		},
-		remove: async ({ id }: { id: string }) => { const row = await service().get(id); if (!isLocalAttachment(row)) throw new WorkspaceError('INVALID_ATTACHMENT', 'This Thing is not a local attachment'); if (row.localAttachment.draftId) return { ok: true, deferred: true }; const result = await service().remove([id]); announceLocalWorkspaceChange(result.deleted); return changed(result); }
+		remove: async ({ id }: { id: string }) => { const row = await service().get(id); if (!isLocalMediaAttachment(row)) throw new WorkspaceError('INVALID_ATTACHMENT', 'This Thing is not a local attachment'); if (localMediaInfo(row).draftId) return { ok: true, deferred: true }; const result = await service().remove([id]); announceLocalWorkspaceChange(result.deleted); return changed(result); }
 	};
 	const browse = (kind: 'component' | 'schema') => async (args: Record<string, unknown> = {}) => {
 		lease.assertCurrent();
@@ -236,7 +254,16 @@ export function anonymousApi<T extends Record<string, any>>(remote: T): T {
 		setActive: async ({ algorithmId }: { algorithmId: string | null }) => changed(await algorithms().setActive(algorithmId)),
 		track: (input: Parameters<LocalAlgorithms['track']>[0]) => algorithms().track(input),
 		search: (args: Record<string, unknown> = {}) => { lease.assertCurrent(); const query = new URLSearchParams(Object.entries(args).filter(([, value]) => value !== undefined).map(([key, value]) => [key, String(value)])); return publicWorkspaceRead(`/api/v1/algorithms/search?${query}`, 'api.algorithms-search', '1.0.0'); },
-		getShared: ({ id }: { id: string }) => { lease.assertCurrent(); return publicWorkspaceRead(`/api/v1/algorithms/shared?id=${encodeURIComponent(id)}`, 'api.algorithms-shared', '1.0.0'); }
+		getShared: async ({ id }: { id: string }) => {
+			lease.assertCurrent();
+			if (id.startsWith('local-')) {
+				const algorithm = (await algorithms().list()).algorithms.find(row => row.id === id);
+				lease.assertCurrent();
+				if (!algorithm) throw new WorkspaceError('NOT_FOUND', 'Algorithm is not in this workspace', 404);
+				return { ok: true, algorithm };
+			}
+			return publicWorkspaceRead(`/api/v1/algorithms/shared?id=${encodeURIComponent(id)}`, 'api.algorithms-shared', '1.0.0');
+		}
 	};
 
 	return local as T;
