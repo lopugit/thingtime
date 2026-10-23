@@ -627,7 +627,33 @@ function assertWorkflowSource() {
   assert.match(handoffBlock, /case "\$live_status" in[\s\S]*?queued\)/u);
   assert.match(handoffBlock, /actions\/runs\/\$queued_run_id\/cancel/);
   assert.match(handoffBlock, /changed state before cancellation; preserving it/);
-  assert.match(handoffBlock, /did not release queue capacity within 60 seconds/);
+  assert.match(
+    handoffBlock,
+    /::notice::\$remaining_pending obsolete Lopu worker run\(s\) did not release queue capacity within 150 seconds; deferring dispatch to a later scan[\s\S]*?exit 0/u,
+    "an undrained cancellation defers with a notice; it dispatched and mutated nothing, so it must not publish a red check on every open PR",
+  );
+  assert.doesNotMatch(
+    handoffBlock,
+    /did not release queue capacity[\s\S]{0,200}?exit 1/u,
+    "GitHub retires cancelled runs asynchronously, so a slow drain is a transient race and never a job failure",
+  );
+  // GitHub acknowledges the cancel POST immediately but retires the run
+  // asynchronously. Observed on run 36254853747: cancel accepted 17:10:52Z,
+  // run reached `cancelled` 17:12:05Z -- 73s, past the old 60s budget, so the
+  // handoff failed 15s before the capacity it was waiting for came back.
+  // Bound the wait on wall clock, not on a round count: the per-round cost
+  // scales with the number of cancelled runs, so a fixed round count could
+  // overrun this job's 5-minute timeout and re-introduce the red check.
+  assert.match(
+    handoffBlock,
+    /SECONDS=0; while \[ "\$SECONDS" -lt 150 \]; do/u,
+    "the cancellation drain wait is bounded by wall clock so it cannot overrun the handoff job timeout",
+  );
+  assert.doesNotMatch(
+    handoffBlock,
+    /for wait_round in \$\(seq/u,
+    "a round-counted drain wait scales with the cancelled-run count and can exceed the job timeout",
+  );
   assert.match(
     handoffBlock,
     /actions\/concurrency_groups\/\$fleet_group_encoded[\s\S]*?\.group_members\[\]\?[\s\S]*?Resolve\|Rebase[\s\S]*?owned_numbers/u,
@@ -1769,7 +1795,58 @@ function aiRuntimeSourceFiles(directory) {
 }
 
 function assertAdminLoader(block, label) {
+  // The inline `jq` loader both controllers used to carry is gone: each one now
+  // calls the shared, unit-tested `lopu-model-waterfall.mjs` adapter. So the
+  // step body is pinned to that single delegation, and the grammar and
+  // fail-closed guarantees are pinned against the adapter itself — dropping
+  // them with the inline loader would have retired the contract, not moved it.
   assert.match(block, /lopu-model-waterfall\.mjs" metadata/, `${label}: shares the validated DB loader`);
+  const loader = readFileSync(join(REPO_ROOT, ".github/scripts/lopu-model-waterfall.mjs"), "utf8");
+  assert.ok(
+    loader.includes("/api/v1/settings/pr-conflict-auto-resolver-model-waterfall"),
+    `${label}: endpoint`,
+  );
+  assert.ok(loader.includes("Thingtime.PRConflictAutoResolverModelWaterfall"), `${label}: singleton key`);
+  // Composed option ids (`<model>[:<effort>][:fast]`): the loader keeps a
+  // closed grammar — id charset and effort segment set — instead of a closed
+  // id list. The Claude base pattern the old inline chain was rebuilt from has
+  // no successor to pin: the adapter maps a configured model onto a pinned
+  // provider action by catalog `provider`, which `assertWorkflowSource`
+  // already pins by action SHA.
+  assert.ok(loader.includes("[a-z0-9][a-z0-9.-]{0,100}(?::[a-z]+){0,2}"), `${label}: closed composed-id charset`);
+  assert.ok(
+    loader.includes("'none','minimal','low','medium','high','xhigh','max','ultra'"),
+    `${label}: closed effort segments`,
+  );
+  // The loader deliberately fails closed rather than inventing an attempt:
+  // "Use only the configured model order; never invent a default attempt." An
+  // unavailable, malformed or unmappable waterfall must run no model at all —
+  // here that is a throw out of `parseWaterfall`, not a synthesized entry.
+  //
+  // The inline-loader form of this check once asserted the opposite — that the
+  // removed `. + ["default"]` hard fallback was still present — so it threw on
+  // every run, on the FIRST of the two loader calls (`merge resolver`).
+  // `assertAdminModelRouting` is the last call in `assertWorkflowSource`, which
+  // is in turn the last call in `selfTest`, so the throw silently skipped every
+  // later assertion: the remaining `merge resolver` loader checks, the entire
+  // `rebase resolver` loader call, and the 59-check remainder of
+  // `assertAdminModelRouting` — 72 in total.
+  //
+  // The failure itself was NOT invisible: `run_contract` in
+  // `control-plane-ci.yml` reports a non-zero contract as `- ⚠️ <label> (exit
+  // N)` with a sanitized 30-line tail and sets `warnings=true`. What the
+  // advisory ⚠️ hid was the coverage cliff behind it, because a first-assertion
+  // throw and a fully passing run are both just one line in that report. Treat
+  // a ⚠️ here as "most of this contract did not run", not as one soft finding.
+  assert.match(loader, /it never invents a model/u, `${label}: fails closed with no invented default`);
+  assert.ok(
+    !loader.includes('. + ["default"]'),
+    `${label}: never appends an unconfigured default attempt`,
+  );
+  // The configured effort still has to reach the attempt it was configured
+  // for; only the carrier changed from `--effort $claude_effort` in the inline
+  // chain to the compiled per-attempt provider input.
+  assert.match(loader, /effort: attempt\.effort/u, `${label}: configured effort reaches each attempt`);
 }
 
 function assertAdminModelRouting(
