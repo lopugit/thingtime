@@ -106,7 +106,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 - 2026-10-23: Build Vercel production, custom environments and previews on GitHub
   Actions, upload only prebuilt output, and disable native source builds. Keep
-  protected publisher credentials separate from product compilation.
+  protected publisher credentials separate from product compilation. Activate
+  current-app staging, preserve cron schedules/regions in prebuilt metadata,
+  and keep existing provider branch aliases current.
+  [Migration and verification](../PRs/1206-codex-vercel-actions-only-build-all-vercel-deployments-on-github-actions.md). **Codex (AI)**
 
 - 2026-10-22: Move device sync configuration off Things home into a dedicated
   device page; keep storage attachments and parent-linked records out of root,

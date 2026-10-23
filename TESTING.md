@@ -12974,3 +12974,9 @@ separate from deterministic discovery/lease tests.
   stable domains. Inspect the source-build controls and confirm no native Git
   link or source deploy hook remains. A repeated unchanged request must skip
   compilation. Keep production runtime charges distinct from build charges.
+
+- Include active `staging` and its branch-bound domain. Check that the selected
+  capability manifest reports each actual deployment origin. Production must
+  retain all seven source cron schedules and Sydney function placement;
+  Preview/custom targets must have no production schedules. Root config alone
+  is insufficient for prebuilt metadata: inspect Vercel's accepted fields.
