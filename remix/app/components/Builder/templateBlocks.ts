@@ -1,3 +1,4 @@
+import { parseTransientBinding, TRANSIENT_BLOCK_ACTION } from './transientBlockActions';
 import { componentScopeValue, resolveTemplate } from '../ComponentsLibrary/componentTemplate';
 import type { WebpageBlock } from './webpageBlocks';
 
@@ -21,7 +22,7 @@ export function templateToBlocks(template: unknown, id: (kind: string) => string
   if (node.ttAction) props['data-tt-action'] = node.ttAction;
   if (node.ttActionInputs !== undefined) props['data-tt-action-inputs'] = node.ttActionInputs;
   if (node.tag === 'tt-collection') return [{ id: id('collection'), type: 'collection', props, children: visit(itemTemplate) }];
-  if (node.tag.startsWith('tt-')) throw new Error(`The ${node.tag} control cannot yet be expanded into blocks.`);
+  if (node.tag.startsWith('tt-') && node.tag !== 'tt-media-pipeline') throw new Error(`The ${node.tag} control cannot yet be expanded into blocks.`);
   const children = Array.isArray(node.children) ? node.children : node.children == null ? [] : [node.children];
   const textOnly = children.every((child: unknown) => typeof child === 'string' || typeof child === 'number');
   return [{ id: id(node.tag), type: 'element', tag: node.tag, props,
@@ -42,6 +43,13 @@ export function resolveBlockProps(props: Record<string, unknown>, scope: Record<
   if (typeof value !== 'string' || (key === 'data-tt-action' && props['data-tt-action-refs'])) continue;
   const match = value.match(/^\{([^{}]+)\}$/);
   if (match) resolved[key] = componentScopeValue(scope, match[1]);
+ }
+ // Compatibility for saved intrinsic layouts authored before action inputs
+ // became structured props. Parse only the closed transient scalar envelope;
+ // other Action strings retain their normal binding semantics.
+ if (props['data-tt-action'] === TRANSIENT_BLOCK_ACTION && typeof props['data-tt-action-inputs'] === 'string') {
+  const legacy = parseTransientBinding(props['data-tt-action-inputs']);
+  if (legacy) resolved['data-tt-action-inputs'] = resolveTemplate({ operation: legacy.operation, ...legacy.inputs }, scope);
  }
  return resolved;
 }

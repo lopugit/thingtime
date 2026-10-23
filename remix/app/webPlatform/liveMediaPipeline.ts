@@ -1,3 +1,4 @@
+import { mediaExtensions } from './mediaExport';
 import { resolveMediaSettings, type MediaPipeline } from './mediaPipeline';
 
 type Publish = (file: { blob: Blob; name: string } | null) => void;
@@ -11,7 +12,7 @@ export function bindMediaPipeline(
 	publish: Publish,
 	transport: { send: (message: unknown) => void; subscribe: (receive: (requestId: number, result: any) => void) => () => void }
 ) {
-	const settings = resolveMediaSettings(pipeline, inputs);
+	resolveMediaSettings(pipeline, inputs);
 	const unique = (selector: string) => {
 		const matches = root.querySelectorAll(selector);
 		if (matches.length !== 1) throw new Error('A media control must resolve to exactly one surface element');
@@ -23,6 +24,7 @@ export function bindMediaPipeline(
 	const status = unique(pipeline.status),
 		progress = unique(pipeline.progress);
 	const preview = pipeline.preview ? unique(pipeline.preview) : null;
+	const imagePreview = pipeline.imagePreview ? unique(pipeline.imagePreview) : null;
 	if (
 		!(file instanceof HTMLInputElement) ||
 		file.type !== 'file' ||
@@ -31,7 +33,8 @@ export function bindMediaPipeline(
 		!(cancel instanceof HTMLButtonElement) ||
 		!(status instanceof HTMLOutputElement) ||
 		!(progress instanceof HTMLProgressElement) ||
-		(preview && !(preview instanceof HTMLVideoElement))
+		(preview && !(preview instanceof HTMLVideoElement)) ||
+		(imagePreview && !(imagePreview instanceof HTMLImageElement))
 	)
 		throw new Error('Media requires a single-file input, start/cancel buttons, output status, progress and optional video');
 	let running = false,
@@ -52,6 +55,8 @@ export function bindMediaPipeline(
 			preview.removeAttribute('src');
 			preview.load();
 		}
+		if (imagePreview instanceof HTMLImageElement) { imagePreview.removeAttribute('src'); imagePreview.hidden = true; }
+		if (preview instanceof HTMLVideoElement) preview.hidden = true;
 		if (url) URL.revokeObjectURL(url);
 		url = undefined;
 	};
@@ -65,7 +70,7 @@ export function bindMediaPipeline(
 	const select = () => {
 		stop();
 		clearOutput();
-		state(file.files?.length ? 'Ready — selected file stays on this device.' : 'Choose a local video.');
+		state(file.files?.length ? 'Ready — selected file stays on this device.' : 'Choose a local image or video.');
 	};
 	const abort = () => {
 		stop();
@@ -78,7 +83,7 @@ export function bindMediaPipeline(
 		clearOutput();
 		const selected = file.files?.[0];
 		if (!selected?.size) {
-			state('Choose a nonempty local video.', 0, false);
+			state('Choose a nonempty local image or video.', 0, false);
 			return;
 		}
 		const current = ++generation;
@@ -101,25 +106,24 @@ export function bindMediaPipeline(
 				else if (result?.type === 'error') fail(result.message);
 				else if (result?.type === 'complete') {
 					const blob = result.blob;
-					if (!(blob instanceof Blob) || !blob.size || !['video/mp4', 'video/webm'].includes(blob.type)) {
+					if (!(blob instanceof Blob) || !blob.size || !Object.prototype.hasOwnProperty.call(mediaExtensions, blob.type)) {
 						fail('The media worker returned an invalid output.');
 						return;
 					}
 					stop();
-					if (preview instanceof HTMLVideoElement) {
-						url = URL.createObjectURL(blob);
-						preview.src = url;
-					}
+					url = URL.createObjectURL(blob);
+					if (preview instanceof HTMLVideoElement && blob.type.startsWith('video/')) { preview.src = url; preview.hidden = false; }
+					if (imagePreview instanceof HTMLImageElement && blob.type.startsWith('image/')) { imagePreview.src = url; imagePreview.hidden = false; }
 					const stem =
 						selected.name
 							.replace(/\.[^.]*$/, '')
 							.replace(/[^a-zA-Z0-9 _-]/g, '_')
-							.slice(0, 80) || 'video';
-					publish({ blob, name: `${stem}-converted.${settings.format}` });
-					state(`Complete — ${blob.size.toLocaleString()} bytes. ${result.receipt.note}`, 100, true, result.receipt);
+							.slice(0, 80) || 'media';
+					publish({ blob, name: `${stem}-converted.${mediaExtensions[blob.type]}` });
+					state(`Complete — ${selected.size.toLocaleString()} → ${blob.size.toLocaleString()} bytes. ${result.receipt.note}`, 100, true, result.receipt);
 				}
 			});
-			transport.send({ type: 'tt-platform-media-start', requestId: current, file: selected });
+			transport.send({ type: 'tt-platform-media-start', requestId: current, file: selected, name: selected.name });
 		} catch {
 			stop();
 			state('This browser could not start local media processing.', 0, false);

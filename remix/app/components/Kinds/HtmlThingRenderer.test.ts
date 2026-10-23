@@ -9,6 +9,14 @@ import { WebpageRuntimeProvider, useWebpageRuntime } from '../Builder/webpageRun
 import { ALLOWED_PROPS, HtmlThingRenderer, InteractiveWorkspace } from './HtmlThingRenderer.tsx';
 import { ChakraThingRenderer } from './ChakraThingRenderer';
 
+test('transient submit markers survive rendering without admitting native form destinations', () => {
+  assert.ok(ALLOWED_PROPS.has('data-tt-submit'));
+  assert.ok(ALLOWED_PROPS.has('data-tt-credential-form'));
+  assert.ok(ALLOWED_PROPS.has('data-tt-private-control'));
+  assert.ok(ALLOWED_PROPS.has('referrerPolicy'), 'authored account avatars retain their no-referrer policy');
+  for (const prop of ['action', 'formAction', 'formaction', 'method']) assert.equal(ALLOWED_PROPS.has(prop), false);
+});
+
 // The prop allowlist IS the trust boundary for component things: a component
 // crystal is untrusted data, and every name in this set is something its
 // author gets to hand the browser. These tests pin the decisions that are

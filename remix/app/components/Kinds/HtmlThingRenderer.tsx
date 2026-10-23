@@ -1,3 +1,4 @@
+import LocalMediaPipeline from '../../webPlatform/LocalMediaPipeline';
 import { isPngThumbnail } from '../../utils/pngThumbnail';
 import { ComponentChange } from '../Builder/ComponentChange';
 import { ComponentMenu } from '../Builder/ComponentMenu';
@@ -25,6 +26,8 @@ import {
 } from './htmlRenderPolicy';
 
 import { applyNoOpener, isEventHandlerProp, isSafeCssText, isSafeUrl } from './safeUrl';
+
+
 
 const WebPlatformSurface = React.lazy(() => import('../../webPlatform/WebPlatformSurface'));
 
@@ -72,12 +75,19 @@ export function InteractiveWorkspace({ name, children }: { name?: string; childr
 // back by habit should fail a test rather than ship.
 export const ALLOWED_PROPS = new Set([
 	'style',
+	'id',
+	'accept',
+	'hidden',
+	'download',
+	'preload',
+	'playsInline',
 	'className',
 	'class',
 	'href',
 	'target',
 	'rel',
 	'src',
+	'referrerPolicy',
 	'alt',
 	'title',
 	'width',
@@ -105,6 +115,8 @@ export const ALLOWED_PROPS = new Set([
 	// assistive tech — no URL, no JS sink, no validation engine
 	'role',
 	'aria-label',
+	'aria-live',
+	'aria-atomic',
 	'aria-valuenow',
 	'aria-valuemin',
 	'aria-valuemax',
@@ -172,6 +184,11 @@ export const ALLOWED_PROPS = new Set([
 	// strings (an action key/id and a JSON inputs blob); no URL or JS sink.
 	'data-tt-action',
 	'data-tt-action-inputs',
+	// Inert transient-host hints. They cannot submit a native form or choose an
+	// endpoint; the current host validates its own fields and adapter binding.
+	'data-tt-submit',
+	'data-tt-credential-form',
+	'data-tt-private-control',
 	// Inert editor address, validated against the authored template before editing.
 	'data-tt-label-key'
 ]);
@@ -290,6 +307,7 @@ const renderNode = (node: HtmlThingNode, key: number, depth: number, state: Rend
 	if (!node || typeof node !== 'object' || Array.isArray(node)) return null;
 
 	const tag = String(node.tag || 'div').toLowerCase();
+	if (tag === 'tt-media-pipeline') return <LocalMediaPipeline key={key} pipeline={node.props?.pipeline}>{renderChildren(node.children, depth + 1, state)}</LocalMediaPipeline>;
 	if (tag === 'tt-web-platform') return <React.Suspense key={key} fallback={<p>Web Platform program</p>}><WebPlatformSurface program={node.props?.program} name={node.props?.name} /></React.Suspense>;
 	if (tag === 'tt-service-workspace') {
 		const name = typeof node.props?.name === 'string' ? node.props.name : undefined;
@@ -402,6 +420,7 @@ export function HtmlBlockElement({ tag, attributes, editorProps, children }: {
  tag: string; attributes?: Record<string, unknown>; editorProps?: Record<string, any>; children?: React.ReactNode;
 }) {
  const mediaUrl = useSharedMediaUrl();
+ if (tag === 'tt-media-pipeline') return <LocalMediaPipeline pipeline={attributes?.pipeline} editorProps={editorProps}>{children}</LocalMediaPipeline>;
  const safeTag = ALLOWED_TAGS.has(tag) && !tag.startsWith('tt-') ? tag : 'div';
  const props = fieldProps(safeTag, sanitizeProps(attributes, safeTag));
  if (props.style) props.style = mapStyleMediaUrls(props.style, mediaUrl);

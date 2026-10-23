@@ -1,7 +1,30 @@
 # Multi-account third-party service library
 
-Status: open, ready-for-review implementation checkpoint. Google identity and refresh are verified
-locally; production delivery and other providers' positive acceptance remain pending.
+Status: open implementation checkpoint. Earlier local Google identity/refresh results are historical evidence. Current two-account provider acceptance, device acceptance, and production delivery remain pending.
+
+## 23 October 2026: cloud reconciliation and current deployment evidence
+
+The source branch was `0c6bcc0b6cac5960e3472eb9a5ac3002d3ebc6b6`. It still contains substantive service-account code absent from current `main`; it is not a duplicate promotion. Current `develop` at `f41cf65629fe98423405de4bea4e5894f59ccb46` was integrated without dropping the merged Lopu selector or media/sync contracts. The three product conflicts were capability declarations/tests; generated graph snapshots are refreshed separately. There were no PR review submissions or inline review threads at reconciliation.
+
+The uncapped-data additions had reused versions already published for other features. They now require fresh additive contracts: `api.things` 1.42.0, `api.things-update` 1.13.0 and `api.actions-run` 1.39.0. Both manifest regressions reject the immediately preceding deployed versions. The browser Things/Action writers negotiate the corrected versions. The saved-service request helper now forwards the opaque `pageToken` instead of dropping it.
+
+The Connections header, signed-out panel, service/account cards, AI account forms, YouTube channels and feed filters now use editable intrinsic document blocks. Labels, icons, repeated account rows and credential fields remain individual Builder nodes. The transient adapter validates provider/account IDs against current data and reads credential fields only for explicit submission; secret values never enter authored documents, display scope, Action history or the DevKit request log. Private-control markers also reject authored credential defaults before layout persistence, including dynamically typed inputs and revealed text fields. Fieldset-scoped Enter and native required-field checks work without enabling arbitrary HTML form submission. Account/origin/layout changes revoke credential-form lifetimes, including submissions delayed by capability discovery.
+
+Current cloud checks: 160 connection tests (including the new editable-template/projection cases), 118 complete capability tests, 10 large-data/transport regressions and 49 password tests pass inside a Linux user/network namespace with only loopback enabled. Targeted integration lint reports no errors and 93 warnings; the new Connections UI files pass lint without warnings. The first connection run exposed live DNS in the hostile-feed timing regression; the test now fixes DNS to synthetic public addressing, restores its mocks, and proves the hostile response reached the real parser. The complete connection rerun passes.
+
+The isolated request-log/renderer checks pass 31 tests, including an innocuously named provider credential field omitted from both the ring buffer and copied curl. The transient lifetime and authored service-template checks pass seven tests (three also run in the connection suite). The final private-control rule also passes all nine settings-layout tests; credential-default rejection checks call the real layout adapter and assert no persistence. These use synthetic values only.
+Final raw TypeScript reports the same 92 diagnostics as a clean `develop` worktree at `f41cf656`; normalized file/code/message comparison finds no added or removed diagnostics. The final Connections/transient-renderer source lint has zero errors and warnings. Repository-wide TypeScript is therefore not clean, but this change adds no diagnostic.
+The final Vite/Nitro production build and Vercel output verification pass, including packaging the official Claude Code native runtime. Existing media WASM-parser fallback and bundle warnings remain; the completed build does not establish live provider acceptance.
+Seven isolated Chromium check records pass using the actual editable Connections components and synthetic HTTP responses/callbacks: desktop/mobile required-field and Enter behavior, independently removable accounts, fixed-endpoint AI save/remove, channel/filter controls, and independently edited nested labels/icons/fields that survive layout save/reload. Full-page views fit at 1440px and 390px. Browser/backend direct-IP and redirect probes fail at the network boundary, with Chromium sandboxing retained. This fixture does not exercise real OAuth providers or claim real-database browser acceptance.
+Graph maintenance is limited to structural extraction because this environment has no configured documentation-semantic proxy. Existing semantic evidence is retained; latest documentation semantics remain unverified.
+
+Public deployment reads on 23 October around 17:25–17:29 AEDT reported production `83a709cfa0df49a7bbc74018f7f43f6f9066c29a` and develop `f41cf65629fe98423405de4bea4e5894f59ccb46`, both ready. The existing [PR preview](https://pr-992.previews.dev.thingtime.com) returned the app and capability JSON successfully; its ready immutable deployment was [thingtime-9opbeao3j](https://thingtime-9opbeao3j-lopugits-projects.vercel.app), source `0c6bcc0b6cac5960e3472eb9a5ac3002d3ebc6b6`. These observations precede this branch update and do not establish deployment of it.
+
+The preview's public provider catalog currently reports Google identity and all Google subservices, Facebook identity/posts and hosted ChatGPT identity as `configured:false` with `setupRequired:provider`. Production/develop expose the older catalog, with Facebook also unconfigured. No private provider dashboard or credential was accessed, and no real two-account consent is claimed. Official hosted ChatGPT identity enrollment remains a selected-partner trial; this does not establish whether Thingtime has approval. Local open-source ChatGPT plan usage is a separate capability.
+
+Saved Claude setup tokens follow `chat.ts` → `createClaudeOAuthClient` → `runClaudeOAuth`, which executes the packaged official `@anthropic-ai/claude-code` native binary with an allowlisted environment and temporary isolated configuration. The Anthropic SDK instance uses a local fetch adapter and placeholder auth; it does not send the saved token directly through SDK HTTP requests. This verifies the code path, not provider approval. [Anthropic authentication guidance](https://code.claude.com/docs/en/authentication) documents setup tokens for Claude Code CI/scripts, while [legal guidance](https://code.claude.com/docs/en/legal-and-compliance) states that developers may not collect, store or intermediate Claude.ai credentials/session tokens. Authorization for this saved-token workflow and live provider acceptance remain unverified; direct Claude browser OAuth is not established.
+
+Origin-scoped Characters preflight succeeded through the managed proxy (`api.auth-characters` 1.0.0). Authentication/membership and the existing private coordination task could not be verified because this cloud run has no supported Thingtime device session/browser. No duplicate parent or impersonated agent record was created. Real credentials were not imported, copied or injected into tests.
 
 ## 18 October: develop integration and credential-import contract correction
 
@@ -195,7 +218,7 @@ and wrappers. Existing users gain password wrapping at their next successful
 password login/verification. No raw password or session JWT is stored in the
 key registry or session wrapper.
 
-## Verified locally
+## Historical local verification (14 October)
 
 October 14: 18 live password recovery checks passed, including two credentials
 surviving reset, old session/password rejection, reset replay, independent
@@ -217,7 +240,7 @@ remained readable on a second reveal after migration.
 - Browser: desktop and 390px layout, two saved AI accounts surviving reload, logout clears private account metadata, sign-in restores the correct library, demo add/feed/disconnect, and independent removal of one synthetic AI credential.
 - Typecheck ratchet reports 91 diagnostics against an 89 baseline; no diagnostics in changed feature files. This is a warning, not a clean typecheck.
 
-## Remaining acceptance
+## Historical acceptance checkpoints (16–18 October)
 
 ### October 16 integration and refresh checkpoint
 
@@ -327,7 +350,9 @@ remained readable on a second reveal after migration.
   Tailscale/Funnel is unverified because the installed CLI wrapper points to a
   missing Tailscale application binary. No new public exposure was configured.
 
-### Remaining provider and delivery gates
+### Historical provider and delivery gates (18 October)
+
+These bullets record the 18 October environment and implementation only. Current provider configuration, deployment evidence and remaining gates are recorded in the [23 October reconciliation](#23-october-2026-cloud-reconciliation-and-current-deployment-evidence) above; the localhost configuration and enrollment status below must not be treated as current.
 
 - Finish the remaining real-provider acceptance and final review.
 - Google web client created on October 14 with production and localhost callbacks; secret stored only in ignored local configuration. A real Google OAuth callback, expired-token refresh and account.profile API request passed, with fresh callback/profile acceptance repeated on October 18. Second-account passkey verification and Facebook client-secret setup are pending.

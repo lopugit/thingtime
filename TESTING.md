@@ -96,11 +96,25 @@ fixture boundary, coverage, stream recovery and Builder acceptance.
 
 - [ ] After merging another feature, password title search still filters before pagination, preserves q across pages, and both manifests advertise api.passwords 1.2.0; client and route search tests remain present.
 
-## Reusable local video compression
+## Reusable local image and video compression
 
+- [ ] File selection is visible immediately on both the intrinsic page and a
+      previously saved Web Platform media program, without Run example. Change
+      settings after selecting a file; Start must use them without losing it.
+- [ ] Compress PNG/JPEG/TIFF/HEIC and animated GIF fixtures locally. Independently
+      decode outputs: compare dimensions, alpha, orientation, frames, delays and
+      loops, including optimized delta rectangles. Duplicate two compressor instances; each native file label must target its own input. JPEG transparency requires an explicit background. APNG, layered or
+      multi-page images, unsupported SVG and invalid files fail clearly.
+- [ ] Cancel while image codecs load and while encoding; stale jobs cannot
+      publish a preview/download. Asset loading fetches public same-origin WASM
+      only; selected bytes never enter a request. The worker still denies network.
+- [ ] In the actual Builder, edit nested heading text, a label, a numeric field,
+      a button and image preview independently; move/duplicate a control, save,
+      reload and verify the live compressor. Keep installed/deployed acceptance
+      separate from the isolated regression fixture.
 - [ ] Install `media-tools` as the intended account; inspect the returned owned
-      Page, Component and Action. An origin with suite capability 1.3.0 refuses
-      this install before mutation; 1.4.0 accepts it.
+      Page, Component and Action. An origin with suite capability below 1.7.0 refuses
+      this install before mutation; compatible 1.7.0 accepts it.
 - [ ] Run the isolated browser flow documented in README: actual WebCodecs
       conversion, MP4 H.264/AAC, WebM VP9/Opus and explicit audio removal. Compare
       downloaded bytes, codecs, dimensions, duration and tracks using ffprobe.
@@ -7858,6 +7872,11 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
 
 ## Third-party connections (`/connections`, `/connections/feed`, `/api/v1/connections/*`)
 
+- [ ] After merging independently advanced capability branches, verify uncapped data writes require `api.things` 1.42.0, `api.things-update` 1.13.0 and `api.actions-run` 1.39.0; earlier versions used for unrelated features must not authorize these writes. Both manifests must retain the current media/sync contracts. Exercise a long-data write against the immediately preceding origin and verify refusal before transmission.
+- [ ] Follow a saved-service continuation token through the browser API helper, not only the HTTP route, and verify `pageToken` reaches the next request unchanged. The hostile-feed parser timing test must stub DNS and prove the response reached the parser, so network delay/refusal cannot change its result.
+- [ ] Edit a service icon, repeated account label and credential field independently in Builder, save and reload. Live account names and synthetic credential values must not enter the saved document or Action history; attempts to save a private field's value/default must fail before persistence even when its type is dynamic or changed to text. Verify empty required fields block both click and Enter, valid mobile Enter submits once, and switching accounts or entering edit mode cancels pending transient work.
+- [ ] Submit a synthetic provider credential under a field name without `token`, `secret` or `password`. The DevKit request log must retain status/timing without any request body, and copied curl must omit the field value. Removing one of two saved accounts must preserve the other account and its actions.
+
 Automated first: `pnpm --dir remix run verify:connections` (real-API
 checks; `TT_VERIFY_LIVE=1` adds a live Hacker News pull). Manual checklist:
 
@@ -13017,3 +13036,105 @@ separate from deterministic discovery/lease tests.
 - [x] Existing editable priority-readiness status renders negotiated folder gate and exact journal reservation kind/remaining count from the same read-only header projection. Old/malformed observations say UNKNOWN; no recovery inference from a reserved boolean. IDs, receipts, source watermarks and recovery order survive observation/reopen unchanged.
 - [x] Focused Electron49/49 and progress/journal/formatter24/24 pass. Changed9 TypeScript files have zero semantic errors (not a full-repo zero-error claim); lint has zero errors. Old producer fails the new histogram regression. OS-isolated Chromium proof passes at1440/390px, scroll/overflow, existing status block editing, save/reload, paused and legacy-unknown states.
 - [ ] After reviewed deployment/install, record ONE natural same-Home window. Timestamp-filter existing rotated logs and compare visible gate/recovery count; classify only newly returned failures. Historical89 codes remain unknown; missing rows/rotated intervals are not zero failures. Preserve all job IDs/settings; no manual Retry/reset/regrant.
+
+### Sync resource limits and immediate durable Pause — 2026-10-21
+
+- [ ] On desktop and mobile, keep a sync active while the saved-job read is delayed or fails. Both connection and automatic-sync Pause controls must remain usable. One click immediately aborts transfer/index/rate/CPU waits, shows Pausing, disables duplicate Pause and Resume, and preserves counters and original operation/receipt identities while disk persistence settles.
+- [ ] Hold pause persistence, emit a discovery/completion/retry event, then release it. No automatic restart may occur. Reload/reopen: the same admitted cycle remains paused. Explicit Resume restarts only that connection. Simulated disk failure still stops current work and blocks automatic restart in this process, with an accurate persistence error.
+- [ ] Emit a large progress burst while editing a connection or automatic-sync interval. Draft values, focus and selections remain stable; routine progress does not reread the job journal or resolve saved settings documents. Latest progress stays readable and final/error/review/Pause states appear immediately.
+- [ ] Individually select/edit/save/reload each nested resource-control label, input, unit selector and action through Builder. Check upload/download units (decimal Kbps/Mbps/Gbps), blank unlimited values, transfer/index worker concurrency and whole CPU percent. Verify desktop/mobile top-to-bottom layout and opened controls without overflow.
+- [ ] Save resource policy only after negotiating `api.things` 1.39.0 and `api.file-sync-batches` 1.2.0 plus native `fileResourceLimitsVersion` 1.0.0. Confirm settings/readback/exact approval preserve configuration3. Old1/2 canonical fixtures remain unchanged; unsupported clients refuse3. Prove actual aggregate directional rates, worker/transfer ceilings and sync-scoped CPU feedback on the intended installed app; fixtures alone are insufficient.
+- Runtime/journal regression command: from `remix/`, `node --import tsx --test app/fileSync/syncTaskRuntime.test.ts app/fileSync/nativeSyncVisibility.test.ts app/fileSync/syncJobJournal.test.ts app/fileSync/syncProgressCache.test.ts app/fileSync/coalescedSyncRefresh.test.ts`.
+- Isolated UI regression: `node remix/scripts/test-sync-pause-ui.mjs [evidence-directory]`. The harness uses synthetic account/data and native grants, fresh browser/profile and an OS loopback-only network boundary; no real files/accounts/backups. Screenshots/results describe fixture acceptance only.
+
+- [x] 2026-10-21 isolated fixture acceptance: `test-sync-pause-ui.mjs` passed at1440×1000 and390×844 with both Pause controls enabled during held journal reads, immediate abort/stopping, durable pause after reload, stable focused priority draft under1000 progress updates, invalid CPU101 blocking Save until25, config3 upload2.5Kbps=312.5bytes/s, independently edited/saved Builder labels/unit option and resource-status CPU/concurrency fields. Current12% CPU /2 transfers /3 index workers /312.5bytes/s cap rendered; paused observations explicitly said saved, not current. No horizontal overflow or page errors; screenshots/results in the chosen evidence directory. This is isolated fixture evidence, not installed native governor acceptance.
+
+## Device sync browsing and collapsed settings — 2026-10-22
+
+- [ ] In grid, list and columns, single-click selects a device; double-click or Enter/Space opens its saved cloud folders. Touch opens directly. The context menu offers synced files, full settings and quick settings.
+- [ ] Compare saved roots with private file-sync configuration records for the active owner/device. Opening an offline device must not start a transfer or grant filesystem access; cloud-folder descendants use ordinary Things permissions.
+- [ ] Fresh drawer and settings page start with every section collapsed. Verify the drawer Close and expand-to-page buttons have separate 44px targets and both work. Open File sync & backup, live filesystem and long sections on desktop/mobile, scroll top to bottom, and check focus, overflow and reduced motion. Legacy version-1 expansion flags reset once while width survives; explicit version-2 choices remain respected.
+- [ ] Edit the overview heading, a navigation link and a repeated folder field separately in Builder; save/reload and verify live bindings still work. Verify empty/error/account-change states without exposing the old account’s folders.
+- [ ] Preserve a removed home source and durable paused state throughout navigation, deployment and app reload.
+
+### Device sync library containment and saved locations
+
+- Open Things root: setup, sync controls, file-sync preferences and relational
+  child data must not appear as root items. Open a device's sync page; verify
+  configuration, progress, Activity manager and saved cloud-folder links.
+- Compare root, nested folder and search for the same canonical file; its stored
+  folder hierarchy must be preserved. Legacy durable standalone files remain
+  available in Unfiled files and search, while storage blobs stay out of the
+  ordinary root; pending/expiring upload drafts do not become library content.
+- Open a canonical file and its storage attachment: verify each breadcrumb
+  against stored folder IDs, click the containing folder, save/reload a nested
+  breadcrumb block edit. An unbound attachment must say no recorded folder
+  location; missing/private/cyclic ancestry must never invent a partial path.
+- Inspect full page desktop/mobile scroll, open the sync settings, progress and
+  Builder controls, and check wrapping, focus, overflow and nested selection.
+
+- Sync upload provenance: fail publication after verified bytes, reload the
+  original run and retry. Verify the private original source/root and intended
+  destination survive before upload authority; reject changed origin, account
+  or initial publication destination. A queued pre-contract exact retry may
+  explicitly stamp its saved path; never infer one from a filename. Verify
+  standalone uploads are unchanged and shared/app/PAT/list reads omit provenance.
+
+### Device activity controls and quiet refresh
+
+- In Activity manager (`/things?activity=1`), disable a recurring view refresh
+  and an event listener. Verify the underlying callbacks stop, other owners
+  remain active, and the choice survives reload and a second window. Re-enable
+  and verify only still-mounted owners resume. Hidden windows release view
+  timers; essential cleanup guards remain enabled.
+- Change an activity preference with unavailable storage: show an error and keep
+  the existing live state. Native stop failures retain the disabled intent and
+  expose the observed running state with a retry; failed preference writes must
+  not stop the service or silently change its in-memory preference.
+- In an isolated desktop environment, disable the Thingtime Node service, verify
+  actual launchd/process termination and no login restart, then re-enable its
+  existing registration. Preserve pairing, grants, jobs and journals. Never use
+  a real active user's service for destructive test setup.
+- Compare Electron CPU/RSS with the native adapter measurement; unavailable
+  values stay unknown. Separate native Node/child and external runtime metrics
+  are not attributed to Electron. Child tasks currently share a service control.
+- Background status refresh retains its last state without a blinking checking
+  label. Paused/completed transfer charts stop their clock; equivalent progress
+  descriptors must not reopen the journal on every byte update.
+- Edit Activity manager heading, controls and repeated fields independently;
+  save/reload. Scroll desktop/mobile fully and open coverage/Builder controls.
+  Isolated fixture evidence is distinct from installed/deployed acceptance.
+
+- Referenced-by parent paths: no scan on mount; explicitly scan a file referenced
+  from two distinct files/folders, a typed post collection and authored webpage
+  media. Verify separate clickable breadcrumbs, ACL-denied sources omitted,
+  cycles terminate, stale references disappear and parentId lineage works.
+  Continue beyond a 500-record batch and a 20-path / 200-read traversal page;
+  cancel and resume from the retained cursor. Other-account reverse references
+  must remain an explicit coverage limitation. Save/reload a nested path-link
+  Builder edit, including a layout containing legacy JSON transient inputs.
+- Unfiled files: verify only one page loads on mount; each Load more makes one
+  further request, displays existing results during load/error, rejects repeated
+  cursors and cancels pending reads on account change/unmount.
+
+- Device sync correction: a fresh dedicated sync page keeps Manage sync connections collapsed; the Thing page exposes Parent paths with raw Thing data switched off. Explicit scanning remains required.
+
+# Prebuilt-only Vercel deployments (2026-10-23)
+
+- The sync coalescing change-storm regression waits for the actual trailing read
+  with a bounded test timeout; it must not assume a busy runner schedules it
+  before a separate five-millisecond timer.
+
+- Run `node --test scripts/vercel-root-flow.test.mjs`: all source-build ignore
+  decisions skip, remote source compilation refuses, and symlinks survive
+  staging without replacing a known-good artifact after a failed build.
+- Run the protected controller's `deploy-vercel-prebuilt.test.mjs` and the
+  existing preview/extractor self-tests. Check production-source restrictions,
+  custom-environment matching, fork/stale-event rejection, exact deployment
+  identity, and absence of credentials in the GitHub build job.
+- Deploy a preview, the stable custom develop environment and production from
+  Actions. Verify each exact source SHA and target in Vercel, the GitHub runner
+  build log, prebuilt upload metadata, root/index/assets/API and the relevant
+  stable domains. Inspect the source-build controls and confirm no native Git
+  link or source deploy hook remains. A repeated unchanged request must skip
+  compilation. Keep production runtime charges distinct from build charges.

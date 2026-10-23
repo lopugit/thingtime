@@ -467,7 +467,7 @@ function runProcess(command, args, options = {}) {
 	const input = options.input === undefined ? null : Buffer.from(options.input);
 	const maximumOutputBytes = options.maximumOutputBytes || MAX_FRAME_BYTES;
 	const maximumErrorBytes = options.maximumErrorBytes || MAX_ERROR_BYTES;
-	const timeoutMs = options.timeoutMs || BRIDGE_TIMEOUT_MS;
+	const timeoutMs = options.timeoutMs === null ? null : (options.timeoutMs || BRIDGE_TIMEOUT_MS);
 
 	return new Promise((resolve, reject) => {
 		let settled = false;
@@ -495,8 +495,8 @@ function runProcess(command, args, options = {}) {
 		};
 
 		const abort = () => fail('cancelled', 'Folder access was cancelled.');
-		const timer = setTimeout(() => fail('node_timeout', 'Thingtime Node did not respond in time.'), timeoutMs);
-		timer.unref?.();
+		const timer = timeoutMs === null ? null : setTimeout(() => fail('node_timeout', 'Thingtime Node did not respond in time.'), timeoutMs);
+		timer?.unref?.();
 		options.signal?.addEventListener('abort', abort, { once: true });
 		if (options.signal?.aborted) abort();
 		child.stdin.on('error', () => fail('node_unavailable', 'Thingtime Node input closed.'));
@@ -1002,6 +1002,10 @@ class ThingtimeNodeIntegration {
 		await this.verifyForRequest(paths);
 		const staging = method === 'folder-sync.request' && parameters.action === 'stage-range';
 		const batching = method === 'folder-sync.request' && parameters.action === 'upload-batch';
+        const policy = parameters.resourceLimits;
+        const governedPayload = method === 'folder-sync.request' && policy &&
+            ((batching && (policy.uploadBytesPerSecond || policy.cpuPercent)) ||
+             (['stage-finish', 'publish'].includes(parameters.action) && policy.cpuPercent));
 		const request = nodeRequest(method, staging ? stageRangeMetadata(parameters) : parameters, suppliedCommandId);
 		if (batching && typeof options.onBatchFrame !== 'function') throw new ThingtimeNodeBridgeError('invalid_request', 'Missing batch callback.');
 		const encoded = staging ? encodeStageInput(request, parameters.bytes) : batching ? encodeBatchInput(request) : `${boundedJson(request, 'node request')}\n`;
@@ -1016,7 +1020,7 @@ class ThingtimeNodeIntegration {
 			env: this.bridgeEnvironment(),
 			input: encoded,
 			maximumOutputBytes: MAX_FRAME_BYTES,
-			timeoutMs: batching ? 185_000 : nodeRequestTimeoutMs(method),
+			timeoutMs: governedPayload ? null : batching ? 185_000 : nodeRequestTimeoutMs(method),
 			signal: batching ? batchSignal : options.signal,
 			...(batching ? { onInput: write => stream.connect(write) } : {}),
 			...(stream ? { onStdout: chunk => stream.write(chunk) } : {})
@@ -1170,7 +1174,7 @@ class ThingtimeNodeIntegration {
 	}
 
 	controlService(action, options = {}) {
-		if (!['start', 'stop', 'restart'].includes(action)) {
+		if (!['start', 'stop', 'restart', 'disable'].includes(action)) {
 			return Promise.reject(new ThingtimeNodeBridgeError('invalid_request', 'Unsupported node control.'));
 		}
 		return this.withServiceLock(async () => {
@@ -1181,6 +1185,10 @@ class ThingtimeNodeIntegration {
 			const registration = await this.registrationStatus();
 			if (registration.registered && existing === null) {
 				throw new ThingtimeNodeBridgeError('login_item_conflict', 'The running node has no Desktop-owned registration.');
+			}
+			if (action === 'disable') {
+				const disabled = await this.runner('/bin/launchctl', ['disable', `gui/${process.getuid()}/${NODE_LABEL}`], { maximumOutputBytes: MAX_ERROR_BYTES, timeoutMs: 10_000 });
+				requireLaunchctlSuccess(disabled, 'disable login launch for');
 			}
 			const stopped = await this.runner('/bin/launchctl', ['bootout', `gui/${process.getuid()}/${NODE_LABEL}`], {
 				maximumOutputBytes: MAX_ERROR_BYTES, timeoutMs: 10_000

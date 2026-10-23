@@ -1,5 +1,9 @@
+import { UnfiledAttachmentsPage } from './UnfiledAttachmentsPage';
+import { ActivityManagerPage } from '~/components/Activity/ActivityManagerPage';
+import { DeviceSyncPanel, DeviceSyncedFilesPage } from '~/components/Devices/DeviceSyncBrowser';
+import { deviceSyncedFilesHref } from '~/components/Devices/deviceSyncNavigation';
 import { openThingHistory, TimelineLibrary } from '~/components/Timeline/TimelineHost';
-import { isManagedLibraryThing } from './thingsCore';
+import { isManagedLibraryThing, isTopLevelLibraryThing } from './thingsCore';
 import { FilesystemThingsPage } from './FilesystemThingsBrowser';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { transferIntent } from '~/utils/thingTransfer/intent';
@@ -18,9 +22,6 @@ import { useIsMobileViewport } from '~/components/Nav/Drawer/useDrawer';
 import { Rainbow } from '~/components/Rainbow/Rainbow';
 import { DeviceDetailsDrawer } from '~/components/Devices/DeviceDetailsDrawer';
 import { deviceThingsPageHref } from '~/components/Devices/deviceNavigation';
-import { DesktopFolderAccess } from '~/components/Devices/DesktopFolderAccess';
-import { shouldHideLocalNodePanel } from '~/components/Devices/localNodePanel';
-import { useNodePanelPreference } from '~/components/Devices/useNodePanelPreference';
 import { MobileDeviceSetupCard } from '~/components/Devices/MobileDeviceSetupCard';
 import { LocalNodeSetupCard } from '~/components/Devices/LocalNodeSetupCard';
 import type { DeviceActionIntent, DeviceControlResolver } from '~/components/Devices/DeviceStateGrid';
@@ -136,13 +137,15 @@ const dedupeById = (things: ThingsThing[]): ThingsThing[] => {
 
 export const ThingsPage = () => {
   const [params] = useSearchParams();
+  if (params.get('activity') === '1') return <ActivityManagerPage />;
+  if (params.get('unfiled') === 'attachments') return <UnfiledAttachmentsPage />;
   const folder = params.get('folder');
   return folder?.startsWith('timeline-folder-') ? <TimelineLibrary folderId={folder} storage={params.get('historyStorage') === 'home' ? 'home' : 'selected'} /> : <ThingsPageContents />;
 };
 
 const ThingsPageContents = () => {
   const [params] = useSearchParams();
-  return params.has("files") ? <FilesystemThingsPage /> : <ThingsLibraryPage />;
+  return params.has("files") ? <FilesystemThingsPage /> : params.get("deviceFiles") && !params.get("folder") ? <DeviceSyncedFilesPage deviceId={params.get("deviceFiles")!} /> : <ThingsLibraryPage />;
 };
 
 const ThingsLibraryPage = () => {
@@ -177,7 +180,9 @@ const ThingsLibraryPage = () => {
   const folderId = searchParams.get('folder') || null;
   const previewParam = searchParams.get('preview') || null;
 	const deviceParam = searchParams.get('device') || null;
+	const [selectedDevice, setSelectedDevice] = useState<string | null>(null);
 	const devicePageMode = Boolean(deviceParam && searchParams.get('deviceView') === 'page');
+	const deviceSyncMode = Boolean(deviceParam && searchParams.get('deviceView') === 'sync');
   const currentKey = folderKeyOf(folderId);
 
   const archive = useAttachmentArchive();
@@ -201,7 +206,6 @@ const ThingsLibraryPage = () => {
 	const serverDeviceControlFor = deviceStore.controlFor;
 	const executeServerDeviceAction = deviceStore.executeAction;
 	const setDevicePermissionMode = deviceStore.setPermissionMode;
-	const [nodePanelDismissed, setNodePanelDismissed] = useNodePanelPreference(user?.id);
 	const localDeviceControlFor = localNode.controlFor;
 	const executeLocalDeviceAction = localNode.executeAction;
 
@@ -544,7 +548,7 @@ const ThingsLibraryPage = () => {
       const page = folderPages[folderKeyOf(targetFolderId)];
       if (!page) return undefined;
       return sortThings(
-        page.filter((thing) => !HIDDEN_KINDS.has(primaryKindOf(thing))),
+        page.filter((thing) => !HIDDEN_KINDS.has(primaryKindOf(thing)) && (targetFolderId !== null || isTopLevelLibraryThing(thing))),
         sort
       );
     },
@@ -1327,8 +1331,9 @@ const ThingsLibraryPage = () => {
     [clipboard?.ids.length, displayItems.length, sort, groupBy, view, displayMode]
   );
 	const deviceMenuModel = useMemo(() => ({ sections: [{ id: 'device-navigation', actions: [{
-		id: 'open-device-page', label: 'Open device page', icon: '↗', lucide: 'maximize',
-		href: menuDeviceId ? deviceThingsPageHref(menuDeviceId) : '/things'
+		id: 'open-device-files', label: 'Open synced files', icon: '🗂️', lucide: 'folder', href: menuDeviceId ? deviceSyncedFilesHref(menuDeviceId) : '/things'
+	}, { id: 'open-device-page', label: 'Device settings page', icon: '⚙️', lucide: 'maximize', href: menuDeviceId ? deviceThingsPageHref(menuDeviceId) : '/things'
+	}, { id: 'open-device-settings', label: 'Quick device settings', icon: '⚙️', lucide: 'settings', command: 'inspect-device'
 	}] }] }), [menuDeviceId]);
 
   const onBackgroundMenuAction = useCallback(
@@ -1508,16 +1513,29 @@ const ThingsLibraryPage = () => {
 	const devicePresentation = {
 		devices: visibleDevices,
 		deviceCounts: deviceStore.countsById,
-		selectedDeviceId: deviceParam,
-		onDeviceSelect: openDevice,
+		selectedDeviceId: deviceParam || selectedDevice,
+		onDeviceSelect: setSelectedDevice,
+		onDeviceOpen: (id: string) => navigate(deviceSyncedFilesHref(id)),
 		onDeviceContextMenu
 	};
 	const searchResultCount = (searchResults || []).length + visibleDevices.length;
+	if (deviceSyncMode && deviceParam) return (
+    <Flex justify="center" background="var(--tt-surface, #fafafb)" minHeight="100vh" paddingTop="calc(var(--thingtime-safe-area-top, 0px) + var(--tt-nav-clearance, 54px) + 24px)" paddingBottom={16} paddingX={{ base: 4, md: 6 }} width="100%">
+      <Flex direction="column" gap={6} width="100%" maxWidth="1100px" minWidth={0}>
+        <DeviceSyncPanel deviceId={deviceParam} ownerId={user?.id} pairedDeviceIds={localNode.pairedDeviceIds} ownedDeviceIds={currentAccountDeviceIds} />
+        {devicesEnabled && user?.id ? <MobileDeviceSetupCard ownerId={user.id} onPaired={deviceStore.refreshList} /> : null}
+        {devicesEnabled && localNode.available ? <LocalNodeSetupCard onRefresh={localNode.refresh} controlFor={localDeviceControlFor} onAction={executeLocalDeviceAction} state={localNode} /> : null}
+      </Flex>
+    </Flex>
+  );
 	if (devicePageMode) return (
 		<Flex background="var(--tt-surface, #fafafb)" minHeight="100vh" paddingBottom={16} paddingTop="calc(var(--thingtime-safe-area-top, 0px) + var(--tt-nav-clearance, 54px) + 20px)" paddingX={{ base: 3, md: 6 }} width="100%">
 			<DeviceDetailsDrawer
 				controlFor={deviceControlFor}
 				localBattery={localBattery}
+				ownerId={user?.id}
+				pairedDeviceIds={localNode.pairedDeviceIds}
+				ownedDeviceIds={currentAccountDeviceIds}
 				isOpen
 				onAction={onDeviceAction}
 				onClose={closeDevice}
@@ -1543,12 +1561,8 @@ const ThingsLibraryPage = () => {
         <Flex alignItems="baseline" gap={3} wrap="wrap">
           <Text {...monoLabel}>Thingtime · Things</Text>
           <Button as={RouterLink} to="/things?files=thingtime" size="sm" variant="ghost">Browse files</Button>
+          {!folderId && !searchMode ? <Button as={RouterLink} to="/things?unfiled=attachments" size="sm" variant="outline" minHeight="44px">Unfiled files</Button> : null}
         </Flex>
-				{devicesEnabled && !folderId && !searchMode && user?.id ? <MobileDeviceSetupCard ownerId={user.id} onPaired={deviceStore.refreshList} /> : null}
-				{devicesEnabled && !folderId && !searchMode && !shouldHideLocalNodePanel(localNode, nodePanelDismissed) ? (
-					<LocalNodeSetupCard onDismiss={() => setNodePanelDismissed(true)} onRefresh={localNode.refresh} controlFor={localDeviceControlFor} onAction={executeLocalDeviceAction} state={localNode} />
-				) : null}
-        {devicesEnabled && !folderId && !searchMode && user?.id ? <DesktopFolderAccess ownerId={user.id} pairedDeviceIds={localNode.pairedDeviceIds} ownedDeviceIds={currentAccountDeviceIds} /> : null}
         <Flex alignItems="center" gap={3} wrap="wrap">
           <Text
             as="h1"
@@ -1580,7 +1594,6 @@ const ThingsLibraryPage = () => {
               <MenuItem onClick={() => { setImportBundle(null); setImportDestination(folderId); setImportOpen(true); }}>Import Things…</MenuItem>
               <MenuItem onClick={() => void fetchFolder(folderId)}>Refresh this folder</MenuItem>
               <MenuItem onClick={selectAll}>{allSelected ? 'Clear selection' : 'Select all'}</MenuItem>
-              {devicesEnabled && <MenuItem onClick={() => setNodePanelDismissed(!nodePanelDismissed)}>{nodePanelDismissed ? 'Show' : 'Hide'} device setup</MenuItem>}
               <MenuDivider /><MenuItem as={RouterLink} to="/things?logs=1">Error logs</MenuItem>
             </MenuList></Portal>
           </Menu>
@@ -1954,6 +1967,9 @@ const ThingsLibraryPage = () => {
 			<DeviceDetailsDrawer
 				controlFor={deviceControlFor}
 				localBattery={localBattery}
+				ownerId={user?.id}
+				pairedDeviceIds={localNode.pairedDeviceIds}
+				ownedDeviceIds={currentAccountDeviceIds}
 				isOpen={Boolean(deviceParam) && !devicePageMode}
 				onAction={onDeviceAction}
 				onClose={closeDevice}
@@ -2012,6 +2028,7 @@ const ThingsLibraryPage = () => {
 			{...deviceMenu.menuProps}
 			meta={menuDeviceId ? { path: deviceStore.devices.find((device) => device.deviceId === menuDeviceId)?.summary?.name || 'Device', type: 'Device' } : undefined}
 			model={deviceMenuModel}
+			onAction={({ action }) => { if (action.command === 'inspect-device' && menuDeviceId) openDevice(menuDeviceId); }}
 		/>
     </Flex>
   );

@@ -67,3 +67,24 @@ test('deep editable trees retain inherited stored media and remap nested Action 
  const twice=rewriteComposition(['webpage'],copied,(_kind,ref)=>`second-${ref}`);
  assert.deepEqual(compositionReferences(['webpage'],twice).map(x=>x.ref),['second-copy-do-saved']);
 });
+
+test('saved transient JSON inputs survive intrinsic binding without widening the closed scalar authority', () => {
+ const original = { 'data-tt-action': '$transient', 'data-tt-action-inputs': JSON.stringify({ operation: 'scan', id: '{item.id}' }) };
+ assert.deepEqual(resolveBlockProps(original, { item: { id: 'saved-id' } })['data-tt-action-inputs'], { operation: 'scan', id: 'saved-id' });
+ assert.equal(typeof original['data-tt-action-inputs'], 'string');
+ const invalid = { ...original, 'data-tt-action-inputs': '{"operation":"scan","nested":{"secret":"x"}}' };
+ assert.notDeepEqual(resolveBlockProps(invalid, {})['data-tt-action-inputs'], { operation: 'scan', nested: { secret: 'x' } });
+});
+
+test('media adapters expand into selectable authored headings, inputs, controls and previews', async () => {
+ const { mediaCompressorTemplate } = await import('../../../scripts/media-acceptance/authoredFixture');
+ let id=0;
+ const blocks=templateToBlocks(JSON.parse(JSON.stringify(mediaCompressorTemplate())), kind=>`${kind}-${++id}`);
+ const flatten=(rows:any[]):any[]=>rows.flatMap(row=>[row,...flatten(row.children||[])]);
+ const all=flatten(blocks);
+ assert.equal(blocks[0].tag,'tt-media-pipeline');
+ for(const tag of ['h2','label','input','button','img','video','details','select','a']) assert.ok(all.some(block=>block.tag===tag),tag);
+ assert.equal(new Set(all.map(block=>block.id)).size,all.length);
+ const saved=sanitizeWebpageBlocks(blocks);
+ assert.equal(saved.ok,true,JSON.stringify(saved));
+});

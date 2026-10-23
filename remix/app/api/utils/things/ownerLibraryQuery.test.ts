@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { isDeepStrictEqual } from 'node:util';
 import { PROTECTED_THINGTIME, isProtectedThingtime } from '../../../schemas/registry';
-import { ownerLibraryMatch } from './ownerLibraryQuery';
+import { ownerLibraryMatch, ownerLibraryRootMatch } from './ownerLibraryQuery';
 
 // Evaluate the small Mongo query vocabulary against fixtures, so these tests
 // assert which rows are returned rather than duplicating the query structure.
@@ -97,4 +97,21 @@ test('stable files appear once in the owner library; Trash and retained attachme
  assert.equal(matches({ ...file, crystal: { trashed: true } }, query), false);
  assert.equal(matches({ ...file, ownerId: 'bob' }, query), false);
  assert.equal(matches({ ...recording, attachmentPurpose: 'file', targetId: 'stable-file' }, query), false);
+});
+
+
+test('root excludes children, sync settings and storage blobs while recovery/search preserve durable files', () => {
+  const library = ownerLibraryMatch('alice', PROTECTED_THINGTIME);
+  const root = { $and: [library, ownerLibraryRootMatch()] };
+  const data = { ownerId: 'alice', thingtime: ['data'], crystal: {} };
+  for (const row of [data]) assert.equal(matches(row, root), true);
+  for (const row of [recording, { ...recording, attachmentPurpose: 'file', crystal: { name: 'search.svg', contentType: 'application/octet-stream', mediaKind: 'file', size: 494 }, folderId: null }, { ...data, parentId: 'parent' }, { ...data, crystal: { parentId: 'parent', body: 'Progress report' } }, { ...data, targetId: 'parent' },
+    { ...data, folderId: 'nested' }, { ...data, thingtime: ['file-sync'] },
+    { ...recording, attachmentPurpose: 'file', attachmentExpiresAt: new Date() }]) assert.equal(matches(row, root), false);
+  const file = { ownerId: 'alice', thingtime: ['file'], folderId: 'nested', crystal: { trashed: false } };
+  assert.equal(matches(file, root), false);
+  assert.equal(matches(file, { $and: [library, { folderId: 'nested' }] }), true);
+  assert.equal(matches(file, library), true);
+  assert.equal(matches({ ...recording, attachmentPurpose: 'file', crystal: { name: 'search.svg', size: 494 } }, library), true);
+  assert.equal(matches({ ...data, parentId: 'parent' }, library), true);
 });

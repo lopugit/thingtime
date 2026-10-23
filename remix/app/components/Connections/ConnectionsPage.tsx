@@ -1,16 +1,18 @@
 import React from 'react';
-import { Box, Button, Flex, Image, Input, Select, Switch, Text, Textarea } from '@chakra-ui/react';
-import { Link, useSearchParams } from 'react-router';
+import { useSearchParams } from 'react-router';
 
 import { useLopu } from '~/components/Lopu/useLopu';
 import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { PageShell } from '~/components/Layout/PageShell';
 import { AIServiceAccounts } from './AIServiceAccounts';
+import { ConnectionsDocument } from './ConnectionsDocument';
+import { connectionsOverviewBlocks, connectionToolsBlocks } from './connectionToolsBlocks';
+import type { TransientBlockActions } from '../Builder/TransientBlockHost';
 import { ServiceCatalog, type Provider } from './ServiceCatalog';
 import { requireThingtimeCapability } from '~/api/utils/capabilities/requireCapability.client';
 import { readLocalCache, writeLocalCache } from '~/hooks/localCache';
-import { cardStyle, connectedProviderLabel, oauthErrorMessage, type ChannelRef, type Connection } from './shared';
+import { connectedProviderLabel, oauthErrorMessage, type ChannelRef, type Connection } from './shared';
 
 // /connections — link third-party apps (Reddit, YouTube, Mastodon, Bluesky,
 // RSS, …), manage the linked accounts, and manage AI feed filters. The feeds
@@ -61,7 +63,6 @@ const ConnectionsContent = ({ ownerId }: { ownerId: string | null }) => {
   const [signedOut, setSignedOut] = React.useState(!ownerId);
 
   const [connecting, setConnecting] = React.useState<Provider | null>(null);
-  const [fieldValues, setFieldValues] = React.useState<Record<string, string>>({});
   const [busy, setBusy] = React.useState(false);
 
   const [filterName, setFilterName] = React.useState('');
@@ -133,7 +134,7 @@ const ConnectionsContent = ({ ownerId }: { ownerId: string | null }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
 
-  const openConnect = async (provider: Provider) => {
+  const openConnect = async (provider: Provider, signal?: AbortSignal) => {
     // SSO providers hand the browser to their own sign-in — no form here
     if (provider.auth === 'oauth2') {
       const tab = window.open('about:blank', '_blank');
@@ -145,9 +146,9 @@ const ConnectionsContent = ({ ownerId }: { ownerId: string | null }) => {
       setBusy(true);
       try {
         await requireThingtimeCapability('api.connections-oauth-begin', '1.1.0');
-        if (!active.current) { tab.close(); return; }
-        const resp = await api.v1.connections.oauthBegin({ provider: provider.id, expectedOwnerId: ownerId });
-        if (!active.current) {
+        if (!active.current || signal?.aborted) { tab.close(); return; }
+        const resp = await api.v1.connections.oauthBegin({ provider: provider.id, expectedOwnerId: ownerId, signal });
+        if (!active.current || signal?.aborted) {
           tab.close();
           return;
         }
@@ -155,25 +156,24 @@ const ConnectionsContent = ({ ownerId }: { ownerId: string | null }) => {
         tab.location.replace(resp.authorizeUrl);
       } catch (err: any) {
         tab.close();
-        if (!active.current) return;
+        if (!active.current || signal?.aborted) return;
         lopu({ title: err?.error || `Could not start the ${provider.name} sign-in 😞`, status: 'error' });
       } finally {
-        setBusy(false);
+        if (active.current) setBusy(false);
       }
       return;
     }
     setConnecting(provider);
-    setFieldValues({});
   };
 
-  const submitConnect = async () => {
+  const submitConnect = async (fieldValues: Record<string, string>, signal?: AbortSignal) => {
     if (!connecting) return;
     setBusy(true);
     try {
       await requireThingtimeCapability('api.connections', '1.1.0');
-      if (!active.current) return;
-      const resp = await api.v1.connections.connect({ provider: connecting.id, fields: fieldValues, expectedOwnerId: ownerId });
-      if (!active.current) return;
+      if (!active.current || signal?.aborted) return;
+      const resp = await api.v1.connections.connect({ provider: connecting.id, fields: fieldValues, expectedOwnerId: ownerId, signal });
+      if (!active.current || signal?.aborted) return;
       lopu({
         title: resp.alreadyLinked
           ? `Already connected to ${resp.connection?.account?.displayName} ✨`
@@ -182,10 +182,9 @@ const ConnectionsContent = ({ ownerId }: { ownerId: string | null }) => {
         duration: 6000
       });
       setConnecting(null);
-      setFieldValues({});
       await refresh();
     } catch (err: any) {
-      if (!active.current) return;
+      if (!active.current || signal?.aborted) return;
       lopu({ title: err?.error || `Could not connect ${connecting.name} 😞`, status: 'error' });
     } finally {
       if (active.current) setBusy(false);
@@ -227,15 +226,17 @@ const ConnectionsContent = ({ ownerId }: { ownerId: string | null }) => {
     setYtBusy(true);
     try {
       const resp = await api.v1.connections.youtubeSearch({ q: ytQuery });
+      if (!active.current) return;
       setYtResults(resp.channels || []);
       setYtSearchConfigured(resp.searchConfigured !== false);
       if (!(resp.channels || []).length) {
         lopu({ title: 'No channels matched that — try a channel ID or URL 🔍', status: 'info', duration: 5000 });
       }
     } catch (err: any) {
+      if (!active.current) return;
       lopu({ title: err?.error || 'Channel search failed 😞', status: 'error' });
     } finally {
-      setYtBusy(false);
+      if (active.current) setYtBusy(false);
     }
   };
 
@@ -243,6 +244,7 @@ const ConnectionsContent = ({ ownerId }: { ownerId: string | null }) => {
     setYtBusy(true);
     try {
       const resp = await api.v1.connections.youtubeChannels({ add: channel });
+      if (!active.current) return;
       lopu({ title: `Subscribed to ${channel.title} 📺`, status: 'success', duration: 5000 });
       setYtResults((current) => current.filter((entry) => entry.id !== channel.id));
       setConnections((current) => {
@@ -251,17 +253,20 @@ const ConnectionsContent = ({ ownerId }: { ownerId: string | null }) => {
       });
       await refresh();
     } catch (err: any) {
+      if (!active.current) return;
       lopu({ title: err?.error || `Could not subscribe to ${channel.title} 😞`, status: 'error' });
     } finally {
-      setYtBusy(false);
+      if (active.current) setYtBusy(false);
     }
   };
 
   const unsubscribeChannel = async (channel: ChannelRef) => {
     try {
       await api.v1.connections.youtubeChannels({ remove: channel.id });
+      if (!active.current) return;
       await refresh();
     } catch (err: any) {
+      if (!active.current) return;
       lopu({ title: err?.error || `Could not remove ${channel.title} 😞`, status: 'error' });
     }
   };
@@ -273,6 +278,7 @@ const ConnectionsContent = ({ ownerId }: { ownerId: string | null }) => {
     }
     try {
       const resp = await api.v1.connections.saveFilter({ name: filterName, prompt: filterPrompt, action: filterAction });
+      if (!active.current) return;
       // functional update + cache written from the SAME next array — the
       // render-time closure may be stale under interleaved mutations
       setFilters((current) => {
@@ -284,6 +290,7 @@ const ConnectionsContent = ({ ownerId }: { ownerId: string | null }) => {
       setFilterPrompt('');
       lopu({ title: `Filter “${resp.filter?.name}” is on 🛡️`, status: 'success', duration: 5000 });
     } catch (err: any) {
+      if (!active.current) return;
       lopu({ title: err?.error || 'Could not save that filter 😞', status: 'error' });
     }
   };
@@ -297,6 +304,7 @@ const ConnectionsContent = ({ ownerId }: { ownerId: string | null }) => {
     try {
       await api.v1.connections.saveFilter({ id: filter.id, enabled: !filter.enabled });
     } catch (err: any) {
+      if (!active.current) return;
       // revert only THIS filter's toggle — a snapshot restore would discard
       // concurrent changes to other filters
       setFilters((current) => {
@@ -317,6 +325,7 @@ const ConnectionsContent = ({ ownerId }: { ownerId: string | null }) => {
     try {
       await api.v1.connections.removeFilter({ id: filter.id });
     } catch (err: any) {
+      if (!active.current) return;
       // restore only the removed entry
       setFilters((current) => {
         const next = current.some((entry) => entry.id === filter.id) ? current : [...current, filter];
@@ -331,6 +340,7 @@ const ConnectionsContent = ({ ownerId }: { ownerId: string | null }) => {
     setBusy(true);
     try {
       await requireThingtimeCapability('api.connections-request', '1.0.0');
+      if (!active.current) return;
       await api.v1.connections.request({ connectionId: connection.id, operation: 'account.profile' });
       if (active.current) lopu({ title: `${connection.account.displayName} is connected`, status: 'success' });
     } catch (error: any) {
@@ -340,89 +350,26 @@ const ConnectionsContent = ({ ownerId }: { ownerId: string | null }) => {
     }
   };
 
-  const connectForm = connecting ? (
-    <Box {...cardStyle} data-tt-credential-form padding={5} display="flex" flexDirection="column" rowGap={3}>
-      <Text fontWeight="600">
-        {connecting.icon} Connect {connecting.name}
-      </Text>
-      {connecting.fields.map((field) => (
-        <Box key={field.key}>
-          <Text fontSize="sm" fontWeight="500" marginBottom={1}>
-            {field.label}
-            {field.required ? ' *' : ''}
-          </Text>
-          <Input
-            aria-label={field.label}
-            value={fieldValues[field.key] || ''}
-            placeholder={field.placeholder}
-            type={field.secret ? 'password' : 'text'}
-            autoComplete={field.secret ? 'off' : undefined}
-            onChange={(event) => setFieldValues((current) => ({ ...current, [field.key]: event.target.value }))}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') submitConnect();
-            }}
-          />
-          {field.help ? (
-            <Text fontSize="xs" color="var(--tt-muted, #6b7280)" marginTop={1}>
-              {field.help}
-            </Text>
-          ) : null}
-        </Box>
-      ))}
-      <Flex columnGap={2}>
-        <Button size="sm" borderRadius="999px" onClick={submitConnect} isLoading={busy}>
-          Link account
-        </Button>
-        <Button
-          size="sm"
-          variant="ghost"
-          borderRadius="999px"
-          onClick={() => {
-            setConnecting(null);
-            setFieldValues({});
-          }}
-        >
-          Cancel
-        </Button>
-      </Flex>
-    </Box>
-  ) : null;
+
+  const toolActions: TransientBlockActions = {
+    'channels.query': ({ value }) => { if (typeof value === 'string') setYtQuery(value); },
+    'channels.search': ({ signal }) => { signal.throwIfAborted(); if (!signedOut && !ytBusy) return searchChannels(); },
+    'channels.subscribe': ({ inputs, signal }) => { signal.throwIfAborted(); const channel = ytResults.find(item => item.id === inputs.id); if (!signedOut && !ytBusy && channel) return subscribeChannel(channel); },
+    'channels.unsubscribe': ({ inputs, signal }) => { signal.throwIfAborted(); const channel = youtubeConnection?.channels?.find(item => item.id === inputs.id); if (!signedOut && !ytBusy && channel) return unsubscribeChannel(channel); },
+    'filters.name': ({ value }) => { if (typeof value === 'string') setFilterName(value); },
+    'filters.prompt': ({ value }) => { if (typeof value === 'string') setFilterPrompt(value); },
+    'filters.action': ({ value }) => { if (value === 'warn' || value === 'hide') setFilterAction(value); },
+    'filters.create': ({ signal }) => { signal.throwIfAborted(); if (!signedOut) return createFilter(); },
+    'filters.toggle': ({ inputs, signal }) => { signal.throwIfAborted(); const filter = filters.find(item => item.id === inputs.id); if (!signedOut && filter) return toggleFilter(filter); },
+    'filters.remove': ({ inputs, signal }) => { signal.throwIfAborted(); const filter = filters.find(item => item.id === inputs.id); if (!signedOut && filter) return removeFilter(filter); }
+  };
 
   return (
     <PageShell width={1100} columnProps={{ rowGap: 8 }}>
-      <Flex alignItems="baseline" justifyContent="space-between" flexWrap="wrap" rowGap={2}>
-        <Box>
-          <Text as="h1" fontSize="2xl" fontWeight="700">
-            Third-party services
-          </Text>
-          <Text color="var(--tt-muted, #6b7280)" marginTop={1}>
-            Your account library for connected services. Add multiple accounts, choose permissions, and reuse saved authorizations in Thingtime
-            actions.
-          </Text>
-        </Box>
-        <Button as={Link} to="/connections/feed" size="sm" variant="outline" borderRadius="999px">
-          Open connected feed 📡
-        </Button>
-      </Flex>
-
-      {signedOut ? (
-        <Box {...cardStyle} padding={6} textAlign="center">
-          <Text fontWeight="600">Sign in to link your apps</Text>
-          <Text color="var(--tt-muted, #6b7280)" marginTop={1}>
-            Connections belong to your account — log in or register to start linking.
-          </Text>
-          <Flex justifyContent="center" columnGap={3} marginTop={4}>
-            <Button as={Link} to="/login" size="sm" borderRadius="999px">
-              Log in 🗝️
-            </Button>
-            <Button as={Link} to="/register" size="sm" variant="outline" borderRadius="999px">
-              Register ➕
-            </Button>
-          </Flex>
-        </Box>
-      ) : null}
+      <ConnectionsDocument documentKey="connections-overview" blocks={connectionsOverviewBlocks} scopeKey={cacheScope} scope={{ page: { signedOut } }} />
 
       <ServiceCatalog
+        documentKey="services-chatgpt"
         providers={providers.filter((provider) => provider.id === 'chatgpt')}
         connections={connections}
         signedOut={signedOut}
@@ -430,11 +377,13 @@ const ConnectionsContent = ({ ownerId }: { ownerId: string | null }) => {
         openConnect={openConnect}
         unlink={unlink}
         verify={verifyConnection}
-        form={connectForm}
+        submitConnect={submitConnect}
+        cancelConnect={() => setConnecting(null)}
         connectingId={connecting?.id}
       />
       <AIServiceAccounts key={ownerId || 'guest'} ownerId={ownerId} />
       <ServiceCatalog
+        documentKey="services-catalog"
         providers={providers.filter((provider) => provider.id !== 'chatgpt')}
         connections={connections}
         signedOut={signedOut}
@@ -442,112 +391,18 @@ const ConnectionsContent = ({ ownerId }: { ownerId: string | null }) => {
         openConnect={openConnect}
         unlink={unlink}
         verify={verifyConnection}
-        form={connectForm}
+        submitConnect={submitConnect}
+        cancelConnect={() => setConnecting(null)}
         connectingId={connecting?.id}
       />
 
-      {/* virtual YouTube subscription list */}
-      {!signedOut ? (
-        <Box display="flex" flexDirection="column" rowGap={3}>
-          <Box>
-            <Text fontWeight="600">YouTube channels 📺</Text>
-            <Text fontSize="sm" color="var(--tt-muted, #6b7280)">
-              Your Thingtime-managed subscription list — every channel you add merges into one uploads feed.
-              {ytSearchConfigured === false ? ' Name search needs a YouTube API key; channel IDs, URLs, and @handles work now.' : ''}
-            </Text>
-          </Box>
-          {(youtubeConnection?.channels || []).map((channel) => (
-            <Flex key={channel.id} {...cardStyle} padding={3} alignItems="center" columnGap={3}>
-              {channel.thumbnail ? <Image src={channel.thumbnail} alt="" boxSize="28px" borderRadius="full" /> : <Text fontSize="lg">📺</Text>}
-              <Text flex="1" fontWeight="500">
-                {channel.title}
-              </Text>
-              <Button size="xs" variant="ghost" borderRadius="999px" onClick={() => unsubscribeChannel(channel)}>
-                Unsubscribe
-              </Button>
-            </Flex>
-          ))}
-          <Flex {...cardStyle} padding={3} columnGap={2} alignItems="center" flexWrap="wrap" rowGap={2}>
-            <Input
-              flex="1"
-              minWidth="200px"
-              placeholder="Search channels, or paste a channel ID / URL / @handle"
-              value={ytQuery}
-              onChange={(event) => setYtQuery(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') searchChannels();
-              }}
-            />
-            <Button size="sm" borderRadius="999px" onClick={searchChannels} isLoading={ytBusy}>
-              Search
-            </Button>
-          </Flex>
-          {ytResults.map((channel) => (
-            <Flex key={channel.id} {...cardStyle} padding={3} alignItems="center" columnGap={3}>
-              {channel.thumbnail ? <Image src={channel.thumbnail} alt="" boxSize="28px" borderRadius="full" /> : <Text fontSize="lg">📺</Text>}
-              <Text flex="1">{channel.title}</Text>
-              <Button size="xs" borderRadius="999px" onClick={() => subscribeChannel(channel)} isLoading={ytBusy}>
-                Subscribe ➕
-              </Button>
-            </Flex>
-          ))}
-        </Box>
-      ) : null}
-
-      {/* AI feed filters */}
-      <Box display="flex" flexDirection="column" rowGap={3}>
-        <Box>
-          <Text fontWeight="600">AI feed filters 🛡️</Text>
-          <Text fontSize="sm" color="var(--tt-muted, #6b7280)">
-            Describe what to catch in plain language — “warn” veils matched posts behind a Show button, “hide” drops them.
-          </Text>
-        </Box>
-        {filters.map((filter) => (
-          <Flex key={filter.id} {...cardStyle} padding={4} alignItems="center" columnGap={3} flexWrap="wrap" rowGap={2}>
-            <Switch isChecked={filter.enabled} onChange={() => toggleFilter(filter)} />
-            <Box flex="1" minWidth="200px">
-              <Text fontWeight="600">
-                {filter.name}
-                <Text as="span" color="var(--tt-muted, #6b7280)" fontWeight="400" marginLeft={2} fontSize="sm">
-                  {filter.action === 'warn' ? 'warn + Show button' : 'hide'}
-                </Text>
-              </Text>
-              <Text fontSize="sm" color="var(--tt-muted, #6b7280)">
-                {filter.prompt}
-              </Text>
-            </Box>
-            <Button size="sm" variant="ghost" borderRadius="999px" onClick={() => removeFilter(filter)}>
-              Remove
-            </Button>
-          </Flex>
-        ))}
-        {!signedOut ? (
-          <Box {...cardStyle} padding={4} display="flex" flexDirection="column" rowGap={2}>
-            <Flex columnGap={2} flexWrap="wrap" rowGap={2}>
-              <Input
-                flex="1"
-                minWidth="160px"
-                placeholder="Filter name (e.g. Sad news)"
-                value={filterName}
-                onChange={(event) => setFilterName(event.target.value)}
-              />
-              <Select width="auto" value={filterAction} onChange={(event) => setFilterAction(event.target.value === 'hide' ? 'hide' : 'warn')}>
-                <option value="warn">Warn (Show button)</option>
-                <option value="hide">Hide</option>
-              </Select>
-            </Flex>
-            <Textarea
-              placeholder="What should this filter catch? e.g. warn for sad news"
-              value={filterPrompt}
-              onChange={(event) => setFilterPrompt(event.target.value)}
-              rows={2}
-            />
-            <Button size="sm" borderRadius="999px" alignSelf="flex-start" onClick={createFilter}>
-              Add filter
-            </Button>
-          </Box>
-        ) : null}
-      </Box>
+      <ConnectionsDocument documentKey="connections-tools" blocks={connectionToolsBlocks} scopeKey={cacheScope} actions={toolActions}
+        scope={{ page: { signedOut, signedIn: !signedOut },
+          channels: { busy: ytBusy, query: ytQuery, needsSetup: ytSearchConfigured === false,
+            saved: (youtubeConnection?.channels || []).map(({ id, title, thumbnail }) => ({ id, title, thumbnail })),
+            results: ytResults.map(({ id, title, thumbnail }) => ({ id, title, thumbnail })) },
+          filters: { name: filterName, prompt: filterPrompt, action: filterAction,
+            items: filters.map(({ id, name, prompt, action, enabled }) => ({ id, name, prompt, enabled, actionLabel: action === 'warn' ? 'warn + Show button' : 'hide' })) } }} />
     </PageShell>
   );
 };

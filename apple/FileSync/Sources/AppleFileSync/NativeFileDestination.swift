@@ -28,9 +28,11 @@ enum NativeFileDestination {
                 var bytes = [UInt8](repeating: 0, count: MobileFolderReader.maximumReadBytes)
                 while offset < source.size {
                     try Task.checkCancellation()
-                    let n = pread(file, &bytes, Int(min(Int64(bytes.count), source.size - offset)), off_t(offset))
-                    guard n > 0 else { throw Failure.changed }
-                    hash.update(data: Data(bytes.prefix(n))); offset += Int64(n)
+                    try SyncResourceCpuContext.chunk {
+                        let n = pread(file, &bytes, Int(min(Int64(bytes.count), source.size - offset)), off_t(offset))
+                        guard n > 0 else { throw Failure.changed }
+                        hash.update(data: Data(bytes.prefix(n))); offset += Int64(n)
+                    }
                 }
                 guard hash.finalize().map({ String(format: "%02x", $0) }).joined() == source.sha256 else { throw Failure.changed }
             }

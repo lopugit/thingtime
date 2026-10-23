@@ -30,8 +30,8 @@ test('file sync is discoverable, independently copyable ordinary data with pause
  const copy = extendSchemaCopy(source, { name: 'My sync template', fields: [{ name: 'notes', type: 'string' }] });
  assert.equal(copy.ok, true);
  if (copy.ok) { assert.equal(copy.crystal.forkOf, 'schema-file-sync'); assert.equal(validateThingtimeCrystal(['schema'], copy.crystal).ok, true); }
- assert.equal(createApiCapabilitiesManifest(scope.origin).features['api.things'], '1.38.0');
- assert.equal(thingtimeCapabilityManifest(scope.origin).features['api.things'].version, '1.38.0');
+ assert.equal(capabilitySatisfies(createApiCapabilitiesManifest(scope.origin).features['api.things'], '1.40.0'), true);
+ assert.equal(capabilitySatisfies(thingtimeCapabilityManifest(scope.origin).features['api.things'].version, '1.40.0'), true);
  const valid = validateThingtimeCrystal(['file-sync'], { ...config(), treeUri: 'content://private', secret: 'never-store' });
  assert.equal(valid.ok, true); if (valid.ok) assert.deepEqual(valid.crystal, config());
  assert.equal(validateThingtimeCrystal(['file-sync', 'post'], config()).ok, false);

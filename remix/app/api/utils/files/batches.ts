@@ -207,8 +207,9 @@ export function createFileBatchService(
 			);
 		};
 
-		for (let offset = 0; offset < dispatchMembers.length; offset += 8) {
-			const wave = dispatchMembers.slice(offset, offset + 8);
+		const memberConcurrency = Math.min(8, d.configuration.configuration.resourceLimits?.transferConcurrency ?? 8);
+		for (let offset = 0; offset < dispatchMembers.length; offset += memberConcurrency) {
+			const wave = dispatchMembers.slice(offset, offset + memberConcurrency);
 			let waveError: unknown = terminalError;
 			if (!terminal)
 				try {
@@ -289,7 +290,11 @@ export function createFileBatchService(
 							if (!prefix && write.folderId !== write.cloudRootId) return failed(ordinal, 'conflict');
 							if (prefix && (observation.parent?.kind !== 'folder' || observation.parent.id !== write.folderId)) return failed(ordinal, 'conflict');
 							const uploadId = attachmentIdForRequest(owner, write.operation.id);
+              const originRequest = { filename: mutation.path.split('/').at(-1), contentType: 'application/octet-stream', sizeBytes: source.size, requestId: write.operation.id, purpose: 'file',
+                fileSyncOrigin: { version: 1, deviceId: d.scope.deviceId, localRootId: d.scope.rootId, ...(write.cloudRootId ? { cloudRootId: write.cloudRootId } : {}), fileId: write.before?.id ?? write.operation.id, folderId: write.folderId, path: mutation.path } };
+
 							if (input.phase === 'prepare') {
+                let originValidated = false;
 								dispatchCheck();
 								let existing = await deps.fingerprint({ id: owner }, uploadId);
 								if (existing.ok === false && existing.status === 404 && row) {
@@ -308,6 +313,9 @@ export function createFileBatchService(
 										// weight in addition to prepare, without altering canonical leases.
 										if (!(await deps.charge(owner, 'verify', 1, 0))) return failed(ordinal, 'temporarily-unavailable', 429, true);
 										dispatchCheck();
+										const originStamped = await deps.start(owner, originRequest);
+                    if (originStamped.ok === false) return failure(ordinal, originStamped);
+                    originValidated = true;
 										const recovered = await deps.complete(owner, { uploadId });
 										if (recovered.ok === false) return failure(ordinal, recovered);
 										dispatchCheck();
@@ -317,6 +325,11 @@ export function createFileBatchService(
 								if (existing.ok === true) {
 									if (existing.size !== source.size || !equalContentFingerprints(existing.fingerprint, source.fingerprint))
 										return failed(ordinal, 'source-changed');
+                  if (!originValidated) {
+                    const recoveredOrigin = await deps.start(owner, originRequest);
+                    if (recoveredOrigin.ok === false) return failure(ordinal, recoveredOrigin);
+                  }
+
 									return {
 										ordinal,
 										status: 'verified',
@@ -328,13 +341,7 @@ export function createFileBatchService(
 								const checksum = Buffer.from(row.sha256, 'hex');
 								if (createHash('sha256').update(checksum).digest('hex') !== source.fingerprint?.sha256) return failed(ordinal, 'source-changed');
 								dispatchCheck();
-								const started = await deps.start(owner, {
-									filename: mutation.path.split('/').at(-1),
-									contentType: 'application/octet-stream',
-									sizeBytes: source.size,
-									requestId: write.operation.id,
-									purpose: 'file'
-								});
+								const started = await deps.start(owner, originRequest);
 								if (started.ok === false) return failure(ordinal, started);
 								if (started.upload.id !== uploadId || started.upload.partCount !== 1) return failed(ordinal, 'invalid-member');
 								// Ready/lost-verify uploads reconcile through verify, never sign another object.

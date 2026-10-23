@@ -1,7 +1,9 @@
+import { activityManager } from '~/activity/activityManager';
 import { useEffect } from 'react';
 import { rootIdentity } from '../utils/rootIdentity';
 import { createNativeSyncHost, getNativeSyncAdapter, isNativeSyncAdapterCurrent } from './nativeSyncHost.client';
 import { nativeSyncTasks, startNativeSyncTask } from './nativeSyncTasks.client';
+import { cancelSyncForActivity } from './syncTaskRuntime';
 import { openSyncJournal } from './journal.client';
 import { MAX_SYNC_JOBS_PER_ACCOUNT, SYNC_JOB_PAGE_SIZE, SYNC_JOBS_CHANGED_EVENT, syncJobDue, syncJobEnabled, type SyncJob } from './syncJobJournal';
 import { setDesktopSyncScheduled } from './desktopSyncWindow.client';
@@ -13,7 +15,7 @@ let discovering = false;
  * selected origin and verifies the account/device/grant again for each job. */
 export async function resumeNativeSyncJobs(ownerId: string, generation: number, signal: AbortSignal) {
 	const adapter = getNativeSyncAdapter();
-	if (discovering || nativeSyncTasks.read()?.active || !adapter || (adapter.platform === 'ios' && document.visibilityState === 'hidden')) return;
+	if (!activityManager.enabled('sync.automation') || !activityManager.enabled('sync.execution') || discovering || nativeSyncTasks.read()?.active || !adapter || (adapter.platform === 'ios' && document.visibilityState === 'hidden')) return;
 	discovering = true;
 	let journal: Awaited<ReturnType<typeof openSyncJournal>> | undefined;
 	const bridge = adapter.platform === 'macos' ? adapter.bridge : undefined;
@@ -48,20 +50,23 @@ export async function resumeNativeSyncJobs(ownerId: string, generation: number, 
 			} catch { currentScope(); origins.set(job.scope.deviceId, null); }
 		}
 		const selected = (job: SyncJob) => origins.get(job.scope.deviceId) === job.scope.origin;
-		const retained = (job: SyncJob) => syncJobEnabled(job) && selected(job);
+		const retained = (job: SyncJob) => !nativeSyncTasks.isPaused(job.scope) && syncJobEnabled(job) && selected(job);
 		if (bridge) await setDesktopSyncScheduled(discovered.some(retained), bridge); currentScope();
 		for (const job of discovered) {
 			currentScope();
 			if (nativeSyncTasks.read()?.active) break;
-			if (selected(job) && syncJobDue(job, Date.now())) await startNativeSyncTask(job.reviewed, job.scope, generation, job);
+			if (!nativeSyncTasks.isPaused(job.scope) && selected(job) && syncJobDue(job, Date.now())) await startNativeSyncTask(job.reviewed, job.scope, generation, job);
 		}
 		if (bridge) await setDesktopSyncScheduled((await readJobs()).some(retained), bridge); currentScope();
 	} finally { journal?.close(); discovering = false; }
 }
 
 export function NativeSyncBootstrap({ ownerId, generation }: { ownerId: string; generation: number }) {
-	useEffect(() => {
+	useEffect(() => { activityManager.define({id:'sync.execution',title:'File transfer and filesystem indexing',kind:'watcher',background:true,detail:'Disable to cancel the current indexing/transfer runner and prevent manual or automatic admission. Saved data and jobs are retained.'}); }, []);
+	useEffect(() => activityManager.register({id:'sync.automation',title:'Automatic file sync discovery',kind:'schedule',background:true,detail:'Owns saved-job discovery, reconnect/online events and the 30-second fallback. Disable to release all of them and stop active sync.'}, activitySignal => {
 		const controller = new AbortController();
+		const disabled = () => { if(activitySignal.reason === 'disabled') void cancelSyncForActivity(nativeSyncTasks).catch(() => {}); };
+		activitySignal.addEventListener('abort',disabled,{once:true});
 		let queued: ReturnType<typeof setTimeout> | undefined;
 		const adapter = getNativeSyncAdapter();
 		const bridge = adapter?.platform === 'macos' ? adapter.bridge : undefined;
@@ -80,10 +85,11 @@ export function NativeSyncBootstrap({ ownerId, generation }: { ownerId: string; 
 		window.addEventListener('online', kick); window.addEventListener(SYNC_JOBS_CHANGED_EVENT, kick);
 		return () => {
 			controller.abort(); clearTimeout(queued); clearInterval(timer);
+			activitySignal.removeEventListener('abort',disabled);
 			document.removeEventListener('visibilitychange', kick); window.removeEventListener('pageshow', kick);
 			window.removeEventListener('online', kick); window.removeEventListener(SYNC_JOBS_CHANGED_EVENT, kick);
 			if (bridge) void setDesktopSyncScheduled(false, bridge).catch(() => {});
 		};
-	}, [ownerId, generation]);
+	}), [ownerId, generation]);
 	return null;
 }

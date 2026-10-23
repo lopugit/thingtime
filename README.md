@@ -4633,36 +4633,52 @@ configured. Local development without a configured secret uses an ephemeral
 key, so refreshing comments after a server restart starts a new cursor chain.
 
 
-### Reusable local video tools
+### Reusable local image and video tools
 
-Install **Local video tools** (`media-tools`) from Builder's app suites on an
-origin advertising `api.webpages-suites-install >= 1.4.0`. The normal installation
-creates private, owned Page, Component and Action Things. Its `tt-web-platform`
-program stores the document, CSS, selectors and editable encoding settings;
-**Save edited component** persists the edited program and current defaults for
-reuse. Neither the selected file nor the output bytes are saved by this Action.
-See `/docs/builder#local-media` for the declarative contract and capability
-inspection guidance shared with Lopu.
+Author image/video tools directly as saved Thingtime Pages and Components, using
+ordinary editable child elements inside the reusable `tt-media-pipeline` adapter.
+This framework release does not author or install a compressor page. The legacy
+`media-tools` suite keeps its existing video definitions. New intrinsic blocks
+require `api.things >= 1.41.0`, `api.things-update >= 1.12.0` and
+`api.webpages-resolve >= 1.8.0` on the selected origin. Save through ordinary
+Builder controls. Selected files and encoded output stay transient on device.
+Existing saved `tt-web-platform` media programs mount controls automatically and
+retain their save Action.
 
-Encoding runs on the selected device through WebCodecs and the pinned
-[Mediabunny 1.61.6 source](https://github.com/Vanilagy/mediabunny/tree/v1.61.6).
-Its unmodified source is MPL-2.0; the shipped notice is at
-`/platform/mediabunny-LICENSE.txt`. No FFmpeg service, provider key, upload,
-external request or additional secret is required. Existing account/database
-configuration is only needed to install or save reusable Things. HTTPS (or
-localhost) and browser codec support are required. MP4 uses H.264/AAC; WebM uses
-VP9/Opus. Unsupported sources or codecs produce an error, including unsupported
-audio rather than silently dropping it. Only primary video/audio are retained;
-extra tracks, subtitles and metadata are omitted. Output can be larger than input;
-the receipt reports actual byte counts. Large files depend on available memory.
+Images use pinned [ImageMagick WASM](https://github.com/dlemstra/magick-wasm)
+and [resvg WASM](https://github.com/yisibl/resvg-js), shipped as same-origin build
+assets. Actual tested inputs include JPEG, PNG, WebP, GIF, BMP, TIFF, ICO, HEIC and
+static SVG paths. Other bundled raster decoders may work; unsupported inputs fail
+explicitly. Output choices are WebP (Automatic), JPEG, PNG, AVIF and GIF; quality
+controls lossy formats and PNG stays lossless. Aspect ratio and orientation are
+preserved, without upscaling. Metadata is stripped. Transparent JPEG conversion
+requires choosing a background explicitly. Animation keeps frames/timing/loops
+in supported WebP/GIF outputs; APNG, multi-page/layered images and incompatible
+animation outputs are refused rather than flattened. SVG is rasterized and only
+the supported static subset is accepted: no text requiring fonts, embedded or
+external images, scripts or animation. Transparent GIF output is refused in favor
+of WebP. WASM and available device memory constrain very large jobs; cancellation
+terminates the worker and leaves the original unchanged. Output can be larger;
+actual before/after byte counts are always reported.
 
-The fixed encoding worker runs on the secure host because opaque iframes cannot
-access WebCodecs. The editable document remains in its opaque sandbox. The host
-validates file messages against that frame and run, resolves settings from its
-validated saved program, and terminates work on cancel, replacement or unmount.
-Custom hosts must serve `/assets/mediaWorker-*.js` with `mediaWorkerCsp` from
-`remix/scripts/csp.mjs` (no network or child workers). Vite and Vercel configure
-this automatically; `verify:vercel-output` asserts the worker and scoped header.
+Videos continue through the pinned
+[Mediabunny 1.61.6 source](https://github.com/Vanilagy/mediabunny/tree/v1.61.6)
+and browser WebCodecs, using MP4 H.264/AAC or WebM VP9/Opus when supported.
+Only primary video/audio tracks are retained; extra tracks, subtitles and
+metadata are omitted. Audio is never silently removed. The MPL-2.0 Mediabunny
+source notice remains at `/platform/mediabunny-LICENSE.txt`; image-engine notices
+are in `remix/THIRD_PARTY_NOTICES.md`.
+
+No upload, server encoder, external codec CDN, provider key or new secret is
+required. Existing account/database configuration is needed only to install or
+save Things. Selected and output bytes remain local. The host fetches only the
+public bundled WASM engines, then passes their bytes to a fixed terminable worker
+whose CSP denies network and child workers. `wasm-unsafe-eval` is scoped to that
+worker's policy, not the application shell; it enables WebAssembly compilation,
+not authored JavaScript. ImageMagick denies external delegates and coders; its
+virtual filesystem has only codec-internal temporary memory paths. Custom hosts
+must serve `/assets/mediaWorker-*.js` with `mediaWorkerCsp` from
+`remix/scripts/csp.mjs`. Legacy editable documents remain opaque sandboxed frames.
 
 Browser regression on macOS: install FFmpeg/ffprobe, a task-owned Chrome for
 Testing binary and Playwright outside the repository. Set `PLAYWRIGHT_MODULE`
@@ -4994,6 +5010,39 @@ now edits connections through this API. For a browser-only regression, open
 production editor with synthetic API/native responses and never accesses files.
 Native approval persistence and transfer workers remain in the
 [full sync acceptance ledger](docs/mobile-file-sync.md).
+
+Optional per-connection resource limits use configuration version 3. Negotiate
+`api.things` 1.39.0 and `api.file-sync-batches` 1.2.0 against the selected origin
+before saving/activating them, and require the native `fileResourceLimitsVersion`
+1.0.0 capability before execution. Upload/download ceilings are decimal bit rates
+in the editor (Kbps/Mbps/Gbps), stored as bytes per second and shared across that
+connection's transfers. Transfer and index concurrency are maximums, not promises
+of parallelism; host safety and CPU backpressure can lower the effective values.
+Blank controls preserve existing defaults. CPU percent is an averaged upper
+budget normalized to total available machine CPU, attributed to this connection's
+indexer, source IO and transport; it does not change other apps' priorities.
+The initial implementation conservatively allocates one third of that CPU budget
+to each scope and does not borrow unused shares. Unsupported native clients fail
+closed rather than silently ignoring limits. CPU-limited downloads and two-way
+sync additionally negotiate `api.attachment-content` 1.17.0 and native
+`fileDownloadVersion` 1.0.0 before admission. The authenticated content endpoint
+returns a private, no-store, 60-second signed target for the exact stored object
+version and signed byte range. The host resolves that target independently and
+the task-owned transport downloads directly without copying account cookies or
+processing payload bytes in the renderer. Targets are ephemeral and never saved
+in progress or journals. Custom storage providers must implement the optional
+`signDownloadRange` adapter; unsupported providers fail closed. The S3 adapter
+reuses the configured credentials and existing versioned GetObject permission.
+No new secret or provider setting is
+needed. Direct object transfers retain existing scoped upload authorization.
+
+Pause cancels current work immediately and saves a per-connection stop independently
+of progress refreshes. Resume is explicit. A failed pause save is reported; the
+current process blocks automatic restart, but reopening may recover the old saved
+job. Keep the device folder selected to resume its journaled progress. Intentional
+rate/CPU waits do not consume network-stall deadlines; actual stalled IO remains
+bounded, and cancelling releases unused pacing reservations before Resume.
+
 
 
 ### Running a foreground mobile folder upload
@@ -6637,3 +6686,40 @@ No source watermark or baseline is advanced by this recovery decision.
 These changes target folder-constrained file frontiers. Controlled tests and
 isolated native/Mongo fixtures are distinct evidence; installed same-job
 throughput and byte-identical recovery remain release acceptance requirements.
+
+# GitHub-built Vercel deployments
+
+Thingtime builds production, custom environments and previews on standard
+GitHub-hosted Ubuntu runners. Vercel hosts the resulting Build Output API
+artifact; it does not compile application source. The protected implementation
+lives on `github-actions` in `.github/workflows/deploy-vercel-prebuilt.yml`.
+Product branches carry a thin listener only. Existing PR preview controllers
+already use the same separate build/publish pattern.
+
+`main` maps to production, branches matching Vercel's custom-environment
+matchers map to that environment (`develop` today), and other product branches
+map to Preview. The default-branch listener also observes requested push runs
+of Web CI and Lopu CodeQL so older branches need not contain the new listener.
+Duplicate ready SHAs are skipped. Deleted, stale and fork PR events never
+authorize a deployment. Use **Actions → Vercel prebuilt deployments → Run
+workflow**, on `main`, to deploy a branch manually; `auto` selects its target.
+Production always requires the current `main` head. Use `preview` explicitly
+to test the production branch without moving production.
+
+Fork setup: create a GitHub environment named `vercel-prebuilt-control`, restrict
+it to the default branch, add `VERCEL_DEPLOY_TOKEN` as an environment secret,
+and set non-secret environment variables `VERCEL_PROJECT_ID`,
+`VERCEL_PROJECT_NAME`, `VERCEL_TEAM_ID` and `VERCEL_TEAM_SLUG` for your own project.
+Keep deployment credentials out of repository-level secrets and build jobs.
+Point reusable workflow references at your protected controller branch.
+Disconnect Vercel's native Git integration and remove its source deploy hooks
+after proving a GitHub-built deployment. Keep `git.deploymentEnabled: false`
+and the always-skip ignore command as repository safeguards. Existing runtime
+variables, vault selection, regions, domains and production cron definitions
+remain managed by their normal contracts. The publisher copies only regions,
+Fluid settings and production cron definitions from the immutable source
+configuration; it never executes source in its credential-bearing job.
+
+See [Vercel deployment references](VERCEL_DEPLOYMENTS.md) for the project and
+verification receipts. Standard Actions usage for this public repository is
+subject to GitHub's current plan terms; Vercel hosting/runtime charges remain.

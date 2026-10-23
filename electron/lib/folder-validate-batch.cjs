@@ -9,17 +9,26 @@ function folderBatchCanonicalBytes(d) {
     closed(d, ['version', 'kind', 'batchId', 'scope', 'configuration', 'members']);
     const s = closed(d.scope, ['origin', 'ownerId', 'dataPlane', 'rootId', 'deviceId']);
     const saved = closed(d.configuration, ['id', 'updatedAt', 'configuration']);
-    const c = closed(saved.configuration, ['configurationVersion', 'name', 'deviceId', 'localRootId', 'sourceKind', 'remoteFolderId', 'mode', 'paused', 'propagateDeletes', 'network', 'chargingOnly', 'excludedPaths', 'ignoreRules']);
+    const c = closed(saved.configuration, ['configurationVersion', 'name', 'deviceId', 'localRootId', 'sourceKind', 'remoteFolderId', 'mode', 'paused', 'propagateDeletes', 'network', 'chargingOnly', 'excludedPaths', 'ignoreRules', 'resourceLimits']);
     if (d.version !== 1 || d.kind !== 'folders' || !uuid(d.batchId) || s.dataPlane !== 'home' || saved.id !== s.rootId || c.deviceId !== s.deviceId ||
-        ![1, 2].includes(c.configurationVersion) || !['backup', 'upload'].includes(c.mode) || c.paused !== false || c.propagateDeletes !== false ||
+        ![1, 2, 3].includes(c.configurationVersion) || !['backup', 'upload'].includes(c.mode) || c.paused !== false || c.propagateDeletes !== false ||
         (c.sourceKind !== undefined && c.sourceKind !== 'folder') || !Array.isArray(c.excludedPaths) || c.excludedPaths.length > 100 ||
         typeof c.chargingOnly !== 'boolean' || (c.ignoreRules !== undefined && typeof c.ignoreRules !== 'string') ||
         !Array.isArray(d.members) || !d.members.length || d.members.length > 256 || Buffer.byteLength(JSON.stringify(d)) > 327680) throw invalid();
     const ignoreRules = (c.ignoreRules ?? '').replace(/\r\n/g, '\n');
-    if (ignoreRules && c.configurationVersion !== 2) throw invalid();
-    const fields = ['thingtime-folder-batch-v1', d.batchId, s.origin, s.ownerId, s.dataPlane, s.rootId, s.deviceId,
-        saved.id, saved.updatedAt, ignoreRules ? '2' : '1', c.name.trim(), c.deviceId, c.localRootId, c.sourceKind ?? 'folder', c.remoteFolderId,
-        c.mode, '0', '0', c.network, c.chargingOnly ? '1' : '0', String(c.excludedPaths.length), ...c.excludedPaths, ignoreRules, String(d.members.length)];
+    if (ignoreRules && c.configurationVersion === 1) throw invalid();
+    const resourceKeys = ['uploadBytesPerSecond', 'downloadBytesPerSecond', 'transferConcurrency', 'indexingConcurrency', 'cpuPercent'];
+    const limits = c.resourceLimits === undefined ? undefined : closed(c.resourceLimits, resourceKeys);
+    const limitFields = resourceKeys.map(key => {
+        const n = limits?.[key]; if (n === undefined) return '';
+        if (typeof n !== 'number' || !Number.isFinite(n) || n <= 0 || (['transferConcurrency', 'indexingConcurrency'].includes(key) && !Number.isSafeInteger(n)) || (key === 'cpuPercent' && (!Number.isInteger(n) || n < 1 || n > 100))) throw invalid();
+        const bytes = Buffer.alloc(8); bytes.writeDoubleBE(n); return bytes.toString('hex');
+    });
+    const hasLimits = limitFields.some(Boolean);
+    if ((hasLimits && c.configurationVersion !== 3) || (!hasLimits && c.configurationVersion === 3)) throw invalid();
+    const fields = [hasLimits ? 'thingtime-folder-batch-v2' : 'thingtime-folder-batch-v1', d.batchId, s.origin, s.ownerId, s.dataPlane, s.rootId, s.deviceId,
+        saved.id, saved.updatedAt, hasLimits ? '3' : ignoreRules ? '2' : '1', c.name.trim(), c.deviceId, c.localRootId, c.sourceKind ?? 'folder', c.remoteFolderId,
+        c.mode, '0', '0', c.network, c.chargingOnly ? '1' : '0', String(c.excludedPaths.length), ...c.excludedPaths, ignoreRules, ...(hasLimits ? limitFields : []), String(d.members.length)];
     const paths = new Set(), ids = new Set(), inodes = new Set(), destinations = new Set();
     for (const [index, member] of d.members.entries()) {
         closed(member, ['ordinal', 'write', 'parent']); const w = closed(member.write, ['operation', 'scope', 'folderId', 'before', 'cloudRootId']);

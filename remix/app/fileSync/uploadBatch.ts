@@ -1,4 +1,4 @@
-import { parseFileSyncConfiguration } from './configuration';
+import { parseFileSyncConfiguration, canonicalResourceLimitFields } from './configuration';
 import type { SavedFileSyncConfiguration } from './configuredPlan';
 import { parseCloudWrite, type CloudWrite } from './cloudWrite';
 import { cloudFileSyncEntry, parseCloudFile, type CloudFile } from './cloudFile';
@@ -16,7 +16,7 @@ import {
 } from './reconcile';
 import { parseCloudInventoryNode, type CloudInventoryNode } from './cloudInventory';
 
-export const UPLOAD_BATCH_REQUIREMENTS = { 'api.file-sync-batches': '1.0.0' } as const;
+export const UPLOAD_BATCH_REQUIREMENTS = { 'api.file-sync-batches': '1.2.1' } as const;
 export const UPLOAD_BATCH_FILES = 256;
 export const UPLOAD_BATCH_FILE_BYTES = 256 * 1024;
 export const UPLOAD_BATCH_BYTES = 32 * 1024 * 1024;
@@ -148,7 +148,8 @@ export function parseBatchScopeConfiguration(scopeValue: unknown, savedValue: un
 			'network',
 			'chargingOnly',
 			'excludedPaths',
-			'ignoreRules'
+			'ignoreRules',
+			'resourceLimits'
 		]) ||
 		scope.dataPlane !== 'home' ||
 		saved.id !== scope.rootId ||
@@ -239,7 +240,7 @@ export function uploadBatchCanonicalBytes(value: unknown): Uint8Array {
 		saved = d.configuration,
 		c = saved.configuration;
 	const fields = [
-		'thingtime-upload-batch-v1',
+		c.resourceLimits ? 'thingtime-upload-batch-v2' : 'thingtime-upload-batch-v1',
 		d.batchId,
 		s.origin,
 		s.ownerId,
@@ -262,6 +263,7 @@ export function uploadBatchCanonicalBytes(value: unknown): Uint8Array {
 		String(c.excludedPaths.length),
 		...c.excludedPaths,
 		c.ignoreRules ?? '',
+		...(c.resourceLimits ? canonicalResourceLimitFields(c.resourceLimits) : []),
 		String(d.members.length)
 	];
 	for (const { ordinal, write } of d.members) {

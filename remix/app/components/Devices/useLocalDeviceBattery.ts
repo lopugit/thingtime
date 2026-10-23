@@ -1,3 +1,4 @@
+import { activityInterval, clearActivityInterval, activityEvents } from '~/activity/activityManager';
 import { useEffect, useState } from 'react';
 
 import { getElectronBridge } from '~/utils/electronBridge';
@@ -64,12 +65,12 @@ export const useLocalDeviceBattery = (accountId: string | null | undefined, devi
 			}
 		};
 		void refresh();
-		const timer = window.setInterval(() => void refresh(), 15_000);
-		document.addEventListener('visibilitychange', refresh);
+		const timer = activityInterval('timer:components/Devices/useLocalDeviceBattery:1', 'Device battery', () => refresh(), 15_000);
+		activityEvents(document, 'events:components/Devices/useLocalDeviceBattery', 'useLocalDeviceBattery').addEventListener('visibilitychange', refresh);
 		return () => {
 			active = false;
-			window.clearInterval(timer);
-			document.removeEventListener('visibilitychange', refresh);
+			clearActivityInterval(timer);
+			activityEvents(document, 'events:components/Devices/useLocalDeviceBattery', 'useLocalDeviceBattery').removeEventListener('visibilitychange', refresh);
 		};
 	}, [accountId, deviceId, eligible, key]);
 	return eligible && latest?.key === key ? latest.battery : null;

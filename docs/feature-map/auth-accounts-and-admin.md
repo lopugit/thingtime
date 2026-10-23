@@ -97,7 +97,14 @@ overlapping tokens in full without rewriting generated replacement markers. Fixe
 redirects and propagate cancellation; ordinary key/value fields are data.
 OpenAI API/Claude Code OAuth cards reuse `lopu/vault`, keeping Lopu's selectable providers
 and Secure Vault as the same records. See README's third-party setup section
-and TESTING's multi-account, callback, rotation and cache isolation checklist.
+and TESTING's multi-account, callback, rotation and cache isolation checklist. The uncapped-data integration negotiates Things 1.42.0, Things update 1.13.0 and Actions run 1.39.0 to avoid collisions with independently shipped media/sync contracts; saved-service browser requests preserve opaque pagination tokens.
+Connections layouts are intrinsic editable documents (`serviceCatalogBlocks`,
+`aiServiceBlocks`, `connectionToolsBlocks`). `TransientBlockHost` exposes only
+validated action names and public display projections; credentials are read
+from the current fieldset during explicit submission. Enter/required-field
+handling stays scoped to that fieldset, and origin/account/edit transitions
+revoke pending adapter work. Credential submission bodies are omitted from
+the DevKit log even when provider field names do not identify them as secrets.
 
 ChatGPT hosted identity uses an approved client, verified OIDC ID tokens and
 no inference grant. Facebook identity and posts are separate grants. Account

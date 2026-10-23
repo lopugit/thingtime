@@ -8,7 +8,7 @@ import type { SyncScope } from '~/fileSync/reconcile';
 import { TransientBlockHost } from '../Builder/TransientBlockHost';
 import { WebpageBlocksRenderer } from '../Builder/WebpageBlocksRenderer';
 import { SettingsDocumentHost, type SettingsDocumentHostProps } from '../Settings/SettingsDocumentHost';
-import { priorityReadinessBlocks, priorityReadinessDisplay, syncProgressBlocks, syncProgressDisplay, type SyncProgressBranch } from './syncProgressBlocks';
+import { syncResourceStatusBlocks, syncResourceStatusDisplay, priorityReadinessBlocks, priorityReadinessDisplay, syncProgressBlocks, syncProgressDisplay, type SyncProgressBranch } from './syncProgressBlocks';
 
 export type SyncProgressViewerProps = {
 	scopeKey: string; series?: TransferSpeedTrackersProps['series']; descriptor?: SyncProgressDescriptor | null; progress?: ForegroundSyncProgress;
@@ -19,8 +19,11 @@ export type SyncProgressViewerProps = {
 };
 const MAX_OPEN_BRANCHES = 8;
 export function SyncProgressViewer(props: SyncProgressViewerProps) {
-	const parsed = React.useMemo(() => { try { return { descriptor: props.descriptor ? parseSyncProgressDescriptor(props.descriptor) : null, invalid: false }; }
-		catch { return { descriptor: null, invalid: true }; } }, [props.descriptor]);
+	// Native snapshots may recreate this small descriptor on every byte event.
+	// Keep the journal source stable until its actual identity changes.
+	const descriptorJson = JSON.stringify(props.descriptor ?? null);
+	const parsed = React.useMemo(() => { try { const value = JSON.parse(descriptorJson); return { descriptor: value ? parseSyncProgressDescriptor(value) : null, invalid: false }; }
+		catch { return { descriptor: null, invalid: true }; } }, [descriptorJson]);
 	return <SyncProgressSession key={`${props.scopeKey}:${parsed.descriptor?.run.id ?? 'indexing'}`} {...props} descriptor={parsed.descriptor}
 		invalidDescriptor={parsed.invalid} />;
 }
@@ -34,12 +37,12 @@ function SyncProgressSession({ scopeKey, series, descriptor, progress, currentSc
 	const focusRef = React.useRef(focusedFolder); focusRef.current = focusedFolder;
 	const latest = React.useRef(branches); latest.current = branches;
 	const requests = React.useRef(new Map<string, AbortController>());
-	const read = React.useCallback(async (parent: string, history?: (string | null)[]) => {
+	const read = React.useCallback(async (parent: string, history?: (string | null)[], quiet=false) => {
 		if (!source) return;
 		requests.current.get(parent)?.abort();
 		const controller = new AbortController(); requests.current.set(parent, controller);
 		const trail = history ?? latest.current[parent]?.history ?? [];
-		setBranches(previous => ({ ...previous, [parent]: { ...previous[parent], history: trail, busy: true, error: '' } }));
+		setBranches(previous => ({ ...previous, [parent]: { ...previous[parent], history: trail, busy: quiet && previous[parent]?.page ? false : true, error: '' } }));
 		try {
 			const page = await projectSyncProgress(source, { parent, after: trail.at(-1) ?? null, activePath: progressRef.current?.path, signal: controller.signal });
 			if (!controller.signal.aborted) setBranches(previous => {
@@ -65,7 +68,7 @@ function SyncProgressSession({ scopeKey, series, descriptor, progress, currentSc
 		const timer = setTimeout(() => {
 			lastRead.current = Date.now();
 			const final = ['complete', 'retained'].includes(stage);
-			for (const parent of Object.keys(latest.current)) if (final || !requests.current.has(parent)) void read(parent);
+			for (const parent of Object.keys(latest.current)) if (final || !requests.current.has(parent)) void read(parent, undefined, true);
 		}, delay);
 		return () => clearTimeout(timer);
 	}, [source, read, confirmed, stage]);
@@ -118,7 +121,7 @@ function SyncProgressSession({ scopeKey, series, descriptor, progress, currentSc
 		{({ blocks, chrome, editing }) => <TransientBlockHost scopeKey={scopeKey} scope={syncProgressDisplay(displayBranches, progress, status, !!source, message, focusedFolder, priorities.enabled, priorities.disabled)} actions={actions} enabled={!editing}>
 			<WebpageBlocksRenderer blocks={blocks} componentsByRef={{}} chrome={chrome} />
 		</TransientBlockHost>}
-	</SettingsDocumentHost><PriorityReadinessViewer scopeKey={scopeKey} progress={progress} state={status} accountTransport={accountTransport} /><TransferSpeedTrackers scopeKey={scopeKey} stage={progress?.stage} state={status === 'running' && progress?.stage === 'complete' ? 'complete' : status} series={series} accountTransport={accountTransport} /></>;
+	</SettingsDocumentHost><SyncResourceStatusViewer scopeKey={scopeKey} progress={progress} state={status} accountTransport={accountTransport} /><PriorityReadinessViewer scopeKey={scopeKey} progress={progress} state={status} accountTransport={accountTransport} /><TransferSpeedTrackers scopeKey={scopeKey} stage={progress?.stage} state={status === 'running' && progress?.stage === 'complete' ? 'complete' : status} series={series} accountTransport={accountTransport} /></>;
 }
 
 function PriorityReadinessViewer({ scopeKey, progress, state, accountTransport }: {
@@ -128,6 +131,18 @@ function PriorityReadinessViewer({ scopeKey, progress, state, accountTransport }
  if (!display.hasPriorityReadiness) return null;
  return <SettingsDocumentHost documentKey="file-sync-priority-readiness" defaultDocument={priorityReadinessBlocks} scopeKey={scopeKey} title="Upload priority readiness" accountTransport={accountTransport}>
   {({ blocks, chrome, editing }) => <TransientBlockHost scopeKey={scopeKey} enabled={!editing} actions={{}} scope={{ sync: display }}>
+   <WebpageBlocksRenderer blocks={blocks} componentsByRef={{}} chrome={chrome} />
+  </TransientBlockHost>}
+ </SettingsDocumentHost>;
+}
+
+function SyncResourceStatusViewer({ scopeKey, progress, state, accountTransport }: {
+ scopeKey: string; progress?: ForegroundSyncProgress; state: SyncProgressState; accountTransport?: SettingsDocumentHostProps['accountTransport'];
+}) {
+ const display = syncResourceStatusDisplay(progress, state);
+ if (!progress?.resources) return null;
+ return <SettingsDocumentHost documentKey="file-sync-resource-status" defaultDocument={syncResourceStatusBlocks} scopeKey={scopeKey} title="Effective sync resources" accountTransport={accountTransport}>
+  {({ blocks, chrome, editing }) => <TransientBlockHost scopeKey={scopeKey} enabled={!editing} actions={{}} scope={display}>
    <WebpageBlocksRenderer blocks={blocks} componentsByRef={{}} chrome={chrome} />
   </TransientBlockHost>}
  </SettingsDocumentHost>;
