@@ -12964,3 +12964,19 @@ separate from deterministic discovery/lease tests.
   cursors and cancels pending reads on account change/unmount.
 
 - Device sync correction: a fresh dedicated sync page keeps Manage sync connections collapsed; the Thing page exposes Parent paths with raw Thing data switched off. Explicit scanning remains required.
+
+# Prebuilt-only Vercel deployments (2026-10-23)
+
+- Run `node --test scripts/vercel-root-flow.test.mjs`: all source-build ignore
+  decisions skip, remote source compilation refuses, and symlinks survive
+  staging without replacing a known-good artifact after a failed build.
+- Run the protected controller's `deploy-vercel-prebuilt.test.mjs` and the
+  existing preview/extractor self-tests. Check production-source restrictions,
+  custom-environment matching, fork/stale-event rejection, exact deployment
+  identity, and absence of credentials in the GitHub build job.
+- Deploy a preview, the stable custom develop environment and production from
+  Actions. Verify each exact source SHA and target in Vercel, the GitHub runner
+  build log, prebuilt upload metadata, root/index/assets/API and the relevant
+  stable domains. Inspect the source-build controls and confirm no native Git
+  link or source deploy hook remains. A repeated unchanged request must skip
+  compilation. Keep production runtime charges distinct from build charges.
