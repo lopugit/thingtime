@@ -96,11 +96,25 @@ fixture boundary, coverage, stream recovery and Builder acceptance.
 
 - [ ] After merging another feature, password title search still filters before pagination, preserves q across pages, and both manifests advertise api.passwords 1.2.0; client and route search tests remain present.
 
-## Reusable local video compression
+## Reusable local image and video compression
 
+- [ ] File selection is visible immediately on both the intrinsic page and a
+      previously saved Web Platform media program, without Run example. Change
+      settings after selecting a file; Start must use them without losing it.
+- [ ] Compress PNG/JPEG/TIFF/HEIC and animated GIF fixtures locally. Independently
+      decode outputs: compare dimensions, alpha, orientation, frames, delays and
+      loops, including optimized delta rectangles. Duplicate two compressor instances; each native file label must target its own input. JPEG transparency requires an explicit background. APNG, layered or
+      multi-page images, unsupported SVG and invalid files fail clearly.
+- [ ] Cancel while image codecs load and while encoding; stale jobs cannot
+      publish a preview/download. Asset loading fetches public same-origin WASM
+      only; selected bytes never enter a request. The worker still denies network.
+- [ ] In the actual Builder, edit nested heading text, a label, a numeric field,
+      a button and image preview independently; move/duplicate a control, save,
+      reload and verify the live compressor. Keep installed/deployed acceptance
+      separate from the isolated regression fixture.
 - [ ] Install `media-tools` as the intended account; inspect the returned owned
-      Page, Component and Action. An origin with suite capability 1.3.0 refuses
-      this install before mutation; 1.4.0 accepts it.
+      Page, Component and Action. An origin with suite capability below 1.7.0 refuses
+      this install before mutation; compatible 1.7.0 accepts it.
 - [ ] Run the isolated browser flow documented in README: actual WebCodecs
       conversion, MP4 H.264/AAC, WebM VP9/Opus and explicit audio removal. Compare
       downloaded bytes, codecs, dimensions, duration and tracks using ffprobe.
