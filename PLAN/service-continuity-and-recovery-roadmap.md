@@ -143,6 +143,7 @@ never creates false success or a security bypass.
   version, confirmation, quota, and moderation at replay time.
 - Bound timeout, retry, backoff, jitter, concurrency, and circuit behavior by
   dependency and request budget. Shed optional work before core paths.
+- Treat the scoped sync controls merged by [PR #1086](https://github.com/lopugit/thingtime/pull/1086) as a useful feature-level control, not a service-wide reliability guarantee. Its implementation record reports immediate per-connection pause fencing and optional transfer/index/CPU ceilings, while signed-installed-bundle and deployed-origin acceptance remain pending. Close that evidence gap through [TODO 28](../TODO/claude-todo/28-service-continuity-and-recovery.md) before claiming release-level behavior; see the [evidence ledger](../NOTES/service-continuity-and-recovery-baseline.md).
 - Keep first-party data and basic composition useful when optional media,
   email, AI, integration, ranking, or preview services fail.
 - Use Lopu for actionable user-facing errors, with accessible non-color state,
@@ -183,6 +184,60 @@ environment and demonstrate semantic correctness within approved objectives.
 
 **Gate:** the first critical recovery profile meets owner-approved semantic,
 security, deletion, and timing criteria twice from clean environments.
+
+#### Native small-file backup integration gate
+
+This is a focused acceptance slice of M3, not a second backup architecture.
+See the [continuity evidence ledger](../NOTES/service-continuity-and-recovery-baseline.md#evidence-ledger)
+for the dated PR observations and their confidence limits.
+As of the fetched `origin/develop` commit `fedef75f52` on 2026-10-21
+Australia/Melbourne, the implementation commits reported by [PR #1083](https://github.com/lopugit/thingtime/pull/1083)
+and [PR #1084](https://github.com/lopugit/thingtime/pull/1084) are in its
+ancestry. [PR #1022](https://github.com/lopugit/thingtime/pull/1022) remains
+open, so recheck the exact target SHA and its origin-scoped capability before
+release; repository ancestry alone does not prove what a deployed origin serves.
+
+The PR reports narrow the remaining proof. PR #1083's 512-operation fixture
+missed its original local `<=50%` threshold in both reported runs; that
+threshold was superseded after review and installed speed acceptance remained
+open. PR #1084's installed observation was explicitly observability-only: an
+original-operation recovery barrier drained during one window, but no upload
+batch or folder-validation result completed there, and historical failure/ACK
+totals stayed unknown. Preserve those as partial evidence, not a speed claim or
+completion of the independent interruption/capability-loss tests below.
+
+1. **Fence the release:** confirm the implementation is present in the chosen
+   `develop` commit and its capability is published by the exact selected
+   origin before installing or enabling the batch path. Missing or incompatible
+   capability must fail closed to the supported per-file path without losing
+   operation identity or receipts.
+2. **Measure the installed path:** with an approved synthetic account and
+   fixed, non-sensitive fixture, compare the intended installed same-Home run
+   with an approved matched baseline. Record source SHA, app/server versions,
+   file and byte counts, elapsed time, and per-file terminal outcomes. Agree on
+   the comparison method and any performance threshold before interpreting the
+   result; publish neither an SLO nor a throughput promise from a single run.
+   Reconcile any new result with PR #1083's explicitly failed original threshold
+   and still-open installed speed acceptance; do not revive that superseded
+   threshold as an owner-approved target.
+3. **Prove partial recovery separately:** interrupt after durable dispatch but
+   before all per-file receipts, then repeat with capability loss. On restart,
+   reconcile attempted, confirmed, fallback, and unknown files to the original
+   operation/upload identities. Require no missing file, duplicate finalization,
+   false completion, or silent conversion of unknown into failure/success. The
+   PR #1084 observation that a recovery barrier drained is useful operational
+   context, but is not a substitute for either fault-injection case or per-file
+   receipt reconciliation.
+4. **Keep evidence privacy-safe:** retain no user filenames, file contents,
+   credentials, signed URLs, or stable account/device identifiers in the
+   acceptance record. A fixture result is not evidence for personal-file
+   throughput, production recovery, or a 100-files/second claim.
+
+**Gate:** integration and capability are verified at the exact release SHA;
+the installed matched comparison and both independent recovery cases pass;
+each outcome reconciles to its receipt; and an owner records the approved
+threshold, limitations, and rollback path. Otherwise keep the batch rollout
+pending and retain the supported safe fallback.
 
 ### M4 — Operate and communicate incidents
 
