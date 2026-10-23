@@ -164,6 +164,6 @@ export const draftPreviewCsp = "default-src 'none'; script-src 'self'; style-src
 // Trusted secure-context WebCodecs worker. No authored scripts, child workers,
 // remote codec imports or network requests are permitted in this worker.
 export const mediaWorkerCsp = serialize({
- 'default-src': ["'none'"], 'script-src': ["'self'"],
+ 'default-src': ["'none'"], 'script-src': ["'self'", "'wasm-unsafe-eval'"],
  'connect-src': ["'none'"], 'worker-src': ["'none'"]
 });

@@ -41,7 +41,13 @@ function PlatformInstance({ raw, fieldName }: { raw: unknown; fieldName?: string
 			return { value: null, error: error instanceof Error ? error.message : 'Check the program and inputs' };
 		}
 	}, [definition, inputs]);
-	const [job, setJob] = React.useState<{ program: PlatformProgram; input: Record<string, unknown>; id: string } | null>(null);
+	const [job, setJob] = React.useState<{ program: PlatformProgram; input: Record<string, unknown>; id: string } | null>(() => {
+		if (!initial?.media) return null;
+		const saved = snapshotPlatformDraft(JSON.stringify(initial), {});
+		return { ...saved, id: crypto.randomUUID() };
+	});
+	const liveDraft = React.useRef(draft);
+	liveDraft.current = draft;
 	const [frameHeight, setFrameHeight] = React.useState(560);
 	const [result, setResult] = React.useState('');
 	const [error, setError] = React.useState('');
@@ -52,11 +58,17 @@ function PlatformInstance({ raw, fieldName }: { raw: unknown; fieldName?: string
 		const media = job.program.media
 			? createHostMediaPipeline(
 					job.program.media,
-					job.input,
+					() => {
+						const current = liveDraft.current;
+						if (!current.value) throw new Error(current.error);
+						if (JSON.stringify(current.value.program.media) !== JSON.stringify(job.program.media)) throw new Error('Apply the edited program before starting.');
+						return current.value.input;
+					},
 					() => new Worker(new URL('./mediaWorker.ts', import.meta.url), { type: 'module' }),
 					(requestId, result) => {
 						frame.current?.contentWindow?.postMessage({ type: 'tt-platform-media-result', runId: job.id, requestId, result }, '*');
-					}
+					},
+					async signal => (await import('./imageAssets')).loadImageWasmAssets(signal)
 			  )
 			: undefined;
 		let ready = false;
@@ -162,9 +174,9 @@ function PlatformInstance({ raw, fieldName }: { raw: unknown; fieldName?: string
 			</div>
 			<div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
 				<button type="button" style={{ ...field, width: 'auto', background: '#18181b', color: '#fff', cursor: 'pointer' }} onClick={run}>
-					Run example
+					{initial.media ? 'Reset selection / apply program' : 'Run example'}
 				</button>
-				<button
+				{!initial.media && <button
 					type="button"
 					style={{ ...field, width: 'auto', cursor: 'pointer' }}
 					onClick={() => {
@@ -174,7 +186,7 @@ function PlatformInstance({ raw, fieldName }: { raw: unknown; fieldName?: string
 					}}
 				>
 					Stop / clear
-				</button>
+				</button>}
 			</div>
 			{(error || draft.error) && (
 				<p role="status" style={{ color: '#9f1239', overflowWrap: 'anywhere' }}>
@@ -190,6 +202,7 @@ function PlatformInstance({ raw, fieldName }: { raw: unknown; fieldName?: string
 					sandbox={job.program.allowFormEvents ? 'allow-scripts allow-forms' : 'allow-scripts'}
 					referrerPolicy="no-referrer"
 					style={{
+						order: job.program.media ? -1 : undefined,
 						width: '100%',
 						height: job.program.document?.length ? (job.program.media ? frameHeight : 320) : 0,
 						border: job.program.document?.length ? '1px solid #e4e4e7' : 0,
@@ -224,7 +237,7 @@ function PlatformInstance({ raw, fieldName }: { raw: unknown; fieldName?: string
 			<details>
 				<summary style={{ cursor: 'pointer', fontSize: 13 }}>Edit reusable program</summary>
 				<p style={{ fontSize: 13 }}>
-					Change the document, CSS rules, parameters and Action steps. Run uses this draft.
+					Change the document, CSS rules, parameters and Action steps. Apply uses this draft. Settings take effect on the next Start.
 					{fieldName
 						? ' Save edited component keeps the complete program and your current inputs as defaults.'
 						: ' Save the definition on your Component Thing to keep it.'}
