@@ -221,23 +221,1063 @@ APPLE_API_ISSUER=<app-store-connect-issuer-id>
 APPLE_TEAM_ID=<apple-developer-team-id>
 ```
 
-The worker publishes a SemVer PR prerelease tagged with the PR number, branch,
-and source SHA. Its macOS ZIP and separately notarized Thingtime Recovery ZIP
-are verified by the Desktop/Recovery updater before either can be cached or
-installed.
+Store each secret directly in the deployment environment. Also add the same
+`THINGTIME_CI_ROUTER_SECRET` as a GitHub Actions repository secret and set the
+repository variable `THINGTIME_CI_ROUTER_URL` to the stable route above. The
+router secret is deliberately independent of both webhook secrets. Vercel's
+system-provided OIDC identity authenticates Sandbox creation in deployed
+functions; local/non-Vercel execution may instead provide `VERCEL_TOKEN`,
+`VERCEL_PROJECT_ID`, and `VERCEL_TEAM_ID`. Set
+`WORKFLOW_SEQUENTIAL_REPLAYS=1` in Vercel for deterministic durable-workflow
+replay. The Admin API reports only whether an integration is configured; it
+never returns credentials. Admin reports **Vercel runner ready** only when the
+GitHub App credentials, provider-router secret, and Vercel runtime identity are
+all available; its API refuses to select Vercel before that complete capability
+is ready. An already-saved Vercel policy still fails over safely to GitHub if a
+dependency later disappears.
 
-## Fork setup: Vercel develop previews
+After deployment and App installation, create both provider webhooks and click
+**Admin → CI Control → Reconcile** once. Reconcile imports existing branches,
+open PRs, Actions runs, deployments, and previews; subsequent webhooks keep the
+projection current. Until that first successful reconcile, an empty dashboard
+with zero counts is expected.
 
-`.github/scripts/deploy-develop-pr-preview.mjs` runs from this branch and needs
-Vercel project settings it cannot infer. Supply them from your own Vercel
-account — every value below is a placeholder:
+# 💹 Donate on Indiegogo to save humanity 🩷
 
-PR-event handoffs and deployment workers use separate, non-cancelling per-PR
-queues. A repository dispatch therefore cannot cancel the metadata-only run
-that created it, and a newer synchronize/edited event waits instead of
-interrupting an active deployment. Every queued worker revalidates the live PR
-head and lifecycle before changing Vercel state, so superseded requests exit
-without publishing stale code.
+### You can get Merch 🌈 + other benefits 🦄💯
+
+https://www.indiegogo.com/projects/thingtime-a-gui-for-the-internet/coming_soon
+
+## Or Donate on GoFundMe 💖
+
+https://www.gofundme.com/f/thingtime
+
+### Force Push ? 👉👈
+
+Thingtime has two deliberately separate conflict workflows:
+
+- **Lopu PR resolver** merges a PR's base branch into its head branch.
+- **Rebase PRs and stacks (AI)** rebases the PR head and, when the PR is part
+  of a stack, continues from the stack root toward its leaves.
+
+Both workflows cover every same-repository PR regardless of its base branch.
+The merge workflow listens to pushes on `"**"` and checks open PRs both
+targeting and originating from the pushed branch. A staggered twice-hourly
+all-PR sweep catches conflicts whose original event was missed or ran from an
+older branch without the latest workflow. Their ownership is intentionally
+disjoint: standalone merge conflicts go to the merge workflow; standalone PRs
+that merge cleanly but cannot rebase, plus stack members whose current history
+needs a merge or rebase update, go to the rebase workflow. Adding
+`no-ai-rebase` opts a merge-conflicting stack member back into the merge-based
+resolver instead.
+
+The rebase workflow covers the case GitHub reports as `mergeable: true` but
+`rebaseable: false`: a plain merge needs no help, yet replaying the branch's
+commits onto its base stops at a conflict. It automatically scans same-repo
+PRs after branch pushes and PR `opened`/`reopened` events, with a scheduled
+all-PR scan as a backstop because GitHub emits no dedicated event when its
+**Rebase stack** button fails. A standalone PR is replayed onto its base; a
+detected stack is rebased root-to-leaf, so each child is replayed onto the
+rewritten parent rather than onto the parent's old SHA.
+
+To run it directly, open **Actions → Rebase PRs and stacks (AI) → Run
+workflow** on the default branch, enter the PR number, and leave cascading
+enabled when the PR has children. Leaving the number blank scans all open
+same-repository PRs. Manual dispatch is also the recovery path after reviewing
+a paused run.
+
+**Lopu PR resolver** is the canonical all-in-one resolver. Enter a PR number
+to inspect one PR, enter a branch to inspect PRs based on or from that branch,
+or leave both blank to scan all open same-repository PRs. PR events inspect
+only the affected PR; the twice-hourly sweep is a quiet backstop. The detector
+does not run from arbitrary pushed branch workflow content. Detection never
+checks out PR code and runs with read-only repository access plus the narrow
+permission required to dispatch the default-branch worker. Each eligible
+conflict is handed to one
+bot-authenticated `workflow_dispatch` job on the default branch, which repeats
+all live PR, label, ownership, protection, and SHA checks before it writes.
+
+Lopu is the durable Thingtime identity; the workflow separately records the
+actual backend in its run and PR attestation. The initial backend is the
+repository's configured **Claude Code** OAuth integration, so it can be
+replaced later without turning PR history into a mix of assistant names.
+Lopu reads the repository direction and affected code, but has only
+read/search/edit/write tools: no shell, Git, or network. The workflow derives
+its allowed edit set from `git diff --diff-filter=U`, rejects every unstaged or
+out-of-scope change, treats `graphify-out/` as base-derived data rather than a
+Lopu merge target, and rejects remaining conflict markers. Immediately before
+publication it re-reads both refs and pushes only with an exact head lease. If
+either branch moves while Lopu is working, the merge is discarded and the next
+detector pass uses a fresh snapshot. The PR receives an attestation with the
+base/head snapshots, verified merge SHA, backend, and resolver-run link.
+
+Add `no-ai-merge` for a permanent opt-out or `ai-merge-paused` for a temporary
+human hold. Fork PRs, drafts, protected heads, the default branch as a head,
+and PRs currently owned by the rebase agent are intentionally skipped.
+
+Detection is patient and audible: GitHub computes a PR's mergeability lazily
+after its base moves and verdicts can take minutes to settle, so the merge
+detector re-queries until every scanned PR has a verdict (time-budgeted via
+`MERGEABLE_POLL_SECONDS`, default 500 seconds — a little over eight minutes)
+instead of sampling once at push time. When it must leave a conflicted-looking PR alone — a fork PR it
+cannot push to, or a verdict that never settled — it upserts one status
+comment on the PR saying exactly that, so a silent PR means "nothing needed
+doing", never "nobody looked". Conflicts that are handed off announce
+themselves through the resolve job's "Auto-resolve running" comment.
+
+**Rebase PRs and stacks (AI)** rewrites PR history, so its force push has
+stricter boundaries:
+
+- It operates only on branches in this repository. Fork PRs, the repository's
+  default branch, and protected branches are refused.
+- Claude receives only regular copies of the exact files stopped in conflict,
+  inside a repo-less scratch directory. It never sees the real checkout, Git
+  metadata, action implementation, or push credentials, and it has only
+  read/edit/write file tools—no shell, Git, search, or network tools. Code
+  loaded from the exact trusted default-branch commit
+  independently validates the scratch files, conflict set, index, and completed
+  rebase before any push.
+- Nothing is pushed until the complete rebase succeeds. The final update uses
+  an exact `--force-with-lease` against the head SHA inspected at the start, so
+  a concurrent human or bot push makes the run fail instead of being erased.
+- Add `no-ai-rebase` to opt a PR out of automatic rebasing. A failed automatic
+  run adds `ai-rebase-paused` for that exact owner/ref/SHA/topology snapshot,
+  preventing a retry loop while the failure is reviewed. A changed snapshot or
+  resolver owner invalidates the hold automatically; retry the unchanged
+  snapshot with a deliberate manual PR-number run.
+  `ai-rebase-in-progress` is the only cross-workflow mutex. Pause labels do not
+  decide ownership: a queued retry re-proves the exact refs and owner before
+  clearing its specific stale pause. Publication requires pauses to be absent,
+  and post-push cleanup preserves any fresh hold created for the new snapshot.
+  An orphaned `ai-rebase-in-progress` lock is recovered after 90 minutes, while
+  paused, active, or not-yet-computed parents—and protected or opted-out
+  parents that still need a rewrite—keep stacked children from running ahead.
+- A rewrite authenticated by `GITHUB_TOKEN` explicitly dispatches **Web CI**
+  against the new branch SHA when the final PR diff touches `remix/` or its CI
+  workflow, because token-authored pushes do not create ordinary Actions runs.
+
+For a fork of Thingtime, enable **Settings → Actions → General → Workflow
+permissions → Read and write permissions**, then add one of these repository
+Actions secrets:
+
+- `ANTHROPIC_API_KEY`, or
+- `CLAUDE_CODE_OAUTH_TOKEN` (created by the Claude CLI GitHub App setup).
+
+`CONFLICT_RESOLVER_PAT` is optional. Add it only if the resolver must rewrite a
+branch whose rebase changes files under `.github/workflows/`; the token needs
+repository contents access plus permission to update workflows. Keep all
+tokens in Actions secrets, scope them to the fork, and never put them in an
+environment file or commit. Automatic runs still skip PRs originating from
+another repository; the contributor's fork must run its own trusted workflow
+if it wants equivalent automation.
+
+# Setup for Forks
+
+Thingtime can run with mostly public configuration, but a few integrations need
+private environment variables in local development or on Vercel.
+
+## Nitro + React Router app
+
+The web app lives in `remix/` for historical path compatibility, but it now
+runs as a React Router non-framework Vite client with Nitro API/server routes.
+Vite serves the browser app on port `9999` and proxies `/api` to the Nitro dev
+server on port `10000` when local backend env is configured. If the local
+MongoDB/auth env is absent, the dev proxy sends `/api` requests to
+`https://thingtime.com` instead so a fresh clone can still log in, create
+service-account tokens, and use the production-backed API without copying any
+private `.env` files.
+
+Local development URLs on Lopu's Mac:
+
+- Local: `http://localhost:9999`
+- Tailnet/Funnel: `https://lopus-macbook-pro-2.tail9606f9.ts.net:9999`
+
+The Tailnet/Funnel mapping for Thingtime should proxy
+`lopus-macbook-pro-2.tail9606f9.ts.net:9999` to `127.0.0.1:9999`. Vite's
+`server.allowedHosts` includes `lopus-macbook-pro-2.tail9606f9.ts.net` so this
+host does not trip Vite's blocked-host protection.
+
+Install and run from the app directory:
+
+```sh
+cd remix
+corepack pnpm install
+corepack pnpm run dev
+```
+
+For a fresh clone or linked worktree, the equivalent repository-root bootstrap
+is:
+
+```sh
+npm run worktree-setup
+```
+
+The Remix `dev`, `build`, and lint entry points run the same dependency check
+automatically. It validates every direct dependency link and uses pnpm's shared
+store to repair missing or stale links, so `node_modules` never needs to be
+copied from another checkout.
+
+From the repository root, `npm run web-pms` starts or restarts the PM2-managed
+dev app `tt-nitro-react-router-9999`. The older `npm run remix-pms` command is
+kept as a compatibility alias.
+
+Local branch metadata is managed automatically by `remix/scripts/pre-dev.sh`.
+That script writes the untracked, generated `remix/.env.auto`; do not edit that
+generated block by hand. On Vercel no file is involved: the branch comes from
+the `VERCEL_GIT_COMMIT_REF` system env var at build and runtime.
+The local dev launcher loads `remix/.env`, `remix/.env.local`, and
+`remix/.env.auto` before spawning Nitro and Vite, so ignored private values like
+MongoDB credentials are available to local API status checks without committing
+secrets. These files are optional for normal app usage; set them only when you
+want to override the default production-backed API fallback or run the backend
+self-sufficiently against your own services.
+
+Build and verify the repository-root Vercel output with:
+
+```sh
+npm run build:vercel
+```
+
+The root `vercel.json` deliberately installs only `remix/`; it never runs the
+legacy repository-level `postinstall`. The build runs the existing Remix Vite +
+Nitro pipeline, validates `remix/.vercel/output`, then stages and revalidates it
+at the repository-root `.vercel/output` expected by Vercel's Build Output API.
+
+In the Vercel project, set **Root Directory** to the repository root (clear the
+old `remix` value), use the **Other** framework preset, and clear dashboard
+overrides for Build Command, Install Command, Output Directory, and Ignored
+Build Step so the tracked root config is authoritative. The root config also
+sets `outputDirectory: null`: the build emits `.vercel/output` itself. The
+product config disables Git deployments for the exact `github-actions` branch;
+the thin control-plane branch carries its own root config with all Git
+deployments disabled, so branches created from it never try to build an absent
+app.
+
+## Electron desktop app
+
+The desktop shell lives in `electron/` and packages the same `remix/` web app
+with Electron. It builds the Vite client and Nitro server with
+`NITRO_PRESET=node_server`, stages the output in `electron/dist/web`, then
+launches the bundled Nitro server on `127.0.0.1` inside the Electron app.
+
+Build the unpacked desktop app from the repository root with:
+
+```sh
+pnpm --dir electron install
+npm run build-electron
+```
+
+For local desktop smoke testing:
+
+```sh
+pnpm --dir electron dev
+```
+
+The local Electron shell reads `remix/.env`, `remix/.env.local`, and
+`remix/.env.auto` before starting Nitro. Keep real MongoDB, auth, Vercel, and AI
+tokens in ignored env files or the launch environment only; commit placeholder
+examples in docs, not secrets.
+
+## API self-documentation
+
+Every registered Thingtime API endpoint exposes a JSON documentation endpoint
+by appending `-docs` to the API path. The docs endpoint accepts both GET and
+POST so sandboxed tools can discover the contract without caring which method
+the real endpoint uses:
+
+```sh
+curl http://localhost:9999/api/v1/auth/service-account-docs
+curl -X POST http://localhost:9999/api/v1/auth/service-account-docs -d '{}'
+```
+
+Each response includes the original endpoint, accepted methods, auth notes,
+step-by-step usage, payload and response examples, and generated curl, wget,
+Node.js, Python, and Ruby snippets. The browser reference lives at
+`/docs/api`, and the docs smoke tests live in the `/tests` page under the
+`Docs` group.
+
+## Extensible data — `extended` + schema-less crystals
+
+Schemas are optional scaffolding, not a cage. Two open surfaces on every thing:
+
+- **`extended`** — every `things` doc carries a schema-free `extended`
+  property that accepts **any JSON structure** (512KB/doc cap). Thingtime wraps
+  it in the platform envelope (share ids, `tt:` ACLs, timestamps) but never
+  validates, structure-indexes, or interprets it. Replace-on-write semantics:
+  send `extended` to swap the whole value, `null` to clear it, omit it to leave
+  it untouched (deep-merging arbitrary JSON is ambiguous, so we never do).
+  It is not structured-searchable — `/search` field conditions can't target it
+  — though its string content is indexed by the collection's wildcard text
+  index like any field (so keep secrets out of it). One reserved key:
+  `tt:textLanguage` (the text index's language override).
+- **Schema-less crystals** — `thingtime` is optional on create: a bare
+  `POST /api/v1/things { crystal: { any: 'shape' } }` defaults to
+  `thingtime: ["data"]`, the bounded free-form crystal, so external apps can
+  store structured data without declaring a schema first — and it stays
+  searchable by real datatypes on `/search`.
+
+Together they make Thingtime an open datastore: schema'd crystals get
+validation and typed search, `extended` carries whatever else your app needs
+on the same document. Docs: `/docs/api` → things.
+
+## MongoDB
+
+MongoDB powers the app status checks and database-backed API routes. Local
+development does not require MongoDB env by default: when
+`MONGODB_CONNECTION_STRING` is missing, Vite and Nitro forward same-origin API
+requests to `https://thingtime.com` with the same method, path, query, headers,
+cookies, and payload. Upstream auth cookies are rewritten for local HTTP so
+zero-env localhost login can persist through the proxy.
+
+Set these variables only when you want this checkout or deployment to serve API
+requests from its own MongoDB instead of falling back to Thingtime production:
+
+```sh
+MONGODB_CONNECTION_STRING="mongodb+srv://<user>:<db_password>@<cluster>/<database>?retryWrites=true&w=majority"
+MONGO_PASS="<password>"
+```
+
+`MONGO_PASS` is only required when `MONGODB_CONNECTION_STRING` contains the
+literal `<db_password>` placeholder. The app substitutes `MONGO_PASS` into that
+placeholder using URL encoding so special characters in the password are safe.
+
+For a local MongoDB instance you can instead use a complete URI with no password
+placeholder:
+
+```sh
+MONGODB_CONNECTION_STRING="mongodb://localhost:27017/thingtime"
+```
+
+## Admin access
+
+Schema-version migrations (`/api/v1/admin/migrations*`), the migrations panel on
+`/schemas`, the admin panel, and raw database diagnostics are admin-gated. A
+user is an admin when their user doc has `meta.admin: true` (promote/demote via
+the admin panel or `POST /api/v1/admin/set-admin`) or their username is in the
+bootstrap env allowlist:
+
+```sh
+ADMIN_USERNAMES="your-username,another-admin"
+```
+
+Env-allowlisted usernames are a permanent override (they can't be demoted from
+the UI, so there's always a way back in) and are reserved at registration so
+nobody can squat an admin username before you register it.
+
+Admins get the `/admin` dashboard (also under the drawer's Account section):
+Users, Apps, Tiers, CI Control, and System management. CI Control presents the
+feature/branch/PR/Actions/deployment topology and signed status history, with
+allowlisted reconciliation and retry controls. The Tiers tab manages protected,
+versioned `subscription-tier` Things in separate Live, Draft / not live, and
+Archived sections. Admins can create a tier or draft a new revision, edit its
+name, tagline, banner, currency, daily/weekly/monthly/yearly prices, six
+computed-or-custom percentage-saved comparisons, Editor.js inclusions, and
+quota defaults, then publish or archive without deleting history. User and app
+assignments pin the exact immutable revision and quota snapshot, so later tier
+changes never silently rewrite an existing customer's plan. The dashboard also
+supports per-field quota overrides (`null` = unlimited), platform-level app
+suspension, and many-to-many ownership links (assign accounts to an owner so
+one login can switch into its service accounts without credentials, and assign
+apps to co-managers).
+
+App owners and linked co-managers use `/apps/manage` to see the app's measured
+aggregate usage and choose among the current live tier cards (the bootstrapped
+catalog starts with Free 5 GiB, Plus 25 GiB, Pro 100 GiB, and metered PAYG).
+Cards show the configured banner, renewal prices, savings, and Editor.js
+inclusions; selection sends both the stable tier id and exact live revision id.
+Managers can also change the inherited per-app-user cap (50 MiB by default) and
+assign or reset custom caps for one or many app users. The app Thing is the
+aggregate ledger; protected relational `app-storage` Things hold per-user usage
+and optional sub-tiers, so neither generic app editing nor an end user can
+rewrite the accounting rows.
+
+The live verification suites need a disposable local database. The app-storage
+suite is deliberately local-URL-only; the admin suite needs an env-admin's
+credentials (placeholders — use your own throwaway admin):
+
+```sh
+node remix/scripts/verify-app-storage.mjs http://127.0.0.1:10000
+```
+
+```sh
+TT_VERIFY_ADMIN_USER="your-admin-username" \
+TT_VERIFY_ADMIN_PASS="your-admin-password" \
+node remix/scripts/verify-admin-subscriptions.mjs http://127.0.0.1:10000
+```
+
+## Auth and Lopu AI
+
+JWT-backed browser sessions prefer ES256 asymmetric signing so other platforms
+can verify Thingtime-issued user tokens without knowing the private signing key.
+Configured asymmetric deployments publish the verification key at:
+
+```sh
+/api/v1/auth/jwks
+```
+
+Use a P-256 private key in PKCS#8 PEM format and a public key in SPKI PEM
+format. The env vars accept either full PEM text with escaped `\n` newlines or
+base64-encoded PEM, which is easier to paste into Vercel:
+
+```sh
+JWT_PRIVATE_KEY="<base64-pkcs8-private-pem>"
+JWT_PUBLIC_KEY="<base64-spki-public-pem>"
+JWT_KEY_ID="thingtime-es256-1"
+JWT_ISSUER="https://thingtime.com"
+```
+
+Generate a fresh key pair with:
+
+```sh
+node <<'NODE'
+const { generateKeyPairSync } = require('node:crypto');
+
+const { privateKey, publicKey } = generateKeyPairSync('ec', {
+  namedCurve: 'P-256',
+});
+const encode = (key) => Buffer.from(key).toString('base64');
+
+console.log('JWT_PRIVATE_KEY=' + encode(privateKey.export({ type: 'pkcs8', format: 'pem' })));
+console.log('JWT_PUBLIC_KEY=' + encode(publicKey.export({ type: 'spki', format: 'pem' })));
+console.log('JWT_KEY_ID=thingtime-es256-1');
+console.log('JWT_ISSUER=https://thingtime.com');
+NODE
+```
+
+The app also exposes a local helper UI at `/crypto`, backed by
+`/api/v1/crypto`, for generating ES256 pairs, switching key encodings, checking
+private/public key matches, verifying JWTs, and verifying signed messages
+before pasting env vars into Vercel.
+
+`JWT_PUBLIC_KEY` is recommended for clarity, but the server can derive it from
+`JWT_PRIVATE_KEY` if only the private key is configured. Keep `JWT_SECRET`
+temporarily as a legacy HS256 verifier while older browser cookies expire:
+
+```sh
+JWT_SECRET="<legacy-long-random-secret>"
+```
+
+If neither asymmetric key material nor `JWT_SECRET` is set, preview and
+production auth fail closed. Local development can still run without keys using
+an insecure dev-only fallback.
+
+The JWKS endpoint supports offline signature, issuer, and expiry verification.
+It does not tell external platforms whether the backing Mongo session has been
+revoked; add a server-side introspection endpoint before relying on live
+revocation checks outside Thingtime.
+
+### Password reset + email 2FA
+
+`POST /api/v1/auth/password-reset` ({ email }) always answers `{ ok: true }` so
+account existence can't be probed; when the email matches an account it sends a
+single-use one-hour reset link to `/reset-password?token=…`. The confirm step
+(`POST /api/v1/auth/password-reset/confirm`) burns the token atomically, sets
+the new bcrypt hash, and revokes every live session. Requests are rate-limited
+per IP (`auth.passwordReset`). Local dev + Vercel previews surface `resetLink`
+in the JSON, mirroring the register route's dev verification link.
+
+Email 2FA is opt-in per account (`GET/POST /api/v1/auth/two-factor`, requires a
+verified email — toggle lives in Settings → Security). With it on,
+`POST /api/v1/login` stops minting sessions from a password alone: it returns
+`{ requiresOtp: true, challenge, expiresAt }` and emails a 6-digit code (only a
+sha256 hash is stored, 10-minute TTL, atomically attempt-capped at 5); a second
+`POST /api/v1/login { challenge, code }` completes login with a constant-time
+comparison. Login attempts are rate-limited per IP (`auth.login`).
+
+### Email delivery (owned email layer)
+
+All outbound email flows through `remix/app/api/utils/email/` — every send
+writes an outbox row to `email_messages` first, checks the suppression /
+unsubscribe lists, then delivers via AWS SES (or logs to the console in dev).
+Auth wrappers in `api/utils/auth/email.ts` (`sendVerificationEmail`,
+`sendPasswordResetEmail`, `sendEmailOtp`, `sendNewsletterEmail`) carry dotted
+`templateKey`s (`auth.verify_email`, `auth.password_reset`, `auth.email_otp`,
+`newsletter.generic`) and purpose metadata.
+
+```sh
+THINGTIME_EMAIL_PROVIDER="ses"          # 'console' (default) or 'ses'
+AWS_SES_REGION="us-east-1"              # or AWS_REGION
+AWS_SES_ACCESS_KEY_ID="<key id>"        # or AWS_ACCESS_KEY_ID
+AWS_SES_SECRET_ACCESS_KEY="<secret>"    # or AWS_SECRET_ACCESS_KEY
+THINGTIME_EMAIL_TRANSACTIONAL_FROM="Thingtime <no-reply@thingtime.com>"
+THINGTIME_EMAIL_NEWSLETTER_FROM="Thingtime Updates <updates@thingtime.com>"
+THINGTIME_EMAIL_REPLY_TO="support@thingtime.com"
+AWS_SES_CONFIGURATION_SET=""            # or THINGTIME_EMAIL_CONFIGURATION_SET
+THINGTIME_EMAIL_FAIL_CLOSED="false"     # fail-open unless "true"
+SES_SANDBOX="1"                         # test throttle (1 msg/sec) for /tests
+THINGTIME_EMAIL_TEST_RECIPIENT="support@thingtime.com"
+THINGTIME_ADMIN_NOTIFICATION_EMAIL="admin@thingtime.com"  # "new user" ops mail
+```
+
+`THINGTIME_ADMIN_NOTIFICATION_EMAIL` is where the internal **new user**
+notification lands when a freshly registered account finishes email
+verification (`templateKey` `admin.new_user`). It defaults to
+`admin@thingtime.com`; point a fork or a preview/staging stack at its own inbox
+so real admin mail is never generated by test signups. That mail is the cue to
+grant the account public file and media uploads, which new signups do **not**
+receive automatically — see
+[Public upload approval](#public-upload-approval) below.
+
+### Public upload approval
+
+New accounts start **without** permission to upload files or media, and
+verifying the email address does not grant it. The permission has two
+independent scopes, so an administrator can approve the **public**, **private**,
+or **all** variation per user:
+
+| Scope | Covers | Flag |
+| --- | --- | --- |
+| `public` | post, comment, and custom-emoji attachments | `meta.publicUploads` |
+| `private` | message attachments + the user's own profile avatar/banner | `meta.privateUploads` |
+| `all` | both of the above in one write | both flags |
+
+The account carries `meta.publicUploads: false` and `meta.privateUploads:
+false` from registration; `POST /api/v1/attachments/uploads` answers
+`403 public_uploads_not_approved` or `403 private_uploads_not_approved`
+(depending on the requested purpose) until an administrator approves that
+scope from the **/admin → Users** tab's per-row **Approve** menu
+(`POST /api/v1/admin/users/public-uploads { userId, enabled, scope }`; scope
+defaults to `public` for pre-scope callers).
+
+Each flag is deliberately tri-state, so nothing here needs a data migration:
+
+| flag value | Meaning |
+| --- | --- |
+| absent | account predates the change — uploads stay enabled |
+| `false` | withheld, awaiting admin approval (every new signup) |
+| `true` | granted by an administrator |
+
+Administrators bypass the flags entirely, so the account that grants the
+permission can never be locked out of the surface that grants it.
+
+Use the SES **API** with an IAM key scoped to `ses:SendEmail` — do not create
+SES SMTP credentials for the app path. `GET /api/v1/email/config` returns the
+sanitized resolved config (never credentials); `POST /api/v1/email/test-otp` is
+a dev/preview-only helper for the `/tests` page restricted to the configured
+test recipient (or a plus alias of it).
+
+### Private S3 media and attachments
+
+Uploaded images are moderated asynchronously after upload: attachment
+completion atomically stamps protected `moderation.status: pending` before the
+upload can be projected or served publicly. Pending media stays available only
+to its owner and admins as evidence; other callers receive not found until a
+provider-pluggable NSFW/TOS analysis releases it. NSFW media then renders
+heavily blurred behind a "Show Anyway" click; TOS/illegal verdicts remain
+quarantined and log a protected `moderationFlag` for the `/admin` → Moderation
+review queue. Provider failures leave the item pending rather than fabricating
+a clear verdict, and the bounded retry sweep recovers both missed analysis and
+missed flag writes.
+
+The recommended production provider is the tiered `openai+claude` pipeline:
+OpenAI's **free** `omni-moderation-latest` endpoint screens every image first,
+clean images stamp `clear` at $0, and only flagged/borderline images escalate
+to a paid Claude vision call for the policy-nuanced verdict (see
+`docs/ai-api-cost-analysis.md`). Note the free screen cannot detect CSAM in
+images (OpenAI's `sexual/minors` category is text-only) and cannot apply
+Thingtime's "artistic nudity still blurs" rule — that is exactly why flagged
+and borderline images always escalate, and why omni alone never stamps
+`blocked`. If Claude is unreachable, omni-flagged images fail safe to `nsfw`
+(blurred + flagged for admin review); if OpenAI is unreachable, every image
+goes straight to Claude.
+
+```sh
+THINGTIME_MODERATION_PROVIDER="openai+claude"  # 'openai+claude' (alias 'tiered') | 'claude' | 'openai' | 'test' | 'off'
+                                               # unset default by keys: both → openai+claude; ANTHROPIC only → claude;
+                                               # OPENAI only → openai; neither → off
+ANTHROPIC_API_KEY="<key>"                # Claude API key (escalation / claude provider)
+OPENAI_API_KEY="<key>"                   # OpenAI key for the free omni-moderation screen
+TT_MODERATION_MODEL="claude-opus-5"      # optional Claude model override
+TT_MODERATION_ESCALATION_SCORE="0.2"     # optional; escalate unflagged images whose max
+                                         # image-category score meets this 0..1 threshold
+```
+
+Note: `OPENAI_API_KEY` and `ANTHROPIC_API_KEY` are shared with the Lopu musing
+feature — their presence alone activates image moderation when
+`THINGTIME_MODERATION_PROVIDER` is unset. Set it to `off` explicitly in
+environments that carry the keys for musing but must not moderate. An
+unrecognized provider value warns and falls back to the key-based default
+rather than silently disabling moderation.
+
+Admins control which AI runs each moderation surface from `/admin` →
+Moderation → "AI moderation settings": media uploads (default / tiered
+openai+claude / free openai-only / claude / off) and post/comment text
+(default / free openai / off). Admin choices are stored in the settings
+collection and override the env default; "default" delegates back to the
+env/key logic above. Post and comment text is screened by the free
+omni-moderation endpoint whenever an OpenAI key exists: block-worthy
+categories (sexual/minors, threatening harassment/hate, violent-illicit,
+self-harm instructions) quarantine the post/comment — it vanishes from every
+feed, thread, and search for everyone — while other flagged categories queue
+an advisory `moderationFlag` (with a bounded text excerpt as evidence) for
+the admin review queue without hiding the content. Edited text is re-screened;
+admin review verdicts are final until an admin changes them.
+
+Post creation is FAIL-CLOSED while text moderation is on: the free omni
+screen races a bounded time budget (`TT_TEXT_SCREEN_BUDGET_MS`, default
+600ms) BEFORE the insert, and a verdict in time means the post is born
+stamped — blocked content never renders anywhere. When no verdict can be
+obtained (omni outage, circuit breaker open, or `TT_TEXT_SCREEN_BUDGET_MS=0`
+async-release mode) the post is born **pending: visible only to its owner**
+until the async queue or the hourly cron screens and releases it — its
+creation notifications fire at release, when followers can actually see it.
+No post-family content ever goes public unscreened while the surface is on;
+turning the surface off publishes normally (and the sweep releases any
+stranded pending docs so an off flip can't orphan them). The budget is
+measured entirely server→OpenAI (client speed is irrelevant), and the
+per-instance breaker (3 failures → open 60s) skips the omni call during
+confirmed outages so posting stays fast — posts just arrive born-pending.
+Edits stay async.
+
+Text screening covers every omni-judgeable public surface of a post-family
+thing in one free combined request: prose (`crystal.text`), marketplace
+listing text (title/location/category/condition), tags, and the legacy
+external image URLs (`crystal.images`, capped at 8/post — omni fetches the
+URLs itself, so the multi-URL photos flow is moderated too; URL images follow
+the same image-blind `sexual/minors` limitation as omni-only media, so they
+flag/advisory rather than auto-block). Known coverage gaps, deliberate for
+now: video and non-image file CONTENTS (needs frame-extraction/AV infra) and
+profile bio/display-name (different write path).
+
+A scheduled safety net (`GET /api/v1/moderation/sweep`, Vercel Cron at minute
+29 each hour, `CRON_SECRET` bearer — same contract as the attachments cleanup
+cron) retries moderation the fire-and-forget kickoffs lost: post-family things
+with real text and no moderation stamp (process death between the post write
+and the verdict stamp, provider outages), pending attachments, and verdicts
+whose protected moderation flag still needs to be written. Because the omni
+screen is free, the same job also gradually drains any
+backlog from periods when text moderation was off; it no-ops while the text
+surface is off. The `/admin` → Moderation "Run analysis sweep" button drains
+the same batches on demand and shows the text backlog count.
+
+Posts, comments and replies, Messenger messages and thread replies, custom
+reaction emoji, and profile avatar/banner images use direct, checksummed
+multipart uploads to a private S3 bucket. The browser receives short-lived part
+URLs, not AWS credentials; product records reference stable attachment ids,
+never expiring S3 URLs. Attachment bytes are reserved against the account's
+Thingtime storage tier before upload and remain charged until exact-version S3
+deletion is confirmed. A stable client request id is hashed with the
+authenticated owner into an opaque owner-scoped attachment id, making lost
+start responses safely retryable without cross-account id squatting or
+existence disclosure.
+
+Every surface binds only its own server-validated attachment purpose. Comment
+and reply files inherit the root post visibility through the complete parent
+chain. Message and thread files require current chat membership. Personal and
+community custom emoji bind one safe raster image to their exact owner/scope;
+community images require membership, while an emoji already used in a shared
+conversation remains renderable to its authenticated participants. Deleting an
+owning post/comment/message/emoji removes the exact S3 versions before Mongo
+rows and quota reservations are released. Custom Mongo data planes cannot bind
+or authorize these home-storage objects.
+
+Profile media is limited to JPEG, PNG, GIF, WebP, or AVIF and 64 MiB per image.
+The server binds a ready upload only to its exact owner and requested avatar or
+banner slot in the same home-Mongo transaction as the profile update. Public
+profile rendering uses the stable same-origin content route; the bucket stays
+private. Replacing or removing managed profile media releases the old reference
+transactionally, but its bytes remain billed until the cleanup path permanently
+deletes the exact S3 version and removes the attachment Thing. External http(s)
+image URLs remain a separate, quota-saving alternative and are never fetched by
+the Thingtime server.
+
+Configure only these server-side Vercel variables. Scope the production bucket
+and role to **Production** only. Thingtime's `develop` Custom Environment and
+standard feature Preview deployments use the separate development bucket,
+role, data plane, and cleanup secret; never expose the production values to
+either environment.
+
+```sh
+THINGTIME_PRIVATE_S3_ROLE_ARN="arn:aws:iam::<12-digit-account-id>:role/<production-attachment-role>"
+THINGTIME_PRIVATE_S3_BUCKET="<private-bucket-name>"
+THINGTIME_PRIVATE_S3_REGION="<aws-region>"
+CRON_SECRET="<long-random-vercel-cron-secret>"
+```
+
+The bucket name must be DNS-compatible **without dots**; dotted names are
+rejected so every signed URL uses the unambiguous virtual-hosted S3 form. The
+bucket must also belong to the same 12-digit AWS account named by the role ARN.
+The runtime derives `ExpectedBucketOwner` from that ARN and fails closed when
+the bucket owner differs.
+
+In Vercel, mark all four values **Sensitive**. Give Production its values only
+in the built-in Production environment. Give `develop` a distinct set only in
+the branch-tracked Custom Environment named `develop`; never select the generic
+Preview environment. `CRON_SECRET` authenticates only
+`/api/v1/attachments/cleanup`; it is not a Thingtime user, PAT, app, or
+service-account credential, and must never use a `THINGTIME_*` browser-visible
+name. Use different secrets for Production and develop.
+
+The `develop` Custom Environment must use an exact `develop` branch matcher and
+own `https://dev.thingtime.com`. Its Vercel OIDC subject is
+`owner:<vercel-team-slug>:project:<vercel-project-name>:environment:develop`.
+This is intentionally different from ordinary PR deployments, whose subject
+ends in `environment:preview`. Branch-scoped Preview variables alone are not an
+AWS boundary because Vercel's Preview OIDC subject contains no Git branch; do
+not trust `environment:preview` for the develop role.
+
+The role must use Vercel OIDC temporary credentials and an exact production
+subject for this project. Do not create an S3 IAM user, reuse the SES IAM user,
+or set generic `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, or `AWS_REGION`
+variables for attachments. Restrict its object policy to the app's `objects/*`
+prefix. With Vercel's recommended team issuer mode, use this placeholder-only
+trust policy (replace every angle-bracket value):
+
+```json
+{
+	"Version": "2012-10-17",
+	"Statement": [
+		{
+			"Effect": "Allow",
+			"Principal": {
+				"Federated": "arn:aws:iam::<12-digit-account-id>:oidc-provider/oidc.vercel.com/<vercel-team-slug>"
+			},
+			"Action": "sts:AssumeRoleWithWebIdentity",
+			"Condition": {
+				"StringEquals": {
+					"oidc.vercel.com/<vercel-team-slug>:aud": "https://vercel.com/<vercel-team-slug>",
+					"oidc.vercel.com/<vercel-team-slug>:sub": "owner:<vercel-team-slug>:project:<vercel-project-name>:environment:<production-or-develop>"
+				}
+			}
+		}
+	]
+}
+```
+
+Create one role per environment. Substitute `production` for the Production
+role and `develop` for the develop role; never wildcard the environment portion
+of `sub` and never let one role trust both subjects.
+
+Attach this placeholder-only permissions policy to the role. Keep generic
+`s3:DeleteObject` out: in a versioned bucket it can create a delete marker
+without permanently removing the billed object version.
+
+```json
+{
+	"Version": "2012-10-17",
+	"Statement": [
+		{
+			"Sid": "ThingtimePrivateAttachments",
+			"Effect": "Allow",
+			"Action": [
+				"s3:AbortMultipartUpload",
+				"s3:DeleteObjectVersion",
+				"s3:GetObject",
+				"s3:GetObjectVersion",
+				"s3:ListMultipartUploadParts",
+				"s3:PutObject",
+				"s3:PutObjectTagging",
+				"s3:PutObjectVersionTagging"
+			],
+			"Resource": "arn:aws:s3:::<private-bucket-name>/objects/*"
+		}
+	]
+}
+```
+
+The runtime role needs only those object actions:
+
+- `s3:PutObject` and `s3:PutObjectTagging` (the MPU starts with a pending tag)
+- `s3:GetObject` and `s3:GetObjectVersion`
+- `s3:DeleteObjectVersion`
+- `s3:AbortMultipartUpload` and `s3:ListMultipartUploadParts`
+- `s3:PutObjectVersionTagging`
+
+Do not grant `s3:ListBucket`, `s3:ListBucketMultipartUploads`, ACL,
+public-read, or bucket-administration actions. Completed attachments persist
+the opaque S3 `VersionId`; sniffing, tagging, download, and deletion all target
+that exact verified version. Exact-version deletion happens before the Thingtime
+storage reservation is refunded, so bucket versioning cannot hide unmetered
+noncurrent bytes.
+
+Keep both account- and bucket-level S3 Block Public Access enabled, Bucket Owner
+Enforced object ownership on, and bucket versioning enabled. Bucket policy
+should explicitly deny non-TLS requests and TLS below 1.2. The
+`aws:PrincipalIsAWSService` condition avoids accidentally blocking AWS service
+principals whose network context AWS redacts:
+
+```json
+{
+	"Version": "2012-10-17",
+	"Statement": [
+		{
+			"Sid": "DenyInsecureTransport",
+			"Effect": "Deny",
+			"Principal": "*",
+			"Action": "s3:*",
+			"Resource": ["arn:aws:s3:::<private-bucket-name>", "arn:aws:s3:::<private-bucket-name>/*"],
+			"Condition": {
+				"Bool": {
+					"aws:SecureTransport": "false",
+					"aws:PrincipalIsAWSService": "false"
+				}
+			}
+		},
+		{
+			"Sid": "DenyTLSBelow12",
+			"Effect": "Deny",
+			"Principal": "*",
+			"Action": "s3:*",
+			"Resource": ["arn:aws:s3:::<private-bucket-name>", "arn:aws:s3:::<private-bucket-name>/*"],
+			"Condition": {
+				"NumericLessThan": {
+					"s3:TlsVersion": "1.2"
+				},
+				"Bool": {
+					"aws:PrincipalIsAWSService": "false"
+				}
+			}
+		}
+	]
+}
+```
+
+Configure CORS with one exact origin per bucket, `PUT`, and the one
+application-authored request header: the production Thingtime origin for the
+production bucket, and `https://dev.thingtime.com` for the develop bucket. The
+uploader deliberately sends a Blob with no `Content-Type`, and completion
+obtains ETags/checksums server-side with ListParts, so no S3 response headers
+need to be exposed:
+
+```json
+[
+	{
+		"AllowedHeaders": ["x-amz-checksum-sha256"],
+		"AllowedMethods": ["PUT"],
+		"AllowedOrigins": ["https://<environment-origin>"],
+		"ExposeHeaders": [],
+		"MaxAgeSeconds": 300
+	}
+]
+```
+
+Lifecycle must abort incomplete multipart uploads after seven days and remove
+noncurrent versions after 30 days. This AWS CLI/API-shaped placeholder applies
+both actions only to Thingtime's object prefix (the S3 console asks for the same
+rule fields):
+
+```json
+{
+	"Rules": [
+		{
+			"ID": "thingtime-private-attachment-cleanup",
+			"Status": "Enabled",
+			"Filter": { "Prefix": "objects/" },
+			"NoncurrentVersionExpiration": { "NoncurrentDays": 30 },
+			"AbortIncompleteMultipartUpload": { "DaysAfterInitiation": 7 }
+		}
+	]
+}
+```
+
+Presigned URLs work with a private bucket; public access must stay off.
+Production uses the app's hourly Vercel Cron at minute 17. Vercel Cron runs
+Production deployments only, so the `develop` Custom Environment instead needs
+an external hourly scheduler that sends the same exact bearer header to
+`https://dev.thingtime.com/api/v1/attachments/cleanup`. Thingtime uses a
+dedicated AWS EventBridge API Destination for that call; keep its connection
+secret distinct, its invocation role limited to that one destination, and its
+rate at one request/second. Configure the Connection as API-key auth with
+header name `Authorization` and value `Bearer <develop-cron-secret>`. Restrict
+the role trust to `events.amazonaws.com` plus the exact rule `aws:SourceArn`
+and account, and grant only `events:InvokeApiDestination` on the exact API
+Destination ARN. Schedule `cron(17 * * * ? *)`; never put the connection secret
+in the rule payload, repository, or logs. Both paths process at most 1,000 rows with a
+25-second wall-clock budget per pass. Pending cancellations
+that issued a presigned part URL stay conservatively billed through an eight-day,
+lifecycle-backed settlement window. Cleanup then requires two empty
+Abort/ListParts checks at least one hour apart before HEAD verification,
+exact-version deletion, and transactional refund. This prevents a signed part
+PUT that finishes late from escaping tier accounting; the seven-day S3
+incomplete-MPU lifecycle remains a required independent guard.
+An MPU that never issued a part URL has no possible late browser PUT and can be
+refunded promptly after Abort/ListParts/HEAD proves it empty.
+
+### Notification emails (SES notification stream)
+
+Activity notifications (friend requests, new followers, comments, replies,
+reactions, shares — plus an optional weekly summary digest) can also email the
+recipient. They ride the same emit calls as the in-app bell, are always
+fire-and-forget, only go to verified addresses, and honor the per-user channel
+matrix from Settings → Notifications (`/api/v1/notifications/settings`: per
+type × channel switches plus a master switch per channel; the two high-volume
+post types are email-opt-in). Sends are capped per recipient per hour, and
+every email footer carries a manage link plus a one-click unsubscribe link
+(`GET /api/v1/notifications/email/unsubscribe?uid=…&token=…`, an HMAC token —
+no session needed).
+
+```sh
+THINGTIME_EMAIL_NOTIFICATIONS_FROM="Thingtime <no-reply@thingtime.com>"
+                                        # optional; falls back to the
+                                        # transactional from-address
+THINGTIME_EMAIL_UNSUB_SECRET=""         # optional HMAC secret for unsubscribe
+                                        # links; falls back to JWT_SECRET /
+                                        # JWT_PRIVATE_KEY
+CRON_SECRET="<random string>"           # lets the Vercel cron trigger the
+                                        # weekly digest run
+APP_URL="https://your-deployment.com"   # absolute links in emails
+```
+
+The weekly digest is scheduled in `remix/vercel.json` (`crons`) against
+`GET /api/v1/notifications/email/weekly-summary`; Vercel attaches
+`Authorization: Bearer <CRON_SECRET>` automatically when that env var exists.
+Signed-in admins can run the same endpoint manually (`?dryRun=1` or
+`POST { dryRun: true }` previews without sending), and the run is idempotent —
+a six-day per-recipient lookback in the `email_messages` outbox prevents
+double-sends.
+
+### Service account provisioning
+
+Apps and backend services can create service-owned Thingtime accounts through:
+
+```sh
+POST /api/v1/auth/service-account
+```
+
+The endpoint is self-service: it does not require a server provisioning secret,
+but it does require a unique, valid email address. The account must verify that
+email within seven days. Until verification, the bearer token works only during
+that grace window; after the deadline, authenticated requests for the service
+account are rejected until the email is verified.
+
+```sh
+curl -X POST "https://thingtime.com/api/v1/auth/service-account" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "serviceName": "CodexTime",
+    "username": "codextime",
+    "email": "codextime-service@example.com",
+    "displayName": "CodexTime"
+  }'
+```
+
+The response includes an `accessToken` that the service can use as a normal
+Thingtime bearer token:
+
+```sh
+Authorization: Bearer <accessToken>
+```
+
+Service account tokens are intentionally non-expiring JWTs with revocable Mongo
+session records. The session `expiresAt` value is `null`, the JWT has no `exp`
+claim, and the account starts with a `storageAllowanceBytes` value of
+`5368709120` (5 GiB). The email-verification deadline is returned as
+`verificationRequiredBy`. Revoke the token by revoking or deleting its backing
+session document.
+
+See `docs/api/service-accounts.md` for the complete request and response shape.
+
+Lopu musings can optionally use Claude and/or OpenAI. Without these keys, the
+endpoint serves the built-in fallback library.
+
+```sh
+ANTHROPIC_API_KEY="<anthropic-api-key>"
+OPENAI_API_KEY="<openai-api-key>"
+LOPU_PROVIDER="claude"
+```
+
+Every Claude-backed musing reads the current Admin → AI workflow model order
+from `Thingtime.PRConflictAutoResolverModelWaterfall`; a named preference wins
+over `LOPU_CLAUDE_MODEL`. When the Admin primary is `default`,
+`LOPU_CLAUDE_MODEL` remains the Anthropic-valid provider default. OpenAI is a
+separate provider and continues to use `LOPU_OPENAI_MODEL` (or its documented
+built-in default), including when it is selected first with `LOPU_PROVIDER`.
+
+When an AI key is configured, the musing endpoint uses MongoDB to allow 10
+AI-backed musings per detected IP address per rolling hour. Requests over the
+limit, or requests made while the rate-limit collection is unavailable, stream
+the preset fallback responses instead of calling an AI provider.
+
+## Branch automation: develop → main promotion
+
+`develop` is the integration branch; `main` is the release branch. Four
+workflows keep them flowing without manual branch surgery, giving two
+complementary ways to ship:
+
+- **Promote features to main** (`.github/workflows/promote-features-to-main.yml`)
+  scans PRs merged into `develop` and opens one promotion PR per feature
+  against `main` (cherry-picked `promote/pr-<n>-<slug>` branches), so every
+  change can get a second, release-focused review on its own. PRs that share a
+  feature group (a `Promotion-Group: <key>` body line, a `stack:<key>`/
+  `group:<key>`/`feature:<key>` label, a `feature/<key>/...` branch, or a
+  `feat(<key>): ...` title) are opened as a stacked chain in merge order —
+  review and merge bottom-up, deleting each branch on merge. Label a develop
+  PR `no-promote` to keep it out of the train; close a promotion PR to reject
+  that change for `main` permanently.
+- **Promote develop to main** (`.github/workflows/promote-develop-to-main.yml`)
+  keeps one standing all-or-nothing PR open (head `develop`, base `main`).
+  When everything on `develop` is deemed mergeable, merge it instead of
+  merging every feature individually. The two trains never fight: after an
+  omnibus merge the per-feature workflow sees the content already on `main`,
+  skips it, and automatically closes any open promotion PRs whose diff has
+  become empty.
+- **Sync main into develop** back-merges `main` after promotions land.
+- The AI conflict/rebase workflows keep promotion PRs and stacks mergeable.
+
+Fork setup: everything runs with the default `GITHUB_TOKEN`, but promotion
+PRs it creates will not trigger CI, and promotion branches touching
+`.github/workflows/**` cannot be pushed. Optionally add a `PROMOTION_PAT`
+repository secret (fine-grained token with Contents + Pull requests +
+Workflows read/write, placeholder value `github_pat_...`) to lift both limits;
+`SYNC_BRANCHES_PAT` / `CONFLICT_RESOLVER_PAT` are honoured as fallbacks.
+
+## Branch automation: the `all` wildcard branch
+
+`all` is a generated everything-branch: `develop` + `main` + every open PR
+(stacked branch → branch PRs included) merged together, so all in-progress
+work can be tried in one place. **Build all branch**
+(`.github/workflows/all-branch.yml`) rebuilds it from scratch and force-pushes
+the result on every push to `develop`/`main`, on every open-PR change, and
+hourly:
+
+- Rebuilds start from `develop`, merge `main`, then merge open PR heads in
+  stack order (parents before children, ascending PR number within a layer)
+  with `-X theirs` plus a matching theirs-biased fallback for modify/delete
+  conflicts — later PRs win contested hunks, and a conflict never stops the
+  train. A PR whose merge cannot complete at all is skipped, not fatal.
+- `ALL_BRANCH.md` at the branch root records exactly what went in (base tips,
+  every merged PR and how it merged, every skipped PR with its reason). The
+  rebuild is deterministic, so the branch is only force-pushed when the
+  resulting tree actually changed.
+- Never base work on `all`, never open PRs from it, and expect
+  `git reset --hard origin/all` when tracking it locally — history is
+  rewritten on every rebuild.
+- Fork PRs are excluded (their unreviewed code would otherwise reach this
+  repo's Vercel builds without the usual fork-authorization step). Label any
+  PR `no-all` to keep it out of the union.
+- Semantic collisions — two PRs adding the same helper merge textually clean,
+  so no git conflict ever exists, yet the union build breaks — are handled by
+  the AI **build doctor**: after each input-changed rebuild the union build
+  runs (install, then the full Vercel-parity remix build, with a mechanical
+  lockfile repair first), and on failure up to three guarded, edit-files-only Claude
+  rounds (the conflict resolver's action pin, model waterfall, and security
+  posture) repair the tree. Out-of-scope edits are reverted, commits are
+  credential-scanned, and the build is re-verified mechanically. Doctor
+  fixups ride on `all` and are cherry-pick-replayed onto the next rebuild,
+  dropping silently once the source PRs heal for real; an exhausted doctor
+  leaves a marker commit and retries once before waiting for input movement.
+  Needs the resolver's `ANTHROPIC_API_KEY` / `CLAUDE_CODE_OAUTH_TOKEN`
+  secret; without it the union is pushed unhealed.
+- `.github` on `all` is pinned to `develop`'s copy (workflows never execute on
+  `all`, and this keeps force-pushes within the default `GITHUB_TOKEN`'s
+  powers). If a rebuild still trips GitHub's workflow-file push restriction,
+  the builder re-pins `.github` to the previous `all` state and retries.
+- Vercel builds `all` like any other product branch, so it doubles as a living
+  everything-preview.
+
+## Vercel deployment status
+
+The footer can show live Vercel deployment/build status. It works in a limited
+tokenless mode on Vercel, but full status, dashboard links, build state, last
+ready time, and active polling need a Vercel REST API token.
+
+Local development, preview deployments, and production deployments expose
+`/vercel`, backed by `/api/v1/vercel/deployments`, to scan recent Vercel pages
+for the latest deployment per unique branch with timestamps, preview links,
+deployment-detail links, current Vercel states, total branches counted, and an
+optional display cap using the same server-only token configuration.
+
+Add this as a sensitive Vercel project environment variable:
 
 ```sh
 VERCEL_API_TOKEN="<vercel-rest-api-token>"
