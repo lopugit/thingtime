@@ -36,6 +36,7 @@ import { SETTINGS_TABS, settingsTabHref, type SettingsTab } from './settingsTabs
 import { DesktopSettings } from './DesktopSettings';
 import { DrawerItemSettings } from './DrawerItemSettings';
 import { ThingsSettings } from './ThingsSettings';
+import { HistorySettings, fullHistoryAccount } from './HistorySettings';
 import { ProfileMediaField, type ProfileMediaFieldHandle } from '~/components/Profile/ProfileMediaField';
 import {
 	profileMediaUpdateFields,
@@ -659,6 +660,19 @@ export const SettingsContent = ({
 						<DesktopSettings />
 					</Flex>
 				)}
+				{tab === 'history' && (
+					<Flex direction="column" gap={4} minW={0}>
+						{/* history (full accounts only) — messages toggle, the account sync
+            hold, stored retention choice, paused Things and the client export.
+            Temporary and service accounts never reach the settings API. */}
+						{user && fullHistoryAccount(user) && <HistorySettings key={user.id} user={user} />}
+						{user && !fullHistoryAccount(user) && (
+							<SettingsSection eyebrow="History" description="History settings need a full account.">
+								<Text fontSize="sm">Sign in with a full account to manage how your Timeline syncs and records.</Text>
+							</SettingsSection>
+						)}
+					</Flex>
+				)}
 				{tab === 'appearance' && (
 					<Flex direction="column" gap={4} minW={0}>
 						<MediaCacheSettings />
@@ -926,7 +940,7 @@ export const SettingsContent = ({
 						)}
 					</Flex>
 				)}
-				{!user && ['profile', 'notifications', 'security', 'connections'].includes(tab) && (
+				{!user && ['profile', 'history', 'notifications', 'security', 'connections'].includes(tab) && (
 					<SettingsSection eyebrow={tab} description="Sign in to manage these account settings.">
 						<Button onClick={() => navigate('/login')}>Log in</Button>
 					</SettingsSection>

@@ -10,8 +10,8 @@ components; reuse them instead of adding parallel versions.
 | --- | --- |
 | Thing context menu model (sections, actions, submenus, drill paths) | `app/components/Thingtime/ContextMenu/contextMenuModel.ts` |
 | Menu renderer, trigger, hover/right-click/pinned behaviour | `app/components/Thingtime/ContextMenu/ThingContextMenu.tsx`, `ThingContextMenuTrigger.tsx`, `useThingContextMenu.tsx` |
-| Base verbs every persisted Thing inherits (`open`, `inspect`, `copy-link`, `download`, `edit`, `share`, `delete`, `send-to-lopu`) | `app/schemas/thingActions.ts` (`THING_ACTIONS`), `ContextMenu/thingEntityMenu.ts` (`buildThingEntityMenu(capabilities, extensions)`) |
-| Persisted-Thing menu button used by cards and pages | `ContextMenu/PersistedThingMenu.tsx` (fetches the Thing on open, handles copy-link/open/inspect/download/send-to-lopu; adapters pass `extensions` + `capabilities` + `onAction`) |
+| Base verbs every persisted Thing inherits (`open`, `inspect`, `history`, `pause-history`, `resume-history`, `copy-link`, `edit`, `share`, `delete`, `send-to-lopu`; the two pause verbs are owner-only and backed by the history prefs store, see [history-and-timeline.md](history-and-timeline.md)) | `app/schemas/thingActions.ts` (`THING_ACTIONS`), `ContextMenu/thingEntityMenu.ts` (`buildThingEntityMenu(capabilities, extensions)`) |
+| Persisted-Thing menu button used by cards and pages | `ContextMenu/PersistedThingMenu.tsx` (fetches the Thing on open, handles copy-link/open/inspect/send-to-lopu; adapters pass `extensions` + `capabilities` + `onAction`) |
 | Canonical link copying | `ContextMenu/thingEntityLink.ts` |
 | Icons: emoji ↔ lucide registry (`LUCIDE_ICONS`, `LUCIDE_FOR_EMOJI`) | `app/theme/icons.tsx`; renderer `app/components/Icon/Icon.tsx` |
 | Toasts / notifications | `app/components/Lopu/useLopu.tsx` (`useLopu()`, `useLopuStream()`) — never raw Chakra `useToast` or `alert()` |

@@ -136,7 +136,7 @@ function BranchCanvas({
 				<Box p={6}>
 					<Text>Your unfinished branch draft is saved on this device.</Text>
 					{draft.history.recoverable.map((event) => (
-						<Button key={event.id} mt={3} onClick={() => void draft.history!.recover(event).catch((error) => setRecoveryError(error.message))}>
+						<Button key={event.id} mt={3} isDisabled={!!draft.history?.paused} title={draft.history?.paused ? 'History is paused for this Thing' : undefined} onClick={() => void draft.history!.recover(event).catch((error) => setRecoveryError(error.message))}>
 							Resume draft
 						</Button>
 					))}
