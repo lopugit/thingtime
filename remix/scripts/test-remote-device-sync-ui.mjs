@@ -1,0 +1,148 @@
+import assert from 'node:assert/strict';
+import { createRequire } from 'node:module';
+import { mkdtemp, readFile, mkdir, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
+import { createServer } from 'node:http';
+import { once } from 'node:events';
+
+const root = resolve(import.meta.dirname, '..');
+const require = createRequire(join(root, 'package.json'));
+const esbuild = createRequire(require.resolve('tsx'))('esbuild');
+const evidence = resolve(process.argv[2] || join(tmpdir(), 'thingtime-remote-device-sync-ui'));
+const dir = await mkdtemp(join(tmpdir(), 'thingtime-remote-device-sync-'));
+let browser, server;
+const results = [], errors = [];
+try {
+ await mkdir(evidence, { recursive: true });
+ await esbuild.build({ entryPoints: [join(root, 'scripts/remote-device-sync.browser.tsx')], bundle: true, format: 'esm',
+  platform: 'browser', target: 'esnext', outfile: join(dir, 'fixture.js'), tsconfig: join(root, 'tsconfig.json'),
+  define: { 'process.env.NODE_ENV': '"development"' }, loader: { '.wasm': 'file' }, logLevel: 'error' });
+ const bundle = await readFile(join(dir, 'fixture.js'));
+ server = createServer((request, response) => {
+  response.writeHead(200, { 'Content-Type': request.url === '/fixture.js' ? 'application/javascript' : 'text/html', 'Cache-Control': 'no-store' });
+  response.end(request.url === '/fixture.js' ? bundle : '<!doctype html><title>Remote device sync regression</title><meta name="viewport" content="width=device-width,initial-scale=1"><div id="root"></div><script type="module" src="/fixture.js"></script>');
+ });
+ server.listen(0, '127.0.0.1'); await once(server, 'listening');
+ const origin = `http://127.0.0.1:${server.address().port}`;
+ browser = await require('playwright').chromium.launch({ headless: true, ...(process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH } : process.platform === 'linux' ? { executablePath: '/usr/bin/chromium' } : {}) });
+ for (const [label, width, height] of [['desktop', 1440, 1000], ['phone', 390, 844]]) {
+  // A fresh, synthetic browser profile. Block every request beyond the fixture,
+  // including requests from dependencies; this test does not load user cookies.
+  const context = await browser.newContext({ viewport: { width, height }, serviceWorkers: 'block' });
+  await context.route('**/*', route => new URL(route.request().url()).origin === origin ? route.continue() : route.abort());
+  const page = await context.newPage();
+  page.on('pageerror', error => errors.push(error.message));
+  try {
+   await page.goto(origin);
+   await page.getByRole('heading', { name: 'Device sync & backup', exact: true }).waitFor();
+   assert.equal(await page.evaluate(() => !!window.thingtimeDesktop || !!window.thingtimeNativeBridge), false, 'ordinary browser has no native bridge');
+   const manage = page.locator('summary').filter({ hasText: 'Manage sync connections' });
+   await manage.click();
+   await page.getByText('Sync connections', { exact: true }).waitFor();
+   await page.getByRole('button', { name: 'Edit', exact: true }).waitFor();
+   assert.equal(await page.getByText('Other device private sync', { exact: true }).count(), 0);
+   assert.equal(await page.getByText('Other owner private sync', { exact: true }).count(), 0);
+   assert.equal(await page.evaluate(() => window.remoteSyncFixture.state().commands.filter(c => c.action !== 'status').length), 0, 'opening settings cannot start device work');
+   await page.getByRole('button', { name: 'Edit', exact: true }).click();
+   await page.getByRole('textbox', { name: 'Connection name', exact: true }).fill(`${label} browser backup`);
+   await page.getByRole('button', { name: 'Save connection', exact: true }).click();
+   await page.getByRole('button', { name: 'Save connection', exact: true }).waitFor({ state: 'hidden' });
+   let state = await page.evaluate(() => window.remoteSyncFixture.state());
+   assert.equal(state.rows.find(row => row.id === 'documents-sync').crystal.name, `${label} browser backup`);
+   assert.equal(state.writes, 1, 'settings can be saved while the target device is offline');
+   assert.equal(state.commands.filter(command => command.action !== 'status').length, 0);
+   await page.screenshot({ path: join(evidence, `${label}-offline-settings.png`), fullPage: true });
+   await page.reload(); await manage.click();
+   await page.getByText(`${label} browser backup`, { exact: true }).last().waitFor();
+   await page.evaluate(() => window.remoteSyncFixture.setOnline(true));
+   await page.getByRole('button', { name: 'Refresh device', exact: true }).click();
+   const start = page.getByRole('button', { name: 'Sync now', exact: true });
+   await start.waitFor();
+   await page.waitForFunction(() => [...document.querySelectorAll('button')].some(button => button.textContent === 'Sync now' && !button.disabled));
+   await page.evaluate(() => window.remoteSyncFixture.failNext('Device declined this sync request.'));
+   await start.click();
+   await page.getByText('Device declined this sync request.', { exact: true }).waitFor();
+   state = await page.evaluate(() => window.remoteSyncFixture.state());
+   assert.equal(state.status.task, null, 'failed command must not be displayed as running');
+   await page.evaluate(() => window.remoteSyncFixture.holdStartAcknowledgement());
+   await start.click();
+   await page.waitForFunction(() => window.remoteSyncFixture.state().pendingStartRequests.length === 1 && window.remoteSyncFixture.state().status.task?.active === true);
+   await page.getByRole('button', { name: 'Refresh device', exact: true }).click();
+   await page.getByText('Transfer in progress', { exact: true }).waitFor();
+   state = await page.evaluate(() => window.remoteSyncFixture.state());
+   assert.equal(state.status.task.active, true);
+   const acceptedStart = state.commands.filter(command => command.action === 'start').at(-1);
+   assert.equal(acceptedStart.connectionId, 'documents-sync');
+   assert.equal(acceptedStart.expectedUpdatedAt, state.rows.find(row => row.id === 'documents-sync').updatedAt);
+   assert.equal(await page.getByRole('button', { name: 'Edit', exact: true }).isDisabled(), true, 'original Start is still awaiting confirmation');
+   const pause = page.getByRole('button', { name: 'Pause sync', exact: true }).first();
+   assert.equal(await pause.isEnabled(), true, 'Pause stays available while Start is awaiting its lost acknowledgement');
+   const pauseAt = Date.now();
+   await pause.click();
+   await page.waitForFunction(() => window.remoteSyncFixture.state().status.task?.active === false, undefined, { timeout: 10_000 });
+   state = await page.evaluate(() => window.remoteSyncFixture.state());
+   assert.equal(state.status.jobs[0].state, 'paused');
+   assert.equal(state.pendingStartRequests.length, 1, 'Pause must finish before the original Start acknowledgement');
+   assert.ok(Date.now() - pauseAt < 10_000, 'Pause must not wait for the two-minute Start deadline');
+   await page.screenshot({ path: join(evidence, `${label}-paused-before-start-ack.png`), fullPage: true });
+   await page.evaluate(() => window.remoteSyncFixture.releaseStartAcknowledgements());
+   await page.waitForFunction(() => [...document.querySelectorAll('button')].some(button => button.textContent === 'Edit' && !button.disabled));
+   assert.equal((await page.evaluate(() => window.remoteSyncFixture.state())).status.task.active, false, 'a late Start acknowledgement must not restart the paused task');
+   await page.getByRole('combobox', { name: `Automatic sync interval for ${label} browser backup`, exact: true }).selectOption('900000');
+   await page.getByRole('button', { name: 'Start automatic sync', exact: true }).click();
+   await page.waitForFunction(() => window.remoteSyncFixture.state().status.task?.active === true);
+   assert.equal((await page.evaluate(() => window.remoteSyncFixture.state())).commands.filter(command => command.action === 'start').at(-1).intervalMs, 900000);
+   await page.getByRole('button', { name: 'Pause sync', exact: true }).first().click();
+   await page.waitForFunction(() => window.remoteSyncFixture.state().status.task?.active === false);
+   await page.screenshot({ path: join(evidence, `${label}-remote-paused.png`), fullPage: true });
+   await page.getByRole('button', { name: 'Progress, coverage & priorities', exact: true }).click();
+   const priorityPaths = page.getByRole('textbox', { name: 'Priority paths', exact: true });
+   await priorityPaths.fill('Important\nPhotos/Family');
+   await page.getByRole('button', { name: 'Save upload priorities', exact: true }).click();
+   await page.getByText('Upload priorities saved. They apply after the current operation finishes.', { exact: true }).waitFor();
+   state = await page.evaluate(() => window.remoteSyncFixture.state());
+   assert.deepEqual(state.priorities, { revision: 1, paths: ['Important', 'Photos/Family'] });
+   assert.ok(state.commands.some(command => command.action === 'priorities' && command.operation === 'save' && command.connectionId === 'documents-sync'));
+   assert.equal(await page.evaluate(async () => (await indexedDB.databases()).some(database => database.name === 'thingtime-file-sync-v1')), false, 'browser priority editing must use the device journal rather than create a local sync journal');
+   await page.getByRole('button', { name: 'Edit', exact: true }).click();
+   const draftName = page.getByRole('textbox', { name: 'Connection name', exact: true });
+   await draftName.fill('My unfinished browser edit');
+   await page.evaluate(() => window.remoteSyncFixture.changeElsewhere());
+   await page.getByRole('button', { name: 'Save connection', exact: true }).click();
+   await page.getByText(/This connection changed elsewhere/).first().waitFor();
+   assert.equal(await draftName.inputValue(), 'My unfinished browser edit');
+   assert.equal((await page.evaluate(() => window.remoteSyncFixture.state())).writes, 0, 'conflicting settings edit cannot overwrite a newer revision');
+   await page.getByRole('button', { name: 'Replace draft with saved version', exact: true }).click();
+   await page.getByRole('button', { name: 'Discard draft', exact: true }).click();
+   await page.getByRole('button', { name: 'Choose device folder', exact: true }).click();
+   await page.getByRole('button', { name: 'Add connection', exact: true }).click();
+   await page.getByRole('textbox', { name: 'Connection name', exact: true }).fill('New connection from browser');
+   await page.getByRole('combobox', { name: 'Private cloud folder', exact: true }).selectOption('cloud-documents');
+   const startsBeforeCreation = (await page.evaluate(() => window.remoteSyncFixture.state())).commands.filter(command => command.action === 'start').length;
+   await page.getByRole('button', { name: 'Save connection', exact: true }).click();
+   await page.getByRole('button', { name: 'Save connection', exact: true }).waitFor({ state: 'hidden' });
+   state = await page.evaluate(() => window.remoteSyncFixture.state());
+   assert.equal(state.rows.find(row => row.crystal.name === 'New connection from browser').crystal.paused, true);
+   assert.ok(state.commands.some(command => command.action === 'folders' && command.request.action === 'choose'));
+   assert.ok(state.commands.some(command => command.action === 'folders' && command.request.action === 'list'), 'a new binding verifies current device roots');
+   assert.equal(state.commands.filter(command => command.action === 'start').length, startsBeforeCreation, 'creating a connection does not start transfers');
+   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, 'phone and desktop layouts fit the viewport');
+   results.push({ viewport: label, browserWithoutNativeBridge: true, offlineSettingsSave: true, savedSettingsReload: true,
+    privateDeviceScope: true, noTransferOnOpen: true, rejectedCommandVisible: true, remoteStart: true, remotePause: true, pauseBeforeStartAcknowledgement: true,
+    remoteAutomaticInterval: true, remotePriorities: true, noBrowserSyncJournal: true, conflictPreservesDraft: true,
+    remoteFolderSelection: true, newConnectionVerifiesRoots: true, noOverflow: true });
+  } catch (error) {
+   await page.screenshot({ path: join(evidence, `${label}-failure.png`), fullPage: true }).catch(() => {});
+   console.error(await page.locator('body').innerText().catch(() => ''));
+   throw error;
+  } finally { await context.close(); }
+ }
+ assert.deepEqual(errors, []);
+ await writeFile(join(evidence, 'results.json'), JSON.stringify({ results, errors }, null, 2));
+ console.log(JSON.stringify({ ok: true, results, evidence }));
+} finally {
+ await browser?.close();
+ if (server?.listening) await new Promise(resolve => server.close(resolve));
+ await rm(dir, { recursive: true, force: true });
+}

@@ -8,7 +8,8 @@ import { WebpageBlocksRenderer } from '../Builder/WebpageBlocksRenderer';
 import { SettingsDocumentHost, type SettingsDocumentHostProps } from '../Settings/SettingsDocumentHost';
 
 type Preferences = { revision: number; paths: string[] };
-export type UploadPriorityOptions = { scope: SyncScope; excludedPaths: string[]; ignoreRules?: string };
+export type UploadPriorityOptions = { scope: SyncScope; excludedPaths: string[]; ignoreRules?: string;
+ transport?: { read(signal: AbortSignal): Promise<Preferences>; save(paths: string[], expectedRevision: number, signal: AbortSignal): Promise<Preferences> } };
 const action = (operation: string, inputs: Record<string, unknown> = {}) => ({ 'data-tt-action': '$transient', 'data-tt-action-inputs': { operation, ...inputs } });
 const control = { 'min-height': '40px', padding: '8px 12px', border: '1px solid var(--tt-border, #ddd)', 'border-radius': '8px', 'max-width': '100%', 'box-sizing': 'border-box' };
 const button = (id: string, text: string, operation: string, inputs: Record<string, unknown> = {}): WebpageBlock => ({ id, type: 'element', tag: 'button', text,
@@ -33,7 +34,7 @@ export const syncUploadPriorityBlocks: WebpageBlock[] = [{ id: 'sync-priorities'
    ] }
   ] }
  ] },
- { id: 'priority-retention', type: 'element', tag: 'p', text: 'Priorities are saved on this device for this account and connection. They change transfer order only. They do not remove local files or prove that a folder is fully backed up.', css: { 'font-size': '12px', color: 'var(--tt-muted, #71717a)' } }
+ { id: 'priority-retention', type: 'element', tag: 'p', text: 'Priorities are saved on the syncing device for this account and connection. They change transfer order only. They do not remove local files or prove that a folder is fully backed up.', css: { 'font-size': '12px', color: 'var(--tt-muted, #71717a)' } }
 ]}];
 
 
@@ -53,13 +54,15 @@ export function useUploadPriorities(options: UploadPriorityOptions | undefined, 
   if (!savedScope || !signal || signal.aborted || running.current === signal) return;
   running.current = signal; setBusy(true); setError('');
   try {
-   check(signal); const journal = await openSyncJournal();
+   check(signal); const transport = latest.current.options?.transport;
+   const journal = transport ? null : await openSyncJournal();
    try {
-    check(signal); const priorities = journal.priorities({ scope: savedScope, currentScope: () => latest.current.currentScope(), signal });
-    const result = paths === undefined ? await priorities.read() : await priorities.save(paths, savedRef.current!.revision);
+    check(signal); const priorities = journal?.priorities({ scope: savedScope, currentScope: () => latest.current.currentScope(), signal });
+    const result = transport ? paths === undefined ? await transport.read(signal) : await transport.save(paths, savedRef.current!.revision, signal)
+     : paths === undefined ? await priorities!.read() : await priorities!.save(paths, savedRef.current!.revision);
     check(signal); savedRef.current = result; setSaved(result); setDraft(result.paths.join('\n'));
     setMessage(paths === undefined ? 'Saved priorities loaded.' : 'Upload priorities saved. They apply after the current operation finishes.');
-   } finally { journal.close(); }
+   } finally { journal?.close(); }
   } catch (cause) {
    if (!signal?.aborted) setError((cause instanceof Error ? cause.message : 'Could not save upload priorities.') + ' Your draft is preserved.');
   } finally { if (running.current === signal) running.current = null; if (!signal.aborted) setBusy(false); }

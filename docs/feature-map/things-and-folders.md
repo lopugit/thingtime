@@ -67,13 +67,11 @@ always through `getThingsCollection()` / `getHomeThingsCollection()`, never a
 raw name). Folders are `folder` Things; containment is the child's `folderId`
 pointing at a folder owned by the same account (`FUNDAMENTALS.md` §3).
 
-Known account read refusals invalidate retained export closures through
-`local-workspace/accountReadRevocation.ts`. `accountExport.ts` supplies an
-in-process availability fence used by the canonical transfer browser/archive
-helpers before returning bytes. `AccountFileSync.assertFileReadable` shares the
-live file metadata check with byte reads. Regressions: `accountReadRefusal.test.ts`,
-`accountExport.test.ts`, `accountFileExport.test.ts`, and opt-in
-`accountExportRefusal.browser.test.ts` (existing local file-export fixture env).
+Private `file-sync` configurations can be managed from any signed-in browser.
+The device sync screen keeps saved connection editing available offline and
+uses a protected, leased control channel for live device operations. Native
+grants and transfer journals stay on the target device. See
+[browser device sync](../browser-device-sync.md) for code paths and checks.
 
 ## Where the code lives
 

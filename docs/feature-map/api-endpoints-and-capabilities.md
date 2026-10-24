@@ -1,13 +1,19 @@
 # API endpoints and capabilities
 
-Conditional file sync prerequisites reuse `attachmentStore.annotateOwnedAttachment`
-and `managedPlacement.moveManagedContent`. Annotation 1.2.0 accepts optional
-`expectedUpdatedAt` and returns the committed timestamp; bulk 1.6.0 accepts it
-only for single-item moves and reports stale per-item status 409. Both manifests
-must carry these versions. `accountTransport.client.ts` negotiates them;
-`accountFiles.browser.test.ts` covers real concurrent edits, moves, private bytes
-and canonical attachment cleanup. The durable local metadata queue now consumes these contracts; deletion
-reconciliation and ordinary account file UI wiring remain pending; see [local workspaces](../local-workspaces.md#conditional-account-file-metadata--2026-10-16).
+`api.devices-sync-control` 1.0.0 adds `/api/v1/devices/sync-control` for the
+account browser and installed sync worker. `deviceSyncControl.ts` authenticates
+the owner and current device pairing, delivers an immutable request once, and
+accepts a result only from its claiming lease. Protected `device-sync-control`
+Things reuse the device queue/unique-key indexes, secure BinData payloads and
+shared control TTL; no new collection or index is introduced. File bytes and
+native grants remain on the device. Run `test:devices`, `test:api-capabilities`
+and `test:schemas`; see [browser device sync](../browser-device-sync.md).
+
+Mobile device descriptors use `app/devices/platform.ts` across validation,
+projection, schemas and client types. `api.devices` 1.10.0 and
+`api.devices-pairing-claim` 1.1.0 add iOS/Android to the existing signed pairing
+protocol. Run `test:devices`, `test:schemas` and `test:api-capabilities`.
+See [mobile sync acceptance](../mobile-file-sync.md) for pending native clients.
 
 `api.things-interactions` 1.0.0 adds the first-party private GET/POST
 `/api/v1/things/interactions` capability: bounded membership snapshots and

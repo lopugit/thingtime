@@ -780,3 +780,10 @@ test('resource limits and CPU downloads negotiate only their semantic dependenci
  assert.equal(capabilitySatisfies('1.16.0', requirements['api.attachment-content']), false);
  assert.equal(capabilitySatisfies('1.18.0', requirements['api.attachment-content']), true);
 });
+
+
+test('remote folder sync control is registered on both capability manifests', () => {
+  assert.equal(createApiCapabilitiesManifest().features['api.devices-sync-control'], '1.0.0');
+  assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.devices-sync-control'].version, '1.0.0');
+  assert.equal(typeof routeModules['v1/devices/sync-control'], 'function');
+});

@@ -17,16 +17,25 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
-- 2026-10-23: Add optional maximum encoded output size to the reusable local image/video pipeline, with decimal KB/MB settings, complete-media bounded retries and host byte checks before preview/download. Authored media settings negotiate Things 1.42 / update 1.13 / webpage resolve 1.9. Isolated Chrome verified actual image/video byte targets, alpha, animation timing, retained audio/full duration and impossible-target refusal. **Codex (AI)**
+- 2026-10-23: Make owned-device folder sync settings available in web browsers,
+  including offline edits, and relay live folder access, transfer/automation,
+  conflict, recovery, progress and priority controls to the installed app.
+  Private leased requests preserve device-owned execution and account boundaries.
+  [Contract](../docs/browser-device-sync.md) and [PR 1216 validation](../PRs/1216-codex-browser-device-folder-sync-make-device-folder-sync-manageable-from-any-signed-in-browser.md). **Codex (AI)**
 
-- 2026-10-23: Add reusable local-media processing and individually editable Builder intrinsic controls. Compressor Pages and Components are authored directly as saved Things; retain the legacy suite. [Details](../PRs/1164-general-media-compressor-local-images-and-immediate-file-controls.md). **Codex (AI)**
+- 2026-10-23: Limit PR 1164 to reusable local-media and editable Builder primitives. Author compressor Pages/Components directly as saved Things; retain the legacy suite and fix capability-compatible file-sync assertions.
 
-- 2026-10-23: Build Vercel production, custom environments and previews on GitHub
-  Actions, upload only prebuilt output, and disable native source builds. Keep
-  protected publisher credentials separate from product compilation. Activate
-  current-app staging, preserve cron schedules/regions in prebuilt metadata,
-  and keep existing provider branch aliases current.
-  [Migration and verification](../PRs/1206-codex-vercel-actions-only-build-all-vercel-deployments-on-github-actions.md). **Codex (AI)**
+### 2026-10-22 — General local compressor
+
+[PR 1164 validation and release notes](../PRs/1164-general-media-compressor-local-images-and-immediate-file-controls.md)
+
+- Add local image compression with bundled WASM codecs, transparency/animation safeguards and truthful size receipts alongside WebCodecs video compression.
+- Show file selection on load, keep the selected file while settings change, and support individually editable Builder elements authored directly as saved Things.
+- Version intrinsic media storage/resolve contracts and extend the isolated desktop/mobile browser regression; scope WebAssembly compilation permission to the network-disabled media worker.
+- 2026-10-23: Make the existing sync change-storm regression observe its trailing
+  read instead of racing a five-millisecond timer under CI load. **Codex (AI)**
+
+- 2026-10-23: Preserve the GitHub Actions prebuilt-only deployment migration on develop so future promotions keep native Vercel source builds disabled. See [PR #1206](https://github.com/lopugit/thingtime/pull/1206). **Codex (AI)**
 
 - 2026-10-22: Move device sync configuration off Things home into a dedicated
   device page; keep storage attachments and parent-linked records out of root,
