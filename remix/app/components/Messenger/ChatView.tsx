@@ -1,22 +1,14 @@
-import { activityInterval, clearActivityInterval } from '~/activity/activityManager';
-import { subscribeBackgroundRefresh } from '~/hooks/backgroundRefresh';
 import React from 'react';
 import { Box, Button, Flex, Input, Spinner } from '@chakra-ui/react';
 
 import { useLopu } from '../Lopu/useLopu';
-import { hasUnknownMutationOutcome } from '~/hooks/apiFailure';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { Composer } from './Composer';
-import { AgentLiveActivity } from './AgentLiveActivity';
 import { EmojiUploadModal } from './EmojiUploadModal';
 import { MessageList } from './MessageList';
 import { emitMessengerRefresh, mergeEmojiMap, pushCustomRecent, readEmojiMap, readMessages, writeMessages } from './messengerCache';
-import { getUserDisplayName } from '~/utils/userIdentity';
 import {
   chatDisplayName,
-	externalSourceAvatar,
-	isLiveAiSource,
-	isLopuAiSource,
   memberDisplayName,
   type ChatMember,
   type ChatMessage,
@@ -26,9 +18,6 @@ import {
   type MessengerMode
 } from './messengerTypes';
 import type { MessengerApi } from './useMessengerApi';
-import type { PublicAttachment } from '~/components/Attachments/attachmentTypes';
-import { useAgentSession } from './useAgentSession';
-import type { AgentSendMode } from './AgentComposerControls';
 
 const ACTIVE_POLL_MS = 4000;
 
@@ -47,9 +36,6 @@ const dedupeNewestFirst = (lists: ChatMessage[][]): ChatMessage[] => {
 
 export type ChatViewProps = {
   api: MessengerApi;
-  // Hidden embedded views retain drafts without polling or marking unread data.
-  active?: boolean;
-  onAccessRevoked?: () => void;
   chatSummary: ChatSummary;
   mode: MessengerMode;
   onBack?: () => void;
@@ -61,16 +47,12 @@ export type ChatViewProps = {
 // visibility-aware poll for fresh pages, optimistic sends and reactions with
 // per-item reconcile, Slack thread panel, and read-receipt advancement.
 export const ChatView = (props: ChatViewProps) => {
-  const { chatSummary, mode, active = true } = props;
+  const { chatSummary, mode } = props;
   const chatId = chatSummary.id;
   const user = useCurrentUser();
   const userId = user?.id || null;
   const lopu = useLopu();
   const api = props.api;
-  const onAccessRevoked = React.useRef(props.onAccessRevoked);
-  onAccessRevoked.current = props.onAccessRevoked;
-	const liveSource = isLiveAiSource(chatSummary.externalSource) ? chatSummary.externalSource : null;
-	const agent = useAgentSession(userId, liveSource, props.onChatsChanged);
 
   const [messages, setMessages] = React.useState<ChatMessage[]>(() => readMessages(userId, chatId));
   const [members, setMembers] = React.useState<ChatMember[]>(chatSummary.members || []);
@@ -85,8 +67,6 @@ export const ChatView = (props: ChatViewProps) => {
   const [uploadOpen, setUploadOpen] = React.useState(false);
   const [editingTopic, setEditingTopic] = React.useState(false);
   const [topicDraft, setTopicDraft] = React.useState('');
-	const [agentMode, setAgentMode] = React.useState<AgentSendMode>('queue');
-	const [interruptingAgent, setInterruptingAgent] = React.useState(false);
 
   const seqRef = React.useRef(0);
   const readMarkRef = React.useRef<string | null>(null);
@@ -95,19 +75,7 @@ export const ChatView = (props: ChatViewProps) => {
   const hasPagedRef = React.useRef(false);
   const emojiFetchRef = React.useRef<Set<string>>(new Set());
   const messagesRef = React.useRef(messages);
-	const lastAgentRefreshRef = React.useRef(0);
   messagesRef.current = messages;
-
-	React.useEffect(() => {
-		if (agentMode === 'steer' && !agent.controls.canSteer) setAgentMode('queue');
-	}, [agent.controls.canSteer, agentMode]);
-
-	React.useEffect(() => {
-		if (!liveSource || agent.state.sequence <= lastAgentRefreshRef.current) return;
-		if (agent.state.status !== 'completed' && agent.state.status !== 'interrupted' && agent.state.status !== 'failed') return;
-		lastAgentRefreshRef.current = agent.state.sequence;
-		props.onChatsChanged();
-	}, [agent.state.sequence, agent.state.status, liveSource, props]);
 
   const myMember = members.find((m) => m.userId === userId) || null;
   const pendingRequest = (chatSummary.myMember?.state || myMember?.state) === 'pending';
@@ -118,12 +86,10 @@ export const ChatView = (props: ChatViewProps) => {
       setCustomEmojis(mergeEmojiMap(userId, payload.customEmojis || {}));
       setMessages((prev) => {
         const pending = prev.filter((m) => m.id.startsWith('pending-'));
-				const merged = replace ? dedupeNewestFirst([pending, payload.messages, prev]) : dedupeNewestFirst([pending, prev, payload.messages]);
-				writeMessages(
-					userId,
-					chatId,
-					merged.filter((m) => !m.id.startsWith('pending-'))
-				);
+        const merged = replace
+          ? dedupeNewestFirst([pending, payload.messages, prev])
+          : dedupeNewestFirst([pending, prev, payload.messages]);
+        writeMessages(userId, chatId, merged.filter((m) => !m.id.startsWith('pending-')));
         return merged;
       });
     },
@@ -132,7 +98,6 @@ export const ChatView = (props: ChatViewProps) => {
 
   // initial load + 4s poll while visible
   React.useEffect(() => {
-    if (!active) return;
     let cancelled = false;
     const seq = ++seqRef.current;
     const load = async () => {
@@ -145,22 +110,24 @@ export const ChatView = (props: ChatViewProps) => {
       } catch (err: any) {
         if (cancelled) return;
         setLoading(false);
-        if ([401, 403, 404].includes(Number(err?.status))) {
-          setMessages([]); setMembers([]); setThreadRoot(null); setNextCursor(null);
-          writeMessages(userId, chatId, []);
-          onAccessRevoked.current?.();
-          return;
-        }
-        if (!messagesRef.current.length) lopu({ title: err?.error || 'Could not load this chat 😞', status: 'error' });
+        lopu({ title: err?.error || 'Could not load this chat 😞', status: 'error' });
       }
     };
-    const unsubscribe = subscribeBackgroundRefresh(`messenger-messages:${userId}:${chatId}`, load, ACTIVE_POLL_MS);
+    void load();
+    const interval = window.setInterval(() => {
+      if (document.visibilityState !== 'visible') return;
+      void load();
+    }, ACTIVE_POLL_MS);
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') void load();
+    };
+    document.addEventListener('visibilitychange', onVisible);
     return () => {
       cancelled = true;
-      unsubscribe();
+      window.clearInterval(interval);
+      document.removeEventListener('visibilitychange', onVisible);
     };
-  // The optional revocation callback is read through the latest props ref.
-  }, [active, api, applyPage, chatId, lopu, userId]);
+  }, [api, applyPage, chatId, lopu]);
 
   // custom emoji palette for this chat (community set + personal set)
   React.useEffect(() => {
@@ -184,16 +151,13 @@ export const ChatView = (props: ChatViewProps) => {
   // the server, deduped here) — this is what clears the unread badge. Pending
   // requests never leave receipts: "seen" must not leak before accept.
   React.useEffect(() => {
-    if (!active || pendingRequest) return;
+    if (pendingRequest) return;
     const newest = messages.find((m) => !m.id.startsWith('pending-'));
     if (!newest || readMarkRef.current === newest.id) return;
     if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
     readMarkRef.current = newest.id;
-		api
-			.markRead({ chatId, messageId: newest.id })
-			.then(() => props.onChatsChanged())
-			.catch(() => {});
-  }, [active, api, chatId, messages, pendingRequest, props]);
+    api.markRead({ chatId, messageId: newest.id }).then(() => props.onChatsChanged()).catch(() => {});
+  }, [api, chatId, messages, pendingRequest, props]);
 
   // reaction chips reference emojis by id with { name, animated } only —
   // fetch the image bytes once per unknown id and cache them
@@ -229,67 +193,31 @@ export const ChatView = (props: ChatViewProps) => {
     setLoadingMore(false);
   };
 
-	const send = async (submission: {
-		text: string;
-		requestId: string;
-		attachmentIds: string[];
-		attachments: PublicAttachment[];
-		agentMode?: AgentSendMode;
-	}): Promise<boolean> => {
-		const { text, requestId, attachmentIds, attachments } = submission;
+  const send = async (text: string): Promise<boolean> => {
     if (editing) {
       const target = editing;
+      setEditing(null);
       const prevText = target.text;
       setMessages((prev) => prev.map((m) => (m.id === target.id ? { ...m, text } : m)));
       try {
         const payload = await api.editMessage({ id: target.id, text });
         setMessages((prev) => prev.map((m) => (m.id === target.id ? payload.message : m)));
-				setEditing((current) => (current?.id === target.id ? null : current));
         return true;
       } catch (err: any) {
         setMessages((prev) => prev.map((m) => (m.id === target.id ? { ...m, text: prevText } : m)));
-				if (hasUnknownMutationOutcome(err)) {
-					lopu({ title: 'That edit may already have saved. Retry safely to confirm it.', status: 'info' });
-					throw err;
-				}
-				lopu({ title: 'Thingtime could not save that edit. Please try again.', status: 'error' });
+        lopu({ title: err?.error || 'Edit failed 😞', status: 'error' });
         return false;
       }
     }
-		if (liveSource) {
-			if (attachments.length) {
-				lopu({ title: 'This desktop connector does not support attachments yet.', status: 'info' });
-				return false;
-			}
-			try {
-				await agent.send({ text, requestId, mode: submission.agentMode || agentMode });
-				return true;
-			} catch (err: any) {
-				if (hasUnknownMutationOutcome(err)) {
-					lopu({ title: 'That agent message may already be queued. Retry safely to confirm it.', status: 'info' });
-					throw err;
-				}
-				lopu({ title: err?.error || err?.message || 'Thingtime could not reach that desktop chat.', status: 'error' });
-				return false;
-			}
-		}
     const reply = replyTo;
+    setReplyTo(null);
     const localId = `pending-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
     const optimistic: ChatMessage = {
       id: localId,
       chatId,
       authorId: userId || '',
-      author: user
-        ? {
-            id: user.id,
-            username: user.username,
-            displayName: user.displayName,
-            temporary: user.temporary,
-            avatarUrl: user.avatarUrl
-          }
-        : null,
+      author: user ? { id: user.id, username: user.username, displayName: user.displayName, avatarUrl: user.avatarUrl } : null,
       text,
-			attachments,
       deleted: false,
       editedAt: null,
       threadRootId: null,
@@ -298,10 +226,9 @@ export const ChatView = (props: ChatViewProps) => {
         ? {
             id: reply.id,
             authorId: reply.authorId,
-            authorName: reply.author ? getUserDisplayName(reply.author) : null,
+            authorName: reply.author?.displayName || reply.author?.username || null,
             text: reply.text.slice(0, 140),
-						deleted: reply.deleted,
-						attachmentCount: reply.attachments.length
+            deleted: reply.deleted
           }
         : null,
       systemType: null,
@@ -314,33 +241,18 @@ export const ChatView = (props: ChatViewProps) => {
     };
     setMessages((prev) => [optimistic, ...prev]);
     try {
-			const payload = await api.sendMessage({
-				chatId,
-				text,
-				requestId,
-				attachmentIds,
-				...(reply ? { replyToId: reply.id } : {})
-			});
+      const payload = await api.sendMessage({ chatId, text, ...(reply ? { replyToId: reply.id } : {}) });
       setMessages((prev) => {
         const next = prev.map((m) => (m.id === localId ? payload.message : m));
-				writeMessages(
-					userId,
-					chatId,
-					next.filter((m) => !m.id.startsWith('pending-'))
-				);
+        writeMessages(userId, chatId, next.filter((m) => !m.id.startsWith('pending-')));
         return next;
       });
-			if (reply) setReplyTo((current) => (current?.id === reply.id ? null : current));
       props.onChatsChanged();
       emitMessengerRefresh();
       return true;
     } catch (err: any) {
       setMessages((prev) => prev.filter((m) => m.id !== localId));
-			if (hasUnknownMutationOutcome(err)) {
-				lopu({ title: 'That message may already have sent. Retry safely to confirm it.', status: 'info' });
-				throw err;
-			}
-			lopu({ title: 'Thingtime could not send that message. Please try again.', status: 'error' });
+      lopu({ title: err?.error || 'Message did not send 😞', status: 'error' });
       return false;
     }
   };
@@ -364,7 +276,11 @@ export const ChatView = (props: ChatViewProps) => {
     try {
       const payload = await api.react({ messageId: message.id, emoji: token });
       setMessages((prev) =>
-				prev.map((m) => (m.id === message.id ? { ...m, reactionCounts: payload.reactionCounts, viewerReactions: payload.viewerReactions } : m))
+        prev.map((m) =>
+          m.id === message.id
+            ? { ...m, reactionCounts: payload.reactionCounts, viewerReactions: payload.viewerReactions }
+            : m
+        )
       );
       setCustomEmojis(mergeEmojiMap(userId, payload.customEmojis || {}));
       if (token.startsWith('custom:') && !had) {
@@ -378,12 +294,9 @@ export const ChatView = (props: ChatViewProps) => {
 
   const remove = async (message: ChatMessage) => {
     const prev = messagesRef.current;
-		setMessages((current) =>
-			current.map((m) => (m.id === message.id ? { ...m, deleted: true, text: '', attachments: [], reactionCounts: {}, viewerReactions: [] } : m))
-		);
+    setMessages((current) => current.map((m) => (m.id === message.id ? { ...m, deleted: true, text: '', reactionCounts: {}, viewerReactions: [] } : m)));
     try {
       await api.deleteMessage({ id: message.id });
-			window.dispatchEvent(new Event('thingtime:root-data-refresh'));
     } catch (err: any) {
       setMessages(prev);
       lopu({ title: err?.error || 'Delete failed 😞', status: 'error' });
@@ -401,17 +314,20 @@ export const ChatView = (props: ChatViewProps) => {
   };
 
   const title = chatDisplayName({ ...chatSummary, members }, userId);
-  const canEditTopic =
-    !chatSummary.externalSource &&
-    mode === 'slack' &&
-    chatSummary.chatType === 'channel' &&
-    (myMember?.role === 'owner' || myMember?.role === 'admin');
+  const canEditTopic = mode === 'slack' && chatSummary.chatType === 'channel' && (myMember?.role === 'owner' || myMember?.role === 'admin');
   const communityEmojiScope = chatSummary.communityId;
 
   return (
     <Flex direction="column" height="100%" minWidth={0} flex={1}>
       {/* header */}
-			<Flex align="center" gap={2} paddingX={3} paddingY={2} borderBottom="1px solid var(--tt-border-light, #f3f3f5)" flexShrink={0}>
+      <Flex
+        align="center"
+        gap={2}
+        paddingX={3}
+        paddingY={2}
+        borderBottom="1px solid var(--tt-border-light, #f3f3f5)"
+        flexShrink={0}
+      >
         {props.onBack ? (
           <Button size="sm" variant="ghost" onClick={props.onBack} aria-label="Back">
             ←
@@ -420,11 +336,6 @@ export const ChatView = (props: ChatViewProps) => {
         <Box minWidth={0} flex={1}>
           <Box fontWeight={700} fontSize="15px" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap">
             {title}
-            {chatSummary.externalSource ? (
-              <Box as="span" fontSize="10px" fontWeight={600} color="var(--tt-muted, #777782)" marginLeft={2}>
-                {externalSourceAvatar(chatSummary.externalSource).glyph} {chatSummary.externalSource.label}
-              </Box>
-            ) : null}
           </Box>
           {mode === 'slack' && chatSummary.chatType === 'channel' ? (
             editingTopic ? (
@@ -479,25 +390,6 @@ export const ChatView = (props: ChatViewProps) => {
         </Box>
       ) : null}
 
-      {chatSummary.externalSource ? (
-        <Box
-          paddingX={3}
-          paddingY="6px"
-          fontSize="11px"
-          textAlign="center"
-          background="var(--tt-surface-alt, #f7f7f9)"
-          color="var(--tt-muted, #777782)"
-          borderBottom="1px solid var(--tt-border-light, #f3f3f5)"
-          whiteSpace="normal"
-        >
-					{isLopuAiSource(chatSummary.externalSource)
-						? 'A conversation with Lopu, the Thingtime assistant 🦄'
-						: liveSource
-							? `Live with ${liveSource.label} on your computer. Messages here are sent to that desktop session; completed responses sync back to Thingtime.`
-							: `Imported read-only from ${chatSummary.externalSource.label}. Reactions, threads and replies stay in Thingtime.`}
-        </Box>
-      ) : null}
-
       {/* messages + optional thread panel */}
       <Flex flex={1} minHeight={0}>
         <Flex direction="column" flex={1} minWidth={0}>
@@ -525,30 +417,8 @@ export const ChatView = (props: ChatViewProps) => {
               onUploadEmoji={() => setUploadOpen(true)}
             />
           )}
-					{liveSource ? (
-						<AgentLiveActivity
-							state={agent.state}
-							connected={agent.connected}
-							onApproval={async (approvalId, decision) => {
-								try {
-									await agent.respondToApproval(approvalId, decision);
-								} catch (err: any) {
-									lopu({ title: err?.error || err?.message || 'Approval response failed.', status: 'error' });
-									throw err;
-								}
-							}}
-						/>
-					) : null}
           <Composer
-						placeholder={
-							isLopuAiSource(chatSummary.externalSource)
-								? 'Ask Lopu anything 🦄'
-								: liveSource
-									? `Message ${liveSource.label} on your computer`
-									: chatSummary.externalSource
-										? `Reply in Thingtime about ${title}`
-										: `Message ${title}`
-						}
+            placeholder={`Message ${title}`}
             pickerEmojis={pickerEmojis}
             replyTo={replyTo}
             onCancelReply={() => setReplyTo(null)}
@@ -556,38 +426,10 @@ export const ChatView = (props: ChatViewProps) => {
             onCancelEdit={() => setEditing(null)}
             onSend={send}
             onUploadEmoji={() => setUploadOpen(true)}
-						attachmentsSupported={!liveSource || liveSource.capabilities.includes('attachments')}
-						disabled={Boolean(liveSource && !liveSource.capabilities.includes('send-message'))}
-						disabledLabel="This desktop connector cannot send messages."
-						agentControls={
-							liveSource
-								? {
-										running: agent.controls.running,
-										mode: agentMode,
-										canQueue: agent.controls.canQueue,
-										canSteer: agent.controls.canSteer,
-										canInterrupt: agent.controls.canInterrupt,
-										queueDepth: agent.controls.queueDepth,
-										interrupting: interruptingAgent,
-										onModeChange: setAgentMode,
-										onInterrupt: () => {
-											if (interruptingAgent) return;
-											setInterruptingAgent(true);
-											void agent
-												.interrupt()
-												.catch((err: any) => {
-													lopu({ title: err?.error || err?.message || 'Could not stop that turn.', status: 'error' });
-												})
-												.finally(() => setInterruptingAgent(false));
-										}
-								  }
-								: undefined
-						}
           />
         </Flex>
         {threadRoot ? (
           <ThreadPanel
-            active={active}
             api={api}
             chatId={chatId}
             root={messages.find((m) => m.id === threadRoot.id) || threadRoot}
@@ -621,7 +463,6 @@ export const ChatView = (props: ChatViewProps) => {
 
 // Slack-style thread side panel: its own page + composer, one level deep.
 const ThreadPanel = ({
-  active,
   api,
   chatId,
   root,
@@ -634,7 +475,6 @@ const ThreadPanel = ({
   onUploadEmoji,
   onSent
 }: {
-  active: boolean;
   api: MessengerApi;
   chatId: string;
   root: ChatMessage;
@@ -662,13 +502,12 @@ const ThreadPanel = ({
   }, [api, chatId, root.id]);
 
   React.useEffect(() => {
-    if (!active) return;
     void load();
-    const interval = activityInterval('timer:components/Messenger/ChatView:1', 'Chat View', () => {
-      if (document.visibilityState === 'visible') return load();
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === 'visible') void load();
     }, ACTIVE_POLL_MS);
-    return () => clearActivityInterval(interval);
-  }, [active, load]);
+    return () => window.clearInterval(interval);
+  }, [load]);
 
   const reactInThread = async (message: ChatMessage, token: string) => {
     if (message.id === root.id) return onReact(message, token);
@@ -685,38 +524,21 @@ const ThreadPanel = ({
     );
     try {
       const payload = await api.react({ messageId: message.id, emoji: token });
-			setReplies((prev) =>
-				prev.map((m) => (m.id === message.id ? { ...m, reactionCounts: payload.reactionCounts, viewerReactions: payload.viewerReactions } : m))
-			);
+      setReplies((prev) => prev.map((m) => (m.id === message.id ? { ...m, reactionCounts: payload.reactionCounts, viewerReactions: payload.viewerReactions } : m)));
     } catch (err: any) {
       setReplies((prev) => prev.map((m) => (m.id === message.id ? message : m)));
       lopu({ title: err?.error || 'Reaction did not stick 😞', status: 'error' });
     }
   };
 
-	const sendReply = async (submission: {
-		text: string;
-		requestId: string;
-		attachmentIds: string[];
-		attachments: PublicAttachment[];
-	}): Promise<boolean> => {
+  const sendReply = async (text: string): Promise<boolean> => {
     try {
-			const payload = await api.sendMessage({
-				chatId,
-				text: submission.text,
-				requestId: submission.requestId,
-				attachmentIds: submission.attachmentIds,
-				threadRootId: root.id
-			});
+      const payload = await api.sendMessage({ chatId, text, threadRootId: root.id });
       setReplies((prev) => [payload.message, ...prev]);
       onSent();
       return true;
     } catch (err: any) {
-			if (hasUnknownMutationOutcome(err)) {
-				lopu({ title: 'That reply may already have sent. Retry safely to confirm it.', status: 'info' });
-				throw err;
-			}
-			lopu({ title: 'Thingtime could not send that reply. Please try again.', status: 'error' });
+      lopu({ title: err?.error || 'Reply did not send 😞', status: 'error' });
       return false;
     }
   };

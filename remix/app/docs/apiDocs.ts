@@ -6621,100 +6621,12 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
-    id: 'ai-connections',
-    group: 'messenger',
-    title: 'AI desktop connections',
-    endpoint: '/api/v1/ai/connections',
-    summary: 'Lists linked ChatGPT/Claude sources or imports one idempotent Messenger sync batch.',
-    detail:
-      'GET lists the authenticated account’s consented AI desktop sources and latest completed counts. POST ' +
-      'accepts one bounded application/json batch from the Thingtime desktop bridge. External projects or ' +
-      'workspaces become private communities, their conversations become private channels, ungrouped ' +
-      'conversations become named group chats, and messages become relational chat-message Things. Provider ' +
-      'credentials, cookies, raw local paths, hidden reasoning and tool traffic are never accepted. Stable ' +
-      'server-hashed source keys make every batch safe to retry. Provider history is read-only; replies stay ' +
-      'inside Thingtime.',
-    auth: {
-      mode: 'session-or-bearer',
-      description: 'Requires a full Thingtime user account via auth cookie or Authorization: Bearer token.'
-    },
-    methods: ['GET', 'POST'],
-    steps: [
-      'Discover and approve a source in the signed Thingtime desktop app.',
-      'Send project records before their conversations and conversation records before their messages.',
-      'Keep each batch within 80 projects, 120 conversations, 240 messages and the 768 KiB body cap.',
-      'Set final true and include source totals on the last batch.',
-      'Retry an interrupted batch unchanged; source hashes prevent duplicate communities, chats, or messages.'
-    ],
-    requestExamples: [
-      {
-        name: 'Import one Claude batch',
-        description: 'Creates a project channel and its first imported message.',
-        method: 'POST',
-        body: {
-          source: {
-            provider: 'claude',
-            sourceId: 'claude-thingtime',
-            label: 'Claude Thingtime',
-            connector: 'claude-code-local',
-            mode: 'local'
-          },
-          groups: [{ id: 'project_01', name: 'Thingtime', kind: 'project' }],
-          conversations: [{ id: 'conversation_01', title: 'Messenger bridge', groupId: 'project_01' }],
-          messages: [
-            {
-              id: 'message_01',
-              conversationId: 'conversation_01',
-              role: 'assistant',
-              authorName: 'Claude',
-              text: 'The bridge is ready.'
-            }
-          ],
-          final: true,
-          totals: { groups: 1, conversations: 1, messages: 1 }
-        }
-      }
-    ],
-    responseExamples: [
-      {
-        status: 200,
-        description: 'Batch accepted and connection status updated.',
-        body: {
-          ok: true,
-          connection: {
-            provider: 'claude',
-            sourceId: 'claude-thingtime',
-            label: 'Claude Thingtime',
-            status: 'connected',
-            readOnly: true,
-            groups: 1,
-            conversations: 1,
-            messages: 1
-          },
-          accepted: { groups: 1, conversations: 1, messages: 1, messageSegments: 1 }
-        }
-      },
-      {
-        status: 409,
-        description: 'A batch arrived before a referenced parent record.',
-        body: { ok: false, error: 'An imported message arrived before its conversation; retry the sync batch' }
-      }
-    ],
-    notes: [
-      'POST requires application/json and draws from the ai.sync rate-limit bucket (600 batches per hour).',
-      'Message text over the native chat cap is split into ordered, idempotent segments.'
-    ]
-  }),
-  endpoint({
     id: 'chats',
-    contractVersion: '1.1.0',
-    featureVersion: '1.1.0',
     group: 'messenger',
     title: 'Chats',
     endpoint: '/api/v1/chats',
     summary: 'Lists every conversation the caller is in, or creates a channel, group, or DM.',
     detail:
-      'Subspace general channels are reconciled for active subspace members on Messenger entry. All linked chat previews and unread counters are filtered by current subspace membership and live parent existence. ' +
       'GET returns every conversation the caller belongs to — community channels, groups, and DMs — each with an ' +
       'unread count, a lastMessage preview, and the caller membership entry (role, nickname, state, muted, read ' +
       'receipt), plus totalUnread (muted chats excluded), requestsCount, and serverTime. POST creates a chat: ' +
@@ -6793,14 +6705,11 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'chats-get',
-    contractVersion: '1.0.1',
-    featureVersion: '1.0.1',
     group: 'messenger',
     title: 'Chat detail',
     endpoint: '/api/v1/chats/get',
     summary: 'Reads one chat with its full member list.',
     detail:
-      'Subspace-linked spaces require current active subspace membership on every read and write; removed, pending, banned and left memberships or deleted parents grant no access. Membership administration uses the subspace controls. ' +
       'Returns a single chat by id along with every member — profile, role, nickname, and per-member read ' +
       'receipt — plus communityName for channels. Read receipts follow the privacy parity rule: a member who ' +
       'turned receipts off neither shares a reading position nor sees the positions of others. Only members of ' +
@@ -6855,14 +6764,11 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'chats-update',
-    contractVersion: '1.0.1',
-    featureVersion: '1.0.1',
     group: 'messenger',
     title: 'Update chat',
     endpoint: '/api/v1/chats/update',
     summary: 'Renames a chat or updates its topic, section, or channel visibility.',
     detail:
-      'Subspace-linked spaces require current active subspace membership on every read and write; removed, pending, banned and left memberships or deleted parents grant no access. Membership administration uses the subspace controls. ' +
       'Groups follow the Messenger convention: any member may rename them. Channels are stricter — only chat or ' +
       'community admins may change them, and channel names are slugged to lowercase. DMs have nothing to rename ' +
       'and return 400. Renames and topic changes insert a system message into the chat so the history explains ' +
@@ -6908,14 +6814,11 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'chats-members',
-    contractVersion: '1.0.1',
-    featureVersion: '1.0.1',
     group: 'messenger',
     title: 'Chat members',
     endpoint: '/api/v1/chats/members',
     summary: 'Manages chat membership with one verb per call: join, add, remove, role, nickname, or mute.',
     detail:
-      'Linked spaces manage member additions, removals and roles through subspace controls. Per-chat nickname and mute preferences remain editable. ' +
       'POST the chatId plus exactly one verb. join: true joins a public channel of a community you belong to. ' +
       'add lists user ids to bring in (any member may add to a group; private channels need an admin, and everyone ' +
       'added to a channel must already be a community member — channel access never outruns the invite gate). ' +
@@ -6983,14 +6886,11 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'chats-leave',
-    contractVersion: '1.0.1',
-    featureVersion: '1.0.1',
     group: 'messenger',
     title: 'Leave chat',
     endpoint: '/api/v1/chats/leave',
     summary: 'Leaves a group or channel.',
     detail:
-      'Subspace-linked spaces require current active subspace membership on every read and write; removed, pending, banned and left memberships or deleted parents grant no access. Membership administration uses the subspace controls. ' +
       'Removes the caller from a group or channel; DMs cannot be left. When the departing member is the owner, ' +
       'ownership auto-promotes the earliest admin, or the earliest remaining member when no admin exists, so a ' +
       'chat never ends up ownerless.',
@@ -7028,22 +6928,16 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'chats-messages',
-    featureVersion: '1.2.1',
-    contractVersion: '1.2.1',
     group: 'messenger',
     title: 'Chat messages',
     endpoint: '/api/v1/chats/messages',
     summary: 'Reads a page of messages or sends a new one, including Slack-style thread replies.',
     detail:
-      'Subspace-linked spaces require current active subspace membership on every read and write; removed, pending, banned and left memberships or deleted parents grant no access. Membership administration uses the subspace controls. ' +
-      'Version 1.2 preserves long Lopu assistant output and all public tool receipts across relational message segments; later receipt segments carry lopu.toolReceiptOffset. ' +
-      'Version 1.1 adds optional lopu.toolCalls[].links ({label, href}, at most 100 per call) to assistant message history. Links allow local paths and credential-free HTTP(S) URLs only; raw tool data and approval grants are excluded. ' +
       'GET pages a chat newest-first with cursor and limit (max 100, default 40); pass threadRootId to scope the ' +
       'page to one thread. The response bundles customEmojis (a map of id to name, image, and animated for any ' +
       'custom reaction tokens on the page), nextCursor, threadRoot, members, chat, and myMember so one request ' +
-			'can paint a conversation. POST sends optional text up to 4000 characters plus as many as 25 purpose-matched private attachments, with optional threadRootId or replyToId. ' +
-			'Attachment messages require a stable client requestId; message insertion, exact attachment binding, pending-request acceptance, preview, and read receipt commit in one home transaction. ' +
-			'Replies and thread messages use the same contract. Every projected attachment contains stable metadata and a same-origin content path, never an S3 key or presigned URL.',
+      'can paint a conversation. POST sends text up to 4000 characters with optional threadRootId or replyToId. ' +
+      'Replying to a pending message request accepts it, and sending marks the chat read up to your own message.',
     auth: {
       mode: 'session-or-bearer',
       description: 'Requires an auth cookie or Authorization: Bearer token.'
@@ -7052,8 +6946,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     steps: [
       'GET with chatId, plus cursor and limit to page older messages newest-first.',
       'Pass threadRootId to read or post inside a single thread.',
-			'POST chatId and optional text (4000 characters max), with replyToId for inline replies.',
-			'For files, first finish purpose=message uploads, then POST their attachmentIds plus one stable requestId. An attachment-only message is valid.',
+      'POST chatId and text (4000 characters max), with replyToId for inline replies.',
       'Resolve custom:<emojiId> reaction tokens through the returned customEmojis map.',
       'Follow nextCursor until it is null to reach the start of history.'
     ],
@@ -7068,12 +6961,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         name: 'Send a message',
         description: 'Post a message to the chat.',
         method: 'POST',
-				body: {
-					chatId: 'c0ffee12-aaaa-4aaa-8aaa-000000000001',
-					text: 'Shipping the messenger docs today.',
-					requestId: '9f59e32b-9509-43ef-9a0f-abde27b6d79c',
-					attachmentIds: ['att_3f9a7d2c5b1e8046a39f12dc7b5e90186d437be2a059c8f1467e3b9d1c4a502e']
-				}
+        body: { chatId: 'c0ffee12-aaaa-4aaa-8aaa-000000000001', text: 'Shipping the messenger docs today.' }
       },
       {
         name: 'Reply in a thread',
@@ -7097,14 +6985,15 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
               id: 'c0ffee12-bbbb-4bbb-8bbb-000000000002',
               senderId: 'c0ffee12-cccc-4ccc-8ccc-000000000003',
               text: 'See you there',
-							attachments: [],
               createdAt: '2026-08-03T10:14:00.000Z'
             }
           ],
           customEmojis: {},
           nextCursor: null,
           threadRoot: null,
-					members: [{ user: { id: 'c0ffee12-cccc-4ccc-8ccc-000000000003', username: 'ada-lovelace' }, role: 'member' }],
+          members: [
+            { user: { id: 'c0ffee12-cccc-4ccc-8ccc-000000000003', username: 'ada-lovelace' }, role: 'member' }
+          ],
           chat: { id: 'c0ffee12-aaaa-4aaa-8aaa-000000000001', chatType: 'group', name: 'Weekend plans' },
           myMember: { role: 'member', muted: false }
         }
@@ -7115,25 +7004,17 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         body: { ok: false, error: 'Not a member of this chat' }
       }
     ],
-		notes: [
-			'Version 1.0.1 projects custom emoji references using the canonical stored-upload emoji_ plus 64 lowercase hex digits, alongside legacy IDs. Existing read access and emoji scope checks are unchanged.',
-			'Sending draws from the chats.message rate-limit bucket (120 messages per minute).',
-			'Message rows are server-managed conversation plumbing; uploaded object bytes are billed exactly once through their attachment Things and refunded only after exact-version S3 deletion.',
-			'Browser attachment sends require same-origin JSON and a full user account. Text-only session/Bearer clients retain the existing contract.'
-		]
+    notes: ['Sending draws from the chats.message rate-limit bucket (120 messages per minute).']
   }),
   endpoint({
     id: 'chats-messages-edit',
-    featureVersion: '1.0.2',
-    contractVersion: '1.0.2',
-    notes: ['Version 1.0.1 preserves canonical stored-upload custom emoji IDs when projecting the edited message. Editing rights and emoji ownership checks are unchanged.'],
     group: 'messenger',
     title: 'Edit message',
     endpoint: '/api/v1/chats/messages/edit',
     summary: 'Edits the text of a message the caller sent.',
     detail:
       'Only the author can edit a message. The new text replaces the old and the message is stamped with ' +
-			'editedAt so clients can show an edited marker. The 4000-character limit applies just as it does on send. Text may be empty only while at least one existing attachment remains.',
+      'editedAt so clients can show an edited marker. The 4000-character limit applies just as it does on send.',
     auth: {
       mode: 'session-or-bearer',
       description: 'Requires an auth cookie or Authorization: Bearer token.'
@@ -7174,14 +7055,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
-    id: 'chats-messages-delete', contractVersion: '1.0.1', featureVersion: '1.0.1',
+    id: 'chats-messages-delete',
     group: 'messenger',
     title: 'Delete message',
     endpoint: '/api/v1/chats/messages/delete',
     summary: 'Soft-deletes a message, leaving a placeholder in the history.',
     detail:
       'The author or a chat admin can delete a message. Deletion is soft: the row stays as a placeholder, its ' +
-			'text is cleared, and its reactions are removed, so conversation flow and reply anchors survive. Every bound object version is permanently deleted before its attachment row is removed and account quota is refunded.',
+      'text is cleared, and its reactions are removed, so conversation flow and reply anchors survive.',
     auth: {
       mode: 'session-or-bearer',
       description: 'Requires an auth cookie or Authorization: Bearer token.'
@@ -7190,7 +7071,6 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     steps: [
       'POST the message id to delete.',
       'The author or a chat admin may delete; anyone else gets a 403.',
-			'Wait for exact-version attachment cleanup and quota refund before the placeholder is committed.',
       'Render the surviving placeholder row as a deleted-message marker.',
       'Expect reactions on the message to be removed with it.'
     ],
@@ -7217,20 +7097,15 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'chats-react',
-    featureVersion: '1.0.2',
-    contractVersion: '1.0.2',
     group: 'messenger',
     title: 'React to message',
     endpoint: '/api/v1/chats/react',
     summary: 'Toggles an emoji reaction on a message.',
     detail:
-      'Subspace-linked spaces require current active subspace membership on every read and write; removed, pending, banned and left memberships or deleted parents grant no access. Membership administration uses the subspace controls. ' +
       'POST a messageId and an emoji token to add the reaction, or again to remove it. The token is either a ' +
       'unicode emoji (the same grammar post reactions use) or custom:<emojiId> referencing an uploaded custom ' +
       'emoji from the community this chat belongs to or from your personal set. The response returns the ' +
-      'refreshed reactionCounts, your own viewerReactions, and a customEmojis map for rendering custom tokens. ' +
-      'Version 1.0.1 recognizes the canonical emoji_ plus 64 lowercase hex digits produced by stored-image uploads, ' +
-      'alongside legacy 6-64 character IDs. Recognition does not grant access: the existing personal/community scope checks still apply. Plain feed reactions continue rejecting custom tokens.',
+      'refreshed reactionCounts, your own viewerReactions, and a customEmojis map for rendering custom tokens.',
     auth: {
       mode: 'session-or-bearer',
       description: 'Requires an auth cookie or Authorization: Bearer token.'
@@ -7286,14 +7161,11 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'chats-read',
-    contractVersion: '1.0.1',
-    featureVersion: '1.0.1',
     group: 'messenger',
     title: 'Read receipt',
     endpoint: '/api/v1/chats/read',
     summary: 'Advances the current user read receipt in a chat.',
     detail:
-      'Subspace-linked spaces require current active subspace membership on every read and write; removed, pending, banned and left memberships or deleted parents grant no access. Membership administration uses the subspace controls. ' +
       'POST chatId and the newest messageId you have displayed. The receipt is a forward-only high-water mark: ' +
       'attempts to move it backwards are ignored. It drives unread counts everywhere and the seen-by indicators ' +
       'other members see, subject to the read-receipt privacy setting.',
@@ -7339,14 +7211,11 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'chats-requests',
-    contractVersion: '1.0.1',
-    featureVersion: '1.0.1',
     group: 'messenger',
     title: 'Message requests',
     endpoint: '/api/v1/chats/requests',
     summary: 'Lists pending DM requests, or accepts and declines them.',
     detail:
-      'Subspace-linked spaces require current active subspace membership on every read and write; removed, pending, banned and left memberships or deleted parents grant no access. Membership administration uses the subspace controls. ' +
       'GET returns pending DM requests in two buckets: follower for senders who follow you, and unknown for ' +
       'everyone else. POST chatId with accept: true opens the conversation and moves it into the normal inbox; ' +
       'accept: false declines and hides it, and the sender is not told either way. Replying to a pending request ' +
@@ -7406,7 +7275,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
-    id: 'chats-updates', contractVersion: '1.0.1', featureVersion: '1.0.1',
+    id: 'chats-updates',
     group: 'messenger',
     title: 'Chat updates poll',
     endpoint: '/api/v1/chats/updates',
@@ -7508,14 +7377,11 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'communities',
-    contractVersion: '1.1.0',
-    featureVersion: '1.1.0',
     group: 'messenger',
     title: 'Communities',
     endpoint: '/api/v1/communities',
     summary: 'Lists the caller communities or creates a new one.',
     detail:
-      'Each subspace has a linked space with subspaceId and subspaceSlug. Its identity, roles and membership come from the live subspace; pending, banned, left or deleted subspaces never appear as accessible spaces. ' +
       'GET returns every community the caller belongs to, with the caller role, memberCount, and the ordered ' +
       'sections that file its channels. POST creates a community from a name and optional description, and the ' +
       'creator becomes its owner.',
@@ -7569,14 +7435,11 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'communities-get',
-    contractVersion: '1.1.0',
-    featureVersion: '1.1.0',
     group: 'messenger',
     title: 'Community detail',
     endpoint: '/api/v1/communities/get',
     summary: 'Reads one community with members, sections, and its channel directory.',
     detail:
-      'Linked spaces return subspaceId and subspaceSlug and derive their current identity, roster, count and roles from the live subspace. ' +
       'Returns the community (including its sections), the first 100 members with roles, the full memberCount, ' +
       'and the channel directory: every channel you have joined plus the joinable public ones, each with ' +
       'memberCount and a joined flag. It is the one call a community screen needs.',
@@ -7610,9 +7473,13 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
             name: 'Thingtime HQ',
             sections: [{ id: 'c0ffee12-eeee-4eee-8eee-000000000005', name: 'Announcements' }]
           },
-					members: [{ user: { id: 'c0ffee12-cccc-4ccc-8ccc-000000000003', username: 'ada-lovelace' }, role: 'owner' }],
+          members: [
+            { user: { id: 'c0ffee12-cccc-4ccc-8ccc-000000000003', username: 'ada-lovelace' }, role: 'owner' }
+          ],
           memberCount: 12,
-					channels: [{ id: 'c0ffee12-aaaa-4aaa-8aaa-000000000002', name: 'general', memberCount: 12, joined: true }]
+          channels: [
+            { id: 'c0ffee12-aaaa-4aaa-8aaa-000000000002', name: 'general', memberCount: 12, joined: true }
+          ]
         }
       },
       {
@@ -7624,14 +7491,11 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'communities-update',
-    contractVersion: '1.0.1',
-    featureVersion: '1.0.1',
     group: 'messenger',
     title: 'Update community',
     endpoint: '/api/v1/communities/update',
     summary: 'Updates a community name or description.',
     detail:
-      'Subspace-linked spaces require current active subspace membership on every read and write; removed, pending, banned and left memberships or deleted parents grant no access. Membership administration uses the subspace controls. ' +
       'Community admins can rename the community or rewrite its description. Sections and channels have their ' +
       'own routes; this one only touches the community record itself.',
     auth: {
@@ -7679,14 +7543,11 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'communities-members',
-    contractVersion: '1.0.1',
-    featureVersion: '1.0.1',
     group: 'messenger',
     title: 'Community members',
     endpoint: '/api/v1/communities/members',
     summary: 'Changes a community member role, removes a member, or leaves.',
     detail:
-      'Subspace-linked spaces require current active subspace membership on every read and write; removed, pending, banned and left memberships or deleted parents grant no access. Membership administration uses the subspace controls. ' +
       'POST the communityId plus exactly one operation. userId with role promotes or demotes between admin and ' +
       'member (admins only). userId with remove: true removes a member (admins only; the owner is untouchable). ' +
       'leave: true removes the caller — anyone but the owner may leave, since a community must keep its owner.',
@@ -7734,14 +7595,11 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'communities-invites',
-    contractVersion: '1.0.1',
-    featureVersion: '1.0.1',
     group: 'messenger',
     title: 'Community invites',
     endpoint: '/api/v1/communities/invites',
     summary: 'Lists, mints, or revokes community invite codes.',
     detail:
-      'Subspace-linked spaces require current active subspace membership on every read and write; removed, pending, banned and left memberships or deleted parents grant no access. Membership administration uses the subspace controls. ' +
       'GET with communityId lists the community invites (admins only). POST with communityId mints a new invite ' +
       '— optionally bounded by expiresInDays and maxUses — and returns its code; POST with communityId and ' +
       'revokeId revokes an existing invite. Codes are redeemed through /api/v1/communities/join.',
@@ -7803,14 +7661,11 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'communities-join',
-    contractVersion: '1.0.1',
-    featureVersion: '1.0.1',
     group: 'messenger',
     title: 'Join community',
     endpoint: '/api/v1/communities/join',
     summary: 'Joins a community by redeeming an invite code.',
     detail:
-      'Subspace-linked spaces cannot be joined by Messenger invite codes: use the subspace join or private membership approval flow. ' +
       'POST a code to join the community it belongs to. Redemption is atomic — expiry, revocation, and use caps ' +
       'are all checked inside the update filter, so an invite can never be over-redeemed in a race. Re-joining a ' +
       'community you are already in is a friendly no-op success.',
@@ -7848,14 +7703,11 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'communities-sections',
-    contractVersion: '1.0.1',
-    featureVersion: '1.0.1',
     group: 'messenger',
     title: 'Community sections',
     endpoint: '/api/v1/communities/sections',
     summary: 'Creates, renames, removes, or reorders community sections.',
     detail:
-      'Subspace-linked spaces require current active subspace membership on every read and write; removed, pending, banned and left memberships or deleted parents grant no access. Membership administration uses the subspace controls. ' +
       'Sections are the folders channels are filed under. POST the communityId plus exactly one operation: ' +
       'create with a name, rename with an id and name, remove with an id, or reorder with the full ordered id ' +
       'list. All four are admin-only and return the refreshed sections. Removing a section un-files its channels ' +
@@ -7909,20 +7761,18 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'emojis',
-    contractVersion: '1.0.2',
-    featureVersion: '1.0.2',
     group: 'messenger',
     title: 'Custom emojis',
     endpoint: '/api/v1/emojis',
     summary: 'Lists or uploads custom emojis for a community or the personal set.',
     detail:
-      'Subspace-linked spaces require current active subspace membership on every read and write; removed, pending, banned and left memberships or deleted parents grant no access. Membership administration uses the subspace controls. ' +
       'GET with chatId or communityId returns the emojis usable in that scope — the community set plus your ' +
       'personal set — and requires membership for community scopes. GET with ids (comma-separated emoji ids) ' +
-			'resolves specific emoji metadata with a stable same-origin content URL: message payloads reference reacted emojis as ' +
-			'{ name, animated } only, and clients fetch authorized images once by id and cache them. POST atomically binds one completed purpose=custom-emoji attachment to a name of ' +
-			'2-32 characters matching [a-z0-9_-] and an optional communityId. Images are private, quota-accounted GIF, PNG, JPEG, or WebP files up to 512 KiB; S3 identifiers never enter the emoji crystal or response. ' +
-			'Names are unique per scope, and messages react with the custom:<emoji id> token. Legacy inline data-URI rows remain read-compatible but cannot be created.',
+      'resolves specific emojis with their image bytes: message payloads reference reacted emojis as ' +
+      '{ name, animated } only, and clients fetch images once by id and cache them. POST uploads one: a name of ' +
+      '2-32 characters matching [a-z0-9_-], an image as a base64 data URI (gif, webp, png, apng, or jpeg, roughly ' +
+      '512 KB of binary), and an optional communityId to share it with a community instead of keeping it ' +
+      'personal. Names are unique per scope, and messages react with the custom:<emoji id> token.',
     auth: {
       mode: 'session-or-bearer',
       description: 'Requires an auth cookie or Authorization: Bearer token.'
@@ -7930,9 +7780,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     methods: ['GET', 'POST'],
     steps: [
       'GET with chatId or communityId to list the emojis usable there.',
-			'Complete one purpose=custom-emoji upload, then POST name, attachmentId, and optional communityId to bind it.',
+      'POST name, image data URI, and optional communityId to upload one.',
       'Keep names 2-32 characters of lowercase letters, digits, underscores, and hyphens.',
-			'Use one GIF, PNG, JPEG, or WebP image no larger than 512 KiB.',
+      'Stay under the roughly 512 KB binary image cap.',
       'React with custom:<emoji id> once the upload lands.'
     ],
     requestExamples: [
@@ -7948,7 +7798,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         method: 'POST',
         body: {
           name: 'party-blob',
-					attachmentId: 'att_8d9a7d2c5b1e8046a39f12dc7b5e90186d437be2a059c8f1467e3b9d1c4a502e',
+          image: 'data:image/gif;base64,R0lGODlh...',
           communityId: 'c0ffee12-dddd-4ddd-8ddd-000000000004'
         }
       }
@@ -7968,24 +7818,17 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         body: { ok: false, error: 'An emoji with that name already exists here' }
       }
     ],
-		notes: [
-			'Uploads draw from the emojis.write rate-limit bucket (30 uploads per hour).',
-			'The attachment reservation uses the account storage tier and is refunded only after exact-version deletion.',
-			'POST requires same-origin JSON and a full user account; custom Mongo data planes cannot bind home S3 objects.'
-		]
+    notes: ['Uploads draw from the emojis.write rate-limit bucket (30 uploads per hour).']
   }),
   endpoint({
     id: 'emojis-delete',
-    contractVersion: '1.0.1',
-    featureVersion: '1.0.1',
     group: 'messenger',
     title: 'Delete custom emoji',
     endpoint: '/api/v1/emojis/delete',
     summary: 'Deletes a custom emoji.',
     detail:
-      'Subspace-linked spaces require current active subspace membership on every read and write; removed, pending, banned and left memberships or deleted parents grant no access. Membership administration uses the subspace controls. ' +
       'The uploader can always delete their own emoji, and community admins can delete any emoji in their ' +
-			'community set. The exact S3 object version is deleted before its quota reservation is refunded and the emoji row is retired. Existing custom:<emoji id> reaction tokens simply stop resolving once the emoji is gone.',
+      'community set. Existing custom:<emoji id> reaction tokens simply stop resolving once the emoji is gone.',
     auth: {
       mode: 'session-or-bearer',
       description: 'Requires an auth cookie or Authorization: Bearer token.'
@@ -8019,14 +7862,61 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
-    id: 'algorithms-search', featureVersion: '1.0.0', contractVersion: '1.0.0',
-    group: 'algorithms', title: 'Search public algorithms', endpoint: '/api/v1/algorithms/search',
-    summary: 'Find algorithms their owners explicitly published to the directory.',
-    detail: 'Public, no-store, literal case-insensitive name/description search. q is capped at 80 characters; cursor is the last shareId. Pages hold 20 entries. Only shared AND listed algorithms appear. Returns identity, description, username and training count, never weights or topInterests. Link-only profiles stay undiscoverable.',
-    auth: { mode: 'none', description: 'Guest-visible.' }, methods: ['GET'],
-    steps: ['GET with optional q and cursor.', 'Use nextCursor for another page.', 'Branch through POST /api/v1/algorithms while authenticated.'],
-    requestExamples: [{ name: 'Search', description: 'Find gardening algorithms.', method: 'GET', query: { q: 'gardening' } }],
-    responseExamples: [{ status: 200, description: 'Public directory page.', body: { ok: true, algorithms: [], nextCursor: null } }]
+    id: 'users-follow',
+    group: 'messenger',
+    title: 'Follow user',
+    endpoint: '/api/v1/users/follow',
+    summary: 'Reads or changes the follow relationship with another user.',
+    detail:
+      'GET with username or userId returns the user, whether you follow them (following), whether they follow ' +
+      'you (followsYou), and their follower and following counts. POST with follow: true or false follows or ' +
+      'unfollows. Follow state matters in Messenger: when you follow someone, their DMs arrive straight in your ' +
+      'inbox instead of the message-requests pile.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Requires an auth cookie or Authorization: Bearer token.'
+    },
+    methods: ['GET', 'POST'],
+    steps: [
+      'GET with username or userId to read the relationship and counts.',
+      'POST the same identifier with follow: true to follow or false to unfollow.',
+      'Show followsYou to explain why a DM skipped message requests.',
+      'Handle 404 when the user does not exist.'
+    ],
+    requestExamples: [
+      {
+        name: 'Read a relationship',
+        description: 'Check the follow state with one user.',
+        method: 'GET',
+        query: { username: 'ada-lovelace' }
+      },
+      {
+        name: 'Follow a user',
+        description: 'Start following by username.',
+        method: 'POST',
+        body: { username: 'ada-lovelace', follow: true }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Relationship returned.',
+        body: {
+          ok: true,
+          user: { id: 'c0ffee12-cccc-4ccc-8ccc-000000000003', username: 'ada-lovelace' },
+          following: true,
+          followsYou: false,
+          followerCount: 42,
+          followingCount: 17
+        }
+      },
+      {
+        status: 404,
+        description: 'User not found.',
+        body: { ok: false, error: 'User not found' }
+      }
+    ],
+    notes: ['Follow changes draw from the users.follow rate-limit bucket (60 requests per minute).']
   }),
   endpoint({
     id: 'algorithms',

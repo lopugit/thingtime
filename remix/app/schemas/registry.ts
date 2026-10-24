@@ -479,82 +479,6 @@ export const MAX_COMMUNITY_DESCRIPTION_CHARS = 500;
 export const MAX_SECTION_NAME_CHARS = 60;
 export const MAX_CHATS_PER_COMMUNITY = 500;
 export const MAX_COMMUNITIES_PER_USER = 50;
-// Subspaces (see api/utils/subspaces): Reddit-style communities — a subspace
-// thing with branding/rules/flairs, relational subspace-member docs, a mod log,
-// and post-level moderation state on a server-owned root field. Up/down votes
-// are their own focused reaction kind (`updown`) beside the open-vocabulary
-// emoji reactions. All bounds live here so no write path can disagree.
-export const SUBSPACE_SLUG_PATTERN = /^[a-z0-9_]{3,30}$/;
-export const MIN_SUBSPACE_SLUG_CHARS = 3;
-export const MAX_SUBSPACE_SLUG_CHARS = 30;
-export const MAX_SUBSPACE_NAME_CHARS = 80;
-export const MAX_SUBSPACE_DESCRIPTION_CHARS = 1000;
-export const MAX_SUBSPACE_RULES = 15;
-export const MAX_SUBSPACE_RULE_TITLE_CHARS = 100;
-export const MAX_SUBSPACE_RULE_TEXT_CHARS = 500;
-export const MAX_SUBSPACE_FLAIRS = 50;
-export const MAX_SUBSPACE_FLAIR_ID_CHARS = 40;
-export const MAX_SUBSPACE_FLAIR_LABEL_CHARS = 64;
-export const MAX_SUBSPACE_ACCENT_CHARS = 32;
-export const MAX_SUBSPACE_ICON_CHARS = 16;
-// custom user-flair text (allowCustomUserFlair) — shorter than a template label
-export const MAX_SUBSPACE_USER_FLAIR_TEXT_CHARS = 40;
-export const MAX_SUBSPACES_PER_USER = 25;
-export const MAX_SUBSPACE_MEMBERSHIPS_PER_USER = 500;
-export const MAX_SUBSPACE_MOD_REASON_CHARS = 300;
-// Removal reasons (round 2, S4): a per-subspace list of canned reasons a
-// moderator picks when removing a post — { id, title, message }; the title +
-// message (+ the mod's free-text note) become the post's stored removal reason
-// and the author's subspace-post-removed notification.
-export const MAX_SUBSPACE_REMOVAL_REASONS = 20;
-export const MAX_SUBSPACE_REMOVAL_REASON_TITLE_CHARS = 80;
-export const MAX_SUBSPACE_REMOVAL_REASON_MESSAGE_CHARS = 500;
-// the composed stored reason on a removed post: title — message · note
-export const MAX_SUBSPACE_POST_REMOVAL_REASON_CHARS = 900;
-// Reports (round 2, S5): a viewer flags a post (or a comment — resolved to its
-// root post) to the subspace's moderators. One `subspace-report` thing per
-// (post, reporter) — a repeat updates the reason / note; the mods' Reports
-// queue groups them by post. `reason` is a rule title, a removal-reason id or
-// free text; `note` is the reporter's optional context.
-export const MAX_SUBSPACE_REPORT_REASON_CHARS = 120;
-export const MAX_SUBSPACE_REPORT_NOTE_CHARS = 500;
-// how many reporters a grouped Reports-queue row lists (the count is exact)
-export const MAX_SUBSPACE_REPORT_REPORTERS_LISTED = 20;
-export const SUBSPACE_REPORT_STATUSES = ['open', 'resolved'] as const;
-export type SubspaceReportStatus = (typeof SUBSPACE_REPORT_STATUSES)[number];
-// how an open report was settled: the post was removed / approved by a mod
-// (auto-resolved by `moderate`), or the mods dismissed the reports outright
-export const SUBSPACE_REPORT_RESOLUTIONS = ['removed', 'approved', 'dismissed'] as const;
-export type SubspaceReportResolution = (typeof SUBSPACE_REPORT_RESOLUTIONS)[number];
-export const MAX_POST_TITLE_CHARS = 300;
-export const SUBSPACE_ACCESS_MODES = ['public', 'restricted', 'private'] as const;
-export type SubspaceAccessMode = (typeof SUBSPACE_ACCESS_MODES)[number];
-export const SUBSPACE_ROLES = ['owner', 'moderator', 'member'] as const;
-export type SubspaceRole = (typeof SUBSPACE_ROLES)[number];
-export const SUBSPACE_FEED_SORTS = ['hot', 'new', 'top', 'rising', 'controversial'] as const;
-export type SubspaceFeedSort = (typeof SUBSPACE_FEED_SORTS)[number];
-// the /s directory's orders: newest first (cursor-paged), most members, most
-// active (posts in the last SUBSPACE_ACTIVE_WINDOW_DAYS) — the last two are
-// ranked in memory over a bounded newest-first window (subspaceCore.ts)
-export const SUBSPACE_LIST_SORTS = ['new', 'members', 'active'] as const;
-export type SubspaceListSort = (typeof SUBSPACE_LIST_SORTS)[number];
-export const SUBSPACE_ACTIVE_WINDOW_DAYS = 7;
-// the home feed's scope: every visible post, or only posts from the viewer's
-// ACTIVE subspaces (empty for guests / non-members)
-export const FEED_SCOPES = ['all', 'subspaces'] as const;
-export type FeedScope = (typeof FEED_SCOPES)[number];
-export const UPDOWN_DIRECTIONS = ['up', 'down'] as const;
-export type UpdownDirection = (typeof UPDOWN_DIRECTIONS)[number];
-// A deleted subspace leaves a slug tombstone (kind `subspace-tombstone`) that
-// keeps holding the `subspaceSlug` uniqueKey: the previous owner may re-found
-// the slug at once, anyone else only after the hold — so bell / email deep
-// links to /s/<slug> can't be hijacked by whoever re-registers it first.
-export const SUBSPACE_SLUG_HOLD_DAYS = 30;
-// Dedicated-endpoint kinds of the family (no generic crystal sanitizers, so
-// /api/v1/things refuses them; excluded from own-things listings + generic
-// DELETE the way the messenger family is).
-export const SUBSPACE_THINGTIME = ['subspace', 'subspace-member', 'subspace-modlog', 'subspace-tombstone', 'subspace-report', 'subspace-embed'] as const;
-export const UPDOWN_THINGTIME = 'updown';
 // Custom emoji: the image is an inline data URI stored on its own thing doc
 // (the avatar pattern, FUNDAMENTALS §3 relational rule) — ~512KB binary ≈
 // 700K base64 chars. Names are the `:name:` vocabulary, Mongo-key-safe.
@@ -2236,9 +2160,8 @@ const appDataSchema: ThingtimeSchema = {
 // /api/v1/emojis and /api/v1/users/follow (no generic-route sanitizers on
 // purpose: membership, roles and request states are server-derived and must
 // not be forgeable through /api/v1/things). Everything is private plumbing
-// (acl ["tt:user"]) and quota-accounted user content — visibility is decided
-// by chat/community MEMBERSHIP, enforced in the messenger utils, never by the
-// generic acl walk.
+// (acl ["tt:user"]) — visibility is decided by chat/community MEMBERSHIP,
+// enforced in the messenger utils, never by the generic acl walk.
 
 const communitySchema: ThingtimeSchema = {
   id: 'community',
@@ -2266,7 +2189,7 @@ const communityMemberSchema: ThingtimeSchema = {
   kind: 'crystal',
   collection: null,
   title: 'Community member',
-	summary: "One user's membership of one community (relational child doc).",
+  summary: 'One user\'s membership of one community (relational child doc).',
   detail:
     'targetId = the community shareId, ownerId = the member. Uniqueness rides the single ' +
     'crystal.memberKey field (`<communityId>:<userId>`, partial unique index) — the reaction-index ' +
@@ -2332,24 +2255,12 @@ const chatSchema: ThingtimeSchema = {
     'join) or private (admins add).',
   createdVia: 'POST /api/v1/chats',
   fields: [
-		{
-			name: 'name',
-			type: 'string',
-			required: false,
-			max: MAX_CHAT_NAME_CHARS,
-			description: 'Chat name (null for DMs — the UI shows the other member).'
-		},
+    { name: 'name', type: 'string', required: false, max: MAX_CHAT_NAME_CHARS, description: 'Chat name (null for DMs — the UI shows the other member).' },
     { name: 'topic', type: 'string', required: false, max: MAX_CHAT_TOPIC_CHARS, description: 'Channel topic line.' },
     { name: 'chatType', type: 'enum', required: true, values: ['channel', 'group', 'dm'], description: 'Conversation shape.' },
     { name: 'communityId', type: 'id', required: false, description: 'Owning community shareId (channels only).' },
     { name: 'sectionId', type: 'id', required: false, description: 'Sidebar section shareId (channels only).' },
-		{
-			name: 'channelVisibility',
-			type: 'enum',
-			required: false,
-			values: ['public', 'private'],
-			description: 'Channel joinability within its community (channels only, default public).'
-		},
+    { name: 'channelVisibility', type: 'enum', required: false, values: ['public', 'private'], description: 'Channel joinability within its community (channels only, default public).' },
     { name: 'dmKey', type: 'string', required: false, description: 'Sorted participant-id pair key deduping DMs.' }
   ],
   example: { name: 'general', topic: 'Anything goes', chatType: 'channel', channelVisibility: 'public' }
@@ -2361,7 +2272,7 @@ const chatMemberSchema: ThingtimeSchema = {
   kind: 'crystal',
   collection: null,
   title: 'Chat member',
-	summary: "One user's membership of one chat — role, nickname, request state and read receipt.",
+  summary: 'One user\'s membership of one chat — role, nickname, request state and read receipt.',
   detail:
     'targetId = the chat shareId, ownerId = the member. Unique per (chat, user) via ' +
     'crystal.memberKey. state tracks the Messenger request flow: active, pending (message ' +
@@ -2373,13 +2284,7 @@ const chatMemberSchema: ThingtimeSchema = {
     { name: 'memberKey', type: 'string', required: true, description: 'Unique `<chatId>:<userId>` pair key.' },
     { name: 'role', type: 'enum', required: true, values: ['owner', 'admin', 'member'], description: 'Chat role.' },
     { name: 'nickname', type: 'string', required: false, max: MAX_NICKNAME_CHARS, description: 'Per-chat nickname (Messenger style).' },
-		{
-			name: 'state',
-			type: 'enum',
-			required: true,
-			values: ['active', 'pending', 'left', 'declined'],
-			description: 'Membership lifecycle / message-request state.'
-		},
+    { name: 'state', type: 'enum', required: true, values: ['active', 'pending', 'left', 'declined'], description: 'Membership lifecycle / message-request state.' },
     { name: 'requestOrigin', type: 'enum', required: false, values: ['follower', 'unknown'], description: 'Message-request bucket while pending.' },
     { name: 'lastReadMessageId', type: 'id', required: false, description: 'Newest message this member has read.' },
     { name: 'lastReadAt', type: 'string', required: false, description: 'ISO timestamp of that read (drives unread counts + seen-by).' },
@@ -2404,515 +2309,15 @@ const chatMessageSchema: ThingtimeSchema = {
     'standard reaction things targeting the message, including custom `custom:<emoji id>` tokens.',
   createdVia: 'POST /api/v1/chats/messages',
   fields: [
-		{
-			name: 'text',
-			type: 'string',
-			required: false,
-			max: MAX_MESSAGE_CHARS,
-			description: `Optional message text, max ${MAX_MESSAGE_CHARS} chars. A message may instead contain one or more bound attachments. :name: tokens render as custom emojis.`
-		},
+    { name: 'text', type: 'string', required: true, max: MAX_MESSAGE_CHARS, description: `Message text, max ${MAX_MESSAGE_CHARS} chars. :name: tokens render as custom emojis.` },
     { name: 'threadRootId', type: 'id', required: false, description: 'Root message shareId when this is a thread reply.' },
     { name: 'replyToId', type: 'id', required: false, description: 'Quoted message shareId (inline reply).' },
     { name: 'editedAt', type: 'string', required: false, description: 'ISO timestamp of the last edit.' },
     { name: 'deletedAt', type: 'string', required: false, description: 'ISO soft-delete timestamp (text is cleared).' },
-		{
-			name: 'systemType',
-			type: 'enum',
-			required: false,
-			values: ['member-added', 'member-left', 'member-removed', 'chat-renamed', 'chat-created', 'topic-changed'],
-			description: 'Set on system event messages.'
-		},
+    { name: 'systemType', type: 'enum', required: false, values: ['member-added', 'member-left', 'member-removed', 'chat-renamed', 'chat-created', 'topic-changed'], description: 'Set on system event messages.' },
     { name: 'systemMeta', type: 'record', required: false, description: 'Event payload for system messages ({ subjectId, value… }).' }
   ],
   example: { text: 'hello from the messenger 👋' }
-};
-
-// The Lopu model catalog: one protected, system-owned control-plane Thing per
-// base model in AI_WORKFLOW_BASE_MODELS (the `default` sentinel is routing,
-// not a model, so it never becomes a doc). Seeded idempotently by
-// api/utils/ai/models.ts — the catalog fields are code and get re-stamped on
-// every seed, `enabled` is the single admin-owned toggle — so the kind rides
-// PROTECTED_THINGTIME and CONTROL_PLANE_STORAGE_THINGTIMES with no crystal
-// sanitizer: generic Thing CRUD can neither mint a fake model nor flip
-// availability, and the catalog never bills anyone.
-const aiModelSchema: ThingtimeSchema = {
-  id: 'ai-model',
-  version: 1,
-  kind: 'crystal',
-  collection: null,
-  title: 'AI model',
-  summary: 'One catalog model Lopu can chat with — provider, effort tiers, speeds, and the admin enabled toggle.',
-  detail:
-    'Written only by the catalog seed (api/utils/ai/models.ts): ownerId "system", storageClass "control", ' +
-    'acl ["tt:all"], deterministic shareId ai-model-<modelId>, root uniqueKeys aiModel:<modelId>. The seed ' +
-    'runs once per process on the first catalog read and on demand through POST /api/v1/admin/ai/models ' +
-    '{ seed: true }; it inserts missing rows and heals drifted catalog fields but never touches enabled. ' +
-    'GET /api/v1/ai/models projects every row publicly with available = enabled && provider key configured; ' +
-    'POST /api/v1/admin/ai/models { id, enabled } is the only writer of the toggle. Direct create/update/' +
-    'delete through the generic things routes is refused and the rows never appear in generic listings.',
-  createdVia: 'Seeded by api/utils/ai/models.ts (first catalog read, or POST /api/v1/admin/ai/models { seed: true })',
-  fields: [
-    { name: 'modelId', type: 'string', required: true, max: 128, description: 'Provider-native model id; equals the catalog id and the shareId suffix.' },
-    { name: 'label', type: 'string', required: true, max: 80, description: 'Display label from the catalog.' },
-    { name: 'provider', type: 'enum', required: true, values: ['anthropic', 'openai'], description: 'Which API serves the model.' },
-    { name: 'efforts', type: 'string[]', required: true, max: 8, description: 'Selectable reasoning-effort tiers; empty means provider-default effort only.' },
-    { name: 'speeds', type: 'string[]', required: true, max: 2, description: 'Offered lanes: normal, plus fast where the provider sells one.' },
-    { name: 'family', type: 'enum', required: true, values: ['claude', 'gpt', 'o-series'], description: 'Derived model family for grouping in pickers.' },
-    { name: 'enabled', type: 'boolean', required: true, description: 'Admin toggle; a disabled model is listed but never selectable.' },
-    { name: 'sortOrder', type: 'number', required: true, min: 0, description: 'Position in the base-model catalog.' },
-    { name: 'contextWindow', type: 'number', required: false, min: 1, description: 'Context window in tokens when the catalog knows it.' },
-    { name: 'notes', type: 'string', required: false, max: 500, description: 'Optional admin note.' }
-  ],
-  example: {
-    modelId: 'claude-opus-5',
-    label: 'Claude Opus 5',
-    provider: 'anthropic',
-    efforts: ['low', 'medium', 'high', 'xhigh', 'max'],
-    speeds: ['normal', 'fast'],
-    family: 'claude',
-    enabled: true,
-    sortOrder: 2,
-    contextWindow: 1000000
-  }
-};
-
-// Lopu usage accounting and credits (design note "Lopu verified access, usage
-// accounting and credits" §2–§3): three protected, owner-private control-plane
-// kinds written ONLY by api/utils/lopu/accounting.ts — a forged account or
-// ledger row would be free credits, so generic Thing CRUD refuses them and
-// they never appear in generic listings. No crystal sanitizer, no new index:
-// the account rides the root uniqueKeys index (lopuAccount:<userId>), the
-// rows the ownerId/thingtime/createdAt index, and "one pending top-up
-// request at a time" is the lopuTopupPending:<userId> unique key.
-const lopuAccountSchema: ThingtimeSchema = {
-  id: 'lopu-account',
-  version: 1,
-  kind: 'crystal',
-  collection: null,
-  title: 'Lopu account',
-  summary: 'One per user — the Lopu credit balance plus lifetime and monthly usage counters.',
-  detail:
-    'Created lazily by ensureLopuAccount (the first gated Lopu turn or GET /api/v1/lopu/account), which grants the ' +
-    'Thingtime.LopuAccess starterCredits exactly once. ownerId = the user, acl ["tt:user"], storageClass "control", root ' +
-    'uniqueKeys lopuAccount:<userId>. Every debit is ONE $inc on this row (balance, lifetime, month — the month counters ' +
-    'reset when monthKey moves on), guarded by the write id in appliedIds so a retried $inc cannot land twice; the ' +
-    'balance may go negative by at most one turn and the next turn is refused with 402 LOPU_NO_CREDITS. A billed turn ' +
-    'also holds an inflight slot for as long as the provider call runs (429 LOPU_TURN_IN_FLIGHT past the cap), so ' +
-    'concurrent turns cannot each spend the same last credit. 1 credit = 1 USD of list price = 1,000,000 micros.',
-  createdVia: 'api/utils/lopu/accounting.ts ensureLopuAccount (first gated Lopu turn, GET /api/v1/lopu/account, admin credit grant)',
-  fields: [
-    { name: 'balanceMicros', type: 'number', required: true, description: 'Current credit balance in micro-USD (signed; negative by at most one turn).' },
-    { name: 'lifetimeCostMicros', type: 'number', required: true, min: 0, description: 'Micros ever debited from this account.' },
-    { name: 'lifetimeInputTokens', type: 'number', required: true, min: 0, description: 'Input tokens across every recorded turn (all billings).' },
-    { name: 'lifetimeOutputTokens', type: 'number', required: true, min: 0, description: 'Output tokens across every recorded turn (all billings).' },
-    { name: 'turns', type: 'number', required: true, min: 0, description: 'Recorded turns (chat, voice, voice sessions).' },
-    { name: 'monthKey', type: 'string', required: true, max: 7, description: 'UTC month the month counters belong to (YYYY-MM).' },
-    { name: 'monthCostMicros', type: 'number', required: true, min: 0, description: 'Micros debited in monthKey.' },
-    { name: 'monthTurns', type: 'number', required: true, min: 0, description: 'Turns recorded in monthKey.' },
-    { name: 'starterGranted', type: 'boolean', required: true, description: 'The one-time starter grant was applied (also true when starterCredits was 0).' },
-    { name: 'starterMicros', type: 'number', required: true, min: 0, description: 'The starter amount that was granted, in micros.' },
-    { name: 'lowBalanceNotifiedAt', type: 'string', required: false, max: 40, description: 'When the balance last dropped under the low-balance threshold (null once lifted).' },
-    { name: 'inflight', type: 'number', required: false, min: 0, description: 'Billed turns currently running for this account (the concurrency cap the gate enforces).' },
-    { name: 'inflightSince', type: 'string', required: false, max: 40, description: 'When a slot was last taken — a slot older than the TTL is swept by the next reservation.' },
-    { name: 'appliedIds', type: 'string[]', required: false, max: 8, description: 'The last few write ids applied to the balance (bounded by $slice) so a retried $inc is a no-op.' }
-  ],
-  example: {
-    balanceMicros: 1400000,
-    lifetimeCostMicros: 600000,
-    lifetimeInputTokens: 300,
-    lifetimeOutputTokens: 150,
-    turns: 1,
-    monthKey: '2026-09',
-    monthCostMicros: 600000,
-    monthTurns: 1,
-    starterGranted: true,
-    starterMicros: 2000000
-  }
-};
-
-const lopuUsageSchema: ThingtimeSchema = {
-  id: 'lopu-usage',
-  version: 1,
-  kind: 'crystal',
-  collection: null,
-  title: 'Lopu usage',
-  summary: 'One row per Lopu turn — tokens, the list price, and what was actually debited.',
-  detail:
-    'Written by debitLopuUsage after every chat reply, voice turn and direct-voice session (ownerId = the user, acl ' +
-    '["tt:user"], storageClass "control"; the chat row’s shareId derives from the requestId so a retried debit never ' +
-    'doubles). billing says who paid: "thingtime" (server keys — debited), "byo" (the viewer’s own Secure Vault provider — ' +
-    'recorded, never debited) or "free" (the canned fallback). costMicros is the list price from api/utils/ai/pricing.ts ' +
-    '(priced: false for a model outside the pricing table, estimated: true for a sibling-priced row); debitedMicros is ' +
-    'the amount taken from the account. Listed through GET /api/v1/lopu/account/history beside the debits that point at it.',
-  createdVia: 'api/utils/lopu/accounting.ts debitLopuUsage (chats reply, voice reply, voice session)',
-  fields: [
-    { name: 'chatId', type: 'string', required: false, max: 160, description: 'The Lopu conversation (chat turns).' },
-    { name: 'requestId', type: 'string', required: false, max: 160, description: 'The client request id of the turn.' },
-    { name: 'surface', type: 'enum', required: true, values: ['chat', 'voice', 'voice-session'], description: 'Which Lopu surface ran the turn.' },
-    { name: 'provider', type: 'string', required: true, max: 40, description: 'claude | openai | vault | test | fallback, or the vault connection kind.' },
-    { name: 'providerLabel', type: 'string', required: false, max: 80, description: 'The vault connection’s display name (byo turns).' },
-    { name: 'model', type: 'string', required: false, max: 128, description: 'The model that answered.' },
-    { name: 'billing', type: 'enum', required: true, values: ['thingtime', 'byo', 'free'], description: 'Who paid for the turn.' },
-    { name: 'inputTokens', type: 'number', required: true, min: 0, description: 'Uncached input tokens.' },
-    { name: 'outputTokens', type: 'number', required: true, min: 0, description: 'Output tokens.' },
-    { name: 'cacheReadTokens', type: 'number', required: true, min: 0, description: 'Prompt-cache read tokens when the provider reported them.' },
-    { name: 'cacheWriteTokens', type: 'number', required: true, min: 0, description: 'Prompt-cache write tokens when the provider reported them.' },
-    { name: 'costMicros', type: 'number', required: true, min: 0, description: 'List price of the turn in micro-USD.' },
-    { name: 'priced', type: 'boolean', required: true, description: 'The model has a pricing row.' },
-    { name: 'estimated', type: 'boolean', required: true, description: 'The pricing row is a sibling estimate.' },
-    { name: 'debitedMicros', type: 'number', required: true, min: 0, description: 'Micros actually taken from the account (0 for byo / free).' },
-    { name: 'toolCalls', type: 'number', required: true, min: 0, description: 'Tool executions in the turn.' },
-    { name: 'hops', type: 'number', required: true, min: 0, description: 'Model hops in the turn.' },
-    { name: 'durationMs', type: 'number', required: true, min: 0, description: 'Wall-clock time of the turn.' }
-  ],
-  example: {
-    chatId: 'lopu-chat-7d1f2c1a-3b7e-4d0a-9c1d-000000000001',
-    requestId: '0f7d2c3a-8b1e-4c2d-9a4f-000000000002',
-    surface: 'chat',
-    provider: 'claude',
-    model: 'claude-opus-5',
-    billing: 'thingtime',
-    inputTokens: 1200,
-    outputTokens: 380,
-    cacheReadTokens: 8000,
-    cacheWriteTokens: 0,
-    costMicros: 19500,
-    priced: true,
-    estimated: false,
-    debitedMicros: 19500,
-    toolCalls: 2,
-    hops: 3,
-    durationMs: 8400
-  }
-};
-
-const lopuCreditSchema: ThingtimeSchema = {
-  id: 'lopu-credit',
-  version: 1,
-  kind: 'crystal',
-  collection: null,
-  title: 'Lopu credit ledger row',
-  summary: 'One signed movement of a Lopu credit balance, or a top-up request waiting for an admin.',
-  detail:
-    'The ledger (ownerId = the user, acl ["tt:user"], storageClass "control"): entry "starter" (the one-time grant), ' +
-    '"grant" / "topup" / "adjust" / "refund" (admin movements through POST /api/v1/admin/lopu/credits, adjust and refund ' +
-    'may be negative), "debit" (one per debited turn, usageId points at the lopu-usage row) — each carrying ' +
-    'balanceAfterMicros — and "request" (POST /api/v1/lopu/account/topup-request: amountMicros is the requested amount, ' +
-    'balanceAfterMicros null, requestStatus pending → approved | declined; while pending the row also carries the root ' +
-    'uniqueKeys lopuTopupPending:<userId>, so an account can only have one open request). Newest first through ' +
-    'GET /api/v1/lopu/account/history.',
-  createdVia: 'api/utils/lopu/accounting.ts (ensureLopuAccount, debitLopuUsage, grantLopuCredits, createLopuTopupRequest, resolveLopuTopupRequest)',
-  fields: [
-    { name: 'entry', type: 'enum', required: true, values: ['starter', 'grant', 'topup', 'debit', 'adjust', 'refund', 'request'], description: 'What kind of movement or request this is.' },
-    { name: 'amountMicros', type: 'number', required: true, description: 'Signed movement in micro-USD (a request carries the requested amount, positive).' },
-    { name: 'balanceAfterMicros', type: 'number', required: false, description: 'The balance after the movement (null on a request).' },
-    { name: 'reason', type: 'string', required: true, max: 300, description: 'Why — the admin’s reason, the turn, or the request kind.' },
-    { name: 'actorId', type: 'string', required: true, max: 128, description: 'Who caused it: the admin, the user, or "system".' },
-    { name: 'usageId', type: 'string', required: false, max: 160, description: 'The lopu-usage row a debit paid for.' },
-    { name: 'requestId', type: 'string', required: false, max: 160, description: 'The request row a topup grant answered.' },
-    { name: 'requestStatus', type: 'enum', required: false, values: ['pending', 'approved', 'declined'], description: 'Request rows only.' },
-    { name: 'note', type: 'string', required: false, max: 500, description: 'The user’s note on a request, or the admin’s note on a grant.' },
-    { name: 'resolvedAt', type: 'string', required: false, max: 40, description: 'When a request was approved or declined.' },
-    { name: 'resolvedBy', type: 'string', required: false, max: 128, description: 'The admin who resolved a request.' },
-    { name: 'grantedMicros', type: 'number', required: false, min: 0, description: 'What an approved request actually granted.' }
-  ],
-  example: {
-    entry: 'debit',
-    amountMicros: -19500,
-    balanceAfterMicros: 1980500,
-    reason: 'Chat turn · claude-opus-5',
-    actorId: '64f000000000000000000002',
-    usageId: 'lopu-usage-3f9c2a1b7d5e4c6a8b0f1e2d3c4b5a69'
-  }
-};
-
-const aiConnectionSchema: ThingtimeSchema = {
-  id: 'ai-connection',
-  version: 1,
-  kind: 'crystal',
-  collection: null,
-  title: 'AI desktop connection',
-  summary: 'One consented ChatGPT or Claude desktop source linked to Thingtime Messenger.',
-  detail:
-		'Created only through /api/v1/ai/connections or an authenticated device live sync. It stores bounded sync status and counts, ' +
-    'never provider credentials, cookies, raw local paths or conversation bodies. Projects map ' +
-		'to communities, conversations or native sessions to chats, and visible completed messages to relational chat-message ' +
-		'Things with hashed source keys for idempotent resync. Live connections expose safe command capabilities and remain writable only through the paired device bridge.',
-	createdVia: 'POST /api/v1/ai/connections or /api/v1/devices/node/live-sync',
-  fields: [
-		{
-			name: 'sourceType',
-			type: 'enum',
-			required: true,
-			values: ['imported', 'live'],
-			description: 'Discriminates snapshot imports from a live paired connector.'
-		},
-    { name: 'provider', type: 'enum', required: true, values: ['chatgpt', 'claude'], description: 'Source provider.' },
-    { name: 'sourceId', type: 'string', required: true, description: 'Non-secret desktop source identifier.' },
-		{ name: 'deviceId', type: 'id', required: false, description: 'Paired device for node-originated sources.' },
-		{ name: 'connectorId', type: 'string', required: false, max: 80, description: 'Live connector identifier.' },
-    { name: 'label', type: 'string', required: true, description: 'User-facing app/profile label.' },
-    { name: 'connectors', type: 'string[]', required: true, description: 'Bounded connector ids seen for this source.' },
-		{ name: 'capabilities', type: 'string[]', required: false, max: 64, description: 'Safe live connector command capabilities.' },
-    { name: 'status', type: 'enum', required: true, values: ['syncing', 'connected', 'error'], description: 'Latest sync state.' },
-		{ name: 'readOnly', type: 'boolean', required: true, description: 'True for imports; false for live connector-backed sessions.' },
-    { name: 'lastSyncAt', type: 'string', required: false, description: 'Last completed sync timestamp.' }
-  ],
-	example: {
-		sourceType: 'imported',
-		provider: 'claude',
-		sourceId: 'claude-thingtime',
-		label: 'Claude Thingtime',
-		connectors: ['claude-code-local'],
-		status: 'connected',
-		readOnly: true
-	}
-};
-
-const deviceSchema: ThingtimeSchema = {
-	id: 'device',
-	version: 1,
-	kind: 'crystal',
-	collection: null,
-	title: 'Mesh device',
-	summary: 'One paired computer participating in the user’s Thingtime mesh.',
-	detail:
-		'Created only by the one-time device pairing flow. The crystal contains bounded, safe display metadata and capability ids; the node credential hash lives only in its scoped session and is never projected. Device rows are protected private user content and count toward account storage.',
-	createdVia: 'POST /api/v1/devices/pairing/claim',
-	fields: [
-		{ name: 'deviceKey', type: 'string', required: true, description: 'Server-hashed unique owner/device key.' },
-		{ name: 'name', type: 'string', required: true, max: 120, description: 'User-facing computer name.' },
-		{ name: 'platform', type: 'enum', required: true, values: [...DEVICE_PLATFORMS], description: 'Operating-system family; capabilities are negotiated separately.' },
-		{ name: 'model', type: 'string', required: false, max: 160, description: 'Bounded hardware model label.' },
-		{ name: 'osVersion', type: 'string', required: false, max: 80, description: 'Bounded OS version label.' },
-		{ name: 'appVersion', type: 'string', required: false, max: 80, description: 'Thingtime node version.' },
-		{ name: 'capabilities', type: 'string[]', required: true, max: 64, description: 'Allowlisted capability identifiers reported at pairing.' },
-		{ name: 'pairedAt', type: 'date', required: true, description: 'Server pairing timestamp.' }
-	],
-	example: { name: 'Lopu’s MacBook Pro', platform: 'macos', capabilities: ['session.read', 'session.send'] }
-};
-
-const deviceStateSchema: ThingtimeSchema = {
-	id: 'device-state',
-	version: 1,
-	kind: 'crystal',
-	collection: null,
-	title: 'Device state mirror',
-	summary: 'The latest bounded state snapshot for one paired device.',
-	detail:
-		'targetId is the device. Exactly one row per device is replace-on-write under a monotonic revision and content hash. Heartbeats stay in scoped session metadata rather than appending Things. Raw paths, process arguments, window titles, frames and media are never accepted. This persistent mirror counts toward account storage.',
-	createdVia: 'POST /api/v1/devices/node/state',
-	fields: [
-		{ name: 'deviceStateKey', type: 'string', required: true, description: 'Server-hashed unique device-state key.' },
-		{ name: 'revision', type: 'number', required: true, min: 1, description: 'Node-monotonic snapshot revision.' },
-		{ name: 'stateHash', type: 'string', required: true, description: 'Canonical content hash used for exact retry reconciliation.' },
-		{ name: 'snapshotHash', type: 'string', required: true, description: 'Canonical hash of the complete state plus connector snapshot.' },
-		{ name: 'state', type: 'record', required: true, description: 'Bounded locked, volume, brightness, battery and safe open-app summary.' },
-		{ name: 'observedAt', type: 'date', required: true, description: 'Server receipt timestamp.' }
-	],
-	example: { revision: 42, state: { locked: false, volume: 0.5, brightness: 0.8, openApps: [] } }
-};
-
-const deviceConnectorSchema: ThingtimeSchema = {
-	id: 'device-connector',
-	version: 1,
-	kind: 'crystal',
-	collection: null,
-	title: 'Device connector mirror',
-	summary: 'One bounded program connector available on a paired device.',
-	detail:
-		'targetId is the device. One row per connector is updated by monotonic snapshot revision and content hash. Credentials, cookies, raw local paths and process arguments are never stored. This persistent mirror counts toward account storage.',
-	createdVia: 'POST /api/v1/devices/node/state',
-	fields: [
-		{ name: 'deviceConnectorKey', type: 'string', required: true, description: 'Server-hashed unique device/connector key.' },
-		{ name: 'revision', type: 'number', required: true, min: 1, description: 'Node-monotonic connector revision.' },
-		{ name: 'connectorHash', type: 'string', required: true, description: 'Canonical content hash.' },
-		{ name: 'connector', type: 'record', required: true, description: 'Safe id, kind, label, status and capability projection.' }
-	],
-	example: {
-		revision: 42,
-		connector: { id: 'chatgpt-desktop', kind: 'chatgpt', label: 'ChatGPT', status: 'connected', capabilities: ['session.read'] }
-	}
-};
-
-const deviceCommandSchema: ThingtimeSchema = {
-	id: 'device-command',
-	version: 1,
-	kind: 'crystal',
-	collection: null,
-	title: 'Device command',
-	summary: 'Bounded allowlisted work queued for one paired device.',
-	detail:
-		'Control-plane delivery state: exact requestId retries return the existing command and conflicting payloads return 409. Required-approval commands remain unleaseable until a linked one-decision approval atomically queues them. Commands use hashed short leases and never expose arbitrary shell, script, executable, path, SDP or frame input. User chat content persists once in quota-billed chat-message Things.',
-	createdVia: 'POST /api/v1/devices/commands',
-	fields: [
-		{ name: 'deviceCommandKey', type: 'string', required: true, description: 'Server-hashed unique owner/device/request key.' },
-		{ name: 'requestId', type: 'string', required: true, max: 160, description: 'Client idempotency identifier.' },
-		{ name: 'kind', type: 'string', required: true, description: 'Allowlisted typed command kind.' },
-		{ name: 'input', type: 'record', required: true, description: 'Closed, kind-specific bounded input.' },
-		{ name: 'requiresApproval', type: 'boolean', required: true, description: 'Whether dispatch requires an account-user decision.' },
-		{
-			name: 'approvalState',
-			type: 'enum',
-			required: true,
-			values: ['not-required', 'pending', 'approved', 'denied'],
-			description: 'Server-enforced dispatch approval gate.'
-		},
-		{
-			name: 'status',
-			type: 'enum',
-			required: true,
-			values: ['queued', 'claimed', 'running', 'needs-approval', 'succeeded', 'failed', 'cancelled', 'needs-review'],
-			description: 'Monotonic command lifecycle.'
-		},
-		{
-			name: 'controlBytes',
-			type: 'number',
-			required: true,
-			min: 0,
-			description: 'Logical command-envelope bytes used by the strict pending control-plane budget.'
-		},
-		{
-			name: 'inputTextHash',
-			type: 'string',
-			required: false,
-			description: 'Hash retained after a delivered session prompt is redacted from the control row.'
-		},
-		{
-			name: 'inputRedactedAt',
-			type: 'date',
-			required: false,
-			description: 'When duplicate prompt text was removed after durable Messenger materialization or terminal completion.'
-		},
-		{ name: 'expiresAt', type: 'date', required: false, description: 'TTL deadline applied only after the command becomes terminal.' }
-	],
-	example: {
-		requestId: 'web-123',
-		kind: 'session.send',
-		input: { connectorId: 'chatgpt', sessionId: 'chat-1', text: 'Hello', delivery: 'queue' },
-		status: 'queued'
-	}
-};
-
-const deviceCommandEventSchema: ThingtimeSchema = {
-	id: 'device-command-event',
-	version: 1,
-	kind: 'crystal',
-	collection: null,
-	title: 'Device event',
-	summary: 'One bounded device, command, approval or screen lifecycle event.',
-	detail:
-		'Relational child event consumed through the cursor-based NDJSON feed. Live AI rows may retain bounded visible deltas and safe activity briefly as control-plane events; reasoning, paths, tool input/output, frames and arbitrary output bodies are rejected. Completed chat content updates the corresponding quota-billed message row.',
-	createdVia: 'Device state machines',
-	fields: [
-		{ name: 'deviceEventKey', type: 'string', required: true, description: 'Server-hashed event idempotency key.' },
-		{ name: 'deviceControlEventScopeKey', type: 'string', required: true, description: 'Server-hashed owner/device retention namespace.' },
-		{
-			name: 'liveControlEventScopeKey',
-			type: 'string',
-			required: false,
-			description: 'Server-hashed connector/session retention namespace for live AI rows.'
-		},
-		{
-			name: 'retainedBytes',
-			type: 'number',
-			required: true,
-			min: 0,
-			description: 'Logical row bytes enforced by strict control-plane retention budgets.'
-		},
-		{
-			name: 'liveEventSequenceKey',
-			type: 'string',
-			required: false,
-			description: 'Server-hashed connector/session/sequence uniqueness key for live AI events.'
-		},
-		{
-			name: 'liveEventHash',
-			type: 'string',
-			required: false,
-			description: 'Canonical live event hash used to distinguish exact replay from conflicting reuse.'
-		},
-		{ name: 'liveActivityHash', type: 'string', required: false, description: 'Canonical safe historical activity hash used for revision checks.' },
-		{ name: 'eventType', type: 'string', required: true, description: 'Bounded event type.' },
-		{ name: 'resourceId', type: 'id', required: false, description: 'Related resource id.' },
-		{ name: 'revision', type: 'number', required: false, description: 'Related monotonic revision.' },
-		{ name: 'payload', type: 'record', required: true, description: 'Small safe event projection.' },
-		{
-			name: 'expiresAt',
-			type: 'date',
-			required: false,
-			description: 'TTL deadline for transient live deltas and activity; durable completed text lives in chat-message rows.'
-		}
-	],
-	example: { eventType: 'command.running', resourceId: 'command-id', payload: { status: 'running' } }
-};
-
-const deviceAiLiveStateSchema: ThingtimeSchema = {
-	id: 'device-ai-live-state',
-	version: 1,
-	kind: 'crystal',
-	collection: null,
-	title: 'Device AI live cursor',
-	summary: 'One monotonic live-event cursor per device connector session.',
-	detail:
-		'Control-plane replay state only. The server hashes the owner/device/connector/session namespace, rejects gaps and stale sequence reuse, and never stores credentials, local paths, reasoning, or tool input/output.',
-	createdVia: 'POST /api/v1/devices/node/live-sync',
-	fields: [
-		{ name: 'deviceAiLiveStateKey', type: 'string', required: true, description: 'Server-hashed unique live session namespace.' },
-		{ name: 'connectorId', type: 'string', required: true, max: 80, description: 'Opaque connector identifier.' },
-		{ name: 'sessionId', type: 'string', required: true, max: 512, description: 'Opaque native session identifier.' },
-		{ name: 'lastSequence', type: 'number', required: true, min: 1, description: 'Last contiguous accepted event sequence.' },
-		{ name: 'lastObservedAt', type: 'date', required: true, description: 'Node observation time for the accepted cursor.' }
-	],
-	example: { connectorId: 'chatgpt-desktop', sessionId: 'session-1', lastSequence: 42, lastObservedAt: '2026-08-18T01:00:00.000Z' }
-};
-
-const deviceApprovalSchema: ThingtimeSchema = {
-	id: 'device-approval',
-	version: 1,
-	kind: 'crystal',
-	collection: null,
-	title: 'Device approval',
-	summary: 'A one-decision approval requested by a local connector.',
-	detail:
-		'Operational approval state tied to one command/device. Exact repeats are idempotent, conflicting decisions return 409, and expired approvals cannot be revived.',
-	createdVia: 'POST /api/v1/devices/node/commands (approval-request)',
-	fields: [
-		{ name: 'deviceApprovalKey', type: 'string', required: true, description: 'Server-hashed unique command/request key.' },
-		{ name: 'commandId', type: 'id', required: true, description: 'Parent device command.' },
-		{ name: 'requestId', type: 'string', required: true, max: 160, description: 'Node idempotency id.' },
-		{ name: 'kind', type: 'string', required: true, max: 80, description: 'Approval category.' },
-		{ name: 'prompt', type: 'string', required: true, max: 1000, description: 'Human-readable bounded question.' },
-		{ name: 'status', type: 'enum', required: true, values: ['pending', 'approved', 'denied', 'expired'], description: 'One-decision state.' }
-	],
-	example: { commandId: 'command-id', requestId: 'approval-1', kind: 'computer-use', prompt: 'Allow app control?', status: 'pending' }
-};
-
-const deviceScreenSessionSchema: ThingtimeSchema = {
-	id: 'device-screen-session',
-	version: 1,
-	kind: 'crystal',
-	collection: null,
-	title: 'Device screen session',
-	summary: 'Safe lifecycle metadata for a remote screen session.',
-	detail:
-		'Persistent, quota-billed lifecycle metadata only. Frames, images, audio, SDP, ICE candidates and TURN credentials are never accepted or stored; media uses a separately authorized real-time channel with local approval.',
-	createdVia: 'POST /api/v1/devices/screen',
-	fields: [
-		{ name: 'deviceScreenKey', type: 'string', required: true, description: 'Server-hashed idempotency key.' },
-		{ name: 'requestId', type: 'string', required: true, max: 160, description: 'Client request id.' },
-		{
-			name: 'status',
-			type: 'enum',
-			required: true,
-			values: ['requested', 'awaiting-local-approval', 'connecting', 'active', 'ended', 'failed'],
-			description: 'Screen lifecycle state.'
-		},
-		{ name: 'viewOnly', type: 'boolean', required: true, description: 'Whether input control is disabled.' },
-		{ name: 'startedAt', type: 'date', required: false, description: 'Server timestamp when active.' },
-		{ name: 'endedAt', type: 'date', required: false, description: 'Server terminal timestamp.' }
-	],
-	example: { requestId: 'screen-1', status: 'awaiting-local-approval', viewOnly: true }
 };
 
 const customEmojiSchema: ThingtimeSchema = {
@@ -2924,8 +2329,8 @@ const customEmojiSchema: ThingtimeSchema = {
   summary: 'An uploaded emoji/gif usable in chat reactions and messages.',
   detail:
     'One thing per emoji (relational, FUNDAMENTALS §3 — never an array on the community). The ' +
-		'image is a protected, quota-accounted S3 attachment (gif/webp/png/jpeg, ≤512 KiB); legacy ' +
-		'inline data-URI rows remain read-compatible. Scope is ' +
+    'image is an inline base64 data URI (gif/webp/png/apng/jpeg, ≤' +
+    `${Math.round(MAX_EMOJI_DATA_URI_CHARS / 1024)}K chars), the avatar-storage pattern. Scope is ` +
     'a community (targetId set) or personal (targetId null); names are unique per scope via ' +
     'crystal.emojiKey. Reaction tokens reference emojis by id (`custom:<shareId>`), so renames ' +
     'never orphan reactions.',
@@ -2933,10 +2338,10 @@ const customEmojiSchema: ThingtimeSchema = {
   fields: [
     { name: 'name', type: 'string', required: true, max: MAX_EMOJI_NAME_CHARS, description: 'Lowercase [a-z0-9_-] name, rendered as :name:.' },
     { name: 'emojiKey', type: 'string', required: true, description: 'Unique `<scope>:<name>` key (scope = communityId or user:<userId>).' },
-		{ name: 'image', type: 'string', required: false, description: 'Legacy inline data:image/... base64 URI; never written for new emojis.' },
-		{ name: 'animated', type: 'boolean', required: false, description: 'True for new GIF uploads or a compatible legacy animated row.' }
+    { name: 'image', type: 'string', required: true, description: 'Inline data:image/... base64 URI.' },
+    { name: 'animated', type: 'boolean', required: false, description: 'True for gif/apng uploads.' }
   ],
-	example: { name: 'party-parrot', emojiKey: 'c0ffee…:party-parrot', animated: true }
+  example: { name: 'party-parrot', emojiKey: 'c0ffee…:party-parrot', image: 'data:image/gif;base64,R0lGOD…', animated: true }
 };
 
 const followSchema: ThingtimeSchema = {
@@ -2947,81 +2352,15 @@ const followSchema: ThingtimeSchema = {
   title: 'Follow',
   summary: 'One user following another (the start of the relationship graph).',
   detail:
-		"ownerId = the follower, targetId = the followed user's shareId; unique per pair via " +
+    'ownerId = the follower, targetId = the followed user\'s shareId; unique per pair via ' +
     'crystal.followKey. Powers the messenger request buckets (a DM from someone you follow ' +
     'lands normally; from a follower it queues as a "follower" request; otherwise "unknown"). ' +
     'The acl circle entries (tt:userFriends…) are designed to plug into this graph later.',
   createdVia: 'POST /api/v1/users/follow',
-	fields: [{ name: 'followKey', type: 'string', required: true, description: 'Unique `<followerId>:<followeeId>` pair key.' }],
+  fields: [
+    { name: 'followKey', type: 'string', required: true, description: 'Unique `<followerId>:<followeeId>` pair key.' }
+  ],
   example: { followKey: '5eed…:c0ffee…' }
-};
-
-// A registered WebAuthn credential (passkey). Accumulating per user →
-// relational (FUNDAMENTALS §3): one thing per credential, ownerId = the
-// account it signs into. Credential material (credentialId, COSE public key,
-// signature counter) lives in the root `secure` blob — never crystal, never
-// projected, invisible to the $** text index — while owner-facing metadata
-// (nickname, provider, dates, revocation) is crystal on an always-private doc.
-// Global credential-id uniqueness + the login-time lookup ride uniqueKeys
-// ('passkeyCredential:<id>', BinData). Server-minted only (PROTECTED).
-const passkeyThingSchema: ThingtimeSchema = {
-	id: 'passkey',
-	version: 1,
-	kind: 'crystal',
-	collection: null,
-	title: 'Passkey',
-	summary: 'A WebAuthn credential (passkey) that can sign into its owner\'s account.',
-	detail:
-		'Registered via POST /api/v1/auth/passkeys/register-options + /register (password confirmation ' +
-		'required), authenticates via /api/v1/auth/passkeys/login-options + /login (discoverable ' +
-		'credentials — no username needed). ownerId is the account it signs into. Credential material ' +
-		'(credentialId, public key, sign counter) lives in the root secure blob; uniqueness and the ' +
-		'login lookup ride uniqueKeys. Revocation (crystal.revokedAt) immediately blocks logins while ' +
-		'keeping the record; revoked passkeys can then be deleted. The generic things CRUD refuses ' +
-		'this kind end to end.',
-	createdVia: 'POST /api/v1/auth/passkeys/register',
-	fields: [
-		{ name: 'nickname', type: 'string', required: false, description: 'Owner-chosen label, defaults to the provider name.' },
-		{ name: 'description', type: 'string', required: false, description: 'Free-form owner note.' },
-		{ name: 'providerName', type: 'string', required: false, description: 'Authenticator provider derived from its AAGUID (e.g. iCloud Keychain, 1Password).' },
-		{ name: 'aaguid', type: 'string', required: false, description: 'Authenticator AAGUID as reported at registration.' },
-		{ name: 'deviceType', type: 'enum', required: false, values: ['singleDevice', 'multiDevice'], description: 'Whether the credential is synced (multiDevice) or bound to one authenticator.' },
-		{ name: 'backedUp', type: 'boolean', required: false, description: 'True when the authenticator reports the credential as backed up/synced.' },
-		{ name: 'transports', type: 'string[]', required: false, description: 'Browser-reported transports (internal, hybrid, usb, nfc, ble).' },
-		{ name: 'lastUsedAt', type: 'string', required: false, description: 'ISO timestamp of the most recent successful login.' },
-		{ name: 'lastUsedOrigin', type: 'string', required: false, description: 'Origin of the most recent successful login.' },
-		{ name: 'revokedAt', type: 'string', required: false, description: 'ISO timestamp — set once revoked; a revoked passkey can never log in.' }
-	],
-	example: { nickname: 'MacBook Touch ID', providerName: 'iCloud Keychain', deviceType: 'multiDevice', backedUp: true }
-};
-
-// Where a passkey has been used: one thing per (passkey, app/origin) pair,
-// upserted on each login (usageCount/lastUsedAt update in place — the doc set
-// is bounded by distinct apps, never per-use growth). targetId = the passkey
-// thing; uniqueKeys 'passkeyAppLink:<passkeyId>:<appKey>' dedups the pair.
-const passkeyAppLinkThingSchema: ThingtimeSchema = {
-	id: 'passkey-app-link',
-	version: 1,
-	kind: 'crystal',
-	collection: null,
-	title: 'Passkey app link',
-	summary: 'A record that a passkey has authenticated a particular app or origin.',
-	detail:
-		'Minted/updated server-side whenever POST /api/v1/auth/passkeys/login succeeds: the deployment ' +
-		'origin always links, and an SSO/app context (clientId) links additionally. Aggregated onto ' +
-		'GET /api/v1/auth/passkeys as each passkey\'s linkedApps. ownerId = the passkey\'s owner, ' +
-		'targetId = the passkey thing. The generic things CRUD refuses this kind.',
-	requiresTarget: true,
-	createdVia: 'POST /api/v1/auth/passkeys/login',
-	fields: [
-		{ name: 'linkKey', type: 'string', required: true, description: 'Pair key `<passkeyId>:<appKey>` — dedupe rides root uniqueKeys, not this path.' },
-		{ name: 'appKey', type: 'string', required: true, description: 'Stable link key — `origin:<origin>` or `app:<clientId>`.' },
-		{ name: 'appName', type: 'string', required: false, description: 'Display name for the app/origin.' },
-		{ name: 'firstUsedAt', type: 'string', required: true, description: 'ISO timestamp of the first login through this link.' },
-		{ name: 'lastUsedAt', type: 'string', required: true, description: 'ISO timestamp of the most recent login through this link.' },
-		{ name: 'usageCount', type: 'number', required: true, description: 'Total successful logins through this link.' }
-	],
-	example: { appKey: 'origin:https://thingtime.com', appName: 'thingtime.com', usageCount: 4 }
 };
 
 // ---------------------------------------------------------------------------
@@ -3046,6 +2385,22 @@ const passkeyAppLinkThingSchema: ThingtimeSchema = {
 export const PROTECTED_THINGTIME = ['user', 'theme', 'feed-algorithm', 'waitlist', 'follow', 'friend', 'notification'] as const;
 export const isProtectedThingtime = (ids: string[]): boolean =>
   ids.some((id) => (PROTECTED_THINGTIME as readonly string[]).includes(id));
+
+// Messenger kinds are owned by /api/v1/chats* end to end. Create/update are
+// already refused by the missing crystal sanitizers, and DELETE must be too:
+// a chat thing "owned" by its creator is one doc standing in for EVERY
+// member's conversation, so the generic owner-may-delete rule cannot apply.
+export const MESSENGER_THINGTIME = [
+  'community',
+  'community-member',
+  'community-invite',
+  'chat-section',
+  'chat',
+  'chat-member',
+  'chat-message',
+  'custom-emoji',
+  'follow'
+] as const;
 
 const userThingSchema: ThingtimeSchema = {
   id: 'user',
@@ -3247,10 +2602,16 @@ export const thingtimeSchemas: ThingtimeSchema[] = [
   folderSchema,
   appSchema,
   appDataSchema,
-  // social graph + notifications (protected, server-minted)
-  followThingSchema,
-  friendThingSchema,
-  notificationThingSchema,
+  // messenger kinds (dedicated endpoints only — no generic sanitizers)
+  communitySchema,
+  communityMemberSchema,
+  communityInviteSchema,
+  chatSectionSchema,
+  chatSchema,
+  chatMemberSchema,
+  chatMessageSchema,
+  customEmojiSchema,
+  followSchema,
   // system kinds (collections collapsing into things — dual-era)
   userThingSchema,
   themeThingSchema,

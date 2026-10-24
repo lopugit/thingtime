@@ -29,13 +29,7 @@ import { VisualSettingsHost } from './components/VisualSettings/VisualSettingsHo
 import { ThemeHost } from './components/ThemeSettings/ThemeHost';
 import { ConfettiCanvas } from './components/Landing/ConfettiCanvas';
 import { EasterEggs } from './components/EasterEggs/EasterEggs';
-import { LopuPositionSync } from './components/Lopu/useLopuPosition';
 import { MessengerNotifications } from './components/Messenger/MessengerNotifications';
-import { AutoLoginPopup } from './components/Account/AutoLoginPopup';
-import { WatchPendingApprovals } from './components/Watch/WatchPendingApprovals';
-import { SiteBlocksHost } from './components/Builder/SiteBlocksHost';
-import { LopuPageTracker } from './components/Lopu/useLopuPages';
-import { LopuHost } from './components/Lopu/LopuHost';
 import { rememberAuthReturnTo } from './utils/authReturn';
 import { bindTransferIdentity } from './utils/thingTransfer/intent';
 import { rootIdentity } from './utils/rootIdentity';
@@ -189,16 +183,8 @@ export default function App() {
         )}
         </div>
         {isAuthorizePopup ? null : <DrawerSystem />}
-        </div>
-        {/* 🦄 Lopu: global floating launcher + draggable chat window (hidden on /lopu). */}
-        {mounted && !isAuthorizePopup ? <LopuHost /> : null}
-        {/* ⌘K quick switcher — global palette; renders nothing until opened. */}
         {/* Messenger: global new-message watcher (Lopu toasts + unread badge). */}
         {mounted && !isAuthorizePopup ? <MessengerNotifications /> : null}
-        {mounted && !isAuthorizePopup ? <WatchPendingApprovals /> : null}
-        {/* Signed out here but signed in on another Thingtime deployment →
-            "continue as" suggestions (cross-deployment auto-login). */}
-        {mounted && !isAuthorizePopup ? <AutoLoginPopup /> : null}
         {/* App-wide confetti canvas + easter eggs (🥚 party mode, window.tt). */}
         {!isStandalonePage ? <ConfettiCanvas /> : null}
         {mounted && !isStandalonePage ? <EasterEggs /> : null}

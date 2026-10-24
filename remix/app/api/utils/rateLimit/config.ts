@@ -239,25 +239,6 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   // than things.write; membership/chat mutations share one bounded bucket.
   'chats.message': { limit: 120, windowMs: 60_000, enabled: true },
   'chats.write': { limit: 60, windowMs: 60_000, enabled: true },
-  // A desktop sync is chunked into bounded JSON batches. The wider hourly
-  // window accommodates a first full-history import while still fencing a
-  // runaway renderer or replay loop.
-  'ai.sync': { limit: 600, windowMs: 3_600_000, enabled: true },
-	// Paired device mesh. Pairing creates credentials and therefore fails
-	// closed at the routes; state/command/event budgets are deliberately roomy
-	// enough for a live desktop while still bounding stuck pollers and replays.
-	'devices.read': { limit: 240, windowMs: 60_000, enabled: true },
-	'devices.pairing': { limit: 20, windowMs: 3_600_000, enabled: true },
-	'devices.pairing.claim': { limit: 30, windowMs: 15 * 60_000, enabled: true },
-	'devices.state': { limit: 240, windowMs: 60_000, enabled: true },
-	'devices.commands': { limit: 120, windowMs: 60_000, enabled: true },
-	'devices.node.commands': { limit: 600, windowMs: 60_000, enabled: true },
-	'devices.liveSync': { limit: 120, windowMs: 60_000, enabled: true },
-	'devices.approvals': { limit: 120, windowMs: 60_000, enabled: true },
-	'devices.permissions': { limit: 60, windowMs: 60_000, enabled: true },
-	'devices.events': { limit: 240, windowMs: 60_000, enabled: true },
-	'devices.screen': { limit: 60, windowMs: 60_000, enabled: true },
-	'devices.sync': { limit: 600, windowMs: 3_600_000, enabled: true },
   // message reactions mirror things.react but chats toggle faster in practice
   'chats.react': { limit: 120, windowMs: 60_000, enabled: true },
   // read receipts fire on every focused chat scroll — cheap single-doc updates,
@@ -266,37 +247,8 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   // custom emoji uploads carry up to ~512KB data URIs into things docs — rare
   // interactive action, so the budget is per-hour like app registration
   'emojis.write': { limit: 30, windowMs: 3_600_000, enabled: true },
-  // The integration vault can trigger provider operations; keep its admin
-  // control plane bounded even before an endpoint policy is consulted.
-  'admin.integrations': { limit: 60, windowMs: 60_000, enabled: true },
-  // marketing publish state (GET /api/v1/marketing/publications) — one tiny
-  // settings read per /marketing navigation, anonymous callers key by IP
-  'marketing.publications': { limit: 240, windowMs: 60_000, enabled: true },
-  // admin publish/unpublish sweeps (POST /api/v1/admin/marketing/publications)
-  // — up to 2,000 keys per call; enforced fail-closed at the route
-  'admin.marketingPublications': { limit: 60, windowMs: 60_000, enabled: true },
-  // service-account provisioning is public self-service but each call mints a
-  // permanent bearer token + a 5 GiB-allowance account and sends a verification
-  // email — bound it tightly per IP (a legit integrator provisions a handful,
-  // ever). Enforced fail-closed at the route like mongodb.populate.
-  'auth.serviceAccount': { limit: 10, windowMs: 15 * 60_000, enabled: true },
-  // Public diagnostic packets used by Commander Activity. A speed run makes
-  // exactly five requests in each direction (one for each fixed packet size),
-  // so this admits one complete measurement every 15 minutes per client IP and
-  // rejects traffic if the shared limiter is unavailable.
-  'networkProbe.ping': { limit: 60, windowMs: 60_000, enabled: true },
-  'networkProbe.download': { limit: 5, windowMs: 15 * 60_000, enabled: true },
-  'networkProbe.upload': { limit: 5, windowMs: 15 * 60_000, enabled: true },
-  // token introspection (POST /api/v1/auth/introspect) — read-only status
-  // checks by external platforms; two cheap DB reads per call, keyed by IP for
-  // anonymous callers, bounded like the other public reads
-  'auth.introspect': { limit: 120, windowMs: 60_000, enabled: true },
-  // the "try my feed brain 🧠" share-link preview (GET /api/v1/algorithms/shared)
-  // — public and anonymous, two DB reads per call (the algorithm lookup plus an
-  // owner-username resolve). The shareId is an unguessable uuid, so this is not
-  // an enumeration brake; it is the same "bound the anonymous public read"
-  // budget the other unauthenticated endpoints carry, keyed by hashed IP.
-  'algorithms.shared': { limit: 120, windowMs: 60_000, enabled: true }
+  // follow/unfollow toggles (also classifies messenger requests)
+  'users.follow': { limit: 60, windowMs: 60_000, enabled: true }
 };
 
 export const RATE_LIMIT_ENDPOINTS = Object.keys(RATE_LIMIT_DEFAULTS);

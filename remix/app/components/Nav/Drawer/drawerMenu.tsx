@@ -61,49 +61,6 @@ export const drawerMenuItems: DrawerTopItem[] = [
 		]
 	},
 	{
-		id: 'mail',
-		label: 'Mail',
-		icon: '✉️',
-		to: '/mail',
-		authOnly: true,
-		children: [
-			{ id: 'mail-inboxes', label: 'All inboxes', to: '/mail', authOnly: true },
-			{ id: 'mail-settings', label: 'Email settings', to: '/settings/email', authOnly: true }
-		]
-	},
-	{
-		id: 'passwords',
-		label: 'Passwords',
-		icon: '🔐',
-		to: '/passwords',
-		authOnly: true,
-		children: [
-			{ id: 'passwords-vault', label: 'Passwords', icon: '🔐', to: '/passwords', authOnly: true },
-			{ id: 'passwords-security', label: 'Security settings', icon: '⚙️', to: '/settings/security', authOnly: true }
-		]
-	},
-	{
-		id: 'connections',
-		label: 'Connections',
-		icon: '🔗',
-		to: '/connections',
-		children: [
-			{ id: 'connections-manage', label: 'Connections', icon: '🔗', to: '/connections' },
-			{ id: 'connections-feed', label: 'Connected feed', icon: '📡', to: '/connections/feed' }
-		]
-	},
-	{
-		id: 'subspaces',
-		label: 'Subspaces',
-		icon: '🪐',
-		to: '/s',
-		children: [
-			{ id: 'subspaces-browse', label: 'Browse', icon: '🪐', to: '/s' },
-			{ id: 'subspaces-mine', label: 'My subspaces', icon: '⭐', to: '/s?mine=1', authOnly: true },
-			{ id: 'subspaces-create', label: 'Create', icon: '➕', to: '/s?create=1', authOnly: true }
-		]
-	},
-	{
 		id: 'messages',
 		label: 'Messages',
 		icon: '💬',
@@ -111,23 +68,6 @@ export const drawerMenuItems: DrawerTopItem[] = [
 		children: [
 			{ id: 'messages-home', label: 'Messages', icon: '💬', to: '/messages', authOnly: true },
 			{ id: 'messages-requests', label: 'Requests', icon: '💌', to: '/messages?view=requests', authOnly: true }
-		]
-	},
-	{
-		// 🦄 Lopu, the Thingtime assistant: the chat page, its conversations
-		// (they live in Messenger) and its preferences
-		id: 'lopu',
-		label: 'Lopu',
-		icon: '🦄',
-		to: '/lopu',
-		children: [
-			{ id: 'lopu-chat', label: 'Chat', icon: '💬', to: '/lopu' },
-			{ id: 'lopu-voice', label: 'Voice', icon: '🎙️', to: '/lopu/voice', authOnly: true },
-			{ id: 'lopu-tasks', label: 'Background tasks', icon: '🕒', to: '/lopu/tasks', authOnly: true },
-			{ id: 'lopu-agent-browsers', label: 'Agent browsers and tasks', icon: '🧭', to: '/agent-browsers', authOnly: true },
-			{ id: 'lopu-conversations', label: 'Conversations', icon: '🗂️', to: '/messages', authOnly: true },
-			{ id: 'lopu-vault', label: 'Secure Vault', icon: '🔐', to: '/settings#secure-vault', authOnly: true },
-			{ id: 'lopu-settings', label: 'Settings', icon: '⚙️', to: '/settings#lopu' }
 		]
 	},
 	{

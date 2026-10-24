@@ -4776,24 +4776,269 @@ halves.
 
 ## Admin secure-fields toggle (`remix/app/components/Admin/AdminPanel.tsx`)
 
-- [ ] `/settings` as an admin shows the "Secure fields" section; the Email
-      row paints its last-known state instantly from `tt-admin-secure-fields`
-      (no spinner after the first ever visit), then reconciles with the
-      server config in the background.
-- [ ] Flipping Email to Plaintext does NOT write immediately: the inline
-      warning + "Store plaintext mirrors" confirm appears; Cancel keeps
-      secure mode. Confirming toasts the reconcile count and every existing
-      user thing gains a root plaintext `email` matching its blob email
-      (spot-check in Compass/mongosh: `db.things.find({ email: <addr> })`).
-- [ ] While plaintext mode is on, a NEW registration (and a new service
-      account) writes the root `email` mirror at insert time; a secure-blob
-      write (e.g. verify-email, theme change) self-heals a hand-deleted
-      mirror on that user.
-- [ ] Flipping back to Secure applies without a confirm step and strips the
-      root `email` from every user thing (`db.things.countDocuments({
-      thingtime: 'user', email: { $exists: true } })` returns 0); the blob
-      email + hashed uniqueKey lookup (`/api/v1/admin/users?q=<full email>`)
-      keep working in both modes.
-- [ ] Non-admin sessions get 401/403 from GET/POST
-      `/api/v1/admin/secure-fields` (the /tests admin group passes), and a
-      failed toggle POST reverts the switch and toasts the error.
+- [ ] As an admin (register a throwaway user, restart dev with
+      `ADMIN_USERNAMES=<user>`), the census table shows every registry
+      collection with its logical name AND physical `<name>_v<N>` name.
+- [ ] The Storage generations table lists every physical collection with a
+      current / stale / ahead badge, and doc counts.
+- [ ] After first boot against a pre-versioning db, adoption has renamed
+      unversioned collections in place (`things` → `things_v2`) — data (users,
+      sessions, posts) is still all there, no re-login required.
+- [ ] `merge-legacy-collections` dry-run reports per-collection copy counts and
+      writes nothing; the real run copies only docs missing at the destination
+      (re-run reports 0) and never deletes a legacy collection.
+- [ ] `drop-stale-collection-generations` shows the red destructive badge;
+      dry-run lists exactly what would drop with doc counts; a non-dry run
+      without `confirm: true` is rejected by the API (the panel sends it after
+      the inline Really run? confirmation); the run refuses to drop a legacy
+      collection that still has unmerged docs and says so in the notes.
+- [ ] Raw admin Mongo queries (`/api/v1/mongodb/raw-results`) still take
+      LOGICAL collection names ('things'), including `$lookup`/`$unionWith`
+      pipeline targets and collectionStats, and hit the versioned physical
+      collections.
+
+## Docs code windows & embed SDK preview (`remix/app/routes/docs/docsCode.tsx`, `remix/app/routes/docs/embed.tsx`)
+
+- [ ] Shell samples with bare URLs (`curl -X POST https://…`) highlight the
+      URL as plain text — never as a `//` comment from the protocol slashes
+      onward; real `//` and `#` comment lines still render muted.
+- [ ] JSON samples color negative numbers as numbers (yellow), not as CLI
+      flags (blue); shell flags (`-H`, `--data`) stay flag-blue.
+- [ ] On /docs/embed, blocking `/sdk/thingtime-login.js` (devtools request
+      blocking) swaps "Loading the SDK…" for the failure notice with the
+      standalone-demo link within ~10s — the preview must never show a
+      permanent loading state.
+
+## MongoDB data endpoint (`/mongodb-status`, `remix/app/components/MongoDB/MongoEndpointConfig.tsx`)
+
+- [ ] Logged OUT: paste a reachable `mongodb://` URL → "Use for this session"
+      flips the page to the Custom endpoint badge, the footer indicator reads
+      "MongoDB (custom)", and the feed/search read from that DB. "Use" on the
+      Thingtime row returns everything to default.
+- [ ] An unreachable URL is rejected at activation (422 toast, e.g.
+      `MongoServerSelectionError (ECONNREFUSED)`) and the previous endpoint
+      stays active — a bad URL must never brick the session's data calls.
+- [ ] A non-mongodb scheme (`http://…`), whitespace, or a >2048-char URL is
+      rejected with a clear validation message.
+- [ ] Logged IN: "Save to my endpoints" persists the endpoint (survives
+      logout/login and other browsers); the raw URL/credentials NEVER appear
+      in any API response, page, or error — only host + db name.
+- [ ] While a custom endpoint is active: login/logout, profile, themes,
+      account switcher and saved-endpoint management still work (identity is
+      home-pinned); posts created land in the CUSTOM db; admin routes
+      (migrations especially) still operate on the home DB.
+- [ ] Removing the saved endpoint the session currently uses also clears the
+      override (page falls back to Thingtime default without a reload).
+- [ ] The `tt_mongo` cookie is httpOnly + session-scoped: closing the browser
+      drops the override; document.cookie can't read it.
+- [ ] LOCAL DEV footer parity: with an override active, the footer indicator
+      reads "MongoDB (custom)" on the local stack too. Regression class: the
+      vite /api proxy's changeOrigin hid the web origin from nitro, so
+      resolveStatusTarget classified "Current Tab" as REMOTE and health routes
+      re-fetched themselves WITHOUT cookies (session state invisible). The
+      proxy must forward x-forwarded-host/-proto (vite.config.ts) — verify
+      /api/v1/health/mongodb?targetOrigin=<web origin> returns custom:true
+      with the cookie, while a real remote target (e.g. thingtime.com) still
+      server-side fetches.
+
+## Docs search (`remix/app/routes/docs/DocsSearch.tsx`, `docsSearchIndex.ts`)
+
+- [ ] Searching "acl" in the /docs drawer ranks the Thing schema (its `acl`
+      field section) first; results highlight the matched terms and show an
+      area badge + mono meta path; the nav list hides while a query is
+      active and returns on clear (× button or Escape).
+- [ ] Anchored results deep-link AND scroll on client-side navigation:
+      "scopes" → Enter lands on /docs/embed#permissions-scopes with the
+      heading at the sticky-header offset, not the page top (DocsLayout's
+      scroll-to-top must skip hash navigations); schema results scroll to
+      their /docs/schemas#schema-<id> card.
+- [ ] ArrowUp/Down move the active row, Enter opens it (query-param entries
+      like design mockups/components select the exact entry), and on mobile
+      tapping a result closes the drawer.
+- [ ] The query lives in the URL (?q=) with replace-style updates: typing
+      never stacks history entries, refresh restores the search, /docs?q=acl
+      deep-links it, result clicks carry ?q= along (so the landed URL is
+      shareable with its search context), and × strips it.
+- [ ] Typing is instant and never drops keys: the input is locally
+      controlled and the URL syncs on a ~200ms debounce — fast typing on
+      /docs/api (the heaviest page) must not lag, and the ?q= write lands
+      once after the pause (the static drawer lists are memoized so
+      keystrokes don't re-render the 78-endpoint menu).
+- [ ] The desktop drawer never shows an internal scrollbar: content renders
+      full height, sticks under the top nav only while it fits the viewport,
+      and taller content (search results, expanded endpoint lists) flows with
+      the page scroll — the bottom of the menu stays reachable.
+
+## Shared app-data (`/api/v1/app-data/shared`, `api/utils/apps/appData.ts`)
+
+- [ ] POST /api/v1/app-data with `visibility: 'app'` on a token WITHOUT the
+      `app-data.shared` scope returns 403 and writes nothing; with the scope
+      the entry's acl becomes `["tt:user", "tt:app/<clientId>"]`.
+- [ ] A plain `{ key, value }` rewrite of an existing shared entry keeps it
+      shared (audience only changes when the write names one); `visibility:
+      'private'` flips the acl back to `["tt:user"]`.
+- [ ] GET /api/v1/app-data/shared returns other users' `visibility: 'app'`
+      entries for the SAME app only — never private entries, never another
+      app's entries — newest first, and `key=post:*` prefix-filters.
+- [ ] Author objects honour each AUTHOR's own grant: displayName/avatarUrl
+      appear only when that author granted the profile field.
+- [ ] Revoking a user's grant (disconnect in settings) removes their entries
+      from the shared feed on the next read while `GET /api/v1/app-data`
+      still shows the entries to the owner.
+- [ ] The consent screen lists "Shared app storage" as its own line, and a
+      grant of plain `app-data` does NOT cover `app-data.shared` (exact
+      consent — no ancestor coverage).
+- [ ] GET /api/docs returns the whole API reference as text/markdown, and
+      /api/docs-docs + every `<endpoint>-docs` route (including
+      /api/v1/app-data/shared-docs) return their JSON doc payloads.
+
+## Sandbox tokens (`/api/v1/oauth/sandbox`, `api/utils/apps/sandbox.ts`)
+
+- [ ] POST /api/v1/oauth/sandbox (no auth, any clientId) returns a Bearer
+      token that works against /app-data set/get/list/delete, the shared
+      pool, and /oauth/userinfo — resolving to the synthetic `sandbox-you`
+      user, never a real account.
+- [ ] Sandbox app-data docs carry `sandboxExpiresAt` (TTL-reaped) and are
+      namespaced per token: a second sandbox token sees NONE of the first's
+      entries (private or shared).
+- [ ] A sandbox token can never act as an account credential:
+      /api/v1/auth/me (and any cookie/session path) rejects it.
+- [ ] GET /api/v1/apps/public?sandbox=1 returns a mock app (flagged
+      `sandbox: true`) for an unregistered clientId instead of 404; without
+      sandbox=1 the 404/403 behaviour is unchanged.
+- [ ] The consent popup's sandbox approve hands back a REAL minted token
+      (falls back to the inert `tt-sandbox-token` only if the mint call
+      fails), and scope gating on the handoff user object still matches the
+      selection.
+- [ ] Feed-pollution fence: a sandbox token minted with a REAL app's
+      clientId can write shared entries, but that real app's
+      /app-data/shared feed never scans them (`sandboxExpiresAt` excluded)
+      — real pages stay full-size even with fresh sandbox junk on top.
+- [ ] Sandbox storage budget: the 51st key for one sandbox token 400s
+      (SANDBOX_MAX_KEYS), while real grants keep the 200-key cap.
+- [ ] Sandbox spaces: tokens minted with the same `space` see each other's
+      visibility-'app' entries in /app-data/shared, each authored by its own
+      `sandbox-<username>` pretend user; PRIVATE entries stay per-token even
+      in a shared space; a different space (or no space) sees nothing; real
+      feeds still exclude all sandbox docs.
+- [ ] Space validation: space shorter than 8 chars 400s; usernames are
+      always 'sandbox-' prefixed so pooled feeds can't impersonate real
+      accounts.
+
+## Rate limiting & index-ensure reliability (`api/utils/rateLimit/enforce.ts`, `api/utils/mongodb/collections.ts`)
+
+- [ ] Healthy path: burst a rate-limited endpoint past its limit (e.g.
+      `things.search`, 120/min → 121 requests) → 429 with `Retry-After`,
+      and NO `[rate-limit]`/`[mongodb]` error lines in the logs.
+- [ ] Index-ensure failure is AUDIBLE, never silent: break the index battery
+      (drop `things_v2`'s `ownerId_1_crystal.appId_1_crystal.key_1` unique
+      index, insert two docs sharing `(ownerId, crystal.appId, crystal.key)`),
+      start a FRESH API process → the boot-time warmup run logs one
+      line beginning `[mongodb] ensureIndexes failed building things.<index>`
+      and saying the next bootstrap call will retry. The cold-start PR moved
+      the battery off the request path, so ordinary API traffic neither retries
+      it nor logs; only the awaited bootstrap callers (`registerUser`, admin
+      migrations) can trigger another attempt.
+- [ ] In-flight work is shared, but failures are retryable immediately: while
+      one ensureIndexes battery is running, concurrent bootstrap callers await
+      that same promise; after it fails, the next explicit bootstrap caller
+      starts one fresh attempt instead of inheriting a rejected promise for a
+      fixed cooldown.
+- [ ] Self-heals after cleanup: delete the duplicate docs, then hit an awaited
+      ensureIndexes caller (register a user / run an admin migration) or restart
+      the process → the unique index is rebuilt immediately (`getIndexes()`
+      shows it) and no stale cooldown blocks the recovered database.
+- [ ] Limiter outage is AUDIBLE, never silent: with the limiter's own DB ops
+      failing (e.g. Mongo down/unreachable), a limited endpoint logs
+      `[rate-limit] enforcement unavailable for <rule> — failing open` per
+      request; ordinary actions fail open (the route then surfaces its own DB
+      error), `failClosed` routes return the 429 unavailable shape. Regression
+      class: a bare `catch {}` fail-open invisibly disabled ALL rate limiting
+      (2026-07 perf audit).
+
+## Password hasher (`/crypto` Password Hasher panel, `api/utils/crypto/passwordHasher.server.ts`)
+
+- [ ] `/crypto` → Password Hasher: enter a username + password → the panel
+      shows a VERIFIED badge, `bcrypt cost 10`, the `$2b$10$…` hash, and a
+      mongosh snippet templated with that username. A supplied password is
+      NEVER echoed back in the response; only a generated one is.
+- [ ] "Generate a strong one" + a length (12–64) returns a password shown
+      exactly once ("save it now") whose hash verifies against it — check
+      independently with `bcrypt.compare` if in doubt.
+- [ ] The hash is self-verified server-side before return (`verified: true`);
+      a password under 6 chars still hashes but is flagged (register's
+      minimum), because an existing account may predate any policy.
+- [ ] END-TO-END (the point of the tool): register a throwaway user via the
+      real API, hash a NEW password, run the returned snippet VERBATIM in
+      mongosh, then log in — the new password works and the old one is
+      rejected. The snippet must report `things: matched 1, modified 1`.
+- [ ] Blob integrity: after the snippet runs, the user's `secure` BinData
+      blob still holds email / accountKind / emailVerified / meta, and
+      `secureVersion` incremented by 1 (matching the app's CAS write). A
+      plain `$set: { passwordHash }` on a things-era user writes a field
+      NOTHING reads — the snippet must unpack → edit → repack instead.
+- [ ] Snippet handles both stores and a miss: an unknown username reports
+      "No user named …" AND lists the usernames that do exist, instead of
+      silently modifying 0 docs.
+- [ ] Collection names in the snippet come from `physicalCollectionName()`
+      (currently `things_v2` / `users_v2`) — never hardcoded, so a version
+      bump can't hand out a snippet that edits a frozen generation.
+- [ ] Rate limited per IP (`crypto.hashPassword`, 20/min): bcrypt is the CPU
+      cost, so a burst past the limit 429s with the hashing message. The
+      intent stays ANONYMOUS on purpose — being locked out is the reason to
+      reach for it — and never reads or writes the database.
+
+## Messenger (chats, communities, custom emojis) (`remix/app/components/Messenger/`, `/api/v1/chats*`, `api/utils/messenger/`)
+
+Automated first: `node scripts/verify-messenger.mjs` from `remix/` against the
+running dev stack (86 live-API checks: permissions, requests, receipts,
+reactions, custom emojis, generic-things escape hatches). Then in a browser:
+
+- [ ] `/messages` requires login (guests bounce to `/login`) and the page owns
+      the viewport: no body scroll, no footer under the composer, nav
+      clearance intact at desktop and mobile widths.
+- [ ] Mode toggle (🏛️ Spaces / 💬 Chats) swaps the SAME conversations between
+      Slack-style rows and Messenger bubbles; the choice survives reload
+      (per-account localStorage key `tt-messenger-mode:<uid>`).
+- [ ] DM flow: search someone → chat opens instantly (optimistic), Enter
+      sends, bubble shows yours right/theirs left, conversation pins to the
+      BOTTOM of the pane even when short.
+- [ ] Requests: a DM from a stranger lands in Message requests (follower vs
+      unknown buckets), stays OUT of the main list and unread totals until
+      accepted; replying accepts implicitly; declining hides the chat and
+      the sender is not told. SECURITY: the decliner can no longer read it.
+- [ ] Slack mode: create community → channel (name slugs to lowercase),
+      topic inline-edit (admins only), sections group channels, right-click
+      renames a channel, public channels joinable via Browse channels while
+      private ones stay invisible to non-members (check the directory).
+- [ ] Threads: Reply in thread opens the side panel, replies stay OUT of the
+      main list, the root shows a 🧵 count chip. One level deep only —
+      replying to a reply files under the same root.
+- [ ] Reactions: hover/long-press → quick row + full picker; same token
+      toggles off; custom tab lists community + personal emojis; a custom
+      reaction renders its image chip for OTHER members too (resolved by id,
+      `custom:<emoji id>`); custom tokens are REJECTED by the post react
+      endpoint (namespace isolation both ways).
+- [ ] Custom emojis: upload ≤512KB gif/webp/png/jpeg → renders inline via
+      `:name:` in messages, animated gifs animate; duplicate name in scope
+      409s; another user's PERSONAL emoji is refused in your chat.
+- [ ] Read receipts: opening a chat advances your receipt (forward-only —
+      REGRESSION: reading an old message must never rewind it); seen-by
+      avatars appear under the last-read message in Messenger mode; the
+      settings toggle (details drawer) is PARITY: off = stop sharing AND
+      stop seeing, while unread counts keep working.
+- [ ] Unread + notifications: sidebar badges + bold rows; system messages
+      (joins/renames) never count as unread; muted chats keep their count
+      but leave the total; a fresh incoming message pops ONE Lopu toast per
+      chat per 30s with an Open chat link (none while that chat is open and
+      visible); polling PAUSES when the tab is hidden and fires immediately
+      on return.
+- [ ] Member control: group rename by ANY member (Messenger rule) vs channel
+      rename by admins only; nicknames settable by anyone for anyone and
+      shown everywhere names render; promote/demote/remove for admins with
+      the owner untouchable; owner leaving hands the chat to the earliest
+      admin, else earliest member.
+- [ ] Generic paths stay closed: `POST /api/v1/things` with any messenger
+      kind 403s ("managed by their own endpoints"); chats/messages are 404
+      through `GET /api/v1/things?id=` for non-owners; `POST
+      /api/v1/things/react` cannot reach another member's chat message.
