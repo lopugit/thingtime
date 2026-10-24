@@ -75,13 +75,17 @@ public final class PasswordClient: @unchecked Sendable {
     }
     public func catalog() async throws -> [PasswordCatalogItem] {
         try await requireCapability()
-        var result: [PasswordCatalogItem] = [], cursor: String?
+        // The catalog carries every entry a vault holds; there is no entry-count
+        // ceiling. A repeated page cursor is the only non-terminating reply, so
+        // bound the walk on cursor identity rather than on the user's data size.
+        var result: [PasswordCatalogItem] = [], cursor: String?, visited: Set<String> = []
         repeat {
             var body: [String: Any] = ["operation": "catalog"]
             if let cursor { body["cursor"] = cursor }
             let reply = try await call(body)
-            guard let entries = reply.catalog, result.count + entries.count <= 10_000, reply.nextCursor != cursor || cursor == nil else { throw PasswordProviderError.unavailable }
+            guard let entries = reply.catalog else { throw PasswordProviderError.unavailable }
             result.append(contentsOf: entries); cursor = reply.nextCursor
+            if let cursor { guard visited.insert(cursor).inserted else { throw PasswordProviderError.unavailable } }
         } while cursor != nil
         return result
     }

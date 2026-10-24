@@ -10,7 +10,7 @@ import { randomUUID } from 'node:crypto';
 import { build } from 'vite';
 const root = fileURLToPath(new URL('..', import.meta.url));
 const suite = process.env.TT_QA_SUITE || 'lopu-credentials';
-assert.ok(['lopu-credentials', 'service-catalog'].includes(suite), 'Unknown credential browser suite');
+assert.ok(['lopu-credentials', 'service-catalog', 'password-manager'].includes(suite), 'Unknown credential browser suite');
 const artifactRoot = process.env.TT_QA_ARTIFACT_DIR || mkdtempSync(path.join(tmpdir(), 'tt-lopu-credential-qa-'));
 const image = process.env.TT_QA_IMAGE,
 	seccomp = process.env.TT_QA_SECCOMP;
