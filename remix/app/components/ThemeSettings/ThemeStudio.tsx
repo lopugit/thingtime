@@ -423,8 +423,8 @@ const ThemeStudioWorkspace = () => {
 					Themes 🎨
 				</Text>
 				<Text marginTop="6px" fontSize="md" color="var(--tt-text, #5a5a66)">
-					Make Thingtime yours — tweak colours, fonts, and the general feel.{' '}
-					{localOnly ? 'Save and export your looks on this device, or browse public looks in the ' : 'Save your look as a theme and share it with a link — or browse public looks in the '}
+					Make Thingtime yours — tweak colours, fonts, and the general feel. Save your look as a theme and share it
+					with a link — or browse everyone&rsquo;s public looks in the{' '}
 					<Text as={RouterLink} to="/themes/gallery" textDecoration="underline" _hover={{ color: 'var(--tt-ink, #16161a)' }}>
 						theme gallery ✨
 					</Text>

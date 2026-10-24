@@ -7,7 +7,6 @@ import { useApi } from '~/hooks/useApi';
 import { useTtTheme } from '~/hooks/useTtTheme';
 
 import { ThemePreviewCard } from './ThemeStudio';
-import { resolveTheme, THINGTIME_THEME } from '~/theme/tokens';
 import type { TtTheme } from '~/theme/tokens';
 
 // /themes/gallery — the public theme gallery (claude-todo/10 ✨): every public
@@ -60,21 +59,7 @@ export const ThemeGallery = () => {
 				const res = await api.v1.themes.listShared();
 				if (cancelled) return;
 				if (res?.ok && Array.isArray(res.themes)) {
-					// Resolve every listed theme against the default before it reaches a
-					// preview card. Unlike "My themes" — one person's own saves — this
-					// grid renders documents written by STRANGERS, straight into
-					// themeToCssVars, which reads theme.colors.*, colors.rainbow[0..4]
-					// and general.* unguarded. Stored docs are not guaranteed
-					// current-shaped (themeToCssVars already carries a
-					// `theme.windows || THINGTIME_THEME.windows` fallback for exactly
-					// that reason), and there is no ErrorBoundary anywhere in the app,
-					// so ONE stale or partially-migrated public doc would white-screen
-					// /themes/gallery for every visitor. resolveTheme is the same
-					// sanitizer saveTheme applies on write, so a well-formed theme
-					// round-trips byte-identically; a malformed one falls back per
-					// token instead of throwing — and any pre-sanitizer legacy value
-					// gets re-gated before it becomes a CSS custom property.
-					setThemes(res.themes.map((entry: any) => ({ ...entry, theme: resolveTheme(THINGTIME_THEME, entry?.theme) })));
+					setThemes(res.themes);
 				} else {
 					setError(res?.error || 'The gallery could not be loaded');
 				}
@@ -109,7 +94,7 @@ export const ThemeGallery = () => {
 				await navigator.clipboard.writeText(url);
 				lopu({ title: 'Share link copied 🔗', description: 'Anyone with the link can apply this theme.', status: 'success', duration: 6000 });
 			} catch {
-				lopu({ title: 'Could not copy the link', description: url, status: 'error' });
+				lopu({ title: 'Could not copy the link', description: url, status: 'warning' });
 			}
 		},
 		[lopu]
@@ -145,8 +130,8 @@ export const ThemeGallery = () => {
 							No public themes yet — yours could be the first 🌈
 						</Text>
 						<Text marginTop="4px" fontSize="sm" color="var(--tt-muted, #9a9aa6)">
-							Create and save your own look in the <Link to="/themes" style={{ textDecoration: 'underline' }}>Theme Studio</Link>.
-							{' '}Sign in to publish a shareable account theme here.
+							Save a theme in the <Link to="/themes" style={{ textDecoration: 'underline' }}>Theme Studio</Link> and tick
+							&ldquo;shareable&rdquo; to publish it here.
 						</Text>
 					</Box>
 				) : (
